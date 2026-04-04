@@ -72,6 +72,7 @@ static GLuint     g_meshShader = 0;
 static GLuint     g_wireShader = 0;
 static bool       g_showWireframe = true;
 static bool       g_showFaces = true;
+static int        g_faceMode = 0; // 0=both sides, 1=outside only, 2=inside only
 
 // Measurement mode globals
 bool g_viewportMeasureMode = false;
@@ -742,15 +743,18 @@ void DrawViewport(float width, float height) {
     glDrawArrays(GL_LINES, 0, g_gridVertCount);
     glBindVertexArray(0);
 
-    // Draw scene mesh (solid faces)
+    // Draw scene mesh (solid faces) with face culling mode
     if (g_showFaces && g_gpuMesh.indexCount > 0) {
         glUseProgram(g_meshShader);
         glUniformMatrix4fv(glGetUniformLocation(g_meshShader, "uViewProj"), 1, GL_FALSE, glm::value_ptr(viewProj));
         glUniform3f(glGetUniformLocation(g_meshShader, "uLightDir"), 0.3f, 0.8f, 0.5f);
         glUniform3fv(glGetUniformLocation(g_meshShader, "uCameraPos"), 1, glm::value_ptr(g_camera.GetPosition()));
         glUniform1f(glGetUniformLocation(g_meshShader, "uAmbient"), 0.25f);
-        glUniform1f(glGetUniformLocation(g_meshShader, "uAlpha"), 0.0f); // opaque
+        glUniform1f(glGetUniformLocation(g_meshShader, "uAlpha"), 0.0f);
+        if (g_faceMode == 1) { glEnable(GL_CULL_FACE); glCullFace(GL_BACK); }
+        else if (g_faceMode == 2) { glEnable(GL_CULL_FACE); glCullFace(GL_FRONT); }
         g_gpuMesh.Draw(g_meshShader, viewProj, false);
+        glDisable(GL_CULL_FACE);
     }
 
     // Draw wireframe overlay (neon edges)
@@ -1364,6 +1368,8 @@ void ViewportToggleWireframe() { g_showWireframe = !g_showWireframe; }
 void ViewportToggleFaces()     { g_showFaces = !g_showFaces; }
 bool ViewportGetShowWireframe() { return g_showWireframe; }
 bool ViewportGetShowFaces()     { return g_showFaces; }
+void ViewportSetFaceMode(int mode) { g_faceMode = mode; }
+int  ViewportGetFaceMode()     { return g_faceMode; }
 
 // ── Camera presets ──────────────────────────────────────────────────────────
 

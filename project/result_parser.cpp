@@ -673,27 +673,27 @@ bool LoadCSBIN(const std::string& path, SurfaceRecResult& result) {
                 return false;
             }
 
-            float energySum = 0;
-            for (int rec = 0; rec < nbRecords; rec++) {
-                std::streampos valStart = f.tellg();
-                // t_faceValue may be padded: uint16(2) + pad(2) + float(4) = 8 bytes
-                // Read the full struct and extract fields at correct offsets
-                char valBuf[16] = {};
-                f.read(valBuf, (std::min)((uint32_t)sizeof(valBuf), faceValueLen));
-                // timeStep at offset 0 (uint16), energy at offset (faceValueLen - 4)
-                float energy;
-                memcpy(&energy, valBuf + faceValueLen - 4, 4);
-                f.seekg(valStart + (std::streampos)faceValueLen);
-                energySum += energy;
-            }
-
-            float avg = (nbRecords > 0) ? energySum / (float)nbRecords : 0;
-
             SurfRecFace face;
             face.v[0] = (uint32_t)v0;
             face.v[1] = (uint32_t)v1;
             face.v[2] = (uint32_t)v2;
-            face.energySum = avg;
+            face.energySum = 0;
+
+            float energySum = 0;
+            for (int rec = 0; rec < nbRecords; rec++) {
+                std::streampos valStart = f.tellg();
+                char valBuf[16] = {};
+                f.read(valBuf, (std::min)((uint32_t)sizeof(valBuf), faceValueLen));
+                uint16_t tsIdx;
+                memcpy(&tsIdx, valBuf, 2);
+                float energy;
+                memcpy(&energy, valBuf + faceValueLen - 4, 4);
+                f.seekg(valStart + (std::streampos)faceValueLen);
+                energySum += energy;
+                face.timeSteps.push_back({(int)tsIdx, energy});
+            }
+
+            face.energySum = energySum; // default: total mode
             result.faces.push_back(face);
         }
     }
@@ -708,6 +708,8 @@ bool LoadCSBIN(const std::string& path, SurfaceRecResult& result) {
         }
     }
 
+    result.nbTimeSteps = nbTimeStep;
+    result.timeStep = timeStep;
     result.loaded = true;
     f.close();
 
@@ -719,6 +721,44 @@ bool LoadCSBIN(const std::string& path, SurfaceRecResult& result) {
     printf("[CSBIN] Loaded: %s (%d nodes, %zu faces, range %.4e — %.4e, fvlen=%u)\n",
            path.c_str(), quantNodes, result.faces.size(), result.minEnergy, result.maxEnergy, faceValueLen);
     return true;
+}
+
+// ─── Surface Receiver Time-Step Methods ─────────────────────────────────────
+
+void SurfaceRecResult::SetTimeStep(int step) {
+    minEnergy = 1e30f; maxEnergy = -1e30f;
+    for (auto& face : faces) {
+        face.energySum = 0;
+        for (auto& [ts, e] : face.timeSteps) {
+            if (ts == step) { face.energySum = e; break; }
+        }
+        if (face.energySum < minEnergy) minEnergy = face.energySum;
+        if (face.energySum > maxEnergy) maxEnergy = face.energySum;
+    }
+}
+
+void SurfaceRecResult::SetCumulative(int step) {
+    minEnergy = 1e30f; maxEnergy = -1e30f;
+    for (auto& face : faces) {
+        face.energySum = 0;
+        for (auto& [ts, e] : face.timeSteps) {
+            if (ts <= step) face.energySum += e;
+        }
+        if (face.energySum < minEnergy) minEnergy = face.energySum;
+        if (face.energySum > maxEnergy) maxEnergy = face.energySum;
+    }
+}
+
+void SurfaceRecResult::SetTotal() {
+    minEnergy = 1e30f; maxEnergy = -1e30f;
+    for (auto& face : faces) {
+        face.energySum = 0;
+        for (auto& [ts, e] : face.timeSteps) {
+            face.energySum += e;
+        }
+        if (face.energySum < minEnergy) minEnergy = face.energySum;
+        if (face.energySum > maxEnergy) maxEnergy = face.energySum;
+    }
 }
 
 // ─── Particle Trajectory .pbin Reader ───────────────────────────────────────

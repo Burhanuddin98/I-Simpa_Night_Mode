@@ -26,6 +26,8 @@ void ViewportToggleWireframe();
 void ViewportToggleFaces();
 bool ViewportGetShowWireframe();
 bool ViewportGetShowFaces();
+void ViewportSetFaceMode(int mode); // 0=both, 1=outside, 2=inside
+int  ViewportGetFaceMode();
 
 // Camera presets
 void ViewportCameraTop();

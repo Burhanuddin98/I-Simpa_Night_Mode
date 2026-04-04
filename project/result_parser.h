@@ -85,6 +85,7 @@ std::vector<std::string> FindResultFiles(const std::string& dir, const std::stri
 struct SurfRecFace {
     uint32_t v[3];          // vertex indices
     float    energySum;     // summed/averaged energy for coloring
+    std::vector<std::pair<int, float>> timeSteps; // (timeStepIndex, energy) per record
 };
 
 struct SurfaceRecResult {
@@ -93,7 +94,16 @@ struct SurfaceRecResult {
     std::vector<SurfRecFace> faces;
     float minEnergy = 0, maxEnergy = 0;
     int recordType = 0;                 // 0=SPL, 2=TR, etc.
+    int nbTimeSteps = 0;               // total time steps in simulation
+    float timeStep = 0;                // seconds per time step
     bool loaded = false;
+
+    // Recompute energySum for each face at a specific time step (instantaneous mode)
+    void SetTimeStep(int step);
+    // Recompute energySum as cumulative sum from 0 to step
+    void SetCumulative(int step);
+    // Recompute energySum as total (all time steps)
+    void SetTotal();
 };
 
 bool LoadCSBIN(const std::string& path, SurfaceRecResult& result);

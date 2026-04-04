@@ -274,9 +274,49 @@ void DrawResults() {
             if (active) ImGui::PopStyleColor();
         }
 
+        // Time-step mode selector + controls
+        if (s_surfRecResult.loaded && s_surfRecResult.nbTimeSteps > 1) {
+            ImGui::Spacing();
+            static int s_mapMode = 2; // 0=instant, 1=cumulative, 2=total
+            static int s_mapStep = 0;
+
+            ImGui::Text("Mode:");
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Instant", s_mapMode == 0)) s_mapMode = 0;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Cumulative", s_mapMode == 1)) s_mapMode = 1;
+            ImGui::SameLine();
+            if (ImGui::RadioButton("Total", s_mapMode == 2)) s_mapMode = 2;
+
+            if (s_mapMode != 2) {
+                ImGui::PushItemWidth(-1);
+                if (ImGui::SliderInt("##MapStep", &s_mapStep, 0, s_surfRecResult.nbTimeSteps - 1)) {
+                    if (s_mapMode == 0)
+                        s_surfRecResult.SetTimeStep(s_mapStep);
+                    else
+                        s_surfRecResult.SetCumulative(s_mapStep);
+                    // Recompute dB range and reload colormap
+                    const float P0 = 2.5e9f;
+                    float minDb = 200, maxDb = -200;
+                    for (auto& face : s_surfRecResult.faces) {
+                        if (face.energySum > 0) {
+                            float db = 10.0f * log10f(face.energySum * P0);
+                            if (db < minDb) minDb = db;
+                            if (db > maxDb) maxDb = db;
+                        }
+                    }
+                    if (maxDb > minDb) { s_surfRecResult.minEnergy = minDb; s_surfRecResult.maxEnergy = maxDb; }
+                    ViewportLoadColormap(s_surfRecResult);
+                }
+                ImGui::PopItemWidth();
+                ImGui::Text("Step %d / %d  (t = %.3f s)", s_mapStep, s_surfRecResult.nbTimeSteps,
+                    s_mapStep * s_surfRecResult.timeStep);
+            }
+        }
+
         // Display info
         if (s_surfRecResult.loaded) {
-            ImGui::Text("%s: %zu faces, range %.2e — %.2e",
+            ImGui::Text("%s: %zu faces, %.1f — %.1f dB",
                 s_surfRecResult.name.c_str(), s_surfRecResult.faces.size(),
                 s_surfRecResult.minEnergy, s_surfRecResult.maxEnergy);
         }

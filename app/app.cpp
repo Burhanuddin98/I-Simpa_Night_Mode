@@ -1455,6 +1455,13 @@ void App::DrawMenuBar() {
             bool showFaces = ViewportGetShowFaces();
             if (ImGui::MenuItem("Show Wireframe", nullptr, &showWire)) ViewportToggleWireframe();
             if (ImGui::MenuItem("Show Faces", nullptr, &showFaces)) ViewportToggleFaces();
+            int faceMode = ViewportGetFaceMode();
+            if (ImGui::BeginMenu("Face Mode")) {
+                if (ImGui::MenuItem("Both Sides", nullptr, faceMode == 0)) ViewportSetFaceMode(0);
+                if (ImGui::MenuItem("Outside Only", nullptr, faceMode == 1)) ViewportSetFaceMode(1);
+                if (ImGui::MenuItem("Inside Only", nullptr, faceMode == 2)) ViewportSetFaceMode(2);
+                ImGui::EndMenu();
+            }
             ImGui::Separator();
             if (ImGui::MenuItem("Top View"))    ViewportCameraTop();
             if (ImGui::MenuItem("Front View"))  ViewportCameraFront();
