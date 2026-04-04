@@ -332,22 +332,28 @@ static void BuildGrid(float extent, float step) {
     struct Vertex { float x, y, z, r, g, b, a; };
     std::vector<Vertex> verts;
 
+    // XZ ground grid (Y=0 plane)
+    float gridAlpha = 0.12f;
+    float gridR = 0.25f, gridG = 0.25f, gridB = 0.30f;
     for (float i = -extent; i <= extent; i += step) {
-        float alpha = (i == 0.0f) ? 0.5f : 0.15f;
-        float r = (i == 0.0f) ? 0.0f : 0.25f;
-        float g = (i == 0.0f) ? 0.0f : 0.25f;
-        float b = (i == 0.0f) ? 0.9f : 0.32f;
-        verts.push_back({i, 0, -extent, r, g, b, alpha});
-        verts.push_back({i, 0,  extent, r, g, b, alpha});
-
-        r = (i == 0.0f) ? 0.9f : 0.25f;
-        g = (i == 0.0f) ? 0.0f : 0.25f;
-        b = (i == 0.0f) ? 0.0f : 0.32f;
-        verts.push_back({-extent, 0, i, r, g, b, alpha});
-        verts.push_back({ extent, 0, i, r, g, b, alpha});
+        verts.push_back({i, 0, -extent, gridR, gridG, gridB, gridAlpha});
+        verts.push_back({i, 0,  extent, gridR, gridG, gridB, gridAlpha});
+        verts.push_back({-extent, 0, i, gridR, gridG, gridB, gridAlpha});
+        verts.push_back({ extent, 0, i, gridR, gridG, gridB, gridAlpha});
     }
-    verts.push_back({0, 0, 0, 0.0f, 0.9f, 0.0f, 0.5f});
-    verts.push_back({0, extent, 0, 0.0f, 0.9f, 0.0f, 0.5f});
+
+    // RGB axis arrows: X=Red, Y=Green, Z=Blue
+    float axLen = extent * 0.5f;
+    float axAlpha = 0.8f;
+    // X axis (red)
+    verts.push_back({0, 0, 0, 0.9f, 0.1f, 0.1f, axAlpha});
+    verts.push_back({axLen, 0, 0, 0.9f, 0.1f, 0.1f, axAlpha});
+    // Y axis (green)
+    verts.push_back({0, 0, 0, 0.1f, 0.9f, 0.1f, axAlpha});
+    verts.push_back({0, axLen, 0, 0.1f, 0.9f, 0.1f, axAlpha});
+    // Z axis (blue)
+    verts.push_back({0, 0, 0, 0.2f, 0.2f, 0.9f, axAlpha});
+    verts.push_back({0, 0, axLen, 0.2f, 0.2f, 0.9f, axAlpha});
 
     g_gridVertCount = (int)verts.size();
     glGenVertexArrays(1, &g_gridVAO);
@@ -1012,12 +1018,49 @@ void DrawViewport(float width, float height) {
 // ── Colormap implementation ─────────────────────────────────────────────────
 
 // Jet-like colormap: blue -> cyan -> green -> yellow -> red
+// ── Color Palettes ──────────────────────────────────────────────────────────
+
+static int g_paletteIdx = 0; // 0=Jet, 1=Viridis, 2=Inferno, 3=Thermal
+static const char* g_paletteNames[] = {"Jet", "Viridis", "Inferno", "Thermal"};
+
 static glm::vec3 JetColor(float t) {
     t = glm::clamp(t, 0.0f, 1.0f);
     if (t < 0.25f) return glm::mix(glm::vec3(0, 0, 1), glm::vec3(0, 1, 1), t * 4.0f);
     if (t < 0.50f) return glm::mix(glm::vec3(0, 1, 1), glm::vec3(0, 1, 0), (t - 0.25f) * 4.0f);
     if (t < 0.75f) return glm::mix(glm::vec3(0, 1, 0), glm::vec3(1, 1, 0), (t - 0.50f) * 4.0f);
     return glm::mix(glm::vec3(1, 1, 0), glm::vec3(1, 0, 0), (t - 0.75f) * 4.0f);
+}
+
+static glm::vec3 ViridisColor(float t) {
+    t = glm::clamp(t, 0.0f, 1.0f);
+    if (t < 0.25f) return glm::mix(glm::vec3(0.267f,0.004f,0.329f), glm::vec3(0.282f,0.141f,0.458f), t*4.0f);
+    if (t < 0.50f) return glm::mix(glm::vec3(0.282f,0.141f,0.458f), glm::vec3(0.127f,0.567f,0.551f), (t-0.25f)*4.0f);
+    if (t < 0.75f) return glm::mix(glm::vec3(0.127f,0.567f,0.551f), glm::vec3(0.544f,0.773f,0.247f), (t-0.50f)*4.0f);
+    return glm::mix(glm::vec3(0.544f,0.773f,0.247f), glm::vec3(0.993f,0.906f,0.144f), (t-0.75f)*4.0f);
+}
+
+static glm::vec3 InfernoColor(float t) {
+    t = glm::clamp(t, 0.0f, 1.0f);
+    if (t < 0.25f) return glm::mix(glm::vec3(0.001f,0.000f,0.014f), glm::vec3(0.258f,0.039f,0.406f), t*4.0f);
+    if (t < 0.50f) return glm::mix(glm::vec3(0.258f,0.039f,0.406f), glm::vec3(0.678f,0.131f,0.245f), (t-0.25f)*4.0f);
+    if (t < 0.75f) return glm::mix(glm::vec3(0.678f,0.131f,0.245f), glm::vec3(0.961f,0.538f,0.098f), (t-0.50f)*4.0f);
+    return glm::mix(glm::vec3(0.961f,0.538f,0.098f), glm::vec3(0.988f,0.998f,0.645f), (t-0.75f)*4.0f);
+}
+
+static glm::vec3 ThermalColor(float t) {
+    t = glm::clamp(t, 0.0f, 1.0f);
+    if (t < 0.33f) return glm::mix(glm::vec3(0, 0, 0), glm::vec3(0.8f, 0, 0), t*3.0f);
+    if (t < 0.66f) return glm::mix(glm::vec3(0.8f, 0, 0), glm::vec3(1, 0.8f, 0), (t-0.33f)*3.0f);
+    return glm::mix(glm::vec3(1, 0.8f, 0), glm::vec3(1, 1, 1), (t-0.66f)*3.0f);
+}
+
+static glm::vec3 PaletteColor(float t) {
+    switch (g_paletteIdx) {
+        case 1: return ViridisColor(t);
+        case 2: return InfernoColor(t);
+        case 3: return ThermalColor(t);
+        default: return JetColor(t);
+    }
 }
 
 void ViewportLoadColormap(const SurfaceRecResult& result) {
@@ -1044,6 +1087,24 @@ void ViewportLoadColormap(const SurfaceRecResult& result) {
     s_colormapMinDb = minDb;
     s_colormapMaxDb = maxDb;
 
+    // Compute per-VERTEX dB values for smooth interpolation
+    std::vector<float> vertDb(result.nodes.size(), 0);
+    std::vector<int> vertCount(result.nodes.size(), 0);
+    for (auto& face : result.faces) {
+        float db = (face.energySum > 0) ? 10.0f * log10f(face.energySum * P0) : minDb;
+        for (int i = 0; i < 3; i++) {
+            if (face.v[i] < result.nodes.size()) {
+                vertDb[face.v[i]] += db;
+                vertCount[face.v[i]]++;
+            }
+        }
+    }
+    for (size_t i = 0; i < vertDb.size(); i++) {
+        vertDb[i] = (vertCount[i] > 0) ? vertDb[i] / vertCount[i] : minDb;
+    }
+    float dbRange = maxDb - minDb;
+    if (dbRange < 0.01f) dbRange = 1.0f;
+
     struct CVertex { float px, py, pz, nx, ny, nz, cr, cg, cb; };
     std::vector<CVertex> verts;
     verts.reserve(result.faces.size() * 3);
@@ -1057,14 +1118,13 @@ void ViewportLoadColormap(const SurfaceRecResult& result) {
         glm::vec3 c = result.nodes[face.v[2]];
         glm::vec3 n = glm::normalize(glm::cross(b - a, c - a));
 
-        float db = (face.energySum > 0) ? 10.0f * log10f(face.energySum * P0) : minDb;
-        float t = (db - minDb) / (maxDb - minDb);
-        t = glm::clamp(t, 0.0f, 1.0f);
-        glm::vec3 col = JetColor(t);
-
-        verts.push_back({a.x, a.y, a.z, n.x, n.y, n.z, col.r, col.g, col.b});
-        verts.push_back({b.x, b.y, b.z, n.x, n.y, n.z, col.r, col.g, col.b});
-        verts.push_back({c.x, c.y, c.z, n.x, n.y, n.z, col.r, col.g, col.b});
+        // Per-vertex color from smoothed dB values
+        for (int vi = 0; vi < 3; vi++) {
+            glm::vec3 pos = result.nodes[face.v[vi]];
+            float t = glm::clamp((vertDb[face.v[vi]] - minDb) / dbRange, 0.0f, 1.0f);
+            glm::vec3 col = PaletteColor(t);
+            verts.push_back({pos.x, pos.y, pos.z, n.x, n.y, n.z, col.r, col.g, col.b});
+        }
     }
 
     g_colormapVertCount = (int)verts.size();
@@ -1088,23 +1148,7 @@ void ViewportLoadColormap(const SurfaceRecResult& result) {
            g_colormapVertCount / 3, minDb, maxDb);
 
     // ── Build iso-contour lines (marching triangles) ────────────────────────
-    // Compute per-VERTEX dB values by averaging all faces touching each vertex
-    std::vector<float> vertDb(result.nodes.size(), -999);
-    std::vector<int> vertCount(result.nodes.size(), 0);
-    for (auto& face : result.faces) {
-        float db = (face.energySum > 0) ? 10.0f * log10f(face.energySum * P0) : minDb;
-        for (int i = 0; i < 3; i++) {
-            if (face.v[i] < result.nodes.size()) {
-                if (vertDb[face.v[i]] < -998) vertDb[face.v[i]] = 0;
-                vertDb[face.v[i]] += db;
-                vertCount[face.v[i]]++;
-            }
-        }
-    }
-    for (size_t i = 0; i < vertDb.size(); i++) {
-        if (vertCount[i] > 0) vertDb[i] /= vertCount[i];
-        else vertDb[i] = minDb;
-    }
+    // Reuses vertDb computed above for smooth coloring
 
     // Generate iso-levels: every 3 dB within the range
     float isoStep = 3.0f;
@@ -1370,6 +1414,9 @@ bool ViewportGetShowWireframe() { return g_showWireframe; }
 bool ViewportGetShowFaces()     { return g_showFaces; }
 void ViewportSetFaceMode(int mode) { g_faceMode = mode; }
 int  ViewportGetFaceMode()     { return g_faceMode; }
+void ViewportSetPalette(int idx) { g_paletteIdx = idx; }
+int  ViewportGetPalette()      { return g_paletteIdx; }
+const char* ViewportGetPaletteName() { return g_paletteNames[g_paletteIdx]; }
 
 // ── Camera presets ──────────────────────────────────────────────────────────
 

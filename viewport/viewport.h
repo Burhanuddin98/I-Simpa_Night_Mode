@@ -28,6 +28,9 @@ bool ViewportGetShowWireframe();
 bool ViewportGetShowFaces();
 void ViewportSetFaceMode(int mode); // 0=both, 1=outside, 2=inside
 int  ViewportGetFaceMode();
+void ViewportSetPalette(int idx); // 0=Jet, 1=Viridis, 2=Inferno, 3=Thermal
+int  ViewportGetPalette();
+const char* ViewportGetPaletteName();
 
 // Camera presets
 void ViewportCameraTop();

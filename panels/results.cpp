@@ -557,8 +557,18 @@ void DrawResults() {
         ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
         ImGui::TextColored(ImVec4(NeonColors::TextDim[0], NeonColors::TextDim[1], NeonColors::TextDim[2], 1.0f),
             "Display Settings");
+
+        // Palette selector
+        int pal = ViewportGetPalette();
+        const char* palNames[] = {"Jet", "Viridis", "Inferno", "Thermal"};
+        if (ImGui::Combo("Palette", &pal, palNames, 4)) {
+            ViewportSetPalette(pal);
+            // Reload colormap with new palette
+            if (s_surfRecResult.loaded)
+                ViewportLoadColormap(s_surfRecResult);
+        }
+
         ImGui::SliderFloat("Opacity", &s_colormapOpacity, 0.1f, 1.0f, "%.0f%%");
-        // TODO: pass opacity to viewport shader
     }
 
     // ════════════════════════════════════════════════════════════════════════

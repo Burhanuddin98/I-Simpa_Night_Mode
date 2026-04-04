@@ -252,6 +252,32 @@ bool App::Init() {
     glfwMakeContextCurrent(m_window);
     glfwSwapInterval(1); // VSync
 
+    // Drag-and-drop file loading
+    glfwSetDropCallback(m_window, [](GLFWwindow*, int count, const char** paths) {
+        if (count > 0) {
+            std::string path = paths[0];
+            std::string ext = path.substr(path.find_last_of('.'));
+            Project& proj = GetProject();
+            SceneModel model;
+            bool ok = false;
+            if (ext == ".ply") ok = LoadPLY(path, model);
+            else if (ext == ".obj") ok = LoadOBJ(path, model);
+            else if (ext == ".stl") ok = LoadSTL(path, model);
+            else if (ext == ".3ds") ok = Load3DS(path, model);
+            else if (ext == ".isimpa" || ext == ".proj") {
+                ok = SmartLoadProject(proj, path);
+                if (ok) ViewportLoadModel(proj.model);
+            }
+            if (ok && model.vertices.size() > 0) {
+                proj.model = model;
+                ViewportLoadModel(model);
+                for (int gi = 0; gi < (int)proj.model.groups.size(); gi++)
+                    proj.AssignMaterial(gi, gi % (int)proj.materials.size());
+                ConsoleLog("[Drop] Loaded: " + path);
+            }
+        }
+    });
+
     // ── Load restyled neon I-Simpa logo ────────────────────────────────────
     {
 #ifdef _WIN32
