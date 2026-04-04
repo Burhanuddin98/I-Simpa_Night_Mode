@@ -26,6 +26,7 @@ A from-scratch reimagining of [I-Simpa](https://i-simpa.univ-gustave-eiffel.fr/)
 The original I-Simpa uses wxWidgets (2010-era UI). This version replaces it with a modern GPU-accelerated ImGui frontend with a dark neon aesthetic, real-time 3D visualization, and a workflow designed for 2026.
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#330000', 'primaryTextColor': '#ff6666', 'primaryBorderColor': '#cc2222', 'lineColor': '#cc2222', 'secondaryColor': '#1a0000', 'tertiaryColor': '#0d0000', 'clusterBkg': '#1a0000', 'clusterBorder': '#cc2222' }}}%%
 graph LR
     subgraph Original["Original I-Simpa"]
         A1[wxWidgets GUI]
@@ -33,7 +34,7 @@ graph LR
         A3[Software render]
         A4[Click-heavy UX]
     end
-    subgraph Night["🔴 Night Mode"]
+    subgraph Night["Night Mode"]
         B1[ImGui + OpenGL 4.6]
         B2[Dockable panels]
         B3[GPU accelerated]
@@ -140,6 +141,7 @@ Both solvers produce:
 ## Simulation Pipeline
 
 ```mermaid
+%%{init: {'theme': 'dark', 'themeVariables': { 'primaryColor': '#330000', 'primaryTextColor': '#ff6666', 'primaryBorderColor': '#cc2222', 'lineColor': '#cc2222', 'secondaryColor': '#1a0000', 'tertiaryColor': '#0d0000' }}}%%
 flowchart TD
     A[Room Geometry<br/>PLY · OBJ · STL · 3DS] --> B[Material Library<br/>11 built-in + custom per-band]
     B --> C[Sound Sources<br/>Power · Spectrum · Directivity]
@@ -157,8 +159,6 @@ flowchart TD
     K --> M[Particles<br/>Rainbow trails<br/>+ animation]
     K --> N[Intensity<br/>Blue arrows<br/>at receivers]
     K --> O[Parameters<br/>RT60 · EDT · C80<br/>D50 · Ts · G]
-
-    style H fill:#fff0f0,stroke:#cc0000,color:#880000
 ```
 
 ---
