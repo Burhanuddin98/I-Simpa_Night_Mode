@@ -298,6 +298,17 @@ src/newgui/
 
 ## Changelog
 
+### v0.3.1 &mdash; Solver Bug Fixes (2026-04-04)
+
+**Upstream Solver Fixes** (in `src/spps/` and `src/ctr/`)
+- Fixed SPPS atmospheric absorption probability: `>=` &rarr; `<=` (was ~10x too strong in random mode)
+- Fixed SPPS transmission probability: removed incorrect `*absorption` factor (was severely underestimating wall transmission)
+- Fixed TCR `isTransparent()`: now frequency-dependent (was hardcoded to band [0], ignoring freq-dependent encumbrances)
+- Fixed TCR Eyring formula: clamped `alpha_mean < 0.99` to prevent `log(0)` / NaN when absorption &ge; 1.0
+
+**Release**
+- Added prebuilt Windows binary release (download &rarr; unzip &rarr; run)
+
 ### v0.3.0 &mdash; Night Mode (2026-04-04)
 
 **Core Simulation Fixes**
