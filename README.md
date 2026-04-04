@@ -25,19 +25,34 @@ A from-scratch reimagining of [I-Simpa](https://i-simpa.univ-gustave-eiffel.fr/)
 
 The original I-Simpa uses wxWidgets (2010-era UI). This version replaces it with a modern GPU-accelerated ImGui frontend with a dark neon aesthetic, real-time 3D visualization, and a workflow designed for 2026.
 
-```
-Original I-Simpa              Night Mode
-+------------------+          +------------------+
-| wxWidgets GUI    |          | ImGui + OpenGL   |
-| Fixed panels     |    -->   | Dockable panels  |
-| Software render  |          | GPU accelerated  |
-| Click-heavy UX   |          | Touchpad-native  |
-+------------------+          +------------------+
-        |                             |
-        +-------- Same Solvers -------+
-        |    SPPS (Particle Tracing)  |
-        |    TCR  (Classical Theory)  |
-        +-----------------------------+
+```mermaid
+graph LR
+    subgraph Original["Original I-Simpa"]
+        A1[wxWidgets GUI]
+        A2[Fixed panels]
+        A3[Software render]
+        A4[Click-heavy UX]
+    end
+    subgraph Night["Night Mode"]
+        B1[ImGui + OpenGL 4.6]
+        B2[Dockable panels]
+        B3[GPU accelerated]
+        B4[Touchpad-native]
+    end
+    A1 -.->|reimagined| B1
+    A2 -.-> B2
+    A3 -.-> B3
+    A4 -.-> B4
+    subgraph Solvers["Same Solvers"]
+        S1[SPPS — Particle Tracing]
+        S2[TCR — Classical Theory]
+    end
+    Original --> Solvers
+    Night --> Solvers
+
+    style Night fill:#1a0005,stroke:#cc1a1a,color:#ff4444
+    style Original fill:#111,stroke:#555,color:#aaa
+    style Solvers fill:#0a0a0a,stroke:#cc1a1a,color:#ff6666
 ```
 
 ---
@@ -67,23 +82,24 @@ Both solvers produce:
 
 ### 3D Viewport
 
-```
-+----------------------------------------------------------+
-|                                                          |
-|   [Elmia Concert Hall - 955 verts, 10 groups]            |
-|                                                          |
-|          Lit mesh with per-group material colors          |
-|          Neon wireframe overlay                           |
-|          Source/receiver glowing icons with labels        |
-|          Surface colormap (SPL) with legend bar           |
-|          White iso-contour lines at constant dB           |
-|          Intensity arrows at receivers                    |
-|          Rainbow particle trails with glow                |
-|          Encumbrance wireframe boxes                      |
-|          Surface receiver grids                           |
-|          Clipping plane                                   |
-|                                                          |
-+----------------------------------------------------------+
+```mermaid
+mindmap
+  root((3D Viewport))
+    Geometry
+      Lit mesh with per-group colors
+      Neon wireframe overlay
+      Clipping plane
+    Elements
+      Source icons with labels
+      Receiver icons with labels
+      Encumbrance wireframe boxes
+      Surface receiver grids
+    Results Overlays
+      SPL surface colormap
+      Color legend bar with dB scale
+      White iso-contour lines
+      Intensity vector arrows
+      Rainbow particle trails
 ```
 
 ### Controls
@@ -134,69 +150,40 @@ Both solvers produce:
 
 ## Simulation Pipeline
 
-```
-                    +------------------+
-                    |   Room Geometry  |
-                    | PLY/OBJ/STL/3DS |
-                    +--------+---------+
-                             |
-                    +--------v---------+
-                    | Material Library |
-                    |  11 built-in +   |
-                    |  custom per-band |
-                    +--------+---------+
-                             |
-              +--------------+--------------+
-              |                             |
-     +--------v---------+         +--------v---------+
-     |  Sources (point)  |         |   Receivers      |
-     |  Power, spectrum,  |         |  Punctual +      |
-     |  directivity       |         |  Surface plane   |
-     +--------+---------+         +--------+---------+
-              |                             |
-              +--------------+--------------+
-                             |
-                    +--------v---------+
-                    |   Mesh Export    |
-                    |  .cbin (surface) |
-                    |  .poly (TetGen)  |
-                    +--------+---------+
-                             |
-                    +--------v---------+
-                    |     TetGen       |
-                    |  Tetrahedral mesh |
-                    +--------+---------+
-                             |
-                    +--------v---------+
-                    | Neighbor Compute |
-                    |  (fallback if    |
-                    |   .neigh missing)|
-                    +--------+---------+
-                             |
-              +--------------+--------------+
-              |                             |
-     +--------v---------+         +--------v---------+
-     |       SPPS        |         |       TCR        |
-     | 100K particles    |         | Sabine + Eyring  |
-     | per source        |         | analytical       |
-     +--------+---------+         +--------+---------+
-              |                             |
-              +--------------+--------------+
-                             |
-                    +--------v---------+
-                    |     Results      |
-                    | .recp .csbin     |
-                    | .pbin .rpi .gabe |
-                    +--------+---------+
-                             |
-              +--------------+--------------+-----------+
-              |              |              |           |
-     +--------v---+  +------v-----+  +-----v----+ +---v--------+
-     | SPL Map    |  | Particles  |  | Intensity | | Parameters |
-     | Surface    |  | Rainbow    |  | Blue      | | RT60, EDT  |
-     | colormap + |  | trails +   |  | arrows at | | C80, D50   |
-     | iso-lines  |  | animation  |  | receivers | | Ts, G, SPL |
-     +------------+  +------------+  +----------+ +------------+
+```mermaid
+flowchart TD
+    A[Room Geometry<br/>PLY · OBJ · STL · 3DS] --> B[Material Library<br/>11 built-in + custom per-band]
+    B --> C[Sound Sources<br/>Power · Spectrum · Directivity]
+    B --> D[Receivers<br/>Punctual + Surface Planes]
+    C --> E[Mesh Export<br/>.cbin surface + .poly TetGen]
+    D --> E
+    E --> F[TetGen<br/>Tetrahedral Mesh]
+    F --> G[Neighbor Compute<br/>Hash-map fallback]
+    G --> H{Solver}
+    H -->|Monte Carlo| I[SPPS<br/>100K particles/source<br/>Ray tracing]
+    H -->|Analytical| J[TCR<br/>Sabine + Eyring<br/>< 1 second]
+    I --> K[Results<br/>.recp · .csbin · .pbin · .rpi · .gabe]
+    J --> K
+    K --> L[SPL Map<br/>Surface colormap<br/>+ iso-contour lines]
+    K --> M[Particles<br/>Rainbow trails<br/>+ animation]
+    K --> N[Intensity<br/>Blue arrows<br/>at receivers]
+    K --> O[Parameters<br/>RT60 · EDT · C80<br/>D50 · Ts · G]
+
+    style A fill:#1a0005,stroke:#cc1a1a,color:#ff8888
+    style B fill:#1a0005,stroke:#cc1a1a,color:#ff8888
+    style C fill:#1a0005,stroke:#882222,color:#ff6666
+    style D fill:#1a0005,stroke:#882222,color:#ff6666
+    style E fill:#0a0a0a,stroke:#cc1a1a,color:#ffaaaa
+    style F fill:#0a0a0a,stroke:#cc1a1a,color:#ffaaaa
+    style G fill:#0a0a0a,stroke:#cc1a1a,color:#ffaaaa
+    style H fill:#220000,stroke:#ff3333,color:#ff4444
+    style I fill:#1a0005,stroke:#ff2222,color:#ff6666
+    style J fill:#1a0005,stroke:#ff2222,color:#ff6666
+    style K fill:#0a0a0a,stroke:#cc1a1a,color:#ffaaaa
+    style L fill:#110000,stroke:#ff4444,color:#ff8888
+    style M fill:#110000,stroke:#ff4444,color:#ff8888
+    style N fill:#110000,stroke:#ff4444,color:#ff8888
+    style O fill:#110000,stroke:#ff4444,color:#ff8888
 ```
 
 ---
