@@ -33,7 +33,7 @@ graph LR
         A3[Software render]
         A4[Click-heavy UX]
     end
-    subgraph Night["Night Mode"]
+    subgraph Night["🔴 Night Mode"]
         B1[ImGui + OpenGL 4.6]
         B2[Dockable panels]
         B3[GPU accelerated]
@@ -43,16 +43,12 @@ graph LR
     A2 -.-> B2
     A3 -.-> B3
     A4 -.-> B4
-    subgraph Solvers["Same Solvers"]
+    subgraph Solvers["Shared Solvers"]
         S1[SPPS — Particle Tracing]
         S2[TCR — Classical Theory]
     end
     Original --> Solvers
     Night --> Solvers
-
-    style Night fill:#1a0005,stroke:#cc1a1a,color:#ff4444
-    style Original fill:#111,stroke:#555,color:#aaa
-    style Solvers fill:#0a0a0a,stroke:#cc1a1a,color:#ff6666
 ```
 
 ---
@@ -82,25 +78,18 @@ Both solvers produce:
 
 ### 3D Viewport
 
-```mermaid
-mindmap
-  root((3D Viewport))
-    Geometry
-      Lit mesh with per-group colors
-      Neon wireframe overlay
-      Clipping plane
-    Elements
-      Source icons with labels
-      Receiver icons with labels
-      Encumbrance wireframe boxes
-      Surface receiver grids
-    Results Overlays
-      SPL surface colormap
-      Color legend bar with dB scale
-      White iso-contour lines
-      Intensity vector arrows
-      Rainbow particle trails
-```
+**Viewport Layers** &mdash; everything rendered in the 3D view:
+
+| Layer | What It Shows |
+|:------|:-------------|
+| **Geometry** | Lit mesh with per-group material colors + neon wireframe overlay |
+| **Elements** | Source icons (orange glow) + Receiver icons (green glow) + labels |
+| **Fittings** | Encumbrance wireframe boxes + surface receiver grids |
+| **SPL Map** | Jet colormap on cutting planes with white iso-contour lines at constant dB |
+| **Legend** | Vertical color gradient bar with min/max dB labels |
+| **Intensity** | Blue arrows at receivers showing sound arrival direction |
+| **Particles** | Rainbow-colored trails with per-particle hue and cubic fade |
+| **Clipping** | Adjustable cutting plane (X/Y/Z axis) |
 
 ### Controls
 
@@ -169,21 +158,7 @@ flowchart TD
     K --> N[Intensity<br/>Blue arrows<br/>at receivers]
     K --> O[Parameters<br/>RT60 · EDT · C80<br/>D50 · Ts · G]
 
-    style A fill:#1a0005,stroke:#cc1a1a,color:#ff8888
-    style B fill:#1a0005,stroke:#cc1a1a,color:#ff8888
-    style C fill:#1a0005,stroke:#882222,color:#ff6666
-    style D fill:#1a0005,stroke:#882222,color:#ff6666
-    style E fill:#0a0a0a,stroke:#cc1a1a,color:#ffaaaa
-    style F fill:#0a0a0a,stroke:#cc1a1a,color:#ffaaaa
-    style G fill:#0a0a0a,stroke:#cc1a1a,color:#ffaaaa
-    style H fill:#220000,stroke:#ff3333,color:#ff4444
-    style I fill:#1a0005,stroke:#ff2222,color:#ff6666
-    style J fill:#1a0005,stroke:#ff2222,color:#ff6666
-    style K fill:#0a0a0a,stroke:#cc1a1a,color:#ffaaaa
-    style L fill:#110000,stroke:#ff4444,color:#ff8888
-    style M fill:#110000,stroke:#ff4444,color:#ff8888
-    style N fill:#110000,stroke:#ff4444,color:#ff8888
-    style O fill:#110000,stroke:#ff4444,color:#ff8888
+    style H fill:#fff0f0,stroke:#cc0000,color:#880000
 ```
 
 ---
