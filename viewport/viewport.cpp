@@ -471,7 +471,7 @@ void InitViewport() {
         r2.name = "R2 (far)";
         r2.position = glm::vec3(3.0f, 1.2f, 8.0f);
 
-        // Surface receiver: horizontal plane at ear height covering room floor
+        // Cutting plane: horizontal at ear height
         auto& sr = proj.AddSurfaceReceiver();
         sr.name = "Floor Map";
         sr.type = SurfaceReceiver::Plane;

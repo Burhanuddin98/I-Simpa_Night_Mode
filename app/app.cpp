@@ -765,22 +765,23 @@ void App::ProcessAutomation() {
                 }
                 ConsoleLog("[Auto] Loaded: " + std::to_string(model.vertices.size()) + " verts, " +
                            std::to_string(model.groups.size()) + " groups", 0);
-                // Replace surface receivers sized to new geometry
+                // Add cutting plane surface receivers at multiple heights
                 {
                     proj.surfaceReceivers.clear();
                     float margin = 0.5f;
                     float cx = (proj.model.bbMin.x + proj.model.bbMax.x) * 0.5f;
+                    float roomH = proj.model.bbMax.y - proj.model.bbMin.y;
 
-                    // Horizontal plane at ear height (floor map)
+                    // Floor map at ear height
                     auto& sr1 = proj.AddSurfaceReceiver();
                     sr1.name = "Floor Map (1.2m)";
                     sr1.vertexA = glm::vec3(proj.model.bbMin.x + margin, 1.2f, proj.model.bbMin.z + margin);
                     sr1.vertexB = glm::vec3(proj.model.bbMax.x - margin, 1.2f, proj.model.bbMin.z + margin);
                     sr1.vertexC = glm::vec3(proj.model.bbMax.x - margin, 1.2f, proj.model.bbMax.z - margin);
 
-                    // Vertical cross-section down the center (longitudinal slice)
+                    // Vertical cross-section through center
                     auto& sr2 = proj.AddSurfaceReceiver();
-                    sr2.name = "Cross Section (center)";
+                    sr2.name = "Cross Section";
                     sr2.vertexA = glm::vec3(cx, proj.model.bbMin.y + margin, proj.model.bbMin.z + margin);
                     sr2.vertexB = glm::vec3(cx, proj.model.bbMax.y - margin, proj.model.bbMin.z + margin);
                     sr2.vertexC = glm::vec3(cx, proj.model.bbMax.y - margin, proj.model.bbMax.z - margin);
