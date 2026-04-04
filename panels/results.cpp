@@ -194,6 +194,36 @@ void DrawResults() {
     // Auto-scan on first access or when triggered
     if (s_autoLoadPending && !proj.lastResultDir.empty()) {
         ScanResults(proj.lastResultDir);
+        // Also scan sibling directories (e.g. scan tcr if spps was last, or vice versa)
+        fs::path parentDir = fs::path(proj.lastResultDir).parent_path();
+        if (fs::exists(parentDir)) {
+            for (auto& entry : fs::directory_iterator(parentDir)) {
+                if (entry.is_directory() && entry.path().string() != proj.lastResultDir) {
+                    // Merge results from sibling dirs
+                    std::string sibDir = entry.path().string();
+                    auto sibCsbin = FindResultFiles(sibDir, ".csbin");
+                    for (auto& c : sibCsbin) {
+                        // Add to mapBandPaths if not already there
+                        std::string bandName = fs::path(c).parent_path().filename().string();
+                        if (bandName == "Global" && s_mapGlobalPath.empty())
+                            s_mapGlobalPath = c;
+                        else {
+                            bool dup = false;
+                            for (auto& existing : s_mapBandPaths)
+                                if (existing == c) { dup = true; break; }
+                            if (!dup) s_mapBandPaths.push_back(c);
+                        }
+                    }
+                    // Load TCR receiver results if SPPS had none
+                    if (s_results.receivers.empty()) {
+                        SimulationResults sibResults;
+                        LoadResults(sibDir, sibResults);
+                        if (sibResults.loaded && !sibResults.receivers.empty())
+                            s_results = sibResults;
+                    }
+                }
+            }
+        }
         s_autoLoadPending = false;
 
         // Auto-load global colormap if available
@@ -238,6 +268,36 @@ void DrawResults() {
     ModeButton("Parameters", VIZ_PARAMETERS, s_vizMode, hasParams);
     ImGui::NewLine();
     ImGui::PopStyleColor();
+
+    // Manual scan button
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 80);
+    if (ImGui::SmallButton("Scan Results")) {
+        // Scan ALL sim_output subdirectories
+        std::string simBase = proj.lastResultDir;
+        if (simBase.empty()) {
+            // Try to find sim_output next to exe
+#ifdef _WIN32
+            char buf[MAX_PATH]; GetModuleFileNameA(nullptr, buf, MAX_PATH);
+            std::string exeDir(buf); auto p = exeDir.find_last_of("\\/");
+            if (p != std::string::npos) simBase = exeDir.substr(0, p+1) + "sim_output";
+#endif
+        }
+        // Scan the parent of lastResultDir (sim_output/) to find all solver outputs
+        fs::path parentDir = fs::path(simBase).parent_path();
+        if (fs::exists(parentDir)) {
+            for (auto& entry : fs::directory_iterator(parentDir)) {
+                if (entry.is_directory()) {
+                    std::string d = entry.path().string();
+                    ScanResults(d);
+                    if (s_results.loaded) {
+                        proj.lastResultDir = d;
+                        break;
+                    }
+                }
+            }
+        }
+        if (!s_results.loaded) ScanResults(simBase);
+    }
 
     ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
 
