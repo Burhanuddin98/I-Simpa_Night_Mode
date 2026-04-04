@@ -761,6 +761,114 @@ void SurfaceRecResult::SetTotal() {
     }
 }
 
+void SurfaceRecResult::ComputeParameter(ParamType param) {
+    if (param == PARAM_SPL) { SetTotal(); return; }
+
+    float dt = timeStep > 0 ? timeStep : 0.005f;
+    minEnergy = 1e30f; maxEnergy = -1e30f;
+
+    for (auto& face : faces) {
+        if (face.timeSteps.empty()) { face.energySum = 0; continue; }
+
+        // Build dense time-series array from sparse (timeStep, energy) pairs
+        int maxTs = 0;
+        for (auto& [ts, e] : face.timeSteps) if (ts > maxTs) maxTs = ts;
+        int nSteps = maxTs + 1;
+        if (nSteps < 2) { face.energySum = 0; continue; }
+
+        std::vector<float> energy(nSteps, 0);
+        for (auto& [ts, e] : face.timeSteps) {
+            if (ts >= 0 && ts < nSteps) energy[ts] += e;
+        }
+
+        // Total energy
+        float totalE = 0;
+        for (float e : energy) totalE += e;
+        if (totalE <= 0) { face.energySum = 0; continue; }
+
+        if (param == PARAM_C80) {
+            // C80 = 10*log10(E_early / E_late), early = 0-80ms
+            int t80 = (int)(0.08f / dt);
+            if (t80 <= 0 || t80 >= nSteps) { face.energySum = 0; continue; }
+            float early = 0, late = 0;
+            for (int t = 0; t < t80; t++) early += energy[t];
+            for (int t = t80; t < nSteps; t++) late += energy[t];
+            face.energySum = (late > 0) ? 10.0f * log10f(early / late) : 20.0f;
+        }
+        else if (param == PARAM_D50) {
+            // D50 = 100 * E_early(0-50ms) / E_total
+            int t50 = (int)(0.05f / dt);
+            if (t50 <= 0 || t50 >= nSteps) { face.energySum = 0; continue; }
+            float early = 0;
+            for (int t = 0; t < t50; t++) early += energy[t];
+            face.energySum = 100.0f * early / totalE;
+        }
+        else if (param == PARAM_TS) {
+            // Ts = sum(t * e(t)) / sum(e(t)) in ms
+            float weightedSum = 0;
+            for (int t = 0; t < nSteps; t++) weightedSum += (t * dt) * energy[t];
+            face.energySum = 1000.0f * weightedSum / totalE;
+        }
+        else if (param == PARAM_RT60 || param == PARAM_EDT) {
+            // Build Schroeder curve (backward integration, normalized to 0 dB at start)
+            std::vector<float> schroeder(nSteps);
+            float cumul = 0;
+            for (int t = nSteps - 1; t >= 0; t--) {
+                cumul += energy[t];
+                schroeder[t] = cumul;
+            }
+            float schMax = schroeder[0];
+            if (schMax <= 0) { face.energySum = 0; continue; }
+
+            // Convert to dB
+            std::vector<float> schDb(nSteps);
+            for (int t = 0; t < nSteps; t++)
+                schDb[t] = (schroeder[t] > 0) ? 10.0f * log10f(schroeder[t] / schMax) : -60.0f;
+
+            if (param == PARAM_RT60) {
+                // RT30: linear regression on -5 to -35 dB range, extrapolate to -60
+                float sx = 0, sy = 0, sxy = 0, sxx = 0;
+                int n = 0;
+                for (int t = 0; t < nSteps; t++) {
+                    if (schDb[t] <= -5.0f && schDb[t] >= -35.0f) {
+                        float x = t * dt;
+                        sx += x; sy += schDb[t]; sxy += x * schDb[t]; sxx += x * x;
+                        n++;
+                    }
+                    if (schDb[t] < -35.0f) break;
+                }
+                if (n >= 2) {
+                    float slope = ((float)n * sxy - sx * sy) / ((float)n * sxx - sx * sx);
+                    face.energySum = (slope < -0.001f) ? (-60.0f / slope) : 0;
+                } else face.energySum = 0;
+            }
+            else { // EDT
+                // Linear regression on 0 to -10 dB range, extrapolate to -60
+                float sx = 0, sy = 0, sxy = 0, sxx = 0;
+                int n = 0;
+                for (int t = 0; t < nSteps; t++) {
+                    if (schDb[t] >= -10.0f && schDb[t] <= 0.0f) {
+                        float x = t * dt;
+                        sx += x; sy += schDb[t]; sxy += x * schDb[t]; sxx += x * x;
+                        n++;
+                    }
+                    if (schDb[t] < -10.0f) break;
+                }
+                if (n >= 2) {
+                    float slope = ((float)n * sxy - sx * sy) / ((float)n * sxx - sx * sx);
+                    face.energySum = (slope < -0.001f) ? (-60.0f / slope) : 0;
+                } else face.energySum = 0;
+            }
+        }
+
+        if (face.energySum < minEnergy) minEnergy = face.energySum;
+        if (face.energySum > maxEnergy) maxEnergy = face.energySum;
+    }
+
+    // Clamp insane values
+    if (minEnergy > maxEnergy) { minEnergy = 0; maxEnergy = 1; }
+}
+
 // ─── Particle Trajectory .pbin Reader ───────────────────────────────────────
 
 bool LoadPBIN(const std::string& path, ParticleData& data) {

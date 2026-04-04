@@ -249,8 +249,31 @@ void DrawResults() {
         // ── SPL Map controls ────────────────────────────────────────────
         ImGui::PushStyleColor(ImGuiCol_Text,
             ImVec4(NeonColors::Cyan[0], NeonColors::Cyan[1], NeonColors::Cyan[2], 1.0f));
-        ImGui::Text("SPL Surface Map");
+        ImGui::Text("Surface Map");
         ImGui::PopStyleColor();
+
+        // Parameter selector
+        static int s_paramType = 0;
+        const char* paramNames[] = {"SPL (dB)", "RT60 (s)", "EDT (s)", "C80 (dB)", "D50 (%%)", "Ts (ms)"};
+        if (ImGui::Combo("Parameter", &s_paramType, paramNames, 6)) {
+            if (s_surfRecResult.loaded) {
+                s_surfRecResult.ComputeParameter((SurfaceRecResult::ParamType)s_paramType);
+                // For SPL, convert to dB for legend; for others, use raw values
+                if (s_paramType == 0) {
+                    const float P0 = 2.5e9f;
+                    float minDb = 200, maxDb = -200;
+                    for (auto& face : s_surfRecResult.faces) {
+                        if (face.energySum > 0) {
+                            float db = 10.0f * log10f(face.energySum * P0);
+                            if (db < minDb) minDb = db;
+                            if (db > maxDb) maxDb = db;
+                        }
+                    }
+                    if (maxDb > minDb) { s_surfRecResult.minEnergy = minDb; s_surfRecResult.maxEnergy = maxDb; }
+                }
+                ViewportLoadColormap(s_surfRecResult);
+            }
+        }
 
         // Band selector
         ImGui::Text("Frequency:");

@@ -1071,30 +1071,50 @@ void ViewportLoadColormap(const SurfaceRecResult& result) {
 
     if (!result.loaded || result.faces.empty()) return;
 
-    // Use log-scale (dB) normalization for meaningful color spread
-    const float P0 = 2.5e9f; // 1/(20e-6)^2
-    float minDb = 200, maxDb = -200;
-    for (auto& face : result.faces) {
-        if (face.energySum > 0) {
-            float db = 10.0f * log10f(face.energySum * P0);
-            if (db < minDb) minDb = db;
-            if (db > maxDb) maxDb = db;
-        }
-    }
-    if (maxDb <= minDb) { minDb = 0; maxDb = 1; }
-    // Store dB range for legend display (in static vars — accessor functions read these)
-    static float s_colormapMinDb = 0, s_colormapMaxDb = 1;
-    s_colormapMinDb = minDb;
-    s_colormapMaxDb = maxDb;
+    // Determine if values are raw energy (need dB conversion) or pre-computed params
+    // Pre-computed params (RT60, C80, D50, Ts) have result.minEnergy/maxEnergy already set
+    // Raw SPL energy has very small values (< 1.0)
+    const float P0 = 2.5e9f;
+    bool useDbConversion = true;
+    float minVal = result.minEnergy, maxVal = result.maxEnergy;
 
-    // Compute per-VERTEX dB values for smooth interpolation
+    // If min/max look like reasonable parameter values (not tiny energy), skip dB conversion
+    if (minVal > -200 && maxVal < 10000 && (maxVal - minVal) > 0.001f &&
+        (fabsf(minVal) > 0.01f || fabsf(maxVal) > 0.01f)) {
+        // Check if these are already acoustic params (not raw energy)
+        // Raw energy is typically 1e-12 to 1e-5 range
+        bool looksLikeEnergy = (maxVal < 0.1f && minVal >= 0);
+        if (!looksLikeEnergy) useDbConversion = false;
+    }
+
+    float minDb, maxDb;
+    if (useDbConversion) {
+        minDb = 200; maxDb = -200;
+        for (auto& face : result.faces) {
+            if (face.energySum > 0) {
+                float db = 10.0f * log10f(face.energySum * P0);
+                if (db < minDb) minDb = db;
+                if (db > maxDb) maxDb = db;
+            }
+        }
+        if (maxDb <= minDb) { minDb = 0; maxDb = 1; }
+    } else {
+        minDb = minVal;
+        maxDb = maxVal;
+    }
+
+    // Compute per-VERTEX values for smooth interpolation
     std::vector<float> vertDb(result.nodes.size(), 0);
     std::vector<int> vertCount(result.nodes.size(), 0);
     for (auto& face : result.faces) {
-        float db = (face.energySum > 0) ? 10.0f * log10f(face.energySum * P0) : minDb;
+        float val;
+        if (useDbConversion)
+            val = (face.energySum > 0) ? 10.0f * log10f(face.energySum * P0) : minDb;
+        else
+            val = face.energySum;
         for (int i = 0; i < 3; i++) {
             if (face.v[i] < result.nodes.size()) {
-                vertDb[face.v[i]] += db;
+                vertDb[face.v[i]] += val;
                 vertCount[face.v[i]]++;
             }
         }

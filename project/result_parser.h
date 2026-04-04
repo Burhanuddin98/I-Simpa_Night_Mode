@@ -98,12 +98,15 @@ struct SurfaceRecResult {
     float timeStep = 0;                // seconds per time step
     bool loaded = false;
 
-    // Recompute energySum for each face at a specific time step (instantaneous mode)
+    // Time-step modes
     void SetTimeStep(int step);
-    // Recompute energySum as cumulative sum from 0 to step
     void SetCumulative(int step);
-    // Recompute energySum as total (all time steps)
     void SetTotal();
+
+    // Acoustic parameter maps: compute per-face values and store in energySum
+    // Each sets energySum to the computed parameter for each face
+    enum ParamType { PARAM_SPL=0, PARAM_RT60, PARAM_EDT, PARAM_C80, PARAM_D50, PARAM_TS };
+    void ComputeParameter(ParamType param);
 };
 
 bool LoadCSBIN(const std::string& path, SurfaceRecResult& result);
