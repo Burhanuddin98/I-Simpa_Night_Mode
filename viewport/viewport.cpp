@@ -749,18 +749,32 @@ void DrawViewport(float width, float height) {
     glDrawArrays(GL_LINES, 0, g_gridVertCount);
     glBindVertexArray(0);
 
-    // Draw scene mesh (solid faces) with face culling mode
+    // Draw scene mesh — auto-translucent when results are displayed
     if (g_showFaces && g_gpuMesh.indexCount > 0) {
+        bool hasResults = g_hasColormap || g_hasParticles;
+        float meshAlpha = hasResults ? 0.3f : 0.0f; // 0 = opaque, >0 = translucent
+
         glUseProgram(g_meshShader);
         glUniformMatrix4fv(glGetUniformLocation(g_meshShader, "uViewProj"), 1, GL_FALSE, glm::value_ptr(viewProj));
         glUniform3f(glGetUniformLocation(g_meshShader, "uLightDir"), 0.3f, 0.8f, 0.5f);
         glUniform3fv(glGetUniformLocation(g_meshShader, "uCameraPos"), 1, glm::value_ptr(g_camera.GetPosition()));
-        glUniform1f(glGetUniformLocation(g_meshShader, "uAmbient"), 0.25f);
-        glUniform1f(glGetUniformLocation(g_meshShader, "uAlpha"), 0.0f);
+        glUniform1f(glGetUniformLocation(g_meshShader, "uAmbient"), hasResults ? 0.35f : 0.25f);
+        glUniform1f(glGetUniformLocation(g_meshShader, "uAlpha"), meshAlpha);
+
+        if (hasResults) {
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask(GL_FALSE); // don't write depth so interior results show through
+        }
+
         if (g_faceMode == 1) { glEnable(GL_CULL_FACE); glCullFace(GL_BACK); }
         else if (g_faceMode == 2) { glEnable(GL_CULL_FACE); glCullFace(GL_FRONT); }
         g_gpuMesh.Draw(g_meshShader, viewProj, false);
         glDisable(GL_CULL_FACE);
+
+        if (hasResults) {
+            glDepthMask(GL_TRUE);
+        }
     }
 
     // Draw wireframe overlay (neon edges)
@@ -1353,7 +1367,7 @@ static void DrawParticles(const glm::mat4& viewProj, float vpWidth, float vpHeig
         glm::vec3 headRGB = glm::mix(baseColor * 0.4f, baseColor + glm::vec3(0.3f), eNorm);
         headRGB = glm::clamp(headRGB, 0.0f, 1.0f);
         float headAlpha = 0.6f + eNorm * 0.4f;
-        float sz = 0.3f + eNorm * 0.4f; // bigger heads
+        float sz = 0.4f + eNorm * 0.5f; // big visible heads
 
         heads.push_back({step.position.x, step.position.y, step.position.z,
                          headRGB.r, headRGB.g, headRGB.b, headAlpha, sz});
