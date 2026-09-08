@@ -56,6 +56,19 @@ run. The pre-flight panel is `ValidateProject()` from the April plan's Step 2.2,
 
 Plus, from the audit tables and not in its priority list: preferences dialog, language selection, save-a-copy, surface group from selection, vertex editing, material categories, custom directivity visualisation, the TLM solver, mesh preview in the viewport, and graph export.
 
+## Found while driving it, 2026-09-08
+
+- **Focus modes hide the panels but the viewport does not reflow.** F5 (viewport only)
+  dismisses the docked panels and leaves the 3D view at its previous size and position, so
+  most of the window goes empty and the model sits cropped against one edge. The mode is
+  meant to give the whole window to the view. Reproduced on a maximised 1920-wide window.
+- **The `.proj` loader fails silently.** `--load <file>.proj` logs *"[PROJ] Opening ZIP with
+  miniz"* and then nothing: no scene, no error, no complaint. The April notes describe this
+  as a miniz hang, but it does not hang. Since upstream's own projects are `.proj`, this is
+  the normal way a user would bring real geometry in.
+- **Duplicate receiver directories.** SPPS output carries both `R1 (near)` and `R1 (near)0`.
+  Cosmetic, not chased, but it means result scans see each receiver twice.
+
 ## Deliberately not parity
 
 - **Surface receivers, scene type.** Present as a struct, wired and then reverted in `35778f0a` because it crashed SPPS. The shipped workaround is cutting planes with a cross-section. This is arc-plan item 8 and it is a solver crash, not a UI gap.
