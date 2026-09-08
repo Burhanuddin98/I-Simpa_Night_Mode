@@ -1,3 +1,9 @@
+> **SUPERSEDED 2026-09-08 — historical record of the 2026-04-04 audit.**
+> Its twenty-item priority list was largely worked off *within that same session*: 14 of 20 items,
+> and all seven marked CRITICAL, have code in the tree today. The feature tables below are stale
+> in the same way. **Do not quote this file for current state.**
+> What is actually still missing: [docs/ui-parity-backlog.md](docs/ui-parity-backlog.md).
+
 # I-Simpa Custom GUI vs Original — Feature Comparison Audit
 
 ## Legend
