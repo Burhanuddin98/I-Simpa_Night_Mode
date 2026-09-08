@@ -11,9 +11,14 @@ Arc-plan item 9, done 2026-09-08. Supersedes the priority list in `AUDIT_COMPARI
 **Updated 05:52 the same day — some rows are now stronger than that.** The GUI was built from a
 clean checkout, driven end to end against solvers built from the pinned upstream tag, and
 photographed running (`session-logs/summary-2026-09-08-release-arc-open.md`). Rows marked **seen**
-below were observed rendering Elmia Hall with real SPPS results, 955 verts / 1086 faces /
-10 groups, on an RTX 5070 under OpenGL 4.6. That is a much stronger claim than code presence, and
-it is confined to what was actually visible in one frame.
+below were observed rendering Elmia Hall on an RTX 5070 under OpenGL 4.6, and are confined to what
+was actually visible in a frame. That is a much stronger claim than code presence.
+
+⚠️ **Those first frames used the BROKEN mesh** (955 verts / 1086 faces), whose solve lost
+99.997% of its particles. That invalidates every *number* read off them, not the rendering: a
+colormap drawn from bad data still proves the colormap draws. Re-confirmed 15:06 on the corrected
+hall (3926 verts / 7860 faces / 10 groups, `testdata/elmia_corrected.ply`), where the particle
+animation was also seen running — 3000 trails, rainbow per particle, energy-driven brightness.
 
 ## Landed — code present, behaviour unverified
 
@@ -24,7 +29,7 @@ it is confined to what was actually visible in one frame.
 | 3. Iso-contour lines | **seen** — white contour lines over the floor map |
 | 4. Surface colormap, smooth + palette selector | **seen** — smooth green-to-yellow field on the floor map, translucent room shell over it |
 | 5. Time-step surface maps | `panels/results.cpp` |
-| 6. Acoustic parameter maps, RT60/EDT/C80/D50/Ts | **parameters computed and read back**: R1 near RT60 0.90 s, EDT 0.18 s, C80 15.7 dB, D50 97%, Ts 15 ms. Whether the *map* renders was not visible in the frame |
+| 6. Acoustic parameter maps, RT60/EDT/C80/D50/Ts | the parser reads the fields back and the panel has the code. ⚠️ The specific values this row quoted (RT60 0.90 s, EDT 0.18 s, C80 15.7 dB, D50 97%, Ts 15 ms) were **RETRACTED the same day** — computed from the broken solve, arc item 12. That the numbers *arrive* is what this row asserts; what they *are* is not evidence of anything yet |
 | 7. Animation step buttons and speed slider | `panels/results.cpp` |
 | 8. Solid-cube heatmap removed | absent from the tree |
 | 9. Mesh quality parameters UI | `panels/properties.cpp`, `project/solver.cpp` |
