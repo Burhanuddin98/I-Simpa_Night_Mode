@@ -56,7 +56,22 @@ graph LR
 
 ## Screenshots
 
-> *Coming soon &mdash; the GUI speaks for itself. Launch it.*
+<p align="center">
+  <img src="docs/images/particles-elmia-500hz.png" width="900" alt="Particle trails through Elmia Hall at 500 Hz"/>
+</p>
+
+*SPPS particle trails through Elmia Hall at 500 Hz &mdash; 3000 recorded particles over 5 seconds,
+each with its own hue, brightness falling as its energy decays, over the surface colormap.*
+
+<p align="center">
+  <img src="docs/images/materials-and-particles.png" width="900" alt="Material library and environment settings beside the running simulation"/>
+</p>
+
+*The material library with per-band absorption curves, and the environment panel, beside the same run.*
+
+> Both frames are the **corrected** Elmia Hall (`testdata/elmia_corrected.ply`).
+> The hall as upstream ships it does not currently produce a valid solve here &mdash; see
+> [docs/release-arc-plan.md](docs/release-arc-plan.md) item 12.
 
 ---
 
