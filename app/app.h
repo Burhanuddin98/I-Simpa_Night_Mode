@@ -13,7 +13,8 @@ namespace isimpa {
 // ─── Automation command (queued from command-line args) ─────────────────────
 struct AutoCmd {
     enum Type { LoadScene, RunSPPS, RunTCR, LoadResults, BuildHeatmap, FocusCamera,
-                AddSource, AddReceiver, AddSurfaceReceiver, Wait, SkipSplash, Quit } type;
+                AddSource, AddReceiver, AddSurfaceReceiver, Wait, SkipSplash, Quit,
+                PlayParticles } type;
     std::string arg;
     float delay = 0; // seconds to wait before executing
 };

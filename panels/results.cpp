@@ -179,6 +179,23 @@ static void LoadColormapFile(const std::string& path) {
 
 // ─── Main Panel ────────────────────────────────────────────────────────────
 
+// Automation entry point (--play-particles [band]): switch the panel to Particles,
+// load one band's trajectories into the viewport and start playback. Returns false
+// until the results scan has populated the band list, so the caller can retry.
+bool ResultsAutoPlayParticles(int bandIdx) {
+    if (s_partBandPaths.empty()) return false;
+    if (bandIdx < 0 || bandIdx >= (int)s_partBandPaths.size()) bandIdx = 0;
+    s_partBandIdx = bandIdx;
+    LoadPBIN(s_partBandPaths[bandIdx], s_particleData);
+    if (!s_particleData.loaded) return false;
+    ViewportLoadParticles(s_particleData);
+    s_vizMode = VIZ_PARTICLES;
+    s_particleTimer = 0;
+    s_particlePlaying = true;
+    ConsoleLog("[Auto] Playing particles: " + s_partBandPaths[bandIdx], 0);
+    return true;
+}
+
 void DrawResults() {
     if (!ImGui::Begin("Results")) { ImGui::End(); return; }
 

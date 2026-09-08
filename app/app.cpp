@@ -46,6 +46,7 @@ namespace isimpa {
     void DrawProperties();
     void DrawConsole();
     void DrawResults();
+    bool ResultsAutoPlayParticles(int bandIdx);
     void DrawMaterials();
     void DrawViewport(float width, float height);
     void DrawCommandPalettePopup(CommandPalette& palette);
@@ -683,7 +684,10 @@ void App::QueueAutomation(const std::vector<std::string>& args) {
             m_autoCmds.push_back({AutoCmd::RunTCR, "", 1.0f});
         }
         else if (a == "--load-results") {
-            m_autoCmds.push_back({AutoCmd::LoadResults, "", 1.0f});
+            // optional explicit directory; without it, whatever the startup scan found
+            std::string dir;
+            if (i + 1 < args.size() && !args[i + 1].empty() && args[i + 1].rfind("--", 0) != 0) dir = args[++i];
+            m_autoCmds.push_back({AutoCmd::LoadResults, dir, 1.0f});
         }
         // --heatmap removed (feature removed from GUI)
         else if (a == "--focus") {
@@ -700,6 +704,12 @@ void App::QueueAutomation(const std::vector<std::string>& args) {
         }
         else if (a == "--wait" && i + 1 < args.size()) {
             m_autoCmds.push_back({AutoCmd::Wait, "", std::stof(args[++i])});
+        }
+        else if (a == "--play-particles") {
+            // optional numeric band index; retry counter travels in the arg as "band:tries"
+            std::string band = "0";
+            if (i + 1 < args.size() && !args[i + 1].empty() && isdigit((unsigned char)args[i + 1][0])) band = args[++i];
+            m_autoCmds.push_back({AutoCmd::PlayParticles, band + ":0", 2.0f});
         }
         else if (a == "--quit") {
             m_autoCmds.push_back({AutoCmd::Quit, "", 0.5f});
@@ -845,7 +855,13 @@ void App::ProcessAutomation() {
             break;
 
         case AutoCmd::LoadResults:
-            ConsoleLog("[Auto] Load results — click 'Load Results' in Results panel", 0);
+            if (!cmd.arg.empty()) {
+                GetProject().lastResultDir = cmd.arg;
+                AutoLog("[Auto] Result directory set: %s", cmd.arg.c_str());
+                ConsoleLog("[Auto] Result directory set: " + cmd.arg, 0);
+            } else {
+                ConsoleLog("[Auto] Load results — click 'Load Results' in Results panel", 0);
+            }
             break;
 
         case AutoCmd::BuildHeatmap:
@@ -860,6 +876,22 @@ void App::ProcessAutomation() {
         case AutoCmd::Wait:
             ConsoleLog("[Auto] Waited " + std::to_string(cmd.delay) + "s", 0);
             break;
+
+        case AutoCmd::PlayParticles: {
+            int band = 0, tries = 0;
+            sscanf(cmd.arg.c_str(), "%d:%d", &band, &tries);
+            if (ResultsAutoPlayParticles(band)) {
+                AutoLog("[Auto] Particles playing (band index %d)", band);
+            } else if (tries < 30) {
+                // results not scanned yet: re-queue ourselves one second later
+                m_autoCmds.insert(m_autoCmds.begin() + m_autoCmdIdx + 1,
+                                  {AutoCmd::PlayParticles, std::to_string(band) + ":" + std::to_string(tries + 1), 1.0f});
+            } else {
+                AutoLog("[Auto] PlayParticles gave up: no particle results found");
+                ConsoleLog("[Auto] No particle results to play", 1);
+            }
+            break;
+        }
 
         case AutoCmd::Quit:
             AutoLog("[Auto] Quit requested");
