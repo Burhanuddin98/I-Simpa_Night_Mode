@@ -6,7 +6,14 @@ Arc-plan item 9, done 2026-09-08. Supersedes the priority list in `AUDIT_COMPARI
 
 `AUDIT_COMPARISON.md` was written mid-session on 2026-04-04 and its twenty-item priority list was largely worked off *within the same session*. Read today it says all seven of its CRITICAL gaps are open. The v0.3.0 through v0.3.3 changelog says every one of them shipped. Two prose documents disagreeing about the same day is not evidence, so each item below was checked against the source tree.
 
-**What a green row here means:** the code exists. It is not a claim that the feature works. Nothing in this repo has been exercised against a running solver since April, and the smoke test that would prove it is arc-plan item 1.
+**What a green row here means:** the code exists. It is not by itself a claim that the feature works.
+
+**Updated 05:52 the same day — some rows are now stronger than that.** The GUI was built from a
+clean checkout, driven end to end against solvers built from the pinned upstream tag, and
+photographed running (`session-logs/summary-2026-09-08-release-arc-open.md`). Rows marked **seen**
+below were observed rendering Elmia Hall with real SPPS results, 955 verts / 1086 faces /
+10 groups, on an RTX 5070 under OpenGL 4.6. That is a much stronger claim than code presence, and
+it is confined to what was actually visible in one frame.
 
 ## Landed — code present, behaviour unverified
 
@@ -14,10 +21,10 @@ Arc-plan item 9, done 2026-09-08. Supersedes the priority list in `AUDIT_COMPARI
 |---|---|
 | 1. Colour legend bar | `panels/results.cpp`, `viewport/viewport.cpp` |
 | 2. Intensity vector arrows | `panels/results.cpp`, `viewport/viewport.cpp` |
-| 3. Iso-contour lines | `viewport/viewport.cpp` |
-| 4. Surface colormap, smooth + palette selector | palette handling across `app/`, `panels/results.cpp`, `viewport/` |
+| 3. Iso-contour lines | **seen** — white contour lines over the floor map |
+| 4. Surface colormap, smooth + palette selector | **seen** — smooth green-to-yellow field on the floor map, translucent room shell over it |
 | 5. Time-step surface maps | `panels/results.cpp` |
-| 6. Acoustic parameter maps, RT60/EDT/C80/D50/Ts | `panels/results.cpp`, `project/result_parser.cpp` |
+| 6. Acoustic parameter maps, RT60/EDT/C80/D50/Ts | **parameters computed and read back**: R1 near RT60 0.90 s, EDT 0.18 s, C80 15.7 dB, D50 97%, Ts 15 ms. Whether the *map* renders was not visible in the frame |
 | 7. Animation step buttons and speed slider | `panels/results.cpp` |
 | 8. Solid-cube heatmap removed | absent from the tree |
 | 9. Mesh quality parameters UI | `panels/properties.cpp`, `project/solver.cpp` |
@@ -28,6 +35,13 @@ Arc-plan item 9, done 2026-09-08. Supersedes the priority list in `AUDIT_COMPARI
 | Drag-drop file open (§1 of the audit) | `app/app.cpp` GLFW drop callback |
 
 Fourteen of the twenty. The audit's own feature tables are stale in the same way and should not be quoted.
+
+Also **seen** working in the same frame, none of them on the priority list: the cutting-plane
+cross-section that replaced the reverted scene-type surface receiver, the material library cards
+with per-material absorption curves (Acoustic Foam 0.753, Heavy Curtain 0.466, Brick 0.043,
+Plaster 0.031), the left workflow rail counting room / materials / sources / receivers, and the
+pre-flight check panel reporting geometry, materials, sources and receivers all green before a
+run. The pre-flight panel is `ValidateProject()` from the April plan's Step 2.2, working.
 
 ## Still open — no code found
 

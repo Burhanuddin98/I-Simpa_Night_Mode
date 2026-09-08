@@ -45,3 +45,101 @@ An earlier launch of the same workflow at 02:14 died with all nine agents errori
 ## Next
 
 Items 4 through 11 of the arc plan, gated on what the running workflow reports. The first real decision waiting on Burhan is whether a commercial Night Mode is in scope, because that alone decides the TetGen question.
+
+---
+
+## 06:04 — RETRACTION: the solve is broken and the GUI cannot see it
+
+Chasing a better particle animation, I ran `spps.exe` directly instead of through the GUI, and
+PowerShell surfaced its **stderr**:
+
+```
+Warning 599982 particles has been in error on 600000 particles.
+The computation result may be wrong, please check the particles statitics file for more details.
+```
+
+99.997% of particles fail, and the solver still exits 0.
+
+**Reproduced at the GUI's own settings.** I had raised duration 2 s to 5 s and particles 100k to
+200k first, so the obvious suspicion was my change. Reverting all three values to exactly what the
+GUI wrote and re-running gave the same result at the smaller scale. The defect is pre-existing and
+was present in the run reported earlier this session as clean.
+
+**Why nobody noticed.** `RunSolver` reads only stdout through its pipe. The warning is on stderr.
+The GUI printed `[Solver] Completed successfully` and cheerfully loaded the results.
+
+### Retracted
+
+Every acoustic figure measured tonight, including the ones quoted to Michael: R1 46.9 dB / RT60
+1.03 s, R2 34.7 dB, Receiver 3 28.5 dB, and R1's EDT 0.18 s, C80 15.7 dB, D50 97%, Ts 15 ms. They
+were computed from a run in which essentially every particle failed. They are not evidence of
+anything and must not be quoted.
+
+What still stands, because it does not depend on the solve being physically right: the GUI builds
+from a clean checkout (61/61, exit 0), the four solvers build from the pinned tag and run, the
+test suite links and runs again (17/19), and the whole chain executes end to end producing files
+the GUI parses and renders. The **plumbing** is proven. The **physics** is not.
+
+### Also surfaced, same output
+
+```
+Xml Property disable_absatmo_computation doesn't exist !
+Xml Property absatmo doesn't exist !
+```
+
+The GUI's `WriteConfigXML` omits two properties this solver version reads. That is a
+format-compatibility gap against upstream 1.4.0, and atmospheric absorption is precisely the
+subject of the first of the four unverified solver-fix claims.
+
+### Prime suspect, unproven at time of writing
+
+The tetrahedral neighbour fallback in `ConvertTetGenToMbin`. The GUI logged 6294 tetrahedra with
+**288 boundary faces**, against a surface mesh of 1086 faces, having "matched 1475 tet faces".
+Those three numbers do not reconcile. The April plan's bug #2 is exactly this failure mode:
+neighbours missing means particles cannot traverse the mesh. The fix for it may be incomplete, or
+may not survive against upstream 1.4.0. A `sentinel` seat was dispatched to root-cause it.
+
+### The lesson worth keeping
+
+A green "Completed successfully" meant only that the process exited. The gate never read the
+channel the bad news arrives on. `feedback_green_gate_is_not_truth`, in a new repo.
+
+### 06:22 — ROOT CAUSE PROVEN. Two hypotheses refuted by test, one chain confirmed end to end
+
+**Refuted, mine:** the tetrahedral neighbour fallback. **Refuted, the reviewer's:** TetGen's `-Y`
+flag. Dropping `-Y` only lowers the skipped-facet count from 535 to 324; under upstream's own
+flags, `-pq1.5 -A -n`, it is still 325.
+
+**The chain, each link with a receipt:**
+
+| step | what happens | receipt |
+|---|---|---|
+| 1 | The raw Elmia PLY is self-intersecting as upstream ships it | converted independently from the PLY, TetGen skips 322 facets as polygons, 312 fan-triangulated; 7 duplicate vertex positions among 955 |
+| 2 | TetGen exits 3, *"Program stopped"*, leaves partial output | `tetgen.log`: *"!!! 535 input triangles are skipped due to self-intersections"* |
+| 3 | The Run button's pipeline downgrades that to a warning and continues | `solver.cpp` ~1229 site: exit≠0 with files present → *"TetGen returned warnings … continuing"*; caller `app.cpp:195` |
+| 4 | Mesh converter builds a mesh of the wrong domain | 6294 tets, 288 boundary faces vs 1086 surface faces |
+| 5 | SPPS destroys particles at faces with no material and no neighbour | `CalculationCore.cpp:365-372`; 599,982 of 600,000 lost; reflection order tops out at 1–4 |
+| 6 | The warning is on stderr; the GUI reads stdout only | `RunSolver` pipe; classifier wants a leading `!`, SPPS writes *"Warning …"* |
+
+**How upstream meshes the same hall.** Its tutorial project carries the hall *after* scene
+correction: 3926 nodes, 7860 facets, eleven times Night Mode's poly, meshing clean with our TetGen
+at 188,410 tetrahedra and zero skipped. Correction is ON in that project. Night Mode's
+`RunMeshGeneration` (`app.cpp:483`) does call `preprocess.exe`, but on the `.cbin`, which the tool
+cannot read (its importer is `ImportPOLY`), *after* the poly was already written from memory, and
+without reading the result back. It rewrote the cbin as 156 bytes. Handed a poly in the syntax it
+expects, `1 0 marker` per facet rather than a lone `1`, it merged the 7 duplicates, split 594
+triangles, then oscillated between two points 2 cm apart on the ceiling plane, gave up at its
+100-round ceiling, printed *"Mesh reparation has been aborted"*, exited 0, and wrote nothing.
+
+**Positive control, passed.** The default box room: 8 vertices, 12 faces, 9 nodes, 12 tetrahedra,
+all 12 tet faces matched. SPPS runs with **no particle-error warning**. So `WriteMeshBinary`,
+`ConvertTetGenToMbin` and the SPPS integration are sound on a valid mesh. The defect is exactly:
+no working repair path, and four silent failures in a row hiding it.
+
+**What the fix looks like.** Repair before export, as upstream does. A real repair, since upstream's
+standalone tool cannot do this hall. And no more swallowing: TetGen exit 3 is a failure, SPPS
+stderr is read, the particle-loss ratio is surfaced. Arc plan item 12.
+
+Two smaller things seen on the way: the solver rejects `disable_absatmo_computation` and
+`absatmo`, which the GUI never writes; and SPPS creates duplicated receiver directories with a
+trailing `0` (`R1 (near)0`), not chased.
