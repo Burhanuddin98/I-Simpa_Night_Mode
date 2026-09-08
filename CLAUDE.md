@@ -16,3 +16,21 @@
 - **TetGen is dual-licensed, AGPL-3 or a paid WIAS licence.** A free GPL release is fine. A closed one is not, without that licence.
 - **Do not claim** the four solver fixes are correct, or that upstream is wrong, in the README, the UI or any marketing copy until item 4 of the arc plan has run.
 - Commit conventions follow `~/.claude/CLAUDE.md`: no Claude attribution, messages focused on the why, and a session summary in `session-logs/` before the final push.
+
+## Picking this up
+
+Live handoff: `session-logs/HANDOFF-2026-09-08.md`. Read it before the arc plan — it names
+what is proven, what is retracted, and the traps already paid for.
+
+**Nothing is pushed.** `main` sits ahead of `origin/main`; the remote is still the April
+release. Pushing is Michael's call and has not been asked.
+
+**Develop against `testdata/elmia_corrected.ply`**, not against upstream's raw `elmia.ply`.
+The raw hall self-intersects and produces a solve in which ~99.997% of particles die while
+every gate reports success (arc item 12). Regenerate the corrected mesh with
+`tools/extract_upstream_scene.py`; pass the original layered `.ply` as the third argument or
+the whole hall gets one material.
+
+**Drive it headless** with `--auto --load <ply> --load-results <dir> --play-particles [band]`,
+or `--run-spps --wait <s> --quit` to solve. Always read the solver's **stderr**: the GUI does
+not, which is how the broken solve went unnoticed for five months.
