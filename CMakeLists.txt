@@ -20,29 +20,29 @@ set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glfw)
 
-# Dear ImGui (docking branch)
+# Dear ImGui (docking branch, PINNED to a commit)
+# Tracking the branch made this repo unbuildable between April and September
+# 2026 without a single commit landing here: upstream retired BeginChildFrame()
+# and CaptureMouseFromApp(), which ImGuizmo still called. Move this SHA
+# deliberately, never implicitly.
 FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG        docking
+    GIT_TAG        a2b7d6e7928e92a0b764d7bd8f3faceb660e60a7  # docking @ 2026-09-07
 )
 FetchContent_MakeAvailable(imgui)
 
-# ImPlot (charts)
+# ImPlot (charts, PINNED)
 FetchContent_Declare(
     implot
     GIT_REPOSITORY https://github.com/epezent/implot.git
-    GIT_TAG        master
+    GIT_TAG        7eeb9168d2e5e6b14e266d8782ecf7e649dfc3a4  # master @ 2026-06-08
 )
 FetchContent_MakeAvailable(implot)
 
-# ImGuizmo (3D gizmos)
-FetchContent_Declare(
-    imguizmo
-    GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
-    GIT_TAG        master
-)
-FetchContent_MakeAvailable(imguizmo)
+# ImGuizmo: REMOVED 2026-09-08. It was fetched, compiled and linked while being
+# called nowhere in this codebase -- its only trace was a word in the About box.
+# It was also the sole reason a clean checkout could no longer build.
 
 # GLM (math)
 FetchContent_Declare(
@@ -86,18 +86,6 @@ add_library(implot_lib STATIC
 target_include_directories(implot_lib PUBLIC ${implot_SOURCE_DIR})
 target_link_libraries(implot_lib PUBLIC imgui_lib)
 
-# ─── ImGuizmo library ────────────────────────────────────────────────────────
-
-add_library(imguizmo_lib STATIC
-    ${imguizmo_SOURCE_DIR}/ImGuizmo.cpp
-    ${imguizmo_SOURCE_DIR}/GraphEditor.cpp
-    ${imguizmo_SOURCE_DIR}/ImCurveEdit.cpp
-    ${imguizmo_SOURCE_DIR}/ImGradient.cpp
-    ${imguizmo_SOURCE_DIR}/ImSequencer.cpp
-)
-target_include_directories(imguizmo_lib PUBLIC ${imguizmo_SOURCE_DIR})
-target_link_libraries(imguizmo_lib PUBLIC imgui_lib)
-
 # ─── Main Application ────────────────────────────────────────────────────────
 
 set(SOURCES
@@ -135,7 +123,6 @@ target_include_directories(ISimpa_NewGUI PRIVATE
 target_link_libraries(ISimpa_NewGUI PRIVATE
     imgui_lib
     implot_lib
-    imguizmo_lib
     glm::glm
     glad
     glfw

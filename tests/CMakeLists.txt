@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ISimpa_Tests LANGUAGES CXX)
+project(ISimpa_Tests LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,6 +16,13 @@ add_executable(test_pipeline
     ../project/result_parser.cpp
     ../mesh/scene_model.cpp
     ../mesh/ply_loader.cpp
+    # miniz: solver.cpp's LoadOriginalProject() extracts .proj archives with it.
+    # Missing here ever since miniz landed in v0.3.0, so this target failed to
+    # link on 7 unresolved mz_zip_* symbols and the suite had not run since.
+    ../mesh/miniz.c
+    ../mesh/miniz_tdef.c
+    ../mesh/miniz_tinfl.c
+    ../mesh/miniz_zip.c
     gpu_stubs.cpp
 )
 

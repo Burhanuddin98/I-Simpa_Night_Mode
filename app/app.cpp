@@ -1182,7 +1182,7 @@ void App::DrawMainDockspace() {
         ImGui::Text("Renderer: OpenGL 4.6 + Dear ImGui (Docking)");
         ImGui::Spacing();
         ImGui::TextColored(ImVec4(NeonColors::TextDim[0], NeonColors::TextDim[1], NeonColors::TextDim[2], 1.0f),
-            "Built with GLFW, ImGui, ImPlot, ImGuizmo, GLM");
+            "Built with GLFW, ImGui, ImPlot, GLM");
         ImGui::Spacing();
         if (ImGui::Button("OK", ImVec2(120, 0))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();

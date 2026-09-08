@@ -1,5 +1,6 @@
 build/
 build2/
+build*/
 *.obj
 *.lib
 *.exp

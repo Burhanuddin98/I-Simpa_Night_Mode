@@ -245,7 +245,7 @@ cmake ..
 cmake --build . --config Release
 ```
 
-All dependencies (GLFW, ImGui, ImPlot, ImGuizmo, GLM, miniz) are fetched automatically via CMake FetchContent.
+All dependencies (GLFW, ImGui, ImPlot, GLM, miniz) are fetched automatically via CMake FetchContent. ImGui and ImPlot are pinned to explicit commits, GLFW and GLM to release tags: nothing tracks a moving branch.
 
 Solver executables (`spps.exe`, `classicalTheory.exe`, `tetgen.exe`, `preprocess.exe`) are copied to `Release/solvers/` automatically from the I-Simpa build tree.
 
