@@ -1,0 +1,2 @@
+# Fixtures are solver inputs: never convert line endings.
+tests/fixtures/** -text
