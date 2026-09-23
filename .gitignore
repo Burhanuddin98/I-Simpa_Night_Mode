@@ -19,3 +19,6 @@ isimpa_project.json
 isimpa_temp_script.py
 isimpa_console.log
 test_project.isimpa
+
+# Rust rebuild
+/target/

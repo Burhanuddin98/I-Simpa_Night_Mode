@@ -1,0 +1,10 @@
+[package]
+name = "simpa"
+description = "Command line for the headless core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+simpa-core = { path = "../simpa-core" }

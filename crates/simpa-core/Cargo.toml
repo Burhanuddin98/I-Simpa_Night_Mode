@@ -1,0 +1,9 @@
+[package]
+name = "simpa-core"
+description = "Headless core: project model, solver input files, runs and results for I-Simpa's solvers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
