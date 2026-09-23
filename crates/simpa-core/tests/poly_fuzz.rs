@@ -132,7 +132,7 @@ proptest! {
 }
 
 proptest! {
-    #![proptest_config(config(5_000))]
+    #![proptest_config(config(10_000))]
 
     /// A real prefix (cut anywhere) followed by a soup of plausible tokens.
     #[test]

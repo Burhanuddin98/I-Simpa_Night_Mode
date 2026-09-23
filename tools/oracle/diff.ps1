@@ -2,7 +2,12 @@
 # print identical canonical dumps for every fixture, and for -Generated models per writer format
 # that Rust generates and writes.
 #   powershell -File tools/oracle/diff.ps1 -Generated 1000
-param([int]$Generated = 1000)
+param(
+    [int]$Generated = 1000,
+    # A directory of real solver output (tools/oracle/make-corpus.ps1); every file of a known
+    # format in it is diffed like a fixture.
+    [string]$Corpus = ''
+)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $repo
@@ -30,14 +35,21 @@ function Get-Dump([string]$exe, [string[]]$argv) {
     $out = $p.StandardOutput.ReadToEnd(); $null = $p.StandardError.ReadToEnd(); $p.WaitForExit()
     return $out.Replace("`r`n", "`n")
 }
+# Every file diffed here is a valid input, so a failure on either side is a mismatch. The oracle
+# cannot say WHY upstream failed, so "both failed" would prove nothing; failure kinds are covered
+# by the negative golden tests instead.
 function Same([string]$rust, [string]$orc) {
-    if ($rust.StartsWith('error') -and $orc.StartsWith('error')) { return $true }
+    if ($rust.StartsWith('error') -or $orc.StartsWith('error')) { return $false }
     return $rust -ceq $orc
 }
 
 $mismatches = 0; $checked = 0
-$fixtures = Get-ChildItem (Join-Path $repo 'tests\fixtures') -Recurse -File | Where-Object { $kinds.ContainsKey($_.Extension.ToLower()) }
+$roots = @(Join-Path $repo 'tests\fixtures')
+if ($Corpus) { $roots += $Corpus }
+$fixtures = $roots | ForEach-Object { Get-ChildItem $_ -Recurse -File } | Where-Object { $kinds.ContainsKey($_.Extension.ToLower()) }
+$byFormat = @{}
 foreach ($f in $fixtures) {
+    $byFormat[$kinds[$f.Extension.ToLower()]] = 1 + [int]$byFormat[$kinds[$f.Extension.ToLower()]]
     $fmt = $kinds[$f.Extension.ToLower()]
     $r = Get-Dump $simpa @('dump', $fmt, $f.FullName)
     $o = Get-Dump $oracle @('dump', $fmt, $f.FullName)
@@ -49,7 +61,7 @@ foreach ($f in $fixtures) {
         Write-Host "MISMATCH $fmt $($f.FullName.Substring($repo.Length + 1))"
     }
 }
-Write-Host "fixtures: $checked checked"
+Write-Host "fixtures: $checked checked ($(($byFormat.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name) $($_.Value)" }) -join ', '))"
 
 foreach ($fmt in 'cbin', 'mbin', 'poly') {
     $bad = 0
