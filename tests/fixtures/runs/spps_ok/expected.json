@@ -1,0 +1,70 @@
+{
+  "solver": "spps",
+  "status": "OK",
+  "codes": [],
+  "warnings": [],
+  "receipt": "Positive baseline: exit 0 with spps_end_of_calculation (SC:343), band columns 500 and 1000 Hz, total 2000 = nbparticules x 1 source per band and no loss (SC:352-361), every expected file present (SC:224-241).",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": []
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "OK",
+    "codes": [],
+    "warnings": [],
+    "lines": [
+      "End of calculation."
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_end_of_calculation",
+        "terminated": true,
+        "text": "End of calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_output_start",
+        "terminated": true,
+        "text": "Output results files."
+      }
+    ],
+    "progress_lines": 3999,
+    "post_run": {
+      "codes": [],
+      "stats": {
+        "500 Hz": {
+          "absorbed_atmosphere": 0,
+          "absorbed_materials": 969,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 0,
+          "remaining": 1031,
+          "total": 2000
+        },
+        "1000 Hz": {
+          "absorbed_atmosphere": 41,
+          "absorbed_materials": 1959,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 0,
+          "remaining": 0,
+          "total": 2000
+        }
+      }
+    }
+  }
+}

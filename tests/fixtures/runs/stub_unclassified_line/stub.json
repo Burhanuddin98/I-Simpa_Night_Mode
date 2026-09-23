@@ -1,0 +1,30 @@
+{
+  "exit_code": 0,
+  "lines": [
+    {
+      "stream": "stdout",
+      "text": "SPPS version 2.2.1",
+      "newline": true,
+      "delay_ms": 0
+    },
+    {
+      "stream": "stdout",
+      "text": "La particule va sortir du perim�tre du volume car une face du domaine est mal orient�e ou le maillage est incorrect. La particule a �t� supprim�e",
+      "newline": true,
+      "delay_ms": 0
+    },
+    {
+      "stream": "stdout",
+      "text": "End of calculation.",
+      "newline": true,
+      "delay_ms": 0
+    },
+    {
+      "stream": "stdout",
+      "text": "Output results files.",
+      "newline": true,
+      "delay_ms": 0
+    }
+  ],
+  "files": {}
+}

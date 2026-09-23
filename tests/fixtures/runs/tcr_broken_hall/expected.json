@@ -1,0 +1,114 @@
+{
+  "solver": "tcr",
+  "status": "FAIL",
+  "codes": [
+    "mesh_invalid",
+    "unmarked_boundary_faces",
+    "uncovered_scene_faces"
+  ],
+  "warnings": [],
+  "receipt": "Night Mode's broken-hall TCR folder of 2026-09-08 (RAW:1057-1058), meshed from the self-intersecting raw hall with 535 facets skipped and no .neigh: 267 faces with no neighbour carry no marker and 338 of the 1,086 scene faces are carried by no tetrahedron face, which decision 6 forbids, so run-folder refuses it before launch (m5-m6-design.md, Run folder). Run anyway, TCR exits 0 with results, but Night Mode's config.xml lacks disable_absatmo_computation and absatmo, so row xml_property_missing fires twice.",
+  "pre_launch": {
+    "mesh_check": "fail",
+    "tetrahedra": 6294,
+    "nodes": 1067,
+    "scene_faces": 1086,
+    "room_id": 0,
+    "counts": {
+      "unmarked_boundary_faces": 267,
+      "uncovered_scene_faces": 338
+    },
+    "codes": [
+      "unmarked_boundary_faces",
+      "uncovered_scene_faces"
+    ],
+    "slivers": {
+      "count": 65,
+      "rule": "corners distinct, |6V| <= 2^-23 * (longest edge)^3"
+    }
+  },
+  "observed": {
+    "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "xml_property_missing"
+    ],
+    "warnings": [],
+    "lines": [
+      "Xml Property disable_absatmo_computation doesn't exist !",
+      "Xml Property absatmo doesn't exist !"
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "tcr_loading",
+        "terminated": true,
+        "text": "XML configuration file is currently loading..."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_config_echo",
+        "terminated": true,
+        "text": "config.xml"
+      },
+      {
+        "stream": "stdout",
+        "row": "xml_property_missing",
+        "terminated": true,
+        "text": "Xml Property disable_absatmo_computation doesn't exist !"
+      },
+      {
+        "stream": "stdout",
+        "row": "xml_property_missing",
+        "terminated": true,
+        "text": "Xml Property absatmo doesn't exist !"
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_loading",
+        "terminated": true,
+        "text": "XML configuration file has been loaded."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_banner",
+        "terminated": true,
+        "text": "Classical Theory of Reverberation version 1.0.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_step",
+        "terminated": true,
+        "text": "Step 1/3 : Main calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_step",
+        "terminated": true,
+        "text": "Step 2/3 : Punctual receivers calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_step",
+        "terminated": true,
+        "text": "Step 3/3 : Surface receivers calculation."
+      }
+    ],
+    "progress_lines": 13,
+    "post_run": {
+      "codes": [
+        "nonfinite_result"
+      ],
+      "nonfinite": [
+        "Punctual receivers\\R2 (far).gabe [Direct dB SPL] 125 Hz = -inf",
+        "Punctual receivers\\R2 (far).gabe [Direct dB SPL] 250 Hz = -inf",
+        "Punctual receivers\\R2 (far).gabe [Direct dB SPL] 500 Hz = -inf",
+        "Punctual receivers\\R2 (far).gabe [Direct dB SPL] 1000 Hz = -inf",
+        "Punctual receivers\\R2 (far).gabe [Direct dB SPL] 2000 Hz = -inf",
+        "Punctual receivers\\R2 (far).gabe [Direct dB SPL] 4000 Hz = -inf",
+        "Punctual receivers\\R2 (far).gabe [Direct dB SPL] Global = -inf"
+      ]
+    }
+  }
+}

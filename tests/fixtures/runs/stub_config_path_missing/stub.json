@@ -1,0 +1,18 @@
+{
+  "exit_code": 0,
+  "lines": [
+    {
+      "stream": "stdout",
+      "text": "SPPS version 2.2.1",
+      "newline": true,
+      "delay_ms": 0
+    },
+    {
+      "stream": "stdout",
+      "text": "The path of the XML configuration file must be specified!",
+      "newline": true,
+      "delay_ms": 0
+    }
+  ],
+  "files": {}
+}

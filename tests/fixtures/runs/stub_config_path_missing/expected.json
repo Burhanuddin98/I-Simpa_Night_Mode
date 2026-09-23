@@ -1,0 +1,67 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "config_path_missing"
+  ],
+  "warnings": [],
+  "receipt": "Row config_path_missing (SC:318, sppsNantes.cpp:287): SPPS started with no argument, exit 0 (SC:190-193). run-folder always passes config.xml, so only a stub reaches it.",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": []
+  },
+  "observed": {
+    "source": "stub.json, played back by the stub solver (not run here)",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "config_path_missing"
+    ],
+    "warnings": [],
+    "lines": [
+      "The path of the XML configuration file must be specified!"
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "config_path_missing",
+        "terminated": true,
+        "text": "The path of the XML configuration file must be specified!"
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "stats_unreadable",
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "SPPS particle statistics.gabe",
+        "Total energy.recp",
+        "Punctual receivers\\R1\\Sound level.recp",
+        "Punctual receivers\\R1\\Advanced sound level.gap",
+        "Punctual receivers\\R1\\Punctual receiver intensity.gabe",
+        "Punctual receivers\\R1\\Sound level per source.recps",
+        "Intensity animation\\1000 Hz\\Intensity.rpi",
+        "Intensity animation\\500 Hz\\Intensity.rpi",
+        "particles\\1000\\particles.pbin",
+        "particles\\1000\\particle_surface_collision_statistics.csv",
+        "particles\\1000\\particle_receivers_collision_statistics.csv",
+        "particles\\500\\particles.pbin",
+        "particles\\500\\particle_surface_collision_statistics.csv",
+        "particles\\500\\particle_receivers_collision_statistics.csv"
+      ]
+    }
+  }
+}

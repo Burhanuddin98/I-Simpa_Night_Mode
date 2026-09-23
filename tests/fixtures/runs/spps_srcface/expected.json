@@ -1,0 +1,67 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "source_on_surface"
+  ],
+  "warnings": [],
+  "receipt": "Source at (1.2, 1.7, 0), inside floor triangle 0: row source_on_surface on stderr (SC:323, sppsNantes.cpp:322-325), exit 0 with no results (SC:72).",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": []
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "source_on_surface"
+    ],
+    "warnings": [],
+    "lines": [
+      "A sound source position is intersecting with the 3D model. Move the sound source inside the 3D model"
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stderr",
+        "row": "source_on_surface",
+        "terminated": true,
+        "text": "A sound source position is intersecting with the 3D model. Move the sound source inside the 3D model"
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "stats_unreadable",
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "SPPS particle statistics.gabe",
+        "Total energy.recp",
+        "Punctual receivers\\R1\\Sound level.recp",
+        "Punctual receivers\\R1\\Advanced sound level.gap",
+        "Punctual receivers\\R1\\Punctual receiver intensity.gabe",
+        "Punctual receivers\\R1\\Sound level per source.recps",
+        "Intensity animation\\1000 Hz\\Intensity.rpi",
+        "Intensity animation\\500 Hz\\Intensity.rpi",
+        "particles\\1000\\particles.pbin",
+        "particles\\1000\\particle_surface_collision_statistics.csv",
+        "particles\\1000\\particle_receivers_collision_statistics.csv",
+        "particles\\500\\particles.pbin",
+        "particles\\500\\particle_surface_collision_statistics.csv",
+        "particles\\500\\particle_receivers_collision_statistics.csv"
+      ]
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "directivity_not_open"
+  ],
+  "warnings": [],
+  "receipt": "directivity_file names a missing file: row directivity_not_open (SC:319, directivityParser.cpp:46), exit 0, the source emits nothing (SC:82, VERIFIED S run_dirmiss; RAW:1194, RAW:1465).",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": []
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "directivity_not_open"
+    ],
+    "warnings": [],
+    "lines": [
+      "DirectivityBalloon : File not open",
+      "End of calculation."
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "directivity_not_open",
+        "terminated": true,
+        "text": "DirectivityBalloon : File not open"
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_end_of_calculation",
+        "terminated": true,
+        "text": "End of calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_output_start",
+        "terminated": true,
+        "text": "Output results files."
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "particle_total_short"
+      ],
+      "stats": {
+        "500 Hz": {
+          "absorbed_atmosphere": 0,
+          "absorbed_materials": 0,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 0,
+          "remaining": 0,
+          "total": 0
+        },
+        "1000 Hz": {
+          "absorbed_atmosphere": 0,
+          "absorbed_materials": 0,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 0,
+          "remaining": 0,
+          "total": 0
+        }
+      }
+    }
+  }
+}

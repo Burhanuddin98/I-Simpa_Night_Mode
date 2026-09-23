@@ -1,0 +1,81 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "xml_property_missing"
+  ],
+  "warnings": [],
+  "receipt": "trans_epsilon absent: row xml_property_missing (SC:314, cxml.cpp:115) is FAIL. Every particle dies at the first step, absorbed by the atmosphere, exit 0 (SC:98, VERIFIED S run_noeps; RAW:1387).",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": []
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "xml_property_missing"
+    ],
+    "warnings": [],
+    "lines": [
+      "Xml Property trans_epsilon doesn't exist !",
+      "End of calculation."
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "xml_property_missing",
+        "terminated": true,
+        "text": "Xml Property trans_epsilon doesn't exist !"
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_end_of_calculation",
+        "terminated": true,
+        "text": "End of calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_output_start",
+        "terminated": true,
+        "text": "Output results files."
+      }
+    ],
+    "progress_lines": 3999,
+    "post_run": {
+      "codes": [],
+      "stats": {
+        "500 Hz": {
+          "absorbed_atmosphere": 2000,
+          "absorbed_materials": 0,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 0,
+          "remaining": 0,
+          "total": 2000
+        },
+        "1000 Hz": {
+          "absorbed_atmosphere": 2000,
+          "absorbed_materials": 0,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 0,
+          "remaining": 0,
+          "total": 2000
+        }
+      }
+    }
+  }
+}

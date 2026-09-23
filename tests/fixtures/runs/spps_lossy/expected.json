@@ -1,0 +1,88 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "mesh_invalid",
+    "unmarked_boundary_faces"
+  ],
+  "warnings": [],
+  "receipt": "Every neighbour link cut to -2: the 12 interior faces become faces with no neighbour and no marker, which decision 6 forbids, so run-folder refuses it before launch. Run anyway, SPPS loses 4000 of 4000 particles to meshing, prints row particle_loss_reported without a newline (SC:325, sppsNantes.cpp:438) and exits 0 (SC:263, VERIFIED S run_lossy; RAW:1541).",
+  "pre_launch": {
+    "mesh_check": "fail",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {
+      "unmarked_boundary_faces": 12
+    },
+    "codes": [
+      "unmarked_boundary_faces"
+    ]
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "particle_loss_reported"
+    ],
+    "warnings": [],
+    "lines": [
+      "End of calculation.",
+      "Warning 4000 particles has been in error on 4000 particles. The computation result may be wrong, please check the particles statitics file for more details."
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_end_of_calculation",
+        "terminated": true,
+        "text": "End of calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_output_start",
+        "terminated": true,
+        "text": "Output results files."
+      },
+      {
+        "stream": "stderr",
+        "row": "particle_loss_reported",
+        "terminated": false,
+        "text": "Warning 4000 particles has been in error on 4000 particles. The computation result may be wrong, please check the particles statitics file for more details."
+      }
+    ],
+    "progress_lines": 3999,
+    "post_run": {
+      "codes": [
+        "particle_loss_excess"
+      ],
+      "stats": {
+        "500 Hz": {
+          "absorbed_atmosphere": 0,
+          "absorbed_materials": 0,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 2000,
+          "remaining": 0,
+          "total": 2000
+        },
+        "1000 Hz": {
+          "absorbed_atmosphere": 0,
+          "absorbed_materials": 0,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 2000,
+          "remaining": 0,
+          "total": 2000
+        }
+      }
+    }
+  }
+}

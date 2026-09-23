@@ -1,0 +1,70 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "mesh_invalid"
+  ],
+  "warnings": [],
+  "receipt": "mesh.cbin truncated to 100 bytes. run-folder cannot read the .cbin for mesh::verify, so it refuses before launch (m5-m6-design.md, Run folder). Run anyway, SPPS prints row scene_mesh_unreadable and the path (SC:315, coreinitialisation.cpp:396) and exits 0 (SC:263; RAW:1201).",
+  "pre_launch": {
+    "mesh_check": "fail",
+    "error": "mesh.cbin cannot be read",
+    "codes": []
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "scene_mesh_unreadable"
+    ],
+    "warnings": [],
+    "lines": [
+      "Unable to read the scene mesh file :",
+      "__RUNDIR__mesh.cbin"
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "scene_mesh_unreadable",
+        "terminated": true,
+        "text": "Unable to read the scene mesh file :"
+      },
+      {
+        "stream": "stdout",
+        "row": "continuation:scene_mesh_unreadable",
+        "terminated": true,
+        "text": "__RUNDIR__mesh.cbin"
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "stats_unreadable",
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "SPPS particle statistics.gabe",
+        "Total energy.recp",
+        "Punctual receivers\\R1\\Sound level.recp",
+        "Punctual receivers\\R1\\Advanced sound level.gap",
+        "Punctual receivers\\R1\\Punctual receiver intensity.gabe",
+        "Punctual receivers\\R1\\Sound level per source.recps",
+        "Intensity animation\\1000 Hz\\Intensity.rpi",
+        "Intensity animation\\500 Hz\\Intensity.rpi",
+        "particles\\1000\\particles.pbin",
+        "particles\\1000\\particle_surface_collision_statistics.csv",
+        "particles\\1000\\particle_receivers_collision_statistics.csv",
+        "particles\\500\\particles.pbin",
+        "particles\\500\\particle_surface_collision_statistics.csv",
+        "particles\\500\\particle_receivers_collision_statistics.csv"
+      ]
+    }
+  }
+}
