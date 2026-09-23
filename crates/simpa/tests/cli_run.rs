@@ -3,9 +3,11 @@
 //! configuration), with the M1 solvers and TetGen:
 //! - TCR is OK with every expected file (gate M6(b)), twice into two distinct folders (M6(h)),
 //!   and under a path with `Ł` (M6(g));
-//! - SPPS crashes on the box's own mesh, because the pinned TetGen's 6-tetrahedron mesh puts the
-//!   tutorial's source exactly on an internal facet (pinned here; gate M6(a) is the ignored test);
-//!   with the source 5 cm away it is OK with 10,000 particles per band and none lost;
+//! - SPPS is refused before launch on the box's own mesh (`source_unlocatable`, exit 5), because
+//!   the pinned TetGen's 6-tetrahedron mesh puts the tutorial's source exactly on an internal
+//!   facet, where SPPS's own test locates it nowhere and SPPS would crash (pinned here; gate
+//!   M6(a) is the ignored test); with the source 5 cm away it is OK with 10,000 particles per
+//!   band and none lost;
 //! - `--mesh <dir>` reuses a mesh, and refuses a stale one (`mesh_out_of_date`, M5(d1)) or one
 //!   whose re-mesh was cancelled (`mesh_missing`, M5(d2)) before any solver starts;
 //! - a cancel exits 130 with the solver killed mid-run, and `simpa` itself killed mid-run leaves
@@ -144,27 +146,60 @@ fn a_run_folder_under_a_non_ascii_path_is_ok() {
 
 /// Pins today's SPPS result on the box's own mesh: the pinned TetGen meshes the box to 6
 /// tetrahedra (docs/m5-m6-design.md decision 3), and the tutorial's source (3, 5, 1.8) lies
-/// exactly on the internal facet x/6 + y/10 = 1 between two of them. SPPS finds no tetrahedron
-/// for it and crashes with an access violation, as it does for a source outside the mesh:
+/// exactly on the internal facet x/6 + y/10 = 1 between two of them. SPPS would find no
+/// tetrahedron for it and crash with an access violation, as it does for a source outside the
+/// mesh:
 /// - `InitSourcesTetraLocalisation` (`lib_interface/coreinitialisation.cpp:71-95`) counts a
 ///   point as outside a tetrahedron when `(node - source) . normal > 0` for any face, in `f32`.
-///   On this facet the product rounds to +2.4e-7 from both sides (an `f32` emulation on this
-///   mesh), so neither tetrahedron takes the source and `currentVolume` stays NULL;
+///   On this facet the product rounds to +2.4e-7 from both sides, so neither tetrahedron takes
+///   the source and `currentVolume` stays NULL;
 /// - `TranslateSourceAtTetrahedronVertex` (`spps/sppsInitialisation.cpp:20`, called at
 ///   `sppsNantes.cpp:321`) dereferences it without a check, before any particle runs.
 ///
-/// When this changes (refinement decided, or a guard added), update it with gate M6(a).
+/// `run::locate` emulates that test, and the run manager refuses the run before launch:
+/// `source_unlocatable`, exit 5, no solver started, `run.json` written. The emulation agrees
+/// with `spps.exe` itself on 233 points on and near this mesh's facets
+/// (`crates/simpa-core/tests/run_locate.rs`). When this changes (refinement decided), update it
+/// with gate M6(a).
 #[test]
-fn spps_crashes_on_the_boxs_own_mesh_with_its_source_on_an_internal_facet() {
+fn spps_is_refused_before_launch_on_the_boxs_own_mesh_with_its_source_on_an_internal_facet() {
     let root = scratch("run-spps-box");
     let o = run(&fixture(BOX), "spps", &root, &[]);
     let m = json(&o);
     summary("box SPPS", &o, &m);
     assert_eq!(o.code, 5, "{o:#?}");
-    assert_eq!(m["verdict"]["status"], "CRASH");
-    assert_eq!(codes(&m), ["crash_access_violation"]);
-    // The mesh the run built: 6 tetrahedra, and the source on an internal face of two of them.
+    assert_eq!(m["verdict"]["status"], "FAIL");
+    assert_eq!(m["stage"], "pre_launch");
+    assert_eq!(m["exit_class"], 5);
+    assert_eq!(codes(&m), ["source_unlocatable"]);
+    let detail = m["verdict"]["reasons"][0]["detail"].as_str().unwrap();
+    assert!(
+        detail.starts_with("source 1 \"Source 1\" at (3, 5, 1.8): "),
+        "{detail}"
+    );
+    // Not launched: no outcome, no solver logs, no solver output; run.json written.
     let dir = run_dir(&m);
+    assert_eq!(m["outcome"], Value::Null);
+    assert!(dir.join("run.json").is_file());
+    assert!(!dir.join("solver.stdout.txt").exists());
+    assert!(!dir.join("solver.stderr.txt").exists());
+    assert!(!dir.join("solve/SPPS particle statistics.gabe").exists());
+    // Without --json: the one verdict line names the refusal.
+    let plain = simpa_run(&[
+        "run".to_string(),
+        fixture(BOX).display().to_string(),
+        "--solver".into(),
+        "spps".into(),
+        "--runs".into(),
+        root.display().to_string(),
+    ]);
+    assert_eq!(plain.code, 5);
+    assert!(
+        plain.stdout.starts_with("FAIL source_unlocatable exit 5: "),
+        "{}",
+        plain.stdout
+    );
+    // The mesh the run built: 6 tetrahedra, and the source on an internal face of two of them.
     let mm: Value =
         serde_json::from_str(&std::fs::read_to_string(dir.join("mesh/mesh.json")).unwrap())
             .unwrap();
@@ -213,12 +248,13 @@ fn internal_faces_holding(mesh: &simpa_core::formats::mbin::Mesh, p: [f64; 3]) -
 
 /// Gate M6(a) as written: the seeded box with SPPS is OK, with 10,000 particles per band and
 /// none lost. Blocked by decision 3 (the pinned TetGen does not refine the box), see the pinned
-/// test above. The ways out are Burhan's and Michael's to choose: settle decision 3, change the
-/// fixture's source or mesh settings (it follows upstream's tutorial 1 SPPS settings, `-pq2 -A
-/// -n` with no volume constraint), or refuse before launch a source SPPS's own `f32` test would
-/// not locate (decision 11 keeps a pre-launch source check open).
+/// test above: the run is now refused before launch with `source_unlocatable` instead of
+/// crashing, which is honest but still not OK. The ways out are Burhan's and Michael's to
+/// choose: settle decision 3 so the box gets a denser mesh, or change the fixture's source or
+/// mesh settings (it follows upstream's tutorial 1 SPPS settings, `-pq2 -A -n` with no volume
+/// constraint).
 #[test]
-#[ignore = "gate M6(a) is blocked: the box's 6-tetrahedron mesh puts the source on an internal facet"]
+#[ignore = "gate M6(a) is blocked by decision 3: the box's 6-tetrahedron mesh puts the source on an internal facet, so the run is refused before launch (source_unlocatable) until the box gets a denser mesh"]
 fn spps_runs_the_seeded_box_ok() {
     let o = run(&fixture(BOX), "spps", &scratch("run-spps-gate"), &[]);
     assert_eq!(o.code, 0, "{}", o.stdout);

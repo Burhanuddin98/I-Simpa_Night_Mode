@@ -22,7 +22,8 @@
     ],
     "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
     "codes_any_of": [],
-    "bands": "pass"
+    "bands": "pass",
+    "location": "not run: the mesh check failed"
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

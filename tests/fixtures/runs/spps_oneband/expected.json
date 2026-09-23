@@ -20,7 +20,8 @@
     "bands": "fail",
     "short_sources": [
       "S1: 1 entries, the 1000 Hz band is entry 2"
-    ]
+    ],
+    "location": "pass"
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

@@ -9,10 +9,12 @@
 //! `run.json` ([`RunManifest`]) into it however the run ends:
 //! - [`run_project`]: a project file. Its geometry is checked (refused: exit class 3), the project
 //!   is validated (2), a mesh is built into `<run>/mesh/` or an existing one is checked (4), the
-//!   run folder's inputs are exported and checked by `validate_export` (2), and the solver runs.
+//!   run folder's inputs are exported and checked by `validate_export` (2), SPPS's sources and
+//!   point receivers are located as SPPS locates them ([`locate`], 5), and the solver runs.
 //! - [`run_folder`]: a folder as it is, `tests/fixtures/runs/<case>` for instance, with no project
-//!   validator: [`pre_launch`] checks its mesh and its bands instead, and a failure is exit class
-//!   5 without a launch.
+//!   validator: [`pre_launch`] checks its mesh and its bands instead, then, for SPPS on a mesh
+//!   that passed, [`locate`] its sources and point receivers; a failure is exit class 5 without a
+//!   launch.
 //!
 //! The solver runs in `<run>/solve/` with the one argument `config.xml` (contract Part B,
 //! "Launch"), through [`crate::process`]; its streams are logged to `solver.stdout.txt` and
@@ -35,6 +37,7 @@ use serde::{Deserialize, Serialize};
 use super::classify::{ClassCounts, Classified, Classifier};
 pub use super::clock::{folder_stamp, rfc3339};
 use super::expect::{self, Expectation};
+use super::locate;
 use super::manifest::{
     FILE_NAME, FileCounts, FileRef, MANIFEST_VERSION, MeshRef, RunManifest, RunSource, hash_folder,
     sha256_bytes, sha256_file,
@@ -131,7 +134,8 @@ impl TryFrom<u8> for ExitClass {
     }
 }
 
-/// The stages of a run, in order. `run_folder` has only `pre_launch` and `solve`.
+/// The stages of a run, in order. `run_project` reaches `pre_launch` with SPPS only; `run_folder`
+/// has only `pre_launch` and `solve`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
@@ -702,6 +706,19 @@ pub fn run_project(
         return rec.cancelled(Stage::Export);
     }
 
+    // SPPS: every source and point receiver must be in a tetrahedron by SPPS's own test, or the
+    // run would crash or read a receiver as silence. Exit class 5, as for `run_folder`.
+    if opts.solver == SolverKind::Spps {
+        on_event(&RunEvent::Stage(Stage::PreLaunch));
+        let reasons = locate::check_folder(&rec.solve);
+        if !reasons.is_empty() {
+            return rec.refuse(Stage::PreLaunch, false, reasons);
+        }
+        if cancel.is_cancelled() {
+            return rec.cancelled(Stage::PreLaunch);
+        }
+    }
+
     on_event(&RunEvent::Stage(Stage::Solve));
     let launched = launch(&rec, cancel, on_event);
     rec.manifest(Stage::Solve, launched)
@@ -862,9 +879,10 @@ fn export(
 
 /// Runs the folder `fixture` as it is, with the solver `opts` names: it is copied into a fresh
 /// `<run>/solve/` without its `expected.json`, `__RUNDIR__` in its `config.xml` becomes the
-/// absolute `solve\` path, and [`pre_launch`] must pass before the solver starts. No project
-/// validator runs. `Err` when `fixture` is not a folder with a `config.xml`, or no run folder
-/// with its `run.json` could be made.
+/// absolute `solve\` path, and [`pre_launch`] must pass before the solver starts, and for SPPS,
+/// once its mesh has passed, [`locate::check_folder`] too. No project validator runs. `Err` when
+/// `fixture` is not a folder with a `config.xml`, or no run folder with its `run.json` could be
+/// made.
 pub fn run_folder(
     fixture: &Path,
     opts: &RunOptions,
@@ -907,7 +925,11 @@ pub fn run_folder(
     rec.hash_inputs()?;
 
     on_event(&RunEvent::Stage(Stage::PreLaunch));
-    let checked = pre_launch(&solve);
+    let mut checked = pre_launch(&solve);
+    // Located only in a mesh mesh::verify passed: in a broken one every point is a consequence.
+    if opts.solver == SolverKind::Spps && checked.verify.as_ref().is_some_and(|v| v.passed()) {
+        checked.reasons.extend(locate::check_folder(&solve));
+    }
     rec.mesh = checked.mesh;
     if !checked.reasons.is_empty() {
         return rec.refuse(Stage::PreLaunch, false, checked.reasons);

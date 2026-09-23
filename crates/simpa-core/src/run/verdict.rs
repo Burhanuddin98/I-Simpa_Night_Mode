@@ -65,6 +65,12 @@ pub mod codes {
     /// The run folder's inputs could not be written: `config_xml`'s writer refused the project
     /// or variant (its code is in the detail), or a file could not be staged.
     pub const EXPORT_FAILED: &str = "export_failed";
+    /// SPPS only, before launch: a source that SPPS's own `f32` point test would put in no
+    /// tetrahedron, on which SPPS crashes (`super::locate`).
+    pub const SOURCE_UNLOCATABLE: &str = "source_unlocatable";
+    /// SPPS only, before launch: a point receiver that SPPS's own `f32` point test would link to
+    /// no tetrahedron, whose levels SPPS then gets wrong without a message (`super::locate`).
+    pub const RECEIVER_UNLOCATABLE: &str = "receiver_unlocatable";
     /// The solver could not be started (its logs beside `solve/` included), or its process tree
     /// could not be ended.
     pub const LAUNCH_FAILED: &str = "launch_failed";
@@ -88,10 +94,12 @@ pub mod codes {
 
     /// Every code above, in the order a verdict lists them: the run manager's refusals before
     /// launch, then the four signals.
-    pub const ALL: [&str; 19] = [
+    pub const ALL: [&str; 21] = [
         GEOMETRY_REFUSED,
         MESH_MISSING,
         EXPORT_FAILED,
+        SOURCE_UNLOCATABLE,
+        RECEIVER_UNLOCATABLE,
         LAUNCH_FAILED,
         LOG_WRITE_FAILED,
         CANCELLED,

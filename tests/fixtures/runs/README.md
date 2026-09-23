@@ -33,9 +33,11 @@ negative tests of these checks.
   - `warnings`: WARN-class rows seen.
   - `pre_launch`: the checks `run-folder` makes before launch, computed by
     `mkexpected.py`'s references: the mesh check (decision 6 and the VerifyReport
-    counts, with the noise floor it used) and the band check (decision 11). A failed
-    mesh check makes the verdict FAIL with `mesh_invalid` and the failing counts' codes;
-    a failed band check adds `band_set_mismatch`.
+    counts, with the noise floor it used), the band check (decision 11) and, for SPPS
+    on a mesh that passed, the location check (SPPS's own f32 point test, emulated). A
+    failed mesh check makes the verdict FAIL with `mesh_invalid` and the failing counts'
+    codes; a failed band check adds `band_set_mismatch`, a failed location check
+    `source_unlocatable` or `receiver_unlocatable`.
   - `observed`: what the real solver did when run anyway, launched as Part B says
     (fresh copy, cwd = the folder, argument `config.xml`): exit code, the solver's own
     status and codes, the decisive lines, the full transcript classified by row (paths
@@ -54,6 +56,9 @@ reproduced. Beyond it:
   `band_set_mismatch` (decision 11).
 - **`tcr_srcout` is caught after all**, by `nonfinite_result`: the direct field at R1 is
   -inf in every band, although TCR exits 0.
+- **`spps_srcout` never reaches SPPS.** `run-folder`'s location check finds its source in
+  no tetrahedron by SPPS's own f32 test and refuses it with `source_unlocatable`; run
+  anyway, SPPS crashes with `0xC0000005`.
 - **Exit `0xFFFFFFFF` is FAIL**, as the exit tables say (SC:264, SC:275). The rule at
   SC:278, "any exit at or above `0xC0000000` is CRASH", would make it `crash_other`.
 - **Night Mode's broken-hall config fails on its own**: TCR prints `xml_property_missing`
@@ -78,7 +83,7 @@ reproduced. Beyond it:
 | `spps_dirempty` | balloon source with no directivity_file attribute | CRASH | xml_property_missing, crash_access_violation | same |
 | `spps_mat0miss` | faces use material 0; the config declares only 5 | CRASH | crash_access_violation | same |
 | `spps_mat7miss` | every face's idMat set to 7; the config declares only 5 | FAIL | material_missing, exit_nonzero | same |
-| `spps_srcout` | source at x = 12 m, outside the 5 m cube | CRASH | crash_access_violation | same |
+| `spps_srcout` | source at x = 12 m, outside the 5 m cube | FAIL | source_unlocatable | CRASH crash_access_violation (exit 0xC0000005) |
 | `spps_unreadable_mesh` | mesh.cbin cut to its first 100 bytes (the survey's fx/trunc.cbin) | FAIL | mesh_invalid | FAIL scene_mesh_unreadable (exit 0x00000000) |
 | `spps_nomesh` | no tetramesh.mbin | FAIL | mesh_invalid | FAIL tetra_mesh_unreadable (exit 0x00000000) |
 | `spps_emptymesh` | tetramesh.mbin with T = 0, N = 0 (8 bytes) | FAIL | mesh_invalid, uncovered_scene_faces | FAIL tetra_mesh_empty, tetra_mesh_unreadable (exit 0x00000000) |
@@ -114,7 +119,7 @@ when run directly.
 | # | row | class | through run-folder | refused before launch | stubs |
 |---|---|---|---|---|---|
 | 1 | `progress` | PROGRESS | `spps_gradient`, `spps_noeps`, `spps_ok`, `spps_srcvertex`, `tcr_ok`, `tcr_srcout` | `spps_lossy`, `spps_oneband`, `tcr_broken_hall` | `stub_particle_loss_unterminated` |
-| 2 | `spps_banner` | INFO | `spps_dirempty`, `spps_dirmiss`, `spps_gradient`, `spps_mat0miss`, `spps_mat7miss`, `spps_noeps`, `spps_ok`, `spps_srcface`, `spps_srcout`, `spps_srcvertex` | `spps_degenerate`, `spps_emptymesh`, `spps_lossy`, `spps_nomesh`, `spps_oneband`, `spps_unreadable_mesh` | `stub_config_path_missing`, `stub_degenerate_tetrahedron`, `stub_particle_loss_unterminated`, `stub_scene_mesh_unreadable`, `stub_source_not_located`, `stub_tetra_mesh_empty`, `stub_tetra_mesh_unreadable`, `stub_unclassified_line` |
+| 2 | `spps_banner` | INFO | `spps_dirempty`, `spps_dirmiss`, `spps_gradient`, `spps_mat0miss`, `spps_mat7miss`, `spps_noeps`, `spps_ok`, `spps_srcface`, `spps_srcvertex` | `spps_degenerate`, `spps_emptymesh`, `spps_lossy`, `spps_nomesh`, `spps_oneband`, `spps_srcout`, `spps_unreadable_mesh` | `stub_config_path_missing`, `stub_degenerate_tetrahedron`, `stub_particle_loss_unterminated`, `stub_scene_mesh_unreadable`, `stub_source_not_located`, `stub_tetra_mesh_empty`, `stub_tetra_mesh_unreadable`, `stub_unclassified_line` |
 | 3 | `tcr_banner` | INFO | `tcr_ok`, `tcr_srcout` | `tcr_broken_hall` | - |
 | 4 | `tcr_loading` | INFO | `tcr_mat7miss`, `tcr_ok`, `tcr_srcout` | `tcr_broken_hall`, `tcr_nomesh` | - |
 | 5 | `tcr_config_echo` | INFO | `tcr_mat7miss`, `tcr_ok`, `tcr_srcout` | `tcr_broken_hall`, `tcr_nomesh` | - |

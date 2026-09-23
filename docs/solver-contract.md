@@ -296,7 +296,7 @@ when the first receiver owns no face.
 | 0 | not evidence of success | Success, and also: no argument; unparseable config (P2 `bad_xml`); unreadable mesh; the on-face stop; a missing separator on `workingdirectory` (P2 `wd_nosep`); 100 % particle loss (S `run_lossy`); a missing directivity file or band (S `run_dirmiss`, P2 `dir_partial`, `dir_badrow`); a short spectrum (S `run_oneband`); zero `trans_epsilon` (P2 `eps_short`); a receiver outside (P2 `rcv_out`); receiver radius 0 (P2 `radius0`); a name overflow (P2 `name_long`); a wrapped delay (P2 `delay_wrap`) | `sppsNantes.cpp:449-460` |
 | `0xFFFFFFFF` (-1) | FAIL | A face's material is undeclared | `coreinitialisation.cpp:429-432`; VERIFIED P2 `mat22_miss` |
 | 1 | FAIL | A degenerate tetrahedron in the `.mbin`: the `degenerate_tetrahedron` line on stderr, with no newline, then exit 1 | `coreTypes.cpp:210-216`; VERIFIED fixture `runs/spps_degenerate` (corner D set to corner A) |
-| `0xC0000005` | CRASH | Access violation, with no message: a source outside the mesh, an undeclared material 0 on the first faces, or a balloon source with no file attribute | VERIFIED P2 `src_out`, `dir_noattr`; S `run_mat0miss` |
+| `0xC0000005` | CRASH | Access violation, with no message: a source outside the mesh or on an internal facet that SPPS's `f32` test puts in no tetrahedron (both refused before launch: `source_unlocatable`), an undeclared material 0 on the first faces, or a balloon source with no file attribute | VERIFIED P2 `src_out`, `dir_noattr`; S `run_mat0miss`; `tests/run_locate.rs` |
 | `0xC0000409` | CRASH | Abort from an uncaught C++ exception: a non-numeric directivity value, an empty `workingdirectory`, or a missing time step | VERIFIED P2 `dir_nan`, `wd_empty`, `no_dt` |
 
 TCR returns `MainProcess`'s value (`main_tc.cpp:160-173`):
@@ -441,6 +441,8 @@ order, and its status is OK exactly when it lists none.
 | `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry; its own codes and counts are in the detail. Exit class 3 |
 | `mesh_missing` | FAIL | before launch | `run --mesh <dir>`: the folder has no readable `mesh.json`, a manifest that is not `OK`, or no `tetramesh.mbin`; or the run's own mesh folder cannot be used. Exit class 4 |
 | `export_failed` | FAIL | before launch | `run`: the run folder's inputs cannot be written. `config_xml`'s writer refuses the project or the variant (its code, such as `variant_not_found`, is in the detail), or a mesh or directivity file cannot be copied. Exit class 2 |
+| `source_unlocatable` | FAIL | before launch | SPPS only, `run` and `run-folder`: a source that SPPS's own `f32` test puts in no tetrahedron of the `.mbin` (`coreinitialisation.cpp:71-95`, emulated by `run::locate`), such as a source exactly on an internal facet where the product rounds positive from both sides. SPPS would crash with `0xC0000005` before any particle runs (`sppsInitialisation.cpp:20`). The detail names each source, its number, name and position as SPPS stores it. Exit class 5, the solver is not launched. VERIFIED against `spps.exe` on 233 points on and near the seeded box's internal facets (`tests/run_locate.rs`) |
+| `receiver_unlocatable` | FAIL | before launch | SPPS only, as `source_unlocatable`, for a point receiver (`coreinitialisation.cpp:178-212`). SPPS runs to the end, but the receiver collects energy only from where its never-written `indexTetra` leads (`coreTypes.h:425`; `sppsInitialisation.cpp:82-90`). VERIFIED on the box refined to 0.5 m³: 0 at 1000 Hz on the facet, a level 1 mm away (`tests/run_locate.rs`). Exit class 5 |
 | `launch_failed` | FAIL | exit | the solver cannot be started (`crate::process`), or its logs beside `solve/` cannot be created, so it is not started; or its process tree cannot be ended within 10 s of the kill. Exit class 5 |
 | `log_write_failed` | unchanged: a warning, never a reason | logs | writing `solver.stdout.txt` or `solver.stderr.txt` failed during the run. The lines were classified as they arrived, so the verdict stands and `run.json` is written; the logs are incomplete |
 | `cancelled` | CANCELLED | exit | the run was cancelled (the process layer killed the tree); never OK, and its outputs are partial. The mesher gives the same code for a cancelled mesh (`docs/formats/mesh-manifest.md`) |
@@ -479,6 +481,7 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   | validate | each Part A error's code; Part A warnings are recorded as the verdict's warnings | 2 |
   | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `manifest_mismatch` or Part A's `mesh_out_of_date` | 4 |
   | export | `export_failed`, or `validate_export`'s error codes | 2 |
+  | pre_launch (SPPS only) | `source_unlocatable`, `receiver_unlocatable` | 5 |
   | solve | the verdict above | 0, 5 or 130 |
 
 - **`run-folder`** copies the folder into `solve/` without its `expected.json`, replaces
@@ -493,9 +496,21 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   - **the bands.** Every source's spectrum must reach the position of the last computed band,
     or the reason is Part A's `band_set_mismatch`. No signal after the run catches a short
     spectrum: VERIFIED fixture `runs/spps_oneband`, exit 0 with every file written.
+  - **the sources and point receivers (SPPS, once the mesh check passed).** Each must be in a
+    tetrahedron by SPPS's own test, or the reason is `source_unlocatable` or
+    `receiver_unlocatable`. This refuses fixture `runs/spps_srcout`, which SPPS crashes on.
   - A `config.xml` that does not parse is `config_attribute_missing`.
 
   Any of these is FAIL with exit class 5, and the solver is not launched.
+- **Locating a point as SPPS does** (`run::locate`, which holds every receipt). SPPS takes the
+  first tetrahedron in file order for which no face has `(node[a] - p) . normal > 0`, where `a`
+  is the face's first vertex and `normal` is `FaceNormal(a, b, c)` computed at load, all in
+  `f32` (`coreTypes.cpp:227-233`; `mathlib.h:120-173, 344-397`). The position is `ToFloat` of
+  the attribute: the first `,` becomes `.`, then `atof`, then `float` (`coreString.cpp:89-105`).
+  The emulation repeats each `f32` operation in the same order; the solvers are built by MSVC
+  x64 with `/fp:precise` and no `/arch`, so there is no FMA and no extended precision. TCR runs
+  the same test at load (`main_tc.cpp:78`) but never reads its result, so the check is SPPS's
+  only.
 - **Cancel.** The caller's token stops the run at the next stage, TetGen, or the solver.
   `--cancel-after-ms` counts from the solver's launch, and `--cancel-after-progress p` cancels at
   the first progress line at or above `p`. A cancelled run is CANCELLED, exit class 130.
