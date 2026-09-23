@@ -7,12 +7,22 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+regex = "1.13.1"
 robust = "1.2.0"
 roxmltree = "0.21.1"
 schemars = "1.2.2"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+sha2 = "0.10.9"
 uuid = { version = "1.26.1", features = ["v4", "serde"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 proptest = "1"

@@ -3003,12 +3003,15 @@ name = "simpa-core"
 version = "0.1.0"
 dependencies = [
  "proptest",
+ "regex",
  "robust",
  "roxmltree",
  "schemars 1.2.2",
  "serde",
  "serde_json",
+ "sha2",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
