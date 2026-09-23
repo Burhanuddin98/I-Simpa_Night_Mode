@@ -1,0 +1,21 @@
+﻿{
+    "upstream_commit":  "929a5c8e5f590b189f29155faeff8670f3699479",
+    "cmake_version":  "4.3.2",
+    "generator":  "Visual Studio 17 2022 (x64)",
+    "build_dir":  "build-fresh",
+    "build_log":  "build-build-fresh-20260923-043138.log",
+    "compiler":  "19.44.35226.0",
+    "options":  [
+                    "SKIPISIMPA=ON",
+                    "CMAKE_BUILD_TYPE=Release",
+                    "CPM_SOURCE_CACHE=B:/repos/.cpm-cache"
+                ],
+    "crt":  "dynamic (upstream default)",
+    "sha256":  {
+                   "spps.exe":  "cacbbee25d70e6ffae8b875b0024b1ddae2c1bb5a154e77994478d66c893d655",
+                   "classicalTheory.exe":  "6382f3213909760451c02e8a32c7b485737f5f2e9689a363fe91c6c689a73d14",
+                   "tetgen.exe":  "c1c754f1c6e06429232e00fd6389cf2453bf781452fd2fae812c9b6e306e1f61",
+                   "preprocess.exe":  "bdffba897fd786a6159b5cc005c65df67e0ff82e196b266cd1002d009282d0e4"
+               },
+    "built_at":  "2026-09-23T04:32:20"
+}

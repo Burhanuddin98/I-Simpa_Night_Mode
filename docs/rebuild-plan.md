@@ -164,6 +164,30 @@ copied.**
 ⚠️ `testdata/elmia_corrected.ply` has **2,438 of 7,860 faces in the wrong material group**. The
 geometry is fine but the grouping is wrong. It is regenerated from `tutorial_2.proj`.
 
+## Found while building, with receipts
+
+- **M0 passed on 2026-09-23 with 9 of 9 checks** (`tools/gates/m0.ps1`). **M1 passed with 24 of 24** (`tools/gates/m1.ps1`), on a from-scratch compile.
+- **What M1 proves.** Our solver build from `929a5c8` produces the same results as the
+  2026-09-08 reference build, compared on a seeded tutorial-1 fixture:
+  - SPPS: every file except `.csbin` is byte-identical, including the statistics table and every `.recp`
+  - TCR: every file except `.csbin` is byte-identical
+  - TetGen: the `.node`, `.ele`, `.face` and `.neigh` files are identical
+- **`.csbin` output is nondeterministic by construction.** The surface-receiver format dumps whole
+  C structs, padding included. Two runs of the *same* executable differ in the last 2 bytes of
+  every 8-byte record. `.csbin` must only ever be compared after decoding, never byte for byte.
+  This is binding on M2's readers and on any gate.
+- **Upstream's compile produces 1,415 warning lines.** The log is
+  `target/solvers/build-build-fresh-*.log`, and MSBuild may print a warning more than once.
+  - C4244 (lossy numeric conversion) ×1024
+  - C4996 (deprecated function) ×190
+  - C4267 (`size_t` truncation) ×134
+  - C4477 (printf format mismatch) ×28
+  - C4018 (signed/unsigned comparison) ×22
+  - C4101 (unused local variable) ×17
+
+  The solvers stay unchanged by decision. C4267 and C4477 are the classes worth knowing about
+  when a format reader disagrees with the oracle.
+
 ## Verified on Grace by the surveys
 
 - **Missing:** Rust and the Tauri CLI.
