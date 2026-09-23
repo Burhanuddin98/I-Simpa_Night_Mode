@@ -1,0 +1,803 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Room acoustics workspace — concept B</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&amp;family=Barlow+Condensed:wght@500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#09090B;color:#EDEDEF;font-family:'Barlow',system-ui,sans-serif}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid #E0202E;outline-offset:1px}
+a{color:#E0202E}a:hover{color:#FF4A55}
+html,body{color-scheme:dark}
+*{scrollbar-width:thin;scrollbar-color:#34343C transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#34343C;border-radius:4px;border:2px solid #0F0F11}
+::-webkit-scrollbar-thumb:hover{background:#E0202E}
+::-webkit-scrollbar-corner{background:transparent}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; display: flex; flex-direction: column; overflow: hidden; background: #09090B; color: #EDEDEF; font-family: 'Barlow', system-ui, sans-serif; font-size: 13px;">
+
+<header style="height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 2px; padding: 0 8px; background: #0F0F11; border-bottom: 1px solid #1D1D21; box-sizing: border-box;">
+<button style="height: 28px; padding: 0 10px; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;">File</button>
+<button style="height: 28px; padding: 0 10px; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;">Edit</button>
+<button style="height: 28px; padding: 0 10px; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;">View</button>
+<button style="height: 28px; padding: 0 10px; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;">Model</button>
+<button style="height: 28px; padding: 0 10px; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;">Simulate</button>
+<button style="height: 28px; padding: 0 10px; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;">Results</button>
+<button style="height: 28px; padding: 0 10px; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;">Help</button>
+<div style="width: 1px; height: 18px; margin: 0 10px; background: #26262B;"></div>
+<div style="height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 5px; background: #1A1A1E; border: 1px solid #26262B; box-sizing: border-box;">
+<span style="font-weight: 500;">Teaching room</span>
+<span style="width: 6px; height: 6px; border-radius: 50%; background: #E0202E;" aria-label="Unsaved changes" role="img"></span>
+</div>
+<div style="flex-grow: 1;"></div>
+<button style="height: 28px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 5px; border: 1px solid #26262B; background: #131316; color: #85858E; font-size: 12.5px;"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.8"></circle><path d="M13.2 13.2L17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>Commands<span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #A1A1AA; margin-left: 18px;">Ctrl K</span></button>
+<button onClick="{{runNow}}" style="height: 28px; min-width: 118px; margin-left: 6px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: none; border-radius: 5px; background: #E0202E; color: #FFFFFF; font-weight: 600; letter-spacing: 0.2px;"><svg width="11" height="11" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3l12 7-12 7z" fill="currentColor"></path></svg>{{runLabel}}<span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 400; opacity: 0.8;">F5</span></button>
+</header>
+
+<div style="height: 44px; flex-shrink: 0; display: flex; align-items: stretch; padding: 0 12px; background: #0F0F11; border-bottom: 1px solid #1D1D21; box-sizing: border-box;">
+<nav aria-label="Workflow" style="display: flex; align-items: stretch;">
+<sc-for list="{{steps}}" as="s" hint-placeholder-count="5">
+<button onClick="{{s.go}}" aria-current="{{s.current}}" style="display: flex; align-items: center; gap: 9px; padding: 0 16px; border: none; border-bottom: 2px solid {{s.under}}; background: transparent; box-sizing: border-box;">
+<span style="width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; background: {{s.badgeBg}}; color: {{s.badgeColor}};">{{s.num}}</span>
+<span style="font-size: 13.5px; font-weight: 500; color: {{s.color}};">{{s.name}}</span>
+<span style="font-size: 12px; color: #85858E;">{{s.sub}}</span>
+</button>
+</sc-for>
+</nav>
+<div style="flex-grow: 1;"></div>
+<div style="display: flex; align-items: center; gap: 10px;">
+<span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E;">Variant</span>
+<div role="tablist" aria-label="Variants" style="display: flex; padding: 3px; gap: 2px; border-radius: 7px; background: #131316; border: 1px solid #26262B;">
+<sc-for list="{{variants}}" as="v" hint-placeholder-count="3">
+<button role="tab" aria-selected="{{v.active}}" onClick="{{v.pick}}" style="height: 26px; padding: 0 12px; border: none; border-radius: 5px; background: {{v.bg}}; color: {{v.color}}; font-size: 12.5px; font-weight: 500;">{{v.name}}</button>
+</sc-for>
+</div>
+</div>
+</div>
+
+<div style="flex-grow: 1; min-height: 0; display: flex;">
+
+<aside aria-label="Scene" style="width: 248px; flex-shrink: 0; display: flex; flex-direction: column; background: #0F0F11; border-right: 1px solid #1D1D21;">
+<div style="padding: 10px 10px 6px;">
+<div style="height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border-radius: 6px; background: #131316; border: 1px solid #26262B; color: #85858E; font-size: 12.5px; box-sizing: border-box;"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.8"></circle><path d="M13.2 13.2L17 17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path></svg>Filter scene</div>
+</div>
+<div style="flex-grow: 1; overflow-y: auto; padding: 4px 6px 12px;">
+<div style="display: flex; justify-content: space-between; padding: 10px 8px 6px; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E;"><span>Surfaces</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 400; letter-spacing: 0;">6</span></div>
+<sc-for list="{{outSurf}}" as="o" hint-placeholder-count="6">
+<div style="height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: 5px; background: {{o.bg}}; box-shadow: inset 0 0 0 1px {{o.ring}};">
+<span style="width: 10px; height: 10px; border-radius: 2px; background: {{o.swatch}};"></span>
+<span style="flex-grow: 1; color: {{o.color}};">{{o.name}}</span>
+<span style="font-size: 12px; color: #85858E; white-space: nowrap;">{{o.mat}}</span>
+</div>
+</sc-for>
+<div style="display: flex; justify-content: space-between; padding: 14px 8px 6px; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E;"><span>Sources</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 400; letter-spacing: 0;">1</span></div>
+<div style="height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: 5px; background: {{srcBg}}; box-shadow: inset 0 0 0 1px {{srcRing}};">
+<span style="width: 10px; height: 10px; border-radius: 50%; background: #E0202E;"></span>
+<span style="flex-grow: 1;">S1</span>
+<span style="font-size: 12px; color: #85858E;">Omni · 85 dB</span>
+</div>
+<div style="display: flex; justify-content: space-between; padding: 14px 8px 6px; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E;"><span>Receivers</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 400; letter-spacing: 0;">3 + grid</span></div>
+<sc-for list="{{recv}}" as="r" hint-placeholder-count="3">
+<div style="height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: 5px;">
+<span style="width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #EDEDEF; box-sizing: border-box;"></span>
+<span style="flex-grow: 1;">{{r.n}}</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #85858E;">{{r.short}}</span>
+</div>
+</sc-for>
+<div style="height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 8px; border-radius: 5px;">
+<span style="width: 10px; height: 10px; border: 1.5px dashed #85858E; box-sizing: border-box;"></span>
+<span style="flex-grow: 1;">Audience grid</span>
+<span style="font-size: 12px; color: #85858E;">240 points</span>
+</div>
+</div>
+</aside>
+
+<main style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column;">
+
+<div style="position: relative; flex-grow: 1; min-height: 0; overflow: hidden; background: #09090B; background-image: radial-gradient(ellipse at 50% 60%, rgba(224,32,46,0.07) 0%, rgba(9,9,11,0) 60%);">
+
+<div style="position: absolute; left: 50%; top: 50%; width: 480px; height: 288px; margin-left: -240px; margin-top: -100px; transform-style: preserve-3d; transform: rotateX(58deg) rotateZ(-38deg); background-color: #111114; background-image: linear-gradient(rgba(237,237,239,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(237,237,239,0.05) 1px, transparent 1px); background-size: 24px 24px; box-shadow: 0 0 0 1px rgba(237,237,239,0.32);">
+<sc-if value="{{isResults}}" hint-placeholder-val="{{ false }}">
+<sc-for list="{{cells}}" as="c" hint-placeholder-count="240">
+<div style="position: absolute; left: {{c.l}}; top: {{c.t}}; width: 24px; height: 24px; background: {{c.bg}};"></div>
+</sc-for>
+</sc-if>
+<div style="position: absolute; left: 0; top: -144px; width: 480px; height: 144px; box-sizing: border-box; transform-origin: 50% 100%; transform: rotateX(-90deg); background: rgba(237,237,239,0.03); border: 1px solid rgba(237,237,239,0.26);"></div>
+<div style="position: absolute; left: 480px; top: 0; width: 144px; height: 288px; box-sizing: border-box; transform-origin: 0% 50%; transform: rotateY(-90deg); background: {{rearBg}}; border: 1px solid {{rearBorder}};"></div>
+<div style="position: absolute; left: 0; top: 288px; width: 480px; height: 144px; box-sizing: border-box; transform-origin: 50% 0%; transform: rotateX(90deg); border: 1px dashed rgba(237,237,239,0.15);"></div>
+<div style="position: absolute; left: -144px; top: 0; width: 144px; height: 288px; box-sizing: border-box; transform-origin: 100% 50%; transform: rotateY(90deg); border: 1px dashed rgba(237,237,239,0.15);"></div>
+<div style="position: absolute; left: 0; top: 0; width: 480px; height: 288px; box-sizing: border-box; transform: translateZ(144px); border: 1px dashed rgba(237,237,239,0.12);"></div>
+<div style="position: absolute; left: 96px; top: 72px; width: 1px; height: 72px; transform-origin: 50% 100%; transform: rotateX(-90deg); background: #E0202E;"></div>
+<div style="position: absolute; left: 88px; top: 136px; width: 16px; height: 16px; border-radius: 50%; background: #E0202E; box-shadow: 0 0 18px rgba(224,32,46,0.85), 0 0 44px rgba(224,32,46,0.35); transform: translateZ(72px) rotateZ(38deg) rotateX(-58deg);"></div>
+<div style="position: absolute; left: 108px; top: 135px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: #FF4A55; transform: translateZ(72px) rotateZ(38deg) rotateX(-58deg);">S1</div>
+<div style="position: absolute; left: 240px; top: 38px; width: 1px; height: 58px; transform-origin: 50% 100%; transform: rotateX(-90deg); background: rgba(237,237,239,0.5);"></div>
+<div style="position: absolute; left: 234px; top: 90px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #EDEDEF; background: #09090B; box-sizing: border-box; transform: translateZ(58px) rotateZ(38deg) rotateX(-58deg);"></div>
+<div style="position: absolute; left: 252px; top: 89px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #EDEDEF; transform: translateZ(58px) rotateZ(38deg) rotateX(-58deg);">R1</div>
+<div style="position: absolute; left: 384px; top: 134px; width: 1px; height: 58px; transform-origin: 50% 100%; transform: rotateX(-90deg); background: rgba(237,237,239,0.5);"></div>
+<div style="position: absolute; left: 378px; top: 186px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #EDEDEF; background: #09090B; box-sizing: border-box; transform: translateZ(58px) rotateZ(38deg) rotateX(-58deg);"></div>
+<div style="position: absolute; left: 396px; top: 185px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #EDEDEF; transform: translateZ(58px) rotateZ(38deg) rotateX(-58deg);">R2</div>
+<div style="position: absolute; left: 168px; top: 158px; width: 1px; height: 58px; transform-origin: 50% 100%; transform: rotateX(-90deg); background: rgba(237,237,239,0.5);"></div>
+<div style="position: absolute; left: 162px; top: 210px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #EDEDEF; background: #09090B; box-sizing: border-box; transform: translateZ(58px) rotateZ(38deg) rotateX(-58deg);"></div>
+<div style="position: absolute; left: 180px; top: 209px; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #EDEDEF; transform: translateZ(58px) rotateZ(38deg) rotateX(-58deg);">R3</div>
+</div>
+
+<div role="tablist" aria-label="View" style="position: absolute; top: 12px; left: 12px; display: flex; padding: 3px; gap: 2px; border-radius: 7px; background: rgba(15,15,17,0.9); border: 1px solid #26262B;">
+<button role="tab" aria-selected="true" style="height: 26px; padding: 0 12px; border: none; border-radius: 5px; background: #26262B; color: #EDEDEF; font-size: 12.5px;">Perspective</button>
+<button role="tab" aria-selected="false" style="height: 26px; padding: 0 12px; border: none; border-radius: 5px; background: transparent; color: #A1A1AA; font-size: 12.5px;">Plan</button>
+<button role="tab" aria-selected="false" style="height: 26px; padding: 0 12px; border: none; border-radius: 5px; background: transparent; color: #A1A1AA; font-size: 12.5px;">Section</button>
+</div>
+
+<div role="toolbar" aria-label="Tools" style="position: absolute; top: 12px; right: 12px; display: flex; flex-direction: column; gap: 2px; padding: 3px; border-radius: 7px; background: rgba(15,15,17,0.9); border: 1px solid #26262B;">
+<button aria-label="Select" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 5px; background: #3A0B10; color: #FF4A55;"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M5 3l10 6-4.6 1.4L8 15.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"></path></svg></button>
+<button aria-label="Orbit" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><ellipse cx="10" cy="10" rx="7.5" ry="3.2" stroke="currentColor" stroke-width="1.5"></ellipse><circle cx="10" cy="10" r="1.8" fill="currentColor"></circle></svg></button>
+<button aria-label="Place receiver" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="7" r="3" stroke="currentColor" stroke-width="1.5"></circle><path d="M10 10v7M7 17h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></button>
+<button aria-label="Section plane" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 12l7-4 7 4-7 4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M10 3v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path></svg></button>
+<button aria-label="Measure" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 5px; background: transparent; color: #A1A1AA;"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 13.5L13.5 3 17 6.5 6.5 17z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path><path d="M6.5 10l1.8 1.8M9.3 7.2l1.8 1.8M12.1 4.4l1.8 1.8" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"></path></svg></button>
+</div>
+
+<div style="position: absolute; left: 12px; bottom: 12px; padding: 8px 10px 10px; border-radius: 7px; background: rgba(15,15,17,0.92); border: 1px solid #26262B;">
+<div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 11.5px; letter-spacing: 1.3px; text-transform: uppercase; color: #85858E;"><span>Plan</span><span style="font-family: 'JetBrains Mono', monospace; font-weight: 400; letter-spacing: 0;">10 × 6 m</span></div>
+<svg width="180" height="116" viewBox="0 0 180 116" role="img" aria-label="Plan view with source and receivers">
+<rect x="10" y="10" width="160" height="96" fill="#111114" stroke="rgba(237,237,239,0.35)" stroke-width="1"></rect>
+<line x1="170" y1="10" x2="170" y2="106" stroke="{{planRear}}" stroke-width="{{planRearW}}"></line>
+<circle cx="42" cy="58" r="22" fill="none" stroke="rgba(224,32,46,0.25)" stroke-width="1"></circle>
+<circle cx="42" cy="58" r="4.5" fill="#E0202E"></circle>
+<circle cx="90" cy="42" r="3.5" fill="#09090B" stroke="#EDEDEF" stroke-width="1.5"></circle>
+<circle cx="138" cy="74" r="3.5" fill="#09090B" stroke="#EDEDEF" stroke-width="1.5"></circle>
+<circle cx="66" cy="82" r="3.5" fill="#09090B" stroke="#EDEDEF" stroke-width="1.5"></circle>
+<text x="48" y="54" font-size="9" fill="#FF4A55" font-family="JetBrains Mono, monospace">S1</text>
+<text x="95" y="39" font-size="9" fill="#A1A1AA" font-family="JetBrains Mono, monospace">R1</text>
+<text x="143" y="71" font-size="9" fill="#A1A1AA" font-family="JetBrains Mono, monospace">R2</text>
+<text x="71" y="79" font-size="9" fill="#A1A1AA" font-family="JetBrains Mono, monospace">R3</text>
+</svg>
+</div>
+
+<sc-if value="{{isResults}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 226px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 7px; background: rgba(15,15,17,0.92); border: 1px solid #26262B;">
+<div style="font-size: 12px; color: #A1A1AA;">{{legendTitle}}</div>
+<div style="width: 200px; height: 8px; border-radius: 2px; background: {{legendBg}};"></div>
+<div style="width: 200px; display: flex; justify-content: space-between; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #A1A1AA;"><span>{{legendLo}}</span><span>{{legendMid}}</span><span>{{legendHi}}</span></div>
+</div>
+</sc-if>
+
+<svg width="60" height="60" viewBox="0 0 64 64" aria-hidden="true" style="position: absolute; right: 12px; bottom: 10px;"><path d="M32 36l16-6.6" stroke="#E0202E" stroke-width="1.6" stroke-linecap="round"></path><path d="M32 36l12.3 8.4" stroke="#A1A1AA" stroke-width="1.6" stroke-linecap="round"></path><path d="M32 36V19" stroke="#EDEDEF" stroke-width="1.6" stroke-linecap="round"></path><text x="51" y="30" font-size="9" fill="#E0202E" font-family="JetBrains Mono, monospace">x</text><text x="46" y="52" font-size="9" fill="#A1A1AA" font-family="JetBrains Mono, monospace">y</text><text x="29" y="15" font-size="9" fill="#EDEDEF" font-family="JetBrains Mono, monospace">z</text></svg>
+</div>
+
+<section aria-label="Analysis dock" style="height: 250px; flex-shrink: 0; display: flex; flex-direction: column; background: #0F0F11; border-top: 1px solid #1D1D21;">
+<div role="tablist" aria-label="Dock" style="height: 34px; flex-shrink: 0; display: flex; align-items: stretch; padding: 0 8px; border-bottom: 1px solid #1D1D21;">
+<sc-for list="{{dockTabs}}" as="d" hint-placeholder-count="3">
+<button role="tab" aria-selected="{{d.active}}" onClick="{{d.go}}" style="display: flex; align-items: center; gap: 7px; padding: 0 14px; border: none; border-bottom: 2px solid {{d.under}}; background: transparent; color: {{d.color}}; font-size: 13px; font-weight: 500;">{{d.name}}<span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: {{d.badgeColor}};">{{d.badge}}</span></button>
+</sc-for>
+<div style="flex-grow: 1;"></div>
+<div style="display: flex; align-items: center; font-size: 12px; color: #85858E;">Live · Sabine and Eyring, 1/1 octave</div>
+</div>
+
+<sc-if value="{{dockAcoustics}}" hint-placeholder-val="{{ true }}">
+<div style="flex-grow: 1; display: flex; gap: 20px; padding: 12px 16px; min-height: 0; box-sizing: border-box;">
+<div style="width: 380px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px;">
+<svg width="380" height="158" viewBox="0 0 380 158" role="img" aria-label="Reverberation time per octave band against the target range">
+<rect x="30" y="{{bandY}}" width="344" height="{{bandH}}" fill="rgba(237,237,239,0.06)"></rect>
+<line x1="30" x2="374" y1="{{bandY}}" y2="{{bandY}}" stroke="rgba(237,237,239,0.25)" stroke-width="1" stroke-dasharray="2 3"></line>
+<line x1="30" x2="374" y1="{{bandY2}}" y2="{{bandY2}}" stroke="rgba(237,237,239,0.25)" stroke-width="1" stroke-dasharray="2 3"></line>
+<path d="M30 8H374M30 40H374M30 72H374M30 104H374" stroke="#1D1D21" stroke-width="1"></path>
+<path d="M30 136H374" stroke="#33333A" stroke-width="1"></path>
+<path d="{{barsIn}}" fill="#E0202E"></path>
+<path d="{{barsOut}}" fill="#F2A93B"></path>
+<path d="{{baseTicks}}" stroke="#EDEDEF" stroke-opacity="{{ghostOp}}" stroke-width="1.5" stroke-dasharray="3 2"></path>
+<text x="24" y="11" text-anchor="end" font-size="9.5" fill="#85858E" font-family="JetBrains Mono, monospace">1.2</text>
+<text x="24" y="43" text-anchor="end" font-size="9.5" fill="#85858E" font-family="JetBrains Mono, monospace">0.9</text>
+<text x="24" y="75" text-anchor="end" font-size="9.5" fill="#85858E" font-family="JetBrains Mono, monospace">0.6</text>
+<text x="24" y="107" text-anchor="end" font-size="9.5" fill="#85858E" font-family="JetBrains Mono, monospace">0.3</text>
+<text x="24" y="139" text-anchor="end" font-size="9.5" fill="#85858E" font-family="JetBrains Mono, monospace">s</text>
+<text x="58.7" y="152" text-anchor="middle" font-size="10" fill="#A1A1AA" font-family="JetBrains Mono, monospace">125</text>
+<text x="116" y="152" text-anchor="middle" font-size="10" fill="#A1A1AA" font-family="JetBrains Mono, monospace">250</text>
+<text x="173.3" y="152" text-anchor="middle" font-size="10" fill="#A1A1AA" font-family="JetBrains Mono, monospace">500</text>
+<text x="230.7" y="152" text-anchor="middle" font-size="10" fill="#A1A1AA" font-family="JetBrains Mono, monospace">1k</text>
+<text x="288" y="152" text-anchor="middle" font-size="10" fill="#A1A1AA" font-family="JetBrains Mono, monospace">2k</text>
+<text x="345.3" y="152" text-anchor="middle" font-size="10" fill="#A1A1AA" font-family="JetBrains Mono, monospace">4k</text>
+</svg>
+<div style="display: flex; gap: 14px; padding-left: 30px; font-size: 11.5px; color: #85858E;">
+<span style="display: flex; align-items: center; gap: 5px;"><span style="width: 9px; height: 9px; background: #E0202E;"></span>In target</span>
+<span style="display: flex; align-items: center; gap: 5px;"><span style="width: 9px; height: 9px; background: #F2A93B;"></span>Outside</span>
+<span style="display: flex; align-items: center; gap: 5px;"><span style="width: 12px; border-top: 1.5px dashed #EDEDEF;"></span>Baseline</span>
+<span>{{targetLabel}}</span>
+</div>
+</div>
+<div style="width: 200px; flex-shrink: 0; display: flex; flex-direction: column;">
+<div style="display: flex; height: 22px; align-items: center; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 11.5px; letter-spacing: 1.2px; text-transform: uppercase; color: #85858E; border-bottom: 1px solid #1D1D21;">
+<span style="width: 56px;">Band</span><span style="width: 48px; text-align: right;">Sabine</span><span style="width: 48px; text-align: right;">Eyring</span><span style="width: 48px; text-align: right;">Δ base</span>
+</div>
+<sc-for list="{{tableRows}}" as="t" hint-placeholder-count="6">
+<div style="display: flex; height: 24px; align-items: center; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; border-bottom: 1px solid #16161A;">
+<span style="width: 56px; color: #A1A1AA;">{{t.band}}</span><span style="width: 48px; text-align: right; color: {{t.color}};">{{t.sab}}</span><span style="width: 48px; text-align: right; color: #A1A1AA;">{{t.eyr}}</span><span style="width: 48px; text-align: right; color: #85858E;">{{t.delta}}</span>
+</div>
+</sc-for>
+</div>
+<div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px;">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 11.5px; letter-spacing: 1.2px; text-transform: uppercase; color: #85858E;">Absorption share · 500 Hz</div>
+<div style="height: 10px; display: flex; border-radius: 2px; overflow: hidden; background: #1A1A1E;">
+<sc-for list="{{shares}}" as="sh" hint-placeholder-count="6">
+<div style="width: {{sh.w}}; height: 10px; background: {{sh.color}}; box-shadow: inset -1px 0 0 #0F0F11;"></div>
+</sc-for>
+</div>
+<sc-for list="{{sharesTop}}" as="sh" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12.5px;">
+<span style="width: 9px; height: 9px; border-radius: 2px; background: {{sh.color}};"></span>
+<span style="flex-grow: 1; color: #A1A1AA;">{{sh.name}}</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">{{sh.pct}}</span>
+</div>
+</sc-for>
+<div style="margin-top: 2px; padding: 8px 10px; border-radius: 6px; background: #131316; border: 1px solid #1D1D21; font-size: 12.5px; line-height: 1.45;">
+<div>{{insight1}}</div>
+<div style="color: {{insight2Color}};">{{insight2}}</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{dockConsole}}" hint-placeholder-val="{{ false }}">
+<div style="flex-grow: 1; overflow-y: auto; padding: 8px 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; box-sizing: border-box;">
+<sc-for list="{{consoleLines}}" as="l" hint-placeholder-count="6">
+<div style="display: flex; gap: 14px; padding: 4px 16px; background: {{l.bg}};">
+<span style="color: #85858E;">{{l.time}}</span>
+<span style="width: 40px; color: {{l.tagColor}};">{{l.tag}}</span>
+<span style="color: {{l.color}};">{{l.text}}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{dockRuns}}" hint-placeholder-val="{{ false }}">
+<div style="flex-grow: 1; overflow-y: auto; padding: 6px 16px; box-sizing: border-box;">
+<div style="display: flex; height: 26px; align-items: center; font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 11.5px; letter-spacing: 1.2px; text-transform: uppercase; color: #85858E; border-bottom: 1px solid #1D1D21;">
+<span style="width: 70px;">Run</span><span style="width: 170px;">Variant</span><span style="width: 90px;">Solver</span><span style="width: 90px;">Status</span><span style="flex-grow: 1;">Check</span>
+</div>
+<sc-for list="{{history}}" as="h" hint-placeholder-count="3">
+<div style="display: flex; height: 32px; align-items: center; font-size: 13px; border-bottom: 1px solid #16161A;">
+<span style="width: 70px; font-family: 'JetBrains Mono', monospace; font-size: 12px;">{{h.n}}</span>
+<span style="width: 170px;">{{h.variant}}</span>
+<span style="width: 90px; color: #A1A1AA;">{{h.solver}}</span>
+<span style="width: 90px; color: {{h.color}}; font-weight: 500;">{{h.status}}</span>
+<span style="flex-grow: 1; color: #85858E;">{{h.detail}}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</section>
+</main>
+
+<aside aria-label="Properties" style="width: 344px; flex-shrink: 0; overflow-y: auto; background: #0F0F11; border-left: 1px solid #1D1D21;">
+
+<sc-if value="{{isGeometry}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column;">
+<div style="padding: 16px 16px 14px; border-bottom: 1px solid #1D1D21;">
+<div style="font-size: 17px; font-weight: 600;">Room model</div>
+<div style="font-size: 12.5px; color: #85858E; margin-top: 2px;">teaching_room.obj · imported, checked</div>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E;">Model check</span><span style="font-size: 12px; font-weight: 500; color: #74D39F;">Ready to mesh</span></div>
+<sc-for list="{{health}}" as="h" hint-placeholder-count="4">
+<div style="height: 30px; display: flex; align-items: center; gap: 9px;">
+<svg width="13" height="13" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8" stroke="#74D39F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<span style="flex-grow: 1; color: #A1A1AA;">{{h.k}}</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">{{h.v}}</span>
+</div>
+</sc-for>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E; margin-bottom: 10px;">Dimensions</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;">
+<div style="padding: 8px 10px; border-radius: 6px; background: #131316; border: 1px solid #26262B;"><div style="font-size: 11.5px; color: #85858E;">Length</div><div style="font-family: 'JetBrains Mono', monospace;">10.00 m</div></div>
+<div style="padding: 8px 10px; border-radius: 6px; background: #131316; border: 1px solid #26262B;"><div style="font-size: 11.5px; color: #85858E;">Width</div><div style="font-family: 'JetBrains Mono', monospace;">6.00 m</div></div>
+<div style="padding: 8px 10px; border-radius: 6px; background: #131316; border: 1px solid #26262B;"><div style="font-size: 11.5px; color: #85858E;">Height</div><div style="font-family: 'JetBrains Mono', monospace;">3.00 m</div></div>
+</div>
+<div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 12.5px; color: #A1A1AA;"><span>Volume <span style="font-family: 'JetBrains Mono', monospace; color: #EDEDEF;">180 m³</span></span><span>Surface <span style="font-family: 'JetBrains Mono', monospace; color: #EDEDEF;">216 m²</span></span></div>
+</div>
+<div style="padding: 14px 16px;">
+<button style="width: 100%; height: 36px; border-radius: 6px; border: 1px solid #26262B; background: #131316; color: #EDEDEF; font-weight: 500;">Replace model…</button>
+<div style="margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #85858E; text-align: center;">OBJ · STL · PLY · 3DS · glTF · IFC</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isMaterials}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column;">
+<div style="padding: 16px 16px 14px; border-bottom: 1px solid #1D1D21;">
+<div style="font-size: 17px; font-weight: 600;">Rear wall</div>
+<div style="font-size: 12.5px; color: #85858E; margin-top: 2px;">Surface group · 18 m² · 6 × 3 m</div>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E; margin-bottom: 10px;">Material</div>
+<div role="radiogroup" aria-label="Rear wall material" style="display: flex; flex-direction: column; gap: 6px;">
+<sc-for list="{{matOptions}}" as="m" hint-placeholder-count="3">
+<button role="radio" aria-checked="{{m.on}}" onClick="{{m.pick}}" style="display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 6px 10px; border-radius: 6px; border: 1px solid {{m.border}}; background: {{m.bg}}; text-align: left; box-sizing: border-box;">
+<span style="width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%; border: 1.5px solid {{m.radio}}; display: flex; align-items: center; justify-content: center; box-sizing: border-box;"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{m.dot}};"></span></span>
+<span style="width: 10px; height: 10px; flex-shrink: 0; border-radius: 2px; background: {{m.swatch}};"></span>
+<span style="flex-grow: 1; font-size: 13px;">{{m.name}}</span>
+<span style="height: 24px; display: flex; align-items: flex-end; gap: 2px;">
+<sc-for list="{{m.bars}}" as="b" hint-placeholder-count="6">
+<span style="width: 5px; height: {{b.h}}; background: {{m.barColor}};"></span>
+</sc-for>
+</span>
+</button>
+</sc-for>
+</div>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div style="display: flex; justify-content: space-between; margin-bottom: 10px;"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E;">Absorption α</span><span style="font-size: 12px; color: #85858E;">editable</span></div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px;">
+<sc-for list="{{alphaCells}}" as="a" hint-placeholder-count="6">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; border-radius: 5px; background: #131316; border: 1px solid #26262B;">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #85858E;">{{a.band}}</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">{{a.v}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; justify-content: space-between; margin-top: 12px; font-size: 12.5px;"><span style="color: #A1A1AA;">Scattering</span><span style="font-family: 'JetBrains Mono', monospace;">0.10</span></div>
+<div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 12.5px;"><span style="color: #A1A1AA;">Transmission</span><span style="font-family: 'JetBrains Mono', monospace;">off</span></div>
+</div>
+<div style="padding: 14px 16px; font-size: 12.5px; line-height: 1.5; color: #85858E;">Double-click a face to take its whole flat surface. Odeon and CATT material files import into the library.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isSources}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column;">
+<div style="padding: 16px 16px 14px; border-bottom: 1px solid #1D1D21;">
+<div style="font-size: 17px; font-weight: 600;">S1</div>
+<div style="font-size: 12.5px; color: #85858E; margin-top: 2px;">Point source · inside the room</div>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E; margin-bottom: 10px;">Position</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px;">
+<div style="padding: 8px 10px; border-radius: 6px; background: #131316; border: 1px solid #26262B;"><div style="font-size: 11.5px; color: #E0202E;">X</div><div style="font-family: 'JetBrains Mono', monospace;">2.00 m</div></div>
+<div style="padding: 8px 10px; border-radius: 6px; background: #131316; border: 1px solid #26262B;"><div style="font-size: 11.5px; color: #A1A1AA;">Y</div><div style="font-family: 'JetBrains Mono', monospace;">3.00 m</div></div>
+<div style="padding: 8px 10px; border-radius: 6px; background: #131316; border: 1px solid #26262B;"><div style="font-size: 11.5px; color: #EDEDEF;">Z</div><div style="font-family: 'JetBrains Mono', monospace;">1.50 m</div></div>
+</div>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E; margin-bottom: 8px;">Emission</div>
+<div style="height: 30px; display: flex; justify-content: space-between; align-items: center;"><span style="color: #A1A1AA;">Sound power</span><span style="font-family: 'JetBrains Mono', monospace;">85 dB</span></div>
+<div style="height: 30px; display: flex; justify-content: space-between; align-items: center;"><span style="color: #A1A1AA;">Spectrum</span><span>Pink noise</span></div>
+<div style="height: 30px; display: flex; justify-content: space-between; align-items: center;"><span style="color: #A1A1AA;">Directivity</span><span>Omni</span></div>
+</div>
+<div style="padding: 14px 16px;">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;"><span style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E;">Receivers</span><button style="height: 26px; padding: 0 10px; border-radius: 5px; border: 1px solid #26262B; background: #131316; color: #A1A1AA; font-size: 12px;">Place in view</button></div>
+<sc-for list="{{recv}}" as="r" hint-placeholder-count="3">
+<div style="height: 32px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #16161A;">
+<span style="width: 26px; font-family: 'JetBrains Mono', monospace;">{{r.n}}</span>
+<span style="flex-grow: 1; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #A1A1AA;">{{r.pos}}</span>
+<span style="font-size: 12px; color: #74D39F;">inside</span>
+</div>
+</sc-for>
+<div style="margin-top: 10px; font-size: 12.5px; line-height: 1.5; color: #85858E;">Receivers snap to 1.2 m ear height. One placed outside the room turns red and blocks the run.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isSolve}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column;">
+<div style="padding: 16px 16px 14px; border-bottom: 1px solid #1D1D21;">
+<div style="font-size: 17px; font-weight: 600;">Simulation</div>
+<div style="font-size: 12.5px; color: #85858E; margin-top: 2px;">Runs in the background · the app stays usable</div>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div role="radiogroup" aria-label="Solver" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px;">
+<button role="radio" aria-checked="{{sppsOn}}" onClick="{{pickSpps}}" style="display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 6px; border: 1px solid {{sppsBorder}}; background: {{sppsBg}}; text-align: left;"><span style="font-weight: 600;">SPPS</span><span style="font-size: 12px; color: #85858E;">Particle tracing</span></button>
+<button role="radio" aria-checked="{{tcrOn}}" onClick="{{pickTcr}}" style="display: flex; flex-direction: column; gap: 1px; padding: 8px 10px; border-radius: 6px; border: 1px solid {{tcrBorder}}; background: {{tcrBg}}; text-align: left;"><span style="font-weight: 600;">TCR</span><span style="font-size: 12px; color: #85858E;">Classical theory</span></button>
+</div>
+<div style="margin-top: 12px;">
+<sc-for list="{{settings}}" as="st" hint-placeholder-count="5">
+<div style="height: 30px; display: flex; justify-content: space-between; align-items: center; gap: 10px;"><span style="color: #A1A1AA;">{{st.k}}</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">{{st.v}}</span></div>
+</sc-for>
+</div>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E; margin-bottom: 8px;">Before running</div>
+<sc-for list="{{preflight}}" as="p" hint-placeholder-count="5">
+<div style="height: 28px; display: flex; align-items: center; gap: 9px;"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4.5 10.5l3.5 3.5 7.5-8" stroke="#74D39F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="color: #A1A1AA;">{{p.t}}</span></div>
+</sc-for>
+</div>
+<div style="padding: 14px 16px;">
+<sc-if value="{{running}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 8px;">
+<div style="display: flex; justify-content: space-between;"><span>Solving {{bandNow}}</span><span style="font-family: 'JetBrains Mono', monospace; color: #FF4A55;">{{pctStr}}</span></div>
+<div style="height: 4px; border-radius: 2px; background: #1D1D21; overflow: hidden;"><div style="width: {{pctStr}}; height: 4px; background: #E0202E;"></div></div>
+<div style="font-size: 12px; color: #85858E;">Solver output is read line by line in the Console tab.</div>
+</div>
+</sc-if>
+<sc-if value="{{idle}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 10px;">
+<div style="display: flex; justify-content: space-between; align-items: center;"><span style="font-weight: 600;">Run {{lastN}} · {{variantName}}</span><span style="font-size: 12px; font-weight: 500; color: #74D39F;">Valid</span></div>
+<div style="height: 28px; display: flex; justify-content: space-between; align-items: center;"><span style="color: #A1A1AA;">Particles lost</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">0.00 % <span style="color: #85858E;">/ 1 % limit</span></span></div>
+<div style="height: 28px; display: flex; justify-content: space-between; align-items: center;"><span style="color: #A1A1AA;">Solver warnings</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">0</span></div>
+<button onClick="{{runNow}}" style="height: 38px; margin-top: 4px; border: none; border-radius: 6px; background: #E0202E; color: #FFFFFF; font-weight: 600;">{{runLabel}}</button>
+</div>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isResults}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column;">
+<div style="padding: 16px 16px 14px; border-bottom: 1px solid #1D1D21;">
+<div style="font-size: 17px; font-weight: 600;">Run {{lastN}} · {{variantName}}</div>
+<div style="font-size: 12.5px; color: #85858E; margin-top: 2px;">SPPS · all parameters computed for every receiver</div>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E; margin-bottom: 8px;">Map</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px;">
+<span style="height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 5px; background: #3A0B10; border: 1px solid #E0202E; font-size: 12.5px;">SPL</span>
+<span style="height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 5px; border: 1px solid #26262B; color: #A1A1AA; font-size: 12.5px;">T30</span>
+<span style="height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 5px; border: 1px solid #26262B; color: #A1A1AA; font-size: 12.5px;">EDT</span>
+<span style="height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 5px; border: 1px solid #26262B; color: #A1A1AA; font-size: 12.5px;">C80</span>
+<span style="height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 5px; border: 1px solid #26262B; color: #A1A1AA; font-size: 12.5px;">D50</span>
+<span style="height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 5px; border: 1px solid #26262B; color: #A1A1AA; font-size: 12.5px;">STI</span>
+</div>
+<div style="height: 30px; display: flex; justify-content: space-between; align-items: center; margin-top: 8px;"><span style="color: #A1A1AA;">Band</span><span style="font-family: 'JetBrains Mono', monospace; font-size: 12px;">1 kHz</span></div>
+<button role="switch" aria-checked="{{diffOn}}" onClick="{{toggleDiff}}" style="width: 100%; height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 0; border: none; background: transparent; text-align: left;">
+<span style="color: #A1A1AA;">Difference from Baseline</span>
+<span style="width: 32px; height: 18px; border-radius: 9px; background: {{diffTrack}}; display: flex; align-items: center; justify-content: {{diffJustify}}; padding: 2px; box-sizing: border-box;"><span style="width: 14px; height: 14px; border-radius: 50%; background: {{diffKnob}};"></span></span>
+</button>
+<div style="font-size: 12px; color: #85858E;">{{diffNote}}</div>
+</div>
+<div style="padding: 14px 16px; border-bottom: 1px solid #1D1D21;">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 600; font-size: 12px; letter-spacing: 1.4px; text-transform: uppercase; color: #85858E; margin-bottom: 6px;">Receivers · SPL 1 kHz</div>
+<sc-for list="{{recv}}" as="r" hint-placeholder-count="3">
+<div style="height: 44px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #16161A;">
+<span style="width: 26px; font-family: 'JetBrains Mono', monospace;">{{r.n}}</span>
+<span style="flex-grow: 1; font-size: 12px; color: #85858E;">{{r.dist}} from S1</span>
+<span style="display: flex; flex-direction: column; align-items: flex-end;">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 15px;">{{r.spl}} dB</span>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: {{r.deltaColor}};">{{r.delta}}</span>
+</span>
+</div>
+</sc-for>
+</div>
+<div style="padding: 14px 16px; display: flex; gap: 6px;">
+<button style="flex: 1; height: 36px; border-radius: 6px; border: none; background: #E0202E; color: #FFFFFF; font-weight: 600;">Export report</button>
+<button style="flex: 1; height: 36px; border-radius: 6px; border: 1px solid #26262B; background: #131316; color: #EDEDEF; font-weight: 500;">Listen at R1</button>
+</div>
+</div>
+</sc-if>
+</aside>
+</div>
+
+<footer style="height: 24px; flex-shrink: 0; display: flex; align-items: center; gap: 18px; padding: 0 12px; background: #0F0F11; border-top: 1px solid #1D1D21; font-size: 12px; color: #85858E; box-sizing: border-box;">
+<span style="display: flex; align-items: center; gap: 6px; color: {{statusColor}};"><span style="width: 7px; height: 7px; border-radius: 50%; background: {{statusColor}};"></span>{{statusText}}</span>
+<span>Model closed · 6 surfaces · 180 m³</span>
+<span>{{variantName}}</span>
+<span style="flex-grow: 1;"></span>
+<span>Solvers: I-Simpa 1.4.0 · SPPS, TCR</span>
+<span>Units: m</span>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  componentWillUnmount() {
+    if (this._t) { clearInterval(this._t); this._t = null; }
+  }
+
+  startRun() {
+    if (this._t) return;
+    this.setState({ step: 'solve', running: true, progress: 0, dock: 'console' });
+    this._t = setInterval(() => {
+      const s = this.state || {};
+      const p = (s.progress || 0) + 3;
+      if (p >= 100) {
+        clearInterval(this._t);
+        this._t = null;
+        const n = (s.runs || 3) + 1;
+        this.setState({ running: false, progress: 100, runs: n, extra: [{ n: n, mat: s.rearMat || 'panel', engine: s.engine || 'spps' }].concat(s.extra || []) });
+      } else {
+        this.setState({ progress: p });
+      }
+    }, 80);
+  }
+
+  renderVals() {
+    const s = this.state || {};
+    const RED = '#E0202E';
+    const step = s.step || 'materials';
+    const rearMat = s.rearMat || 'panel';
+    const running = !!s.running;
+    const progress = s.progress || 0;
+    const engine = s.engine || 'spps';
+    const dock = s.dock || 'acoustics';
+    const diffOn = !!s.diff && rearMat !== 'plaster';
+    const lastN = s.runs || 3;
+
+    const MATS = {
+      lino: { name: 'Linoleum on concrete', short: 'Linoleum', swatch: '#6B6B73', a: [0.02, 0.03, 0.03, 0.03, 0.03, 0.02] },
+      tile: { name: 'Mineral-fibre tile', short: 'Ceiling tile', swatch: '#B8B8C0', a: [0.50, 0.70, 0.60, 0.70, 0.70, 0.50] },
+      plaster: { name: 'Painted plaster', short: 'Plaster', swatch: '#4A4A52', a: [0.013, 0.015, 0.02, 0.03, 0.04, 0.05] },
+      panel: { name: 'Slotted wood panel', short: 'Wood panel', swatch: '#8A5A3C', a: [0.25, 0.60, 0.80, 0.70, 0.50, 0.40] },
+      curtain: { name: 'Heavy velour curtain', short: 'Curtain', swatch: '#7A1520', a: [0.14, 0.35, 0.55, 0.72, 0.70, 0.65] }
+    };
+    const VARIANT = { plaster: 'Baseline', panel: 'Treated rear wall', curtain: 'Rear curtain' };
+    const BANDS = ['125 Hz', '250 Hz', '500 Hz', '1 kHz', '2 kHz', '4 kHz'];
+    const V = 180, S = 216;
+
+    const surfDefs = [
+      { id: 'floor', name: 'Floor', area: 60, mat: 'lino' },
+      { id: 'ceiling', name: 'Ceiling', area: 60, mat: 'tile' },
+      { id: 'left', name: 'Left wall', area: 30, mat: 'plaster' },
+      { id: 'right', name: 'Right wall', area: 30, mat: 'plaster' },
+      { id: 'front', name: 'Front wall', area: 18, mat: 'plaster' },
+      { id: 'rear', name: 'Rear wall', area: 18, mat: 'rear' }
+    ];
+    const matKey = (sf, rm) => (sf.mat === 'rear' ? rm : sf.mat);
+    const absorb = rm => [0, 1, 2, 3, 4, 5].map(b => surfDefs.reduce((acc, sf) => acc + sf.area * MATS[matKey(sf, rm)].a[b], 0));
+    const A = absorb(rearMat), A0 = absorb('plaster');
+    const sab = A.map(x => 0.161 * V / x);
+    const sab0 = A0.map(x => 0.161 * V / x);
+    const eyr = A.map(x => 0.161 * V / (-S * Math.log(1 - x / S)));
+
+    const tgt = 0.32 * Math.log10(V) - 0.17;
+    const lo = 0.8 * tgt, hi = 1.2 * tgt;
+    const BX = i => 30 + (i + 0.5) * (344 / 6);
+    const BY = t => 8 + (1.2 - Math.min(1.2, Math.max(0, t))) / 1.2 * 128;
+    const bar = i => 'M' + (BX(i) - 15).toFixed(1) + ',' + BY(sab[i]).toFixed(1) + 'h30V136h-30z';
+    const inIdx = [], outIdx = [];
+    sab.forEach((t, i) => ((t >= lo && t <= hi) ? inIdx : outIdx).push(i));
+    const off = outIdx.map(i => BANDS[i]);
+
+    const tableRows = sab.map((t, i) => {
+      const d = t - sab0[i];
+      return {
+        band: BANDS[i],
+        sab: t.toFixed(2),
+        eyr: eyr[i].toFixed(2),
+        delta: rearMat === 'plaster' ? '—' : (d < 0 ? '−' : '+') + Math.abs(d).toFixed(2),
+        color: (t >= lo && t <= hi) ? '#EDEDEF' : '#F2A93B'
+      };
+    });
+
+    const shareColor = sf => MATS[matKey(sf, rearMat)].swatch;
+    const shareRaw = surfDefs.map(sf => ({ name: sf.name, color: sf.id === 'rear' ? RED : shareColor(sf), v: sf.area * MATS[matKey(sf, rearMat)].a[2] / A[2] })).sort((a, b) => b.v - a.v);
+    const shares = shareRaw.map(x => ({ color: x.color, w: (x.v * 100).toFixed(2) + '%' }));
+    const sharesTop = shareRaw.slice(0, 3).map(x => ({ name: x.name, color: x.color, pct: Math.round(x.v * 100) + ' %' }));
+    const insight1 = shareRaw[0].name + ' does ' + Math.round(shareRaw[0].v * 100) + ' % of the absorbing at 500 Hz.';
+    const insight2 = off.length === 0 ? 'All six bands are inside the target range.' : 'Outside the target range at ' + (off.length === 1 ? off[0] : off.slice(0, -1).join(', ') + ' and ' + off[off.length - 1]) + '.';
+
+    const Rc = x => x / (1 - x / S);
+    const R = Rc(A[3]), R0 = Rc(A0[3]);
+    const lp = (r2, RR) => 85 + 10 * Math.log10(1 / (4 * Math.PI * r2) + 4 / RR);
+    const HOT = ['#0B0B0E', '#2A0A12', '#520C18', '#7F101E', '#B0161F', '#DB2F1F', '#F2601C', '#F99A2E', '#FCD270'];
+    const COOL = ['#0E1116', '#15212C', '#1C3446', '#264B63', '#356683', '#4A84A5', '#6AA6C6', '#A3CDE3'];
+    const hex3 = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+    const ramp = (stops, t) => {
+      const u = Math.max(0, Math.min(1, t));
+      const n = stops.length - 1;
+      const k = Math.min(n - 1, Math.floor(u * n));
+      const f = u * n - k;
+      const a = hex3(stops[k]), b = hex3(stops[k + 1]);
+      return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * f).toString(16).padStart(2, '0')).join('');
+    };
+    const cells = [];
+    if (step === 'results') {
+      for (let j = 0; j < 12; j++) {
+        for (let i = 0; i < 20; i++) {
+          const x = 0.25 + 0.5 * i, y = 0.25 + 0.5 * j;
+          const r2 = (x - 2) * (x - 2) + (y - 3) * (y - 3) + 0.09;
+          const L = lp(r2, R);
+          cells.push({ l: (i * 24) + 'px', t: (j * 24) + 'px', bg: diffOn ? ramp(COOL, (lp(r2, R0) - L) / 1.5) : ramp(HOT, (L - 72) / 10) });
+        }
+      }
+    }
+
+    const recv = [{ n: 'R1', x: 5.0, y: 2.0 }, { n: 'R2', x: 8.0, y: 4.0 }, { n: 'R3', x: 3.5, y: 4.5 }].map(r => {
+      const r2 = (r.x - 2) * (r.x - 2) + (r.y - 3) * (r.y - 3) + 0.09;
+      const L = lp(r2, R), d = L - lp(r2, R0);
+      const same = rearMat === 'plaster';
+      return {
+        n: r.n,
+        short: r.x.toFixed(1) + ', ' + r.y.toFixed(1),
+        pos: '(' + r.x.toFixed(2) + ', ' + r.y.toFixed(2) + ', 1.20)',
+        dist: Math.sqrt(r2).toFixed(1) + ' m',
+        spl: L.toFixed(1),
+        delta: same ? 'baseline' : (d < 0 ? '−' : '+') + Math.abs(d).toFixed(1) + ' dB vs baseline',
+        deltaColor: same ? '#85858E' : '#A3CDE3'
+      };
+    });
+
+    const stepDefs = [
+      { key: 'geometry', num: '1', name: 'Geometry', sub: 'closed' },
+      { key: 'materials', num: '2', name: 'Materials', sub: '6 / 6' },
+      { key: 'sources', num: '3', name: 'Sources & receivers', sub: '1 · 3' },
+      { key: 'solve', num: '4', name: 'Simulate', sub: running ? progress + ' %' : 'run ' + lastN + ' valid' },
+      { key: 'results', num: '5', name: 'Results', sub: '' }
+    ];
+    const steps = stepDefs.map(d => {
+      const on = d.key === step;
+      return {
+        num: d.num, name: d.name, sub: d.sub,
+        current: on ? 'step' : 'false',
+        under: on ? RED : 'transparent',
+        color: on ? '#EDEDEF' : '#A1A1AA',
+        badgeBg: on ? RED : '#1F1F24',
+        badgeColor: on ? '#FFFFFF' : '#A1A1AA',
+        go: () => this.setState({ step: d.key })
+      };
+    });
+
+    const variants = ['plaster', 'panel', 'curtain'].map(k => {
+      const on = k === rearMat;
+      return { name: VARIANT[k], active: on, bg: on ? '#3A0B10' : 'transparent', color: on ? '#FFFFFF' : '#A1A1AA', pick: () => this.setState({ rearMat: k }) };
+    });
+
+    const outSurf = surfDefs.map(sf => {
+      const sel = sf.id === 'rear' && step === 'materials';
+      const m = MATS[matKey(sf, rearMat)];
+      return { name: sf.name, mat: m.short, swatch: m.swatch, bg: sel ? '#3A0B10' : 'transparent', ring: sel ? 'rgba(224,32,46,0.7)' : 'transparent', color: sel ? '#FFFFFF' : '#EDEDEF' };
+    });
+    const srcSel = step === 'sources';
+
+    const matOptions = ['plaster', 'panel', 'curtain'].map(k => {
+      const on = k === rearMat;
+      const m = MATS[k];
+      return {
+        name: m.name, on: on, swatch: m.swatch,
+        border: on ? RED : '#26262B',
+        bg: on ? '#1A0B0E' : '#131316',
+        radio: on ? RED : '#55555E',
+        dot: on ? RED : 'transparent',
+        barColor: on ? RED : '#55555E',
+        bars: m.a.map(a => ({ h: Math.max(2, Math.round(a * 24)) + 'px' })),
+        pick: () => this.setState({ rearMat: k })
+      };
+    });
+    const alphaCells = MATS[rearMat].a.map((a, i) => ({ band: ['125', '250', '500', '1k', '2k', '4k'][i], v: a.toFixed(2) }));
+
+    const health = [
+      { k: 'Closed volume', v: 'yes' },
+      { k: 'Self-intersections', v: '0' },
+      { k: 'Flipped normals', v: '0' },
+      { k: 'Units', v: 'm (detected)' }
+    ];
+    const settings = engine === 'spps' ? [
+      { k: 'Particles per band', v: 'auto' },
+      { k: 'Duration', v: '1.5 s' },
+      { k: 'Time step', v: '10 ms' },
+      { k: 'Bands', v: '1/1 oct · 125–4k' },
+      { k: 'Air absorption', v: '20 °C · 50 %' }
+    ] : [
+      { k: 'Method', v: 'Sabine · Eyring' },
+      { k: 'Bands', v: '1/1 oct · 125–4k' },
+      { k: 'Air absorption', v: '20 °C · 50 %' }
+    ];
+    const preflight = [
+      { t: 'Every surface has a material' },
+      { t: 'Model closed, no self-intersections' },
+      { t: 'Source inside the room' },
+      { t: 'All receivers inside the room' },
+      { t: 'Air absorption set' }
+    ];
+
+    const history = (s.extra || []).map(r => ({ n: '#' + r.n, variant: VARIANT[r.mat], solver: r.engine === 'tcr' ? 'TCR' : 'SPPS', status: 'Valid', detail: 'no particles lost · 0 warnings', color: '#74D39F' })).concat([
+      { n: '#3', variant: 'Treated rear wall', solver: 'SPPS', status: 'Valid', detail: 'no particles lost · 0 warnings', color: '#74D39F' },
+      { n: '#2', variant: 'Baseline', solver: 'SPPS', status: 'Valid', detail: 'no particles lost · 0 warnings', color: '#74D39F' },
+      { n: '#1', variant: 'Raw import', solver: '—', status: 'Refused', detail: 'stopped before meshing: 2 self-intersecting faces on the ceiling', color: '#FF4A55' }
+    ]);
+
+    const consoleBase = [
+      { time: '14:02:11', tag: 'FAIL', text: 'Import check: 2 self-intersecting faces on Ceiling. Run refused; faces highlighted in the view.' },
+      { time: '14:03:40', tag: 'INFO', text: 'Model re-imported. Closed volume, 0 self-intersections.' },
+      { time: '14:05:02', tag: 'INFO', text: 'Run #2 · mesh built, every surface face matched to a material.' },
+      { time: '14:05:49', tag: 'OK', text: 'Run #2 · SPPS finished. Particles lost 0.00 % (limit 1 %).' },
+      { time: '14:09:15', tag: 'OK', text: 'Run #3 · SPPS finished. Particles lost 0.00 % (limit 1 %).' }
+    ];
+    const liveLines = running ? [{ time: 'now', tag: 'INFO', text: 'SPPS solving ' + BANDS[Math.min(5, Math.floor(progress / 100 * 6))] + ' · ' + progress + ' %' }] : [];
+    const doneLines = (s.extra || []).slice().reverse().map(r => ({ time: 'now', tag: 'OK', text: 'Run #' + r.n + ' · ' + (r.engine === 'tcr' ? 'TCR' : 'SPPS') + ' finished. Particles lost 0.00 % (limit 1 %).' }));
+    const TAGC = { FAIL: '#FF4A55', WARN: '#F2A93B', INFO: '#A1A1AA', OK: '#74D39F' };
+    const consoleLines = consoleBase.concat(doneLines, liveLines).map(l => ({
+      time: l.time, tag: l.tag, text: l.text,
+      tagColor: TAGC[l.tag],
+      color: l.tag === 'FAIL' ? '#FFB3B8' : '#EDEDEF',
+      bg: l.tag === 'FAIL' ? 'rgba(224,32,46,0.08)' : 'transparent'
+    }));
+
+    const dockTabs = [
+      { key: 'acoustics', name: 'Acoustics', badge: off.length ? off.length + ' off' : 'ok', badgeColor: off.length ? '#F2A93B' : '#74D39F' },
+      { key: 'console', name: 'Console', badge: running ? 'live' : '1 fail', badgeColor: running ? '#FF4A55' : '#85858E' },
+      { key: 'runs', name: 'Runs', badge: String(history.length), badgeColor: '#85858E' }
+    ].map(d => {
+      const on = d.key === dock;
+      return { name: d.name, badge: d.badge, badgeColor: d.badgeColor, active: on, under: on ? RED : 'transparent', color: on ? '#EDEDEF' : '#A1A1AA', go: () => this.setState({ dock: d.key }) };
+    });
+
+    const hl = step === 'materials';
+    const sppsOn = engine === 'spps';
+
+    return {
+      runLabel: running ? 'Running ' + progress + ' %' : (sppsOn ? 'Run SPPS' : 'Run TCR'),
+      runNow: () => this.startRun(),
+      steps: steps,
+      variants: variants,
+      variantName: VARIANT[rearMat],
+      isGeometry: step === 'geometry',
+      isMaterials: step === 'materials',
+      isSources: step === 'sources',
+      isSolve: step === 'solve',
+      isResults: step === 'results',
+
+      outSurf: outSurf,
+      srcBg: srcSel ? '#3A0B10' : 'transparent',
+      srcRing: srcSel ? 'rgba(224,32,46,0.7)' : 'transparent',
+      recv: recv,
+
+      rearBg: hl ? 'rgba(224,32,46,0.16)' : 'rgba(237,237,239,0.03)',
+      rearBorder: hl ? RED : 'rgba(237,237,239,0.26)',
+      planRear: hl ? RED : 'rgba(237,237,239,0.35)',
+      planRearW: hl ? 3 : 1,
+      cells: cells,
+      legendTitle: diffOn ? 'Difference from baseline · 1 kHz' : 'SPL · 1 kHz · Lw 85 dB',
+      legendBg: 'linear-gradient(90deg, ' + (diffOn ? COOL : HOT).join(', ') + ')',
+      legendLo: diffOn ? '0' : '72',
+      legendMid: diffOn ? '−0.75' : '77',
+      legendHi: diffOn ? '−1.5 dB' : '82 dB',
+
+      dockTabs: dockTabs,
+      dockAcoustics: dock === 'acoustics',
+      dockConsole: dock === 'console',
+      dockRuns: dock === 'runs',
+      bandY: BY(hi).toFixed(1),
+      bandY2: BY(lo).toFixed(1),
+      bandH: (BY(lo) - BY(hi)).toFixed(1),
+      barsIn: inIdx.map(bar).join(' '),
+      barsOut: outIdx.map(bar).join(' '),
+      baseTicks: [0, 1, 2, 3, 4, 5].map(i => 'M' + (BX(i) - 20).toFixed(1) + ',' + BY(sab0[i]).toFixed(1) + 'h40').join(' '),
+      ghostOp: rearMat === 'plaster' ? 0 : 0.85,
+      targetLabel: 'target ' + lo.toFixed(2) + '–' + hi.toFixed(2) + ' s (DIN 18041 A3)',
+      tableRows: tableRows,
+      shares: shares,
+      sharesTop: sharesTop,
+      insight1: insight1,
+      insight2: insight2,
+      insight2Color: off.length === 0 ? '#74D39F' : '#F2A93B',
+      consoleLines: consoleLines,
+      history: history,
+
+      matOptions: matOptions,
+      alphaCells: alphaCells,
+      health: health,
+      settings: settings,
+      preflight: preflight,
+      sppsOn: sppsOn,
+      tcrOn: !sppsOn,
+      sppsBg: sppsOn ? '#1A0B0E' : '#131316',
+      sppsBorder: sppsOn ? RED : '#26262B',
+      tcrBg: !sppsOn ? '#1A0B0E' : '#131316',
+      tcrBorder: !sppsOn ? RED : '#26262B',
+      pickSpps: () => this.setState({ engine: 'spps' }),
+      pickTcr: () => this.setState({ engine: 'tcr' }),
+      running: running,
+      idle: !running,
+      pctStr: progress + '%',
+      bandNow: BANDS[Math.min(5, Math.floor(progress / 100 * 6))],
+      lastN: lastN,
+
+      diffOn: diffOn,
+      toggleDiff: () => this.setState({ diff: !s.diff }),
+      diffNote: rearMat === 'plaster' ? 'Pick another variant at the top to compare.' : 'Blue shows where ' + VARIANT[rearMat] + ' is quieter.',
+      diffTrack: diffOn ? RED : '#26262B',
+      diffKnob: diffOn ? '#FFFFFF' : '#85858E',
+      diffJustify: diffOn ? 'flex-end' : 'flex-start',
+
+      statusText: running ? 'Simulating · ' + progress + ' %' : 'Ready',
+      statusColor: running ? '#FF4A55' : '#74D39F'
+    };
+  }
+}
+</script>
+</body>
+</html>
