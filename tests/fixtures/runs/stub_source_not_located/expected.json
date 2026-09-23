@@ -1,0 +1,83 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "source_not_located"
+  ],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "Row source_not_located (SC:324, sppsNantes.cpp:63), on stderr with no newline, once per band so both land on one stderr line. No real run reaches it (SC:324).",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
+  },
+  "observed": {
+    "source": "stub.json, played back by the stub solver (not run here)",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "source_not_located"
+    ],
+    "warnings": [],
+    "lines": [
+      "End of calculation.",
+      "Unable to find the source position!Unable to find the source position!"
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_end_of_calculation",
+        "terminated": true,
+        "text": "End of calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_output_start",
+        "terminated": true,
+        "text": "Output results files."
+      },
+      {
+        "stream": "stderr",
+        "row": "source_not_located",
+        "terminated": false,
+        "text": "Unable to find the source position!Unable to find the source position!"
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "stats_unreadable",
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "SPPS particle statistics.gabe",
+        "Total energy.recp",
+        "Punctual receivers\\R1\\Sound level.recp",
+        "Punctual receivers\\R1\\Advanced sound level.gap",
+        "Punctual receivers\\R1\\Punctual receiver intensity.gabe",
+        "Punctual receivers\\R1\\Sound level per source.recps",
+        "Intensity animation\\1000 Hz\\Intensity.rpi",
+        "Intensity animation\\500 Hz\\Intensity.rpi",
+        "particles\\1000\\particles.pbin",
+        "particles\\1000\\particle_surface_collision_statistics.csv",
+        "particles\\1000\\particle_receivers_collision_statistics.csv",
+        "particles\\500\\particles.pbin",
+        "particles\\500\\particle_surface_collision_statistics.csv",
+        "particles\\500\\particle_receivers_collision_statistics.csv"
+      ]
+    }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "solver": "tcr",
+  "status": "FAIL",
+  "codes": [
+    "mesh_invalid"
+  ],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "No tetramesh.mbin: refused before launch. Run anyway, TCR prints row tetra_mesh_unreadable and exits 1 (SC:274, VERIFIED S tcr_nomesh; RAW:1267).",
+  "pre_launch": {
+    "mesh_check": "fail",
+    "error": "tetramesh.mbin is missing",
+    "codes": []
+  },
+  "observed": {
+    "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",
+    "exit_code": "0x00000001",
+    "status": "FAIL",
+    "codes": [
+      "tetra_mesh_unreadable",
+      "exit_nonzero"
+    ],
+    "warnings": [],
+    "lines": [
+      "Unable to read the tetrahedalization of the scene mesh file, calculation canceled."
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "tcr_loading",
+        "terminated": true,
+        "text": "XML configuration file is currently loading..."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_config_echo",
+        "terminated": true,
+        "text": "config.xml"
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_loading",
+        "terminated": true,
+        "text": "XML configuration file has been loaded."
+      },
+      {
+        "stream": "stdout",
+        "row": "tetra_mesh_unreadable",
+        "terminated": true,
+        "text": "Unable to read the tetrahedalization of the scene mesh file, calculation canceled."
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "Main results.gabe",
+        "Punctual receivers\\R1.gabe"
+      ]
+    }
+  }
+}

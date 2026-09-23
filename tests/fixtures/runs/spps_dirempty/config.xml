@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration workingdirectory="__RUNDIR__">
+  <simulation recepteurss_directory="Surface receiver\" recepteurss_filename="Sound level.csbin" recepteurss_cut_filename="rs_cut.csbin" receiversp_directory="Punctual receivers" receiversp_filename="Sound level.recp" receiversp_filename_adv="Advanced sound level.gap" cumul_filename="Total energy.recp" modelName="mesh.cbin" tetrameshFileName="tetramesh.mbin" abs_atmo_calc="1" enc_calc="1" trans_calc="1" direct_calc="0" duree_simulation="0.5" output_recp_bysource="0" output_recs_byfreq="1" surf_receiv_method="0" random_seed="1" computation_method="1" nbparticules="2000" nbparticules_rendu="10" pasdetemps="0.001" rayon_recepteurp="0.31" trans_epsilon="5" stats_filename="SPPS particle statistics.gabe" particules_directory="particles\" particules_filename="particles.pbin" directivities_directory="" direct_recepteurSOutputName="Direct field\" sabine_recepteurSOutputName="Total field (Sabine)\" eyring_recepteurSOutputName="Total field (Eyring)\">
+    <freq_enum><bfreq freq="1000" docalc="1"/><bfreq freq="500" docalc="1"/></freq_enum>
+  </simulation>
+  <condition_atmospherique humidite="50" pression="101325" temperature="20" z0="0.02" alog="0" blin="0" disable_absatmo_computation="0" absatmo="0"/>
+  <surface_absorption_enum>
+    <type_surface id="0" side_material="1"><bfreq freq="500" absorb="0.2" diffusion="0.1" loi="1"/><bfreq freq="1000" absorb="0.3" diffusion="0.1" loi="1"/></type_surface>
+  </surface_absorption_enum>
+  <sources>
+    <source id="1" name="S1" x="1.2" y="1.7" z="2.1" delay="0" u="1" v="0" w="0" directivite="5"><bfreq freq="500" db="90"/><bfreq freq="1000" db="90"/></source>
+  </sources>
+  <recepteursp>
+    <recepteur_ponctuel id="2" lbl="R1" x="3.6" y="3.1" z="1.4" u="1" v="0" w="0"/>
+  </recepteursp>
+  <recepteurss/>
+  <encombrement_enum/>
+</configuration>

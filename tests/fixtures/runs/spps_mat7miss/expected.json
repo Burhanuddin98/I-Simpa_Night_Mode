@@ -1,0 +1,72 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "material_missing",
+    "exit_nonzero"
+  ],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "Faces use material 7, undeclared: row material_missing on stderr (SC:321, coreinitialisation.cpp:430) and exit 0xFFFFFFFF (SC:264, VERIFIED S run_mat7miss; RAW:1477).",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0xFFFFFFFF",
+    "status": "FAIL",
+    "codes": [
+      "material_missing",
+      "exit_nonzero"
+    ],
+    "warnings": [],
+    "lines": [
+      "Wrong project configuration, a face is defined but no materials are attached to it ! Check your group/material associations"
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stderr",
+        "row": "material_missing",
+        "terminated": true,
+        "text": "Wrong project configuration, a face is defined but no materials are attached to it ! Check your group/material associations"
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "stats_unreadable",
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "SPPS particle statistics.gabe",
+        "Total energy.recp",
+        "Punctual receivers\\R1\\Sound level.recp",
+        "Punctual receivers\\R1\\Advanced sound level.gap",
+        "Punctual receivers\\R1\\Punctual receiver intensity.gabe",
+        "Punctual receivers\\R1\\Sound level per source.recps",
+        "Intensity animation\\1000 Hz\\Intensity.rpi",
+        "Intensity animation\\500 Hz\\Intensity.rpi",
+        "particles\\1000\\particles.pbin",
+        "particles\\1000\\particle_surface_collision_statistics.csv",
+        "particles\\1000\\particle_receivers_collision_statistics.csv",
+        "particles\\500\\particles.pbin",
+        "particles\\500\\particle_surface_collision_statistics.csv",
+        "particles\\500\\particle_receivers_collision_statistics.csv"
+      ]
+    }
+  }
+}

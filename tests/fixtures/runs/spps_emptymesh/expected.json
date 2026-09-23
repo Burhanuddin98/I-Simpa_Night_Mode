@@ -1,0 +1,90 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "mesh_invalid",
+    "uncovered_scene_faces"
+  ],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "tetramesh.mbin with T = N = 0: no tetrahedron face carries any of the 12 scene faces. Run anyway, SPPS prints the path, row tetra_mesh_empty (SC:317, coreTypes.cpp:241) and row tetra_mesh_unreadable (coreinitialisation.cpp:456), exit 0.",
+  "pre_launch": {
+    "mesh_check": "fail",
+    "tetrahedra": 0,
+    "nodes": 0,
+    "scene_faces": 12,
+    "room_id": null,
+    "counts": {
+      "uncovered_scene_faces": 12
+    },
+    "codes": [
+      "uncovered_scene_faces"
+    ],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "tetra_mesh_empty",
+      "tetra_mesh_unreadable"
+    ],
+    "warnings": [],
+    "lines": [
+      "__RUNDIR__tetramesh.mbin",
+      "Tetrahedron file is empty, the calculation can't be done !",
+      "Unable to read the tetrahedalization of the scene mesh file, calculation canceled."
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "continuation:tetra_mesh_empty",
+        "terminated": true,
+        "text": "__RUNDIR__tetramesh.mbin"
+      },
+      {
+        "stream": "stdout",
+        "row": "tetra_mesh_empty",
+        "terminated": true,
+        "text": "Tetrahedron file is empty, the calculation can't be done !"
+      },
+      {
+        "stream": "stdout",
+        "row": "tetra_mesh_unreadable",
+        "terminated": true,
+        "text": "Unable to read the tetrahedalization of the scene mesh file, calculation canceled."
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "stats_unreadable",
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "SPPS particle statistics.gabe",
+        "Total energy.recp",
+        "Punctual receivers\\R1\\Sound level.recp",
+        "Punctual receivers\\R1\\Advanced sound level.gap",
+        "Punctual receivers\\R1\\Punctual receiver intensity.gabe",
+        "Punctual receivers\\R1\\Sound level per source.recps",
+        "Intensity animation\\1000 Hz\\Intensity.rpi",
+        "Intensity animation\\500 Hz\\Intensity.rpi",
+        "particles\\1000\\particles.pbin",
+        "particles\\1000\\particle_surface_collision_statistics.csv",
+        "particles\\1000\\particle_receivers_collision_statistics.csv",
+        "particles\\500\\particles.pbin",
+        "particles\\500\\particle_surface_collision_statistics.csv",
+        "particles\\500\\particle_receivers_collision_statistics.csv"
+      ]
+    }
+  }
+}

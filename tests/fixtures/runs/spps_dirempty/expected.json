@@ -1,0 +1,70 @@
+{
+  "solver": "spps",
+  "status": "CRASH",
+  "codes": [
+    "xml_property_missing",
+    "crash_access_violation"
+  ],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "Balloon source without a directivity_file attribute: row xml_property_missing, then a NULL directivity and 0xC0000005 (SC:82, SC:266, VERIFIED S run_dirempty; RAW:1465).",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0xC0000005",
+    "status": "CRASH",
+    "codes": [
+      "xml_property_missing",
+      "crash_access_violation"
+    ],
+    "warnings": [],
+    "lines": [
+      "Xml Property directivity_file doesn't exist !"
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "xml_property_missing",
+        "terminated": true,
+        "text": "Xml Property directivity_file doesn't exist !"
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "stats_unreadable",
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "SPPS particle statistics.gabe",
+        "Total energy.recp",
+        "Punctual receivers\\R1\\Sound level.recp",
+        "Punctual receivers\\R1\\Advanced sound level.gap",
+        "Punctual receivers\\R1\\Punctual receiver intensity.gabe",
+        "Punctual receivers\\R1\\Sound level per source.recps",
+        "Intensity animation\\1000 Hz\\Intensity.rpi",
+        "Intensity animation\\500 Hz\\Intensity.rpi",
+        "particles\\1000\\particles.pbin",
+        "particles\\1000\\particle_surface_collision_statistics.csv",
+        "particles\\1000\\particle_receivers_collision_statistics.csv",
+        "particles\\500\\particles.pbin"
+      ]
+    }
+  }
+}

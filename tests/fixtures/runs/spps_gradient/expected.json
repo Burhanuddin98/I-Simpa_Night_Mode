@@ -1,0 +1,87 @@
+{
+  "solver": "spps",
+  "status": "OK",
+  "codes": [],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "blin = 0.001: a sound-speed gradient, so both ground_height lines (SC:311, coreinitialisation.cpp:139, 148, INFO); otherwise spps_ok.",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
+  },
+  "observed": {
+    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "OK",
+    "codes": [],
+    "warnings": [],
+    "lines": [
+      "Compute of z ground inside each tetra.",
+      "Calculation of z ground inside each tetra has been done.",
+      "End of calculation."
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "ground_height",
+        "terminated": true,
+        "text": "Compute of z ground inside each tetra."
+      },
+      {
+        "stream": "stdout",
+        "row": "ground_height",
+        "terminated": true,
+        "text": "Calculation of z ground inside each tetra has been done."
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_end_of_calculation",
+        "terminated": true,
+        "text": "End of calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_output_start",
+        "terminated": true,
+        "text": "Output results files."
+      }
+    ],
+    "progress_lines": 3999,
+    "post_run": {
+      "codes": [],
+      "stats": {
+        "500 Hz": {
+          "absorbed_atmosphere": 0,
+          "absorbed_materials": 970,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 0,
+          "remaining": 1030,
+          "total": 2000
+        },
+        "1000 Hz": {
+          "absorbed_atmosphere": 43,
+          "absorbed_materials": 1957,
+          "absorbed_fittings": 0,
+          "lost_loops": 0,
+          "lost_meshing": 0,
+          "remaining": 0,
+          "total": 2000
+        }
+      }
+    }
+  }
+}

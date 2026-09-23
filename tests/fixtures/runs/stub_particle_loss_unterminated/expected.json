@@ -1,0 +1,83 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "particle_loss_reported"
+  ],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "Row particle_loss_reported (SC:325) as SPPS's last output, with no newline (M6(e): the final stderr line must be captured). Text from spps_lossy, refused before launch.",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
+  },
+  "observed": {
+    "source": "stub.json, played back by the stub solver (not run here)",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "particle_loss_reported"
+    ],
+    "warnings": [],
+    "lines": [
+      "End of calculation.",
+      "Warning 4000 particles has been in error on 4000 particles. The computation result may be wrong, please check the particles statitics file for more details."
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_end_of_calculation",
+        "terminated": true,
+        "text": "End of calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "spps_output_start",
+        "terminated": true,
+        "text": "Output results files."
+      },
+      {
+        "stream": "stderr",
+        "row": "particle_loss_reported",
+        "terminated": false,
+        "text": "Warning 4000 particles has been in error on 4000 particles. The computation result may be wrong, please check the particles statitics file for more details."
+      }
+    ],
+    "progress_lines": 2,
+    "post_run": {
+      "codes": [
+        "stats_unreadable",
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "SPPS particle statistics.gabe",
+        "Total energy.recp",
+        "Punctual receivers\\R1\\Sound level.recp",
+        "Punctual receivers\\R1\\Advanced sound level.gap",
+        "Punctual receivers\\R1\\Punctual receiver intensity.gabe",
+        "Punctual receivers\\R1\\Sound level per source.recps",
+        "Intensity animation\\1000 Hz\\Intensity.rpi",
+        "Intensity animation\\500 Hz\\Intensity.rpi",
+        "particles\\1000\\particles.pbin",
+        "particles\\1000\\particle_surface_collision_statistics.csv",
+        "particles\\1000\\particle_receivers_collision_statistics.csv",
+        "particles\\500\\particles.pbin",
+        "particles\\500\\particle_surface_collision_statistics.csv",
+        "particles\\500\\particle_receivers_collision_statistics.csv"
+      ]
+    }
+  }
+}

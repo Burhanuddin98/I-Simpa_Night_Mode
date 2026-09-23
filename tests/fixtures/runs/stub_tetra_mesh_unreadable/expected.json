@@ -1,0 +1,70 @@
+{
+  "solver": "spps",
+  "status": "FAIL",
+  "codes": [
+    "tetra_mesh_unreadable"
+  ],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "Row tetra_mesh_unreadable (SC:316) with SPPS's exit 0. Text from spps_nomesh, refused before launch.",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
+  },
+  "observed": {
+    "source": "stub.json, played back by the stub solver (not run here)",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "tetra_mesh_unreadable"
+    ],
+    "warnings": [],
+    "lines": [
+      "Unable to read the tetrahedalization of the scene mesh file, calculation canceled."
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "spps_banner",
+        "terminated": true,
+        "text": "SPPS version 2.2.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "tetra_mesh_unreadable",
+        "terminated": true,
+        "text": "Unable to read the tetrahedalization of the scene mesh file, calculation canceled."
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "stats_unreadable",
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "SPPS particle statistics.gabe",
+        "Total energy.recp",
+        "Punctual receivers\\R1\\Sound level.recp",
+        "Punctual receivers\\R1\\Advanced sound level.gap",
+        "Punctual receivers\\R1\\Punctual receiver intensity.gabe",
+        "Punctual receivers\\R1\\Sound level per source.recps",
+        "Intensity animation\\1000 Hz\\Intensity.rpi",
+        "Intensity animation\\500 Hz\\Intensity.rpi",
+        "particles\\1000\\particles.pbin",
+        "particles\\1000\\particle_surface_collision_statistics.csv",
+        "particles\\1000\\particle_receivers_collision_statistics.csv",
+        "particles\\500\\particles.pbin",
+        "particles\\500\\particle_surface_collision_statistics.csv",
+        "particles\\500\\particle_receivers_collision_statistics.csv"
+      ]
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "solver": "tcr",
+  "status": "FAIL",
+  "codes": [
+    "nonfinite_result"
+  ],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "Source outside the room: TCR exits 0 with results (SC:71, SC:273; RAW:1435), but the direct field at R1 is -inf in every band, which nonfinite_result catches (SC:365).",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
+  },
+  "observed": {
+    "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",
+    "exit_code": "0x00000000",
+    "status": "FAIL",
+    "codes": [
+      "nonfinite_result"
+    ],
+    "warnings": [],
+    "lines": [],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "tcr_loading",
+        "terminated": true,
+        "text": "XML configuration file is currently loading..."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_config_echo",
+        "terminated": true,
+        "text": "config.xml"
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_loading",
+        "terminated": true,
+        "text": "XML configuration file has been loaded."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_banner",
+        "terminated": true,
+        "text": "Classical Theory of Reverberation version 1.0.1"
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_step",
+        "terminated": true,
+        "text": "Step 1/3 : Main calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_step",
+        "terminated": true,
+        "text": "Step 2/3 : Punctual receivers calculation."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_step",
+        "terminated": true,
+        "text": "Step 3/3 : No Surface receivers."
+      }
+    ],
+    "progress_lines": 1,
+    "post_run": {
+      "codes": [
+        "nonfinite_result"
+      ],
+      "nonfinite": [
+        "Punctual receivers\\R1.gabe [Direct dB SPL] 500 Hz = -inf",
+        "Punctual receivers\\R1.gabe [Direct dB SPL] 1000 Hz = -inf",
+        "Punctual receivers\\R1.gabe [Direct dB SPL] Global = -inf"
+      ]
+    }
+  }
+}

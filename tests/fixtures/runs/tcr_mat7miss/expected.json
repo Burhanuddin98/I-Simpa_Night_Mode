@@ -1,0 +1,71 @@
+{
+  "solver": "tcr",
+  "status": "FAIL",
+  "codes": [
+    "material_missing",
+    "exit_nonzero"
+  ],
+  "codes_any_of": [],
+  "warnings": [],
+  "receipt": "As spps_mat7miss: row material_missing, exit 0xFFFFFFFF (SC:275, VERIFIED P2 tcr_mat22_miss; RAW:1477).",
+  "pre_launch": {
+    "mesh_check": "pass",
+    "tetrahedra": 6,
+    "nodes": 8,
+    "scene_faces": 12,
+    "room_id": 1,
+    "counts": {},
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
+  },
+  "observed": {
+    "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",
+    "exit_code": "0xFFFFFFFF",
+    "status": "FAIL",
+    "codes": [
+      "material_missing",
+      "exit_nonzero"
+    ],
+    "warnings": [],
+    "lines": [
+      "Wrong project configuration, a face is defined but no materials are attached to it ! Check your group/material associations"
+    ],
+    "transcript": [
+      {
+        "stream": "stdout",
+        "row": "tcr_loading",
+        "terminated": true,
+        "text": "XML configuration file is currently loading..."
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_config_echo",
+        "terminated": true,
+        "text": "config.xml"
+      },
+      {
+        "stream": "stdout",
+        "row": "tcr_loading",
+        "terminated": true,
+        "text": "XML configuration file has been loaded."
+      },
+      {
+        "stream": "stderr",
+        "row": "material_missing",
+        "terminated": true,
+        "text": "Wrong project configuration, a face is defined but no materials are attached to it ! Check your group/material associations"
+      }
+    ],
+    "progress_lines": 0,
+    "post_run": {
+      "codes": [
+        "expected_file_missing"
+      ],
+      "missing_files": [
+        "Main results.gabe",
+        "Punctual receivers\\R1.gabe"
+      ]
+    }
+  }
+}

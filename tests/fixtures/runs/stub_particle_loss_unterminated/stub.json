@@ -1,0 +1,42 @@
+{
+  "exit_code": 0,
+  "lines": [
+    {
+      "stream": "stdout",
+      "text": "SPPS version 2.2.1",
+      "newline": true,
+      "delay_ms": 0
+    },
+    {
+      "stream": "stdout",
+      "text": "#50",
+      "newline": true,
+      "delay_ms": 0
+    },
+    {
+      "stream": "stdout",
+      "text": "#100",
+      "newline": true,
+      "delay_ms": 0
+    },
+    {
+      "stream": "stdout",
+      "text": "End of calculation.",
+      "newline": true,
+      "delay_ms": 0
+    },
+    {
+      "stream": "stdout",
+      "text": "Output results files.",
+      "newline": true,
+      "delay_ms": 0
+    },
+    {
+      "stream": "stderr",
+      "text": "Warning 4000 particles has been in error on 4000 particles. The computation result may be wrong, please check the particles statitics file for more details.",
+      "newline": false,
+      "delay_ms": 0
+    }
+  ],
+  "files": {}
+}
