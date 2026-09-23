@@ -6,16 +6,19 @@
 //! in `docs/formats/mesh-manifest.md` (the mesher and `mesh::verify`). Each body row's first cell
 //! must be one backticked snake_case code; any other row is an error, never skipped.
 //!
-//! **Produced.** Read from the source of the three families whose reasons carry codes, every
-//! `.rs` file of `src/validate*`, `src/run*` and `src/mesh*`:
+//! **Produced.** Read from every `.rs` file under `src/`, so that a code made anywhere in the core
+//! is held to the tables, not only in the three families whose reasons carry codes today
+//! (`validate`, `run`, `mesh`):
 //! - a `const NAME: &str = "code";` inside a `mod codes { .. }` block;
 //! - a row id of `LINE_RULES`: `rule("id", ..` or `rule(CONST, ..`, the constant in the same file;
 //! - a count of `VerifyReport::counts`: `("code", self.code)`, the field spelled as its code;
 //! - a folder code of `verify_dir`: `codes.push("code")`;
 //! - a code literal passed straight to `issue(`, `Reason::new(` or the mesher's `fail(m, `.
 //!
-//! Other modules' error codes (`geometry::check`, `schema`, `config_xml`'s writer and importer)
-//! are their own APIs. A run reports them inside one of these families' reasons, never as one.
+//! Other modules' error codes (`geometry::check`'s `ReasonCode`, `schema`, `config_xml`'s writer
+//! and importer, each through its own `code()` method) are their own APIs, not reason codes. A
+//! run never lists one as a reason: `geometry_refused` and `export_failed` carry them in their
+//! detail. None of them is made by the patterns above, which the walk over all of `src/` checks.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -29,7 +32,7 @@ mod paths;
 /// Code to the places it was found.
 type Sites = BTreeMap<String, Vec<String>>;
 
-/// `(relative path, text)` of every source file of the three families.
+/// `(relative path, text)` of every source file under `src/`.
 fn source_files() -> Vec<(String, String)> {
     fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
         let mut entries: Vec<_> = std::fs::read_dir(dir)
@@ -46,22 +49,26 @@ fn source_files() -> Vec<(String, String)> {
                     .unwrap()
                     .to_string_lossy()
                     .replace('\\', "/");
-                let family = rel.split(['/', '.']).next().unwrap_or("");
-                if ["validate", "run", "mesh"].contains(&family) {
-                    let text = std::fs::read_to_string(&p).unwrap();
-                    out.push((rel, text));
-                }
+                let text = std::fs::read_to_string(&p).unwrap();
+                out.push((rel, text));
             }
         }
     }
     let root = paths::repo_file("crates/simpa-core/src");
     let mut out = Vec::new();
     walk(&root, &root, &mut out);
-    assert!(
-        out.iter().any(|(p, _)| p == "run/verdict.rs") && out.len() > 10,
-        "the source walk found {} files",
-        out.len()
-    );
+    for must in [
+        "run/verdict.rs",
+        "geometry/check.rs",
+        "config_xml/write.rs",
+        "lib.rs",
+    ] {
+        assert!(
+            out.iter().any(|(p, _)| p == must),
+            "the source walk missed {must} ({} files)",
+            out.len()
+        );
+    }
     out
 }
 
@@ -353,6 +360,21 @@ fn the_check_says_no_to_each_kind_of_drift() {
     let r = check(&edited, &contract, &manifest);
     has(r.clone(), "undocumented: brand_new_code");
     has(r, "undocumented: another_new_code");
+
+    // A reason made outside the three families (the config writer here) is held to the tables
+    // too.
+    let mut edited = files.clone();
+    let writer = edited
+        .iter_mut()
+        .find(|(p, _)| p == "config_xml/write.rs")
+        .expect("config_xml/write.rs is walked");
+    writer
+        .1
+        .push_str(r#"fn f() { Reason::new("writer_made_code", ""); }"#);
+    has(
+        check(&edited, &contract, &manifest),
+        "undocumented: writer_made_code",
+    );
 
     // A table that is not a code table (the manifest's key table) is not read as one.
     let keys = manifest.replacen("| `manifest_version` |", "| `not_a_code_row` |", 1);
