@@ -89,11 +89,27 @@ fn the_rule_table_is_the_contract_pages_part_a() {
         documented.len()
     );
 
-    // No structural code is used on the page for anything else.
+    // The structural codes are Part A's "Structural faults" table, in order, and appear nowhere
+    // else on the page.
+    let structural: Vec<String> = section(&text, "### Structural faults")
+        .into_iter()
+        .filter(|l| l.starts_with("| `"))
+        .map(|l| {
+            let c = cells(l);
+            assert_eq!(
+                (c[1].as_str(), c[2].as_str()),
+                ("structure", "error"),
+                "{l}"
+            );
+            backticked(&c[0])[0].to_string()
+        })
+        .collect();
+    assert_eq!(structural, STRUCTURAL_CODES, "the structural faults table");
     for code in STRUCTURAL_CODES {
-        assert!(
-            !text.contains(&format!("`{code}`")),
-            "{code} appears in the contract"
+        assert_eq!(
+            text.matches(&format!("`{code}`")).count(),
+            1,
+            "{code} must appear once on the contract page, in its structural row"
         );
     }
 }

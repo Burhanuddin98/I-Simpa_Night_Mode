@@ -132,7 +132,9 @@ pub struct FaceFile {
     pub faces: Vec<[i32; 3]>,
     /// `trifacemarkerlist`: present when the header's marker flag is nonzero and the file holds
     /// at least one face (TetGen allocates no marker list for an empty file). In a `.face` it is
-    /// the facet marker; in a `_skipped.face` it is `(int) badface::key`, -1 in every row seen.
+    /// the facet marker (`shellmark`); in a `_skipped.face` it is `(int) badface::key`, which
+    /// TetGen sets to the facet's `shellmark` (`tetgen.cxx:20445, 20462, 21337-21338`), so the
+    /// `.poly` facet marker there too: -1 only when the `.poly` gave its facets none.
     pub markers: Option<Vec<i32>>,
 }
 

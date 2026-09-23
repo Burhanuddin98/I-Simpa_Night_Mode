@@ -257,27 +257,40 @@ fn no_two_patterns_match_one_documented_sample() {
     assert_eq!(samples.len(), LINE_RULES.len() - 1);
 }
 
+/// The codes of Part B's "Reason codes" table, in order.
+fn reason_table(text: &str) -> Vec<String> {
+    let part_b = section(text, "## Part B").join("\n");
+    section(&part_b, "### Reason codes")
+        .into_iter()
+        .filter(|l| l.starts_with("| `"))
+        .map(|l| backticked(&cells(l)[0])[0].to_string())
+        .collect()
+}
+
 #[test]
 fn the_verdicts_codes_are_the_contracts() {
     let text = read("docs/solver-contract.md");
-    let part_b = section(&text, "## Part B").join("\n");
-    let in_b = |code: &str| part_b.contains(&format!("`{code}`"));
-    // New codes this module needs and the page does not list yet. When the page gains one, this
-    // test fails until the code is taken off this list.
-    let not_yet_documented = [codes::END_OF_CALCULATION_MISSING, codes::RESULT_UNREADABLE];
-    for code in codes::ALL {
-        if not_yet_documented.contains(&code) {
-            assert!(
-                !text.contains(&format!("`{code}`")),
-                "{code} is now documented"
-            );
-        } else if code == codes::CONFIG_ATTRIBUTE_MISSING {
-            // Part A's code for an unreadable config, reused.
-            assert!(RULES.iter().any(|r| r.code == code));
-        } else {
-            assert!(in_b(code), "{code} is not in Part B");
-        }
-    }
+    // Every code the verdict owns is a row of Part B's reason table, in the module's order; the
+    // one it borrows is Part A's code for an unreadable config.
+    let owned: Vec<&str> = codes::ALL
+        .into_iter()
+        .filter(|&c| c != codes::CONFIG_ATTRIBUTE_MISSING)
+        .collect();
+    assert_eq!(reason_table(&text), owned, "Part B's reason codes table");
+    assert!(
+        RULES
+            .iter()
+            .any(|r| r.code == codes::CONFIG_ATTRIBUTE_MISSING)
+    );
+    // Negative: a row dropped from the table, or a code the module does not own added to it.
+    let dropped = text.replacen("| `result_unreadable` |", "| result_unreadable |", 1);
+    assert_ne!(reason_table(&dropped), owned);
+    let added = text.replacen(
+        "| `result_unreadable` |",
+        "| `made_up` | FAIL | files | nothing |\n| `result_unreadable` |",
+        1,
+    );
+    assert_ne!(reason_table(&added), owned);
     // Part B's codes and the line ids do not collide with Part A's rule codes.
     for r in RULES.iter() {
         assert!(

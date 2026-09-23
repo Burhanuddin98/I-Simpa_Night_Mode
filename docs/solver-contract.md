@@ -175,6 +175,25 @@ The other traps are handled elsewhere:
 - world units: the schema's f64 metres
 - untrusted exit codes and streams: Part B
 
+### Structural faults
+
+These are not rules. They are the faults `schema::Project::check_integrity` refuses when a project
+is loaded; `core::validate` reads a project without that check (`validate::read_project`) and
+reports each fault under the same code as `schema::IntegrityError::code`, so a broken file is
+described rather than refused at load. Every one is an error: the exporter cannot write a
+project that has one. The other integrity faults map to the rules above.
+
+| Code | Stage | Severity | Fault |
+|---|---|---|---|
+| `version` | structure | error | `format_version` is not the version this build holds |
+| `bands` | structure | error | a band frequency that is not a nominal frequency of the band kind, or bands out of order |
+| `duplicate_id` | structure | error | two entities of one kind share an id |
+| `dangling_reference` | structure | error | a surface receiver or fitting zone names a surface group that does not exist |
+| `face_vertex` | structure | error | a face indexes past the vertex list |
+| `repeated_group` | structure | error | a list of group references names one group twice |
+| `override_order` | structure | error | a variant's overrides are not strictly ascending by group id |
+| `solver_int_range` | structure | error | the random seed or a pinned material solver id does not fit a C `int` |
+
 ### Rules that belong to other stages
 
 These are not `core::validate` rules, so they carry no code here:
@@ -239,7 +258,7 @@ match these tables: tutorial 1 has 27 bands, 2 point receivers, 1 surface receiv
 | `<receiversp_directory>\<lbl>\Sound level per source.recps` | per point receiver, fixed name | `sppsNantes.cpp:406`; `spps/reportmanager.cpp:614` |
 | `<receiversp_directory>\<lbl>\<source name>\<receiversp_filename>` | `output_recp_bysource` ≠ 0 | `spps/reportmanager.cpp:620-656` |
 | `Intensity animation\<f> Hz\Intensity.rpi` | per computed band, fixed name | `spps/reportmanager.cpp:719-757` |
-| `<recepteurss_directory><f> Hz\<recepteurss_filename>` | surface receivers exist and `output_recs_byfreq` ≠ 0 | `sppsNantes.cpp:183-193, 219-224` |
+| `<recepteurss_directory><f> Hz\<recepteurss_filename>` | surface receivers exist, the first has faces, and `output_recs_byfreq` ≠ 0 | `sppsNantes.cpp:183-193, 219-224`; `baseReportManager.cpp:331-334, 361-364` |
 | `<recepteurss_directory><f> Hz\<recepteurss_cut_filename>` | cutting planes exist and `output_recs_byfreq` ≠ 0 | `sppsNantes.cpp:225-226` |
 | `<recepteurss_directory>Global\<recepteurss_filename>` | surface receivers exist and the first has faces | `sppsNantes.cpp:408-421`; `baseReportManager.cpp:430-433` |
 | `<recepteurss_directory>Global\<recepteurss_cut_filename>` | cutting planes exist | `sppsNantes.cpp:412, 421`; `baseReportManager.cpp:211-214` |
@@ -250,14 +269,22 @@ SPPS creates `<recepteurss_directory>` and its `Global\` folder even when there 
 receivers (`sppsNantes.cpp:408-411`). VERIFIED P2 `recs_byfreq0`: `output_recs_byfreq="0"` leaves
 only the `Global\` file.
 
+**The first surface receiver decides whether any surface-receiver file is written.**
+`SauveRecepteursSurfaciques` returns before writing anything, per band or `Global`, when the
+first `recepteur_surfacique` owns no face (`baseReportManager.cpp:331-334, 361-364, 430-433`); a
+later receiver's faces do not help. Both solvers write through it. Part A's
+`surface_receiver_empty` refuses such a project; for a folder no validator has seen, the expected
+files are derived from the `.cbin` that `modelName` names (a face's `idRs`), and none are expected
+when the first receiver owns no face.
+
 **TCR** (GUI mode, the only mode we use)
 
 | Path | When | Receipt |
 |---|---|---|
 | `Main results.gabe` | always | `main_tc.cpp:136-137, 145` |
 | `Punctual receivers\<lbl>.gabe` | per point receiver. The folder name is fixed; `receiversp_directory` is ignored | `main_tc.cpp:139-144`; `ctr/reportmanager.cpp:148` |
-| `<direct\|sabine\|eyring prefix><recepteurss_directory><f> Hz\<recepteurss_filename>` (and `…cut_filename` for cutting planes) | surface receivers or cutting planes exist; every computed band, whatever `output_recs_byfreq` says | `TC_CalculationCore.cpp:344-402` |
-| `<direct\|sabine\|eyring prefix><recepteurss_directory>Global\<recepteurss_filename>` (and the cut file) | the same | `TC_CalculationCore.cpp:406-420` |
+| `<direct\|sabine\|eyring prefix><recepteurss_directory><f> Hz\<recepteurss_filename>` (and `…cut_filename` for cutting planes) | surface receivers exist and the first has faces (the receiver file), or cutting planes exist (the cut file); every computed band, whatever `output_recs_byfreq` says | `TC_CalculationCore.cpp:344-402`; `baseReportManager.cpp:331-334, 361-364` |
+| `<direct\|sabine\|eyring prefix><recepteurss_directory>Global\<recepteurss_filename>` (and the cut file) | the same | `TC_CalculationCore.cpp:406-420`; `baseReportManager.cpp:430-433` |
 
 ### Exit codes
 
@@ -268,7 +295,7 @@ only the `Global\` file.
 |---|---|---|---|
 | 0 | not evidence of success | Success, and also: no argument; unparseable config (P2 `bad_xml`); unreadable mesh; the on-face stop; a missing separator on `workingdirectory` (P2 `wd_nosep`); 100 % particle loss (S `run_lossy`); a missing directivity file or band (S `run_dirmiss`, P2 `dir_partial`, `dir_badrow`); a short spectrum (S `run_oneband`); zero `trans_epsilon` (P2 `eps_short`); a receiver outside (P2 `rcv_out`); receiver radius 0 (P2 `radius0`); a name overflow (P2 `name_long`); a wrapped delay (P2 `delay_wrap`) | `sppsNantes.cpp:449-460` |
 | `0xFFFFFFFF` (-1) | FAIL | A face's material is undeclared | `coreinitialisation.cpp:429-432`; VERIFIED P2 `mat22_miss` |
-| 1 | FAIL | A degenerate tetrahedron in the `.mbin` (not run) | `coreTypes.cpp:210-216` |
+| 1 | FAIL | A degenerate tetrahedron in the `.mbin`: the `degenerate_tetrahedron` line on stderr, with no newline, then exit 1 | `coreTypes.cpp:210-216`; VERIFIED fixture `runs/spps_degenerate` (corner D set to corner A) |
 | `0xC0000005` | CRASH | Access violation, with no message: a source outside the mesh, an undeclared material 0 on the first faces, or a balloon source with no file attribute | VERIFIED P2 `src_out`, `dir_noattr`; S `run_mat0miss` |
 | `0xC0000409` | CRASH | Abort from an uncaught C++ exception: a non-numeric directivity value, an empty `workingdirectory`, or a missing time step | VERIFIED P2 `dir_nan`, `wd_empty`, `no_dt` |
 
@@ -281,9 +308,14 @@ TCR returns `MainProcess`'s value (`main_tc.cpp:160-173`):
 | `0xFFFFFFFF` (-1) | FAIL | A face's material is undeclared | VERIFIED P2 `tcr_mat22_miss` |
 | `0xC0000409` | CRASH | A non-numeric directivity value | VERIFIED P2 `tcr_dir_nan` |
 
-**Rule:** any exit at or above `0xC0000000` is CRASH (`crash_access_violation` for
-`0xC0000005`, `crash_abort` for `0xC0000409`, `crash_other` otherwise). Any other non-zero exit
-is FAIL, with reason `exit_nonzero`. Exit 0 is necessary for OK, never sufficient.
+**Rule.** Exit 0 is necessary for OK, never sufficient. Any other exit decides the status:
+- **`0xFFFFFFFF` (-1) is FAIL,** reason `exit_nonzero`. It lies in the NTSTATUS error range, but
+  it is not an exception: it is the solvers' own `return -1` on an undeclared material
+  (`coreinitialisation.cpp:429-432`), as both tables above list it. VERIFIED fixtures
+  `runs/spps_mat7miss` and `runs/tcr_mat7miss`.
+- **Any other exit at or above `0xC0000000` is CRASH:** `crash_access_violation` for
+  `0xC0000005`, `crash_abort` for `0xC0000409`, `crash_other` otherwise.
+- **Any other non-zero exit is FAIL,** reason `exit_nonzero`.
 
 ### Output line classification
 
@@ -346,34 +378,79 @@ Notes on the classifier:
 
 A run is **OK** only when all four signals agree (plan, `core::run`):
 
-1. **Exit code.** TCR: 0. SPPS: 0 and a `spps_end_of_calculation` line. Anything else takes the
-   class from "Exit codes" above.
-2. **Lines.** No FAIL-class line, and every WARN is recorded.
+1. **Exit code.** TCR: 0. SPPS: 0 and a `spps_end_of_calculation` line; exit 0 without it is
+   `end_of_calculation_missing`. Any other exit takes its status and reason from "Exit codes"
+   above.
+2. **Lines.** No FAIL-class line (the reason is the row's id, once per id), and every WARN line
+   is recorded, in arrival order.
 3. **Statistics** (SPPS only). The GABE at `<stats_filename>` is read with
    `docs/formats/gabe.md`'s reader.
    - Column 0 holds the seven labels in order: absorbed by the atmosphere, absorbed by the
      materials, absorbed by the fittings, lost by infinite loops, lost by meshing problems,
      remaining, total (`spps/reportmanager.cpp:489-496`).
    - There is one integer column per computed band, labelled `<f> Hz` (`spps/reportmanager.cpp:349, 498-515`).
-   - The set of band columns must equal the project's bands. This catches `docalc` and duplicate
-     errors (P2 `docalc_true`, `dup_freq`). Reason: `stats_band_mismatch`.
+   - The set of band columns must equal the bands the config asks for: every `freq_enum` band
+     whose `docalc` is not `"0"`, each once. This catches `docalc` and duplicate errors (P2
+     `docalc_true`, `dup_freq`), since the solver computes a band only for the exact `"1"`.
+     Reason: `stats_band_mismatch`.
    - In every band, total ≥ `nbparticules` × the number of sources, or the reason is
      `particle_total_short`. Equality is expected, except that energetic mode also counts the
      copies it makes of transmitted particles: every `Run` call counts once
      (`CalculationCore.cpp:109, 262-285`; `sppsNantes.cpp:147-154`) (inferred). VERIFIED
      equality on tutorial 1: 10,000 per band in P1 and P2. Totals are 0 when a source emits
      nothing (P2 `dir_partial`, `dir_badrow`).
-   - In every band, (lost by meshing + lost by loops) / total must not exceed the tolerance of
-     open decision 7. Reason: `particle_loss_excess`.
+   - In every band, (lost by meshing + lost by loops) / total must not exceed the loss limit, which
+     open decision 7 has still to fix: `docs/m5-m6-design.md` decision 9 proposes 0.01, and every
+     run manifest records the limit it was judged by. A NaN limit fails every band with
+     particles. Reason: `particle_loss_excess`.
 4. **Files.** Every expected file above exists and is non-empty. Reason:
    `expected_file_missing`.
    - A `.csbin` is compared only after decoding.
    - TCR additionally: no NaN or ±inf in any value we display, or the reason is
-     `nonfinite_result`. TCR's Global row is NaN by design, and P2 `tcr_oneband_src` shows NaN
-     from a band error.
+     `nonfinite_result`. The values displayed are the band rows of `Main results.gabe` and of
+     each `Punctual receivers\<lbl>.gabe`, and every value of each surface-receiver and
+     cutting-plane `.csbin`. The tables' `Global` row is left out: it is NaN by design in the
+     non-energetic columns (`ctr/reportmanager.cpp:206-209`) and is derived from band rows that
+     are uninitialised for a band not computed (`ctr/tcTypes.h:38-48`). The `.csbin` values are
+     linear energies zeroed before any band runs (`coreTypes.cpp:91-99`; `rsbin.h:113`), so they
+     have no exception. P2 `tcr_oneband_src` shows NaN from a band error.
+   - **`-inf` in a point receiver's `Direct` column is how a source outside the room shows.**
+     TCR adds no direct energy from a source it cannot see, then prints `10*log10f(0)`
+     (`TC_CalculationCore.cpp:160-184`). VERIFIED fixture `runs/tcr_srcout`: exit 0, no FAIL
+     line, every file written, and R1's `Direct` is -inf in every band. A receiver hidden from
+     every source in a valid room looks exactly the same and fails too; the reason's detail
+     names both causes. Telling them apart needs a pre-launch source-inside check, open for
+     Burhan and Michael (`docs/m5-m6-design.md`, decision 11).
+   - A TCR result file that exists but does not decode, or has no row for a requested band, is
+     `result_unreadable`.
 
-A stats file that cannot be read is `stats_unreadable`. A cancelled run is `cancelled`, and is
-never OK.
+Signals 3 and 4 are judged only after exit 0 without a cancel. After a crash, a non-zero exit or
+a cancel the outputs are partial by construction, and listing them would bury the cause; the
+FAIL lines are reported whatever the exit. The expected files are derived from the `config.xml`
+actually in the working directory, and a config that cannot be read after the run is Part A's
+`config_attribute_missing`: nothing can be expected from it.
+
+### Reason codes
+
+Every reason a verdict can carry, besides the FAIL rows' ids in the classification table and the
+Part A codes named in the text above. A verdict lists at most one entry per code, in signal
+order, and its status is OK exactly when it lists none.
+
+| Code | Status | Signal | When |
+|---|---|---|---|
+| `cancelled` | CANCELLED | exit | the run was cancelled (the process layer killed the tree); never OK, and its outputs are partial. The mesher gives the same code for a cancelled mesh (`docs/formats/mesh-manifest.md`) |
+| `crash_access_violation` | CRASH | exit | exit `0xC0000005` |
+| `crash_abort` | CRASH | exit | exit `0xC0000409`, an abort after an uncaught C++ exception |
+| `crash_other` | CRASH | exit | any other exit at or above `0xC0000000` except `0xFFFFFFFF`, or no exit code without a cancel |
+| `exit_nonzero` | FAIL | exit | any other non-zero exit, `0xFFFFFFFF` included |
+| `end_of_calculation_missing` | FAIL | exit | SPPS exited 0 without printing `End of calculation.` |
+| `stats_unreadable` | FAIL | statistics | SPPS's `<stats_filename>` is missing or does not read as the seven-row table |
+| `stats_band_mismatch` | FAIL | statistics | the statistics' band columns are not the config's requested bands, each once |
+| `particle_total_short` | FAIL | statistics | a band's total is below `nbparticules` × sources |
+| `particle_loss_excess` | FAIL | statistics | a band's (lost by meshing + lost by loops) / total exceeds the loss limit: `--loss-limit`, default 0.01 (`docs/m5-m6-design.md`, decision 9), recorded in `run.json` |
+| `expected_file_missing` | FAIL | files | an expected file is missing or empty |
+| `nonfinite_result` | FAIL | files | TCR: a displayed value is NaN or ±inf |
+| `result_unreadable` | FAIL | files | TCR: a result table or `.csbin` exists but does not decode, or lacks a requested band's row |
 
 ### Threads, cancelling and partial output
 

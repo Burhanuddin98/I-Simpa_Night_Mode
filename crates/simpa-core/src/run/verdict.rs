@@ -26,14 +26,13 @@
 //! a cancel the outputs are partial by construction, and listing them would bury the cause. The
 //! FAIL lines are reported whatever the exit.
 //!
-//! **Deviations from the contract's wording,** each needing a contract edit:
-//! - `0xFFFFFFFF` (-1) is `exit_nonzero`, not CRASH. The rule's range (`>= 0xC0000000`) contains
-//!   it, but the exit tables list it as FAIL: it is the solvers' own `return -1` on an undeclared
-//!   material, not an exception.
-//! - `end_of_calculation_missing` and `result_unreadable` are new codes: Part B names none for an
-//!   SPPS exit 0 without its final line, nor for a TCR table that cannot be decoded.
-//! - An unreadable `config.xml` is `config_attribute_missing`, the code `validate_export` gives
-//!   the same fault (`validate/export.rs:403-441`): without it no output can be expected.
+//! Three points the contract states explicitly (Part B, "Exit codes" and "Judging a run"):
+//! - `0xFFFFFFFF` (-1) is `exit_nonzero`, not CRASH, although it lies in the NTSTATUS range: it
+//!   is the solvers' own `return -1` on an undeclared material, not an exception.
+//! - Every code of [`codes`] but one is a row of Part B's "Reason codes" table, in [`codes::ALL`]'s
+//!   order (`tests/run_contract_docs.rs`).
+//! - An unreadable `config.xml` is `config_attribute_missing`, the Part A code `validate_export`
+//!   gives the same fault (`validate/export.rs:403-441`): without it no output can be expected.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;

@@ -1,7 +1,21 @@
 # Solver file formats
 
-One page per format: `cbin`, `mbin`, `poly`, `tetgen`, `gabe`, `csbin`, `pbin`, and later
-`config_xml`. Each page gives:
+One page per file the solvers or TetGen read or write, and one for a file of our own.
+
+| Page | File | Canonical dump |
+|---|---|---|
+| `cbin.md` | the scene mesh, `mesh.cbin` | yes |
+| `mbin.md` | the tetrahedral mesh, `tetramesh.mbin` | yes |
+| `poly.md` | TetGen's input, `scene_mesh.poly` | yes |
+| `tetgen.md` | TetGen's output, `.1.{node,ele,face,neigh}` and `_skipped.{node,face}` | yes |
+| `var.md` | TetGen's facet-area constraints, `scene_mesh.var` | no: we write it and TetGen reads it |
+| `gabe.md` | result tables, `.gabe` and its relatives | yes |
+| `csbin.md` | surface-receiver results, `.csbin` | yes |
+| `pbin.md` | particle files, `.pbin` | yes |
+| `config_xml.md` | the solver configuration, `config.xml` | no: `docs/solver-contract.md` holds its rules |
+| `mesh-manifest.md` | `mesh.json`, the mesh folder, and the mesher's and mesh verifier's reason codes | no: our own format |
+
+Each binary format's page gives:
 - the byte layout
 - sizes, sentinels and version fields
 - failure modes
@@ -36,4 +50,7 @@ same file. The gate diffs the two. Rules:
   counts "both failed" as agreement. The negative tests check the kind.
 
 Build one format's oracle with `powershell -File oracle/build.ps1 -Only <fmt>`, and run it with
-`target\oracle\<fmt>\oracle.exe dump <fmt> <file>`.
+`target\oracle\<fmt>\oracle.exe dump <fmt> <file>`. `-UpstreamSrc <tree>\src` reads upstream from
+another tree at the same commit. The tests build the oracle they need on demand, from
+`$SIMPA_UPSTREAM` or the M1 archive (`crates/simpa-core/tests/common/paths.rs`), and fail when it
+cannot be built: no cross-check is skipped.

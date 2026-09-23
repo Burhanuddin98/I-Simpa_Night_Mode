@@ -104,16 +104,22 @@ writes its own `_skipped.face` and exits 3, and the pairs are ({12}, {8}), ({12}
 
 ## Reason codes
 
-Every code that applies is listed, not only the first.
+Every code that applies is listed in `codes`, not only the first. Two of them are documented
+where they were defined first, and mean the same here:
+- **`mesh_settings_conflict`** (`docs/solver-contract.md` Part A): the settings ask for a `.var`
+  and `-Y` together. The mesher refuses it itself, and nothing is written but the manifest.
+- **`cancelled`** (`docs/solver-contract.md` Part B): the cancel token was set, before TetGen
+  started, while it ran (it is killed), during the `-d` follow-up, or before the `.mbin` was
+  written. The status is then `CANCELLED`.
+
+The mesher's own codes:
 
 | Code | When |
 |---|---|
-| `mesh_settings_conflict` | the settings ask for a `.var` and `-Y` together; nothing is written but the manifest. The validator's rule of the same name |
 | `input_invalid` | the project or `.poly` cannot be expressed as TetGen input: a structural fault, a vertex or region point not finite as `f32`, an empty box zone, a `-q` or `-a` value not above 0 and finite as `f32`, a `.poly` that does not parse, a scene `mesh.cbin` cannot hold. For `mesh_from_tetgen`: a folder holding more than one TetGen output set, with no basename given |
 | `stale_delete_failed` | a file an earlier mesh left could not be deleted; nothing is meshed |
 | `input_write_failed` | `mesh.cbin`, `scene_mesh.poly` or `scene_mesh.var` could not be written; TetGen does not run |
 | `tetgen_launch_failed` | TetGen could not be started (no such file), or its log could not be written |
-| `cancelled` | the cancel token was set: before TetGen started, while it ran (it is killed), during the `-d` follow-up, or before the `.mbin` was written |
 | `tetgen_crash` | the exit code is 0xC0000000 or above (an NTSTATUS error such as 0xC0000005) |
 | `tetgen_exit_nonzero` | the exit code is not 0; a crash has both codes. TetGen exits 3 after skipping facets |
 | `tetgen_skipped_facets` | `scene_mesh_skipped.face` has rows. Its markers are facet markers (`docs/formats/tetgen.md`) and are mapped to scene faces and groups; `diag/` then holds the `-d` follow-up |
@@ -126,6 +132,37 @@ Every code that applies is listed, not only the first.
 Only an `OK` manifest comes with a `tetramesh.mbin`, and its `files.mbin` is that file's sha256.
 `run` checks the `.mbin` against it. The `.cbin`'s sha256 is recorded only, because `run`
 re-exports the `.cbin` with the current materials (decision 7).
+
+## Verification codes
+
+`mesh::verify` checks a `.mbin` against the `.cbin` its markers index (`verify_mesh`), and a whole
+folder (`verify_dir`). The mesher runs `verify_mesh` on every `.mbin` it builds and lists its
+codes after `mesh_invalid`. Each count of the report is a number of offending
+items, and its code is spelled as its field. A mesh passes exactly when every count is 0.
+
+| Code | Counts |
+|---|---|
+| `index_errors` | corner, face-vertex or neighbour indices out of range, one per index; a tetrahedron with a corner out of range gets no geometric check |
+| `degenerate_tets` | tetrahedra with a repeated corner, or with `\|(A−D)·((B−D)×(C−D))\|` at or below the `f32` noise floor of their corners; they get no orientation or face-order check |
+| `inverted_tets` | tetrahedra with `(A−D)·((B−D)×(C−D)) > 0`, against the `.mbin` convention (`docs/formats/mbin.md`) |
+| `misordered_faces` | faces that are not the face opposite their slot's corner, wound as the face table winds it (a rotation is accepted): the solver takes a face's normal from this winding (`coreTypes.cpp:233`) |
+| `unmarked_boundary_faces` | faces with no neighbour and a marker below 0 |
+| `marker_out_of_range` | markers at or above the `.cbin`'s face count |
+| `nonmutual_neighbors` | faces whose neighbour does not name them back across the same three nodes, and faces with no neighbour whose three nodes another face holds |
+| `asymmetric_internal_faces` | marked faces whose neighbour's shared face carries a different marker: internal facets are marked on both sides (decision 6) |
+| `marker_geometry_mismatches` | marked faces with a node farther than 16·2⁻²⁴·R from the scene face their marker names, R being the scene's largest \|coordinate\| |
+| `uncovered_scene_faces` | scene faces no tetrahedron face carries (the report lists the first 20) |
+| `unknown_volume_ids` | tetrahedra whose `idVolume` is neither the room's nor a declared fitting's |
+
+`verify_dir` adds what only the folder shows. The mesher's `tetgen_skipped_facets`,
+`neigh_missing` and `tetgen_output_missing` (above) mean the same there, for TetGen output under
+any basename. Its own codes:
+
+| Code | When |
+|---|---|
+| `cbin_missing` | a `.mbin` with no `.cbin` beside it to check its markers against |
+| `manifest_mismatch` | `mesh.json` records a `.mbin` sha256 that is not the folder's `.mbin`'s, or one for a `.mbin` the folder lacks, or `files.mbin` null beside a `.mbin` |
+| `nothing_to_verify` | the folder holds neither TetGen output nor a `.mbin` |
 
 ## Measured (2026-09-23, Grace, debug build of the tests)
 

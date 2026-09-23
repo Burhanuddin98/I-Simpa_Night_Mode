@@ -388,8 +388,8 @@ and it has bugs:
   - the four dumps are pinned.
 
   The skipped pair reads as 535 facets with marker -1, over 1 067 points. The negative cases are
-  listed in "The rule" above. The oracle cross-check runs when `target/oracle` holds a tetgen
-  oracle.
+  listed in "The rule" above. The oracle cross-check builds the tetgen oracle when it is missing
+  or stale, and fails when it cannot.
 - **`tetgen_fuzz.rs`, 6 tests.** Three proptests of 10 000 cases each, every case read as all
   four kinds: arbitrary bytes, TetGen-alphabet text, and mutated fixtures. None panicked, and no
   case's peak allocation exceeded `budget(len)`. Three deterministic budget tests: the densest
