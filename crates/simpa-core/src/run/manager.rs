@@ -4,7 +4,8 @@
 //! when the caller's [`CancelToken`] is set.
 //!
 //! Two entry points, each creating a fresh run folder `<root>/<yyyyMMdd-HHmmss-fff>-<solver>[-n]/`
-//! with `create_dir` (never reused; `-2`, `-3`, ... on a collision; the time is UTC) and writing
+//! with `create_dir` (never reused; `-2`, `-3`, ... on a collision; the time is local, see
+//! [`super::clock`]) and writing
 //! `run.json` ([`RunManifest`]) into it however the run ends:
 //! - [`run_project`]: a project file. Its geometry is checked (refused: exit class 3), the project
 //!   is validated (2), a mesh is built into `<run>/mesh/` or an existing one is checked (4), the
@@ -26,12 +27,13 @@ use std::io::{self, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use roxmltree::Document;
 use serde::{Deserialize, Serialize};
 
 use super::classify::{ClassCounts, Classified, Classifier};
+pub use super::clock::{folder_stamp, rfc3339};
 use super::expect::{self, Expectation};
 use super::manifest::{
     FILE_NAME, FileCounts, FileRef, MANIFEST_VERSION, MeshRef, RunManifest, RunSource, hash_folder,
@@ -360,44 +362,6 @@ impl Mesher for CancelAfterLaunch<'_> {
 
 // ---------------------------------------------------------------------------------------------
 // Run folders and times
-
-/// Civil date and time in UTC of `t`: (year, month, day, hour, minute, second, millisecond).
-fn utc(t: SystemTime) -> (i64, u32, u32, u32, u32, u32, u32) {
-    let d = t.duration_since(UNIX_EPOCH).unwrap_or_default();
-    let secs = d.as_secs() as i64;
-    let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
-    // Howard Hinnant's civil_from_days.
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    (
-        year,
-        month,
-        day,
-        (rem / 3_600) as u32,
-        (rem % 3_600 / 60) as u32,
-        (rem % 60) as u32,
-        d.subsec_millis(),
-    )
-}
-
-/// `yyyyMMdd-HHmmss-fff`, UTC: the start of a run folder's name.
-pub fn folder_stamp(t: SystemTime) -> String {
-    let (y, mo, d, h, mi, s, ms) = utc(t);
-    format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{s:02}-{ms:03}")
-}
-
-/// RFC 3339 in UTC with milliseconds: `run.json`'s `started`.
-pub fn rfc3339(t: SystemTime) -> String {
-    let (y, mo, d, h, mi, s, ms) = utc(t);
-    format!("{y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}:{s:02}.{ms:03}Z")
-}
 
 /// Creates `<root>/<stamp>-<solver>` with `create_dir`, or `-2`, `-3`, ... after it when the name
 /// is taken: a run folder is never reused. `root` is created when missing.
@@ -1380,18 +1344,6 @@ fn judged(rec: &Record, outcome: Outcome, lines: &[Classified]) -> Launched {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn utc_dates_are_civil_dates() {
-        let at = |s: u64, ms: u64| UNIX_EPOCH + Duration::from_millis(s * 1000 + ms);
-        assert_eq!(folder_stamp(at(0, 0)), "19700101-000000-000");
-        // 2026-09-23 18:52:31.123 UTC, and the leap day of 2024.
-        assert_eq!(folder_stamp(at(1_790_189_551, 123)), "20260923-185231-123");
-        assert_eq!(rfc3339(at(1_790_189_551, 123)), "2026-09-23T18:52:31.123Z");
-        assert_eq!(folder_stamp(at(1_709_164_800, 7)), "20240229-000000-007");
-        assert_eq!(folder_stamp(at(951_782_400, 0)), "20000229-000000-000");
-        assert_eq!(folder_stamp(at(4_102_444_799, 999)), "20991231-235959-999");
-    }
 
     /// A log writer that takes `room` bytes and then fails, and whose flush fails when
     /// `flush_fails`.

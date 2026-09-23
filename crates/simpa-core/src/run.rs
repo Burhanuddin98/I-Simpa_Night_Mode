@@ -12,11 +12,13 @@
 //! - [`expect`] reads what a `config.xml` asks for, and lists the files that follow from it.
 //! - [`verdict`] makes the four-signal judgement and owns its reason codes.
 //! - [`manifest`] is `run.json`.
+//! - [`clock`] gives run folders and `run.json` the local time, with its UTC offset.
 //! - [`manager`] runs a project or a run folder end to end: the run folder, the pre-launch
 //!   refusals, the launch through [`crate::process`], and the verdict, reported to an event
 //!   callback and written to `run.json`.
 
 pub mod classify;
+pub mod clock;
 pub mod expect;
 pub mod manager;
 pub mod manifest;

@@ -461,8 +461,9 @@ order, and its status is OK exactly when it lists none.
 
 `core::run::manager` runs a project (`simpa run`) or a folder as it is (`simpa run-folder`) end
 to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout").
-- **The run folder** is `<root>/<yyyyMMdd-HHmmss-fff>-<solver>[-n]/`, the time in UTC, made
-  with `create_dir` and never reused (`-2`, `-3`, ... on a collision). The solver runs in its
+- **The run folder** is `<root>/<yyyyMMdd-HHmmss-fff>-<solver>[-n]/` in this machine's local
+  time, made with `create_dir` and never reused (`-2`, `-3`, ... on a collision). `run.json`'s
+  `started` is the same instant in RFC 3339 with the UTC offset. The solver runs in its
   `solve/`; `mesh/` holds the run's own mesh; `run.json` and `solver.stdout.txt` /
   `solver.stderr.txt` sit beside `solve/`. Every run folder gets its `run.json`, refused or
   launched: `stage` says where the run ended and `exit_class` is the CLI's exit code. A launched

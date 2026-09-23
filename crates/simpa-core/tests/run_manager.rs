@@ -366,12 +366,15 @@ fn run_folders_are_never_reused() {
         .iter()
         .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
         .collect();
+    // The stamp is local time (`run::clock`, tested against .NET there).
+    let stamp = simpa_core::run::manager::folder_stamp(at);
+    assert!(stamp.ends_with("-123"), "{stamp}");
     assert_eq!(
         names,
         [
-            "20260923-185231-123-tcr",
-            "20260923-185231-123-tcr-2",
-            "20260923-185231-123-tcr-3"
+            format!("{stamp}-tcr"),
+            format!("{stamp}-tcr-2"),
+            format!("{stamp}-tcr-3")
         ]
     );
     assert!(a.is_absolute());
