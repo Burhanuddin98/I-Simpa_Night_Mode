@@ -500,8 +500,11 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   (`spps/core_configuration.cpp:28, 44-47`; `sppsNantes.cpp:369-387`). With a seed, two runs of
   the same config give identical files apart from `.csbin` (M1 gate).
 - **SPPS writes per-band surface-receiver files as each band finishes, and everything else after
-  all bands** (`sppsNantes.cpp:216-226, 389-423`). A killed run leaves partial files and counts
-  as failed (inferred). Its folder is never reused.
+  all bands** (`sppsNantes.cpp:216-226, 389-423`). A killed run leaves partial files and is
+  CANCELLED, never OK; its folder is never reused. VERIFIED 2026-09-23 on the tutorial box
+  (`crates/simpa/tests/cli_run.rs`): cancelled 150 ms into SPPS, 4 of the 65 expected files
+  were there; cancelled at the first progress line, none. The Job Object kill leaves no solver
+  process running, checked on a private copy of `spps.exe` that could then be deleted.
 - **TCR is single-threaded** and takes about 0.1 s on tutorial 1 (P2 `tcr_base`).
 
 ### TetGen
@@ -549,7 +552,6 @@ of reference; its file formats are in `docs/formats/tetgen.md`.
 
 ## Not examined
 
-- A run killed mid-solve. Cancel behaviour is inferred from the code.
 - Long-path behaviour beyond 260 characters.
 - SPPS's `-v` output.
 - The `.pbin` header when `nbparticules_rendu` exceeds `nbparticules`.

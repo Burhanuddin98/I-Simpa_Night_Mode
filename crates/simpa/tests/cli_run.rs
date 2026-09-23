@@ -1,0 +1,352 @@
+//! `simpa run` end to end through the built binary, on the seeded tutorial box
+//! (`tests/fixtures/rooms/tutorial1_box_seeded.simpa`: seed 1, 10,000 particles, M1's reference
+//! configuration), with the M1 solvers and TetGen:
+//! - TCR is OK with every expected file (gate M6(b)), twice into two distinct folders (M6(h)),
+//!   and under a path with `Ł` (M6(g));
+//! - SPPS crashes on the box's own mesh, because the pinned TetGen's 6-tetrahedron mesh puts the
+//!   tutorial's source exactly on an internal facet (pinned here; gate M6(a) is the ignored test);
+//!   with the source 5 cm away it is OK with 10,000 particles per band and none lost;
+//! - `--mesh <dir>` reuses a mesh, and refuses a stale one (`mesh_out_of_date`, M5(d1)) or one
+//!   whose re-mesh was cancelled (`mesh_missing`, M5(d2)) before any solver starts;
+//! - a cancel exits 130 and leaves no solver running (M6(f)).
+
+mod support;
+
+use std::path::{Path, PathBuf};
+
+use serde_json::Value;
+use support::*;
+
+const BOX: &str = "rooms/tutorial1_box_seeded.simpa";
+
+fn run(project: &Path, solver: &str, root: &Path, extra: &[&str]) -> Out {
+    let mut args: Vec<String> = vec![
+        "run".into(),
+        project.display().to_string(),
+        "--solver".into(),
+        solver.into(),
+        "--runs".into(),
+        root.display().to_string(),
+        "--json".into(),
+    ];
+    args.extend(extra.iter().map(|s| s.to_string()));
+    simpa_run(&args)
+}
+
+/// A copy of the seeded box with `edit` applied to its JSON, written into `dir`.
+fn edited_box(dir: &Path, name: &str, edit: impl FnOnce(&mut Value)) -> PathBuf {
+    let text = std::fs::read_to_string(fixture(BOX)).unwrap();
+    let mut v: Value = serde_json::from_str(&text).unwrap();
+    edit(&mut v);
+    let path = dir.join(name);
+    std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+    path
+}
+
+/// The box with its source moved 5 cm in x and 10 cm in y, off every internal facet of its mesh.
+fn moved_source_box(dir: &Path) -> PathBuf {
+    edited_box(dir, "box_source_moved.simpa", |v| {
+        v["sources"][0]["position"] = serde_json::json!([3.05, 5.1, 1.8]);
+    })
+}
+
+fn summary(label: &str, o: &Out, m: &Value) {
+    println!(
+        "{label}: {} {:?} exit {}; solver {:.0} ms, simpa run {:.0} ms; files {}/{}",
+        m["verdict"]["status"],
+        codes(m),
+        o.code,
+        m["outcome"]["elapsed_ms"].as_f64().unwrap_or(f64::NAN),
+        o.ms,
+        m["files"]["present"],
+        m["files"]["expected"]
+    );
+}
+
+#[test]
+fn tcr_runs_the_box_ok_twice_into_two_folders() {
+    let root = scratch("run-tcr");
+    let a = run(&fixture(BOX), "tcr", &root, &[]);
+    assert_eq!(a.code, 0, "{a:#?}");
+    let m = json(&a);
+    summary("box TCR", &a, &m);
+    assert_eq!(m["verdict"]["status"], "OK");
+    assert_eq!(m["stage"], "solve");
+    assert_eq!(m["files"]["expected"], 87);
+    assert_eq!(m["files"]["present"], 87);
+    let solve = run_dir(&m).join("solve");
+    assert!(solve.join("Main results.gabe").is_file());
+    for lbl in ["Receiver 1", "Receiver 2"] {
+        assert!(
+            solve
+                .join(format!("Punctual receivers/{lbl}.gabe"))
+                .is_file()
+        );
+    }
+    // The run folder: mesh/ built for it, logs and run.json beside solve/.
+    let dir = run_dir(&m);
+    assert!(dir.join("mesh/mesh.json").is_file());
+    assert!(dir.join("solver.stdout.txt").is_file());
+    // Every classified line went to stderr as CLASS  text.
+    assert!(
+        a.stderr
+            .lines()
+            .any(|l| l.starts_with("INFO  Classical Theory")),
+        "{}",
+        a.stderr
+    );
+
+    // A second run: its own folder, and no receiver folder with a suffix (M6(h)).
+    let b = run(&fixture(BOX), "tcr", &root, &[]);
+    assert_eq!(b.code, 0, "{b:#?}");
+    let mb = json(&b);
+    assert_ne!(run_dir(&m), run_dir(&mb));
+    let mut labels: Vec<String> = std::fs::read_dir(run_dir(&mb).join("solve/Punctual receivers"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    labels.sort();
+    assert_eq!(labels, ["Receiver 1.gabe", "Receiver 2.gabe"]);
+
+    // Without --json: one line naming the verdict, the exit code and the folder.
+    let plain = simpa_run(&[
+        "run".to_string(),
+        fixture(BOX).display().to_string(),
+        "--solver".into(),
+        "tcr".into(),
+        "--runs".into(),
+        root.display().to_string(),
+    ]);
+    assert_eq!(plain.code, 0);
+    assert!(
+        plain.stdout.starts_with("OK - exit 0: "),
+        "{}",
+        plain.stdout
+    );
+    assert!(
+        Path::new(plain.stdout.trim().rsplit(": ").next().unwrap())
+            .join("run.json")
+            .is_file()
+    );
+}
+
+#[test]
+fn a_run_folder_under_a_non_ascii_path_is_ok() {
+    let root = scratch("run-utf8").join("Łódź runs");
+    let o = run(&fixture(BOX), "tcr", &root, &[]);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let m = json(&o);
+    summary("box TCR under Ł", &o, &m);
+    assert_eq!(m["files"]["present"], 87);
+    assert!(m["cwd"].as_str().unwrap().contains("Łódź"));
+}
+
+/// Pins today's SPPS result on the box's own mesh: the pinned TetGen meshes the box to 6
+/// tetrahedra (docs/m5-m6-design.md decision 3), and the tutorial's source (3, 5, 1.8) lies
+/// exactly on the internal facet x/6 + y/10 = 1 between two of them. SPPS finds no tetrahedron
+/// for it and crashes with an access violation, as it does for a source outside the mesh.
+/// When this changes (refinement decided, or a guard added), update it with gate M6(a).
+#[test]
+fn spps_crashes_on_the_boxs_own_mesh_with_its_source_on_an_internal_facet() {
+    let root = scratch("run-spps-box");
+    let o = run(&fixture(BOX), "spps", &root, &[]);
+    let m = json(&o);
+    summary("box SPPS", &o, &m);
+    assert_eq!(o.code, 5, "{o:#?}");
+    assert_eq!(m["verdict"]["status"], "CRASH");
+    assert_eq!(codes(&m), ["crash_access_violation"]);
+    // The mesh the run built: 6 tetrahedra, and the source on an internal face of two of them.
+    let dir = run_dir(&m);
+    let mm: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("mesh/mesh.json")).unwrap())
+            .unwrap();
+    assert_eq!(mm["counts"]["build"]["tetrahedra"], 6);
+    let mesh = simpa_core::formats::mbin::read_file(&dir.join("solve/tetramesh.mbin")).unwrap();
+    let on = internal_faces_holding(&mesh, [3.0, 5.0, 1.8]);
+    assert_eq!(
+        on, 2,
+        "tetrahedron faces holding the source (both sides of one facet)"
+    );
+    // The moved source of the OK test below is on none.
+    assert_eq!(internal_faces_holding(&mesh, [3.05, 5.1, 1.8]), 0);
+}
+
+/// How many internal tetrahedron faces (with a neighbour) hold `p`: on the face's plane to
+/// 1e-9 m and inside its triangle.
+fn internal_faces_holding(mesh: &simpa_core::formats::mbin::Mesh, p: [f64; 3]) -> usize {
+    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let cross = |a: [f64; 3], b: [f64; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let node = |i: i32| mesh.nodes[i as usize].map(f64::from);
+    let mut n = 0;
+    for t in &mesh.tetrahedra {
+        for f in t.faces.iter().filter(|f| f.neighbor >= 0) {
+            let [a, b, c] = f.vertices.map(node);
+            let normal = cross(sub(b, a), sub(c, a));
+            let len = dot(normal, normal).sqrt();
+            if (dot(normal, sub(p, a)) / len).abs() > 1e-9 {
+                continue;
+            }
+            // Inside: p is on the inner side of each edge, within the plane.
+            let inside = [(a, b), (b, c), (c, a)]
+                .iter()
+                .all(|&(u, v)| dot(cross(sub(v, u), sub(p, u)), normal) >= -1e-12);
+            n += usize::from(inside);
+        }
+    }
+    n
+}
+
+/// Gate M6(a) as written: the seeded box with SPPS is OK, with 10,000 particles per band and
+/// none lost. Blocked by decision 3 (the pinned TetGen does not refine the box), see the pinned
+/// test above.
+#[test]
+#[ignore = "gate M6(a) is blocked: the box's 6-tetrahedron mesh puts the source on an internal facet"]
+fn spps_runs_the_seeded_box_ok() {
+    let o = run(&fixture(BOX), "spps", &scratch("run-spps-gate"), &[]);
+    assert_eq!(o.code, 0, "{}", o.stdout);
+}
+
+#[test]
+fn spps_runs_the_box_ok_with_its_source_off_the_internal_facets() {
+    let root = scratch("run-spps-moved");
+    let project = moved_source_box(&root);
+    let o = run(&project, "spps", &root, &[]);
+    let m = json(&o);
+    summary("box SPPS, source moved 5 cm", &o, &m);
+    assert_eq!(o.code, 0, "{o:#?}");
+    assert_eq!(m["verdict"]["status"], "OK");
+    assert_eq!(m["lines"]["fail"], 0);
+    assert_eq!(m["lines"]["warn"], 0);
+    assert_eq!(m["files"]["expected"], 65);
+    assert_eq!(m["files"]["present"], 65);
+    let bands = m["particles"]["bands"].as_array().unwrap();
+    assert_eq!(bands.len(), 27);
+    for b in bands {
+        assert_eq!(b["total"], 10_000, "{b}");
+        assert_eq!(b["lost_by_meshing_problems"], 0, "{b}");
+        assert_eq!(b["lost_by_infinite_loops"], 0, "{b}");
+    }
+    let solve = run_dir(&m).join("solve");
+    assert!(
+        solve
+            .join("Surface receiver/Global/Sound level.csbin")
+            .is_file()
+    );
+    assert!(!o.stderr.contains("particles has been in error"));
+}
+
+#[test]
+fn a_mesh_folder_is_reused_and_refused_when_stale_or_cancelled() {
+    let root = scratch("run-reuse");
+    let mesh_dir = root.join("box-mesh");
+    let meshed = simpa_run(&[
+        "mesh".to_string(),
+        fixture(BOX).display().to_string(),
+        "--out".into(),
+        mesh_dir.display().to_string(),
+    ]);
+    assert_eq!(meshed.code, 0, "{meshed:#?}");
+    let mesh_arg = mesh_dir.display().to_string();
+
+    // Reused: no mesh/ in the run folder, and the manifest names the mesh it used.
+    let o = run(&fixture(BOX), "tcr", &root, &["--mesh", &mesh_arg]);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let m = json(&o);
+    assert!(!run_dir(&m).join("mesh").exists());
+    assert_eq!(
+        m["mesh"]["manifest"],
+        mesh_dir.join("mesh.json").display().to_string()
+    );
+
+    // M5(d1): a vertex moved after meshing: mesh_out_of_date, exit 4, no solver started.
+    let moved = edited_box(&root, "box_vertex_moved.simpa", |v| {
+        v["geometry"]["vertices"][0][2] = serde_json::json!(0.25);
+    });
+    let o = run(&moved, "tcr", &root, &["--mesh", &mesh_arg]);
+    assert_eq!(o.code, 4, "{o:#?}");
+    let m = json(&o);
+    assert_eq!(codes(&m), ["mesh_out_of_date"]);
+    assert_eq!(m["outcome"], Value::Null);
+    assert_eq!(m["stage"], "mesh");
+    assert!(!run_dir(&m).join("solver.stdout.txt").exists());
+    assert!(!run_dir(&m).join("solve").exists());
+
+    // M5(d2): a re-mesh cancelled 1 ms into TetGen leaves no .mbin: mesh_missing, exit 4.
+    let cancelled = simpa_run(&[
+        "mesh".to_string(),
+        fixture(BOX).display().to_string(),
+        "--out".into(),
+        mesh_arg.clone(),
+        "--cancel-after-ms".into(),
+        "1".into(),
+    ]);
+    assert_eq!(cancelled.code, 130, "{cancelled:#?}");
+    assert!(!mesh_dir.join("tetramesh.mbin").exists());
+    let o = run(&fixture(BOX), "tcr", &root, &["--mesh", &mesh_arg]);
+    assert_eq!(o.code, 4, "{o:#?}");
+    let m = json(&o);
+    assert_eq!(codes(&m), ["mesh_missing"]);
+    assert!(!run_dir(&m).join("solver.stdout.txt").exists());
+}
+
+#[test]
+fn a_cancelled_run_exits_130_and_leaves_no_solver_running() {
+    let root = scratch("run-cancel");
+    let project = moved_source_box(&root);
+    for (label, extra) in [
+        ("progress", ["--cancel-after-progress", "1"]),
+        ("time", ["--cancel-after-ms", "150"]),
+    ] {
+        let image = format!("spps-cancel-{label}-{}.exe", std::process::id());
+        let exe = private_copy(&solver_exe("spps.exe"), &root, &image);
+        let exe_arg = exe.display().to_string();
+        let mut args: Vec<&str> = vec!["--solver-exe", &exe_arg];
+        args.extend(extra);
+        let o = run(&project, "spps", &root, &args);
+        assert_eq!(o.code, 130, "{label}: {o:#?}");
+        let m = json(&o);
+        summary(&format!("box SPPS cancelled by {label}"), &o, &m);
+        assert_eq!(m["verdict"]["status"], "CANCELLED");
+        assert_eq!(codes(&m), ["cancelled"]);
+        assert_eq!(m["outcome"]["cancelled"], true);
+        assert!(!image_running(&image), "{image} still runs");
+        std::fs::remove_file(&exe).expect("the SPPS copy is no longer running");
+    }
+}
+
+#[test]
+fn bad_options_and_refused_projects_have_their_exit_codes() {
+    let root = scratch("run-refused");
+    for bad in ["NaN", "-0.5"] {
+        let o = run(&fixture(BOX), "spps", &root, &["--loss-limit", bad]);
+        assert_eq!(o.code, 2, "{bad}: {o:#?}");
+        assert!(o.stderr.contains("--loss-limit"), "{}", o.stderr);
+    }
+    let o = run(&fixture(BOX), "fdtd", &root, &[]);
+    assert_eq!(o.code, 2);
+    // Geometry refused: exit 3, with a run folder that says so.
+    let o = run(
+        &fixture("geometry/two_boxes_interpenetrating.simpa"),
+        "tcr",
+        &root,
+        &[],
+    );
+    assert_eq!(o.code, 3, "{o:#?}");
+    assert_eq!(codes(&json(&o)), ["geometry_refused"]);
+    // A project rule broken: exit 2.
+    let o = run(
+        &fixture("negative/schema/source_none.simpa"),
+        "tcr",
+        &root,
+        &[],
+    );
+    assert_eq!(o.code, 2, "{o:#?}");
+    assert_eq!(codes(&json(&o)), ["source_none"]);
+}
