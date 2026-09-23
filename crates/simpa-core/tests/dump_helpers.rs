@@ -26,11 +26,18 @@ fn spellings_are_fixed() {
 
 #[test]
 fn oracle_agrees_when_built() {
-    let exe = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/oracle/all/oracle.exe");
+    let exe =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/oracle/all/oracle.exe");
     if !exe.exists() {
         eprintln!("oracle not built; skipping cross-check");
         return;
     }
-    let out = std::process::Command::new(exe).args(["dump", "selftest", "-"]).output().unwrap();
-    assert_eq!(String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n"), selftest_dump());
+    let out = std::process::Command::new(exe)
+        .args(["dump", "selftest", "-"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n"),
+        selftest_dump()
+    );
 }

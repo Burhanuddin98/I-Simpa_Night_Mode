@@ -60,5 +60,7 @@ pub fn budget(len: usize) -> usize {
 
 /// Path of a file under `tests/fixtures/`.
 pub fn fixture(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures").join(rel)
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures")
+        .join(rel)
 }

@@ -25,7 +25,11 @@ pub enum FormatError {
     /// The data ends before a field that must be present.
     Truncated { what: &'static str, offset: usize },
     /// A version field holds a value this reader does not support.
-    Version { what: &'static str, found: String, expected: &'static str },
+    Version {
+        what: &'static str,
+        found: String,
+        expected: &'static str,
+    },
     /// The data is present but violates the format (bad count, index out of range, bad text).
     Invalid(String),
     /// Any other I/O failure.
@@ -39,11 +43,31 @@ impl fmt::Display for FormatError {
             FormatError::Truncated { what, offset } => {
                 write!(f, "truncated {what}: data ends at byte {offset}")
             }
-            FormatError::Version { what, found, expected } => {
-                write!(f, "unsupported {what} version {found} (expected {expected})")
+            FormatError::Version {
+                what,
+                found,
+                expected,
+            } => {
+                write!(
+                    f,
+                    "unsupported {what} version {found} (expected {expected})"
+                )
             }
             FormatError::Invalid(msg) => write!(f, "invalid data: {msg}"),
             FormatError::Io(e) => write!(f, "i/o error: {e}"),
+        }
+    }
+}
+
+impl FormatError {
+    /// The failure kind as spelled in a canonical dump's `error <kind>` line.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            FormatError::NotFound(_) => "notfound",
+            FormatError::Truncated { .. } => "truncated",
+            FormatError::Version { .. } => "version",
+            FormatError::Invalid(_) => "invalid",
+            FormatError::Io(_) => "io",
         }
     }
 }
@@ -93,7 +117,10 @@ impl<'a> Cursor<'a> {
 
     pub fn bytes(&mut self, n: usize) -> Result<&'a [u8]> {
         if n > self.remaining() {
-            return Err(FormatError::Truncated { what: self.what, offset: self.buf.len() });
+            return Err(FormatError::Truncated {
+                what: self.what,
+                offset: self.buf.len(),
+            });
         }
         let s = &self.buf[self.pos..self.pos + n];
         self.pos += n;
@@ -106,7 +133,10 @@ impl<'a> Cursor<'a> {
 
     pub fn seek(&mut self, pos: usize) -> Result<()> {
         if pos > self.buf.len() {
-            return Err(FormatError::Truncated { what: self.what, offset: self.buf.len() });
+            return Err(FormatError::Truncated {
+                what: self.what,
+                offset: self.buf.len(),
+            });
         }
         self.pos = pos;
         Ok(())
@@ -117,7 +147,10 @@ impl<'a> Cursor<'a> {
     pub fn check_count(&self, count: usize, record_size: usize) -> Result<usize> {
         match count.checked_mul(record_size) {
             Some(total) if total <= self.remaining() => Ok(count),
-            _ => Err(FormatError::Truncated { what: self.what, offset: self.buf.len() }),
+            _ => Err(FormatError::Truncated {
+                what: self.what,
+                offset: self.buf.len(),
+            }),
         }
     }
 
@@ -178,5 +211,9 @@ pub fn str_token(s: &[u8]) -> String {
             out.push_str(&format!("\\x{b:02x}"));
         }
     }
-    if out.is_empty() { "\\x".to_string() } else { out }
+    if out.is_empty() {
+        "\\x".to_string()
+    } else {
+        out
+    }
 }
