@@ -507,10 +507,14 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   the same config give identical files apart from `.csbin` (M1 gate).
 - **SPPS writes per-band surface-receiver files as each band finishes, and everything else after
   all bands** (`sppsNantes.cpp:216-226, 389-423`). A killed run leaves partial files and is
-  CANCELLED, never OK; its folder is never reused. VERIFIED 2026-09-23 on the tutorial box
-  (`crates/simpa/tests/cli_run.rs`): cancelled 150 ms into SPPS, 4 of the 65 expected files
-  were there; cancelled at the first progress line, none. The Job Object kill leaves no solver
-  process running, checked on a private copy of `spps.exe` that could then be deleted.
+  CANCELLED, never OK; its folder is never reused. VERIFIED 2026-09-23 on the tutorial box with
+  its source off the internal facets and 1,000,000 particles, which SPPS runs in 17.1 s with all
+  65 files (`crates/simpa/tests/cli_run.rs`): cancelled at 1 % or 150 ms into SPPS, it stopped
+  within 0.3 s with none of the 65 files. The Job Object kill leaves no solver process running,
+  checked on a private copy of `spps.exe` that could then be deleted, and `simpa.exe` killed
+  mid-run (`TerminateProcess`, as `Stop-Process` does) leaves none 2 s later: only
+  `KILL_ON_JOB_CLOSE` can end it then. With the kill disabled, the cancelled run wrote all 65
+  files in 17 s; with the flag removed, the solver outlived `simpa`.
 - **TCR is single-threaded** and takes about 0.1 s on tutorial 1 (P2 `tcr_base`).
 
 ### TetGen
