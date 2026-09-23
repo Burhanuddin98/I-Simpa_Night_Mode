@@ -140,9 +140,16 @@ when the flag is nonzero **and** the count is above 0.
 **The marker's meaning.**
 - In a `.face`, it is the `.poly` facet marker (`shellmark`, `:34424`). I-Simpa sets it to the
   facet number, so it maps a triangle back to a scene face.
-- In a `_skipped.face`, it is `(int) badface::key`. In the fixture it is -1 on all 535 rows.
-  Upstream's GUI reads it as a 1-based facet number (`projet_maillage.cpp:256, 262-265`). A
-  value of -1 falls outside that range, so the GUI can highlight none of the skipped facets.
+- In a `_skipped.face`, it is `(int) badface::key`, and TetGen sets that key to the facet's
+  marker, `shellmark` (`:20445, 20462, 21337`). So it is the `.poly` facet marker here too.
+  The survey's self-intersecting cube gives rows ending 8, 9 and 12: the two triangles of the
+  wall that a thirteenth facet pierces, and that facet (`crates/simpa-core/tests/mesh_poly.rs`).
+- The fixture's 535 rows are all -1 only because Night Mode's `.poly` wrote no facet markers:
+  its facet list header is `1086 0` (`build-clean/sim_output/tcr/model.poly`), so TetGen had none
+  to copy. The same missing markers make every row of that run's `.1.face` -1.
+- Upstream's GUI reads the skipped markers in debug mode only: it adds 1 and later subtracts 1
+  (`projet_maillage.cpp:256, 264`), so it looks each marker up in its facet table as it is. A
+  -1 finds nothing, which is why the broken hall's skipped facets could not be highlighted.
 
 ### `.neigh`: no loader. Writer `outneighbors` (`tetgen.cxx:34924-35002`)
 
@@ -166,8 +173,9 @@ It is written as `%ld  %d` with a literal 4 (`:34958`), then `%4d    %4d  %4d  %
   (`tetgen.cxx:7`), built from upstream `929a5c8`.
 - **Index base.** `first` is 0 or 1. The four files of one run share it.
 - **Hull.** A `.neigh` entry of -1 means that face is on the hull.
-- **Markers.** A `.node` marker is 0 for a free interior point. In a `.face`, the marker is the
-  facet marker; in a `_skipped.face` it is the `badface` key, covered above.
+- **Markers.** A `.node` marker is 0 for a free interior point. In a `.face` and in a
+  `_skipped.face` alike, the marker is the facet marker (in the latter through the `badface`
+  key), covered above.
 - **Region.** The `.ele` attribute written with `-A` is the region number. It is 1 for tutorial
   1's single room.
 

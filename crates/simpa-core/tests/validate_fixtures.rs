@@ -271,6 +271,10 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
     add("mesh_out_of_date", &|p| {
         *p = raised_corner();
     });
+    add("mesh_settings_conflict", &|p| {
+        // The cube keeps upstream's default -Y, which forbids the splits a .var asks for.
+        p.solvers.meshing.surface_receiver_max_area_m2 = Some(F64::new(5.0));
+    });
     all
 }
 

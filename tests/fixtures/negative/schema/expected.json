@@ -16,6 +16,7 @@
   "material_unassigned.simpa": "material_unassigned",
   "material_value_out_of_range.simpa": "material_value_out_of_range",
   "mesh_out_of_date.simpa": "mesh_out_of_date",
+  "mesh_settings_conflict.simpa": "mesh_settings_conflict",
   "name_duplicate.simpa": "name_duplicate",
   "name_not_filename_safe.simpa": "name_not_filename_safe",
   "name_too_long.simpa": "name_too_long",
