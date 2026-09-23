@@ -39,13 +39,7 @@ fn summary(report: &CheckReport) -> String {
 
 #[test]
 fn m4a_raw_elmia_is_refused_with_the_harvest_census() {
-    let Some(path) = raw_elmia() else {
-        eprintln!(
-            "SKIPPED m4a: raw elmia.ply not found (Grace-local: {RAW_ELMIA}); this gate item did \
-             not run"
-        );
-        return;
-    };
+    let path = raw_elmia();
     let g = read_ply(&path);
     assert_eq!(
         (g.vertices.len(), g.faces.len()),
@@ -586,18 +580,11 @@ fn group(n: u128) -> GroupId {
     GroupId::from_u128(n)
 }
 
-/// Gate (e) through the fixture the CLI gate (`tools/gates/m4.ps1`) checks, once it is
-/// committed. This suite does not write it; until it exists the test says so and passes.
+/// Gate (e) through the committed fixture the CLI gate (`tools/gates/m4.ps1`) checks. A missing
+/// fixture panics.
 #[test]
 fn m4e_the_cli_gate_fixture_is_refused_with_its_pairs() {
-    let path = repo("tests/fixtures/geometry/two_boxes_interpenetrating.simpa");
-    if !path.is_file() {
-        eprintln!(
-            "SKIPPED: {} is not committed yet; the CLI gate (e) needs it",
-            path.display()
-        );
-        return;
-    }
+    let path = committed("tests/fixtures/geometry/two_boxes_interpenetrating.simpa");
     let project = schema::load(&path).expect("two_boxes_interpenetrating.simpa loads");
     let report = check::check(&project.geometry);
     eprintln!("two_boxes_interpenetrating.simpa: {}", summary(&report));

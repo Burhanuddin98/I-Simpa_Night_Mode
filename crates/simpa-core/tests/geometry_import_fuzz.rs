@@ -395,38 +395,24 @@ fn stored_zip(entries: &[(String, Vec<u8>)]) -> Vec<u8> {
 }
 
 /// Tutorial 1's project folder (projet_config.xml, sceneMesh.bin, the .finfo lists), read from
-/// upstream's checkout; `None` when it is absent and not required.
-fn tutorial1_entries() -> Option<Vec<(String, Vec<u8>)>> {
-    let root = std::env::var_os("SIMPA_UPSTREAM")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|| std::path::PathBuf::from(r"B:\repos\I-Simpa-upstream"));
-    let path = root.join(r"src/isimpa/resources/doc/tutorial/tutorial 1/tutorial_1.proj");
-    if !path.exists() {
-        if std::env::var_os("SIMPA_REQUIRE_UPSTREAM").is_some() {
-            panic!(
-                "SIMPA_REQUIRE_UPSTREAM is set but {} is missing",
-                path.display()
-            );
-        }
-        eprintln!("upstream checkout not found ({}); skipping", path.display());
-        return None;
-    }
+/// the upstream source tree (`common/paths.rs`); panics when it is absent.
+fn tutorial1_entries() -> Vec<(String, Vec<u8>)> {
+    let path = common::paths::upstream_file(
+        "src/isimpa/resources/doc/tutorial/tutorial 1/tutorial_1.proj",
+    );
     let bytes = std::fs::read(path).unwrap();
     let archive = Archive::parse(&bytes).unwrap();
-    let entries: Vec<(String, Vec<u8>)> = archive
+    archive
         .entries()
         .iter()
         .filter(|e| e.name.starts_with("instance2/") && e.name.matches('/').count() == 1)
         .map(|e| (e.name.clone(), archive.read_entry(e).unwrap()))
-        .collect();
-    Some(entries)
+        .collect()
 }
 
 #[test]
 fn stored_zip_of_tutorial1_imports_like_the_original() {
-    let Some(entries) = tutorial1_entries() else {
-        return;
-    };
+    let entries = tutorial1_entries();
     let p = import_proj(&stored_zip(&entries)).unwrap().project;
     assert_eq!(p.geometry.vertices.len(), 8);
     assert_eq!(p.geometry.faces.len(), 12);
@@ -442,9 +428,7 @@ proptest! {
         which in 0..6usize,
         edits in proptest::collection::vec(edit(), 1..4),
     ) {
-        let Some(mut entries) = tutorial1_entries() else {
-            return Ok(());
-        };
+        let mut entries = tutorial1_entries();
         let k = which % entries.len();
         let mutated = apply(std::mem::take(&mut entries[k].1), &edits);
         entries[k].1 = mutated;

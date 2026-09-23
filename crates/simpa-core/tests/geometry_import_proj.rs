@@ -1,11 +1,11 @@
 //! `core::geometry::import::import_proj` against upstream's own tutorial projects: M4 gate items
 //! (b) and (c), the committed room fixtures, the embedded reference database, and the zip reader.
 //!
-//! These read upstream's checkout (`B:\repos\I-Simpa-upstream` on Grace, or
-//! `$SIMPA_UPSTREAM`), which CI does not have: without it each test says so and passes, unless
-//! `SIMPA_REQUIRE_UPSTREAM=1` is set (the M4 gate sets it), when a missing checkout fails. The
-//! same gate numbers are also asserted on the committed fixtures by `geometry_import_rooms.rs`,
-//! which needs nothing outside the repo.
+//! These read upstream's tutorial projects from the upstream source tree at the pinned commit,
+//! found by `common/paths.rs` (`$SIMPA_UPSTREAM`, else the tree `solvers/build.ps1` extracts into
+//! `target/solvers/src-929a5c8`). A missing tree panics, naming where it looked, so none of these
+//! tests passes without running. The same gate numbers are also asserted on the committed
+//! fixtures by `geometry_import_rooms.rs`, which needs nothing outside the repo.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -18,27 +18,14 @@ use simpa_core::geometry::import::{
 };
 use simpa_core::schema::{self, Directivity, Project, SurfaceReceiverShape, Vec3};
 
-fn upstream_root() -> PathBuf {
-    std::env::var_os("SIMPA_UPSTREAM")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"B:\repos\I-Simpa-upstream"))
-}
+#[allow(dead_code)]
+#[path = "common/paths.rs"]
+mod paths;
 
-/// A file of upstream's checkout, or `None` (and a note) when the checkout is absent and not
-/// required.
-fn upstream(rel: &str) -> Option<PathBuf> {
-    let p = upstream_root().join(rel);
-    if p.exists() {
-        return Some(p);
-    }
-    if std::env::var_os("SIMPA_REQUIRE_UPSTREAM").is_some() {
-        panic!(
-            "SIMPA_REQUIRE_UPSTREAM is set but {} is missing",
-            p.display()
-        );
-    }
-    eprintln!("upstream checkout not found ({}); skipping", p.display());
-    None
+/// A file of the upstream source tree at the pinned commit (`common/paths.rs`: `$SIMPA_UPSTREAM`,
+/// else the tree `solvers/build.ps1` extracts). Panics, naming where it looked, when it is absent.
+fn upstream(rel: &str) -> PathBuf {
+    paths::upstream_file(rel)
 }
 
 const TUTORIAL1: &str = r"src/isimpa/resources/doc/tutorial/tutorial 1/tutorial_1.proj";
@@ -143,9 +130,7 @@ fn vec3_near(v: Vec3, want: [f64; 3], what: &str) {
 
 #[test]
 fn gate_b_tutorial2_is_the_corrected_hall_grouped_by_its_finfo_lists() {
-    let Some(path) = upstream(TUTORIAL2) else {
-        return;
-    };
+    let path = upstream(TUTORIAL2);
     let imported = import_proj_file(&path).unwrap();
     let p = &imported.project;
     let r = &imported.report;
@@ -233,9 +218,7 @@ fn gate_b_tutorial2_is_the_corrected_hall_grouped_by_its_finfo_lists() {
 
 #[test]
 fn gate_c_tutorial1_is_the_six_by_ten_by_three_box() {
-    let Some(path) = upstream(TUTORIAL1) else {
-        return;
-    };
+    let path = upstream(TUTORIAL1);
     let imported = import_proj_file(&path).unwrap();
     let p = &imported.project;
     let r = &imported.report;
@@ -313,9 +296,7 @@ fn gate_c_tutorial1_is_the_six_by_ten_by_three_box() {
 /// way upstream's GUI writes it.
 #[test]
 fn tutorial1_reads_as_upstreams_gui_wrote_its_spps_run() {
-    let Some(path) = upstream(TUTORIAL1) else {
-        return;
-    };
+    let path = upstream(TUTORIAL1);
     let bytes = std::fs::read(&path).unwrap();
     let archive = Archive::parse(&bytes).unwrap();
     let config = String::from_utf8(
@@ -460,9 +441,7 @@ fn tutorial1_reads_as_upstreams_gui_wrote_its_spps_run() {
 #[test]
 #[ignore]
 fn write_room_fixtures() {
-    let (Some(t1), Some(t2)) = (upstream(TUTORIAL1), upstream(TUTORIAL2)) else {
-        panic!("the fixtures are regenerated from upstream's checkout");
-    };
+    let (t1, t2) = (upstream(TUTORIAL1), upstream(TUTORIAL2));
     std::fs::create_dir_all(repo_file("tests/fixtures/rooms")).unwrap();
     schema::save(&tutorial1_box(&t1), &repo_file(BOX_FIXTURE)).unwrap();
     schema::save(&elmia_corrected(&t2), &repo_file(ELMIA_FIXTURE)).unwrap();
@@ -470,9 +449,7 @@ fn write_room_fixtures() {
 
 #[test]
 fn room_fixtures_are_the_import_of_upstreams_tutorials() {
-    let (Some(t1), Some(t2)) = (upstream(TUTORIAL1), upstream(TUTORIAL2)) else {
-        return;
-    };
+    let (t1, t2) = (upstream(TUTORIAL1), upstream(TUTORIAL2));
     for (rel, project) in [
         (BOX_FIXTURE, tutorial1_box(&t1)),
         (ELMIA_FIXTURE, elmia_corrected(&t2)),
@@ -492,9 +469,7 @@ fn room_fixtures_are_the_import_of_upstreams_tutorials() {
 #[test]
 fn tutorial3_projects_are_refused_by_name_for_their_fitting_zones() {
     for rel in [TUTORIAL3, INDUSTRIAL] {
-        let Some(path) = upstream(rel) else {
-            return;
-        };
+        let path = upstream(rel);
         let e = import_proj_file(&path).unwrap_err();
         println!("{rel}: {} ({e})", e.code());
         assert!(matches!(e, ImportError::Unsupported { .. }), "{e}");
@@ -504,9 +479,7 @@ fn tutorial3_projects_are_refused_by_name_for_their_fitting_zones() {
 
 #[test]
 fn reference_database_matches_upstreams_appconst() {
-    let Some(path) = upstream(APPCONST) else {
-        return;
-    };
+    let path = upstream(APPCONST);
     let xml = std::fs::read_to_string(path).unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
     let f32_of = |t: &str| t.trim().parse::<f64>().unwrap() as f32;
@@ -584,9 +557,7 @@ fn reference_database_matches_upstreams_appconst() {
 fn every_entry_of_every_tutorial_archive_inflates_to_its_crc() {
     let mut total = (0usize, 0u64);
     for rel in [TUTORIAL1, TUTORIAL2, TUTORIAL3, INDUSTRIAL] {
-        let Some(path) = upstream(rel) else {
-            return;
-        };
+        let path = upstream(rel);
         let bytes = std::fs::read(&path).unwrap();
         let archive = Archive::parse(&bytes).unwrap();
         for e in archive.entries() {
@@ -624,9 +595,7 @@ fn finfo_reads_both_count_widths_and_checks_the_count() {
 
 #[test]
 fn scene_mesh_readers_agree_with_the_archive() {
-    let Some(path) = upstream(TUTORIAL1) else {
-        return;
-    };
+    let path = upstream(TUTORIAL1);
     let bytes = std::fs::read(&path).unwrap();
     let archive = Archive::parse(&bytes).unwrap();
     let mesh = read_scene_mesh(&archive.read("instance2/sceneMesh.bin").unwrap()).unwrap();

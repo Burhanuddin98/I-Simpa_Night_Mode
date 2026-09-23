@@ -4,6 +4,9 @@
 
 use std::path::{Path, PathBuf};
 
+#[path = "common/paths.rs"]
+mod paths;
+
 use simpa_core::schema::{self, Face, Geometry, GroupId, Vec3};
 
 pub fn repo(rel: &str) -> PathBuf {
@@ -12,19 +15,24 @@ pub fn repo(rel: &str) -> PathBuf {
         .join(rel)
 }
 
-/// Upstream's raw tutorial hall (Grace-local; not committed here).
-pub const RAW_ELMIA: &str =
-    r"B:\repos\I-Simpa-upstream\src\isimpa\resources\doc\tutorial\tutorial 2\elmia.ply";
+/// Upstream's raw tutorial hall, relative to the upstream source tree.
+pub const RAW_ELMIA: &str = "src/isimpa/resources/doc/tutorial/tutorial 2/elmia.ply";
 
-/// The raw hall, from a committed fixture if one exists, else from the upstream checkout.
-pub fn raw_elmia() -> Option<PathBuf> {
-    [
-        repo("tests/fixtures/upstream/tutorial2/elmia.ply"),
-        repo("tests/fixtures/rooms/elmia_raw.ply"),
-        PathBuf::from(RAW_ELMIA),
-    ]
-    .into_iter()
-    .find(|p| p.is_file())
+/// The raw hall, from the upstream source tree (`common/paths.rs`: `$SIMPA_UPSTREAM`, else the
+/// tree `solvers/build.ps1` extracts). Panics, naming where it looked, when it is absent.
+pub fn raw_elmia() -> PathBuf {
+    paths::upstream_file(RAW_ELMIA)
+}
+
+/// A committed fixture a gate item needs. Panics when it is missing: the test must run.
+pub fn committed(rel: &str) -> PathBuf {
+    let path = repo(rel);
+    assert!(
+        path.is_file(),
+        "{} is missing: this gate item runs on it",
+        path.display()
+    );
+    path
 }
 
 /// The corrected hall: `tests/fixtures/rooms/elmia_corrected.simpa` once the importer writes it,

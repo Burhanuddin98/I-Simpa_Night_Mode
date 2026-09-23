@@ -1,7 +1,8 @@
 //! `core::geometry::import`'s mesh readers on the hand-made fixtures in
 //! `tests/fixtures/geometry/` (written by `make_fixtures.py` there): M4 gate item (f), and the
 //! Night Mode reader defects each fix answers. Needs nothing outside the repo, except the last
-//! test, which reads upstream's raw `elmia.ply` when the checkout is present.
+//! test, which reads upstream's raw `elmia.ply` from the upstream source tree (`common/paths.rs`)
+//! and panics when that tree is absent.
 
 use std::path::{Path, PathBuf};
 
@@ -10,6 +11,10 @@ use simpa_core::geometry::import::{
     read_obj, read_ply, read_stl,
 };
 use simpa_core::schema::Vec3;
+
+#[allow(dead_code)]
+#[path = "common/paths.rs"]
+mod paths;
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -423,20 +428,7 @@ fn a_model_becomes_a_project_with_one_group_per_file_group() {
 
 #[test]
 fn upstream_raw_elmia_ply_reads_with_its_layers() {
-    let root = std::env::var_os("SIMPA_UPSTREAM")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(r"B:\repos\I-Simpa-upstream"));
-    let path = root.join(r"src/isimpa/resources/doc/tutorial/tutorial 2/elmia.ply");
-    if !path.exists() {
-        if std::env::var_os("SIMPA_REQUIRE_UPSTREAM").is_some() {
-            panic!(
-                "SIMPA_REQUIRE_UPSTREAM is set but {} is missing",
-                path.display()
-            );
-        }
-        eprintln!("upstream checkout not found ({}); skipping", path.display());
-        return;
-    }
+    let path = paths::upstream_file("src/isimpa/resources/doc/tutorial/tutorial 2/elmia.ply");
     let m = import_file(&path, &metres_z_up()).unwrap();
     println!(
         "elmia.ply: {} vertices ({} unused), {} polygons ({} split), {} triangles, groups {:?}, \

@@ -229,10 +229,7 @@ fn an_intersection_blocks_orientation_but_not_the_safe_fixes() {
 
 #[test]
 fn the_raw_hall_is_welded_and_cleaned_but_refused() {
-    let Some(path) = raw_elmia() else {
-        eprintln!("SKIPPED: raw elmia.ply not found (Grace-local: {RAW_ELMIA}); did not run");
-        return;
-    };
+    let path = raw_elmia();
     let g = read_ply(&path);
     // Reference, computed independently in Python (exact rational zero-area test, first-kept
     // welding): 7 exact duplicate vertices, face 392 of zero area, no duplicate faces; the
@@ -540,18 +537,11 @@ fn the_outcome_serialises_with_stable_kinds() {
     assert_eq!(json["refusals"][0]["code"], "open_boundary");
 }
 
-/// Gate (d) through the fixture the CLI gate (`tools/gates/m4.ps1`) repairs, once it is
-/// committed. This suite does not write it; until it exists the test says so and passes.
+/// Gate (d) through the committed fixture the CLI gate (`tools/gates/m4.ps1`) repairs. A missing
+/// fixture panics.
 #[test]
 fn m4d_the_cli_gate_fixture_repairs_with_exactly_three_changes() {
-    let path = repo("tests/fixtures/geometry/box_three_faults.simpa");
-    if !path.is_file() {
-        eprintln!(
-            "SKIPPED: {} is not committed yet; the CLI gate (d) needs it",
-            path.display()
-        );
-        return;
-    }
+    let path = committed("tests/fixtures/geometry/box_three_faults.simpa");
     let project = schema::load(&path).expect("box_three_faults.simpa loads");
     assert!(!check::check(&project.geometry).is_ok());
     let outcome = run(&project.geometry);
