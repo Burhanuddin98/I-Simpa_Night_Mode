@@ -16,7 +16,7 @@ use simpa_core::config_xml;
 use simpa_core::formats::cbin;
 use simpa_core::formats::gabe::{Column, ColumnData, Gabe};
 use simpa_core::process::{Line, Stream};
-use simpa_core::run::{BandStats, Expectation, Outputs, ParticleStats};
+use simpa_core::run::{BandStats, Expectation, Outputs, ParticleStats, SurfaceValues};
 use simpa_core::schema::SolverKind;
 
 /// The repository root: an absolute path with no `..` in it.
@@ -181,8 +181,17 @@ pub fn band_table(exp: &Expectation, columns: usize) -> Gabe {
     }
 }
 
+/// A surface-receiver file whose 12 values are all finite.
+pub fn clean_surface() -> SurfaceValues {
+    SurfaceValues {
+        values: 12,
+        nonfinite: 0,
+        first_nonfinite: None,
+    }
+}
+
 /// The outputs of a run that wrote every expected file (100 bytes each), clean statistics
-/// (SPPS) and finite result tables (TCR).
+/// (SPPS) and finite result tables and surface-receiver files (TCR).
 pub fn good_outputs(exp: &Expectation) -> Outputs {
     let files: BTreeMap<String, u64> = exp.expected_files().into_iter().map(|p| (p, 100)).collect();
     let stats = exp.spps.as_ref().map(|_| Ok(clean_stats(exp)));
@@ -191,10 +200,16 @@ pub fn good_outputs(exp: &Expectation) -> Outputs {
         .into_iter()
         .map(|t| (t, Ok(band_table(exp, 6))))
         .collect();
+    let surfaces = exp
+        .surface_tables()
+        .into_iter()
+        .map(|t| (t, Ok(clean_surface())))
+        .collect();
     Outputs {
         files,
         stats,
         tables,
+        surfaces,
     }
 }
 

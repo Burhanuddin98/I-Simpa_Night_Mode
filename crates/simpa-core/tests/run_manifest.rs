@@ -137,6 +137,36 @@ fn a_manifest_of_another_layout_is_refused() {
 }
 
 #[test]
+fn a_non_finite_loss_limit_round_trips() {
+    // The verdict accepts a NaN limit and fails closed on it; run.json must still read back.
+    for (limit, text) in [
+        (f64::NAN, r#""loss_limit": "NaN""#),
+        (f64::INFINITY, r#""loss_limit": "inf""#),
+        (f64::NEG_INFINITY, r#""loss_limit": "-inf""#),
+        (0.01, r#""loss_limit": 0.01"#),
+    ] {
+        let m = RunManifest {
+            loss_limit: limit,
+            ..sample()
+        };
+        let json = m.to_json();
+        assert!(json.contains(text), "{json}");
+        let back = RunManifest::from_json(&json).unwrap();
+        assert_eq!(back.loss_limit.to_bits(), limit.to_bits(), "{limit}");
+        assert_eq!(back.to_json(), json);
+    }
+    // An integer limit reads as a number; null and any other text are refused.
+    let json = sample().to_json();
+    let one = json.replacen(r#""loss_limit": 0.01"#, r#""loss_limit": 1"#, 1);
+    assert_eq!(RunManifest::from_json(&one).unwrap().loss_limit, 1.0);
+    for bad in [r#""loss_limit": null"#, r#""loss_limit": "lots""#] {
+        let text = json.replacen(r#""loss_limit": 0.01"#, bad, 1);
+        assert_ne!(text, json);
+        assert!(RunManifest::from_json(&text).is_err(), "{bad}");
+    }
+}
+
+#[test]
 fn file_counts_count_only_present_non_empty_expected_files() {
     let exp = tutorial1_expectation(SolverKind::Tcr);
     let expected = exp.expected_files();

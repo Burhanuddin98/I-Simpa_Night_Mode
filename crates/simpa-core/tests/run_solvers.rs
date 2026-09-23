@@ -160,13 +160,7 @@ fn tcr_tutorial1_as_upstreams_gui_wrote_it_fails_on_its_xml_property_line() {
 
 #[test]
 fn tcr_tutorial1_with_every_attribute_is_ok_and_writes_exactly_the_expected_files() {
-    let dir = stage_tutorial1("tcr-t1", SolverKind::Tcr, |t| {
-        t.replacen(
-            r#"modelName="mesh.cbin""#,
-            r#"directivities_directory="loudspeakers\" modelName="mesh.cbin""#,
-            1,
-        )
-    });
+    let dir = stage_tutorial1("tcr-t1", SolverKind::Tcr, tcr_complete);
     let r = run(&dir, SolverKind::Tcr);
     let n = ClassCounts::of(&r.lines);
     assert_eq!((n.unclassified, n.warn, n.fail), (0, 0, 0));
@@ -184,6 +178,53 @@ fn tcr_tutorial1_with_every_attribute_is_ok_and_writes_exactly_the_expected_file
     assert_eq!(r.verdict.status, Status::Ok, "{:#?}", r.verdict);
     assert!(r.verdict.reasons.is_empty() && r.verdict.warnings.is_empty());
     assert_eq!(r.outputs.tables.len(), 3);
+    // Every surface-receiver file decodes, and every value in it is finite.
+    assert_eq!(r.outputs.surfaces.len(), 84);
+    for (path, s) in &r.outputs.surfaces {
+        let s = s.as_ref().unwrap_or_else(|e| panic!("{path}: {e}"));
+        assert!(s.values > 0 && s.nonfinite == 0, "{path}: {s:?}");
+    }
+}
+
+/// Tutorial 1's TCR config with our writer's `directivities_directory`, so that a clean run has
+/// no FAIL line.
+fn tcr_complete(t: String) -> String {
+    t.replacen(
+        r#"modelName="mesh.cbin""#,
+        r#"directivities_directory="loudspeakers\" modelName="mesh.cbin""#,
+        1,
+    )
+}
+
+#[test]
+fn tcr_with_its_source_outside_the_room_exits_0_and_is_refused() {
+    // P2 tcr_src_out, a silent failure the contract lists: exit 0, no FAIL line, every file
+    // written. Only the -inf direct level at each point receiver gives it away.
+    let dir = stage_tutorial1("tcr-t1-srcout", SolverKind::Tcr, |t| {
+        let moved = tcr_complete(t).replacen(
+            r#"name="Source 1" x="3" y="5""#,
+            r#"name="Source 1" x="-20" y="5""#,
+            1,
+        );
+        assert!(moved.contains(r#"x="-20""#));
+        moved
+    });
+    let r = run(&dir, SolverKind::Tcr);
+    assert_eq!(r.outcome.exit_code, Some(0));
+    let n = ClassCounts::of(&r.lines);
+    assert_eq!((n.unclassified, n.warn, n.fail), (0, 0, 0));
+    let expected: BTreeSet<String> = r.expected.iter().cloned().collect();
+    assert_eq!(written(&r), expected, "files written vs files expected");
+    assert_eq!(r.verdict.status, Status::Fail);
+    assert_eq!(r.verdict.codes(), [NONFINITE_RESULT], "{:#?}", r.verdict);
+    let detail = &r.verdict.reasons[0].detail;
+    assert!(detail.contains("Direct at 50 Hz is -inf;"), "{detail}");
+    assert!(
+        detail.ends_with("a receiver every source is hidden from"),
+        "{detail}"
+    );
+    // Both receivers, in all 27 bands, and nowhere else.
+    assert!(detail.starts_with("54 displayed value(s)"), "{detail}");
 }
 
 #[test]
@@ -209,13 +250,7 @@ fn spps_without_its_tetrahedral_mesh_exits_0_and_is_refused() {
 #[test]
 fn tcr_without_its_tetrahedral_mesh_exits_1() {
     // S tcr_nomesh.
-    let dir = stage_tutorial1("tcr-t1-nombin", SolverKind::Tcr, |t| {
-        t.replacen(
-            r#"modelName="mesh.cbin""#,
-            r#"directivities_directory="loudspeakers\" modelName="mesh.cbin""#,
-            1,
-        )
-    });
+    let dir = stage_tutorial1("tcr-t1-nombin", SolverKind::Tcr, tcr_complete);
     std::fs::remove_file(dir.join("tetramesh.mbin")).unwrap();
     let r = run(&dir, SolverKind::Tcr);
     assert_eq!(r.outcome.exit_code, Some(1));

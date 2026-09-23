@@ -64,48 +64,81 @@ type Row = (
     String,
 );
 
-/// The classification table of a contract page's text.
-fn documented(text: &str) -> Vec<Row> {
-    let part_b = section(text, "## Part B").join("\n");
-    let mut rows = Vec::new();
-    for line in section(&part_b, "### Output line classification") {
-        if !line.starts_with("| `") {
-            continue;
-        }
-        let c = cells(line);
-        assert_eq!(c.len(), 5, "{line}");
-        let stream = match c[1].as_str() {
-            "stdout" => Some(Stream::Stdout),
-            "stderr" => Some(Stream::Stderr),
-            "either" => None,
-            other => panic!("stream {other:?} in {line}"),
-        };
-        let class = match c[3].split([':', ' ']).next().unwrap() {
-            "PROGRESS" => LineClass::Progress,
-            "INFO" => LineClass::Info,
-            "OK" => LineClass::Ok,
-            "WARN" => LineClass::Warn,
-            "FAIL" => LineClass::Fail,
-            other => panic!("class {other:?} in {line}"),
-        };
-        let continuation = if c[2].contains("next line") {
-            Some(Continuation::Next)
-        } else if c[2].contains("previous line") {
-            Some(Continuation::Previous)
-        } else {
-            None
-        };
-        rows.push((
-            backticked(&c[0])[0].to_string(),
-            stream,
-            backticked(&c[2]).first().map(|p| p.to_string()),
-            class,
-            continuation,
-            c[2].contains("no newline"),
-            backticked(&c[4]).join("; "),
-        ));
+const HEADER: &str = "| Pattern id / reason | Stream | Pattern | Class | Receipt |";
+
+/// One body row of the table, or why it does not read as one.
+fn row(line: &str) -> Result<Row, String> {
+    let c = cells(line);
+    if c.len() != 5 {
+        return Err(format!("{} cells, not 5: {line}", c.len()));
     }
-    rows
+    // The id cell is exactly one backticked identifier.
+    let id = match backticked(&c[0])[..] {
+        [id] if c[0] == format!("`{id}`") && !id.is_empty() => id.to_string(),
+        _ => {
+            return Err(format!(
+                "id cell {:?} is not one backticked id: {line}",
+                c[0]
+            ));
+        }
+    };
+    let stream = match c[1].as_str() {
+        "stdout" => Some(Stream::Stdout),
+        "stderr" => Some(Stream::Stderr),
+        "either" => None,
+        other => return Err(format!("stream {other:?}: {line}")),
+    };
+    let class = match c[3].split([':', ' ']).next().unwrap() {
+        "PROGRESS" => LineClass::Progress,
+        "INFO" => LineClass::Info,
+        "OK" => LineClass::Ok,
+        "WARN" => LineClass::Warn,
+        "FAIL" => LineClass::Fail,
+        other => return Err(format!("class {other:?}: {line}")),
+    };
+    let continuation = if c[2].contains("next line") {
+        Some(Continuation::Next)
+    } else if c[2].contains("previous line") {
+        Some(Continuation::Previous)
+    } else {
+        None
+    };
+    Ok((
+        id,
+        stream,
+        backticked(&c[2]).first().map(|p| p.to_string()),
+        class,
+        continuation,
+        c[2].contains("no newline"),
+        backticked(&c[4]).join("; "),
+    ))
+}
+
+/// The classification table of a contract page's text. Every line of the section that starts
+/// with `|` is the header, the separator, or a body row that must parse, all in one block: a row
+/// the parser cannot read, or a table line away from the table, is an error, never skipped.
+fn documented(text: &str) -> Result<Vec<Row>, String> {
+    let part_b = section(text, "## Part B").join("\n");
+    let lines = section(&part_b, "### Output line classification");
+    let table: Vec<(usize, &str)> = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| l.trim_start().starts_with('|'))
+        .map(|(i, l)| (i, *l))
+        .collect();
+    let (Some(&(_, header)), Some(&(_, separator))) = (table.first(), table.get(1)) else {
+        return Err("no table in the section".into());
+    };
+    if header != HEADER {
+        return Err(format!("header {header:?}"));
+    }
+    if cells(separator).iter().any(|c| c != "---") {
+        return Err(format!("separator {separator:?}"));
+    }
+    if table.windows(2).any(|w| w[1].0 != w[0].0 + 1) {
+        return Err("the table's lines are not one block".into());
+    }
+    table[2..].iter().map(|(_, l)| row(l)).collect()
 }
 
 fn ours() -> Vec<Row> {
@@ -127,7 +160,7 @@ fn ours() -> Vec<Row> {
 
 #[test]
 fn the_classifier_table_is_the_contract_pages_part_b() {
-    let rows = documented(&read("docs/solver-contract.md"));
+    let rows = documented(&read("docs/solver-contract.md")).unwrap();
     assert_eq!(rows.len(), 22, "Part B's table has 22 rows");
     assert_eq!(
         rows,
@@ -152,7 +185,7 @@ fn the_classifier_table_is_the_contract_pages_part_b() {
 fn the_comparison_notices_a_row_added_removed_or_changed() {
     let text = read("docs/solver-contract.md");
     let row = "| `directivity_not_open` | stdout | `^DirectivityBalloon : File not open$` | FAIL |";
-    assert!(text.contains(row));
+    let full = text.lines().find(|l| l.starts_with(row)).expect("the row");
     let mutations = [
         // A row changed: its class, its pattern, its stream.
         text.replacen(row, &row.replace("| FAIL |", "| WARN |"), 1),
@@ -163,15 +196,32 @@ fn the_comparison_notices_a_row_added_removed_or_changed() {
             .filter(|l| !l.starts_with(row))
             .collect::<Vec<_>>()
             .join("\n"),
-        // A row added.
+        // A row added: well formed, without backticks on its id, with a cell missing, and
+        // after the table.
         text.replacen(
             row,
             &format!("| `new_row` | stdout | `^New$` | INFO | `x.cpp:1` |\n{row}"),
             1,
         ),
+        text.replacen(
+            full,
+            &format!("{full}\n| new_row | stdout | `^New line$` | FAIL | `x.cpp:1` |"),
+            1,
+        ),
+        text.replacen(full, &format!("{full}\n| `new_row` | stdout | FAIL |"), 1),
+        text.replacen(
+            "Notes on the classifier:",
+            "| `new_row` | stdout | `^New$` | INFO | `x.cpp:1` |\n\nNotes on the classifier:",
+            1,
+        ),
+        // The header changed.
+        text.replacen("| Pattern id / reason |", "| Pattern id |", 1),
     ];
-    for m in &mutations {
-        assert_ne!(documented(m), ours());
+    let good = Ok(ours());
+    assert_eq!(documented(&text), good);
+    for (i, m) in mutations.iter().enumerate() {
+        assert_ne!(m, &text, "mutation {i} changed nothing");
+        assert_ne!(documented(m), good, "mutation {i} went unnoticed");
     }
 }
 

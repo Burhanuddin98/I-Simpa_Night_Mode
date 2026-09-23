@@ -26,4 +26,6 @@ pub use classify::{
 pub use expect::{Band, ExpectError, Expectation, OutputNames, SppsSettings};
 pub use manifest::{FileCounts, FileRef, MeshRef, RunManifest, RunSource};
 pub use stats::{BandStats, ParticleStats, StatsError};
-pub use verdict::{DEFAULT_LOSS_LIMIT, Evidence, Outputs, Reason, Status, Verdict, judge};
+pub use verdict::{
+    DEFAULT_LOSS_LIMIT, Evidence, Outputs, Reason, Status, SurfaceValues, Verdict, judge,
+};

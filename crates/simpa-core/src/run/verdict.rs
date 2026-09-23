@@ -7,11 +7,20 @@
 //!    `exit_nonzero`. Exit 0 is necessary, never sufficient: SPPS also needs its
 //!    `spps_end_of_calculation` line, or the reason is `end_of_calculation_missing`.
 //! 2. **Lines.** No FAIL line (the reason is the row's id, once per id); every WARN line is
-//!    recorded in [`Verdict::warnings`].
+//!    recorded in [`Verdict::warnings`], in arrival order.
 //! 3. **Statistics** (SPPS): `stats_unreadable`, `stats_band_mismatch`, `particle_total_short`,
 //!    `particle_loss_excess`.
-//! 4. **Files.** `expected_file_missing`; for TCR also `nonfinite_result`, and
-//!    `result_unreadable` for a result table that does not decode.
+//! 4. **Files.** `expected_file_missing`; for TCR also `nonfinite_result` for any displayed value
+//!    that is NaN or ±inf (the `.gabe` tables' band rows, every `.csbin` value), and
+//!    `result_unreadable` for a result file that does not decode.
+//!
+//! **`nonfinite_result` has one exclusion,** the `Global` row of a `.gabe` table (see
+//! `table_reasons`). In particular `-inf` in a point receiver's `Direct` column fails the run:
+//! it is the level of zero direct energy (`TC_CalculationCore.cpp:160-184`: a source hidden by
+//! the scene adds nothing, then `10*log10f(0)`), and a source outside the room (P2
+//! `tcr_src_out`, a contract-listed silent failure) produces exactly that, with nothing else to
+//! tell it apart. A receiver hidden from every source in an otherwise valid room fails the same
+//! way; the reason's detail names both causes.
 //!
 //! Signals 3 and 4 are judged only after exit 0 without cancel: after a crash, a non-zero exit or
 //! a cancel the outputs are partial by construction, and listing them would bury the cause. The
@@ -25,8 +34,6 @@
 //!   SPPS exit 0 without its final line, nor for a TCR table that cannot be decoded.
 //! - An unreadable `config.xml` is `config_attribute_missing`, the code `validate_export` gives
 //!   the same fault (`validate/export.rs:403-441`): without it no output can be expected.
-//! - `nonfinite_result` allows one value besides the `Global` row: `-inf` in a point receiver's
-//!   `Direct` column, the direct level of a receiver no source can see (see `by_design`).
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -38,6 +45,7 @@ use serde::{Deserialize, Serialize};
 use super::classify::{Classified, Continuation, END_OF_CALCULATION, LineClass, rule_by_id};
 use super::expect::{ExpectError, Expectation, normalize};
 use super::stats::{self, ParticleStats, StatsError};
+use crate::formats::csbin::{self, Csbin};
 use crate::formats::gabe::{self, Gabe};
 use crate::process::Outcome;
 use crate::schema::SolverKind;
@@ -126,7 +134,7 @@ pub struct Verdict {
     /// Why the run is not OK: at most one entry per code, in signal order. Empty exactly when
     /// the status is OK.
     pub reasons: Vec<Reason>,
-    /// Every WARN line in arrival order: its row id and its text.
+    /// Every WARN line, in arrival order ([`Classified::seq`]): its row id and its text.
     pub warnings: Vec<Reason>,
 }
 
@@ -141,6 +149,43 @@ impl Verdict {
     }
 }
 
+/// A `.csbin`'s stored values, reduced to what [`judge`] checks.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SurfaceValues {
+    /// Values stored, over every receiver, face and recorded time step.
+    pub values: usize,
+    /// Of those, the NaN and ±inf ones.
+    pub nonfinite: usize,
+    /// Where the first non-finite value is: receiver, face, time step and value.
+    pub first_nonfinite: Option<String>,
+}
+
+impl SurfaceValues {
+    /// Counts every value of `c` and locates the first that is not finite.
+    pub fn of(c: &Csbin) -> Self {
+        let mut s = SurfaceValues::default();
+        for r in &c.receivers {
+            for (i, f) in r.faces.iter().enumerate() {
+                for rec in f.records.iter() {
+                    s.values += 1;
+                    if !rec.energy.is_finite() {
+                        s.nonfinite += 1;
+                        s.first_nonfinite.get_or_insert_with(|| {
+                            format!(
+                                "receiver '{}' face {i} time step {} is {}",
+                                r.name_lossy(),
+                                rec.time_step,
+                                rec.energy
+                            )
+                        });
+                    }
+                }
+            }
+        }
+        s
+    }
+}
+
 /// What a finished run left in its working directory, read once after the solver exits.
 #[derive(Debug, Default)]
 pub struct Outputs {
@@ -150,6 +195,9 @@ pub struct Outputs {
     pub stats: Option<Result<ParticleStats, StatsError>>,
     /// TCR: each existing [`Expectation::result_tables`] entry, decoded, or why not.
     pub tables: BTreeMap<String, Result<Gabe, String>>,
+    /// TCR: each existing [`Expectation::surface_tables`] entry, decoded and reduced to its
+    /// values, or why it could not be decoded.
+    pub surfaces: BTreeMap<String, Result<SurfaceValues, String>>,
 }
 
 fn list_files(root: &Path, dir: &Path, out: &mut BTreeMap<String, u64>) {
@@ -172,7 +220,7 @@ fn list_files(root: &Path, dir: &Path, out: &mut BTreeMap<String, u64>) {
 
 impl Outputs {
     /// Lists `dir` (the solver's working directory) and reads what the expectation says to
-    /// check: SPPS's statistics table, TCR's result tables.
+    /// check: SPPS's statistics table, TCR's result tables and surface-receiver files.
     pub fn read(dir: &Path, exp: &Expectation) -> Outputs {
         let mut files = BTreeMap::new();
         list_files(dir, dir, &mut files);
@@ -187,10 +235,22 @@ impl Outputs {
                 (t, g)
             })
             .collect();
+        let surfaces = exp
+            .surface_tables()
+            .into_iter()
+            .filter(|t| files.contains_key(t))
+            .map(|t| {
+                let c = csbin::read_file(&dir.join(&t))
+                    .map(|c| SurfaceValues::of(&c))
+                    .map_err(|e| e.to_string());
+                (t, c)
+            })
+            .collect();
         Outputs {
             files,
             stats,
             tables,
+            surfaces,
         }
     }
 }
@@ -200,7 +260,8 @@ impl Outputs {
 pub struct Evidence<'a> {
     pub solver: SolverKind,
     pub outcome: &'a Outcome,
-    /// Every classified line, in the order the classifier settled them.
+    /// Every classified line, in the order the classifier settled them (not always arrival
+    /// order: see [`Classified::seq`]).
     pub lines: &'a [Classified],
     /// What the run folder's `config.xml` asks for, or why it could not be read.
     pub expectation: Result<&'a Expectation, &'a ExpectError>,
@@ -421,25 +482,31 @@ fn file_reasons(exp: &Expectation, outputs: &Outputs, out: &mut Vec<Reason>) {
 /// The point-receiver column TCR writes the direct field in (`main_tc.cpp:131`).
 const DIRECT_COLUMN: &[u8] = b"Direct";
 
-/// Whether a non-finite value is one TCR writes by design, not by failure: `-inf` in a point
-/// receiver's `Direct` column is the level of zero direct energy, which a receiver no source can
-/// see receives (`TC_CalculationCore.cpp:160-184`: occluded sources add nothing, then
-/// `10*log10f(0)`). Measured on Night Mode's hall run: `R2 (far)`, all six bands.
-fn by_design(column: &[u8], v: f32) -> bool {
-    v == f32::NEG_INFINITY && column == DIRECT_COLUMN
+/// What `-inf` in a `Direct` column means, added once to the reason's detail: the level of zero
+/// direct energy (`TC_CalculationCore.cpp:160-184`).
+const NO_DIRECT_SOUND: &str = "; -inf in Direct means no direct sound from any source: a source \
+                               outside the room, or a receiver every source is hidden from";
+
+/// A result file that exists and is not empty (otherwise `expected_file_missing` covers it).
+fn present(outputs: &Outputs, path: &str) -> bool {
+    outputs.files.get(path).is_some_and(|&n| n > 0)
 }
 
-/// TCR: every float value in a requested band's row must be finite, except [`by_design`]. The
-/// `Global` row is left out: it is NaN by design in the non-energetic columns
-/// (`ctr/reportmanager.cpp:206-209`), and elsewhere it is derived from the band rows, which
-/// include uninitialised values for a band that is not computed (`ctr/tcTypes.h:38-48`).
+/// TCR: every float value in a requested band's row of each `.gabe` result table must be finite,
+/// and so must every value of each surface-receiver `.csbin`. The `Global` row is left out: it is
+/// NaN by design in the non-energetic columns (`ctr/reportmanager.cpp:206-209`), and elsewhere it
+/// is derived from the band rows, which include uninitialised values for a band that is not
+/// computed (`ctr/tcTypes.h:38-48`). The `.csbin` files have no such exception: their values are
+/// linear energies, zeroed before any band is computed (`coreTypes.cpp:91-99`; `rsbin.h:113`).
 fn table_reasons(exp: &Expectation, outputs: &Outputs, out: &mut Vec<Reason>) {
     let bands = exp.requested_bands();
     let mut unreadable: Vec<String> = Vec::new();
     let mut nonfinite: Vec<String> = Vec::new();
+    let mut nonfinite_values = 0usize;
+    let mut no_direct_sound = false;
     for t in exp.result_tables() {
-        if !outputs.files.get(&t).is_some_and(|&n| n > 0) {
-            continue; // expected_file_missing
+        if !present(outputs, &t) {
+            continue;
         }
         let g = match outputs.tables.get(&t) {
             None => {
@@ -452,21 +519,22 @@ fn table_reasons(exp: &Expectation, outputs: &Outputs, out: &mut Vec<Reason>) {
             }
             Some(Ok(g)) => g,
         };
-        let Some(labels) = g.row_labels() else {
+        if g.row_labels().is_none() {
             unreadable.push(format!("{t}: no row labels"));
             continue;
-        };
+        }
         for f in &bands {
             let label = format!("{f} Hz");
-            let Some(row) = labels.iter().position(|l| l == label.as_bytes()) else {
+            let Some(row) = g.row_index(label.as_bytes()) else {
                 unreadable.push(format!("{t}: no row for {label}"));
                 continue;
             };
             for col in &g.columns[1..] {
                 if let Some(&v) = col.floats().and_then(|v| v.get(row))
                     && !v.is_finite()
-                    && !by_design(col.name(), v)
                 {
+                    nonfinite_values += 1;
+                    no_direct_sound |= v == f32::NEG_INFINITY && col.name() == DIRECT_COLUMN;
                     nonfinite.push(format!(
                         "{t}: {} at {label} is {v}",
                         String::from_utf8_lossy(col.name())
@@ -475,15 +543,33 @@ fn table_reasons(exp: &Expectation, outputs: &Outputs, out: &mut Vec<Reason>) {
             }
         }
     }
+    for t in exp.surface_tables() {
+        if !present(outputs, &t) {
+            continue;
+        }
+        match outputs.surfaces.get(&t) {
+            None => unreadable.push(format!("{t}: not decoded")),
+            Some(Err(e)) => unreadable.push(format!("{t}: {e}")),
+            Some(Ok(s)) => {
+                if let Some(first) = &s.first_nonfinite {
+                    nonfinite_values += s.nonfinite;
+                    nonfinite.push(format!(
+                        "{t}: {} of {} values, first {first}",
+                        s.nonfinite, s.values
+                    ));
+                }
+            }
+        }
+    }
     if !nonfinite.is_empty() {
-        out.push(Reason::new(
-            NONFINITE_RESULT,
-            format!(
-                "{} displayed value(s) are not finite: {}",
-                nonfinite.len(),
-                first_of(&nonfinite, 5)
-            ),
-        ));
+        let mut detail = format!(
+            "{nonfinite_values} displayed value(s) are not finite: {}",
+            first_of(&nonfinite, 5)
+        );
+        if no_direct_sound {
+            detail.push_str(NO_DIRECT_SOUND);
+        }
+        out.push(Reason::new(NONFINITE_RESULT, detail));
     }
     if !unreadable.is_empty() {
         out.push(Reason::new(
@@ -499,10 +585,15 @@ fn table_reasons(exp: &Expectation, outputs: &Outputs, out: &mut Vec<Reason>) {
 
 /// Judges a run from its evidence.
 pub fn judge(ev: &Evidence) -> Verdict {
-    let warnings: Vec<Reason> = ev
+    let mut warned: Vec<&Classified> = ev
         .lines
         .iter()
         .filter(|l| l.class == LineClass::Warn)
+        .collect();
+    // The classifier settles an unclassified line one line late; record in arrival order.
+    warned.sort_by_key(|l| l.seq);
+    let warnings: Vec<Reason> = warned
+        .into_iter()
         .map(|l| Reason::new(l.id, l.line.text.clone()))
         .collect();
 

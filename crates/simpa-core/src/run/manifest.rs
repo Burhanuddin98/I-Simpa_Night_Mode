@@ -40,12 +40,18 @@ pub struct FileRef {
 pub enum RunSource {
     /// `simpa run <project>`: the project file, the variant written, and the project's hash.
     Project {
+        /// The project file, as the command line gave it.
         path: String,
+        /// The project file's sha256, lower-case hex, read when the run started.
         sha256: String,
+        /// The variant whose `config.xml` was written; `None` for the project's own settings.
         variant: Option<String>,
     },
     /// `simpa run-folder <fixture-dir>`: a folder copied in as it is, validator bypassed.
-    Fixture { path: String },
+    Fixture {
+        /// The fixture folder, as the command line gave it.
+        path: String,
+    },
 }
 
 /// The mesh the run used.
@@ -123,7 +129,9 @@ pub struct RunManifest {
     pub core_version: String,
     /// The upstream commit the solvers are built from (`simpa_core::SOLVER_COMMIT`).
     pub solver_commit: String,
+    /// What was run: a project, or a fixture folder with the validator bypassed.
     pub source: RunSource,
+    /// Which solver: `spps` or `tcr`.
     pub solver: SolverKind,
     /// The solver executable, absolute, and its sha256.
     pub exe: FileRef,
@@ -137,14 +145,60 @@ pub struct RunManifest {
     /// The input files in `solve/` before launch (`config.xml`, the `.cbin`, the `.mbin`,
     /// directivity files), relative to `solve/`, with their hashes.
     pub inputs: Vec<FileRef>,
+    /// The mesh the run used; `None` when the run ended before one was chosen.
     pub mesh: Option<MeshRef>,
+    /// How the process ended: exit code as a raw `u32` (`None` when there was none), whether it
+    /// was cancelled, and its wall time in ms.
     pub outcome: Outcome,
     /// Lines per class, both streams together.
     pub lines: ClassCounts,
+    /// Files in `solve/` after the run, against the expected list.
     pub files: FileCounts,
-    /// The loss limit the verdict used (`docs/m5-m6-design.md`, decision 9).
+    /// The loss limit the verdict used (`docs/m5-m6-design.md`, decision 9). JSON has no NaN or
+    /// infinity, so those are written as the strings `"NaN"`, `"inf"` and `"-inf"`.
+    #[serde(with = "any_f64")]
     pub loss_limit: f64,
+    /// The judgement: status, reasons and the WARN lines ([`Verdict`]).
     pub verdict: Verdict,
+}
+
+/// An `f64` as a JSON number when finite, otherwise as `"NaN"`, `"inf"` or `"-inf"`. serde_json
+/// writes a non-finite `f64` as `null`, which does not read back into an `f64`.
+mod any_f64 {
+    use serde::de::Error as _;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(v: &f64, s: S) -> Result<S::Ok, S::Error> {
+        if v.is_finite() {
+            s.serialize_f64(*v)
+        } else if v.is_nan() {
+            s.serialize_str("NaN")
+        } else if *v > 0.0 {
+            s.serialize_str("inf")
+        } else {
+            s.serialize_str("-inf")
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Repr {
+            Number(f64),
+            Text(String),
+        }
+        match Repr::deserialize(d)? {
+            Repr::Number(v) => Ok(v),
+            Repr::Text(t) => match t.as_str() {
+                "NaN" => Ok(f64::NAN),
+                "inf" => Ok(f64::INFINITY),
+                "-inf" => Ok(f64::NEG_INFINITY),
+                other => Err(D::Error::custom(format!(
+                    "{other:?} is not a number, \"NaN\", \"inf\" or \"-inf\""
+                ))),
+            },
+        }
+    }
 }
 
 impl RunManifest {

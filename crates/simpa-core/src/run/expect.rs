@@ -11,7 +11,7 @@
 //! as children, `cxml.cpp:61-64`).
 //!
 //! **Requested bands.** The solvers compute a band only when `docalc` is exactly `"1"`
-//! (`base_core_configuration.cpp:104`). The expectation asks for every band whose `docalc` is not
+//! (`base_core_configuration.cpp:106`). The expectation asks for every band whose `docalc` is not
 //! `"0"`, so a band the solver drops over a malformed switch shows up as missing outputs and as
 //! `stats_band_mismatch`, as P2 `docalc_true` did.
 //!
@@ -454,24 +454,49 @@ impl Expectation {
                 for lbl in &self.point_receivers {
                     v.push(format!("{}/{lbl}.gabe", fixed::TCR_POINT_RECEIVER_DIR));
                 }
-                for prefix in [&n.direct_prefix, &n.sabine_prefix, &n.eyring_prefix] {
-                    let root = format!("{prefix}{rss}");
-                    for f in bands
-                        .iter()
-                        .map(|f| format!("{f} Hz"))
-                        .chain([fixed::GLOBAL.to_string()])
-                    {
-                        if self.surface_files() {
-                            v.push(format!("{root}{f}/{}", n.recepteurss_filename));
-                        }
-                        if self.cutting_planes > 0 {
-                            v.push(format!("{root}{f}/{}", n.recepteurss_cut_filename));
-                        }
-                    }
-                }
+                v.extend(self.tcr_surface_files());
             }
         }
         dedup(v.iter().map(|p| normalize(p)).collect())
+    }
+
+    /// TCR's surface-receiver and cutting-plane files, as the solver joins their names: per
+    /// computed band and `Global`, under each of the three result prefixes.
+    fn tcr_surface_files(&self) -> Vec<String> {
+        let n = &self.names;
+        let rss = &n.recepteurss_directory;
+        let mut v = Vec::new();
+        for prefix in [&n.direct_prefix, &n.sabine_prefix, &n.eyring_prefix] {
+            let root = format!("{prefix}{rss}");
+            for f in self
+                .requested_bands()
+                .iter()
+                .map(|f| format!("{f} Hz"))
+                .chain([fixed::GLOBAL.to_string()])
+            {
+                if self.surface_files() {
+                    v.push(format!("{root}{f}/{}", n.recepteurss_filename));
+                }
+                if self.cutting_planes > 0 {
+                    v.push(format!("{root}{f}/{}", n.recepteurss_cut_filename));
+                }
+            }
+        }
+        v
+    }
+
+    /// The `.csbin` files whose values must be finite (TCR's `nonfinite_result`): every
+    /// surface-receiver and cutting-plane file TCR must write, [`normalize`]d. Empty for SPPS.
+    pub fn surface_tables(&self) -> Vec<String> {
+        if self.solver != SolverKind::Tcr {
+            return Vec::new();
+        }
+        dedup(
+            self.tcr_surface_files()
+                .iter()
+                .map(|p| normalize(p))
+                .collect(),
+        )
     }
 }
 

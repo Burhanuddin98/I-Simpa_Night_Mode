@@ -18,8 +18,10 @@
 //!
 //! The [`Classifier`] sees lines one at a time, in arrival order. To recognise the line *before*
 //! `tetra_mesh_empty` it holds back a line that matches no pattern until the next line on the same
-//! stream arrives, or until [`Classifier::finish`]: an unclassified line is therefore reported one
-//! line late. A line that matches a pattern is never held.
+//! stream arrives, or until [`Classifier::finish`]: an unclassified line is therefore settled one
+//! line late, and a live consumer sees it only then. A line that matches a pattern is never held.
+//! Settled lines can thus leave in another order than they arrived; each carries its arrival index
+//! ([`Classified::seq`]), by which the verdict orders what it records.
 
 use std::sync::LazyLock;
 
@@ -351,10 +353,12 @@ pub struct Classified {
     pub continuation: bool,
     /// The percentage of a PROGRESS line.
     pub progress: Option<f64>,
+    /// The line's arrival index: 0 for the first line pushed, counting both streams.
+    pub seq: u64,
 }
 
 impl Classified {
-    fn new(line: Line, rule: &'static LineRule, continuation: bool) -> Self {
+    fn new(line: Line, seq: u64, rule: &'static LineRule, continuation: bool) -> Self {
         let progress = if rule.class == LineClass::Progress && !continuation {
             progress_value(&line.text)
         } else {
@@ -366,6 +370,7 @@ impl Classified {
             class: rule.class,
             continuation,
             progress,
+            seq,
         }
     }
 }
@@ -374,15 +379,17 @@ impl Classified {
 struct StreamState {
     /// The next line on this stream is the path after `scene_mesh_unreadable`.
     path_follows: bool,
-    /// A line that matched nothing, held until the next line shows whether it is the file name
-    /// before `tetra_mesh_empty`.
-    held: Option<Line>,
+    /// A line that matched nothing, with its arrival index, held until the next line shows
+    /// whether it is the file name before `tetra_mesh_empty`.
+    held: Option<(Line, u64)>,
 }
 
 /// Classifies lines as they arrive, holding the continuation-line state per stream.
 #[derive(Debug, Default)]
 pub struct Classifier {
     streams: [StreamState; 2],
+    /// Lines pushed so far: the next line's [`Classified::seq`].
+    pushed: u64,
 }
 
 fn slot(stream: Stream) -> usize {
@@ -398,45 +405,51 @@ impl Classifier {
     }
 
     /// Takes the next line and returns the lines it settles, in order: none (the line is held),
-    /// one, or two (a held line, then this one).
+    /// one, or two (a held line, then this one). A held line is an unclassified one, settled by
+    /// the next line on its stream or by [`Classifier::finish`].
     pub fn push(&mut self, line: &Line) -> Vec<Classified> {
+        let seq = self.pushed;
+        self.pushed += 1;
         let state = &mut self.streams[slot(line.stream)];
         if state.path_follows {
             state.path_follows = false;
             // A held line was settled when the event line arrived, so there is none here.
             let event = rule_by_id("scene_mesh_unreadable").expect("row exists");
-            return vec![Classified::new(line.clone(), event, true)];
+            return vec![Classified::new(line.clone(), seq, event, true)];
         }
         let rule = match_text(&line.text);
         let mut out = Vec::with_capacity(2);
         if rule.pattern.is_none() {
-            if let Some(held) = state.held.replace(line.clone()) {
-                out.push(Classified::new(held, rule, false));
+            if let Some((held, at)) = state.held.replace((line.clone(), seq)) {
+                out.push(Classified::new(held, at, rule, false));
             }
             return out;
         }
-        if let Some(held) = state.held.take() {
+        if let Some((held, at)) = state.held.take() {
             out.push(if rule.continuation == Some(Continuation::Previous) {
-                Classified::new(held, rule, true)
+                Classified::new(held, at, rule, true)
             } else {
-                Classified::new(held, unclassified_rule(), false)
+                Classified::new(held, at, unclassified_rule(), false)
             });
         }
         state.path_follows = rule.continuation == Some(Continuation::Next);
-        out.push(Classified::new(line.clone(), rule, false));
+        out.push(Classified::new(line.clone(), seq, rule, false));
         out
     }
 
-    /// Settles the held lines at the end of both streams (stdout's first).
+    /// Settles the held lines at the end of both streams, in arrival order.
     pub fn finish(&mut self) -> Vec<Classified> {
-        self.streams
+        let mut out: Vec<Classified> = self
+            .streams
             .iter_mut()
             .filter_map(|s| {
                 s.path_follows = false;
                 s.held.take()
             })
-            .map(|held| Classified::new(held, unclassified_rule(), false))
-            .collect()
+            .map(|(held, at)| Classified::new(held, at, unclassified_rule(), false))
+            .collect();
+        out.sort_by_key(|c| c.seq);
+        out
     }
 }
 
@@ -566,11 +579,13 @@ mod tests {
                     "Unable to read the scene mesh file :"
                 ),
                 ("scene_mesh_unreadable", true, r"C:\run\mesh.cbin"),
-                // Both held to the end; finish() settles stdout's first.
-                (UNCLASSIFIED, false, r"C:\run\another"),
+                // Both held to the end; finish() settles them in arrival order.
                 (UNCLASSIFIED, false, "something on stderr"),
+                (UNCLASSIFIED, false, r"C:\run\another"),
             ]
         );
+        let seq: Vec<u64> = c.iter().map(|c| c.seq).collect();
+        assert_eq!(seq, [0, 2, 1, 3]);
     }
 
     #[test]

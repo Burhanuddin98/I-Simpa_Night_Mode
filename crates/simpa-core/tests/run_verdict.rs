@@ -9,7 +9,7 @@ use simpa_core::process::{Line, Outcome, Stream};
 use simpa_core::run::verdict::codes::*;
 use simpa_core::run::{
     BandStats, ExpectError, Expectation, LINE_RULES, LineClass, Outputs, StatsError, Status,
-    Verdict, classify_all, judge,
+    SurfaceValues, Verdict, classify_all, judge,
 };
 use simpa_core::run::{DEFAULT_LOSS_LIMIT, Evidence};
 use simpa_core::schema::SolverKind;
@@ -370,6 +370,39 @@ fn warn_lines_are_recorded_and_do_not_fail_the_run() {
 }
 
 #[test]
+fn warnings_keep_arrival_order_across_streams() {
+    // The classifier holds the stderr line until its stream's next line (here: until finish),
+    // so it is settled after the stdout WARN that arrived later.
+    let exp = tutorial1_expectation(SolverKind::Spps);
+    let mut lines = clean_spps_lines();
+    lines.insert(1, line(Stream::Stderr, "first, undocumented"));
+    lines.insert(
+        2,
+        line(
+            Stream::Stdout,
+            "Source at tetrahedron vertex, move source position from [1;2;3] to [1.01;2;3]",
+        ),
+    );
+    let classified = classify_all(&lines);
+    let settled: Vec<&str> = classified
+        .iter()
+        .filter(|l| l.class == LineClass::Warn)
+        .map(|l| l.id)
+        .collect();
+    assert_eq!(settled, ["source_moved_off_vertex", "unclassified_line"]);
+    let v = verdict_of(
+        SolverKind::Spps,
+        &exited(0),
+        &lines,
+        &exp,
+        &good_outputs(&exp),
+        DEFAULT_LOSS_LIMIT,
+    );
+    let warned: Vec<&str> = v.warnings.iter().map(|w| w.code.as_str()).collect();
+    assert_eq!(warned, ["unclassified_line", "source_moved_off_vertex"]);
+}
+
+#[test]
 fn config_attribute_missing_when_the_config_cannot_be_read() {
     let classified = classify_all(&clean_spps_lines());
     let err = ExpectError::NotXml("unexpected end of stream".into());
@@ -597,25 +630,82 @@ fn direct_level(label: &[u8], value: f32) -> Verdict {
 }
 
 #[test]
-fn an_occluded_receivers_direct_level_is_minus_infinity_by_design() {
-    // TCR adds no direct energy from a source it cannot see, then takes 10 log10 of 0.
-    assert!(direct_level(b"Direct\rdB SPL", f32::NEG_INFINITY).is_ok());
-    // Only -inf, and only in that column.
-    assert_only(
-        &direct_level(b"Direct\rdB SPL", f32::NAN),
-        Status::Fail,
-        NONFINITE_RESULT,
+fn minus_infinity_in_a_direct_column_fails_the_run() {
+    // TCR adds no direct energy from a source it cannot see, then takes 10 log10 of 0. A source
+    // outside the room (P2 tcr_src_out) gives exactly this, so it is not excused; the detail says
+    // what it most likely means.
+    let v = direct_level(b"Direct\rdB SPL", f32::NEG_INFINITY);
+    assert_only(&v, Status::Fail, NONFINITE_RESULT);
+    let detail = &v.reasons[0].detail;
+    assert!(detail.contains("Direct at 125 Hz is -inf;"), "{detail}");
+    assert!(
+        detail.ends_with("a receiver every source is hidden from"),
+        "{detail}"
     );
-    assert_only(
-        &direct_level(b"Direct\rdB SPL", f32::INFINITY),
-        Status::Fail,
-        NONFINITE_RESULT,
+    // Other values and columns fail without the hint.
+    for (label, value) in [
+        (&b"Direct\rdB SPL"[..], f32::NAN),
+        (b"Direct\rdB SPL", f32::INFINITY),
+        (b"Total (Sabine)\rdB SPL", f32::NEG_INFINITY),
+    ] {
+        let v = direct_level(label, value);
+        assert_only(&v, Status::Fail, NONFINITE_RESULT);
+        assert!(!v.reasons[0].detail.contains("no direct sound"), "{v:#?}");
+    }
+}
+
+fn first_surface(o: &mut Outputs) -> &mut Result<SurfaceValues, String> {
+    o.surfaces.values_mut().next().unwrap()
+}
+
+#[test]
+fn nonfinite_result_in_a_surface_receiver_file() {
+    // P2 tcr_oneband_src: NaN levels from a band error reach the surface maps too.
+    let v = broken(SolverKind::Tcr, |_, o| {
+        *first_surface(o) = Ok(SurfaceValues {
+            values: 12,
+            nonfinite: 3,
+            first_nonfinite: Some("receiver 'Floor' face 0 time step 0 is NaN".into()),
+        });
+    });
+    assert_only(&v, Status::Fail, NONFINITE_RESULT);
+    assert!(v.reasons[0].detail.contains("3 of 12 values"), "{v:#?}");
+    // Tutorial 1's TCR run has 84 surface-receiver files, every one of them checked.
+    let exp = tutorial1_expectation(SolverKind::Tcr);
+    assert_eq!(exp.surface_tables().len(), 84);
+    assert!(
+        exp.surface_tables()
+            .iter()
+            .all(|t| t.ends_with(".csbin") && exp.expected_files().contains(t))
     );
-    assert_only(
-        &direct_level(b"Total (Sabine)\rdB SPL", f32::NEG_INFINITY),
-        Status::Fail,
-        NONFINITE_RESULT,
+    assert!(
+        tutorial1_expectation(SolverKind::Spps)
+            .surface_tables()
+            .is_empty()
     );
+}
+
+#[test]
+fn surface_values_count_what_a_csbin_holds() {
+    let path = fixture("upstream/lib_interface/rs_cut.csbin");
+    let mut c = simpa_core::formats::csbin::read_file(&path).unwrap();
+    let clean = SurfaceValues::of(&c);
+    assert!(clean.values > 0, "{clean:?}");
+    assert_eq!(
+        (clean.nonfinite, clean.first_nonfinite.as_deref()),
+        (0, None)
+    );
+    // One value made NaN, one +inf: both are counted, the first is located.
+    let face = c.receivers[0]
+        .faces
+        .iter_mut()
+        .find(|f| f.records.len() >= 2)
+        .unwrap();
+    face.records[0].energy = f32::NAN;
+    face.records[1].energy = f32::INFINITY;
+    let bad = SurfaceValues::of(&c);
+    assert_eq!((bad.values, bad.nonfinite), (clean.values, 2));
+    assert!(bad.first_nonfinite.unwrap().ends_with("is NaN"));
 }
 
 #[test]
@@ -677,6 +767,17 @@ fn result_unreadable() {
         }
     });
     assert_only(&v, Status::Fail, RESULT_UNREADABLE);
+    // A surface-receiver file that does not decode, or was never decoded.
+    let v = broken(SolverKind::Tcr, |_, o| {
+        *first_surface(o) = Err("csbin: truncated".into());
+    });
+    assert_only(&v, Status::Fail, RESULT_UNREADABLE);
+    let v = broken(SolverKind::Tcr, |_, o| o.surfaces.clear());
+    assert_only(&v, Status::Fail, RESULT_UNREADABLE);
+    assert!(
+        v.reasons[0].detail.starts_with("84 result table(s)"),
+        "{v:#?}"
+    );
 }
 
 #[test]
