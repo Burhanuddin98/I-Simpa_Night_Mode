@@ -3,6 +3,8 @@ use std::process::ExitCode;
 
 use simpa_core::{config_xml, formats, schema, validate};
 
+mod mesh_run;
+
 const USAGE: &str = "usage:
   simpa --version
   simpa dump <cbin|mbin|poly|tetgen|gabe|csbin|pbin> <file>   canonical dump of a solver file
@@ -15,7 +17,22 @@ const USAGE: &str = "usage:
                [--weld by-format|exact|off] [--keep-groups <previous.simpa>] [--json]
   simpa import-proj <file.proj> <out.simpa> [--json]         import an upstream I-Simpa project
   simpa check <model|project.simpa> [--unit ..] [--up ..] [--json]   exit 3 when refused
-  simpa repair <in> <out.simpa> [--weld-tolerance <m>] [--json]      exit 3 when refused";
+  simpa repair <in> <out.simpa> [--weld-tolerance <m>] [--json]      exit 3 when refused
+  simpa mesh <project.simpa | file.poly> --out <dir> [--json] [--tetgen <exe>]
+             [--from-tetgen <dir> [--basename <b>]] [--cancel-after-ms <n>]
+                                                              TetGen's lines on stderr; exit 0, 2, 3, 4, 130
+  simpa mesh-verify <dir> [--json] [--room-id <n>] [--fittings <a,b,..>]   exit 4 when it fails
+  simpa run <project.simpa> --solver spps|tcr [--variant <v>] [--mesh <dir>] [--runs <root>]
+            [--loss-limit <f>] [--cancel-after-ms <n>] [--cancel-after-progress <p>]
+            [--solver-exe <exe>] [--tetgen <exe>] [--json]
+  simpa run-folder <dir> --solver spps|tcr [--runs <root>] [--solver-exe <exe>] [--loss-limit <f>]
+            [--cancel-after-ms <n>] [--cancel-after-progress <p>] [--json]
+      run and run-folder print each solver line on stderr as 'CLASS  text', and the run manifest
+      (--json) or one verdict line naming the run folder on stdout. The runs root defaults to
+      'runs' beside the project (run) or in the current folder (run-folder). Exit 0 OK,
+      2 usage or validation, 3 geometry refused, 4 mesh, 5 solver FAIL or CRASH, 130 cancelled.
+  Executables: --solver-exe / --tetgen, else $SIMPA_SOLVERS_DIR, else beside simpa.exe (its
+  solvers/ folder first), else the nearest target/solvers/bin above it.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -40,6 +57,10 @@ fn main() -> ExitCode {
         ["check", rest @ ..] => check_cmd(rest),
         ["repair", rest @ ..] => repair_cmd(rest),
         ["export-config", rest @ ..] => export_config(rest),
+        ["mesh", rest @ ..] => mesh_run::mesh_cmd(rest),
+        ["mesh-verify", rest @ ..] => mesh_run::mesh_verify_cmd(rest),
+        ["run", rest @ ..] => mesh_run::run_cmd(rest),
+        ["run-folder", rest @ ..] => mesh_run::run_folder_cmd(rest),
         [command, ..] => fail(&format!("unknown command '{command}'\n{USAGE}")),
     }
 }
