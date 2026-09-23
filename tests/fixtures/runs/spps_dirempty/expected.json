@@ -5,6 +5,7 @@
     "xml_property_missing",
     "crash_access_violation"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Balloon source without a directivity_file attribute: row xml_property_missing, then a NULL directivity and 0xC0000005 (SC:82, SC:266, VERIFIED S run_dirempty; RAW:1465).",
   "pre_launch": {
@@ -14,7 +15,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

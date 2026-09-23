@@ -2,6 +2,7 @@
   "solver": "spps",
   "status": "OK",
   "codes": [],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "blin = 0.001: a sound-speed gradient, so both ground_height lines (SC:311, coreinitialisation.cpp:139, 148, INFO); otherwise spps_ok.",
   "pre_launch": {
@@ -11,7 +12,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

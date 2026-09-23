@@ -1,11 +1,12 @@
-"""Tests of the fixture generators' checks: each check is shown saying no to a bad input.
+r"""Tests of the fixture generators' checks: each check is shown saying no to a bad input.
 
     python tools/fixture-gen/test_fixture_gen.py
 
 Needs the `simpa` CLI: $SIMPA_CLI, else $CARGO_TARGET_DIR/debug/simpa.exe, else
-<repo>/target/debug/simpa.exe. The end-to-end test also needs the solvers: $SIMPA_SOLVERS_DIR,
-else <repo>/target/solvers/bin. A missing executable fails the test that needs it, loudly;
-nothing is skipped.
+<repo>/target/debug/simpa.exe. The end-to-end tests also need the solvers: $SIMPA_SOLVERS_DIR,
+else <repo>/target/solvers/bin. The stub-text tests need upstream's source: $SIMPA_UPSTREAM,
+else B:\repos\I-Simpa-upstream. A missing one fails the test that needs it, loudly; nothing is
+skipped.
 """
 import copy
 import json
@@ -29,7 +30,13 @@ REPO = HERE.parents[1]
 RUNS = REPO / "tests/fixtures/runs"
 ROOMS = REPO / "tests/fixtures/rooms"
 CONTRACT = REPO / "docs/solver-contract.md"
-UPSTREAM = Path(os.environ.get("SIMPA_UPSTREAM", r"B:\repos\I-Simpa-upstream"))
+
+
+def upstream_dir() -> Path:
+    d = Path(os.environ.get("SIMPA_UPSTREAM") or r"B:\repos\I-Simpa-upstream")
+    if not (d / "src").is_dir():
+        raise AssertionError(f"upstream checkout not found at {d}; set SIMPA_UPSTREAM")
+    return d
 
 
 def simpa_exe() -> Path:
@@ -142,18 +149,93 @@ class MeshCheck(unittest.TestCase):
             self.assertEqual(r["counts"]["marker_geometry_mismatches"], 1)
             self.assertEqual(r["counts"]["uncovered_scene_faces"], 1)
 
+    def test_the_broken_halls_slivers_depend_on_the_floor(self):
+        r = self.check("tcr_broken_hall")
+        self.assertEqual(r["counts"], {"degenerate_tets": 65, "unmarked_boundary_faces": 267,
+                                       "uncovered_scene_faces": 338})
+        self.assertEqual(r["codes_any_of"], [["degenerate_tets", "inverted_tets"]])
+        sweep = {s["floor"]: (s["degenerate_tets"], s["inverted_tets"]) for s in r["floor_sweep"]}
+        self.assertEqual(sweep["0"], (0, 22))
+        self.assertEqual(sweep["2^-23"], (65, 0))
+
+    def test_a_floor_that_alone_decides_the_mesh_is_refused(self):
+        sweep = {None: {"degenerate_tets": 0, "inverted_tets": 0},
+                 -23: {"degenerate_tets": 3, "inverted_tets": 0}}
+        with self.assertRaises(SystemExit):
+            mx.floor_dependence("x", sweep, {"degenerate_tets": 3})
+
+    def test_a_count_some_floors_lack_is_not_required(self):
+        sweep = {None: {"degenerate_tets": 0, "inverted_tets": 0},
+                 -23: {"degenerate_tets": 3, "inverted_tets": 0}}
+        moving, any_of = mx.floor_dependence("x", sweep, {"degenerate_tets": 3, "index_errors": 1})
+        self.assertEqual((moving, any_of), (["degenerate_tets"], []))
+        sweep[None]["inverted_tets"] = 2
+        moving, any_of = mx.floor_dependence("x", sweep, {"degenerate_tets": 3})
+        self.assertEqual(any_of, [["degenerate_tets", "inverted_tets"]])
+
 
 class Expectations(unittest.TestCase):
     def test_a_verdict_that_differs_from_the_expectation_is_reported(self):
-        got = {"status": "FAIL", "codes": ["exit_nonzero"], "warnings": [],
-               "pre_launch": {"mesh_check": "pass"}, "observed": {}}
-        self.assertTrue(mx.disagreements("spps_ok", got))
+        rows = mx.load_rows(CONTRACT)
+        got = {"status": "FAIL", "codes": ["exit_nonzero"], "codes_any_of": [], "warnings": [],
+               "pre_launch": {"mesh_check": "pass"}, "observed": {}, "_lines": []}
+        self.assertTrue(mx.disagreements("spps_ok", got, rows))
         got_ok = dict(got, status="OK", codes=[])
-        self.assertEqual(mx.disagreements("spps_ok", got_ok), [])
+        self.assertEqual(mx.disagreements("spps_ok", got_ok, rows), [])
+
+    def test_a_missing_any_of_group_is_reported(self):
+        rows = mx.load_rows(CONTRACT)
+        pre = mx.mesh_check(RUNS / "tcr_broken_hall", mx.Config(RUNS / "tcr_broken_hall/config.xml"),
+                            mx.Simpa(simpa_exe()))
+        got = {"status": "FAIL",
+               "codes": ["mesh_invalid", "unmarked_boundary_faces", "uncovered_scene_faces"],
+               "codes_any_of": pre["codes_any_of"], "warnings": [], "pre_launch": pre,
+               "observed": {"status": "FAIL", "codes": ["xml_property_missing"]}, "_lines": []}
+        self.assertEqual(mx.disagreements("tcr_broken_hall", got, rows), [])
+        bad = mx.disagreements("tcr_broken_hall", dict(got, codes_any_of=[]), rows)
+        self.assertEqual(len(bad), 1)
+        self.assertIn("codes_any_of", bad[0])
+
+    def judge_stub(self, name: str, edit) -> list:
+        """disagreements() for a copy of the committed stub `name` with edit(lines) applied."""
+        rows = mx.load_rows(CONTRACT)
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / name
+            shutil.copytree(RUNS / name, d)
+            spec = json.loads((d / "stub.json").read_text(encoding="utf-8"))
+            edit(spec["lines"])
+            (d / "stub.json").write_text(json.dumps(spec, ensure_ascii=False), encoding="utf-8")
+            got = mx.judge(d, Path(tmp), rows, mx.Simpa(simpa_exe()))
+        return mx.disagreements(name, got, rows)
+
+    def test_a_stub_whose_final_stderr_line_gains_a_newline_is_refused(self):
+        name = "stub_particle_loss_unterminated"
+        self.assertEqual(self.judge_stub(name, lambda lines: None), [])
+
+        def terminate(lines):
+            self.assertEqual((lines[-1]["stream"], lines[-1]["newline"]), ("stderr", False))
+            lines[-1]["newline"] = True
+
+        bad = self.judge_stub(name, terminate)
+        self.assertTrue(any("particle_loss_reported ends in a newline" in m for m in bad), bad)
+        self.assertTrue(any("final stderr line must be" in m for m in bad), bad)
+
+    def test_a_stub_line_moved_to_the_wrong_stream_is_refused(self):
+        name = "stub_degenerate_tetrahedron"
+        self.assertEqual(self.judge_stub(name, lambda lines: None), [])
+
+        def to_stdout(lines):
+            self.assertEqual(lines[1]["stream"], "stderr")
+            lines[1].update(stream="stdout", newline=True)
+
+        bad = self.judge_stub(name, to_stdout)
+        self.assertTrue(any("degenerate_tetrahedron on stdout, the contract says stderr" in m
+                            for m in bad), bad)
+        self.assertTrue(any("no stderr at all" in m for m in bad), bad)
 
     def test_a_stub_text_with_no_evidence_is_reported(self):
         stub = {"_lines": lines(stdout=b"Invented text\n")}
-        bad = mx.check_stub_texts({"stub_x": stub}, UPSTREAM, mx.load_rows(CONTRACT))
+        bad = mx.check_stub_texts({"stub_x": stub}, upstream_dir(), mx.load_rows(CONTRACT))
         self.assertEqual(len(bad), 1)
         self.assertIn("Invented text", bad[0])
 
@@ -162,7 +244,7 @@ class Expectations(unittest.TestCase):
         mx.STUB_EVIDENCE["The path of the XML configuration file must be given!"] = (
             "source", "spps/sppsNantes.cpp", 287)
         try:
-            bad = mx.check_stub_texts({"stub_x": stub}, UPSTREAM, mx.load_rows(CONTRACT))
+            bad = mx.check_stub_texts({"stub_x": stub}, upstream_dir(), mx.load_rows(CONTRACT))
         finally:
             del mx.STUB_EVIDENCE["The path of the XML configuration file must be given!"]
         self.assertEqual(len(bad), 1)
@@ -177,7 +259,8 @@ class Expectations(unittest.TestCase):
         self.assertEqual(len(cases), len(mx.EXPECT))
         for case in cases:
             doc = json.loads((case / "expected.json").read_text(encoding="utf-8"))
-            self.assertLessEqual(set(doc["codes"]) | set(doc["warnings"]), known, case.name)
+            any_of = {x for group in doc["codes_any_of"] for x in group}
+            self.assertLessEqual(set(doc["codes"]) | set(doc["warnings"]) | any_of, known, case.name)
             self.assertIn(doc["status"], {"OK", "FAIL", "CRASH"})
             self.assertEqual(doc["status"] == "OK", doc["codes"] == [], case.name)
             fc.check_self_contained(case)
@@ -277,6 +360,37 @@ class EndToEnd(unittest.TestCase):
             self.assertNotEqual(r.returncode, 0)
             self.assertIn("solver not found", r.stdout + r.stderr)
 
+    def run_cases(self, out: Path, case: str) -> subprocess.CompletedProcess:
+        env = dict(os.environ, SIMPA_SOLVERS_DIR=str(solvers_dir()))
+        return subprocess.run(["powershell", "-NoProfile", "-File", str(HERE / "runsolvers.ps1"),
+                               "-Runs", str(RUNS), "-Out", str(out), "-Case", case],
+                              capture_output=True, text=True, env=env)
+
+    def test_the_runner_refuses_an_unknown_case(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for case in ("spps_okk", "spps_ok,nope", "stub_config_path_missing"):
+                out = Path(tmp) / case.replace(",", "_")
+                r = self.run_cases(out, case)
+                self.assertNotEqual(r.returncode, 0, case)
+                self.assertIn("unknown case", r.stdout + r.stderr, case)
+                self.assertEqual(list(out.iterdir()), [], case)
+
+    def test_the_runner_takes_a_comma_list_under_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            r = self.run_cases(Path(tmp), "spps_ok,tcr_ok")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()), ["spps_ok", "tcr_ok"])
+            self.assertIn("ran 2 case(s)", r.stdout)
+
+    def test_mkexpected_reads_simpa_upstream(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env = dict(os.environ, SIMPA_UPSTREAM=str(Path(tmp) / "none"))
+            r = subprocess.run([sys.executable, str(HERE / "mkexpected.py"), str(RUNS), tmp,
+                                "--simpa", str(simpa_exe()), "--check"],
+                               capture_output=True, text=True, env=env)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("upstream checkout not found", r.stderr)
+
     def test_committed_expectations_reproduce_and_a_tampered_one_is_caught(self):
         with tempfile.TemporaryDirectory() as tmp:
             obs = Path(tmp) / "observed"
@@ -285,7 +399,7 @@ class EndToEnd(unittest.TestCase):
                                 "-Runs", str(RUNS), "-Out", str(obs)], capture_output=True, text=True, env=env)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             check = [sys.executable, str(HERE / "mkexpected.py"), None, str(obs), "--simpa", str(simpa_exe()),
-                     "--check"]
+                     "--upstream", str(upstream_dir()), "--check"]
             r = subprocess.run(check[:2] + [str(RUNS)] + check[3:], capture_output=True, text=True)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             runs = Path(tmp) / "runs"

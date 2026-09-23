@@ -5,6 +5,7 @@
     "material_missing",
     "exit_nonzero"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Faces use material 7, undeclared: row material_missing on stderr (SC:321, coreinitialisation.cpp:430) and exit 0xFFFFFFFF (SC:264, VERIFIED S run_mat7miss; RAW:1477).",
   "pre_launch": {
@@ -14,7 +15,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

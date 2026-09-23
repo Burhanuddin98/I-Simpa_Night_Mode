@@ -4,6 +4,7 @@
   "codes": [
     "scene_mesh_unreadable"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Row scene_mesh_unreadable and its continuation path (SC:315, SC:299-301). Text from spps_unreadable_mesh, refused before launch.",
   "pre_launch": {
@@ -13,7 +14,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "stub.json, played back by the stub solver (not run here)",

@@ -2,6 +2,7 @@
   "solver": "spps",
   "status": "OK",
   "codes": [],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Positive baseline: exit 0 with spps_end_of_calculation (SC:343), band columns 500 and 1000 Hz, total 2000 = nbparticules x 1 source per band and no loss (SC:352-361), every expected file present (SC:224-241).",
   "pre_launch": {
@@ -11,7 +12,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

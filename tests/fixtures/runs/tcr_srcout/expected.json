@@ -4,6 +4,7 @@
   "codes": [
     "nonfinite_result"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Source outside the room: TCR exits 0 with results (SC:71, SC:273; RAW:1435), but the direct field at R1 is -inf in every band, which nonfinite_result catches (SC:365).",
   "pre_launch": {
@@ -13,7 +14,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",

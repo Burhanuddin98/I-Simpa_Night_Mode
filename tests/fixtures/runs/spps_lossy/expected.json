@@ -5,6 +5,7 @@
     "mesh_invalid",
     "unmarked_boundary_faces"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Every neighbour link cut to -2: the 12 interior faces become faces with no neighbour and no marker, which decision 6 forbids, so run-folder refuses it before launch. Run anyway, SPPS loses 4000 of 4000 particles to meshing, prints row particle_loss_reported without a newline (SC:325, sppsNantes.cpp:438) and exits 0 (SC:263, VERIFIED S run_lossy; RAW:1541).",
   "pre_launch": {
@@ -18,7 +19,9 @@
     },
     "codes": [
       "unmarked_boundary_faces"
-    ]
+    ],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

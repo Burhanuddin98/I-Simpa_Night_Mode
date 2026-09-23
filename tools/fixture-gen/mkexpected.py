@@ -12,13 +12,17 @@ For every fixture this script computes, independently of the Rust crates:
    non-finite values), read through `simpa dump`;
 2. the pre-launch mesh check `run-folder` makes (docs/m5-m6-design.md, "Run folder"): the
    decision-6 invariants and the VerifyReport counts, on the fixture's .mbin and .cbin;
-3. the final verdict: mesh_invalid plus the failing counts when (2) fails, else (1).
+3. the final verdict: mesh_invalid plus the failing counts when (2) fails, else (1). A count
+   that depends on mesh::verify's noise floor goes to `codes_any_of` instead: the verdict must
+   carry one code of each group.
 
 It then compares both verdicts with EXPECT, the expectation written down before the runs with
 its receipt, and stops with exit 1 on any disagreement, writing nothing. Only when every case
 agrees does it write <case>/expected.json and <runs-dir>/README.md (with --check it compares
 them with the files on disk instead). Stub texts are checked against a real run's output or the
-string literal in upstream's source.
+string literal in upstream's source. Every classified line must be on the stream the contract
+gives its row and, for the three "(no newline)" rows, end without one; a case may also require
+its final stderr line to be a given row with no newline (`final_stderr`).
 
 Verdict rules (docs/solver-contract.md Part B, "Exit codes" and "Judging a run"):
 - `codes` holds the decisive reasons: the FAIL-class lines and the exit class
@@ -36,10 +40,12 @@ import collections
 import hashlib
 import json
 import math
+import os
 import re
 import struct
 import subprocess
 import sys
+import textwrap
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -119,6 +125,7 @@ EXPECT = {
     "spps_degenerate": dict(
         status="FAIL", codes=["mesh_invalid", "degenerate_tets"],
         observed_status="FAIL", observed_codes=["degenerate_tetrahedron", "exit_nonzero"],
+        final_stderr="degenerate_tetrahedron",
         receipt="Tetrahedron 0 with corner D = corner A. Run anyway, SPPS prints row "
         "degenerate_tetrahedron without a newline (SC:322, coreTypes.cpp:213) and exits 1 "
         "(SC:265, first run of this case: the contract had it 'not run')."),
@@ -138,6 +145,7 @@ EXPECT = {
     "spps_lossy": dict(
         status="FAIL", codes=["mesh_invalid", "unmarked_boundary_faces"],
         observed_status="FAIL", observed_codes=["particle_loss_reported"],
+        final_stderr="particle_loss_reported",
         receipt="Every neighbour link cut to -2: the 12 interior faces become faces with no "
         "neighbour and no marker, which decision 6 forbids, so run-folder refuses it before launch. "
         "Run anyway, SPPS loses 4000 of 4000 particles to meshing, prints row "
@@ -162,13 +170,17 @@ EXPECT = {
         "tetra_mesh_unreadable and exits 1 (SC:274, VERIFIED S tcr_nomesh; RAW:1267)."),
     "tcr_broken_hall": dict(
         status="FAIL", codes=["mesh_invalid", "unmarked_boundary_faces", "uncovered_scene_faces"],
+        codes_any_of=[["degenerate_tets", "inverted_tets"]],
         observed_status="FAIL", observed_codes=["xml_property_missing"],
         receipt="Night Mode's broken-hall TCR folder of 2026-09-08 (RAW:1057-1058), meshed from the "
         "self-intersecting raw hall with 535 facets skipped and no .neigh: 267 faces with no "
         "neighbour carry no marker and 338 of the 1,086 scene faces are carried by no tetrahedron "
         "face, which decision 6 forbids, so run-folder refuses it before launch (m5-m6-design.md, "
-        "Run folder). Run anyway, TCR exits 0 with results, but Night Mode's config.xml lacks "
-        "disable_absatmo_computation and absatmo, so row xml_property_missing fires twice."),
+        "Run folder). Its near-flat tetrahedra, 22 of them wound against the .mbin convention, "
+        "are degenerate_tets or inverted_tets depending on mesh::verify's noise floor (verify.rs "
+        "VerifyReport), so the verdict carries one of the two. Run anyway, TCR exits 0 with "
+        "results, but Night Mode's config.xml lacks disable_absatmo_computation and absatmo, so "
+        "row xml_property_missing fires twice."),
     "stub_config_path_missing": dict(
         status="FAIL", codes=["config_path_missing"],
         receipt="Row config_path_missing (SC:318, sppsNantes.cpp:287): SPPS started with no "
@@ -176,14 +188,18 @@ EXPECT = {
         "reaches it."),
     "stub_degenerate_tetrahedron": dict(
         status="FAIL", codes=["degenerate_tetrahedron", "exit_nonzero"],
-        receipt="Row degenerate_tetrahedron (SC:322) with exit 1, text from spps_degenerate. The real "
-        "case is refused before launch by mesh::verify."),
+        final_stderr="degenerate_tetrahedron",
+        receipt="Row degenerate_tetrahedron (SC:322) with exit 1, on stderr with no newline as "
+        "coreTypes.cpp:213 prints it; text from spps_degenerate. The real case is refused before "
+        "launch by mesh::verify."),
     "stub_source_not_located": dict(
         status="FAIL", codes=["source_not_located"],
-        receipt="Row source_not_located (SC:324, sppsNantes.cpp:63), no newline, once per band so "
-        "both land on one stderr line. No real run reaches it (SC:324)."),
+        final_stderr="source_not_located",
+        receipt="Row source_not_located (SC:324, sppsNantes.cpp:63), on stderr with no newline, once "
+        "per band so both land on one stderr line. No real run reaches it (SC:324)."),
     "stub_particle_loss_unterminated": dict(
         status="FAIL", codes=["particle_loss_reported"],
+        final_stderr="particle_loss_reported",
         receipt="Row particle_loss_reported (SC:325) as SPPS's last output, with no newline (M6(e): "
         "the final stderr line must be captured). Text from spps_lossy, refused before launch."),
     "stub_scene_mesh_unreadable": dict(
@@ -267,6 +283,7 @@ class Row:
     stream: str
     regex: "re.Pattern | None"
     cls: str
+    newline: bool = True  # False for the rows the page marks "(no newline)"
 
 
 def load_rows(contract: Path) -> list[Row]:
@@ -286,11 +303,16 @@ def load_rows(contract: Path) -> list[Row]:
         cls = cells[3].split(":")[0].split()[0]
         if cls not in CLASSES:
             fc.die(f"row {rid}: unknown class {cls!r}")
-        rows.append(Row(rid, cells[1], regex, cls))
+        if cells[1] not in ("stdout", "stderr", "either"):
+            fc.die(f"row {rid}: unknown stream {cells[1]!r}")
+        rows.append(Row(rid, cells[1], regex, cls, "(no newline" not in cells[2]))
     if len(rows) != ROW_COUNT or len({r.id for r in rows}) != ROW_COUNT:
         fc.die(f"{contract}: {len(rows)} classifier rows, expected {ROW_COUNT} distinct")
     if [r.id for r in rows if r.regex is None] != ["unclassified_line"]:
         fc.die("only unclassified_line may lack a pattern")
+    # SC:286-287: "Three stderr messages end without a newline".
+    if sorted(r.stream for r in rows if not r.newline) != ["stderr"] * 3:
+        fc.die(f"{contract}: expected 3 stderr rows marked (no newline)")
     return rows
 
 
@@ -558,6 +580,13 @@ COUNT_ORDER = ["index_errors", "degenerate_tets", "inverted_tets", "unmarked_bou
                "marker_out_of_range", "nonmutual_neighbors", "asymmetric_internal_faces",
                "marker_geometry_mismatches", "uncovered_scene_faces", "unknown_volume_ids"]
 
+# verify.rs counts a tetrahedron with "a volume at or below the f32 noise floor" as degenerate
+# and one with (A-D).((B-D)x(C-D)) >= 0 as inverted, but fixes no floor. The reference floor is
+# |6V| <= 2^-23 (f32 epsilon) * (longest edge)^3; a count that changes across FLOOR_SWEEP is not
+# required of mesh::verify, only that one of the counts it moves between is non-zero.
+FLOOR_EXP = -23
+FLOOR_SWEEP = (None, -26, -23, -20, -17)  # None: floor 0, only exact zeros are degenerate
+
 
 def sub(a, b):
     return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
@@ -632,11 +661,10 @@ def mesh_check(folder: Path, cfg: Config, simpa: Simpa) -> dict:
         tets.append((corners, int(t[5]), fcs))
 
     c = collections.Counter()
-    flat = 0
+    shapes = []  # (repeated corner, |6V| / (longest edge)^3, det >= 0) per tetrahedron
     scale = max([1.0] + [abs(x) for v in verts for x in v])
     tol = 32 * 2.0 ** -24 * scale
     covered = set()
-    volume_by_id = collections.defaultdict(float)
     ids = collections.Counter(t[1] for t in tets)
     room = ids.most_common(1)[0][0] if ids else None
     allowed = {room} | set(cfg.fittings())
@@ -648,13 +676,8 @@ def mesh_check(folder: Path, cfg: Config, simpa: Simpa) -> dict:
         A, B, C, D = (nodes[x] for x in corners)
         det = dot(sub(A, D), cross(sub(B, D), sub(C, D)))
         edge = max(math.dist(p, q) for p in (A, B, C, D) for q in (A, B, C, D))
-        if len(set(corners)) < 4:
-            c["degenerate_tets"] += 1
-        elif abs(det) <= 2.0 ** -23 * edge ** 3:
-            flat += 1
-        elif det >= 0:
-            c["inverted_tets"] += 1
-        volume_by_id[idv] += abs(det) / 6
+        repeated = len(set(corners)) < 4
+        shapes.append((repeated, 0.0 if repeated else abs(det) / edge ** 3, det >= 0))
         if idv not in allowed:
             c["unknown_volume_ids"] += 1
         for fv, marker, n in fcs:
@@ -674,18 +697,41 @@ def mesh_check(folder: Path, cfg: Config, simpa: Simpa) -> dict:
                 elif marker >= 0 and back[0][1] != marker:
                     c["asymmetric_internal_faces"] += 1
     c["uncovered_scene_faces"] = nf - len(covered)
+
+    def shape_counts(exp):
+        floor = 0.0 if exp is None else 2.0 ** exp
+        degenerate = [rep or ratio <= floor for rep, ratio, _ in shapes]
+        return {"degenerate_tets": sum(degenerate),
+                "inverted_tets": sum(pos and not d for d, (_, _, pos) in zip(degenerate, shapes))}
+
+    sweep = {exp: shape_counts(exp) for exp in FLOOR_SWEEP}
+    c.update(sweep[FLOOR_EXP])
     counts = {k: c[k] for k in COUNT_ORDER if c[k]}
+    moving, any_of = floor_dependence(folder.name, sweep, counts)
     out = {
         "mesh_check": "fail" if counts else "pass",
         "tetrahedra": nt, "nodes": nn, "scene_faces": nf, "room_id": room,
         "counts": counts, "codes": list(counts),
+        "noise_floor": f"|6V| <= 2^{FLOOR_EXP} * (longest edge)^3",
+        "codes_any_of": any_of,
     }
-    if flat:
-        # Whether a sliver is "at or below the f32 noise floor" depends on mesh::verify's own
-        # threshold, so slivers are reported but not required of it.
-        out["slivers"] = {"count": flat,
-                          "rule": "corners distinct, |6V| <= 2^-23 * (longest edge)^3"}
+    if moving:
+        out["floor_dependent"] = moving
+        out["floor_sweep"] = [dict(floor="0" if e is None else f"2^{e}", **s) for e, s in sweep.items()]
     return out
+
+
+def floor_dependence(name: str, sweep: dict, counts: dict) -> tuple[list[str], list[list[str]]]:
+    """The tetrahedron codes that are non-zero at some floors of `sweep` only, and the
+    codes_any_of they make: one group when every floor gives one of them, none otherwise. Exits
+    when the floor alone decides whether the mesh passes."""
+    nonzero = [{k for k, v in s.items() if v} for s in sweep.values()]
+    moving = sorted(set.union(*nonzero) - set.intersection(*nonzero), key=COUNT_ORDER.index)
+    if not moving or all(s & set(moving) for s in nonzero):
+        return moving, [moving] if moving else []
+    if not set(counts) - set(moving):
+        fc.die(f"{name}: the mesh passes or fails depending on the noise floor: {sweep}")
+    return moving, []
 
 
 # ---------------------------------------------------------------------------------------------
@@ -741,24 +787,52 @@ def judge(case: Path, obs_root: Path, rows: list[Row], simpa: Simpa) -> dict:
         "post_run": post,
     }
     pre = mesh_check(case, Config(case / "config.xml"), simpa)
+    any_of = pre.get("codes_any_of", [])
     if pre["mesh_check"] == "fail":
-        final_status, final_codes = "FAIL", ["mesh_invalid"] + pre["codes"]
+        moving = pre.get("floor_dependent", [])
+        final_status = "FAIL"
+        final_codes = ["mesh_invalid"] + [x for x in pre["codes"] if x not in moving]
     else:
         final_status, final_codes = status, codes
-    return {"solver": solver, "status": final_status, "codes": final_codes,
+    return {"solver": solver, "status": final_status, "codes": final_codes, "codes_any_of": any_of,
             "warnings": warnings if pre["mesh_check"] == "pass" else [],
             "pre_launch": pre, "observed": observed, "_lines": lines}
 
 
-def disagreements(name: str, got: dict) -> list[str]:
+def shape_disagreements(name: str, lines: list[Line], rows: list[Row]) -> list[str]:
+    """Every line of a row is on the stream the contract gives it (SC:305-326), and a row it
+    marks "(no newline)" never ends in one (SC:286-287). The classifier ignores the stream; this
+    keeps the fixtures, real transcripts and stubs alike, faithful to where the solver prints."""
+    by_id = {r.id: r for r in rows}
+    bad = []
+    for ln in lines:
+        r = by_id.get(ln.row)
+        if r is None:
+            continue  # a continuation line
+        if r.stream != "either" and ln.stream != r.stream:
+            bad.append(f"{name}: {r.id} on {ln.stream}, the contract says {r.stream}: {ln.text!r}")
+        if not r.newline and ln.terminated:
+            bad.append(f"{name}: {r.id} ends in a newline, the contract says it has none: {ln.text!r}")
+    return bad
+
+
+def disagreements(name: str, got: dict, rows: list[Row]) -> list[str]:
     exp = EXPECT.get(name)
     if exp is None:
         return [f"{name}: no expectation written down"]
-    bad = []
+    bad = shape_disagreements(name, got["_lines"], rows)
     if got["status"] != exp["status"] or got["codes"] != exp["codes"]:
         bad.append(f"{name}: expected {exp['status']} {exp['codes']}, got {got['status']} {got['codes']}")
+    if got["codes_any_of"] != exp.get("codes_any_of", []):
+        bad.append(f"{name}: expected codes_any_of {exp.get('codes_any_of', [])}, got {got['codes_any_of']}")
     if got["warnings"] != exp.get("warnings", []):
         bad.append(f"{name}: expected warnings {exp.get('warnings', [])}, got {got['warnings']}")
+    want = exp.get("final_stderr")
+    if want:
+        err = [ln for ln in got["_lines"] if ln.stream == "stderr"]
+        if not err or err[-1].row != want or err[-1].terminated:
+            seen = f"{err[-1].row}, terminated={err[-1].terminated}" if err else "no stderr at all"
+            bad.append(f"{name}: the final stderr line must be {want} with no newline, got {seen}")
     o = got["observed"]
     if "observed_status" in exp:
         if (o["status"], o["codes"]) != (exp["observed_status"], exp["observed_codes"]):
@@ -801,12 +875,31 @@ def expected_json(name: str, r: dict) -> str:
         "solver": r["solver"],
         "status": r["status"],
         "codes": r["codes"],
+        "codes_any_of": r["codes_any_of"],
         "warnings": r["warnings"],
         "receipt": exp["receipt"],
         "pre_launch": r["pre_launch"],
         "observed": r["observed"],
     }
     return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
+
+
+def floor_notes(runs: dict) -> list[str]:
+    """A README bullet per case whose tetrahedron counts depend on the noise floor."""
+    out = []
+    for n, r in runs.items():
+        sweep = r["pre_launch"].get("floor_sweep")
+        if not sweep:
+            continue
+        col = lambda k: ", ".join(str(s[k]) for s in sweep)
+        text = (f"**`{n}`'s tetrahedron counts depend on the noise floor.** With the floor on "
+                f"|6V| / (longest edge)^3 at {', '.join(s['floor'] for s in sweep)}, it has "
+                f"{col('degenerate_tets')} degenerate and {col('inverted_tets')} inverted "
+                "tetrahedra. Every floor gives one of the two codes, so the verdict must carry one "
+                "(`codes_any_of`).")
+        out += textwrap.wrap(text, 92, initial_indent="- ", subsequent_indent="  ",
+                             break_on_hyphens=False)
+    return out
 
 
 def readme(runs: dict, rows: list[Row]) -> str:
@@ -828,8 +921,10 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "```",
         "",
         "`mktcr.py` without `--broken-hall` keeps the committed `tcr_broken_hall`; its source folder",
-        "exists on one machine only. `mkexpected.py --check` compares instead of writing.",
-        "`python tools/fixture-gen/test_fixture_gen.py` runs the negative tests of these checks.",
+        "exists on one machine only. `mkexpected.py --check` compares instead of writing. Both",
+        "refuse a transcript or stub with a row's line on the wrong stream, or a \"(no newline)\"",
+        "row's line ending in one. `python tools/fixture-gen/test_fixture_gen.py` runs the",
+        "negative tests of these checks.",
         "",
         "## A fixture",
         "",
@@ -840,10 +935,14 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "  - `status` and `codes`: the verdict `run-folder` must give. `codes` are the decisive",
         "    reasons and must all appear; a verdict may add consequences (for example",
         "    `expected_file_missing` after a crash).",
+        "  - `codes_any_of`: groups of codes of which the verdict must carry at least one each.",
+        "    Only `tcr_broken_hall` has one: its near-flat tetrahedra are `degenerate_tets` or",
+        "    `inverted_tets` depending on mesh::verify's noise floor (`pre_launch.floor_sweep`).",
         "  - `warnings`: WARN-class rows seen.",
         "  - `pre_launch`: the mesh check `run-folder` makes before launch, computed by",
-        "    `mkexpected.py`'s reference of decision 6 and the VerifyReport counts. When it",
-        "    fails, the verdict is FAIL with `mesh_invalid` and the failing counts' codes.",
+        "    `mkexpected.py`'s reference of decision 6 and the VerifyReport counts, with the",
+        "    noise floor it used. When it fails, the verdict is FAIL with `mesh_invalid` and the",
+        "    failing counts' codes.",
         "  - `observed`: what the real solver did when run anyway, launched as Part B says",
         "    (fresh copy, cwd = the folder, argument `config.xml`): exit code, the solver's own",
         "    status and codes, the decisive lines, the full transcript classified by row (paths",
@@ -865,6 +964,7 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "  SC:278, \"any exit at or above `0xC0000000` is CRASH\", would make it `crash_other`.",
         "- **Night Mode's broken-hall config fails on its own**: TCR prints `xml_property_missing`",
         "  for `disable_absatmo_computation` and `absatmo`, and R2's direct field is -inf.",
+        *floor_notes(runs),
         "- **Rows the contract had not seen run:** `degenerate_tetrahedron` (exit 1, no",
         "  newline), `tetra_mesh_empty`, `ground_height`, `source_moved_off_vertex` and",
         "  `source_on_surface` all print exactly as the table says. A source inside a floor",
@@ -913,15 +1013,19 @@ def main() -> None:
     ap.add_argument("observed", type=Path)
     ap.add_argument("--simpa", type=Path, required=True)
     ap.add_argument("--contract", type=Path, default=REPO / "docs/solver-contract.md")
-    ap.add_argument("--upstream", type=Path, default=Path(r"B:\repos\I-Simpa-upstream"))
+    ap.add_argument("--upstream", type=Path,
+                    default=Path(os.environ.get("SIMPA_UPSTREAM") or r"B:\repos\I-Simpa-upstream"),
+                    help=r"default: $SIMPA_UPSTREAM, else B:\repos\I-Simpa-upstream")
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
+    if not (a.upstream / "src").is_dir():
+        fc.die(f"upstream checkout not found at {a.upstream} (set --upstream or SIMPA_UPSTREAM)")
     rows = load_rows(a.contract)
     simpa = Simpa(a.simpa)
     names = sorted(p.name for p in a.runs.iterdir() if p.is_dir() and re.match(r"(spps|tcr|stub)_", p.name))
     order = [n for n in EXPECT if n in names] + [n for n in names if n not in EXPECT]
     runs = {n: judge(a.runs / n, a.observed, rows, simpa) for n in order}
-    bad = [m for n, r in runs.items() for m in disagreements(n, r)]
+    bad = [m for n, r in runs.items() for m in disagreements(n, r, rows)]
     bad += [f"{n}: fixture missing" for n in EXPECT if n not in runs]
     bad += check_stub_texts(runs, a.upstream, rows)
     for n, r in runs.items():

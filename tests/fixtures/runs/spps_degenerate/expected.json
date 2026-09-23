@@ -5,6 +5,7 @@
     "mesh_invalid",
     "degenerate_tets"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Tetrahedron 0 with corner D = corner A. Run anyway, SPPS prints row degenerate_tetrahedron without a newline (SC:322, coreTypes.cpp:213) and exits 1 (SC:265, first run of this case: the contract had it 'not run').",
   "pre_launch": {
@@ -18,7 +19,9 @@
     },
     "codes": [
       "degenerate_tets"
-    ]
+    ],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

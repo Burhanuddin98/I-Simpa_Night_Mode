@@ -4,6 +4,7 @@
   "codes": [
     "mesh_invalid"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "mesh.cbin truncated to 100 bytes. run-folder cannot read the .cbin for mesh::verify, so it refuses before launch (m5-m6-design.md, Run folder). Run anyway, SPPS prints row scene_mesh_unreadable and the path (SC:315, coreinitialisation.cpp:396) and exits 0 (SC:263; RAW:1201).",
   "pre_launch": {

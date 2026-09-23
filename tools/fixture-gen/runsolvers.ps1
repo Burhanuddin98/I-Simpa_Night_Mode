@@ -5,7 +5,7 @@
 #       [-Solvers <dir>] [-Case <name>,<name>] [-TimeoutSec 300]
 #
 # Per case (a folder under -Runs whose name starts with spps_ or tcr_; stub_ folders are for the
-# stub solver, not these):
+# stub solver, not these; -Case names one or more of them, and an unknown name is an error):
 # - <Out>/<case>/solve/ is created fresh and must not exist: an old run is never reused;
 # - every fixture file except expected.json is copied into it, and __RUNDIR__ in its config.xml
 #   is replaced by the folder's absolute path plus a backslash (UTF-8, no BOM, bytes otherwise
@@ -38,8 +38,17 @@ New-Item -ItemType Directory -Force $Out | Out-Null
 $Out = (Resolve-Path $Out).Path
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
-$cases = Get-ChildItem $Runs -Directory | Where-Object { $_.Name -match '^(spps|tcr)_' }
-if ($Case.Count) { $cases = $cases | Where-Object { $Case -contains $_.Name } }
+$all = @(Get-ChildItem $Runs -Directory | Where-Object { $_.Name -match '^(spps|tcr)_' })
+if (-not $all.Count) { throw "no spps_ or tcr_ case folders under $Runs" }
+# Under -File a comma list arrives as one string: split it here, whichever way it came.
+$want = @($Case | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+$cases = $all
+if ($want.Count) {
+    $names = @($all | ForEach-Object { $_.Name })
+    $unknown = @($want | Where-Object { $names -notcontains $_ })
+    if ($unknown.Count) { throw "unknown case: $($unknown -join ', ') (no such spps_ or tcr_ folder under $Runs)" }
+    $cases = @($all | Where-Object { $want -contains $_.Name })
+}
 foreach ($c in $cases) {
     $solver = $c.Name.Split('_')[0]
     $caseOut = Join-Path $Out $c.Name
@@ -75,3 +84,4 @@ foreach ($c in $cases) {
     [IO.File]::WriteAllText((Join-Path $caseOut 'run.json'), ($record | ConvertTo-Json), $utf8)
     Write-Host ("{0,-24} {1,-5} exit {2}  {3,7:N0} ms{4}" -f $c.Name, $solver, $hex, $elapsed, $(if ($timedOut) { '  TIMEOUT' } else { '' }))
 }
+Write-Host "ran $($cases.Count) case(s) into $Out"

@@ -4,6 +4,7 @@
   "codes": [
     "crash_access_violation"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Source at x = 12 m in a 5 m cube: NULL tetrahedron, 0xC0000005 with no message (SC:71, SC:266, VERIFIED S run_srcout; RAW:1435).",
   "pre_launch": {
@@ -13,7 +14,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

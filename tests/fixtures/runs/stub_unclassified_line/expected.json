@@ -5,6 +5,7 @@
     "stats_unreadable",
     "expected_file_missing"
   ],
+  "codes_any_of": [],
   "warnings": [
     "unclassified_line"
   ],
@@ -16,7 +17,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "stub.json, played back by the stub solver (not run here)",

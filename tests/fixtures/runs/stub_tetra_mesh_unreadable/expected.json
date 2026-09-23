@@ -4,6 +4,7 @@
   "codes": [
     "tetra_mesh_unreadable"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Row tetra_mesh_unreadable (SC:316) with SPPS's exit 0. Text from spps_nomesh, refused before launch.",
   "pre_launch": {
@@ -13,7 +14,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "stub.json, played back by the stub solver (not run here)",

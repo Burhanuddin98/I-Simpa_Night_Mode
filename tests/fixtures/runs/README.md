@@ -13,8 +13,10 @@ python tools/fixture-gen/mkexpected.py tests/fixtures/runs <that folder> --simpa
 ```
 
 `mktcr.py` without `--broken-hall` keeps the committed `tcr_broken_hall`; its source folder
-exists on one machine only. `mkexpected.py --check` compares instead of writing.
-`python tools/fixture-gen/test_fixture_gen.py` runs the negative tests of these checks.
+exists on one machine only. `mkexpected.py --check` compares instead of writing. Both
+refuse a transcript or stub with a row's line on the wrong stream, or a "(no newline)"
+row's line ending in one. `python tools/fixture-gen/test_fixture_gen.py` runs the
+negative tests of these checks.
 
 ## A fixture
 
@@ -25,10 +27,14 @@ exists on one machine only. `mkexpected.py --check` compares instead of writing.
   - `status` and `codes`: the verdict `run-folder` must give. `codes` are the decisive
     reasons and must all appear; a verdict may add consequences (for example
     `expected_file_missing` after a crash).
+  - `codes_any_of`: groups of codes of which the verdict must carry at least one each.
+    Only `tcr_broken_hall` has one: its near-flat tetrahedra are `degenerate_tets` or
+    `inverted_tets` depending on mesh::verify's noise floor (`pre_launch.floor_sweep`).
   - `warnings`: WARN-class rows seen.
   - `pre_launch`: the mesh check `run-folder` makes before launch, computed by
-    `mkexpected.py`'s reference of decision 6 and the VerifyReport counts. When it
-    fails, the verdict is FAIL with `mesh_invalid` and the failing counts' codes.
+    `mkexpected.py`'s reference of decision 6 and the VerifyReport counts, with the
+    noise floor it used. When it fails, the verdict is FAIL with `mesh_invalid` and the
+    failing counts' codes.
   - `observed`: what the real solver did when run anyway, launched as Part B says
     (fresh copy, cwd = the folder, argument `config.xml`): exit code, the solver's own
     status and codes, the decisive lines, the full transcript classified by row (paths
@@ -50,6 +56,10 @@ reproduced. Beyond it:
   SC:278, "any exit at or above `0xC0000000` is CRASH", would make it `crash_other`.
 - **Night Mode's broken-hall config fails on its own**: TCR prints `xml_property_missing`
   for `disable_absatmo_computation` and `absatmo`, and R2's direct field is -inf.
+- **`tcr_broken_hall`'s tetrahedron counts depend on the noise floor.** With the floor on
+  |6V| / (longest edge)^3 at 0, 2^-26, 2^-23, 2^-20, 2^-17, it has 0, 38, 65, 82, 138
+  degenerate and 22, 8, 0, 0, 0 inverted tetrahedra. Every floor gives one of the two codes,
+  so the verdict must carry one (`codes_any_of`).
 - **Rows the contract had not seen run:** `degenerate_tetrahedron` (exit 1, no
   newline), `tetra_mesh_empty`, `ground_height`, `source_moved_off_vertex` and
   `source_on_surface` all print exactly as the table says. A source inside a floor

@@ -4,6 +4,7 @@
   "codes": [
     "source_on_surface"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Source at (1.2, 1.7, 0), inside floor triangle 0: row source_on_surface on stderr (SC:323, sppsNantes.cpp:322-325), exit 0 with no results (SC:72).",
   "pre_launch": {
@@ -13,7 +14,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

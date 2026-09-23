@@ -2,6 +2,7 @@
   "solver": "spps",
   "status": "OK",
   "codes": [],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Source spectrum with 1 of 2 bands. No Part B signal fires: exit 0, no FAIL line, totals 2000 per band, no loss; the 1000 Hz band loses every particle to the atmosphere at the first step instead. Only the project rule band_set_mismatch (SC:55, VERIFIED S run_oneband; RAW:1471) catches it, and run-folder runs no validator.",
   "pre_launch": {
@@ -11,7 +12,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

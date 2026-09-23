@@ -6,8 +6,14 @@
     "unmarked_boundary_faces",
     "uncovered_scene_faces"
   ],
+  "codes_any_of": [
+    [
+      "degenerate_tets",
+      "inverted_tets"
+    ]
+  ],
   "warnings": [],
-  "receipt": "Night Mode's broken-hall TCR folder of 2026-09-08 (RAW:1057-1058), meshed from the self-intersecting raw hall with 535 facets skipped and no .neigh: 267 faces with no neighbour carry no marker and 338 of the 1,086 scene faces are carried by no tetrahedron face, which decision 6 forbids, so run-folder refuses it before launch (m5-m6-design.md, Run folder). Run anyway, TCR exits 0 with results, but Night Mode's config.xml lacks disable_absatmo_computation and absatmo, so row xml_property_missing fires twice.",
+  "receipt": "Night Mode's broken-hall TCR folder of 2026-09-08 (RAW:1057-1058), meshed from the self-intersecting raw hall with 535 facets skipped and no .neigh: 267 faces with no neighbour carry no marker and 338 of the 1,086 scene faces are carried by no tetrahedron face, which decision 6 forbids, so run-folder refuses it before launch (m5-m6-design.md, Run folder). Its near-flat tetrahedra, 22 of them wound against the .mbin convention, are degenerate_tets or inverted_tets depending on mesh::verify's noise floor (verify.rs VerifyReport), so the verdict carries one of the two. Run anyway, TCR exits 0 with results, but Night Mode's config.xml lacks disable_absatmo_computation and absatmo, so row xml_property_missing fires twice.",
   "pre_launch": {
     "mesh_check": "fail",
     "tetrahedra": 6294,
@@ -15,17 +21,53 @@
     "scene_faces": 1086,
     "room_id": 0,
     "counts": {
+      "degenerate_tets": 65,
       "unmarked_boundary_faces": 267,
       "uncovered_scene_faces": 338
     },
     "codes": [
+      "degenerate_tets",
       "unmarked_boundary_faces",
       "uncovered_scene_faces"
     ],
-    "slivers": {
-      "count": 65,
-      "rule": "corners distinct, |6V| <= 2^-23 * (longest edge)^3"
-    }
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": [
+      [
+        "degenerate_tets",
+        "inverted_tets"
+      ]
+    ],
+    "floor_dependent": [
+      "degenerate_tets",
+      "inverted_tets"
+    ],
+    "floor_sweep": [
+      {
+        "floor": "0",
+        "degenerate_tets": 0,
+        "inverted_tets": 22
+      },
+      {
+        "floor": "2^-26",
+        "degenerate_tets": 38,
+        "inverted_tets": 8
+      },
+      {
+        "floor": "2^-23",
+        "degenerate_tets": 65,
+        "inverted_tets": 0
+      },
+      {
+        "floor": "2^-20",
+        "degenerate_tets": 82,
+        "inverted_tets": 0
+      },
+      {
+        "floor": "2^-17",
+        "degenerate_tets": 138,
+        "inverted_tets": 0
+      }
+    ]
   },
   "observed": {
     "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",

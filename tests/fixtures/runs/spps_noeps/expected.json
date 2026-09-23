@@ -4,6 +4,7 @@
   "codes": [
     "xml_property_missing"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "trans_epsilon absent: row xml_property_missing (SC:314, cxml.cpp:115) is FAIL. Every particle dies at the first step, absorbed by the atmosphere, exit 0 (SC:98, VERIFIED S run_noeps; RAW:1387).",
   "pre_launch": {
@@ -13,7 +14,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

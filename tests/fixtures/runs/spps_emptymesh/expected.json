@@ -5,6 +5,7 @@
     "mesh_invalid",
     "uncovered_scene_faces"
   ],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "tetramesh.mbin with T = N = 0: no tetrahedron face carries any of the 12 scene faces. Run anyway, SPPS prints the path, row tetra_mesh_empty (SC:317, coreTypes.cpp:241) and row tetra_mesh_unreadable (coreinitialisation.cpp:456), exit 0.",
   "pre_launch": {
@@ -18,7 +19,9 @@
     },
     "codes": [
       "uncovered_scene_faces"
-    ]
+    ],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

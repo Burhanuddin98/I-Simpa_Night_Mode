@@ -2,6 +2,7 @@
   "solver": "tcr",
   "status": "OK",
   "codes": [],
+  "codes_any_of": [],
   "warnings": [],
   "receipt": "Positive TCR baseline on spps_ok's inputs: exit 0 (SC:273), Main results.gabe and Punctual receivers\\R1.gabe (SC:251-252), no non-finite value outside the Global row.",
   "pre_launch": {
@@ -11,7 +12,9 @@
     "scene_faces": 12,
     "room_id": 1,
     "counts": {},
-    "codes": []
+    "codes": [],
+    "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
+    "codes_any_of": []
   },
   "observed": {
     "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",
