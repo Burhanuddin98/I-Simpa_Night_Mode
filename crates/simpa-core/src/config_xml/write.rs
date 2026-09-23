@@ -546,9 +546,10 @@ fn write_material(
             ("loi", loi.clone()),
         ];
         if let Some(tl) = &m.transmission_loss_db {
+            let loss = transmission_loss_written(tl[i].get(), m.absorption[i].get());
             attrs.push((
                 "affaiblissement",
-                real(&what(&format!("{f} Hz transmission loss")), tl[i].get())?,
+                real(&what(&format!("{f} Hz transmission loss")), loss)?,
             ));
         }
         x.empty("bfreq", attrs);
@@ -556,6 +557,25 @@ fn write_material(
     x.close("type_surface");
     Ok(())
 }
+
+/// Loss in dB with which no more energy is transmitted than absorbed, as upstream's GUI enforces
+/// (`isimpa/data_manager/e_data_row_materiau.h:126-145`): when tau = 10^(-R/10) exceeds alpha, R
+/// becomes -10 log10(alpha), so tau = alpha exactly. With alpha = 0 upstream turns transmission off
+/// for the band; config.xml has no per-band switch, so a 300 dB loss (tau = 1e-30) stands in.
+/// The validator warns about both (`material_transmission_exceeds_absorption`).
+pub(crate) fn transmission_loss_written(loss_db: f64, absorption: f64) -> f64 {
+    if absorption <= 0.0 {
+        return loss_db.max(ZERO_ABSORPTION_LOSS_DB);
+    }
+    if 10f64.powf(-loss_db / 10.0) > absorption {
+        -10.0 * absorption.log10()
+    } else {
+        loss_db
+    }
+}
+
+/// Stand-in loss for a band that absorbs nothing: upstream disables transmission there.
+pub(crate) const ZERO_ABSORPTION_LOSS_DB: f64 = 300.0;
 
 fn write_source(
     x: &mut Xml,
@@ -748,5 +768,23 @@ impl Xml {
     fn finish(self) -> String {
         debug_assert!(self.open.is_empty());
         self.out
+    }
+}
+
+#[cfg(test)]
+mod transmission_tests {
+    use super::transmission_loss_written as w;
+
+    #[test]
+    fn clamps_transmission_to_absorption_like_upstream() {
+        // tau = 10^(-5/10) = 0.316 > alpha 0.1, so the loss becomes 10 dB (tau = 0.1).
+        assert!((w(5.0, 0.1) - 10.0).abs() < 1e-12);
+        // tau = 10^(-20/10) = 0.01 <= alpha 0.1: written as entered.
+        assert_eq!(w(20.0, 0.1), 20.0);
+        // Exactly at the limit: unchanged.
+        assert_eq!(w(10.0, 0.1), 10.0);
+        // No absorption, no transmission.
+        assert_eq!(w(5.0, 0.0), super::ZERO_ABSORPTION_LOSS_DB);
+        assert_eq!(w(400.0, 0.0), 400.0);
     }
 }

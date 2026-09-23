@@ -5,8 +5,8 @@ use std::sync::{Mutex, MutexGuard};
 use simpa_core::formats::FormatError;
 use simpa_core::formats::mbin::{self, Mesh, TetraFace, Tetrahedron};
 
-// The negative case measures allocation, and the counters are process-wide: every test here
-// holds this lock so no other test allocates during a measurement.
+// The negative case measures allocation. The counters are per thread now (common/mod.rs), so
+// the lock every test here holds is no longer required; it is kept as harmless belt and braces.
 #[global_allocator]
 static A: common::Tracking = common::Tracking;
 static SERIAL: Mutex<()> = Mutex::new(());

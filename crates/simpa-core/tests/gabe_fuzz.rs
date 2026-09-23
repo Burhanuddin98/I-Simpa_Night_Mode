@@ -1,6 +1,6 @@
 //! Robustness gate for the GABE reader: arbitrary bytes and mutations of real tables never
 //! panic, and never make the reader allocate more than `budget(len)`.
-//! Run with `--test-threads=1`: the allocation counters are process-wide.
+//! The allocation counters are per thread (see common/mod.rs), so tests may run in parallel.
 mod common;
 
 #[global_allocator]

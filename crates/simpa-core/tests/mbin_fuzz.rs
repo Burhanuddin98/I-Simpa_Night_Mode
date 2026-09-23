@@ -3,7 +3,7 @@ mod common;
 #[global_allocator]
 static A: common::Tracking = common::Tracking;
 
-// Run with --test-threads=1: the allocation counters are process-wide.
+// The allocation counters are per thread (see common/mod.rs), so tests may run in parallel.
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU32, Ordering};

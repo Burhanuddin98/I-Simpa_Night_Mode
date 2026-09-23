@@ -63,7 +63,18 @@ Check "(b) positive projects validate with no error" {
     }
     $all
 }
-Check "(b) validator fixture and project suites" { (CargoTest '--test validate_fixtures') -and (CargoTest '--test validate_projects') -and (CargoTest '--test validate_contract_docs') }
+$vf = @()
+Check "(b) validator fixture suite: project-stage and export-stage fixtures" {
+    $script:vf = cmd /c "cargo test -q -p simpa-core --test validate_fixtures -- --nocapture --test-threads=1 2>&1"
+    $ok = $LASTEXITCODE -eq 0
+    foreach ($stage in 'project-stage', 'export-stage') {
+        $line = @($script:vf | Where-Object { $_ -match "^$stage (\d+)/(\d+) matched" }) | Select-Object -First 1
+        if (-not $line -or -not ($line -match "^$stage (\d+)/(\d+) matched") -or $Matches[1] -ne $Matches[2]) { $ok = $false }
+        Write-Host "      $(if ($line) { $line } else { "$stage count missing" })"
+    }
+    $ok
+}
+Check "(b) validator project and contract-doc suites" { (CargoTest '--test validate_projects') -and (CargoTest '--test validate_contract_docs') }
 
 # (c)
 foreach ($solver in 'spps', 'tcr') {

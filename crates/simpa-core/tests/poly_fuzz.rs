@@ -1,7 +1,7 @@
 //! The `.poly` reader under hostile input: no panic, and never more than `budget(len)` bytes
 //! allocated, for arbitrary bytes, for mutations of real files and of generated ones, for token
 //! soups that reach deep into the grammar, and for the worst cases of the size argument in
-//! docs/formats/poly.md. Run with `--test-threads=1`: the allocation counters are process-wide.
+//! docs/formats/poly.md. The allocation counters are per thread (see common/mod.rs).
 mod common;
 
 #[global_allocator]

@@ -1,7 +1,7 @@
 mod common;
 
 // The tracking allocator lets the huge-count cases prove they reserve nothing. Its counters are
-// process-wide, so every test here takes SERIAL and they run one at a time.
+// per thread now (common/mod.rs); the SERIAL lock predates that and is kept as belt and braces.
 #[global_allocator]
 static A: common::Tracking = common::Tracking;
 

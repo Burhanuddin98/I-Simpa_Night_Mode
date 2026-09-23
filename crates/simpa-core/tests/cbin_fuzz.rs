@@ -1,5 +1,5 @@
 //! Fuzz for the `.cbin` reader: no input panics it, and no input makes it allocate more than
-//! `budget(len)`. Run with `--test-threads=1`: the allocation counters are process-wide.
+//! `budget(len)`. The allocation counters are per thread (see common/mod.rs), so tests may run in parallel.
 mod common;
 
 #[global_allocator]

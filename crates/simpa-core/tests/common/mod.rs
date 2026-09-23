@@ -4,6 +4,10 @@
 //! the peak between [`reset_peak`] and [`peak_since_reset`]. The counters are per thread, so the
 //! measurement covers the reader call on the test's own thread and sibling tests running in
 //! parallel do not count against it (they did while the counters were process-wide).
+//!
+//! Scope limit: an allocation made on ANOTHER thread is invisible to the measurement. Every
+//! reader in `formats` is single-threaded today; a reader that spawns threads would need a
+//! different measurement before its budget assertion means anything.
 #![allow(dead_code)]
 
 use std::alloc::{GlobalAlloc, Layout, System};

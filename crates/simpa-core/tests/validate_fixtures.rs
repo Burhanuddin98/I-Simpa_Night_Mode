@@ -560,7 +560,7 @@ fn every_project_fixture_yields_exactly_its_code() {
             Err(e) => failures.push(e),
         }
     }
-    println!("{matched}/{} matched", expected.len());
+    println!("project-stage {matched}/{} matched", expected.len());
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 
     // One fixture per project rule, and nothing else in the table.
@@ -710,7 +710,7 @@ fn every_export_fixture_yields_exactly_its_code() {
             Err(e) => failures.push(e),
         }
     }
-    println!("{matched}/{} matched", expected.len());
+    println!("export-stage {matched}/{} matched", expected.len());
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     let mut codes: Vec<&str> = expected.values().map(String::as_str).collect();
     codes.sort_unstable();
