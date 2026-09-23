@@ -2,6 +2,8 @@ build/
 build2/
 build*/
 *.obj
+# ...but not the OBJ mesh fixtures the geometry tests read.
+!tests/fixtures/**/*.obj
 *.lib
 *.exp
 *.pdb
@@ -25,3 +27,6 @@ test_project.isimpa
 
 # Per-project agent memory written by the Claude Code harness
 .claude/
+
+# Python bytecode from the fixture generators and their tests
+__pycache__/

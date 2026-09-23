@@ -1,0 +1,33 @@
+# Box modelled Y-up: x 0..6, y 0..3 (height), z 0..10.
+# Imported --up z it keeps these axes; --up y maps (x, y, z) to (x, -z, y).
+mtllib box.mtl
+o room box
+v 0 0 0
+v 6 0 0
+v 6 3 0
+v 0 3 0
+v 0 0 10
+v 6 0 10
+v 6 3 10
+v 0 3 10
+vt 0 0
+vn 0 1 0
+s off
+g side z0
+usemtl walls
+f 1 4 3 2
+g side z1
+usemtl walls
+f 5/1/1 6/1/1 7/1/1 8/1/1
+g side y0
+usemtl floor
+f -8//1 -7//1 -3//1 -4//1
+g side x1
+usemtl walls
+f 2 3 7 6
+g side y1
+usemtl ceiling
+f 3/1/1 4/1/1 8/1/1 7/1/1
+g side x0
+usemtl walls
+f -5//1 -8//1 -4//1 -1//1
