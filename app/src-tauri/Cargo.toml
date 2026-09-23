@@ -1,0 +1,20 @@
+[package]
+name = "app"
+description = "Tauri shell over the headless core: Concept B chrome, typed bridge, IPC and self-test"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+schemars = "1.2.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+simpa-core = { path = "../../crates/simpa-core" }
+# >= 2.11.6 for GHSA-w28w-mhc8-qvjv (channel and large-invoke queues bound to their webview).
+tauri = { version = "2.11.6", features = [] }
+tauri-plugin-dialog = "2.7.3"

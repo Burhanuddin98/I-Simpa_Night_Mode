@@ -1,0 +1,52 @@
+/* Bundled locally (OFL-1.1, from @fontsource); the approved mockup loaded them from Google Fonts,
+   which the CSP and offline use both rule out. Latin subset, woff2 only, the weights the design
+   uses: Barlow 400/500/600, Barlow Condensed 500/600, JetBrains Mono 400/500. */
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-display: block;
+  font-weight: 400;
+  src: url('../../node_modules/@fontsource/barlow/files/barlow-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-display: block;
+  font-weight: 500;
+  src: url('../../node_modules/@fontsource/barlow/files/barlow-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow';
+  font-style: normal;
+  font-display: block;
+  font-weight: 600;
+  src: url('../../node_modules/@fontsource/barlow/files/barlow-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-display: block;
+  font-weight: 500;
+  src: url('../../node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-style: normal;
+  font-display: block;
+  font-weight: 600;
+  src: url('../../node_modules/@fontsource/barlow-condensed/files/barlow-condensed-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: block;
+  font-weight: 400;
+  src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-display: block;
+  font-weight: 500;
+  src: url('../../node_modules/@fontsource/jetbrains-mono/files/jetbrains-mono-latin-500-normal.woff2') format('woff2');
+}

@@ -1,0 +1,33 @@
+{
+  "name": "simpa-app",
+  "private": true,
+  "version": "0.1.0",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config ui/vite.config.ts",
+    "build:ui": "tsc -p ui/tsconfig.json && vite build --config ui/vite.config.ts",
+    "typecheck": "tsc -p ui/tsconfig.json",
+    "bindings": "node ui/scripts/gen-bindings.mjs",
+    "test": "node ui/scripts/checksum-kat.test.mjs",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@fontsource/barlow": "5.3.0",
+    "@fontsource/barlow-condensed": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@tauri-apps/api": "~2.11.1",
+    "@tauri-apps/plugin-dialog": "~2.7.3",
+    "react": "~19.3.0",
+    "react-dom": "~19.3.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "~2.11.5",
+    "@types/react": "~19.3.0",
+    "@types/react-dom": "~19.3.0",
+    "@vitejs/plugin-react": "~6.1.1",
+    "json-schema-to-typescript": "~16.0.0",
+    "typescript": "~6.0.3",
+    "vite": "~8.3.0"
+  }
+}

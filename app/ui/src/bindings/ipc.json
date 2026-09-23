@@ -1,0 +1,410 @@
+{
+  "$defs": {
+    "BatchStats": {
+      "properties": {
+        "batches": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "events": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "send_failures": {
+          "description": "Batches the sink refused (the webview went away, for example).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "events",
+        "batches",
+        "send_failures"
+      ],
+      "type": "object"
+    },
+    "CmdError": {
+      "description": "An error for the UI: a stable reason code and a message for people.",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "EventsProbeReport": {
+      "properties": {
+        "batch_period_ms": {
+          "format": "double",
+          "type": "number"
+        },
+        "elapsed_ms": {
+          "format": "double",
+          "type": "number"
+        },
+        "lines": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stats": {
+          "$ref": "#/$defs/BatchStats"
+        }
+      },
+      "required": [
+        "lines",
+        "elapsed_ms",
+        "batch_period_ms",
+        "stats"
+      ],
+      "type": "object"
+    },
+    "FloatProbe": {
+      "description": "What each reader made of a JSON array of numbers: the bits as `0x` + 16 hex digits.",
+      "properties": {
+        "disagreements": {
+          "description": "How many values the two readers disagree on.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exact_bits": {
+          "description": "Read with the core's exact reader, as every schema value from the UI is.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "serde_json_bits": {
+          "description": "Read with `serde_json::from_str`, as a command argument typed `f64` would be.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "exact_bits",
+        "serde_json_bits",
+        "disagreements"
+      ],
+      "type": "object"
+    },
+    "LineClass": {
+      "description": "The Console's classes (docs/design/README.md: FAIL, INFO and OK; WARN for the amber lines).",
+      "enum": [
+        "FAIL",
+        "WARN",
+        "INFO",
+        "OK"
+      ],
+      "type": "string"
+    },
+    "Prepared": {
+      "description": "A prepared buffer: take it with `token`; `checksum` is [`checksum`] of its bytes.",
+      "properties": {
+        "bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "checksum": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "prepare_ms": {
+          "format": "double",
+          "type": "number"
+        },
+        "token": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "token",
+        "bytes",
+        "checksum",
+        "prepare_ms"
+      ],
+      "type": "object"
+    },
+    "ProjectInfo": {
+      "description": "What the chrome shows about the open project: names and counts, never an acoustic value.",
+      "properties": {
+        "active_variant": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "can_redo": {
+          "type": "boolean"
+        },
+        "can_undo": {
+          "type": "boolean"
+        },
+        "faces": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "materials": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "point_receivers": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sources": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "surface_groups": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "surface_receivers": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "variants": {
+          "items": {
+            "$ref": "#/$defs/VariantInfo"
+          },
+          "type": "array"
+        },
+        "vertices": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "vertices",
+        "faces",
+        "surface_groups",
+        "materials",
+        "sources",
+        "point_receivers",
+        "surface_receivers",
+        "variants",
+        "can_undo",
+        "can_redo"
+      ],
+      "type": "object"
+    },
+    "RunEvent": {
+      "properties": {
+        "class": {
+          "$ref": "#/$defs/LineClass"
+        },
+        "seq": {
+          "description": "0, 1, 2, ... per run, so the UI can prove it lost nothing and kept the order.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stream": {
+          "$ref": "#/$defs/Stream"
+        },
+        "t_ms": {
+          "description": "Milliseconds since the run started.",
+          "format": "double",
+          "type": "number"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "t_ms",
+        "stream",
+        "class",
+        "text"
+      ],
+      "type": "object"
+    },
+    "RunEventBatch": {
+      "properties": {
+        "batch": {
+          "description": "0, 1, 2, ... per run.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/RunEvent"
+          },
+          "type": "array"
+        },
+        "last": {
+          "description": "The producer has finished; no batch follows.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "batch",
+        "events",
+        "last"
+      ],
+      "type": "object"
+    },
+    "StartupInfo": {
+      "properties": {
+        "app_version": {
+          "type": "string"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProjectInfo"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "project_error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CmdError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "selftest": {
+          "type": "boolean"
+        },
+        "tauri_version": {
+          "type": "string"
+        },
+        "webview": {
+          "$ref": "#/$defs/WebviewInfo"
+        }
+      },
+      "required": [
+        "selftest",
+        "app_version",
+        "tauri_version",
+        "webview"
+      ],
+      "type": "object"
+    },
+    "Stream": {
+      "description": "Where a line came from. Lines are classified by content, never by stream (laydown, Traps).",
+      "enum": [
+        "stdout",
+        "stderr"
+      ],
+      "type": "string"
+    },
+    "VariantInfo": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "WebviewInfo": {
+      "description": "The webview engine and its runtime version, for the self-test and the Console.",
+      "properties": {
+        "engine": {
+          "type": "string"
+        },
+        "version": {
+          "description": "`None` when the runtime cannot be queried (it is then missing or broken).",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "engine"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The app's command results and events, dumped by app.exe --dump-schema. Do not edit.",
+  "properties": {
+    "cmd_error": {
+      "$ref": "#/$defs/CmdError"
+    },
+    "events_probe_report": {
+      "$ref": "#/$defs/EventsProbeReport"
+    },
+    "float_probe": {
+      "$ref": "#/$defs/FloatProbe"
+    },
+    "prepared": {
+      "$ref": "#/$defs/Prepared"
+    },
+    "project_info": {
+      "$ref": "#/$defs/ProjectInfo"
+    },
+    "run_event_batch": {
+      "$ref": "#/$defs/RunEventBatch"
+    },
+    "startup_info": {
+      "$ref": "#/$defs/StartupInfo"
+    }
+  },
+  "required": [
+    "cmd_error",
+    "events_probe_report",
+    "float_probe",
+    "prepared",
+    "project_info",
+    "run_event_batch",
+    "startup_info"
+  ],
+  "title": "IpcBindings",
+  "type": "object"
+}

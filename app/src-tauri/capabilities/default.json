@@ -1,0 +1,30 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The main window: the app's own async commands and the file dialogs. No shell and no file-system plugin; the core reads files by the path a dialog returns.",
+  "windows": ["main"],
+  "permissions": [
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-message",
+    "allow-ping",
+    "allow-panic-probe",
+    "allow-panic-probe-unguarded",
+    "allow-unguarded-panic-runs",
+    "allow-bench-prepare",
+    "allow-bench-take",
+    "allow-bench-clear",
+    "allow-run-events-probe",
+    "allow-exact-float-probe",
+    "allow-project-new",
+    "allow-project-load-text",
+    "allow-project-open",
+    "allow-project-info",
+    "allow-project-json",
+    "allow-project-apply",
+    "allow-project-undo",
+    "allow-project-redo",
+    "allow-app-startup",
+    "allow-selftest-report"
+  ]
+}

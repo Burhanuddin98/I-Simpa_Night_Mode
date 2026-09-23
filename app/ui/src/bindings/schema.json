@@ -1,0 +1,2860 @@
+{
+  "$defs": {
+    "AirAbsorption": {
+      "description": "Air absorption: `condition_atmospherique@disable_absatmo_computation` and `@absatmo`.\n\nIn JSON: `{\"kind\": \"iso9613\"}` or `{\"kind\": \"user_defined\", \"value\": v, \"unit\": u}`. Extra\nkeys are refused for both kinds, so a hand-edited `{\"kind\": \"iso9613\", \"value\": 0.5}` is an\nerror, not a silent switch to the computed value.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Computed by the solver per band from temperature, humidity and pressure (ISO 9613-1).",
+          "properties": {
+            "kind": {
+              "const": "iso9613",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "One value for every band, with its unit.",
+          "properties": {
+            "kind": {
+              "const": "user_defined",
+              "type": "string"
+            },
+            "unit": {
+              "$ref": "#/$defs/AttenuationUnit"
+            },
+            "value": {
+              "description": "A float. Finite values are numbers; non-finite values are strings.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "value",
+            "unit"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "AttenuationUnit": {
+      "description": "Unit of a user-defined air absorption.",
+      "oneOf": [
+        {
+          "const": "per_metre",
+          "description": "Energy attenuation per metre (1/m): energy falls as `exp(-m x)`. This is what the solver\nreads from `@absatmo`, verbatim.",
+          "type": "string"
+        },
+        {
+          "const": "decibel_per_metre",
+          "description": "Level attenuation in dB per metre. The solver's own computed path converts dB/m by\nln(10)/10 (`base_core_configuration.cpp:111-115`); so does\n[`AttenuationUnit::to_per_metre`].",
+          "type": "string"
+        }
+      ]
+    },
+    "BandData": {
+      "additionalProperties": false,
+      "description": "Every per-band array of a project, keyed by entity in project order: what changes with the\nband set. Custom spectrum shapes are `Some`, other shapes `None`.",
+      "properties": {
+        "background_noise_shapes": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "description": "A float. Finite values are numbers; non-finite values are strings.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "fitting_zones": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/FittingBands"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "materials": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/MaterialBands"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "source_shapes": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "description": "A float. Finite values are numbers; non-finite values are strings.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": [
+                  "array",
+                  "null"
+                ]
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "spps_bands_computed": {
+          "items": {
+            "type": "boolean"
+          },
+          "type": "array"
+        },
+        "tcr_bands_computed": {
+          "items": {
+            "type": "boolean"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "materials",
+        "source_shapes",
+        "background_noise_shapes",
+        "fitting_zones",
+        "spps_bands_computed",
+        "tcr_bands_computed"
+      ],
+      "type": "object"
+    },
+    "BandKind": {
+      "description": "Octave or third-octave bands.",
+      "enum": [
+        "octave",
+        "third_octave"
+      ],
+      "type": "string"
+    },
+    "BandSet": {
+      "additionalProperties": false,
+      "description": "The frequency bands every per-band value in the project is given on.\n\n`frequencies_hz` holds nominal centre frequencies of `kind`, strictly ascending. The solvers\nsort `freq_enum` and map every per-band array by sorted position, so ascending order here is\nthe order of every per-band array in the project.",
+      "properties": {
+        "frequencies_hz": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/BandKind"
+        }
+      },
+      "required": [
+        "kind",
+        "frequencies_hz"
+      ],
+      "type": "object"
+    },
+    "Camera": {
+      "additionalProperties": false,
+      "description": "A perspective camera looking from `eye` at `target`, Z up.",
+      "properties": {
+        "eye": {
+          "description": "[x, y, z] in metres, Z up",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "target": {
+          "description": "[x, y, z] in metres, Z up",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "vertical_fov_deg": {
+          "description": "A float. Finite values are numbers; non-finite values are strings.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "eye",
+        "target",
+        "vertical_fov_deg"
+      ],
+      "type": "object"
+    },
+    "ComputationMethod": {
+      "description": "SPPS's absorption method: `simulation@computation_method`.",
+      "oneOf": [
+        {
+          "const": "random",
+          "description": "Code 0: Monte-Carlo absorption.",
+          "type": "string"
+        },
+        {
+          "const": "energetic",
+          "description": "Code 1: energy weighting.",
+          "type": "string"
+        }
+      ]
+    },
+    "DiffusionLaw": {
+      "description": "Diffusion law inside a fitting zone: `encombrement/bfreq@loi_diff`, the solver's\n`DIFFUSION_LAW` (`lib_interface/coreTypes.h:108-113`). The discriminant is the solver code.",
+      "enum": [
+        "uniform",
+        "uniform_reflection",
+        "lambert_reflection"
+      ],
+      "type": "string"
+    },
+    "Directivity": {
+      "description": "Source directivity: `source@directivite`, the solver's `SOURCE_TYPE`\n(`lib_interface/coreTypes.h:96-104`). See [`Directivity::solver_code`].\n\nIn JSON: `{\"kind\": \"omni\"}`, `{\"kind\": \"unidirectional\", \"direction\": [x, y, z]}`, ...\nExtra keys are refused for every kind. (serde's derive alone would read\n`{\"kind\": \"omni\", \"file\": \"balloon.txt\"}` as omni and drop the file, so the reader is written\nby hand.)",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Code 0.",
+          "properties": {
+            "kind": {
+              "const": "omni",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 1: emits along `direction` (`@u`, `@v`, `@w`, normalised by the solver).",
+          "properties": {
+            "direction": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "kind": {
+              "const": "unidirectional",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "direction"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 2: emits in the XY plane.",
+          "properties": {
+            "kind": {
+              "const": "plane_xy",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 3: emits in the YZ plane.",
+          "properties": {
+            "kind": {
+              "const": "plane_yz",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 4: emits in the XZ plane.",
+          "properties": {
+            "kind": {
+              "const": "plane_xz",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 5: a directivity balloon file (`@directivity_file`), aimed along `direction`.\n`file` is relative to the project file. A missing file makes the source emit nothing,\nwith exit code 0 (contract survey, `run_dirmiss`), so it is checked before launch.",
+          "properties": {
+            "direction": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "file": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "balloon",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "file",
+            "direction"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EntityRef": {
+      "description": "A named entity of the project. In JSON: `{\"kind\": \"material\", \"id\": \"<uuid>\"}`; any other\nkey is refused.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "surface_group",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "material",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "point_receiver",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "surface_receiver",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "fitting_zone",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "variant",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Environment": {
+      "additionalProperties": false,
+      "description": "The medium: `condition_atmospherique`. A missing element would leave the sound speed and\ndensity at 0, so config.xml always writes every attribute.",
+      "properties": {
+        "air_absorption": {
+          "$ref": "#/$defs/AirAbsorption"
+        },
+        "celerity_gradient_lin": {
+          "description": "`@blin`: linear celerity-gradient coefficient (0 = homogeneous).",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "celerity_gradient_log": {
+          "description": "`@alog`: logarithmic celerity-gradient coefficient (0 = homogeneous).",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "ground_roughness_m": {
+          "description": "`@z0`, metres: ground roughness for the celerity profile.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "pressure_pa": {
+          "description": "`@pression`, pascals.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "relative_humidity_percent": {
+          "description": "`@humidite`, percent relative humidity.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "temperature_c": {
+          "description": "`@temperature`, degrees Celsius.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "required": [
+        "temperature_c",
+        "relative_humidity_percent",
+        "pressure_pa",
+        "air_absorption",
+        "ground_roughness_m",
+        "celerity_gradient_log",
+        "celerity_gradient_lin"
+      ],
+      "type": "object"
+    },
+    "FittingBands": {
+      "additionalProperties": false,
+      "description": "A fitting zone's per-band arrays.",
+      "properties": {
+        "absorption": {
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "diffusion_law": {
+          "items": {
+            "$ref": "#/$defs/DiffusionLaw"
+          },
+          "type": "array"
+        },
+        "mean_free_path_m": {
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "absorption",
+        "mean_free_path_m",
+        "diffusion_law"
+      ],
+      "type": "object"
+    },
+    "FittingQuantity": {
+      "description": "A per-band quantity of a fitting zone.",
+      "enum": [
+        "absorption",
+        "mean_free_path"
+      ],
+      "type": "string"
+    },
+    "FittingShape": {
+      "description": "The volume of a fitting zone. Export marks it as a TetGen region whose attribute is the zone's\nsolver id (`mbin idVolume`, `.cbin idEn`).",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "An axis-aligned box.",
+          "properties": {
+            "kind": {
+              "const": "box",
+              "type": "string"
+            },
+            "max": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "min": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "min",
+            "max"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The volume closed by the faces of these surface groups; `inside_point` seeds the region.",
+          "properties": {
+            "groups": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "inside_point": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "kind": {
+              "const": "surfaces",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "groups",
+            "inside_point"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "FittingZone": {
+      "additionalProperties": false,
+      "description": "A fitting zone (encombrement): a volume filled with scattering objects, `encombrement_enum`.",
+      "properties": {
+        "absorption": {
+          "description": "`bfreq@alpha` per band: absorption of the fittings, 0 to 1.",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "diffusion_law": {
+          "description": "`bfreq@loi_diff` per band.",
+          "items": {
+            "$ref": "#/$defs/DiffusionLaw"
+          },
+          "type": "array"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "mean_free_path_m": {
+          "description": "`bfreq@lambda` per band: mean free path between fittings, metres.",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "shape": {
+          "$ref": "#/$defs/FittingShape"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "enabled",
+        "shape",
+        "absorption",
+        "mean_free_path_m",
+        "diffusion_law"
+      ],
+      "type": "object"
+    },
+    "Frame": {
+      "additionalProperties": false,
+      "description": "The world frame.",
+      "properties": {
+        "length_unit": {
+          "$ref": "#/$defs/LengthUnit"
+        },
+        "up_axis": {
+          "$ref": "#/$defs/UpAxis"
+        }
+      },
+      "required": [
+        "length_unit",
+        "up_axis"
+      ],
+      "type": "object"
+    },
+    "Geometry": {
+      "additionalProperties": false,
+      "description": "The room's surface mesh, in world metres. Each face belongs to one surface group.",
+      "properties": {
+        "faces": {
+          "items": {
+            "description": "[a, b, c, group]: three vertex indices and a surface group id",
+            "items": false,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "format": "uuid",
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "type": "array"
+        },
+        "vertices": {
+          "items": {
+            "description": "[x, y, z] in metres, Z up",
+            "items": {
+              "description": "A float. Finite values are numbers; non-finite values are strings.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                  "type": "string"
+                }
+              ]
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": "array"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "vertices",
+        "faces"
+      ],
+      "type": "object"
+    },
+    "LengthUnit": {
+      "description": "Length unit of every coordinate in the project. Only metres: the file states it so that a\nfile in any other unit is refused rather than misread.",
+      "enum": [
+        "metre"
+      ],
+      "type": "string"
+    },
+    "Material": {
+      "additionalProperties": false,
+      "description": "A surface material: `surface_absorption_enum/type_surface`.",
+      "properties": {
+        "absorption": {
+          "description": "Absorption coefficient per band, 0 to 1 (`bfreq@absorb`).",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "color": {
+          "description": "Display colour.",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "type": "string"
+        },
+        "double_sided": {
+          "description": "`@side_material`: the material acts on both sides of a face.",
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reflection_law": {
+          "$ref": "#/$defs/ReflectionLaw",
+          "description": "Written on every band as `bfreq@loi`."
+        },
+        "scattering": {
+          "description": "Scattering coefficient per band, 0 to 1: the share of reflections that are diffuse\n(`bfreq@diffusion`).",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "solver_id": {
+          "description": "A pinned solver id (`type_surface@id`, the `.cbin` face `idMat`). `None` lets export\nassign one. Importers set it so that a project imported from a solver mesh exports the\nsame ids and still matches that mesh. At most [`SOLVER_INT_MAX`]: the solver reads\n`@id` with `atoi`.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "transmission_loss_db": {
+          "description": "Transmission loss per band in dB (`bfreq@affaiblissement`, tau = 10^(-R/10)). `None`\nmeans no transmission: the attribute is then left out, which is how the solver knows.",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "color",
+        "absorption",
+        "scattering",
+        "reflection_law",
+        "transmission_loss_db",
+        "double_sided",
+        "solver_id"
+      ],
+      "type": "object"
+    },
+    "MaterialBands": {
+      "additionalProperties": false,
+      "description": "A material's per-band arrays.",
+      "properties": {
+        "absorption": {
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "scattering": {
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "transmission_loss_db": {
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "absorption",
+        "scattering",
+        "transmission_loss_db"
+      ],
+      "type": "object"
+    },
+    "MaterialOverride": {
+      "additionalProperties": false,
+      "description": "One material override in a [`Variant`].",
+      "properties": {
+        "group": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "material": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "material"
+      ],
+      "type": "object"
+    },
+    "MaterialQuantity": {
+      "description": "A per-band quantity of a material.",
+      "oneOf": [
+        {
+          "enum": [
+            "absorption",
+            "scattering"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "transmission_loss",
+          "description": "Only on a material that has a transmission loss.",
+          "type": "string"
+        }
+      ]
+    },
+    "MeshSettings": {
+      "additionalProperties": false,
+      "description": "TetGen settings (`e_core_core_tetconf.h`).",
+      "properties": {
+        "max_volume_m3": {
+          "anyOf": [
+            {
+              "description": "A float. Finite values are numbers; non-finite values are strings.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`-a`: maximum tetrahedron volume, cubic metres; `None` for no bound."
+        },
+        "min_radius_edge_ratio": {
+          "description": "`-q`: radius-to-edge quality bound.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "preserve_boundary": {
+          "description": "`-Y`: add no Steiner points on the boundary.",
+          "type": "boolean"
+        },
+        "surface_receiver_max_area_m2": {
+          "anyOf": [
+            {
+              "description": "A float. Finite values are numbers; non-finite values are strings.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Facet-area constraint on surface-receiver faces, square metres (the `.var` file); `None`\nfor no refinement."
+        }
+      },
+      "required": [
+        "min_radius_edge_ratio",
+        "max_volume_m3",
+        "surface_receiver_max_area_m2",
+        "preserve_boundary"
+      ],
+      "type": "object"
+    },
+    "Op": {
+      "description": "One edit. [`Op::apply`] returns its exact inverse.\n\n`Add*` ops insert at `index` (at most the list length); their inverse is `Remove*` by id,\nwhose inverse re-inserts at the same index. `Replace*` ops swap a whole entity, found by its\nid. A removal is refused while anything refers to the entity.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "op": {
+              "const": "set_project_name",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "type": "string"
+            },
+            "op": {
+              "const": "set_description",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "description"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "op": {
+              "const": "rename",
+              "type": "string"
+            },
+            "target": {
+              "$ref": "#/$defs/EntityRef"
+            }
+          },
+          "required": [
+            "op",
+            "target",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Changes the band set and every per-band array at once; see [`Project::rebanded`].",
+          "properties": {
+            "bands": {
+              "$ref": "#/$defs/BandSet"
+            },
+            "data": {
+              "$ref": "#/$defs/BandData"
+            },
+            "op": {
+              "const": "set_bands",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "bands",
+            "data"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Replaces the whole mesh (a re-import). Every face's group must exist.",
+          "properties": {
+            "geometry": {
+              "$ref": "#/$defs/Geometry"
+            },
+            "op": {
+              "const": "set_geometry",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "geometry"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "group": {
+              "$ref": "#/$defs/SurfaceGroup"
+            },
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "op": {
+              "const": "add_surface_group",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "index",
+            "group"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "remove_surface_group",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "group": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "material": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "set_group_material",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "group",
+            "material"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "material": {
+              "$ref": "#/$defs/Material"
+            },
+            "op": {
+              "const": "add_material",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "index",
+            "material"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "remove_material",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "material": {
+              "$ref": "#/$defs/Material"
+            },
+            "op": {
+              "const": "replace_material",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "material"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "band": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "material": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "set_material_band",
+              "type": "string"
+            },
+            "quantity": {
+              "$ref": "#/$defs/MaterialQuantity"
+            },
+            "value": {
+              "description": "A float. Finite values are numbers; non-finite values are strings.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "material",
+            "quantity",
+            "band",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "op": {
+              "const": "add_source",
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/$defs/Source"
+            }
+          },
+          "required": [
+            "op",
+            "index",
+            "source"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "remove_source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "replace_source",
+              "type": "string"
+            },
+            "source": {
+              "$ref": "#/$defs/Source"
+            }
+          },
+          "required": [
+            "op",
+            "source"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "move_source",
+              "type": "string"
+            },
+            "position": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            }
+          },
+          "required": [
+            "op",
+            "id",
+            "position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "set_source_enabled",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "id",
+            "enabled"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "op": {
+              "const": "add_point_receiver",
+              "type": "string"
+            },
+            "receiver": {
+              "$ref": "#/$defs/PointReceiver"
+            }
+          },
+          "required": [
+            "op",
+            "index",
+            "receiver"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "remove_point_receiver",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "replace_point_receiver",
+              "type": "string"
+            },
+            "receiver": {
+              "$ref": "#/$defs/PointReceiver"
+            }
+          },
+          "required": [
+            "op",
+            "receiver"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "move_point_receiver",
+              "type": "string"
+            },
+            "position": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            }
+          },
+          "required": [
+            "op",
+            "id",
+            "position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "op": {
+              "const": "add_surface_receiver",
+              "type": "string"
+            },
+            "receiver": {
+              "$ref": "#/$defs/SurfaceReceiver"
+            }
+          },
+          "required": [
+            "op",
+            "index",
+            "receiver"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "remove_surface_receiver",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "replace_surface_receiver",
+              "type": "string"
+            },
+            "receiver": {
+              "$ref": "#/$defs/SurfaceReceiver"
+            }
+          },
+          "required": [
+            "op",
+            "receiver"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "op": {
+              "const": "add_fitting_zone",
+              "type": "string"
+            },
+            "zone": {
+              "$ref": "#/$defs/FittingZone"
+            }
+          },
+          "required": [
+            "op",
+            "index",
+            "zone"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "remove_fitting_zone",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "replace_fitting_zone",
+              "type": "string"
+            },
+            "zone": {
+              "$ref": "#/$defs/FittingZone"
+            }
+          },
+          "required": [
+            "op",
+            "zone"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "band": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "op": {
+              "const": "set_fitting_band",
+              "type": "string"
+            },
+            "quantity": {
+              "$ref": "#/$defs/FittingQuantity"
+            },
+            "value": {
+              "description": "A float. Finite values are numbers; non-finite values are strings.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                  "type": "string"
+                }
+              ]
+            },
+            "zone": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "zone",
+            "quantity",
+            "band",
+            "value"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "environment": {
+              "$ref": "#/$defs/Environment"
+            },
+            "op": {
+              "const": "set_environment",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "environment"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "set_solver_settings",
+              "type": "string"
+            },
+            "settings": {
+              "$ref": "#/$defs/SolverSettings"
+            }
+          },
+          "required": [
+            "op",
+            "settings"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "band": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "computed": {
+              "type": "boolean"
+            },
+            "op": {
+              "const": "set_band_computed",
+              "type": "string"
+            },
+            "solver": {
+              "$ref": "#/$defs/SolverKind"
+            }
+          },
+          "required": [
+            "op",
+            "solver",
+            "band",
+            "computed"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "op": {
+              "const": "add_variant",
+              "type": "string"
+            },
+            "variant": {
+              "$ref": "#/$defs/Variant"
+            }
+          },
+          "required": [
+            "op",
+            "index",
+            "variant"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Refused while the variant is active.",
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "op": {
+              "const": "remove_variant",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Sets (`Some`) or removes (`None`) a variant's override on one group.",
+          "properties": {
+            "group": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "material": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "op": {
+              "const": "set_variant_override",
+              "type": "string"
+            },
+            "variant": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "variant",
+            "group",
+            "material"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "set_active_variant",
+              "type": "string"
+            },
+            "variant": {
+              "format": "uuid",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "op",
+            "variant"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "camera": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Camera"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "op": {
+              "const": "set_camera",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "camera"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Applies `ops` in order, all or nothing. The inverse is the inverses in reverse order.",
+          "properties": {
+            "op": {
+              "const": "batch",
+              "type": "string"
+            },
+            "ops": {
+              "items": {
+                "$ref": "#/$defs/Op"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "op",
+            "ops"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PointReceiver": {
+      "additionalProperties": false,
+      "description": "A point receiver: `recepteursp/recepteur_ponctuel`.",
+      "properties": {
+        "background_noise": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Spectrum"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Background noise, `bfreq@db` per band. `None` writes none."
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "description": "`@lbl` and `@name`. SPPS makes it a folder name and TCR a file name.",
+          "type": "string"
+        },
+        "orientation": {
+          "description": "`@u`, `@v`, `@w`, normalised by the solver; must not be zero.",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "position": {
+          "description": "`@x`, `@y`, `@z`; must lie inside the meshed volume.",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "position",
+        "orientation",
+        "background_noise"
+      ],
+      "type": "object"
+    },
+    "Project": {
+      "additionalProperties": false,
+      "description": "A room-acoustics project: the model, its materials, sources and receivers, the solver settings\nand the GUI state.",
+      "properties": {
+        "active_variant": {
+          "description": "The variant the GUI shows and a run uses; `None` is the base project.",
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bands": {
+          "$ref": "#/$defs/BandSet",
+          "description": "The one band set every per-band array follows (`freq_enum`)."
+        },
+        "description": {
+          "type": "string"
+        },
+        "environment": {
+          "$ref": "#/$defs/Environment"
+        },
+        "fitting_zones": {
+          "items": {
+            "$ref": "#/$defs/FittingZone"
+          },
+          "type": "array"
+        },
+        "format_version": {
+          "description": "Always [`FORMAT_VERSION`]; checked first on load.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frame": {
+          "$ref": "#/$defs/Frame"
+        },
+        "geometry": {
+          "$ref": "#/$defs/Geometry"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "materials": {
+          "description": "The project's material library. Entries need not be in use.",
+          "items": {
+            "$ref": "#/$defs/Material"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "point_receivers": {
+          "items": {
+            "$ref": "#/$defs/PointReceiver"
+          },
+          "type": "array"
+        },
+        "solvers": {
+          "$ref": "#/$defs/SolverSettings"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "type": "array"
+        },
+        "surface_groups": {
+          "items": {
+            "$ref": "#/$defs/SurfaceGroup"
+          },
+          "type": "array"
+        },
+        "surface_receivers": {
+          "items": {
+            "$ref": "#/$defs/SurfaceReceiver"
+          },
+          "type": "array"
+        },
+        "variants": {
+          "items": {
+            "$ref": "#/$defs/Variant"
+          },
+          "type": "array"
+        },
+        "view": {
+          "$ref": "#/$defs/ViewState"
+        }
+      },
+      "required": [
+        "format_version",
+        "id",
+        "name",
+        "description",
+        "frame",
+        "bands",
+        "geometry",
+        "surface_groups",
+        "materials",
+        "sources",
+        "point_receivers",
+        "surface_receivers",
+        "fitting_zones",
+        "environment",
+        "solvers",
+        "variants",
+        "active_variant",
+        "view"
+      ],
+      "type": "object"
+    },
+    "ReflectionLaw": {
+      "description": "How a surface reflects the diffuse part of the energy: `type_surface/bfreq@loi`, the solver's\n`REFLECTION_LAW` (`lib_interface/coreTypes.h:83-92`). The discriminant is the solver code.\n\nSPPS draws a diffuse reflection with probability equal to the scattering coefficient\n(`spps/CalculationCore.cpp:318`), so the law has no effect at scattering 0.\n[`ReflectionLaw::SemiDiffuse`] has no case in SPPS's `ReflectionLaws::SolveReflection`\n(`spps/tools/dotreflection.h:23-45`) and falls to its default, a specular reflection.",
+      "oneOf": [
+        {
+          "enum": [
+            "specular",
+            "lambert",
+            "w2",
+            "w3",
+            "w4",
+            "semi_diffuse"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "uniform",
+          "description": "Uniform, `w1` in upstream's comments.",
+          "type": "string"
+        }
+      ]
+    },
+    "SolverKind": {
+      "enum": [
+        "spps",
+        "tcr"
+      ],
+      "type": "string"
+    },
+    "SolverSettings": {
+      "additionalProperties": false,
+      "description": "Settings of every solver the project can run.",
+      "properties": {
+        "meshing": {
+          "$ref": "#/$defs/MeshSettings"
+        },
+        "spps": {
+          "$ref": "#/$defs/SppsSettings"
+        },
+        "tcr": {
+          "$ref": "#/$defs/TcrSettings"
+        }
+      },
+      "required": [
+        "spps",
+        "tcr",
+        "meshing"
+      ],
+      "type": "object"
+    },
+    "SoundMapQuantity": {
+      "description": "What SPPS writes on surface receivers: `simulation@surf_receiv_method`.",
+      "oneOf": [
+        {
+          "const": "intensity",
+          "description": "Code 0: angle-weighted intensity.",
+          "type": "string"
+        },
+        {
+          "const": "spl",
+          "description": "Code 1: sound pressure level.",
+          "type": "string"
+        }
+      ]
+    },
+    "Source": {
+      "additionalProperties": false,
+      "description": "A point sound source: `sources/source`.",
+      "properties": {
+        "delay_s": {
+          "description": "`@delay`, seconds.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "directivity": {
+          "$ref": "#/$defs/Directivity"
+        },
+        "enabled": {
+          "description": "A disabled source is left out of config.xml.",
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "description": "`@name`.",
+          "type": "string"
+        },
+        "position": {
+          "description": "`@x`, `@y`, `@z`. Must lie strictly inside the meshed volume: SPPS crashes on a source\noutside it (contract survey, `run_srcout`).",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "power": {
+          "$ref": "#/$defs/Spectrum",
+          "description": "Sound power, dB re 1 pW (`bfreq@db` per band, from [`Spectrum::band_levels_db`])."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "enabled",
+        "position",
+        "power",
+        "directivity",
+        "delay_s"
+      ],
+      "type": "object"
+    },
+    "Spectrum": {
+      "additionalProperties": false,
+      "description": "A level spectrum: a global level spread over the project's bands by a shape.\n\nUsed for source sound power (dB re 1 pW) and receiver background noise.",
+      "properties": {
+        "global_db": {
+          "description": "The energetic sum over the project's bands, in dB.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "shape": {
+          "$ref": "#/$defs/SpectrumShape"
+        }
+      },
+      "required": [
+        "global_db",
+        "shape"
+      ],
+      "type": "object"
+    },
+    "SpectrumShape": {
+      "description": "The shape of a level spectrum across the project's bands.\n\nIn JSON: `{\"kind\": \"pink\"}`, `{\"kind\": \"white\"}` or `{\"kind\": \"custom\", \"relative_db\": [...]}`.\nExtra keys are refused for every kind: serde's derive alone would read\n`{\"kind\": \"pink\", \"relative_db\": [...]}` as pink and drop the levels, so the reader is written\nby hand.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Equal power in every band.",
+          "properties": {
+            "kind": {
+              "const": "pink",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Power proportional to bandwidth: +1 dB per third-octave band and +3 dB per octave band,\nexactly (base-10 bands). This is I-Simpa's \"White noise\": tutorial 1's source, 80 dB\nover 50 Hz to 20 kHz in thirds, reads 60.1404190063477 dB at 1 kHz, and this shape gives\n60.14042 dB.",
+          "properties": {
+            "kind": {
+              "const": "white",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Relative levels in dB, one per band. Only the differences matter.",
+          "properties": {
+            "kind": {
+              "const": "custom",
+              "type": "string"
+            },
+            "relative_db": {
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "relative_db"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SppsSettings": {
+      "additionalProperties": false,
+      "description": "SPPS, the particle solver: the `simulation` element's SPPS attributes.\n\nThe three integers are C `int`s in the solver: each is at most [`SOLVER_INT_MAX`], which\n[`Project::check_integrity`] enforces.",
+      "properties": {
+        "air_absorption": {
+          "description": "`@abs_atmo_calc`.",
+          "type": "boolean"
+        },
+        "bands_computed": {
+          "description": "`freq_enum/bfreq@docalc` per band: which bands SPPS computes.",
+          "items": {
+            "type": "boolean"
+          },
+          "type": "array"
+        },
+        "direct_field_only": {
+          "description": "`@direct_calc`: direct field only (every surface fully absorbing).",
+          "type": "boolean"
+        },
+        "duration_s": {
+          "description": "`@duree_simulation`, seconds.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "echogram_per_source": {
+          "description": "`@output_recp_bysource`: an echogram per source as well as the total.",
+          "type": "boolean"
+        },
+        "extinction_exponent": {
+          "description": "`@trans_epsilon`: a particle dies below `E0 * 10^-n`. A missing value (0) kills every\nparticle at the first step in energetic mode (contract survey, `run_noeps`).",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "fittings": {
+          "description": "`@enc_calc`: fitting zones on. Off, the solver ignores them silently.",
+          "type": "boolean"
+        },
+        "method": {
+          "$ref": "#/$defs/ComputationMethod"
+        },
+        "particles_per_source": {
+          "description": "`@nbparticules`: particles per source per band. The solver raises values below 1 to 1.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "particles_saved": {
+          "description": "`@nbparticules_rendu`: particles per source saved for display; 0 saves none.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "random_seed": {
+          "description": "`@random_seed`: 0 leaves the generator unseeded and runs one thread per band; any other\nvalue seeds it and forces a single thread. The solver reads it as a C `int`.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "receiver_radius_m": {
+          "description": "`@rayon_recepteurp`: point-receiver sphere radius, metres. Must be above 0.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "save_receiver_intersections": {
+          "description": "`@save_receivers_intersection`: per-band receiver collision CSVs.",
+          "type": "boolean"
+        },
+        "save_surface_intersections": {
+          "description": "`@save_surface_intersection`: per-band surface collision CSVs.",
+          "type": "boolean"
+        },
+        "sound_map": {
+          "$ref": "#/$defs/SoundMapQuantity",
+          "description": "`@surf_receiv_method`."
+        },
+        "sound_maps_per_band": {
+          "description": "`@output_recs_byfreq`: surface-receiver files for every band, not only the global one.",
+          "type": "boolean"
+        },
+        "time_step_s": {
+          "description": "`@pasdetemps`, seconds. `duration / time step` must stay below 65,536 steps.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "transmission": {
+          "description": "`@trans_calc`: transmission through materials that have a transmission loss.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "particles_per_source",
+        "particles_saved",
+        "duration_s",
+        "time_step_s",
+        "random_seed",
+        "method",
+        "air_absorption",
+        "fittings",
+        "direct_field_only",
+        "transmission",
+        "extinction_exponent",
+        "receiver_radius_m",
+        "sound_map",
+        "sound_maps_per_band",
+        "echogram_per_source",
+        "save_surface_intersections",
+        "save_receiver_intersections",
+        "bands_computed"
+      ],
+      "type": "object"
+    },
+    "SurfaceGroup": {
+      "additionalProperties": false,
+      "description": "A named set of faces sharing one material: the unit materials are assigned to.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "material": {
+          "description": "The base project's material; a [`Variant`] may override it.",
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "material"
+      ],
+      "type": "object"
+    },
+    "SurfaceReceiver": {
+      "additionalProperties": false,
+      "description": "A surface receiver (sound map): `recepteurss/recepteur_surfacique` or\n`recepteur_surfacique_coupe`.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "description": "`@name`.",
+          "type": "string"
+        },
+        "shape": {
+          "$ref": "#/$defs/SurfaceReceiverShape"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "enabled",
+        "shape"
+      ],
+      "type": "object"
+    },
+    "SurfaceReceiverShape": {
+      "description": "Where a surface receiver lies.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "On the model: every face of these surface groups carries this receiver's id as its `.cbin`\n`idRs`. A face has one `idRs`, so a group belongs to at most one scene receiver.",
+          "properties": {
+            "groups": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "scene",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "groups"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A rectangle through corners `a`, `b`, `c` (`@ax`..`@cz`), cut into\n`ceil(|bc| / resolution) x ceil(|ba| / resolution)` cells (`@resolution`, metres).",
+          "properties": {
+            "a": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "b": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "c": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "kind": {
+              "const": "cutting_plane",
+              "type": "string"
+            },
+            "resolution_m": {
+              "description": "A float. Finite values are numbers; non-finite values are strings.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "a",
+            "b",
+            "c",
+            "resolution_m"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "TcrSettings": {
+      "additionalProperties": false,
+      "description": "TCR, the classical theory of reverberation. TCR always writes surface receivers per band\n(it tests the attribute's presence, not its value), so that switch is not a setting.",
+      "properties": {
+        "air_absorption": {
+          "description": "`@abs_atmo_calc`.",
+          "type": "boolean"
+        },
+        "bands_computed": {
+          "description": "`freq_enum/bfreq@docalc` per band.",
+          "items": {
+            "type": "boolean"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "air_absorption",
+        "bands_computed"
+      ],
+      "type": "object"
+    },
+    "UpAxis": {
+      "description": "The vertical axis. Only +Z, as the solvers use it (`@alog`/`@blin` gradients act along z).",
+      "enum": [
+        "z"
+      ],
+      "type": "string"
+    },
+    "Variant": {
+      "additionalProperties": false,
+      "description": "A named set of material overrides on top of the base project.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "overrides": {
+          "description": "At most one per group, strictly ascending by group id (so each variant has one spelling).",
+          "items": {
+            "$ref": "#/$defs/MaterialOverride"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "overrides"
+      ],
+      "type": "object"
+    },
+    "ViewState": {
+      "additionalProperties": false,
+      "description": "GUI state that belongs to the project.",
+      "properties": {
+        "camera": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Camera"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The saved 3D view; `None` lets the GUI frame the model."
+        }
+      },
+      "required": [
+        "camera"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "simpa_core::schema, dumped by app.exe --dump-schema. Do not edit.",
+  "properties": {
+    "op": {
+      "$ref": "#/$defs/Op"
+    },
+    "project": {
+      "$ref": "#/$defs/Project"
+    }
+  },
+  "required": [
+    "op",
+    "project"
+  ],
+  "title": "SchemaBindings",
+  "type": "object"
+}

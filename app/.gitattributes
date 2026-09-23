@@ -1,0 +1,5 @@
+# The generated bindings are always checked out with LF, whatever core.autocrlf says (it is true
+# on Grace and Zeph). The generator writes LF, so a checkout then compares byte for byte with a
+# regeneration (M9 gate e). The gate also compares git blob ids, so it holds either way.
+ui/src/bindings/** text eol=lf
+ui/src/checksum-kat.json text eol=lf
