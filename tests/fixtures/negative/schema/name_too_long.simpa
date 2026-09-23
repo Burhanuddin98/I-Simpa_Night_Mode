@@ -1,0 +1,137 @@
+{
+  "format_version": 1,
+  "id": "0c0be000-0000-4000-8000-000000000001",
+  "name": "Cube",
+  "description": "Upstream's 5 m test cube (src/lib_interface/tests/cube.cbin, cube_mesh.mbin at 929a5c8). Material solver ids equal the cube.cbin idMat values. Source and receiver are at least 0.35 m from every plane through three cube corners, so off every face of cube_mesh.mbin's 6 tetrahedra.",
+  "frame": {
+    "length_unit": "metre",
+    "up_axis": "z"
+  },
+  "bands": {
+    "kind": "octave",
+    "frequencies_hz": [125, 250, 500, 1000, 2000, 4000]
+  },
+  "geometry": {
+    "vertices": [
+      [5.0, -0.0, 0.0],
+      [0.0, -0.0, 0.0],
+      [0.0, 5.0, 0.0],
+      [5.0, 5.0, 0.0],
+      [0.0, 5.0, 5.0],
+      [5.0, 5.0, 5.0],
+      [0.0, -0.0, 5.0],
+      [5.0, -0.0, 5.0]
+    ],
+    "faces": [
+      [0, 1, 2, "0c0be000-0000-4000-8000-000000000200"],
+      [0, 2, 3, "0c0be000-0000-4000-8000-000000000200"],
+      [2, 4, 5, "0c0be000-0000-4000-8000-000000000200"],
+      [2, 5, 3, "0c0be000-0000-4000-8000-000000000200"],
+      [2, 6, 4, "0c0be000-0000-4000-8000-000000000200"],
+      [2, 1, 6, "0c0be000-0000-4000-8000-000000000200"],
+      [1, 0, 7, "0c0be000-0000-4000-8000-000000000200"],
+      [6, 1, 7, "0c0be000-0000-4000-8000-000000000200"],
+      [0, 3, 5, "0c0be000-0000-4000-8000-000000000200"],
+      [7, 0, 5, "0c0be000-0000-4000-8000-000000000200"],
+      [7, 5, 4, "0c0be000-0000-4000-8000-000000000200"],
+      [6, 7, 4, "0c0be000-0000-4000-8000-000000000200"]
+    ]
+  },
+  "surface_groups": [
+    {
+      "id": "0c0be000-0000-4000-8000-000000000200",
+      "name": "Cube faces (idMat 0)",
+      "material": "0c0be000-0000-4000-8000-000000000100"
+    }
+  ],
+  "materials": [
+    {
+      "id": "0c0be000-0000-4000-8000-000000000100",
+      "name": "Cube walls (idMat 0)",
+      "color": "#b0b0b0",
+      "absorption": [0.2, 0.2, 0.2, 0.2, 0.2, 0.2],
+      "scattering": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "reflection_law": "lambert",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": 0
+    }
+  ],
+  "sources": [
+    {
+      "id": "0c0be000-0000-4000-8000-000000000300",
+      "name": "Source with a name longer than the 49 bytes a cell holds",
+      "enabled": true,
+      "position": [3.0, 1.25, 2.5],
+      "power": {
+        "global_db": 90.0,
+        "shape": {
+          "kind": "pink"
+        }
+      },
+      "directivity": {
+        "kind": "omni"
+      },
+      "delay_s": 0.0
+    }
+  ],
+  "point_receivers": [
+    {
+      "id": "0c0be000-0000-4000-8000-000000000400",
+      "name": "Receiver 1",
+      "position": [2.0, 3.75, 2.5],
+      "orientation": [1.0, 0.0, 0.0],
+      "background_noise": null
+    }
+  ],
+  "surface_receivers": [],
+  "fitting_zones": [],
+  "environment": {
+    "temperature_c": 20.0,
+    "relative_humidity_percent": 50.0,
+    "pressure_pa": 101325.0,
+    "air_absorption": {
+      "kind": "iso9613"
+    },
+    "ground_roughness_m": 0.02,
+    "celerity_gradient_log": 0.0,
+    "celerity_gradient_lin": 0.0
+  },
+  "solvers": {
+    "spps": {
+      "particles_per_source": 2000,
+      "particles_saved": 0,
+      "duration_s": 1.0,
+      "time_step_s": 0.002,
+      "random_seed": 1,
+      "method": "random",
+      "air_absorption": true,
+      "fittings": true,
+      "direct_field_only": false,
+      "transmission": true,
+      "extinction_exponent": 5.0,
+      "receiver_radius_m": 0.31,
+      "sound_map": "intensity",
+      "sound_maps_per_band": true,
+      "echogram_per_source": false,
+      "save_surface_intersections": true,
+      "save_receiver_intersections": true,
+      "bands_computed": [true, true, true, true, true, true]
+    },
+    "tcr": {
+      "air_absorption": true,
+      "bands_computed": [true, true, true, true, true, true]
+    },
+    "meshing": {
+      "min_radius_edge_ratio": 5.0,
+      "max_volume_m3": null,
+      "surface_receiver_max_area_m2": null,
+      "preserve_boundary": true
+    }
+  },
+  "variants": [],
+  "active_variant": null,
+  "view": {
+    "camera": null
+  }
+}

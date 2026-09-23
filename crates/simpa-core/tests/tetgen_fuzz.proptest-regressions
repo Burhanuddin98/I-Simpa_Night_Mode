@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ac2be5ab051288e5dfc6dd37c9bcc26a08f8e9e97dc365cada86ea68addc6c35 # shrinks to which = 5, edits = [Flip(2358763324265255677, 223), InsertText(3890307592235532910, "-"), DeleteLine(6005957065985407632), DigitSwap(4674524107783837004, 57), DigitSwap(55255920490095759, 53)]
+cc 1954293bc8ad6250cd1e96e543626b94739c60231caf6dbb965bfae2645a9b11 # shrinks to bytes = [133, 115, 85, 130, 170, 117, 38, 110, 208, 67, 28, 81, 189, 2, 149, 149, 217, 242, 151, 166, 16, 255, 125, 59, 223, 122, 119, 146, 46, 142, 167, 97, 27, 12, 241, 147, 227, 138, 254, 212, 189, 51, 204, 64, 104, 1, 74, 91, 249, 147, 144, 11, 163, 120, 76, 25, 141, 208, 215, 163, 100, 143, 97, 100, 25, 173, 122, 71, 71, 16, 225, 60, 240, 198, 40, 20, 232, 67, 236, 192, 173, 32, 52, 222, 182, 129, 19, 47, 238, 24, 48, 204, 214, 44, 207, 104, 126, 82, 71, 255, 155, 122, 186, 191, 252, 126, 66, 1, 1, 79, 12, 14, 220, 233, 213, 66, 211, 241, 8, 46, 115, 226, 214, 184, 189, 147, 51, 50, 103, 125, 201, 104, 36, 186, 221, 192, 213, 201, 217, 123, 151, 1, 244, 197, 217, 59, 193, 90, 114, 170, 222, 60, 254, 107, 222, 75, 195, 39, 233, 4, 45, 204, 198, 113, 130, 85]

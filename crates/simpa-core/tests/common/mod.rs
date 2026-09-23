@@ -1,22 +1,39 @@
 //! Shared helpers for the format tests.
 //!
 //! Fuzz tests install [`Tracking`] as the global allocator of their own test binary and measure
-//! the peak between [`reset_peak`] and [`peak_since_reset`]. The counters are process-wide, so run
-//! fuzz binaries with `--test-threads=1`.
+//! the peak between [`reset_peak`] and [`peak_since_reset`]. The counters are per thread, so the
+//! measurement covers the reader call on the test's own thread and sibling tests running in
+//! parallel do not count against it (they did while the counters were process-wide).
 #![allow(dead_code)]
 
 use std::alloc::{GlobalAlloc, Layout, System};
+use std::cell::Cell;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct Tracking;
 
-static CURRENT: AtomicUsize = AtomicUsize::new(0);
-static PEAK: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    // Const-initialised: touching them never allocates, so the allocator cannot recurse.
+    static CURRENT: Cell<usize> = const { Cell::new(0) };
+    static PEAK: Cell<usize> = const { Cell::new(0) };
+}
 
 fn note_alloc(size: usize) {
-    let now = CURRENT.fetch_add(size, Ordering::SeqCst) + size;
-    PEAK.fetch_max(now, Ordering::SeqCst);
+    // try_with: during thread teardown the slots may already be gone; skip rather than panic.
+    let _ = CURRENT.try_with(|c| {
+        let now = c.get() + size;
+        c.set(now);
+        let _ = PEAK.try_with(|p| {
+            if now > p.get() {
+                p.set(now);
+            }
+        });
+    });
+}
+
+fn note_free(size: usize) {
+    // Memory allocated on another thread may be freed here; saturate instead of wrapping.
+    let _ = CURRENT.try_with(|c| c.set(c.get().saturating_sub(size)));
 }
 
 unsafe impl GlobalAlloc for Tracking {
@@ -29,28 +46,28 @@ unsafe impl GlobalAlloc for Tracking {
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         unsafe { System.dealloc(ptr, layout) };
-        CURRENT.fetch_sub(layout.size(), Ordering::SeqCst);
+        note_free(layout.size());
     }
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         let p = unsafe { System.realloc(ptr, layout, new_size) };
         if !p.is_null() {
-            CURRENT.fetch_sub(layout.size(), Ordering::SeqCst);
+            note_free(layout.size());
             note_alloc(new_size);
         }
         p
     }
 }
 
-/// Starts a measurement; returns the bytes live at this moment (the baseline).
+/// Starts a measurement on this thread; returns the bytes live here now (the baseline).
 pub fn reset_peak() -> usize {
-    let now = CURRENT.load(Ordering::SeqCst);
-    PEAK.store(now, Ordering::SeqCst);
+    let now = CURRENT.with(Cell::get);
+    PEAK.with(|p| p.set(now));
     now
 }
 
-/// Peak bytes allocated above `baseline` since [`reset_peak`].
+/// Peak bytes this thread allocated above `baseline` since [`reset_peak`].
 pub fn peak_since_reset(baseline: usize) -> usize {
-    PEAK.load(Ordering::SeqCst).saturating_sub(baseline)
+    PEAK.with(Cell::get).saturating_sub(baseline)
 }
 
 /// Allocation budget a reader may use for an input of `len` bytes (gate M2(c)).

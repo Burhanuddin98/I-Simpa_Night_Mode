@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration workingdirectory="__RUNDIR__">
+  <condition_atmospherique temperature="20" pression="101325" humidite="50" z0="0.02" alog="0" blin="0" disable_absatmo_computation="0" absatmo="0"/>
+  <simulation modelName="mesh.cbin" tetrameshFileName="tetramesh.mbin" pasdetemps="0.002" duree_simulation="1" directivities_directory="" recepteurss_directory="Surface receiver\" recepteurss_filename="Sound level.csbin" recepteurss_cut_filename="rs_cut.csbin" receiversp_directory="RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR" receiversp_filename="Sound level.recp" receiversp_filename_adv="Advanced sound level.gap" cumul_filename="Total energy.recp" particules_directory="Particles\" particules_filename="particles.pbin" stats_filename="SPPS particle statistics.gabe" nbparticules="2000" nbparticules_rendu="0" abs_atmo_calc="1" output_recp_bysource="0" random_seed="1" save_surface_intersection="1" save_receivers_intersection="1" direct_calc="0" enc_calc="1" computation_method="0" rayon_recepteurp="0.31" trans_epsilon="5" trans_calc="1" output_recs_byfreq="1" surf_receiv_method="0">
+    <freq_enum>
+      <bfreq freq="125" docalc="1"/>
+      <bfreq freq="250" docalc="1"/>
+      <bfreq freq="500" docalc="1"/>
+      <bfreq freq="1000" docalc="1"/>
+      <bfreq freq="2000" docalc="1"/>
+      <bfreq freq="4000" docalc="1"/>
+    </freq_enum>
+  </simulation>
+  <surface_absorption_enum>
+    <type_surface id="0" side_material="1">
+      <bfreq freq="125" absorb="0.2" diffusion="0.1" loi="2"/>
+      <bfreq freq="250" absorb="0.2" diffusion="0.1" loi="2"/>
+      <bfreq freq="500" absorb="0.2" diffusion="0.1" loi="2"/>
+      <bfreq freq="1000" absorb="0.2" diffusion="0.1" loi="2"/>
+      <bfreq freq="2000" absorb="0.2" diffusion="0.1" loi="2"/>
+      <bfreq freq="4000" absorb="0.2" diffusion="0.1" loi="2"/>
+    </type_surface>
+  </surface_absorption_enum>
+  <sources>
+    <source name="Source 1" x="3" y="1.25" z="2.5" directivite="0" delay="0">
+      <bfreq freq="125" db="82.2184874961636"/>
+      <bfreq freq="250" db="82.2184874961636"/>
+      <bfreq freq="500" db="82.2184874961636"/>
+      <bfreq freq="1000" db="82.2184874961636"/>
+      <bfreq freq="2000" db="82.2184874961636"/>
+      <bfreq freq="4000" db="82.2184874961636"/>
+    </source>
+  </sources>
+  <recepteursp>
+    <recepteur_ponctuel id="0" lbl="Receiver 1" x="2" y="3.75" z="2.5" u="1" v="0" w="0">
+      <bfreq freq="125" db="0"/>
+      <bfreq freq="250" db="0"/>
+      <bfreq freq="500" db="0"/>
+      <bfreq freq="1000" db="0"/>
+      <bfreq freq="2000" db="0"/>
+      <bfreq freq="4000" db="0"/>
+    </recepteur_ponctuel>
+  </recepteursp>
+  <recepteurss/>
+  <encombrement_enum/>
+</configuration>

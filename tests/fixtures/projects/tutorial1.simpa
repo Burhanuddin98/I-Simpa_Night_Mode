@@ -1,0 +1,237 @@
+{
+  "format_version": 1,
+  "id": "aefbe883-2012-4cb7-ad7f-811c3d866a74",
+  "name": "Tutorial 1",
+  "description": "Upstream I-Simpa tutorial 1 (tutorial_1.proj at 929a5c8), imported by config_xml::import_upstream_with_mesh from tests/fixtures/upstream/tutorial1/spps/config.xml and its mesh.cbin. SPPS settings as in that fixture: 10,000 particles, random seed 1.",
+  "frame": {
+    "length_unit": "metre",
+    "up_axis": "z"
+  },
+  "bands": {
+    "kind": "third_octave",
+    "frequencies_hz": [50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000]
+  },
+  "geometry": {
+    "vertices": [
+      [6.0, -0.0, 0.0],
+      [0.0, -0.0, 0.0],
+      [0.0, 10.0, 0.0],
+      [6.0, -0.0, 0.0],
+      [0.0, 10.0, 0.0],
+      [6.0, 10.0, 0.0],
+      [0.0, 10.0, 0.0],
+      [0.0, 10.0, 3.0],
+      [6.0, 10.0, 3.0],
+      [0.0, 10.0, 0.0],
+      [6.0, 10.0, 3.0],
+      [6.0, 10.0, 0.0],
+      [0.0, 10.0, 0.0],
+      [0.0, -0.0, 3.0],
+      [0.0, 10.0, 3.0],
+      [0.0, 10.0, 0.0],
+      [0.0, -0.0, 0.0],
+      [0.0, -0.0, 3.0],
+      [0.0, -0.0, 0.0],
+      [6.0, -0.0, 0.0],
+      [6.0, -0.0, 3.0],
+      [0.0, -0.0, 3.0],
+      [0.0, -0.0, 0.0],
+      [6.0, -0.0, 3.0],
+      [6.0, -0.0, 0.0],
+      [6.0, 10.0, 0.0],
+      [6.0, 10.0, 3.0],
+      [6.0, -0.0, 3.0],
+      [6.0, -0.0, 0.0],
+      [6.0, 10.0, 3.0],
+      [6.0, -0.0, 3.0],
+      [6.0, 10.0, 3.0],
+      [0.0, 10.0, 3.0],
+      [0.0, -0.0, 3.0],
+      [6.0, -0.0, 3.0],
+      [0.0, 10.0, 3.0]
+    ],
+    "faces": [
+      [0, 1, 2, "b7ef82d8-23d8-4ae7-80fc-f91fc3e0adeb"],
+      [3, 4, 5, "b7ef82d8-23d8-4ae7-80fc-f91fc3e0adeb"],
+      [6, 7, 8, "96a593cd-1a11-40c8-a146-e92acca7a80a"],
+      [9, 10, 11, "96a593cd-1a11-40c8-a146-e92acca7a80a"],
+      [12, 13, 14, "96a593cd-1a11-40c8-a146-e92acca7a80a"],
+      [15, 16, 17, "96a593cd-1a11-40c8-a146-e92acca7a80a"],
+      [18, 19, 20, "96a593cd-1a11-40c8-a146-e92acca7a80a"],
+      [21, 22, 23, "96a593cd-1a11-40c8-a146-e92acca7a80a"],
+      [24, 25, 26, "96a593cd-1a11-40c8-a146-e92acca7a80a"],
+      [27, 28, 29, "96a593cd-1a11-40c8-a146-e92acca7a80a"],
+      [30, 31, 32, "755ba4c2-114a-45a9-8290-d835d56ea329"],
+      [33, 34, 35, "755ba4c2-114a-45a9-8290-d835d56ea329"]
+    ]
+  },
+  "surface_groups": [
+    {
+      "id": "b7ef82d8-23d8-4ae7-80fc-f91fc3e0adeb",
+      "name": "idMat 25 / idRs 3503",
+      "material": "b3e45954-51c7-4107-a24c-da25724ce4cf"
+    },
+    {
+      "id": "96a593cd-1a11-40c8-a146-e92acca7a80a",
+      "name": "idMat 22",
+      "material": "929a6a49-4800-47e8-8397-c9307b13dfee"
+    },
+    {
+      "id": "755ba4c2-114a-45a9-8290-d835d56ea329",
+      "name": "idMat 21",
+      "material": "71507b3e-3f39-4cc9-a0b8-fb0f60beee91"
+    }
+  ],
+  "materials": [
+    {
+      "id": "50068c33-3672-41aa-8102-eb1a6985e9b0",
+      "name": "Material 0",
+      "color": "#b0b0b0",
+      "absorption": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "scattering": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": 0
+    },
+    {
+      "id": "71507b3e-3f39-4cc9-a0b8-fb0f60beee91",
+      "name": "Material 21",
+      "color": "#c89f6e",
+      "absorption": [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
+      "scattering": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": 21
+    },
+    {
+      "id": "929a6a49-4800-47e8-8397-c9307b13dfee",
+      "name": "Material 22",
+      "color": "#7a9ec4",
+      "absorption": [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2],
+      "scattering": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": 22
+    },
+    {
+      "id": "b3e45954-51c7-4107-a24c-da25724ce4cf",
+      "name": "Material 25",
+      "color": "#9cc47a",
+      "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "scattering": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": 25
+    }
+  ],
+  "sources": [
+    {
+      "id": "c812cff2-6d66-4401-add2-871a33c00af4",
+      "name": "Source 1",
+      "enabled": true,
+      "position": [3.0, 5.0, 1.8],
+      "power": {
+        "global_db": 80.0,
+        "shape": {
+          "kind": "white"
+        }
+      },
+      "directivity": {
+        "kind": "omni"
+      },
+      "delay_s": 0.0
+    }
+  ],
+  "point_receivers": [
+    {
+      "id": "967292ee-c2d6-47d5-97ab-f162ed87cbe9",
+      "name": "Receiver 2",
+      "position": [3.0, 7.0, 1.8],
+      "orientation": [-0.3833573, -0.8945003, -0.23001435],
+      "background_noise": {
+        "global_db": -4.6704870796322155e-8,
+        "shape": {
+          "kind": "custom",
+          "relative_db": [-32.85958, -31.85958, -30.85958, -29.85958, -28.85958, -27.85958, -26.85958, -25.85958, -24.85958, -23.85958, -22.85958, -21.85958, -20.85958, -19.85958, -18.85958, -17.85958, -16.85958, -15.859579, -14.859579, -13.859579, -12.859579, -11.859579, -10.859579, -9.859579, -8.859579, -7.8595796, -6.8595796]
+        }
+      }
+    },
+    {
+      "id": "b7bc81f9-cb9d-42f4-b661-0258e4c0d0ca",
+      "name": "Receiver 1",
+      "position": [1.0, 1.0, 1.8],
+      "orientation": [-0.43685207, -0.43685207, -0.7863337],
+      "background_noise": {
+        "global_db": -4.6704870796322155e-8,
+        "shape": {
+          "kind": "custom",
+          "relative_db": [-32.85958, -31.85958, -30.85958, -29.85958, -28.85958, -27.85958, -26.85958, -25.85958, -24.85958, -23.85958, -22.85958, -21.85958, -20.85958, -19.85958, -18.85958, -17.85958, -16.85958, -15.859579, -14.859579, -13.859579, -12.859579, -11.859579, -10.859579, -9.859579, -8.859579, -7.8595796, -6.8595796]
+        }
+      }
+    }
+  ],
+  "surface_receivers": [
+    {
+      "id": "51d97503-ed49-47c6-94f0-08cd3240b173",
+      "name": "Receiver",
+      "enabled": true,
+      "shape": {
+        "kind": "scene",
+        "groups": ["b7ef82d8-23d8-4ae7-80fc-f91fc3e0adeb"]
+      }
+    }
+  ],
+  "fitting_zones": [],
+  "environment": {
+    "temperature_c": 20.0,
+    "relative_humidity_percent": 50.0,
+    "pressure_pa": 101325.0,
+    "air_absorption": {
+      "kind": "iso9613"
+    },
+    "ground_roughness_m": 0.02,
+    "celerity_gradient_log": 0.0,
+    "celerity_gradient_lin": 0.0
+  },
+  "solvers": {
+    "spps": {
+      "particles_per_source": 10000,
+      "particles_saved": 0,
+      "duration_s": 2.0,
+      "time_step_s": 0.01,
+      "random_seed": 1,
+      "method": "random",
+      "air_absorption": true,
+      "fittings": true,
+      "direct_field_only": false,
+      "transmission": true,
+      "extinction_exponent": 5.0,
+      "receiver_radius_m": 0.31,
+      "sound_map": "intensity",
+      "sound_maps_per_band": true,
+      "echogram_per_source": false,
+      "save_surface_intersections": true,
+      "save_receiver_intersections": true,
+      "bands_computed": [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+    },
+    "tcr": {
+      "air_absorption": true,
+      "bands_computed": [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+    },
+    "meshing": {
+      "min_radius_edge_ratio": 5.0,
+      "max_volume_m3": null,
+      "surface_receiver_max_area_m2": null,
+      "preserve_boundary": true
+    }
+  },
+  "variants": [],
+  "active_variant": null,
+  "view": {
+    "camera": null
+  }
+}

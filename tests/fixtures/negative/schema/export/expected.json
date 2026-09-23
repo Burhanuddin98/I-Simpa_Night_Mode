@@ -1,0 +1,9 @@
+{
+  "config_attribute_missing": "config_attribute_missing",
+  "config_value_format": "config_value_format",
+  "docalc_not_literal_one": "docalc_not_literal_one",
+  "fitting_id_collides_with_room_region": "fitting_id_collides_with_room_region",
+  "output_path_too_long": "output_path_too_long",
+  "solver_id_mapping_invalid": "solver_id_mapping_invalid",
+  "working_directory_invalid": "working_directory_invalid"
+}

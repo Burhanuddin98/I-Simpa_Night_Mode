@@ -22,3 +22,6 @@ test_project.isimpa
 
 # Rust rebuild
 /target/
+
+# Per-project agent memory written by the Claude Code harness
+.claude/
