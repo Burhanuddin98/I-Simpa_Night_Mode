@@ -93,6 +93,43 @@ These are the plan's codes (raw json line 3); M5 and M6 implement 4, 5 and 130.
 - **6:** result verification (M7)
 - **130:** cancelled
 
+## CLI surface (integration)
+
+**`simpa mesh <project.simpa | file.poly> --out <dir>`**
+- Options: `--json`, `--tetgen <exe>`, `--from-tetgen <dir>`, `--cancel-after-ms <n>`.
+- A project must pass `geometry::check` first (exit 3) and the mesh-relevant validator rules
+  (exit 2).
+- stdout carries the mesh manifest (`--json`) or a summary; TetGen's lines go to stderr.
+- Exits: 0, 2, 3, 4 or 130.
+
+**`simpa mesh-verify <dir>`**
+- Options: `--json`, `--room-id <n>`, `--fittings <a,b,..>`.
+- stdout carries the `DirReport`.
+- Exits: 0 on a pass, 4 on a failure.
+
+**`simpa run <project> --solver spps|tcr`**
+- Options:
+  - `--variant <v>`, `--mesh <dir>`, `--runs <root>`
+  - `--loss-limit <f>` (default 0.01)
+  - `--cancel-after-ms <n>`, `--cancel-after-progress <p>`
+  - `--solver-exe <exe>`, `--tetgen <exe>`, `--json`
+- Classified lines stream to stderr as `CLASS  text`.
+- stdout carries the run manifest (`--json`) or a one-line verdict. Both name the run folder.
+- Exits: 0, 2, 3, 4, 5 or 130.
+
+**`simpa run-folder <dir> --solver spps|tcr`**
+- Options: `--runs <root>`, `--solver-exe <exe>`, `--loss-limit <f>`, `--cancel-after-ms <n>`,
+  `--cancel-after-progress <p>` and `--json`.
+- Exits: 0, 5 or 130.
+
+**Finding the executables.** The first of these that exists is used, and its path and sha256
+go into the manifest:
+1. `--solver-exe` or `--tetgen`
+2. `$SIMPA_SOLVERS_DIR`
+3. `<simpa.exe dir>\solvers\`
+4. `<simpa.exe dir>\`
+5. the nearest `target\solvers\bin\` above `simpa.exe`, for the dev tree
+
 ## Layout
 
 ```
