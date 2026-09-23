@@ -277,6 +277,29 @@ fn broken_neighbour_link_is_nonmutual_neighbors_only() {
 }
 
 #[test]
+fn neighbours_in_the_wrong_face_slots_are_nonmutual_neighbors_only() {
+    // A mesher that writes `.neigh` columns into the wrong face slots: one tetrahedron's
+    // neighbours across faces 0 and 1 trade places. Each link still names a tetrahedron that
+    // links back to it, so a check of the back-link alone passes this; only comparing the three
+    // nodes on both sides of the link catches it.
+    let (mut mesh, scene) = tutorial1();
+    let t = mesh
+        .tetrahedra
+        .iter()
+        .position(|tet| tet.faces.iter().all(|f| f.neighbor >= 0 && f.marker < 0))
+        .expect("an interior tetrahedron");
+    let faces = &mut mesh.tetrahedra[t].faces;
+    let (n0, n1) = (faces[0].neighbor, faces[1].neighbor);
+    assert_ne!(n0, n1);
+    faces[0].neighbor = n1;
+    faces[1].neighbor = n0;
+    let r = verify_mesh(&mesh, &scene, &upstream());
+    assert_only(&r, "nonmutual_neighbors");
+    // t's two swapped faces, and the face each former neighbour shares with t.
+    assert_eq!(r.nonmutual_neighbors, 4);
+}
+
+#[test]
 fn shared_face_without_a_link_is_nonmutual_neighbors_only() {
     // Both sides of an interior face lose their link, and both are marked with a scene face
     // placed exactly there, so they are not unmarked boundary faces: the face is still shared.
@@ -326,6 +349,71 @@ fn marker_on_a_distant_scene_face_is_marker_geometry_mismatches_only() {
     assert_eq!(r.marker_geometry_mismatches, 1);
 }
 
+/// A scene face's corners as `f64`.
+fn scene_triangle(scene: &Model, s: usize) -> [[f64; 3]; 3] {
+    let f = scene.faces[s];
+    [f.a, f.b, f.c].map(|i| {
+        let v = scene.vertices[i as usize];
+        [v.x, v.y, v.z].map(f64::from)
+    })
+}
+
+/// Distance from `p` to the plane through `tri`.
+fn plane_distance(p: [f64; 3], tri: [[f64; 3]; 3]) -> f64 {
+    let sub = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let (u, v, w) = (sub(tri[1], tri[0]), sub(tri[2], tri[0]), sub(p, tri[0]));
+    let n = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
+    let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+    (n[0] * w[0] + n[1] * w[1] + n[2] * w[2]).abs() / len
+}
+
+#[test]
+fn marker_on_the_coplanar_neighbouring_triangle_is_marker_geometry_mismatches_only() {
+    // Each wall of the box is two triangles. A face on one, marked with the other, lies in the
+    // marker's plane but outside its triangle: only the "inside it" half of the check sees it.
+    let (mut mesh, scene) = tutorial1();
+    let tol = verify_mesh(&mesh, &scene, &upstream()).marker_tolerance_m;
+    let uses = marker_uses(&mesh);
+    let centroid =
+        |pts: [[f64; 3]; 3]| [0, 1, 2].map(|k| (pts[0][k] + pts[1][k] + pts[2][k]) / 3.0);
+    let gap = |a: [f64; 3], b: [f64; 3]| (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f64>().sqrt();
+    // Of the boundary faces whose scene face others also carry, the one farthest from a
+    // coplanar other scene face: (distance between centroids, tet, face, that scene face).
+    let mut best: Option<(f64, usize, usize, usize)> = None;
+    for (t, tet) in mesh.tetrahedra.iter().enumerate() {
+        for (i, f) in tet.faces.iter().enumerate() {
+            if f.neighbor >= 0 || f.marker < 0 || uses[&f.marker] < 2 {
+                continue;
+            }
+            let pts = f.vertices.map(|v| node_f64(&mesh, v));
+            for s in (0..scene.faces.len()).filter(|&s| s as i32 != f.marker) {
+                let tri = scene_triangle(&scene, s);
+                if pts.iter().all(|&p| plane_distance(p, tri) <= tol / 16.0) {
+                    let d = gap(centroid(pts), centroid(tri));
+                    if best.is_none_or(|b| d > b.0) {
+                        best = Some((d, t, i, s));
+                    }
+                }
+            }
+        }
+    }
+    let (_, t, i, s) = best.expect("a wall of two coplanar triangles");
+    mesh.tetrahedra[t].faces[i].marker = s as i32;
+    let r = verify_mesh(&mesh, &scene, &upstream());
+    assert_only(&r, "marker_geometry_mismatches");
+    assert_eq!(r.marker_geometry_mismatches, 1);
+    // In the plane to within a sixteenth of the tolerance, yet metres outside the triangle.
+    println!(
+        "coplanar marker: tet {t} face {i} -> scene face {s}, {:.3} m outside it",
+        r.max_marker_distance_m
+    );
+    assert!(r.max_marker_distance_m > 0.1, "{}", r.max_marker_distance_m);
+}
+
 #[test]
 fn scene_face_with_no_markers_is_uncovered_scene_faces_only() {
     // Every tetrahedron face that carried scene face 5 moves to a copy of it appended to the
@@ -347,6 +435,29 @@ fn scene_face_with_no_markers_is_uncovered_scene_faces_only() {
     let r = verify_mesh(&mesh, &scene, &upstream());
     assert_only(&r, "uncovered_scene_faces");
     assert_eq!(r.uncovered_scene_faces, 1);
+    assert_eq!(r.uncovered_scene_faces_first, [5]);
+
+    // The literal mutation, every marker of face 5 removed (set to -1), leaves those boundary
+    // faces unmarked as well, so it gives exactly those two codes.
+    let (mut mesh, scene) = tutorial1();
+    let mut cleared = 0;
+    for tet in &mut mesh.tetrahedra {
+        for f in &mut tet.faces {
+            if f.marker == 5 {
+                f.marker = -1;
+                cleared += 1;
+            }
+        }
+    }
+    assert_eq!(cleared, moved);
+    let r = verify_mesh(&mesh, &scene, &upstream());
+    assert_eq!(
+        codes(&r),
+        ["unmarked_boundary_faces", "uncovered_scene_faces"],
+        "{}",
+        summary("face 5 unmarked", &r)
+    );
+    assert_eq!(r.unmarked_boundary_faces, cleared);
     assert_eq!(r.uncovered_scene_faces_first, [5]);
 }
 
@@ -396,11 +507,23 @@ fn neighbour_and_face_vertex_out_of_range_are_index_errors() {
     assert_only(&r, "index_errors");
     assert_eq!(r.index_errors, 1);
 
+    // A face vertex of -5 on an interior face. One index error; the face is then also not the
+    // face opposite its slot's corner, and no longer the face its neighbour holds, seen from both
+    // ends. Each of the three is true of the mutated mesh, so all three are reported.
     let (mut mesh, scene) = tutorial1();
-    mesh.tetrahedra[3].faces[0].vertices[0] = -5;
+    let ((t, i), _) = internal_face(&mesh);
+    mesh.tetrahedra[t].faces[i].vertices[0] = -5;
     let r = verify_mesh(&mesh, &scene, &upstream());
-    assert!(r.codes.contains(&"index_errors".to_string()), "{r:?}");
-    assert_eq!(r.index_errors, 1);
+    assert_eq!(
+        codes(&r),
+        ["index_errors", "misordered_faces", "nonmutual_neighbors"],
+        "{}",
+        summary("face vertex -5", &r)
+    );
+    assert_eq!(
+        (r.index_errors, r.misordered_faces, r.nonmutual_neighbors),
+        (1, 1, 2)
+    );
 }
 
 #[test]
@@ -742,6 +865,128 @@ fn manifest_hash_is_checked_when_present() {
     ));
 }
 
+/// A manifest in the mesher's layout (`docs/formats/mesh-manifest.md`, "Layout"), trimmed to the
+/// keys around the one read: `files.mbin` is `mbin`, verbatim JSON.
+fn mesher_manifest(mbin: &str) -> String {
+    format!(
+        "{{\n  \"manifest_version\": 1,\n  \"source\": \"project\",\n  \"status\": \"OK\",\n  \
+         \"codes\": [],\n  \"files\": {{\n    \"poly\": \"{p}\",\n    \"var\": null,\n    \
+         \"cbin\": \"{p}\",\n    \"mbin\": {mbin}\n  }},\n  \"skipped_rows\": 0\n}}\n",
+        p = "a".repeat(64)
+    )
+}
+
+#[test]
+fn mesher_manifest_files_mbin_is_checked() {
+    let quoted = |h: &str| format!("\"{h}\"");
+    let dir = cube_folder(
+        "files_good",
+        Some(&mesher_manifest(&quoted(CUBE_MBIN_SHA256))),
+    );
+    let r = verify_dir(&dir, &upstream()).unwrap();
+    assert!(r.passed(), "{r:?}");
+
+    // Negative: one digit off.
+    let mut wrong = CUBE_MBIN_SHA256.to_string();
+    wrong.replace_range(0..1, if wrong.starts_with('0') { "1" } else { "0" });
+    let dir = cube_folder("files_wrong", Some(&mesher_manifest(&quoted(&wrong))));
+    assert_eq!(
+        verify_dir(&dir, &upstream()).unwrap().codes,
+        ["manifest_mismatch"]
+    );
+
+    // Negative: null says the mesher wrote no .mbin, so the one in the folder is not its own (a
+    // partial write, or a leftover).
+    let dir = cube_folder("files_null_beside_mbin", Some(&mesher_manifest("null")));
+    assert_eq!(
+        verify_dir(&dir, &upstream()).unwrap().codes,
+        ["manifest_mismatch"]
+    );
+
+    // Negative: a record of the wrong type, for `files.mbin` and for `files` itself.
+    for (name, m) in [
+        ("files_mbin_number", mesher_manifest("7")),
+        ("files_not_object", "{\"files\": \"x\"}".to_string()),
+    ] {
+        let dir = cube_folder(name, Some(&m));
+        assert_eq!(
+            verify_dir(&dir, &upstream()).unwrap().codes,
+            ["manifest_mismatch"],
+            "{name}"
+        );
+    }
+
+    // No `files`, or `files` without `mbin`: not checked.
+    for (name, m) in [
+        ("files_absent", "{\"manifest_version\": 1}"),
+        ("files_without_mbin", "{\"files\": {\"cbin\": null}}"),
+    ] {
+        let dir = cube_folder(name, Some(m));
+        assert!(verify_dir(&dir, &upstream()).unwrap().passed(), "{name}");
+    }
+
+    // Both records kept: each is checked.
+    let both = |files: &str, top: &str| {
+        mesher_manifest(&quoted(files)).replacen(
+            '{',
+            &format!("{{\n  \"mbin_sha256\": \"{top}\","),
+            1,
+        )
+    };
+    let dir = cube_folder("both_good", Some(&both(CUBE_MBIN_SHA256, CUBE_MBIN_SHA256)));
+    assert!(verify_dir(&dir, &upstream()).unwrap().passed());
+    for (name, files, top) in [
+        ("both_files_wrong", wrong.as_str(), CUBE_MBIN_SHA256),
+        ("both_top_wrong", CUBE_MBIN_SHA256, wrong.as_str()),
+    ] {
+        let dir = cube_folder(name, Some(&both(files, top)));
+        assert_eq!(
+            verify_dir(&dir, &upstream()).unwrap().codes,
+            ["manifest_mismatch"],
+            "{name}"
+        );
+    }
+
+    // A failed meshing: TetGen skipped facets and no .mbin was written. Null is then right, and a
+    // hash is not.
+    let src = fixture("meshes/tg_bad");
+    for (name, mbin, expected) in [
+        (
+            "failed_null",
+            "null".to_string(),
+            &["tetgen_skipped_facets", "neigh_missing"][..],
+        ),
+        (
+            "failed_hash",
+            quoted(CUBE_MBIN_SHA256),
+            &[
+                "tetgen_skipped_facets",
+                "neigh_missing",
+                "manifest_mismatch",
+            ][..],
+        ),
+    ] {
+        let dir = scratch(name);
+        for ext in [
+            "1.node",
+            "1.ele",
+            "1.face",
+            "_skipped.face",
+            "_skipped.node",
+        ] {
+            let file = if ext.starts_with('_') {
+                format!("scene_mesh{ext}")
+            } else {
+                format!("scene_mesh.{ext}")
+            };
+            copy(&src.join(&file), &dir, &file);
+        }
+        std::fs::write(dir.join("mesh.json"), mesher_manifest(&mbin)).unwrap();
+        let r = verify_dir(&dir, &VolumeIds::default()).unwrap();
+        assert_eq!(r.codes, expected, "{name}");
+    }
+}
+
 #[test]
 fn mesh_codes_follow_the_folder_codes() {
     // The cube with this crate's room id: the mesh check fails, and its code reaches the folder.
@@ -800,6 +1045,34 @@ fn ambiguous_or_missing_folders_are_errors() {
     let r = verify_dir(&dir, &upstream()).unwrap();
     assert!(r.passed(), "{r:?}");
     assert!(r.mbin_file.unwrap().ends_with("tetramesh.mbin"));
+
+    // Two .cbin files, neither named mesh.cbin: without a .mbin none is needed, so the folder
+    // gets a verdict; beside a .mbin they are ambiguous.
+    let dir = scratch("two_cbin");
+    let src = fixture("meshes/tg_bad");
+    for ext in ["1.node", "1.ele", "1.face"] {
+        copy(
+            &src.join(format!("scene_mesh.{ext}")),
+            &dir,
+            &format!("scene_mesh.{ext}"),
+        );
+    }
+    std::fs::write(dir.join("scene_mesh.1.neigh"), b"placeholder").unwrap();
+    for name in ["a.cbin", "b.cbin"] {
+        copy(&fixture("upstream/lib_interface/cube.cbin"), &dir, name);
+    }
+    let r = verify_dir(&dir, &upstream()).unwrap();
+    assert!(r.passed(), "{r:?}");
+    assert!(r.cbin_file.is_none());
+    copy(
+        &fixture("upstream/lib_interface/cube_mesh.mbin"),
+        &dir,
+        "tetramesh.mbin",
+    );
+    assert!(matches!(
+        verify_dir(&dir, &upstream()),
+        Err(FormatError::Invalid(_))
+    ));
 
     // TetGen output under two basenames.
     let dir = scratch("two_bases");

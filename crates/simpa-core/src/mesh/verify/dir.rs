@@ -23,8 +23,6 @@ const TETGEN_SUFFIXES: [&str; 6] = [
 
 /// The folder's mesh manifest (`docs/m5-m6-design.md`, "Layout").
 const MANIFEST: &str = "mesh.json";
-/// The manifest field holding the `.mbin`'s sha256 as hex; the only field read here.
-const MANIFEST_MBIN_SHA256: &str = "mbin_sha256";
 
 /// The folder's regular files, keyed by lowercased name.
 struct Listing {
@@ -116,6 +114,35 @@ fn sha256_hex(bytes: &[u8]) -> String {
     s
 }
 
+/// True when every record `manifest` keeps of the `.mbin` agrees with the folder, whose `.mbin`
+/// hashes to `mbin_sha256` (`None`: the folder has no `.mbin`). Two records are read, and nothing
+/// else in the manifest:
+/// - `files.mbin`, the mesher's (`docs/formats/mesh-manifest.md`, "Layout"): the hex sha256, or
+///   null when it wrote no `.mbin`, so null beside a `.mbin` is a partial or foreign file;
+/// - a top-level `mbin_sha256`, hex, with null meaning "not recorded".
+///
+/// An absent record is not checked. A record of the wrong JSON type does not agree.
+fn manifest_agrees(manifest: &serde_json::Value, mbin_sha256: Option<&str>) -> bool {
+    use serde_json::Value;
+    let is_the_mbin = |hex: &str| mbin_sha256.is_some_and(|h| h.eq_ignore_ascii_case(hex));
+    let files = match manifest.get("files") {
+        None | Some(Value::Null) => true,
+        Some(Value::Object(files)) => match files.get("mbin") {
+            None => true,
+            Some(Value::Null) => mbin_sha256.is_none(),
+            Some(Value::String(hex)) => is_the_mbin(hex),
+            Some(_) => false,
+        },
+        Some(_) => false,
+    };
+    let top_level = match manifest.get("mbin_sha256") {
+        None | Some(Value::Null) => true,
+        Some(Value::String(hex)) => is_the_mbin(hex),
+        Some(_) => false,
+    };
+    files && top_level
+}
+
 pub(super) fn verify(dir: &Path, ids: &VolumeIds) -> Result<DirReport, FormatError> {
     let listing = Listing::read(dir)?;
     let mut report = DirReport {
@@ -147,7 +174,11 @@ pub(super) fn verify(dir: &Path, ids: &VolumeIds) -> Result<DirReport, FormatErr
 
     // The `.mbin` and the `.cbin` its markers index.
     let mbin_path = listing.pick("tetramesh.mbin", ".mbin")?;
-    let cbin_path = listing.pick("mesh.cbin", ".cbin")?;
+    // Only a `.mbin` needs a `.cbin`, so several of them are ambiguous only then.
+    let cbin_path = match mbin_path {
+        Some(_) => listing.pick("mesh.cbin", ".cbin")?,
+        None => None,
+    };
     if let Some(path) = &mbin_path {
         let bytes = formats::read_file(path)?;
         report.mbin_sha256 = Some(sha256_hex(&bytes));
@@ -170,16 +201,7 @@ pub(super) fn verify(dir: &Path, ids: &VolumeIds) -> Result<DirReport, FormatErr
         let json = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes);
         let manifest: serde_json::Value = serde_json::from_slice(json)
             .map_err(|e| FormatError::Invalid(format!("{}: not JSON: {e}", path.display())))?;
-        let recorded = manifest.get(MANIFEST_MBIN_SHA256);
-        let matches = match recorded {
-            None | Some(serde_json::Value::Null) => true,
-            Some(serde_json::Value::String(hex)) => report
-                .mbin_sha256
-                .as_deref()
-                .is_some_and(|h| h.eq_ignore_ascii_case(hex)),
-            Some(_) => false,
-        };
-        if !matches {
+        if !manifest_agrees(&manifest, report.mbin_sha256.as_deref()) {
             codes.push("manifest_mismatch");
         }
     }

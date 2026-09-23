@@ -314,7 +314,8 @@ pub struct DirReport {
     pub skipped_markers: Vec<i32>,
     /// The `.mbin` checked: `tetramesh.mbin`, or the folder's only `.mbin`.
     pub mbin_file: Option<PathBuf>,
-    /// The `.cbin` it was checked against: `mesh.cbin`, or the folder's only `.cbin`.
+    /// The `.cbin` it was checked against: `mesh.cbin`, or the folder's only `.cbin`. Looked for
+    /// only when there is a `.mbin`.
     pub cbin_file: Option<PathBuf>,
     /// Lowercase hex sha256 of that `.mbin`.
     pub mbin_sha256: Option<String>,
@@ -340,12 +341,15 @@ impl DirReport {
 ///   `tetgen.cxx:36225-36240`, and upstream then solves on default neighbours);
 /// - `tetgen_output_missing`: TetGen output without all of `.1.node`, `.1.ele` and `.1.face`;
 /// - `cbin_missing`: a `.mbin` with no `.cbin` to check its markers against;
-/// - `manifest_mismatch`: `mesh.json` has an `mbin_sha256` that is not the `.mbin`'s, or names
-///   a `.mbin` the folder lacks (an absent or null field is not checked);
+/// - `manifest_mismatch`: `mesh.json` records a `.mbin` sha256 that is not the `.mbin`'s, or
+///   one for a `.mbin` the folder lacks, or records no `.mbin` beside one. Its records are the
+///   mesher's `files.mbin` (`docs/formats/mesh-manifest.md`; null when it wrote none) and a
+///   top-level `mbin_sha256` (null: not recorded); an absent record is not checked;
 /// - `nothing_to_verify`: neither TetGen output nor a `.mbin`.
 ///
-/// Unreadable files, a folder with TetGen output under two basenames, and several `.mbin` or
-/// `.cbin` files without `tetramesh.mbin` / `mesh.cbin` among them are errors.
+/// Unreadable files, a folder with TetGen output under two basenames, several `.mbin` files
+/// without `tetramesh.mbin` among them, and, beside a `.mbin`, several `.cbin` files without
+/// `mesh.cbin` among them, are errors.
 pub fn verify_dir(dir: &Path, ids: &VolumeIds) -> Result<DirReport, FormatError> {
     dir::verify(dir, ids)
 }
