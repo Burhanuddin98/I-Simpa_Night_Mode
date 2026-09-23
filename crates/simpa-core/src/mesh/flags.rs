@@ -8,14 +8,15 @@ use crate::schema::MeshSettings;
 /// The flags for `settings`, in upstream's order: `[-a<v>] -pq<r> -A -n [-Y]`
 /// (`isimpa/data_manager/projet_maillage.cpp:167-170`, with `appendparams` = `-Y` when
 /// `preserve_boundary`). TetGen reads each switch wherever it stands, so the order is cosmetic.
+/// Numbers are [`setting_g15`]: upstream holds both settings as `float`.
 pub fn tetgen_flags(settings: &MeshSettings) -> Vec<String> {
     let mut flags = Vec::with_capacity(5);
     if let Some(v) = settings.max_volume_m3 {
-        flags.push(format!("-a{}", to_string_g15(v.get())));
+        flags.push(format!("-a{}", setting_g15(v.get())));
     }
     flags.push(format!(
         "-pq{}",
-        to_string_g15(settings.min_radius_edge_ratio.get())
+        setting_g15(settings.min_radius_edge_ratio.get())
     ));
     flags.push("-A".to_string());
     flags.push("-n".to_string());
@@ -30,6 +31,14 @@ pub fn tetgen_flags(settings: &MeshSettings) -> Vec<String> {
 /// (`docs/m5-m6-design.md`, decision 3; `docs/formats/var.md`).
 pub fn settings_conflict(settings: &MeshSettings) -> bool {
     settings.surface_receiver_max_area_m2.is_some() && settings.preserve_boundary
+}
+
+/// A meshing setting as upstream puts it on TetGen's command line: narrowed to the `float`
+/// `param_TetGenMaillage` holds it in (`isimpa/data_manager/projet.h:98-99`), promoted back to
+/// `double` for `Convertor::ToString`, and printed by [`to_string_g15`]. So q = 1.1 is
+/// `1.10000002384186`, as upstream spells it; 2, 5, 1.5 and 100 are exact in `f32`.
+pub fn setting_g15(v: f64) -> String {
+    to_string_g15(f64::from(v as f32))
 }
 
 /// `v` as upstream's `Convertor::ToString(double, int precision = 15)` prints it
@@ -165,6 +174,12 @@ mod tests {
         assert_eq!(tetgen_flags(&settings(1.5, None, None, false))[0], "-pq1.5");
         let with_a = tetgen_flags(&settings(5.0, Some(100.0), None, true));
         assert_eq!(with_a, ["-a100", "-pq5", "-A", "-n", "-Y"]);
+        // Upstream's settings are float: a value not exact in f32 prints as the float it is.
+        let inexact = tetgen_flags(&settings(1.1, Some(0.3), None, false));
+        assert_eq!(
+            inexact,
+            ["-a0.300000011920929", "-pq1.10000002384186", "-A", "-n"]
+        );
         assert_eq!(to_string_g15(0.1), "0.1");
         assert_eq!(to_string_g15(f64::from(0.1f32)), "0.100000001490116");
         assert_eq!(to_string_g15(1e20), "1e+20");

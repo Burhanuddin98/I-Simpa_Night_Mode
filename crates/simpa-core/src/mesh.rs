@@ -38,7 +38,8 @@ pub mod verify;
 pub use build::{AttributeMap, BuildStats, FACE_CORNERS, OutputPaths, TetgenOutput, build_mbin};
 pub use diag::{Element, Intersection, intersections};
 pub use flags::{
-    TetgenCommand, format_g, settings_conflict, tetgen_flags, to_string_g15, trailer_command,
+    TetgenCommand, format_g, setting_g15, settings_conflict, tetgen_flags, to_string_g15,
+    trailer_command,
 };
 pub use input::{
     InputError, MeshInput, ZoneFacets, poly_input, project_input, refined_faces, var_bytes,
@@ -65,6 +66,10 @@ pub mod codes {
     pub const MESH_SETTINGS_CONFLICT: &str = "mesh_settings_conflict";
     /// The project or `.poly` cannot be turned into TetGen input.
     pub const INPUT_INVALID: &str = "input_invalid";
+    /// A file an earlier mesh left in the folder could not be deleted.
+    pub const STALE_DELETE_FAILED: &str = "stale_delete_failed";
+    /// `mesh.cbin`, `scene_mesh.poly` or `scene_mesh.var` could not be written.
+    pub const INPUT_WRITE_FAILED: &str = "input_write_failed";
     /// TetGen could not be started, or its output could not be logged.
     pub const TETGEN_LAUNCH_FAILED: &str = "tetgen_launch_failed";
     /// Meshing was cancelled.
@@ -87,7 +92,8 @@ pub mod codes {
     pub const MBIN_WRITE_FAILED: &str = "mbin_write_failed";
 }
 
-/// A failure to use the mesh folder at all: no manifest could be written.
+/// A failure to use the mesh folder at all: it could not be created, or no manifest could be
+/// written into it.
 #[derive(Debug)]
 pub enum MeshError {
     Io { path: PathBuf, source: io::Error },
@@ -202,9 +208,21 @@ fn finish(dir: &Path, mut m: MeshManifest, start: Instant) -> Result<MeshManifes
     Ok(m)
 }
 
-fn prepare(dir: &Path) -> Result<(), MeshError> {
+/// Creates `dir` (`Err` when it cannot be) and deletes its stale files; a file that will not go
+/// is `stale_delete_failed`, and `false`.
+fn prepare(dir: &Path, m: &mut MeshManifest) -> Result<bool, MeshError> {
     std::fs::create_dir_all(dir).map_err(io_at(dir))?;
-    delete_stale(dir).map(|_| ())
+    match delete_stale(dir) {
+        Ok(_) => Ok(true),
+        Err(e) => {
+            fail(
+                m,
+                codes::STALE_DELETE_FAILED,
+                format!("{e}; nothing is meshed over a file an earlier mesh left"),
+            );
+            Ok(false)
+        }
+    }
 }
 
 /// Meshes `project` into `out_dir` with its own [`MeshSettings`] (flags from [`tetgen_flags`]).
@@ -213,7 +231,8 @@ fn prepare(dir: &Path) -> Result<(), MeshError> {
 /// runs in `<out_dir>/diag/` and its findings go in the manifest. `on_line` sees TetGen's output
 /// as it arrives; `cancel` stops TetGen and leaves no `.mbin`.
 ///
-/// `Err` only when the folder itself cannot be used; every other failure is in the manifest.
+/// `Err` only when the folder cannot be created, or `mesh.json` cannot be written into it; every
+/// other failure is in the manifest.
 pub fn mesh_project(
     project: &Project,
     out_dir: &Path,
@@ -222,9 +241,11 @@ pub fn mesh_project(
     on_line: &mut dyn FnMut(&Line),
 ) -> Result<MeshManifest, MeshError> {
     let start = Instant::now();
-    prepare(out_dir)?;
     let mut m = new_manifest(MeshSource::Project);
     m.mesh_input_hash = Some(crate::validate::mesh_input_hash(project));
+    if !prepare(out_dir, &mut m)? {
+        return finish(out_dir, m, start);
+    }
     let settings = &project.solvers.meshing;
     if settings_conflict(settings) {
         fail(
@@ -255,9 +276,11 @@ pub fn mesh_poly(
     on_line: &mut dyn FnMut(&Line),
 ) -> Result<MeshManifest, MeshError> {
     let start = Instant::now();
-    prepare(out_dir)?;
     let mut m = new_manifest(MeshSource::Poly);
     m.input_path = Some(poly_path.display().to_string());
+    if !prepare(out_dir, &mut m)? {
+        return finish(out_dir, m, start);
+    }
     if settings.surface_receiver_max_area_m2.is_some() {
         m.messages
             .push("a raw .poly has no surface receivers: no .var is written".to_string());
@@ -286,29 +309,38 @@ fn scene_counts(m: &mut MeshManifest, input: &MeshInput) {
     m.messages.extend(input.notes.iter().cloned());
 }
 
-fn write_file(dir: &Path, name: &str, bytes: &[u8]) -> Result<String, MeshError> {
+/// Writes `bytes` to `<dir>/<name>` and returns their sha256; the error names the file.
+fn write_file(dir: &Path, name: &str, bytes: &[u8]) -> Result<String, String> {
     let path = dir.join(name);
-    std::fs::write(&path, bytes).map_err(io_at(&path))?;
+    std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
     Ok(sha256_hex(bytes))
 }
 
-/// Writes `mesh.cbin` with [`cbin::write_file`], which refuses a scene the format cannot hold;
-/// that refusal is `input_invalid`, and `Ok(false)`.
-fn write_scene(dir: &Path, scene: &cbin::Model, m: &mut MeshManifest) -> Result<bool, MeshError> {
+/// Writes `mesh.cbin` with [`cbin::write_file`]. A scene the format cannot hold is
+/// `input_invalid`, a file that cannot be written `input_write_failed`; either gives `false`.
+fn write_scene(dir: &Path, scene: &cbin::Model, m: &mut MeshManifest) -> bool {
     let path = dir.join(names::SCENE_MESH);
-    match cbin::write_file(scene, &path) {
-        Ok(()) => {
-            m.files.cbin = Some(sha256_file(&path).map_err(io_at(&path))?);
-            Ok(true)
+    let written = cbin::write_file(scene, &path).and_then(|()| Ok(sha256_file(&path)?));
+    match written {
+        Ok(sha) => {
+            m.files.cbin = Some(sha);
+            true
         }
-        Err(crate::formats::FormatError::Io(e)) => Err(io_at(&path)(e)),
+        Err(crate::formats::FormatError::Io(e)) => {
+            fail(
+                m,
+                codes::INPUT_WRITE_FAILED,
+                format!("{}: {e}", path.display()),
+            );
+            false
+        }
         Err(e) => {
             fail(
                 m,
                 codes::INPUT_INVALID,
                 format!("{}: {e}", names::SCENE_MESH),
             );
-            Ok(false)
+            false
         }
     }
 }
@@ -325,13 +357,20 @@ fn run_input(
     start: Instant,
 ) -> Result<MeshManifest, MeshError> {
     scene_counts(&mut m, input);
-    if !write_scene(dir, &input.scene, &mut m)? {
+    if !write_scene(dir, &input.scene, &mut m) {
         return finish(dir, m, start);
     }
     let poly_bytes = poly::write(&input.poly);
-    m.files.poly = Some(write_file(dir, POLY_FILE, &poly_bytes)?);
-    if let Some(var) = &input.var {
-        m.files.var = Some(write_file(dir, VAR_FILE, var)?);
+    let written = write_file(dir, POLY_FILE, &poly_bytes).and_then(|sha| {
+        m.files.poly = Some(sha);
+        match &input.var {
+            Some(var) => write_file(dir, VAR_FILE, var).map(|sha| m.files.var = Some(sha)),
+            None => Ok(()),
+        }
+    });
+    if let Err(e) = written {
+        fail(&mut m, codes::INPUT_WRITE_FAILED, e);
+        return finish(dir, m, start);
     }
 
     let mut argv = tetgen_flags(settings);
@@ -364,10 +403,10 @@ fn run_input(
     };
     let skipped = classify(&paths, Some(&outcome), input, &mut m);
     if skipped && !cancel.is_cancelled() {
-        m.diagnosis = diagnose(input, &poly_bytes, dir, mesher, cancel, on_line, &mut m)?;
+        m.diagnosis = diagnose(input, &poly_bytes, dir, mesher, cancel, on_line, &mut m);
     }
     if m.codes.is_empty() {
-        build_and_write(&paths, input, dir, cancel, &mut m);
+        build_and_write(&paths, input, dir, cancel, &mut m, verify::verify_mesh);
     }
     finish(dir, m, start)
 }
@@ -388,7 +427,6 @@ fn call(
     let program = mesher.program();
     let mut record = TetgenCall {
         program: program.map(|p| p.display().to_string()),
-        program_sha256: program.and_then(|p| sha256_file(p).ok()),
         argv: argv.to_vec(),
         cwd: cwd_label.to_string(),
         ..TetgenCall::default()
@@ -401,6 +439,9 @@ fn call(
         }
         on_line(l);
     });
+    // Hashed after the run, so the hash does not delay the launch (and a cancel) by the time it
+    // takes; Windows keeps a running image from being replaced.
+    record.program_sha256 = program.and_then(|p| sha256_file(p).ok());
     if let Ok(o) = &result {
         record.exit_code = o.exit_code;
         record.cancelled = o.cancelled;
@@ -548,7 +589,8 @@ fn map_skipped(markers: &[i64], input: &MeshInput) -> Vec<SkippedFacet> {
 }
 
 /// `tetgen -d` on the same `.poly` (no `.var`) in `<dir>/diag/`: the intersecting pairs it
-/// reports, and its own `_skipped.face` markers.
+/// reports, and its own `_skipped.face` markers. The outcome is a failure already, so a
+/// follow-up that cannot be set up is a message and no diagnosis.
 fn diagnose(
     input: &MeshInput,
     poly_bytes: &[u8],
@@ -557,10 +599,16 @@ fn diagnose(
     cancel: &CancelToken,
     on_line: &mut dyn FnMut(&Line),
     m: &mut MeshManifest,
-) -> Result<Option<Diagnosis>, MeshError> {
+) -> Option<Diagnosis> {
     let diag_dir = dir.join(DIAG_DIR);
-    std::fs::create_dir_all(&diag_dir).map_err(io_at(&diag_dir))?;
-    write_file(&diag_dir, POLY_FILE, poly_bytes)?;
+    let ready = std::fs::create_dir_all(&diag_dir)
+        .map_err(|e| format!("{}: {e}", diag_dir.display()))
+        .and_then(|()| write_file(&diag_dir, POLY_FILE, poly_bytes));
+    if let Err(e) = ready {
+        m.messages
+            .push(format!("the tetgen -d follow-up could not be set up: {e}"));
+        return None;
+    }
     let argv = vec!["-d".to_string(), POLY_FILE.to_string()];
     let mut lines = Vec::new();
     let mut slot = None;
@@ -589,20 +637,26 @@ fn diagnose(
         .and_then(|f| f.markers)
         .map(|ms| ms.into_iter().map(i64::from).collect())
         .unwrap_or_default();
-    Ok(Some(Diagnosis {
+    Some(Diagnosis {
         call: call_record,
         skipped_markers,
         intersections: intersections(&lines, &input.poly),
-    }))
+    })
 }
 
-/// Reads TetGen's output, builds the `.mbin`, verifies it and writes it when it passes.
+/// The check a built mesh must pass before it is written: [`verify::verify_mesh`], or a stand-in
+/// in this module's tests.
+type Verifier = fn(&mbin::Mesh, &cbin::Model, &verify::VolumeIds) -> verify::VerifyReport;
+
+/// Reads TetGen's output, builds the `.mbin`, runs `verifier` on it, and writes it only when it
+/// passes.
 fn build_and_write(
     paths: &OutputPaths,
     input: &MeshInput,
     dir: &Path,
     cancel: &CancelToken,
     m: &mut MeshManifest,
+    verifier: Verifier,
 ) {
     let built = TetgenOutput::read(paths)
         .and_then(|out| build_mbin(&out, input.scene.faces.len(), &input.volume_ids.fittings));
@@ -611,7 +665,7 @@ fn build_and_write(
         Err(e) => return fail(m, codes::TETGEN_OUTPUT_INVALID, e),
     };
     m.counts.build = Some(stats);
-    let report = verify::verify_mesh(&mesh, &input.scene, &input.volume_ids);
+    let report = verifier(&mesh, &input.scene, &input.volume_ids);
     let passed = report.passed();
     let verify_codes = report.codes.clone();
     m.verify = Some(report);
@@ -652,11 +706,28 @@ fn build_and_write(
     }
 }
 
+/// Why [`find_basename`] found no one basename.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FindBasename {
+    /// The folder holds no TetGen output, or cannot be read.
+    Nothing(String),
+    /// The folder holds more than one output set.
+    Ambiguous(String),
+}
+
+impl std::fmt::Display for FindBasename {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FindBasename::Nothing(s) | FindBasename::Ambiguous(s) => f.write_str(s),
+        }
+    }
+}
+
 /// The TetGen basename in `dir`: the one `<base>` with a `<base>.1.ele`, or failing that a
 /// `<base>.1.node`, `<base>.1.face` or `<base>_skipped.face`.
-pub fn find_basename(dir: &Path) -> Result<String, String> {
+pub fn find_basename(dir: &Path) -> Result<String, FindBasename> {
     let names: Vec<String> = std::fs::read_dir(dir)
-        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .map_err(|e| FindBasename::Nothing(format!("{}: {e}", dir.display())))?
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
         .map(|e| e.file_name().to_string_lossy().into_owned())
@@ -681,15 +752,18 @@ pub fn find_basename(dir: &Path) -> Result<String, String> {
             0 => continue,
             1 => return Ok(bases.remove(0)),
             _ => {
-                return Err(format!(
-                    "{} holds more than one TetGen output set: {}",
+                return Err(FindBasename::Ambiguous(format!(
+                    "{} holds more than one TetGen output set: {}; name the basename",
                     dir.display(),
                     bases.join(", ")
-                ));
+                )));
             }
         }
     }
-    Err(format!("{} holds no TetGen output", dir.display()))
+    Err(FindBasename::Nothing(format!(
+        "{} holds no TetGen output",
+        dir.display()
+    )))
 }
 
 /// Builds and verifies the `.mbin` of an existing TetGen output set in `tetgen_dir` (basename
@@ -697,7 +771,9 @@ pub fn find_basename(dir: &Path) -> Result<String, String> {
 /// `tetramesh.mbin` when it passes, and `mesh.json` with source `external`, the flags read from
 /// the `.1.face` trailer and the project's mesh input hash. Only those three files are deleted
 /// from `out_dir` first, so `out_dir` may be `tetgen_dir`. The project's box fitting zones and
-/// ids are applied as [`mesh_project`] applies them.
+/// ids are applied as [`mesh_project`] applies them. A folder with no TetGen output is read as
+/// `scene_mesh`, so each missing file gets its code; a folder with several sets is
+/// `input_invalid` unless `basename` names one.
 pub fn mesh_from_tetgen(
     project: &Project,
     tetgen_dir: &Path,
@@ -706,17 +782,24 @@ pub fn mesh_from_tetgen(
 ) -> Result<MeshManifest, MeshError> {
     let start = Instant::now();
     std::fs::create_dir_all(out_dir).map_err(io_at(out_dir))?;
+    let mut m = new_manifest(MeshSource::External);
+    m.input_path = Some(tetgen_dir.display().to_string());
+    m.mesh_input_hash = Some(crate::validate::mesh_input_hash(project));
     for name in [names::SCENE_MESH, names::TETRA_MESH, MANIFEST_FILE] {
         let path = out_dir.join(name);
         match std::fs::remove_file(&path) {
             Ok(()) => {}
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            Err(e) => return Err(io_at(&path)(e)),
+            Err(e) => fail(
+                &mut m,
+                codes::STALE_DELETE_FAILED,
+                format!("{}: {e}", path.display()),
+            ),
         }
     }
-    let mut m = new_manifest(MeshSource::External);
-    m.input_path = Some(tetgen_dir.display().to_string());
-    m.mesh_input_hash = Some(crate::validate::mesh_input_hash(project));
+    if !m.codes.is_empty() {
+        return finish(out_dir, m, start);
+    }
     let input = match project_input(project) {
         Ok(i) => i,
         Err(e) => {
@@ -728,16 +811,21 @@ pub fn mesh_from_tetgen(
     m.counts.poly_vertices = 0;
     m.counts.poly_facets = 0;
     m.counts.var_constraints = 0;
-    if !write_scene(out_dir, &input.scene, &mut m)? {
+    if !write_scene(out_dir, &input.scene, &mut m) {
         return finish(out_dir, m, start);
     }
     let base = match basename {
         Some(b) => b.to_string(),
         None => match find_basename(tetgen_dir) {
             Ok(b) => b,
-            Err(e) => {
-                fail(&mut m, codes::TETGEN_OUTPUT_MISSING, e);
+            Err(FindBasename::Ambiguous(e)) => {
+                fail(&mut m, codes::INPUT_INVALID, e);
                 return finish(out_dir, m, start);
+            }
+            // Read as `scene_mesh`: `classify` then names every file that is missing.
+            Err(FindBasename::Nothing(e)) => {
+                m.messages.push(e);
+                BASENAME.to_string()
             }
         },
     };
@@ -766,7 +854,14 @@ pub fn mesh_from_tetgen(
     }
     classify(&paths, None, &input, &mut m);
     if m.codes.is_empty() {
-        build_and_write(&paths, &input, out_dir, &CancelToken::new(), &mut m);
+        build_and_write(
+            &paths,
+            &input,
+            out_dir,
+            &CancelToken::new(),
+            &mut m,
+            verify::verify_mesh,
+        );
     }
     finish(out_dir, m, start)
 }
@@ -774,6 +869,104 @@ pub fn mesh_from_tetgen(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// A fresh folder holding TetGen's output for one tetrahedron, and the mesher input of the
+    /// scene it meshes: the tetrahedron's 4 faces, markers 0-3.
+    fn one_tetrahedron(label: &str) -> (PathBuf, MeshInput) {
+        static N: AtomicUsize = AtomicUsize::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "simpa-mesh-unit-{label}-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let faces: [[u32; 3]; 4] = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]];
+        let model = poly::Model {
+            save_face_index: true,
+            user_defined_faces: Vec::new(),
+            model_faces: faces
+                .iter()
+                .enumerate()
+                .map(|(i, &vertices)| poly::Face {
+                    vertices,
+                    face_index: i as u32,
+                })
+                .collect(),
+            model_vertices: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            model_regions: Vec::new(),
+        };
+        let input = poly_input(&model).unwrap();
+        for (ext, text) in [
+            ("node", "4 3 0 0\n1 0 0 0\n2 1 0 0\n3 0 1 0\n4 0 0 1\n"),
+            ("ele", "1 4 1\n1 1 2 3 4 1\n"),
+            ("face", "4 1\n1 1 3 2 0\n2 1 2 4 1\n3 1 4 3 2\n4 2 3 4 3\n"),
+            ("neigh", "1 4\n1 -1 -1 -1 -1\n"),
+        ] {
+            std::fs::write(dir.join(format!("scene_mesh.1.{ext}")), text).unwrap();
+        }
+        (dir, input)
+    }
+
+    fn passes(_: &mbin::Mesh, _: &cbin::Model, _: &verify::VolumeIds) -> verify::VerifyReport {
+        verify::VerifyReport::default()
+    }
+
+    fn refuses(_: &mbin::Mesh, _: &cbin::Model, _: &verify::VolumeIds) -> verify::VerifyReport {
+        verify::VerifyReport {
+            unmarked_boundary_faces: 1,
+            codes: vec!["unmarked_boundary_faces".to_string()],
+            ..verify::VerifyReport::default()
+        }
+    }
+
+    fn build_with(dir: &Path, input: &MeshInput, verifier: Verifier) -> MeshManifest {
+        let mut m = new_manifest(MeshSource::Poly);
+        let paths = OutputPaths::new(dir, BASENAME);
+        build_and_write(&paths, input, dir, &CancelToken::new(), &mut m, verifier);
+        m
+    }
+
+    #[test]
+    fn a_mesh_is_written_only_when_the_verifier_passes_it() {
+        // Control: the same output, passed, is written with its sha256.
+        let (dir, input) = one_tetrahedron("verified");
+        let m = build_with(&dir, &input, passes);
+        assert!(m.codes.is_empty(), "{m:#?}");
+        let mbin_path = dir.join(names::TETRA_MESH);
+        assert_eq!(m.files.mbin, Some(sha256_file(&mbin_path).unwrap()));
+        let mesh = mbin::read_file(&mbin_path).unwrap();
+        let markers: Vec<i32> = mesh.tetrahedra[0].faces.iter().map(|f| f.marker).collect();
+        assert_eq!(markers, [3, 2, 1, 0]);
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        // Refused: mesh_invalid, then the verifier's own codes, its report kept, no .mbin.
+        let (dir, input) = one_tetrahedron("refused");
+        let m = build_with(&dir, &input, refuses);
+        assert_eq!(m.codes, [codes::MESH_INVALID, "unmarked_boundary_faces"]);
+        assert!(m.verify.as_ref().is_some_and(|r| !r.passed()));
+        assert_eq!(m.files.mbin, None);
+        assert!(!dir.join(names::TETRA_MESH).exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_mbin_that_cannot_be_written_is_mbin_write_failed() {
+        let (dir, input) = one_tetrahedron("unwritable");
+        // A folder where the file should go.
+        std::fs::create_dir(dir.join(names::TETRA_MESH)).unwrap();
+        let m = build_with(&dir, &input, passes);
+        assert_eq!(m.codes, [codes::MBIN_WRITE_FAILED], "{m:#?}");
+        assert_eq!(m.files.mbin, None);
+        assert!(dir.join(names::TETRA_MESH).is_dir());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn stale_names_are_the_meshers_and_tetgens() {

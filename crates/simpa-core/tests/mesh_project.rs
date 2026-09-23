@@ -17,7 +17,8 @@ use simpa_core::mesh::{
 };
 use simpa_core::process::{CancelToken, Line, Outcome};
 use simpa_core::schema::{
-    DiffusionLaw, F64, FittingShape, FittingZone, FittingZoneId, Project, Vec3,
+    DiffusionLaw, F64, Face, FittingShape, FittingZone, FittingZoneId, GroupId, Project,
+    SurfaceGroup, Vec3,
 };
 use support::{face_area, fixture, invariants, load_room, scratch, tetgen_exe, volume_by_id};
 
@@ -194,10 +195,15 @@ fn the_pinned_tetgen_reads_the_var_and_refines_nothing() {
 }
 
 fn with_box_zone(p: &mut Project, min: [f64; 3], max: [f64; 3]) {
+    with_named_box_zone(p, "Zone 1", 1, min, max);
+}
+
+/// Adds an enabled box fitting zone named `name`, id number `k`.
+fn with_named_box_zone(p: &mut Project, name: &str, k: u128, min: [f64; 3], max: [f64; 3]) {
     let n = p.bands.frequencies_hz.len();
     p.fitting_zones.push(FittingZone {
-        id: FittingZoneId::from_u128(0x0f17_0000_0000_4000_8000_0000_0000_0001),
-        name: "Zone 1".to_string(),
+        id: FittingZoneId::from_u128(0x0f17_0000_0000_4000_8000_0000_0000_0000 + k),
+        name: name.to_string(),
         enabled: true,
         shape: FittingShape::Box {
             min: Vec3::from(min),
@@ -341,10 +347,35 @@ fn a_mesh_rebuilt_from_its_tetgen_output_is_identical() {
     assert_eq!(e.codes, [codes::NEIGH_MISSING]);
     assert!(!out.join("tetramesh.mbin").exists());
 
-    // No TetGen output at all.
+    // No TetGen output at all: every missing file has its code.
     let empty = scratch("external-empty");
     let e = mesh_from_tetgen(&p, &empty, None, &empty).unwrap();
-    assert_eq!(e.codes, [codes::TETGEN_OUTPUT_MISSING]);
+    assert_eq!(
+        e.codes,
+        [codes::TETGEN_OUTPUT_MISSING, codes::NEIGH_MISSING]
+    );
+    assert!(!empty.join("tetramesh.mbin").exists());
+    assert_eq!(read_manifest(&empty).unwrap(), e);
+
+    // Two output sets and no basename: which one is meant is not guessed.
+    let two = scratch("external-two");
+    for base in ["model", "scene_mesh"] {
+        for ext in ["node", "ele", "face", "neigh"] {
+            std::fs::copy(
+                a.join(format!("scene_mesh.1.{ext}")),
+                two.join(format!("{base}.1.{ext}")),
+            )
+            .unwrap();
+        }
+    }
+    let e = mesh_from_tetgen(&p, &two, None, &two.join("out")).unwrap();
+    assert_eq!(e.codes, [codes::INPUT_INVALID], "{e:#?}");
+    let e = mesh_from_tetgen(&p, &two, Some("model"), &two.join("out")).unwrap();
+    assert!(e.is_ok(), "{e:#?}");
+    assert_eq!(
+        std::fs::read(two.join("out/tetramesh.mbin")).unwrap(),
+        original
+    );
 }
 
 /// A mesher that runs nothing: it calls `act` on the folder and returns `outcome`.
@@ -406,6 +437,8 @@ fn fake_run(label: &str, p: &Project, mesher: &dyn Mesher) -> (PathBuf, MeshMani
 }
 
 #[test]
+// Clearing the read-only attribute is the point on Windows.
+#[allow(clippy::permissions_set_readonly_false)]
 fn every_failure_code_fires_on_its_input() {
     let p = load_room("tutorial1_box.simpa");
     let set = |m: &MeshManifest| m.codes.iter().cloned().collect::<BTreeSet<String>>();
@@ -498,6 +531,88 @@ fn every_failure_code_fires_on_its_input() {
     let (_, m) = fake_run("fake-flatzone", &flat, &never);
     assert_eq!(m.codes, [codes::INPUT_INVALID]);
 
+    // A .poly that cannot be written (a folder stands where it goes): nothing runs, and the
+    // manifest says why.
+    let dir = scratch("fake-polydir");
+    std::fs::create_dir(dir.join("scene_mesh.poly")).unwrap();
+    let m = mesh_project(&p, &dir, &never, &CancelToken::new(), &mut |_: &Line| {}).unwrap();
+    assert_eq!(m.codes, [codes::INPUT_WRITE_FAILED], "{m:#?}");
+    assert_eq!(read_manifest(&dir).unwrap(), m);
+
+    // A stale file that will not be deleted (read-only): nothing is meshed over it.
+    let dir = scratch("fake-readonly");
+    let stale = dir.join("scene_mesh.var");
+    std::fs::write(&stale, "stale").unwrap();
+    let mut perms = std::fs::metadata(&stale).unwrap().permissions();
+    perms.set_readonly(true);
+    std::fs::set_permissions(&stale, perms.clone()).unwrap();
+    let m = mesh_project(&p, &dir, &never, &CancelToken::new(), &mut |_: &Line| {}).unwrap();
+    assert_eq!(m.codes, [codes::STALE_DELETE_FAILED], "{m:#?}");
+    assert_eq!(read_manifest(&dir).unwrap(), m);
+    assert!(!dir.join("scene_mesh.poly").exists());
+    perms.set_readonly(false);
+    std::fs::set_permissions(&stale, perms).unwrap();
+
+    // A _skipped.face that does not read: the skip cannot be mapped, so the output is invalid.
+    let garbled = Fake {
+        act: |d: &Path| {
+            copy_box_output(d, &[]);
+            std::fs::write(d.join("scene_mesh_skipped.face"), "not a face file\n").unwrap();
+        },
+        outcome: exited(0),
+    };
+    let (_, m) = fake_run("fake-garbledskip", &p, &garbled);
+    assert_eq!(m.codes, [codes::TETGEN_OUTPUT_INVALID], "{m:#?}");
+    assert!(
+        m.messages
+            .iter()
+            .any(|s| s.contains("scene_mesh_skipped.face"))
+    );
+
+    // Skipped facets, and a file named diag where the follow-up's folder goes: the failure is
+    // reported as it is, and the follow-up that could not be set up is a message.
+    let skips = Fake {
+        act: |d: &Path| {
+            std::fs::write(
+                d.join("scene_mesh_skipped.face"),
+                "2 1\n1 1 2 3 8\n2 1 3 4 9\n",
+            )
+            .unwrap();
+        },
+        outcome: exited(3),
+    };
+    let dir = scratch("fake-diagfile");
+    std::fs::write(dir.join("diag"), "a file, not a folder").unwrap();
+    let m = mesh_project(&p, &dir, &skips, &CancelToken::new(), &mut |_: &Line| {}).unwrap();
+    assert_eq!(
+        set(&m),
+        expect(&[
+            codes::TETGEN_EXIT_NONZERO,
+            codes::TETGEN_SKIPPED_FACETS,
+            codes::TETGEN_OUTPUT_MISSING,
+            codes::NEIGH_MISSING
+        ])
+    );
+    let skipped: Vec<(i64, Option<String>)> = m
+        .skipped_facets
+        .iter()
+        .map(|s| (s.marker, s.group.clone()))
+        .collect();
+    assert_eq!(
+        skipped,
+        [
+            (8, Some("Walls".to_string())),
+            (9, Some("Walls".to_string()))
+        ]
+    );
+    assert_eq!(m.diagnosis, None);
+    assert!(
+        m.messages
+            .iter()
+            .any(|s| s.starts_with("the tetgen -d follow-up could not be set up"))
+    );
+    assert_eq!(read_manifest(&dir).unwrap(), m);
+
     // Cancelled before TetGen starts.
     let dir = scratch("fake-precancel");
     let cancel = CancelToken::new();
@@ -540,6 +655,25 @@ fn invariant_checker_says_no() {
         .unwrap();
     bad.tetrahedra[t].faces[k].neighbor = -2;
     assert!(!invariants(&bad).is_empty());
+    // TetGen's own hull value, -1, left in place of -2.
+    let mut raw_hull = good.clone();
+    let t = raw_hull
+        .tetrahedra
+        .iter()
+        .position(|t| t.faces.iter().any(|f| f.neighbor == -2))
+        .unwrap();
+    for f in &mut raw_hull.tetrahedra[t].faces {
+        if f.neighbor == -2 {
+            f.neighbor = -1;
+        }
+    }
+    assert!(
+        invariants(&raw_hull)
+            .iter()
+            .any(|s| s.starts_with("neighbour value")),
+        "{:?}",
+        invariants(&raw_hull)
+    );
     let mut flipped = good.clone();
     flipped.tetrahedra[0].vertices.swap(0, 1);
     assert!(
@@ -595,4 +729,185 @@ fn a_mesh_that_fails_verification_is_not_written() {
     assert!(has(&m, codes::MESH_INVALID), "{m:#?}");
     assert!(has(&m, "unmarked_boundary_faces"), "{m:#?}");
     assert!(m.verify.as_ref().is_some_and(|r| !r.passed()));
+}
+
+/// Adds a surface group named `name` (the walls' material) and returns its id.
+fn add_group(p: &mut Project, name: &str, id: u128) -> GroupId {
+    let gid = GroupId::from_u128(id);
+    let material = p.surface_groups[0].material;
+    p.surface_groups.push(SurfaceGroup {
+        id: gid,
+        name: name.to_string(),
+        material,
+    });
+    gid
+}
+
+/// Adds the closed box `min`-`max` to the scene as 12 faces of group `gid`, wound outward.
+fn add_box_faces(p: &mut Project, gid: GroupId, min: [f64; 3], max: [f64; 3]) {
+    let base = p.geometry.vertices.len() as u32;
+    for k in 0..8usize {
+        let at_max = [matches!(k & 3, 1 | 2), matches!(k & 3, 2 | 3), k >= 4];
+        p.geometry.vertices.push(Vec3::from(
+            [0, 1, 2].map(|a| if at_max[a] { max[a] } else { min[a] }),
+        ));
+    }
+    for t in [
+        [0, 2, 1],
+        [0, 3, 2],
+        [4, 5, 6],
+        [4, 6, 7],
+        [0, 1, 5],
+        [0, 5, 4],
+        [1, 2, 6],
+        [1, 6, 5],
+        [2, 3, 7],
+        [2, 7, 6],
+        [3, 0, 4],
+        [3, 4, 7],
+    ] {
+        p.geometry.faces.push(Face {
+            vertices: t.map(|c: u32| base + c),
+            group: gid,
+        });
+    }
+}
+
+/// Decision 6 end to end: a `Surfaces` fitting zone whose surfaces are scene faces inside the
+/// room. Those faces are internal facets, so each of their triangles is marked on both sides.
+#[test]
+fn a_surfaces_zone_marks_its_internal_facets_on_both_sides() {
+    let mut p = load_room("tutorial1_box.simpa");
+    let gid = add_group(
+        &mut p,
+        "Fittings",
+        0x0f17_0000_0000_4000_8000_0000_0000_0002,
+    );
+    add_box_faces(&mut p, gid, [1.0, 1.0, 0.5], [2.0, 2.0, 1.5]);
+    let n = p.bands.frequencies_hz.len();
+    p.fitting_zones.push(FittingZone {
+        id: FittingZoneId::from_u128(0x0f17_0000_0000_4000_8000_0000_0000_0003),
+        name: "Shelf".to_string(),
+        enabled: true,
+        shape: FittingShape::Surfaces {
+            groups: vec![gid],
+            inside_point: Vec3::from([1.5, 1.5, 1.0]),
+        },
+        absorption: vec![F64::new(0.1); n],
+        mean_free_path_m: vec![F64::new(2.0); n],
+        diffusion_law: vec![DiffusionLaw::Uniform; n],
+    });
+    let dir = scratch("surfaces-zone");
+    let m = run(&p, &dir);
+    assert!(m.is_ok(), "{m:#?}");
+    assert_eq!(m.volume_ids.fittings, [2]);
+    assert!(m.zone_facets.is_empty(), "a Surfaces zone adds no facets");
+    assert_eq!((m.counts.scene_faces, m.counts.poly_facets), (24, 24));
+
+    let mesh = mbin::read_file(&dir.join("tetramesh.mbin")).unwrap();
+    assert_eq!(invariants(&mesh), Vec::<String>::new());
+    let volumes = volume_by_id(&mesh);
+    println!("Surfaces zone: volume per idVolume {volumes:?}");
+    assert_eq!(volumes.keys().copied().collect::<Vec<_>>(), [0, 2]);
+    assert!((volumes[&2] - 1.0).abs() <= 1e-9, "{volumes:?}");
+    assert!((volumes[&0] - 179.0).abs() / 179.0 <= 1e-9, "{volumes:?}");
+
+    // Per internal marker (12..24): as many .face rows as triangles, each on two tetrahedron
+    // faces, and every one of those faces has a neighbour.
+    let face = match simpa_core::formats::tetgen::read_file(&dir.join("scene_mesh.1.face")) {
+        Ok(simpa_core::formats::tetgen::TetgenFile::Face(f)) => f,
+        other => panic!("{other:?}"),
+    };
+    let mut rows = std::collections::BTreeMap::<i32, usize>::new();
+    for &k in face.markers.as_ref().unwrap() {
+        *rows.entry(k).or_insert(0) += 1;
+    }
+    let on_tets = marker_counts(&mesh);
+    assert_eq!(
+        on_tets.keys().copied().collect::<Vec<_>>(),
+        (0..24).collect::<Vec<i32>>()
+    );
+    for k in 12..24 {
+        assert_eq!(on_tets[&k], 2 * rows[&k], "marker {k}: both sides");
+    }
+    for k in 0..12 {
+        assert_eq!(on_tets[&k], rows[&k], "marker {k}: hull, one side");
+    }
+    let internal_on_hull = mesh
+        .tetrahedra
+        .iter()
+        .flat_map(|t| t.faces.iter())
+        .filter(|f| f.marker >= 12 && f.neighbor < 0)
+        .count();
+    assert_eq!(internal_on_hull, 0);
+    let stats = m.counts.build.as_ref().unwrap();
+    let internal_rows: usize = (12..24).map(|k| rows[&k]).sum();
+    assert_eq!(
+        stats.marked_tet_faces,
+        stats.hull_tet_faces + 2 * internal_rows
+    );
+}
+
+/// Skipped facets of a project are named by scene face and surface group, and a box fitting
+/// zone's triangles by the zone.
+#[test]
+fn skipped_facets_are_named_by_group_and_fitting_zone() {
+    // A baffle (its own group) that pierces the x = 6 wall inside wall face 9: the segment it
+    // cuts runs (6, 3, 1.25)-(6, 3, 1.75), above that wall's diagonal (z = 0.3 y).
+    let mut p = load_room("tutorial1_box.simpa");
+    let gid = add_group(&mut p, "Baffle", 0x0f17_0000_0000_4000_8000_0000_0000_0004);
+    let v = p.geometry.vertices.len() as u32;
+    for c in [[5.0, 3.0, 1.5], [7.0, 3.0, 1.0], [7.0, 3.0, 2.0]] {
+        p.geometry.vertices.push(Vec3::from(c));
+    }
+    p.geometry.faces.push(Face {
+        vertices: [v, v + 1, v + 2],
+        group: gid,
+    });
+    let m = run(&p, &scratch("skipped-baffle"));
+    println!(
+        "baffle: codes {:?}, skipped {:?}, diagnosis pairs {:?}",
+        m.codes,
+        m.skipped_facets,
+        m.diagnosis.as_ref().map(|d| &d.intersections)
+    );
+    assert!(has(&m, codes::TETGEN_SKIPPED_FACETS), "{m:#?}");
+    // Measured: TetGen skips the pierced wall face, not the baffle; the -d follow-up names the
+    // baffle's edge as what pierces it.
+    let named: Vec<(i64, Option<u32>, Option<&str>)> = m
+        .skipped_facets
+        .iter()
+        .map(|s| (s.marker, s.scene_face, s.group.as_deref()))
+        .collect();
+    assert_eq!(named, [(9, Some(9), Some("Walls"))]);
+    assert!(m.skipped_facets.iter().all(|s| s.fitting_zone.is_none()));
+    let d = m.diagnosis.as_ref().expect("a diagnosis");
+    assert!(
+        d.intersections.iter().any(|i| {
+            i.first.markers == [12] && i.second.as_ref().is_some_and(|s| s.markers == [9])
+        }),
+        "{d:#?}"
+    );
+
+    // Two box zones that overlap: TetGen skips zone triangles (markers past the 12 scene
+    // faces), which are named by their zone and carry no scene face or group.
+    let mut p = load_room("tutorial1_box.simpa");
+    with_named_box_zone(&mut p, "Zone 1", 1, [1.0, 1.0, 0.5], [2.0, 2.0, 1.5]);
+    with_named_box_zone(&mut p, "Zone 2", 2, [1.5, 1.5, 1.0], [2.5, 2.5, 2.0]);
+    let m = run(&p, &scratch("skipped-zones"));
+    println!(
+        "overlapping zones: codes {:?}, zone facets {:?}, skipped {:?}",
+        m.codes, m.zone_facets, m.skipped_facets
+    );
+    assert!(has(&m, codes::TETGEN_SKIPPED_FACETS), "{m:#?}");
+    assert!(!m.skipped_facets.is_empty());
+    for s in &m.skipped_facets {
+        let zone = match s.marker {
+            12..24 => "Zone 1",
+            24..36 => "Zone 2",
+            _ => panic!("{s:?} is not a zone triangle"),
+        };
+        assert_eq!((s.scene_face, s.group.as_deref()), (None, None), "{s:?}");
+        assert_eq!(s.fitting_zone.as_deref(), Some(zone), "{s:?}");
+    }
 }

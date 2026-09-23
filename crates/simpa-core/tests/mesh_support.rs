@@ -113,6 +113,7 @@ pub fn volume_by_id(mesh: &mbin::Mesh) -> std::collections::BTreeMap<i32, f64> {
 /// Every violation of the `.mbin` invariants of `docs/m5-m6-design.md` decision 6, plus the face
 /// convention of `docs/formats/mbin.md`, as messages (the first few of each kind):
 /// - face `i` is `FACE_CORNERS[i]` of the corners;
+/// - a neighbour is -2 (none) or a tetrahedron index: TetGen's -1 never reaches the `.mbin`;
 /// - a face with neighbour -2 has a marker ≥ 0;
 /// - a face with a marker ≥ 0 and a neighbour has a twin carrying the same marker;
 /// - neighbours are mutual and share the face;
@@ -137,10 +138,18 @@ pub fn invariants(mesh: &mbin::Mesh) -> Vec<String> {
             if f.vertices != FACE_CORNERS[k].map(|c| t.vertices[c]) {
                 note("face order", format!("tetrahedron {i} face {k}"));
             }
-            if f.neighbor < 0 {
+            if f.neighbor == mbin::NO_NEIGHBOR {
                 if f.marker < 0 {
                     note("unmarked hull", format!("tetrahedron {i} face {k}"));
                 }
+                continue;
+            }
+            if f.neighbor < 0 {
+                // TetGen's -1 is written as -2; no other negative value is a neighbour.
+                note(
+                    "neighbour value",
+                    format!("tetrahedron {i} face {k}: {}", f.neighbor),
+                );
                 continue;
             }
             let Some(other) = mesh.tetrahedra.get(f.neighbor as usize) else {

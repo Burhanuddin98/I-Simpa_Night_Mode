@@ -1,19 +1,20 @@
 //! The corrected Elmia hall (`tests/fixtures/rooms/elmia_corrected.simpa`) meshed with the real
-//! `tetgen.exe` and its own settings, and the same mesh cancelled 50 ms in.
+//! `tetgen.exe` and its own settings, and the same mesh cancelled 50 ms after TetGen starts.
 
 #[path = "mesh_support.rs"]
 mod support;
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use simpa_core::formats::mbin;
 use simpa_core::formats::tetgen::{self, TetgenFile};
-use simpa_core::mesh::{MeshManifest, MeshStatus, TetgenMesher, codes, mesh_project};
-use simpa_core::process::{CancelToken, Line};
+use simpa_core::mesh::{MeshManifest, MeshStatus, Mesher, TetgenMesher, codes, mesh_project};
+use simpa_core::process::{CancelToken, Line, Outcome};
 use support::{invariants, load_room, process_running, scratch, tetgen_exe};
 
 struct Reference {
@@ -97,21 +98,10 @@ fn the_corrected_hall_meshes() {
 
 static COPY: AtomicUsize = AtomicUsize::new(0);
 
-#[test]
-fn a_cancel_at_50_ms_stops_tetgen_and_leaves_no_mbin() {
-    let reference = hall();
-    assert!(reference.manifest.is_ok());
-    let tetgen_ms = reference.manifest.tetgen.as_ref().unwrap().elapsed_ms;
-    assert!(
-        tetgen_ms > 200.0,
-        "an uncancelled hall mesh takes {tetgen_ms:.0} ms: too short for a 50 ms cancel to prove \
-         anything"
-    );
-
-    // A copy of tetgen.exe under a name no other process uses, so that "nothing is left
-    // running" can be checked by image name, and by deleting the copy (Windows refuses to
-    // delete a running image).
-    let dir = scratch("hall-cancel");
+/// A copy of tetgen.exe in `dir` under a name no other process uses, so that "nothing is left
+/// running" can be checked by image name, and by deleting the copy (Windows refuses to delete a
+/// running image). Returns the image name and the path.
+fn tetgen_copy(dir: &Path) -> (String, PathBuf) {
     let image = format!(
         "tetgen_cancel_{}_{}.exe",
         std::process::id(),
@@ -119,36 +109,119 @@ fn a_cancel_at_50_ms_stops_tetgen_and_leaves_no_mbin() {
     );
     let exe = dir.join(&image);
     std::fs::copy(tetgen_exe(), &exe).unwrap();
-    let out = dir.join("mesh");
+    (image, exe)
+}
 
+/// Sets the cancel token `after` the moment TetGen is launched, so the cancel lands while TetGen
+/// runs whatever the work before the launch costs. `honour_cancel: false` hands TetGen a token
+/// nobody sets: a mesher whose kill is broken, for the negative control.
+struct CancelAfterLaunch {
+    inner: TetgenMesher,
+    after: Duration,
+    honour_cancel: bool,
+    launched: Mutex<Option<Instant>>,
+}
+
+impl Mesher for CancelAfterLaunch {
+    fn program(&self) -> Option<&Path> {
+        self.inner.program()
+    }
+
+    fn run(
+        &self,
+        dir: &Path,
+        args: &[String],
+        cancel: &CancelToken,
+        on_line: &mut dyn FnMut(&Line),
+    ) -> io::Result<Outcome> {
+        *self.launched.lock().unwrap() = Some(Instant::now());
+        let trigger = cancel.clone();
+        let after = self.after;
+        let timer = std::thread::spawn(move || {
+            std::thread::sleep(after);
+            trigger.cancel();
+        });
+        let ignored = CancelToken::new();
+        let token = if self.honour_cancel { cancel } else { &ignored };
+        let outcome = self.inner.run(dir, args, token, on_line);
+        timer.join().unwrap();
+        outcome
+    }
+}
+
+/// One hall mesh through [`CancelAfterLaunch`], with its own copy of tetgen.exe.
+struct CancelRun {
+    out: PathBuf,
+    image: String,
+    exe: PathBuf,
+    manifest: MeshManifest,
+    wall_ms: f64,
+    /// When TetGen was launched, from the start of the call.
+    launch_ms: f64,
+}
+
+fn cancel_run(label: &str, honour_cancel: bool) -> CancelRun {
+    let dir = scratch(label);
+    let (image, exe) = tetgen_copy(&dir);
+    let out = dir.join("mesh");
     let p = load_room("elmia_corrected.simpa");
-    let cancel = CancelToken::new();
-    let trigger = cancel.clone();
+    let mesher = CancelAfterLaunch {
+        inner: TetgenMesher::new(&exe),
+        after: Duration::from_millis(50),
+        honour_cancel,
+        launched: Mutex::new(None),
+    };
     let t0 = Instant::now();
-    let timer = std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(50));
-        trigger.cancel();
-    });
-    let m = mesh_project(
-        &p,
-        &out,
-        &TetgenMesher::new(&exe),
-        &cancel,
-        &mut |_: &Line| {},
-    )
-    .unwrap();
+    let manifest =
+        mesh_project(&p, &out, &mesher, &CancelToken::new(), &mut |_: &Line| {}).unwrap();
     let wall_ms = t0.elapsed().as_secs_f64() * 1e3;
-    timer.join().unwrap();
-    println!(
-        "cancelled hall: {:.0} ms wall, TetGen {:?} ms; uncancelled {:.0} ms wall; codes {:?}",
+    let launched = mesher
+        .launched
+        .lock()
+        .unwrap()
+        .expect("TetGen was launched");
+    CancelRun {
+        out,
+        image,
+        exe,
+        manifest,
         wall_ms,
-        m.tetgen.as_ref().map(|c| c.elapsed_ms),
-        reference.wall_ms,
-        m.codes
+        launch_ms: launched.duration_since(t0).as_secs_f64() * 1e3,
+    }
+}
+
+#[test]
+fn a_cancel_50_ms_into_tetgen_stops_it_and_leaves_no_mbin() {
+    let reference = hall();
+    assert!(reference.manifest.is_ok());
+    let tetgen_ms = reference.manifest.tetgen.as_ref().unwrap().elapsed_ms;
+    assert!(
+        tetgen_ms > 200.0,
+        "an uncancelled hall mesh takes {tetgen_ms:.0} ms of TetGen: too short for a 50 ms \
+         cancel to prove anything"
+    );
+
+    let CancelRun {
+        out,
+        image,
+        exe,
+        manifest: m,
+        wall_ms,
+        launch_ms,
+    } = cancel_run("hall-cancel", true);
+    let call = m.tetgen.as_ref().expect("TetGen was called");
+    println!(
+        "cancelled hall: TetGen launched {launch_ms:.0} ms into the call, cancelled 50 ms later, \
+         ran {:.0} ms; {wall_ms:.0} ms wall; uncancelled: TetGen {tetgen_ms:.0} ms, {:.0} ms \
+         wall; codes {:?}",
+        call.elapsed_ms, reference.wall_ms, m.codes
     );
 
     assert_eq!(m.status, MeshStatus::Cancelled, "{m:#?}");
     assert!(m.codes.iter().any(|c| c == codes::CANCELLED));
+    // TetGen was running when the cancel came, and was killed: no exit code of its own.
+    assert!(call.cancelled && call.exit_code.is_none(), "{call:#?}");
+    assert!(call.elapsed_ms < tetgen_ms, "{call:#?}");
     assert!(!out.join("tetramesh.mbin").exists());
     assert!(
         !out.join("scene_mesh.1.ele").exists(),
@@ -157,4 +230,26 @@ fn a_cancel_at_50_ms_stops_tetgen_and_leaves_no_mbin() {
     assert!(wall_ms < reference.wall_ms);
     assert!(!process_running(&image), "{image} is still running");
     std::fs::remove_file(&exe).expect("the tetgen copy is no longer running");
+}
+
+/// The negative control for the test above: a mesher that never passes the cancel on. The
+/// token is still set 50 ms in, so the pipeline refuses to write a `.mbin` and the status is
+/// `CANCELLED` either way: only the TetGen call's own record, and the `.1.ele` it finished,
+/// show that nothing was killed.
+#[test]
+fn a_mesher_that_ignores_cancel_is_caught() {
+    let CancelRun {
+        out,
+        image,
+        exe,
+        manifest: m,
+        ..
+    } = cancel_run("hall-nocancel", false);
+    let call = m.tetgen.as_ref().expect("TetGen was called");
+    assert_eq!(m.status, MeshStatus::Cancelled, "{m:#?}");
+    assert!(!out.join("tetramesh.mbin").exists());
+    assert!(!call.cancelled && call.exit_code == Some(0), "{call:#?}");
+    assert!(out.join("scene_mesh.1.ele").exists(), "TetGen finished");
+    assert!(!process_running(&image));
+    std::fs::remove_file(&exe).unwrap();
 }

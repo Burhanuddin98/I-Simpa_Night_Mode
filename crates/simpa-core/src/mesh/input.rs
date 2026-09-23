@@ -97,17 +97,18 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
         config_xml::scene_mesh(project).map_err(|e| InputError(format!("scene mesh: {e}")))?;
     let ids = SolverIds::assign(project).map_err(|e| InputError(format!("solver ids: {e}")))?;
     let settings = &project.solvers.meshing;
+    // The flags carry these as the f32 upstream holds (`flags::setting_g15`).
     let q = settings.min_radius_edge_ratio.get();
-    if !(q.is_finite() && q > 0.0) {
+    if !((q as f32).is_finite() && q as f32 > 0.0) {
         return Err(InputError(format!(
-            "the radius-edge ratio (-q) is {q}; it must be above 0 and finite"
+            "the radius-edge ratio (-q) is {q}; it must be above 0 and finite as a 32-bit float"
         )));
     }
     if let Some(a) = settings.max_volume_m3.map(|a| a.get())
-        && !(a.is_finite() && a > 0.0)
+        && !((a as f32).is_finite() && a as f32 > 0.0)
     {
         return Err(InputError(format!(
-            "the maximum tetrahedron volume (-a) is {a} m³; it must be above 0 and finite"
+            "the maximum tetrahedron volume (-a) is {a} m³; it must be above 0 and finite as a              32-bit float"
         )));
     }
 
