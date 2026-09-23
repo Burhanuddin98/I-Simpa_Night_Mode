@@ -18,13 +18,20 @@
 //!   two-space indent. Attribute values escape `& < > "` and tab, line feed and carriage return;
 //!   a character XML 1.0 cannot carry at all is [`WriteError::Unencodable`].
 //! - **Deterministic.** The same project, solver, variant and folder always give the same bytes:
-//!   elements and attributes are written in a fixed order, lists in the project's order, and every
-//!   spectrum in the band set's ascending order.
+//!   elements and attributes are written in a fixed order, and every spectrum in the band set's
+//!   ascending order.
+//! - **Lists last item first,** as upstream's GUI writes them: sources, point receivers, surface
+//!   receivers and fitting zones. The solvers number sources and receivers by their position in
+//!   the file, so this is part of their input (`docs/formats/config_xml.md`, "Parity with
+//!   upstream's GUI"). [`import_upstream`] reverses them back into project order.
 //! - **Numbers as the C locale reads them.** A real is the shortest decimal that reads back to the
 //!   same `f64` bits (never more than C++'s `max_digits10`, 17 significant digits), with `.` as
 //!   the decimal point, no exponent and no grouping; `atof` then reads exactly that `f64`, and the
 //!   solver stores it as `value as f32`. A non-finite real is [`WriteError::NonFinite`]. Integers
 //!   are plain decimal, and every switch is `"1"` or `"0"`, `docalc` included.
+//! - **Spectra as upstream computes them:** white and pink noise on upstream's 27 bands are the
+//!   `f32` levels upstream's GUI computes ([`band_levels_written`]); a transmitting material has
+//!   no `affaiblissement` in a band that absorbs nothing, as upstream writes it.
 //! - **`workingdirectory`** is the run folder as an absolute path ending in the platform
 //!   separator ([`working_directory`]).
 //! - **No dead payload:** no `<surface_mesh>`, `<vertices>` or `<subdomains>`, and none of the
@@ -37,7 +44,10 @@
 //! The project's ids are UUIDs and never reach a solver. The integers the solvers match between
 //! `config.xml`, the scene mesh (`.cbin`) and the tetrahedral mesh (`.mbin`) are assigned here, by
 //! [`SolverIds::assign`], from the project's own order, so the same project always gets the same
-//! ids, whatever its variant:
+//! ids, whatever its variant. Upstream's GUI writes its own element ids instead (3503, 1930, ...),
+//! which a project has nowhere to hold, so for the same scene ours differ from upstream's. In the
+//! mode the writer selects, the solvers match them between the three files and write a scene
+//! receiver's id into its `.csbin` output, and nothing else reads them:
 //!
 //! | Solver id | Written as | Assigned |
 //! |---|---|---|
@@ -72,6 +82,13 @@
 //! hyphenated UUID). A name two variants share is [`WriteError::VariantAmbiguous`]; pass the id.
 //! To write what the GUI shows, pass `project.active_variant.map(|v| v.to_string())`.
 //!
+//! # The scene mesh
+//!
+//! [`scene_mesh`] takes every vertex through upstream's 32-bit OpenGL round trip ([`GlFrame`]), as
+//! upstream's GUI writes its `.cbin`, so the solvers read the same `f32` bits for the same scene
+//! (`docs/formats/cbin.md`, "Parity with upstream's GUI"). The mesher's `.poly` takes its vertices
+//! from it, as upstream's does.
+//!
 //! # Importing
 //!
 //! [`import_upstream`] and [`import_upstream_with_mesh`] read a `config.xml` upstream's GUI wrote
@@ -82,17 +99,19 @@
 //! [`Spectrum`](crate::schema::Spectrum) when one reproduces every band's `f32` exactly, and a
 //! custom one otherwise.
 
+mod gl;
 mod ids;
 mod import;
 mod num;
 mod write;
 
+pub use gl::GlFrame;
 pub use ids::{FIRST_ASSIGNED_MATERIAL_ID, FIRST_FITTING_ID, SolverIds, scene_mesh};
 pub use import::{ImportError, import_upstream, import_upstream_with_mesh};
 pub use num::widen_f32;
 pub use write::{
-    StagedFile, WriteError, directivity_files, resolve_variant, working_directory, write,
-    write_file,
+    StagedFile, WriteError, band_levels_written, directivity_files, resolve_variant,
+    working_directory, write, write_file,
 };
 
 pub use crate::schema::SolverKind;

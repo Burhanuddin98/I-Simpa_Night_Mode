@@ -170,6 +170,70 @@ faces 12
 (`80000000` is -0.0. It is in the file, and upstream's test cannot see it because it compares
 with a tolerance, `bin.h:60-62`.)
 
+## Parity with upstream's GUI
+
+**What upstream's GUI writes.** `CObjet3D::ToCBINFormat` (`isimpa/3dengine/Core/Objet3D_maillage.cpp:742-819`):
+
+- the scene's faces, group by group in the scene's own order, each with its vertex indices into
+  the scene's vertex list, and `idMat`, `idRs` and `idEn` from its surface group, surface receiver
+  and fitting (`ApplicationConfiguration::GetFaceLink`, `:746-774`);
+- the scene's vertices in their own order, each converted from the GUI's OpenGL coordinates back
+  to world coordinates in `f32` (`GlCoordsToCommonCoords`, `:777`). The GUI holds the scene
+  centred and scaled into [-1, 1] (`CObjet3D::Unitize`, `Objet3D.cpp:527-571`), so every
+  coordinate takes a 32-bit round trip: a world `y` of 0 comes back as `-0`, and a coordinate
+  can move by about one unit in the last place of the scene's largest coordinate;
+- then each fitting box the user drew: 12 triangles, 3 new vertices each, `idMat` 0, `idRs` -1,
+  `idEn` = the box's id (`:783-815`).
+
+**What ours writes.** `config_xml::scene_mesh`: the project's faces in project order, and its
+vertices narrowed to `f32` and then taken through the same round trip in the scene's frame
+(`config_xml::GlFrame`: upstream's `UnitizeVar`, computed with upstream's own `f32` and `f64`
+steps). A project imported from a `.proj` keeps the scene's face order.
+
+**Measured** (`crates/simpa-core/tests/parity_inputs.rs`, against every run folder stored in
+upstream's tutorials at 929a5c8: tutorial 1's SPPS and TCR runs, tutorial 3's three SPPS runs;
+tutorial 2 and `Industrial.proj` store none):
+
+| Our project | Result against upstream's `mesh.cbin` |
+|---|---|
+| `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | **Byte-identical**, 1,016 bytes, once our receiver id 0 is written as upstream's 3503 |
+| `tutorial_1.proj` imported (`simpa import-proj`) | All 12 faces equal corner for corner (`f32` bits, in face order a, b, c), every `idMat` equal, `idRs` 3503 is our 0. Our vertex list is the welded one: 8 vertices against upstream's 36 (one copy per face), holding exactly upstream's 8 distinct vertices |
+| tutorial 3 (its config, with the two edits of `config_xml.md`'s parity section, and its `.cbin`, imported) | All 76 vertices and 100 faces equal bit for bit, the drawn box's 12 faces included; `idEn` 2083 and 1930 are our 3 and 2 |
+| upstream's own `sceneMesh.bin` of tutorial 3, through `GlFrame` | The run's 40 scene vertices, bit for bit |
+
+Each check has its refusal in the same test: without the round trip, 18 corners of tutorial 1
+differ (`+0` where upstream has `-0`); one vertex one `f32` step off is reported at every corner
+that names it; one face's `idMat` changed is reported; an id left unmapped is reported; a frame one
+`f32` step off in scale moves 4 of tutorial 3's 40 vertices.
+
+**What still differs, why, and what the solver sees.**
+
+1. **Ids.** Our `idRs` and `idEn` are assigned from project order (receivers from 0, fitting zones
+   from 2; `config_xml.rs`); upstream's are its GUI's element ids (3503; 1930, 2083). The project
+   has nowhere to hold upstream's ids. The solvers only match these ids with `config.xml`, which
+   carries the same ones, so every face gets the same receiver and fitting. The one place an id
+   leaves the solver is a surface receiver's `.csbin` output, which records it as `xmlIndex`
+   (`baseReportManager.cpp:40`): there 3503 reads 0.
+2. **The vertex list of a `.proj` import.** The import welds equal vertices (tutorial 1: 8 for
+   upstream's 36). The solvers use a scene vertex only as a corner of the faces that name it
+   (`coreinitialisation.cpp:417-422`, `CalculationCore.cpp:524-526`,
+   `sppsInitialisation.cpp:99-101`, `TC_CalculationCore.cpp:33, 97, 117, 127, 524-526`), and their
+   surface-receiver output takes its nodes from the tetrahedral mesh, not the scene
+   (`UTILISER_MAILLAGE_OPTIMISATION`, `sppsTypes.h:7`; `TC_CalculationCore.cpp:390, 400`). So the
+   solver sees the same triangles.
+3. **One vertex of the bounding box.** Upstream's `Unitize` leaves its list's last vertex out of the
+   bounding box (`v < size() - 1`, `Objet3D.cpp:542`); `GlFrame` takes every vertex, since a welded
+   list has no such order to follow. They agree unless that one vertex alone sets an extreme of the
+   box; then the frame differs, and some coordinates move by about one unit in the last place.
+   None of the tutorials is such a case.
+4. **Fitting boxes drawn by the user.** Upstream appends each box's 12 triangles to the `.cbin`;
+   our box zones go to the `.poly` only, and their triangles are plain tetrahedron-to-tetrahedron
+   faces in the `.mbin` (`docs/m5-m6-design.md`, decision 5). A particle crosses both
+   (`CalculationCore.cpp:218, 226` for upstream's fitting faces), and TCR leaves upstream's out of
+   the room's surfaces (`TC_CalculationCore.cpp:13`), where ours has none. That the two are the
+   same physics is not yet shown by a run (decision 5). A zone imported from a `.cbin`, like
+   tutorial 3's drawn box, is a surface zone and keeps its 12 faces.
+
 ## Verification (2026-09-23)
 
 - `tests/cbin_golden.rs`: values from upstream's own tests, never from this reader.

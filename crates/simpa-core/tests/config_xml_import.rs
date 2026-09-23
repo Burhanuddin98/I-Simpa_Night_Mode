@@ -78,10 +78,14 @@ fn tutorial1_fixture_is_the_import_of_upstream_tutorial1() {
         p.sources[0].power,
         schema::Spectrum::new(80.0, SpectrumShape::White)
     );
-    // The background noise is 1 ulp off white 0 dB at 16 and 20 kHz in the GUI's own floats, so
-    // it stays custom, to keep the solver's input identical.
+    // The background noise is I-Simpa's white noise at 0 dB: the writer computes white and pink
+    // in f32 as upstream's GUI does (band_levels_written), which gives the GUI's own floats in
+    // every band, so the import recognises it.
     let noise = p.point_receivers[0].background_noise.as_ref().unwrap();
-    assert!(matches!(noise.shape, SpectrumShape::Custom { .. }));
+    assert_eq!(*noise, schema::Spectrum::new(0.0, SpectrumShape::White));
+    // Upstream writes its lists last first; the project holds them in the GUI's own order.
+    let names: Vec<&str> = p.point_receivers.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(names, vec!["Receiver 1", "Receiver 2"]);
     let scene = &p.surface_receivers[0];
     assert_eq!(scene.name, "Receiver");
     assert_eq!(
@@ -259,8 +263,9 @@ fn the_solver_reads_the_same_values_as_from_upstreams_configs() {
                 // Ids assigned from the project's order, not the GUI's session counters. Point
                 // receiver ids are only stored in GUI mode; the surface receiver's id matches
                 // the idRs of the scene mesh written with it (scene_mesh).
-                "recepteursp/recepteur_ponctuel[0]@id: upstream 3669, ours 0".to_string(),
-                "recepteursp/recepteur_ponctuel[1]@id: upstream 3510, ours 1".to_string(),
+                // Both lists are written last first, so project receiver 1 (id 1) comes first.
+                "recepteursp/recepteur_ponctuel[0]@id: upstream 3669, ours 1".to_string(),
+                "recepteursp/recepteur_ponctuel[1]@id: upstream 3510, ours 0".to_string(),
                 "recepteurss/recepteur_surfacique[0]@id: upstream 3503, ours 0".to_string(),
                 // The GUI's default material: no face of mesh.cbin uses idMat 0.
                 "type_surface[id=0]: only upstream's".to_string(),

@@ -6,10 +6,11 @@ use std::path::{Path, PathBuf};
 
 use super::ids::{SolverIds, group_zone_ids};
 use super::names;
-use super::num::real_text;
+use super::num::{real_text, widen_f32};
+use crate::geometry::import::REFERENCE_SPECTRA;
 use crate::schema::{
-    Directivity, FittingZone, IntegrityError, Material, Project, ReflectionLaw, SolverKind, Source,
-    SurfaceReceiverShape, VariantId,
+    BandKind, BandSet, Directivity, FittingZone, IntegrityError, Material, Project, ReflectionLaw,
+    SolverKind, Source, Spectrum, SpectrumShape, SurfaceReceiverShape, VariantId,
 };
 
 /// Why a `config.xml` could not be written. [`WriteError::code`] is a stable reason code.
@@ -395,16 +396,23 @@ pub fn write(
     }
     x.close("surface_absorption_enum");
 
+    // The lists below are written last item first, as upstream's GUI writes them: it creates each
+    // child with `new wxXmlNode(parent, ...)`, which puts the new node first among its parent's
+    // children (`e_scene_sources_source.h:113`, `e_scene_recepteursp_recepteur.h:111`,
+    // `e_scene_recepteurss_recepteur.h:119`, `e_scene_encombrements_encombrement_*.h`). The solvers
+    // number sources and receivers by their position in the file, so this order is part of their
+    // input: a seeded SPPS run draws its particles source by source in it.
+
     // sources.
     x.open("sources", vec![]);
-    for s in project.sources.iter().filter(|s| s.enabled) {
+    for s in project.sources.iter().filter(|s| s.enabled).rev() {
         write_source(&mut x, project, s, &staged)?;
     }
     x.close("sources");
 
     // recepteursp.
     x.open("recepteursp", vec![]);
-    for r in &project.point_receivers {
+    for r in project.point_receivers.iter().rev() {
         let what = |f: &str| format!("point receiver '{}' {f}", r.name);
         let id = ids
             .point_receiver_id(r.id)
@@ -428,14 +436,12 @@ pub fn write(
         // gives a receiver with no entries (coreTypes.cpp:36-44), written so every band is
         // explicit.
         let levels = match &r.background_noise {
-            Some(noise) => {
-                noise
-                    .band_levels_db(&project.bands)
-                    .ok_or_else(|| WriteError::Unsupported {
-                        what: what("background noise"),
-                        reason: "its spectrum does not fit the band set".to_string(),
-                    })?
-            }
+            Some(noise) => band_levels_written(noise, &project.bands).ok_or_else(|| {
+                WriteError::Unsupported {
+                    what: what("background noise"),
+                    reason: "its spectrum does not fit the band set".to_string(),
+                }
+            })?,
             None => vec![0.0; project.bands.len()],
         };
         for (f, db) in project.bands.frequencies_hz.iter().zip(levels) {
@@ -453,7 +459,7 @@ pub fn write(
 
     // recepteurss.
     x.open("recepteurss", vec![]);
-    for r in project.surface_receivers.iter().filter(|r| r.enabled) {
+    for r in project.surface_receivers.iter().filter(|r| r.enabled).rev() {
         let what = |f: &str| format!("surface receiver '{}' {f}", r.name);
         let id = ids
             .surface_receiver_id(r.id)
@@ -486,7 +492,7 @@ pub fn write(
 
     // encombrement_enum.
     x.open("encombrement_enum", vec![]);
-    for z in project.fitting_zones.iter().filter(|z| z.enabled) {
+    for z in project.fitting_zones.iter().filter(|z| z.enabled).rev() {
         let id = ids.fitting_zone_id(z.id).expect("every zone has an id");
         write_fitting(&mut x, project, id, z)?;
     }
@@ -545,8 +551,9 @@ fn write_material(
             ),
             ("loi", loi.clone()),
         ];
-        if let Some(tl) = &m.transmission_loss_db {
-            let loss = transmission_loss_written(tl[i].get(), m.absorption[i].get());
+        if let Some(tl) = &m.transmission_loss_db
+            && let Some(loss) = transmission_loss_written(tl[i].get(), m.absorption[i].get())
+        {
             attrs.push((
                 "affaiblissement",
                 real(&what(&format!("{f} Hz transmission loss")), loss)?,
@@ -558,24 +565,82 @@ fn write_material(
     Ok(())
 }
 
-/// Loss in dB with which no more energy is transmitted than absorbed, as upstream's GUI enforces
-/// (`isimpa/data_manager/e_data_row_materiau.h:126-145`): when tau = 10^(-R/10) exceeds alpha, R
-/// becomes -10 log10(alpha), so tau = alpha exactly. With alpha = 0 upstream turns transmission off
-/// for the band; config.xml has no per-band switch, so a 300 dB loss (tau = 1e-30) stands in.
-/// The validator warns about both (`material_transmission_exceeds_absorption`).
-pub(crate) fn transmission_loss_written(loss_db: f64, absorption: f64) -> f64 {
-    if absorption <= 0.0 {
-        return loss_db.max(ZERO_ABSORPTION_LOSS_DB);
+/// The `affaiblissement` written for one band of a transmitting material, or `None` for no
+/// attribute: the loss in dB with which no more energy is transmitted than absorbed, as upstream's
+/// GUI enforces (`isimpa/data_manager/e_data_row_materiau.h:126-145`): when
+/// tau = 10^(-R/10) exceeds alpha, R becomes -10 log10(alpha), so tau = alpha exactly. With alpha
+/// 0 (as the solver's `f32`) upstream turns the band's `transmission` off, and its GUI then leaves
+/// `affaiblissement` out of that band (`e_data_row_materiau.h:98-106`); the solvers read the
+/// attribute per band (`base_core_configuration.cpp:210-219`), so leaving it out is exactly
+/// upstream's input. The validator warns about both (`material_transmission_exceeds_absorption`).
+pub(crate) fn transmission_loss_written(loss_db: f64, absorption: f64) -> Option<f64> {
+    if absorption as f32 <= 0.0 {
+        return None;
     }
-    if 10f64.powf(-loss_db / 10.0) > absorption {
+    Some(if 10f64.powf(-loss_db / 10.0) > absorption {
         -10.0 * absorption.log10()
     } else {
         loss_db
+    })
+}
+
+/// The band levels, in dB, that [`write()`] writes for a spectrum (a source's power or a point
+/// receiver's background noise): each is written as its shortest decimal, which the solver reads
+/// back to the same `f32`.
+///
+/// On upstream's own band set, the 27 third-octave bands from 50 Hz to 20 kHz, a
+/// [`SpectrumShape::White`] or [`SpectrumShape::Pink`] spectrum is computed the way upstream's GUI
+/// computes its "White noise" and "Pink noise" reference spectra at every write
+/// (`E_Property_Freq::LoadLwFromBdd` and `SetGlobalLevel`, `generic_element/e_property_freq.cpp`):
+/// in `f32`, from the reference levels rounded to 2 decimals in `appconst.xml`, so the solver
+/// gets upstream's exact `f32`. [`Spectrum::band_levels_db`] (in `f64`) can differ from it by one
+/// unit in the last place: it does in 2 of tutorial 1's 27 background-noise bands. Every other
+/// spectrum, and every spectrum on another band set, is [`Spectrum::band_levels_db`]. `None` when
+/// the spectrum does not fit the band set.
+pub fn band_levels_written(spectrum: &Spectrum, bands: &BandSet) -> Option<Vec<f64>> {
+    let reference_id = match spectrum.shape {
+        SpectrumShape::White => Some(0),
+        SpectrumShape::Pink => Some(1),
+        SpectrumShape::Custom { .. } => None,
+    };
+    let reference = reference_id
+        .filter(|_| is_upstream_band_set(bands))
+        .and_then(|id| REFERENCE_SPECTRA.iter().find(|r| r.id == id));
+    match reference {
+        Some(r) => Some(
+            upstream_band_levels(&r.band_db, spectrum.global_db.get() as f32)
+                .iter()
+                .map(|&l| widen_f32(l))
+                .collect(),
+        ),
+        None => spectrum.band_levels_db(bands),
     }
 }
 
-/// Stand-in loss for a band that absorbs nothing: upstream disables transmission there.
-pub(crate) const ZERO_ABSORPTION_LOSS_DB: f64 = 300.0;
+/// Upstream's frequency list (`ApplicationConfiguration::GetAllFrequencies`): every third-octave
+/// band from 50 Hz to 20 kHz, the bands its reference spectra are given on.
+fn is_upstream_band_set(bands: &BandSet) -> bool {
+    bands.kind == BandKind::ThirdOctave
+        && bands.frequencies_hz == BandKind::ThirdOctave.nominal_frequencies()
+        && bands.len() == 27
+}
+
+/// What upstream's GUI writes for a reference spectrum at global level `lw`, with no attenuation
+/// (`e_property_freq.cpp:139-176`, `:223-227`, `:256-272` and `:331-358`,
+/// `e_data_row_ext_bandefreq.h:108-111`):
+/// the band levels start as the reference's, their energetic sum is formed in `f32` from `f64`
+/// powers (`totdb += pow(10, lw / 10)`, then `10 * log10f(totdb)`), and every band is moved by
+/// `lw` minus that sum, in `f32`. Measured: this reproduces all 39 source and receiver spectra of
+/// the five runs stored in upstream's tutorials, bit for bit (`tests/parity_inputs.rs`).
+fn upstream_band_levels(reference: &[f32; 27], lw: f32) -> [f32; 27] {
+    let mut total = 0.0f32;
+    for &r in reference {
+        total = (f64::from(total) + 10f64.powf(f64::from(r / 10.0))) as f32;
+    }
+    let global = 10.0f32 * total.log10();
+    let delta = lw - global;
+    reference.map(|r| r + delta)
+}
 
 fn write_source(
     x: &mut Xml,
@@ -619,10 +684,8 @@ fn write_source(
         ));
     }
     x.open("source", attrs);
-    let levels = s
-        .power
-        .band_levels_db(&project.bands)
-        .ok_or_else(|| WriteError::Unsupported {
+    let levels =
+        band_levels_written(&s.power, &project.bands).ok_or_else(|| WriteError::Unsupported {
             what: what("power"),
             reason: "its spectrum does not fit the band set".to_string(),
         })?;
@@ -772,19 +835,84 @@ impl Xml {
 }
 
 #[cfg(test)]
+mod spectrum_tests {
+    use super::band_levels_written;
+    use crate::schema::{BandKind, BandSet, Spectrum, SpectrumShape};
+
+    /// The `f32` a value of upstream's config.xml reads as.
+    fn f(text: &str) -> u32 {
+        (text.parse::<f64>().unwrap() as f32).to_bits()
+    }
+
+    #[test]
+    fn white_noise_is_upstreams_f32_in_every_band() {
+        // Tutorial 1's GUI-written config (tests/fixtures/upstream/tutorial1/spps/config.xml):
+        // the source is white noise at 80 dB, the receivers' background noise white at 0 dB.
+        let bands = BandSet::range(BandKind::ThirdOctave, 50, 20000).unwrap();
+        let at = |s: &Spectrum, hz: u32| -> (u32, u32) {
+            let i = bands.index_of(hz).unwrap();
+            let written = band_levels_written(s, &bands).unwrap()[i] as f32;
+            let exact = s.band_levels_db(&bands).unwrap()[i] as f32;
+            (written.to_bits(), exact.to_bits())
+        };
+        let source = Spectrum::new(80.0, SpectrumShape::White);
+        let noise = Spectrum::new(0.0, SpectrumShape::White);
+        for (s, hz, upstream) in [
+            (&source, 50, "47.1404190063477"),
+            (&source, 1000, "60.1404190063477"),
+            (&source, 20000, "73.1404190063477"),
+            (&noise, 50, "-32.8595809936523"),
+            (&noise, 1000, "-19.8595790863037"),
+            (&noise, 16000, "-7.85957956314087"),
+            (&noise, 20000, "-6.85957956314087"),
+        ] {
+            assert_eq!(at(s, hz).0, f(upstream), "{hz} Hz, {s:?}");
+        }
+        // The f64 formula misses upstream's float in two of these bands, by one unit in the last
+        // place: that is why white and pink are computed upstream's way.
+        assert_ne!(at(&noise, 16000).1, f("-7.85957956314087"));
+        assert_ne!(at(&noise, 20000).1, f("-6.85957956314087"));
+    }
+
+    #[test]
+    fn other_band_sets_and_custom_shapes_keep_the_f64_formula() {
+        let octaves = BandSet::range(BandKind::Octave, 63, 16000).unwrap();
+        let fewer = BandSet::range(BandKind::ThirdOctave, 100, 5000).unwrap();
+        for bands in [&octaves, &fewer] {
+            for shape in [SpectrumShape::White, SpectrumShape::Pink] {
+                let s = Spectrum::new(80.0, shape);
+                assert_eq!(band_levels_written(&s, bands), s.band_levels_db(bands));
+            }
+        }
+        let all = BandSet::range(BandKind::ThirdOctave, 50, 20000).unwrap();
+        let custom = Spectrum::new(
+            70.0,
+            SpectrumShape::Custom {
+                relative_db: (0..27).map(|i| crate::schema::F64::new(i as f64)).collect(),
+            },
+        );
+        assert_eq!(
+            band_levels_written(&custom, &all),
+            custom.band_levels_db(&all)
+        );
+    }
+}
+
+#[cfg(test)]
 mod transmission_tests {
     use super::transmission_loss_written as w;
 
     #[test]
     fn clamps_transmission_to_absorption_like_upstream() {
         // tau = 10^(-5/10) = 0.316 > alpha 0.1, so the loss becomes 10 dB (tau = 0.1).
-        assert!((w(5.0, 0.1) - 10.0).abs() < 1e-12);
+        assert!((w(5.0, 0.1).unwrap() - 10.0).abs() < 1e-12);
         // tau = 10^(-20/10) = 0.01 <= alpha 0.1: written as entered.
-        assert_eq!(w(20.0, 0.1), 20.0);
+        assert_eq!(w(20.0, 0.1), Some(20.0));
         // Exactly at the limit: unchanged.
-        assert_eq!(w(10.0, 0.1), 10.0);
-        // No absorption, no transmission.
-        assert_eq!(w(5.0, 0.0), super::ZERO_ABSORPTION_LOSS_DB);
-        assert_eq!(w(400.0, 0.0), 400.0);
+        assert_eq!(w(10.0, 0.1), Some(10.0));
+        // No absorption, no transmission: no attribute, as upstream's GUI writes the band.
+        assert_eq!(w(5.0, 0.0), None);
+        assert_eq!(w(400.0, 0.0), None);
+        assert_eq!(w(5.0, 1e-50), None, "0 as the solver's f32");
     }
 }

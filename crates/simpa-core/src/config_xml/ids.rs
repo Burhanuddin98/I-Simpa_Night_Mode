@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use super::gl::GlFrame;
 use super::write::WriteError;
 use crate::formats::cbin;
 use crate::schema::{
@@ -174,21 +175,32 @@ pub(crate) fn group_zone_ids(
 }
 
 /// The scene mesh (`mesh.cbin`) of a project, carrying the same solver ids as [`super::write()`]'s
-/// `config.xml`: the project's vertices narrowed to `f32` and its faces in order, each with
-/// `idMat` = its group's material id, `idRs` = the id of the enabled scene receiver covering its
-/// group (-1 for none) and `idEn` = the id of the enabled fitting zone its group bounds (-1 for
-/// none). It does not depend on the variant. Write it with [`cbin::write_file`].
+/// `config.xml`: the project's vertices and its faces in order, each face with `idMat` = its
+/// group's material id, `idRs` = the id of the enabled scene receiver covering its group (-1 for
+/// none) and `idEn` = the id of the enabled fitting zone its group bounds (-1 for none). It does
+/// not depend on the variant. Write it with [`cbin::write_file`].
+///
+/// Each vertex is narrowed to `f32` and then taken through upstream's OpenGL round trip in the
+/// scene's [`GlFrame`], as upstream's GUI writes its `.cbin` (`Objet3D_maillage.cpp:777`), so
+/// the solver reads the same `f32` bits for the same scene (a world `y` of 0 becomes `-0`, and a
+/// coordinate may move by about one unit in the last place of the scene's largest coordinate). A
+/// scene with no frame (no vertices, or every vertex at one point) is written narrowed only.
 pub fn scene_mesh(project: &Project) -> Result<cbin::Model, WriteError> {
     project.check_integrity().map_err(WriteError::Integrity)?;
     let ids = SolverIds::assign(project)?;
     let zones = group_zone_ids(project, &ids)?;
+    let frame = GlFrame::of_project(project);
     let vertices = project
         .geometry
         .vertices
         .iter()
         .enumerate()
         .map(|(i, v)| {
-            let [x, y, z] = v.to_array().map(|c| c as f32);
+            let narrowed = v.to_array().map(|c| c as f32);
+            let [x, y, z] = match &frame {
+                Some(f) => f.round_trip(narrowed),
+                None => narrowed,
+            };
             if [x, y, z].iter().all(|c| c.is_finite()) {
                 Ok(cbin::Vertex { x, y, z })
             } else {

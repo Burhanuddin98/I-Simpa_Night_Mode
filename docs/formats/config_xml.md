@@ -5,8 +5,10 @@ Each solver takes one argument, the path of a `config.xml`. SPPS (`spps.exe`) an
 `Base_Core_Configuration::LoadCfgFile`. Each then reads a few attributes of its own. This page
 describes **what the solvers read and what they do with it**. It does not describe what
 upstream's GUI writes, although "Ignored by the solvers" lists what the GUI writes that no solver
-reads. The Rust writer is `crates/simpa-core/src/config_xml.rs` (M3). The pre-launch rules that
-this page motivates, and the launch contract, are in `docs/solver-contract.md`.
+reads, and "Parity with upstream's GUI" compares what the GUI wrote for its own tutorial runs
+with what our writer writes. The Rust writer is `crates/simpa-core/src/config_xml.rs` (M3). The
+pre-launch rules that this page motivates, and the launch contract, are in
+`docs/solver-contract.md`.
 
 ## Receipts
 
@@ -291,7 +293,7 @@ Each child is one material, whatever its element name (`base_core_configuration.
 | `type_surface/bfreq@absorb` | real, α | both | Absorption coefficient. Not range-checked | always | `base_core_configuration.cpp:208` |
 | `type_surface/bfreq@diffusion` | real, 0 to 1 | both, used by SPPS | Probability of a non-specular reflection: `diffusion==1 \|\| rand<diffusion` (`CalculationCore.cpp:318`) | always | `base_core_configuration.cpp:209` |
 | `type_surface/bfreq@loi` | int, `REFLECTION_LAW` | both, used by SPPS | 0 specular, 1 uniform, 2 Lambert, 3 W2, 4 W3, 5 W4, 6 semi-diffuse (`coreTypes.h:83-92`). **6 falls through to the default branch and reflects specularly** (`dotreflection.h:23-45`) | always | `base_core_configuration.cpp:220-221` |
-| `type_surface/bfreq@affaiblissement` | real, dB transmission loss | both, *optional*, used by SPPS | Its presence enables transmission with τ = 10^(-R/10) (`base_core_configuration.cpp:210-219`), used only when `trans_calc` is set. Absent: no transmission. The solver does no α/τ consistency check | if the material transmits | `base_core_configuration.cpp:210-219` |
+| `type_surface/bfreq@affaiblissement` | real, dB transmission loss | both, *optional*, used by SPPS | Its presence enables transmission with τ = 10^(-R/10) (`base_core_configuration.cpp:210-219`), used only when `trans_calc` is set. Absent: no transmission. The solver does no α/τ consistency check. Upstream's GUI leaves it out of a band whose absorption is 0 (`e_data_row_materiau.h:98-106, 131-134`), and so does the writer | if the material transmits | `base_core_configuration.cpp:210-219` |
 | `type_surface/bfreq@freq` | int | both | Sort key only | always | `base_core_configuration.cpp:201` |
 
 ### `recepteursp` (point receivers)
@@ -387,8 +389,12 @@ Upstream's GUI writes the following, and no solver reads any of it.
 | `source@id` | `e_scene_sources_source.h:114` | A source's index is its list position (`base_core_configuration.cpp:153`) |
 | `recepteur_ponctuel@name` | `e_scene_recepteursp_recepteur.h:113` | The solvers use `@lbl` (`base_core_configuration.cpp:244-249`) |
 | `<subdomains>`, and `volume@id` and `volume@name` inside it | `e_scene_volumes_volume.h:146-153` | No `GetChild("subdomains")` |
+| `type_surface@masse_volumique` | `e_scene_bdd_materiaux_propmateriau.h:71`, on user materials (tutorial 3) | Never looked up |
+| `encombrement@x`, `encombrement@y`, `encombrement@z` | A fitting zone's exported properties (`e_scene_encombrements_encombrement_model.h:146-157`, tutorial 3's zone 1930) | A fitting is read as `@id` and its band entries only (`base_core_configuration.cpp:303-330`) |
 
 **Receipts.**
+- **The last two rows** (from tutorial 3's configs) are read from the code only: the names are
+  not among those passed to `GetProperty` or `IsPropertyExist` (grep below).
 - **VERIFIED P1.** All six rows were removed from both tutorial-1 configs: 279 characters from
   SPPS's and 150 from TCR's. The results were the same:
   - every output file was identical: SPPS 65 files, TCR 87. `.csbin` files were compared by size,
@@ -401,6 +407,103 @@ Upstream's GUI writes the following, and no solver reads any of it.
   elements listed above.
 
 Our writer writes none of them, and no `<surface_mesh>` or `<vertices>` either (M3).
+
+## Parity with upstream's GUI
+
+**The references.** Every run folder stored in upstream's tutorials at 929a5c8 holds the
+`config.xml` and `mesh.cbin` the GUI handed the solver, and the project file it saved beside
+them: tutorial 1's SPPS and TCR runs (2019-06-07) and tutorial 3's three SPPS runs (2019-06-18).
+Tutorial 2 and `Industrial.proj` store no run folder. `crates/simpa-core/tests/parity_inputs.rs`
+reads them from the upstream tree and compares what the solvers read from theirs and from ours,
+value by value: `atoi` for an integer, `atof` into an `f32` for a real (by bits), a string
+verbatim, each element where the solvers find it (lists by position, materials by id, band
+entries by their rank after the solvers' sort). An attribute neither in the reference tables nor
+in "Ignored by the solvers" fails the test, so nothing is skipped unseen. The scene mesh is
+compared in `docs/formats/cbin.md`, "Parity with upstream's GUI".
+
+**Three rules of the writer that come from this comparison** (2026-09-24):
+
+1. **Lists are written last item first:** sources, point receivers, surface receivers and cutting
+   planes, fitting zones. Upstream's GUI creates each child with `new wxXmlNode(parent, ...)`,
+   which puts it first among its parent's children (`e_scene_sources_source.h:113`,
+   `e_scene_recepteursp_recepteur.h:111`, `e_scene_recepteurss_recepteur.h:119`,
+   `e_scene_recepteurss_recepteurcoupe.h:204`, `e_scene_encombrements_encombrement_model.h:150`,
+   `e_scene_encombrements_encombrement_cuboide.h:354`). Measured: tutorial 3's project lists its
+   receivers 155 to 791 and its sources 974 to 1770, and each of its configs lists them 791 to 155
+   and 1770 to 974, across both source groups. The order is solver input: sources and receivers
+   are numbered by their position in the file, a seeded SPPS run draws its particles source by
+   source in that order, and whether the `Global` surface-receiver file is written depends on the
+   first receiver (`baseReportManager.cpp:393, 432`). A project keeps the GUI's own order (the
+   `.proj` import reads the project file in order; `import_upstream` reverses the config's
+   lists), so writing it gives upstream's order. Band entries are still written ascending;
+   upstream's come descending for the same reason, and the solvers sort them
+   (`cxml.cpp:130-156`).
+2. **White and pink noise on upstream's 27 bands are computed as upstream's GUI computes them:**
+   in `f32`, from its reference levels rounded to 2 decimals (`config_xml::band_levels_written`;
+   `E_Property_Freq::LoadLwFromBdd` and `SetGlobalLevel`, `generic_element/e_property_freq.cpp`).
+   Measured: the 39 source and receiver spectra of the five runs are all equal to upstream's
+   floats in every band, where the `f64` formula (`Spectrum::band_levels_db`) misses 38 band
+   values by one unit in the last place. Other shapes and other band sets keep the `f64` formula.
+3. **A band that absorbs nothing has no `affaiblissement`,** as upstream's GUI writes it (see the
+   attribute's row). Until 2026-09-24 the writer put a 300 dB loss there. In random mode a
+   particle hitting such a band is absorbed only when its draw is exactly 0, and then transmits
+   if the band has a loss (`CalculationCore.cpp:288-292`); without the attribute it never does,
+   as with upstream's input.
+
+**Measured** on the five runs, with our config written into upstream's own run folder so that
+`workingdirectory` is equal:
+
+| Our project | Values the solver reads differently |
+|---|---|
+| `tutorial_1.proj` imported, SPPS run | 17 lines, all of the kinds listed below: the ids, the stored directions, and the by-design lines |
+| `tutorial_1.proj` imported, TCR run | 15 lines, the same kinds |
+| tutorial 3's config and `.cbin` imported (with the two edits below) and written back, each run | 37 lines: the ids, the by-design lines, and the 7 band values of the two edits |
+| `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | the ids and the by-design lines (`config_xml_import.rs`); and a same-seed run of ours beside upstream's own config gives every output file identical, the `.csbin` files once decoded with the receiver's id mapped (`config_xml_solver.rs`, `tutorial1_runs_clean_and_matches_upstreams_own_configuration`) |
+
+Each comparison has its refusal in the same test: one `f32` step on one band of one value, a
+changed temperature, a changed transmission loss and the receivers in the other order are each
+reported.
+
+**What still differs, why, and what the solver does with it.**
+
+- **Ids.** `recepteur_ponctuel@id`, `recepteur_surfacique@id`, `recepteur_surfacique_coupe@id`
+  and `encombrement@id` are ours, assigned from project order (`config_xml.rs`, "Solver ids"):
+  tutorial 1's receivers 3669 and 3510 are our 1 and 0 and its scene receiver 3503 our 0;
+  tutorial 3's fitting zones 2083 and 1930 are our 3 and 2. The project has nowhere to hold the
+  GUI's element ids. A point receiver's id is only stored in GUI mode. A scene receiver's and a
+  fitting's are matched with the `.cbin` and `.mbin`, which carry ours, and a scene receiver's id
+  is also written into its `.csbin` output (`xmlIndex`).
+- **Point-receiver directions (tutorial 1).** Upstream's GUI computes a receiver's direction when
+  its position changes, and holds it at full precision for the rest of that session, which is
+  when these runs were written (`-0.436852067708969`). Its project file keeps 6 significant
+  digits (`-0.436852`), and the direction is recomputed only on a move
+  (`e_scene_recepteursp_recepteur.h:195-219`), so upstream itself writes the 6-digit value after
+  reopening the project (inferred). The import reads what the file holds. The two are up to 5e-7
+  apart in a unit vector, which SPPS uses only in its lateral-energy terms
+  (`spps/reportmanager.cpp:222`).
+- **Only upstream's:** `<subdomains>` (ignored); `source@u`, `@v` and `@w` on an omni source (read
+  only for types 1 and 5); `type_surface` 0, the GUI's default material, when no face uses it (the
+  solvers look material 0 up once, `coreinitialisation.cpp:410`, and use it only for a face with
+  `idMat` 0).
+- **`directivities_directory`:** upstream's SPPS config holds `loudspeakers\`, ours `""` when no
+  source has a directivity file; it is read only for a type-5 source. Upstream's TCR config lacks
+  it, and TCR prints `Xml Property directivities_directory doesn't exist !`.
+- **Only ours:** `save_surface_intersection` and `save_receivers_intersection`, at 1, the value
+  the solver takes when they are absent.
+- **Tutorial 3 needs two edits to become a project.** Its `.proj` is refused for its fitting zones
+  (`geometry::import`), and its config imports only with these:
+  - material 100 has reflection law 2 (Lambert) in 6 of 27 bands and 0 in the others; a project
+    holds one law per material, so the test sets law 0 in all, and those 6 values differ;
+  - material 101 ("Open_door") transmits with a 0 dB loss in 5 of the 6 bands where it absorbs,
+    but not at 125 Hz; a project's material transmits in every band that absorbs or in none, so
+    the test gives it 0 dB at 125 Hz too, and that one value differs.
+
+**Formatting only** (the solvers read the same values): upstream prints each real as its `f32`
+at 15 significant digits (`0.310000002384186`), ours as the shortest decimal of the project's
+value (`0.31`), and both read back to the same `f32`; band entries descending against ascending;
+the order of the root's elements and of attributes (the solvers look both up by name); the
+attributes in "Ignored by the solvers"; upstream's materials no face uses; indentation and line
+ends.
 
 ## Corrections to the contract survey
 
