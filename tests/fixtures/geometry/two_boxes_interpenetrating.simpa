@@ -1,0 +1,216 @@
+{
+  "format_version": 1,
+  "id": "2e439367-069c-45cb-81ba-733b22395c33",
+  "name": "two interpenetrating boxes",
+  "description": "Upstream I-Simpa tutorial 1 (tutorial_1.proj at 929a5c8), imported by geometry::import::import_proj: a 6 x 10 x 3 m box, groups and materials from its .finfo lists and idmat, sources and receivers from projet_config.xml.",
+  "frame": {
+    "length_unit": "metre",
+    "up_axis": "z"
+  },
+  "bands": {
+    "kind": "third_octave",
+    "frequencies_hz": [50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000]
+  },
+  "geometry": {
+    "vertices": [
+      [6.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0],
+      [0.0, 10.0, 0.0],
+      [6.0, 10.0, 0.0],
+      [0.0, 10.0, 3.0],
+      [6.0, 10.0, 3.0],
+      [0.0, 0.0, 3.0],
+      [6.0, 0.0, 3.0],
+      [9.0, 5.0, 1.5],
+      [3.0, 5.0, 1.5],
+      [3.0, 15.0, 1.5],
+      [9.0, 15.0, 1.5],
+      [3.0, 15.0, 4.5],
+      [9.0, 15.0, 4.5],
+      [3.0, 5.0, 4.5],
+      [9.0, 5.0, 4.5]
+    ],
+    "faces": [
+      [0, 1, 2, "16914a01-df81-4716-9d5c-f123554fdfaf"],
+      [0, 2, 3, "16914a01-df81-4716-9d5c-f123554fdfaf"],
+      [2, 4, 5, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [2, 5, 3, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [2, 6, 4, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [2, 1, 6, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [1, 0, 7, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [6, 1, 7, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [0, 3, 5, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [7, 0, 5, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [7, 5, 4, "37db390c-e848-4235-bc12-02194c88e490"],
+      [6, 7, 4, "37db390c-e848-4235-bc12-02194c88e490"],
+      [8, 9, 10, "16914a01-df81-4716-9d5c-f123554fdfaf"],
+      [8, 10, 11, "16914a01-df81-4716-9d5c-f123554fdfaf"],
+      [10, 12, 13, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [10, 13, 11, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [10, 14, 12, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [10, 9, 14, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [9, 8, 15, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [14, 9, 15, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [8, 11, 13, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [15, 8, 13, "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace"],
+      [15, 13, 12, "37db390c-e848-4235-bc12-02194c88e490"],
+      [14, 15, 12, "37db390c-e848-4235-bc12-02194c88e490"]
+    ]
+  },
+  "surface_groups": [
+    {
+      "id": "37db390c-e848-4235-bc12-02194c88e490",
+      "name": "Ceiling",
+      "material": "d084e30d-d843-4ee9-8531-eee33e7e6ccf"
+    },
+    {
+      "id": "16914a01-df81-4716-9d5c-f123554fdfaf",
+      "name": "Floor",
+      "material": "f1ced218-e10a-4908-a4e7-fed835b771b0"
+    },
+    {
+      "id": "f5465bf6-d5ba-4cf7-bea6-e02e5e16dace",
+      "name": "Walls",
+      "material": "1219c223-ead1-4327-87c6-ccf9500c620d"
+    }
+  ],
+  "materials": [
+    {
+      "id": "d084e30d-d843-4ee9-8531-eee33e7e6ccf",
+      "name": "30% absorbing",
+      "color": "#b2b2b2",
+      "absorption": [0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3],
+      "scattering": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": 21
+    },
+    {
+      "id": "f1ced218-e10a-4908-a4e7-fed835b771b0",
+      "name": "10% absorbing",
+      "color": "#e6e6e6",
+      "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "scattering": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": 25
+    },
+    {
+      "id": "1219c223-ead1-4327-87c6-ccf9500c620d",
+      "name": "20% absorbing",
+      "color": "#cccccc",
+      "absorption": [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2],
+      "scattering": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": 22
+    }
+  ],
+  "sources": [
+    {
+      "id": "48ed3ca6-65ee-4c09-99a7-afcdb33839ad",
+      "name": "Source 1",
+      "enabled": true,
+      "position": [3.0, 5.0, 1.8],
+      "power": {
+        "global_db": 80.0,
+        "shape": {
+          "kind": "white"
+        }
+      },
+      "directivity": {
+        "kind": "omni"
+      },
+      "delay_s": 0.0
+    }
+  ],
+  "point_receivers": [
+    {
+      "id": "169d64ce-26f4-4708-9382-6b2409edd5ff",
+      "name": "Receiver 1",
+      "position": [1.0, 1.0, 1.8],
+      "orientation": [-0.436852, -0.436852, -0.786334],
+      "background_noise": {
+        "global_db": 0.0,
+        "shape": {
+          "kind": "white"
+        }
+      }
+    },
+    {
+      "id": "37e753d9-2fbb-4227-b238-7c190026dbe0",
+      "name": "Receiver 2",
+      "position": [3.0, 7.0, 1.8],
+      "orientation": [-0.383357, -0.8945, -0.230014],
+      "background_noise": {
+        "global_db": 0.0,
+        "shape": {
+          "kind": "white"
+        }
+      }
+    }
+  ],
+  "surface_receivers": [
+    {
+      "id": "d127ce8c-074e-4288-a081-1076e157ee0f",
+      "name": "Receiver",
+      "enabled": true,
+      "shape": {
+        "kind": "scene",
+        "groups": ["16914a01-df81-4716-9d5c-f123554fdfaf"]
+      }
+    }
+  ],
+  "fitting_zones": [],
+  "environment": {
+    "temperature_c": 20.0,
+    "relative_humidity_percent": 50.0,
+    "pressure_pa": 101325.0,
+    "air_absorption": {
+      "kind": "iso9613"
+    },
+    "ground_roughness_m": 0.02,
+    "celerity_gradient_log": 0.0,
+    "celerity_gradient_lin": 0.0
+  },
+  "solvers": {
+    "spps": {
+      "particles_per_source": 150000,
+      "particles_saved": 0,
+      "duration_s": 2.0,
+      "time_step_s": 0.01,
+      "random_seed": 0,
+      "method": "random",
+      "air_absorption": true,
+      "fittings": true,
+      "direct_field_only": false,
+      "transmission": true,
+      "extinction_exponent": 5.0,
+      "receiver_radius_m": 0.31,
+      "sound_map": "intensity",
+      "sound_maps_per_band": true,
+      "echogram_per_source": false,
+      "save_surface_intersections": true,
+      "save_receiver_intersections": true,
+      "bands_computed": [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+    },
+    "tcr": {
+      "air_absorption": true,
+      "bands_computed": [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
+    },
+    "meshing": {
+      "min_radius_edge_ratio": 2.0,
+      "max_volume_m3": null,
+      "surface_receiver_max_area_m2": 0.1,
+      "preserve_boundary": false
+    }
+  },
+  "variants": [],
+  "active_variant": null,
+  "view": {
+    "camera": null
+  }
+}

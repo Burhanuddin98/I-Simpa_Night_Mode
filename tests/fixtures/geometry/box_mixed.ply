@@ -1,0 +1,42 @@
+ply
+format ascii 1.0
+element vertex 8
+property short x
+property uchar confidence
+property int y
+property double z
+element junk 2
+property list uchar float stuff
+property ushort tag
+element face 12
+property ushort flags
+property list ushort uint vertex_indices
+property uchar layer_id
+element layer 3
+property list uint char layer_name
+end_header
+0 200 0 0.0
+6 200 0 0.0
+6 200 10 0.0
+0 200 10 0.0
+0 200 0 3.0
+6 200 0 3.0
+6 200 10 3.0
+0 200 10 3.0
+2 0.5 -1.25 7
+0 65535
+9 3 0 3 2 0
+9 3 0 2 1 0
+9 3 4 5 6 1
+9 3 4 6 7 1
+9 3 0 1 5 2
+9 3 0 5 4 2
+9 3 1 2 6 2
+9 3 1 6 5 2
+9 3 2 3 7 2
+9 3 2 7 6 2
+9 3 3 0 4 2
+9 3 3 4 7 2
+5 102 108 111 111 114
+7 99 101 105 108 105 110 103
+5 119 97 108 108 115

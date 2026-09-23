@@ -10,7 +10,12 @@ const USAGE: &str = "usage:
                                                               (poly: as upstream's reader sees it)
   simpa validate <project.simpa> [--json] [--mesh-hash <hex>] check a project; exit 2 on any error
   simpa export-config <project.simpa> <run-dir> [--solver spps|tcr] [--variant <name>]
-                                                              write config.xml and mesh.cbin for a run";
+                                                              write config.xml and mesh.cbin for a run
+  simpa import <mesh.ply|obj|stl> <out.simpa> --unit m|cm|mm|ft|in --up y|z
+               [--weld by-format|exact|off] [--keep-groups <previous.simpa>] [--json]
+  simpa import-proj <file.proj> <out.simpa> [--json]         import an upstream I-Simpa project
+  simpa check <model|project.simpa> [--unit ..] [--up ..] [--json]   exit 3 when refused
+  simpa repair <in> <out.simpa> [--weld-tolerance <m>] [--json]      exit 3 when refused";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -30,6 +35,10 @@ fn main() -> ExitCode {
             Err(_) => fail(&format!("seed must be an unsigned integer, got '{seed}'")),
         },
         ["validate", rest @ ..] => validate_cmd(rest),
+        ["import", rest @ ..] => import_cmd(rest),
+        ["import-proj", rest @ ..] => import_proj_cmd(rest),
+        ["check", rest @ ..] => check_cmd(rest),
+        ["repair", rest @ ..] => repair_cmd(rest),
         ["export-config", rest @ ..] => export_config(rest),
         [command, ..] => fail(&format!("unknown command '{command}'\n{USAGE}")),
     }
@@ -167,6 +176,313 @@ fn export_config(args: &[&str]) -> ExitCode {
     }
     println!("{}", config.display());
     println!("{}", mesh_path.display());
+    ExitCode::SUCCESS
+}
+
+/// Options shared by the geometry commands: positional arguments and `--flag value` pairs.
+struct GeoArgs<'a> {
+    positional: Vec<&'a str>,
+    json: bool,
+    options: std::collections::BTreeMap<&'a str, &'a str>,
+}
+
+fn geo_args<'a>(args: &[&'a str], flags_with_values: &[&str]) -> Result<GeoArgs<'a>, String> {
+    let mut out = GeoArgs {
+        positional: Vec::new(),
+        json: false,
+        options: Default::default(),
+    };
+    let mut it = args.iter();
+    while let Some(&a) = it.next() {
+        if a == "--json" {
+            out.json = true;
+        } else if let Some(name) = a.strip_prefix("--") {
+            // --units is accepted for --unit.
+            let name = if name == "units" { "unit" } else { name };
+            if !flags_with_values.contains(&name) {
+                return Err(format!("unknown option '{a}'\n{USAGE}"));
+            }
+            match it.next() {
+                Some(&v) => {
+                    out.options.insert(name, v);
+                }
+                None => return Err(format!("{a} needs a value")),
+            }
+        } else {
+            out.positional.push(a);
+        }
+    }
+    Ok(out)
+}
+
+/// A project from a `.simpa` file, or from a mesh file imported with the given options.
+fn project_from(path: &Path, a: &GeoArgs) -> Result<schema::Project, String> {
+    use simpa_core::geometry::import::{ImportOptions, Unit, Up, Weld};
+    if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("simpa"))
+    {
+        return schema::load(path).map_err(|e| format!("{}: {e}", path.display()));
+    }
+    let unit = a
+        .options
+        .get("unit")
+        .ok_or("--unit is required for a mesh file (m, cm, mm, ft, in)")?;
+    let unit = Unit::from_symbol(unit).ok_or(format!("unknown unit '{unit}'"))?;
+    let up = a
+        .options
+        .get("up")
+        .ok_or("--up is required for a mesh file (y or z)")?;
+    let up = Up::from_name(up).ok_or(format!("unknown up axis '{up}'"))?;
+    let mut options = ImportOptions::new(unit, up);
+    if let Some(w) = a.options.get("weld") {
+        options.weld = match *w {
+            "by-format" => Weld::ByFormat,
+            "exact" => Weld::Exact,
+            "off" => Weld::Off,
+            other => return Err(format!("unknown --weld '{other}'")),
+        };
+    }
+    let model = simpa_core::geometry::import::import_file(path, &options)
+        .map_err(|e| format!("{}: {} ({e})", path.display(), e.code()))?;
+    let name = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    Ok(model.to_project(&name))
+}
+
+/// Faces of each surface group, in group order.
+fn group_faces(p: &schema::Project) -> Vec<(schema::GroupId, String, Vec<u32>)> {
+    p.surface_groups
+        .iter()
+        .map(|g| {
+            let faces = (0..p.geometry.faces.len() as u32)
+                .filter(|&i| p.geometry.faces[i as usize].group == g.id)
+                .collect();
+            (g.id, g.name.clone(), faces)
+        })
+        .collect()
+}
+
+fn project_summary(p: &schema::Project) -> serde_json::Value {
+    use simpa_core::geometry::check;
+    let report = check::check(&p.geometry);
+    let groups = group_faces(p);
+    let surface_receivers: Vec<_> = p
+        .surface_receivers
+        .iter()
+        .filter_map(|r| match &r.shape {
+            schema::SurfaceReceiverShape::Scene { groups: ids } => {
+                let mut faces: Vec<u32> = groups
+                    .iter()
+                    .filter(|(id, _, _)| ids.contains(id))
+                    .flat_map(|(_, _, f)| f.iter().copied())
+                    .collect();
+                faces.sort_unstable();
+                Some(serde_json::json!({ "name": r.name, "faces": faces }))
+            }
+            schema::SurfaceReceiverShape::CuttingPlane { .. } => None,
+        })
+        .collect();
+    serde_json::json!({
+        "vertices": p.geometry.vertices.len(),
+        "faces": p.geometry.faces.len(),
+        "groups": groups.iter().map(|(_, n, f)| serde_json::json!({ "name": n, "faces": f })).collect::<Vec<_>>(),
+        "surface_receivers": surface_receivers,
+        "area_m2": report.measures.area_m2,
+        "volume_m3": report.measures.signed_volume_m3,
+        "sources": p.sources.iter().map(|s| s.position.to_array()).collect::<Vec<_>>(),
+        "receivers": p.point_receivers.iter().map(|r| r.position.to_array()).collect::<Vec<_>>(),
+    })
+}
+
+/// `import <mesh> <out.simpa> --unit .. --up .. [--weld ..] [--keep-groups prev] [--json]`
+fn import_cmd(args: &[&str]) -> ExitCode {
+    let a = match geo_args(args, &["unit", "up", "weld", "keep-groups", "tolerance"]) {
+        Ok(a) => a,
+        Err(e) => return fail(&e),
+    };
+    let [input, out] = a.positional.as_slice() else {
+        return fail(&format!("import needs <mesh> <out.simpa>\n{USAGE}"));
+    };
+    let mut project = match project_from(Path::new(input), &a) {
+        Ok(p) => p,
+        Err(e) => return fail(&e),
+    };
+    if let Some(prev) = a.options.get("keep-groups") {
+        use simpa_core::geometry::import;
+        let previous = match schema::load(Path::new(prev)) {
+            Ok(p) => p,
+            Err(e) => return fail(&format!("{prev}: {e}")),
+        };
+        let tolerance = match a.options.get("tolerance").map(|t| t.parse::<f64>()) {
+            None => import::DEFAULT_REASSIGN_TOLERANCE_M,
+            Some(Ok(t)) => t,
+            Some(Err(_)) => return fail("--tolerance must be a number of metres"),
+        };
+        let unit = import::Unit::from_symbol(a.options["unit"]).expect("checked by project_from");
+        let up = import::Up::from_name(a.options["up"]).expect("checked by project_from");
+        let model =
+            match import::import_file(Path::new(input), &import::ImportOptions::new(unit, up)) {
+                Ok(m) => m,
+                Err(e) => return fail(&format!("{input}: {e}")),
+            };
+        match import::reassign(&previous, &model, tolerance) {
+            Ok(r) => {
+                eprintln!(
+                    "kept groups: {} faces matched, {} unmatched",
+                    r.matched_faces, r.unmatched_faces
+                );
+                project = r.project;
+            }
+            Err(e) => return fail(&format!("keep-groups: {e}")),
+        }
+    }
+    if let Err(e) = schema::save(&project, Path::new(out)) {
+        return fail(&format!("{out}: {e}"));
+    }
+    print_summary(&project, a.json)
+}
+
+fn print_summary(project: &schema::Project, json: bool) -> ExitCode {
+    let s = project_summary(project);
+    if json {
+        println!("{s}");
+    } else {
+        println!(
+            "{} vertices, {} faces, {} groups, area {:.3} m2, volume {:.3} m3",
+            s["vertices"],
+            s["faces"],
+            project.surface_groups.len(),
+            s["area_m2"].as_f64().unwrap_or(0.0),
+            s["volume_m3"].as_f64().unwrap_or(0.0)
+        );
+    }
+    ExitCode::SUCCESS
+}
+
+/// `import-proj <file.proj> <out.simpa> [--json]`
+fn import_proj_cmd(args: &[&str]) -> ExitCode {
+    let a = match geo_args(args, &[]) {
+        Ok(a) => a,
+        Err(e) => return fail(&e),
+    };
+    let [input, out] = a.positional.as_slice() else {
+        return fail(&format!(
+            "import-proj needs <file.proj> <out.simpa>\n{USAGE}"
+        ));
+    };
+    let imported = match simpa_core::geometry::import::import_proj_file(Path::new(input)) {
+        Ok(i) => i,
+        Err(e) => return fail(&format!("{input}: {} ({e})", e.code())),
+    };
+    if let Err(e) = schema::save(&imported.project, Path::new(out)) {
+        return fail(&format!("{out}: {e}"));
+    }
+    print_summary(&imported.project, a.json)
+}
+
+/// `check <model|project> [--unit ..] [--up ..] [--weld ..] [--json]`: exit 0 ok, 3 refused.
+fn check_cmd(args: &[&str]) -> ExitCode {
+    use simpa_core::geometry::check;
+    let a = match geo_args(args, &["unit", "up", "weld"]) {
+        Ok(a) => a,
+        Err(e) => return fail(&e),
+    };
+    let [input] = a.positional.as_slice() else {
+        return fail(&format!("check needs one model or project\n{USAGE}"));
+    };
+    let project = match project_from(Path::new(input), &a) {
+        Ok(p) => p,
+        Err(e) => return fail(&e),
+    };
+    let r = check::check(&project.geometry);
+    let ok = r.verdict == check::Verdict::Ok;
+    if a.json {
+        let out = serde_json::json!({
+            "verdict": if ok { "ok" } else { "refused" },
+            "reasons": r.reasons.iter().map(|x| x.code.as_str()).collect::<Vec<_>>(),
+            "vertices": r.counts.vertices,
+            "faces": r.counts.faces,
+            "edges": r.counts.edges,
+            "open_edges": r.counts.open_edges,
+            "manifold_edges": r.counts.manifold_edges,
+            "nonmanifold_edges": r.counts.nonmanifold_edges,
+            "self_intersections": r.counts.self_intersecting_pairs,
+            "intersecting_pairs": r.self_intersections,
+            "signed_volume_m3": r.measures.signed_volume_m3,
+            "area_m2": r.measures.area_m2,
+            "report": r,
+        });
+        println!("{out}");
+    } else {
+        println!(
+            "{}: {} faces, {} edges ({} open, {} non-manifold), {} self-intersecting pairs, volume {:.3} m3",
+            if ok { "ok" } else { "refused" },
+            r.counts.faces,
+            r.counts.edges,
+            r.counts.open_edges,
+            r.counts.nonmanifold_edges,
+            r.counts.self_intersecting_pairs,
+            r.measures.signed_volume_m3
+        );
+        for reason in &r.reasons {
+            println!("  {}: {}", reason.code.as_str(), reason.message);
+        }
+    }
+    if ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(3)
+    }
+}
+
+/// `repair <in> <out.simpa> [--weld-tolerance m] [--json]`: every change logged; exit 3 refused.
+fn repair_cmd(args: &[&str]) -> ExitCode {
+    use simpa_core::geometry::repair::{self, RepairOptions, RepairStatus};
+    let a = match geo_args(args, &["unit", "up", "weld", "weld-tolerance"]) {
+        Ok(a) => a,
+        Err(e) => return fail(&e),
+    };
+    let [input, out] = a.positional.as_slice() else {
+        return fail(&format!("repair needs <in> <out.simpa>\n{USAGE}"));
+    };
+    let mut project = match project_from(Path::new(input), &a) {
+        Ok(p) => p,
+        Err(e) => return fail(&e),
+    };
+    let tolerance = match a.options.get("weld-tolerance").map(|t| t.parse::<f64>()) {
+        None => repair::DEFAULT_WELD_TOLERANCE_M,
+        Some(Ok(t)) => t,
+        Some(Err(_)) => return fail("--weld-tolerance must be a number of metres"),
+    };
+    let outcome = match repair::repair(
+        &project.geometry,
+        &RepairOptions {
+            weld_tolerance_m: tolerance,
+        },
+    ) {
+        Ok(o) => o,
+        Err(e) => return fail(&format!("repair: {} ({e})", e.code())),
+    };
+    if a.json {
+        println!(
+            "{}",
+            serde_json::to_string(&outcome).expect("outcome serialises")
+        );
+    } else {
+        for c in &outcome.changes {
+            println!("{}", serde_json::to_string(c).expect("change serialises"));
+        }
+    }
+    if outcome.status == RepairStatus::Refused {
+        return ExitCode::from(3);
+    }
+    project.geometry = outcome.geometry;
+    if let Err(e) = schema::save(&project, Path::new(out)) {
+        return fail(&format!("{out}: {e}"));
+    }
     ExitCode::SUCCESS
 }
 
