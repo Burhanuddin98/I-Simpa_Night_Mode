@@ -5,6 +5,7 @@
 
 pub mod config_xml;
 pub mod formats;
+pub mod geometry;
 pub mod schema;
 pub mod validate;
 
