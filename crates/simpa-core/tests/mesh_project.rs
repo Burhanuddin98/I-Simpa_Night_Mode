@@ -714,20 +714,32 @@ fn a_face_row_short_gives_a_mesh_the_invariants_refuse() {
     );
 }
 
-/// Decision 5 of the pipeline: a mesh `verify_mesh` refuses is never written. The verifier is
-/// built in parallel and is a scaffold that passes everything until it is merged; enable this
-/// then.
+/// Decision 5 of the pipeline: a mesh the real `verify_mesh` refuses is never written. The input
+/// is the box's TetGen output with its last `.face` row dropped, so one hull face of the `.mbin`
+/// built from it carries no marker. It fails when the verifier passes that mesh (a pass-all
+/// verifier gives no `mesh_invalid`), or when the pipeline writes the `.mbin` anyway.
 #[test]
-#[ignore = "needs mesh::verify::verify_mesh, which is a pass-everything scaffold until merged"]
 fn a_mesh_that_fails_verification_is_not_written() {
     let p = load_room("tutorial1_box.simpa");
     let fake = Fake {
         act: |d: &Path| copy_box_output_less_one_face_row(d),
         outcome: exited(0),
     };
+    // `fake_run` also asserts that no `tetramesh.mbin` is in the folder. The box's 6-tetrahedron
+    // mesh carries each scene face on exactly one tetrahedron face, so the face that lost its
+    // row also leaves its scene face uncovered.
     let (_, m) = fake_run("fake-unmarked", &p, &fake);
-    assert!(has(&m, codes::MESH_INVALID), "{m:#?}");
-    assert!(has(&m, "unmarked_boundary_faces"), "{m:#?}");
+    assert_eq!(
+        m.codes,
+        [
+            codes::MESH_INVALID,
+            "unmarked_boundary_faces",
+            "uncovered_scene_faces"
+        ],
+        "{m:#?}"
+    );
+    assert_eq!(m.status, MeshStatus::Fail);
+    assert_eq!(m.files.mbin, None);
     assert!(m.verify.as_ref().is_some_and(|r| !r.passed()));
 }
 
