@@ -81,7 +81,7 @@ are in the raw JSON.
 | # | Milestone | Depends on |
 |---|---|---|
 | M0 | Repo, toolchain, gate harness | – |
-| M1 | Reproducible solver build. SPPS, TCR and preprocess from `929a5c8`, byte-identical to today's reference binaries apart from the link timestamps. TetGen is 1.5.0 from `third_party/tetgen-1.5.0` (= upstream `4db335c`, amended 2026-09-23), built with upstream's tetgen command lines and checked by its manifest sha256 after a from-scratch build and by tutorial 1's 2019 mesh, byte for byte apart from the trailer line | M0 |
+| M1 | Reproducible solver build. SPPS, TCR and preprocess from `929a5c8`, byte-identical to today's reference binaries apart from the link timestamps. TetGen is 1.5.0 from `third_party/tetgen-1.5.0` (= upstream `4db335c`, amended 2026-09-23), extracted unmodified from the committed WIAS tarball, built with upstream's tetgen command lines, and checked by its manifest sha256 after a from-scratch build and by the 2019 meshes of tutorials 1 and 3, byte for byte apart from the trailer line | M0 |
 | M2 | Written format specs (`docs/formats/`), Rust format writers and readers, oracle diffs over 1,000+ generated models | M1 |
 | M3 | Typed project schema **including variants**, `config.xml` writer, pre-launch validator | M2 |
 | M4 | Geometry import, check and safe repair. Raw Elmia **refused with a reason**; corrected Elmia accepted | M3 |

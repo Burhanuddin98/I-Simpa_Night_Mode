@@ -12,11 +12,15 @@ TetGen that upstream I-Simpa vendored in 2016 and shipped in its releases 1.3.3 
   - 272,513 bytes
   - 8 members, all dated 2013-11-06.
 - **Extracted with** `tar -xzf tetgen1.5.0.tar.gz --strip-components=1`. Nothing was changed.
-  `SHA256SUMS` lists every member's sha256. `solvers/build.ps1` refuses to build if any file
-  differs from it, and so does `tools/gates/m1.ps1`.
+- **The tarball is committed here too**, as `tetgen1.5.0.tar.gz`, so the extraction can be
+  re-checked offline. `solvers/build.ps1` and `tools/gates/m1.ps1` both hash it against the
+  sha256 above, which is written once, in `solvers/tetgen/source.ps1`. They then read it member by
+  member, in memory, and refuse the folder if any file differs from its member.
 - **Added by us, not from WIAS:**
   - this file
-  - `SHA256SUMS`
+  - `tetgen1.5.0.tar.gz` (WIAS's file, committed as downloaded)
+  - `SHA256SUMS`, which lists every member's sha256 for people to read. `solvers/build.ps1`
+    refuses to build if it disagrees with the tarball.
   - `.gitattributes` (`* -text`), so that git never rewrites line endings. The sources are
     LF, except `example.poly`, which is CRLF in the tarball.
 
@@ -79,6 +83,10 @@ build").
   - The script builds upstream's 1.6.0 target in the same run, as the reference.
   - It reads the cl and link command lines MSBuild recorded for both targets.
   - It refuses the build unless the two sets are equal once paths are removed.
+  - The comparison is case-sensitive. Only the two paths are matched without regard to case,
+    because MSBuild upper-cases paths in its records. cl flags are case-sensitive: `/Gr` is not
+    `/GR`. M1 feeds it both an `/O2`-to-`/Od` edit and a `/GR`-to-`/Gr` edit, and both must be
+    refused.
   - Recorded flags: `/O2 /Ob2 /MD /GR /EHsc /W3`, with `_MBCS WIN32 _WINDOWS NDEBUG`.
 - **The rebuild check in M1:** `tools/gates/m1.ps1` builds the folder again from scratch. The
   result must equal `target/solvers/bin/tetgen.exe` byte for byte, apart from the link
@@ -86,9 +94,11 @@ build").
 
 ## Measured
 
-Built with MSVC 19.44.35226.0, `tetgen.exe` sha256 `9800a02af3ca4297…`, 2026-09-23. Each run
-used `-pq2 -A -n`, upstream's tutorial settings. That is the command recorded in the trailer of
-every 2019 `.1.*` file.
+Built with MSVC 19.44.35226.0 on 2026-09-23. The exe's sha256 changes with every link, because
+the link time is written into it, so `solvers/manifest.json` holds the current one. Relinks of the
+same source differ only in those timestamp bytes; M1 checks this on every run. Each run used
+`-pq2 -A -n`, upstream's tutorial settings. That is the command recorded in the trailer of every
+2019 `.1.*` file.
 
 **Inputs:** each project's `temp/scene_mesh.poly`, plus `.var` where the project has one, taken
 from the tutorial `.proj` zips at `929a5c8`.
@@ -102,10 +112,39 @@ excluded.
 | 2 (Elmia hall, no `.var`) | 41,607 | 161,543 | 1,036 of 41,607 lines differ in text only | identical |
 | 3 (no `.var`) | 835 | 3,285 | identical | identical |
 
-- **Tutorial 2's `.node` lines:** every coordinate parses to the same double. The 1,047 differing
-  coordinates are exact decimal ties at the 17th significant digit, such as `…945312` against
-  `…945313` for the float32 value 0.0977344512939453125. Today's UCRT `printf` rounds a tie to
-  even. The 2019 runtime rounded it up.
+- **Tutorial 2's `.node` lines:** every coordinate parses to the same double, and so to the same
+  float32 in the `.mbin`. The 1,047 differing coordinates are exact decimal ties at the 17th
+  significant digit, such as `…945312` against `…945313` for the float32 value
+  0.0977344512939453125. Our `printf` rounds a tie to even. The binary that wrote the 2019 files
+  rounded it away from zero.
+- **TetGen does not decide the rounding. On a current Windows, the way the binary was built
+  does.** All the binaries below import `printf` from the same Windows UCRT
+  (`api-ms-win-crt-stdio`). Microsoft's `printf` documentation says what that UCRT does, and the
+  measurements below agree. From Windows 10 2004 on, it rounds exact ties to even for programs
+  built with Visual Studio 2019 16.2 or later. Older programs keep rounding them away from zero,
+  and so does any program linked with MSVC's `legacy_stdio_float_rounding.obj`. Windows before
+  2004 always rounded ties away from zero. Tutorial 2, run on 2026-09-24 on Windows 11, all five
+  `.1.*` files, trailer aside:
+
+  | `tetgen.exe` | linker | `.node` against 2019 | `.ele` `.face` `.neigh` `.edge` |
+  |---|---|---|---|
+  | upstream's 1.3.3 release (`200d030a…`, linked 2016-12-09) | 14.00 | identical | identical |
+  | upstream's 1.3.4 release (`db3d5add…`, linked 2020-12-23) | 14.28 | 1,036 lines differ, byte-identical to ours | identical |
+  | ours | 14.44 | 1,036 lines differ | identical |
+  | ours plus `legacy_stdio_float_rounding.obj` (`20ce8f58…`) | 14.44 | identical | identical |
+
+  The last row is the same source, CMake file and flags, with that one extra link input. It
+  gives the 2019 files byte for byte on tutorials 1, 2 and 3.
+- **So we keep upstream's settings.** Upstream's 929a5c8 target links no such object, and
+  upstream's own 1.3.4 release, the last one to ship TetGen 1.5.0, writes exactly our bytes.
+  Matching the 2019 `.node` text would mean adding a link input upstream never used, and the
+  solver input would not change, because the `.mbin` stores float32 values. The release
+  binaries come from upstream's GitHub installers, extracted under
+  `target/investigate/release-binary/inst13{3,4}`. The runs are in
+  `target/agents/ob-fix-tetgen15-scratch/tut/` and the legacy-rounding build is in
+  `…/legacy-arm/`. Both folders are untracked scratch.
+- **M1 checks tutorials 1 and 3, not 2.** Their outputs match byte for byte whichever rounding
+  was used. Tutorial 2's outputs are 19 MB a run.
 - **TetGen 1.6.0 on the same inputs:**
   - tutorial 1: 8 nodes, 6 tets
   - tutorial 2: 29,472 nodes, 123,718 tets

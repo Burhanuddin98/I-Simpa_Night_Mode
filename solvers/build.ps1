@@ -27,8 +27,8 @@ $bld = Join-Path $root $BuildName
 $tgSrc = Join-Path $repo 'third_party\tetgen-1.5.0'
 $tgBld = Join-Path $root "$BuildName-tetgen150"
 $bin = Join-Path $root 'bin'
-# WIAS tetgen1.5.0.tar.gz, from which third_party/tetgen-1.5.0 was extracted unmodified.
-$tgTarballSha = '4d114861d5ef2063afd06ef38885ec46822e90e7b4ea38c864f76493451f9cf3'
+# WIAS tetgen1.5.0.tar.gz, committed beside the files extracted from it unmodified.
+$tgTarball = Join-Path $tgSrc 'tetgen1.5.0.tar.gz'
 $tgUpstreamCommit = '4db335c123eb54986015dbd8192aa8a7e0ec0969'
 # One log per invocation: a no-op rebuild must never overwrite the log of the real compile.
 $log = Join-Path $root ("build-$BuildName-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.log')
@@ -37,6 +37,7 @@ $targets = @('spps', 'classicalTheory', 'preprocess', 'tetgen')
 New-Item -ItemType Directory -Force $root, $bin | Out-Null
 Set-Content -Path $log -Value "build started $(Get-Date -Format s)"
 . (Join-Path $PSScriptRoot 'tetgen\build-commands.ps1')
+. (Join-Path $PSScriptRoot 'tetgen\source.ps1')
 
 function Run([string]$what, [string[]]$argv) {
     Add-Content $log "`n> $what $($argv -join ' ')"
@@ -47,15 +48,26 @@ function Run([string]$what, [string[]]$argv) {
     if ($code -ne 0) { throw "$what exited $code (see $log)" }
 }
 
-# The vendored TetGen must be the tarball's bytes: SHA256SUMS lists every member.
-$tgFiles = [ordered]@{}
+# The vendored TetGen must be the tarball's bytes. The tarball is WIAS's (its sha256), each of
+# its members is read here and must equal the folder's file, and SHA256SUMS, the human-readable
+# list, must say the same.
+$tgTarballSha = (Get-FileHash -LiteralPath $tgTarball -Algorithm SHA256).Hash.ToLower()
+if ($tgTarballSha -ne $TetgenTarballSha256) { throw "$tgTarball is $tgTarballSha, not WIAS's tetgen1.5.0.tar.gz ($TetgenTarballSha256): refusing to build" }
+$tgFiles = Read-TetgenTarball $tgTarball
+$bad = @(Get-TarballMismatches $tgFiles $tgSrc)
+if ($bad.Count) { throw "third_party/tetgen-1.5.0 differs from its tarball in $($bad -join ', '): refusing to build a changed TetGen" }
+$sums = @{}
 foreach ($line in Get-Content (Join-Path $tgSrc 'SHA256SUMS')) {
     if ($line -notmatch '^([0-9a-f]{64})  (\S+)$') { throw "SHA256SUMS: unreadable line '$line'" }
-    $f = Join-Path $tgSrc $Matches[2]
-    $h = if (Test-Path -LiteralPath $f) { (Get-FileHash -LiteralPath $f -Algorithm SHA256).Hash.ToLower() } else { 'missing' }
-    if ($h -ne $Matches[1]) { throw "third_party/tetgen-1.5.0/$($Matches[2]) is $h, SHA256SUMS says $($Matches[1]): refusing to build a changed TetGen" }
-    $tgFiles[$Matches[2]] = $h
+    $sums[$Matches[2]] = $Matches[1]
 }
+if ($sums.Count -ne $tgFiles.Count -or @($tgFiles.Keys | Where-Object { $sums[$_] -ne $tgFiles[$_] }).Count) {
+    throw "third_party/tetgen-1.5.0/SHA256SUMS does not list the tarball's members and their sha256"
+}
+# For the manifest, in SHA256SUMS's (ordinal) order.
+$names = [string[]]@($tgFiles.Keys); [Array]::Sort($names, [StringComparer]::Ordinal)
+$tgSorted = [ordered]@{}; foreach ($k in $names) { $tgSorted[$k] = $tgFiles[$k] }
+$tgFiles = $tgSorted
 
 if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
     New-Item -ItemType Directory -Force $src | Out-Null
@@ -115,7 +127,7 @@ $manifest = [ordered]@{
     tetgen          = [ordered]@{
         version                      = '1.5.0'
         source                       = 'third_party/tetgen-1.5.0'
-        tarball                      = 'tetgen1.5.0.tar.gz (WIAS)'
+        tarball                      = 'third_party/tetgen-1.5.0/tetgen1.5.0.tar.gz (WIAS)'
         tarball_sha256               = $tgTarballSha
         files_sha256                 = $tgFiles
         same_blobs_as_upstream       = $tgUpstreamCommit

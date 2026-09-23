@@ -3,7 +3,7 @@
     "cmake_version":  "4.3.2",
     "generator":  "Visual Studio 17 2022 (x64)",
     "build_dir":  "build",
-    "build_log":  "build-build-20260923-235617.log",
+    "build_log":  "build-build-20260924-011416.log",
     "compiler":  "19.44.35226.0",
     "options":  [
                     "SKIPISIMPA=ON",
@@ -14,13 +14,13 @@
     "sha256":  {
                    "spps.exe":  "22b55a0fcec17e6dbfb7c564ca6c8435d7a4e7864bc6858cf880f1fe97bced7e",
                    "classicalTheory.exe":  "6f892a5b36f19247c051485b2b2362963c756514e2b612dae4e77907b9823299",
-                   "tetgen.exe":  "9800a02af3ca4297d38f06bf95a3f39f465dec9ee976a14191ee72cf67256f23",
+                   "tetgen.exe":  "321491e555f8f425f315821b39de23be12c9f40f379d772dffb1ac69b5ac3ad8",
                    "preprocess.exe":  "22d33f349b9c2ef22c1280eef81dea294f82fe06659449d463498135534cc9d3"
                },
     "tetgen":  {
                    "version":  "1.5.0",
                    "source":  "third_party/tetgen-1.5.0",
-                   "tarball":  "tetgen1.5.0.tar.gz (WIAS)",
+                   "tarball":  "third_party/tetgen-1.5.0/tetgen1.5.0.tar.gz (WIAS)",
                    "tarball_sha256":  "4d114861d5ef2063afd06ef38885ec46822e90e7b4ea38c864f76493451f9cf3",
                    "files_sha256":  {
                                         "CMakeLists.txt":  "43ea4c84e7679ec5746a8b04eeefe6aad4695c8b47e3fb492bc9330e64e8a81c",
@@ -36,9 +36,9 @@
                    "cmake":  "solvers/tetgen/CMakeLists.txt",
                    "build_dir":  "build-tetgen150",
                    "command_lines":  "equal to upstream\u0027s tetgen target at 929a5c8, 3 records",
-                   "exe_sha256":  "9800a02af3ca4297d38f06bf95a3f39f465dec9ee976a14191ee72cf67256f23",
+                   "exe_sha256":  "321491e555f8f425f315821b39de23be12c9f40f379d772dffb1ac69b5ac3ad8",
                    "upstream_160_reference_sha256":  "fb9b7cdca35e37855e9561d062e13622ba3c97dbc7d8ff612927bb56df59b128",
                    "upstream_160_reference":  "build\\src\\tetgen\\Release\\tetgen.exe (not shipped)"
                },
-    "built_at":  "2026-09-23T23:57:12"
+    "built_at":  "2026-09-24T01:14:20"
 }
