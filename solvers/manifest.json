@@ -2,8 +2,8 @@
     "upstream_commit":  "929a5c8e5f590b189f29155faeff8670f3699479",
     "cmake_version":  "4.3.2",
     "generator":  "Visual Studio 17 2022 (x64)",
-    "build_dir":  "build-fresh",
-    "build_log":  "build-build-fresh-20260923-043138.log",
+    "build_dir":  "build",
+    "build_log":  "build-build-20260923-235617.log",
     "compiler":  "19.44.35226.0",
     "options":  [
                     "SKIPISIMPA=ON",
@@ -12,10 +12,33 @@
                 ],
     "crt":  "dynamic (upstream default)",
     "sha256":  {
-                   "spps.exe":  "cacbbee25d70e6ffae8b875b0024b1ddae2c1bb5a154e77994478d66c893d655",
-                   "classicalTheory.exe":  "6382f3213909760451c02e8a32c7b485737f5f2e9689a363fe91c6c689a73d14",
-                   "tetgen.exe":  "c1c754f1c6e06429232e00fd6389cf2453bf781452fd2fae812c9b6e306e1f61",
-                   "preprocess.exe":  "bdffba897fd786a6159b5cc005c65df67e0ff82e196b266cd1002d009282d0e4"
+                   "spps.exe":  "22b55a0fcec17e6dbfb7c564ca6c8435d7a4e7864bc6858cf880f1fe97bced7e",
+                   "classicalTheory.exe":  "6f892a5b36f19247c051485b2b2362963c756514e2b612dae4e77907b9823299",
+                   "tetgen.exe":  "9800a02af3ca4297d38f06bf95a3f39f465dec9ee976a14191ee72cf67256f23",
+                   "preprocess.exe":  "22d33f349b9c2ef22c1280eef81dea294f82fe06659449d463498135534cc9d3"
                },
-    "built_at":  "2026-09-23T04:32:20"
+    "tetgen":  {
+                   "version":  "1.5.0",
+                   "source":  "third_party/tetgen-1.5.0",
+                   "tarball":  "tetgen1.5.0.tar.gz (WIAS)",
+                   "tarball_sha256":  "4d114861d5ef2063afd06ef38885ec46822e90e7b4ea38c864f76493451f9cf3",
+                   "files_sha256":  {
+                                        "CMakeLists.txt":  "43ea4c84e7679ec5746a8b04eeefe6aad4695c8b47e3fb492bc9330e64e8a81c",
+                                        "LICENSE":  "f15e3301d0f40116aa2e3567963c3dcc8dd45453337dedf592caa73a5390549f",
+                                        "README":  "62df50e9ef0c07b85d33c981bc7a11da9d27cea45be4befaf41833e63b3e28a3",
+                                        "example.poly":  "1f3f556c59ff78211c36f5084b35ff8ce6a4b913dcdfd0d9ceb24b6a4a9949e0",
+                                        "makefile":  "2140ebb5220ab331effee6e2576ebf534f6680af84a93ca5b208411e1e7a28ba",
+                                        "predicates.cxx":  "fbd97e2c8103c85a7006c9fd47256e0bd944928da7df7f89bb512f0b32c12b5f",
+                                        "tetgen.cxx":  "c71ba56f6018d52cf5521d13b183e0356e935196ff9af560c585423aa519d234",
+                                        "tetgen.h":  "a5fb9b225bfd5c52e8a60e5144686922d3c76944f3014f2cb5d54a0f34a5ef7d"
+                                    },
+                   "same_blobs_as_upstream":  "4db335c123eb54986015dbd8192aa8a7e0ec0969",
+                   "cmake":  "solvers/tetgen/CMakeLists.txt",
+                   "build_dir":  "build-tetgen150",
+                   "command_lines":  "equal to upstream\u0027s tetgen target at 929a5c8, 3 records",
+                   "exe_sha256":  "9800a02af3ca4297d38f06bf95a3f39f465dec9ee976a14191ee72cf67256f23",
+                   "upstream_160_reference_sha256":  "fb9b7cdca35e37855e9561d062e13622ba3c97dbc7d8ff612927bb56df59b128",
+                   "upstream_160_reference":  "build\\src\\tetgen\\Release\\tetgen.exe (not shipped)"
+               },
+    "built_at":  "2026-09-23T23:57:12"
 }
