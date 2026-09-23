@@ -11,22 +11,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::formats::{FormatError, cbin, mbin};
 
-/// What [`verify_mesh`] accepts as volume ids.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// What [`verify_mesh`] accepts as volume ids. The default is this crate's convention: room 0,
+/// no fittings.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VolumeIds {
     /// The id room tetrahedra carry: 0 for meshes this crate builds, 1 for upstream's own.
     pub room: i32,
     /// The solver ids of the enabled fitting zones.
     pub fittings: Vec<i32>,
-}
-
-impl Default for VolumeIds {
-    fn default() -> Self {
-        VolumeIds {
-            room: 0,
-            fittings: Vec::new(),
-        }
-    }
 }
 
 /// The result of [`verify_mesh`]. Every count is a number of offending items; `codes` lists the
