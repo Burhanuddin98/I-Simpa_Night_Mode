@@ -10,11 +10,13 @@ For every fixture this script computes, independently of the Rust crates:
 1. the solver's own verdict, from the Part B tables it parses out of the contract page (22 line
    patterns, exit classes) and from the post-run checks (statistics, expected files, TCR's
    non-finite values), read through `simpa dump`;
-2. the pre-launch mesh check `run-folder` makes (docs/m5-m6-design.md, "Run folder"): the
-   decision-6 invariants and the VerifyReport counts, on the fixture's .mbin and .cbin;
-3. the final verdict: mesh_invalid plus the failing counts when (2) fails, else (1). A count
-   that depends on mesh::verify's noise floor goes to `codes_any_of` instead: the verdict must
-   carry one code of each group.
+2. the pre-launch checks `run-folder` makes (docs/m5-m6-design.md, "Run folder", and decision
+   11): the decision-6 invariants and the VerifyReport counts, on the fixture's .mbin and .cbin,
+   and the config-only band check (every source's spectrum reaches the last computed band);
+3. the final verdict: mesh_invalid plus the failing counts when the mesh check fails, and
+   band_set_mismatch when the band check fails, else (1). A count that depends on
+   mesh::verify's noise floor goes to `codes_any_of` instead: the verdict must carry one code of
+   each group.
 
 It then compares both verdicts with EXPECT, the expectation written down before the runs with
 its receipt, and stops with exit 1 on any disagreement, writing nothing. Only when every case
@@ -75,11 +77,13 @@ EXPECT = {
         "particle dies at the first step, absorbed by the atmosphere, exit 0 (SC:98, VERIFIED S "
         "run_noeps; RAW:1387)."),
     "spps_oneband": dict(
-        status="OK", codes=[],
-        receipt="Source spectrum with 1 of 2 bands. No Part B signal fires: exit 0, no FAIL line, "
-        "totals 2000 per band, no loss; the 1000 Hz band loses every particle to the atmosphere at "
-        "the first step instead. Only the project rule band_set_mismatch (SC:55, VERIFIED S "
-        "run_oneband; RAW:1471) catches it, and run-folder runs no validator."),
+        status="FAIL", codes=["band_set_mismatch"],
+        observed_status="OK", observed_codes=[],
+        receipt="Source spectrum with 1 of 2 bands. Run anyway, no Part B signal fires: exit 0, no "
+        "FAIL line, totals 2000 per band, no loss; the 1000 Hz band loses every particle to the "
+        "atmosphere at the first step instead. So run-folder's config-only band check refuses it "
+        "before launch with band_set_mismatch (m5-m6-design.md decision 11; SC:55, VERIFIED S "
+        "run_oneband; RAW:1471)."),
     "spps_dirmiss": dict(
         status="FAIL", codes=["directivity_not_open"],
         receipt="directivity_file names a missing file: row directivity_not_open (SC:319, "
@@ -734,6 +738,26 @@ def floor_dependence(name: str, sweep: dict, counts: dict) -> tuple[list[str], l
     return moving, []
 
 
+def band_check(cfg: Config) -> dict:
+    """run-folder's config-only band check (m5-m6-design.md decision 11): spectra are mapped to
+    bands by position, in ascending frequency, so every source needs an entry at the position of
+    the last computed band (docalc exactly "1")."""
+    bands = sorted((int(b.get("freq", "0")), b.get("docalc") == "1")
+                   for b in cfg.sim.find("freq_enum"))
+    computed = [i for i, (_, on) in enumerate(bands) if on]
+    if not computed:
+        return {"bands": "pass"}
+    last = computed[-1]
+    short = [f"{s.get('name', '')}: {len(list(s))} entries, the {bands[last][0]} Hz band is entry {last + 1}"
+             for s in cfg.sources() if len(list(s)) <= last]
+    return {"bands": "fail", "short_sources": short} if short else {"bands": "pass"}
+
+
+def pre_ok(pre: dict) -> bool:
+    """Both pre-launch checks pass: the solver would start."""
+    return pre["mesh_check"] == "pass" and pre.get("bands") != "fail"
+
+
 # ---------------------------------------------------------------------------------------------
 # Judging one case
 
@@ -787,15 +811,20 @@ def judge(case: Path, obs_root: Path, rows: list[Row], simpa: Simpa) -> dict:
         "post_run": post,
     }
     pre = mesh_check(case, Config(case / "config.xml"), simpa)
+    pre.update(band_check(Config(case / "config.xml")))
     any_of = pre.get("codes_any_of", [])
+    final_codes = []
     if pre["mesh_check"] == "fail":
         moving = pre.get("floor_dependent", [])
-        final_status = "FAIL"
         final_codes = ["mesh_invalid"] + [x for x in pre["codes"] if x not in moving]
+    if pre["bands"] == "fail":
+        final_codes.append("band_set_mismatch")
+    if final_codes:
+        final_status = "FAIL"
     else:
         final_status, final_codes = status, codes
     return {"solver": solver, "status": final_status, "codes": final_codes, "codes_any_of": any_of,
-            "warnings": warnings if pre["mesh_check"] == "pass" else [],
+            "warnings": warnings if pre_ok(pre) else [],
             "pre_launch": pre, "observed": observed, "_lines": lines}
 
 
@@ -838,8 +867,8 @@ def disagreements(name: str, got: dict, rows: list[Row]) -> list[str]:
         if (o["status"], o["codes"]) != (exp["observed_status"], exp["observed_codes"]):
             bad.append(f"{name}: expected the solver's own verdict {exp['observed_status']} "
                        f"{exp['observed_codes']}, got {o['status']} {o['codes']}")
-    elif got["pre_launch"]["mesh_check"] != "pass":
-        bad.append(f"{name}: pre-launch mesh check failed unexpectedly: {got['pre_launch']}")
+    elif not pre_ok(got["pre_launch"]):
+        bad.append(f"{name}: a pre-launch check failed unexpectedly: {got['pre_launch']}")
     return bad
 
 
@@ -939,10 +968,11 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "    Only `tcr_broken_hall` has one: its near-flat tetrahedra are `degenerate_tets` or",
         "    `inverted_tets` depending on mesh::verify's noise floor (`pre_launch.floor_sweep`).",
         "  - `warnings`: WARN-class rows seen.",
-        "  - `pre_launch`: the mesh check `run-folder` makes before launch, computed by",
-        "    `mkexpected.py`'s reference of decision 6 and the VerifyReport counts, with the",
-        "    noise floor it used. When it fails, the verdict is FAIL with `mesh_invalid` and the",
-        "    failing counts' codes.",
+        "  - `pre_launch`: the checks `run-folder` makes before launch, computed by",
+        "    `mkexpected.py`'s references: the mesh check (decision 6 and the VerifyReport",
+        "    counts, with the noise floor it used) and the band check (decision 11). A failed",
+        "    mesh check makes the verdict FAIL with `mesh_invalid` and the failing counts' codes;",
+        "    a failed band check adds `band_set_mismatch`.",
         "  - `observed`: what the real solver did when run anyway, launched as Part B says",
         "    (fresh copy, cwd = the folder, argument `config.xml`): exit code, the solver's own",
         "    status and codes, the decisive lines, the full transcript classified by row (paths",
@@ -957,7 +987,8 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "",
         "- **`spps_oneband` is not caught by any Part B signal.** Exit 0, no FAIL line, 2,000",
         "  particles per band, no loss: the 1000 Hz band's particles are all absorbed by the",
-        "  atmosphere at the first step. Only the project rule `band_set_mismatch` refuses it.",
+        "  atmosphere at the first step. `run-folder`'s band check refuses it before launch with",
+        "  `band_set_mismatch` (decision 11).",
         "- **`tcr_srcout` is caught after all**, by `nonfinite_result`: the direct field at R1 is",
         "  -inf in every band, although TCR exits 0.",
         "- **Exit `0xFFFFFFFF` is FAIL**, as the exit tables say (SC:264, SC:275). The rule at",
@@ -978,7 +1009,7 @@ def readme(runs: dict, rows: list[Row]) -> str:
     for n in real:
         r = runs[n]
         o = r["observed"]
-        alone = "same" if r["pre_launch"]["mesh_check"] == "pass" else (
+        alone = "same" if pre_ok(r["pre_launch"]) else (
             f"{o['status']} {', '.join(o['codes'])} (exit {o['exit_code']})")
         L.append(f"| `{n}` | {CONSTRUCTION[n]} | {r['status']} | {', '.join(r['codes']) or '-'} | {alone} |")
     L += ["", "| stub | status | codes | exit |", "|---|---|---|---|"]
@@ -990,7 +1021,7 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "## Classifier coverage",
         "",
         "Which fixture's output hits each row of docs/solver-contract.md Part B. \"Through",
-        "run-folder\" lists real cases whose mesh passes the pre-launch check, so the solver",
+        "run-folder\" lists real cases that pass the pre-launch checks, so the solver",
         "actually starts; \"refused before launch\" lists real cases that print the row only",
         "when run directly.",
         "",
@@ -999,7 +1030,7 @@ def readme(runs: dict, rows: list[Row]) -> str:
     ]
     for i, row in enumerate(rows, 1):
         hit = {n for n, r in runs.items() if any(ln.row == row.id for ln in r["_lines"])}
-        ok = sorted(n for n in hit if n in real and runs[n]["pre_launch"]["mesh_check"] == "pass")
+        ok = sorted(n for n in hit if n in real and pre_ok(runs[n]["pre_launch"]))
         refused = sorted(n for n in hit if n in real and n not in ok)
         st = sorted(n for n in hit if n in stubs)
         cell = lambda xs: ", ".join(f"`{x}`" for x in xs) or "-"

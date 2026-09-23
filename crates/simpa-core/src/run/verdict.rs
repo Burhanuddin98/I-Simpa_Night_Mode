@@ -56,6 +56,17 @@ pub const DEFAULT_LOSS_LIMIT: f64 = 0.01;
 /// The verdict's own reason codes. A FAIL line's reason is its row id
 /// ([`LINE_RULES`](super::classify::LINE_RULES)).
 pub mod codes {
+    /// The run manager refused the project's geometry (`geometry::check`); its own codes are in
+    /// the reason's detail.
+    pub const GEOMETRY_REFUSED: &str = "geometry_refused";
+    /// `run --mesh <dir>`: the folder has no `OK` mesh manifest or no `tetramesh.mbin`, or an
+    /// in-run mesh folder could not be used at all.
+    pub const MESH_MISSING: &str = "mesh_missing";
+    /// The run folder's inputs could not be written: `config_xml`'s writer refused the project
+    /// or variant (its code is in the detail), or a file could not be staged.
+    pub const EXPORT_FAILED: &str = "export_failed";
+    /// The solver could not be started, or its process tree could not be ended.
+    pub const LAUNCH_FAILED: &str = "launch_failed";
     pub const CANCELLED: &str = "cancelled";
     pub const CRASH_ACCESS_VIOLATION: &str = "crash_access_violation";
     pub const CRASH_ABORT: &str = "crash_abort";
@@ -71,8 +82,13 @@ pub mod codes {
     pub const NONFINITE_RESULT: &str = "nonfinite_result";
     pub const RESULT_UNREADABLE: &str = "result_unreadable";
 
-    /// Every code above, in the order a verdict lists them.
-    pub const ALL: [&str; 14] = [
+    /// Every code above, in the order a verdict lists them: the run manager's refusals before
+    /// launch, then the four signals.
+    pub const ALL: [&str; 18] = [
+        GEOMETRY_REFUSED,
+        MESH_MISSING,
+        EXPORT_FAILED,
+        LAUNCH_FAILED,
         CANCELLED,
         CRASH_ACCESS_VIOLATION,
         CRASH_ABORT,
@@ -117,7 +133,8 @@ pub struct Reason {
 }
 
 impl Reason {
-    fn new(code: &str, detail: impl Into<String>) -> Self {
+    /// A reason with `code` and its detail in words.
+    pub fn new(code: &str, detail: impl Into<String>) -> Self {
         Reason {
             code: code.to_string(),
             detail: detail.into(),

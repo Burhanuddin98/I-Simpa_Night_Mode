@@ -1,10 +1,12 @@
 {
   "solver": "spps",
-  "status": "OK",
-  "codes": [],
+  "status": "FAIL",
+  "codes": [
+    "band_set_mismatch"
+  ],
   "codes_any_of": [],
   "warnings": [],
-  "receipt": "Source spectrum with 1 of 2 bands. No Part B signal fires: exit 0, no FAIL line, totals 2000 per band, no loss; the 1000 Hz band loses every particle to the atmosphere at the first step instead. Only the project rule band_set_mismatch (SC:55, VERIFIED S run_oneband; RAW:1471) catches it, and run-folder runs no validator.",
+  "receipt": "Source spectrum with 1 of 2 bands. Run anyway, no Part B signal fires: exit 0, no FAIL line, totals 2000 per band, no loss; the 1000 Hz band loses every particle to the atmosphere at the first step instead. So run-folder's config-only band check refuses it before launch with band_set_mismatch (m5-m6-design.md decision 11; SC:55, VERIFIED S run_oneband; RAW:1471).",
   "pre_launch": {
     "mesh_check": "pass",
     "tetrahedra": 6,
@@ -14,7 +16,11 @@
     "counts": {},
     "codes": [],
     "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
-    "codes_any_of": []
+    "codes_any_of": [],
+    "bands": "fail",
+    "short_sources": [
+      "S1: 1 entries, the 1000 Hz band is entry 2"
+    ]
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

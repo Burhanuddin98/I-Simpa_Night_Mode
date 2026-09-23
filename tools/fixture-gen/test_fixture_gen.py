@@ -174,6 +174,23 @@ class MeshCheck(unittest.TestCase):
         self.assertEqual(any_of, [["degenerate_tets", "inverted_tets"]])
 
 
+class BandCheck(unittest.TestCase):
+    def test_a_short_spectrum_is_refused_and_a_full_one_passes(self):
+        self.assertEqual(mx.band_check(mx.Config(RUNS / "spps_ok" / "config.xml")), {"bands": "pass"})
+        r = mx.band_check(mx.Config(RUNS / "spps_oneband" / "config.xml"))
+        self.assertEqual(r["bands"], "fail")
+        self.assertEqual(len(r["short_sources"]), 1)
+
+    def test_an_entry_missing_for_a_band_not_computed_passes(self):
+        with tempfile.TemporaryDirectory() as t:
+            text = (RUNS / "spps_oneband" / "config.xml").read_text(encoding="utf-8")
+            # 1000 Hz, the band past the one entry, is no longer computed.
+            text = text.replace('<bfreq freq="1000" docalc="1"/>', '<bfreq freq="1000" docalc="0"/>')
+            path = Path(t) / "config.xml"
+            path.write_text(text, encoding="utf-8")
+            self.assertEqual(mx.band_check(mx.Config(path)), {"bands": "pass"})
+
+
 class Expectations(unittest.TestCase):
     def test_a_verdict_that_differs_from_the_expectation_is_reported(self):
         rows = mx.load_rows(CONTRACT)
@@ -254,7 +271,7 @@ class Expectations(unittest.TestCase):
             "exit_nonzero", "crash_access_violation", "crash_abort", "crash_other",
             "stats_band_mismatch", "particle_total_short", "particle_loss_excess",
             "expected_file_missing", "nonfinite_result", "stats_unreadable", "cancelled",
-            "mesh_invalid"} | set(mx.COUNT_ORDER)
+            "mesh_invalid", "band_set_mismatch"} | set(mx.COUNT_ORDER)
         cases = sorted(p for p in RUNS.iterdir() if p.is_dir())
         self.assertEqual(len(cases), len(mx.EXPECT))
         for case in cases:
@@ -354,7 +371,7 @@ class EndToEnd(unittest.TestCase):
 
     def test_the_runner_refuses_missing_solvers(self):
         with tempfile.TemporaryDirectory() as tmp:
-            r = subprocess.run(["powershell", "-NoProfile", "-File", str(HERE / "runsolvers.ps1"),
+            r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(HERE / "runsolvers.ps1"),
                                 "-Runs", str(RUNS), "-Out", tmp, "-Solvers", str(Path(tmp) / "none")],
                                capture_output=True, text=True)
             self.assertNotEqual(r.returncode, 0)
@@ -362,7 +379,7 @@ class EndToEnd(unittest.TestCase):
 
     def run_cases(self, out: Path, case: str) -> subprocess.CompletedProcess:
         env = dict(os.environ, SIMPA_SOLVERS_DIR=str(solvers_dir()))
-        return subprocess.run(["powershell", "-NoProfile", "-File", str(HERE / "runsolvers.ps1"),
+        return subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(HERE / "runsolvers.ps1"),
                                "-Runs", str(RUNS), "-Out", str(out), "-Case", case],
                               capture_output=True, text=True, env=env)
 
@@ -395,7 +412,7 @@ class EndToEnd(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             obs = Path(tmp) / "observed"
             env = dict(os.environ, SIMPA_SOLVERS_DIR=str(solvers_dir()))
-            r = subprocess.run(["powershell", "-NoProfile", "-File", str(HERE / "runsolvers.ps1"),
+            r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(HERE / "runsolvers.ps1"),
                                 "-Runs", str(RUNS), "-Out", str(obs)], capture_output=True, text=True, env=env)
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
             check = [sys.executable, str(HERE / "mkexpected.py"), None, str(obs), "--simpa", str(simpa_exe()),

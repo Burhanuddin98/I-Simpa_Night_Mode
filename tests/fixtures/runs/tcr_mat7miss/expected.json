@@ -17,7 +17,8 @@
     "counts": {},
     "codes": [],
     "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
-    "codes_any_of": []
+    "codes_any_of": [],
+    "bands": "pass"
   },
   "observed": {
     "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",

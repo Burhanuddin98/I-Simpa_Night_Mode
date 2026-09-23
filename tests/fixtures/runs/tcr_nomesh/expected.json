@@ -10,7 +10,8 @@
   "pre_launch": {
     "mesh_check": "fail",
     "error": "tetramesh.mbin is missing",
-    "codes": []
+    "codes": [],
+    "bands": "pass"
   },
   "observed": {
     "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",

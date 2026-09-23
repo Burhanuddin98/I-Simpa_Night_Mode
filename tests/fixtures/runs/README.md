@@ -31,10 +31,11 @@ negative tests of these checks.
     Only `tcr_broken_hall` has one: its near-flat tetrahedra are `degenerate_tets` or
     `inverted_tets` depending on mesh::verify's noise floor (`pre_launch.floor_sweep`).
   - `warnings`: WARN-class rows seen.
-  - `pre_launch`: the mesh check `run-folder` makes before launch, computed by
-    `mkexpected.py`'s reference of decision 6 and the VerifyReport counts, with the
-    noise floor it used. When it fails, the verdict is FAIL with `mesh_invalid` and the
-    failing counts' codes.
+  - `pre_launch`: the checks `run-folder` makes before launch, computed by
+    `mkexpected.py`'s references: the mesh check (decision 6 and the VerifyReport
+    counts, with the noise floor it used) and the band check (decision 11). A failed
+    mesh check makes the verdict FAIL with `mesh_invalid` and the failing counts' codes;
+    a failed band check adds `band_set_mismatch`.
   - `observed`: what the real solver did when run anyway, launched as Part B says
     (fresh copy, cwd = the folder, argument `config.xml`): exit code, the solver's own
     status and codes, the decisive lines, the full transcript classified by row (paths
@@ -49,7 +50,8 @@ reproduced. Beyond it:
 
 - **`spps_oneband` is not caught by any Part B signal.** Exit 0, no FAIL line, 2,000
   particles per band, no loss: the 1000 Hz band's particles are all absorbed by the
-  atmosphere at the first step. Only the project rule `band_set_mismatch` refuses it.
+  atmosphere at the first step. `run-folder`'s band check refuses it before launch with
+  `band_set_mismatch` (decision 11).
 - **`tcr_srcout` is caught after all**, by `nonfinite_result`: the direct field at R1 is
   -inf in every band, although TCR exits 0.
 - **Exit `0xFFFFFFFF` is FAIL**, as the exit tables say (SC:264, SC:275). The rule at
@@ -71,7 +73,7 @@ reproduced. Beyond it:
 |---|---|---|---|---|
 | `spps_ok` | the survey's run_ok: cube.cbin, cube_mesh.mbin, 2 bands, 2,000 particles, seed 1 | OK | - | same |
 | `spps_noeps` | spps_ok without the trans_epsilon attribute | FAIL | xml_property_missing | same |
-| `spps_oneband` | source spectrum with the 1000 Hz band only | OK | - | same |
+| `spps_oneband` | source spectrum with the 1000 Hz band only | FAIL | band_set_mismatch | OK  (exit 0x00000000) |
 | `spps_dirmiss` | balloon source (directivite 5), directivity_file="nope.txt", no such file | FAIL | directivity_not_open | same |
 | `spps_dirempty` | balloon source with no directivity_file attribute | CRASH | xml_property_missing, crash_access_violation | same |
 | `spps_mat0miss` | faces use material 0; the config declares only 5 | CRASH | crash_access_violation | same |
@@ -105,21 +107,21 @@ reproduced. Beyond it:
 ## Classifier coverage
 
 Which fixture's output hits each row of docs/solver-contract.md Part B. "Through
-run-folder" lists real cases whose mesh passes the pre-launch check, so the solver
+run-folder" lists real cases that pass the pre-launch checks, so the solver
 actually starts; "refused before launch" lists real cases that print the row only
 when run directly.
 
 | # | row | class | through run-folder | refused before launch | stubs |
 |---|---|---|---|---|---|
-| 1 | `progress` | PROGRESS | `spps_gradient`, `spps_noeps`, `spps_ok`, `spps_oneband`, `spps_srcvertex`, `tcr_ok`, `tcr_srcout` | `spps_lossy`, `tcr_broken_hall` | `stub_particle_loss_unterminated` |
-| 2 | `spps_banner` | INFO | `spps_dirempty`, `spps_dirmiss`, `spps_gradient`, `spps_mat0miss`, `spps_mat7miss`, `spps_noeps`, `spps_ok`, `spps_oneband`, `spps_srcface`, `spps_srcout`, `spps_srcvertex` | `spps_degenerate`, `spps_emptymesh`, `spps_lossy`, `spps_nomesh`, `spps_unreadable_mesh` | `stub_config_path_missing`, `stub_degenerate_tetrahedron`, `stub_particle_loss_unterminated`, `stub_scene_mesh_unreadable`, `stub_source_not_located`, `stub_tetra_mesh_empty`, `stub_tetra_mesh_unreadable`, `stub_unclassified_line` |
+| 1 | `progress` | PROGRESS | `spps_gradient`, `spps_noeps`, `spps_ok`, `spps_srcvertex`, `tcr_ok`, `tcr_srcout` | `spps_lossy`, `spps_oneband`, `tcr_broken_hall` | `stub_particle_loss_unterminated` |
+| 2 | `spps_banner` | INFO | `spps_dirempty`, `spps_dirmiss`, `spps_gradient`, `spps_mat0miss`, `spps_mat7miss`, `spps_noeps`, `spps_ok`, `spps_srcface`, `spps_srcout`, `spps_srcvertex` | `spps_degenerate`, `spps_emptymesh`, `spps_lossy`, `spps_nomesh`, `spps_oneband`, `spps_unreadable_mesh` | `stub_config_path_missing`, `stub_degenerate_tetrahedron`, `stub_particle_loss_unterminated`, `stub_scene_mesh_unreadable`, `stub_source_not_located`, `stub_tetra_mesh_empty`, `stub_tetra_mesh_unreadable`, `stub_unclassified_line` |
 | 3 | `tcr_banner` | INFO | `tcr_ok`, `tcr_srcout` | `tcr_broken_hall` | - |
 | 4 | `tcr_loading` | INFO | `tcr_mat7miss`, `tcr_ok`, `tcr_srcout` | `tcr_broken_hall`, `tcr_nomesh` | - |
 | 5 | `tcr_config_echo` | INFO | `tcr_mat7miss`, `tcr_ok`, `tcr_srcout` | `tcr_broken_hall`, `tcr_nomesh` | - |
 | 6 | `tcr_step` | INFO | `tcr_ok`, `tcr_srcout` | `tcr_broken_hall` | - |
 | 7 | `ground_height` | INFO | `spps_gradient` | - | - |
-| 8 | `spps_output_start` | INFO | `spps_dirmiss`, `spps_gradient`, `spps_noeps`, `spps_ok`, `spps_oneband`, `spps_srcvertex` | `spps_lossy` | `stub_particle_loss_unterminated`, `stub_source_not_located`, `stub_unclassified_line` |
-| 9 | `spps_end_of_calculation` | OK | `spps_dirmiss`, `spps_gradient`, `spps_noeps`, `spps_ok`, `spps_oneband`, `spps_srcvertex` | `spps_lossy` | `stub_particle_loss_unterminated`, `stub_source_not_located`, `stub_unclassified_line` |
+| 8 | `spps_output_start` | INFO | `spps_dirmiss`, `spps_gradient`, `spps_noeps`, `spps_ok`, `spps_srcvertex` | `spps_lossy`, `spps_oneband` | `stub_particle_loss_unterminated`, `stub_source_not_located`, `stub_unclassified_line` |
+| 9 | `spps_end_of_calculation` | OK | `spps_dirmiss`, `spps_gradient`, `spps_noeps`, `spps_ok`, `spps_srcvertex` | `spps_lossy`, `spps_oneband` | `stub_particle_loss_unterminated`, `stub_source_not_located`, `stub_unclassified_line` |
 | 10 | `xml_property_missing` | FAIL | `spps_dirempty`, `spps_noeps` | `tcr_broken_hall` | - |
 | 11 | `scene_mesh_unreadable` | FAIL | - | `spps_unreadable_mesh` | `stub_scene_mesh_unreadable` |
 | 12 | `tetra_mesh_unreadable` | FAIL | - | `spps_emptymesh`, `spps_nomesh`, `tcr_nomesh` | `stub_tetra_mesh_empty`, `stub_tetra_mesh_unreadable` |

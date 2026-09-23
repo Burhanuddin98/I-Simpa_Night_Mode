@@ -137,7 +137,8 @@ re-exports the `.cbin` with the current materials (decision 7).
 
 `mesh::verify` checks a `.mbin` against the `.cbin` its markers index (`verify_mesh`), and a whole
 folder (`verify_dir`). The mesher runs `verify_mesh` on every `.mbin` it builds and lists its
-codes after `mesh_invalid`. Each count of the report is a number of offending
+codes after `mesh_invalid`, and `run-folder` does the same before it launches a folder
+(`docs/solver-contract.md` Part B, "The run manager"). Each count of the report is a number of offending
 items, and its code is spelled as its field. A mesh passes exactly when every count is 0.
 
 | Code | Counts |
@@ -161,7 +162,7 @@ any basename. Its own codes:
 | Code | When |
 |---|---|
 | `cbin_missing` | a `.mbin` with no `.cbin` beside it to check its markers against |
-| `manifest_mismatch` | `mesh.json` records a `.mbin` sha256 that is not the folder's `.mbin`'s, or one for a `.mbin` the folder lacks, or `files.mbin` null beside a `.mbin` |
+| `manifest_mismatch` | `mesh.json` records a `.mbin` sha256 that is not the folder's `.mbin`'s, or one for a `.mbin` the folder lacks, or `files.mbin` null beside a `.mbin`. `run --mesh <dir>` refuses a folder whose `files.mbin` is not its `.mbin`'s sha256 with the same code |
 | `nothing_to_verify` | the folder holds neither TetGen output nor a `.mbin` |
 
 ## Measured (2026-09-23, Grace, debug build of the tests)

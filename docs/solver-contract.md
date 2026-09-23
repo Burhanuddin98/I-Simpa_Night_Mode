@@ -438,6 +438,10 @@ order, and its status is OK exactly when it lists none.
 
 | Code | Status | Signal | When |
 |---|---|---|---|
+| `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry; its own codes and counts are in the detail. Exit class 3 |
+| `mesh_missing` | FAIL | before launch | `run --mesh <dir>`: the folder has no readable `mesh.json`, a manifest that is not `OK`, or no `tetramesh.mbin`; or the run's own mesh folder cannot be used. Exit class 4 |
+| `export_failed` | FAIL | before launch | `run`: the run folder's inputs cannot be written. `config_xml`'s writer refuses the project or the variant (its code, such as `variant_not_found`, is in the detail), or a mesh or directivity file cannot be copied. Exit class 2 |
+| `launch_failed` | FAIL | exit | the solver cannot be started, or its process tree cannot be ended within 10 s of the kill (`crate::process`). Exit class 5 |
 | `cancelled` | CANCELLED | exit | the run was cancelled (the process layer killed the tree); never OK, and its outputs are partial. The mesher gives the same code for a cancelled mesh (`docs/formats/mesh-manifest.md`) |
 | `crash_access_violation` | CRASH | exit | exit `0xC0000005` |
 | `crash_abort` | CRASH | exit | exit `0xC0000409`, an abort after an uncaught C++ exception |
@@ -451,6 +455,44 @@ order, and its status is OK exactly when it lists none.
 | `expected_file_missing` | FAIL | files | an expected file is missing or empty |
 | `nonfinite_result` | FAIL | files | TCR: a displayed value is NaN or ±inf |
 | `result_unreadable` | FAIL | files | TCR: a result table or `.csbin` exists but does not decode, or lacks a requested band's row |
+
+### The run manager
+
+`core::run::manager` runs a project (`simpa run`) or a folder as it is (`simpa run-folder`) end
+to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout").
+- **The run folder** is `<root>/<yyyyMMdd-HHmmss-fff>-<solver>[-n]/`, the time in UTC, made
+  with `create_dir` and never reused (`-2`, `-3`, ... on a collision). The solver runs in its
+  `solve/`; `mesh/` holds the run's own mesh; `run.json` and `solver.stdout.txt` /
+  `solver.stderr.txt` sit beside `solve/`. Every run folder gets its `run.json`, refused or
+  launched: `stage` says where the run ended and `exit_class` is the CLI's exit code.
+- **`run`**, stage by stage. A refusal ends the run before launch, with status FAIL:
+
+  | Stage | Refused with | Exit class |
+  |---|---|---|
+  | geometry | `geometry_refused` | 3 |
+  | validate | each Part A error's code; Part A warnings are recorded as the verdict's warnings | 2 |
+  | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `manifest_mismatch` or Part A's `mesh_out_of_date` | 4 |
+  | export | `export_failed`, or `validate_export`'s error codes | 2 |
+  | solve | the verdict above | 0, 5 or 130 |
+
+- **`run-folder`** copies the folder into `solve/` without its `expected.json`, replaces
+  `__RUNDIR__` in `config.xml` with the absolute `solve\` path, runs no project validator, and
+  checks before launch:
+  - **the mesh.** The `.mbin` that `tetrameshFileName` names must exist and read, the `.cbin`
+    that `modelName` names must read, and `mesh::verify` must pass them. The room id is the most
+    common `idVolume` that is no declared fitting's (0 in our meshes, 1 in upstream's), and the
+    fittings are the config's `encombrement` ids. Otherwise the reason is the mesher's
+    `mesh_invalid`, followed by the verifier's codes. This refuses the broken-hall TCR folder,
+    which TCR itself runs to exit 0 (fixture `runs/tcr_broken_hall`).
+  - **the bands.** Every source's spectrum must reach the position of the last computed band,
+    or the reason is Part A's `band_set_mismatch`. No signal after the run catches a short
+    spectrum: VERIFIED fixture `runs/spps_oneband`, exit 0 with every file written.
+  - A `config.xml` that does not parse is `config_attribute_missing`.
+
+  Any of these is FAIL with exit class 5, and the solver is not launched.
+- **Cancel.** The caller's token stops the run at the next stage, TetGen, or the solver.
+  `--cancel-after-ms` counts from the solver's launch, and `--cancel-after-progress p` cancels at
+  the first progress line at or above `p`. A cancelled run is CANCELLED, exit class 130.
 
 ### Threads, cancelling and partial output
 

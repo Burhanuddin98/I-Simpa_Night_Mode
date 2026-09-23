@@ -782,11 +782,16 @@ fn result_unreadable() {
 
 #[test]
 fn every_verdict_code_is_exercised_above() {
-    // The tests above cover every code of `codes::ALL`; this keeps the list and the tests in
-    // step when a code is added.
+    // The tests above cover every code of `codes::ALL` that `judge` gives; this keeps the list
+    // and the tests in step when a code is added. The first four are the run manager's refusals,
+    // exercised in tests/run_manager.rs.
     assert_eq!(
         ALL,
         [
+            GEOMETRY_REFUSED,
+            MESH_MISSING,
+            EXPORT_FAILED,
+            LAUNCH_FAILED,
             CANCELLED,
             CRASH_ACCESS_VIOLATION,
             CRASH_ABORT,

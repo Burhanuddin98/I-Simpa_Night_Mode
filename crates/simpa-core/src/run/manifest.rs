@@ -1,10 +1,12 @@
 //! `run.json`: the record of one solver run, written beside the run's `solve/` folder.
 //!
 //! It records what ran (source, solver, executable and its hash, argv, cwd), on what (the input
-//! files' hashes and the mesh), what happened (the process outcome and the lines per class) and
-//! the verdict, with the loss limit it was judged by. Nothing here reads a clock: the start time
-//! is whatever the caller passes. Unknown fields are refused on reading, so a manifest from a
-//! different layout fails loudly instead of losing fields.
+//! files' hashes and the mesh), how far it got (the stage it ended in and the CLI exit class),
+//! what happened (the process outcome, the lines per class, SPPS's particle statistics) and the
+//! verdict, with the loss limit it was judged by. The run manager
+//! ([`super::manager`]) writes one for every run folder it creates, refused or launched. Nothing
+//! here reads a clock: the start time is whatever the caller passes. Unknown fields are refused
+//! on reading, so a manifest from a different layout fails loudly instead of losing fields.
 
 use std::io::{self, Read};
 use std::path::Path;
@@ -14,6 +16,8 @@ use sha2::{Digest, Sha256};
 
 use super::classify::ClassCounts;
 use super::expect::normalize;
+use super::manager::{ExitClass, Stage};
+use super::stats::ParticleStats;
 use super::verdict::{Outputs, Verdict};
 use crate::process::Outcome;
 use crate::schema::SolverKind;
@@ -147,13 +151,21 @@ pub struct RunManifest {
     pub inputs: Vec<FileRef>,
     /// The mesh the run used; `None` when the run ended before one was chosen.
     pub mesh: Option<MeshRef>,
+    /// The stage the run ended in: `solve` once the solver was launched, otherwise the stage
+    /// that refused it.
+    pub stage: Stage,
+    /// The CLI's exit code for this run (`docs/m5-m6-design.md`, "Exit codes"): 0, 2, 3, 4, 5
+    /// or 130.
+    pub exit_class: ExitClass,
     /// How the process ended: exit code as a raw `u32` (`None` when there was none), whether it
-    /// was cancelled, and its wall time in ms.
-    pub outcome: Outcome,
+    /// was cancelled, and its wall time in ms. `None` when the solver was never launched.
+    pub outcome: Option<Outcome>,
     /// Lines per class, both streams together.
     pub lines: ClassCounts,
     /// Files in `solve/` after the run, against the expected list.
     pub files: FileCounts,
+    /// SPPS's particle statistics per band, when the table was read.
+    pub particles: Option<ParticleStats>,
     /// The loss limit the verdict used (`docs/m5-m6-design.md`, decision 9). JSON has no NaN or
     /// infinity, so those are written as the strings `"NaN"`, `"inf"` and `"-inf"`.
     #[serde(with = "any_f64")]
@@ -209,8 +221,14 @@ impl RunManifest {
         s
     }
 
+    /// Reads a manifest with the crate's exact JSON reader ([`crate::schema::parse_json`]):
+    /// serde_json's own reader is not correctly rounded, so a time would not read back as
+    /// written.
     pub fn from_json(text: &str) -> serde_json::Result<RunManifest> {
-        serde_json::from_str(text)
+        use serde::de::Error as _;
+        let value = crate::schema::parse_json(text)
+            .map_err(|e| serde_json::Error::custom(e.to_string()))?;
+        serde_json::from_value(value)
     }
 }
 

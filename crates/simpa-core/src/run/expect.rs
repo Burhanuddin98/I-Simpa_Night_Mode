@@ -170,7 +170,7 @@ pub struct Expectation {
 
 /// `atoi`: leading C spaces, an optional sign, then digits; 0 when there are none. Saturates at
 /// the `int` range, where C's behaviour is undefined.
-fn atoi(s: &str) -> i32 {
+pub(crate) fn atoi(s: &str) -> i32 {
     let s = s.trim_start_matches([' ', '\t', '\n', '\r', '\x0b', '\x0c']);
     let (neg, digits) = match s.as_bytes().first() {
         Some(b'-') => (true, &s[1..]),
@@ -186,13 +186,13 @@ fn atoi(s: &str) -> i32 {
 }
 
 /// The children the solver iterates: every element, and any non-blank text.
-fn items<'a, 'i>(node: Node<'a, 'i>) -> impl Iterator<Item = Node<'a, 'i>> {
+pub(crate) fn items<'a, 'i>(node: Node<'a, 'i>) -> impl Iterator<Item = Node<'a, 'i>> {
     node.children()
         .filter(|c| c.is_element() || (c.is_text() && !c.text().unwrap_or("").trim().is_empty()))
 }
 
 /// The first child element named `name` (`CXmlNode::GetChild`).
-fn child<'a, 'i>(node: Node<'a, 'i>, name: &str) -> Option<Node<'a, 'i>> {
+pub(crate) fn child<'a, 'i>(node: Node<'a, 'i>, name: &str) -> Option<Node<'a, 'i>> {
     node.children()
         .find(|c| c.is_element() && c.tag_name().name() == name)
 }

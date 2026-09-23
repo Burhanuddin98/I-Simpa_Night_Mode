@@ -10,7 +10,8 @@
   "pre_launch": {
     "mesh_check": "fail",
     "error": "tetramesh.mbin is missing",
-    "codes": []
+    "codes": [],
+    "bands": "pass"
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",

@@ -67,7 +67,8 @@
         "degenerate_tets": 138,
         "inverted_tets": 0
       }
-    ]
+    ],
+    "bands": "pass"
   },
   "observed": {
     "source": "classicalTheory.exe sha256 6382f32139097604, run by runsolvers.ps1",

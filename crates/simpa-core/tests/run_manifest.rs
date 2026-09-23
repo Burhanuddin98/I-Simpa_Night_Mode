@@ -7,8 +7,8 @@ mod support;
 use simpa_core::process::Outcome;
 use simpa_core::run::manifest::{self, MANIFEST_VERSION, sha256_bytes, sha256_file};
 use simpa_core::run::{
-    ClassCounts, DEFAULT_LOSS_LIMIT, Evidence, FileCounts, FileRef, MeshRef, RunManifest,
-    RunSource, classify_all, judge,
+    ClassCounts, DEFAULT_LOSS_LIMIT, Evidence, ExitClass, FileCounts, FileRef, MeshRef,
+    RunManifest, RunSource, Stage, classify_all, judge,
 };
 use simpa_core::schema::SolverKind;
 use support::*;
@@ -56,13 +56,16 @@ fn sample() -> RunManifest {
             mesh_input_hash: Some("0123456789abcdef0123456789abcdef".into()),
             mbin_sha256: sha256_bytes(b"mbin"),
         }),
-        outcome,
+        stage: Stage::Solve,
+        exit_class: ExitClass::of(Stage::Solve, verdict.status),
+        outcome: Some(outcome),
         lines: ClassCounts::of(&lines),
         files: FileCounts {
             total: 68,
             expected: 65,
             present: 65,
         },
+        particles: Some(clean_stats(&exp)),
         loss_limit: DEFAULT_LOSS_LIMIT,
         verdict,
     }
@@ -102,9 +105,12 @@ fn the_field_names_are_fixed() {
         "started",
         "inputs",
         "mesh",
+        "stage",
+        "exit_class",
         "outcome",
         "lines",
         "files",
+        "particles",
         "loss_limit",
         "verdict",
     ];
@@ -118,6 +124,28 @@ fn the_field_names_are_fixed() {
     assert_eq!(v["verdict"]["status"], "CRASH");
     assert_eq!(v["verdict"]["reasons"][0]["code"], "crash_access_violation");
     assert_eq!(v["lines"]["ok"], 1);
+    // The CLI's exit code, as a number, and the stage by name.
+    assert_eq!(v["stage"], "solve");
+    assert_eq!(v["exit_class"], 5);
+    assert_eq!(v["particles"]["bands"][0]["total"], 10_000);
+}
+
+#[test]
+fn a_run_refused_before_launch_round_trips_with_no_outcome() {
+    let refused = RunManifest {
+        stage: Stage::Mesh,
+        exit_class: ExitClass::Mesh,
+        outcome: None,
+        particles: None,
+        ..sample()
+    };
+    let json = refused.to_json();
+    assert!(json.contains(r#""outcome": null"#), "{json}");
+    assert!(json.contains(r#""exit_class": 4"#), "{json}");
+    assert_eq!(RunManifest::from_json(&json).unwrap(), refused);
+    // An exit class the CLI does not have is refused on reading.
+    let bad = json.replacen(r#""exit_class": 4"#, r#""exit_class": 1"#, 1);
+    assert!(RunManifest::from_json(&bad).is_err());
 }
 
 #[test]

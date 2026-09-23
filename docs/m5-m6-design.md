@@ -203,9 +203,12 @@ Expected files are derived from the `config.xml` actually in `solve/`, for both 
 
 `run-folder` skips only the *project* validator. Before launch it runs `mesh::verify` on the
 folder's `.mbin` and the `.cbin` it indexes, with the room id taken as the most common
-`idVolume`. A failure there is a run failure: status FAIL, reason `mesh_invalid` plus the
-verifier's codes, exit 5. This is what refuses the broken-hall TCR folder, since TCR itself
-exits 0 on it.
+`idVolume` that is no declared fitting's. A failure there is a run failure: status FAIL, reason
+`mesh_invalid` plus the verifier's codes, exit 5. This is what refuses the broken-hall TCR
+folder, since TCR itself exits 0 on it. A missing `.mbin` or an unreadable `.cbin` is
+`mesh_invalid` alone. The config-only band check of decision 11 runs beside it:
+`band_set_mismatch`, exit 5. `docs/solver-contract.md` Part B, "The run manager", is the
+reference.
 
 **Stub solver.** `simpa-stub-solver.exe config.xml`, a test binary in `crates/simpa`, reads
 `stub.json` from its working folder:
