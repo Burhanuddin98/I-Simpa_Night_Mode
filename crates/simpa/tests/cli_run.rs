@@ -8,7 +8,8 @@
 //!   with the source 5 cm away it is OK with 10,000 particles per band and none lost;
 //! - `--mesh <dir>` reuses a mesh, and refuses a stale one (`mesh_out_of_date`, M5(d1)) or one
 //!   whose re-mesh was cancelled (`mesh_missing`, M5(d2)) before any solver starts;
-//! - a cancel exits 130 and leaves no solver running (M6(f)).
+//! - a cancel exits 130 with the solver killed mid-run, and `simpa` itself killed mid-run leaves
+//!   no solver running 2 s later (M6(f)).
 
 mod support;
 
@@ -144,7 +145,14 @@ fn a_run_folder_under_a_non_ascii_path_is_ok() {
 /// Pins today's SPPS result on the box's own mesh: the pinned TetGen meshes the box to 6
 /// tetrahedra (docs/m5-m6-design.md decision 3), and the tutorial's source (3, 5, 1.8) lies
 /// exactly on the internal facet x/6 + y/10 = 1 between two of them. SPPS finds no tetrahedron
-/// for it and crashes with an access violation, as it does for a source outside the mesh.
+/// for it and crashes with an access violation, as it does for a source outside the mesh:
+/// - `InitSourcesTetraLocalisation` (`lib_interface/coreinitialisation.cpp:71-95`) counts a
+///   point as outside a tetrahedron when `(node - source) . normal > 0` for any face, in `f32`.
+///   On this facet the product rounds to +2.4e-7 from both sides (an `f32` emulation on this
+///   mesh), so neither tetrahedron takes the source and `currentVolume` stays NULL;
+/// - `TranslateSourceAtTetrahedronVertex` (`spps/sppsInitialisation.cpp:20`, called at
+///   `sppsNantes.cpp:321`) dereferences it without a check, before any particle runs.
+///
 /// When this changes (refinement decided, or a guard added), update it with gate M6(a).
 #[test]
 fn spps_crashes_on_the_boxs_own_mesh_with_its_source_on_an_internal_facet() {
@@ -205,7 +213,10 @@ fn internal_faces_holding(mesh: &simpa_core::formats::mbin::Mesh, p: [f64; 3]) -
 
 /// Gate M6(a) as written: the seeded box with SPPS is OK, with 10,000 particles per band and
 /// none lost. Blocked by decision 3 (the pinned TetGen does not refine the box), see the pinned
-/// test above.
+/// test above. The ways out are Burhan's and Michael's to choose: settle decision 3, change the
+/// fixture's source or mesh settings (it follows upstream's tutorial 1 SPPS settings, `-pq2 -A
+/// -n` with no volume constraint), or refuse before launch a source SPPS's own `f32` test would
+/// not locate (decision 11 keeps a pre-launch source check open).
 #[test]
 #[ignore = "gate M6(a) is blocked: the box's 6-tetrahedron mesh puts the source on an internal facet"]
 fn spps_runs_the_seeded_box_ok() {
@@ -296,10 +307,29 @@ fn a_mesh_folder_is_reused_and_refused_when_stale_or_cancelled() {
     assert!(!run_dir(&m).join("solver.stdout.txt").exists());
 }
 
+/// Particles per source of [`long_box`]: enough that SPPS, left alone, runs for many seconds
+/// (measured on Grace, debug `simpa`: 17.1 s and 65/65 files, against 0.5 s for the box's
+/// 10,000), so a solver that was not killed shows as one that finished or still runs, never as
+/// one that happened to end in time.
+const LONG_RUN_PARTICLES: u64 = 1_000_000;
+
+/// The moved-source box with [`LONG_RUN_PARTICLES`] per source: the run the cancel and kill
+/// tests stop.
+fn long_box(dir: &Path) -> PathBuf {
+    edited_box(dir, "box_long_run.simpa", |v| {
+        v["sources"][0]["position"] = serde_json::json!([3.05, 5.1, 1.8]);
+        v["solvers"]["spps"]["particles_per_source"] = serde_json::json!(LONG_RUN_PARTICLES);
+    })
+}
+
+/// M6(f), first clause. The cancel must stop a running SPPS, not merely be reported: the solver
+/// ends long before it could have finished, with its outputs incomplete. Each assertion fails
+/// when the tree is not killed (the solver then runs to the end, writing every file) or when
+/// the cancel is not passed on (exit 0, OK).
 #[test]
 fn a_cancelled_run_exits_130_and_leaves_no_solver_running() {
     let root = scratch("run-cancel");
-    let project = moved_source_box(&root);
+    let project = long_box(&root);
     for (label, extra) in [
         ("progress", ["--cancel-after-progress", "1"]),
         ("time", ["--cancel-after-ms", "150"]),
@@ -316,9 +346,85 @@ fn a_cancelled_run_exits_130_and_leaves_no_solver_running() {
         assert_eq!(m["verdict"]["status"], "CANCELLED");
         assert_eq!(codes(&m), ["cancelled"]);
         assert_eq!(m["outcome"]["cancelled"], true);
+        assert_eq!(m["outcome"]["exit_code"], Value::Null, "killed, not exited");
+        // Killed mid-run: the outputs are incomplete, and the solver stopped far sooner than the
+        // run's 17 s (measured: 0/65 files after 0.1 s, for both cancels).
+        let (present, expected) = (
+            m["files"]["present"].as_u64().unwrap(),
+            m["files"]["expected"].as_u64().unwrap(),
+        );
+        assert!(
+            present < expected,
+            "{label}: {present}/{expected} files: SPPS ran to its end"
+        );
+        let solver_ms = m["outcome"]["elapsed_ms"].as_f64().unwrap();
+        assert!(
+            solver_ms < 5_000.0,
+            "{label}: SPPS ran {solver_ms:.0} ms after a cancel at 1 % or 150 ms"
+        );
         assert!(!image_running(&image), "{image} still runs");
         std::fs::remove_file(&exe).expect("the SPPS copy is no longer running");
     }
+}
+
+/// M6(f), second clause: `simpa.exe` killed mid-run (`Stop-Process` is `TerminateProcess`, as
+/// `Child::kill` is) leaves no solver running 2 s later. Nothing in `simpa` runs after the kill:
+/// only the job's `KILL_ON_JOB_CLOSE`, applied when the kernel closes the dead process's job
+/// handle, can end the solver. Fails when that flag is missing: SPPS then runs on for the rest
+/// of its 17 s.
+#[test]
+fn killing_simpa_mid_run_leaves_no_solver_running() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    use std::time::{Duration, Instant};
+
+    let root = scratch("run-killed");
+    let project = long_box(&root);
+    let image = format!("spps-killed-{}.exe", std::process::id());
+    let exe = private_copy(&solver_exe("spps.exe"), &root, &image);
+    let mut child = Command::new(simpa())
+        .arg("run")
+        .arg(&project)
+        .args(["--solver", "spps", "--runs"])
+        .arg(&root)
+        .arg("--solver-exe")
+        .arg(&exe)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("simpa starts");
+    // The first PROGRESS line: the solver has been launched and is propagating particles.
+    let (tx, rx) = std::sync::mpsc::channel();
+    let stderr = child.stderr.take().unwrap();
+    let reader = std::thread::spawn(move || {
+        for line in BufReader::new(stderr).lines() {
+            let Ok(line) = line else { break };
+            if line.starts_with("PROGRESS  ") {
+                let _ = tx.send(line);
+            }
+        }
+    });
+    let first = rx.recv_timeout(Duration::from_secs(120));
+    let running = image_running(&image);
+    child.kill().expect("simpa is killed");
+    child.wait().unwrap();
+    let killed = Instant::now();
+    let first = first.expect("simpa printed no PROGRESS line within 120 s");
+    assert!(
+        running,
+        "{image} did not run when simpa was killed ({first})"
+    );
+    // M6(f): 2 s later, no solver.
+    std::thread::sleep(Duration::from_secs(2).saturating_sub(killed.elapsed()));
+    let after_2s = image_running(&image);
+    reader.join().unwrap();
+    assert!(
+        !after_2s,
+        "{image} still runs 2 s after simpa was killed at {first}"
+    );
+    std::fs::remove_file(&exe).expect("the SPPS copy is no longer running");
+    println!("simpa killed at {first}: no {image} 2 s later");
 }
 
 #[test]
