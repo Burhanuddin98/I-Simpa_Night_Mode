@@ -28,7 +28,15 @@
 # (g) `simpa mesh rooms/elmia_corrected.simpa --cancel-after-ms 50` exits 130 with TetGen killed
 #     while it ran (tetgen.cancelled true, tetgen.exit_code null, no .1.ele written), and 2 s
 #     later `tasklist /FI "IMAGENAME eq tetgen.exe"` lists none.
-# Every check that can pass has a "says NO" partner: an input it must refuse.
+# Every check that can pass has a "says NO" check that must refuse an input:
+# - a clause's own refusal sits beside it, named "says NO";
+# - the checks that only claim a mesh was built ((a) box, (b) hall, (c) raw-.poly control,
+#   (e) fitting) share one "meshed" predicate, which must refuse tg_bad's result;
+# - mesh-verify's clean verdicts in (a), (b) and (e) are refused by (a)'s read with room id 1
+#   and by (c)'s broken hall;
+# - the tail (tests, clippy, fmt) must pass a clean scratch crate and refuse a copy with one
+#   planted fault each, and the tests that need upstream's tree or the solvers must FAIL, with
+#   their panic, when those are missing.
 # A check that an open decision blocks prints BLOCKED; the gate then exits 3, never 0.
 # Every TetGen or solver call has a hard 5-minute timeout: a timeout is a FAIL with its time.
 # Run: powershell -File tools/gates/m5.ps1
@@ -38,7 +46,9 @@ Set-Location $repo
 $env:RUSTUP_HOME = "$env:USERPROFILE\.rustup"; $env:CARGO_HOME = "$env:USERPROFILE\.cargo"
 $env:Path = "$env:CARGO_HOME\bin;$env:Path"; $env:CARGO_INCREMENTAL = '0'
 Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
-# Upstream-dependent tests must FAIL, not skip, when the upstream checkout is missing.
+# House style from M4; no test reads it today. Tests that need upstream's tree or the solvers panic
+# whenever those are missing (crates/simpa-core/tests/common/paths.rs), whatever this says, and the
+# check "tests say NO without their inputs" proves that on every run of this gate.
 $env:SIMPA_REQUIRE_UPSTREAM = '1'
 $failures = @(); $blocked = @(); $script:checks = 0
 # A check body returns exactly one bool, or `Blocked <reason>` when an open decision stops it.
@@ -65,10 +75,13 @@ function Check($name, [scriptblock]$body) {
 
 $build = cmd /c "cargo build -q --release -p simpa 2>&1"
 if ($LASTEXITCODE -ne 0) { $build | Select-Object -Last 20 | ForEach-Object { Write-Host $_ }; throw 'CLI build failed: refusing to test a stale simpa.exe' }
-# Runs a cargo command; on failure prints its last lines so a FAIL is never silent.
+# Runs a cargo command; on failure prints its last lines so a FAIL is never silent. Its whole
+# output stays in $script:cargoText for the checks that must see why it failed.
 function Cargo([string]$cmdline) {
     $out = cmd /c "$cmdline 2>&1"
-    if ($LASTEXITCODE -ne 0) { $out | Select-Object -Last 15 | ForEach-Object { Write-Host "      | $_" }; return $false }
+    $code = $LASTEXITCODE
+    $script:cargoText = (@($out) | ForEach-Object { "$_" }) -join "`n"
+    if ($code -ne 0) { $out | Select-Object -Last 15 | ForEach-Object { Write-Host "      | $_" }; return $false }
     return $true
 }
 $simpa = Join-Path $repo 'target\release\simpa.exe'
@@ -224,6 +237,9 @@ function Edited([string]$from, [string]$to, [string]$find, [string]$replace) {
 }
 function RunDir($m) { Split-Path -Parent $m.cwd }
 function Codes($m) { @($m.verdict.reasons | ForEach-Object { $_.code }) }
+# What every check that claims "meshes" requires of a `simpa mesh --json` call into $out: exit 0,
+# status OK, and a tetramesh.mbin written. tg_bad's result must fail it.
+function Meshed($r, [string]$out) { $r.Exit -eq 0 -and $r.Json.status -eq 'OK' -and (Test-Path (Join-Path $out 'tetramesh.mbin')) }
 
 $boxRoom = Join-Path $fx 'rooms\tutorial1_box.simpa'
 $hallRoom = Join-Path $fx 'rooms\elmia_corrected.simpa'
@@ -235,7 +251,7 @@ Check "(a) box meshes with its own settings: exit 0, OK, TetGen argv -pq2 -A -n 
     $r = Simpa @('mesh', $boxRoom, '--out', $boxMesh, '--json') 'mesh-box'
     $m = $r.Json
     Write-Host "      exit $($r.Exit), $($m.status), argv '$(@($m.tetgen.argv) -join ' ')', $($m.counts.build.tetrahedra) tetrahedra, TetGen $([math]::Round($m.tetgen.elapsed_ms, 1)) ms, simpa mesh $([math]::Round($r.Sec * 1000)) ms"
-    $r.Exit -eq 0 -and $m.status -eq 'OK' -and (@($m.tetgen.argv) -join ' ') -eq '-pq2 -A -n scene_mesh.poly' -and (Test-Path (Join-Path $boxMesh 'tetramesh.mbin'))
+    (Meshed $r $boxMesh) -and (@($m.tetgen.argv) -join ' ') -eq '-pq2 -A -n scene_mesh.poly'
 }
 Check "(a) mesh-verify: unmarked_boundary_faces, degenerate_tets, uncovered_scene_faces, index_errors 0; inverted_tets and misordered_faces 0" {
     $r = Simpa @('mesh-verify', $boxMesh, '--json') 'verify-box'
@@ -293,7 +309,7 @@ Check "(b) hall meshes: exit 0, OK, no *_skipped.* file, skipped_rows 0" {
     $m = $r.Json
     $skipped = @(Get-ChildItem $hallMesh -Filter '*_skipped.*' -File)
     Write-Host "      exit $($r.Exit), $($m.status), argv '$(@($m.tetgen.argv) -join ' ')', $($m.counts.build.tetrahedra) tetrahedra, $($m.counts.build.face_rows) .face rows, TetGen $([math]::Round($m.tetgen.elapsed_ms)) ms, simpa mesh $([math]::Round($r.Sec, 2)) s; $($skipped.Count) skipped files"
-    $r.Exit -eq 0 -and $m.status -eq 'OK' -and $skipped.Count -eq 0 -and $m.skipped_rows -eq 0 -and $m.counts.scene_faces -eq 7860
+    (Meshed $r $hallMesh) -and $skipped.Count -eq 0 -and $m.skipped_rows -eq 0 -and $m.counts.scene_faces -eq 7860
 }
 Check "(b) every .1.face row has a marker >= 0 and the markers cover all 7,860 scene faces" {
     $v = FaceMarkerVerdict (Read-FaceMarkers (Join-Path $hallMesh 'scene_mesh.1.face')) 7860
@@ -328,15 +344,17 @@ Check "(b) says NO: one .poly coordinate one ulp off gives max |delta| > 0" {
 }
 
 # --- (c) broken input -----------------------------------------------------------------------------
+$script:tgBad = $null
 Check "(c) control: a valid raw .poly (upstream's tutorial-1 scene_mesh.poly) meshes: exit 0, OK, .mbin written" {
     $out = Join-Path $work 'raw-poly-mesh'
     $r = Simpa @('mesh', (Join-Path $fx 'upstream\tutorial1\tetgen\scene_mesh.poly'), '--out', $out, '--json') 'mesh-raw-poly'
     Write-Host "      exit $($r.Exit), $($r.Json.status), argv '$(@($r.Json.tetgen.argv) -join ' ')', $($r.Json.counts.build.tetrahedra) tetrahedra"
-    $r.Exit -eq 0 -and $r.Json.status -eq 'OK' -and (Test-Path (Join-Path $out 'tetramesh.mbin'))
+    Meshed $r $out
 }
 Check "(c) tg_bad .poly: exit 4, tetgen_skipped_facets, markers [8, 9, 12] mapped to scene faces [8, 9, 12], no .mbin" {
     $out = Join-Path $work 'tg-bad-mesh'
     $r = Simpa @('mesh', (Join-Path $fx 'meshes\tg_bad\scene_mesh.poly'), '--out', $out, '--json') 'mesh-tg-bad'
+    $script:tgBad = [pscustomobject]@{ R = $r; Out = $out }
     $m = $r.Json
     $markers = (@($m.skipped_facets) | ForEach-Object { $_.marker }) -join ','
     $faces = (@($m.skipped_facets) | ForEach-Object { $_.scene_face }) -join ','
@@ -349,6 +367,12 @@ Check "(c) broken hall: mesh-verify exit 4 with tetgen_skipped_facets (535) and 
     $codes = @($r.Json.codes)
     Write-Host "      exit $($r.Exit), codes [$($codes -join ', ')], skipped facets $($r.Json.skipped_facets)"
     $r.Exit -eq 4 -and ($codes -contains 'tetgen_skipped_facets') -and ($codes -contains 'neigh_missing') -and $r.Json.skipped_facets -eq 535
+}
+Check "(a)(b)(c)(e) says NO: the 'meshed' predicate of the box, hall, raw-.poly and fitting checks refuses tg_bad's result (exit 4, FAIL, no .mbin)" {
+    if ($null -eq $script:tgBad) { throw 'the tg_bad check did not run' }
+    $meshed = Meshed $script:tgBad.R $script:tgBad.Out
+    Write-Host "      tg_bad: exit $($script:tgBad.R.Exit), $($script:tgBad.R.Json.status); meshed: $meshed"
+    -not $meshed
 }
 
 # --- (d) a stale mesh -----------------------------------------------------------------------------
@@ -408,7 +432,7 @@ Check "(e) the box with one fitting zone meshes: exit 0, OK, volume_ids room 0 a
     $r = Simpa @('mesh', $fitRoom, '--out', $fitMesh, '--json') 'mesh-fitting'
     $v = Simpa @('mesh-verify', $fitMesh, '--json', '--fittings', '2') 'verify-fitting'
     Write-Host "      exit $($r.Exit), $($r.Json.status), room $($r.Json.volume_ids.room), fittings [$(@($r.Json.volume_ids.fittings) -join ', ')], $($r.Json.counts.build.tetrahedra) tetrahedra; verify exit $($v.Exit) [$(@($v.Json.codes) -join ', ')], volume by id $($v.Json.mesh.volume_by_id | ConvertTo-Json -Compress)"
-    $r.Exit -eq 0 -and $r.Json.status -eq 'OK' -and $r.Json.volume_ids.room -eq 0 -and (@($r.Json.volume_ids.fittings) -join ',') -eq '2' -and $v.Exit -eq 0
+    (Meshed $r $fitMesh) -and $r.Json.volume_ids.room -eq 0 -and (@($r.Json.volume_ids.fittings) -join ',') -eq '2' -and $v.Exit -eq 0 -and @($v.Json.codes).Count -eq 0
 }
 Check "(e) room tetrahedra are 0, only tetrahedra inside the zone (1,1,0.5)-(2,2,1.5) are 2, id-2 volume = 1 m3 to 1e-9 relative" {
     $script:fitM = Read-Mbin (Join-Path $fitMesh 'tetramesh.mbin')
@@ -496,6 +520,49 @@ Check "timeouts say NO: a hall mesh given a 0 s limit is killed, the call throws
     $null -ne $msg -and $msg.StartsWith('TIMEOUT: mesh-hall-timeout still ran after') -and -not $running
 }
 
+# --- the tail, and what it must refuse ------------------------------------------------------------
+# A cargo command through Cargo with extra environment variables, restored afterwards; the helper's
+# echo of a failure is not printed. Its verdict and its whole output.
+function CargoQuiet([string]$cmdline, [hashtable]$vars = @{}) {
+    $saved = @{}
+    foreach ($k in $vars.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
+    try { $ok = Cargo $cmdline 6>$null } finally { foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) } }
+    [pscustomobject]@{ Ok = $ok; Text = $script:cargoText }
+}
+# A scratch crate, its own workspace, in its own folder: a fresh folder per variant, because on B:
+# (exFAT, whole-second mtimes) a rewrite within the second of a build is not seen by cargo.
+function New-TailCrate([string]$name, [string]$lib) {
+    $dir = Join-Path $work $name
+    New-Item -ItemType Directory -Force (Join-Path $dir 'src') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $dir 'Cargo.toml'), "[package]`nname = `"tail_scratch`"`nversion = `"0.0.0`"`nedition = `"2021`"`n`n[workspace]`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'src\lib.rs'), $lib)
+    Join-Path $dir 'Cargo.toml'
+}
+Check "the tail says NO: a scratch crate that passes cargo test, clippy -D warnings and fmt --check fails each once a failing test, an unused variable and a one-line fn body are planted" {
+    $clean = New-TailCrate 'tail-clean' "pub fn two() -> i32 {`n    2`n}`n`n#[test]`nfn two_is_two() {`n    assert_eq!(two(), 2);`n}`n"
+    $planted = New-TailCrate 'tail-planted' "pub fn two() -> i32 { let unused = 1; 2 }`n`n#[test]`nfn two_is_three() {`n    assert_eq!(two(), 3);`n}`n"
+    $cmds = [ordered]@{ test = 'cargo test -q --manifest-path "{0}"'; clippy = 'cargo clippy -q --manifest-path "{0}" --all-targets -- -D warnings'; fmt = 'cargo fmt --manifest-path "{0}" --check' }
+    $why = @{ test = 'test result: FAILED'; clippy = 'unused variable'; fmt = 'Diff in' }
+    $ok = $true; $seen = @()
+    foreach ($k in $cmds.Keys) {
+        $c = CargoQuiet ($cmds[$k] -f $clean); $p = CargoQuiet ($cmds[$k] -f $planted)
+        $hit = $p.Text.Contains($why[$k])
+        $seen += "$k clean $(if ($c.Ok) { 'passes' } else { 'FAILS' }), planted $(if ($p.Ok) { 'PASSES' } else { 'fails' }) ('$($why[$k])': $hit)"
+        if (-not $c.Ok -or $p.Ok -or -not $hit) { $ok = $false }
+    }
+    Write-Host "      $($seen -join '; ')"
+    $ok
+}
+Check "tests say NO without their inputs: SIMPA_UPSTREAM or SIMPA_SOLVERS_DIR naming a missing folder makes geometry_import_proj or mesh_poly FAIL with the panic naming it, never pass or skip" {
+    $none = Join-Path $work 'no-such-folder'
+    $u = CargoQuiet 'cargo test -q -p simpa-core --test geometry_import_proj' @{ SIMPA_UPSTREAM = $none }
+    $s = CargoQuiet 'cargo test -q -p simpa-core --test mesh_poly' @{ SIMPA_SOLVERS_DIR = $none }
+    $uHit = $u.Text.Contains("$none is not an upstream source tree"); $sHit = $s.Text.Contains("$none\tetgen.exe is missing: this test runs the M1 solver build")
+    $result = { param($t) ([regex]::Matches($t, '(?m)^test result: .*$') | ForEach-Object { $_.Value.Trim() }) -join ' | ' }
+    Write-Host "      upstream missing: $(if ($u.Ok) { 'PASSED' } else { 'failed' }), its panic seen: $uHit; $(& $result $u.Text)"
+    Write-Host "      solvers missing: $(if ($s.Ok) { 'PASSED' } else { 'failed' }), its panic seen: $sHit; $(& $result $s.Text)"
+    -not $u.Ok -and $uHit -and -not $s.Ok -and $sHit
+}
 Check "workspace tests, parallel" { Cargo 'cargo test -q --workspace --exclude app' }
 Check "clippy -D warnings (core and CLI)" { Cargo 'cargo clippy -q -p simpa-core -p simpa --all-targets -- -D warnings' }
 Check "cargo fmt --check (core and CLI)" { Cargo 'cargo fmt -p simpa-core -p simpa --check' }

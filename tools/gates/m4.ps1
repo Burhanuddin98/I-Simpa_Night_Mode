@@ -10,7 +10,8 @@ Set-Location $repo
 $env:RUSTUP_HOME = "$env:USERPROFILE\.rustup"; $env:CARGO_HOME = "$env:USERPROFILE\.cargo"
 $env:Path = "$env:CARGO_HOME\bin;$env:Path"; $env:CARGO_INCREMENTAL = '0'
 Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
-# Upstream-dependent tests must FAIL, not skip, when the upstream checkout is missing.
+# No test reads this today. Tests that need upstream's tree panic whenever it is missing
+# (crates/simpa-core/tests/common/paths.rs); gates M5 and M6 prove that on every run.
 $env:SIMPA_REQUIRE_UPSTREAM = '1'
 $failures = @(); $script:checks = 0
 function Check($name, [scriptblock]$body) {
