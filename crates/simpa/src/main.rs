@@ -373,10 +373,16 @@ fn import_proj_cmd(args: &[&str]) -> ExitCode {
             "import-proj needs <file.proj> <out.simpa>\n{USAGE}"
         ));
     };
-    let imported = match simpa_core::geometry::import::import_proj_file(Path::new(input)) {
+    let mut imported = match simpa_core::geometry::import::import_proj_file(Path::new(input)) {
         Ok(i) => i,
         Err(e) => return fail(&format!("{input}: {} ({e})", e.code())),
     };
+    // Name the project after its file rather than leaving the importer's placeholder.
+    if (imported.project.name.is_empty() || imported.project.name == "New project")
+        && let Some(stem) = Path::new(input).file_stem()
+    {
+        imported.project.name = stem.to_string_lossy().into_owned();
+    }
     if let Err(e) = schema::save(&imported.project, Path::new(out)) {
         return fail(&format!("{out}: {e}"));
     }

@@ -10,8 +10,11 @@ Set-Location $repo
 $env:RUSTUP_HOME = "$env:USERPROFILE\.rustup"; $env:CARGO_HOME = "$env:USERPROFILE\.cargo"
 $env:Path = "$env:CARGO_HOME\bin;$env:Path"; $env:CARGO_INCREMENTAL = '0'
 Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
-$failures = @()
+# Upstream-dependent tests must FAIL, not skip, when the upstream checkout is missing.
+$env:SIMPA_REQUIRE_UPSTREAM = '1'
+$failures = @(); $script:checks = 0
 function Check($name, [scriptblock]$body) {
+    $script:checks++
     try {
         $ok = & $body
         if ($ok) { Write-Host "PASS  $name" } else { Write-Host "FAIL  $name"; $script:failures += $name }
@@ -23,7 +26,14 @@ function Near($a, $b, $tol) { [math]::Abs([double]$a - [double]$b) -le $tol }
 # Positions come from float32 project data: compare to 1e-5 m, never as text.
 function NearPoint($p, $q) { (Near $p[0] $q[0] 1e-5) -and (Near $p[1] $q[1] 1e-5) -and (Near $p[2] $q[2] 1e-5) }
 
-cmd /c "cargo build -q --release -p simpa 2>&1" | Out-Null
+$build = cmd /c "cargo build -q --release -p simpa 2>&1"
+if ($LASTEXITCODE -ne 0) { $build | Select-Object -Last 20 | ForEach-Object { Write-Host $_ }; throw 'CLI build failed: refusing to test a stale simpa.exe' }
+# Runs a cargo command; on failure prints its last lines so a FAIL is never silent.
+function Cargo([string]$cmdline) {
+    $out = cmd /c "$cmdline 2>&1"
+    if ($LASTEXITCODE -ne 0) { $out | Select-Object -Last 15 | ForEach-Object { Write-Host "      | $_" }; return $false }
+    return $true
+}
 $simpa = Join-Path $repo 'target\release\simpa.exe'
 $tut = 'B:\repos\I-Simpa-upstream\src\isimpa\resources\doc\tutorial'
 $work = Join-Path $repo ('target\gates\m4\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
@@ -47,6 +57,19 @@ Check "(b) import-proj tutorial_2: 3,926 vertices, 7,860 faces, 10 groups, area 
     $s = SimpaJson @('import-proj', "$tut\tutorial 2\tutorial_2.proj", $hall, '--json')
     Write-Host "      $($s.vertices) vertices, $($s.faces) faces, $(@($s.groups).Count) groups, area $($s.area_m2) m2"
     $script:lastExit -eq 0 -and $s.vertices -eq 3926 -and $s.faces -eq 7860 -and @($s.groups).Count -eq 10 -and (Near $s.area_m2 4001.8 0.1)
+}
+# Everything but the free-text name and description must equal the committed fixture.
+function Normalized($path) { $o = Get-Content $path -Raw | ConvertFrom-Json; $o.PSObject.Properties.Remove('name'); $o.PSObject.Properties.Remove('description'); $o | ConvertTo-Json -Depth 64 -Compress }
+Check "(b)(c) import-proj reproduces the committed room fixtures (all but name and description)" {
+    $boxOut = Join-Path $work 'tutorial1_box_again.simpa'
+    & $simpa import-proj "$tut\tutorial 1\tutorial_1.proj" $boxOut | Out-Null
+    $same = @()
+    foreach ($pair in @(@($hall, 'elmia_corrected.simpa'), @($boxOut, 'tutorial1_box.simpa'))) {
+        $a = Normalized $pair[0]; $b = Normalized (Join-Path $repo ('tests\fixtures\rooms\' + $pair[1]))
+        Write-Host "      $($pair[1]): $(if ($a -eq $b) { 'identical' } else { 'DIFFERS' })"
+        $same += ($a -eq $b)
+    }
+    -not ($same -contains $false)
 }
 Check "(b) corrected hall passes check: 11,790 edges all used twice, 0 self-intersections, volume > 0" {
     $r = SimpaJson @('check', $hall, '--json')
@@ -73,8 +96,7 @@ Check "(c) import-proj tutorial_1: 8 vertices, 12 faces, groups, receiver faces,
 Check "(d)-(g) geometry suites: repair log, interpenetrating boxes, importers, re-import" {
     $ok = $true
     foreach ($t in (Get-ChildItem (Join-Path $repo 'crates\simpa-core\tests') -Filter 'geometry_*.rs' | Where-Object { $_.BaseName -notlike '*support*' })) {
-        cmd /c "cargo test -q -p simpa-core --test $($t.BaseName) 2>&1" | Out-Null
-        if ($LASTEXITCODE -ne 0) { Write-Host "      $($t.BaseName) failed"; $ok = $false }
+        if (-not (Cargo "cargo test -q -p simpa-core --test $($t.BaseName)")) { Write-Host "      $($t.BaseName) failed"; $ok = $false }
     }
     $ok
 }
@@ -96,10 +118,10 @@ Check "(e) CLI check refuses two interpenetrating boxes and lists face pairs" {
     $script:lastExit -eq 3 -and @($r.intersecting_pairs).Count -gt 0
 }
 
-Check "workspace tests, parallel" { cmd /c "cargo test -q --workspace --exclude app 2>&1" | Out-Null; $LASTEXITCODE -eq 0 }
-Check "clippy -D warnings (core and CLI)" { cmd /c "cargo clippy -q -p simpa-core -p simpa --all-targets -- -D warnings 2>&1" | Out-Null; $LASTEXITCODE -eq 0 }
-Check "cargo fmt --check (core and CLI)" { cmd /c "cargo fmt -p simpa-core -p simpa --check 2>&1" | Out-Null; $LASTEXITCODE -eq 0 }
+Check "workspace tests, parallel" { Cargo 'cargo test -q --workspace --exclude app' }
+Check "clippy -D warnings (core and CLI)" { Cargo 'cargo clippy -q -p simpa-core -p simpa --all-targets -- -D warnings' }
+Check "cargo fmt --check (core and CLI)" { Cargo 'cargo fmt -p simpa-core -p simpa --check' }
 
 Write-Host "`nwork: $work"
-if ($failures.Count) { Write-Host "M4 FAILED: $($failures.Count) check(s)"; exit 1 }
-Write-Host "M4 PASSED"; exit 0
+if ($failures.Count) { Write-Host "M4 FAILED: $($failures.Count) of $script:checks checks"; exit 1 }
+Write-Host "M4 PASSED: $script:checks of $script:checks checks"; exit 0
