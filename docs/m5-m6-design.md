@@ -135,6 +135,27 @@ and runs it with no validator. The verdict is the same as `run`'s.
 Expected files are derived from the `config.xml` actually in `solve/`, for both `run` and
 `run-folder`. That file is the one source of truth.
 
+`run-folder` skips only the *project* validator. Before launch it runs `mesh::verify` on the
+folder's `.mbin` and the `.cbin` it indexes, with the room id taken as the most common
+`idVolume`. A failure there is a run failure: status FAIL, reason `mesh_invalid` plus the
+verifier's codes, exit 5. This is what refuses the broken-hall TCR folder, since TCR itself
+exits 0 on it.
+
+**Stub solver.** `simpa-stub-solver.exe config.xml`, a test binary in `crates/simpa`, reads
+`stub.json` from its working folder:
+
+```json
+{
+  "exit_code": 0,
+  "lines": [{"stream": "stdout|stderr", "text": "...", "newline": true, "delay_ms": 0}],
+  "files": {"relative/path": "contents"}
+}
+```
+
+It prints the lines in order and creates the files. It covers the classifier rows that no real
+run reaches (`config_path_missing`, `degenerate_tetrahedron`, `source_not_located`), plus the
+final stderr line without a newline. `run-folder --solver-exe <path>` points at it.
+
 ## Interfaces between pieces
 
 **`process`**, used by the mesher and the run manager:
@@ -152,11 +173,12 @@ pub fn run(spec: &Spec, cancel: &CancelToken, on_line: &mut dyn FnMut(&Line)) ->
   `TerminateJobObject`.
 - A trailing partial line is flushed with `terminated: false`.
 
-**`mesh::verify`**, used by the mesher before writing, by `mesh-verify` and by `run`:
+**`mesh::verify`**, used by the mesher before writing, by `mesh-verify` and by `run`. The types
+are fixed in `crates/simpa-core/src/mesh/verify.rs` (scaffold):
 ```rust
-pub struct VerifyReport { counts..., pub codes: Vec<&'static str> /* empty = pass */ }
-pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, fitting_ids: &[i32]) -> VerifyReport
-pub fn verify_dir(dir: &Path) -> Result<DirReport, FormatError>  // TetGen set and/or .mbin in a folder
+pub struct VolumeIds { pub room: i32 /* 0 ours, 1 upstream's */, pub fittings: Vec<i32> }
+pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> VerifyReport
+pub fn verify_dir(dir: &Path, ids: &VolumeIds) -> Result<DirReport, FormatError>
 ```
 Counts in the report:
 - `index_errors`, `degenerate_tets` and `inverted_tets`
