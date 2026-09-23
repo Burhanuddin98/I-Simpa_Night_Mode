@@ -35,7 +35,10 @@ mod manifest;
 mod tetgen;
 pub mod verify;
 
-pub use build::{AttributeMap, BuildStats, FACE_CORNERS, OutputPaths, TetgenOutput, build_mbin};
+pub use build::{
+    AttributeMap, BuildStats, FACE_CORNERS, OutputPaths, TetgenOutput, UPSTREAM_CORNERS, Unitize,
+    build_mbin, upstream_order,
+};
 pub use diag::{Element, Intersection, intersections};
 pub use flags::{
     TetgenCommand, format_g, setting_g15, settings_conflict, tetgen_flags, to_string_g15,
@@ -648,8 +651,8 @@ fn diagnose(
 /// in this module's tests.
 type Verifier = fn(&mbin::Mesh, &cbin::Model, &verify::VolumeIds) -> verify::VerifyReport;
 
-/// Reads TetGen's output, builds the `.mbin`, runs `verifier` on it, and writes it only when it
-/// passes.
+/// Reads TetGen's output, builds the `.mbin` in the frame upstream's GUI would fit to the scene
+/// ([`Unitize::of_scene`]), runs `verifier` on it, and writes it only when it passes.
 fn build_and_write(
     paths: &OutputPaths,
     input: &MeshInput,
@@ -658,8 +661,18 @@ fn build_and_write(
     m: &mut MeshManifest,
     verifier: Verifier,
 ) {
-    let built = TetgenOutput::read(paths)
-        .and_then(|out| build_mbin(&out, input.scene.faces.len(), &input.volume_ids.fittings));
+    let unitize = match Unitize::of_scene(&input.scene) {
+        Ok(u) => u,
+        Err(e) => return fail(m, codes::INPUT_INVALID, e),
+    };
+    let built = TetgenOutput::read(paths).and_then(|out| {
+        build_mbin(
+            &out,
+            input.scene.faces.len(),
+            &input.volume_ids.fittings,
+            &unitize,
+        )
+    });
     let (mesh, stats) = match built {
         Ok(b) => b,
         Err(e) => return fail(m, codes::TETGEN_OUTPUT_INVALID, e),
@@ -942,8 +955,11 @@ mod tests {
         let mbin_path = dir.join(names::TETRA_MESH);
         assert_eq!(m.files.mbin, Some(sha256_file(&mbin_path).unwrap()));
         let mesh = mbin::read_file(&mbin_path).unwrap();
+        // The .ele row (1,2,3,4) is written in upstream's order, (4,3,2,1): face i is opposite
+        // node 4 - i, which is the scene face with marker i.
+        assert_eq!(mesh.tetrahedra[0].vertices, [3, 2, 1, 0]);
         let markers: Vec<i32> = mesh.tetrahedra[0].faces.iter().map(|f| f.marker).collect();
-        assert_eq!(markers, [3, 2, 1, 0]);
+        assert_eq!(markers, [0, 1, 2, 3]);
         std::fs::remove_dir_all(&dir).unwrap();
 
         // Refused: mesh_invalid, then the verifier's own codes, its report kept, no .mbin.
@@ -952,6 +968,27 @@ mod tests {
         assert_eq!(m.codes, [codes::MESH_INVALID, "unmarked_boundary_faces"]);
         assert!(m.verify.as_ref().is_some_and(|r| !r.passed()));
         assert_eq!(m.files.mbin, None);
+        assert!(!dir.join(names::TETRA_MESH).exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_scene_no_frame_fits_is_input_invalid_and_writes_no_mbin() {
+        // Control: the scene as it is fits a frame (the other tests write its .mbin).
+        let (dir, mut input) = one_tetrahedron("noframe");
+        assert!(Unitize::of_scene(&input.scene).is_ok());
+        // Every vertex but the last at one point: upstream's Unitize would divide by zero.
+        let last = input.scene.vertices.len() - 1;
+        let first = input.scene.vertices[0];
+        for v in &mut input.scene.vertices[..last] {
+            *v = first;
+        }
+        let m = build_with(&dir, &input, passes);
+        assert_eq!(m.codes, [codes::INPUT_INVALID], "{m:#?}");
+        assert!(
+            m.messages.iter().any(|s| s.contains("UnitizeVar")),
+            "{m:#?}"
+        );
         assert!(!dir.join(names::TETRA_MESH).exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }
