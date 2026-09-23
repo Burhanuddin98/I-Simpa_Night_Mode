@@ -433,7 +433,7 @@ actually in the working directory, and a config that cannot be read after the ru
 ### Reason codes
 
 Every reason a verdict can carry, besides the FAIL rows' ids in the classification table and the
-Part A codes named in the text above. A verdict lists at most one entry per code, in signal
+Part A codes named in the text above, and the one warning the run manager adds itself. A verdict lists at most one entry per code, in signal
 order, and its status is OK exactly when it lists none.
 
 | Code | Status | Signal | When |
@@ -441,7 +441,8 @@ order, and its status is OK exactly when it lists none.
 | `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry; its own codes and counts are in the detail. Exit class 3 |
 | `mesh_missing` | FAIL | before launch | `run --mesh <dir>`: the folder has no readable `mesh.json`, a manifest that is not `OK`, or no `tetramesh.mbin`; or the run's own mesh folder cannot be used. Exit class 4 |
 | `export_failed` | FAIL | before launch | `run`: the run folder's inputs cannot be written. `config_xml`'s writer refuses the project or the variant (its code, such as `variant_not_found`, is in the detail), or a mesh or directivity file cannot be copied. Exit class 2 |
-| `launch_failed` | FAIL | exit | the solver cannot be started, or its process tree cannot be ended within 10 s of the kill (`crate::process`). Exit class 5 |
+| `launch_failed` | FAIL | exit | the solver cannot be started (`crate::process`), or its logs beside `solve/` cannot be created, so it is not started; or its process tree cannot be ended within 10 s of the kill. Exit class 5 |
+| `log_write_failed` | unchanged: a warning, never a reason | logs | writing `solver.stdout.txt` or `solver.stderr.txt` failed during the run. The lines were classified as they arrived, so the verdict stands and `run.json` is written; the logs are incomplete |
 | `cancelled` | CANCELLED | exit | the run was cancelled (the process layer killed the tree); never OK, and its outputs are partial. The mesher gives the same code for a cancelled mesh (`docs/formats/mesh-manifest.md`) |
 | `crash_access_violation` | CRASH | exit | exit `0xC0000005` |
 | `crash_abort` | CRASH | exit | exit `0xC0000409`, an abort after an uncaught C++ exception |
@@ -464,7 +465,11 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   with `create_dir` and never reused (`-2`, `-3`, ... on a collision). The solver runs in its
   `solve/`; `mesh/` holds the run's own mesh; `run.json` and `solver.stdout.txt` /
   `solver.stderr.txt` sit beside `solve/`. Every run folder gets its `run.json`, refused or
-  launched: `stage` says where the run ended and `exit_class` is the CLI's exit code.
+  launched: `stage` says where the run ended and `exit_class` is the CLI's exit code. A launched
+  run always ends in a verdict, a failed log write included (`log_write_failed`). The one
+  exception is an I/O failure in the run folder itself: `run-folder` cannot copy the fixture in,
+  fill its `config.xml` or hash it, or `run.json` cannot be written. The CLI then reports the
+  error on stderr and exits 2.
 - **`run`**, stage by stage. A refusal ends the run before launch, with status FAIL:
 
   | Stage | Refused with | Exit class |

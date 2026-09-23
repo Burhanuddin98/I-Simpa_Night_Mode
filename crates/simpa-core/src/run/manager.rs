@@ -713,7 +713,13 @@ pub fn run_project(
     ) {
         return rec.refuse(Stage::Export, false, vec![reason]);
     }
-    rec.hash_inputs()?;
+    if let Err(e) = rec.hash_inputs() {
+        let reason = Reason::new(
+            codes::EXPORT_FAILED,
+            format!("reading back the inputs: {e}"),
+        );
+        return rec.refuse(Stage::Export, false, vec![reason]);
+    }
     let issues = validate::validate_export(&project, &rec.solve, opts.solver);
     rec.warnings.extend(
         issues
@@ -733,7 +739,7 @@ pub fn run_project(
     }
 
     on_event(&RunEvent::Stage(Stage::Solve));
-    let launched = launch(&rec, cancel, on_event)?;
+    let launched = launch(&rec, cancel, on_event);
     rec.manifest(Stage::Solve, launched)
 }
 
@@ -946,7 +952,7 @@ pub fn run_folder(
         return rec.cancelled(Stage::PreLaunch);
     }
     on_event(&RunEvent::Stage(Stage::Solve));
-    let launched = launch(&rec, cancel, on_event)?;
+    let launched = launch(&rec, cancel, on_event);
     rec.manifest(Stage::Solve, launched)
 }
 
@@ -1197,19 +1203,106 @@ impl Sink<'_> {
     }
 }
 
+/// The solver's two logs beside `solve/`, written line by line as the lines arrive. A failed
+/// write does not stop the run: the lines are classified in memory all the same, so the verdict
+/// stands. The first failure is kept and becomes the verdict's `log_write_failed` warning, and
+/// `run.json` is written as for any launched run.
+struct Logs<W: Write> {
+    out: (W, PathBuf),
+    err: (W, PathBuf),
+    failed: Option<(PathBuf, io::Error)>,
+}
+
+impl Logs<BufWriter<File>> {
+    /// Creates `solver.stdout.txt` and `solver.stderr.txt` in `dir`; `launch_failed` when either
+    /// cannot be created, since the run would then have no record of what the solver printed.
+    fn create(dir: &Path) -> Result<Self, Reason> {
+        let open = |name: &str| {
+            let path = dir.join(name);
+            match File::create(&path) {
+                Ok(f) => Ok((BufWriter::new(f), path)),
+                Err(e) => Err(Reason::new(
+                    codes::LAUNCH_FAILED,
+                    format!(
+                        "the solver's log {} cannot be created ({e}); the solver was not launched",
+                        path.display()
+                    ),
+                )),
+            }
+        };
+        Ok(Logs {
+            out: open(STDOUT_LOG)?,
+            err: open(STDERR_LOG)?,
+            failed: None,
+        })
+    }
+}
+
+impl<W: Write> Logs<W> {
+    /// Appends `l` to its stream's log, with its newline when it had one.
+    fn line(&mut self, l: &Line) {
+        let (w, path) = match l.stream {
+            process::Stream::Stdout => (&mut self.out.0, &self.out.1),
+            process::Stream::Stderr => (&mut self.err.0, &self.err.1),
+        };
+        let eol = if l.terminated { "\n" } else { "" };
+        if let Err(e) = write!(w, "{}{eol}", l.text)
+            && self.failed.is_none()
+        {
+            self.failed = Some((path.clone(), e));
+        }
+    }
+
+    /// Flushes both logs. The first write or flush failure, as the `log_write_failed` warning.
+    fn finish(self) -> Option<Reason> {
+        let Logs {
+            mut out,
+            mut err,
+            mut failed,
+        } = self;
+        for (w, path) in [&mut out, &mut err] {
+            if let Err(e) = w.flush()
+                && failed.is_none()
+            {
+                failed = Some((path.clone(), e));
+            }
+        }
+        failed.map(|(path, e)| {
+            Reason::new(
+                codes::LOG_WRITE_FAILED,
+                format!(
+                    "{}: {e}; the log is incomplete, the lines were classified as they arrived",
+                    path.display()
+                ),
+            )
+        })
+    }
+}
+
+/// A run whose solver never started, for `reason` (`launch_failed`).
+fn not_launched(reason: Reason, lines: ClassCounts) -> Launched {
+    Launched {
+        outcome: None,
+        verdict: Verdict {
+            status: Status::Fail,
+            reasons: vec![reason],
+            warnings: Vec::new(),
+        },
+        lines,
+        files: FileCounts::default(),
+        particles: None,
+    }
+}
+
 /// Launches the solver in `rec.solve` with the contract's argument, logging both streams beside
-/// `solve/` and classifying every line as it arrives, then judges the run.
-fn launch(
-    rec: &Record,
-    cancel: &CancelToken,
-    on_event: &mut dyn FnMut(&RunEvent),
-) -> Result<Launched, RunError> {
+/// `solve/` and classifying every line as it arrives, then judges the run. Every ending is a
+/// [`Launched`], so a launched run always gets its `run.json`.
+fn launch(rec: &Record, cancel: &CancelToken, on_event: &mut dyn FnMut(&RunEvent)) -> Launched {
     let opts = rec.opts;
-    let out_path = rec.dir.join(STDOUT_LOG);
-    let err_path = rec.dir.join(STDERR_LOG);
-    let mut out = BufWriter::new(File::create(&out_path).map_err(io_at(&out_path))?);
-    let mut err = BufWriter::new(File::create(&err_path).map_err(io_at(&err_path))?);
-    let mut log_error: Option<(PathBuf, io::Error)> = None;
+    let mut logs = match Logs::create(&rec.dir) {
+        Ok(l) => l,
+        Err(reason) => return not_launched(reason, ClassCounts::default()),
+    };
     let spec = Spec {
         program: opts.solver_exe.clone(),
         args: vec![SOLVER_ARGUMENT.into()],
@@ -1226,16 +1319,7 @@ fn launch(
         .cancel_after_ms
         .map(|ms| CancelTimer::start(Duration::from_millis(ms), cancel.clone()));
     let result = process::run(&spec, cancel, &mut |l: &Line| {
-        let (log, path) = match l.stream {
-            process::Stream::Stdout => (&mut out, &out_path),
-            process::Stream::Stderr => (&mut err, &err_path),
-        };
-        let eol = if l.terminated { "\n" } else { "" };
-        if let Err(e) = write!(log, "{}{eol}", l.text)
-            && log_error.is_none()
-        {
-            log_error = Some((path.clone(), e));
-        }
+        logs.line(l);
         for c in classifier.push(l) {
             sink.take(c);
         }
@@ -1245,31 +1329,25 @@ fn launch(
         sink.take(c);
     }
     let lines = sink.lines;
-    out.flush().map_err(io_at(&out_path))?;
-    err.flush().map_err(io_at(&err_path))?;
-    if let Some((path, e)) = log_error {
-        return Err(RunError::Io { path, source: e });
-    }
-    let outcome = match result {
-        Ok(o) => o,
-        Err(e) => {
-            let verdict = Verdict {
-                status: Status::Fail,
-                reasons: vec![Reason::new(
-                    codes::LAUNCH_FAILED,
-                    format!("{}: {e}", opts.solver_exe.display()),
-                )],
-                warnings: Vec::new(),
-            };
-            return Ok(Launched {
-                outcome: None,
-                verdict,
-                lines: ClassCounts::of(&lines),
-                files: FileCounts::default(),
-                particles: None,
-            });
-        }
+    let log_warning = logs.finish();
+    let mut launched = match result {
+        Ok(outcome) => judged(rec, outcome, &lines),
+        Err(e) => not_launched(
+            Reason::new(
+                codes::LAUNCH_FAILED,
+                format!("{}: {e}", opts.solver_exe.display()),
+            ),
+            ClassCounts::of(&lines),
+        ),
     };
+    launched.verdict.warnings.extend(log_warning);
+    launched
+}
+
+/// The verdict on a solver that ran and ended with `outcome`, from its `lines` and the files in
+/// `rec.solve`.
+fn judged(rec: &Record, outcome: Outcome, lines: &[Classified]) -> Launched {
+    let opts = rec.opts;
     let exp = Expectation::read(&rec.solve, opts.solver);
     let outputs = match &exp {
         Ok(e) => Outputs::read(&rec.solve, e),
@@ -1278,7 +1356,7 @@ fn launch(
     let verdict = judge(&Evidence {
         solver: opts.solver,
         outcome: &outcome,
-        lines: &lines,
+        lines,
         expectation: exp.as_ref(),
         outputs: &outputs,
         loss_limit: opts.loss_limit,
@@ -1290,13 +1368,13 @@ fn launch(
             ..FileCounts::default()
         },
     };
-    Ok(Launched {
+    Launched {
         outcome: Some(outcome),
         verdict,
-        lines: ClassCounts::of(&lines),
+        lines: ClassCounts::of(lines),
         files,
         particles: outputs.stats.and_then(Result::ok),
-    })
+    }
 }
 
 #[cfg(test)]
@@ -1313,6 +1391,105 @@ mod tests {
         assert_eq!(folder_stamp(at(1_709_164_800, 7)), "20240229-000000-007");
         assert_eq!(folder_stamp(at(951_782_400, 0)), "20000229-000000-000");
         assert_eq!(folder_stamp(at(4_102_444_799, 999)), "20991231-235959-999");
+    }
+
+    /// A log writer that takes `room` bytes and then fails, and whose flush fails when
+    /// `flush_fails`.
+    struct Full {
+        room: usize,
+        got: Vec<u8>,
+        flush_fails: bool,
+    }
+
+    impl Write for Full {
+        fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+            if b.len() > self.room {
+                return Err(io::Error::other("disk full"));
+            }
+            self.room -= b.len();
+            self.got.extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            if self.flush_fails {
+                return Err(io::Error::other("flush failed"));
+            }
+            Ok(())
+        }
+    }
+
+    fn full(room: usize, flush_fails: bool) -> Full {
+        Full {
+            room,
+            got: Vec::new(),
+            flush_fails,
+        }
+    }
+
+    fn line(stream: process::Stream, text: &str, terminated: bool) -> Line {
+        Line {
+            stream,
+            t_ms: 0.0,
+            text: text.into(),
+            terminated,
+        }
+    }
+
+    #[test]
+    fn a_failed_log_write_is_a_warning_and_the_logs_go_on() {
+        use process::Stream::{Stderr, Stdout};
+        let mut logs = Logs {
+            out: (full(4, false), PathBuf::from("o.txt")),
+            err: (full(100, false), PathBuf::from("e.txt")),
+            failed: None,
+        };
+        logs.line(&line(Stdout, "abc", true));
+        logs.line(&line(Stdout, "def", true));
+        logs.line(&line(Stderr, "tail", false));
+        // The failed line is lost, the other log is still written, unterminated line as it came.
+        assert_eq!(logs.out.0.got, b"abc\n");
+        assert_eq!(logs.err.0.got, b"tail");
+        let w = logs.finish().expect("the write failure is kept");
+        assert_eq!(w.code, "log_write_failed");
+        assert!(w.detail.starts_with("o.txt: disk full"), "{}", w.detail);
+
+        // A failed flush counts too; the first failure is the one reported.
+        let logs = Logs {
+            out: (full(100, false), PathBuf::from("o.txt")),
+            err: (full(100, true), PathBuf::from("e.txt")),
+            failed: None,
+        };
+        let w = logs.finish().expect("the flush failure is kept");
+        assert!(w.detail.starts_with("e.txt: flush failed"), "{}", w.detail);
+
+        // Nothing failed: no warning.
+        let logs = Logs {
+            out: (full(100, false), PathBuf::from("o.txt")),
+            err: (full(100, false), PathBuf::from("e.txt")),
+            failed: None,
+        };
+        assert_eq!(logs.finish(), None);
+    }
+
+    #[test]
+    fn logs_that_cannot_be_created_are_launch_failed() {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/tmp")
+            .join(format!("manager-logs-{}", std::process::id()));
+        for blocked in [STDOUT_LOG, STDERR_LOG] {
+            let dir = base.join(blocked);
+            // A folder where the log file should go: File::create fails on it.
+            fs::create_dir_all(dir.join(blocked)).unwrap();
+            let Err(r) = Logs::create(&dir) else {
+                panic!("{blocked} was created over a folder");
+            };
+            assert_eq!(r.code, "launch_failed");
+            assert!(r.detail.contains(blocked), "{}", r.detail);
+        }
+        let free = base.join("free");
+        fs::create_dir_all(&free).unwrap();
+        assert!(Logs::create(&free).is_ok());
+        fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

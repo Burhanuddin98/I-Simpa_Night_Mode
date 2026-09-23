@@ -65,8 +65,12 @@ pub mod codes {
     /// The run folder's inputs could not be written: `config_xml`'s writer refused the project
     /// or variant (its code is in the detail), or a file could not be staged.
     pub const EXPORT_FAILED: &str = "export_failed";
-    /// The solver could not be started, or its process tree could not be ended.
+    /// The solver could not be started (its logs beside `solve/` included), or its process tree
+    /// could not be ended.
     pub const LAUNCH_FAILED: &str = "launch_failed";
+    /// A warning, never a reason: writing the solver's logs failed during the run. The lines
+    /// were classified as they arrived, so the verdict stands; the logs are incomplete.
+    pub const LOG_WRITE_FAILED: &str = "log_write_failed";
     pub const CANCELLED: &str = "cancelled";
     pub const CRASH_ACCESS_VIOLATION: &str = "crash_access_violation";
     pub const CRASH_ABORT: &str = "crash_abort";
@@ -84,11 +88,12 @@ pub mod codes {
 
     /// Every code above, in the order a verdict lists them: the run manager's refusals before
     /// launch, then the four signals.
-    pub const ALL: [&str; 18] = [
+    pub const ALL: [&str; 19] = [
         GEOMETRY_REFUSED,
         MESH_MISSING,
         EXPORT_FAILED,
         LAUNCH_FAILED,
+        LOG_WRITE_FAILED,
         CANCELLED,
         CRASH_ACCESS_VIOLATION,
         CRASH_ABORT,
