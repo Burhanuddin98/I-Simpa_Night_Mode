@@ -27,7 +27,16 @@
 #     leaves no spps.exe 2 s later.
 # (g) A run under a path containing U+0141 is OK with the same file count as its ASCII twin.
 # (h) Two runs of one project get two distinct folders, and no 'R10'-style suffixed receiver appears.
-# Every check that can pass has a "says NO" partner: an input it must refuse.
+# Every check that can pass has a "says NO" check that must refuse an input:
+# - a clause's own refusal sits beside it, named "says NO", or is a control that must fail the
+#   same predicate ((a)'s control, (f)'s long box left alone);
+# - (d)'s three checks share the expectation rules and the named-case lookup, refused in
+#   "(d) says NO"; (c)'s config identity and per-band bound each have a "says NO";
+# - (c)'s free-space, floor-mesh and run checks are preconditions of the bound, not claims of
+#   their own: each fails on its own failure, and the bound check throws without them;
+# - the tail (tests, clippy, fmt) must pass a clean scratch crate and refuse a copy with one
+#   planted fault each, and the tests that need upstream's tree or the solvers must FAIL, with
+#   their panic, when those are missing.
 # A check that an open decision blocks prints BLOCKED; the gate then exits 3, never 0.
 # Every solver call has a hard timeout, 45 minutes for a hall SPPS run and 5 minutes for anything
 # else: a timeout is a FAIL with its time.
@@ -38,7 +47,9 @@ Set-Location $repo
 $env:RUSTUP_HOME = "$env:USERPROFILE\.rustup"; $env:CARGO_HOME = "$env:USERPROFILE\.cargo"
 $env:Path = "$env:CARGO_HOME\bin;$env:Path"; $env:CARGO_INCREMENTAL = '0'
 Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue
-# Upstream-dependent tests must FAIL, not skip, when the upstream checkout is missing.
+# House style from M4; no test reads it today. Tests that need upstream's tree or the solvers panic
+# whenever those are missing (crates/simpa-core/tests/common/paths.rs), whatever this says, and the
+# check "tests say NO without their inputs" proves that on every run of this gate.
 $env:SIMPA_REQUIRE_UPSTREAM = '1'
 $failures = @(); $blocked = @(); $script:checks = 0
 # A check body returns exactly one bool, or `Blocked <reason>` when an open decision stops it.
@@ -65,10 +76,13 @@ function Check($name, [scriptblock]$body) {
 
 $build = cmd /c "cargo build -q --release -p simpa 2>&1"
 if ($LASTEXITCODE -ne 0) { $build | Select-Object -Last 20 | ForEach-Object { Write-Host $_ }; throw 'CLI build failed: refusing to test a stale simpa.exe' }
-# Runs a cargo command; on failure prints its last lines so a FAIL is never silent.
+# Runs a cargo command; on failure prints its last lines so a FAIL is never silent. Its whole
+# output stays in $script:cargoText for the checks that must see why it failed.
 function Cargo([string]$cmdline) {
     $out = cmd /c "$cmdline 2>&1"
-    if ($LASTEXITCODE -ne 0) { $out | Select-Object -Last 15 | ForEach-Object { Write-Host "      | $_" }; return $false }
+    $code = $LASTEXITCODE
+    $script:cargoText = (@($out) | ForEach-Object { "$_" }) -join "`n"
+    if ($code -ne 0) { $out | Select-Object -Last 15 | ForEach-Object { Write-Host "      | $_" }; return $false }
     return $true
 }
 $simpa = Join-Path $repo 'target\release\simpa.exe'
@@ -143,6 +157,8 @@ function Edited([string]$from, [string]$to, $edits) {
 function RunDir($m) { Split-Path -Parent $m.cwd }
 function Codes($m) { @($m.verdict.reasons | ForEach-Object { $_.code }) }
 function Config($m) { [xml](ReadText (Join-Path $m.cwd 'config.xml')) }
+# A run's config.xml as text with its workingdirectory blanked: two runs of one config compare equal.
+function ConfigSansDir($m) { (ReadText (Join-Path $m.cwd 'config.xml')) -replace 'workingdirectory="[^"]*"', 'workingdirectory=""' }
 function FileCount([string]$dir) { @(Get-ChildItem -LiteralPath $dir -Recurse -File).Count }
 function Summary($o) {
     $m = $o.Json
@@ -327,9 +343,13 @@ foreach ($case in $cases) {
     $script:caseResults += [pscustomobject]@{ Name = $case.Name; Positive = ($exp.status -eq 'OK'); Status = $status; Problems = $problems; Run = $o }
 }
 $named = @('spps_noeps', 'spps_oneband', 'spps_dirmiss', 'spps_dirempty', 'spps_mat0miss', 'spps_mat7miss', 'spps_srcout', 'spps_lossy', 'tcr_broken_hall', 'spps_unreadable_mesh', 'tcr_nomesh')
-Check "(d) the 11 cases the gate names are fixtures, each expected FAIL or CRASH" {
+# The names that are not among the run cases expected to fail (a positive case counts as missing).
+function MissingNamed([string[]]$names) {
     $neg = @($script:caseResults | Where-Object { -not $_.Positive } | ForEach-Object { $_.Name })
-    $missing = @($named | Where-Object { $neg -notcontains $_ })
+    @($names | Where-Object { $neg -notcontains $_ })   # callers collect it with @()
+}
+Check "(d) the 11 cases the gate names are fixtures, each expected FAIL or CRASH" {
+    $missing = @(MissingNamed $named)
     Write-Host "      named: $($named -join ', '); missing or not negative: [$($missing -join ', ')]"
     $missing.Count -eq 0
 }
@@ -345,7 +365,7 @@ Check "(d) positive run folders (expected OK): exit 0, OK" {
     Write-Host "      $($met.Count)/$($pos.Count) positive run folders matched expected.json ($(($pos | ForEach-Object { $_.Name }) -join ', '))"
     $pos.Count -gt 0 -and $met.Count -eq $pos.Count
 }
-Check "(d) says NO: the expectation check reports each way a verdict can miss expected.json" {
+Check "(d) says NO: the expectation check reports each way a verdict can miss expected.json, and the named-case lookup reports a name that is no negative fixture" {
     $m = '{"verdict": {"status": "FAIL", "reasons": [{"code": "mesh_invalid"}, {"code": "degenerate_tets"}], "warnings": [{"code": "unclassified_line"}, {"code": "unclassified_line"}]}}' | ConvertFrom-Json
     $base = '{"status": "FAIL", "codes": ["mesh_invalid"], "codes_any_of": [["degenerate_tets", "inverted_tets"]], "warnings": ["unclassified_line"]}'
     $ok = (Unmet ($base | ConvertFrom-Json) $m 5).Count -eq 0
@@ -360,8 +380,10 @@ Check "(d) says NO: the expectation check reports each way a verdict can miss ex
         $got = Unmet ($base.Replace($c[0], $c[1]) | ConvertFrom-Json) $m $c[2]
         if (@($got | Where-Object { $_ -like "*$($c[3])*" }).Count -eq 1) { $caught++ } else { Write-Host "      not caught: $($c[3]) (got: $($got -join '; '))" }
     }
-    Write-Host "      the met case: $(if ($ok) { 'no complaint' } else { 'COMPLAINED' }); $caught of $($cases.Count) misses caught"
-    $ok -and $caught -eq $cases.Count
+    $absent = @(MissingNamed (@($named) + 'spps_no_such_case' + 'spps_ok'))
+    $namedOk = ($absent -join ',') -eq 'spps_no_such_case,spps_ok'
+    Write-Host "      the met case: $(if ($ok) { 'no complaint' } else { 'COMPLAINED' }); $caught of $($cases.Count) misses caught; named-case lookup with a name that is no fixture and the positive spps_ok added reports [$($absent -join ', ')]"
+    $ok -and $caught -eq $cases.Count -and $namedOk
 }
 
 # --- (e) classifier coverage ------------------------------------------------------------------------
@@ -499,26 +521,34 @@ Check "(c) floor run on upstream's mesh with the identical config (config.xml eq
     $script:floor = $o
     Write-Host "      $(Summary $o); $(RunSize $o) MB in its run folder; B: free fell $([math]::Round(($free0 - (Get-PSDrive B).Free) / 1MB)) MB over the run (the whole drive, other writers included)"
     if ($null -eq $o.Json) { return $false }
-    $strip = { param($m) (ReadText (Join-Path $m.cwd 'config.xml')) -replace 'workingdirectory="[^"]*"', 'workingdirectory=""' }
-    $same = (& $strip $script:ours.Json) -ceq (& $strip $o.Json)
+    $same = (ConfigSansDir $script:ours.Json) -ceq (ConfigSansDir $o.Json)
     $freqs = (@($o.Json.particles.bands) | ForEach-Object { $_.freq_hz }) -join ','
     Write-Host "      config.xml identical but for workingdirectory: $same; floor bands [$freqs]"
     $same -and $freqs -eq '125,250,500,1000,2000,4000'
+}
+Check "(c) says NO: the config comparison refuses the floor's config.xml with random_seed 1 changed to 2" {
+    if ($null -eq $script:ours.Json -or $null -eq $script:floor.Json) { throw 'a hall run gave no manifest' }
+    $floorCfg = ConfigSansDir $script:floor.Json
+    $n = ([regex]::Matches($floorCfg, 'random_seed="1"')).Count
+    if ($n -ne 1) { throw "random_seed=`"1`" appears $n times in the floor's config.xml, not once" }
+    -not ((ConfigSansDir $script:ours.Json) -ceq $floorCfg.Replace('random_seed="1"', 'random_seed="2"'))
 }
 Check "(c) per band, our lost_by_meshing <= floor + 4 sqrt(max(floor, 1)) (tolerance PROPOSED: open decision 7, docs/m5-m6-design.md decision 9)" {
     if ($null -eq $script:ours.Json -or $null -eq $script:floor.Json) { throw 'a hall run gave no manifest' }
     $ob = @($script:ours.Json.particles.bands | Where-Object { $null -ne $_ }); $fb = @($script:floor.Json.particles.bands | Where-Object { $null -ne $_ })
     if ($ob.Count -ne 6 -or $fb.Count -ne 6) { throw "bands: ours $($ob.Count), floor $($fb.Count), expected 6 each" }
     Write-Host ('      {0,7} {1,9} {2,9} {3,7} {4,9} {5,11} {6,11}' -f 'band Hz', 'ours', 'floor', 'ratio', 'bound', 'ours loops', 'floor loops')
-    $bad = 0
+    $bad = 0; $atOrBelow = 0
     for ($i = 0; $i -lt 6; $i++) {
         $o = [double]$ob[$i].lost_by_meshing_problems; $f = [double]$fb[$i].lost_by_meshing_problems; $bound = LossBound $f
         if ($ob[$i].freq_hz -ne $fb[$i].freq_hz) { throw "band $i is $($ob[$i].freq_hz) Hz in ours, $($fb[$i].freq_hz) Hz in the floor" }
         $ratio = if ($f -gt 0) { '{0:N2}' -f ($o / $f) } else { 'n/a' }
         if ($o -gt $bound) { $bad++ }
+        if ($o -le $f) { $atOrBelow++ }
         Write-Host ('      {0,7} {1,9} {2,9} {3,7} {4,9:N1} {5,11} {6,11}  {7}' -f $ob[$i].freq_hz, $o, $f, $ratio, $bound, $ob[$i].lost_by_infinite_loops, $fb[$i].lost_by_infinite_loops, $(if ($o -gt $bound) { 'OVER' } else { 'ok' }))
     }
     Write-Host "      per $($ob[0].total) particles per band; wall: ours $([math]::Round($script:ours.Sec, 1)) s (solver $([math]::Round($script:ours.Json.outcome.elapsed_ms / 1000, 1)) s), floor $([math]::Round($script:floor.Sec, 1)) s (solver $([math]::Round($script:floor.Json.outcome.elapsed_ms / 1000, 1)) s); floor verdict $($script:floor.Json.verdict.status) [$((Codes $script:floor.Json) -join ', ')]"
+    Write-Host "      for open decision 7 (information, not a check): the stricter rule ours <= floor holds in $atOrBelow of 6 bands"
     $bad -eq 0
 }
 
@@ -659,6 +689,49 @@ Check "(h) says NO: a receiver folder holding a suffixed duplicate ('Receiver 10
     $d.Extra.Count -eq 1 -and $d.Extra[0] -eq 'Receiver 10'
 }
 
+# --- the tail, and what it must refuse ------------------------------------------------------------
+# A cargo command through Cargo with extra environment variables, restored afterwards; the helper's
+# echo of a failure is not printed. Its verdict and its whole output.
+function CargoQuiet([string]$cmdline, [hashtable]$vars = @{}) {
+    $saved = @{}
+    foreach ($k in $vars.Keys) { $saved[$k] = [Environment]::GetEnvironmentVariable($k); [Environment]::SetEnvironmentVariable($k, $vars[$k]) }
+    try { $ok = Cargo $cmdline 6>$null } finally { foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) } }
+    [pscustomobject]@{ Ok = $ok; Text = $script:cargoText }
+}
+# A scratch crate, its own workspace, in its own folder: a fresh folder per variant, because on B:
+# (exFAT, whole-second mtimes) a rewrite within the second of a build is not seen by cargo.
+function New-TailCrate([string]$name, [string]$lib) {
+    $dir = Join-Path $work $name
+    New-Item -ItemType Directory -Force (Join-Path $dir 'src') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $dir 'Cargo.toml'), "[package]`nname = `"tail_scratch`"`nversion = `"0.0.0`"`nedition = `"2021`"`n`n[workspace]`n")
+    [IO.File]::WriteAllText((Join-Path $dir 'src\lib.rs'), $lib)
+    Join-Path $dir 'Cargo.toml'
+}
+Check "the tail says NO: a scratch crate that passes cargo test, clippy -D warnings and fmt --check fails each once a failing test, an unused variable and a one-line fn body are planted" {
+    $clean = New-TailCrate 'tail-clean' "pub fn two() -> i32 {`n    2`n}`n`n#[test]`nfn two_is_two() {`n    assert_eq!(two(), 2);`n}`n"
+    $planted = New-TailCrate 'tail-planted' "pub fn two() -> i32 { let unused = 1; 2 }`n`n#[test]`nfn two_is_three() {`n    assert_eq!(two(), 3);`n}`n"
+    $cmds = [ordered]@{ test = 'cargo test -q --manifest-path "{0}"'; clippy = 'cargo clippy -q --manifest-path "{0}" --all-targets -- -D warnings'; fmt = 'cargo fmt --manifest-path "{0}" --check' }
+    $why = @{ test = 'test result: FAILED'; clippy = 'unused variable'; fmt = 'Diff in' }
+    $ok = $true; $seen = @()
+    foreach ($k in $cmds.Keys) {
+        $c = CargoQuiet ($cmds[$k] -f $clean); $p = CargoQuiet ($cmds[$k] -f $planted)
+        $hit = $p.Text.Contains($why[$k])
+        $seen += "$k clean $(if ($c.Ok) { 'passes' } else { 'FAILS' }), planted $(if ($p.Ok) { 'PASSES' } else { 'fails' }) ('$($why[$k])': $hit)"
+        if (-not $c.Ok -or $p.Ok -or -not $hit) { $ok = $false }
+    }
+    Write-Host "      $($seen -join '; ')"
+    $ok
+}
+Check "tests say NO without their inputs: SIMPA_UPSTREAM or SIMPA_SOLVERS_DIR naming a missing folder makes geometry_import_proj or mesh_poly FAIL with the panic naming it, never pass or skip" {
+    $none = Join-Path $work 'no-such-folder'
+    $u = CargoQuiet 'cargo test -q -p simpa-core --test geometry_import_proj' @{ SIMPA_UPSTREAM = $none }
+    $s = CargoQuiet 'cargo test -q -p simpa-core --test mesh_poly' @{ SIMPA_SOLVERS_DIR = $none }
+    $uHit = $u.Text.Contains("$none is not an upstream source tree"); $sHit = $s.Text.Contains("$none\tetgen.exe is missing: this test runs the M1 solver build")
+    $result = { param($t) ([regex]::Matches($t, '(?m)^test result: .*$') | ForEach-Object { $_.Value.Trim() }) -join ' | ' }
+    Write-Host "      upstream missing: $(if ($u.Ok) { 'PASSED' } else { 'failed' }), its panic seen: $uHit; $(& $result $u.Text)"
+    Write-Host "      solvers missing: $(if ($s.Ok) { 'PASSED' } else { 'failed' }), its panic seen: $sHit; $(& $result $s.Text)"
+    -not $u.Ok -and $uHit -and -not $s.Ok -and $sHit
+}
 Check "workspace tests, parallel" { Cargo 'cargo test -q --workspace --exclude app' }
 Check "clippy -D warnings (core and CLI)" { Cargo 'cargo clippy -q -p simpa-core -p simpa --all-targets -- -D warnings' }
 Check "cargo fmt --check (core and CLI)" { Cargo 'cargo fmt -p simpa-core -p simpa --check' }
