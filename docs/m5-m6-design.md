@@ -25,11 +25,25 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
    - **M5(b):** without `-Y`, the hall's `.1.face` has far more rows than 7,860 (upstream's
      mesh has 60,974). The gate instead checks that every row has a marker ≥ 0, that the markers
      cover all 7,860 scene faces, and that no marker's geometry mismatches.
-3. **`.var` and `-Y` together are a validation error:** `mesh_settings_conflict`, project stage.
-   `-Y` disables the facet-area constraint. Measured: M1 ran `-pq5 -A -n -Y` with the `.var`
-   and got 6 tets, against upstream's 2,257 (`m1.ps1:117`). Upstream's GUI turns `-Y` off
-   whenever the constraint is on (`e_core_core_tetconf.h:82-90`). The new rule gets a doc row
-   in `solver-contract.md` Part A and a negative fixture, the same as the other 40.
+3. **Surface-receiver refinement does not work with the pinned TetGen. This is an open
+   architecture decision.**
+   - **Why.** TetGen 1.6.0 at `929a5c8` never reads a facet's area bound when it splits a
+     subface. `check_subface` tests only the radius-edge ratio (`tetgen.cxx:27347-27388`), and
+     every other `areabound` read is commented out or merely copies the value.
+   - **Measured:** the tutorial box meshes to the same 6 tetrahedra with and without its
+     `.var`, and with or without `-Y`. The floor receiver comes out as 2 faces of 30 m².
+     Upstream's 2019 tutorial mesh, made by an older TetGen, has 934 floor faces of at most
+     0.0998 m².
+   - **Consequence:** current upstream builds almost certainly draw unrefined surface-receiver
+     maps too. That is not to be claimed publicly before a bed shows it.
+   - **The two ways out, for Burhan and Michael:**
+     - patch TetGen, which breaks "solvers unchanged" and M1's byte identity
+     - pre-split the receiver faces in our `.poly` and keep TetGen stock
+   - Until one is chosen, M5(a)'s area check is an ignored test, beside a test that pins
+     today's behaviour.
+   - `mesh_settings_conflict` (`.var` together with `-Y`) stays as a project-stage error. It
+     keeps parity with upstream's GUI, which clears `-Y` whenever the constraint is on
+     (`e_core_core_tetconf.h:82-90`), but it prevents no measured failure with this build.
 4. **The `.var` file** follows `var.cpp:54-64`. It has one row per face whose group belongs to
    an *enabled scene* surface receiver, keyed by the face's `.poly` marker (the `.cbin` face
    index), with one global area. It must be byte-identical to
@@ -239,6 +253,7 @@ the doc drift apart. The classifier holds the continuation-line state for
 - **M5(a):** the box is meshed with its own settings, plus these checks:
   - the `.var` is byte-identical to upstream's tutorial-1 `.var`
   - more than 2 tet faces carry markers 0/1, and each such face has area ≤ 0.1 m² × (1 + 1e-4)
+    **(blocked by decision 3)**
 - **M5(b):** as in decision 2.
 - **M5(c):** `simpa mesh <file.poly>` accepts a raw `.poly`, whose facets then act as the scene.
   The survey's `tg_bad` poly gives exit 4, `tetgen_skipped_facets` with markers [8, 9, 12],
