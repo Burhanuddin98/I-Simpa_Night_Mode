@@ -1,0 +1,25 @@
+Opening scene_mesh.poly.
+Delaunizing vertices...
+Delaunay seconds:  0
+Creating surface mesh ...
+Surface mesh seconds:  0
+Recovering boundaries...
+Warning:  A segment and a facet intersect.
+  segment: [9,10] tag(-1).
+  facet triangle: [1,4,6] tag(8)
+Warning:  A segment and a facet intersect.
+  segment: [11,9] tag(-1).
+  facet triangle: [8,1,6] tag(9)
+Warning:  A segment and a facet intersect.
+  segment: [6,1] tag(-1).
+  facet triangle: [9,10,11] tag(12)
+Boundary recovery seconds:  0
+
+!!! 3 input triangles are skipped due to self-intersections.
+Writing scene_mesh_skipped.node.
+Writing scene_mesh_skipped.face
+Writing scene_mesh.1.node.
+Writing scene_mesh.1.ele.
+Writing scene_mesh.1.face.
+Writing scene_mesh.1.edge.
+The input surface mesh contain self-intersections. Program stopped.
