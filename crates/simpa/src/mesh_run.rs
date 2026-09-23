@@ -13,7 +13,7 @@ use simpa_core::process::{CancelToken, Line};
 use simpa_core::run::manager::{self, TETGEN_EXE_NAME, solver_exe_name};
 use simpa_core::run::{
     CancelAfterLaunch, DEFAULT_LOSS_LIMIT, ExeSearch, ExitClass, MeshChoice, RunEvent, RunOptions,
-    RunReport,
+    RunReport, Status,
 };
 use simpa_core::schema::{MeshSettings, SolverKind};
 use simpa_core::{geometry, validate};
@@ -366,9 +366,14 @@ fn print_report(r: &RunReport, json: bool) -> ExitCode {
         print!("{}", m.to_json());
     } else {
         let codes = m.verdict.codes();
+        let status = match m.verdict.status {
+            Status::Ok => "OK",
+            Status::Fail => "FAIL",
+            Status::Crash => "CRASH",
+            Status::Cancelled => "CANCELLED",
+        };
         println!(
-            "{:?} {} exit {}: {}",
-            m.verdict.status,
+            "{status} {} exit {}: {}",
             if codes.is_empty() {
                 "-".to_string()
             } else {
