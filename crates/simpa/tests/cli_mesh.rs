@@ -70,6 +70,31 @@ fn the_box_meshes_and_verifies() {
     let wrong = verify(&out, &["--room-id", "1"]);
     assert_eq!(wrong.code, 4, "{wrong:#?}");
     assert!(strings(&json(&wrong)["codes"]).contains(&"unknown_volume_ids".to_string()));
+
+    // --from-tetgen builds the same .mbin from that TetGen output, with no TetGen run.
+    let again = scratch("mesh-box-external");
+    let out_arg = out.display().to_string();
+    let e = mesh(
+        &fixture("rooms/tutorial1_box.simpa"),
+        &again,
+        &["--from-tetgen", &out_arg],
+    );
+    assert_eq!(e.code, 0, "{e:#?}");
+    let em = json(&e);
+    assert_eq!(
+        (em["status"].as_str(), em["source"].as_str()),
+        (Some("OK"), Some("external"))
+    );
+    assert_eq!(em["files"]["mbin"], m["files"]["mbin"]);
+    // And from a folder with no TetGen output it fails, naming what is missing.
+    let empty = scratch("mesh-box-no-tetgen");
+    let f = mesh(
+        &fixture("rooms/tutorial1_box.simpa"),
+        &again,
+        &["--from-tetgen", &empty.display().to_string()],
+    );
+    assert_eq!(f.code, 4, "{f:#?}");
+    assert!(strings(&json(&f)["codes"]).contains(&"tetgen_output_missing".to_string()));
 }
 
 #[test]
