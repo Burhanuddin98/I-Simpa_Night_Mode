@@ -17,14 +17,17 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
      (`coreinitialisation.cpp:158-173`).
    - **M5(e) reads "the first fitting zone, solver id 2"**, not "id 1".
 2. **The mesher takes its flags from the project's `MeshSettings`.** The flags are
-   `-pq<r> [-a<v>] -A -n [-Y]`, with numbers formatted as upstream's `Convertor::ToString` does
-   (precision 15, classic locale; `sppsString.cpp:91-98`).
+   `[-a<v>] -pq<r> -A -n [-Y]`, in upstream's order (`projet_maillage.cpp:167-170`).
+   - Numbers are narrowed to f32 first, as upstream's float settings are (`projet.h:98-99`),
+     and then printed like upstream's `Convertor::ToString` (precision 15, classic locale;
+     `sppsString.cpp:91-98`). So a q of 1.1 prints as `-pq1.10000002384186`.
    - The room fixtures carry `q 2, preserve_boundary false`, and the box also has a `.var` at
      0.1 m². That gives `-pq2 -A -n`, the same flags as upstream's tutorial_2 mesh.
    - The default `MeshSettings` gives upstream's GUI default, `-pq5 -A -n -Y`.
-   - **M5(b):** without `-Y`, the hall's `.1.face` has far more rows than 7,860 (upstream's
-     mesh has 60,974). The gate instead checks that every row has a marker ≥ 0, that the markers
-     cover all 7,860 scene faces, and that no marker's geometry mismatches.
+   - **M5(b):** without `-Y`, the hall's `.1.face` has far more rows than 7,860. Measured with
+     the pinned TetGen: 36,716 rows; upstream's older build gave 60,974. The gate instead
+     checks three things: every row has a marker ≥ 0, the markers cover all 7,860 scene faces,
+     and no marker's geometry mismatches.
 3. **Surface-receiver refinement does not work with the pinned TetGen. This is an open
    architecture decision.**
    - **Why.** TetGen 1.6.0 at `929a5c8` never reads a facet's area bound when it splits a
@@ -94,6 +97,18 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
 10. **Particle totals follow the contract, not the gate text.** Per band, total ≥ nbparticules
     × sources, and equal except for energetic-mode transmission copies (`solver-contract.md:354-359`).
     The gate's "× bands" is wrong: each band is its own column.
+11. **Three calls about what `run-folder` and the run verdict refuse:**
+    - **A source spectrum shorter than the computed band set is `band_set_mismatch`,** found
+      before launch by a check on the config only. The validator's code already names exactly
+      this case (`solver-contract.md:55`, VERIFIED `run_oneband`). No output signal can catch it:
+      the run exits 0 with every file present.
+    - **A TCR point receiver with `-inf` in its `Direct` column fails with `nonfinite_result`.**
+      That is how a source outside the room shows. A receiver truly hidden from every source
+      looks identical and also fails. This is open for Burhan and Michael, with a pre-launch
+      source-inside check as the alternative.
+    - **Core `run::LineClass` has PROGRESS; the Tauri shell's `LineClass` does not.** The shell
+      is not changed in M5/M6, so the M9 bindings gate stays green. M11 maps PROGRESS to the
+      progress bar at its own boundary.
 
 ## Exit codes (CLI)
 
@@ -261,8 +276,11 @@ the doc drift apart. The classifier holds the continuation-line state for
   `tetgen_skipped_facets` (535) and `neigh_missing`.
 - **M5(d):** as in decision 7.
 - **M5(e):** as in decision 1.
-- **M5(g):** also asserts that TetGen had not finished: no `.1.ele` was written, and the elapsed
-  time is below that of an uncancelled mesh of the same room.
+- **M5(g):** also asserts that the cancel hit a running TetGen. The manifest must show
+  `tetgen.cancelled` true and `tetgen.exit_code` null. Status CANCELLED alone does not prove it:
+  the pipeline also reports CANCELLED when a mesher ignores the cancel. No `.1.ele` may have
+  been written. Run it on a release build, since TetGen starts 36-45 ms into the call in a
+  debug build.
 - **M6(a):** uses a derived fixture, `rooms/tutorial1_box_seeded.simpa`: seed 1 and 10,000
   particles, M1's reference configuration. Totals as in decision 10.
 - **M6(c):** uses the derived fixture `rooms/elmia_loss_gate.simpa`: seed 1, bands 125-4,000 Hz
