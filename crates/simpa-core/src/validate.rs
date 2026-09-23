@@ -6,7 +6,7 @@
 //! proceeds. No rule turns a solver failure into a warning.
 //!
 //! There are two stages, as on the contract page:
-//! - [`validate`] and [`validate_with`] check a typed [`Project`] (33 `project` rules), with its
+//! - [`validate`] and [`validate_with`] check a typed [`Project`] (34 `project` rules), with its
 //!   geometry, its directivity files and, when one is given, the stamp of its tetrahedral mesh.
 //! - [`validate_export`] checks the exact files the exporter wrote to a run folder
 //!   (`config.xml`, the `.cbin` and the `.mbin`) immediately before launch (7 `export` rules).
@@ -170,6 +170,8 @@ pub mod codes {
     // Project integrity.
     pub const VARIANT_REFERENCE_INVALID: &str = "variant_reference_invalid";
     pub const MESH_OUT_OF_DATE: &str = "mesh_out_of_date";
+    // Meshing.
+    pub const MESH_SETTINGS_CONFLICT: &str = "mesh_settings_conflict";
     // Export checks.
     pub const WORKING_DIRECTORY_INVALID: &str = "working_directory_invalid";
     pub const OUTPUT_PATH_TOO_LONG: &str = "output_path_too_long";
@@ -209,9 +211,9 @@ const fn rule(code: &'static str, stage: Stage, severity: Severity) -> Rule {
 use Severity::{Error as E, Warning as W};
 use Stage::{Export as X, Project as P};
 
-/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 33 project rules and 7
-/// export rules, 37 errors and 3 warnings.
-pub const RULES: [Rule; 40] = [
+/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 34 project rules and 7
+/// export rules, 38 errors and 3 warnings.
+pub const RULES: [Rule; 41] = [
     rule(codes::BAND_SET_EMPTY, P, E),
     rule(codes::BAND_DUPLICATE, P, E),
     rule(codes::BAND_FREQUENCY_NOT_INTEGER, P, E),
@@ -245,6 +247,7 @@ pub const RULES: [Rule; 40] = [
     rule(codes::FITTING_PARAMETERS_INVALID, P, E),
     rule(codes::VARIANT_REFERENCE_INVALID, P, E),
     rule(codes::MESH_OUT_OF_DATE, P, E),
+    rule(codes::MESH_SETTINGS_CONFLICT, P, E),
     rule(codes::WORKING_DIRECTORY_INVALID, X, E),
     rule(codes::OUTPUT_PATH_TOO_LONG, X, E),
     rule(codes::CONFIG_ATTRIBUTE_MISSING, X, E),
@@ -460,14 +463,14 @@ mod tests {
 
     #[test]
     fn rule_table_matches_the_contract_counts() {
-        assert_eq!(RULES.len(), 40);
+        assert_eq!(RULES.len(), 41);
         let project = RULES.iter().filter(|r| r.stage == Stage::Project).count();
         let warnings = RULES
             .iter()
             .filter(|r| r.severity == Severity::Warning)
             .count();
-        assert_eq!((project, 40 - project), (33, 7));
-        assert_eq!((40 - warnings, warnings), (37, 3));
+        assert_eq!((project, 41 - project), (34, 7));
+        assert_eq!((41 - warnings, warnings), (38, 3));
         let mut all: Vec<&str> = RULES.iter().map(|r| r.code).collect();
         all.extend(STRUCTURAL_CODES);
         let n = all.len();

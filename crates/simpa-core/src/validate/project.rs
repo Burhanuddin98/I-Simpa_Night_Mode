@@ -28,6 +28,7 @@ pub(super) fn check(p: &Project, ctx: &Context, out: &mut Vec<Issue>) {
     surface_receivers(p, out);
     fittings(p, out);
     mesh(p, ctx, out);
+    mesh_settings(p, out);
 }
 
 /// Finite in `f64` and still finite once rounded to the solver's `f32`.
@@ -827,5 +828,25 @@ fn mesh(p: &Project, ctx: &Context, out: &mut Vec<Issue>) {
                 ),
             ));
         }
+    }
+}
+
+/// `mesh_settings_conflict`: a facet-area constraint (the `.var`) and `-Y` together. The `.var`
+/// asks TetGen to split the receiver faces and `-Y` forbids splitting any boundary facet
+/// (`docs/m5-m6-design.md`, decision 3; `docs/formats/var.md`).
+fn mesh_settings(p: &Project, out: &mut Vec<Issue>) {
+    let m = &p.solvers.meshing;
+    if crate::mesh::settings_conflict(m)
+        && let Some(area) = m.surface_receiver_max_area_m2
+    {
+        out.push(issue(
+            MESH_SETTINGS_CONFLICT,
+            "/solvers/meshing/preserve_boundary",
+            format!(
+                "the mesh settings ask TetGen to refine surface-receiver faces to at most {area} \
+                 m² (the .var) and keep -Y (preserve_boundary) on, which forbids splitting any \
+                 boundary face. Upstream's GUI turns -Y off whenever the constraint is on"
+            ),
+        ));
     }
 }

@@ -28,7 +28,8 @@ use super::real::{F64, Vec3};
 /// - time step 0.5 to 20 ms, duration 0.1 to 3 s (at most 6,000 steps), extinction exponent 1
 ///   to 10, random seed within a C `int`, at least one band computed per solver;
 /// - names ASCII, under 50 bytes and unique across the project;
-/// - pinned material solver ids unique; a surface group in at most one scene receiver.
+/// - pinned material solver ids unique; a surface group in at most one scene receiver;
+/// - no surface-receiver area constraint together with `-Y` (`preserve_boundary`).
 pub fn generate(seed: u64) -> Project {
     let mut r = Rng::new(seed);
     let bands = random_bands(&mut r);
@@ -271,11 +272,20 @@ pub fn generate(seed: u64) -> Project {
             air_absorption: r.bool(),
             bands_computed: r.flags(n),
         },
-        meshing: MeshSettings {
-            min_radius_edge_ratio: F64::new(r.value(1.1, 5.0)),
-            max_volume_m3: r.bool().then(|| F64::new(r.value(0.5, 100.0))),
-            surface_receiver_max_area_m2: r.bool().then(|| F64::new(r.value(0.1, 5.0))),
-            preserve_boundary: r.bool(),
+        meshing: {
+            // The same draws in the same order as before; -Y is dropped where a facet-area
+            // constraint is set, since -Y forbids the splits it asks for
+            // (`mesh_settings_conflict`).
+            let min_radius_edge_ratio = F64::new(r.value(1.1, 5.0));
+            let max_volume_m3 = r.bool().then(|| F64::new(r.value(0.5, 100.0)));
+            let surface_receiver_max_area_m2 = r.bool().then(|| F64::new(r.value(0.1, 5.0)));
+            let preserve_boundary = r.bool() && surface_receiver_max_area_m2.is_none();
+            MeshSettings {
+                min_radius_edge_ratio,
+                max_volume_m3,
+                surface_receiver_max_area_m2,
+                preserve_boundary,
+            }
         },
     };
 

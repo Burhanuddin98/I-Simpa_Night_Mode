@@ -128,6 +128,12 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 | `variant_reference_invalid` | project | error | The active variant overrides only surface groups that exist, and only with materials that exist | A dangling override leaves the group without a material in the exported config, which is `material_unassigned`'s failure: exit -1 or `0xC0000005` |
 | `mesh_out_of_date` | project | error | The tetrahedral mesh was built from the exact scene geometry being exported: the hashes match | A `.mbin` has no magic number, no version and no link to its `.cbin` (`docs/formats/mbin.md`). Face markers index the `.cbin`'s face array with no bounds check (`coreTypes.cpp:223-225`), so a stale mesh reads the wrong faces or past the end (inferred). This is a trap in `docs/upstream-laydown.md` |
 
+#### Meshing
+
+| Code | Stage | Severity | Rule | What it prevents |
+|---|---|---|---|---|
+| `mesh_settings_conflict` | project | error | A surface-receiver area constraint (`surface_receiver_max_area_m2`, the `.var`) is not combined with `-Y` (`preserve_boundary`) | The two ask for opposite things. The `.var` asks TetGen to split the receiver's facets down to an area; `-Y` (`nobisect`) forbids splitting any boundary facet, since the whole facet-refinement block is under `if (!b->nobisect)` (`tetgen.cxx:29377-29551`). Upstream's GUI clears `-Y` whenever the constraint is turned on (`e_core_core_tetconf.h:82-90`). **The pinned TetGen refines nothing for a `.var` either way:** 1.6.0 loads it and records each facet's bound (`tetgen.cxx:2446-2449, 25066-25077`) but never reads a bound when it decides a split (`check_subface`, `:27347-27388`). Measured 2026-09-23: tutorial 1's box with upstream's own `.var` gives the same 6-tetrahedron mesh with `-pq2 -A -n` as with no `.var`, where upstream's 2019 mesh has 2,257 (`docs/formats/var.md`). So the rule keeps parity with upstream's GUI and with a TetGen that honours the bound; with the pinned build it prevents no measured failure. The mesher refuses the same combination with the same code (`docs/formats/mesh-manifest.md`) |
+
 #### Export checks
 
 | Code | Stage | Severity | Rule | What it prevents |
@@ -140,7 +146,7 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 | `solver_id_mapping_invalid` | export | error | Solver ids are unique within materials, within surface receivers and within fittings. Every id used by a face (idMat, idRs, idEn) or by a tetrahedron (idVolume ≠ 0) is declared | Lookups return the first match, so a duplicate id silently hides the second item (`base_core_configuration.cpp:374-391`). An undeclared idMat exits -1 or crashes (`material_unassigned`). An undeclared idRs indexes a vector at -1 (`coreinitialisation.cpp:291-304, 353-360`). An undeclared fitting id drops the fitting silently (`coreinitialisation.cpp:151-176, 437-445`) (inferred) |
 | `fitting_id_collides_with_room_region` | export | error | No fitting's solver id equals the TetGen region attribute of the room's own tetrahedra | Every tetrahedron whose idVolume is not 0 gets the fitting with that id (`coreinitialisation.cpp:151-176`). TetGen `-A` gave all 2,257 of tutorial 1's room tetrahedra idVolume 1 (read from `tests/fixtures/upstream/tutorial1/spps/tetramesh.mbin` on 2026-09-23), so a fitting with id 1 would fill the whole room (inferred) |
 
-**Count: 40 rules.** 33 are `project` rules and 7 are `export` rules; 37 are errors and 3 are
+**Count: 41 rules.** 34 are `project` rules and 7 are `export` rules; 38 are errors and 3 are
 warnings. Every item in `plan.components[core::validate]` maps to a rule:
 
 | Plan item | Rule(s) |

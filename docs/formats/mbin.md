@@ -70,9 +70,37 @@ Face `i` is the face opposite vertex `i`, and its neighbour is TetGen's neighbou
 winding sets the face normal the solver computes (`coreTypes.cpp:233`), which it compares with
 the scene face's normal when attaching surface receivers (`coreinitialisation.cpp:292`).
 
-Measured on all four fixtures (18,488 faces): every face follows the table exactly (same
-order, not only the same set), neighbours are mutual, a face has a marker `≥ 0` exactly when its
-neighbour is `-2`, and every tetrahedron has `(A−D)·((B−D)×(C−D)) < 0`.
+### Invariants
+
+The invariants of a usable `.mbin` (`docs/m5-m6-design.md`, decision 6). The meshes `core::mesh`
+builds (`crates/simpa-core/src/mesh/build.rs`) keep them, and `mesh::verify` checks them:
+- every face follows the table above, and face `i`'s neighbour is TetGen's neighbour `i`;
+- a face with neighbour `-2` has a marker `≥ 0`: the hull is made of scene faces;
+- a face with a marker `≥ 0` and a neighbour `≥ 0` lies on an internal facet, and the face across
+  it, in that neighbour, carries the same marker. Upstream marks **both** sides of such a facet:
+  each `.face` row goes to every tetrahedron face holding its three vertices, in any order
+  (`Objet3D_maillage.cpp:369-381`);
+- neighbours are mutual;
+- every tetrahedron has `(A−D)·((B−D)×(C−D)) < 0`.
+
+Two conventions of the meshes `core::mesh` builds depart from upstream's own:
+- **`idVolume`** is 0 for the room and a fitting zone's solver id (2 and up) inside it
+  (decision 1). Upstream's meshes carry TetGen's attribute unchanged, so their room is 1, or the
+  largest fitting id plus 1 (`tetgen.cxx:24223-24306`).
+- **Box fitting zones** are TetGen facets with markers past the scene's faces; the builder writes
+  those faces with marker -1 (decision 5), so they are plain tetrahedron-to-tetrahedron
+  transitions and are not internal facets in the sense above.
+
+The previous statement here, "a face has a marker `≥ 0` exactly when its neighbour is `-2`", was
+measured on the four fixtures (18,488 faces), none of which has an internal facet. It holds only
+for such meshes: a mesh with a `Surfaces` fitting zone, or any scene face with room on both
+sides, has marked faces with a neighbour. The rest was measured there too: every face follows
+the table exactly (same order, not only the same set), neighbours are mutual, and every
+tetrahedron has the negative orientation.
+
+Measured on meshes `core::mesh` built on 2026-09-23 (`crates/simpa-core/tests/mesh_*.rs`): the
+box (6 tetrahedra), the box with a box fitting zone, the corrected hall (123,718 tetrahedra) and
+the survey's cube all keep every invariant.
 
 None of this is checked by upstream's reader or by `read`: they are properties of the files, not
 of the format. `generate` produces meshes that follow all of them.
