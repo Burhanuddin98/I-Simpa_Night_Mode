@@ -53,6 +53,10 @@ def main() -> None:
     put(TCR_RUN + "config.xml", OUT / "tcr/config.xml", tcr_config)
     put("instance2/temp/scene_mesh.poly", OUT / "tetgen/scene_mesh.poly")
     put("instance2/temp/scene_mesh.var", OUT / "tetgen/scene_mesh.var")
+    # TetGen's output for that .poly, from which the GUI built tetramesh.mbin: the .mbin
+    # builder's byte-identity test (crates/simpa-core/tests/mesh_mbin_parity.rs) reads them.
+    for ext in ("node", "ele", "face", "neigh", "edge"):
+        put(f"instance2/temp/scene_mesh.1.{ext}", OUT / f"tetgen/scene_mesh.1.{ext}")
 
     proj_sha = hashlib.sha256(PROJ.read_bytes()).hexdigest()
     lines = [
@@ -67,7 +71,8 @@ def main() -> None:
         "A seed makes SPPS run single-threaded.",
         f"- SPPS `nbparticules` 150000 becomes {PARTICLES}, so the comparison runs in seconds.",
         "",
-        "Meshes and the TetGen input are unmodified. These are format and equivalence fixtures:",
+        "Meshes, the TetGen input and TetGen's output are unmodified. These are format and "
+        "equivalence fixtures:",
         "the acoustic values they produce are not evidence of anything.",
         "",
         "| fixture | zip member | sha256 |",
