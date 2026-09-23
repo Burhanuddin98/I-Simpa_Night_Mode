@@ -1,7 +1,5 @@
 mod common;
 
-use std::path::{Path, PathBuf};
-
 use common::fixture;
 use simpa_core::formats::FormatError;
 use simpa_core::formats::gabe::{self, ColumnData, Gabe};
@@ -429,30 +427,11 @@ fn strings_and_labels_stop_at_nul_or_their_field() {
     assert_eq!(s[1], b"ab");
 }
 
-/// An oracle build that has a `gabe` dumper, if one exists.
-fn oracle_exe() -> Option<PathBuf> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/oracle");
-    ["gabe", "all"]
-        .iter()
-        .map(|d| root.join(d).join("oracle.exe"))
-        .find(|p| {
-            std::process::Command::new(p)
-                .arg("list")
-                .output()
-                .is_ok_and(|o| {
-                    String::from_utf8_lossy(&o.stdout)
-                        .lines()
-                        .any(|l| l.trim() == "gabe")
-                })
-        })
-}
-
+/// Upstream's reader through the oracle, built on demand (`common/paths.rs`): an oracle that
+/// cannot be built fails this test, never skips it.
 #[test]
-fn oracle_agrees_on_every_fixture_when_built() {
-    let Some(exe) = oracle_exe() else {
-        eprintln!("oracle not built; skipping cross-check");
-        return;
-    };
+fn oracle_agrees_on_every_fixture() {
+    let exe = common::paths::oracle("gabe");
     for rel in FIXTURES {
         let path = fixture(rel);
         let out = std::process::Command::new(&exe)

@@ -2,6 +2,10 @@
 //! (oracle/dump_selftest.cpp prints the same lines).
 use simpa_core::formats::{f32_hex, f64_hex, str_token};
 
+#[allow(dead_code)]
+#[path = "common/paths.rs"]
+mod paths;
+
 pub fn selftest_dump() -> String {
     format!(
         "selftest 1\nf32 {} {} {} {}\nf64 {} {}\nstr {} {}\n",
@@ -24,14 +28,11 @@ fn spellings_are_fixed() {
     );
 }
 
+/// The oracle's own spelling of the same values (`oracle/dump_selftest.cpp`), built on demand
+/// (`common/paths.rs`): an oracle that cannot be built fails this test, never skips it.
 #[test]
-fn oracle_agrees_when_built() {
-    let exe =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/oracle/all/oracle.exe");
-    if !exe.exists() {
-        eprintln!("oracle not built; skipping cross-check");
-        return;
-    }
+fn oracle_agrees() {
+    let exe = paths::oracle("selftest");
     let out = std::process::Command::new(exe)
         .args(["dump", "selftest", "-"])
         .output()

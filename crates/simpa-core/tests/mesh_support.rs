@@ -1,51 +1,24 @@
 //! Shared helpers for the `mesh_*` tests, included by each with `#[path]`. Built on its own it is
 //! an empty test target.
 //!
-//! - [`tetgen_exe`] finds the M1 build of `tetgen.exe`: `$SIMPA_SOLVERS_DIR`, or
-//!   `<repo>/target/solvers/bin`. It panics when neither has one: these tests never skip.
+//! - [`tetgen_exe`] finds the M1 build of `tetgen.exe` through `common/paths.rs`:
+//!   `$SIMPA_SOLVERS_DIR`, or `<repo>/target/solvers/bin`. It panics when neither has one: these
+//!   tests never skip.
 //! - [`scratch`] gives each test a fresh folder under cargo's test scratch space.
 //! - [`invariants`] checks a `.mbin` against `docs/m5-m6-design.md` decision 6 on its own, so the
 //!   mesher's tests do not lean on `mesh::verify`, which is built separately.
 #![allow(dead_code)]
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use simpa_core::formats::mbin;
 use simpa_core::schema::{self, Project};
 
-/// The repository root.
-pub fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .expect("crates/simpa-core sits two levels below the root")
-        .to_path_buf()
-}
-
-pub fn fixture(rel: &str) -> PathBuf {
-    repo_root().join("tests/fixtures").join(rel)
-}
-
-/// The folder holding the M1 solver build.
-pub fn solvers_dir() -> PathBuf {
-    match std::env::var_os("SIMPA_SOLVERS_DIR") {
-        Some(d) => PathBuf::from(d),
-        None => repo_root().join("target/solvers/bin"),
-    }
-}
-
-/// `tetgen.exe` from the M1 build. Panics, naming where it looked, when it is absent.
-pub fn tetgen_exe() -> PathBuf {
-    let exe = solvers_dir().join("tetgen.exe");
-    assert!(
-        exe.is_file(),
-        "{} is missing: the mesh tests run the M1 solver build. Build it with \
-         solvers/build.ps1, or point SIMPA_SOLVERS_DIR at a folder holding tetgen.exe",
-        exe.display()
-    );
-    exe
-}
+#[path = "common/paths.rs"]
+mod paths;
+#[allow(unused_imports)]
+pub use paths::{fixture, repo_root, solvers_dir, tetgen_exe};
 
 static N: AtomicUsize = AtomicUsize::new(0);
 

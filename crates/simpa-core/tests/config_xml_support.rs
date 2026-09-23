@@ -5,7 +5,8 @@
 //!   solver reads, its type and its Writer obligation.
 //! - [`solver_view`] reads a `config.xml` into what the solvers would hold: each element instance
 //!   keyed the way the solvers find it, each documented attribute parsed as the solver parses it.
-//! - [`run_solver`] runs one of our M1 solver builds in a run folder.
+//! - [`run_solver`] runs one of our M1 solver builds in a run folder, found through
+//!   `common/paths.rs` ([`solver_exe`]: `$SIMPA_SOLVERS_DIR`, else `<repo>/target/solvers/bin`).
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
@@ -15,18 +16,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use simpa_core::schema::{self, Project};
 
-/// The repository root: an absolute path with no `..` in it.
-pub fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .expect("crates/simpa-core sits two levels below the root")
-        .to_path_buf()
-}
-
-pub fn repo_file(rel: &str) -> PathBuf {
-    repo_root().join(rel)
-}
+#[path = "common/paths.rs"]
+mod paths;
+#[allow(unused_imports)]
+pub use paths::{repo_file, repo_root, solver_exe, upstream_file};
 
 pub fn read_text(rel: &str) -> String {
     let p = repo_file(rel);
@@ -587,16 +580,6 @@ impl Run {
     pub fn has_line(&self, prefix: &str) -> bool {
         self.stdout.lines().any(|l| l.starts_with(prefix))
     }
-}
-
-pub fn solver_exe(name: &str) -> PathBuf {
-    let p = repo_file(&format!("target/solvers/bin/{name}"));
-    assert!(
-        p.is_file(),
-        "{} is missing: these tests run the M1 solver build (tools/gates/m1.ps1)",
-        p.display()
-    );
-    p
 }
 
 /// Runs `exe config.xml` with the run folder as the working directory, the way upstream's GUI and

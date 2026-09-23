@@ -1,7 +1,8 @@
 //! M3 gate (c), the solver as oracle: configurations written by `core::config_xml` are run by
-//! our M1 builds of SPPS and TCR (`target/solvers/bin`), each in a fresh folder under
-//! `target/test-runs/config_xml/`, with the folder as the working directory and `config.xml` as
-//! the argument. The folders are kept for inspection, with `_stdout.txt` and `_stderr.txt`.
+//! our M1 builds of SPPS and TCR (`$SIMPA_SOLVERS_DIR`, else `target/solvers/bin`), each in a
+//! fresh folder under `target/test-runs/config_xml/`, with the folder as the working directory
+//! and `config.xml` as the argument. The folders are kept for inspection, with `_stdout.txt` and
+//! `_stderr.txt`.
 //!
 //! These tests need the solver build, so they are Grace-local, not CI-portable.
 
@@ -13,7 +14,9 @@ use std::path::Path;
 use simpa_core::config_xml::{self, SolverKind, names, scene_mesh};
 use simpa_core::formats::{cbin, csbin, gabe};
 use simpa_core::schema::Project;
-use support::{Run, fresh_run_dir, load_project, outputs, repo_file, run_solver, solver_exe};
+use support::{
+    Run, fresh_run_dir, load_project, outputs, repo_file, run_solver, solver_exe, upstream_file,
+};
 
 fn exe(solver: SolverKind) -> std::path::PathBuf {
     solver_exe(match solver {
@@ -49,7 +52,7 @@ fn prepare(
             // The rich cube's balloon is upstream's own sample file.
             assert!(f.project_path.ends_with("speaker-test3.txt"));
             std::fs::copy(
-                repo_file("target/solvers/src-929a5c8/src/spps/tests/speaker-test3.txt"),
+                upstream_file("src/spps/tests/speaker-test3.txt"),
                 d.join(&f.run_name),
             )
             .unwrap();

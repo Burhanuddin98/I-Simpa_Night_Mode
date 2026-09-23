@@ -21,11 +21,10 @@ fn upstream() -> VolumeIds {
     }
 }
 
-fn fixture(rel: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures")
-        .join(rel)
-}
+#[allow(dead_code)]
+#[path = "common/paths.rs"]
+mod paths;
+use paths::fixture;
 
 fn load(mbin_rel: &str, cbin_rel: &str) -> (Mesh, Model) {
     let mesh = mbin::read_file(&fixture(mbin_rel)).unwrap_or_else(|e| panic!("{mbin_rel}: {e}"));

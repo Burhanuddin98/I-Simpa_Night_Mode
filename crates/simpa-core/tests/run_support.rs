@@ -1,8 +1,8 @@
 //! Shared helpers for the `run_*` tests, included by each with `#[path]`. Built on its own it is
 //! an empty test target.
 //!
-//! - [`solver_exe`] finds an M1 solver build: `$SIMPA_SOLVERS_DIR`, else
-//!   `<repo>/target/solvers/bin`. A missing executable panics; these tests never skip.
+//! - [`solver_exe`] finds an M1 solver build through `common/paths.rs`: `$SIMPA_SOLVERS_DIR`,
+//!   else `<repo>/target/solvers/bin`. A missing executable panics; these tests never skip.
 //! - [`stage_tutorial1`] copies upstream's tutorial-1 run folder with `__RUNDIR__` filled in.
 //! - [`good_outputs`] builds, in memory, the outputs of a run that did everything its
 //!   expectation asks, which each verdict test then breaks in exactly one way.
@@ -19,37 +19,13 @@ use simpa_core::process::{Line, Stream};
 use simpa_core::run::{BandStats, Expectation, Outputs, ParticleStats, SurfaceValues};
 use simpa_core::schema::SolverKind;
 
-/// The repository root: an absolute path with no `..` in it.
-pub fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .expect("crates/simpa-core sits two levels below the root")
-        .to_path_buf()
-}
-
-/// A file under `tests/fixtures/`.
-pub fn fixture(rel: &str) -> PathBuf {
-    repo_root().join("tests/fixtures").join(rel)
-}
+#[path = "common/paths.rs"]
+mod paths;
+#[allow(unused_imports)]
+pub use paths::{fixture, repo_root, solver_exe};
 
 pub fn read_text(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
-}
-
-/// An M1 solver build: `$SIMPA_SOLVERS_DIR/<name>`, else `<repo>/target/solvers/bin/<name>`.
-pub fn solver_exe(name: &str) -> PathBuf {
-    let dir = std::env::var_os("SIMPA_SOLVERS_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo_root().join("target/solvers/bin"));
-    let p = dir.join(name);
-    assert!(
-        p.is_file(),
-        "{} is missing: set SIMPA_SOLVERS_DIR to the folder of the M1 solver build \
-         (tools/gates/m1.ps1), or build it into <repo>/target/solvers/bin",
-        p.display()
-    );
-    p
 }
 
 pub fn exe_for(solver: SolverKind) -> PathBuf {

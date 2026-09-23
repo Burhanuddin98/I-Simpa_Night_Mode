@@ -3,10 +3,7 @@
 //! File names are matched ignoring ASCII case, as Windows opens them.
 
 use std::collections::BTreeMap;
-use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-
-use sha2::{Digest, Sha256};
 
 use super::{DirReport, VolumeIds, verify_mesh};
 use crate::formats::{self, FormatError, cbin, mbin, tetgen};
@@ -106,14 +103,6 @@ impl Listing {
     }
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(64);
-    for b in Sha256::digest(bytes) {
-        let _ = write!(s, "{b:02x}");
-    }
-    s
-}
-
 /// True when every record `manifest` keeps of the `.mbin` agrees with the folder, whose `.mbin`
 /// hashes to `mbin_sha256` (`None`: the folder has no `.mbin`). Two records are read, and nothing
 /// else in the manifest:
@@ -181,7 +170,7 @@ pub(super) fn verify(dir: &Path, ids: &VolumeIds) -> Result<DirReport, FormatErr
     };
     if let Some(path) = &mbin_path {
         let bytes = formats::read_file(path)?;
-        report.mbin_sha256 = Some(sha256_hex(&bytes));
+        report.mbin_sha256 = Some(crate::run::manifest::sha256_bytes(&bytes));
         let mesh = mbin::read(&bytes)?;
         match &cbin_path {
             Some(cpath) => {

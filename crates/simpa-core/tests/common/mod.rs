@@ -1,4 +1,5 @@
-//! Shared helpers for the format tests.
+//! Shared helpers for the format tests. [`paths`] finds the solver build, the upstream sources
+//! and the oracle for every test target.
 //!
 //! Fuzz tests install [`Tracking`] as the global allocator of their own test binary and measure
 //! the peak between [`reset_peak`] and [`peak_since_reset`]. The counters are per thread, so the
@@ -12,7 +13,6 @@
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
-use std::path::PathBuf;
 
 pub struct Tracking;
 
@@ -79,9 +79,7 @@ pub fn budget(len: usize) -> usize {
     2 * len + 64 * 1024
 }
 
+pub mod paths;
+
 /// Path of a file under `tests/fixtures/`.
-pub fn fixture(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures")
-        .join(rel)
-}
+pub use paths::fixture;

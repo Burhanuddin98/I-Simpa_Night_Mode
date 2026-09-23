@@ -3,7 +3,6 @@ mod common;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
 
 use simpa_core::formats::FormatError;
 use simpa_core::formats::poly::{self, Face, Model, Region};
@@ -734,60 +733,11 @@ fn comment_lines_are_the_ones_both_readers_skip() {
 // ---------------------------------------------------------------------------------------------
 // Upstream's own reader (`oracle/dump_poly.cpp` over `CPoly::ImportPOLY`).
 
-/// The oracle, built into `target/oracle/poly` by `oracle/build.ps1 -Only poly` when it is
-/// missing or older than its sources. A failed build fails every test that needs it, so these
-/// checks never pass without running.
-fn oracle() -> &'static Path {
-    static ORACLE: OnceLock<Result<PathBuf, String>> = OnceLock::new();
-    match ORACLE.get_or_init(build_oracle) {
-        Ok(exe) => exe,
-        Err(e) => panic!("{e}"),
-    }
-}
-
-fn build_oracle() -> Result<PathBuf, String> {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let exe = repo.join("target/oracle/poly/oracle.exe");
-    let modified = |p: &Path| std::fs::metadata(p).and_then(|m| m.modified()).ok();
-    let sources = [
-        "oracle/dump_poly.cpp",
-        "oracle/common.hpp",
-        "oracle/main.cpp",
-        "oracle/std_tools_nob.cpp",
-        "oracle/build.ps1",
-    ];
-    let stale = modified(&exe).is_none_or(|built| {
-        sources
-            .iter()
-            .any(|s| modified(&repo.join(s)).is_none_or(|t| t > built))
-    });
-    let lists_poly = || {
-        Command::new(&exe).arg("list").output().is_ok_and(|o| {
-            String::from_utf8_lossy(&o.stdout)
-                .lines()
-                .any(|l| l.trim() == "poly")
-        })
-    };
-    if stale || !lists_poly() {
-        let out = Command::new("powershell")
-            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-            .arg(repo.join("oracle/build.ps1"))
-            .args(["-Only", "poly"])
-            .output()
-            .map_err(|e| format!("cannot run oracle/build.ps1: {e}"))?;
-        if !out.status.success() {
-            return Err(format!(
-                "oracle/build.ps1 -Only poly failed ({}):\n{}{}",
-                out.status,
-                String::from_utf8_lossy(&out.stdout),
-                String::from_utf8_lossy(&out.stderr)
-            ));
-        }
-    }
-    if !lists_poly() {
-        return Err(format!("{} does not list poly", exe.display()));
-    }
-    Ok(exe)
+/// The oracle, built into `target/oracle/poly` on demand by `common/paths.rs` when it is missing
+/// or older than its sources. A failed build fails every test that needs it, so these checks
+/// never pass without running.
+fn oracle() -> PathBuf {
+    common::paths::oracle("poly")
 }
 
 /// The oracle's dump of `path`, line ends normalised.

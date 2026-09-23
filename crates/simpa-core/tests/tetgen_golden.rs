@@ -194,28 +194,11 @@ fn skipped_face_parses_as_535_skipped_facets() {
     assert!(f.faces.iter().flatten().all(|&c| c >= 1 && c <= count));
 }
 
-/// Runs the oracle (TetGen's own loaders) over every fixture when it has been built.
+/// Runs the oracle (TetGen's own loaders) over every fixture. It is built on demand
+/// (`common/paths.rs`): an oracle that cannot be built fails this test, never skips it.
 #[test]
-fn oracle_agrees_on_every_fixture_when_built() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/oracle");
-    let exe = ["tetgen", "all"]
-        .iter()
-        .map(|d| root.join(d).join("oracle.exe"))
-        .find(|p| {
-            p.exists()
-                && std::process::Command::new(p)
-                    .arg("list")
-                    .output()
-                    .is_ok_and(|o| {
-                        String::from_utf8_lossy(&o.stdout)
-                            .lines()
-                            .any(|l| l.trim() == "tetgen")
-                    })
-        });
-    let Some(exe) = exe else {
-        eprintln!("tetgen oracle not built; skipping cross-check");
-        return;
-    };
+fn oracle_agrees_on_every_fixture() {
+    let exe = common::paths::oracle("tetgen");
     for path in fixtures() {
         let out = std::process::Command::new(&exe)
             .arg("dump")

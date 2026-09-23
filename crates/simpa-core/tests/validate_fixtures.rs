@@ -29,10 +29,12 @@ use simpa_core::validate::{
     self, Context, Issue, RULES, Severity, Stage, mesh_input_hash, severity_of, validate_export,
 };
 
+#[allow(dead_code)]
+#[path = "common/paths.rs"]
+mod paths;
+
 fn repo(rel: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .join(rel)
+    paths::repo_file(rel)
 }
 
 fn negative_dir() -> PathBuf {
@@ -757,13 +759,11 @@ fn run_solver(exe: &Path, dir: &Path) -> (bool, String, String) {
 
 #[test]
 fn the_real_solvers_read_every_attribute_of_the_baselines() {
-    // Grace-local: the M1 solver build. Skipped where it is absent (CI).
-    let bin = repo("target/solvers/bin");
-    let (spps_exe, tcr_exe) = (bin.join("spps.exe"), bin.join("classicalTheory.exe"));
-    if !spps_exe.exists() || !tcr_exe.exists() {
-        println!("skipped: no solver build at {}", bin.display());
-        return;
-    }
+    // The M1 solver build (`common/paths.rs`); a missing one panics, never skips.
+    let (spps_exe, tcr_exe) = (
+        paths::solver_exe("spps.exe"),
+        paths::solver_exe("classicalTheory.exe"),
+    );
     let spps = run_folder("solver_spps", &read("baseline/config_spps.xml"));
     assert_eq!(
         validate_export(&cube(), &spps, SolverKind::Spps),

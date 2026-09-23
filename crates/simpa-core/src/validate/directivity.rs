@@ -242,16 +242,20 @@ mod tests {
         assert!(b.covers(125) && b.covers(250) && !b.covers(500));
     }
 
+    /// The tests' one finder of the upstream source tree (`$SIMPA_UPSTREAM`, else the M1
+    /// archive); it panics when the tree is absent, so this test never passes without running.
+    #[allow(dead_code)]
+    mod paths {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/common/paths.rs"
+        ));
+    }
+
     #[test]
     fn upstreams_sample_file_parses() {
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../target/solvers/src-929a5c8/src/spps/tests/speaker-test3.txt"
-        );
-        // The upstream source tree is a Grace-local build input, not a committed fixture.
-        let Ok(bytes) = std::fs::read(path) else {
-            return;
-        };
+        let path = paths::upstream_file("src/spps/tests/speaker-test3.txt");
+        let bytes = std::fs::read(&path).unwrap();
         let b = parse(&bytes).unwrap();
         for f in [40, 125, 1000, 4000, 8000] {
             assert!(b.covers(f), "{f}");

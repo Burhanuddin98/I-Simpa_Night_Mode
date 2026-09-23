@@ -5,7 +5,6 @@ use std::io;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use super::build::BuildStats;
 use super::diag::Intersection;
@@ -144,18 +143,11 @@ impl MeshManifest {
     }
 }
 
-/// sha256 of `bytes`, lowercase hex.
-pub fn sha256_hex(bytes: &[u8]) -> String {
-    Sha256::digest(bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
-}
-
-/// sha256 of the file at `path`, lowercase hex.
-pub fn sha256_file(path: &Path) -> io::Result<String> {
-    Ok(sha256_hex(&std::fs::read(path)?))
-}
+/// sha256 of `bytes`, lowercase hex: the run manifest's hash, so a mesh and a run hash files
+/// the same way.
+pub use crate::run::manifest::sha256_bytes as sha256_hex;
+/// sha256 of the file at `path`, lowercase hex, read in blocks.
+pub use crate::run::manifest::sha256_file;
 
 /// Writes `manifest` to `<dir>/mesh.json`: pretty JSON, `\n` line ends, a final newline.
 pub fn write_manifest(dir: &Path, manifest: &MeshManifest) -> io::Result<()> {
@@ -182,21 +174,4 @@ pub fn read_manifest(dir: &Path) -> Result<MeshManifest, FormatError> {
         });
     }
     serde_json::from_value(value).map_err(|e| invalid(e.to_string()))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sha256_known_values() {
-        assert_eq!(
-            sha256_hex(b""),
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        );
-        assert_eq!(
-            sha256_hex(b"abc"),
-            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-        );
-    }
 }

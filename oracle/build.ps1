@@ -2,14 +2,15 @@
 # archive) behind a CLI that prints canonical dumps. Test-only; never shipped.
 #   powershell -File oracle/build.ps1               # every oracle/dump_*.cpp -> target/oracle/all/oracle.exe
 #   powershell -File oracle/build.ps1 -Only cbin    # one format -> target/oracle/cbin/oracle.exe
+#   ... -UpstreamSrc <tree>\src                    # upstream's src/ from another tree at that commit
 # A dump_<fmt>.cpp may pull in more upstream sources or defines with header lines such as
 #   // oracle-extra-source: tetgen/tetgen.cxx      (path relative to the upstream src/ directory)
 #   // oracle-define: TETLIBRARY
-param([string]$Only = '', [string]$Commit = '929a5c8')
+param([string]$Only = '', [string]$Commit = '929a5c8', [string]$UpstreamSrc = '')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $oracle = Join-Path $repo 'oracle'
-$src = Join-Path $repo "target\solvers\src-$Commit\src"
+$src = if ($UpstreamSrc) { $UpstreamSrc } else { Join-Path $repo "target\solvers\src-$Commit\src" }
 $li = Join-Path $src 'lib_interface'
 if (-not (Test-Path $li)) { throw "upstream source archive missing at ${src}; run solvers/build.ps1 first" }
 $name = if ($Only) { $Only } else { 'all' }

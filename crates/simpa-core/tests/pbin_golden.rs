@@ -140,36 +140,28 @@ fn fixture_dump_shape() {
     assert!(d.ends_with('\n') && !d.contains(" \n") && !d.contains('\r'));
 }
 
-/// Runs upstream's reader through the oracle when it has been built; skips otherwise.
-fn oracle_dump(file: &Path) -> Option<String> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/oracle");
-    for dir in ["pbin", "all"] {
-        let exe = root.join(dir).join("oracle.exe");
-        if !exe.exists() {
-            continue;
-        }
-        let out = std::process::Command::new(&exe)
-            .arg("dump")
-            .arg("pbin")
-            .arg(file)
-            .output()
-            .ok()?;
-        if out.status.code() == Some(2) {
-            continue; // this oracle build has no pbin dumper
-        }
-        return Some(String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n"));
-    }
-    None
+/// Upstream's reader through the oracle, built on demand (`common/paths.rs`): an oracle that
+/// cannot be built fails the test, never skips it.
+fn oracle_dump(file: &Path) -> String {
+    let out = std::process::Command::new(common::paths::oracle("pbin"))
+        .arg("dump")
+        .arg("pbin")
+        .arg(file)
+        .output()
+        .expect("run the oracle");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    String::from_utf8_lossy(&out.stdout).replace("\r\n", "\n")
 }
 
 #[test]
-fn oracle_agrees_on_fixture_when_built() {
+fn oracle_agrees_on_fixture() {
     let _g = serial();
     let path = common::fixture(FIXTURE);
-    match oracle_dump(&path) {
-        Some(o) => assert_eq!(pbin::dump_file(&path), o),
-        None => eprintln!("pbin oracle not built; skipping cross-check"),
-    }
+    assert_eq!(pbin::dump_file(&path), oracle_dump(&path));
 }
 
 #[test]
