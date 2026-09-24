@@ -148,7 +148,7 @@ fn alive(alpha: f64, t_a: f64) -> f64 {
 
 /// The eight values of `series` from `arrival`, `None` where refused, with the refusals' reasons.
 fn values(series: &EnergySeries, arrival: f64) -> Vec<(&'static str, Result<f64, String>)> {
-    let p = decay::evaluate(series, Arrival::Known { time_s: arrival }).unwrap();
+    let p = decay::evaluate(series, Arrival::at(arrival));
     let why = |e: simpa_core::params::ParamError| e.to_string();
     vec![
         ("SPL", p.spl_db.map_err(why)),
@@ -187,14 +187,14 @@ fn the_cliff_gives_a_short_t30_without_the_floor_and_a_refusal_with_it() {
     let (cliff, _) = histogram(alpha, Some(eps), r, 3.0);
     let t30_ref = decay::decay_time(
         &EnergySeries::new(DT, reference).unwrap(),
-        Arrival::Known { time_s: t_a },
+        Arrival::at(t_a),
         DecayRange::T30,
     )
     .unwrap()
     .t_s;
     // The defect: nothing in the series itself refuses the cliff.
     let plain = EnergySeries::new(DT, cliff.clone()).unwrap();
-    let t30 = decay::decay_time(&plain, Arrival::Known { time_s: t_a }, DecayRange::T30)
+    let t30 = decay::decay_time(&plain, Arrival::at(t_a), DecayRange::T30)
         .unwrap()
         .t_s;
     println!("without the floor: T30 {t30:.4} s against {t30_ref:.4} s");
@@ -204,7 +204,7 @@ fn the_cliff_gives_a_short_t30_without_the_floor_and_a_refusal_with_it() {
         .with_solver_floor(-10.0 * eps, alive(alpha, t_a))
         .unwrap();
     for range in [DecayRange::T20, DecayRange::T30] {
-        let e = decay::decay_time(&floored, Arrival::Known { time_s: t_a }, range).unwrap_err();
+        let e = decay::decay_time(&floored, Arrival::at(t_a), range).unwrap_err();
         assert_eq!(e.code(), codes::NOT_EVALUABLE);
         assert!(
             matches!(
@@ -286,12 +286,10 @@ fn at_upstreams_default_epsilon_the_floor_still_accepts_t30() {
         .unwrap();
     let r = EnergySeries::new(DT, reference).unwrap();
     for range in [DecayRange::Edt, DecayRange::T20, DecayRange::T30] {
-        let got = decay::decay_time(&s, Arrival::Known { time_s: t_a }, range)
+        let got = decay::decay_time(&s, Arrival::at(t_a), range)
             .unwrap_or_else(|e| panic!("{range:?}: {e}"))
             .t_s;
-        let want = decay::decay_time(&r, Arrival::Known { time_s: t_a }, range)
-            .unwrap()
-            .t_s;
+        let want = decay::decay_time(&r, Arrival::at(t_a), range).unwrap().t_s;
         println!("{range:?}: {got:.4} s against {want:.4} s");
         assert!((got / want - 1.0).abs() <= limits::DECAY_RELATIVE);
     }

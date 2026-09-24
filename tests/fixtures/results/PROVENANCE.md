@@ -1,8 +1,8 @@
 # Provenance: results fixtures
 
-Four run folders, exactly as `simpa run` wrote them, for `core::results` and `simpa results`
-(milestone M7, gate (e), and the M7 review). Acoustic values in them are format evidence only,
-never results to quote.
+Five run folders, exactly as `simpa run` wrote them, for `core::results` and `simpa results`
+(milestone M7, gate (e), the M7 review and its follow-ups). Acoustic values in them are format
+evidence only, never results to quote.
 
 | Folder | What |
 |---|---|
@@ -10,6 +10,7 @@ never results to quote.
 | `seats_tcr/` | the same project through TCR |
 | `energetic_spps/` | `rooms/energetic_box.simpa` through SPPS: the same box in energetic mode, `trans_epsilon` 3, 50,000 particles: every particle dropped, absorbed or lost by the end, for the solver's floor and energetic mode's completeness |
 | `sources2_spps/` | `rooms/sources2_box.simpa` through SPPS: the same box with a second source, `Source 2` at (5, 8.5, 1.2), 3 dB weaker and 20 ms late, and `output_recp_bysource` on: each receiver folder holds `Source 1/` and `Source 2/`, for the echograms per source and the refusal of onset-relative parameters on their sum |
+| `outputs_spps/` | `rooms/outputs_box.simpa` through SPPS: the Seat box with a cutting plane `Cut` (config id 1) beside the floor's surface receiver `Receiver` (id 0), and 10 particles per source saved without collision files: `Surface receiver/<band>/` and `Global/` hold `Sound level.csbin` and `rs_cut.csbin`, and `Particles/500/` and `Particles/1000/` a `particles.pbin` each (8 particles written in each band), for the surface files kept apart by name and the `.pbin` read (M7 follow-ups; the M7 critic found neither in any fixture). Written 2026-09-24 by the solvers of `.claude/worktrees/t3-proj/target/solvers/bin`, whose code sha256 equals `solvers/manifest.json` (the `run.json` records their paths and sha256) |
 
 Each holds `run.json`, `solver.stdout.txt`, `solver.stderr.txt`, `mesh/` (the run's own mesh) and
 `solve/` (the solver's inputs and every file it wrote). `run.json`'s absolute paths (`exe`, `cwd`)
@@ -30,9 +31,11 @@ time, paths and hashes of the executables.
 The rooms were rewritten after these runs (`rooms/PROVENANCE.md`, "M7 rooms"): they now pin the
 seeded box's element ids, so a run made today writes `config.xml` with the source's id 1799,
 the receivers 1473 and 1632 and the surface receiver 1792, where these carry no source id and
-the ids export assigned then (0 and 1, and 0); each `run.json` records the room's sha256 before
-the rewrite.
+the ids export assigned then (0 and 1, and 0; in `outputs_spps/` also the cutting plane `Cut`'s
+1, which stays unpinned in the room); each `run.json` records the room's sha256 before the
+rewrite. `outputs_spps/` was made on `m7-followups` before its merge into the rebuild line, whose
+pins the merge gave `outputs_box.simpa` on 2026-09-25.
 
-Written 2026-09-24 by the solvers of `.claude/worktrees/wf_b9ed1d0e-3d2-8/target/solvers/bin`,
+The first four were written 2026-09-24 by the solvers of `.claude/worktrees/wf_b9ed1d0e-3d2-8/target/solvers/bin`,
 the build `solvers/manifest.json` records at this branch's base (`spps.exe`, `classicalTheory.exe`
 and TetGen 1.5.0; their sha256 values are in each `run.json` and `mesh/mesh.json`).

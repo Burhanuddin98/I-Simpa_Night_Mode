@@ -4,6 +4,7 @@
 //! failure to a warning. See `docs/rebuild-plan.md`.
 
 pub mod config_xml;
+pub mod faults;
 pub mod formats;
 pub mod geometry;
 pub mod mesh;

@@ -5,7 +5,8 @@
 CLI: `simpa results <run-folder> [--json]` (`crates/simpa/src/results_cmd.rs`); its JSON is
 `docs/formats/results-json.md`. Tests: `crates/simpa-core/tests/results_load.rs`,
 `results_rooms.rs`, `params_complete.rs`, `params_floor.rs`, `params_noise.rs` and
-`crates/simpa/tests/cli_results.rs`. Gate: `tools/gates/m7.ps1`.
+`crates/simpa/tests/cli_results.rs`. Gate: `tools/gates/m7.ps1`. Evidence for M8, run on purpose:
+`crates/simpa/tests/m8_evidence.rs` ("What M8 needs", below).
 
 **No number read or computed here is shown to a user until M8's physics bed passes**
 (`docs/rebuild-plan.md`, M12). The JSON says so: `"validated_by_bed": false`.
@@ -32,12 +33,30 @@ of `docs/solver-contract.md`, Part B, "Result refusals", and nothing is read in 
    the run is caught here.
 6. Every file read below decodes, is laid out as the solver writes it and agrees with its sibling
    (`results_file_invalid`), and holds no NaN, infinity or negative energy
-   (`results_value_invalid`).
+   (`results_value_invalid`). One exception (M7 follow-up): a NaN in one of the `.gap`'s two
+   lateral columns makes that column unusable (`spps::LateralNaN`), not the run. SPPS computes the
+   angle there with an unclamped `acos` (`lib_interface/Core/mathlib.h:176-180`), which a particle
+   direction along the receiver's orientation takes past ±1 in `f32`; it happened in one of ten
+   tutorial 1 runs at 1,500,000 particles in energetic mode, and refused the whole run, T30
+   included, although no parameter reads those columns and the energy beside them is checked
+   equal to the `.recp`'s. A negative or infinite lateral value still refuses the run
+   (`results_load.rs`, `a_nan_in_a_gap_lateral_column_makes_that_column_unusable_not_the_run`).
 
-`simpa results` exits 6 for steps 1, 3, 4, 5 and 6: the plan's stable exit codes give 5 to a
-solver run that failed and 6 to result verification (`docs/rebuild-plan-raw-2026-09-23.json`,
-the `cli` component; `docs/m5-m6-design.md`, "Exit codes"). A run whose verdict is OK but whose
-folder no longer verifies is not a failed run, and a caller that sees 5 knows the solver failed.
+`simpa results` exits 6 for steps 1, 3, 4, 5 and 6, and 5 for step 2. The plan's stable exit codes
+are "0 OK, 2 validation, 3 geometry, 4 mesh, 5 solver run, 6 result verification, 130 cancelled"
+(`docs/rebuild-plan-raw-2026-09-23.json`, `plan.architecture`, the `cli` line; the `cli` component
+itself lists no codes); `docs/m5-m6-design.md`, "Exit codes", words 5 as "solver run FAIL or
+CRASH" and 130 as "cancelled".
+- **A cancelled run is refused with 5, not 130** (corrected after the M7 review, which found the
+  earlier text citing "5 solver run" for it without saying why). 130 says that the command itself
+  was cancelled: `simpa run` exits 130 when its run is cancelled. `simpa results` was not cancelled;
+  it read to the end a folder whose run did not finish, a solver run that did not succeed, which is
+  what 5 reports for FAIL and CRASH too. A caller that sees 5 knows the run's solver did not
+  succeed, whichever way, and the refusal's code (`results_run_failed`, `results_run_cancelled`)
+  says which.
+- **A run whose verdict is OK but whose folder no longer verifies** is not a failed run but results
+  that fail verification: 6.
+
 A report holding a number that is not finite is refused the same way, `results_value_invalid`
 (`report::checked_report`), since JSON would print it as `null`. Every code is produced by a spoiled copy of a
 committed run in `results_load.rs`; the CLI's exits in `cli_results.rs`, among them a real FAIL
@@ -61,6 +80,29 @@ e_report_file.cpp:296-321` maps each extension to its report class):
 Besides them: `<cumul_filename>` (the room's energy per band and step), the statistics, every
 surface-receiver and cutting-plane `.csbin`, each band's `Intensity.rpi` (decoded to check it
 reads, not kept) and, when particles are saved, each band's `.pbin` (summarised).
+- **Surface receivers and cutting planes are kept apart by name** (the plan's `core::results`):
+  the file named `recepteurss_cut_filename` (`rs_cut.csbin`) is the cutting planes', the other
+  (`Sound level.csbin`) the scene receivers', per band and in `Global`. Each must hold only
+  receivers of its own kind, told by their `xmlIndex`, the id `config.xml` gives each
+  `recepteur_surfacique` and `recepteur_surfacique_coupe`; a file holding the other kind's is
+  refused, `results_file_invalid`, not read as it. The JSON gives each receiver's `id`. Tested on
+  the committed run `results/outputs_spps` (`rooms/outputs_box.simpa`: the Seat box with the floor's
+  receiver `Receiver`, id 0, and a cutting plane `Cut`, id 1, 1.2 m up over 5 × 9 m in 1 m cells):
+  all six files read as their kind (`results_load.rs`,
+  `cutting_planes_and_surface_receivers_are_kept_apart_by_name`); says no: the two 500 Hz files
+  swapped, or the cutting plane's `Global` file copied over the receiver's, is refused. The M7
+  critic found no fixture with a cutting plane.
+- **Saved particles** (`nbparticules_rendu`): each band's `Particles/<f>/particles.pbin`, decoded
+  (`docs/formats/pbin.md`) and held to its run: its time step is `pasdetemps`'s `f32` bit for bit,
+  its step count the run's, it holds at most `nbparticules_rendu` per source, each particle has at
+  least one step and none past the last (`results_file_invalid`), and every position and energy is
+  finite and every energy at least 0 (`results_value_invalid`). The JSON gives each file's particles
+  and step records. `results/outputs_spps` saves 10 per source: 8 particles in each band, 28 and
+  39 step records (`saved_particles_are_read_through_the_results_and_held_to_their_run`, which
+  compares with the format reader's own read); says no: a `.pbin` removed
+  (`results_outputs_invalid`), cut short by one record, with another time step, or with a particle
+  past the last step (`results_file_invalid`), or with a NaN energy (`results_value_invalid`). The
+  M7 critic found no fixture that saved particles.
 
 **What a `.recp` value is.** `energy_sum × c·ρ / V_receiver` (`baseReportManager.cpp:183`;
 `sppsInitialisation.cpp:86`), where `energy_sum` adds each particle's energy `W/N`
@@ -119,6 +161,36 @@ materials by 6.6 %, the floor's and the walls' materials swapped by 4.9 %, each 
 absorption by 0.92 %. A swap of the floor and the ceiling cannot show in a box like this, nor in
 Sabine or Eyring at all when the two have equal areas: they see only `A` and `S`.
 
+**What gate M7(d) can detect, measured** (M7 follow-ups; `cli_results.rs`,
+`gate_d_says_no_through_the_code_to_one_surface_and_to_the_air_term`). The M7 critic: the gate's
+say-NO was specified as one surface's α 5 % higher and run as the whole Walls group (96 of
+216 m²), and the air term `4mV` had none.
+- **One surface.** Each of the box's six planes gets a group and a copy of its material of its own
+  with α scaled, is run through TCR, and its analytic times (`results::tcr::analytic` on that
+  run's inputs) are held against the unchanged run's TCR times. The smallest α increase that fails
+  the gate (either theory outside 0.5 % in some band), found on the project and confirmed through
+  TCR 2 % below it (passes in all 27 bands) and 2 % above (fails in 15):
+
+  | Plane | Area | α | +5 % fails the gate in | Smallest increase caught |
+  |---|---|---|---|---|
+  | floor | 60 m² | 0.1 | 24 of 27 bands | +3.21 % |
+  | ceiling | 60 m² | 0.3 | 27 of 27 | +1.07 % |
+  | walls x = 0 and x = 6 | 30 m² each | 0.2 | 24 of 27 | +3.21 % |
+  | walls y = 0 and y = 10 | 18 m² each | 0.2 | **0 of 27** | +5.35 % |
+
+  Every threshold is the same error in absorption area, `S·Δα` = 0.193 m², 0.45 % of `A` in the
+  low bands where the air adds least; above them `4mV` dilutes it. **One 18 m² wall 5 % more
+  absorbing passes the gate**: it moves the times by 0.42 %, as the critic computed. The gate
+  resolves one surface's error only when it moves `A` by more than 0.19 m² in some band.
+- **The air term**, through the code: `results::tcr`'s analytic references on the same run's inputs
+  with a test-only fault (`simpa_core::faults`). Dropping `4mV` fails the gate in 20 of 27 bands,
+  from 250 Hz up (+0.50 % there, +201 % at 20 kHz). Taking `m` from ISO 9613-1 at the exact
+  midband frequency instead of the solver's value at the nominal one fails it in 2 bands only,
+  12.5 kHz (−0.59 %) and 16 kHz (+0.96 %); at 8 kHz it moves the times by 0.39 %, inside the gate.
+  So gate (d) catches a missing air term, but not the choice of midband frequency below 12.5 kHz on
+  this room (`docs/params.md`, "The reference M8 compares against", measures that choice in M8's
+  rooms).
+
 ## Receivers are enumerated by folder
 
 SPPS writes each point receiver into a folder named by its label, TCR into a file `<lbl>.gabe`.
@@ -136,9 +208,21 @@ C80, D50 and Ts, each a value or its refusal; the same for an explicitly labelle
 bands summed bin by bin (`params::aggregate`). For a TCR receiver each of the eight is refused,
 `no_time_series` (above).
 
+Beside them (M7 follow-ups, for M12; the M7 critic): the **curvature** of the decay, T20 against
+T30 with its flag (`docs/params.md`, "Decay times"), and the **Schroeder curve** the decay times
+were fitted to, thinned to within 0.01 dB (`docs/params.md`, "The decay curve, for display"), so
+that M12's decay charts and curved-decay warnings come from the code that gives the numbers. With
+several sources in a band both are withheld as the seven onset-relative values are
+(`several_sources`); for TCR the curvature is refused `no_time_series` and there is no curve.
+
+**Upstream's GUI on the same tutorial 1 run**: `docs/params.md`, "Upstream's GUI reproduced on
+tutorial 1", ports its algorithm, reproduces its stored table and measures each step from its
+method to ours.
+
 **The arrival.** Every onset-relative parameter is measured from the direct sound's arrival at the
-receiver's centre, `params::decay::Arrival::Known`: the earliest over the sources of emission plus
-distance over `c`, where
+receiver's centre, `params::decay::Arrival::Known`, with the direct sound spread over the time a
+particle takes to cross the receiver ball, `±R/c` (`docs/params.md`, "The direct sound's
+spread"): the earliest over the sources of emission plus distance over `c`, where
 - positions are as SPPS stores them (`f32`, `run::locate::to_float`);
 - `c` is SPPS's `343.2·√((T + 273.15)/293.15)` stored as `f32`
   (`base_core_configuration.cpp:64`; `Celerite_du_son.cpp:46`);
@@ -146,41 +230,79 @@ distance over `c`, where
   emission time is that step times `dt`.
 
 With a celerity gradient (`alog` or `blin` not 0) sound does not travel in straight lines at `c`,
-and the arrival is left to `Arrival::Detected`.
+and the arrival is left to `Arrival::Detected`. The JSON gives, per band, the `arrival` C50, C80,
+D50 and Ts were measured from and the `decay_arrival` EDT, T20 and T30 were (`results_load.rs`
+checks that every SPPS band carries `r/c` with the spread `R/c`).
+
+**The early reverberation** (second review). Every SPPS series is given to `params` with its early
+reverberation unresolved (`EnergySeries::with_early_reverberation_unresolved`; the JSON's
+`early_reverberation_unresolved`): SPPS's reverberation begins with the first reflection and builds
+up, so each value is read with it beginning at the arrival, at the first bin wholly after the direct
+sound and at that bin's end, reported midway, and refused `early_unresolved` when those differ by
+more than its limit (`docs/params.md`, "The early reverberation"). At the default step of 10 ms that
+refuses EDT in M8's cells from α 0.1 (5×4×3 m) or 0.2 (6×10×3 m) up, where it had read up to 4.9 %
+short ("What M8 needs", "EDT and the time step").
 
 **Measured, and piece A's open question answered.** A particle deposits energy while it crosses the
 receiver sphere, so the direct sound is spread over `[(r − R)/c, (r + R)/c]`, `2R/c` long (the JSON
-gives it as `receiver_crossing_s`).
-- At upstream's defaults (`dt` = 10 ms, `R` = 0.31 m, `2R/c` = 1.8 ms) both ends usually fall in one
-  bin. On tutorial 1 the arrival `r/c` lies in the onset bin at both receivers in all 27 bands.
-  **"Usually" is about 92 % of receiver positions.** When `(r − R)/c` falls in the bin before the
-  one holding `r/c`, that bin holds the cap of the sphere the wavefront has crossed; once the cap
-  holds 1 % of the largest bin, it is the onset bin, `r/c` lies after it, and all seven
-  onset-relative parameters are refused, `params_bad_arrival` (M7 review). With `r/c` uniform in
-  its bin that happens for a stretch of `R/c` less the cap height at which the cap reaches 1 %
-  (`h/R` = 0.117, from `h²(3R − h)/(4R³)` = 0.01, if the direct sound fills the largest bin):
-  `(R − 0.117 R)/(c·dt)` = 8 % of positions. No number is wrong; M8 and M12 should expect the
-  refusal that often at the defaults.
+gives it as `receiver_crossing_s`). When `(r − R)/c` falls in the bin before the one holding `r/c`,
+that bin holds the cap of the sphere the wavefront has crossed; once the cap holds 1 % of the
+largest bin, it is the onset bin and `r/c` lies after it. Then C50, C80, D50 and Ts are refused,
+`params_bad_arrival`; **SPL, EDT, T20 and T30 are not** (M7 follow-up: the M7 review's version
+refused all seven onset-relative parameters, T30 included). The decay times are read from the
+arrival with the cap counted in the direct sound, which is exact on the synthetic series of
+`params_arrival.rs`.
+- **Measured over receiver positions** (`crates/simpa/tests/m8_evidence.rs`,
+  `arrival_outside_the_onset_bin_over_receiver_positions`, run on purpose): tutorial 1 at upstream's
+  defaults (150,000 particles, random mode, `R` = 0.31 m, seed 1), octave bands 125 Hz to 4 kHz, 200
+  receivers uniform over the box at least 0.5 m from the walls and 1 m from the source.
+  | `dt` | Receivers with `r/c` after the onset bin | Receiver-bands | Leading edge in the bin before |
+  |---|---|---|---|
+  | 10 ms (upstream's default) | **16 of 200, 8.0 %** | 96 of 1200 | 20 (10.0 %; `R/(c·dt)` = 9.0 %) |
+  | 1 ms | **162 of 200, 81.0 %** | 953 of 1200 | 179 (89.5 %; 90.3 %) |
+
+  None had `r/c` before the onset bin. At a receiver the refusal holds in every band (the direct
+  sound is the same in all of them). This replaces the M7 review's derived "about 8 %", which the
+  measurement confirms at 10 ms. Where refused, the decay times at 150,000 particles were refused
+  for their noise (and T30 for its range at 10 ms), never for the arrival (counted before the early
+  reverberation was bounded, below; EDT at 10 ms can now also be refused `early_unresolved`).
+- **For M8:** at a step of 1 ms, C50, C80, D50 and Ts are refused at four receivers in five by this
+  rule alone. With the spread given, the same curve that gives the decay times gives them exactly
+  on the synthetic series; refusing them is Burhan's decision of 2026-09-24 (keep the strict
+  rule), not a limit of the model.
 - On the level box (`dt` = 0.2 ms, `R` = 0.5 m, `2R/c` = 2.9 ms), the first bin with energy is bin 21
   at 2 m, which is `(r − R)/c` = 4.37 ms; the onset bin (the first within 20 dB of the largest) is
-  bin 22; `r/c` = 5.83 ms is bin 29. So neither `r/c` nor `(r − R)/c` lies in the onset bin, and
-  every onset-relative parameter is refused, `params_bad_arrival`; SPL, which does not depend on
-  the arrival, is not. The same at 4 m: bins 50, 51 and 58. This is piece A's documented case of a
-  direct sound spread over several bins, which its model does not cover; M8 decides what a bed
-  uses there.
+  bin 22; `r/c` = 5.83 ms is bin 29. So `r/c` lies after the onset bin, and C50, C80, D50 and Ts
+  are refused, `params_bad_arrival`; SPL is not. The same at 4 m: bins 50, 51 and 58. The decay
+  times are read from the arrival over the spread (bins 22 to 36 are the direct sound); a free
+  field has nothing after it, so they are refused, `range_too_short` (T30 at 4 m
+  `range_not_reached`), never measured from the direct sound's own shape (a run of the level box,
+  seed 1, both receivers, 125 Hz and 4 kHz checked).
 
 **Complete series.** When SPPS's own statistics show that nothing arrives after a band's last
-bin, the series is given to `params` as complete (`EnergySeries::complete`, `tests/params_complete.rs`):
-SPPS in random mode with `trans_epsilon` above 0, and no particle remaining at the end of the
-calculation. A particle counts as remaining only when the time steps run out while it is alive
-(`spps/CalculationCore.cpp:49, 88-92`), and in random mode a particle is absorbed whole, never
-dwindles (`CalculationCore.cpp:62-67, 147-155, 288-300`). `trans_epsilon` 0 drops every particle at
-its first surface in random mode too (`CalculationCore.cpp:305`). Energetic mode drops a particle
-once its energy falls below `10^-trans_epsilon` of its start (`sppsNantes.cpp:75`), energy no
-histogram holds, so it never claims completeness: `params` bounds its tail and its floor. The JSON
-reports the claim per band (`complete`); `SppsResults::band_complete`'s unit test says no for
-energetic mode, a particle remaining, and `trans_epsilon` 0 or NaN, and the committed energetic run
-(below) is refused completeness with every particle accounted for.
+bin, but what unfinished paths would have brought, the series is given to `params` as complete
+(`EnergySeries::complete`, `tests/params_complete.rs`): SPPS in random mode with `trans_epsilon`
+above 0, and at most one particle in a million remaining at the end of the calculation
+(`spps::REMAINING_UNFINISHED_SHARE`). A particle counts as remaining only when the time steps run
+out while it is alive (`spps/CalculationCore.cpp:49, 88-92`), and in random mode a particle is
+absorbed whole, never dwindles (`CalculationCore.cpp:62-67, 147-155, 288-300`). `trans_epsilon` 0
+drops every particle at its first surface in random mode too (`CalculationCore.cpp:305`).
+Energetic mode drops a particle once its energy falls below `10^-trans_epsilon` of its start
+(`sppsNantes.cpp:75`), energy no histogram holds, so it never claims completeness: `params` bounds
+its tail and its floor. The JSON reports the claim per band (`complete`); `SppsResults::
+band_complete`'s unit tests say no for energetic mode, more than one particle in a million
+remaining, and `trans_epsilon` 0 or NaN, and the committed energetic run (below) is refused
+completeness with every particle accounted for.
+
+**The few left alive** (M7 follow-ups, second review). The first rule was "none remaining". At
+M8's counts SPPS leaves about one particle in 10⁸ to 10⁹ alive at the end in the 6×10×3 m room,
+trapped, reaching no receiver ("What M8 needs", "Particles left alive at the end"), and each one
+refused its band's every onset-relative quantity through the tail of a ragged random-mode end. A
+remaining particle's path is unfinished as a lost one's is, so up to one in a million are now
+bounded with the lost ones, `(lost + remaining)/(N·f)` of the energy from the arrival
+(`SppsResults::lost_share`, below); more than that is a run cut short, left incomplete, its tail
+bounded from the series (`a_particle_in_a_million_left_alive_is_bounded_as_unfinished_not_refused`
+says no at 11 in 10 million).
 
 Without it, random mode's scattered last particles make the last window not decaying, and piece A
 refused everything in most bands: on the M6 gate's seeded tutorial box (10,000 particles), all
@@ -211,10 +333,52 @@ instead (`SppsResults::lost_share`):
   emitted energy still alive then, `f`;
 - with `n` lost of `N` emitted, they take at most `n/(N·f)` of the energy from the arrival on,
   which `params` adds as missing energy and refuses whatever it moves beyond its limit
-  (`EnergySeries::with_lost_share`; `docs/params.md`, "Missing energy").
+  (`EnergySeries::with_lost_share`; `docs/params.md`, "Missing energy"). In a complete band the
+  few particles left alive at the end are counted with them ("Complete series").
 
-In energetic mode a particle lost late carries less than `f` of its start energy, so the bound is
-conservative there. The JSON gives the share per band (`lost_share`).
+The JSON gives the share per band (`lost_share`). The report path is tested on the committed runs
+(`results_load.rs`): the random-mode Seat run with 20 lost planted at 500 Hz gives `n/(N·f)`, not
+following the decay.
+
+**Energetic mode** (M7 follow-up). There every particle is kept until the floor, its energy falling
+with the room's, so a particle lost at `t` carries about the mean energy of the particles then,
+and what it would still have brought is its share of what they all bring after `t`: it falls with
+the decay. `n` lost of `N` emitted, each carrying at most `ρ` times the mean energy when it was
+lost, take at most `ρ·n/N` of the energy the receiver gets from every time on
+(`SppsResults::lost_share_following_decay`; `params::EnergySeries::with_lost_share_following_decay`,
+which holds every quantity to the most a scaling of the curve by `1 + ρ·n/N` can move it, added to
+what the floor moves it by: `docs/params.md`, "Missing energy"). The JSON says so with
+`lost_follows_decay`; the report path is tested on the committed energetic run (`results_load.rs`:
+its 2 lost of 50,000 at 500 Hz give `10·2/50,000`, and 200 planted give 0.04, which refuses SPL by
+the 0.17 dB it can move every level, where random mode's lump would have passed it).
+**`ρ` is an empirical cap, not a bound.** Measured, because the random-mode bound refused T30
+wholesale in energetic mode (`crates/simpa/tests/m8_evidence.rs`, run on purpose; logs kept in the
+scratch folder):
+- **what lost particles carried**, from every particle's saved trajectory (tutorial 1, energetic,
+  150,000 particles, all saved, 3 seeds, 6 octave bands): SPPS counted 24 lost; the 17 found in
+  the trajectories (stopped before the end with more than 10⁻⁴ of their start energy; no particle
+  the floor dropped ended above 4.6·10⁻⁵) were lost between 40 and 500 ms and carried **0.16 to
+  2.02 times the mean energy** of the particles then (median 0.88). The other 7 ended below 10⁻⁴ of
+  their start energy, where they cannot be told from particles the floor dropped: their ratio is
+  not known;
+- **in an M8 cell** (second review: the 5×4×3 m room at α 0.4, energetic, `trans_epsilon` 9,
+  300,000 particles all saved, 3 seeds): of 76 lost, the 44 that stopped with more than 10⁻⁵ of
+  their start energy carried **0.04 to 4.4 times** the mean (median 1.0); the rest are censored
+  the same way. `ρ` is taken as 10 (`ENERGETIC_LOST_ENERGY_RATIO`), twice the largest measured;
+- **what that does to T30**: with each found particle's own energy and loss time, and what it would
+  still have brought **modelled** as following the decay (a trajectory stops where the particle
+  was lost, so its future is not measured), T30 moved by at most 4.4·10⁻⁶ (tutorial 1) and
+  3.0·10⁻⁶ (the M8 cell) in any receiver-band, where the random-mode bound claimed up to 2.1 % and
+  1.5 % and refused it. On tutorial 1 what they would have brought from the arrival on was 2 % of
+  that bound's (median; 18 % at most);
+- at tutorial 1's 150,000 particles the random-mode bound refused T30 in 212 of 360
+  receiver-bands on its own, and at 1,500,000 in 308 of 324;
+- **where `ρ` matters**: in energetic cells of 1.5 M particles or more, `ρ·n/N` is about 10⁻⁴ to
+  10⁻³ and moves T30 by at most 0.01 to 0.1 %; it refuses C80 (0.01 dB limit) in the 6×10×3 m room at
+  α 0.05, where 125 lost a band in a 4 s run give 8.3·10⁻⁴ ("What M8 needs").
+
+Random mode keeps its bound: there a lost particle carries its whole start energy until it is
+absorbed, and its worth does not fall with the decay.
 
 ### Energetic mode: the solver's floor
 
@@ -226,6 +390,17 @@ the reviewer's model over α 0.05–0.9, ε 1–7). The committed run `results/e
 particles) has every particle dropped or absorbed by the end, 0 remaining, and still no band
 complete; its T30 is refused `missing_not_cleared` in 3 of 4 receiver-bands (the fourth is refused
 earlier, its tail not decaying).
+
+**The floor's bound is earned at upstream's default** (M7 follow-up, `m8_evidence.rs`,
+`energetic_floor_against_a_lower_floor`, run on purpose): tutorial 1 in energetic mode, 6
+receivers, octave bands 125 Hz to 4 kHz, 1,500,000 particles, seeds 1 to 10 at `trans_epsilon` 5
+and again at 9, every run read (second review: the first count left out runs refused for a
+lateral NaN, and quoted two separate maxima as one receiver-band's). T30 from the series alone is
+**0.338 ± 0.025 % shorter on average at 5 than at 9**; the largest difference in one receiver-band
+is 0.56 %, 4.2 of its own standard errors; 6 of the 36 differ by more than the 0.5 % limit; the
+largest in standard errors, in some receiver-band, is 5.7. The floor's bound refuses T30 at 5 in all
+36 receiver-bands of the seed checked, and in none at 9. So energetic mode needs a floor below
+upstream's default for T30; at 9 a run takes 300 s against 182 s at 5 (20 at a time on Grace).
 
 ### Monte-Carlo noise
 
@@ -252,9 +427,42 @@ order (EDT 2.0 %, T20 5.5 %, T30 8.4 %). Before this rule, on the 2019 run, T30 
 at 1.6 kHz where TCR's Sabine time is 0.66 s.
 
 **Energetic mode at upstream's default** (tutorial 1, `trans_epsilon` 5, 150,000 particles, our
-run): SPL, C50, C80 and D50 in almost every band, Ts in some; EDT refused for its noise (the
-random-mode bound, loose here); T20 and T30 refused `missing_moves`, mostly for 17 lost particles
-at 1 kHz whose bound, `1.8·10⁻⁴` of the energy, is conservative in energetic mode.
+run, M7 review): SPL, C50, C80 and D50 in almost every band, Ts in some; EDT refused for its noise
+(the random-mode bound, loose here); T20 and T30 refused `missing_moves`, mostly for 17 lost
+particles at 1 kHz whose bound, `1.8·10⁻⁴` of the energy as random mode's lump, was conservative in
+energetic mode. The follow-ups replaced that bound for energetic mode ("Lost particles"); T30 at
+`trans_epsilon` 5 is still refused, for the floor ("Energetic mode: the solver's floor").
+
+**Energetic mode against real seeds** (M7 follow-up; `m8_evidence.rs`,
+`energetic_noise_against_ten_seeds`, run on purpose). Tutorial 1 in energetic mode at upstream's
+defaults, 6 receivers, octave bands 125 Hz to 4 kHz, seeds 1 to 10; per quantity, the spread of
+the values over the seeds against the root-mean-square of the estimates, pooled over the
+receiver-bands where every seed gives a value (each series evaluated as the bootstrap takes it,
+complete and nothing missing, so that the floor and lost particles do not hide the noise):
+
+| Quantity | 150,000 particles, 10 seeds | 1,500,000 particles, 10 seeds |
+|---|---|---|
+| SPL | 0.71 | 0.73 |
+| EDT | 0.37 | 0.36 |
+| T20 | 0.11 | 0.12 |
+| T30 | 0.07 | 0.07 |
+| C50 | 0.54 | 0.53 |
+| C80 | 0.40 | 0.40 |
+| D50 | 0.54 | 0.53 |
+| Ts | 0.46 | 0.47 |
+
+(36 receiver-bands for SPL and the decay times, 24 for C50, C80, D50 and Ts: at two receivers `r/c`
+lies after its onset bin, and those four are refused there.) The estimate is the random-mode model,
+an upper bound in energetic mode (`docs/params.md`, "Monte-Carlo noise"), and the seeds say it is
+one: no quantity's pooled ratio is above 1, and the largest single receiver-band's is 1.06 at
+150,000 and 1.26 at 1,500,000 (SPL), within what 10 seeds leave uncertain (about 23 %). **It
+over-states the noise of T30 14 times and of T20 9 times**, the same at both counts. Nothing is
+changed: the bound is sound, and the particle counts M8 needs under it are measured below ("What M8
+needs"). A model that matches energetic mode needs the spread of the particles' energies at each
+time: the second review points out that deposits scale with the particles' mean energy, which the
+room table already gives, so a second-moment bound would do; that is for Burhan to decide. (Seed 7
+at 1,500,000 particles, refused in the first count for a NaN in its `.gap` lateral column, is read
+with the fix: 10 seeds.)
 
 ### Several sources, and the echogram per source
 
@@ -282,8 +490,14 @@ off, an omni source of 100 dB per band (octaves 125 Hz–4 kHz), receivers 2 m a
 - **What keeps the reverberant field out is the duration** (corrected after the M7 review). The
   source is 9.97 m from the nearest wall and a particle covers `c·20 ms` = 6.86 m in the whole run,
   so none reaches a surface: the statistics count 0 absorbed by the materials and every particle
-  remaining in every band, which `gate_c_...` asserts. The receivers see the direct field and
-  nothing else.
+  remaining in every band, which `gate_c_...` asserts, and nothing reaches a receiver after the
+  direct sound has passed it. The receivers see the direct field and nothing else. **Says no**
+  (M7 follow-ups; the M7 critic: the check had no partner): the same box with its walls
+  reflecting (α 0.5, `direct_calc` off) over 120 ms, 100,000 particles, through SPPS
+  (`gate_c_says_no_to_a_run_whose_walls_are_reached`): the statistics count 86,945 to 87,155 of
+  100,000 absorbed by the materials and 12,845 to 13,055 remaining, so the check fails in every
+  band; what it keeps out, energy after the direct sound, is 4.0 to 6.3 % of the total at 2 m and
+  14.4 to 18.2 % at 4 m.
 - **Two guards the run does not exercise.** `direct_calc` stops a particle at its first surface
   hit (`spps/CalculationCore.cpp:236-242`), and α = 1 does the same without it in both computation
   methods (`CalculationCore.cpp:249-261, 288-300`), with no transmission. The earlier text gave
@@ -304,9 +518,14 @@ averaging `1/d²` over a sphere of radius `R` reads `10·lg(1 + R²/(5r²))` hig
 | 2 m | +0.19 to +0.28 dB | −0.01 to +0.08 dB |
 | 4 m | +0.11 to +0.30 dB | −0.05 to +0.14 dB |
 
-Says no: Night Mode's `.gap` echogram level, the energy over the intensity reference 10⁻¹²
-instead of `p₀²` (`main:project/result_parser.cpp:486`), reads 26.02 dB high and misses the gate in
-every band; so does the SPL moved 1 dB either way.
+Says no, **through the code** (M7 follow-ups; the M7 critic: the first partners added 26 dB and
+1 dB to the SPL the correct run had produced). The test computes the run's report again in its
+own process, by the code the CLI runs (`results::load`, `report::checked_report`; without a fault
+it is the CLI's report, which the test asserts), with the level code path's calibration constant
+replaced through a test-only seam (`simpa_core::faults::Fault::LevelReference`, compiled only into
+test builds): Night Mode's `.gap` reference, the intensity reference 10⁻¹² instead of `p₀²`
+(`main:project/result_parser.cpp:486`), reads +26.02 dB and misses the gate in all 12
+receiver-bands; `p₀²` 1 dB off either way reads ±1.00 dB and misses it in all 12.
 
 **The exact free field** (M7 review). Because its reference sits 0.11–0.30 dB below what SPPS should
 give, the gate's ±0.5 dB lets a calibration error between about −0.6 and +0.2 dB through. The same
@@ -317,8 +536,8 @@ the receiver ball in closed form, `3/(2r·R³)·[(R² − r²)/2·ln((r+R)/(r−
 `the_ball_average_of_the_inverse_square_is_its_closed_form`). Every band must lie within 4 of its
 `mc_sd`, and the mean of the 12, weighted by `1/mc_sd²`, within 4 of its standard deviation. On
 seed 1 that mean is +0.028 dB with a standard deviation of 0.014 dB; it catches an offset above
-+0.028 dB or below −0.083 dB, so the SPL moved 0.1 dB either way, or computed with `ρc` = 400
-(−0.14 dB), is caught.
++0.028 dB or below −0.083 dB. Through the same seam, `p₀²` 0.1 dB off either way (weighted means
++0.128 and −0.072 dB), and the reference as it would read with `ρc` = 400 (−0.114 dB), are caught.
 
 **Over ten seeds** (`cli_results.rs`, `level_box_over_ten_seeds`, run on purpose: seeds 1–10,
 1,000,000 particles each): each seed's weighted mean difference from the exact free field runs from
@@ -326,3 +545,214 @@ seed 1 that mean is +0.028 dB with a standard deviation of 0.014 dB; it catches 
 from the spread over the seeds, not from `mc_sd`. No level bias is resolved at the 0.01 dB scale;
 seed 1's +0.028 dB is chance. The SPL spread over the seeds is 1.12 times the mean `mc_sd` pooled
 over the 12 receiver-bands (0.66 to 1.57 per receiver-band, each from 10 seeds).
+
+## What M8 needs (M7 follow-ups, 2026-09-24)
+
+Measured with `crates/simpa/tests/m8_evidence.rs` (`m8_cells`, `m8_tcr_cells`) and
+`crates/simpa-core/tests/lambert_box.rs`, run on purpose on Grace; every SPPS run read again with
+this commit's `simpa results` (`$SIMPA_M8_FROM`). Each cell: the room with every surface at α,
+Lambert reflection with scattering 1, 3 receivers each at least 1 m from the walls and the source,
+`dt` 10 ms unless stated; air absorption off and octave bands 125 Hz to 4 kHz (18 receiver-bands),
+or, for M8's second table, air on at 20 °C and 50 % and octave bands to 8 kHz (21). Seeds 1 to 3,
+and 1 to 20 in two cells. The bands differ only in their random numbers, so they are replicas; the
+three receivers of a band share its particles. **Information for M8's design, not a gate.** The
+refusal limits are Burhan's strict ones (2026-09-24), unchanged. The wall times are per run with
+19 to 27 runs at once on Grace's 28 threads.
+
+"Through" counts the receiver-bands where every seed gives the quantity. From each series alone,
+refused or not: "σ" is the relative standard deviation of T30 over the seeds, pooled over the
+receiver-bands, with its own uncertainty; "range" the largest (max − min)/mean over seeds 1 to 3 of
+any receiver-band; "range of the mean" the same for the mean over the cell's receiver-bands (the
+same receiver-bands in every seed). "vs Eyring" is the mean T30 against
+`24·ln10/343.2 · V/(−S·ln(1 − α))`. **The counts are counts that passed, not minima.**
+
+### Random mode
+
+| Room | α | Particles | Duration | Through: T30 / EDT / C80 / D50 | σ | Range | Range of the mean | vs Eyring | Wall |
+|---|---|---|---|---|---|---|---|---|---|
+| 6×10×3 | 0.05 | 1.5 M | 4 s | 18 / 18 / 18 / 18 | 1.89 ± 0.22 % | 7.97 % | 0.57 % | +1.21 % | 97 s |
+| 6×10×3 | 0.05 | 12 M | 4 s | 18 / 18 / 18 / 18 | 0.62 ± 0.07 % | **1.94 %** | 0.21 % | +1.01 % | 648 s |
+| 6×10×3 | 0.1 | 1.5 M | 3 s | **5** / 18 / 18 / 18 | 2.16 ± 0.25 % | 9.47 % | 0.88 % | +2.79 % | 48 s |
+| 6×10×3 | 0.1 | 6 M | 3 s | 18 / 18 / 18 / 18 | 1.35 ± 0.16 % | 5.90 % | 0.20 % | +2.46 % | 198 s |
+| 6×10×3 | 0.1 | 40 M | 3 s | 18 / 18 / 18 / 18 | 0.40 ± 0.05 % | **1.73 %** | 0.21 % | +2.26 % | 1165 s |
+| 6×10×3 | 0.2 | 1.5 M | 2 s | **0** / 0 / 18 / 18 | 3.74 ± 0.44 % | 13.2 % | 0.55 % | +5.05 % | 23 s |
+| 6×10×3 | 0.2 | 8 M, 20 seeds | 2 s | 18 / 0 / 18 / 18 | 1.60 ± 0.06 % | 4.49 % | 0.11 % | +5.02 % | 119 s |
+| 6×10×3 | 0.2 | 80 M | 2 s | 18 / 0 / 18 / 18 | 0.45 ± 0.05 % | **1.53 %** | 0.34 % | +4.95 % | 1151 s |
+| 6×10×3 | 0.4 | 1.5 M | 1 s | **0** / 0 / 18 / 18 | 4.96 ± 0.58 % | 15.9 % | 1.77 % | +10.63 % | 11 s |
+| 6×10×3 | 0.4 | 16 M | 1.5 s | **17** / 0 / 18 / 18 | 2.09 ± 0.25 % | 7.43 % | 1.02 % | +10.84 % | 98 s |
+| 6×10×3 | 0.4 | 48 M | 1 s | 18 / 0 / 18 / 18 | 1.14 ± 0.13 % | 4.49 % | 0.72 % | +10.72 % | 336 s |
+| 6×10×3 | 0.4 | 260 M | 1.5 s | 18 / 0 / 18 / 18 | 0.42 ± 0.05 % | **1.47 %** | 0.03 % | +10.73 % | 1748 s |
+| 5×4×3 | 0.05 | 1.5 M | 3 s | 18 / 18 / 18 / 18 | 1.16 ± 0.14 % | 4.45 % | 0.58 % | +1.27 % | 98 s |
+| 5×4×3 | 0.05 | 10 M | 3 s | 18 / 18 / 18 / 18 | 0.47 ± 0.06 % | **1.48 %** | 0.17 % | +1.04 % | 583 s |
+| 5×4×3 | 0.1 | 1.5 M | 2 s | 18 / 0 / 18 / 18 | 1.62 ± 0.19 % | 5.71 % | 0.58 % | +2.15 % | 48 s |
+| 5×4×3 | 0.1 | 18 M | 2 s | 18 / 0 / 18 / 18 | 0.53 ± 0.06 % | **1.91 %** | 0.24 % | +2.18 % | 528 s |
+| 5×4×3 | 0.2 | 1.5 M | 1.5 s | **9** / 0 / 18 / 18 | 2.25 ± 0.27 % | 8.61 % | 0.15 % | +4.50 % | 23 s |
+| 5×4×3 | 0.2 | 8 M | 1.5 s | 18 / 0 / 18 / 18 | 1.05 ± 0.12 % | 3.43 % | 0.52 % | +4.68 % | 143 s |
+| 5×4×3 | 0.2 | 40 M | 1.5 s | 18 / 0 / 18 / 18 | 0.42 ± 0.05 % | **1.56 %** | 0.26 % | +4.45 % | 585 s |
+| 5×4×3 | 0.4 | 1.5 M | 1 s | **0** / 0 / 18 / 18 | 2.62 ± 0.31 % | 8.50 % | 0.59 % | +9.37 % | 11 s |
+| 5×4×3 | 0.4 | 8 M, 20 seeds | 1 s | 18 / 0 / 18 / 18 | 1.56 ± 0.06 % | 4.83 % | 0.56 % | +9.32 % | 59 s |
+| 5×4×3 | 0.4 | 60 M | 1 s | 18 / 0 / 18 / 18 | 0.52 ± 0.06 % | **1.55 %** | 0.32 % | +9.28 % | 431 s |
+
+T30 refused at the lower counts is `monte_carlo_noise`; EDT refused is `early_unresolved` ("EDT
+and the time step", below).
+
+### Energetic mode
+
+| Room | α | Particles | Duration | `trans_epsilon` | Through: T30 / EDT / C80 / D50 | σ | Range | Range of the mean | vs Eyring | Wall |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 6×10×3 | 0.05 | 1.5 M | 4 s | 7 | 18 / 18 / **5** / 18 | 0.04 % | 0.17 % | 0.02 % | +1.19 % | 1330 s |
+| 6×10×3 | 0.1 | 6 M | 2 s | 7 | 18 / 18 / 18 / 18 | 0.03 % | 0.10 % | 0.01 % | +2.42 % | 2605 s |
+| 6×10×3 | 0.2 | 1.5 M | 1 s | 9 | **0** / 0 / 18 / 18 | 0.09 % | 0.27 % | 0.02 % | +4.95 % | 356 s |
+| 6×10×3 | 0.2 | 4.5 M | 1 s | 9 | 18 / 0 / 18 / 18 | 0.07 % | 0.26 % | 0.02 % | +4.96 % | 906 s |
+| 6×10×3 | 0.4 | 1.5 M | 0.5 s | 9 | **0** / 0 / 18 / 18 | 0.18 % | 0.65 % | 0.08 % | +10.73 % | 180 s |
+| 6×10×3 | 0.4 | 13 M | 0.5 s | 9 | 18 / 0 / 18 / 18 | 0.06 % | 0.19 % | 0.04 % | +10.74 % | 1102 s |
+| 5×4×3 | 0.05 | 1.5 M | 3 s | 7 | 18 / 18 / 18 / 18 | 0.03 % | 0.12 % | 0.01 % | +1.10 % | 1345 s |
+| 5×4×3 | 0.1 | 1.5 M | 2 s | 7 | 18 / 0 / 18 / 18 | 0.04 % | 0.13 % | 0.02 % | +2.22 % | 663 s |
+| 5×4×3 | 0.2 | 1.5 M | 0.8 s | 9 | 18 / 0 / 18 / 18 | 0.07 % | 0.24 % | 0.07 % | +4.45 % | 354 s |
+| 5×4×3 | 0.2 | 1.5 M | 0.8 s | 7 | 18 / 0 / 18 / 18 | 0.06 % | 0.16 % | 0.02 % | +4.43 % | 330 s |
+| 5×4×3 | 0.4 | 1.5 M | 0.4 s | 9 | **0** / 0 / 18 / 18 | 0.12 % | 0.49 % | 0.04 % | +9.24 % | 180 s |
+| 5×4×3 | 0.4 | 3.5 M | 0.4 s | 9 | 18 / 0 / 18 / 18 | 0.08 % | 0.29 % | 0.01 % | +9.24 % | 405 s |
+
+The α 0.05 and 0.1 rows are new (second review: they had not been run). T30 refused is
+`monte_carlo_noise`: the estimate is the random-mode bound, 30 to 40 times what the seeds show
+here. C80 refused at α 0.05 in the 6×10×3 m room is `missing_moves`: 125 lost particles a band in a
+4 s run make the energetic lost share `10·125/1,500,000` = 8.3·10⁻⁴, which moves C80 (about −2.9 dB)
+by up to 0.011 dB against its 0.01 dB limit.
+
+### The second table: air absorption on
+
+Octave bands 125 Hz to 8 kHz, 20 °C, 50 %; "vs Eyring" here is against `K·V/(A + 4mV)` with the air
+term SPPS applies (`params::air::solver_air_absorption_per_m`), per band from 125 Hz to 8 kHz.
+
+| Method | Room | α | Particles | Through: T30 | σ | Range | vs Eyring + 4mV, 125 Hz … 8 kHz | Wall |
+|---|---|---|---|---|---|---|---|---|
+| random | 6×10×3 | 0.05 | 6 M, 4 s | 21 / 21 | 0.94 ± 0.10 % | 3.70 % | +1.30, +1.51, +0.93, +1.31, +0.72, −0.07, −0.37 % (± 0.3 %) | 345 s |
+| energetic, ε 7 | 6×10×3 | 0.05 | 4 M, 4 s | 21 / 21 | 0.03 % | 0.11 % | +1.20, +1.20, +1.15, +1.11, +1.03, +0.82, +0.46 % | 3428 s |
+| random | 5×4×3 | 0.1 | 4 M, 2 s | 21 / 21 | 1.01 ± 0.11 % | 4.74 % | +2.94, +2.84, +1.89, +2.03, +2.33, +2.04, +1.33 % (± 0.3 %) | 108 s |
+| energetic, ε 7 | 5×4×3 | 0.1 | 4 M, 2 s | 21 / 21 | 0.03 % | 0.14 % | +2.21, +2.19, +2.17, +2.12, +2.08, +1.88, +1.37 % | 1864 s |
+
+Air adds its rate to the room's exactly, in SPPS (a factor `e^(−m·c·dt)` a step on the energy or on
+survival, `CalculationCore.cpp:57, 64`) as in Eyring's `4mV`, while the excess over Eyring comes
+from the walls alone (below). So the excess falls as air takes a larger share: predicted from the
+independent transport's T without air plus the air rate, +0.46 % at 8 kHz in the 6×10×3 m room and
++1.37 % in the 5×4×3 m one, which is what energetic SPPS gives to 0.01 %. Every band is within 5 %.
+
+**TCR on every cell** (`m8_tcr_cells`: both rooms, the four α, air off and on): TCR's Eyring time
+equals the analytic value, TCR's constant 0.163 with the solver's `m`, within 4.4·10⁻⁷ relative
+in every band. Against Eyring with SPPS's constant it is +1.23 % everywhere, the constant alone.
+
+### T30 against Eyring: the reference, measured apart from SPPS
+
+Second review: the first version of this section read "random and energetic agree, so this is the
+reference, not the solver". It was not evidence: both methods share SPPS's whole transport. This
+is. `crates/simpa-core/tests/lambert_box.rs` is a transport written from scratch for it, sharing no
+code with SPPS: straight rays in the box, Lambert (cosine) reflection, the energy multiplied by
+`1 − α` at each reflection, receiver balls of 0.31 m collecting energy times path length per bin,
+4,000,000 rays per cell in 8 independent replicas, T30 read through `params` as SPPS's are.
+
+| Room | α | `γ²` | Transport | SPPS energetic | SPPS random (highest count) | Kuttruff with this `γ²` |
+|---|---|---|---|---|---|---|
+| 6×10×3 | 0.05 | 0.388 | +1.20 % | +1.19 % | +1.01 % | +1.01 % |
+| 6×10×3 | 0.1 | 0.388 | +2.44 % | +2.42 % | +2.26 % | +2.09 % |
+| 6×10×3 | 0.2 | 0.387 | +4.96 % | +4.96 % | +4.95 % | +4.51 % |
+| 6×10×3 | 0.4 | 0.384 | +10.78 % | +10.74 % | +10.73 % | +10.86 % |
+| 5×4×3 | 0.05 | 0.352 | +1.11 % | +1.10 % | +1.04 % | +0.91 % |
+| 5×4×3 | 0.1 | 0.352 | +2.20 % | +2.22 % | +2.18 % | +1.89 % |
+| 5×4×3 | 0.2 | 0.351 | +4.47 % | +4.45 % | +4.45 % | +4.08 % |
+| 5×4×3 | 0.4 | 0.350 | +9.25 % | +9.24 % | +9.28 % | +9.83 % |
+
+- The transport's mean free path is `4V/S` within 0.3 % (3.334 against 3.333 m; 2.554 against
+  2.553 m), and its room energy decays at the rate its receivers give (T within 0.05 %).
+- **SPPS reproduces it**: energetic within 0.04 % in every cell (the transport's standard error is
+  0.01 to 0.07 %), random within 0.2 % (its cell mean carries about 0.1 % of noise, and the three
+  receivers of a band share their particles). The excess over Eyring is the Lambert box's, not
+  SPPS's: a 5 % tolerance against Eyring fails the α 0.4 cells for physics, and α 0.2 in the
+  6×10×3 m room sits at it.
+- Kuttruff's correction with the transport's own `γ²` comes within 0.6 % of the transport. Its
+  `γ²` depends on the room (0.388 and 0.352 here), so it would need computing for each room, apart
+  from SPPS. The options are Burhan's (`docs/params.md`, "The reference M8 compares against").
+
+### Seed spread: what "≤ 2 %" asks for
+
+The range of three seeds is a poor statistic: for normal noise its mean is 1.69 σ and its 95 %
+point 3.31 σ, so a single range is uncertain by about half. The σ above, pooled over 18
+receiver-bands (36 degrees of freedom), is uncertain by about 12 %; over 20 seeds (342), by 4 %.
+- **Over 20 seeds at 8 M** (6×10×3 α 0.2 and 5×4×3 α 0.4, every triple of the 20, 1140): a
+  receiver-band's 3-seed range is within 2 % in 37 % of cases, never in all 18 of a triple (the
+  worst of 18 has median 5.7 %, 5–95 % 4.1 to 7.9 %), and **the cell's mean in every triple** (its σ
+  0.39 % and 0.34 %).
+- **σ falls as `1/√N`**: from the 20-seed σ, 0.51 % and 0.57 % are predicted at 80 M and 60 M;
+  0.45 ± 0.05 % and 0.52 ± 0.06 % were measured.
+- **Per receiver-band, measured**: at the bold counts every receiver-band of every random cell
+  came within 2 % over seeds 1 to 3 (worst 1.47 to 1.94 %). From σ the chance of that is 0.35 to
+  0.98 (6×10×3: 0.35 at 12 M, 0.98 at 40 M, 0.91 at 80 M, 0.96 at 260 M; 5×4×3: 0.87 at 10 M, 0.68
+  at 18 M, 0.96 at 40 M, 0.74 at 60 M), so some passed by luck. **For a 95 % chance that all 18
+  pass**: 6×10×3: 25 M, 35 M, 90 M and 252 M at α 0.05, 0.1, 0.2 and 0.4; 5×4×3: 12 M, 28 M, 39 M
+  and 87 M; random-mode wall time grows in proportion.
+- **On the cell's mean**: met from 1.5 M in every cell.
+- **Energetic**: every receiver-band within 0.65 % from 1.5 M, in every cell.
+
+### EDT and the time step
+
+The second review's probe (`docs/params.md`, "The early reverberation"): the same cells at `dt`
+10, 1 and 0.2 ms, energetic, 1.5 M, seeds 1 to 3, EDT per receiver from the curve with the
+reverberation continued back (the model alone) over its 18 band-seeds, against 0.2 ms:
+
+| Cell | 10 ms | 1 ms | T30 at 10 ms |
+|---|---|---|---|
+| 5×4×3, α 0.4 | **−4.50, −4.47, −4.89 %** (42 to 53 standard errors) | −0.01, +0.10, −0.15 % | within 0.05 % |
+| 6×10×3, α 0.2 | −0.17, −0.49, −0.36 % (up to 5.5) | −0.09, +0.13, −0.00 % | within 0.03 % |
+
+The independent transport gives the same (5×4×3 α 0.4: −4.47 to −4.75 %; 6×10×3 α 0.4: +0.12 to
+−1.75 %), so the bias is the histogram's, not SPPS's. Read three ways, as SPPS's series now are,
+EDT at 10 ms is refused `early_unresolved` in every cell but α 0.05 (both rooms) and α 0.1 in the
+6×10×3 m room, where the transport shows it within 0.30 % of 0.2 ms. A step of 1 ms costs 1.2 to
+1.6 times the time of 10 ms, 0.2 ms 2.9 to 3.6 times (131, 161 and 382 s; 294, 458 and 1058 s).
+
+### Particles left alive at the end
+
+Random mode at high counts leaves a few particles alive at the end in the 6×10×3 m room, about one
+in 10⁸ to 10⁹ particle-bands (18 in 4.7·10⁹ at 260 M), and none in 2·10⁹ in the 5×4×3 m room. They
+cannot be survivors: at α 0.4 surviving the 103 reflections of 1 s has a chance of 10⁻²³.
+**Trapped, measured**: seed 2 at 48 M kept one particle alive at 500 Hz and one at 1 kHz after 1 s,
+and the same run to 1.5 s kept them again, in the same two bands (a survivor at 1 s would be
+absorbed by 1.5 s with a chance of 1 − 10⁻¹¹). The runs are deterministic: the 1.5 s run's
+receiver histograms equal the 1 s run's bin for bin in the first second, and hold nothing after
+it, so the trapped particles reach no receiver. Before this commit each one made its band
+incomplete and its ragged random-mode end refused T30, EDT, C80 and D50 as `truncated` (15 of 18
+receiver-bands at 48 M; 8 of 18 at 8 M over 20 seeds). Now a band with at most one particle in a
+million alive is complete, those few bounded with the lost ones as unfinished paths ("Complete
+series"). The mechanism inside SPPS is not known; an upstream finding, not raised.
+
+### Lost particles in an M8 cell
+
+The second review asked whether `ρ` = 10, measured on tutorial 1, holds in M8's rooms. Measured
+in the 5×4×3 m room at α 0.4, energetic, `trans_epsilon` 9, 300,000 particles with every
+trajectory saved, 3 seeds (`energetic_lost_particles_from_saved_trajectories` with
+`$SIMPA_LOST_CELL`): SPPS counted 76 lost; the 44 that stopped with more than 10⁻⁵ of their start
+energy, ten thousand times the floor, carried **0.04 to 4.4 times the mean** (median 1.0). The rest
+ended within 10⁴ of the floor, where particles the floor dropped (up to 13 times above it at five
+reflections a step) cannot be told from them. `ρ` = 10 is twice the largest measured.
+
+### For Burhan's decisions
+
+- **The reference** (above; `docs/params.md`): Eyring and a tolerance or α set that allows for the
+  Lambert box's slower decay, or Kuttruff with a `γ²` computed apart from SPPS, or the independent
+  transport. SPPS matches the transport to 0.04 % (energetic).
+- **Seed spread**: per receiver-band needs the counts above (12 to 252 M in random mode for a 95 %
+  chance in every receiver-band); on the cell's mean it is met from 1.5 M.
+- **Energetic mode's noise bound** over-states T30's noise 30 to 40 times; it alone sets the
+  energetic counts (1.5 to 13 M, 5 to 57 minutes a run under load). A tighter model would need the
+  spread of the particles' energies (second review: deposits scale with the mean energy `f(t)`,
+  which the room table already gives).
+- **EDT**: at 10 ms it comes out only where the early decay is slow against the step; at 1 ms C50,
+  C80, D50 and Ts are refused `params_bad_arrival` at most receivers (the strict rule of
+  2026-09-24).
+- **`trans_epsilon`**: 7 or more for energetic cells (5 biases T30, "Energetic mode: the solver's
+  floor").
+
+### Runs refused for a NaN
+
+Before the lateral-column fix ("Verified runs only", step 6), 2 of the 3 energetic runs in the
+5×4×3 m room at α 0.2 and 1.5 M, and 1 of 10 energetic runs of tutorial 1 at 1.5 M, were refused
+whole for a NaN in a `.gap` lateral column; every table here reads them with the fix.

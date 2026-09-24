@@ -26,5 +26,12 @@ windows-sys = { version = "0.61.2", features = [
     "Win32_System_Time",
 ] }
 
+[features]
+# Test builds only: lets a test put a fault into the code paths the M7 gates hold
+# (src/faults.rs), so each gate's say-NO runs the fault through the code. No normal build has it.
+fault-injection = []
+
 [dev-dependencies]
 proptest = "1"
+# This crate's own tests build it with the fault seams (src/faults.rs).
+simpa-core = { path = ".", features = ["fault-injection"] }

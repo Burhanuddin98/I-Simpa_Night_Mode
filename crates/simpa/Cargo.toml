@@ -13,3 +13,7 @@ simpa-core = { path = "../simpa-core" }
 [dev-dependencies]
 # The parity bed reads upstream's config.xml through parity_support.rs, shared with simpa-core's tests.
 roxmltree = "0.21.1"
+# The gates' say-NO partners put their faults into the code (simpa-core src/faults.rs); test builds only.
+simpa-core = { path = "../simpa-core", features = ["fault-injection"] }
+# Validates `simpa results --json` against the committed JSON Schema (cli_results.rs).
+boon = "0.6"

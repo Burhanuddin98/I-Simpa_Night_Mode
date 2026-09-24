@@ -1,0 +1,90 @@
+{
+  "manifest_version": 1,
+  "core_version": "0.1.0",
+  "solver_commit": "929a5c8e5f590b189f29155faeff8670f3699479",
+  "source": {
+    "kind": "project",
+    "path": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m7-params\\tests/fixtures\\rooms/outputs_box.simpa",
+    "sha256": "b0b183de0b84bf2996f734c0b8a84143fd804edb3882ba9acbcd895ccd3b3d25",
+    "variant": null
+  },
+  "solver": "spps",
+  "exe": {
+    "path": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\t3-proj\\target\\solvers\\bin\\spps.exe",
+    "sha256": "1d9900db6cc260039c53963754d4df8de4370c7c6a65cfe998a66cb5720822e8"
+  },
+  "argv": [
+    "config.xml"
+  ],
+  "cwd": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m7-params\\target\\tmp\\cli\\write-results-14636-0-1790275096819978500\\20260924-203817-195-spps\\solve",
+  "started": "2026-09-24T20:38:17.195+02:00",
+  "inputs": [
+    {
+      "path": "config.xml",
+      "sha256": "01d6f4782589ec8c4356a2817fcd6a32782022795f7feb1f17a0cd0662e5aa83"
+    },
+    {
+      "path": "mesh.cbin",
+      "sha256": "d279779f3e625772b2c3ea6972fa384cf56d8923c2b94d0cd29357dd9f1528d7"
+    },
+    {
+      "path": "tetramesh.mbin",
+      "sha256": "33f6d8c1dcd3ddd2a431a48b8090ed735e345c272b188ae97f507ea7bdb7750b"
+    }
+  ],
+  "mesh": {
+    "manifest": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m7-params\\target\\tmp\\cli\\write-results-14636-0-1790275096819978500\\20260924-203817-195-spps\\mesh\\mesh.json",
+    "mesh_input_hash": "1ae4bbc60921beeb9d90ffd62930ad56",
+    "mbin_sha256": "33f6d8c1dcd3ddd2a431a48b8090ed735e345c272b188ae97f507ea7bdb7750b"
+  },
+  "stage": "solve",
+  "exit_class": 0,
+  "outcome": {
+    "exit_code": 0,
+    "cancelled": false,
+    "elapsed_ms": 58.6488
+  },
+  "lines": {
+    "progress": 3999,
+    "info": 2,
+    "ok": 1,
+    "warn": 0,
+    "fail": 0,
+    "unclassified": 0
+  },
+  "files": {
+    "total": 23,
+    "expected": 20,
+    "present": 20
+  },
+  "particles": {
+    "bands": [
+      {
+        "freq_hz": 500,
+        "absorbed_by_atmosphere": 17,
+        "absorbed_by_materials": 1983,
+        "absorbed_by_fittings": 0,
+        "lost_by_infinite_loops": 0,
+        "lost_by_meshing_problems": 0,
+        "remaining": 0,
+        "total": 2000
+      },
+      {
+        "freq_hz": 1000,
+        "absorbed_by_atmosphere": 39,
+        "absorbed_by_materials": 1961,
+        "absorbed_by_fittings": 0,
+        "lost_by_infinite_loops": 0,
+        "lost_by_meshing_problems": 0,
+        "remaining": 0,
+        "total": 2000
+      }
+    ]
+  },
+  "loss_limit": 0.01,
+  "verdict": {
+    "status": "OK",
+    "reasons": [],
+    "warnings": []
+  }
+}

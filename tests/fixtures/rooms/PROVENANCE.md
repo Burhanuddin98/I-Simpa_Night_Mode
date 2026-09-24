@@ -78,10 +78,16 @@ on sources, receivers and surface receivers, and no longer loaded. What the reci
 seeded box keeps its pins (the source 1799, receivers 1473 and 1632, the surface receiver 1792);
 what they make is unpinned, as the level box's material already was: the level box's source and
 both its receivers (cloned from the tutorial's first receiver, they would both pin 1473, which
-`check_integrity` refuses on load) and the two-source box's `Source 2` (a second 1799). The
-committed runs under `tests/fixtures/results/` were made before this rewrite, from
-`seats_box.simpa`, `energetic_box.simpa` and `sources2_box.simpa` at the hashes their `run.json`
-records; their `config.xml` carries the ids export assigned then.
+`check_integrity` refuses on load) and the two-source box's `Source 2` (a second 1799).
+
+Rewritten again on 2026-09-25 when the M7 follow-ups were merged into that line. The five rooms
+above came out byte for byte as the first rewrite had written them (the follow-ups had rewritten
+them for the `preprocess` key only, which the first rewrite already wrote). `outputs_box.simpa`,
+which the follow-ups added, now keeps the seeded box's pins as the others do; its cutting plane
+`Cut` is made by its recipe and unpinned. The committed runs under `tests/fixtures/results/` were
+made before these rewrites, from `seats_box.simpa`, `energetic_box.simpa`, `sources2_box.simpa`
+and `outputs_box.simpa` at the hashes their `run.json` records; their `config.xml` carries the ids
+export assigned then.
 
 | fixture | recipe | for | sha256 |
 |---|---|---|---|
@@ -89,4 +95,5 @@ records; their `config.xml` carries the ids export assigned then.
 | `seats_box.simpa` | tutorial 1's box on the octave bands 500 Hz and 1 kHz, its receivers renamed `Seat` and `Seat2`, 2,000 particles over 1 s, the floor receiver's faces refined to 4 m² | gate M7(e); its runs are `tests/fixtures/results/` | `ce61b850e78f5bf8` |
 | `energetic_box.simpa` | `seats_box.simpa` in energetic mode, `trans_epsilon` 3, 50,000 particles | the M7 review: the solver's floor, energetic completeness; its run is `results/energetic_spps/` | `da78f07b4ed2f042` |
 | `sources2_box.simpa` | `seats_box.simpa` with a second source `Source 2` at (5, 8.5, 1.2), 3 dB below `Source 1` and 20 ms late, and `echogram_per_source` on | the M7 review: echograms per source, several sources; its run is `results/sources2_spps/` | `043ca6baf31d6d57` |
+| `outputs_box.simpa` | `seats_box.simpa` with a cutting plane `Cut` 1.2 m above the floor, corners (0.5, 9.5, 1.2), (0.5, 0.5, 1.2) and (5.5, 0.5, 1.2), 1 m resolution, and 10 particles per source saved (`particles_saved`) with the surface and receiver collision files off | the M7 follow-ups: cutting planes kept apart from surface receivers by name, and the `.pbin` read; its run is `results/outputs_spps/` | `cba48e2bf7d775cf` |
 | `tutorial1_box_asymmetric.simpa` | `tutorial1_box_seeded.simpa` with the floor's material renamed `Rising absorption`, its α `0.15 + 0.025·i` in band `i` (0.15 to 0.80 over the 27 bands), and the walls' α 0.1 in every band; the ceiling stays 0.3 | gate M7(d), the M7 review: tutorial 1's own absorption averages to the same α by area, by face and by material; here each way, a swap of the floor's and walls' materials, and a band's neighbour's α miss TCR by more than 0.5 % | `7da969c0642a2337` |

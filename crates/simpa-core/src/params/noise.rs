@@ -96,6 +96,9 @@ pub struct Estimate {
 pub struct Parameters {
     /// The onset bin; `None` when the series itself is refused.
     pub onset: Option<Onset>,
+    /// What EDT, T20 and T30 were measured from (`decay::BandParameters::decay_arrival`); `None`
+    /// when the series itself is refused.
+    pub decay_arrival: Option<Arrival>,
     pub spl_db: Result<Estimate, ParamError>,
     pub edt_s: Result<Estimate, ParamError>,
     pub t20_s: Result<Estimate, ParamError>,
@@ -105,6 +108,10 @@ pub struct Parameters {
     /// A fraction.
     pub d50: Result<Estimate, ParamError>,
     pub ts_s: Result<Estimate, ParamError>,
+    /// `100·(T30/T20 − 1)`, %, from the reported T20 and T30, its standard deviation over the
+    /// resamples that give both; refused, with T30's refusal or else T20's, when either is
+    /// ([`decay::curvature`]). No limit of its own: its noise follows from theirs.
+    pub curvature_percent: Result<Estimate, ParamError>,
 }
 
 /// The eight quantities in [`Parameters`]' order, with their limits: `(quantity, limit,
@@ -124,30 +131,28 @@ const QUANTITIES: [(Quantity, f64, bool); 8] = [
     (Quantity::CentreTime, limits::CENTRE_TIME_S, false),
 ];
 
-/// The eight values of `decay` on one series, in [`QUANTITIES`]' order. SPL does not depend on
-/// the arrival, so a given arrival that `decay` refuses (`params_bad_arrival`) refuses the other
-/// seven only.
-fn values(series: &EnergySeries, arrival: Arrival) -> ([Result<f64, ParamError>; 8], Onset) {
-    match decay::evaluate(series, arrival) {
-        Ok(p) => (
-            [
-                p.spl_db,
-                p.edt.map(|f| f.t_s),
-                p.t20.map(|f| f.t_s),
-                p.t30.map(|f| f.t_s),
-                p.c50_db,
-                p.c80_db,
-                p.d50,
-                p.ts_s,
-            ],
-            p.onset,
-        ),
-        Err(e) => {
-            let mut all: [Result<f64, ParamError>; 8] = std::array::from_fn(|_| Err(e.clone()));
-            all[0] = decay::spl_db(series);
-            (all, decay::onset(series))
-        }
-    }
+/// The eight values of `decay` on one series, in [`QUANTITIES`]' order. A given arrival that does
+/// not fit the onset bin refuses C50, C80, D50 and Ts only (`params_bad_arrival`,
+/// [`decay::evaluate`]).
+fn values(
+    series: &EnergySeries,
+    arrival: Arrival,
+) -> ([Result<f64, ParamError>; 8], Onset, Arrival) {
+    let p = decay::evaluate(series, arrival);
+    (
+        [
+            p.spl_db,
+            p.edt.map(|f| f.t_s),
+            p.t20.map(|f| f.t_s),
+            p.t30.map(|f| f.t_s),
+            p.c50_db,
+            p.c80_db,
+            p.d50,
+            p.ts_s,
+        ],
+        p.onset,
+        p.decay_arrival,
+    )
 }
 
 /// The eight parameters of `series` from `arrival`, each with its noise under `model`, or its
@@ -164,6 +169,7 @@ pub fn evaluate(
             let r = || Err(e.clone());
             return Parameters {
                 onset: None,
+                decay_arrival: None,
                 spl_db: r(),
                 edt_s: r(),
                 t20_s: r(),
@@ -172,10 +178,11 @@ pub fn evaluate(
                 c80_db: r(),
                 d50: r(),
                 ts_s: r(),
+                curvature_percent: r(),
             };
         }
     };
-    let (base, onset) = values(series, arrival);
+    let (base, onset, decay_arrival) = values(series, arrival);
     // Each resample's eight values; `None` where the resample refuses the quantity.
     let mut samples: Vec<[Option<f64>; 8]> = Vec::new();
     if let NoiseModel::Crossings { mean_deposit } = model
@@ -189,8 +196,16 @@ pub fn evaluate(
             // particles were judged on the series itself; here only the value's spread is wanted,
             // so the resample is taken as it is: complete, nothing missing. (Judging the tail of
             // a resample again would refuse energetic mode for the ragged ends of the random-mode
-            // stand-ins, not for its own noise.)
-            samples.push(match EnergySeries::complete(series.dt(), drawn) {
+            // stand-ins, not for its own noise.) Its early reverberation is read as the series'
+            // is, so that the resamples give the value the series gives.
+            let resampled = EnergySeries::complete(series.dt(), drawn).map(|s| {
+                if series.early_reverberation_unresolved() {
+                    s.with_early_reverberation_unresolved()
+                } else {
+                    s
+                }
+            });
+            samples.push(match resampled {
                 Ok(s) => values(&s, arrival).0.map(|r| r.ok()),
                 Err(_) => [None; 8],
             });
@@ -212,10 +227,33 @@ pub fn evaluate(
             }
         }));
     }
+    // The curvature of the reported T20 and T30, with its spread over the resamples giving both.
+    let curvature_percent = match (&out[2], &out[3]) {
+        // T30's refusal first, then T20's.
+        (_, Err(e)) | (Err(e), _) => Err(match e {
+            ParamError::NotEvaluable { why, .. } => not_evaluable(Quantity::Curvature, why.clone()),
+            other => other.clone(),
+        }),
+        (Ok(t20), Ok(t30)) => {
+            let percent = |t20: f64, t30: f64| 100.0 * (t30 / t20 - 1.0);
+            let got: Vec<f64> = samples
+                .iter()
+                .filter_map(|s| Some(percent(s[2]?, s[3]?)))
+                .collect();
+            let value = percent(t20.value, t30.value);
+            // Both passed their own judgement, so at least 180 resamples give both. Were there
+            // fewer than two, the two spreads added as if independent would stand in.
+            let sd = standard_deviation(&got).unwrap_or_else(|| {
+                100.0 * (t30.value / t20.value) * (t30.sd / t30.value).hypot(t20.sd / t20.value)
+            });
+            Ok(Estimate { value, sd })
+        }
+    };
     let mut it = out.into_iter();
     let mut next = || it.next().expect("eight quantities");
     Parameters {
         onset: Some(onset),
+        decay_arrival: Some(decay_arrival),
         spl_db: next(),
         edt_s: next(),
         t20_s: next(),
@@ -224,6 +262,7 @@ pub fn evaluate(
         c80_db: next(),
         d50: next(),
         ts_s: next(),
+        curvature_percent,
     }
 }
 

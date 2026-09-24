@@ -17,21 +17,26 @@
 # Drives the release CLI and the tests:
 #   simpa run <project> --solver spps|tcr --runs <root> --json     simpa results <run> --json
 #   simpa dump gabe|csbin <file>                                    cargo test -p simpa-core|simpa
-# Every check that can pass has a "says NO" partner that must refuse an input:
+# Every check that can pass has a "says NO" partner that must refuse an input, with the fault in
+# the code or the input, never added to a number the correct run produced (M7 follow-ups; the
+# code faults are simpa_core::faults, compiled only into test builds):
 # - (a), (b), (f): the gate's predicate is applied here to the numbers the tests print, and the
 #   tests' own refusals must run and pass: a decay 1 % off fails every bound, a decay kinked above
 #   -5 dB fails EDT only and one kinked below -25 dB T30 only (a wrong regression range breaks
-#   that), air 1 C or 5 % RH off misses the table, a natural-log or neighbouring-group DIN formula
-#   misses 0.552 s;
-# - (c): Night Mode's .gap level (energy over 1e-12, main:project/result_parser.cpp:486) and the
-#   SPL moved 1 dB either way miss the bound in every band. The reverberant field is kept out by
-#   the 20 ms duration (no particle reaches a wall), which the statistics must show. Beyond the
+#   that), air 1 C or 5 % RH off misses the table; the natural log put into the DIN code, and the
+#   code's A2 and A4 formulas, miss 0.552 s. (a) is also run with the arrival detected;
+# - (c): the level code path's reference constant replaced by Night Mode's 1e-12
+#   (main:project/result_parser.cpp:486), and 1 dB off either way, misses the bound in every band.
+#   The reverberant field is kept out by the 20 ms duration (no particle reaches a wall), which the
+#   statistics must show; a run whose walls are reached and reflect fails that check. Beyond the
 #   plan's bound (M7 review), the same run is held to the exact free field within its Monte-Carlo
-#   noise, and the SPL 0.1 dB either way, or with rho c = 400, misses that;
+#   noise, and the reference 0.1 dB off either way, or as rho c = 400 would read, misses that;
 # - (d): the walls' alpha 5 % higher, run through TCR, gives analytic times outside 0.5 % of the
-#   unchanged run in every band; a NaN planted in a copy of the run is found by the scan and the
-#   copy is refused by simpa results. Beyond the plan's box (M7 review), an asymmetric box, where
-#   a mean over faces or materials, a swap of two groups' materials or a band's neighbour's
+#   unchanged run in every band; one plane's alpha raised past the smallest increase the gate
+#   resolves (measured) is caught, and 2 % below it is not; the air term dropped, or taken at ISO's
+#   exact midband, misses TCR in some band; a NaN planted in a copy of the run is found by the scan
+#   and the copy is refused by simpa results. Beyond the plan's box (M7 review), an asymmetric box,
+#   where a mean over faces or materials, a swap of two groups' materials or a band's neighbour's
 #   absorption each miss TCR by more than 0.5 % in every band;
 # - (e): a copy with the two folders swapped reads the series swapped, and one with a third folder
 #   'Seat3' is refused (exit 6);
@@ -204,6 +209,15 @@ Check "(a) six exact decays, T 0.3/1/3 s x dt 1/10 ms: T20, T30, EDT within 0.5 
     }
     $ok
 }
+# The plan's direct-arrival detection on the gate's own decays (the M7 critic: only the given
+# arrival had been run): decay times pass; C50, C80 and D50 are refused unresolved, the truth
+# bracketed, never returned as numbers.
+Check "(a) with the arrival detected (Arrival::Detected): the six decays give EDT, T20 and T30 within 0.5 %, and C50, C80 and D50 refused unresolved with the closed form between the two ends of the onset bin" {
+    if (-not (OneTest 'simpa-core' 'params_synthetic' 'gate_a_decays_with_the_arrival_detected')) { return $false }
+    $m = [regex]::Matches($script:cargoText, '(?m)^detected, T (\S+) s, dt (\S+) s: EDT (\w+), T20 (\w+), T30 (\w+), C50 (\w+), C80 (\w+), D50 (\w+), Ts (\w+)')
+    $m | ForEach-Object { Write-Host "      $($_.Value)" }
+    $m.Count -eq 6 -and @($m | Where-Object { $_.Groups[3].Value -ne 'pass' -or $_.Groups[4].Value -ne 'pass' -or $_.Groups[5].Value -ne 'pass' -or $_.Groups[7].Value -ne 'unresolved' -or $_.Groups[8].Value -ne 'unresolved' }).Count -eq 0
+}
 Check "(a) says NO: a decay 1 % off fails all seven bounds, in all six cases" { OneTest 'simpa-core' 'params_synthetic' 'a_decay_one_percent_off_fails_every_bound' }
 Check "(a) says NO: a series cut before -35 dB gives range_not_reached for T30, not a number" { OneTest 'simpa-core' 'params_synthetic' 'a_series_cut_before_minus_35_db_gives_not_evaluable_not_a_number' }
 # On an exact exponential every sub-range gives the same slope, so the six decays above cannot see
@@ -306,20 +320,25 @@ Check "(c) what keeps the reverberant field out is the 20 ms duration: SPPS's st
     Write-Host ("      {0} bands; absorbed by the materials {1}; remaining {2} of {3}" -f $bands.Count, (($bands | ForEach-Object { $_.absorbed_by_materials }) -join '/'), $bands[0].remaining, $bands[0].total)
     $bands.Count -eq 6 -and $bad.Count -eq 0
 }
-Check "(c) says NO: Night Mode's .gap level, energy / 1e-12 (main:project/result_parser.cpp:486), misses the bound in every band" {
+# The say-NOs put their fault into the code (M7 follow-ups; the M7 critic: they had added offsets
+# to the SPL the correct run produced): cli_results' gate (c) test runs the level box, then
+# computes its report again in-process with the level code path's reference constant replaced
+# (simpa_core::faults::Fault::LevelReference, a test-only feature no normal build has).
+Check "(c) says NO through the code: SPL's reference p0^2 replaced by Night Mode's 1e-12 (main:project/result_parser.cpp:486), and by p0^2 1 dB off either way, misses the bound in every band; p0^2 0.1 dB off either way, or as rho c = 400 would read, misses the exact free field" {
     $line = @(git show main:project/result_parser.cpp)[485]
     Write-Host "      result_parser.cpp:486: $($line.Trim())"
-    $rows = LevelRows
-    $caught = @($rows | Where-Object { -not (GateC (10 * [math]::Log10($_.Total / 1e-12)) $_.Lw $_.R) })
-    $gap = ($rows | ForEach-Object { 10 * [math]::Log10($_.Total / 1e-12) - $_.Spl } | Measure-Object -Average).Average
-    Write-Host ("      Night Mode's level reads {0:N3} dB above ours; caught in {1} of {2} bands" -f $gap, $caught.Count, $rows.Count)
-    $line.Contains('/ 1e-12f') -and $caught.Count -eq $rows.Count
+    if (-not (OneTest 'simpa' 'cli_results' 'gate_c_level_calibration_and_the_offsets_it_catches')) { return $false }
+    $m = [regex]::Matches($script:cargoText, "(?m)^gate \(c\) says no through the code: (.+?): SPL (\S+) dB, outside the gate's bound in (\d+) of (\d+) bands")
+    $m | ForEach-Object { Write-Host "      $($_.Groups[1].Value): SPL $($_.Groups[2].Value) dB, outside in $($_.Groups[3].Value) of $($_.Groups[4].Value) bands" }
+    $x = [regex]::Matches($script:cargoText, '(?m)^exact says no through the code: (.+?): weighted mean (\S+) dB: (caught|PASSES)')
+    $x | ForEach-Object { Write-Host "      exact: $($_.Groups[1].Value): mean $($_.Groups[2].Value) dB, $($_.Groups[3].Value)" }
+    $line.Contains('/ 1e-12f') -and $m.Count -eq 3 -and @($m | Where-Object { $_.Groups[3].Value -ne $_.Groups[4].Value -or $_.Groups[4].Value -ne '12' }).Count -eq 0 -and $x.Count -eq 3 -and @($x | Where-Object { $_.Groups[3].Value -ne 'caught' }).Count -eq 0
 }
-Check "(c) says NO: the SPL moved 1 dB up or down misses the bound in every band" {
-    $rows = LevelRows
-    $caught = @($rows | Where-Object { -not (GateC ($_.Spl + 1) $_.Lw $_.R) -and -not (GateC ($_.Spl - 1) $_.Lw $_.R) })
-    Write-Host "      caught in $($caught.Count) of $($rows.Count) bands"
-    $caught.Count -eq $rows.Count
+Check "(c) says NO to a run whose walls are reached: the level box with its walls reflecting (alpha 0.5) and 120 ms, through SPPS, fails the no-reverberant-field check in every band" {
+    if (-not (OneTest 'simpa' 'cli_results' 'gate_c_says_no_to_a_run_whose_walls_are_reached')) { return $false }
+    $m = [regex]::Matches($script:cargoText, '(?m)^reflecting walls, (\d+) Hz: absorbed by the materials (\d+), remaining (\d+) of (\d+)')
+    $m | ForEach-Object { Write-Host "      $($_.Groups[1].Value) Hz: absorbed by the materials $($_.Groups[2].Value), remaining $($_.Groups[3].Value) of $($_.Groups[4].Value)" }
+    $m.Count -eq 6 -and @($m | Where-Object { [int]$_.Groups[2].Value -eq 0 -or $_.Groups[3].Value -eq $_.Groups[4].Value }).Count -eq 0
 }
 # The gate's reference assumes rho c = 400 and a point receiver, so it sits 0.11-0.30 dB below what
 # SPPS should give, and a calibration error between about -0.6 and +0.2 dB passes it (M7 review).
@@ -333,16 +352,6 @@ Check "(c) the exact free field, W rho c <1/d^2> / (4 pi p0^2) with SPPS's rho c
     $c = ExactCheck $rows $script:levelRadius $script:levelRhoC 0
     Write-Host ("      rho c {0:N2}, R {1} m; weighted mean SPL - exact {2:+0.0000;-0.0000} dB, standard deviation {3:N4} dB: {4}" -f $script:levelRhoC, $script:levelRadius, $c.Mean, $c.Sd, $(if ($c.Ok) { 'within' } else { 'OUTSIDE' }))
     $rows.Count -eq 12 -and $c.Ok
-}
-Check "(c) says NO to the exact free field: the SPL 0.1 dB up, 0.1 dB down, or as it would be with rho c = 400 (-0.14 dB) misses it" {
-    $rows = LevelRows
-    $caught = 0
-    foreach ($o in @(0.1, -0.1, (10 * [math]::Log10(400 / $script:levelRhoC)))) {
-        $c = ExactCheck $rows $script:levelRadius $script:levelRhoC $o
-        Write-Host ("      SPL {0:+0.000;-0.000} dB: weighted mean {1:+0.0000;-0.0000} dB: {2}" -f $o, $c.Mean, $(if ($c.Ok) { 'PASSES' } else { 'caught' }))
-        if (-not $c.Ok) { $caught++ }
-    }
-    $caught -eq 3
 }
 
 # --- (d) TCR against the analytic values ----------------------------------------------------------
@@ -427,6 +436,16 @@ Check "(d) says NO: the walls' alpha 5 % higher (0.2 -> 0.21), through TCR, give
     Write-Host ("      50 Hz: TCR Sabine {0:N4} s vs moved {1:N4} s; outside 0.5 % in {2} of {3} bands" -f $first.sabine.reverberation_time_s, $a.bands[0].sabine_s.value, $out, $t.bands.Count)
     $out -eq $t.bands.Count
 }
+# One surface, as the gate's say-NO was specified (the M7 critic: the check above changes the whole
+# Walls group), and the air term, which had none, both through the code.
+Check "(d) says NO through the code: the air term 4mV dropped, or m from ISO 9613-1 at the exact midband, misses TCR in some band; one plane's alpha raised past what the gate resolves is caught, and just below it is not" {
+    if (-not (OneTest 'simpa' 'cli_results' 'gate_d_says_no_through_the_code_to_one_surface_and_to_the_air_term')) { return $false }
+    $m = [regex]::Matches($script:cargoText, '(?m)^gate \(d\) says no through the code: (.+?): outside 0\.5 % in (\d+) of 27 bands')
+    $m | ForEach-Object { Write-Host "      $($_.Groups[1].Value): outside 0.5 % in $($_.Groups[2].Value) of 27 bands" }
+    $p = [regex]::Matches($script:cargoText, '(?m)^gate \(d\), one surface: (.+?) \((\d+) m2\): alpha \+5 % fails the gate in (\d+) of 27 bands; the smallest increase it catches is \+(\S+) % \(through TCR: \+\S+ % caught in (\d+) bands, \+\S+ % in (\d+)\)')
+    $p | ForEach-Object { Write-Host "      $($_.Groups[1].Value) ($($_.Groups[2].Value) m2): +5 % fails in $($_.Groups[3].Value) bands; smallest increase caught +$($_.Groups[4].Value) % (just below: $($_.Groups[5].Value) bands, just above: $($_.Groups[6].Value))" }
+    $m.Count -eq 2 -and @($m | Where-Object { [int]$_.Groups[2].Value -eq 0 }).Count -eq 0 -and $p.Count -eq 6 -and @($p | Where-Object { $_.Groups[5].Value -ne '0' -or $_.Groups[6].Value -eq '0' }).Count -eq 0
+}
 Check "(d) says NO: a NaN planted in a band row of a copy's Main results is found by the scan, and simpa results refuses the copy (exit 6, results_outputs_invalid)" {
     $copy = CopyTree (TcrRun) (Join-Path $work 'tcr-nan\run')
     $main = Join-Path $copy 'solve\Main results.gabe'
@@ -502,10 +521,22 @@ Check "(f) DIN 18041 A3 at 180 m3 is 0.552 +/- 0.001 s" {
     Write-Host "      A3, 180 m3: $t s"
     GateF $t
 }
-Check "(f) says NO: the natural log for lg (1.4917 s) and group A2's formula (0.6944 s) miss 0.552 +/- 0.001 s" {
-    $ln = 0.32 * [math]::Log(180) - 0.17; $a2 = 0.37 * [math]::Log10(180) - 0.14
-    Write-Host ("      ln: {0:N4} s, A2: {1:N4} s" -f $ln, $a2)
-    -not (GateF $ln) -and -not (GateF $a2)
+# Through the code (M7 follow-ups): the test puts the natural log into params::din18041's lg
+# (simpa_core::faults::Fault::DinNaturalLog) and asks the code for groups A2 and A4.
+Check "(f) says NO through the code: the natural log in place of lg, and groups A2's and A4's formulas, miss 0.552 +/- 0.001 s" {
+    if (-not (OneTest 'simpa-core' 'params_room' 'gate_f_din_18041_a3_at_180_m3_is_0_552_s')) { return $false }
+    if ($script:cargoText -notmatch 'says no through the code: ln for lg ([0-9.]+) s, A2 ([0-9.]+) s, A4 ([0-9.]+) s') { throw 'the test printed no say-NO values' }
+    $v = @([double]$Matches[1], [double]$Matches[2], [double]$Matches[3])
+    Write-Host ("      ln for lg: {0} s, A2: {1} s, A4: {2} s" -f $v[0], $v[1], $v[2])
+    @($v | Where-Object { GateF $_ }).Count -eq 0
+}
+
+# --- the deliverable's schema ---------------------------------------------------------------------
+Check "results --json validated against the committed schema by a JSON Schema validator: every committed run's report (SPPS and TCR) and a refusal of each exit; a wrong type or a missing field fails it" {
+    if (-not (OneTest 'simpa' 'cli_results' 'every_report_and_refusal_validates_against_the_committed_schema')) { return $false }
+    $m = [regex]::Matches($script:cargoText, '(?m)^schema says no: ([^:]+):')
+    Write-Host "      says no to: $((@($m | ForEach-Object { $_.Groups[1].Value })) -join '; ')"
+    $m.Count -eq 7
 }
 
 # --- the tail -------------------------------------------------------------------------------------
