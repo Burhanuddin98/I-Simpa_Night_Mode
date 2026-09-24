@@ -1,10 +1,16 @@
 """Judge recorded solver runs against docs/solver-contract.md and write each expected.json.
 
     python tools/fixture-gen/mkexpected.py <runs-dir> <observed-root> --simpa <simpa.exe>
-        [--contract docs/solver-contract.md] [--upstream <root>] [--check]
+        [--contract docs/solver-contract.md] [--upstream <root>] [--manifest <manifest.json>]
+        [--check]
 
 <observed-root> is what runsolvers.ps1 wrote (-Out): <case>/solve/, solver.stdout.txt,
 solver.stderr.txt and run.json per real case. stub_* fixtures are judged from their stub.json.
+
+Each real run cites the solver that ran by its code sha256 (pe_fingerprint.py: the sha256 with
+the link timestamps zeroed, the same for every build of the same code), so a rebuild of the
+solvers leaves the fixtures as they are. That solver must be solvers/manifest.json's build: an
+executable whose code sha256 is not the manifest's is a disagreement.
 
 For every fixture this script computes, independently of the Rust crates:
 1. the solver's own verdict, from the Part B tables it parses out of the contract page (22 line
@@ -41,7 +47,6 @@ Verdict rules (docs/solver-contract.md Part B, "Exit codes" and "Judging a run")
 """
 import argparse
 import collections
-import hashlib
 import json
 import math
 import os
@@ -55,6 +60,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import fixture_common as fc
+import pe_fingerprint as pf
 
 REPO = Path(__file__).resolve().parents[2]
 LOSS_LIMIT = 0.01
@@ -885,6 +891,7 @@ def judge(case: Path, obs_root: Path, rows: list[Row], simpa: Simpa) -> dict:
         out, err, code, solve = buf["stdout"], buf["stderr"], spec["exit_code"] & 0xFFFFFFFF, case
         source = "stub.json, played back by the stub solver (not run here)"
         rundir = None
+        solver_ran = None
     else:
         o = obs_root / name
         run = json.loads((o / "run.json").read_text(encoding="utf-8-sig"))
@@ -893,7 +900,11 @@ def judge(case: Path, obs_root: Path, rows: list[Row], simpa: Simpa) -> dict:
         out, err = (o / "solver.stdout.txt").read_bytes(), (o / "solver.stderr.txt").read_bytes()
         code, solve = int(run["exit_code"], 16), o / "solve"
         exe = Path(run["exe"])
-        source = f"{exe.name} sha256 {hashlib.sha256(exe.read_bytes()).hexdigest()[:16]}, run by runsolvers.ps1"
+        try:
+            solver_ran = (exe.name, pf.code_sha256(exe))
+        except (OSError, pf.NotMeasured) as e:
+            fc.die(f"{name}: no code sha256 for the solver that ran: {e}")
+        source = f"{exe.name} code sha256 {solver_ran[1][:16]}, run by runsolvers.ps1"
         rundir = str(solve) + "\\"
     lines = classify(split_stream(out, "stdout") + split_stream(err, "stderr"), rows)
     cfg = Config(solve / "config.xml")
@@ -941,7 +952,7 @@ def judge(case: Path, obs_root: Path, rows: list[Row], simpa: Simpa) -> dict:
         final_status, final_codes = status, codes
     return {"solver": solver, "status": final_status, "codes": final_codes, "codes_any_of": any_of,
             "warnings": warnings if pre_ok(pre) else [],
-            "pre_launch": pre, "observed": observed, "_lines": lines}
+            "pre_launch": pre, "observed": observed, "_lines": lines, "_solver": solver_ran}
 
 
 def shape_disagreements(name: str, lines: list[Line], rows: list[Row]) -> list[str]:
@@ -985,6 +996,34 @@ def disagreements(name: str, got: dict, rows: list[Row]) -> list[str]:
                        f"{exp['observed_codes']}, got {o['status']} {o['codes']}")
     elif not pre_ok(got["pre_launch"]):
         bad.append(f"{name}: a pre-launch check failed unexpectedly: {got['pre_launch']}")
+    return bad
+
+
+def load_manifest_code(path: Path) -> dict[str, str]:
+    """solvers/manifest.json's code sha256 per executable; exits when it has none."""
+    try:
+        m = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError) as e:
+        fc.die(f"cannot read the solver manifest {path}: {e}")
+    code = m.get("code_sha256")
+    if not isinstance(code, dict) or not all(
+            isinstance(code.get(e), str) and re.fullmatch(r"[0-9a-f]{64}", code[e])
+            for e in ("spps.exe", "classicalTheory.exe")):
+        fc.die(f"{path} records no code sha256 of spps.exe and classicalTheory.exe")
+    return code
+
+
+def solver_disagreements(runs: dict, manifest_code: dict[str, str]) -> list[str]:
+    """Every real run ran the manifest's build: its executable's code sha256 is the manifest's."""
+    bad = []
+    for name, r in runs.items():
+        if r["_solver"] is None:
+            continue
+        exe, code = r["_solver"]
+        want = manifest_code.get(exe)
+        if code != want:
+            bad.append(f"{name}: {exe} has code sha256 {code[:16]}, not solvers/manifest.json's "
+                       f"{(want or 'none')[:16]}: the runs must be the manifest's build")
     return bad
 
 
@@ -1048,11 +1087,12 @@ def floor_notes(runs: dict) -> list[str]:
 
 
 def observed_sha(runs: dict, exe: str) -> str:
-    """The sha256 prefix every real run of `exe` records in its `observed.source`: the README names
-    the build the runs came from, not a literal that outlives it. Several builds among the runs, or
-    none, is refused."""
-    shas = {r["observed"]["source"].split(" ")[2].rstrip(",") for n, r in runs.items()
-            if not n.startswith("stub_") and r["observed"]["source"].startswith(f"{exe} sha256 ")}
+    """The code sha256 prefix every real run of `exe` records in its `observed.source`: the README
+    names the build the runs came from, not a literal that outlives it. Several builds among the
+    runs, or none, is refused."""
+    pattern = re.compile(rf"{re.escape(exe)} code sha256 ([0-9a-f]{{16}}), ")
+    shas = {m.group(1) for n, r in runs.items() if not n.startswith("stub_")
+            for m in [pattern.match(r["observed"]["source"])] if m}
     if len(shas) != 1:
         fc.die(f"the runs of {exe} name {len(shas)} builds, not one: {sorted(shas)}")
     return shas.pop()
@@ -1110,11 +1150,12 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "",
         "## What the runs showed",
         "",
-        "Observed with the M1 solvers of `solvers/manifest.json` (`spps.exe` "
-        f"`{observed_sha(runs, 'spps.exe')}`,",
-        f"`classicalTheory.exe` `{observed_sha(runs, 'classicalTheory.exe')}`). Every survey "
-        "behaviour cited in the receipts",
-        "reproduced. Beyond it:",
+        "Observed with the M1 solvers of `solvers/manifest.json`, cited by code sha256 (the sha256",
+        "with the link timestamps zeroed, `solvers/pe-fingerprint.ps1`, which every build of the",
+        f"same code has): `spps.exe` `{observed_sha(runs, 'spps.exe')}`, `classicalTheory.exe`",
+        f"`{observed_sha(runs, 'classicalTheory.exe')}`. Every survey behaviour cited in the "
+        "receipts reproduced.",
+        "Beyond it:",
         "",
         "- **`spps_oneband` is not caught by any Part B signal.** Exit 0, no FAIL line, 2,000",
         "  particles per band, no loss: the 1000 Hz band's particles are all absorbed by the",
@@ -1181,10 +1222,13 @@ def main() -> None:
     ap.add_argument("--upstream", type=Path,
                     default=Path(os.environ.get("SIMPA_UPSTREAM") or r"B:\repos\I-Simpa-upstream"),
                     help=r"default: $SIMPA_UPSTREAM, else B:\repos\I-Simpa-upstream")
+    ap.add_argument("--manifest", type=Path, default=REPO / "solvers/manifest.json",
+                    help="the solver build the runs must be, by code sha256")
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args()
     if not (a.upstream / "src").is_dir():
         fc.die(f"upstream checkout not found at {a.upstream} (set --upstream or SIMPA_UPSTREAM)")
+    manifest_code = load_manifest_code(a.manifest)
     rows = load_rows(a.contract)
     simpa = Simpa(a.simpa)
     names = sorted(p.name for p in a.runs.iterdir() if p.is_dir() and re.match(r"(spps|tcr|stub)_", p.name))
@@ -1193,6 +1237,7 @@ def main() -> None:
     bad = [m for n, r in runs.items() for m in disagreements(n, r, rows)]
     bad += [f"{n}: fixture missing" for n in EXPECT if n not in runs]
     bad += check_stub_texts(runs, a.upstream, rows)
+    bad += solver_disagreements(runs, manifest_code)
     for n, r in runs.items():
         print(f"{n:34} {r['status']:5} {', '.join(r['codes']) or '-':60} "
               f"(solver alone: {r['observed']['status']} {', '.join(r['observed']['codes']) or '-'})")

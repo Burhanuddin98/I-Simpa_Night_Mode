@@ -26,11 +26,17 @@ import extract_tutorial2_mesh as t2  # noqa: E402
 import fixture_common as fc  # noqa: E402
 import mkexpected as mx  # noqa: E402
 import mkrooms  # noqa: E402
+import pe_fingerprint as pf  # noqa: E402
 
 REPO = HERE.parents[1]
 RUNS = REPO / "tests/fixtures/runs"
 ROOMS = REPO / "tests/fixtures/rooms"
 CONTRACT = REPO / "docs/solver-contract.md"
+MANIFEST = REPO / "solvers/manifest.json"
+PE_PS1 = REPO / "solvers/pe-fingerprint.ps1"
+SOLVER_EXES = ("spps.exe", "classicalTheory.exe", "tetgen.exe", "preprocess.exe")
+# 2000-01-01 00:00:00 UTC: a link time no build of ours has.
+Y2K = 946684800
 
 
 def upstream_dir() -> Path:
@@ -430,6 +436,144 @@ class Tutorial2(unittest.TestCase):
         self.assertEqual(t2.compare(self.NODES, self.FACETS, room)["same"], 0)
 
 
+def manifest() -> dict:
+    return json.loads(MANIFEST.read_text(encoding="utf-8-sig"))
+
+
+def pe_copy(src: Path, dst: Path, edit) -> Path:
+    """A copy of `src` at `dst` with `edit(bytearray)` applied."""
+    d = bytearray(src.read_bytes())
+    edit(d)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(bytes(d))
+    return dst
+
+
+def restamp(d: bytearray) -> None:
+    """Every link-time field set to Y2K: the same code linked at another time."""
+    for off, n, _ in pf.link_time_fields(bytes(d)):
+        d[off:off + n] = struct.pack("<I", Y2K)
+
+
+def flip_text(d: bytearray) -> None:
+    """The middle byte of .text inverted."""
+    text = [s for s in pf.headers(bytes(d)).sections if s.name == ".text"][0]
+    d[text.rptr + text.rsize // 2] ^= 0xFF
+
+
+def debug_entry(d: bytes) -> int:
+    """The offset of the first debug-directory entry."""
+    return [off for off, _, f in pf.link_time_fields(d) if f.startswith("IMAGE_DEBUG")][0] - 4
+
+
+def ps_fingerprint(command: str) -> subprocess.CompletedProcess:
+    """`command` run by Windows PowerShell with solvers/pe-fingerprint.ps1 dot-sourced."""
+    script = str(PE_PS1).replace("'", "''")
+    return subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command",
+                           f"$ErrorActionPreference = 'Stop'; . '{script}'; {command}"],
+                          capture_output=True, text=True)
+
+
+def ps_quote(p: Path) -> str:
+    return "'" + str(p).replace("'", "''") + "'"
+
+
+class PeFingerprint(unittest.TestCase):
+    """The code sha256 (pe_fingerprint.py and solvers/pe-fingerprint.ps1): the sha256 with the
+    link timestamps zeroed. Each property is shown with the input that breaks it."""
+
+    def test_the_solvers_have_the_manifests_code_sha256(self):
+        m = manifest()
+        for name in SOLVER_EXES:
+            exe = solvers_dir() / name
+            self.assertEqual(pf.code_sha256(exe), m["code_sha256"][name], name)
+        self.assertEqual(m["tetgen"]["exe_code_sha256"], m["code_sha256"]["tetgen.exe"])
+
+    def test_another_link_time_changes_the_sha256_and_not_the_code_sha256(self):
+        spps = solvers_dir() / "spps.exe"
+        with tempfile.TemporaryDirectory() as tmp:
+            other = pe_copy(spps, Path(tmp) / "spps.exe", restamp)
+            self.assertNotEqual(pf.raw_sha256(other), pf.raw_sha256(spps))
+            self.assertEqual(pf.code_sha256(other), pf.code_sha256(spps))
+
+    def test_says_no_to_one_code_byte(self):
+        spps = solvers_dir() / "spps.exe"
+        with tempfile.TemporaryDirectory() as tmp:
+            flipped = pe_copy(spps, Path(tmp) / "spps.exe", flip_text)
+            self.assertNotEqual(pf.code_sha256(flipped), pf.code_sha256(spps))
+            self.assertNotEqual(pf.code_sha256(flipped), manifest()["code_sha256"]["spps.exe"])
+
+    def test_says_no_to_one_byte_beside_a_timestamp(self):
+        # Only the 4 timestamp bytes are zeroed: the byte after the COFF one (the first of
+        # PointerToSymbolTable) and the debug entry's POGO data are kept.
+        spps = solvers_dir() / "spps.exe"
+        coff_ts = pf.link_time_fields(spps.read_bytes())[0][0]
+        pogo = struct.unpack_from("<I", spps.read_bytes(), debug_entry(spps.read_bytes()) + 24)[0]
+
+        def after_coff(d):
+            d[coff_ts + 4] ^= 0x01
+
+        def in_pogo(d):
+            d[pogo + 8] ^= 0x01
+        with tempfile.TemporaryDirectory() as tmp:
+            for label, edit in (("after_coff", after_coff), ("in_pogo", in_pogo)):
+                other = pe_copy(spps, Path(tmp) / label / "spps.exe", edit)
+                self.assertNotEqual(pf.code_sha256(other), pf.code_sha256(spps), label)
+
+    def test_says_no_to_a_link_it_was_not_measured_on(self):
+        spps = solvers_dir() / "spps.exe"
+        h = pf.headers(spps.read_bytes())
+
+        def checksum(d):
+            d[h.opt + 64:h.opt + 68] = struct.pack("<I", 0x0007A5E1)
+
+        def codeview(d):
+            d[debug_entry(bytes(d)) + 12:debug_entry(bytes(d)) + 16] = struct.pack("<I", 2)
+
+        def pe32(d):
+            d[h.opt:h.opt + 2] = struct.pack("<H", 0x10B)
+        cases = {"checksum": (checksum, "CheckSum is set"), "codeview": (codeview, "CODEVIEW"),
+                 "pe32": (pe32, "not PE32+"), "cut": (None, "runs past the end")}
+        with tempfile.TemporaryDirectory() as tmp:
+            for label, (edit, why) in cases.items():
+                p = Path(tmp) / label / "spps.exe"
+                if edit is None:
+                    p.parent.mkdir()
+                    p.write_bytes(spps.read_bytes()[:h.coff + 30])
+                else:
+                    pe_copy(spps, p, edit)
+                with self.assertRaises(pf.NotMeasured, msg=label) as e:
+                    pf.code_sha256(p)
+                self.assertIn(why, str(e.exception), label)
+            with self.assertRaises(pf.NotMeasured) as e:
+                pf.code_sha256(CONTRACT)
+            self.assertIn("no MZ signature", str(e.exception))
+
+    def test_the_powershell_definition_is_the_same(self):
+        spps = solvers_dir() / "spps.exe"
+        with tempfile.TemporaryDirectory() as tmp:
+            files = [solvers_dir() / n for n in SOLVER_EXES]
+            files += [pe_copy(spps, Path(tmp) / "restamped/spps.exe", restamp),
+                      pe_copy(spps, Path(tmp) / "flipped/spps.exe", flip_text)]
+            r = ps_fingerprint("; ".join(f"Get-CodeSha256 {ps_quote(p)}" for p in files))
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(r.stdout.split(), [pf.code_sha256(p) for p in files])
+            # The same fields at the same offsets.
+            r = ps_fingerprint("Get-PeLinkTimeFields ([IO.File]::ReadAllBytes(" + ps_quote(spps) +
+                               ")) | ForEach-Object { '{0} {1}' -f $_.Offset, $_.Length }")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual([ln for ln in r.stdout.splitlines() if ln.strip()],
+                             [f"{o} {n}" for o, n, _ in pf.link_time_fields(spps.read_bytes())])
+            # And the same refusals.
+            h = pf.headers(spps.read_bytes())
+            checksum = pe_copy(spps, Path(tmp) / "checksum/spps.exe",
+                               lambda d: d.__setitem__(slice(h.opt + 64, h.opt + 68), b"\1\0\0\0"))
+            for p, why in ((checksum, "CheckSum is set"), (CONTRACT, "no MZ signature")):
+                r = ps_fingerprint(f"Get-CodeSha256 {ps_quote(p)}")
+                self.assertNotEqual(r.returncode, 0, p)
+                self.assertIn(why, r.stderr, p)
+
+
 class EndToEnd(unittest.TestCase):
     """Runs the real solvers on every committed fixture, then checks the committed files."""
 
@@ -490,6 +634,81 @@ class EndToEnd(unittest.TestCase):
             r = subprocess.run(check[:2] + [str(runs)] + check[3:], capture_output=True, text=True)
             self.assertEqual(r.returncode, 1)
             self.assertIn("STALE", r.stdout)
+
+    def test_the_citations_survive_a_relink_and_say_no_to_other_code(self):
+        """The fixtures cite the code sha256 of the solver that ran: the same runs recorded with
+        spps.exe linked at another time get the verdict they get with spps.exe itself, word for
+        word; with one code byte of it changed they are refused, by the manifest check and, past
+        it, by the STALE check.
+
+        The relink is compared with spps.exe's own verdict, not with "up to date": spps_oneband's
+        1000 Hz statistics are not the same on every run of one spps.exe (measured 2026-09-24: 2
+        of 15 fresh runs gave 41 particles absorbed by the atmosphere and 1,959 by materials, not
+        2,000 and 0), and test_committed_expectations_reproduce_and_a_tampered_one_is_caught is
+        the test that holds the fixtures to a fresh run."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            env = dict(os.environ, SIMPA_SOLVERS_DIR=str(solvers_dir()))
+            obs = tmp / "observed"
+            r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(HERE / "runsolvers.ps1"),
+                                "-Runs", str(RUNS), "-Out", str(obs)], capture_output=True, text=True, env=env)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            spps = solvers_dir() / "spps.exe"
+            relinked = pe_copy(spps, tmp / "relinked/spps.exe", restamp)
+            flipped = pe_copy(spps, tmp / "flipped/spps.exe", flip_text)
+
+            def check(exe: Path, manifest_path: Path = MANIFEST) -> subprocess.CompletedProcess:
+                # Every SPPS run's record names `exe` as the solver that ran.
+                for rec in obs.glob("spps_*/run.json"):
+                    run = json.loads(rec.read_text(encoding="utf-8-sig"))
+                    run["exe"] = str(exe)
+                    rec.write_text(json.dumps(run), encoding="utf-8")
+                return subprocess.run([sys.executable, str(HERE / "mkexpected.py"), str(RUNS), str(obs),
+                                       "--simpa", str(simpa_exe()), "--upstream", str(upstream_dir()),
+                                       "--manifest", str(manifest_path), "--check"],
+                                      capture_output=True, text=True)
+
+            self.assertNotEqual(pf.raw_sha256(relinked), pf.raw_sha256(spps))
+            own = check(spps)
+            r = check(relinked)
+            self.assertEqual((r.returncode, r.stdout, r.stderr), (own.returncode, own.stdout, own.stderr))
+            self.assertNotIn("DISAGREEMENTS", r.stdout)
+            # Every citation matched: nothing is stale but, on some runs, spps_oneband's statistics.
+            stale = r.stdout.split("STALE:", 1)[1].split() if "STALE:" in r.stdout else []
+            self.assertLessEqual(set(stale), {str(RUNS / "spps_oneband" / "expected.json")}, r.stdout)
+
+            r = check(flipped)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertIn("DISAGREEMENTS", r.stdout)
+            self.assertIn(f"spps_ok: spps.exe has code sha256 {pf.code_sha256(flipped)[:16]}, not "
+                          "solvers/manifest.json's", r.stdout)
+
+            # A manifest naming the changed code lets it past the manifest check: the committed
+            # citations still name the manifest's code, so every SPPS fixture and the README are
+            # STALE, and no TCR fixture.
+            m = manifest()
+            m["code_sha256"]["spps.exe"] = pf.code_sha256(flipped)
+            other = tmp / "manifest.json"
+            other.write_text(json.dumps(m), encoding="utf-8")
+            r = check(flipped, other)
+            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+            self.assertNotIn("DISAGREEMENTS", r.stdout)
+            stale = r.stdout.split("STALE:", 1)[1].split()
+            self.assertEqual(sorted(Path(p).parent.name for p in stale if p.endswith("expected.json")),
+                             sorted(p.name for p in RUNS.glob("spps_*") if p.is_dir()))
+            self.assertIn(str(RUNS / "README.md"), stale)
+
+    def test_mkexpected_refuses_a_manifest_without_code_sha256(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            m = manifest()
+            del m["code_sha256"]
+            p = Path(tmp) / "manifest.json"
+            p.write_text(json.dumps(m), encoding="utf-8")
+            r = subprocess.run([sys.executable, str(HERE / "mkexpected.py"), str(RUNS), tmp,
+                                "--simpa", str(simpa_exe()), "--upstream", str(upstream_dir()),
+                                "--manifest", str(p), "--check"], capture_output=True, text=True)
+            self.assertNotEqual(r.returncode, 0)
+            self.assertIn("records no code sha256", r.stderr)
 
 
 if __name__ == "__main__":

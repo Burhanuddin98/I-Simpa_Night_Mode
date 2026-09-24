@@ -1,7 +1,9 @@
 # Parity gate: our build against original I-Simpa (docs/m5-m6-design.md, decision 3, "the parity
 # bed"). Runs the bed and the tests it rests on, and says what each proves:
-# (1) The solvers under test are the committed build: solvers/manifest.json's sha256 of spps.exe,
-#     classicalTheory.exe, tetgen.exe and preprocess.exe, in $SolversDir.
+# (1) The solvers under test are the committed build: solvers/manifest.json's code sha256
+#     (solvers/pe-fingerprint.ps1, the sha256 with the link timestamps zeroed, the same for every
+#     build of the same code) of spps.exe, classicalTheory.exe, tetgen.exe and preprocess.exe, in
+#     $SolversDir. Their sha256 is printed beside it: the manifest's link or another one.
 # (2) The bed, crates/simpa/tests/parity_tutorials.rs: upstream's tutorials 1, 2 and 3, imported
 #     and meshed by `simpa`, against the files original I-Simpa wrote into each .proj, and SPPS and
 #     TCR run with one seed on our inputs and on the original inputs, every output compared.
@@ -18,8 +20,9 @@
 #     (the bed's ignored test, given $ReleaseBinaries): ours must be bit-identical to 1.4.0; 1.3.4's
 #     differences are measured and printed.
 # Every check has a "says NO":
-# - (1) refuses upstream's own TetGen 1.6.0 build (the 929a5c8 reference, built by
-#   solvers/build.ps1 beside ours) in place of ours;
+# - (1) refuses a copy of the folder with one byte of spps.exe's .text inverted, and upstream's
+#   own TetGen 1.6.0 build (the 929a5c8 reference, built by solvers/build.ps1 beside ours) in
+#   place of ours;
 # - (2) the verdict reader must read every test a bed transcript lists as failed as FAILED, and no
 #   test as passed when the failed count and that list disagree;
 #   the bed run with that TetGen 1.6.0 in the solver folder must FAIL tutorial_1, naming
@@ -115,7 +118,7 @@ function Get-TestVerdicts([string]$text) {
     }
     $results
 }
-function Sha([string]$path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() }
+. (Join-Path $repo 'solvers\pe-fingerprint.ps1')
 
 $build = cmd /c "cargo build -q -p simpa --tests 2>&1"
 if ($LASTEXITCODE -ne 0) { $build | Select-Object -Last 20 | ForEach-Object { Write-Host $_ }; throw 'build failed: refusing to test stale code' }
@@ -123,23 +126,39 @@ if ($LASTEXITCODE -ne 0) { $build | Select-Object -Last 20 | ForEach-Object { Wr
 # --- (1) the solvers under test -------------------------------------------------------------------
 $manifest = Get-Content (Join-Path $repo 'solvers\manifest.json') -Raw | ConvertFrom-Json
 $exes = @('spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe')
-Check "(1) the solvers under test are solvers/manifest.json's build (sha256 of all 4)" {
+function Short([string]$h) { if ($h -match '^[0-9a-f]{64}$') { $h.Substring(0, 16) } else { "'$h'" } }
+# Whether a folder holds solvers/manifest.json's build: each executable's code sha256 is the
+# manifest's. Prints both hashes of each, and whether its sha256 is the manifest's link.
+function Test-SolverFolder([string]$dir) {
     $ok = $true
     foreach ($e in $exes) {
-        $p = Join-Path $SolversDir $e
+        $p = Join-Path $dir $e
         if (-not (Test-Path $p)) { throw "$p is missing" }
-        $h = Sha $p; $want = $manifest.sha256.$e
-        Write-Host ("      {0,-20} {1} {2}" -f $e, $h.Substring(0, 16), $(if ($h -eq $want) { 'manifest' } else { "NOT the manifest's $($want.Substring(0, 16))" }))
-        if ($h -ne $want) { $ok = $false }
+        $code = Get-CodeSha256 $p; $raw = Get-RawSha256 $p; $want = "$($manifest.code_sha256.$e)"
+        if ($want -notmatch '^[0-9a-f]{64}$') { throw "solvers/manifest.json has no code sha256 for $e" }
+        $link = if ($raw -eq $manifest.sha256.$e) { "the manifest's link" } else { "another link than the manifest's $(Short $manifest.sha256.$e)" }
+        Write-Host ("      {0,-20} code sha256 {1} {2}; sha256 {3}, {4}" -f $e, (Short $code), $(if ($code -eq $want) { 'manifest' } else { "NOT the manifest's $(Short $want)" }), (Short $raw), $link)
+        if ($code -ne $want) { $ok = $false }
     }
+    $ok
+}
+Check "(1) the solvers under test are solvers/manifest.json's build (code sha256 of all 4)" {
+    $ok = Test-SolverFolder $SolversDir
     Write-Host "      TetGen: $($manifest.tetgen.version), $($manifest.tetgen.source)"
     $ok -and $manifest.tetgen.version -eq '1.5.0'
 }
+Check "(1) says NO: the same folder with one byte of spps.exe's .text inverted is not the manifest's build" {
+    $flipped = Join-Path $work 'solvers-spps-flipped'
+    New-Item -ItemType Directory -Force $flipped | Out-Null
+    foreach ($e in $exes) { if ($e -ne 'spps.exe') { Copy-Item (Join-Path $SolversDir $e) (Join-Path $flipped $e) } }
+    $null = Copy-PeFlippedText (Join-Path $SolversDir 'spps.exe') (Join-Path $flipped 'spps.exe')
+    -not (Test-SolverFolder $flipped)
+}
 Check "(1) says NO: upstream's TetGen 1.6.0 build is not the manifest's tetgen.exe" {
     if (-not (Test-Path $Tetgen160)) { throw "$Tetgen160 is missing: build it with solvers/build.ps1, or pass -Tetgen160" }
-    $h = Sha $Tetgen160
-    Write-Host "      $Tetgen160 $($h.Substring(0, 16)); manifest $($manifest.sha256.'tetgen.exe'.Substring(0, 16)); the manifest's 1.6.0 reference $($manifest.tetgen.upstream_160_reference_sha256.Substring(0, 16))"
-    $h -ne $manifest.sha256.'tetgen.exe'
+    $code = Get-CodeSha256 $Tetgen160
+    Write-Host "      $Tetgen160 code sha256 $(Short $code), sha256 $(Short (Get-RawSha256 $Tetgen160)); manifest's tetgen.exe $(Short $manifest.code_sha256.'tetgen.exe'); the manifest's 1.6.0 reference $(Short $manifest.tetgen.upstream_160_reference_code_sha256)"
+    ("$($manifest.code_sha256.'tetgen.exe')" -match '^[0-9a-f]{64}$') -and $code -ne $manifest.code_sha256.'tetgen.exe'
 }
 
 # --- (2) the bed -------------------------------------------------------------------------------------

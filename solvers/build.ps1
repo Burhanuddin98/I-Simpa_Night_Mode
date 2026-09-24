@@ -10,6 +10,9 @@
 #   Upstream's 1.6.0 target is still built, into the build tree only: its recorded cl and link
 #   command lines are the reference ours must equal, and M1 runs it as the build its tetgen
 #   checks must refuse. It is never copied into bin\.
+# The manifest records each executable's sha256 and its code sha256 (solvers/pe-fingerprint.ps1):
+# the sha256 with the link-time fields zeroed, the same for every build of the same code. The
+# gates hold the solvers to the code sha256, so a rebuild needs no new manifest or fixtures.
 param(
     [string]$Upstream = 'B:\repos\I-Simpa-upstream',
     [string]$Commit = '929a5c8e5f590b189f29155faeff8670f3699479',
@@ -17,11 +20,17 @@ param(
     # Upstream always configures src/python_bindings, which needs SWIG even though we build no bindings.
     [string]$SwigRoot = "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\SWIG.SWIG_Microsoft.Winget.Source_8wekyb3d8bbwe\swigwin-4.4.1",
     # A new name gives a from-scratch compile without deleting an earlier build tree.
-    [string]$BuildName = 'build'
+    [string]$BuildName = 'build',
+    # Where the source archive, the build trees, bin\ and the logs go. Default <repo>\target\solvers,
+    # the build the gates and tests run, whose manifest is solvers\manifest.json. Any other folder
+    # is a build beside it (a fresh folder is a from-scratch build): its manifest is written to
+    # <Root>\manifest.json and solvers\manifest.json is left alone.
+    [string]$Root = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$root = Join-Path $repo 'target\solvers'
+$root = if ($Root) { [IO.Path]::GetFullPath($Root) } else { Join-Path $repo 'target\solvers' }
+$manifestPath = if ($Root) { Join-Path $root 'manifest.json' } else { Join-Path $repo 'solvers\manifest.json' }
 $src = Join-Path $root ('src-' + $Commit.Substring(0, 7))
 $bld = Join-Path $root $BuildName
 $tgSrc = Join-Path $repo 'third_party\tetgen-1.5.0'
@@ -38,6 +47,7 @@ New-Item -ItemType Directory -Force $root, $bin | Out-Null
 Set-Content -Path $log -Value "build started $(Get-Date -Format s)"
 . (Join-Path $PSScriptRoot 'tetgen\build-commands.ps1')
 . (Join-Path $PSScriptRoot 'tetgen\source.ps1')
+. (Join-Path $PSScriptRoot 'pe-fingerprint.ps1')
 
 function Run([string]$what, [string[]]$argv) {
     Add-Content $log "`n> $what $($argv -join ' ')"
@@ -99,15 +109,18 @@ $exes = [ordered]@{
     'tetgen.exe'          = Join-Path $tgBld 'Release\tetgen.exe'
     'preprocess.exe'      = Join-Path $bld 'src\preprocess\Release\preprocess.exe'
 }
-$hashes = [ordered]@{}
+$hashes = [ordered]@{}; $codeHashes = [ordered]@{}
 foreach ($name in $exes.Keys) {
     $built = $exes[$name]
     if (-not (Test-Path $built)) { throw "missing build output $built" }
     Copy-Item $built (Join-Path $bin $name) -Force
-    $hashes[$name] = (Get-FileHash (Join-Path $bin $name) -Algorithm SHA256).Hash.ToLower()
+    $hashes[$name] = Get-RawSha256 (Join-Path $bin $name)
+    # Throws on an executable whose link-time fields are not the measured ones.
+    $codeHashes[$name] = Get-CodeSha256 (Join-Path $bin $name)
 }
 $ref16 = Join-Path $bld 'src\tetgen\Release\tetgen.exe'
 if (-not (Test-Path $ref16)) { throw "missing build output $ref16" }
+$ref16Code = Get-CodeSha256 $ref16
 
 $ccf = Get-ChildItem (Join-Path $bld 'CMakeFiles') -Recurse -Filter 'CMakeCXXCompiler.cmake' | Select-Object -First 1
 $compiler = (Select-String -Path $ccf.FullName -Pattern 'set\(CMAKE_CXX_COMPILER_VERSION "([^"]+)"').Matches[0].Groups[1].Value
@@ -123,7 +136,11 @@ $manifest = [ordered]@{
     compiler        = $compiler
     options         = @('SKIPISIMPA=ON', 'CMAKE_BUILD_TYPE=Release', "CPM_SOURCE_CACHE=$CpmCache")
     crt             = 'dynamic (upstream default)'
+    # This link's bytes: another build of the same code has other ones.
     sha256          = $hashes
+    # The same for every build of the same code: what the gates and the run fixtures hold to.
+    code_sha256     = $codeHashes
+    code_sha256_of  = 'the exe with IMAGE_FILE_HEADER.TimeDateStamp and every IMAGE_DEBUG_DIRECTORY TimeDateStamp zeroed (solvers/pe-fingerprint.ps1)'
     tetgen          = [ordered]@{
         version                      = '1.5.0'
         source                       = 'third_party/tetgen-1.5.0'
@@ -135,17 +152,19 @@ $manifest = [ordered]@{
         build_dir                    = (Split-Path -Leaf $tgBld)
         command_lines                = "equal to upstream's tetgen target at $($Commit.Substring(0, 7)), $($refCmds.Count) records"
         exe_sha256                   = $hashes['tetgen.exe']
-        upstream_160_reference_sha256 = (Get-FileHash $ref16 -Algorithm SHA256).Hash.ToLower()
+        exe_code_sha256              = $codeHashes['tetgen.exe']
+        upstream_160_reference_sha256 = Get-RawSha256 $ref16
+        upstream_160_reference_code_sha256 = $ref16Code
         upstream_160_reference       = "$BuildName\src\tetgen\Release\tetgen.exe (not shipped)"
     }
     built_at        = (Get-Date -Format s)
 }
-$manifest | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $repo 'solvers\manifest.json') -Encoding UTF8
+$manifest | ConvertTo-Json -Depth 4 | Set-Content $manifestPath -Encoding UTF8
 Add-Content $log "`nbuild finished $(Get-Date -Format s)"
 $warn = Select-String -Path $log -Pattern 'warning (C\d{4})' | ForEach-Object { $_.Matches[0].Groups[1].Value }
 $compiled = @(Select-String -Path $log -Pattern '\.(cpp|cxx|c)$').Count
 Write-Host "compiler warnings: $(@($warn).Count) lines over $compiled compiled-file lines (log: $log)"
 $warn | Group-Object | Sort-Object Count -Descending | Select-Object -First 8 | ForEach-Object { Write-Host ("  {0} x{1}" -f $_.Name, $_.Count) }
 Write-Host "tetgen 1.5.0 command lines equal upstream's tetgen target ($($refCmds.Count) records)"
-Write-Host "solvers built into $bin"
-$hashes.GetEnumerator() | ForEach-Object { Write-Host ("  {0,-20} {1}" -f $_.Key, $_.Value.Substring(0, 16)) }
+Write-Host "solvers built into $bin; manifest $manifestPath"
+$hashes.GetEnumerator() | ForEach-Object { Write-Host ("  {0,-20} sha256 {1}  code sha256 {2}" -f $_.Key, $_.Value.Substring(0, 16), $codeHashes[$_.Key].Substring(0, 16)) }

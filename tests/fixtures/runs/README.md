@@ -46,9 +46,11 @@ negative tests of these checks.
 
 ## What the runs showed
 
-Observed with the M1 solvers of `solvers/manifest.json` (`spps.exe` `5b2fac424a025b94`,
-`classicalTheory.exe` `9ea03b323df1be9e`). Every survey behaviour cited in the receipts
-reproduced. Beyond it:
+Observed with the M1 solvers of `solvers/manifest.json`, cited by code sha256 (the sha256
+with the link timestamps zeroed, `solvers/pe-fingerprint.ps1`, which every build of the
+same code has): `spps.exe` `550485c695292501`, `classicalTheory.exe`
+`fad4ab5d3f024829`. Every survey behaviour cited in the receipts reproduced.
+Beyond it:
 
 - **`spps_oneband` is not caught by any Part B signal.** Exit 0, no FAIL line, 2,000
   particles per band, no loss: the 1000 Hz band's particles are all absorbed by the

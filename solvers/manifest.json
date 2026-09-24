@@ -17,6 +17,13 @@
                    "tetgen.exe":  "1b11ad94c54ddf5e4f7867b6da558b4cfa2d6e85cf32497ad232c014e2a0bc5b",
                    "preprocess.exe":  "01a862c7220d756be4d95ac99530a8fcb335b22d2071305aef924a0514ccd4e9"
                },
+    "code_sha256":  {
+                        "spps.exe":  "550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d",
+                        "classicalTheory.exe":  "fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234",
+                        "tetgen.exe":  "d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f",
+                        "preprocess.exe":  "7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26"
+                    },
+    "code_sha256_of":  "the exe with IMAGE_FILE_HEADER.TimeDateStamp and every IMAGE_DEBUG_DIRECTORY TimeDateStamp zeroed (solvers/pe-fingerprint.ps1)",
     "tetgen":  {
                    "version":  "1.5.0",
                    "source":  "third_party/tetgen-1.5.0",
@@ -37,7 +44,9 @@
                    "build_dir":  "build-tetgen150",
                    "command_lines":  "equal to upstream\u0027s tetgen target at 929a5c8, 3 records",
                    "exe_sha256":  "1b11ad94c54ddf5e4f7867b6da558b4cfa2d6e85cf32497ad232c014e2a0bc5b",
+                   "exe_code_sha256":  "d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f",
                    "upstream_160_reference_sha256":  "e3170ef318490eb09b17529d2630f6665d8ee96ea356c1dfe8ce33152c2aef16",
+                   "upstream_160_reference_code_sha256":  "b0c89b7fe8de05dcd64c5acc37a54492bc29710476a70e8a62c91f3c27f4663b",
                    "upstream_160_reference":  "build\\src\\tetgen\\Release\\tetgen.exe (not shipped)"
                },
     "built_at":  "2026-09-24T06:48:30"
