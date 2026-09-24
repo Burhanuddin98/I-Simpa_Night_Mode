@@ -52,10 +52,16 @@ same code has): `spps.exe` `550485c695292501`, `classicalTheory.exe`
 `fad4ab5d3f024829`. Every survey behaviour cited in the receipts reproduced.
 Beyond it:
 
-- **`spps_oneband` is not caught by any Part B signal.** Exit 0, no FAIL line, 2,000
-  particles per band, no loss: the 1000 Hz band's particles are all absorbed by the
-  atmosphere at the first step. `run-folder`'s band check refuses it before launch with
-  `band_set_mismatch` (decision 11).
+- **`spps_oneband` is not caught by any Part B signal, and it does not reproduce.** Exit
+  0, no FAIL line, 2,000 particles per band, no loss. SPPS reads the 1000 Hz band's power
+  past the end of the source's one-entry spectrum (`base_core_configuration.cpp:141`,
+  `sppsNantes.cpp:73`), whatever the heap holds there. In most runs the band's particles
+  are all absorbed by the atmosphere at the first step; in 7 of 230 runs measured
+  (2026-09-24) they ran on a positive power, 41 absorbed by the atmosphere and 1,959 by
+  materials. `expected.json` records the first; `mkexpected.py` judges the second as the
+  first and says so in a NOTE (`UNREPRODUCIBLE`), and any other outcome is a disagreement.
+  `run-folder`'s band check refuses the case before launch with `band_set_mismatch`
+  (decision 11), so no verdict depends on it.
 - **`tcr_srcout` is caught after all**, by `nonfinite_result`: the direct field at R1 is
   -inf in every band, although TCR exits 0.
 - **`spps_srcout` never reaches SPPS.** `run-folder`'s location check finds its source in

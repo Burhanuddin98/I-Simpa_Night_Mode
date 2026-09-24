@@ -23,7 +23,11 @@ material ids. The PLY's centroid-guessed groups are wrong for 2,438 of its 7,860
 Since 2026-09-24 (`docs/m5-m6-design.md`, decision 13) the import pins every source, receiver
 and surface receiver to upstream's element id (`solver_id`, the `.proj`'s `wxid`: the box's
 surface receiver 1792, receivers 1473 and 1632, source 1799), and records each source's group;
-the three derived rooms and their hashes below were regenerated with them.
+the three derived rooms and their hashes below were regenerated with them. Their hashes have
+changed with every key the `.simpa` format gained that day (`destination`, `preprocess`,
+`solver_id`, `group`). `tools/fixture-gen/test_fixture_gen.py` holds the files to the derivation
+(`test_the_committed_rooms_are_the_derivation`) and both tables' sha256 to the files they name
+(`test_the_provenance_tables_give_each_files_sha256`).
 
 What each file holds is asserted by `crates/simpa-core/tests/geometry_import_rooms.rs`, which
 needs nothing outside the repo:
@@ -54,8 +58,8 @@ give back the same bytes.
 The fitting zone: id `0c0be000-0000-4000-8000-00000000f177`, name `Fitting zone`, enabled, a
 box from (1, 1, 0.5) to (2, 2, 1.5) m (1 m³, dyadic corners, so the gate's 1e-9 volume check
 is exact) with no upstream corner order (`destination` null, a box drawn here; the key was added
-on 2026-09-24 with the `.proj` import of rectangular zones, which changed the file's hash from
-`fab25e56605b7008`), and in all 27 bands absorption 0.1, mean free path 1.0 m and diffusion law
+on 2026-09-24 with the `.proj` import of rectangular zones), and in all 27 bands absorption 0.1,
+mean free path 1.0 m and diffusion law
 `uniform`, and no pinned solver id (`solver_id` null: a zone drawn here, numbered 2 by export).
 Those pass `fitting_parameters_invalid` (0 ≤ α ≤ 1, λ > 0). The zone clears the
 source (3, 5, 1.8) and both receivers, (1, 1, 1.8) and (3, 7, 1.8).

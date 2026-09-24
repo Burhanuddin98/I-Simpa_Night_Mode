@@ -198,6 +198,54 @@ class BandCheck(unittest.TestCase):
             self.assertEqual(mx.band_check(mx.Config(path)), {"bands": "pass"})
 
 
+class Unreproducible(unittest.TestCase):
+    """mkexpected.UNREPRODUCIBLE: spps_oneband's 1000 Hz band, read past the end of its source's
+    spectrum, has two measured outcomes; the tolerance takes exactly those, for that band of that
+    case, and nothing else."""
+
+    T = mx.UNREPRODUCIBLE["spps_oneband"]
+
+    def post(self, band_stats: dict) -> dict:
+        recorded = json.loads((RUNS / "spps_oneband" / fc.EXPECTED_JSON).read_text(encoding="utf-8"))
+        post = copy.deepcopy(recorded["observed"]["post_run"])
+        post["stats"][self.T["band"]] = dict(band_stats)
+        return post
+
+    def test_the_recorded_outcome_is_the_first_listed(self):
+        recorded = json.loads((RUNS / "spps_oneband" / fc.EXPECTED_JSON).read_text(encoding="utf-8"))
+        self.assertEqual(recorded["observed"]["post_run"]["stats"][self.T["band"]], self.T["outcomes"][0])
+        self.assertEqual(len(self.T["outcomes"]), 2)
+        self.assertIn("7 of 230", self.T["measured"])
+
+    def test_the_unreproducible_band_takes_its_listed_outcomes_only(self):
+        first, second = self.T["outcomes"]
+        # The recorded outcome: as it is, no note.
+        post = self.post(first)
+        self.assertEqual(mx.tolerate("spps_oneband", post), (post, None, None))
+        # The other measured outcome: judged as the recorded one, and said.
+        got, note, odd = mx.tolerate("spps_oneband", self.post(second))
+        self.assertEqual(got, self.post(first))
+        self.assertIsNone(odd)
+        self.assertIn("NOTE spps_oneband", note)
+        self.assertIn("UNREPRODUCIBLE", note)
+        # Says no: a third outcome for that band is a disagreement, left as it came.
+        third = dict(second, absorbed_atmosphere=42, absorbed_materials=1958)
+        got, note, odd = mx.tolerate("spps_oneband", self.post(third))
+        self.assertEqual(got, self.post(third))
+        self.assertIsNone(note)
+        self.assertIn("no outcome UNREPRODUCIBLE lists", odd)
+        # Says no: the tolerance is that case's only; spps_ok's statistics are never replaced.
+        ok = json.loads((RUNS / "spps_ok" / fc.EXPECTED_JSON).read_text(encoding="utf-8"))["observed"]["post_run"]
+        bent = copy.deepcopy(ok)
+        bent["stats"]["1000 Hz"] = dict(second)
+        self.assertEqual(mx.tolerate("spps_ok", bent), (bent, None, None))
+        # Says no: the other band of the case is not the tolerance's; a change there is left for the
+        # STALE check to see.
+        other = self.post(first)
+        other["stats"]["500 Hz"] = dict(other["stats"]["500 Hz"], remaining=1030, absorbed_materials=970)
+        self.assertEqual(mx.tolerate("spps_oneband", other), (other, None, None))
+
+
 class LocationCheck(unittest.TestCase):
     def check(self, d: Path) -> dict:
         cfg = mx.Config(d / "config.xml")
@@ -404,6 +452,39 @@ class Rooms(unittest.TestCase):
     def test_the_committed_rooms_are_the_derivation(self):
         for name, text in mkrooms.derive(ROOMS).items():
             self.assertEqual((ROOMS / name).read_bytes(), text.encode("utf-8"), name)
+
+    @staticmethod
+    def provenance_mismatches(text: str) -> list:
+        """Every sha256 the rooms' PROVENANCE.md tables give against the file it names: each
+        derived room's first 16 hex digits, and each source .proj's full sha256 in upstream's
+        checkout. A table row per file is required."""
+        import hashlib
+        import re
+        sha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()
+        derived = re.findall(r"^\| `([^`]+\.simpa)` \|.*\| `([0-9a-f]{16})` \|\r?$", text, re.M)
+        sources = re.findall(r"^\| `([^`]+\.simpa)` \| `([^`]+\.proj)` \| `([0-9a-f]{64})` \|\r?$", text, re.M)
+        bad = [f"{name}: the table gives {h}, the file is {sha(ROOMS / name)[:16]}"
+               for name, h in derived if sha(ROOMS / name)[:16] != h]
+        bad += [f"{src}: the table gives {h[:16]}, the file is {sha(upstream_dir() / src)[:16]}"
+                for _, src, h in sources if sha(upstream_dir() / src) != h]
+        named = {n for n, _ in derived} | {n for n, _, _ in sources}
+        bad += [f"{p.name}: no row" for p in ROOMS.glob("*.simpa") if p.name not in named]
+        return bad
+
+    def test_the_provenance_tables_give_each_files_sha256(self):
+        text = (ROOMS / "PROVENANCE.md").read_text(encoding="utf-8")
+        self.assertEqual(self.provenance_mismatches(text), [])
+        # Says no: one hex digit changed in each table, and a row gone.
+        derived = next(line for line in text.splitlines() if line.startswith("| `tutorial1_box_fitting.simpa`"))
+        h = derived.rstrip(" |`").rsplit("`", 1)[1]
+        bent = text.replace(h, h[:-1] + ("0" if h[-1] != "0" else "1"))
+        self.assertEqual(len(self.provenance_mismatches(bent)), 1, bent)
+        src = "d778983d3f862b30877be39f4119857e10122e53249d88e5a68eb6be5d0a6a7e"
+        self.assertIn(src, text)
+        self.assertEqual(len(self.provenance_mismatches(text.replace(src, src[:-1] + "f"))), 1)
+        gone = text.replace(derived + "\n", "").replace(derived + "\r\n", "")
+        self.assertNotEqual(gone, text)
+        self.assertEqual(self.provenance_mismatches(gone), ["tutorial1_box_fitting.simpa: no row"])
 
 
 class Tutorial2(unittest.TestCase):
@@ -638,14 +719,12 @@ class EndToEnd(unittest.TestCase):
     def test_the_citations_survive_a_relink_and_say_no_to_other_code(self):
         """The fixtures cite the code sha256 of the solver that ran: the same runs recorded with
         spps.exe linked at another time get the verdict they get with spps.exe itself, word for
-        word; with one code byte of it changed they are refused, by the manifest check and, past
-        it, by the STALE check.
+        word, and every fixture is up to date; with one code byte of it changed they are refused,
+        by the manifest check and, past it, by the STALE check.
 
-        The relink is compared with spps.exe's own verdict, not with "up to date": spps_oneband's
-        1000 Hz statistics are not the same on every run of one spps.exe (measured 2026-09-24: 2
-        of 15 fresh runs gave 41 particles absorbed by the atmosphere and 1,959 by materials, not
-        2,000 and 0), and test_committed_expectations_reproduce_and_a_tampered_one_is_caught is
-        the test that holds the fixtures to a fresh run."""
+        spps_oneband's 1000 Hz statistics are not the same on every run of one spps.exe: that is
+        mkexpected.UNREPRODUCIBLE's named tolerance, with its cause and measured rate (7 of 230
+        runs), not a loosening here (test_the_unreproducible_band_takes_its_listed_outcomes_only)."""
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             env = dict(os.environ, SIMPA_SOLVERS_DIR=str(solvers_dir()))
@@ -673,9 +752,9 @@ class EndToEnd(unittest.TestCase):
             r = check(relinked)
             self.assertEqual((r.returncode, r.stdout, r.stderr), (own.returncode, own.stdout, own.stderr))
             self.assertNotIn("DISAGREEMENTS", r.stdout)
-            # Every citation matched: nothing is stale but, on some runs, spps_oneband's statistics.
-            stale = r.stdout.split("STALE:", 1)[1].split() if "STALE:" in r.stdout else []
-            self.assertLessEqual(set(stale), {str(RUNS / "spps_oneband" / "expected.json")}, r.stdout)
+            # Every citation matched, and nothing is stale.
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertNotIn("STALE", r.stdout)
 
             r = check(flipped)
             self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
