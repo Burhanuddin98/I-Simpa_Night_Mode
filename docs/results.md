@@ -411,3 +411,81 @@ seed 1 that mean is +0.028 dB with a standard deviation of 0.014 dB; it catches 
 from the spread over the seeds, not from `mc_sd`. No level bias is resolved at the 0.01 dB scale;
 seed 1's +0.028 dB is chance. The SPL spread over the seeds is 1.12 times the mean `mc_sd` pooled
 over the 12 receiver-bands (0.66 to 1.57 per receiver-band, each from 10 seeds).
+
+## What M8 needs (M7 follow-ups, 2026-09-24)
+
+Measured with `crates/simpa/tests/m8_evidence.rs`, `m8_cells`, run on purpose on Grace (27 runs at
+once on 28 threads; the wall times are per run under that load). Each cell: the room with every
+surface at α, Lambert reflection with scattering 1, air absorption off, octave bands 125 Hz to
+4 kHz, 3 receivers each at least 1 m from the walls and the source, seeds 1 to 3, `dt` 10 ms; 18
+receiver-bands, which are 6 independent replicas per receiver since the bands differ only in their
+random numbers. **Information for M8's design, not a gate.** The refusal limits are Burhan's strict
+ones (2026-09-24), unchanged.
+
+"Through" counts the receiver-bands where every seed gives the quantity. "Spread" is (max − min)/mean
+of T30 over the 3 seeds from each series alone, refused or not: per receiver-band (median, worst of
+18), and of the mean over the cell's 18 receiver-bands. "sd" is the largest estimated Monte-Carlo
+standard deviation of T30 (the refusal limit is 2.5 %). "vs Eyring" is the mean T30 against
+`24·ln10/343.2 · V/(−S·ln(1 − α))`.
+
+| Method | Room | α | Particles | Duration | Through: T30 / EDT, C80, D50 | sd | Spread per receiver-band | Spread of the mean | vs Eyring | Wall |
+|---|---|---|---|---|---|---|---|---|---|---|
+| random | 6×10×3 | 0.05 | 1.5 M | 4 s | 18 / 18 | 2.1 % | 2.0 %, 8.0 % | 0.57 % | +1.2 % | 97 s |
+| random | 6×10×3 | 0.1 | 1.5 M | 3 s | **5** / 18 | 4.4 % | 3.3 %, 9.5 % | 0.88 % | +2.8 % | 48 s |
+| random | 6×10×3 | 0.1 | 6 M | 3 s | 18 / 18 | 1.6 % | 1.9 %, 5.9 % | 0.20 % | +2.5 % | 198 s |
+| random | 6×10×3 | 0.2 | 1.5 M | 2 s | **0** / 18 | 5.9 % | 4.5 %, 13.2 % | 0.55 % | +5.1 % | 23 s |
+| random | 6×10×3 | 0.2 | 8 M | 2 s | 18 / 18 | 2.1 % | 2.3 %, 4.5 % | 0.11 % | +4.6 % | 143 s |
+| random | 6×10×3 | 0.4 | 1.5 M | 1 s | **0** / 18 | 14.0 % | 8.3 %, 15.9 % | 1.77 % | +10.6 % | 11 s |
+| random | 6×10×3 | 0.4 | 48 M | 1 s | **15** / 15 | 1.2 % | 1.7 %, 4.5 % | 0.72 % | +10.7 % | 336 s |
+| random | 5×4×3 | 0.05 | 1.5 M | 3 s | 18 / 18 | 1.4 % | 1.8 %, 4.5 % | 0.58 % | +1.3 % | 98 s |
+| random | 5×4×3 | 0.1 | 1.5 M | 2 s | 18 / 18 | 2.0 % | 2.5 %, 5.7 % | 0.58 % | +2.2 % | 48 s |
+| random | 5×4×3 | 0.2 | 1.5 M | 1.5 s | **9** / 18 | 3.5 % | 3.7 %, 8.6 % | 0.15 % | +4.5 % | 23 s |
+| random | 5×4×3 | 0.2 | 8 M | 1.5 s | 18 / 18 | 1.1 % | 1.6 %, 3.4 % | 0.52 % | +4.7 % | 143 s |
+| random | 5×4×3 | 0.4 | 1.5 M | 1 s | **0** / 18 | 5.4 % | 3.9 %, 8.5 % | 0.59 % | +9.4 % | 11 s |
+| random | 5×4×3 | 0.4 | 8 M | 1 s | 18 / 18 | 2.0 % | 2.0 %, 4.8 % | 0.56 % | +9.3 % | 76 s |
+| energetic, ε 9 | 6×10×3 | 0.2 | 1.5 M | 1 s | **0** / 18 | 4.1 % | 0.16 %, 0.27 % | 0.02 % | +5.0 % | 356 s |
+| energetic, ε 7 | 6×10×3 | 0.2 | 1.5 M | 1 s | **0** / 18 | 4.1 % | 0.14 %, 0.40 % | 0.04 % | +5.0 % | 283 s |
+| energetic, ε 9 | 6×10×3 | 0.2 | 4.5 M | 1 s | 18 / 18 | 2.4 % | 0.11 %, 0.26 % | 0.02 % | +5.0 % | 906 s |
+| energetic, ε 9 | 6×10×3 | 0.4 | 1.5 M | 0.5 s | **0** / 18 | 7.3 % | 0.27 %, 0.65 % | 0.08 % | +10.7 % | 180 s |
+| energetic, ε 9 | 6×10×3 | 0.4 | 13 M | 0.5 s | 18 / 18 | 2.3 % | 0.08 %, 0.19 % | 0.04 % | +10.7 % | 1102 s |
+| energetic, ε 9 | 5×4×3 | 0.2 | 1.5 M | 0.8 s | 18 / 18 | 2.3 % | 0.09 %, 0.24 % | 0.07 % | +4.5 % | 354 s |
+| energetic, ε 7 | 5×4×3 | 0.2 | 1.5 M | 0.8 s | 18 / 18 | 2.4 % | 0.10 %, 0.16 % | 0.02 % | +4.4 % | 330 s |
+| energetic, ε 9 | 5×4×3 | 0.4 | 1.5 M | 0.4 s | **0** / 18 | 3.6 % | 0.20 %, 0.49 % | 0.04 % | +9.2 % | 180 s |
+| energetic, ε 9 | 5×4×3 | 0.4 | 3.5 M | 0.4 s | 18 / 18 | 2.5 % | 0.10 %, 0.29 % | 0.01 % | +9.2 % | 405 s |
+
+(The 6×10×3, α 0.4, 48 M row: 1 s was too short at that count; one seed kept particles to the end in
+one band, whose tail then refused T30, EDT, C80 and D50 there as `truncated`, so 15 of 18 are
+counted. At 48 M the duration needs more margin than at 1.5 M.)
+
+**What it says, for Burhan's decisions:**
+- **T30 is what limits.** EDT, C80 and D50 came through in every receiver-band of every cell from
+  1.5 M particles on, in both methods (no receiver there had `r/c` after its onset bin).
+- **Random mode:** the refusal limits let T30 through in every receiver-band at 1.5 M at α 0.05
+  (both rooms) and α 0.1 (5×4×3); at 6 M at α 0.1 (6×10×3); at 8 M at α 0.2 (both) and α 0.4
+  (5×4×3); at 48 M at α 0.4 (6×10×3). The seed spread per receiver-band stays above 2 % at those
+  counts (worst of 18: 3.4–8.0 %), while the spread of the cell's mean T30 is under 0.8 % in every
+  one of them. **M8's "seed spread ≤ 2 %" needs defining**: per receiver-band it would take about
+  (worst/2 %)² times the particles (some 40 M at α 0.2 in the 6×10×3 room); on the cell's mean it
+  is met at the counts above.
+- **Energetic mode:** the seeds agree to 0.3 % at worst per receiver-band from 1.5 M on (0.65 % at
+  α 0.4, 1.5 M), but T30 is refused for its noise until the random-mode bound falls under 2.5 %:
+  1.5 M at α 0.2 in the 5×4×3 room, 3.5 M at α 0.4 there, 4.5 M and 13 M at α 0.2 and 0.4 in the
+  6×10×3 room, 6 to 18 minutes a run. The bound is some 30 to 40 times the standard deviation the
+  seeds show in these cells (a range of 3 is about 1.7 standard deviations), and 14 times on
+  tutorial 1 ("Monte-Carlo noise", above). `trans_epsilon` 7 clears the floor's bound where 5 does
+  not (above), for about 20 % less time than 9 in the 6×10×3 room; T30 at 7 equals T30 at 9 to
+  0.02 %.
+- **Against Eyring, the solver and the reference disagree before any tolerance is chosen.** The
+  mean T30 lies above T_Eyring by +1.2 % to +1.3 % at α 0.05, +2.2 % to +2.8 % at 0.1, +4.4 % to
+  +5.1 % at 0.2 and +9.2 % to +10.7 % at 0.4, the same in both rooms and **the same in both
+  computation methods** (energetic and random agree on the cell's mean T30 within 0.4 %). With M8's
+  5 % that fails every α 0.4 cell and puts α 0.2 at the edge, for any constant (TCR's 0.163 would
+  take 1.2 % off each). The growth with α follows the correction for the spread of the free path
+  lengths, `A = −S·ln(1 − α)·(1 + (γ²/2)·ln(1 − α))` [commonly stated, Kuttruff; not read here],
+  which with `γ²` about 0.4 gives +1.0, +2.1, +4.7 and +11.4 %. Whether M8's reference takes that
+  correction (and a `γ²` for each room), or its α set or tolerance changes, is Burhan's decision;
+  nothing here decides it. The analytic constant and air term are in `docs/params.md`, "The
+  reference M8 compares against".
+- **Runs refused for a NaN.** Before the lateral-column fix ("Verified runs only", step 6), 2 of the
+  3 energetic runs in the 5×4×3 room at α 0.2 and 1.5 M were refused whole for a NaN in a `.gap`
+  lateral column; the table reads them with the fix.
