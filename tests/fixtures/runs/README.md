@@ -46,8 +46,8 @@ negative tests of these checks.
 
 ## What the runs showed
 
-Observed with the M1 solvers of `solvers/manifest.json` (`spps.exe` `22b55a0fcec17e6d`,
-`classicalTheory.exe` `6f892a5b36f19247`). Every survey behaviour cited in the receipts
+Observed with the M1 solvers of `solvers/manifest.json` (`spps.exe` `5b2fac424a025b94`,
+`classicalTheory.exe` `9ea03b323df1be9e`). Every survey behaviour cited in the receipts
 reproduced. Beyond it:
 
 - **`spps_oneband` is not caught by any Part B signal.** Exit 0, no FAIL line, 2,000
