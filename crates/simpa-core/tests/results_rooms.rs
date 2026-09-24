@@ -5,7 +5,11 @@
 //!   band, and receivers 2 m and 4 m from it;
 //! - `seats_box.simpa`, gate M7(e): tutorial 1's box on two octave bands with its two point
 //!   receivers renamed `Seat` and `Seat2`, whose runs are the committed fixtures under
-//!   `tests/fixtures/results/`.
+//!   `tests/fixtures/results/`;
+//! - `energetic_box.simpa`: the same in energetic mode with `trans_epsilon` 3, for the solver's
+//!   floor and energetic mode's completeness;
+//! - `sources2_box.simpa`: the same with a second source and an echogram per source, for the
+//!   per-source echograms and the refusal of onset-relative parameters on a sum of sources.
 //!
 //! Regenerate with `cargo test -p simpa-core --test results_rooms -- --ignored write_m7_rooms`.
 
@@ -41,18 +45,24 @@ fn pick<T: Clone>(values: &[T], all: &[u32], keep: &[u32]) -> Vec<T> {
 
 /// Gate M7(c)'s room.
 ///
-/// - **Why every surface absorbs everything.** `direct_calc = 1` already makes SPPS absorb a
-///   particle at its first surface hit (`spps/CalculationCore.cpp:236-242`). α = 1 in every
-///   band makes the same true without that switch, in both computation methods
+/// - **What keeps the reverberant field out: the duration.** The source is 9.97 m from the
+///   nearest wall, and a particle covers `c·20 ms` = 6.86 m in the whole run, so no particle
+///   reaches a surface: SPPS's statistics count 0 absorbed by the materials and every particle
+///   remaining (`cli_results.rs`, `gate_c_...`, which asserts it). The receivers see the direct
+///   field and nothing else.
+/// - **Two more guards, which this run does not exercise.** `direct_calc = 1` makes SPPS absorb a
+///   particle at its first surface hit (`spps/CalculationCore.cpp:236-242`), and α = 1 in every
+///   band does the same without that switch in both computation methods
 ///   (`CalculationCore.cpp:249-261, 288-300`), with no transmission (no transmission loss is
-///   set). Only the direct field can reach a receiver, whichever of the two a future change
-///   broke, so the check isolates the chain from source power to level.
+///   set). Neither is reached while no particle reaches a surface; they matter only if the
+///   duration is made longer.
 /// - **Why 0.2 ms steps and 0.5 m receivers.** A receiver of radius `R` sees the direct sound
 ///   for `2R/c` = 2.9 ms. Spread over about 15 steps, its last steps fall steadily, which is
 ///   what `params`' tail bound needs before it states a level (`docs/params.md`,
 ///   "Truncation"). The larger sphere puts 4 times the default's particles through each
 ///   receiver; averaging `1/d²` over it reads `10·lg(1 + R²/(5r²))` = +0.054 dB high at 2 m.
-/// - **Why 20 ms.** The last direct sound, at 4 m, has passed by 13.1 ms.
+/// - **Why 20 ms.** The last direct sound, at 4 m, has passed by 13.1 ms, and the first
+///   reflection could arrive no earlier than 29 ms.
 pub fn level_box() -> Project {
     let t = tutorial_box();
     let bands = BandSet::default();
@@ -172,11 +182,50 @@ pub fn seats_box() -> Project {
     p
 }
 
+/// The M7 review's energetic-mode room: [`seats_box`] in energetic mode with `trans_epsilon` 3,
+/// so SPPS drops each particle at 30 dB below its start, inside the ranges of T20 and T30; 50,000
+/// particles, so that the cliff the drop leaves is a smooth fall and not a few stray particles.
+pub fn energetic_box() -> Project {
+    let mut p = seats_box();
+    p.id = ProjectId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0e01);
+    p.name = "Energetic seats box".into();
+    p.description = "M7 review: the Seat and Seat2 box in energetic mode, trans_epsilon 3, 50,000 \
+                     particles. Written by crates/simpa-core/tests/results_rooms.rs."
+        .into();
+    p.solvers.spps.method = ComputationMethod::Energetic;
+    p.solvers.spps.extinction_exponent = schema::F64::new(3.0);
+    p.solvers.spps.particles_per_source = 50_000;
+    p
+}
+
+/// The M7 review's two-source room: [`seats_box`] with a second source, 3 dB weaker and 20 ms
+/// late, and an echogram per source at every receiver.
+pub fn sources2_box() -> Project {
+    let mut p = seats_box();
+    p.id = ProjectId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0e02);
+    p.name = "Two-source seats box".into();
+    p.description = "M7 review: the Seat and Seat2 box with a second source, 3 dB weaker and \
+                     20 ms late, and an echogram per source. Written by \
+                     crates/simpa-core/tests/results_rooms.rs."
+        .into();
+    let mut s = p.sources[0].clone();
+    s.id = SourceId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0e03);
+    s.name = "Source 2".into();
+    s.position = Vec3::new(5.0, 8.5, 1.2);
+    s.power = Spectrum::new(s.power.global_db.get() - 3.0, s.power.shape.clone());
+    s.delay_s = schema::F64::new(0.02);
+    p.sources.push(s);
+    p.solvers.spps.echogram_per_source = true;
+    p
+}
+
 /// Every M7 room, by file name.
 fn rooms() -> Vec<(&'static str, Project)> {
     vec![
         ("level_box_20m.simpa", level_box()),
         ("seats_box.simpa", seats_box()),
+        ("energetic_box.simpa", energetic_box()),
+        ("sources2_box.simpa", sources2_box()),
     ]
 }
 

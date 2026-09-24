@@ -29,7 +29,14 @@ are not for publication.`
 ## Numbers
 
 - Every number is a JSON number: a finite `f64`, printed as the shortest decimal that reads back to
-  the same `f64`. No value in a report is NaN or infinite: a run holding one is refused.
+  the same `f64`. No value in a report is NaN or infinite: a run holding one is refused, and the
+  report itself is walked for non-finite numbers before it is printed (`report::checked_report`,
+  exit 6, `results_value_invalid`), because JSON would print one as `null`, indistinguishable from
+  an absent value.
+- **`null` appears only at these keys:** `spps`, `tcr` (the other solver's), `mc_sd` (a value not
+  from a Monte-Carlo histogram), `band_hz`, `field`, `air_m_per_metre`, `onset`, `position_m`,
+  `arrival_s`, `floor_db`, `lost_share`, `crossings`, and inside a refusal's typed `error`, `sd`,
+  `with_tail` and `with_missing` (`cli_results.rs`, `every_null_in_a_report_is_at_a_nullable_key`).
 - Values read from the solvers' files are their `f32`, widened exactly. A reader that is not
   correctly rounded (serde_json's default is not) can come back one `f64` unit off; compare such
   values as `f32`. JavaScript's `JSON.parse` is correctly rounded.
@@ -44,7 +51,7 @@ are not for publication.`
 
 ```
 {
-  "results_version": 1,
+  "results_version": 2,               // 2: mc_sd, noise, floor, lost-share and per-source fields
   "validated_by_bed": false,          // false until M8's bed passes: show nothing
   "run_folder": "<as given>",
   "solver": "spps" | "tcr",
@@ -64,7 +71,9 @@ are not for publication.`
 | `speed_of_sound_m_s`, `receiver_radius_m` | SPPS's `c` and `rayon_recepteurp` |
 | `receiver_crossing_s` | `2R/c`: the direct sound is spread over this long at a receiver |
 | `celerity_gradient` | `alog` or `blin` is not 0: no straight-line arrival is computed |
-| `sources[]` | `name`, `position_m` (`null` when not read), `emission_s` (`ceil(delay/dt)·dt`) |
+| `computation_method`, `particles_per_source`, `trans_epsilon`, `echogram_per_source` | `computation_method` (0 random, 1 energetic), `nbparticules`, `trans_epsilon` and `output_recp_bysource` as SPPS reads them |
+| `monte_carlo` | how every value's noise was judged: `resamples`, `refused_resamples_allowed`, `seed`, and the largest standard deviation allowed, `limit_decay_relative` (EDT, T20, T30), `limit_clarity_db`, `limit_definition`, `limit_centre_time_s`, `limit_spl_db` (`docs/params.md`, "Monte-Carlo noise") |
+| `sources[]` | `name`, `position_m` (`null` when not read), `emission_s` (`ceil(delay/dt)·dt`), `band_power_w` (per computed band, W, as SPPS computes it), `balloon` (a directivity balloon: its values are refused, `noise_unknown`) |
 | `particles` | the statistics per band: absorbed by the atmosphere, the materials, the fittings; lost by loops and meshing; remaining; total |
 | `total_energy[]` | per band, the room's energy per step (`<cumul_filename>`) |
 | `point_receivers[]` | below, in the order of their folder names |
@@ -78,24 +87,29 @@ A point receiver:
 | `label`, `folder` | the folder's name, which is exactly one `config.xml` label, and its path under `solve/` |
 | `position_m` | as SPPS stores it; `null` when not read |
 | `arrival_s` | the direct sound's arrival at the centre, which every onset-relative parameter is measured from; `null` when not computed, and the parameters then detect it |
-| `bands[]` | per computed band: `freq_hz`; `complete` (SPPS's statistics show nothing arrives after the series); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters` |
-| `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `parameters` |
+| `bands[]` | per computed band: `freq_hz`; `complete` (SPPS's statistics show nothing arrives after the series); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that lost particles can have taken, or `null` when none was lost); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …}` in Pa², or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters` |
+| `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `parameters`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
 | `by_source[]` | `source` and its `energy` per band, Pa² |
+| `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `noise_model`, `crossings`, `energy_pa2`, `total_pa2`, `onset`, `parameters`) and `aggregate`: the parameters of that source–receiver pair. Empty otherwise |
 
 `parameters` holds `spl_db`, `edt_s`, `t20_s`, `t30_s`, `c50_db`, `c80_db`, `d50` and `ts_s`, each
 exactly one of:
 
 ```
-{"value": 64.3876}
+{"value": 64.3876, "mc_sd": 0.041}
 {"not_evaluable": {"code": "params_not_evaluable",
-                   "message": "params_not_evaluable: T30: range_not_reached: ...",
+                   "message": "params_not_evaluable: T30: monte_carlo_noise: ...",
                    "error": {"kind": "not_evaluable", "quantity": {"quantity": "t30"},
-                             "why": {"why": "range_not_reached", "needed_db": -35.0, "reached_db": -19.1}}}}
+                             "why": {"why": "monte_carlo_noise", "value": 0.83, "sd": 0.099,
+                                     "limit": 0.025, "resamples": 200, "refused_resamples": 107}}}}
 ```
 
-`code` is a row of `docs/solver-contract.md`, "Parameter refusals"; `error` is the typed refusal,
-`why.why` one of `range_not_reached`, `truncated`, `unresolved`, `range_too_short`,
-`not_decaying`, `empty_window` for `params_not_evaluable` (`docs/params.md`).
+`mc_sd` is the value's estimated Monte-Carlo standard deviation in its unit; every SPPS value
+carries one, and no value is reported whose standard deviation exceeds the run's `monte_carlo`
+limits. `code` is a row of `docs/solver-contract.md`, "Parameter refusals"; `error` is the typed
+refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `range_too_short`,
+`not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`, `monte_carlo_noise`,
+`noise_unknown`, `several_sources` for `params_not_evaluable` (`docs/params.md`).
 
 ### `tcr`
 
@@ -103,9 +117,9 @@ exactly one of:
 |---|---|
 | `bands[]` | per computed band: `freq_hz`, and for `sabine` and `eyring` each `absorption_area_m2`, `reverberation_time_s`, `level_db`, as TCR wrote them |
 | `global` | `aggregate` (the label), `sabine_level_db`, `eyring_level_db` |
-| `point_receivers[]` | `label`, `file`; per band `direct_db`, `total_sabine_db`, `total_eyring_db`; `global_direct_db`, `global_total_sabine_db`, `global_total_eyring_db` (`null` when not finite) |
+| `point_receivers[]` | `label`, `file`; per band `direct_db`, `total_sabine_db`, `total_eyring_db`; `global_direct_db`, `global_total_sabine_db`, `global_total_eyring_db` (the `Global` row, each column's energetic sum over the bands, **an aggregate**; a value that is not finite is refused, `results_value_invalid`) |
 | `surfaces[]` | as for SPPS, with `field` one of `Direct field`, `Total field (Sabine)`, `Total field (Eyring)` |
-| `analytic` | `core::params`' Sabine and Eyring times on the run's own inputs: `{"status": "computed", "volume_m3", "area_m2", "bands": [{"freq_hz", "air_m_per_metre", "sabine_s", "eyring_s"}]}`, the two times as `{"value": …}` or `{"not_evaluable": …}`; or `{"status": "not_computed", "why": …}` |
+| `analytic` | `core::params`' Sabine and Eyring times on the run's own inputs: `{"status": "computed", "volume_m3", "area_m2", "bands": [{"freq_hz", "air_m_per_metre", "sabine_s", "eyring_s"}]}`, the two times as `{"value": …, "mc_sd": null}` or `{"not_evaluable": …}`; or `{"status": "not_computed", "why": …}` |
 
 TCR writes no time series, so a TCR report has no per-receiver `parameters`.
 
@@ -113,7 +127,7 @@ TCR writes no time series, so a TCR report has no per-receiver `parameters`.
 
 ```
 {
-  "results_version": 1,
+  "results_version": 2,
   "run_folder": "<as given>",
   "refused": {
     "code": "results_run_failed",

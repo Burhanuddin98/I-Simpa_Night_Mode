@@ -3,8 +3,11 @@
 //! upstream are in `docs/params.md`.
 //!
 //! - [`decay`]: onset, Schroeder integration, EDT, T20, T30, C50, C80, D50, Ts and SPL, each with
-//!   a bound on what the unseen tail after the series' end could change, and, when the direct
-//!   sound's arrival is not given, on what its place inside the onset bin could change.
+//!   a bound on what the unseen tail after the series' end could change, on what energy the solver
+//!   dropped below its floor could change ([`EnergySeries::with_solver_floor`]), and, when the
+//!   direct sound's arrival is not given, on what its place inside the onset bin could change.
+//! - [`noise`]: the Monte-Carlo noise of each of those values, estimated from the number of
+//!   receiver crossings behind every bin, and the refusal of a value whose noise is too large.
 //! - [`air`]: ISO 9613-1 attenuation, and the value SPPS and TCR actually use.
 //! - [`room`]: Sabine and Eyring as TCR computes them.
 //! - [`din18041`]: the group-A target reverberation times.
@@ -21,6 +24,7 @@ use serde::Serialize;
 pub mod air;
 pub mod decay;
 pub mod din18041;
+pub mod noise;
 pub mod room;
 
 /// The refusal codes. Each is a row of `docs/solver-contract.md`, Part B, "Parameter refusals"
@@ -48,9 +52,11 @@ pub mod codes {
     pub const NO_ABSORPTION: &str = "params_no_absorption";
     /// A DIN 18041 volume outside the range the sourced formula covers.
     pub const DIN_OUT_OF_RANGE: &str = "params_din_out_of_range";
+    /// A solver floor, or a Monte-Carlo deposit, that is not a finite number in its domain.
+    pub const BAD_NOISE_INPUT: &str = "params_bad_noise_input";
 
     /// Every code, in the order of the documentation table.
-    pub const ALL: [&str; 11] = [
+    pub const ALL: [&str; 12] = [
         BAD_TIME_STEP,
         SERIES_TOO_SHORT,
         BAD_ENERGY,
@@ -62,6 +68,7 @@ pub mod codes {
         BAD_ROOM,
         NO_ABSORPTION,
         DIN_OUT_OF_RANGE,
+        BAD_NOISE_INPUT,
     ];
 }
 
@@ -149,6 +156,52 @@ pub enum NotEvaluable {
     NotDecaying,
     /// A window the quantity divides by holds no energy.
     EmptyWindow { from_s: f64 },
+    /// Energy is missing from the series: the solver dropped each particle once its energy fell to
+    /// `floor_db` below its start ([`EnergySeries::with_solver_floor`]), or lost particles
+    /// mid-path ([`EnergySeries::with_lost_share`]). With the most energy that can have cost
+    /// added, the decay is not shown to fall to the bottom of the range.
+    MissingNotCleared {
+        floor_db: Option<f64>,
+        lost_share: Option<f64>,
+        /// The bottom of the evaluation range, dB.
+        needed_db: f64,
+        /// How far the decay had fallen, the unseen tail and the missing energy included, dB.
+        reached_db: f64,
+    },
+    /// With the most energy the solver's floor or its lost particles can have cost added, the
+    /// value moves by more than `limit`.
+    MissingMoves {
+        floor_db: Option<f64>,
+        lost_share: Option<f64>,
+        /// The value from the series. Not reported as the quantity.
+        value: f64,
+        /// The value with the missing energy added; `None` when that curve cannot be fitted.
+        with_missing: Option<f64>,
+        limit: f64,
+    },
+    /// The value's Monte-Carlo standard deviation, estimated from the receiver crossings behind
+    /// each bin ([`noise`]), is above `limit`; or more than [`noise::REFUSED_RESAMPLES_ALLOWED`]
+    /// of the resampled series refuse the quantity themselves.
+    MonteCarloNoise {
+        /// The value from the series. Not reported as the quantity.
+        value: f64,
+        /// `None` when fewer than two resampled series give a value.
+        sd: Option<f64>,
+        /// In the quantity's unit (relative for decay times).
+        limit: f64,
+        resamples: usize,
+        refused_resamples: usize,
+    },
+    /// The series' Monte-Carlo noise cannot be estimated, so nothing bounds it.
+    NoiseUnknown {
+        /// The value from the series. Not reported as the quantity.
+        value: f64,
+        detail: String,
+    },
+    /// More than one source contributes to the series. ISO 3382-1 defines the onset-relative
+    /// quantities per source–receiver pair, and a sum of several sources' responses is not one.
+    /// Made by `core::results`, which knows the sources; `params` never sees them.
+    SeveralSources { sources: Vec<String> },
 }
 
 impl fmt::Display for NotEvaluable {
@@ -202,7 +255,78 @@ impl fmt::Display for NotEvaluable {
             NotEvaluable::EmptyWindow { from_s } => {
                 write!(f, "empty_window: no energy after {from_s} s")
             }
+            NotEvaluable::MissingNotCleared {
+                floor_db,
+                lost_share,
+                needed_db,
+                reached_db,
+            } => write!(
+                f,
+                "missing_not_cleared: with what {} can have cost added, the decay reached \
+                 {reached_db:.1} dB, the range needs {needed_db:.1} dB",
+                missing_cause(*floor_db, *lost_share)
+            ),
+            NotEvaluable::MissingMoves {
+                floor_db,
+                lost_share,
+                value,
+                with_missing,
+                limit,
+            } => {
+                let cause = missing_cause(*floor_db, *lost_share);
+                match with_missing {
+                    Some(w) => write!(
+                        f,
+                        "missing_moves: {value} from the series, {w} with what {cause} can have \
+                         cost added; the limit is {limit}"
+                    ),
+                    None => write!(
+                        f,
+                        "missing_moves: {value} from the series, and with what {cause} can have \
+                         cost added the curve cannot be fitted"
+                    ),
+                }
+            }
+            NotEvaluable::MonteCarloNoise {
+                value,
+                sd,
+                limit,
+                resamples,
+                refused_resamples,
+            } => {
+                write!(f, "monte_carlo_noise: {value} from the series, ")?;
+                match sd {
+                    Some(sd) => write!(f, "standard deviation {sd} over {resamples} resamples")?,
+                    None => write!(f, "no standard deviation from {resamples} resamples")?,
+                }
+                write!(
+                    f,
+                    ", {refused_resamples} of which refuse it; the limit is {limit}. Run more \
+                     particles"
+                )
+            }
+            NotEvaluable::NoiseUnknown { value, detail } => write!(
+                f,
+                "noise_unknown: {value} from the series, but its Monte-Carlo noise cannot be \
+                 estimated: {detail}"
+            ),
+            NotEvaluable::SeveralSources { sources } => write!(
+                f,
+                "several_sources: {sources:?} all contribute; the quantity is defined per source \
+                 and receiver. Turn on the echogram per source"
+            ),
         }
+    }
+}
+
+/// What made energy go missing, in words.
+fn missing_cause(floor_db: Option<f64>, lost_share: Option<f64>) -> String {
+    let floor = floor_db.map(|db| format!("the solver's floor ({db} dB below a particle's start)"));
+    let lost = lost_share.map(|s| format!("its lost particles (share {s:.2e})"));
+    match (floor, lost) {
+        (Some(a), Some(b)) => format!("{a} and {b}"),
+        (Some(a), None) | (None, Some(a)) => a,
+        (None, None) => "nothing".into(),
     }
 }
 
@@ -248,6 +372,10 @@ pub enum ParamError {
         volume_m3: f64,
         detail: String,
     },
+    BadNoiseInput {
+        field: String,
+        value: f64,
+    },
 }
 
 impl ParamError {
@@ -265,6 +393,7 @@ impl ParamError {
             ParamError::BadRoom { .. } => codes::BAD_ROOM,
             ParamError::NoAbsorption => codes::NO_ABSORPTION,
             ParamError::DinOutOfRange { .. } => codes::DIN_OUT_OF_RANGE,
+            ParamError::BadNoiseInput { .. } => codes::BAD_NOISE_INPUT,
         }
     }
 
@@ -314,6 +443,7 @@ impl fmt::Display for ParamError {
                 volume_m3,
                 detail,
             } => write!(f, "{group} at {volume_m3} m³: {detail}"),
+            ParamError::BadNoiseInput { field, value } => write!(f, "{field} = {value}"),
         }
     }
 }
@@ -324,6 +454,18 @@ pub(crate) fn not_evaluable(quantity: Quantity, why: NotEvaluable) -> ParamError
     ParamError::NotEvaluable { quantity, why }
 }
 
+/// A solver's floor: it drops each particle once its energy falls `-db` dB below its start
+/// ([`EnergySeries::with_solver_floor`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SolverFloor {
+    /// Negative: SPPS's `-10·trans_epsilon`.
+    pub db: f64,
+    /// The share of the emitted energy the room still held when the direct sound arrived, above
+    /// 0. What the dropped particles would still have brought is at most `10^{db/10}/alive_share`
+    /// of the energy the receiver gets from the arrival on.
+    pub alive_share: f64,
+}
+
 /// One band's energy histogram: bin `k` holds the energy that arrived in `[k·dt, (k+1)·dt)`,
 /// in Pa² as SPPS writes a `.recp` value (`docs/params.md`, "The input").
 #[derive(Clone, Debug, PartialEq)]
@@ -332,6 +474,12 @@ pub struct EnergySeries {
     values: Vec<f64>,
     /// The caller knows that no energy arrives after the last bin ([`EnergySeries::complete`]).
     complete: bool,
+    /// The solver dropped each particle once its energy fell below a floor
+    /// ([`EnergySeries::with_solver_floor`]).
+    floor: Option<SolverFloor>,
+    /// The share of the energy after the onset that lost particles can have taken with them
+    /// ([`EnergySeries::with_lost_share`]).
+    lost_share: Option<f64>,
 }
 
 impl EnergySeries {
@@ -362,7 +510,70 @@ impl EnergySeries {
             dt,
             values,
             complete: false,
+            floor: None,
+            lost_share: None,
         })
+    }
+
+    /// The series of a solver that lost some particles mid-path, whose unfinished paths can have
+    /// taken up to `share` of the energy after the onset (`S(onset)`) with them. SPPS counts them
+    /// (`partLoop`, `partLost`); `core::results` gives the share (`docs/results.md`, "Lost
+    /// particles"). Every quantity it could move beyond its limit is refused, as for a floor; the
+    /// series keeps its completeness, since nothing arrives after its end but what was lost.
+    /// Refused, `params_bad_noise_input`, when `share` is not a finite number of at least 0.
+    pub fn with_lost_share(mut self, share: f64) -> Result<Self, ParamError> {
+        if !share.is_finite() || share < 0.0 {
+            return Err(ParamError::BadNoiseInput {
+                field: "lost_share".into(),
+                value: share,
+            });
+        }
+        self.lost_share = (share > 0.0).then_some(share);
+        Ok(self)
+    }
+
+    /// The share [`EnergySeries::with_lost_share`] set.
+    pub fn lost_share(&self) -> Option<f64> {
+        self.lost_share
+    }
+
+    /// The series of a solver that drops each particle once its energy falls `-floor_db` dB below
+    /// its start: SPPS in energetic mode drops it at `10^-trans_epsilon` of its start
+    /// (`spps/sppsNantes.cpp:75`; `CalculationCore.cpp:57-60, 305`), so `floor_db` is
+    /// `-10·trans_epsilon`. `alive_share` is the share of the emitted energy the room still held
+    /// when the direct sound arrived ([`SolverFloor`]). What the dropped particles would still
+    /// have brought is bounded, `10^{floor_db/10}/alive_share` of `S(onset)`, and every quantity it
+    /// could move beyond its limit is refused (`docs/params.md`, "Missing energy"). A floor means
+    /// energy is missing, so the series is no longer complete. Refused, `params_bad_noise_input`,
+    /// when `floor_db` is not a finite number or `alive_share` not a finite positive one.
+    pub fn with_solver_floor(
+        mut self,
+        floor_db: f64,
+        alive_share: f64,
+    ) -> Result<Self, ParamError> {
+        if !floor_db.is_finite() {
+            return Err(ParamError::BadNoiseInput {
+                field: "floor_db".into(),
+                value: floor_db,
+            });
+        }
+        if !alive_share.is_finite() || alive_share <= 0.0 {
+            return Err(ParamError::BadNoiseInput {
+                field: "alive_share".into(),
+                value: alive_share,
+            });
+        }
+        self.floor = Some(SolverFloor {
+            db: floor_db,
+            alive_share,
+        });
+        self.complete = false;
+        Ok(self)
+    }
+
+    /// The floor [`EnergySeries::with_solver_floor`] set.
+    pub fn floor(&self) -> Option<SolverFloor> {
+        self.floor
     }
 
     /// A series whose caller knows that no energy arrives after its last bin, refused as
@@ -413,8 +624,13 @@ impl EnergySeries {
 }
 
 /// Bands summed bin by bin into one series, labelled by its caller as an aggregate (upstream's
-/// `Global` row, `projet_calculation.cpp:898`). It is complete when every band is. Refused when
-/// the series differ in `dt` or length, or when there are none.
+/// `Global` row, `projet_calculation.cpp:898`). It is complete when every band is, and carries
+/// the highest floor of any band. Refused when the series differ in `dt` or length, or when there
+/// are none.
+///
+/// **Not ISO 3382-1's single-number value.** ISO's single numbers are arithmetic means of octave
+/// band values (Annex A, as commonly quoted: 500 Hz and 1 kHz for EDT and C80); this is one decay
+/// of all bands' energy together, weighted by the source spectrum (`docs/params.md`).
 pub fn aggregate(bands: &[EnergySeries]) -> Result<EnergySeries, ParamError> {
     let Some(first) = bands.first() else {
         return Err(ParamError::SeriesMismatch {
@@ -440,10 +656,26 @@ pub fn aggregate(bands: &[EnergySeries]) -> Result<EnergySeries, ParamError> {
             *acc += v;
         }
     }
-    if bands.iter().all(|b| b.complete) {
-        EnergySeries::complete(first.dt, values)
+    let summed = if bands.iter().all(|b| b.complete) {
+        EnergySeries::complete(first.dt, values)?
     } else {
-        EnergySeries::new(first.dt, values)
+        EnergySeries::new(first.dt, values)?
+    };
+    // The highest floor, the smallest share alive and the largest lost share of any band: those
+    // that can have cost most.
+    let summed = match bands
+        .iter()
+        .filter_map(|b| b.floor)
+        .reduce(|a, b| SolverFloor {
+            db: a.db.max(b.db),
+            alive_share: a.alive_share.min(b.alive_share),
+        }) {
+        Some(f) => summed.with_solver_floor(f.db, f.alive_share)?,
+        None => summed,
+    };
+    match bands.iter().filter_map(|b| b.lost_share).reduce(f64::max) {
+        Some(share) => summed.with_lost_share(share),
+        None => Ok(summed),
     }
 }
 
@@ -551,6 +783,10 @@ mod tests {
                 group: "A5".into(),
                 volume_m3: 10.0,
                 detail: "x".into(),
+            },
+            ParamError::BadNoiseInput {
+                field: "floor_db".into(),
+                value: f64::NAN,
             },
         ];
         let got: Vec<&str> = errors.iter().map(ParamError::code).collect();

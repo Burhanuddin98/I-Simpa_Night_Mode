@@ -597,12 +597,13 @@ and still have a parameter refused.
 | `params_bad_energy` | a value is NaN, ±inf or negative | the first bad index and its value |
 | `params_no_energy` | every value of a series is zero | none |
 | `params_bad_arrival` | a given direct-arrival time is not a finite time at or after 0 s, or lies outside the series' onset bin (the first bin within 20 dB of the largest) | the time, and which side of the bin it fell |
-| `params_not_evaluable` | the series is valid but the quantity cannot be read from it: `range_not_reached`, `truncated`, `unresolved`, `range_too_short`, `not_decaying` or `empty_window` (`docs/params.md`) | the quantity; the depth reached, the value and the value with the unseen tail added, or the values with the arrival at either end of the onset bin |
+| `params_not_evaluable` | the series is valid but the quantity cannot be read from it: `range_not_reached`, `truncated`, `unresolved`, `range_too_short`, `not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`, `monte_carlo_noise`, `noise_unknown` or `several_sources` (`docs/params.md`) | the quantity; the depth reached, the value and the value with the unseen tail (or the energy the solver's floor and lost particles can have cost) added, the values with the arrival at either end of the onset bin, the value's Monte-Carlo standard deviation and its limit, or the sources |
 | `params_series_mismatch` | bands to be aggregated differ in `dt` or length, or there are none | the two shapes |
 | `params_bad_air` | an ISO 9613-1 input is out of its domain: a frequency or pressure that is not positive, a temperature at or below absolute zero, a humidity outside 0–100 % | the field and value |
 | `params_bad_room` | a Sabine or Eyring input is out of its domain: a volume that is not positive, a negative area, α outside [0, 1], a negative air term, no surface area | the field and value |
 | `params_no_absorption` | the absorption area plus `4·m·V` is zero, so the reverberation time would be infinite | none |
 | `params_din_out_of_range` | a DIN 18041 volume outside its group's range: A1 30–1000 m³, A2 50–5000 m³, A3 30–5000 m³, A4 30–500 m³, A5 200–30 000 m³ (`docs/params.md`, "DIN 18041 targets") | the group, the volume and the range |
+| `params_bad_noise_input` | a solver floor that is not a finite number, a share of energy alive or lost that is not a finite number in its domain, or a Monte-Carlo mean deposit that is not a finite positive number (`docs/params.md`, "Missing energy", "Monte-Carlo noise") | the field and value |
 
 ### Result refusals
 

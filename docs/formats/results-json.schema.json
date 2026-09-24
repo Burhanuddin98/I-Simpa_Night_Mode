@@ -80,7 +80,7 @@
   "report": {
     "$defs": {
       "AggregateReport": {
-        "description": "All bands of a receiver summed bin by bin (`params::aggregate`): **an aggregate, not a band**.",
+        "description": "All bands of a receiver summed bin by bin (`params::aggregate`): **an aggregate, not a band,\nand not ISO 3382-1's single-number value** (the arithmetic mean of band values), since its\ndecay is weighted by the source spectrum.",
         "properties": {
           "aggregate": {
             "description": "Always `\"all computed bands summed bin by bin\"`.",
@@ -272,12 +272,18 @@
         "type": "object"
       },
       "Evaluated": {
-        "description": "A quantity's value, or why it has none.",
-        "oneOf": [
+        "anyOf": [
           {
-            "additionalProperties": false,
             "description": "In the quantity's unit (the field name says it).",
             "properties": {
+              "mc_sd": {
+                "description": "The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);\n`null` for a value that does not come from a Monte-Carlo histogram, such as TCR's\nanalytic references.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "value": {
                 "format": "double",
                 "type": "number"
@@ -289,7 +295,6 @@
             "type": "object"
           },
           {
-            "additionalProperties": false,
             "description": "`core::params` refused it.",
             "properties": {
               "not_evaluable": {
@@ -301,7 +306,8 @@
             ],
             "type": "object"
           }
-        ]
+        ],
+        "description": "A quantity's value, or why it has none."
       },
       "MainBand": {
         "description": "One band row of `Main results.gabe`.",
@@ -323,6 +329,101 @@
           "eyring"
         ],
         "type": "object"
+      },
+      "MonteCarloReport": {
+        "description": "How every SPPS value's Monte-Carlo noise was estimated and judged (`params::noise`).",
+        "properties": {
+          "limit_centre_time_s": {
+            "format": "double",
+            "type": "number"
+          },
+          "limit_clarity_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "limit_decay_relative": {
+            "description": "The largest standard deviation a value may carry: EDT, T20 and T30 relative, C50 and C80\nin dB, D50 as a fraction, Ts in s, SPL in dB.",
+            "format": "double",
+            "type": "number"
+          },
+          "limit_definition": {
+            "format": "double",
+            "type": "number"
+          },
+          "limit_spl_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "refused_resamples_allowed": {
+            "description": "Resamples that may refuse a quantity before its value is refused.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "resamples": {
+            "description": "Resampled series per estimate.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "seed": {
+            "description": "The bootstrap's seed.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resamples",
+          "refused_resamples_allowed",
+          "seed",
+          "limit_decay_relative",
+          "limit_clarity_db",
+          "limit_definition",
+          "limit_centre_time_s",
+          "limit_spl_db"
+        ],
+        "type": "object"
+      },
+      "NoiseModel": {
+        "description": "What a series' noise is estimated from.",
+        "oneOf": [
+          {
+            "description": "Receiver crossings, each adding `mean_deposit` on average, in the series' unit; with\nseveral sources, the largest of theirs.",
+            "properties": {
+              "mean_deposit": {
+                "format": "double",
+                "type": "number"
+              },
+              "model": {
+                "const": "crossings",
+                "type": "string"
+              }
+            },
+            "required": [
+              "model",
+              "mean_deposit"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Nothing bounds the noise; every value is refused, `noise_unknown`.",
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "model": {
+                "const": "unknown",
+                "type": "string"
+              }
+            },
+            "required": [
+              "model",
+              "detail"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "NotEvaluable": {
         "description": "Why a quantity cannot be read from a valid series.",
@@ -471,6 +572,179 @@
             "required": [
               "why",
               "from_s"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Energy is missing from the series: the solver dropped each particle once its energy fell to\n`floor_db` below its start ([`EnergySeries::with_solver_floor`]), or lost particles\nmid-path ([`EnergySeries::with_lost_share`]). With the most energy that can have cost\nadded, the decay is not shown to fall to the bottom of the range.",
+            "properties": {
+              "floor_db": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lost_share": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "needed_db": {
+                "description": "The bottom of the evaluation range, dB.",
+                "format": "double",
+                "type": "number"
+              },
+              "reached_db": {
+                "description": "How far the decay had fallen, the unseen tail and the missing energy included, dB.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "missing_not_cleared",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "needed_db",
+              "reached_db"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "With the most energy the solver's floor or its lost particles can have cost added, the\nvalue moves by more than `limit`.",
+            "properties": {
+              "floor_db": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "limit": {
+                "format": "double",
+                "type": "number"
+              },
+              "lost_share": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "value": {
+                "description": "The value from the series. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "missing_moves",
+                "type": "string"
+              },
+              "with_missing": {
+                "description": "The value with the missing energy added; `None` when that curve cannot be fitted.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The value's Monte-Carlo standard deviation, estimated from the receiver crossings behind\neach bin ([`noise`]), is above `limit`; or more than [`noise::REFUSED_RESAMPLES_ALLOWED`]\nof the resampled series refuse the quantity themselves.",
+            "properties": {
+              "limit": {
+                "description": "In the quantity's unit (relative for decay times).",
+                "format": "double",
+                "type": "number"
+              },
+              "refused_resamples": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "resamples": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sd": {
+                "description": "`None` when fewer than two resampled series give a value.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "value": {
+                "description": "The value from the series. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "monte_carlo_noise",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "limit",
+              "resamples",
+              "refused_resamples"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The series' Monte-Carlo noise cannot be estimated, so nothing bounds it.",
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "value": {
+                "description": "The value from the series. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "noise_unknown",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "detail"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "More than one source contributes to the series. ISO 3382-1 defines the onset-relative\nquantities per source–receiver pair, and a sum of several sources' responses is not one.\nMade by `core::results`, which knows the sources; `params` never sees them.",
+            "properties": {
+              "sources": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "why": {
+                "const": "several_sources",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "sources"
             ],
             "type": "object"
           }
@@ -718,6 +992,27 @@
               "detail"
             ],
             "type": "object"
+          },
+          {
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "bad_noise_input",
+                "type": "string"
+              },
+              "value": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "value"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -828,26 +1123,17 @@
             "type": "string"
           },
           "global_direct_db": {
-            "description": "The `Global` row: each column's energetic sum over the bands, an aggregate. `None` where\nit is not finite.",
+            "description": "The `Global` row: each column's energetic sum over the bands, an aggregate. A value that\nis not finite is refused, `results_value_invalid`.",
             "format": "double",
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": "number"
           },
           "global_total_eyring_db": {
             "format": "double",
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": "number"
           },
           "global_total_sabine_db": {
             "format": "double",
-            "type": [
-              "number",
-              "null"
-            ]
+            "type": "number"
           },
           "label": {
             "description": "The file's name without `.gabe`: exactly one `recepteur_ponctuel@lbl`.",
@@ -857,7 +1143,10 @@
         "required": [
           "label",
           "file",
-          "bands"
+          "bands",
+          "global_direct_db",
+          "global_total_sabine_db",
+          "global_total_eyring_db"
         ],
         "type": "object"
       },
@@ -1012,8 +1301,23 @@
             "type": "number"
           },
           "complete": {
-            "description": "SPPS's statistics show that nothing arrives after the series' end (random mode, no\nparticle remaining: `spps::SppsResults::band_complete`), so the series is given to\n`params` as complete and no tail is bounded. Otherwise `params` bounds the tail.",
+            "description": "SPPS's statistics show that nothing arrives after the series' end (random mode, no\nparticle remaining, none lost: `spps::SppsResults::band_complete`), so the series is given\nto `params` as complete and no tail is bounded. Otherwise `params` bounds the tail.",
             "type": "boolean"
+          },
+          "contributing_sources": {
+            "description": "The sources whose energy reaches the receiver in this band (their `.recps` total is above\n0). With more than one, the seven onset-relative parameters are refused,\n`several_sources`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "crossings": {
+            "description": "The receiver crossings behind the series, estimated as its total over the mean deposit;\n`null` when the noise has no model.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "energy_pa2": {
             "description": "The `.recp` column, Pa² per time step.",
@@ -1023,9 +1327,29 @@
             },
             "type": "array"
           },
+          "floor_db": {
+            "description": "The level below a particle's start at which SPPS drops it, dB, when that can cost the\nhistogram energy (energetic mode: `-10·trans_epsilon`); `params` bounds what it can have\ndropped. `null` otherwise.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "freq_hz": {
             "format": "int32",
             "type": "integer"
+          },
+          "lost_share": {
+            "description": "The share of the energy from the arrival on that lost particles can have taken with them\n(`spps::SppsResults::lost_share`); `params` bounds what it can move. `null` when none was\nlost.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "noise_model": {
+            "$ref": "#/$defs/NoiseModel",
+            "description": "What the values' Monte-Carlo noise is estimated from (`params::noise`)."
           },
           "onset": {
             "anyOf": [
@@ -1055,6 +1379,8 @@
         "required": [
           "freq_hz",
           "complete",
+          "contributing_sources",
+          "noise_model",
           "energy_pa2",
           "total_pa2",
           "source_power_rho_c",
@@ -1093,9 +1419,73 @@
         ],
         "type": "string"
       },
+      "SourceBandReport": {
+        "description": "One source's own echogram at a receiver, one band.",
+        "properties": {
+          "crossings": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "energy_pa2": {
+            "description": "The source's `.recp` column, Pa² per time step.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "noise_model": {
+            "$ref": "#/$defs/NoiseModel"
+          },
+          "onset": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Onset"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "parameters": {
+            "$ref": "#/$defs/Parameters"
+          },
+          "total_pa2": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "noise_model",
+          "energy_pa2",
+          "total_pa2",
+          "parameters"
+        ],
+        "type": "object"
+      },
       "SourcePoint": {
         "description": "A source as SPPS reads it.",
         "properties": {
+          "balloon": {
+            "description": "`directivite` is 5, a directivity balloon: SPPS scales each particle's energy by the\nballoon's value in its direction (`sppsNantes.cpp:115-127`), so its particles do not all\ncarry `W/N`.",
+            "type": "boolean"
+          },
+          "band_power_w": {
+            "description": "Its power in each computed band, W, as SPPS computes it: `10⁻¹²·10^(db/10)` in `f32`\nfrom its `bfreq@db` children sorted by `freq` and taken by position\n(`base_core_configuration.cpp:140-150`). Each of its particles starts with this over\n`nbparticules` (`sppsNantes.cpp:73`).",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
           "emission_s": {
             "description": "When its particles start: `ceil(delay / dt)` steps, cast to `u16`\n(`sppsNantes.cpp:91`), times `dt`.",
             "format": "double",
@@ -1121,7 +1511,45 @@
         },
         "required": [
           "name",
-          "emission_s"
+          "emission_s",
+          "band_power_w",
+          "balloon"
+        ],
+        "type": "object"
+      },
+      "SourceReceiverReport": {
+        "description": "One source's own echogram at a receiver (`output_recp_bysource`): the parameters of that\nsource–receiver pair, as ISO 3382-1 defines them.",
+        "properties": {
+          "aggregate": {
+            "$ref": "#/$defs/AggregateReport"
+          },
+          "arrival_s": {
+            "description": "The direct sound's arrival from this source, as for the receiver.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "bands": {
+            "items": {
+              "$ref": "#/$defs/SourceBandReport"
+            },
+            "type": "array"
+          },
+          "file": {
+            "description": "Relative to `solve/`.",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "file",
+          "bands",
+          "aggregate"
         ],
         "type": "object"
       },
@@ -1153,7 +1581,7 @@
             "$ref": "#/$defs/AggregateReport"
           },
           "arrival_s": {
-            "description": "The direct sound's arrival at the receiver's centre, which every onset-relative parameter\nis measured from (`params::decay::Arrival::Known`); `null` when it is not computed\n(a celerity gradient, or a position not read), and the parameters then use\n`Arrival::Detected`.",
+            "description": "The direct sound's arrival at the receiver's centre, which every onset-relative parameter\nis measured from (`params::decay::Arrival::Known`): the earliest over the sources;\n`null` when it is not computed (a celerity gradient, or a position not read), and the\nparameters then use `Arrival::Detected`.",
             "format": "double",
             "type": [
               "number",
@@ -1180,6 +1608,13 @@
           "label": {
             "type": "string"
           },
+          "per_source": {
+            "description": "Each source's own echogram and its parameters, when `output_recp_bysource` is on; empty\notherwise.",
+            "items": {
+              "$ref": "#/$defs/SourceReceiverReport"
+            },
+            "type": "array"
+          },
           "position_m": {
             "items": {
               "format": "double",
@@ -1198,7 +1633,8 @@
           "folder",
           "bands",
           "aggregate",
-          "by_source"
+          "by_source",
+          "per_source"
         ],
         "type": "object"
       },
@@ -1208,9 +1644,21 @@
           "celerity_gradient": {
             "type": "boolean"
           },
+          "computation_method": {
+            "description": "`computation_method`: 0 random, 1 energetic.",
+            "format": "int32",
+            "type": "integer"
+          },
           "duration_s": {
             "format": "double",
             "type": "number"
+          },
+          "echogram_per_source": {
+            "description": "`output_recp_bysource`.",
+            "type": "boolean"
+          },
+          "monte_carlo": {
+            "$ref": "#/$defs/MonteCarloReport"
           },
           "particle_files": {
             "items": {
@@ -1220,6 +1668,12 @@
           },
           "particles": {
             "$ref": "#/$defs/ParticleStats"
+          },
+          "particles_per_source": {
+            "description": "`nbparticules`: particles per source and band.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
           },
           "point_receivers": {
             "items": {
@@ -1267,6 +1721,11 @@
               "$ref": "#/$defs/BandEnergy"
             },
             "type": "array"
+          },
+          "trans_epsilon": {
+            "description": "`trans_epsilon` as SPPS reads it.",
+            "format": "double",
+            "type": "number"
           }
         },
         "required": [
@@ -1277,6 +1736,11 @@
           "receiver_radius_m",
           "receiver_crossing_s",
           "celerity_gradient",
+          "computation_method",
+          "particles_per_source",
+          "trans_epsilon",
+          "echogram_per_source",
+          "monte_carlo",
           "sources",
           "particles",
           "total_energy",

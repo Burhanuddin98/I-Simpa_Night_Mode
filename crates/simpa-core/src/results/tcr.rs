@@ -71,11 +71,11 @@ pub struct PointReceiver {
     /// Relative to `solve/`.
     pub file: String,
     pub bands: Vec<ReceiverBand>,
-    /// The `Global` row: each column's energetic sum over the bands, an aggregate. `None` where
-    /// it is not finite.
-    pub global_direct_db: Option<f64>,
-    pub global_total_sabine_db: Option<f64>,
-    pub global_total_eyring_db: Option<f64>,
+    /// The `Global` row: each column's energetic sum over the bands, an aggregate. A value that
+    /// is not finite is refused, `results_value_invalid`.
+    pub global_direct_db: f64,
+    pub global_total_sabine_db: f64,
+    pub global_total_eyring_db: f64,
 }
 
 /// `core::params`' reverberation times for one band, on the run's inputs.
@@ -104,8 +104,10 @@ pub enum Analytic {
     NotComputed { why: String },
 }
 
-/// The per-band absorption of each material id, in band order: the solver maps a material's
-/// `bfreq` children to the sorted `freq_enum` by position (`base_core_configuration.cpp:202-221`).
+/// The per-band absorption of each material id, in band order: the solver sorts a material's
+/// `bfreq` children by `freq` read as an integer (`OrderChildsByProperty`, `cxml.cpp:130-146`)
+/// and maps them to the sorted `freq_enum` by position (`base_core_configuration.cpp:201-221`),
+/// so the order they are written in does not matter.
 fn materials(doc: &Document) -> Result<Vec<(u32, Vec<f64>)>, String> {
     let root = doc.root_element();
     let Some(list) = expect::child(root, "surface_absorption_enum") else {
@@ -117,17 +119,45 @@ fn materials(doc: &Document) -> Result<Vec<(u32, Vec<f64>)>, String> {
         let mut alphas = Vec::new();
         for b in expect::items(m) {
             let text = b.attribute("absorb").unwrap_or("");
+            let freq = expect::atoi(b.attribute("freq").unwrap_or(""));
             match locate::to_float(text) {
-                Some(a) if a.is_finite() => alphas.push(f64::from(a)),
+                Some(a) if a.is_finite() => alphas.push((freq, f64::from(a))),
                 _ => return Err(format!("material {id}: absorb {text:?} is not a number")),
             }
         }
+        alphas.sort_by_key(|a| a.0);
         out.push((
             u32::try_from(id).map_err(|_| format!("material id {id}"))?,
-            alphas,
+            alphas.into_iter().map(|a| a.1).collect(),
         ));
     }
     Ok(out)
+}
+
+/// The surfaces of band `index` (among all of config.xml's bands, ascending): each face's area
+/// with its material's absorption at that position.
+fn band_surfaces(
+    faces: &[(f64, u32)],
+    mats: &[(u32, Vec<f64>)],
+    index: usize,
+) -> Result<Vec<Surface>, String> {
+    faces
+        .iter()
+        .map(|&(area_m2, id_mat)| {
+            let alphas = mats
+                .iter()
+                .find(|(id, _)| *id == id_mat)
+                .map(|(_, a)| a)
+                .ok_or_else(|| format!("a face's material {id_mat} is not declared"))?;
+            let absorption = *alphas
+                .get(index)
+                .ok_or_else(|| format!("material {id_mat} has no band {index}"))?;
+            Ok(Surface {
+                area_m2,
+                absorption,
+            })
+        })
+        .collect()
 }
 
 /// `core::params`' Sabine and Eyring times on the run's own inputs ([module docs](self)).
@@ -209,26 +239,17 @@ fn analytic_inner(solve: &Path, exp: &Expectation) -> Result<Analytic, String> {
             Ok(0.5 * dot(n, n).sqrt())
         })
         .collect::<Result<_, String>>()?;
+    let faces: Vec<(f64, u32)> = face_areas
+        .iter()
+        .zip(&scene.faces)
+        .map(|(&a, f)| (a, f.id_mat))
+        .collect();
     let mut bands = Vec::new();
     for (index, band) in exp.bands.iter().enumerate() {
         if !band.requested {
             continue;
         }
-        let mut surfaces = Vec::with_capacity(scene.faces.len());
-        for (f, &area_m2) in scene.faces.iter().zip(&face_areas) {
-            let alphas = mats
-                .iter()
-                .find(|(id, _)| *id == f.id_mat)
-                .map(|(_, a)| a)
-                .ok_or_else(|| format!("a face's material {} is not declared", f.id_mat))?;
-            let absorption = *alphas
-                .get(index)
-                .ok_or_else(|| format!("material {} has no band {index}", f.id_mat))?;
-            surfaces.push(Surface {
-                area_m2,
-                absorption,
-            });
-        }
+        let surfaces = band_surfaces(&faces, &mats, index)?;
         let air_m_per_metre = if !air_on {
             None
         } else if user_air {
@@ -367,10 +388,6 @@ fn receiver_files(solve: &Path, labels: &[String]) -> Result<Vec<String>, Refusa
     Ok(names)
 }
 
-fn finite_or_none(v: f64) -> Option<f64> {
-    v.is_finite().then_some(v)
-}
-
 pub(crate) fn read(solve: &Path, exp: &Expectation) -> Result<TcrResults, Refusal> {
     let bands_hz = exp.requested_bands();
     let main_rel = key(fixed::TCR_MAIN_RESULTS);
@@ -409,23 +426,16 @@ pub(crate) fn read(solve: &Path, exp: &Expectation) -> Result<TcrResults, Refusa
                 total_eyring_db: cell(&g, &rel, "Total (Eyring)", &row)?,
             });
         }
+        // The Global row is each column's energetic sum over the bands
+        // (`ctr/input_output/reportmanager.cpp:131-143`): finite whenever the band rows are, so a
+        // value that is not is refused like a band row's.
         point_receivers.push(PointReceiver {
             file: rel.clone(),
             label,
             bands: rows,
-            global_direct_db: finite_or_none(optional_cell(&g, &rel, "Direct", fixed::GLOBAL)?),
-            global_total_sabine_db: finite_or_none(optional_cell(
-                &g,
-                &rel,
-                "Total (Sabine)",
-                fixed::GLOBAL,
-            )?),
-            global_total_eyring_db: finite_or_none(optional_cell(
-                &g,
-                &rel,
-                "Total (Eyring)",
-                fixed::GLOBAL,
-            )?),
+            global_direct_db: cell(&g, &rel, "Direct", fixed::GLOBAL)?,
+            global_total_sabine_db: cell(&g, &rel, "Total (Sabine)", fixed::GLOBAL)?,
+            global_total_eyring_db: cell(&g, &rel, "Total (Eyring)", fixed::GLOBAL)?,
         });
     }
     let n = &exp.names;
@@ -443,4 +453,47 @@ pub(crate) fn read(solve: &Path, exp: &Expectation) -> Result<TcrResults, Refusa
         surfaces,
         analytic: analytic(solve, exp),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Material 1 absorbs differently in every band and is written out of order; material 2 is
+    /// flat. Faces of unequal area carry them, so taking the wrong band, the file's order, or the
+    /// other face's material each changes the absorption area.
+    const CONFIG: &str = r#"<configuration>
+  <surface_absorption_enum>
+    <type_surface id="1">
+      <bfreq freq="500" absorb="0.3"/>
+      <bfreq freq="1000" absorb="0.5"/>
+      <bfreq freq="125" absorb="0.1"/>
+      <bfreq freq="250" absorb="0.2"/>
+    </type_surface>
+    <type_surface id="2">
+      <bfreq freq="125" absorb="0.05"/>
+      <bfreq freq="250" absorb="0.05"/>
+      <bfreq freq="500" absorb="0.05"/>
+      <bfreq freq="1000" absorb="0.05"/>
+    </type_surface>
+  </surface_absorption_enum>
+</configuration>"#;
+
+    #[test]
+    fn each_band_takes_its_own_absorption_in_frequency_order() {
+        let doc = Document::parse(CONFIG).unwrap();
+        let mats = materials(&doc).unwrap();
+        let f32s = |v: [f32; 4]| v.map(f64::from).to_vec();
+        assert_eq!(mats[0], (1, f32s([0.1, 0.2, 0.3, 0.5])));
+        let faces = [(10.0, 1), (30.0, 2)];
+        // Band i of 125, 250, 500, 1000 Hz: A = 10·α₁(i) + 30·0.05.
+        for (i, want) in [2.5, 3.5, 4.5, 6.5].into_iter().enumerate() {
+            let s = band_surfaces(&faces, &mats, i).unwrap();
+            let a: f64 = s.iter().map(|s| s.area_m2 * s.absorption).sum();
+            assert!((a - want).abs() < 1e-6, "band {i}: A = {a}, want {want}");
+        }
+        // Says no: a material missing from the declarations, or a band it does not have.
+        assert!(band_surfaces(&[(1.0, 3)], &mats, 0).is_err());
+        assert!(band_surfaces(&faces, &mats, 4).is_err());
+    }
 }

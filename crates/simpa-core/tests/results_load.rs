@@ -19,6 +19,8 @@ use simpa_core::results::{self, RunResults, codes, spps::solver_speed_of_sound, 
 
 const SPPS: &str = "results/seats_spps";
 const TCR: &str = "results/seats_tcr";
+const ENERGETIC: &str = "results/energetic_spps";
+const SOURCES2: &str = "results/sources2_spps";
 
 fn load(name: &str) -> RunResults {
     results::load(&common::fixture(name)).unwrap_or_else(|r| panic!("{name}: {r}"))
@@ -213,6 +215,129 @@ fn the_tcr_run_reads_typed_and_matches_its_analytic_values() {
         assert!((b.eyring.reverberation_time_s / eyr - 1.0).abs() < 1e-5);
         assert!(a.air_m_per_metre.is_some_and(|m| m > 0.0));
     }
+}
+
+/// `ρ·c` as SPPS computes it at 20 °C and 101 325 Pa (`Masse_volumique_air.cpp:45-52`;
+/// `Celerite_du_son.cpp:46`).
+fn solver_rho_c() -> f64 {
+    101_325.0 * 28.9644 / (8314.32 * 293.15) * 343.2
+}
+
+#[test]
+fn the_energetic_run_is_never_complete_and_its_floor_refuses_the_decay_times() {
+    let r = load(ENERGETIC);
+    let s = r.spps().unwrap();
+    assert_eq!(s.computation_method, 1);
+    assert_eq!(s.trans_epsilon, 3.0);
+    assert_eq!(s.floor_db(), Some(-30.0));
+    // Every particle was dropped, absorbed or lost before the end, and still no band is complete:
+    // the drop is energy the histogram never holds. In at least one band none was lost either,
+    // so energetic mode alone is what refuses the claim there.
+    let mut isolated = 0;
+    for b in &s.particles.bands {
+        println!("{} Hz: {b:?}", b.freq_hz);
+        assert_eq!(b.remaining, 0, "{} Hz", b.freq_hz);
+        assert!(!s.band_complete(b.freq_hz), "{} Hz", b.freq_hz);
+        if b.lost() == 0 {
+            isolated += 1;
+        }
+    }
+    assert!(isolated >= 1);
+    let rep = serde_json::to_value(results::report(&r)).unwrap();
+    let mut floor = 0;
+    for p in rep["spps"]["point_receivers"].as_array().unwrap() {
+        for b in p["bands"].as_array().unwrap() {
+            assert_eq!(b["complete"], false);
+            assert_eq!(b["floor_db"], -30.0);
+            let t30 = &b["parameters"]["t30_s"]["not_evaluable"];
+            assert!(
+                t30.is_object(),
+                "{} {}: T30 {t30}",
+                p["label"],
+                b["freq_hz"]
+            );
+            let why = &t30["error"]["why"];
+            if why["why"].as_str().unwrap().starts_with("missing_") && why["floor_db"] == -30.0 {
+                floor += 1;
+            }
+            println!("{} {} Hz: T30 {}", p["label"], b["freq_hz"], t30["message"]);
+        }
+    }
+    // Three of the four receiver-bands give the floor as the reason; Seat2 at 500 Hz is refused
+    // earlier, its tail not decaying.
+    assert!(floor >= 3, "{floor}");
+}
+
+#[test]
+fn the_two_source_run_reads_each_sources_echogram_and_refuses_their_sum() {
+    let r = load(SOURCES2);
+    let s = r.spps().unwrap();
+    assert!(s.echogram_per_source);
+    let names: Vec<&str> = s.sources.iter().map(|x| x.name.as_str()).collect();
+    assert_eq!(names, ["Source 2", "Source 1"]);
+    // Source 2 is 3 dB weaker: half the power, as SPPS computes it in f32.
+    let (w2, w1) = (s.sources[0].band_power_w[0], s.sources[1].band_power_w[0]);
+    assert!((w1 / w2 - 10f64.powf(0.3)).abs() < 1e-5, "{w1} / {w2}");
+    // Its particles start 2 steps late.
+    assert_eq!(s.sources[0].emission_s, 2.0 * f64::from(0.01f32));
+    // The mean deposit of Source 1's particles against its closed form W·ρc/(N·πR²).
+    let d1 = s.mean_deposit(1, 0).unwrap();
+    let want = w1 * solver_rho_c() / (2000.0 * std::f64::consts::PI * f64::from(0.31f32).powi(2));
+    assert!((d1 / want - 1.0).abs() < 1e-5, "{d1} vs {want}");
+    for p in &s.point_receivers {
+        assert_eq!(p.echograms.len(), 2);
+        assert_eq!(
+            p.echograms[0].file,
+            format!("Punctual receivers/{}/Source 2/Sound level.recp", p.label)
+        );
+        for (i, b) in p.bands.iter().enumerate() {
+            let (a, c) = (&p.echograms[0].energy[i], &p.echograms[1].energy[i]);
+            assert_ne!(a, c);
+            for k in 0..b.energy.len() {
+                let sum = a[k] + c[k];
+                assert!((sum - b.energy[k]).abs() <= 2e-6 * sum.max(b.energy[k]));
+            }
+            assert_eq!(p.contributing(i).len(), 2);
+        }
+        // Each source's arrival is its own.
+        let one = s.arrival_from(p, &["Source 1"]).unwrap();
+        let two = s.arrival_from(p, &["Source 2"]).unwrap();
+        assert_ne!(one, two);
+        assert_eq!(s.arrival_s(p), Some(one.min(two)));
+    }
+    let rep = serde_json::to_value(results::report(&r)).unwrap();
+    for p in rep["spps"]["point_receivers"].as_array().unwrap() {
+        for b in p["bands"].as_array().unwrap() {
+            // The sum of two sources: every onset-relative parameter refused, SPL not for that.
+            for q in ["edt_s", "t20_s", "t30_s", "c50_db", "c80_db", "d50", "ts_s"] {
+                let why = &b["parameters"][q]["not_evaluable"]["error"]["why"];
+                assert_eq!(why["why"], "several_sources", "{q}");
+                assert_eq!(why["sources"], serde_json::json!(["Source 2", "Source 1"]));
+            }
+            let spl = &b["parameters"]["spl_db"]["not_evaluable"]["error"]["why"]["why"];
+            assert_ne!(spl, "several_sources");
+            // The noise model takes the stronger source's deposit.
+            assert_eq!(b["noise_model"]["model"], "crossings");
+        }
+        let per: Vec<&str> = p["per_source"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x["source"].as_str().unwrap())
+            .collect();
+        assert_eq!(per, ["Source 2", "Source 1"]);
+        for x in p["per_source"].as_array().unwrap() {
+            for b in x["bands"].as_array().unwrap() {
+                for q in ["edt_s", "t20_s", "t30_s", "c50_db", "c80_db", "d50", "ts_s"] {
+                    let why = &b["parameters"][q]["not_evaluable"]["error"]["why"]["why"];
+                    assert_ne!(why, "several_sources", "{} {q}", x["source"]);
+                }
+            }
+        }
+    }
+    // The band's model is Source 1's deposit, the larger.
+    let m = &rep["spps"]["point_receivers"][0]["bands"][0]["noise_model"]["mean_deposit"];
+    assert!((m.as_f64().unwrap() / d1 - 1.0).abs() < 1e-12, "{m}");
 }
 
 type Spoil = fn(&Path);
@@ -414,6 +539,61 @@ fn cases() -> Vec<(&'static str, &'static str, Spoil, &'static str)> {
             "a negative energy in the room total",
             |r| plant(&r.join("solve/Total energy.recp"), 2, 5, -1.0),
             codes::VALUE_INVALID,
+        ),
+        (
+            TCR,
+            "NaN in Seat's Global row, an energetic sum the verdict does not scan",
+            |r| {
+                // Column 1 is Direct; row 2 is Global, after the two bands.
+                plant(
+                    &r.join("solve/Punctual receivers/Seat.gabe"),
+                    1,
+                    2,
+                    f32::NAN,
+                )
+            },
+            codes::VALUE_INVALID,
+        ),
+        (
+            SOURCES2,
+            "a source's echogram removed",
+            |r| {
+                std::fs::remove_file(
+                    r.join("solve/Punctual receivers/Seat2/Source 1/Sound level.recp"),
+                )
+                .unwrap()
+            },
+            codes::OUTPUTS_INVALID,
+        ),
+        (
+            SOURCES2,
+            "a source's echogram that no longer sums to the .recp",
+            |r| {
+                let p = r.join("solve/Punctual receivers/Seat/Source 2/Sound level.recp");
+                let g = gabe::read_file(&p).unwrap();
+                let (row, v) = g.columns[1]
+                    .floats()
+                    .unwrap()
+                    .iter()
+                    .enumerate()
+                    .find(|(_, v)| **v > 0.0)
+                    .map(|(i, v)| (i, *v))
+                    .unwrap();
+                plant(&p, 1, row, v * 1.01);
+            },
+            codes::FILE_INVALID,
+        ),
+        (
+            SOURCES2,
+            "a folder in a receiver folder that no source names",
+            |r| std::fs::create_dir(r.join("solve/Punctual receivers/Seat/Source 3")).unwrap(),
+            codes::FILE_INVALID,
+        ),
+        (
+            SPPS,
+            "a per-source folder when output_recp_bysource is off",
+            |r| std::fs::create_dir(r.join("solve/Punctual receivers/Seat/Source 1")).unwrap(),
+            codes::FILE_INVALID,
         ),
     ]
 }

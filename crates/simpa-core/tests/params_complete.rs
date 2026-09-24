@@ -174,6 +174,155 @@ fn a_complete_series_is_fitted_only_down_to_its_last_bin() {
     }
 }
 
+/// Random mode with `n` of `n_total` particles lost at `t_lost`: every particle deposits at the
+/// same rate while alive, and particles are absorbed at rate `1/τ`, so the receiver's histogram is
+/// `N·e^{−t/τ}` per unit time and each lost particle takes `e^{−(t − t_lost)/τ}` with it. Bin
+/// integrals, the arrival at 0.
+fn with_lost(t: f64, dt: f64, n: f64, n_total: f64, t_lost: f64) -> (Vec<f64>, Vec<f64>) {
+    let tau = t / K60;
+    let bins = (80.0 * t / 60.0 / dt).round() as usize;
+    let bin = |a: f64, b: f64, from: f64| -> f64 {
+        let (a, b) = (a.max(from), b.max(from));
+        tau * ((-(a - from) / tau).exp() - (-(b - from) / tau).exp())
+    };
+    let truth: Vec<f64> = (0..bins)
+        .map(|k| n_total * bin(k as f64 * dt, (k + 1) as f64 * dt, 0.0))
+        .collect();
+    let lost: Vec<f64> = (0..bins)
+        .map(|k| {
+            let (a, b) = (k as f64 * dt, (k + 1) as f64 * dt);
+            n_total * bin(a, b, 0.0) - n * bin(a, b, t_lost)
+        })
+        .collect();
+    (truth, lost)
+}
+
+#[test]
+fn lost_particles_move_no_accepted_value_beyond_its_limit() {
+    // The share core::results gives: n / (N·f) with f the share alive at the arrival, 1 here.
+    let (t, dt, n_total) = (1.0, 0.01, 150_000.0);
+    let tau = t / K60;
+    let mut refused_with = 0;
+    for t_lost in [0.1, 0.5] {
+        // Lost particles must have been alive: at most N·e^{−t/τ} of them.
+        let alive = n_total * (-t_lost / tau).exp();
+        for n in [1.0, 10.0, 100.0] {
+            if n > alive {
+                continue;
+            }
+            let (truth, lost) = with_lost(t, dt, n, n_total, t_lost);
+            let want = evaluate(&EnergySeries::complete(dt, truth).unwrap(), AT_ZERO).unwrap();
+            let plain =
+                evaluate(&EnergySeries::complete(dt, lost.clone()).unwrap(), AT_ZERO).unwrap();
+            let s = EnergySeries::complete(dt, lost)
+                .unwrap()
+                .with_lost_share(n / n_total)
+                .unwrap();
+            assert!(s.is_complete(), "a lost share keeps the series complete");
+            let got = evaluate(&s, AT_ZERO).unwrap();
+            let pairs = [
+                (
+                    "T20",
+                    want.t20.clone().map(|f| f.t_s),
+                    plain.t20.clone().map(|f| f.t_s),
+                    got.t20.clone().map(|f| f.t_s),
+                    0.005,
+                    true,
+                ),
+                (
+                    "T30",
+                    want.t30.clone().map(|f| f.t_s),
+                    plain.t30.clone().map(|f| f.t_s),
+                    got.t30.clone().map(|f| f.t_s),
+                    0.005,
+                    true,
+                ),
+                (
+                    "C80",
+                    want.c80_db.clone(),
+                    plain.c80_db.clone(),
+                    got.c80_db.clone(),
+                    0.01,
+                    false,
+                ),
+                (
+                    "D50",
+                    want.d50.clone(),
+                    plain.d50.clone(),
+                    got.d50.clone(),
+                    0.001,
+                    false,
+                ),
+                (
+                    "SPL",
+                    want.spl_db.clone(),
+                    plain.spl_db.clone(),
+                    got.spl_db.clone(),
+                    0.1,
+                    false,
+                ),
+            ];
+            for (name, w, p, g, limit, rel) in pairs {
+                let w = w.unwrap();
+                let off = |x: f64| {
+                    if rel {
+                        (x / w - 1.0).abs()
+                    } else {
+                        (x - w).abs()
+                    }
+                };
+                match g {
+                    Ok(g) => assert!(off(g) <= limit, "t_lost {t_lost} n {n}: {name} {g} vs {w}"),
+                    Err(e) => {
+                        assert!(
+                            matches!(
+                                e.not_evaluable(),
+                                Some(
+                                    NotEvaluable::MissingMoves {
+                                        lost_share: Some(_),
+                                        ..
+                                    } | NotEvaluable::MissingNotCleared {
+                                        lost_share: Some(_),
+                                        ..
+                                    }
+                                )
+                            ),
+                            "{name}: {e}"
+                        );
+                        // The value the series alone gives is wrong: the refusal is earned.
+                        if let Ok(p) = p
+                            && off(p) > limit
+                        {
+                            refused_with += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // The defect it closes: 100 particles lost at 0.5 s, two thirds of what was then alive, make
+    // T30 wrong from the series alone, and the share refuses it.
+    assert!(refused_with >= 1, "{refused_with}");
+    // One lost particle of 150,000 moves nothing: T30 from 1 s of decay passes.
+    let (_, lost) = with_lost(t, dt, 1.0, n_total, 0.5);
+    let s = EnergySeries::complete(dt, lost)
+        .unwrap()
+        .with_lost_share(1.0 / n_total)
+        .unwrap();
+    assert!(evaluate(&s, AT_ZERO).unwrap().t30.is_ok());
+    // A share that is not a number of at least 0 is refused.
+    for bad in [-1e-6, f64::NAN, f64::INFINITY] {
+        assert_eq!(
+            EnergySeries::new(dt, vec![1.0, 0.5])
+                .unwrap()
+                .with_lost_share(bad)
+                .unwrap_err()
+                .code(),
+            codes::BAD_NOISE_INPUT
+        );
+    }
+}
+
 #[test]
 fn an_aggregate_is_complete_only_when_every_band_is() {
     let a = EnergySeries::complete(0.01, vec![1.0, 0.5, 0.25]).unwrap();

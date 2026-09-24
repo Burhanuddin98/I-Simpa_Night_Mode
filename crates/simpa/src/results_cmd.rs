@@ -53,9 +53,8 @@ pub fn results_cmd(args: &[&str]) -> ExitCode {
     if !folder.is_dir() {
         return fail(&format!("{} is not a folder", folder.display()));
     }
-    match results::load(folder) {
-        Ok(r) => {
-            let rep = results::report(&r);
+    match results::load(folder).and_then(|r| results::checked_report(&r)) {
+        Ok(rep) => {
             if json {
                 println!(
                     "{}",
@@ -84,8 +83,8 @@ pub fn results_cmd(args: &[&str]) -> ExitCode {
 /// A value to its precision, or `NE(<why>)` for a refusal.
 fn cell(e: &Evaluated, digits: usize, scale: f64) -> String {
     match e {
-        Evaluated::Value(v) => format!("{:.*}", digits, v * scale),
-        Evaluated::NotEvaluable(r) => {
+        Evaluated::Value { value, .. } => format!("{:.*}", digits, value * scale),
+        Evaluated::NotEvaluable { not_evaluable: r } => {
             let why = serde_json::to_value(&r.error)
                 .ok()
                 .and_then(|v| v["why"]["why"].as_str().map(str::to_string))
@@ -128,7 +127,16 @@ fn text(rep: &Report) -> String {
                 .bands
                 .iter()
                 .map(|b| (format!("{} Hz", b.freq_hz), &b.parameters))
-                .chain([("aggregate".to_string(), &r.aggregate.parameters)]);
+                .chain([("aggregate".to_string(), &r.aggregate.parameters)])
+                .chain(r.per_source.iter().flat_map(|src| {
+                    src.bands
+                        .iter()
+                        .map(move |b| (format!("{} {} Hz", src.source, b.freq_hz), &b.parameters))
+                        .chain([(
+                            format!("{} aggregate", src.source),
+                            &src.aggregate.parameters,
+                        )])
+                }));
             for (label, p) in rows {
                 let _ = writeln!(
                     s,

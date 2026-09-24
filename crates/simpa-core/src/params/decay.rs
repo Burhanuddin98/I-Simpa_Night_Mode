@@ -12,12 +12,15 @@
 //! The model is exact for an exponential decay and for an impulse followed by one, wherever in
 //! its bin the arrival falls.
 //!
-//! **Two unknowns, bounded.** The energy after the series' end ([`Tail`]); and, when the arrival
-//! is not given, where in the onset bin it lies. Each quantity is computed with and without the
-//! tail, and with the arrival at each end of the onset bin. When either moves it by more than
-//! its limit ([`limits`]), it is refused, as `truncated` or `unresolved`. No alternative value is
-//! ever reported as the quantity. A series its caller knows to be complete
-//! ([`EnergySeries::complete`]) has no tail: [`Tail::Complete`] adds nothing and refuses nothing.
+//! **Three unknowns, bounded.** The energy after the series' end ([`Tail`]); the energy missing
+//! from it because the solver dropped particles below a floor or lost them mid-path
+//! ([`EnergySeries::with_solver_floor`], [`EnergySeries::with_lost_share`]); and, when the
+//! arrival is not given, where in the onset bin it lies. Each quantity is computed with and
+//! without the tail, with the missing energy added too, and with the arrival at each end of the
+//! onset bin. When any of them moves it by more than its limit ([`limits`]), it is refused, as
+//! `truncated`, `missing_moves` or `unresolved`. No alternative value is ever reported as the
+//! quantity. A series its caller knows to be complete ([`EnergySeries::complete`]) has no tail:
+//! [`Tail::Complete`] adds nothing and refuses nothing.
 
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -37,14 +40,15 @@ pub const MIN_REGRESSION_BINS: f64 = 2.0;
 /// `|100·(T30/T20 − 1)|` above this marks a curved decay (ISO 3382-2's 10 %, as commonly stated).
 pub const CURVATURE_LIMIT_PERCENT: f64 = 10.0;
 
-/// How far an unknown the histogram cannot show (the tail after its end, the arrival inside the
-/// onset bin) may move each quantity before it is refused: the tighter of 1/10 of the difference
-/// limen commonly quoted from ISO 3382-1 Annex A and gate (a)'s bound (`docs/params.md`,
-/// "Truncation").
+/// How far an unknown the histogram cannot show (the tail after its end, the energy missing from
+/// it, the arrival inside the onset bin) may move each quantity before it is refused: the tighter
+/// of 1/10 of a difference limen and gate (a)'s bound (`docs/params.md`, "Truncation"). ISO
+/// 3382-1's Table A.1, as commonly reproduced, gives limens for EDT, C80, D50, Ts and G only; T20
+/// and T30 take EDT's, C50 takes C80's.
 pub mod limits {
-    /// EDT, T20, T30: relative. 1/10 of the 5 % limen, and gate (a)'s bound.
+    /// EDT, T20, T30: relative. 1/10 of EDT's 5 % limen, and gate (a)'s bound.
     pub const DECAY_RELATIVE: f64 = 0.005;
-    /// C50, C80: dB. Gate (a)'s bound, tighter than 1/10 of the 1 dB limen.
+    /// C50, C80: dB. Gate (a)'s bound, tighter than 1/10 of C80's 1 dB limen.
     pub const CLARITY_DB: f64 = 0.01;
     /// D50: fraction (0.1 percentage points). Gate (a)'s bound, tighter than 1/10 of the 0.05
     /// limen.
@@ -551,13 +555,31 @@ struct Line {
     span: f64,
 }
 
-/// The curve from one arrival, and the same with the unseen tail added.
+/// The curve from one arrival, the same with the unseen tail added, and with the missing energy
+/// added as well.
 struct View {
     arrival_s: f64,
     plain: Curve,
     /// `None` when the tail is unbounded.
     with_tail: Option<Curve>,
+    /// `None` when nothing is missing, or the missing energy has no finite bound.
+    with_missing: Option<Curve>,
 }
+
+/// Energy missing from the series ([`EnergySeries::with_solver_floor`],
+/// [`EnergySeries::with_lost_share`]), bounded (`docs/params.md`, "Missing energy").
+#[derive(Clone, Copy, Debug)]
+struct Missing {
+    floor_db: Option<f64>,
+    lost_share: Option<f64>,
+    /// The most energy the dropped and lost particles would still have brought to the receiver:
+    /// `10^{floor/10} / alive_share · S(onset)` for the floor, `share · S(onset)` for the lost
+    /// particles.
+    energy: f64,
+}
+
+/// A decay so fast that energy added after the series' end sits at its end: a lump there.
+const LUMP_RATE: f64 = 1e12;
 
 /// What every parameter shares: the onset, the arrival, the tail and the curves.
 struct Analysis<'a> {
@@ -565,8 +587,19 @@ struct Analysis<'a> {
     onset: Onset,
     arrival: Arrival,
     tail: Result<Tail, ParamError>,
+    /// `Some` when energy is missing from the series.
+    missing: Option<Missing>,
     /// One per arrival: the given one, or the two ends of the onset bin.
     views: Vec<View>,
+}
+
+/// One quantity from one arrival: from the series, with the tail, and with the missing energy as
+/// well (`None` when that curve gives no value).
+#[derive(Clone, Copy, Debug)]
+struct Eval {
+    plain: f64,
+    tail: Option<f64>,
+    missing: Option<f64>,
 }
 
 fn relative(a: f64, b: f64) -> f64 {
@@ -599,12 +632,44 @@ impl<'a> Analysis<'a> {
             Arrival::Known { time_s } => vec![time_s],
             Arrival::Detected => vec![onset.bin_start_s, onset.bin_end_s],
         };
+        // The floor's dropped energy: each particle is dropped with at most `10^{db/10}` of its
+        // start energy, and what it would still have brought is, on average, what that much energy
+        // brings from any particle alive then. From the arrival on the receiver gets `S(onset)`
+        // from the `alive_share` of the emitted energy the room still held, so the dropped
+        // particles, all together, would have brought at most `10^{db/10}/alive_share` of it.
+        // The lost particles' share is given whole.
+        let s0 = sums[onset.index];
+        let floor_energy = series
+            .floor()
+            .map(|f| 10f64.powf(f.db / 10.0) / f.alive_share * s0);
+        let lost_energy = series.lost_share().map(|share| share * s0);
+        let missing = (floor_energy.is_some() || lost_energy.is_some()).then(|| Missing {
+            floor_db: series.floor().map(|f| f.db),
+            lost_share: series.lost_share(),
+            energy: floor_energy.unwrap_or(0.0) + lost_energy.unwrap_or(0.0),
+        });
+        // The curve with the missing energy: added to every sum, and after the end continued at
+        // the tail's rate, or, for a complete series, a lump at its end, the latest it can be.
+        let with_missing = match (missing, &tail) {
+            (
+                Some(m),
+                Ok(Tail::Bounded {
+                    energy,
+                    ratio_per_bin,
+                    ..
+                }),
+            ) if m.energy.is_finite() => Some((energy + m.energy, -ratio_per_bin.ln() / dt)),
+            (Some(m), Ok(Tail::Complete)) if m.energy.is_finite() => Some((m.energy, LUMP_RATE)),
+            _ => None,
+        };
         let views = times
             .into_iter()
             .map(|t| View {
                 arrival_s: t,
                 plain: Curve::new(&sums, dt, onset.index, end, t, None),
                 with_tail: added.map(|a| Curve::new(&sums, dt, onset.index, end, t, a)),
+                with_missing: with_missing
+                    .map(|a| Curve::new(&sums, dt, onset.index, end, t, Some(a))),
             })
             .collect();
         Ok(Analysis {
@@ -612,6 +677,7 @@ impl<'a> Analysis<'a> {
             onset,
             arrival,
             tail,
+            missing,
             views,
         })
     }
@@ -626,20 +692,22 @@ impl<'a> Analysis<'a> {
         self.tail.as_ref().map(|_| ()).map_err(Clone::clone)
     }
 
-    /// The reported value from one `(value, value with the tail)` per arrival: their mean, or a
-    /// refusal. `truncated` when the tail moves the mean by more than `limit`; `unresolved` when
-    /// an end of the onset bin lies further than `limit` from it.
+    /// The reported value from one [`Eval`] per arrival: their mean, or a refusal. `truncated`
+    /// when the tail moves the mean by more than `limit`; `missing_moves` when the energy missing
+    /// from the series does; `unresolved` when an end of the onset bin lies further than `limit`
+    /// from it.
     fn settle(
+        &self,
         quantity: Quantity,
-        evals: &[(f64, Option<f64>)],
+        evals: &[Eval],
         limit: f64,
         distance: fn(f64, f64) -> f64,
     ) -> Result<f64, ParamError> {
         let n = evals.len() as f64;
-        let value = evals.iter().map(|e| e.0).sum::<f64>() / n;
+        let value = evals.iter().map(|e| e.plain).sum::<f64>() / n;
         let with_tail = evals
             .iter()
-            .map(|e| e.1)
+            .map(|e| e.tail)
             .sum::<Option<f64>>()
             .map(|s| s / n);
         match with_tail {
@@ -655,8 +723,33 @@ impl<'a> Analysis<'a> {
                 ));
             }
         }
-        let low = evals.iter().map(|e| e.0).fold(f64::INFINITY, f64::min);
-        let high = evals.iter().map(|e| e.0).fold(f64::NEG_INFINITY, f64::max);
+        if let Some(m) = self.missing {
+            let with_missing = evals
+                .iter()
+                .map(|e| e.missing)
+                .sum::<Option<f64>>()
+                .map(|s| s / n);
+            match with_missing {
+                Some(w) if distance(value, w) <= limit => {}
+                _ => {
+                    return Err(not_evaluable(
+                        quantity,
+                        NotEvaluable::MissingMoves {
+                            floor_db: m.floor_db,
+                            lost_share: m.lost_share,
+                            value,
+                            with_missing,
+                            limit,
+                        },
+                    ));
+                }
+            }
+        }
+        let low = evals.iter().map(|e| e.plain).fold(f64::INFINITY, f64::min);
+        let high = evals
+            .iter()
+            .map(|e| e.plain)
+            .fold(f64::NEG_INFINITY, f64::max);
         if distance(value, low).max(distance(value, high)) > limit {
             return Err(not_evaluable(
                 quantity,
@@ -699,24 +792,53 @@ impl<'a> Analysis<'a> {
                 },
             ));
         }
+        // With energy missing, the decay must also be shown to pass the bottom with all of it and
+        // the tail added.
+        if let Some(m) = self.missing {
+            let unseen = m.energy
+                + match self.tail {
+                    Ok(Tail::Bounded { energy, .. }) => energy,
+                    _ => 0.0,
+                };
+            let reached = if unseen.is_finite() {
+                10.0 * (unseen / (top + unseen)).log10()
+            } else {
+                0.0
+            };
+            if reached > range.bottom_db() {
+                return Err(not_evaluable(
+                    q,
+                    NotEvaluable::MissingNotCleared {
+                        floor_db: m.floor_db,
+                        lost_share: m.lost_share,
+                        needed_db: range.bottom_db(),
+                        reached_db: reached,
+                    },
+                ));
+            }
+        }
         let mut evals = Vec::with_capacity(self.views.len());
         let mut span = f64::INFINITY;
+        let fit = |c: &Option<Curve>| {
+            c.as_ref()
+                .and_then(|c| c.line(range, self.dt()).ok())
+                .map(|l| -60.0 / l.slope)
+        };
         for v in &self.views {
             let own = v
                 .plain
                 .line(range, self.dt())
                 .map_err(|why| not_evaluable(q, why))?;
-            let with_tail = v
-                .with_tail
-                .as_ref()
-                .and_then(|c| c.line(range, self.dt()).ok())
-                .map(|l| -60.0 / l.slope);
-            evals.push((-60.0 / own.slope, with_tail));
+            evals.push(Eval {
+                plain: -60.0 / own.slope,
+                tail: fit(&v.with_tail),
+                missing: fit(&v.with_missing),
+            });
             span = span.min(own.span);
         }
-        let t = Self::settle(q, &evals, limits::DECAY_RELATIVE, relative)?;
+        let t = self.settle(q, &evals, limits::DECAY_RELATIVE, relative)?;
         // `settle` passed, so every arrival's fit with the tail exists.
-        let with_tail_s = evals.iter().map(|e| e.1.unwrap()).sum::<f64>() / evals.len() as f64;
+        let with_tail_s = evals.iter().map(|e| e.tail.unwrap()).sum::<f64>() / evals.len() as f64;
         Ok(DecayFit {
             range,
             t_s: t,
@@ -768,10 +890,14 @@ impl<'a> Analysis<'a> {
                     },
                 ));
             }
-            evals.push((c(&v.plain), v.with_tail.as_ref().map(c)));
+            evals.push(Eval {
+                plain: c(&v.plain),
+                tail: v.with_tail.as_ref().map(c),
+                missing: v.with_missing.as_ref().map(c),
+            });
         }
         self.tail_ok()?;
-        Self::settle(q, &evals, limits::CLARITY_DB, absolute)
+        self.settle(q, &evals, limits::CLARITY_DB, absolute)
     }
 
     fn definition(&self, te_s: f64) -> Result<f64, ParamError> {
@@ -785,9 +911,13 @@ impl<'a> Analysis<'a> {
         let evals: Vec<_> = self
             .views
             .iter()
-            .map(|v| (d(&v.plain), v.with_tail.as_ref().map(d)))
+            .map(|v| Eval {
+                plain: d(&v.plain),
+                tail: v.with_tail.as_ref().map(d),
+                missing: v.with_missing.as_ref().map(d),
+            })
             .collect();
-        Self::settle(q, &evals, limits::DEFINITION, absolute)
+        self.settle(q, &evals, limits::DEFINITION, absolute)
     }
 
     fn centre_time_s(&self) -> Result<f64, ParamError> {
@@ -796,25 +926,37 @@ impl<'a> Analysis<'a> {
         let evals: Vec<_> = self
             .views
             .iter()
-            .map(|v| (ts(&v.plain), v.with_tail.as_ref().map(ts)))
+            .map(|v| Eval {
+                plain: ts(&v.plain),
+                tail: v.with_tail.as_ref().map(ts),
+                missing: v.with_missing.as_ref().map(ts),
+            })
             .collect();
-        let value = evals.iter().map(|e| e.0).sum::<f64>() / evals.len() as f64;
+        let value = evals.iter().map(|e| e.plain).sum::<f64>() / evals.len() as f64;
         let limit = limits::CENTRE_TIME_S.min(limits::CENTRE_TIME_RELATIVE * value);
-        Self::settle(Quantity::CentreTime, &evals, limit, absolute)
+        self.settle(Quantity::CentreTime, &evals, limit, absolute)
     }
 
     fn spl_db(&self) -> Result<f64, ParamError> {
         self.tail_ok()?;
         let total = self.series.total();
         let level = |e: f64| 10.0 * (e / P_REF_SQUARED).log10();
-        let with_tail = match self.tail {
-            Ok(Tail::Bounded { energy, .. }) => Some(level(total + energy)),
-            Ok(Tail::Complete) => Some(level(total)),
+        let tail_energy = match self.tail {
+            Ok(Tail::Bounded { energy, .. }) => Some(energy),
+            Ok(Tail::Complete) => Some(0.0),
             _ => None,
         };
-        Self::settle(
+        let missing = match (tail_energy, self.missing) {
+            (Some(t), Some(m)) if m.energy.is_finite() => Some(level(total + t + m.energy)),
+            _ => None,
+        };
+        self.settle(
             Quantity::Spl,
-            &[(level(total), with_tail)],
+            &[Eval {
+                plain: level(total),
+                tail: tail_energy.map(|t| level(total + t)),
+                missing,
+            }],
             limits::SPL_DB,
             absolute,
         )

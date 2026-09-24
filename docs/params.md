@@ -4,7 +4,8 @@
 later gates need: ISO 9613-1 air attenuation, Sabine and Eyring as TCR computes them, and the DIN
 18041 targets. Code: `crates/simpa-core/src/params.rs` and `params/`. Tests:
 `crates/simpa-core/tests/params_synthetic.rs` (gate (a)), `params_air.rs` (gate (b)),
-`params_room.rs` (Sabine, Eyring, gate (f)).
+`params_room.rs` (Sabine, Eyring, gate (f)), `params_complete.rs` (complete series, lost
+particles), `params_floor.rs` (the solver's floor), `params_noise.rs` (Monte-Carlo noise).
 
 **No number computed here is shown to a user until M8's physics bed passes** (`docs/rebuild-plan.md`,
 M12). M7 builds the numbers; it does not publish them.
@@ -47,6 +48,12 @@ An `EnergySeries` is `(dt, values)`: bin `k` holds the energy that arrived in `[
 series labelled as an aggregate, as upstream's `Global` row does (`projet_calculation.cpp:898`).
 Series with a different `dt` or length are refused, `params_series_mismatch`. Upstream's `Average`
 row, the arithmetic mean of the band values (`projet_calculation.cpp:206-209`), is not computed.
+
+**The aggregate is not ISO 3382-1's single-number value.** ISO's single numbers [commonly stated]
+are arithmetic means of octave-band values (Annex A: 500 Hz and 1 kHz for EDT and C80, for
+instance). The aggregate is one decay of all bands' energy together, so it is weighted by the
+source's spectrum: with a flat 100 dB per band it follows the bands that hold the most energy at
+the receiver. It must never be shown as "the room's T30".
 
 ## Direct-arrival detection: the onset bin and the arrival
 
@@ -150,24 +157,31 @@ extrapolation. Instead each parameter carries a bound:
      last bin with energy, inside which the curve has no shape: otherwise `range_not_reached`,
      with the level at the start of that bin. Added by M7 piece B, with its tests in
      `tests/params_complete.rs`: without it, random-mode runs were refused wholesale for a tail
-     they do not have.
+     they do not have. **Completeness says nothing about noise**: a complete series is exact for
+     its particles, not for the room, and its noise is judged separately ("Monte-Carlo noise",
+     below). Particles the solver lost mid-path are bounded separately too ("Missing energy").
 2. **The check.** Every parameter is computed twice: as reported, from the series alone; and with
    `M` added to every backward sum and continued after the last bin with energy as an exponential
    at the window's rate. If the two differ by more than the limit below, the parameter is refused
    as `params_not_evaluable` (`truncated`), with both numbers in the detail. An unbounded tail
    refuses everything that depends on it. **The second number is never reported as the value.**
 
-   The same limits bound what `Arrival::Detected` leaves open (`unresolved`, above). Each is the
-   tighter of 1/10 of the difference limen commonly quoted from ISO 3382-1 Annex A and gate (a)'s
-   bound:
+   The same limits bound what `Arrival::Detected` leaves open (`unresolved`, above), and what the
+   energy missing from a series can move ("Missing energy", below). Each is the tighter of 1/10 of
+   a difference limen and gate (a)'s bound. **The limens:** ISO 3382-1:2009 Table A.1, as commonly
+   reproduced (not read here), gives them for G (1 dB), EDT (5 %), C80 (1 dB), D50 (0.05) and Ts
+   (10 ms) only. T20 and T30 have none there; they take EDT's 5 %, and C50 takes C80's 1 dB. Those
+   two are extensions, not the standard's:
 
    | Quantity | Limit | 1/10 limen | Gate (a) |
    |---|---|---|---|
-   | EDT, T20, T30 | 0.5 % relative | 0.5 % (of 5 %) | 0.5 % |
-   | C50, C80 | 0.01 dB | 0.1 dB (of 1 dB) | 0.01 dB |
+   | EDT | 0.5 % relative | 0.5 % (of EDT's 5 %) | 0.5 % |
+   | T20, T30 | 0.5 % relative | 0.5 % (of EDT's 5 %, extended) | 0.5 % |
+   | C80 | 0.01 dB | 0.1 dB (of 1 dB) | 0.01 dB |
+   | C50 | 0.01 dB | 0.1 dB (of C80's 1 dB, extended) | none named; held as C80 |
    | D50 | 0.001 (0.1 points) | 0.005 (of 0.05) | 0.1 points |
    | Ts | 1 ms or 0.5 % of Ts, the tighter | 1 ms (of 10 ms) | none named; the test holds Ts to 0.5 % |
-   | SPL | 0.1 dB | 0.1 dB (of the 1 dB quoted for G) | none (gate (c) is ±0.5 dB) |
+   | SPL | 0.1 dB | 0.1 dB (of the 1 dB given for G) | none (gate (c) is ±0.5 dB) |
 
    The first version used 1/10 of the limen alone, 0.1 dB for C and 0.5 points for D50, so a
    truncated series could return a C80 0.1 dB off as a number while gate (a) asks for 0.01 dB.
@@ -196,6 +210,102 @@ asserted by `params_synthetic.rs::the_documented_truncation_table_holds`.
 without any tail handling. `GetTimeRange` (lines 143-170) sets the end of the regression to the
 last time step when the bottom is never reached (line 150), so a decay that stops at −20 dB gets a
 T30 regressed down to its end, silently.
+
+## Missing energy: the solver's floor and lost particles
+
+Added after the M7 review (2026-09-24). Energy can be missing from inside a series, not only after
+its end, and the tail bound cannot see it:
+
+- **The floor.** SPPS in energetic mode drops each particle once its energy is at or below
+  `10^-trans_epsilon` of its start (`spps/sppsNantes.cpp:75`; `CalculationCore.cpp:57-60,
+  141-146, 305-310`). The histogram then ends in a cliff. Inside it the tail estimate's last
+  window falls steeply, `M` comes out near 0, and the curve reads as deep as it likes: in the
+  reviewer's model (below) `trans_epsilon` 3 gave T30 11.8 % short and T20 5.1 % short, both
+  accepted.
+- **Lost particles.** SPPS counts particles lost to infinite loops and meshing problems
+  (`partLoop`, `partLost`, `CalculationCore.cpp:102-107`); each stops mid-path, and what it would
+  still have brought is missing.
+
+`EnergySeries::with_solver_floor(floor_db, alive_share)` and `with_lost_share(share)` say so. The
+most energy that can be missing is bounded, as a share of `S(onset)`, the energy the receiver
+gets from the arrival on:
+
+- a dropped particle carries at most `10^{floor/10}` of its start energy, and what it would still
+  have brought is, on average, what that much energy brings from any particle alive then. From
+  the arrival on, the receiver gets `S(onset)` from the `alive_share` of the emitted energy the
+  room still held then, so the dropped particles together would have brought at most
+  `10^{floor/10} / alive_share · S(onset)`;
+- a lost particle would have brought what an average particle alive at the arrival brings, so `n`
+  of `N` lost take at most `n / (N · alive_share)` of `S(onset)` (`core::results` computes it,
+  `docs/results.md`, "Lost particles").
+
+Every quantity is computed once more with that energy added to every backward sum and, after the
+end, continued at the tail's rate (a lump at the end for a complete series, the latest it can
+be). Moved beyond its limit: `params_not_evaluable` (`missing_moves`). A decay time must also reach
+the bottom of its range with it added: otherwise `missing_not_cleared`. Adding a constant to the
+backward sums is the worst case for a decay time: the true missing energy after `u` falls with
+`u`, and adding more at later times bends the fit more.
+
+**Tested against the reviewer's model** (`tests/params_floor.rs`), in closed form: tutorial 1's
+room, reflections a Poisson process at `c/(4V/S)`, a particle's energy `(1 − α)^N`, dropped at
+`10^-ε`, a direct sound of `S·α/(16πr²)` of the reverberant energy. Over α from 0.05 to 0.9, ε
+from 1 to 7 and r of 2 and 8 m, 487 values are accepted and none is further from the model without
+the drop than its limit; 368 are refused, 306 of which the series alone gets wrong. At upstream's
+default ε = 5, α = 0.2, T30 is accepted (0.6688 s against 0.6709 s). Lost particles, in
+`tests/params_complete.rs`: 100 of 150,000 lost at 0.5 s, two thirds of those then alive, make
+T30 wrong from the series alone, and their share refuses it; one lost particle moves nothing.
+
+**What it assumes:** that a dropped or lost particle's future is, on average, an alive particle's.
+In a diffuse room that holds; a particle lost where it would have crossed the receiver more than
+most is not covered.
+
+## Monte-Carlo noise
+
+Added after the M7 review. A complete random-mode series is exact for its particles, not for the
+room: at tutorial 1's 150,000 particles T30 came out at 0.8 to 2.4 s where the room's time is
+0.67 s, and was reported as a number. `params::noise` estimates each value's Monte-Carlo standard
+deviation and refuses the value when it is too large.
+
+- **The model.** SPPS adds, for every particle crossing a receiver sphere of radius `R`, its
+  energy times its chord through the sphere (`spps/input_output/reportmanager.cpp:223-224`),
+  and writes the sum times `ρc/V` (`baseReportManager.cpp:183`). In random mode a particle keeps
+  its start energy `W/N` (`sppsNantes.cpp:73`) until it is absorbed whole, so one crossing adds
+  `W/N · ℓ · ρc/V`. A uniform beam crossing a sphere gives chords of density `ℓ/(2R²)` on
+  `[0, 2R]`: mean `4R/3`, `E[ℓ²]/E[ℓ]² = 9/8`. The mean deposit is `d̄ = W·ρc/(N·πR²)`; a bin
+  holding `E` holds about `E/d̄` crossings; crossings are Poisson, so its variance is
+  `(9/8)·d̄·E`.
+- **Energetic mode.** A particle's energy only falls from `W/N`, so the same `d̄` bounds each
+  deposit and the variance from above. The energetic estimator is the random one averaged over the
+  absorption draws, so its variance is at most random mode's: the bound is sound, and loose.
+- **The estimate.** A parametric bootstrap: 200 series drawn from the model around the series,
+  each bin a compound Poisson sum of `E/d̄` expected crossings with chord deposits (a normal draw
+  of the same mean and variance above 30), each evaluated as it is (complete, nothing missing:
+  the tail, the floor and lost particles are judged once, on the series); the standard deviation
+  over them is the value's. The seed is fixed, so a series gives the same estimate every time.
+- **The refusal:** `monte_carlo_noise`, when the standard deviation is above the limit or more
+  than 10 of the 200 resamples refuse the quantity themselves. The limit is half the limen: twice
+  the standard deviation, about a 95 % interval, stays within one limen.
+
+  | Quantity | Largest standard deviation |
+  |---|---|
+  | EDT, T20, T30 | 2.5 % relative (half of EDT's 5 %; T20 and T30 extended) |
+  | C50, C80 | 0.5 dB |
+  | D50 | 0.025 |
+  | Ts | 5 ms |
+  | SPL | 0.5 dB |
+
+  M8's bed asks more of three seeds (a spread of at most 2 %); this limit is what one run may
+  show, not the bed's.
+- **Several sources:** the largest of their mean deposits, an upper bound. **A directivity
+  balloon** scales each particle's energy by its direction, so `d̄` is not known: every value is
+  refused, `noise_unknown`.
+- **Checked** (`tests/params_noise.rs`), against 60 independent runs of the model with its own
+  generator: at 40,000 and 400,000 crossings the estimate is the spread of the runs within a
+  factor 0.85 to 1.25 for all eight quantities. At 4,000 crossings, tutorial 1's count at
+  150,000 particles, 5 of 10 runs give a T30 more than 5 % off from the series alone, and every
+  one is refused.
+- **What it assumes:** crossings independent between bins. A particle crossing twice is counted
+  twice; at tutorial 1's counts (0.03 crossings per particle) that correlation is about 3 %.
 
 ## Decay times: EDT, T20 and T30
 
@@ -430,7 +540,16 @@ and one of:
 - `unresolved`, with the values from both ends of the onset bin;
 - `range_too_short`, with the time spent in the range and the time needed;
 - `not_decaying`;
-- `empty_window`.
+- `empty_window`;
+- `missing_not_cleared` and `missing_moves`, with the floor and the lost share, and the depth
+  reached or the value with the missing energy added ("Missing energy");
+- `monte_carlo_noise`, with the value, its standard deviation, the limit and the resamples that
+  refused it; `noise_unknown`, with why ("Monte-Carlo noise");
+- `several_sources`, with the sources: made by `core::results`, not by `params`
+  (`docs/results.md`, "Several sources").
+
+`params_bad_noise_input` refuses a floor, a share alive or lost, or a mean deposit that is not a
+finite number in its domain.
 
 The citations of upstream's lines in `params::air` and `params::room` are checked against the
 source at `929a5c8` by `params_air.rs` and `params_room.rs`, so a citation that drifts fails a test.

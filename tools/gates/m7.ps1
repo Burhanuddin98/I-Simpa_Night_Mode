@@ -22,7 +22,8 @@
 #   tests' own refusals must run and pass: a decay 1 % off fails every bound, air 1 C or 5 % RH off
 #   misses the table, a natural-log or neighbouring-group DIN formula misses 0.552 s;
 # - (c): Night Mode's .gap level (energy over 1e-12, main:project/result_parser.cpp:486) and the
-#   SPL moved 1 dB either way miss the bound in every band;
+#   SPL moved 1 dB either way miss the bound in every band. The reverberant field is kept out by
+#   the 20 ms duration (no particle reaches a wall), which the statistics must show;
 # - (d): the walls' alpha 5 % higher, run through TCR, gives analytic times outside 0.5 % of the
 #   unchanged run in every band; a NaN planted in a copy of the run is found by the scan and the
 #   copy is refused by simpa results;
@@ -150,7 +151,12 @@ function CopyTree([string]$from, [string]$to) {
 # The float value of an f32 hex token of a canonical dump.
 function F32([string]$hex) { [BitConverter]::ToSingle([BitConverter]::GetBytes([Convert]::ToUInt32($hex, 16)), 0) }
 function NonFinite([string]$hex) { ([Convert]::ToUInt32($hex, 16) -band 0x7f800000) -eq 0x7f800000 }
-# Every float value of a .gabe dump's rows not labelled Global, as (column, row, hex).
+# Main results' Global row for the areas and times: NaN by design (ctr/input_output/reportmanager.cpp:208).
+# Every other value, receiver tables' Global rows included, must be finite.
+function ByDesign([string]$file, $v) {
+    (Split-Path -Leaf $file) -eq 'Main results.gabe' -and $v.Row -eq 'Global' -and ($v.Column -like 'A_*' -or $v.Column -like 'TR_*')
+}
+# Every float value of a .gabe dump, as (column, row, hex).
 function GabeValues([string]$file) {
     $dump = (& $simpa dump gabe $file) -split "`n"
     if ($LASTEXITCODE -ne 0) { throw "dump gabe $file failed" }
@@ -162,7 +168,7 @@ function GabeValues([string]$file) {
         if ($col -lt 0) { continue }
         if ($col -eq 0) { $labels += $l; continue }
         if ($type -eq 'float') {
-            if ($labels[$row] -ne 'Global') { $vals += [pscustomobject]@{ Column = $name; Row = $labels[$row]; Hex = $l } }
+            $vals += [pscustomobject]@{ Column = $name; Row = $labels[$row]; Hex = $l }
             $row++
         }
     }
@@ -218,6 +224,7 @@ function LevelRows {
     if ($null -ne $script:levelRows) { return , $script:levelRows }
     $run = RunOk (Join-Path $fx 'rooms\level_box_20m.simpa') 'spps' (Join-Path $work 'level') 'level-spps'
     $rep = Results $run 'level-results'
+    $script:levelRep = $rep
     [xml]$cfg = ReadText (Join-Path $run 'solve\config.xml')
     $lw = @{}; foreach ($b in $cfg.configuration.sources.source.bfreq) { $lw[[int]$b.freq] = [double][single][double]::Parse($b.db, [Globalization.CultureInfo]::InvariantCulture) }
     $src = $rep.spps.sources[0].position_m
@@ -244,6 +251,13 @@ Check "(c) level box through SPPS: SPL within +/-0.5 dB of Lw - 20 lg r - 11 at 
         if (-not $pass) { $ok = $false }
     }
     $ok
+}
+Check "(c) what keeps the reverberant field out is the 20 ms duration: SPPS's statistics count 0 particles absorbed by the materials and every particle remaining, every band" {
+    $null = LevelRows
+    $bands = @($script:levelRep.spps.particles.bands)
+    $bad = @($bands | Where-Object { $_.absorbed_by_materials -ne 0 -or $_.remaining -ne $_.total })
+    Write-Host ("      {0} bands; absorbed by the materials {1}; remaining {2} of {3}" -f $bands.Count, (($bands | ForEach-Object { $_.absorbed_by_materials }) -join '/'), $bands[0].remaining, $bands[0].total)
+    $bands.Count -eq 6 -and $bad.Count -eq 0
 }
 Check "(c) says NO: Night Mode's .gap level, energy / 1e-12 (main:project/result_parser.cpp:486), misses the bound in every band" {
     $line = @(git show main:project/result_parser.cpp)[485]
@@ -289,18 +303,22 @@ Check "(d) tutorial-1 box through TCR: per band, TCR's Sabine and Eyring times e
 Check "(d) the same from the project itself (cargo test gate_d_...): within 0.5 %, and the project's walls 5 % more absorbing outside it" {
     OneTest 'simpa' 'cli_results' 'gate_d_tcr_equals_the_analytic_sabine_and_eyring_and_says_no'
 }
-Check "(d) no NaN or infinity in any value TCR wrote for display: band rows of every table, every .csbin value" {
+Check "(d) no NaN or infinity in any value TCR wrote for display: every row of every table (receiver Global rows included; Main results' Global areas and times are NaN by design and must be), every .csbin value" {
     $solve = Join-Path (TcrRun) 'solve'
-    $n = 0; $bad = @()
+    $n = 0; $bad = @(); $design = 0
     foreach ($f in Get-ChildItem -LiteralPath $solve -Recurse -File) {
         if ($f.Extension -eq '.gabe') {
-            foreach ($v in GabeValues $f.FullName) { $n++; if (NonFinite $v.Hex) { $bad += "$($f.Name) $($v.Column) $($v.Row)" } }
+            foreach ($v in GabeValues $f.FullName) {
+                if (ByDesign $f.FullName $v) { $design++; if (-not (NonFinite $v.Hex)) { $bad += "$($f.Name) $($v.Column) Global is not NaN" }; continue }
+                $n++; if (NonFinite $v.Hex) { $bad += "$($f.Name) $($v.Column) $($v.Row)" }
+            }
         } elseif ($f.Extension -eq '.csbin') {
             foreach ($h in CsbinValues $f.FullName) { $n++; if (NonFinite $h) { $bad += $f.FullName } }
         }
     }
-    Write-Host "      $n values scanned, $($bad.Count) not finite"
-    $n -gt 1000 -and $bad.Count -eq 0
+    Write-Host "      $n values scanned, $($bad.Count) not finite; $design Global areas and times NaN by design"
+    $bad | Select-Object -First 5 | ForEach-Object { Write-Host "      $_" }
+    $n -gt 1000 -and $bad.Count -eq 0 -and $design -eq 4
 }
 Check "(d) says NO: the walls' alpha 5 % higher (0.2 -> 0.21), through TCR, gives analytic times outside 0.5 % of the unchanged run in every band" {
     $text = [IO.File]::ReadAllText($tut)
@@ -333,7 +351,7 @@ Check "(d) says NO: a NaN planted in a band row of a copy's Main results is foun
     if ($at -lt 0) { throw 'the value is not in the file' }
     $nan = [BitConverter]::GetBytes([uint32]0x7fc00000); for ($k = 0; $k -lt 4; $k++) { $bytes[$at + $k] = $nan[$k] }
     [IO.File]::WriteAllBytes($main, $bytes)
-    $found = @(GabeValues $main | Where-Object { NonFinite $_.Hex })
+    $found = @(GabeValues $main | Where-Object { (NonFinite $_.Hex) -and -not (ByDesign $main $_) })
     $o = Simpa @('results', $copy, '--json') 'nan-results'
     Write-Host "      scan finds $($found.Count) ($($found[0].Column) at $($found[0].Row)); simpa results exit $($o.Exit), $($o.Json.refused.code)"
     $found.Count -eq 1 -and $found[0].Column -like 'TR_Sabine*' -and $found[0].Row -eq '100\x20Hz' -and $o.Exit -eq 6 -and $o.Json.refused.code -eq 'results_outputs_invalid'

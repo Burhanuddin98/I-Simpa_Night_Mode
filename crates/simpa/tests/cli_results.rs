@@ -36,6 +36,10 @@ const LEVEL: &str = "rooms/level_box_20m.simpa";
 const TUTORIAL: &str = "rooms/tutorial1_box_seeded.simpa";
 const SEATS_SPPS: &str = "results/seats_spps";
 const SEATS_TCR: &str = "results/seats_tcr";
+const ENERGETIC: &str = "rooms/energetic_box.simpa";
+const SOURCES2: &str = "rooms/sources2_box.simpa";
+const ENERGETIC_SPPS: &str = "results/energetic_spps";
+const SOURCES2_SPPS: &str = "results/sources2_spps";
 
 fn results(folder: &Path, json: bool) -> Out {
     let mut args = vec!["results".to_string(), folder.display().to_string()];
@@ -93,33 +97,74 @@ fn refused_code(o: &Out) -> String {
     json(o)["refused"]["code"].as_str().unwrap().to_string()
 }
 
-/// Every number and its path in a JSON value.
-fn numbers(v: &Value, path: String, out: &mut Vec<(String, f64)>) {
+/// The path of every null in a JSON value.
+fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
     match v {
-        Value::Number(n) => out.push((path, n.as_f64().unwrap())),
+        Value::Null => out.push(path),
         Value::Array(a) => a
             .iter()
             .enumerate()
-            .for_each(|(i, x)| numbers(x, format!("{path}[{i}]"), out)),
+            .for_each(|(i, x)| nulls(x, format!("{path}[{i}]"), out)),
         Value::Object(m) => m
             .iter()
-            .for_each(|(k, x)| numbers(x, format!("{path}.{k}"), out)),
+            .for_each(|(k, x)| nulls(x, format!("{path}.{k}"), out)),
         _ => {}
     }
 }
 
+/// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
+/// typed `error`.
+const NULLABLE: [&str; 15] = [
+    ".spps",
+    ".tcr",
+    ".mc_sd",
+    ".band_hz",
+    ".field",
+    ".air_m_per_metre",
+    ".onset",
+    ".position_m",
+    ".arrival_s",
+    ".floor_db",
+    ".lost_share",
+    ".crossings",
+    ".sd",
+    ".with_tail",
+    ".with_missing",
+];
+
 #[test]
-#[ignore = "runs SPPS and TCR and rewrites tests/fixtures/results/; run on purpose"]
+fn every_null_in_a_report_is_at_a_nullable_key() {
+    for name in [SEATS_SPPS, SEATS_TCR, ENERGETIC_SPPS, SOURCES2_SPPS] {
+        let rep = json(&results(&fixture(name), true));
+        let mut all = Vec::new();
+        nulls(&rep, String::new(), &mut all);
+        let unexpected: Vec<&String> = all
+            .iter()
+            .filter(|p| !NULLABLE.iter().any(|k| p.ends_with(k)))
+            .collect();
+        assert!(unexpected.is_empty(), "{name}: {unexpected:?}");
+        // Top-level spps or tcr is null for the other solver.
+        assert!(rep["spps"].is_null() != rep["tcr"].is_null());
+    }
+}
+
+#[test]
+#[ignore = "runs SPPS and TCR and writes tests/fixtures/results/; run on purpose"]
 fn write_results_fixtures() {
     let root = scratch("write-results");
-    for (solver, name) in [("spps", SEATS_SPPS), ("tcr", SEATS_TCR)] {
-        let dir = run_ok(&fixture(SEATS), solver, &root, &[]);
+    for (room, solver, name) in [
+        (SEATS, "spps", SEATS_SPPS),
+        (SEATS, "tcr", SEATS_TCR),
+        (ENERGETIC, "spps", ENERGETIC_SPPS),
+        (SOURCES2, "spps", SOURCES2_SPPS),
+    ] {
         let to = fixture(name);
-        assert!(
-            !to.exists(),
-            "{} exists: remove it first; this writer deletes nothing",
-            to.display()
-        );
+        // This writer deletes nothing: to regenerate a fixture, remove its folder first.
+        if to.exists() {
+            println!("kept {}: it exists", to.display());
+            continue;
+        }
+        let dir = run_ok(&fixture(room), solver, &root, &[]);
         copy_dir(&dir, &to);
         let o = results(&to, true);
         assert_eq!(o.code, 0, "{o:#?}");
@@ -559,6 +604,13 @@ fn gate_c_level_calibration_and_the_offsets_it_catches() {
     let run = run_ok(&fixture(LEVEL), "spps", &root, &[]);
     let rows = level_rows(&run);
     assert_eq!(rows.len(), 12, "2 receivers x 6 bands");
+    // What keeps the reverberant field out is the duration: no particle reaches a surface, so
+    // none is absorbed and every one remains (results_rooms.rs, level_box).
+    let rep = json(&results(&run, true));
+    for b in rep["spps"]["particles"]["bands"].as_array().unwrap() {
+        assert_eq!(b["absorbed_by_materials"], 0, "{b}");
+        assert_eq!(b["remaining"], b["total"], "{b}");
+    }
     // ρ·c as SPPS computes it at 20 °C and 101 325 Pa (Masse_volumique_air.cpp:45-52;
     // Celerite_du_son.cpp:46), and the average of 1/d² over a receiver sphere of radius R.
     let rho_c = 101_325.0 * 28.9644 / (8314.32 * 293.15) * 343.2;
@@ -699,21 +751,27 @@ fn gate_d_tcr_equals_the_analytic_sabine_and_eyring_and_says_no() {
     );
     assert_eq!(moved_out, n);
 
-    // No NaN or infinity in any value TCR wrote for display: every band row of every table and
-    // every .csbin value, read with the format readers alone (the Global rows are NaN by design:
-    // ctr/input_output/reportmanager.cpp:208).
+    // No NaN or infinity in any value TCR wrote for display: every row of every table and every
+    // .csbin value, read with the format readers alone. The one exception is Main results'
+    // Global row for the areas and times, NaN by design (ctr/input_output/reportmanager.cpp:208);
+    // its levels, and every receiver table's Global row, an energetic sum, are scanned.
     let mut values = 0usize;
     for e in walk(&run.join("solve")) {
         let name = e.to_string_lossy().to_string();
         if name.ends_with(".gabe") {
             let g = simpa_core::formats::gabe::read_file(&e).unwrap();
             let labels = g.row_labels().unwrap().to_vec();
+            let main = name.ends_with("Main results.gabe");
             for c in &g.columns[1..] {
+                let by_design =
+                    main && (c.name().starts_with(b"A_") || c.name().starts_with(b"TR_"));
                 for (k, v) in c.floats().unwrap().iter().enumerate() {
-                    if labels[k] != b"Global" {
-                        values += 1;
-                        assert!(v.is_finite(), "{name} {:?} row {k}", c.name());
+                    if labels[k] == b"Global" && by_design {
+                        assert!(v.is_nan(), "{name} {:?}: Global is NaN by design", c.name());
+                        continue;
                     }
+                    values += 1;
+                    assert!(v.is_finite(), "{name} {:?} row {k}", c.name());
                 }
             }
         } else if name.ends_with(".csbin") {
@@ -729,9 +787,16 @@ fn gate_d_tcr_equals_the_analytic_sabine_and_eyring_and_says_no() {
         }
     }
     println!("{values} displayed values, all finite");
+    // serde_json prints a NaN as null, so a JSON number is always finite and says nothing; the
+    // report is walked for non-finite numbers before it is printed (report::checked_report).
+    // What the output can show: every null is at a key documented as nullable.
     let mut all = Vec::new();
-    numbers(&rep, String::new(), &mut all);
-    assert!(all.iter().all(|(_, v)| v.is_finite()));
+    nulls(&rep, String::new(), &mut all);
+    let unexpected: Vec<&String> = all
+        .iter()
+        .filter(|p| !NULLABLE.iter().any(|k| p.ends_with(k)))
+        .collect();
+    assert!(unexpected.is_empty(), "{unexpected:?}");
 
     // Says no: a NaN planted in a copy's Main results is refused (the verdict's nonfinite_result,
     // judged again).
@@ -769,6 +834,30 @@ fn param(p: &Value, name: &str) -> Option<f64> {
     p[name]["value"].as_f64()
 }
 
+/// A decay time with its Monte-Carlo standard deviation, or why it was refused (with the
+/// standard deviation, relative, when it was refused for its noise).
+fn why(p: &Value, name: &str) -> String {
+    let q = &p[name];
+    if let Some(v) = q["value"].as_f64() {
+        return format!(
+            "{v:.2}±{:.1}%",
+            100.0 * q["mc_sd"].as_f64().unwrap_or(f64::NAN) / v
+        );
+    }
+    let w = &q["not_evaluable"]["error"]["why"];
+    match w["why"].as_str() {
+        Some("monte_carlo_noise") => format!(
+            "mc {:.1}%",
+            100.0 * w["sd"].as_f64().unwrap_or(f64::NAN) / w["value"].as_f64().unwrap_or(f64::NAN)
+        ),
+        Some(other) => other.to_string(),
+        None => q["not_evaluable"]["code"]
+            .as_str()
+            .unwrap_or("?")
+            .to_string(),
+    }
+}
+
 #[test]
 #[ignore = "information for the M7 report, not a gate: runs SPPS and TCR on tutorial 1 and prints \
             our parameters beside upstream's stored 2019 ones"]
@@ -777,6 +866,7 @@ fn tutorial1_parameters_beside_upstreams() {
     use simpa_core::geometry::import::zip::Archive;
     use simpa_core::params::EnergySeries;
     use simpa_core::params::decay::Arrival;
+    use simpa_core::params::noise::NoiseModel;
     use simpa_core::results::report;
 
     let proj = paths::upstream_file("src/isimpa/resources/doc/tutorial/tutorial 1/tutorial_1.proj");
@@ -786,6 +876,11 @@ fn tutorial1_parameters_beside_upstreams() {
     let read = |n: &str| gabe::read(&z.read(&format!("{spps}{n}")).unwrap()).unwrap();
     let up = read("Punctual receivers/Receiver 1/Acoustic parameters.gabe");
     let recp = read("Punctual receivers/Receiver 1/Sound level.recp");
+    // The .gap's column 2, the source's power times ρc per band, for the noise model: the 2019
+    // run's config.xml has 150,000 particles and a receiver radius of 0.31 m (f32).
+    let gap = read("Punctual receivers/Receiver 1/Advanced sound level.gap");
+    let power_rho_c = gap.columns[2].floats().unwrap().to_vec();
+    let radius = f64::from(0.31f32);
     let stats = simpa_core::run::stats::from_gabe(&read("SPPS particle statistics.gabe")).unwrap();
     let tcr2019 = gabe::read(
         &z.read(
@@ -807,11 +902,11 @@ fn tutorial1_parameters_beside_upstreams() {
     // 2019 statistics count no particle remaining (random mode).
     let dt = f64::from(0.01f32);
     let c = f64::from(simpa_core::results::spps::solver_speed_of_sound(20.0));
-    let arrival = Arrival::Known {
-        time_s: (2.0f64.powi(2) + 4.0f64.powi(2)).sqrt() / c,
-    };
+    let arrival_s = (2.0f64.powi(2) + 4.0f64.powi(2)).sqrt() / c;
+    let arrival = Arrival::Known { time_s: arrival_s };
+    let room = read("Total energy.recp");
     let mut on_2019 = Vec::new();
-    for col in &recp.columns[1..] {
+    for (i, col) in recp.columns[1..].iter().enumerate() {
         let f = simpa_core::run::stats::band_label(col.name()).unwrap();
         let e: Vec<f64> = col
             .floats()
@@ -819,17 +914,30 @@ fn tutorial1_parameters_beside_upstreams() {
             .iter()
             .map(|&x| f64::from(x))
             .collect();
-        let complete = stats
-            .bands
-            .iter()
-            .find(|b| b.freq_hz == f)
-            .is_some_and(|b| b.remaining == 0);
-        let s = if complete {
+        let band = stats.bands.iter().find(|b| b.freq_hz == f).unwrap();
+        let s = if band.remaining == 0 {
             EnergySeries::complete(dt, e)
         } else {
             EnergySeries::new(dt, e)
         };
-        let (p, _) = report::parameters(&s, arrival);
+        // The lost particles' share, as core::results gives it: lost / (N·f), f the share of the
+        // emitted energy alive at the end of the arrival's step (the room table over the .gap's
+        // source power).
+        let s = match (s, band.lost()) {
+            (Ok(s), 0) => Ok(s),
+            (Ok(s), lost) => {
+                let bin = (arrival_s / dt).floor() as usize;
+                let alive = f64::from(room.columns[i + 1].floats().unwrap()[bin])
+                    / f64::from(power_rho_c[i]);
+                s.with_lost_share(lost as f64 / (150_000.0 * alive))
+            }
+            (Err(e), _) => Err(e),
+        };
+        let model = NoiseModel::crossings(
+            f64::from(power_rho_c[i]) / (150_000.0 * std::f64::consts::PI * radius * radius),
+        )
+        .unwrap();
+        let (p, _) = report::parameters(&s, arrival, &model);
         on_2019.push((f, serde_json::to_value(&p).unwrap()));
     }
 
@@ -927,6 +1035,27 @@ fn tutorial1_parameters_beside_upstreams() {
                 1,
                 1000.0
             ),
+        );
+    }
+    println!(
+        "\nThe decay times behind the table: each value with its Monte-Carlo standard deviation, \
+         or why it was refused (mc: its noise, with the standard deviation)."
+    );
+    println!(
+        "{:>6} | {:^16} | {:^16} | {:^16} | {:^16} | {:^16} | {:^16}",
+        "band", "EDT A", "EDT B", "T20 A", "T20 B", "T30 A", "T30 B"
+    );
+    for (i, (f, a)) in on_2019.iter().enumerate() {
+        let b = &r1["bands"][i]["parameters"];
+        println!(
+            "{:>6} | {:^16} | {:^16} | {:^16} | {:^16} | {:^16} | {:^16}",
+            f,
+            why(a, "edt_s"),
+            why(b, "edt_s"),
+            why(a, "t20_s"),
+            why(b, "t20_s"),
+            why(a, "t30_s"),
+            why(b, "t30_s")
         );
     }
     println!(

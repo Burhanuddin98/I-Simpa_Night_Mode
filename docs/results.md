@@ -4,8 +4,8 @@
 (`docs/params.md`) computed from them. Code: `crates/simpa-core/src/results.rs` and `results/`.
 CLI: `simpa results <run-folder> [--json]` (`crates/simpa/src/results_cmd.rs`); its JSON is
 `docs/formats/results-json.md`. Tests: `crates/simpa-core/tests/results_load.rs`,
-`results_rooms.rs`, `params_complete.rs` and `crates/simpa/tests/cli_results.rs`. Gate:
-`tools/gates/m7.ps1`.
+`results_rooms.rs`, `params_complete.rs`, `params_floor.rs`, `params_noise.rs` and
+`crates/simpa/tests/cli_results.rs`. Gate: `tools/gates/m7.ps1`.
 
 **No number read or computed here is shown to a user until M8's physics bed passes**
 (`docs/rebuild-plan.md`, M12). The JSON says so: `"validated_by_bed": false`.
@@ -34,7 +34,12 @@ of `docs/solver-contract.md`, Part B, "Result refusals", and nothing is read in 
    (`results_file_invalid`), and holds no NaN, infinity or negative energy
    (`results_value_invalid`).
 
-`simpa results` exits 6 for steps 1, 3, 4, 5 and 6. Every code is produced by a spoiled copy of a
+`simpa results` exits 6 for steps 1, 3, 4, 5 and 6: the plan's stable exit codes give 5 to a
+solver run that failed and 6 to result verification (`docs/rebuild-plan-raw-2026-09-23.json`,
+the `cli` component; `docs/m5-m6-design.md`, "Exit codes"). A run whose verdict is OK but whose
+folder no longer verifies is not a failed run, and a caller that sees 5 knows the solver failed.
+A report holding a number that is not finite is refused the same way, `results_value_invalid`
+(`report::checked_report`), since JSON would print it as `null`. Every code is produced by a spoiled copy of a
 committed run in `results_load.rs`; the CLI's exits in `cli_results.rs`, among them a real FAIL
 run (`run-folder` on the negative fixture `spps_nomesh`) and a real cancelled one.
 
@@ -50,6 +55,7 @@ e_report_file.cpp:296-321` maps each extension to its report class):
 | `<receiversp_filename>` (`.recp`, `e_report_gabe_recp.cpp`) | per band, the energy series `params` reads | a label column, then one float column per computed band labelled `<f> Hz` in band order, every column as long as the room table's |
 | `<receiversp_filename_adv>` (`.gap`, `e_report_gabe_gap.cpp`) | per band, `E·cos²φ` and `E·\|cos φ\|`; the sources' power times `ρ·c`; the background noise | its index column is `[1, 2, 3, 4, 5, bands, 3, steps]`; its time step is `pasdetemps`'s `f32`, bit for bit; its bands are the run's; **its energy columns equal the `.recp`'s bit for bit**, since SPPS writes both from `energy_sum × cdt_vol` (`baseReportManager.cpp:183`; `spps/reportmanager.cpp:855`) |
 | `Sound level per source.recps` (`e_report_gabe_recps.cpp`) | each source's total per band | one row per source, labelled with its name in `config.xml`'s order |
+| `<source name>/<receiversp_filename>`, with `output_recp_bysource` (`reportmanager.cpp:620-656`; upstream's GUI shows it as a `.recp`, `e_report_file.cpp:304-307`) | each source's own echogram per band | the receiver folder's subfolders are exactly the sources' names, none with the switch off; laid out as the `.recp`; the sources' echograms sum to the `.recp` bin by bin within `f32` rounding, each to its `.recps` total ("Several sources", below) |
 | `Punctual receiver intensity.gabe` | the intensity vector per band and step | `steps + 1` rows (the last is `Sum`); columns `<f> Hz\n{x,y,z}` |
 
 Besides them: `<cumul_filename>` (the room's energy per band and step), the statistics, every
@@ -131,8 +137,15 @@ and the arrival is left to `Arrival::Detected`.
 receiver sphere, so the direct sound is spread over `[(r − R)/c, (r + R)/c]`, `2R/c` long (the JSON
 gives it as `receiver_crossing_s`).
 - At upstream's defaults (`dt` = 10 ms, `R` = 0.31 m, `2R/c` = 1.8 ms) both ends usually fall in one
-  bin. On tutorial 1 the arrival `r/c` lies in the onset bin at both receivers in all 27 bands, and
-  every parameter comes out.
+  bin. On tutorial 1 the arrival `r/c` lies in the onset bin at both receivers in all 27 bands.
+  **"Usually" is about 92 % of receiver positions.** When `(r − R)/c` falls in the bin before the
+  one holding `r/c`, that bin holds the cap of the sphere the wavefront has crossed; once the cap
+  holds 1 % of the largest bin, it is the onset bin, `r/c` lies after it, and all seven
+  onset-relative parameters are refused, `params_bad_arrival` (M7 review). With `r/c` uniform in
+  its bin that happens for a stretch of `R/c` less the cap height at which the cap reaches 1 %
+  (`h/R` = 0.117, from `h²(3R − h)/(4R³)` = 0.01, if the direct sound fills the largest bin):
+  `(R − 0.117 R)/(c·dt)` = 8 % of positions. No number is wrong; M8 and M12 should expect the
+  refusal that often at the defaults.
 - On the level box (`dt` = 0.2 ms, `R` = 0.5 m, `2R/c` = 2.9 ms), the first bin with energy is bin 21
   at 2 m, which is `(r − R)/c` = 4.37 ms; the onset bin (the first within 20 dB of the largest) is
   bin 22; `r/c` = 5.83 ms is bin 29. So neither `r/c` nor `(r − R)/c` lies in the onset bin, and
@@ -142,14 +155,17 @@ gives it as `receiver_crossing_s`).
   uses there.
 
 **Complete series.** When SPPS's own statistics show that nothing arrives after a band's last
-bin, the series is given to `params` as complete (`EnergySeries::complete`, the one change this
-piece made to piece A, `tests/params_complete.rs`): SPPS in random mode, and no particle remaining
-at the end of the calculation. A particle counts as remaining only when the time steps run out while
-it is alive (`spps/CalculationCore.cpp:49, 88-92`), and in random mode a particle is absorbed whole,
-never dwindles (`CalculationCore.cpp:62-67, 147-155, 288-300`). Energetic mode drops a particle once
-its energy falls below `10^-trans_epsilon` of its start (`sppsNantes.cpp:75`;
-`CalculationCore.cpp:305`), energy no histogram holds, so it never claims completeness and piece A
-bounds its tail. The JSON reports the claim per band (`complete`).
+bin, the series is given to `params` as complete (`EnergySeries::complete`, `tests/params_complete.rs`):
+SPPS in random mode with `trans_epsilon` above 0, and no particle remaining at the end of the
+calculation. A particle counts as remaining only when the time steps run out while it is alive
+(`spps/CalculationCore.cpp:49, 88-92`), and in random mode a particle is absorbed whole, never
+dwindles (`CalculationCore.cpp:62-67, 147-155, 288-300`). `trans_epsilon` 0 drops every particle at
+its first surface in random mode too (`CalculationCore.cpp:305`). Energetic mode drops a particle
+once its energy falls below `10^-trans_epsilon` of its start (`sppsNantes.cpp:75`), energy no
+histogram holds, so it never claims completeness: `params` bounds its tail and its floor. The JSON
+reports the claim per band (`complete`); `SppsResults::band_complete`'s unit test says no for
+energetic mode, a particle remaining, and `trans_epsilon` 0 or NaN, and the committed energetic run
+(below) is refused completeness with every particle accounted for.
 
 Without it, random mode's scattered last particles make the last window not decaying, and piece A
 refused everything in most bands: on the M6 gate's seeded tutorial box (10,000 particles), all
@@ -164,24 +180,98 @@ the committed Seat run gave T30 equal to T20 to every digit at 500 Hz: its last 
 starts at −19.1 dB, so both were fitted over the same −5 to −19.1 dB. With 2,000 particles neither
 reaches its bottom before that bin, and both are refused.
 
-**What nothing here bounds: Monte-Carlo noise.** A complete series is exact for its particles, not
-for the room. On tutorial 1's stored 2019 `.recp` (150,000 particles, Receiver 1), our T30 comes
-out in the same 10 of 27 bands as upstream's GUI gives a number in (both refuse or give NaN in the
-other 17), 0.71–2.40 s against upstream's 0.67–2.42 s, where TCR's Sabine time in those bands is
-0.61–0.68 s. The 2.40 s at 1.6 kHz is in both. The seed spread M8 gates (`docs/rebuild-plan.md`,
-M8) is what bounds this; a rule on the particles behind each part of the curve is an open decision.
+### Lost particles
+
+SPPS loses a few particles to infinite loops and meshing problems (`partLoop`, `partLost`,
+`CalculationCore.cpp:102-107`), and the verdict accepts up to 1 % (`run/verdict.rs`). A lost
+particle stops mid-path; its unfinished path is energy the histogram never holds, so "complete" is
+true only up to it (M7 review). The first fix, completeness only with none lost, refused almost
+everything: tutorial 1 at 150,000 particles loses 1 in most bands, and with the claim gone random
+mode's ragged last window refused all eight parameters, SPL included. So the loss is bounded
+instead (`SppsResults::lost_share`):
+- a lost particle would have brought, on average, what any particle alive at the arrival brings;
+- the room table (`<cumul_filename>`) holds the energy of the particles alive at the end of each
+  step times `ρc` (`reportmanager.cpp:155-166, 426-437`), and the `.gap` the sources' power times
+  `ρc` (`reportmanager.cpp:807-816`), so their ratio at the arrival's step is the share of the
+  emitted energy still alive then, `f`;
+- with `n` lost of `N` emitted, they take at most `n/(N·f)` of the energy from the arrival on,
+  which `params` adds as missing energy and refuses whatever it moves beyond its limit
+  (`EnergySeries::with_lost_share`; `docs/params.md`, "Missing energy").
+
+In energetic mode a particle lost late carries less than `f` of its start energy, so the bound is
+conservative there. The JSON gives the share per band (`lost_share`).
+
+### Energetic mode: the solver's floor
+
+Energetic mode drops each particle at `10^-trans_epsilon` of its start. `params` bounds what that
+drop can have cost, `10^{-trans_epsilon}/f` of the energy from the arrival on, with `f` as above
+(`EnergySeries::with_solver_floor`; `docs/params.md`, "Missing energy", where the rule is held to
+the reviewer's model over α 0.05–0.9, ε 1–7). The committed run `results/energetic_spps`
+(`rooms/energetic_box.simpa`: the Seat box in energetic mode, `trans_epsilon` 3, 50,000
+particles) has every particle dropped or absorbed by the end, 0 remaining, and still no band
+complete; its T30 is refused `missing_not_cleared` in 3 of 4 receiver-bands (the fourth is refused
+earlier, its tail not decaying).
+
+### Monte-Carlo noise
+
+Every SPPS value carries its estimated Monte-Carlo standard deviation (`mc_sd`), and a value whose
+noise is above half its limen is refused, `monte_carlo_noise` (`params::noise`; `docs/params.md`,
+"Monte-Carlo noise"). The mean deposit of one crossing, `W·ρc/(N·πR²)`, comes from the run: `W` is
+each source's band power as SPPS computes it from `config.xml` (`10⁻¹²·10^(db/10)` in `f32`,
+`base_core_configuration.cpp:140-150`), `ρc` the `.gap`'s sources' power times `ρc` over their
+summed power, `N` `nbparticules`, `R` `rayon_recepteurp`. The JSON gives the model per band
+(`noise_model`) and the crossings it implies (`crossings`). A directivity balloon (`directivite`
+5) scales each particle's energy by its direction (`sppsNantes.cpp:115-127`), so no deposit is
+known and every value is refused, `noise_unknown`.
+
+**Tutorial 1, Receiver 1, at 150,000 particles** (`cli_results.rs`,
+`tutorial1_parameters_beside_upstreams`): about 3,300 crossings per band. SPL, C50, C80, D50 and
+Ts come out in most of the 27 bands; EDT carries 2.4–3.4 % and passes in 2 bands; T20 carries
+5–22 % and T30 is refused for its noise or its range everywhere. The reviewer's model gave the same
+order (EDT 2.0 %, T20 5.5 %, T30 8.4 %). Before this rule, on the 2019 run, T30 came out at 2.40 s
+at 1.6 kHz where TCR's Sabine time is 0.66 s.
+
+**Energetic mode at upstream's default** (tutorial 1, `trans_epsilon` 5, 150,000 particles, our
+run): SPL, C50, C80 and D50 in almost every band, Ts in some; EDT refused for its noise (the
+random-mode bound, loose here); T20 and T30 refused `missing_moves`, mostly for 17 lost particles
+at 1 kHz whose bound, `1.8·10⁻⁴` of the energy, is conservative in energetic mode.
+
+### Several sources, and the echogram per source
+
+With more than one source, the `.recp` adds every source's particles into one series
+(`reportmanager.cpp:223-224`), measured here from the earliest arrival. ISO 3382-1 defines EDT,
+T20, T30, C50, C80, D50 and Ts per source–receiver pair, so on a band where more than one source's
+`.recps` total is above 0 those seven are refused, `several_sources`; SPL, the level of all of
+them together, is not (M7 review). Upstream's GUI computes them anyway from the same file.
+
+With `output_recp_bysource` on, SPPS also writes each source's own echogram,
+`<receiver folder>/<source name>/<receiversp_filename>` (`reportmanager.cpp:620-656`), which
+upstream's GUI shows as a `.recp` (`e_report_file.cpp:304-307`). They are read and checked: the
+receiver folder's subfolders are exactly the sources' names (none when the switch is off); each
+file is laid out as the `.recp`; bin by bin the sources' echograms sum to the `.recp` within the
+`f32` rounding of their sum; each sums over time to its `.recps` total. The JSON gives each
+source's parameters, measured from that source's own arrival (`per_source`). The committed run
+`results/sources2_spps` (`rooms/sources2_box.simpa`: the Seat box with a second source, 3 dB
+weaker and 20 ms late, and the switch on) holds it; spoiled copies with a source's echogram
+removed, one value changed by 1 %, or a folder no source names are refused.
 
 ## Level calibration (gate M7(c))
 
 `rooms/level_box_20m.simpa`: a 20 × 20 × 20 m box, SPPS with `direct_calc = 1` and air absorption
 off, an omni source of 100 dB per band (octaves 125 Hz–4 kHz), receivers 2 m and 4 m away.
-- **Every surface absorbs everything** (α = 1). `direct_calc` alone already stops a particle at its
-  first surface hit (`spps/CalculationCore.cpp:236-242`); α = 1 makes the same true without it, in
-  both computation methods (`CalculationCore.cpp:249-261, 288-300`), with no transmission. So only
-  the direct field reaches a receiver whichever of the two a change broke, and the reverberant
-  field cannot mask the check.
+- **What keeps the reverberant field out is the duration** (corrected after the M7 review). The
+  source is 9.97 m from the nearest wall and a particle covers `c·20 ms` = 6.86 m in the whole run,
+  so none reaches a surface: the statistics count 0 absorbed by the materials and every particle
+  remaining in every band, which `gate_c_...` asserts. The receivers see the direct field and
+  nothing else.
+- **Two guards the run does not exercise.** `direct_calc` stops a particle at its first surface
+  hit (`spps/CalculationCore.cpp:236-242`), and α = 1 does the same without it in both computation
+  methods (`CalculationCore.cpp:249-261, 288-300`), with no transmission. The earlier text gave
+  these as the reason; with no particle reaching a surface, the gate would pass with both broken.
+  They matter only if the duration is made longer.
 - **Why 0.2 ms steps and 0.5 m receivers:** see `results_rooms.rs`. The level does not depend on
-  either; `params`' tail bound, which it passes, does.
+  either; `params`' tail bound, which it passes, does. No band is complete (every particle
+  remains), so SPL goes through the tail bound, not the complete path.
 
 The gate's reference `Lw − 20·lg r − 11` rounds `10·lg(4π)` = 10.99 and assumes `ρc = 400`.
 SPPS's `ρc` at 20 °C and 101 325 Pa is 413.3 (`Masse_volumique_air.cpp:45-52`), 0.14 dB more, and

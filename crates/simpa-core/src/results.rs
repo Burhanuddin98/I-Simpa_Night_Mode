@@ -38,7 +38,7 @@ pub mod report;
 pub mod spps;
 pub mod tcr;
 
-pub use report::{Report, report};
+pub use report::{Report, checked_report, report};
 
 /// The refusal codes. Each is a row of `docs/solver-contract.md`, Part B, "Result refusals"
 /// (`tests/reason_codes_docs.rs`).
