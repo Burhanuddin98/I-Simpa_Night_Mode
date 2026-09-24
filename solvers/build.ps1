@@ -22,15 +22,21 @@ param(
     # A new name gives a from-scratch compile without deleting an earlier build tree.
     [string]$BuildName = 'build',
     # Where the source archive, the build trees, bin\ and the logs go. Default <repo>\target\solvers,
-    # the build the gates and tests run, whose manifest is solvers\manifest.json. Any other folder
-    # is a build beside it (a fresh folder is a from-scratch build): its manifest is written to
-    # <Root>\manifest.json and solvers\manifest.json is left alone.
-    [string]$Root = ''
+    # the build the gates and tests run; any other folder is a build beside it (a fresh folder is a
+    # from-scratch build). Every build writes its own manifest to <that folder>\manifest.json.
+    [string]$Root = '',
+    # Also write this build's manifest over the committed solvers\manifest.json. Only needed when
+    # the code sha256 changes (new source or new build settings); a plain rebuild changes only the
+    # raw sha256 and the link time, which the gates do not hold the solvers to.
+    [switch]$UpdateCommittedManifest
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$root = if ($Root) { [IO.Path]::GetFullPath($Root) } else { Join-Path $repo 'target\solvers' }
-$manifestPath = if ($Root) { Join-Path $root 'manifest.json' } else { Join-Path $repo 'solvers\manifest.json' }
+# PowerShell variable names ignore case: $root below IS $Root, so read the parameter first.
+$customRoot = [bool]$Root
+$root = if ($customRoot) { [IO.Path]::GetFullPath($Root) } else { Join-Path $repo 'target\solvers' }
+$manifestPath = Join-Path $root 'manifest.json'
+$committedManifest = Join-Path $repo 'solvers\manifest.json'
 $src = Join-Path $root ('src-' + $Commit.Substring(0, 7))
 $bld = Join-Path $root $BuildName
 $tgSrc = Join-Path $repo 'third_party\tetgen-1.5.0'
@@ -160,6 +166,10 @@ $manifest = [ordered]@{
     built_at        = (Get-Date -Format s)
 }
 $manifest | ConvertTo-Json -Depth 4 | Set-Content $manifestPath -Encoding UTF8
+if ($UpdateCommittedManifest) {
+    $manifest | ConvertTo-Json -Depth 4 | Set-Content $committedManifest -Encoding UTF8
+    Write-Host "committed manifest rewritten: $committedManifest"
+}
 Add-Content $log "`nbuild finished $(Get-Date -Format s)"
 $warn = Select-String -Path $log -Pattern 'warning (C\d{4})' | ForEach-Object { $_.Matches[0].Groups[1].Value }
 $compiled = @(Select-String -Path $log -Pattern '\.(cpp|cxx|c)$').Count
