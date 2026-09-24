@@ -663,6 +663,47 @@ not in the file's.
 | `proj_volumes_unsupported` | Any volume (`volumes/volume`, element type 86) | Seeds a TetGen region with its own volume bound for it (`e_scene_volumes_volume.h:168-188`); a project holds no volumes. Upstream's `Industrial.proj` is refused for its three |
 | `proj_mesh_debug_mode` | SPPS's or TCR's meshing settings (`mesh_conf`) with "Test mesh topology" (`debugmode`) on | Runs `tetgen -d` alone, skips the scene correction and loads no mesh (`projet_maillage.cpp:165-174, 212, 242-275`), then runs the solver on whatever mesh it already held (`projet.cpp:751-769`). None of upstream's projects has it on |
 
+### Parameter refusals
+
+`core::params` computes the acoustic parameters from a run's energy histograms and the analytic
+references (`docs/params.md`). A quantity it cannot compute honestly is a typed refusal with one
+of these codes, never a number and never a warning. They are not run verdicts: a run can be OK
+and still have a parameter refused.
+
+| Code | Refused when | Detail |
+|---|---|---|
+| `params_bad_time_step` | a series' `dt`, or a clarity or definition window, is not a finite positive number | the value |
+| `params_series_too_short` | a series is empty; ends at or before the arrival plus `te` for C or D; or has fewer than 2 bins after its onset, so its tail cannot be estimated | what needed how many seconds, and how many the series has |
+| `params_bad_energy` | a value is NaN, ±inf or negative | the first bad index and its value |
+| `params_no_energy` | every value of a series is zero | none |
+| `params_bad_arrival` | a given direct-arrival time is not a finite time at or after 0 s, or lies outside the series' onset bin (the first bin within 20 dB of the largest) | the time, and which side of the bin it fell |
+| `params_not_evaluable` | the series is valid but the quantity cannot be read from it: `range_not_reached`, `truncated`, `unresolved`, `range_too_short`, `not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`, `monte_carlo_noise`, `noise_unknown`, `several_sources` or `no_time_series` (`docs/params.md`) | the quantity; the depth reached, the value and the value with the unseen tail (or the energy the solver's floor and lost particles can have cost) added, the values with the arrival at either end of the onset bin, the value's Monte-Carlo standard deviation and its limit, the sources, or where the solver's own values are |
+| `params_series_mismatch` | bands to be aggregated differ in `dt` or length, or there are none | the two shapes |
+| `params_bad_air` | an ISO 9613-1 input is out of its domain: a frequency or pressure that is not positive, a temperature at or below absolute zero, a humidity outside 0–100 % | the field and value |
+| `params_bad_room` | a Sabine or Eyring input is out of its domain: a volume that is not positive, a negative area, α outside [0, 1], a negative air term, no surface area | the field and value |
+| `params_no_absorption` | the absorption area plus `4·m·V` is zero, so the reverberation time would be infinite | none |
+| `params_din_out_of_range` | a DIN 18041 volume outside its group's range: A1 30–1000 m³, A2 50–5000 m³, A3 30–5000 m³, A4 30–500 m³, A5 200–30 000 m³ (`docs/params.md`, "DIN 18041 targets") | the group, the volume and the range |
+| `params_bad_noise_input` | a solver floor that is not a finite number, a share of energy alive or lost that is not a finite number in its domain, or a Monte-Carlo mean deposit that is not a finite positive number (`docs/params.md`, "Missing energy", "Monte-Carlo noise") | the field and value |
+
+### Result refusals
+
+`core::results::load` reads a run folder's results only for a run that is OK and still verifies
+when it is read (`docs/results.md`). Anything else is refused with one of these codes, never read
+in part. `simpa results` exits 5 for a run whose verdict is not OK (`results_run_failed`,
+`results_run_cancelled`) and 6 for every other refusal (`docs/m5-m6-design.md`,
+"Exit codes": 5 solver run, 6 result verification).
+
+| Code | Refused when | Exit |
+|---|---|---|
+| `results_manifest_missing` | the folder has no `run.json`: it is not a folder `simpa run` or `simpa run-folder` wrote | 6 |
+| `results_manifest_invalid` | `run.json` does not read as this core's manifest; names another manifest version or solver commit; or says OK while listing reasons, ending at a stage other than `solve`, with an exit class other than 0, with no solver outcome, a non-zero exit or a cancel, or with solver arguments other than `config.xml` | 6 |
+| `results_run_failed` | `run.json`'s verdict is FAIL or CRASH; its reasons are carried | 5 |
+| `results_run_cancelled` | `run.json`'s verdict is CANCELLED | 5 |
+| `results_inputs_changed` | an input the manifest recorded before launch (`config.xml`, the `.cbin`, the `.mbin`, directivity files) is missing from `solve/` or has another sha256 now | 6 |
+| `results_outputs_invalid` | the outputs, judged again now by the verdict's own output signals (`run::verdict::output_reasons`: statistics, expected files, TCR's non-finite and unreadable tables), fail them; their reasons are carried | 6 |
+| `results_file_invalid` | a result file read here does not decode or is not laid out as the solver writes it (band columns, row counts, the `.gap`'s index), disagrees with its sibling (the `.gap`'s energy is not the `.recp`'s bit for bit, or its time step is not `pasdetemps`), or the receiver folders or tables are not exactly the config's labels | 6 |
+| `results_value_invalid` | a value in a result file read here is NaN or infinite, or an energy is negative | 6 |
+
 ### Corrections to the survey's run contract
 
 - **Not every non-success SPPS exit is 0 or `0xC0000005`.** There is also `0xC0000409`, an

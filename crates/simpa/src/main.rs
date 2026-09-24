@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use simpa_core::{config_xml, formats, schema, validate};
 
 mod mesh_run;
+mod results_cmd;
 
 const USAGE: &str = "usage:
   simpa --version
@@ -36,6 +37,9 @@ const USAGE: &str = "usage:
       (--json) or one verdict line naming the run folder on stdout. The runs root defaults to
       'runs' beside the project (run) or in the current folder (run-folder). Exit 0 OK,
       2 usage or validation, 3 geometry refused, 4 mesh, 5 solver FAIL or CRASH, 130 cancelled.
+  simpa results <run-folder> [--json]                        a verified run's results and parameters
+      exit 0; 2 usage; 5 the run is FAIL, CRASH or CANCELLED; 6 its results do not verify
+  simpa results --schema                                     the JSON Schemas of results --json
   Executables: --solver-exe / --tetgen, else $SIMPA_SOLVERS_DIR, else beside simpa.exe (its
   solvers/ folder first), else the nearest target/solvers/bin above it.";
 
@@ -66,6 +70,7 @@ fn main() -> ExitCode {
         ["mesh-verify", rest @ ..] => mesh_run::mesh_verify_cmd(rest),
         ["run", rest @ ..] => mesh_run::run_cmd(rest),
         ["run-folder", rest @ ..] => mesh_run::run_folder_cmd(rest),
+        ["results", rest @ ..] => results_cmd::results_cmd(rest),
         [command, ..] => fail(&format!("unknown command '{command}'\n{USAGE}")),
     }
 }

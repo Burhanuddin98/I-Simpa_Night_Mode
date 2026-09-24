@@ -1,0 +1,90 @@
+{
+  "manifest_version": 1,
+  "core_version": "0.1.0",
+  "solver_commit": "929a5c8e5f590b189f29155faeff8670f3699479",
+  "source": {
+    "kind": "project",
+    "path": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m7-params\\tests/fixtures\\rooms/seats_box.simpa",
+    "sha256": "e030381d37e5c7ea74611dc077d2a6dd5b2eac313fcfd26685fe0e2f5eabf87e",
+    "variant": null
+  },
+  "solver": "spps",
+  "exe": {
+    "path": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\wf_b9ed1d0e-3d2-8\\target\\solvers\\bin\\spps.exe",
+    "sha256": "5b2fac424a025b948027d30692ff6897548d60bd138c66ecaa9c21f9631b8b7a"
+  },
+  "argv": [
+    "config.xml"
+  ],
+  "cwd": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m7-params\\target\\tmp\\cli\\write-results-20320-0-1790243430934944600\\20260924-115030-959-spps\\solve",
+  "started": "2026-09-24T11:50:30.959+02:00",
+  "inputs": [
+    {
+      "path": "config.xml",
+      "sha256": "c5b966e09c438b6271f3dd2123f86b18227a41c91e1303132f618715c8f78a38"
+    },
+    {
+      "path": "mesh.cbin",
+      "sha256": "d279779f3e625772b2c3ea6972fa384cf56d8923c2b94d0cd29357dd9f1528d7"
+    },
+    {
+      "path": "tetramesh.mbin",
+      "sha256": "33f6d8c1dcd3ddd2a431a48b8090ed735e345c272b188ae97f507ea7bdb7750b"
+    }
+  ],
+  "mesh": {
+    "manifest": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m7-params\\target\\tmp\\cli\\write-results-20320-0-1790243430934944600\\20260924-115030-959-spps\\mesh\\mesh.json",
+    "mesh_input_hash": "8586f7b21eea088f1de1251c32725841",
+    "mbin_sha256": "33f6d8c1dcd3ddd2a431a48b8090ed735e345c272b188ae97f507ea7bdb7750b"
+  },
+  "stage": "solve",
+  "exit_class": 0,
+  "outcome": {
+    "exit_code": 0,
+    "cancelled": false,
+    "elapsed_ms": 56.7297
+  },
+  "lines": {
+    "progress": 3999,
+    "info": 2,
+    "ok": 1,
+    "warn": 0,
+    "fail": 0,
+    "unclassified": 0
+  },
+  "files": {
+    "total": 18,
+    "expected": 15,
+    "present": 15
+  },
+  "particles": {
+    "bands": [
+      {
+        "freq_hz": 500,
+        "absorbed_by_atmosphere": 17,
+        "absorbed_by_materials": 1983,
+        "absorbed_by_fittings": 0,
+        "lost_by_infinite_loops": 0,
+        "lost_by_meshing_problems": 0,
+        "remaining": 0,
+        "total": 2000
+      },
+      {
+        "freq_hz": 1000,
+        "absorbed_by_atmosphere": 39,
+        "absorbed_by_materials": 1961,
+        "absorbed_by_fittings": 0,
+        "lost_by_infinite_loops": 0,
+        "lost_by_meshing_problems": 0,
+        "remaining": 0,
+        "total": 2000
+      }
+    ]
+  },
+  "loss_limit": 0.01,
+  "verdict": {
+    "status": "OK",
+    "reasons": [],
+    "warnings": []
+  }
+}

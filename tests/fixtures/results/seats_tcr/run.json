@@ -1,0 +1,67 @@
+{
+  "manifest_version": 1,
+  "core_version": "0.1.0",
+  "solver_commit": "929a5c8e5f590b189f29155faeff8670f3699479",
+  "source": {
+    "kind": "project",
+    "path": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m7-params\\tests/fixtures\\rooms/seats_box.simpa",
+    "sha256": "e030381d37e5c7ea74611dc077d2a6dd5b2eac313fcfd26685fe0e2f5eabf87e",
+    "variant": null
+  },
+  "solver": "tcr",
+  "exe": {
+    "path": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\wf_b9ed1d0e-3d2-8\\target\\solvers\\bin\\classicalTheory.exe",
+    "sha256": "9ea03b323df1be9e6ba0c859c35d132a987cc9a3bfecc055833189e676296f1f"
+  },
+  "argv": [
+    "config.xml"
+  ],
+  "cwd": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m7-params\\target\\tmp\\cli\\write-results-20320-0-1790243430934944600\\20260924-115031-155-tcr\\solve",
+  "started": "2026-09-24T11:50:31.155+02:00",
+  "inputs": [
+    {
+      "path": "config.xml",
+      "sha256": "270e6bbfaf780b2bcea845141cf818b1c710e7e54c0d76dd74bcfa56d2be0b70"
+    },
+    {
+      "path": "mesh.cbin",
+      "sha256": "d279779f3e625772b2c3ea6972fa384cf56d8923c2b94d0cd29357dd9f1528d7"
+    },
+    {
+      "path": "tetramesh.mbin",
+      "sha256": "33f6d8c1dcd3ddd2a431a48b8090ed735e345c272b188ae97f507ea7bdb7750b"
+    }
+  ],
+  "mesh": {
+    "manifest": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m7-params\\target\\tmp\\cli\\write-results-20320-0-1790243430934944600\\20260924-115031-155-tcr\\mesh\\mesh.json",
+    "mesh_input_hash": "8586f7b21eea088f1de1251c32725841",
+    "mbin_sha256": "33f6d8c1dcd3ddd2a431a48b8090ed735e345c272b188ae97f507ea7bdb7750b"
+  },
+  "stage": "solve",
+  "exit_class": 0,
+  "outcome": {
+    "exit_code": 0,
+    "cancelled": false,
+    "elapsed_ms": 64.23389999999999
+  },
+  "lines": {
+    "progress": 5,
+    "info": 7,
+    "ok": 0,
+    "warn": 0,
+    "fail": 0,
+    "unclassified": 0
+  },
+  "files": {
+    "total": 15,
+    "expected": 12,
+    "present": 12
+  },
+  "particles": null,
+  "loss_limit": 0.01,
+  "verdict": {
+    "status": "OK",
+    "reasons": [],
+    "warnings": []
+  }
+}

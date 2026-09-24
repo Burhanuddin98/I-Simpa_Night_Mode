@@ -1,0 +1,2034 @@
+{
+  "refusal": {
+    "$defs": {
+      "Reason": {
+        "additionalProperties": false,
+        "description": "One reason, or one recorded WARN line.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "Refusal": {
+        "description": "Why a run's results were refused.",
+        "properties": {
+          "code": {
+            "description": "One of [`codes::ALL`].",
+            "type": "string"
+          },
+          "detail": {
+            "description": "What was found, in words.",
+            "type": "string"
+          },
+          "reasons": {
+            "description": "The verdict's reasons, for a run that failed or was cancelled; the output signals' reasons\njudged now, for `results_outputs_invalid`; otherwise empty.",
+            "items": {
+              "$ref": "#/$defs/Reason"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "detail",
+          "reasons"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "What `simpa results <run> --json` prints when it refuses a run.",
+    "properties": {
+      "exit_code": {
+        "description": "The CLI's exit code: 5 for a failed or cancelled run, 6 for results that do not verify.",
+        "format": "uint8",
+        "maximum": 255,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "refused": {
+        "$ref": "#/$defs/Refusal"
+      },
+      "results_version": {
+        "description": "[`REPORT_VERSION`].",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "run_folder": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "results_version",
+      "run_folder",
+      "refused",
+      "exit_code"
+    ],
+    "title": "RefusalReport",
+    "type": "object"
+  },
+  "report": {
+    "$defs": {
+      "AggregateReport": {
+        "description": "All bands of a receiver summed bin by bin (`params::aggregate`): **an aggregate, not a band,\nand not ISO 3382-1's single-number value** (the arithmetic mean of band values), since its\ndecay is weighted by the source spectrum.",
+        "properties": {
+          "aggregate": {
+            "description": "Always `\"all computed bands summed bin by bin\"`.",
+            "type": "string"
+          },
+          "bands_hz": {
+            "description": "The bands summed: those whose series `params` accepts.",
+            "items": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "parameters": {
+            "$ref": "#/$defs/Parameters"
+          }
+        },
+        "required": [
+          "aggregate",
+          "bands_hz",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "AnalyticBandReport": {
+        "description": "`core::params`' Sabine and Eyring times for one band, on the run's inputs.",
+        "properties": {
+          "air_m_per_metre": {
+            "description": "The energy attenuation TCR adds as `4·m·V`, 1/m; `null` with air absorption off.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "eyring_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "s, with TCR's constant 0.163."
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "sabine_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "s, with TCR's constant 0.163."
+          }
+        },
+        "required": [
+          "freq_hz",
+          "sabine_s",
+          "eyring_s"
+        ],
+        "type": "object"
+      },
+      "AnalyticReport": {
+        "description": "The analytic references on the run's own inputs (`tcr::analytic`), or why there are none.",
+        "oneOf": [
+          {
+            "properties": {
+              "area_m2": {
+                "format": "double",
+                "type": "number"
+              },
+              "bands": {
+                "items": {
+                  "$ref": "#/$defs/AnalyticBandReport"
+                },
+                "type": "array"
+              },
+              "status": {
+                "const": "computed",
+                "type": "string"
+              },
+              "volume_m3": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "status",
+              "volume_m3",
+              "area_m2",
+              "bands"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "not_computed",
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "why"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "BandEnergy": {
+        "description": "One band's series of a whole-room table (`<cumul_filename>`).",
+        "properties": {
+          "energy": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "energy"
+        ],
+        "type": "object"
+      },
+      "BandStats": {
+        "additionalProperties": false,
+        "description": "One band's column. The field order is the row order.",
+        "properties": {
+          "absorbed_by_atmosphere": {
+            "description": "`partAbsAtmo`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "absorbed_by_fittings": {
+            "description": "`partAbsEncombrement`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "absorbed_by_materials": {
+            "description": "`partAbsSurf`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "freq_hz": {
+            "description": "The band, from the column label `<f> Hz`.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "lost_by_infinite_loops": {
+            "description": "`partLoop`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lost_by_meshing_problems": {
+            "description": "`partLost`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "remaining": {
+            "description": "`partAlive`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "description": "`partTotal`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "absorbed_by_atmosphere",
+          "absorbed_by_materials",
+          "absorbed_by_fittings",
+          "lost_by_infinite_loops",
+          "lost_by_meshing_problems",
+          "remaining",
+          "total"
+        ],
+        "type": "object"
+      },
+      "Evaluated": {
+        "anyOf": [
+          {
+            "description": "In the quantity's unit (the field name says it).",
+            "properties": {
+              "mc_sd": {
+                "description": "The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);\n`null` for a value that does not come from a Monte-Carlo histogram, such as TCR's\nanalytic references.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "value": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`core::params` refused it.",
+            "properties": {
+              "not_evaluable": {
+                "$ref": "#/$defs/Refused"
+              }
+            },
+            "required": [
+              "not_evaluable"
+            ],
+            "type": "object"
+          }
+        ],
+        "description": "A quantity's value, or why it has none."
+      },
+      "MainBand": {
+        "description": "One band row of `Main results.gabe`.",
+        "properties": {
+          "eyring": {
+            "$ref": "#/$defs/Theory"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "sabine": {
+            "$ref": "#/$defs/Theory"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "sabine",
+          "eyring"
+        ],
+        "type": "object"
+      },
+      "MonteCarloReport": {
+        "description": "How every SPPS value's Monte-Carlo noise was estimated and judged (`params::noise`).",
+        "properties": {
+          "limit_centre_time_s": {
+            "format": "double",
+            "type": "number"
+          },
+          "limit_clarity_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "limit_decay_relative": {
+            "description": "The largest standard deviation a value may carry: EDT, T20 and T30 relative, C50 and C80\nin dB, D50 as a fraction, Ts in s, SPL in dB.",
+            "format": "double",
+            "type": "number"
+          },
+          "limit_definition": {
+            "format": "double",
+            "type": "number"
+          },
+          "limit_spl_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "refused_resamples_allowed": {
+            "description": "Resamples that may refuse a quantity before its value is refused.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "resamples": {
+            "description": "Resampled series per estimate.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "seed": {
+            "description": "The bootstrap's seed.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resamples",
+          "refused_resamples_allowed",
+          "seed",
+          "limit_decay_relative",
+          "limit_clarity_db",
+          "limit_definition",
+          "limit_centre_time_s",
+          "limit_spl_db"
+        ],
+        "type": "object"
+      },
+      "NoiseModel": {
+        "description": "What a series' noise is estimated from.",
+        "oneOf": [
+          {
+            "description": "Receiver crossings, each adding `mean_deposit` on average, in the series' unit; with\nseveral sources, the largest of theirs.",
+            "properties": {
+              "mean_deposit": {
+                "format": "double",
+                "type": "number"
+              },
+              "model": {
+                "const": "crossings",
+                "type": "string"
+              }
+            },
+            "required": [
+              "model",
+              "mean_deposit"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Nothing bounds the noise; every value is refused, `noise_unknown`.",
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "model": {
+                "const": "unknown",
+                "type": "string"
+              }
+            },
+            "required": [
+              "model",
+              "detail"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "NotEvaluable": {
+        "description": "Why a quantity cannot be read from a valid series.",
+        "oneOf": [
+          {
+            "description": "The decay, with the unseen tail added, never fell to the bottom of the range.",
+            "properties": {
+              "needed_db": {
+                "description": "The bottom of the evaluation range, dB (negative).",
+                "format": "double",
+                "type": "number"
+              },
+              "reached_db": {
+                "description": "How far the decay had fallen when the series ended, dB.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "range_not_reached",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "needed_db",
+              "reached_db"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The energy after the series' end could move the value by more than `limit`.",
+            "properties": {
+              "limit": {
+                "description": "The largest difference allowed, in the quantity's unit (relative for decay times).",
+                "format": "double",
+                "type": "number"
+              },
+              "value": {
+                "description": "The value from the series alone. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "truncated",
+                "type": "string"
+              },
+              "with_tail": {
+                "description": "The value with the estimated tail added; `None` when the tail is unbounded (the\nseries was not decaying at its end), or when the decay curve with the tail spends too\nlittle time in the range to fit.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The arrival was not given, and where in the onset bin it lies moves the value by more\nthan `limit`: `low` and `high` are the values with the arrival at the two ends of the bin.",
+            "properties": {
+              "high": {
+                "format": "double",
+                "type": "number"
+              },
+              "limit": {
+                "description": "The largest distance allowed from `value` to either end, in the quantity's unit\n(relative for decay times).",
+                "format": "double",
+                "type": "number"
+              },
+              "low": {
+                "format": "double",
+                "type": "number"
+              },
+              "value": {
+                "description": "Midway between `low` and `high`. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "unresolved",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "low",
+              "high",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The decay curve spends less time inside the range than a regression needs.",
+            "properties": {
+              "needed_s": {
+                "format": "double",
+                "type": "number"
+              },
+              "span_s": {
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "range_too_short",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "span_s",
+              "needed_s"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The fitted slope is not negative.",
+            "properties": {
+              "why": {
+                "const": "not_decaying",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A window the quantity divides by holds no energy.",
+            "properties": {
+              "from_s": {
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "empty_window",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "from_s"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Energy is missing from the series: the solver dropped each particle once its energy fell to\n`floor_db` below its start ([`EnergySeries::with_solver_floor`]), or lost particles\nmid-path ([`EnergySeries::with_lost_share`]). With the most energy that can have cost\nadded, the decay is not shown to fall to the bottom of the range.",
+            "properties": {
+              "floor_db": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lost_share": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "needed_db": {
+                "description": "The bottom of the evaluation range, dB.",
+                "format": "double",
+                "type": "number"
+              },
+              "reached_db": {
+                "description": "How far the decay had fallen, the unseen tail and the missing energy included, dB.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "missing_not_cleared",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "needed_db",
+              "reached_db"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "With the most energy the solver's floor or its lost particles can have cost added, the\nvalue moves by more than `limit`.",
+            "properties": {
+              "floor_db": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "limit": {
+                "format": "double",
+                "type": "number"
+              },
+              "lost_share": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "value": {
+                "description": "The value from the series. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "missing_moves",
+                "type": "string"
+              },
+              "with_missing": {
+                "description": "The value with the missing energy added; `None` when that curve cannot be fitted.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The value's Monte-Carlo standard deviation, estimated from the receiver crossings behind\neach bin ([`noise`]), is above `limit`; or more than [`noise::REFUSED_RESAMPLES_ALLOWED`]\nof the resampled series refuse the quantity themselves.",
+            "properties": {
+              "limit": {
+                "description": "In the quantity's unit (relative for decay times).",
+                "format": "double",
+                "type": "number"
+              },
+              "refused_resamples": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "resamples": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "sd": {
+                "description": "`None` when fewer than two resampled series give a value.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "value": {
+                "description": "The value from the series. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "monte_carlo_noise",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "limit",
+              "resamples",
+              "refused_resamples"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The series' Monte-Carlo noise cannot be estimated, so nothing bounds it.",
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "value": {
+                "description": "The value from the series. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "noise_unknown",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "detail"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "More than one source contributes to the series. ISO 3382-1 defines the onset-relative\nquantities per source–receiver pair, and a sum of several sources' responses is not one.\nMade by `core::results`, which knows the sources; `params` never sees them.",
+            "properties": {
+              "sources": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "why": {
+                "const": "several_sources",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "sources"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The solver wrote no energy time series for the receiver, so there is nothing to compute the\nquantity from. Made by `core::results` for TCR, whose receiver tables hold steady-state\nlevels only; `params` never sees such a receiver.",
+            "properties": {
+              "detail": {
+                "description": "The solver, and where its own values for the receiver are.",
+                "type": "string"
+              },
+              "why": {
+                "const": "no_time_series",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "detail"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Onset": {
+        "description": "The onset bin: the first bin whose energy is within [`ONSET_THRESHOLD_DB`] of the largest.",
+        "properties": {
+          "bin_end_s": {
+            "description": "Where it ends, s.",
+            "format": "double",
+            "type": "number"
+          },
+          "bin_start_s": {
+            "description": "Where the bin starts, s.",
+            "format": "double",
+            "type": "number"
+          },
+          "index": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "index",
+          "bin_start_s",
+          "bin_end_s"
+        ],
+        "type": "object"
+      },
+      "ParamError": {
+        "description": "A refusal, with its code ([`ParamError::code`]) and what caused it.",
+        "oneOf": [
+          {
+            "properties": {
+              "dt": {
+                "format": "double",
+                "type": "number"
+              },
+              "kind": {
+                "const": "bad_time_step",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "dt"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "available_s": {
+                "format": "double",
+                "type": "number"
+              },
+              "kind": {
+                "const": "series_too_short",
+                "type": "string"
+              },
+              "needed_s": {
+                "format": "double",
+                "type": "number"
+              },
+              "what": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "what",
+              "needed_s",
+              "available_s"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "index": {
+                "format": "uint",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "const": "bad_energy",
+                "type": "string"
+              },
+              "value": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "index",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "no_energy",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "bad_arrival",
+                "type": "string"
+              },
+              "time_s": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "time_s",
+              "detail"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "not_evaluable",
+                "type": "string"
+              },
+              "quantity": {
+                "$ref": "#/$defs/Quantity"
+              },
+              "why": {
+                "$ref": "#/$defs/NotEvaluable"
+              }
+            },
+            "required": [
+              "kind",
+              "quantity",
+              "why"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "series_mismatch",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "detail"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "bad_air",
+                "type": "string"
+              },
+              "value": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "bad_room",
+                "type": "string"
+              },
+              "value": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "no_absorption",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "group": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "din_out_of_range",
+                "type": "string"
+              },
+              "volume_m3": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "group",
+              "volume_m3",
+              "detail"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "field": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "bad_noise_input",
+                "type": "string"
+              },
+              "value": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "kind",
+              "field",
+              "value"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "Parameters": {
+        "description": "The eight parameters of one band (or of the aggregate).",
+        "properties": {
+          "c50_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "dB."
+          },
+          "c80_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "dB."
+          },
+          "d50": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "A fraction, 0 to 1 (shown as a percentage)."
+          },
+          "edt_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "s."
+          },
+          "spl_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "dB re 20 µPa."
+          },
+          "t20_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "s."
+          },
+          "t30_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "s."
+          },
+          "ts_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "s."
+          }
+        },
+        "required": [
+          "spl_db",
+          "edt_s",
+          "t20_s",
+          "t30_s",
+          "c50_db",
+          "c80_db",
+          "d50",
+          "ts_s"
+        ],
+        "type": "object"
+      },
+      "ParticleFileSummary": {
+        "description": "A saved particle file (`nbparticules_rendu` > 0), decoded and summarised.",
+        "properties": {
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "particles": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "recorded_steps": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "freq_hz",
+          "particles",
+          "recorded_steps"
+        ],
+        "type": "object"
+      },
+      "ParticleStats": {
+        "additionalProperties": false,
+        "description": "The whole table: one entry per band column, in file order.",
+        "properties": {
+          "bands": {
+            "items": {
+              "$ref": "#/$defs/BandStats"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "bands"
+        ],
+        "type": "object"
+      },
+      "Quantity": {
+        "description": "What a refusal is about.",
+        "oneOf": [
+          {
+            "properties": {
+              "quantity": {
+                "const": "spl",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "quantity": {
+                "const": "edt",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "quantity": {
+                "const": "t20",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "quantity": {
+                "const": "t30",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "C_te, `te` in seconds.",
+            "properties": {
+              "quantity": {
+                "const": "clarity",
+                "type": "string"
+              },
+              "te_s": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "quantity",
+              "te_s"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "D_te, `te` in seconds.",
+            "properties": {
+              "quantity": {
+                "const": "definition",
+                "type": "string"
+              },
+              "te_s": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "quantity",
+              "te_s"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "quantity": {
+                "const": "centre_time",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "`100·(T30/T20 − 1)`.",
+            "properties": {
+              "quantity": {
+                "const": "curvature",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "ReceiverBandReport": {
+        "description": "One band of an SPPS point receiver.",
+        "properties": {
+          "background_noise_db": {
+            "description": "The receiver's background noise, dB (the `.gap`).",
+            "format": "double",
+            "type": "number"
+          },
+          "complete": {
+            "description": "SPPS's statistics show that no particle was still alive when the steps ran out (random\nmode, `trans_epsilon` above 0, no particle remaining: `spps::SppsResults::band_complete`),\nso the series is given to `params` as complete and no tail after its end is bounded.\nOtherwise `params` bounds that tail. **Lost particles do not make a band incomplete:** the\nenergy their unfinished paths would have brought is bounded separately, `lost_share`.",
+            "type": "boolean"
+          },
+          "contributing_sources": {
+            "description": "The sources whose energy reaches the receiver in this band (their `.recps` total is above\n0). With more than one, the seven onset-relative parameters are refused,\n`several_sources`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "crossings": {
+            "description": "The receiver crossings behind the series, estimated as its total over the mean deposit;\n`null` when the noise has no model.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "energy_pa2": {
+            "description": "The `.recp` column, Pa² per time step.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "floor_db": {
+            "description": "The level below a particle's start at which SPPS drops it, dB, when that can cost the\nhistogram energy (energetic mode: `-10·trans_epsilon`); `params` bounds what it can have\ndropped. `null` otherwise.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "lost_share": {
+            "description": "The share of the energy from the arrival on that lost particles can have taken with them\n(`spps::SppsResults::lost_share`); `params` bounds what it can move. `null` when none was\nlost.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "noise_model": {
+            "$ref": "#/$defs/NoiseModel",
+            "description": "What the values' Monte-Carlo noise is estimated from (`params::noise`)."
+          },
+          "onset": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Onset"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first bin within 20 dB of the largest; `null` when the series is refused."
+          },
+          "parameters": {
+            "$ref": "#/$defs/Parameters"
+          },
+          "source_power_rho_c": {
+            "description": "The sources' power in this band times `ρ·c` (the `.gap`), Pa²·m²: the free field's\nmean-square pressure at distance `r` is this over `4πr²`.",
+            "format": "double",
+            "type": "number"
+          },
+          "total_pa2": {
+            "description": "Their sum.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "complete",
+          "contributing_sources",
+          "noise_model",
+          "energy_pa2",
+          "total_pa2",
+          "source_power_rho_c",
+          "background_noise_db",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "Refused": {
+        "description": "A `core::params` refusal.",
+        "properties": {
+          "code": {
+            "description": "One of `params::codes::ALL` (`docs/solver-contract.md`, \"Parameter refusals\").",
+            "type": "string"
+          },
+          "error": {
+            "$ref": "#/$defs/ParamError",
+            "description": "The typed refusal."
+          },
+          "message": {
+            "description": "The refusal in words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "error"
+        ],
+        "type": "object"
+      },
+      "SolverKind": {
+        "enum": [
+          "spps",
+          "tcr"
+        ],
+        "type": "string"
+      },
+      "SourceBandReport": {
+        "description": "One source's own echogram at a receiver, one band.",
+        "properties": {
+          "crossings": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "energy_pa2": {
+            "description": "The source's `.recp` column, Pa² per time step.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "noise_model": {
+            "$ref": "#/$defs/NoiseModel"
+          },
+          "onset": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Onset"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "parameters": {
+            "$ref": "#/$defs/Parameters"
+          },
+          "total_pa2": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "noise_model",
+          "energy_pa2",
+          "total_pa2",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "SourcePoint": {
+        "description": "A source as SPPS reads it.",
+        "properties": {
+          "balloon": {
+            "description": "`directivite` is 5, a directivity balloon: SPPS scales each particle's energy by the\nballoon's value in its direction (`sppsNantes.cpp:115-127`), so its particles do not all\ncarry `W/N`.",
+            "type": "boolean"
+          },
+          "band_power_w": {
+            "description": "Its power in each computed band, W, as SPPS computes it: `10⁻¹²·10^(db/10)` in `f32`\nfrom its `bfreq@db` children sorted by `freq` and taken by position\n(`base_core_configuration.cpp:140-150`). Each of its particles starts with this over\n`nbparticules` (`sppsNantes.cpp:73`).",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "emission_s": {
+            "description": "When its particles start: `ceil(delay / dt)` steps, cast to `u16`\n(`sppsNantes.cpp:91`), times `dt`.",
+            "format": "double",
+            "type": "number"
+          },
+          "name": {
+            "description": "`source@name`.",
+            "type": "string"
+          },
+          "position_m": {
+            "description": "The position SPPS stores (`f32`); `None` when a coordinate is not one SPPS's reading is\nemulated for (`run::locate::to_float`).",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "emission_s",
+          "band_power_w",
+          "balloon"
+        ],
+        "type": "object"
+      },
+      "SourceReceiverReport": {
+        "description": "One source's own echogram at a receiver (`output_recp_bysource`): the parameters of that\nsource–receiver pair, as ISO 3382-1 defines them.",
+        "properties": {
+          "aggregate": {
+            "$ref": "#/$defs/AggregateReport"
+          },
+          "arrival_s": {
+            "description": "The direct sound's arrival from this source, as for the receiver.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "bands": {
+            "items": {
+              "$ref": "#/$defs/SourceBandReport"
+            },
+            "type": "array"
+          },
+          "file": {
+            "description": "Relative to `solve/`.",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "file",
+          "bands",
+          "aggregate"
+        ],
+        "type": "object"
+      },
+      "SourceTotals": {
+        "description": "One source's total at a receiver, per band (`.recps`).",
+        "properties": {
+          "energy": {
+            "description": "Pa², one per band.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "energy"
+        ],
+        "type": "object"
+      },
+      "SppsReceiverReport": {
+        "description": "An SPPS point receiver.",
+        "properties": {
+          "aggregate": {
+            "$ref": "#/$defs/AggregateReport"
+          },
+          "arrival_s": {
+            "description": "The direct sound's arrival at the receiver's centre, which every onset-relative parameter\nis measured from (`params::decay::Arrival::Known`): the earliest over the sources;\n`null` when it is not computed (a celerity gradient, or a position not read), and the\nparameters then use `Arrival::Detected`.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "bands": {
+            "items": {
+              "$ref": "#/$defs/ReceiverBandReport"
+            },
+            "type": "array"
+          },
+          "by_source": {
+            "description": "Each source's total per band, Pa² (`.recps`), in `config.xml`'s order.",
+            "items": {
+              "$ref": "#/$defs/SourceTotals"
+            },
+            "type": "array"
+          },
+          "folder": {
+            "description": "Relative to `solve/`.",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "per_source": {
+            "description": "Each source's own echogram and its parameters, when `output_recp_bysource` is on; empty\notherwise.",
+            "items": {
+              "$ref": "#/$defs/SourceReceiverReport"
+            },
+            "type": "array"
+          },
+          "position_m": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "folder",
+          "bands",
+          "aggregate",
+          "by_source",
+          "per_source"
+        ],
+        "type": "object"
+      },
+      "SppsReport": {
+        "description": "An SPPS run.",
+        "properties": {
+          "celerity_gradient": {
+            "type": "boolean"
+          },
+          "computation_method": {
+            "description": "`computation_method`: 0 random, 1 energetic.",
+            "format": "int32",
+            "type": "integer"
+          },
+          "duration_s": {
+            "format": "double",
+            "type": "number"
+          },
+          "echogram_per_source": {
+            "description": "`output_recp_bysource`.",
+            "type": "boolean"
+          },
+          "monte_carlo": {
+            "$ref": "#/$defs/MonteCarloReport"
+          },
+          "particle_files": {
+            "items": {
+              "$ref": "#/$defs/ParticleFileSummary"
+            },
+            "type": "array"
+          },
+          "particles": {
+            "$ref": "#/$defs/ParticleStats"
+          },
+          "particles_per_source": {
+            "description": "`nbparticules`: particles per source and band.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "point_receivers": {
+            "items": {
+              "$ref": "#/$defs/SppsReceiverReport"
+            },
+            "type": "array"
+          },
+          "receiver_crossing_s": {
+            "description": "`2R/c`: the direct sound is spread over this long at a receiver.",
+            "format": "double",
+            "type": "number"
+          },
+          "receiver_radius_m": {
+            "format": "double",
+            "type": "number"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/$defs/SourcePoint"
+            },
+            "type": "array"
+          },
+          "speed_of_sound_m_s": {
+            "format": "double",
+            "type": "number"
+          },
+          "steps": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "surfaces": {
+            "items": {
+              "$ref": "#/$defs/SurfaceSummary"
+            },
+            "type": "array"
+          },
+          "time_step_s": {
+            "format": "double",
+            "type": "number"
+          },
+          "total_energy": {
+            "description": "The energy in the room per band and step (`<cumul_filename>`).",
+            "items": {
+              "$ref": "#/$defs/BandEnergy"
+            },
+            "type": "array"
+          },
+          "trans_epsilon": {
+            "description": "`trans_epsilon` as SPPS reads it.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "time_step_s",
+          "duration_s",
+          "steps",
+          "speed_of_sound_m_s",
+          "receiver_radius_m",
+          "receiver_crossing_s",
+          "celerity_gradient",
+          "computation_method",
+          "particles_per_source",
+          "trans_epsilon",
+          "echogram_per_source",
+          "monte_carlo",
+          "sources",
+          "particles",
+          "total_energy",
+          "point_receivers",
+          "surfaces",
+          "particle_files"
+        ],
+        "type": "object"
+      },
+      "Status": {
+        "description": "How a run ended.",
+        "enum": [
+          "OK",
+          "FAIL",
+          "CRASH",
+          "CANCELLED"
+        ],
+        "type": "string"
+      },
+      "SurfaceReceiverSummary": {
+        "description": "One receiver of a surface file.",
+        "properties": {
+          "faces": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "records": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "value_sum": {
+            "description": "The sum of every stored value.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "faces",
+          "records",
+          "value_sum"
+        ],
+        "type": "object"
+      },
+      "SurfaceSummary": {
+        "description": "One surface-receiver or cutting-plane file, summarised (the values stay in the file; M12 reads\nit with the `.csbin` reader).",
+        "properties": {
+          "band_hz": {
+            "description": "The band; `null` for the `Global` file, **an aggregate of all bands**.",
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "cutting_plane": {
+            "type": "boolean"
+          },
+          "field": {
+            "description": "TCR's field; `null` for SPPS.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "Relative to `solve/`.",
+            "type": "string"
+          },
+          "receivers": {
+            "items": {
+              "$ref": "#/$defs/SurfaceReceiverSummary"
+            },
+            "type": "array"
+          },
+          "record_type": {
+            "description": "`recordType` (`docs/formats/csbin.md`).",
+            "type": "string"
+          },
+          "time_step_s": {
+            "format": "double",
+            "type": "number"
+          },
+          "time_steps": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "cutting_plane",
+          "record_type",
+          "time_steps",
+          "time_step_s",
+          "receivers"
+        ],
+        "type": "object"
+      },
+      "TcrGlobal": {
+        "description": "TCR's `Global` row: the energetic sum of the band levels, **an aggregate**.",
+        "properties": {
+          "aggregate": {
+            "description": "Always `\"energetic sum of the band levels\"`.",
+            "type": "string"
+          },
+          "eyring_level_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "sabine_level_db": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "aggregate",
+          "sabine_level_db",
+          "eyring_level_db"
+        ],
+        "type": "object"
+      },
+      "TcrReceiverBandReport": {
+        "description": "One band of a TCR point receiver: TCR's own levels, dB, and the eight parameters, every one\nrefused `no_time_series`.",
+        "properties": {
+          "direct_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "parameters": {
+            "$ref": "#/$defs/Parameters",
+            "description": "TCR writes steady-state levels, not an energy time series, so `core::params` has nothing\nto compute from: each of the eight is `params_not_evaluable`, `no_time_series`. Its SPL\ntoo, because TCR gives two totals, Sabine's and Eyring's, and neither is `params`' SPL of a\nseries; they are `total_sabine_db` and `total_eyring_db`."
+          },
+          "total_eyring_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "total_sabine_db": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "direct_db",
+          "total_sabine_db",
+          "total_eyring_db",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "TcrReceiverReport": {
+        "description": "A TCR point receiver, in the same shape as an SPPS one where the two meet: `label`, `bands[]`\nwith `freq_hz` and `parameters`, and `aggregate`.",
+        "properties": {
+          "aggregate": {
+            "$ref": "#/$defs/AggregateReport",
+            "description": "As SPPS's, with no band summed and every parameter refused `no_time_series`."
+          },
+          "bands": {
+            "items": {
+              "$ref": "#/$defs/TcrReceiverBandReport"
+            },
+            "type": "array"
+          },
+          "file": {
+            "description": "Relative to `solve/`.",
+            "type": "string"
+          },
+          "global_direct_db": {
+            "description": "The `Global` row: each column's energetic sum over the bands, **an aggregate**.",
+            "format": "double",
+            "type": "number"
+          },
+          "global_total_eyring_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "global_total_sabine_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "label": {
+            "description": "The file's name without `.gabe`: exactly one `recepteur_ponctuel@lbl`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "file",
+          "bands",
+          "global_direct_db",
+          "global_total_sabine_db",
+          "global_total_eyring_db",
+          "aggregate"
+        ],
+        "type": "object"
+      },
+      "TcrReport": {
+        "description": "A TCR run: its values as TCR computed them, and `core::params`' analytic Sabine and Eyring\ntimes on the same inputs. TCR writes no time series, so every per-receiver parameter is\nrefused, `no_time_series`.",
+        "properties": {
+          "analytic": {
+            "$ref": "#/$defs/AnalyticReport"
+          },
+          "bands": {
+            "items": {
+              "$ref": "#/$defs/MainBand"
+            },
+            "type": "array"
+          },
+          "global": {
+            "$ref": "#/$defs/TcrGlobal"
+          },
+          "point_receivers": {
+            "items": {
+              "$ref": "#/$defs/TcrReceiverReport"
+            },
+            "type": "array"
+          },
+          "surfaces": {
+            "items": {
+              "$ref": "#/$defs/SurfaceSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "bands",
+          "global",
+          "point_receivers",
+          "surfaces",
+          "analytic"
+        ],
+        "type": "object"
+      },
+      "Theory": {
+        "description": "One theory's values in one band of `Main results.gabe`.",
+        "properties": {
+          "absorption_area_m2": {
+            "description": "`A_*`: the equivalent absorption area, m².",
+            "format": "double",
+            "type": "number"
+          },
+          "level_db": {
+            "description": "`L_*`: the reverberant field's level, dB.",
+            "format": "double",
+            "type": "number"
+          },
+          "reverberation_time_s": {
+            "description": "`TR_*`: the reverberation time, s.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "absorption_area_m2",
+          "reverberation_time_s",
+          "level_db"
+        ],
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "What `simpa results <run> --json` prints.",
+    "properties": {
+      "bands_hz": {
+        "description": "The computed bands, ascending.",
+        "items": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "results_version": {
+        "description": "[`REPORT_VERSION`].",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "run_folder": {
+        "description": "The run folder, as given.",
+        "type": "string"
+      },
+      "solver": {
+        "$ref": "#/$defs/SolverKind"
+      },
+      "spps": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/SppsReport"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Present for an SPPS run."
+      },
+      "started": {
+        "description": "`run.json`'s `started`.",
+        "type": "string"
+      },
+      "status": {
+        "$ref": "#/$defs/Status",
+        "description": "Always OK: any other run is refused."
+      },
+      "tcr": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/TcrReport"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Present for a TCR run."
+      },
+      "validated_by_bed": {
+        "description": "False until M8's physics bed passes: no number here may be shown to a user.",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "results_version",
+      "validated_by_bed",
+      "run_folder",
+      "solver",
+      "status",
+      "started",
+      "bands_hz"
+    ],
+    "title": "Report",
+    "type": "object"
+  }
+}
