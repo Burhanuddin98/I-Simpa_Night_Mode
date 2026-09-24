@@ -120,21 +120,25 @@ TetGen's numbers on the way, and both are needed to reproduce upstream's files:
    tests (`mesh/build.rs`).
 
 Markers go to every tetrahedron face holding a `.face` row's three vertices (`:369-381`), and
-`idVolume` is the `.ele` attribute unchanged (`:165, 868`).
+`idVolume` is the `.ele` attribute unchanged (`:165, 868`), and so it is in the meshes `core::mesh` builds
+(`docs/m5-m6-design.md`, decision 1): a fitting zone's solver id (2 and up) inside it, and the
+room's parts numbered by TetGen from one above the largest (1 without fitting zones;
+`tetgen.cxx:22352-22436`).
 
 **Evidence.** `crates/simpa-core/tests/mesh_mbin_parity.rs` builds tutorial 1's 2019 TetGen output
 (`tests/fixtures/upstream/tutorial1/tetgen/scene_mesh.1.*`) with `core::mesh` and gets upstream's
-2019 `tetramesh.mbin` (sha256 `8a6b3943dd47126b`, 234,492 bytes) byte for byte, except the 2,257
-`idVolume` fields that decision 1 writes as 0 (every one of them is 1 in upstream's file, as is
-every `.ele` attribute). With one step undone the comparison fails:
+2019 `tetramesh.mbin` (sha256 `8a6b3943dd47126b`, 234,492 bytes) byte for byte, `idVolume`
+included: every one is 1, TetGen's attribute for the one region, as in every `.ele` row
+(decision 1; until 2026-09-24 the builder wrote the room as 0, and the comparison refuses that
+file in exactly its 2,257 `idVolume` fields). With one step undone the comparison fails:
 - TetGen's own corner order: all 2,257 tetrahedron records differ (47,524 of their 56,425 `i32`
   fields);
 - no round trip: 230 of the 732 nodes differ, 198 of them in value by at most 2^-21 m
   (4.77e-7 m), the other 32 only in the sign of a zero.
 
 The same test rebuilds tutorial 3's 2019 `.mbin` (3,285 tetrahedra, 835 nodes, five regions,
-read from the upstream checkout's `tutorial_3.proj`) byte for byte with `build_mbin` given
-upstream's own region ids, the frame fitted to the 40 scene vertices of upstream's own `.cbin`:
+read from the upstream checkout's `tutorial_3.proj`) byte for byte with `build_mbin`, TetGen's
+region attributes written as they come, the frame fitted to the 40 scene vertices of upstream's own `.cbin`:
 `(9.548741, 5, -4, 0.10472585)`. That scene is no box of integers, so the frame's `f32`
 arithmetic is exercised for real. A frame one `f32` step off, or centred in the scene's axes
 rather than the GUI's, fails the tutorial-1 comparison.
@@ -144,7 +148,7 @@ the mesher Burhan chose ("Our own build",
 `docs/investigations/2026-09-23-upstream-meshing/DECISIONS.md`), gives TetGen's 2019 `.ele`,
 `.face` and `.neigh` (the command-line trailer apart) and its `.node` (the sign of the zeros in y
 apart: our `.poly` writes `0` where upstream's, back from the GL frame, wrote `-0`), and then
-upstream's 2019 `.mbin`, byte for byte except `idVolume`. A TetGen 1.6.0 build meshes that box
+upstream's 2019 `.mbin`, byte for byte. A TetGen 1.6.0 build meshes that box
 into 6 tetrahedra, and the test says so.
 
 Neither conversion changes an invariant below, which is why only a byte comparison can tell them
@@ -167,11 +171,8 @@ builds (`crates/simpa-core/src/mesh/build.rs`) keep them, and `mesh::verify` che
 - neighbours are mutual;
 - every tetrahedron has `(A−D)·((B−D)×(C−D)) < 0`.
 
-Two conventions of the meshes `core::mesh` builds depart from upstream's own, and nothing else
+One convention of the meshes `core::mesh` builds departs from upstream's own, and nothing else
 does (evidence above):
-- **`idVolume`** is 0 for the room and a fitting zone's solver id (2 and up) inside it
-  (decision 1). Upstream's meshes carry TetGen's attribute unchanged, so their room is 1, or the
-  largest fitting id plus 1 (`tetgen.cxx:24223-24306`).
 - **Box fitting zones** are TetGen facets with markers past the scene's faces; the builder writes
   those faces with marker -1 (decision 5), so they are plain tetrahedron-to-tetrahedron
   transitions and are not internal facets in the sense above.

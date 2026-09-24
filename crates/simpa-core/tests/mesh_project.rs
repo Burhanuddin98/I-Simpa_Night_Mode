@@ -78,7 +78,8 @@ fn the_box_meshes_with_its_own_settings() {
 
     let mesh = mbin::read_file(&dir.join("tetramesh.mbin")).unwrap();
     assert_eq!(invariants(&mesh), Vec::<String>::new());
-    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 0));
+    // The room as TetGen numbers it, 1 without fitting zones, written unchanged (decision 1).
+    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 1));
     let markers = marker_counts(&mesh);
     assert_eq!(
         markers.keys().copied().collect::<Vec<_>>(),
@@ -256,10 +257,10 @@ fn a_box_fitting_zone_is_its_own_region() {
     assert_eq!(invariants(&mesh), Vec::<String>::new());
     let volumes = volume_by_id(&mesh);
     println!("box with a zone: volume per idVolume {volumes:?}");
-    assert_eq!(volumes.keys().copied().collect::<Vec<_>>(), [0, 2]);
+    assert_eq!(volumes.keys().copied().collect::<Vec<_>>(), [2, 3]);
     let zone = volumes[&2];
     assert!(((zone - 1.0) / 1.0).abs() <= 1e-9, "zone volume {zone} m³");
-    assert!(((volumes[&0] + zone - 180.0) / 180.0).abs() <= 1e-9);
+    assert!(((volumes[&3] + zone - 180.0) / 180.0).abs() <= 1e-9);
     // The zone's triangles (markers 12..24) are plain tet-to-tet transitions.
     assert!(
         mesh.tetrahedra
@@ -269,13 +270,15 @@ fn a_box_fitting_zone_is_its_own_region() {
     );
     let stats = m.counts.build.as_ref().unwrap();
     assert!(stats.zone_tet_faces >= 24, "{stats:?}");
-    // TetGen gave the unseeded room the next attribute, 3; the builder wrote it as 0.
+    // TetGen gave the unseeded room the next attribute, 3, and the builder wrote it unchanged, as
+    // upstream does; the verifier took the room from 3 (VolumeIds::tetgen).
     let attrs: Vec<(i64, i32)> = stats
         .attributes
         .iter()
         .map(|a| (a.attribute, a.id_volume))
         .collect();
-    assert_eq!(attrs, [(2, 2), (3, 0)]);
+    assert_eq!(attrs, [(2, 2), (3, 3)]);
+    assert_eq!(m.volume_ids.room, 3);
 }
 
 #[test]
@@ -892,7 +895,7 @@ fn a_face_row_short_gives_a_mesh_the_invariants_refuse() {
         .unwrap()
         .scene;
     let unitize = mesh::Unitize::of_scene(&scene).unwrap();
-    let (built, _) = mesh::build_mbin(&out, 12, &[], &unitize).unwrap();
+    let (built, _) = mesh::build_mbin(&out, 12, &unitize).unwrap();
     let bad = invariants(&built);
     assert!(
         bad.iter().any(|s| s.starts_with("unmarked hull")),
@@ -1006,9 +1009,10 @@ fn a_surfaces_zone_marks_its_internal_facets_on_both_sides() {
     assert_eq!(invariants(&mesh), Vec::<String>::new());
     let volumes = volume_by_id(&mesh);
     println!("Surfaces zone: volume per idVolume {volumes:?}");
-    assert_eq!(volumes.keys().copied().collect::<Vec<_>>(), [0, 2]);
+    // The zone, 2, and the room as TetGen numbered it, 3.
+    assert_eq!(volumes.keys().copied().collect::<Vec<_>>(), [2, 3]);
     assert!((volumes[&2] - 1.0).abs() <= 1e-9, "{volumes:?}");
-    assert!((volumes[&0] - 179.0).abs() / 179.0 <= 1e-9, "{volumes:?}");
+    assert!((volumes[&3] - 179.0).abs() / 179.0 <= 1e-9, "{volumes:?}");
 
     // Per internal marker (12..24): as many .face rows as triangles, each on two tetrahedron
     // faces, and every one of those faces has a neighbour.

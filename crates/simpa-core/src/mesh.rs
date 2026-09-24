@@ -790,14 +790,8 @@ fn build_and_write(
         Ok(u) => u,
         Err(e) => return fail(m, codes::INPUT_INVALID, e),
     };
-    let built = TetgenOutput::read(paths).and_then(|out| {
-        build_mbin(
-            &out,
-            input.scene.faces.len(),
-            &input.volume_ids.fittings,
-            &unitize,
-        )
-    });
+    let built = TetgenOutput::read(paths)
+        .and_then(|out| build_mbin(&out, input.scene.faces.len(), &unitize));
     let (mesh, stats) = match built {
         Ok(b) => b,
         Err(e) => return fail(m, codes::TETGEN_OUTPUT_INVALID, e),

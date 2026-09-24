@@ -295,7 +295,7 @@ pub fn mesh_verify_cmd(args: &[&str]) -> ExitCode {
         return usage_error("mesh-verify needs one folder");
     };
     let room = match a.value("room-id").map(str::parse::<i32>).transpose() {
-        Ok(r) => r.unwrap_or(0),
+        Ok(r) => r,
         Err(_) => return usage_error("--room-id must be an integer"),
     };
     let fittings: Result<Vec<i32>, _> = a
@@ -305,7 +305,12 @@ pub fn mesh_verify_cmd(args: &[&str]) -> ExitCode {
     let Ok(fittings) = fittings else {
         return usage_error("--fittings must be integers separated by commas");
     };
-    let ids = verify::VolumeIds { room, fittings };
+    // TetGen's numbering for the fittings (the room from one above the largest), unless the room's
+    // first id is given.
+    let mut ids = verify::VolumeIds::tetgen(fittings);
+    if let Some(room) = room {
+        ids.room = room;
+    }
     let report = match verify::verify_dir(Path::new(dir), &ids) {
         Ok(r) => r,
         Err(e) => {

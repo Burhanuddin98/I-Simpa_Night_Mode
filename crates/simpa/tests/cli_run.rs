@@ -6,9 +6,10 @@
 //! - SPPS locates a source lying exactly on an internal facet of TetGen 1.6.0's 6-tetrahedron box
 //!   because the `.mbin` carries upstream's corner order; in TetGen's order the run is refused
 //!   before launch (`source_unlocatable`, exit 5), and `spps.exe` launched on those same inputs
-//!   crashes. The seeded box itself, meshed by TetGen 1.5.0 as upstream's 2019 mesh, is OK (gate
-//!   M6(a)), and so is the box with its source 5 cm away; each loses one particle of 10,000 by
-//!   meshing in one or two bands, as measured and pinned;
+//!   crashes. The seeded box itself, meshed by TetGen 1.5.0 as upstream's 2019 mesh, is OK and
+//!   loses per band no more particles than upstream's own mesh of the box, same seed (gate M6(a),
+//!   as Burhan judged it on 2026-09-24); the box with its source 5 cm away is OK too, its losses
+//!   measured and pinned;
 //! - `--mesh <dir>` reuses a mesh, and refuses a stale one (`mesh_out_of_date`, M5(d1)) or one
 //!   whose re-mesh was cancelled (`mesh_missing`, M5(d2)) before any solver starts;
 //! - a cancel exits 130 with the solver killed mid-run, and `simpa` itself killed mid-run leaves
@@ -352,18 +353,65 @@ fn lossy(l: &[(u64, u64, u64)]) -> Vec<(u64, u64, u64)> {
     l.iter().copied().filter(|&(_, a, b)| a + b > 0).collect()
 }
 
-/// Gate M6(a): the seeded box with SPPS runs OK. With TetGen 1.5.0, the mesher since decision 3,
-/// the box meshes to upstream's own 2019 tutorial mesh, 2,257 tetrahedra
-/// (`simpa-core/tests/mesh_mbin_parity.rs`), written in upstream's corner order; the tutorial's
-/// source is inside it by SPPS's own test (`run::locate`), and the run launches, exits 0 and
-/// writes all 65 files. With TetGen 1.6.0 the box was 6 tetrahedra with the source on an internal
-/// facet, which the facet test above shows refused in TetGen's corner order: that is the input
-/// that makes this gate say no.
+/// `Err` naming each band in which `ours` loses more particles than `reference`, by meshing or by
+/// infinite loops: gate M6(a)'s test ("no worse than upstream"), band by band, both runs having
+/// the same bands.
+fn no_worse(ours: &[(u64, u64, u64)], reference: &[(u64, u64, u64)]) -> Result<(), String> {
+    let bands = |l: &[(u64, u64, u64)]| l.iter().map(|b| b.0).collect::<Vec<_>>();
+    if bands(ours) != bands(reference) {
+        return Err(format!(
+            "the runs computed different bands: {:?} and {:?}",
+            bands(ours),
+            bands(reference)
+        ));
+    }
+    let worse: Vec<String> = ours
+        .iter()
+        .zip(reference)
+        .filter(|(o, r)| o.1 > r.1 || o.2 > r.2)
+        .map(|(o, r)| {
+            format!(
+                "{} Hz: ours loses {} by meshing and {} by loops, the reference {} and {}",
+                o.0, o.1, o.2, r.1, r.2
+            )
+        })
+        .collect();
+    if worse.is_empty() {
+        Ok(())
+    } else {
+        Err(worse.join("; "))
+    }
+}
+
+/// A mesh folder built by `mesh::mesh_from_tetgen` from the TetGen output set `base` in the
+/// fixture folder `tetgen_rel`, against the seeded box, for `simpa run --mesh`.
+fn box_mesh_from(root: &Path, name: &str, tetgen_rel: &str, base: &str) -> PathBuf {
+    let project = simpa_core::schema::load(&fixture(BOX)).unwrap();
+    let dir = root.join(name);
+    let mm = simpa_core::mesh::mesh_from_tetgen(&project, &fixture(tetgen_rel), Some(base), &dir)
+        .unwrap();
+    assert!(mm.is_ok(), "{mm:#?}");
+    dir
+}
+
+/// Gate M6(a), as Burhan judged it on 2026-09-24 at 05:13 ("No worse than upstream",
+/// `docs/investigations/2026-09-23-upstream-meshing/DECISIONS.md`): the seeded box with SPPS runs
+/// OK, and in no band loses more particles than upstream's own mesh of the same room, with the
+/// same seed and configuration. M6(c) judges the hall the same way.
 ///
-/// The gate text asks for none lost by meshing. SPPS loses one particle here, on upstream's own
-/// mesh; the parity bed (`parity_tutorials.rs`) shows the same statistics file from our tutorial-1
-/// inputs as from the original's, same seed. The counts below are measured and pinned, and the
-/// gate's wording is Burhan's and Michael's to settle.
+/// - **Ours:** `simpa run` meshes the box with TetGen 1.5.0, the mesher since decision 3, into
+///   2,257 tetrahedra in upstream's corner order; the tutorial's source is inside it by SPPS's own
+///   test (`run::locate`), and the run launches, exits 0 and writes all 65 files.
+/// - **Upstream's own mesh:** the TetGen output its GUI meshed tutorial 1 with on 2019-06-07
+///   (`tests/fixtures/upstream/tutorial1/tetgen`), built into a mesh folder whose `.mbin` must be
+///   the 2019 `tetramesh.mbin` byte for byte (sha256 `8a6b3943…`), then `simpa run --mesh` on it:
+///   the same project, seed 1 and 10,000 particles, 27 bands.
+/// - **Says no:** the same comparison against the 6-tetrahedron mesh TetGen 1.6.0 makes of the box
+///   (`tests/fixtures/solver-outputs/tutorial1/tetgen_scene_mesh.1.*`), which loses none: ours,
+///   which loses one particle at 2 kHz, is refused.
+///
+/// Measured on 2026-09-24: both 2,257-tetrahedron runs lose one particle by meshing at 2 kHz and
+/// none elsewhere.
 #[test]
 fn spps_runs_the_seeded_box_ok() {
     let root = scratch("run-spps-gate");
@@ -381,14 +429,54 @@ fn spps_runs_the_seeded_box_ok() {
         serde_json::from_str(&std::fs::read_to_string(run_dir(&m).join("mesh/mesh.json")).unwrap())
             .unwrap();
     assert_eq!(mm["counts"]["build"]["tetrahedra"], 2257);
-    // Measured on 2026-09-24 (seed 1, 10,000 particles, 27 bands): one particle lost by meshing
-    // at 2 kHz, none elsewhere. A change in the mesh, its corner order or the solver moves it.
-    let l = losses(&m);
-    println!(
-        "M6(a) bands with a loss (Hz, meshing, loops): {:?}",
-        lossy(&l)
+    let ours = losses(&m);
+
+    // Upstream's own mesh of the box, the same project.
+    let upstream_dir = box_mesh_from(
+        &root,
+        "upstream-2019",
+        "upstream/tutorial1/tetgen",
+        "scene_mesh",
     );
-    assert_eq!(lossy(&l), [(2000, 1, 0)]);
+    let upstream_mbin = std::fs::read(upstream_dir.join("tetramesh.mbin")).unwrap();
+    assert_eq!(
+        upstream_mbin,
+        std::fs::read(fixture("upstream/tutorial1/spps/tetramesh.mbin")).unwrap(),
+        "the reference mesh is upstream's 2019 tetramesh.mbin"
+    );
+    let arg = upstream_dir.display().to_string();
+    let u = run(&fixture(BOX), "spps", &root, &["--mesh", &arg]);
+    let um = json(&u);
+    summary("box SPPS on upstream's 2019 mesh", &u, &um);
+    assert_eq!(u.code, 0, "{u:#?}");
+    let reference = losses(&um);
+    println!(
+        "M6(a) bands with a loss (Hz, meshing, loops): ours {:?}, upstream's own mesh {:?}",
+        lossy(&ours),
+        lossy(&reference)
+    );
+    no_worse(&ours, &reference).unwrap();
+
+    // Says no: judged against a mesh of the box that loses fewer, ours is refused.
+    let six_dir = box_mesh_from(
+        &root,
+        "six-tetrahedra",
+        "solver-outputs/tutorial1",
+        "tetgen_scene_mesh",
+    );
+    let arg = six_dir.display().to_string();
+    let s = run(&fixture(BOX), "spps", &root, &["--mesh", &arg]);
+    assert_eq!(s.code, 0, "{s:#?}");
+    let six = losses(&json(&s));
+    assert!(lossy(&six).is_empty(), "{six:?}");
+    let refused = no_worse(&ours, &six).unwrap_err();
+    println!("M6(a) against the 6-tetrahedron mesh: {refused}");
+    assert!(
+        refused.starts_with("2000 Hz: ours loses 1 by meshing"),
+        "{refused}"
+    );
+    // And bands that do not line up are refused, not compared.
+    assert!(no_worse(&ours, &six[1..]).is_err());
 }
 
 #[test]

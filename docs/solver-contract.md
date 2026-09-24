@@ -441,7 +441,7 @@ order, and its status is OK exactly when it lists none.
 | `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry; its own codes and counts are in the detail. Exit class 3 |
 | `mesh_missing` | FAIL | before launch | `run --mesh <dir>`: the folder has no readable `mesh.json`, a manifest that is not `OK`, or no `tetramesh.mbin`; or the run's own mesh folder cannot be used. Exit class 4 |
 | `export_failed` | FAIL | before launch | `run`: the run folder's inputs cannot be written. `config_xml`'s writer refuses the project or the variant (its code, such as `variant_not_found`, is in the detail), or a mesh or directivity file cannot be copied. Exit class 2 |
-| `source_unlocatable` | FAIL | before launch | SPPS only, `run` and `run-folder`: a source that SPPS's own `f32` test puts in no tetrahedron of the `.mbin` (`coreinitialisation.cpp:71-95`, emulated by `run::locate`), such as a source exactly on an internal facet where the product rounds positive from both sides. SPPS would crash with `0xC0000005` before any particle runs (`sppsInitialisation.cpp:20`). The detail names each source, its number, name and position as SPPS stores it. Exit class 5, the solver is not launched. VERIFIED against `spps.exe` on 233 points on and near the seeded box's internal facets (`tests/run_locate.rs`) |
+| `source_unlocatable` | FAIL | before launch | SPPS only, `run` and `run-folder`: a source that SPPS's own `f32` test puts in no tetrahedron of the `.mbin` (`coreinitialisation.cpp:71-95`, emulated by `run::locate`), such as a source exactly on an internal facet where the product rounds positive from both sides. SPPS would crash with `0xC0000005` before any particle runs (`sppsInitialisation.cpp:20`). The detail names each source, its number in the project's order (`config.xml` lists them newest first, so the file's last is number 1), its name and its position as SPPS stores it. Exit class 5, the solver is not launched. VERIFIED against `spps.exe` on 233 points on and near the seeded box's internal facets (`tests/run_locate.rs`) |
 | `receiver_unlocatable` | FAIL | before launch | SPPS only, as `source_unlocatable`, for a point receiver (`coreinitialisation.cpp:178-212`). SPPS runs to the end, but the receiver collects energy only from where its never-written `indexTetra` leads (`coreTypes.h:425`; `sppsInitialisation.cpp:82-90`). VERIFIED on the box refined to 0.5 m³: 0 at 1000 Hz on the facet, a level 1 mm away (`tests/run_locate.rs`). Exit class 5 |
 | `launch_failed` | FAIL | exit | the solver cannot be started (`crate::process`), or its logs beside `solve/` cannot be created, so it is not started; or its process tree cannot be ended within 10 s of the kill. Exit class 5 |
 | `log_write_failed` | unchanged: a warning, never a reason | logs | writing `solver.stdout.txt` or `solver.stderr.txt` failed during the run. The lines were classified as they arrived, so the verdict stands and `run.json` is written; the logs are incomplete |
@@ -488,9 +488,11 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   `__RUNDIR__` in `config.xml` with the absolute `solve\` path, runs no project validator, and
   checks before launch:
   - **the mesh.** The `.mbin` that `tetrameshFileName` names must exist and read, the `.cbin`
-    that `modelName` names must read, and `mesh::verify` must pass them. The room id is the most
-    common `idVolume` that is no declared fitting's (0 in our meshes, 1 in upstream's), and the
-    fittings are the config's `encombrement` ids. Otherwise the reason is the mesher's
+    that `modelName` names must read, and `mesh::verify` must pass them. The fittings are the
+    config's `encombrement` ids, and the room's ids are TetGen's numbering above them, as both
+    upstream's meshes and ours carry them (`docs/m5-m6-design.md`, decision 1); with no fitting
+    declared, the room starts at the smallest `idVolume` in the mesh (1 from TetGen, 0 in upstream's
+    Python-binding mesh and Night Mode's broken hall). Otherwise the reason is the mesher's
     `mesh_invalid`, followed by the verifier's codes. This refuses the broken-hall TCR folder,
     which TCR itself runs to exit 0 (fixture `runs/tcr_broken_hall`).
   - **the bands.** Every source's spectrum must reach the position of the last computed band,

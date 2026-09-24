@@ -674,9 +674,15 @@ def mesh_check(folder: Path, cfg: Config, simpa: Simpa) -> dict:
     scale = max([1.0] + [abs(x) for v in verts for x in v])
     tol = 32 * 2.0 ** -24 * scale
     covered = set()
-    ids = collections.Counter(t[1] for t in tets)
-    room = ids.most_common(1)[0][0] if ids else None
-    allowed = {room} | set(cfg.fittings())
+    # run-folder's volume ids (run/manager.rs, volume_ids): with fittings declared, TetGen's
+    # numbering, the room from one above the largest; without, the room from the smallest id
+    # (None for a mesh with no tetrahedron, where nothing is judged). An id is known when it is a
+    # fitting's or at least the room's.
+    fittings = set(cfg.fittings())
+    if fittings:
+        room = max(max(fittings), 0) + 1
+    else:
+        room = min((t[1] for t in tets), default=None)
     for k, (corners, idv, fcs) in enumerate(tets):
         if any(not 0 <= x < nn for x in corners) or any(
                 not 0 <= x < nn for fv, _, _ in fcs for x in fv) or any(n >= nt for _, _, n in fcs):
@@ -687,7 +693,7 @@ def mesh_check(folder: Path, cfg: Config, simpa: Simpa) -> dict:
         edge = max(math.dist(p, q) for p in (A, B, C, D) for q in (A, B, C, D))
         repeated = len(set(corners)) < 4
         shapes.append((repeated, 0.0 if repeated else abs(det) / edge ** 3, det >= 0))
-        if idv not in allowed:
+        if idv not in fittings and idv < room:
             c["unknown_volume_ids"] += 1
         for fv, marker, n in fcs:
             if n < 0 and marker < 0:
@@ -843,10 +849,13 @@ def location_check(folder: Path, cfg: Config, pre: dict) -> dict:
     for kind, tag, label, code in (("source", "sources", "name", "source_unlocatable"),
                                    ("point receiver", "recepteursp", "lbl", "receiver_unlocatable")):
         node = cfg.root.find(tag)
-        for i, e in enumerate([] if node is None else list(node), 1):
+        items = [] if node is None else list(node)
+        for k, e in enumerate(items):
             p = [to_float(e.get(a, "")) for a in ("x", "y", "z")]
             if None in p or any(not any(outside(a, n, p) for a, n in t) for t in tets):
                 continue
+            # Numbered in the project's order: config.xml lists them newest first (run/locate.rs).
+            i = len(items) - k
             lost.append(f"{kind} {i} \"{e.get(label, '')}\" at ({', '.join(f'{x:g}' for x in p)})")
             if code not in codes:
                 codes.append(code)

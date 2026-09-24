@@ -82,7 +82,7 @@ with `read_manifest`, which uses the crate's correctly rounded JSON reader
 | `tetgen` | object or null | the TetGen call: `program`, `program_sha256` (hashed after the run, so hashing does not delay the launch), `argv` (after the program), `cwd` (`.`), `exit_code` (raw `u32`, null when cancelled), `cancelled`, `elapsed_ms`. For `external`, `program` and `argv` come from the `.1.face` trailer, `cwd` is the TetGen folder, and there is no hash, exit code or time |
 | `files` | object | sha256 (64 lowercase hex digits) of `poly`, `var`, `cbin` and `mbin`; null for a file not written |
 | `counts` | object | `scene_vertices`, `scene_faces`, `poly_vertices`, `poly_facets`, `regions`, `var_constraints`, and `build` (below) once TetGen's output was read |
-| `volume_ids` | object | `room` (0) and `fittings` (the seeded solver ids): the `idVolume` values the `.mbin` may carry |
+| `volume_ids` | object | `fittings` (the seeded solver ids) and `room`, the room's first id as TetGen numbers it, one above the largest fitting or 1 (`VolumeIds::tetgen`; its further parts carry the ids above): the `idVolume` values the `.mbin` may carry (`docs/m5-m6-design.md`, decision 1) |
 | `zone_facets` | array | per box fitting zone: `zone` (its name), `solver_id`, `first_marker` of its 12 triangles |
 | `skipped_rows` | integer | rows of `scene_mesh_skipped.face` |
 | `skipped_facets` | array | per distinct skipped marker, ascending: `marker`, `scene_face` (when the marker is one), `group` (its surface group), `fitting_zone` (when it is a box zone's triangle) |
@@ -94,8 +94,8 @@ with `read_manifest`, which uses the crate's correctly rounded JSON reader
 `counts.build` holds `nodes`, `tetrahedra`, `face_rows` (of the `.1.face`), `marked_tet_faces`
 (tetrahedron faces written with a scene marker, both sides of an internal facet counted),
 `zone_tet_faces` (faces on box-zone triangles, written -1), `hull_tet_faces` (neighbour -2), and
-`attributes`: each TetGen region attribute seen, the `idVolume` written for it and its number of
-tetrahedra.
+`attributes`: each TetGen region attribute seen, the `idVolume` written for it (the attribute
+itself, decision 1) and its number of tetrahedra.
 
 `self_intersection` holds `stop`, the pair TetGen named before it stopped (an intersection as
 below, with `message` its `Found ...` line), or null when it named none; `pairs`, every pair of
@@ -172,7 +172,7 @@ items, and its code is spelled as its field. A mesh passes exactly when every co
 | `asymmetric_internal_faces` | marked faces whose neighbour's shared face carries a different marker: internal facets are marked on both sides (decision 6) |
 | `marker_geometry_mismatches` | marked faces with a node farther than 16·2⁻²⁴·R from the scene face their marker names, R being the scene's largest \|coordinate\| |
 | `uncovered_scene_faces` | scene faces no tetrahedron face carries (the report lists the first 20) |
-| `unknown_volume_ids` | tetrahedra whose `idVolume` is neither the room's nor a declared fitting's |
+| `unknown_volume_ids` | tetrahedra whose `idVolume` is no declared fitting's and below the room's first id (TetGen's numbering; a room written 0 beside it, for one) |
 
 `verify_dir` adds what only the folder shows. The mesher's `tetgen_skipped_facets`,
 `neigh_missing` and `tetgen_output_missing` (above) mean the same there, for TetGen output under
@@ -202,8 +202,8 @@ The mesher before decision 3 moved to TetGen 1.5.0; kept as the record of what 1
 | Mesh | Flags | Result |
 |---|---|---|
 | tutorial 1's box | `-pq2 -A -n` + `.var` | 8 nodes, 6 tetrahedra; TetGen 9-19 ms (the `.var` is inert, `docs/formats/var.md`) |
-| the box with a box fitting zone (1, 1, 0.5)-(2, 2, 1.5) | `-pq2 -A -n` + `.var` | zone volume 1.000 m³ (idVolume 2), room 179.000 m³ (TetGen's attribute 3, written 0) |
-| the box with a `Surfaces` zone: an inner box of 12 scene faces | `-pq2 -A -n` + `.var` | zone 1.000 m³ (idVolume 2), room 179.000 m³; each inner-box triangle marked on both of its tetrahedron faces |
+| the box with a box fitting zone (1, 1, 0.5)-(2, 2, 1.5) | `-pq2 -A -n` + `.var` | zone volume 1.000 m³ (idVolume 2), room 179.000 m³ (TetGen's attribute 3, written unchanged; 0 before decision 1 was reversed on 2026-09-24) |
+| the box with a `Surfaces` zone: an inner box of 12 scene faces | `-pq2 -A -n` + `.var` | zone 1.000 m³ (idVolume 2), room 179.000 m³ (idVolume 3); each inner-box triangle marked on both of its tetrahedron faces |
 | the corrected hall | `-pq2 -A -n` | 29,472 nodes, 123,718 tetrahedra, 36,716 `.face` rows covering all 7,860 scene faces; TetGen 1,074-1,310 ms, `mesh_project` 1,992-2,230 ms |
 | the hall, cancelled 50 ms after TetGen's launch | `-pq2 -A -n` | TetGen launched 36-45 ms into the call (debug build: the inputs are built and hashed first), killed after 58-69 ms of running, `CANCELLED` 108-119 ms after the call started; no `.1.ele`, no `.mbin` |
 | the survey's self-intersecting cube | `-pq5 -A -n -Y` | exit 3, skipped markers 8, 9, 12, no `.1.neigh`, no `.mbin` |

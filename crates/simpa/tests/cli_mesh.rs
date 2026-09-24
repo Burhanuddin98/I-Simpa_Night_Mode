@@ -66,10 +66,19 @@ fn the_box_meshes_and_verifies() {
         "box: {} tetrahedra, TetGen {:.0} ms, simpa mesh {:.0} ms",
         r["mesh"]["tetrahedra"], m["tetgen"]["elapsed_ms"], o.ms
     );
-    // The same folder read with upstream's room id: every tetrahedron is then unknown.
-    let wrong = verify(&out, &["--room-id", "1"]);
+    // Every tetrahedron carries TetGen's room, 1, as upstream's tutorial mesh does (decision 1):
+    // the folder passes with upstream's ids given explicitly, and fails read as the mesh of a
+    // project with one fitting zone, 2, whose room TetGen would number from 3.
+    assert_eq!(r["mesh"]["volume_by_id"].as_object().unwrap().len(), 1);
+    assert!(r["mesh"]["volume_by_id"]["1"].is_number(), "{}", r["mesh"]);
+    let upstream = verify(&out, &["--room-id", "1"]);
+    assert_eq!(upstream.code, 0, "{upstream:#?}");
+    let wrong = verify(&out, &["--fittings", "2"]);
     assert_eq!(wrong.code, 4, "{wrong:#?}");
-    assert!(strings(&json(&wrong)["codes"]).contains(&"unknown_volume_ids".to_string()));
+    assert_eq!(
+        strings(&json(&wrong)["codes"]),
+        ["unknown_volume_ids".to_string()]
+    );
 
     // --from-tetgen builds the same .mbin from that TetGen output, with no TetGen run.
     let again = scratch("mesh-box-external");
@@ -172,12 +181,27 @@ fn a_self_intersecting_poly_is_refused_and_the_broken_hall_fails_verification() 
         plain.stdout
     );
 
-    let v = verify(&fixture("meshes/broken_hall"), &[]);
+    // Night Mode's own .mbin of the broken hall writes the room as 0: read so, its codes are the
+    // folder's and the mesh's own; read with TetGen's numbering, every tetrahedron is also unknown.
+    let v = verify(&fixture("meshes/broken_hall"), &["--room-id", "0"]);
     assert_eq!(v.code, 4, "{v:#?}");
     let r = json(&v);
-    let codes = strings(&r["codes"]);
-    assert_eq!(codes[..2], ["tetgen_skipped_facets", "neigh_missing"]);
+    assert_eq!(
+        strings(&r["codes"]),
+        [
+            "tetgen_skipped_facets",
+            "neigh_missing",
+            "degenerate_tets",
+            "unmarked_boundary_faces",
+            "uncovered_scene_faces"
+        ]
+    );
     assert_eq!(r["skipped_facets"], 535);
+    let v = verify(&fixture("meshes/broken_hall"), &[]);
+    assert_eq!(v.code, 4, "{v:#?}");
+    let codes = strings(&json(&v)["codes"]);
+    assert_eq!(codes[..2], ["tetgen_skipped_facets", "neigh_missing"]);
+    assert_eq!(codes.last().map(String::as_str), Some("unknown_volume_ids"));
 }
 
 #[test]

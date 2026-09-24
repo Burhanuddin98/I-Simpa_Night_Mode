@@ -22,8 +22,9 @@
 #     no solver starts. (d2) A re-mesh cancelled 1 ms into TetGen leaves no tetramesh.mbin, and
 #     `run --mesh <dir>` exits 4 with mesh_missing.
 # (e) A fitting zone in the box (rooms/tutorial1_box_fitting.simpa): room tetrahedra carry
-#     idVolume 0, only tetrahedra inside the zone carry its solver id 2 (decision 1), and the id-2
-#     volume equals the zone's 1 m3 to 1e-9 relative.
+#     idVolume 3, the attribute TetGen gives the region no seed reaches (one above the zone's seed),
+#     written unchanged as upstream writes it; only tetrahedra inside the zone carry its solver id 2
+#     (decision 1, reversed 2026-09-24); and the id-2 volume equals the zone's 1 m3 to 1e-9 relative.
 # (f) The oracle dump of every .mbin this gate wrote equals the Rust dump
 #     (tools/oracle/diff.ps1 -Corpus <work> -Generated 0: mismatches 0).
 # (g) `simpa mesh rooms/elmia_corrected.simpa --cancel-after-ms 50` exits 130 with TetGen killed
@@ -33,8 +34,8 @@
 # - a clause's own refusal sits beside it, named "says NO";
 # - the checks that only claim a mesh was built ((a) box, (b) hall, (c) raw-.poly control,
 #   (e) fitting) share one "meshed" predicate, which must refuse tg_bad's result;
-# - mesh-verify's clean verdicts in (a), (b) and (e) are refused by (a)'s read with room id 1
-#   and by (c)'s broken hall;
+# - mesh-verify's clean verdicts in (a), (b) and (e) are refused by (a)'s read as the mesh of a
+#   project with one fitting zone (--fittings 2, TetGen's room from 3) and by (c)'s broken hall;
 # - the tail (tests, clippy, fmt) must pass a clean scratch crate and refuse a copy with one
 #   planted fault each, and the tests that need upstream's tree or the solvers must FAIL, with
 #   their panic, when those are missing.
@@ -261,8 +262,8 @@ Check "(a) mesh-verify: unmarked_boundary_faces, degenerate_tets, uncovered_scen
     $r.Exit -eq 0 -and $x.tetrahedra -gt 0 -and $x.unmarked_boundary_faces -eq 0 -and $x.degenerate_tets -eq 0 -and $x.uncovered_scene_faces -eq 0 -and
         $x.index_errors -eq 0 -and $x.inverted_tets -eq 0 -and $x.misordered_faces -eq 0 -and @($r.Json.codes).Count -eq 0
 }
-Check "(a) says NO: the same folder read with upstream's room id 1 fails (exit 4, unknown_volume_ids)" {
-    $r = Simpa @('mesh-verify', $boxMesh, '--json', '--room-id', '1') 'verify-box-room1'
+Check "(a) says NO: the same folder read as a project with one fitting zone, 2 (TetGen's room from 3), fails (exit 4, unknown_volume_ids)" {
+    $r = Simpa @('mesh-verify', $boxMesh, '--json', '--fittings', '2') 'verify-box-fitting2'
     Write-Host "      exit $($r.Exit), codes [$(@($r.Json.codes) -join ', ')]"
     $r.Exit -eq 4 -and (@($r.Json.codes) -contains 'unknown_volume_ids')
 }
@@ -380,7 +381,8 @@ Check "(c) says NO: a clean raw .poly gives no tetgen_self_intersection and no s
     -not (@($r.Json.codes) -contains 'tetgen_self_intersection') -and $null -eq $r.Json.self_intersection
 }
 Check "(c) broken hall: mesh-verify exit 4 with tetgen_skipped_facets (535) and neigh_missing" {
-    $r = Simpa @('mesh-verify', (Join-Path $fx 'meshes\broken_hall'), '--json') 'verify-broken-hall'
+    # Night Mode's own .mbin of the hall writes the room as 0, not TetGen's 1.
+    $r = Simpa @('mesh-verify', (Join-Path $fx 'meshes\broken_hall'), '--json', '--room-id', '0') 'verify-broken-hall'
     $codes = @($r.Json.codes)
     Write-Host "      exit $($r.Exit), codes [$($codes -join ', ')], skipped facets $($r.Json.skipped_facets)"
     $r.Exit -eq 4 -and ($codes -contains 'tetgen_skipped_facets') -and ($codes -contains 'neigh_missing') -and $r.Json.skipped_facets -eq 535
@@ -425,7 +427,8 @@ Check "(d2) a re-mesh cancelled 1 ms into TetGen: exit 130, CANCELLED, no tetram
 $fitMesh = Join-Path $work 'fitting-mesh'
 $zoneLo = @(1.0, 1.0, 0.5); $zoneHi = @(2.0, 2.0, 1.5)
 # Per idVolume: tetrahedra, volume, and how many sit on the wrong side of the zone box: an id-2
-# tetrahedron with a corner outside it, or an id-0 one whose centroid is strictly inside it.
+# tetrahedron with a corner outside it, or a room one (id 3, TetGen's) whose centroid is strictly
+# inside it.
 function ZoneCensus($m, $lo, $hi) {
     $eps = 1e-6
     $s = @{ n0 = 0; n2 = 0; other = 0; v0 = 0.0; v2 = 0.0; out2 = 0; in0 = 0 }
@@ -435,7 +438,7 @@ function ZoneCensus($m, $lo, $hi) {
         if ($t.id -eq 2) {
             $s.n2++; $s.v2 += $vol
             foreach ($q in $p) { for ($c = 0; $c -lt 3; $c++) { if ($q[$c] -lt $lo[$c] - $eps -or $q[$c] -gt $hi[$c] + $eps) { $s.out2++; break } } }
-        } elseif ($t.id -eq 0) {
+        } elseif ($t.id -eq 3) {
             $s.n0++; $s.v0 += $vol
             $inside = $true
             for ($c = 0; $c -lt 3; $c++) { $g = ($p[0][$c] + $p[1][$c] + $p[2][$c] + $p[3][$c]) / 4; if (-not ($g -gt $lo[$c] + $eps -and $g -lt $hi[$c] - $eps)) { $inside = $false } }
@@ -445,22 +448,22 @@ function ZoneCensus($m, $lo, $hi) {
     $s
 }
 $script:fitM = $null
-Check "(e) the box with one fitting zone meshes: exit 0, OK, volume_ids room 0 and fittings [2]; mesh-verify --fittings 2 passes" {
+Check "(e) the box with one fitting zone meshes: exit 0, OK, volume_ids room 3 and fittings [2]; mesh-verify --fittings 2 passes" {
     $r = Simpa @('mesh', $fitRoom, '--out', $fitMesh, '--json') 'mesh-fitting'
     $v = Simpa @('mesh-verify', $fitMesh, '--json', '--fittings', '2') 'verify-fitting'
     Write-Host "      exit $($r.Exit), $($r.Json.status), room $($r.Json.volume_ids.room), fittings [$(@($r.Json.volume_ids.fittings) -join ', ')], $($r.Json.counts.build.tetrahedra) tetrahedra; verify exit $($v.Exit) [$(@($v.Json.codes) -join ', ')], volume by id $($v.Json.mesh.volume_by_id | ConvertTo-Json -Compress)"
-    (Meshed $r $fitMesh) -and $r.Json.volume_ids.room -eq 0 -and (@($r.Json.volume_ids.fittings) -join ',') -eq '2' -and $v.Exit -eq 0 -and @($v.Json.codes).Count -eq 0
+    (Meshed $r $fitMesh) -and $r.Json.volume_ids.room -eq 3 -and (@($r.Json.volume_ids.fittings) -join ',') -eq '2' -and $v.Exit -eq 0 -and @($v.Json.codes).Count -eq 0
 }
-Check "(e) room tetrahedra are 0, only tetrahedra inside the zone (1,1,0.5)-(2,2,1.5) are 2, id-2 volume = 1 m3 to 1e-9 relative" {
+Check "(e) room tetrahedra are 3 (TetGen's), only tetrahedra inside the zone (1,1,0.5)-(2,2,1.5) are 2, id-2 volume = 1 m3 to 1e-9 relative" {
     $script:fitM = Read-Mbin (Join-Path $fitMesh 'tetramesh.mbin')
     $s = ZoneCensus $script:fitM $zoneLo $zoneHi
     $rel = [math]::Abs($s.v2 - 1.0) / 1.0
-    Write-Host "      id 2: $($s.n2) tets, $($s.v2) m3 (relative error $rel), $($s.out2) outside the zone; id 0: $($s.n0) tets, $($s.v0) m3, $($s.in0) inside the zone; other ids: $($s.other)"
+    Write-Host "      id 2: $($s.n2) tets, $($s.v2) m3 (relative error $rel), $($s.out2) outside the zone; id 3: $($s.n0) tets, $($s.v0) m3, $($s.in0) inside the zone; other ids: $($s.other)"
     $s.n2 -gt 0 -and $s.out2 -eq 0 -and $s.in0 -eq 0 -and $s.other -eq 0 -and $rel -le 1e-9 -and [math]::Abs($s.v0 + $s.v2 - 180) / 180 -le 1e-9
 }
 Check "(e) says NO: the same census against the zone moved 0.5 m in x finds id-2 tetrahedra outside it" {
     $s = ZoneCensus $script:fitM @(1.5, 1.0, 0.5) @(2.5, 2.0, 1.5)
-    Write-Host "      $($s.out2) id-2 tets outside the moved zone, $($s.in0) id-0 tets inside it"
+    Write-Host "      $($s.out2) id-2 tets outside the moved zone, $($s.in0) id-3 tets inside it"
     $s.out2 -gt 0
 }
 

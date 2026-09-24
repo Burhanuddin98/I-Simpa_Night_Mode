@@ -65,7 +65,8 @@ fn the_corrected_hall_meshes() {
 
     let mesh = mbin::read_file(&r.dir.join("tetramesh.mbin")).unwrap();
     assert_eq!(invariants(&mesh), Vec::<String>::new());
-    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 0));
+    // One region, TetGen's attribute 1, written unchanged (decision 1).
+    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 1));
     let in_mbin: BTreeSet<i32> = mesh
         .tetrahedra
         .iter()

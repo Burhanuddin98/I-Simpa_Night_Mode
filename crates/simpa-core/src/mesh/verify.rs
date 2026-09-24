@@ -10,7 +10,7 @@
 //! Every count is a number of offending items and has a reason code spelled as its field. A mesh
 //! passes exactly when every count is 0.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -30,14 +30,44 @@ pub const FACE_CORNERS: [[usize; 3]; 4] = [[1, 3, 2], [2, 3, 0], [0, 3, 1], [1, 
 /// How many uncovered scene faces [`VerifyReport::uncovered_scene_faces_first`] lists.
 pub const UNCOVERED_LISTED: usize = 20;
 
-/// What [`verify_mesh`] accepts as volume ids. The default is this crate's convention: room 0,
-/// no fittings.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// What [`verify_mesh`] accepts as volume ids: TetGen's region numbering, which upstream's GUI
+/// writes into the `.mbin` unchanged, and so does this crate's builder (`docs/m5-m6-design.md`,
+/// decision 1).
+///
+/// TetGen's `-A` gives each seeded region its seed's attribute, a fitting zone's solver id, and
+/// each region no seed reaches the next number above the largest seed, one per region
+/// (`tetgen.cxx:22403-22436`): the room is 1 without fitting zones, and its parts are
+/// `room, room + 1, ...` (tutorial 3's room is three regions, 2084 to 2086, above its fittings
+/// 1930 and 2083). An id is known when it is a fitting's or at least `room`; anything else,
+/// such as a room written 0 beside TetGen's numbering, is `unknown_volume_ids`.
+///
+/// The default is a mesh without fitting zones: room 1 ([`VolumeIds::tetgen`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VolumeIds {
-    /// The id room tetrahedra carry: 0 for meshes this crate builds, 1 for upstream's own.
+    /// The room's first id; its further parts carry the ids above it.
     pub room: i32,
     /// The solver ids of the enabled fitting zones.
     pub fittings: Vec<i32>,
+}
+
+impl VolumeIds {
+    /// TetGen's numbering for regions seeded with `fittings`: the room starts one above the
+    /// largest seed, or at 1 without one (`maxattr` starts at 0, `tetgen.cxx:22357, 22404`).
+    pub fn tetgen(fittings: Vec<i32>) -> Self {
+        let room = fittings.iter().copied().max().unwrap_or(0).max(0) + 1;
+        VolumeIds { room, fittings }
+    }
+
+    /// Whether a tetrahedron may carry `id`: a fitting's id, or a room part's.
+    pub fn knows(&self, id: i32) -> bool {
+        self.fittings.contains(&id) || id >= self.room
+    }
+}
+
+impl Default for VolumeIds {
+    fn default() -> Self {
+        VolumeIds::tetgen(Vec::new())
+    }
 }
 
 /// The result of [`verify_mesh`]. Every count is a number of offending items; `codes` lists the
@@ -80,7 +110,8 @@ pub struct VerifyReport {
     /// first 20 face indices.
     pub uncovered_scene_faces: usize,
     pub uncovered_scene_faces_first: Vec<u32>,
-    /// Tetrahedra whose `idVolume` is neither the room's nor a fitting's (`unknown_volume_ids`).
+    /// Tetrahedra whose `idVolume` is neither a fitting's nor a room part's, that is below
+    /// [`VolumeIds::room`] and no fitting's (`unknown_volume_ids`).
     pub unknown_volume_ids: usize,
     /// Total volume in cubic metres per `idVolume`.
     pub volume_by_id: BTreeMap<i32, f64>,
@@ -149,13 +180,9 @@ pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> V
             .and_then(|i| mesh.nodes.get(i))
             .map(|p| p.map(f64::from))
     };
-    let known: BTreeSet<i32> = std::iter::once(ids.room)
-        .chain(ids.fittings.iter().copied())
-        .collect();
-
     // Pass 1, per tetrahedron: indices, volume ids, degeneracy, orientation, face order.
     for tet in &mesh.tetrahedra {
-        if !known.contains(&tet.id_volume) {
+        if !ids.knows(tet.id_volume) {
             r.unknown_volume_ids += 1;
         }
         for face in &tet.faces {

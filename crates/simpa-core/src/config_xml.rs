@@ -73,13 +73,15 @@
 //! [`WriteError::SharedSolverId`].
 //!
 //! Fitting ids start at 2 because TetGen's `-A` numbers a region that no region seed marks with
-//! the next integer above the largest seeded attribute, starting from 1 (`tetgen.cxx:24218-24300`):
-//! a mesh made with no fitting regions gives every room tetrahedron the attribute 1, and
-//! upstream's meshes keep it, so tutorial 1's `tetramesh.mbin` carries the room as `idVolume` 1.
-//! The `.mbin` builder of [`crate::mesh`] does not: it writes the room as `idVolume` 0, the
-//! solver's "main volume" (`coreTypes.h:445`), and a seeded fitting as its own id
-//! (`docs/m5-m6-design.md`, decision 1). To the solver `idVolume` 0 means no fitting. So no
-//! fitting id can be 0, nor 1, the room's attribute in TetGen's output and upstream's meshes.
+//! the next integer above the largest seeded attribute, starting from 1 (TetGen 1.5.0,
+//! `tetgen.cxx:22403-22436`): a mesh made with no fitting regions gives every room tetrahedron the
+//! attribute 1, and upstream's meshes keep it, so tutorial 1's `tetramesh.mbin` carries the room
+//! as `idVolume` 1. The `.mbin` builder of [`crate::mesh`] writes the attribute unchanged too
+//! (`docs/m5-m6-design.md`, decision 1): a seeded fitting carries its own id and the room's parts
+//! the ids above the largest one. To the solver `idVolume` 0 means no fitting, and any other id
+//! that no `encombrement` declares a NULL fitting, handed to the tetrahedron's scene faces
+//! (`coreinitialisation.cpp:151-176`). So no fitting id can be 0, nor 1, the room's attribute
+//! in TetGen's output and upstream's meshes.
 //!
 //! # Variants
 //!

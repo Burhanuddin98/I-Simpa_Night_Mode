@@ -177,7 +177,8 @@ fn the_same_cube_without_the_piercing_facet_meshes() {
     markers.sort_unstable();
     markers.dedup();
     assert_eq!(markers, (0..12).collect::<Vec<i32>>());
-    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 0));
+    // One region, TetGen's attribute 1, written unchanged (decision 1).
+    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 1));
 }
 
 #[test]

@@ -980,9 +980,9 @@ pub struct PreLaunch {
 /// The checks `run_folder` makes on a working folder before launch, in place of the project
 /// validator (`docs/m5-m6-design.md`, "Run folder", and decision 11):
 /// - **the mesh:** the `.mbin` `tetrameshFileName` names must exist and read, the `.cbin`
-///   `modelName` names must read, and [`verify::verify_mesh`] must pass them, with the room id
-///   the most common `idVolume` that is not a declared fitting's, and the fittings the config's
-///   `encombrement` ids. Anything else is `mesh_invalid`, followed by the verifier's codes;
+///   `modelName` names must read, and [`verify::verify_mesh`] must pass them, with the fittings
+///   the config's `encombrement` ids and the room's first id as `volume_ids` chooses it. Anything
+///   else is `mesh_invalid`, followed by the verifier's codes;
 /// - **the bands:** every source's spectrum must reach every computed band. Spectra are mapped
 ///   to bands by position (Part A, `band_set_mismatch`), so a source with fewer entries than a
 ///   computed band's position is read past its end, and nothing after the run shows it.
@@ -1076,15 +1076,12 @@ fn mesh_check(solve: &Path, doc: &Document, out: &mut PreLaunch) {
                 .collect()
         })
         .unwrap_or_default();
-    let ids = verify::VolumeIds {
-        room: room_id(&mesh, &fittings),
-        fittings,
-    };
+    let ids = volume_ids(&mesh, fittings);
     let report = verify::verify_mesh(&mesh, &scene, &ids);
     if !report.passed() {
         let counts = serde_json::to_value(&report).unwrap_or_default();
         out.reasons.push(invalid(format!(
-            "{} fails mesh::verify with room id {}: {}",
+            "{} fails mesh::verify with the room from id {}: {}",
             mbin_path.display(),
             ids.room,
             report.codes.join(", ")
@@ -1098,21 +1095,26 @@ fn mesh_check(solve: &Path, doc: &Document, out: &mut PreLaunch) {
     out.verify = Some(report);
 }
 
-/// The most common `idVolume` that no declared fitting has, the smallest on a tie; 0 when every
-/// tetrahedron is a fitting's.
-fn room_id(mesh: &mbin::Mesh, fittings: &[i32]) -> i32 {
-    let mut count: std::collections::BTreeMap<i32, usize> = Default::default();
-    for t in mesh
+/// The volume ids a run folder's `.mbin` is checked with, with no project to say how it was
+/// meshed:
+/// - with fitting zones declared (`encombrement` ids), TetGen's numbering for them
+///   ([`verify::VolumeIds::tetgen`]): the room's parts above the largest fitting id, as upstream's
+///   GUI and this crate's mesher both write them (tutorial 3: fittings 1930 and 2083, room 2084
+///   to 2086), so an id below that is no fitting's is `unknown_volume_ids`;
+/// - with none, the room starts at the smallest `idVolume` in the mesh: TetGen's 1, and also the
+///   0 some upstream meshes carry (its Python-binding test mesh, and Night Mode's broken hall),
+///   which the solver reads as the room too (`coreTypes.h:445`); 1 for an empty mesh.
+fn volume_ids(mesh: &mbin::Mesh, fittings: Vec<i32>) -> verify::VolumeIds {
+    if !fittings.is_empty() {
+        return verify::VolumeIds::tetgen(fittings);
+    }
+    let room = mesh
         .tetrahedra
         .iter()
-        .filter(|t| !fittings.contains(&t.id_volume))
-    {
-        *count.entry(t.id_volume).or_default() += 1;
-    }
-    count
-        .into_iter()
-        .max_by(|a, b| a.1.cmp(&b.1).then(b.0.cmp(&a.0)))
-        .map_or(0, |(id, _)| id)
+        .map(|t| t.id_volume)
+        .min()
+        .unwrap_or(1);
+    verify::VolumeIds { room, fittings }
 }
 
 /// `pre_launch`'s band check: each source's spectrum reaches every computed band's position.
@@ -1501,7 +1503,7 @@ mod tests {
     }
 
     #[test]
-    fn the_room_is_the_most_common_id_that_is_no_fitting() {
+    fn a_run_folders_ids_follow_tetgens_numbering() {
         let tet = |id_volume| mbin::Tetrahedron {
             vertices: [0; 4],
             id_volume,
@@ -1511,13 +1513,25 @@ mod tests {
             nodes: Vec::new(),
             tetrahedra: ids.iter().map(|&i| tet(i)).collect(),
         };
-        assert_eq!(room_id(&mesh(&[1, 1, 2]), &[]), 1);
-        // A fitting larger than the room is still not the room.
-        assert_eq!(room_id(&mesh(&[0, 2, 2, 2]), &[2]), 0);
-        // A tie goes to the smaller id; no room at all gives 0.
-        assert_eq!(room_id(&mesh(&[3, 1]), &[]), 1);
-        assert_eq!(room_id(&mesh(&[2]), &[2]), 0);
-        assert_eq!(room_id(&mesh(&[]), &[]), 0);
+        let unknown = |ids: &[i32], fittings: &[i32]| -> Vec<i32> {
+            let v = volume_ids(&mesh(ids), fittings.to_vec());
+            ids.iter().copied().filter(|&i| !v.knows(i)).collect()
+        };
+        // Tutorial 3's run folders: two fittings, the room in three parts above them.
+        assert_eq!(
+            volume_ids(&mesh(&[2084, 1930, 2085, 2083, 2086]), vec![1930, 2083]).room,
+            2084
+        );
+        assert!(unknown(&[2084, 1930, 2085, 2083, 2086], &[1930, 2083]).is_empty());
+        // With fittings, a room written 0 (this crate's builder before 2026-09-24) is not
+        // TetGen's numbering: refused.
+        assert_eq!(unknown(&[0, 2, 2, 2], &[2]), [0]);
+        // Without fittings, the room starts at the smallest id: TetGen's 1, or the 0 of
+        // upstream's Python-binding mesh and Night Mode's broken hall.
+        assert_eq!(volume_ids(&mesh(&[1, 1, 2]), vec![]).room, 1);
+        assert_eq!(volume_ids(&mesh(&[0, 0]), vec![]).room, 0);
+        assert!(unknown(&[3, 1], &[]).is_empty());
+        assert_eq!(volume_ids(&mesh(&[]), vec![]).room, 1);
     }
 
     #[test]

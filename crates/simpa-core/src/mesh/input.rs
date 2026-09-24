@@ -30,7 +30,8 @@ pub struct MeshInput {
     pub var_markers: Vec<u32>,
     /// `mesh.cbin`: the scene the `.mbin` markers index.
     pub scene: cbin::Model,
-    /// The ids the `.mbin` may carry: room 0, and the seeded fitting ids.
+    /// The ids the `.mbin` may carry: the seeded fitting ids, and the room's parts numbered by
+    /// TetGen above them ([`VolumeIds::tetgen`]).
     pub volume_ids: VolumeIds,
     /// Per scene face, the name of its surface group (empty for a raw `.poly`).
     pub face_groups: Vec<String>,
@@ -234,7 +235,7 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
         var,
         var_markers,
         scene,
-        volume_ids: VolumeIds { room: 0, fittings },
+        volume_ids: VolumeIds::tetgen(fittings),
         face_groups,
         zone_facets,
         notes: Vec::new(),
@@ -362,7 +363,7 @@ pub fn poly_input(model: &poly::Model) -> Result<MeshInput, InputError> {
         var: None,
         var_markers: Vec::new(),
         scene: cbin::Model { faces, vertices },
-        volume_ids: VolumeIds { room: 0, fittings },
+        volume_ids: VolumeIds::tetgen(fittings),
         face_groups: vec![String::new(); n],
         zone_facets: Vec::new(),
         notes,

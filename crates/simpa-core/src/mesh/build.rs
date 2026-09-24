@@ -2,12 +2,12 @@
 //! upstream's GUI builds it: `CObjet3D::LoadMaillage` reads the four files
 //! (`isimpa/3dengine/Core/Objet3D_maillage.cpp:54-488`) and `CObjet3D::SaveMaillage` writes the
 //! `.mbin` from what it read (`:830-898`, called with `toRealCoords = true` by
-//! `data_manager/projet.cpp:769`). Two departures, `docs/m5-m6-design.md` decisions 1 and 5,
-//! and nothing else.
+//! `data_manager/projet.cpp:769`). One departure, `docs/m5-m6-design.md` decision 5 (a box
+//! fitting zone's facets), and nothing else: `idVolume` is TetGen's region attribute, unchanged,
+//! as upstream writes it (decision 1).
 //!
 //! Evidence (`tests/mesh_mbin_parity.rs`): upstream's 2019 tutorial-1 `tetramesh.mbin` is rebuilt
-//! from the TetGen output it was made from byte for byte, `idVolume` apart (decision 1), and so is
-//! tutorial 3's, given upstream's region ids.
+//! from the TetGen output it was made from byte for byte, and so is tutorial 3's.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
@@ -269,13 +269,15 @@ pub struct BuildStats {
     pub zone_tet_faces: usize,
     /// Tetrahedron faces with no neighbour (-2).
     pub hull_tet_faces: usize,
-    /// Each TetGen region attribute seen, the `idVolume` written for it, and its tetrahedra.
+    /// Each TetGen region attribute seen, the `idVolume` written for it (the attribute itself,
+    /// decision 1), and its tetrahedra.
     pub attributes: Vec<AttributeMap>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttributeMap {
     pub attribute: i64,
+    /// Equal to `attribute`: the builder writes TetGen's region attribute unchanged.
     pub id_volume: i32,
     pub tetrahedra: usize,
 }
@@ -296,23 +298,22 @@ fn sorted(mut f: [i32; 3]) -> [i32; 3] {
 ///   `.neigh` or not at all;
 /// - markers from the `.face` rows, matched by unordered vertex triple to **every** tetrahedron
 ///   face carrying that triangle, so both sides of an internal facet get it
-///   (`Objet3D_maillage.cpp:369-381`).
+///   (`Objet3D_maillage.cpp:369-381`);
+/// - `idVolume` = the last `.ele` attribute (`-A`'s region), unchanged, as upstream writes it
+///   (`Objet3D_maillage.cpp:165, 868`): a seeded fitting zone carries its seed's id, and each
+///   region no seed reaches the next number above the largest seed (`tetgen.cxx:22403-22436`), 1
+///   for a room without fitting zones (decision 1).
 ///
-/// The two departures from upstream:
-/// - `idVolume` = the last `.ele` attribute (`-A`'s region) when it is one of `fittings`, and 0
-///   (the room) otherwise (decision 1). Upstream writes the attribute unchanged
-///   (`Objet3D_maillage.cpp:165, 868`), so its room is 1;
-/// - a marker at or above `scene_faces` (a box fitting zone's triangle, decision 5) or below 0
-///   is written as -1.
+/// The one departure from upstream: a marker at or above `scene_faces` (a box fitting zone's
+/// triangle, decision 5) or below 0 is written as -1.
 ///
 /// Refuses, with the reason, files that disagree with each other ([`tetgen::check_mesh`]), a mesh
-/// without the `-A` attribute or with a non-integral one, second-order tetrahedra, a `.face`
-/// without markers, one triangle listed twice with different markers, a `.face` row that no
-/// tetrahedron has, and a node that is not finite after the round trip.
+/// without the `-A` attribute or with a non-integral one (or one no `i32` holds), second-order
+/// tetrahedra, a `.face` without markers, one triangle listed twice with different markers, a
+/// `.face` row that no tetrahedron has, and a node that is not finite after the round trip.
 pub fn build_mbin(
     out: &TetgenOutput,
     scene_faces: usize,
-    fittings: &[i32],
     unitize: &Unitize,
 ) -> Result<(mbin::Mesh, BuildStats), String> {
     tetgen::check_mesh(&out.node, &out.ele, Some(&out.face), Some(&out.neigh))
@@ -388,13 +389,12 @@ pub fn build_mbin(
                 "tetrahedron {t} has region attribute {attr}, not an integer"
             ));
         }
-        let attr = attr as i64;
-        let id_volume = if fittings.iter().any(|&f| i64::from(f) == attr) {
-            attr as i32
-        } else {
-            0
-        };
-        attributes.entry(attr).or_insert((id_volume, 0)).1 += 1;
+        // In i32's range, checked above.
+        let id_volume = attr as i32;
+        attributes
+            .entry(i64::from(id_volume))
+            .or_insert((id_volume, 0))
+            .1 += 1;
         let faces = std::array::from_fn(|i| {
             let fv = FACE_CORNERS[i].map(|k| vertices[k]);
             let n = neighbours[i];
@@ -489,7 +489,7 @@ mod tests {
             &[([2, 3, 4], 5), ([1, 2, 3], 0), ([5, 2, 4], 9)],
             [3.0, 2.0],
         );
-        let (mesh, stats) = build_mbin(&out, 8, &[2], &unit_frame()).unwrap();
+        let (mesh, stats) = build_mbin(&out, 8, &unit_frame()).unwrap();
         let (a, b) = (&mesh.tetrahedra[0], &mesh.tetrahedra[1]);
         // .ele row (1,2,3,4) is written (4,3,2,1), 0-based (3,2,1,0).
         assert_eq!(a.vertices, [3, 2, 1, 0]);
@@ -506,8 +506,16 @@ mod tests {
         // Marker 9 >= 8 scene faces: a zone facet, written -1.
         assert!(b.faces.iter().all(|f| f.marker != 9));
         assert_eq!(stats.zone_tet_faces, 1);
-        // Attribute 3 is not a fitting: room 0. Attribute 2 is.
-        assert_eq!((a.id_volume, b.id_volume), (0, 2));
+        // Each tetrahedron carries its region attribute unchanged, as upstream writes it.
+        assert_eq!((a.id_volume, b.id_volume), (3, 2));
+        assert_eq!(
+            stats
+                .attributes
+                .iter()
+                .map(|m| (m.attribute, m.id_volume, m.tetrahedra))
+                .collect::<Vec<_>>(),
+            [(2, 2, 1), (3, 3, 1)]
+        );
         assert_eq!(stats.marked_tet_faces, 3);
         // The nodes are the .node's, through the round trip: here every coordinate survives it,
         // and each 0 in y comes back as -0.0.
@@ -521,26 +529,26 @@ mod tests {
         let u = unit_frame();
         // A .face row no tetrahedron has.
         let out = pair(&[([1, 2, 5], 0)], [1.0, 1.0]);
-        let e = build_mbin(&out, 8, &[], &u).unwrap_err();
+        let e = build_mbin(&out, 8, &u).unwrap_err();
         assert!(e.contains("belong to no tetrahedron"), "{e}");
         // One triangle, two markers.
         let out = pair(&[([2, 3, 4], 1), ([4, 3, 2], 2)], [1.0, 1.0]);
-        assert!(build_mbin(&out, 8, &[], &u).unwrap_err().contains("marker"));
+        assert!(build_mbin(&out, 8, &u).unwrap_err().contains("marker"));
         // A non-integral region attribute.
         let out = pair(&[], [1.5, 1.0]);
         assert!(
-            build_mbin(&out, 8, &[], &u)
+            build_mbin(&out, 8, &u)
                 .unwrap_err()
                 .contains("not an integer")
         );
         // No -A attribute.
         let mut out = pair(&[], [1.0, 1.0]);
         out.ele = tetgen::read_ele(b"2 4 0\n1 1 2 3 4\n2 5 2 4 3\n").unwrap();
-        assert!(build_mbin(&out, 8, &[], &u).unwrap_err().contains("-A"));
+        assert!(build_mbin(&out, 8, &u).unwrap_err().contains("-A"));
         // A .neigh that is not mutual.
         let mut out = pair(&[], [1.0, 1.0]);
         out.neigh = tetgen::read_neigh(b"2 4\n1 2 -1 -1 -1\n2 -1 -1 -1 -1\n").unwrap();
-        assert!(build_mbin(&out, 8, &[], &u).is_err());
+        assert!(build_mbin(&out, 8, &u).is_err());
         // A node the round trip takes out of f32's range.
         let mut out = pair(&[], [1.0, 1.0]);
         out.node = tetgen::read_node(b"5 3 0 0\n1 0 0 0\n2 1 0 0\n3 0 1 0\n4 0 0 1\n5 3e38 1 1\n")
@@ -549,7 +557,7 @@ mod tests {
             centre: [-3e38, 0.0, 0.0],
             scale: 1.0,
         };
-        let e = build_mbin(&out, 8, &[], &far).unwrap_err();
+        let e = build_mbin(&out, 8, &far).unwrap_err();
         assert!(e.contains("node 4 is not finite"), "{e}");
     }
 

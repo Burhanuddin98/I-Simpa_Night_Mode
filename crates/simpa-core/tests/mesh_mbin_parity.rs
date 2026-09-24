@@ -2,16 +2,15 @@
 //! kept both TetGen's output (`tests/fixtures/upstream/tutorial1/tetgen/scene_mesh.1.*`) and the
 //! `tetramesh.mbin` it wrote from it (`upstream/tutorial1/spps/tetramesh.mbin`, the same bytes as
 //! `tcr/`). `mesh::mesh_from_tetgen` on the first, with the tutorial's own project, gives the
-//! second byte for byte, with one documented exception: `idVolume`.
+//! second byte for byte.
 //!
-//! **`idVolume`.** Decision 1 of `docs/m5-m6-design.md` writes the room as 0; upstream writes
-//! TetGen's region attribute unchanged (`Objet3D_maillage.cpp:165, 868`). The evidence for how
-//! the comparison treats it: every one of the fixture's 2,257 tetrahedra has `idVolume` 1, and
-//! every row of its `.ele` has attribute 1, the one region TetGen found. So the fixture is
-//! compared with those fields mapped 1 -> 0, the map decision 1 prescribes, rather than with a
-//! builder switched to upstream's `room: 1`: the comparison then covers the code path every
-//! mesh takes, and the test also checks that those 2,257 fields are the **only** bytes in which
-//! the two files differ.
+//! **`idVolume`** is TetGen's region attribute, unchanged, as upstream writes it
+//! (`Objet3D_maillage.cpp:165, 868`; `docs/m5-m6-design.md`, decision 1): every one of the
+//! fixture's 2,257 tetrahedra has 1, the one region TetGen found. Until 2026-09-24 the builder
+//! wrote the room as 0 and this comparison mapped 1 to 0; decision 1 is reversed, because a room
+//! written 0 changes SPPS's results beside a fitting zone (tutorial 3, the parity bed). The
+//! comparison says no to the old output: the rebuilt file with its room written 0 differs from
+//! upstream's in exactly the 2,257 `idVolume` fields.
 //!
 //! **Each of the builder's two upstream conversions is needed.** The builder's output with one
 //! of them undone, and nothing else changed, fails the comparison:
@@ -40,8 +39,8 @@
 //! **From the project, through TetGen 1.5.0.** Tutorial 1's project meshed by the TetGen of the
 //! solver build (`$SIMPA_SOLVERS_DIR`), which is 1.5.0 by Burhan's decision ("Our own build",
 //! `docs/investigations/2026-09-23-upstream-meshing/DECISIONS.md`), gives TetGen's 2019 files
-//! and then upstream's 2019 `.mbin`, byte for byte (`idVolume` as above). Against a TetGen 1.6.0
-//! build that test fails, as it should: 1.6.0 meshes the box into 6 tetrahedra.
+//! and then upstream's 2019 `.mbin`, byte for byte. Against a TetGen 1.6.0 build that test fails,
+//! as it should: 1.6.0 meshes the box into 6 tetrahedra.
 //!
 //! **The code under test is this tree's.** The runs of this project share one cargo build folder
 //! between checkouts, and cargo judges a path package up to date by file times alone, so it can
@@ -52,8 +51,9 @@
 //! (`$SIMPA_UPSTREAM`, `tests/common/paths.rs`; missing, the test fails, it never skips). A scene
 //! of 40 vertices and a fitting zone in five TetGen regions (upstream's ids 1930 and 2083-2086;
 //! the fitting zone is why `import_proj` refuses the project), meshed on 2019-06-18 into 3,285
-//! tetrahedra: `build_mbin` gives its `.mbin` byte for byte, told upstream's own ids, with the
-//! frame fitted to the scene part of upstream's `.cbin`, which is not a box of integers.
+//! tetrahedra: `build_mbin` gives its `.mbin` byte for byte, TetGen's region attributes written as
+//! they come, with the frame fitted to the scene part of upstream's `.cbin`, which is not a box of
+//! integers.
 
 #[path = "mesh_support.rs"]
 mod support;
@@ -114,17 +114,17 @@ fn id_volume_offset(nodes: usize, t: usize) -> usize {
     8 + 12 * nodes + 100 * t + 16
 }
 
-/// Upstream's bytes with each room `idVolume`, 1, written as decision 1 writes it, 0. Panics if a
-/// tetrahedron carries anything else: then the map would be a guess.
-fn with_room_as_zero(upstream: &[u8]) -> Vec<u8> {
-    let mut expected = upstream.to_vec();
+/// `bytes` with each tetrahedron's `idVolume` written 0, as the builder wrote the room until
+/// decision 1 was reversed. Panics if a tetrahedron carries anything but upstream's room, 1.
+fn with_room_as_zero(bytes: &[u8]) -> Vec<u8> {
+    let mut out = bytes.to_vec();
     for t in 0..TETS {
         let at = id_volume_offset(NODES, t);
-        let field: [u8; 4] = expected[at..at + 4].try_into().unwrap();
+        let field: [u8; 4] = out[at..at + 4].try_into().unwrap();
         assert_eq!(i32::from_le_bytes(field), 1, "tetrahedron {t}'s idVolume");
-        expected[at..at + 4].copy_from_slice(&0i32.to_le_bytes());
+        out[at..at + 4].copy_from_slice(&0i32.to_le_bytes());
     }
-    expected
+    out
 }
 
 /// Where two `.mbin` files first differ, in words.
@@ -268,16 +268,16 @@ fn the_2019_tutorial_mesh_is_rebuilt_byte_for_byte() {
     let ours = ours_bytes();
     assert_eq!(m.files.mbin.as_deref(), Some(sha256_hex(&ours).as_str()));
 
-    let expected = with_room_as_zero(&upstream);
     assert!(
-        ours == expected,
-        "the rebuilt .mbin differs from upstream's (room mapped to 0) at {}",
-        first_difference(&ours, &expected, NODES).unwrap()
+        ours == upstream,
+        "the rebuilt .mbin differs from upstream's at {}",
+        first_difference(&ours, &upstream, NODES).unwrap()
     );
 
-    // The only bytes in which ours and upstream's raw file differ: the low byte of each
-    // tetrahedron's idVolume.
-    let differing: Vec<usize> = ours
+    // It says no to the room written 0, as the builder wrote it until 2026-09-24: exactly the
+    // low byte of each tetrahedron's idVolume differs.
+    let room_zero = with_room_as_zero(&ours);
+    let differing: Vec<usize> = room_zero
         .iter()
         .zip(&upstream)
         .enumerate()
@@ -287,14 +287,14 @@ fn the_2019_tutorial_mesh_is_rebuilt_byte_for_byte() {
     let id_volumes: Vec<usize> = (0..TETS).map(|t| id_volume_offset(NODES, t)).collect();
     assert_eq!(differing, id_volumes);
 
-    // The builder saw one region, attribute 1, and wrote it as the room.
+    // The builder saw one region, attribute 1, and wrote it unchanged.
     let stats = m.counts.build.as_ref().unwrap();
     let attrs: Vec<(i64, i32, usize)> = stats
         .attributes
         .iter()
         .map(|a| (a.attribute, a.id_volume, a.tetrahedra))
         .collect();
-    assert_eq!(attrs, [(1, 0, TETS)]);
+    assert_eq!(attrs, [(1, 1, TETS)]);
     assert_eq!((stats.nodes, stats.tetrahedra), (NODES, TETS));
     // The TetGen call is the one the .face trailer records.
     let call = m.tetgen.as_ref().unwrap();
@@ -368,7 +368,7 @@ fn without_the_corner_reversal_the_comparison_fails() {
     assert_eq!(invariants(&tetgen_order), Vec::<String>::new());
 
     let bytes = mbin::write(&tetgen_order);
-    let expected = with_room_as_zero(&upstream_bytes());
+    let expected = upstream_bytes();
     assert_ne!(bytes, expected);
     let body = 8 + 12 * NODES;
     assert_eq!(bytes[..body], expected[..body], "the nodes are untouched");
@@ -401,7 +401,7 @@ fn without_the_round_trip_the_comparison_fails() {
     assert_eq!(invariants(&unconverted), Vec::<String>::new());
 
     let bytes = mbin::write(&unconverted);
-    let expected = with_room_as_zero(&upstream_bytes());
+    let expected = upstream_bytes();
     assert_ne!(bytes, expected);
     let body = 8 + 12 * NODES;
     assert_eq!(
@@ -439,18 +439,18 @@ fn a_frame_one_ulp_off_or_in_the_scenes_axes_fails_the_comparison() {
     // (x, z, -y).
     let out = mesh::TetgenOutput::read(&mesh::OutputPaths::new(&fixture(TETGEN_DIR), "scene_mesh"))
         .unwrap();
-    let expected = with_room_as_zero(&upstream_bytes());
+    let expected = upstream_bytes();
     let right = Unitize {
         centre: [3.0, 1.5, -5.0],
         scale: 0.2,
     };
-    let (mesh, _) = mesh::build_mbin(&out, 12, &[], &right).unwrap();
+    let (mesh, _) = mesh::build_mbin(&out, 12, &right).unwrap();
     assert!(mbin::write(&mesh) == expected, "control: upstream's frame");
     let off = Unitize {
         scale: f32::from_bits(0.2f32.to_bits() + 1),
         ..right
     };
-    let (mesh, _) = mesh::build_mbin(&out, 12, &[], &off).unwrap();
+    let (mesh, _) = mesh::build_mbin(&out, 12, &off).unwrap();
     let bytes = mbin::write(&mesh);
     assert_ne!(bytes, expected);
     println!(
@@ -461,7 +461,7 @@ fn a_frame_one_ulp_off_or_in_the_scenes_axes_fails_the_comparison() {
         centre: [3.0, 5.0, 1.5],
         ..right
     };
-    let (mesh, _) = mesh::build_mbin(&out, 12, &[], &scene_axes).unwrap();
+    let (mesh, _) = mesh::build_mbin(&out, 12, &scene_axes).unwrap();
     let bytes = mbin::write(&mesh);
     assert_ne!(bytes, expected);
     println!(
@@ -507,10 +507,10 @@ fn the_tutorial_project_meshed_by_tetgen_150_gives_upstreams_2019_mbin() {
     }
 
     let bytes = std::fs::read(dir.join("tetramesh.mbin")).unwrap();
-    let expected = with_room_as_zero(&upstream_bytes());
+    let expected = upstream_bytes();
     assert!(
         bytes == expected,
-        "the .mbin meshed from the project differs from upstream's (room mapped to 0) at {}",
+        "the .mbin meshed from the project differs from upstream's at {}",
         first_difference(&bytes, &expected, NODES).unwrap()
     );
 }
@@ -526,14 +526,10 @@ fn the_invariants_hold_in_upstreams_corner_order() {
     let report = verify_mesh(&ours, &scene, &VolumeIds::default());
     assert!(report.passed(), "{report:#?}");
     assert_eq!(invariants(&ours), Vec::<String>::new());
-    // So does upstream's own file, with its room id and against its own .cbin.
+    // So does upstream's own file, against its own .cbin.
     let upstream = mbin::read(&upstream_bytes()).unwrap();
     let upstream_scene = cbin::read_file(&fixture("upstream/tutorial1/spps/mesh.cbin")).unwrap();
-    let ids = VolumeIds {
-        room: 1,
-        fittings: Vec::new(),
-    };
-    let report = verify_mesh(&upstream, &upstream_scene, &ids);
+    let report = verify_mesh(&upstream, &upstream_scene, &VolumeIds::default());
     assert!(report.passed(), "{report:#?}");
 
     // The orientation sign, exactly (Shewchuk's orient3d), in both corner orders: (d,c,b,a) is
@@ -620,14 +616,15 @@ fn tutorial_3s_mesh_is_rebuilt_byte_for_byte_from_the_upstream_checkout() {
     assert!((unitize.centre[0] - 9.548_741).abs() < 1e-5, "{unitize:?}");
     assert!((unitize.scale - 0.104_725_85).abs() < 1e-7, "{unitize:?}");
 
-    // Upstream's ids unchanged: every region attribute is listed, so none is written as 0.
+    // TetGen's attributes, written unchanged: fittings 1930 and 2083, the room's three parts
+    // above them.
     let out = mesh::TetgenOutput::read(&mesh::OutputPaths::new(&dir, "scene_mesh")).unwrap();
     let attributes: BTreeSet<i32> = (0..out.ele.len())
         .map(|t| *out.ele.tet_attributes(t).last().unwrap() as i32)
         .collect();
     let ids: Vec<i32> = attributes.into_iter().collect();
     assert_eq!(ids, [1930, 2083, 2084, 2085, 2086]);
-    let (built, stats) = mesh::build_mbin(&out, scene.faces.len(), &ids, &unitize).unwrap();
+    let (built, stats) = mesh::build_mbin(&out, scene.faces.len(), &unitize).unwrap();
     assert_eq!((stats.tetrahedra, stats.nodes), (3285, 835));
     assert_eq!(stats.zone_tet_faces, 0, "every marker indexes a .cbin face");
     let bytes = mbin::write(&built);

@@ -5,11 +5,10 @@
 # (2) The bed, crates/simpa/tests/parity_tutorials.rs: upstream's tutorials 1, 2 and 3, imported
 #     and meshed by `simpa`, against the files original I-Simpa wrote into each .proj, and SPPS and
 #     TCR run with one seed on our inputs and on the original inputs, every output compared.
-#     tutorial_1, tutorial_2, tutorial_3 and the_comparisons_say_no must pass, and the two tests
-#     the plain suite ignores must say so. tutorial_3_same_seed_runs, one of those, is run here and
-#     is BLOCKED, never passed, only on its measured signature: every run differs with the room
-#     written as idVolume 0 (decision 1) and matches with the room's parts kept as TetGen numbered
-#     them. Reversing decision 1 is Burhan's and Michael's call.
+#     tutorial_1, tutorial_2, tutorial_3, tutorial_3_same_seed_runs and the_comparisons_say_no must
+#     pass, and the one test the plain suite ignores (4) must say so. tutorial_3_same_seed_runs holds
+#     the room written as TetGen numbers it (decision 1, reversed 2026-09-24): every output of the 3
+#     runs equals the original's, and the room written 0 on run 0 must differ.
 # (3) The tests the bed rests on: parity_inputs.rs (config.xml and mesh.cbin, value by value) and
 #     mesh_mbin_parity.rs (the .mbin builder, byte for byte).
 # (4) Upstream's shipped 1.3.4 and 1.4.0 SPPS and TCR against ours on tutorial 1's original inputs
@@ -19,7 +18,8 @@
 # - (1) refuses upstream's own TetGen 1.6.0 build (the 929a5c8 reference, built by
 #   solvers/build.ps1 beside ours) in place of ours;
 # - (2) the bed run with that TetGen 1.6.0 in the solver folder must FAIL tutorial_1, naming
-#   TetGen's files; the_comparisons_say_no feeds each comparison the input that fails it;
+#   TetGen's files; the_comparisons_say_no feeds each comparison the input that fails it, and
+#   tutorial_3_same_seed_runs the room written 0;
 # - (4) asserts that 1.3.4 differs, so the comparison can tell two builds apart.
 # A check an open decision blocks prints BLOCKED; the gate then exits 3, never 0.
 # Run: powershell -File tools/gates/parity.ps1 [-SolversDir <bin>] [-ReleaseBinaries <folder>]
@@ -125,31 +125,24 @@ Check "(1) says NO: upstream's TetGen 1.6.0 build is not the manifest's tetgen.e
 
 # --- (2) the bed -------------------------------------------------------------------------------------
 $script:bed = CargoTest 'cargo test -p simpa --test parity_tutorials --no-fail-fast -- --nocapture --test-threads=1' 'bed'
-foreach ($t in @('tutorial_1', 'tutorial_2', 'tutorial_3', 'the_comparisons_say_no')) {
+foreach ($t in @('tutorial_1', 'tutorial_2', 'tutorial_3', 'tutorial_3_same_seed_runs', 'the_comparisons_say_no')) {
     Check "(2) bed: $t" {
         $r = $script:bed.Results[$t]
         Write-Host "      $t ... $r"
         $r -eq 'ok'
     }
 }
-Check "(2) bed: the two tests the plain suite ignores say so, with their reasons, never skipped silently" {
-    $a = $script:bed.Results['tutorial_3_same_seed_runs']; $b = $script:bed.Results['shipped_1_3_4_and_1_4_0_solvers_against_ours']
-    Write-Host "      tutorial_3_same_seed_runs ... $a; shipped_1_3_4_and_1_4_0_solvers_against_ours ... $b"
-    $a -eq 'ignored' -and $b -eq 'ignored'
+Check "(2) bed: the one test the plain suite ignores says so, with its reason, never skipped silently" {
+    $b = $script:bed.Results['shipped_1_3_4_and_1_4_0_solvers_against_ours']
+    $ignored = @($script:bed.Results.GetEnumerator() | Where-Object { $_.Value -eq 'ignored' } | ForEach-Object { $_.Key })
+    Write-Host "      shipped_1_3_4_and_1_4_0_solvers_against_ours ... $b; ignored: [$($ignored -join ', ')]"
+    $b -eq 'ignored' -and $ignored.Count -eq 1
 }
-Check "(2) bed: tutorial_3_same_seed_runs, run here (decision 1: the room written as idVolume 0)" {
-    $t3 = CargoTest 'cargo test -p simpa --test parity_tutorials tutorial_3_same_seed_runs -- --ignored --exact --nocapture' 'bed-t3-runs'
-    $r = $t3.Results['tutorial_3_same_seed_runs']
-    Write-Host "      tutorial_3_same_seed_runs ... $r"
-    if ($r -eq 'ok') { return $true }
-    # BLOCKED only on the measured signature: each of the 3 runs differs with the room as 0 and
-    # matches with the room's parts kept as TetGen numbered them.
-    $sig = [regex]::Matches($t3.Text, '(?m)^run \d: (\d+) of (\d+) output files differ with idVolume \{[^}]*2084: 0[^}]*\}.*?; with the room''s parts kept as TetGen numbered them \(\{[^}]*2084: 2084[^}]*\}\), 0 differ$')
-    Write-Host "      runs with the decision-1 signature: $($sig.Count) of 3"
-    if ($r -eq 'FAILED' -and $sig.Count -eq 3) {
-        return (Blocked 'decision 1 (docs/m5-m6-design.md): the .mbin builder writes the room as idVolume 0, and SPPS then leaves a fitting on scene faces where upstream''s room overwrites it (coreinitialisation.cpp:151-176); with the room kept as TetGen numbers it, all 3 tutorial-3 runs match the original. Reversing decision 1 is Burhan''s and Michael''s call')
-    }
-    $false
+Check "(2) bed: tutorial_3_same_seed_runs printed its 3 runs equal and the room written 0 refused" {
+    $eq = [regex]::Matches($script:bed.Text, '(?m)^  run \d: all \d+ output files equal to the original inputs'' run').Count
+    $no = [regex]::Match($script:bed.Text, '(?m)^  run 0 with the room written 0 \(the builder before 2026-09-24\): (\d+) of (\d+) files differ')
+    Write-Host "      runs equal: $eq of 3; room written 0: $(if ($no.Success) { "$($no.Groups[1].Value) of $($no.Groups[2].Value) files differ" } else { 'no line' })"
+    $eq -eq 3 -and $no.Success -and [int]$no.Groups[1].Value -gt 0
 }
 Check "(2) says NO: the bed with upstream's TetGen 1.6.0 in the solver folder fails tutorial_1, naming TetGen's files" {
     if (-not (Test-Path $Tetgen160)) { throw "$Tetgen160 is missing" }

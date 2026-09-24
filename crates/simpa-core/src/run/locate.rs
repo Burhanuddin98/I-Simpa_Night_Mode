@@ -257,7 +257,10 @@ pub enum Kind {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Point {
     pub kind: Kind,
-    /// Its place among its kind's elements, from 1.
+    /// Its place among its kind's elements in the project's order, from 1: `config.xml` lists
+    /// them newest first, as upstream's GUI writes them and `config_xml::write` does
+    /// (`crates/simpa-core/tests/parity_inputs.rs`), so the file's last element is number 1 and a
+    /// receiver's number goes with its name ("point receiver 2 "Receiver 2"").
     pub number: usize,
     /// `source@name` or `recepteur_ponctuel@lbl`.
     pub label: String,
@@ -293,6 +296,7 @@ pub fn points(doc: &Document) -> Vec<Point> {
         let Some(node) = expect::child(root, list) else {
             continue;
         };
+        let count = expect::items(node).count();
         for (i, e) in expect::items(node).enumerate() {
             let text = ["x", "y", "z"].map(|a| e.attribute(a).unwrap_or("").to_string());
             let position = match text.each_ref().map(|t| to_float(t)) {
@@ -301,7 +305,7 @@ pub fn points(doc: &Document) -> Vec<Point> {
             };
             out.push(Point {
                 kind,
-                number: i + 1,
+                number: count - i,
                 label: e.attribute(label).unwrap_or("").to_string(),
                 text,
                 position,

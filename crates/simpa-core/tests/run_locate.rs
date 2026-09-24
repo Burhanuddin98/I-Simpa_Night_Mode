@@ -319,11 +319,11 @@ fn the_check_names_each_unlocatable_source_and_receiver_and_passes_the_rest() {
         got,
         [codes::SOURCE_UNLOCATABLE, codes::RECEIVER_UNLOCATABLE]
     );
-    // Numbered in config.xml's order, which lists receivers newest first as upstream writes them
-    // (`config_xml/write.rs`): Receiver 2 is the first.
+    // Numbered in the project's order, though config.xml lists receivers newest first as
+    // upstream writes them (`config_xml/write.rs`): Receiver 2 is the file's first and number 2.
     assert!(
         r[1].detail
-            .starts_with("point receiver 1 \"Receiver 2\" at (3, 5, 1.8): "),
+            .starts_with("point receiver 2 \"Receiver 2\" at (3, 5, 1.8): "),
         "{}",
         r[1].detail
     );
@@ -346,6 +346,11 @@ fn the_check_names_each_unlocatable_source_and_receiver_and_passes_the_rest() {
     assert_eq!(pts[0].position, Some(at("3", "5", "1.8")));
     assert_eq!(pts[1].position, Some([1.0, 0.0, 2.0]));
     assert_eq!((pts[2].kind, pts[2].number), (Kind::PointReceiver, 1));
+    // Numbered from the file's end, the project's order: the file's first source is number 2.
+    assert_eq!(
+        (pts[0].label.as_str(), pts[0].number, pts[1].number),
+        ("A", 2, 1)
+    );
     assert_eq!(pts[2].position, None, "a hexadecimal float is not emulated");
     let test = TetraTest::new(&mesh).unwrap();
     let lost = locate::unlocated(&doc, &test);
@@ -531,18 +536,24 @@ fn the_emulation_agrees_with_spps_on_and_near_the_boxs_internal_facets() {
             bad.join("\n")
         );
         assert_eq!(rows.len(), 5 + 6 * (36 + 2));
-        let unlocated = rows.iter().filter(|r| r.tetrahedron.is_none()).count();
-        let located = rows.len() - unlocated;
+        let count = |f: &dyn Fn(&Row) -> bool| rows.iter().filter(|r| f(r)).count();
+        let unlocated_crashed = count(&|r| r.tetrahedron.is_none() && crashed(r));
+        let located_finished = count(&|r| r.tetrahedron.is_some() && finished(r));
         // The two outside points are lost in either order; 5 cm and 1 mm off the facet are found.
         assert!(rows[3].tetrahedron.is_none() && rows[4].tetrahedron.is_none());
         assert!(rows[1].tetrahedron.is_some() && rows[2].tetrahedron.is_some());
-        assert!(located >= 150, "{label}: only {located} located points");
+        // The floor the locate check was verified with: at least 200 points located and finished
+        // by SPPS in each order (measured 2026-09-24: 220 in TetGen's order, 225 in upstream's).
+        assert!(
+            located_finished >= 200,
+            "{label}: only {located_finished} points located and finished"
+        );
         if tetgen_order {
             // Both answers occur often enough to be tested: the facet points that round out of
             // both tetrahedra, the outside points, and the rest. The tutorial's source is lost.
             assert!(
-                unlocated >= 10,
-                "{label}: only {unlocated} unlocated points"
+                unlocated_crashed >= 10,
+                "{label}: only {unlocated_crashed} points unlocated and crashed"
             );
             assert_eq!(rows[0].tetrahedron, None);
         } else {
