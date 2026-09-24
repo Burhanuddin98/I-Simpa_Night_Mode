@@ -143,7 +143,8 @@
       "min_radius_edge_ratio": 2.0,
       "max_volume_m3": null,
       "surface_receiver_max_area_m2": 0.1,
-      "preserve_boundary": false
+      "preserve_boundary": false,
+      "preprocess": false
     }
   },
   "variants": [],
