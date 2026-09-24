@@ -9,7 +9,10 @@
 //! - `energetic_box.simpa`: the same in energetic mode with `trans_epsilon` 3, for the solver's
 //!   floor and energetic mode's completeness;
 //! - `sources2_box.simpa`: the same with a second source and an echogram per source, for the
-//!   per-source echograms and the refusal of onset-relative parameters on a sum of sources.
+//!   per-source echograms and the refusal of onset-relative parameters on a sum of sources;
+//! - `tutorial1_box_asymmetric.simpa`, gate M7(d)'s second room: tutorial 1's box with absorption
+//!   under which a mean by area, by face and by material, and a swap of the floor's and the
+//!   walls' materials, all give different reverberation times.
 //!
 //! Regenerate with `cargo test -p simpa-core --test results_rooms -- --ignored write_m7_rooms`.
 
@@ -219,6 +222,58 @@ pub fn sources2_box() -> Project {
     p
 }
 
+/// The floor's absorption in band `i` (0 to 26) of [`asymmetric_box`]: `0.15 + 0.025·i`, to three
+/// decimals.
+pub fn asymmetric_floor_alpha(i: usize) -> f64 {
+    ((0.15 + 0.025 * i as f64) * 1000.0).round() / 1000.0
+}
+
+/// Gate M7(d)'s second room (M7 review): tutorial 1's box with absorption that tells apart the
+/// ways of combining it. On tutorial 1 itself the floor's 0.1 and the ceiling's 0.3 sit on equal
+/// areas and average to the walls' 0.2, so a mean weighted by area, a mean over faces and a mean
+/// over materials all give 0.2, and the check cannot see which one the code takes. Here:
+/// - the floor (60 m², 2 faces) rises by band, [`asymmetric_floor_alpha`], 0.15 to 0.80;
+/// - the walls (96 m², 8 faces) are 0.1 in every band;
+/// - the ceiling (60 m², 2 faces) stays 0.3.
+///
+/// Then `A` weighted by area is `60·α_f + 27.6` m², and in every band a mean over the 12 faces
+/// (`36·α_f + 25.2`) is at least 16 % lower, a mean over the three materials (`72·α_f + 28.8`) at
+/// least 8 % higher, the floor's and the walls' materials swapped (`96·α_f + 24`) at least 4.9 %
+/// higher, and the neighbouring band's floor 1.5 m² off. The floor and the walls never share an
+/// α, so a swap between them always shows. Swapping the floor and the ceiling cannot show in any
+/// room like this: they have equal areas, and Sabine and Eyring see only `A` and `S`.
+pub fn asymmetric_box() -> Project {
+    let mut p = tutorial_box();
+    p.id = ProjectId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0d00);
+    p.name = "Asymmetric absorption box".into();
+    p.description = "Gate M7(d), M7 review: tutorial 1's box with the floor's absorption rising \
+                     from 0.15 to 0.80 over the 27 bands, the walls at 0.1 and the ceiling at \
+                     0.3, so that a mean by area, by face and by material differ. Written by \
+                     crates/simpa-core/tests/results_rooms.rs."
+        .into();
+    let n = p.bands.len();
+    let material_of = |p: &Project, group: &str| {
+        let g = p
+            .surface_groups
+            .iter()
+            .find(|g| g.name == group)
+            .expect("a tutorial group");
+        p.materials
+            .iter()
+            .position(|m| m.id == g.material)
+            .expect("its material")
+    };
+    let floor = material_of(&p, "Floor");
+    let walls = material_of(&p, "Walls");
+    p.materials[floor].name = "Rising absorption".into();
+    p.materials[floor].absorption = (0..n)
+        .map(|i| schema::F64::new(asymmetric_floor_alpha(i)))
+        .collect();
+    p.materials[walls].name = "10% absorbing".into();
+    p.materials[walls].absorption = vec![schema::F64::new(0.1); n];
+    p
+}
+
 /// Every M7 room, by file name.
 fn rooms() -> Vec<(&'static str, Project)> {
     vec![
@@ -226,6 +281,7 @@ fn rooms() -> Vec<(&'static str, Project)> {
         ("seats_box.simpa", seats_box()),
         ("energetic_box.simpa", energetic_box()),
         ("sources2_box.simpa", sources2_box()),
+        ("tutorial1_box_asymmetric.simpa", asymmetric_box()),
     ]
 }
 
@@ -263,6 +319,89 @@ fn the_m7_rooms_are_their_recipes_and_validate_clean() {
         let ctx = validate::Context::for_project_file(Path::new(&path));
         let issues = validate::validate_with(&loaded, &ctx);
         assert!(issues.is_empty(), "{name}: {issues:#?}");
+    }
+}
+
+/// Per surface group: its name, its faces' areas and its material's absorption per band.
+fn groups(p: &Project) -> Vec<(String, Vec<f64>, Vec<f64>)> {
+    let v = &p.geometry.vertices;
+    p.surface_groups
+        .iter()
+        .map(|g| {
+            let areas = p
+                .geometry
+                .faces
+                .iter()
+                .filter(|f| f.group == g.id)
+                .map(|f| {
+                    let [a, b, c] = f.vertices.map(|i| v[i as usize].to_array());
+                    let (u, w) = (
+                        [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+                        [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
+                    );
+                    let n = [
+                        u[1] * w[2] - u[2] * w[1],
+                        u[2] * w[0] - u[0] * w[2],
+                        u[0] * w[1] - u[1] * w[0],
+                    ];
+                    0.5 * (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()
+                })
+                .collect();
+            let m = p.materials.iter().find(|m| m.id == g.material).unwrap();
+            let alphas = m.absorption.iter().map(|a| a.get()).collect();
+            (g.name.clone(), areas, alphas)
+        })
+        .collect()
+}
+
+#[test]
+fn the_asymmetric_box_tells_apart_the_ways_of_combining_absorption() {
+    let asym = asymmetric_box();
+    let g = groups(&asym);
+    let find = |name: &str| g.iter().find(|x| x.0 == name).unwrap();
+    let (floor, walls, ceiling) = (find("Floor"), find("Walls"), find("Ceiling"));
+    assert_eq!(
+        [floor.1.len(), walls.1.len(), ceiling.1.len()],
+        [2, 8, 2],
+        "faces"
+    );
+    let area = |x: &(String, Vec<f64>, Vec<f64>)| x.1.iter().sum::<f64>();
+    assert!((area(floor) - 60.0).abs() < 1e-9 && (area(ceiling) - 60.0).abs() < 1e-9);
+    assert!((area(walls) - 96.0).abs() < 1e-9);
+    let (mut face, mut material, mut swapped, mut neighbour) =
+        (f64::MAX, f64::MAX, f64::MAX, f64::MAX);
+    for i in 0..27 {
+        let (af, aw, ac) = (floor.2[i], walls.2[i], ceiling.2[i]);
+        assert_eq!(af, asymmetric_floor_alpha(i));
+        assert!(af != aw, "band {i}: the floor and the walls share α");
+        let a = 60.0 * af + 96.0 * aw + 60.0 * ac;
+        let rel = |x: f64| (x / a - 1.0).abs();
+        face = face.min(rel(216.0 * (2.0 * af + 8.0 * aw + 2.0 * ac) / 12.0));
+        material = material.min(rel(216.0 * (af + aw + ac) / 3.0));
+        swapped = swapped.min(rel(96.0 * af + 60.0 * aw + 60.0 * ac));
+        let j = if i < 26 { i + 1 } else { i - 1 };
+        neighbour = f64::min(neighbour, (60.0 * (floor.2[j] - af)).abs());
+    }
+    println!(
+        "smallest differences from A by area: by face {face:.3}, by material {material:.3}, \
+         floor and walls swapped {swapped:.3} (relative); neighbouring band {neighbour:.3} m2"
+    );
+    assert!(
+        face >= 0.16 && material >= 0.08 && swapped >= 0.049,
+        "the doc's figures"
+    );
+    assert!((neighbour - 1.5).abs() < 1e-9);
+
+    // Says no: tutorial 1's own box cannot tell them apart; every rule gives the same A.
+    let t = groups(&tutorial_box());
+    let alpha = |name: &str| t.iter().find(|x| x.0 == name).unwrap().2[0];
+    let (af, aw, ac) = (alpha("Floor"), alpha("Walls"), alpha("Ceiling"));
+    let a = 60.0 * af + 96.0 * aw + 60.0 * ac;
+    for other in [
+        216.0 * (2.0 * af + 8.0 * aw + 2.0 * ac) / 12.0,
+        216.0 * (af + aw + ac) / 3.0,
+    ] {
+        assert!((other / a - 1.0).abs() < 1e-12, "{other} vs {a}");
     }
 }
 

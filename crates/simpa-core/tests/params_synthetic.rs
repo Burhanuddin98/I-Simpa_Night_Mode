@@ -219,6 +219,7 @@ fn a_decay_off_only_where_one_parameter_looks_fails_that_parameter_only() {
         });
         let [edt, t20, t30, ..] =
             gate_checks(&evaluate(&early, AT_ZERO).unwrap(), &Closed::decay(t));
+        println!("early kink, T {t} s: {}", kink_line([edt, t20, t30]));
         assert_eq!([edt, t20, t30], [false, true, true], "early kink, T {t}");
         // 5 % slower below −25 dB: only T30 sees it.
         let t25 = -25.0 / slope;
@@ -231,8 +232,21 @@ fn a_decay_off_only_where_one_parameter_looks_fails_that_parameter_only() {
         });
         let [edt, t20, t30, ..] =
             gate_checks(&evaluate(&late, AT_ZERO).unwrap(), &Closed::decay(t));
+        println!("late kink, T {t} s: {}", kink_line([edt, t20, t30]));
         assert_eq!([edt, t20, t30], [true, true, false], "late kink, T {t}");
     }
+}
+
+/// `EDT within, T20 within, T30 OUTSIDE`: which of the three meet gate (a)'s 0.5 %, for the gate
+/// script to read.
+fn kink_line(within: [bool; 3]) -> String {
+    let w = |b: bool| if b { "within" } else { "OUTSIDE" };
+    format!(
+        "EDT {}, T20 {}, T30 {}",
+        w(within[0]),
+        w(within[1]),
+        w(within[2])
+    )
 }
 
 /// T30 by a least-squares line through the truncated curve's bin-edge points in −5 … −35 dB,

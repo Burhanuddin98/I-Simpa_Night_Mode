@@ -89,7 +89,9 @@ TCR writes no time series, so `core::params` has nothing to evaluate from it; it
 read as it wrote them: `Main results.gabe`'s per-band area, reverberation time and level of Sabine
 and Eyring, and its `Global` levels (the areas and times of `Global` are NaN by design,
 `ctr/input_output/reportmanager.cpp:208`); each `Punctual receivers/<lbl>.gabe`'s direct and total
-levels per band; every `.csbin` of the three fields.
+levels per band; every `.csbin` of the three fields. Each TCR receiver still carries the eight
+parameters per band and for its aggregate, every one refused `params_not_evaluable`,
+`no_time_series`, so the JSON has one shape of receiver for both solvers (M7 review).
 
 **The analytic references on the run's own inputs** (`results::tcr::analytic`), what gate M7(d) and
 M8 compare TCR with: `params::room`'s Sabine and Eyring times with TCR's constant 0.163, over every
@@ -105,6 +107,18 @@ Measured on tutorial 1's box: TCR equals the analytic values within 3.3·10⁻�
 theories, both from the project and from the run's inputs (`gate_d_…`); and the 2019 run stored in
 `tutorial_1.proj` gives the same reverberation times as ours to 4 decimals in every band.
 
+**Tutorial 1's box cannot tell how the absorption is combined** (M7 review). Its floor (α 0.1) and
+ceiling (0.3) have equal areas, 60 m², and average to the walls' 0.2, so a mean weighted by area, a
+mean over the 12 faces and a mean over the three materials are all 0.2: the last two also equal
+TCR within 3.3·10⁻⁷ in every band (`gate_d_tcr_equals_…` prints it). Gate M7(d) therefore also
+runs `rooms/tutorial1_box_asymmetric.simpa`: the floor's α rising from 0.15 to 0.80 over the bands,
+the walls 0.1, the ceiling 0.3 (`results_rooms.rs`, `asymmetric_box`). TCR equals ours within
+7.2·10⁻⁷ in every band, and each wrong way misses it by more than 0.5 % in all 27 bands, both
+theories (`gate_d_the_asymmetric_room_…`): a mean over faces by at least 13.3 %, a mean over
+materials by 6.6 %, the floor's and the walls' materials swapped by 4.9 %, each band's neighbour's
+absorption by 0.92 %. A swap of the floor and the ceiling cannot show in a box like this, nor in
+Sabine or Eyring at all when the two have equal areas: they see only `A` and `S`.
+
 ## Receivers are enumerated by folder
 
 SPPS writes each point receiver into a folder named by its label, TCR into a file `<lbl>.gabe`.
@@ -119,7 +133,8 @@ and a copy with a third folder `Seat3` is refused (`cli_results.rs`, `results_lo
 
 For each SPPS point receiver and band, `report::parameters` gives piece A's SPL, EDT, T20, T30, C50,
 C80, D50 and Ts, each a value or its refusal; the same for an explicitly labelled aggregate of all
-bands summed bin by bin (`params::aggregate`).
+bands summed bin by bin (`params::aggregate`). For a TCR receiver each of the eight is refused,
+`no_time_series` (above).
 
 **The arrival.** Every onset-relative parameter is measured from the direct sound's arrival at the
 receiver's centre, `params::decay::Arrival::Known`: the earliest over the sources of emission plus
@@ -224,6 +239,11 @@ summed power, `N` `nbparticules`, `R` `rayon_recepteurp`. The JSON gives the mod
 5) scales each particle's energy by its direction (`sppsNantes.cpp:115-127`), so no deposit is
 known and every value is refused, `noise_unknown`.
 
+**Against real seeds** (M7 review): over 20 SPPS seeds of tutorial 1 the estimate matches the
+spread of every quantity at 150,000 particles (pooled ratio 0.95–1.05), and at 1,500,000 runs low
+by 15–21 % for EDT, T20 and Ts; `docs/params.md`, "Monte-Carlo noise", has the table and what it
+means at the refusal limit.
+
 **Tutorial 1, Receiver 1, at 150,000 particles** (`cli_results.rs`,
 `tutorial1_parameters_beside_upstreams`): about 3,300 crossings per band. SPL, C50, C80, D50 and
 Ts come out in most of the 27 bands; EDT carries 2.4–3.4 % and passes in 2 bands; T20 carries
@@ -287,3 +307,22 @@ averaging `1/d²` over a sphere of radius `R` reads `10·lg(1 + R²/(5r²))` hig
 Says no: Night Mode's `.gap` echogram level, the energy over the intensity reference 10⁻¹²
 instead of `p₀²` (`main:project/result_parser.cpp:486`), reads 26.02 dB high and misses the gate in
 every band; so does the SPL moved 1 dB either way.
+
+**The exact free field** (M7 review). Because its reference sits 0.11–0.30 dB below what SPPS should
+give, the gate's ±0.5 dB lets a calibration error between about −0.6 and +0.2 dB through. The same
+run is therefore also held to the exact value, `W·ρc·⟨1/d²⟩/(4π·p₀²)`: `ρc` as SPPS computes it from
+the run's temperature and pressure (413.25 at 20 °C and 101 325 Pa), and `⟨1/d²⟩` the mean over
+the receiver ball in closed form, `3/(2r·R³)·[(R² − r²)/2·ln((r+R)/(r−R)) + r·R]` (+0.0554 dB at
+2 m and +0.0137 dB at 4 m above `1/r²`; `cli_results.rs`,
+`the_ball_average_of_the_inverse_square_is_its_closed_form`). Every band must lie within 4 of its
+`mc_sd`, and the mean of the 12, weighted by `1/mc_sd²`, within 4 of its standard deviation. On
+seed 1 that mean is +0.028 dB with a standard deviation of 0.014 dB; it catches an offset above
++0.028 dB or below −0.083 dB, so the SPL moved 0.1 dB either way, or computed with `ρc` = 400
+(−0.14 dB), is caught.
+
+**Over ten seeds** (`cli_results.rs`, `level_box_over_ten_seeds`, run on purpose: seeds 1–10,
+1,000,000 particles each): each seed's weighted mean difference from the exact free field runs from
+−0.024 to +0.028 dB, and their mean is **+0.0028 dB with a standard error of 0.0040 dB**, taken
+from the spread over the seeds, not from `mc_sd`. No level bias is resolved at the 0.01 dB scale;
+seed 1's +0.028 dB is chance. The SPL spread over the seeds is 1.12 times the mean `mc_sd` pooled
+over the 12 receiver-bands (0.66 to 1.57 per receiver-band, each from 10 seeds).

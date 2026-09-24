@@ -11,12 +11,19 @@
 //! - **Gate M7(c):** `rooms/level_box_20m.simpa` through SPPS: every band's SPL at 2 m and 4 m
 //!   within ±0.5 dB of `Lw − 20·lg r − 11`. Says no: Night Mode's `.gap` level (energy over
 //!   1e-12, `main:project/result_parser.cpp:486`) and a 1 dB offset each way miss it in every
-//!   band.
+//!   band. Tighter (M7 review): the same SPL against the exact free field within its Monte-Carlo
+//!   noise, which the SPL 0.1 dB either way, or with `ρc` = 400, misses.
 //! - **Gate M7(d):** tutorial 1's box through TCR: per band, TCR's Sabine and Eyring times equal
 //!   `core::params`' within 0.5 %, computed both from the project and from the run's own inputs,
 //!   and no value TCR wrote for display is NaN or infinite. Says no: the walls' α 5 % higher
 //!   moves the analytic value outside 0.5 % of the unchanged run in every band; a NaN planted in
-//!   a copy of the run is refused.
+//!   a copy of the run is refused. Tutorial 1's absorption cannot tell a mean by area from one by
+//!   face or by material, so `rooms/tutorial1_box_asymmetric.simpa` does (M7 review): each wrong
+//!   way misses TCR by more than 0.5 % in every band.
+//! - **Spec item 4 for TCR:** every TCR receiver band and aggregate carries the eight parameters,
+//!   each refused `no_time_series`.
+//! - **Evidence, run on purpose:** the level box over ten seeds (no level bias at the 0.01 dB
+//!   scale), and tutorial 1 over twenty seeds (the Monte-Carlo estimate against the real spread).
 //!
 //! The committed fixtures under `tests/fixtures/results/` are written by
 //! `cargo test -p simpa --test cli_results -- --ignored write_results_fixtures`.
@@ -40,6 +47,7 @@ const ENERGETIC: &str = "rooms/energetic_box.simpa";
 const SOURCES2: &str = "rooms/sources2_box.simpa";
 const ENERGETIC_SPPS: &str = "results/energetic_spps";
 const SOURCES2_SPPS: &str = "results/sources2_spps";
+const ASYMMETRIC: &str = "rooms/tutorial1_box_asymmetric.simpa";
 
 fn results(folder: &Path, json: bool) -> Out {
     let mut args = vec!["results".to_string(), folder.display().to_string()];
@@ -292,21 +300,62 @@ fn text_mode_prints_the_unvalidated_banner_and_a_row_per_band_and_receiver() {
     assert!(o.stdout.contains("TR Sab s"), "{}", o.stdout);
 }
 
+const EIGHT: [&str; 8] = [
+    "spl_db", "edt_s", "t20_s", "t30_s", "c50_db", "c80_db", "d50", "ts_s",
+];
+
 #[test]
 fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() {
     let rep = json(&results(&fixture(SEATS_SPPS), true));
-    let names = [
-        "spl_db", "edt_s", "t20_s", "t30_s", "c50_db", "c80_db", "d50", "ts_s",
-    ];
+    let mut values = 0;
     for r in rep["spps"]["point_receivers"].as_array().unwrap() {
         let bands = r["bands"].as_array().unwrap();
         assert_eq!(bands.len(), 2);
         for b in bands.iter().chain([&r["aggregate"]]) {
-            for n in names {
+            for n in EIGHT {
                 let p = &b["parameters"][n];
                 let ok = p["value"].is_f64() || p["not_evaluable"]["code"].is_string();
                 assert!(ok, "{} {n}: {p}", r["label"]);
+                values += usize::from(p["value"].is_f64());
+                // No SPPS receiver is refused for having no series.
+                assert_ne!(p["not_evaluable"]["error"]["why"]["why"], "no_time_series");
             }
+        }
+    }
+    assert!(values > 0, "the SPPS run has values");
+}
+
+#[test]
+fn a_tcr_receiver_has_all_eight_parameters_each_refused_for_having_no_series() {
+    // Spec item 4: per receiver and band, each value or its NOT_EVALUABLE reason. TCR writes
+    // steady-state levels and no series, so every one is refused, in the SPPS receivers' shape.
+    let rep = json(&results(&fixture(SEATS_TCR), true));
+    let rs = rep["tcr"]["point_receivers"].as_array().unwrap();
+    assert_eq!(rs.len(), 2);
+    for r in rs {
+        let bands = r["bands"].as_array().unwrap();
+        assert_eq!(bands.len(), 2);
+        assert_eq!(r["aggregate"]["bands_hz"], serde_json::json!([]));
+        for b in bands.iter().chain([&r["aggregate"]]) {
+            for n in EIGHT {
+                let p = &b["parameters"][n];
+                assert!(p["value"].is_null(), "{} {n}: {p}", r["label"]);
+                assert_eq!(p["not_evaluable"]["code"], "params_not_evaluable", "{p}");
+                let why = &p["not_evaluable"]["error"]["why"];
+                assert_eq!(why["why"], "no_time_series", "{p}");
+                assert!(
+                    why["detail"]
+                        .as_str()
+                        .unwrap()
+                        .contains(r["file"].as_str().unwrap()),
+                    "{p}"
+                );
+            }
+        }
+        // TCR's own levels stay beside them, as it wrote them.
+        for b in bands {
+            assert!(b["direct_db"].is_f64() && b["total_sabine_db"].is_f64());
+            assert!(b["total_eyring_db"].is_f64());
         }
     }
 }
@@ -549,12 +598,28 @@ fn source_levels(run: &Path) -> Vec<(i32, f64)> {
     v
 }
 
-/// Per receiver and band: `(label, band, r, spl, total energy, Lw)`.
-fn level_rows(run: &Path) -> Vec<(String, i32, f64, f64, f64, f64)> {
+/// One receiver and band of the level box.
+struct LevelRow {
+    label: String,
+    freq_hz: i32,
+    /// The receiver's distance from the source, m.
+    r: f64,
+    spl: f64,
+    /// SPL's estimated Monte-Carlo standard deviation, dB.
+    sd: f64,
+    /// The `.recp`'s total, Pa².
+    total: f64,
+    /// The source's level in the band, as SPPS reads it.
+    lw: f64,
+}
+
+/// The level box's rows, and its receiver radius.
+fn level_rows(run: &Path) -> (Vec<LevelRow>, f64) {
     let o = results(run, true);
     assert_eq!(o.code, 0, "{o:#?}");
     let rep = json(&o);
     let s = &rep["spps"];
+    let radius = s["receiver_radius_m"].as_f64().unwrap();
     let src: Vec<f64> = s["sources"][0]["position_m"]
         .as_array()
         .unwrap()
@@ -574,23 +639,22 @@ fn level_rows(run: &Path) -> Vec<(String, i32, f64, f64, f64, f64)> {
             ((p[0] - src[0]).powi(2) + (p[1] - src[1]).powi(2) + (p[2] - src[2]).powi(2)).sqrt();
         for b in r["bands"].as_array().unwrap() {
             let f = b["freq_hz"].as_i64().unwrap() as i32;
-            let spl = b["parameters"]["spl_db"]["value"]
+            let p = &b["parameters"]["spl_db"];
+            let spl = p["value"]
                 .as_f64()
-                .unwrap_or_else(|| {
-                    panic!("{} {f} Hz: SPL {}", r["label"], b["parameters"]["spl_db"])
-                });
-            let l = lw.iter().find(|x| x.0 == f).unwrap().1;
-            out.push((
-                r["label"].as_str().unwrap().to_string(),
-                f,
-                dist,
+                .unwrap_or_else(|| panic!("{} {f} Hz: SPL {p}", r["label"]));
+            out.push(LevelRow {
+                label: r["label"].as_str().unwrap().to_string(),
+                freq_hz: f,
+                r: dist,
                 spl,
-                b["total_pa2"].as_f64().unwrap(),
-                l,
-            ));
+                sd: p["mc_sd"].as_f64().unwrap(),
+                total: b["total_pa2"].as_f64().unwrap(),
+                lw: lw.iter().find(|x| x.0 == f).unwrap().1,
+            });
         }
     }
-    out
+    (out, radius)
 }
 
 /// Gate M7(c)'s predicate.
@@ -598,12 +662,77 @@ fn gate_c(spl: f64, lw: f64, r: f64) -> bool {
     (spl - (lw - 20.0 * r.log10() - 11.0)).abs() <= 0.5
 }
 
+/// `ρ·c` as SPPS computes it (`Masse_volumique_air.cpp:45-52`, `ρ = P·M/(R·T)` with M = 28.9644
+/// kg/kmol and R = 8314.32 J/(K·kmol); `Celerite_du_son.cpp:46`, `c = 343.2·√(T/293.15)`).
+fn solver_rho_c(temperature_c: f64, pressure_pa: f64) -> f64 {
+    let k = temperature_c + 273.15;
+    pressure_pa * 28.9644 / (8314.32 * k) * 343.2 * (k / 293.15).sqrt()
+}
+
+/// The mean of `1/d²` over a ball of radius `a` whose centre is `r > a` from the source: over a
+/// shell of radius `ρ` it is `ln((r+ρ)/(r−ρ))/(2rρ)`, and over the ball
+/// `3/(2r·a³)·[(a² − r²)/2·ln((r+a)/(r−a)) + r·a]`.
+fn mean_inverse_square(r: f64, a: f64) -> f64 {
+    3.0 / (2.0 * r * a.powi(3)) * ((a * a - r * r) / 2.0 * ((r + a) / (r - a)).ln() + r * a)
+}
+
+/// The free field's level at a receiver sphere of radius `a` centred `r` from an omni source of
+/// `lw` dB, averaged over the sphere as SPPS's receiver does: `W·ρc·⟨1/d²⟩/(4π·p₀²)`.
+fn exact_free_field(lw: f64, r: f64, a: f64, rho_c: f64) -> f64 {
+    let w = 1e-12 * 10f64.powf(lw / 10.0);
+    10.0 * (w * rho_c * mean_inverse_square(r, a) / (4.0 * std::f64::consts::PI * 4e-10)).log10()
+}
+
+/// The tighter level check (M7 review): the gate's reference assumes `ρc = 400` and a point
+/// receiver, so it sits 0.11–0.30 dB below what SPPS should give and cannot see an error between
+/// about −0.6 and +0.2 dB. Against the exact free field, with the noise each value carries: every
+/// band within 4 of its `mc_sd`, and the mean of all bands, weighted by `1/mc_sd²`, within 4 of its
+/// standard deviation. Returns that mean's difference, its standard deviation, and whether all
+/// passes, with `offset` dB added to every SPL.
+fn exact_check(rows: &[LevelRow], radius: f64, rho_c: f64, offset: f64) -> (f64, f64, bool) {
+    let (mut sum, mut weights, mut bands_ok) = (0.0, 0.0, true);
+    for x in rows {
+        let d = x.spl + offset - exact_free_field(x.lw, x.r, radius, rho_c);
+        bands_ok &= d.abs() <= 4.0 * x.sd;
+        sum += d / (x.sd * x.sd);
+        weights += 1.0 / (x.sd * x.sd);
+    }
+    let (mean, sd) = (sum / weights, weights.sqrt().recip());
+    (mean, sd, bands_ok && mean.abs() <= 4.0 * sd)
+}
+
+#[test]
+fn the_ball_average_of_the_inverse_square_is_its_closed_form() {
+    // Against a midpoint sum over the ball in spherical shells, and the series 1 + a²/(5r²) + ….
+    for (r, a) in [(2.0, 0.5), (4.0, 0.5), (1.0, 0.31)] {
+        let (n, mut s) = (4000, 0.0);
+        for k in 0..n {
+            let rho = (k as f64 + 0.5) / n as f64 * a;
+            let shell = ((r + rho) / (r - rho)).ln() / (2.0 * r * rho);
+            s += 3.0 * rho * rho / a.powi(3) * shell * a / n as f64;
+        }
+        let closed = mean_inverse_square(r, a);
+        assert!(
+            (closed / s - 1.0).abs() < 1e-6,
+            "r {r}, a {a}: {closed} vs {s}"
+        );
+        let series = (1.0 + a * a / (5.0 * r * r) + 3.0 * a.powi(4) / (35.0 * r.powi(4))) / (r * r);
+        assert!((closed / series - 1.0).abs() < 1e-3, "{closed} vs {series}");
+    }
+    // 10·lg of it at 2 m and 4 m for R = 0.5 m, above 1/r²: +0.0554 and +0.0137 dB.
+    let db = |r: f64| 10.0 * (mean_inverse_square(r, 0.5) * r * r).log10();
+    assert!((db(2.0) - 0.0554).abs() < 5e-4 && (db(4.0) - 0.0137).abs() < 5e-4);
+    // SPPS's ρc at 20 °C, 101 325 Pa.
+    assert!((solver_rho_c(20.0, 101_325.0) - 413.25).abs() < 0.01);
+}
+
 #[test]
 fn gate_c_level_calibration_and_the_offsets_it_catches() {
     let root = scratch("gate-c");
     let run = run_ok(&fixture(LEVEL), "spps", &root, &[]);
-    let rows = level_rows(&run);
+    let (rows, radius) = level_rows(&run);
     assert_eq!(rows.len(), 12, "2 receivers x 6 bands");
+    assert_eq!(radius, 0.5);
     // What keeps the reverberant field out is the duration: no particle reaches a surface, so
     // none is absorbed and every one remains (results_rooms.rs, level_box).
     let rep = json(&results(&run, true));
@@ -611,45 +740,100 @@ fn gate_c_level_calibration_and_the_offsets_it_catches() {
         assert_eq!(b["absorbed_by_materials"], 0, "{b}");
         assert_eq!(b["remaining"], b["total"], "{b}");
     }
-    // ρ·c as SPPS computes it at 20 °C and 101 325 Pa (Masse_volumique_air.cpp:45-52;
-    // Celerite_du_son.cpp:46), and the average of 1/d² over a receiver sphere of radius R.
-    let rho_c = 101_325.0 * 28.9644 / (8314.32 * 293.15) * 343.2;
-    let exact = |lw: f64, r: f64| {
-        lw + 10.0 * (rho_c * 1e-12 / (4.0 * std::f64::consts::PI * 4e-10)).log10()
-            - 20.0 * r.log10()
-            + 10.0 * (1.0 + 0.25 / (5.0 * r * r)).log10()
-    };
+    // The run's own atmosphere.
+    let text = std::fs::read_to_string(run.join("solve/config.xml")).unwrap();
+    let doc = roxmltree::Document::parse(&text).unwrap();
+    let atmo = doc
+        .descendants()
+        .find(|n| n.has_tag_name("condition_atmospherique"))
+        .unwrap();
+    let num = |k: &str| atmo.attribute(k).unwrap().parse::<f64>().unwrap();
+    let rho_c = solver_rho_c(num("temperature"), num("pression"));
     let (mut worst_gate, mut worst_exact) = (0.0f64, 0.0f64);
-    for (label, f, r, spl, total, lw) in &rows {
-        assert!((lw - 100.0).abs() < 1e-9, "{f} Hz: Lw {lw}");
+    for x in &rows {
+        let (spl, lw, r) = (x.spl, x.lw, x.r);
+        assert!((lw - 100.0).abs() < 1e-9, "{} Hz: Lw {lw}", x.freq_hz);
         let want = lw - 20.0 * r.log10() - 11.0;
+        let exact = exact_free_field(lw, r, radius, rho_c);
         println!(
-            "{label} {f:>5} Hz r {r:.6} m: SPL {spl:.3} dB, gate {want:.3} ({:+.3}), exact {:.3} \
-             ({:+.3})",
+            "{} {:>5} Hz r {r:.6} m: SPL {spl:.3} dB (mc_sd {:.3}), gate {want:.3} ({:+.3}), \
+             exact {exact:.3} ({:+.3}, {:+.1} mc_sd)",
+            x.label,
+            x.freq_hz,
+            x.sd,
             spl - want,
-            exact(*lw, *r),
-            spl - exact(*lw, *r)
+            spl - exact,
+            (spl - exact) / x.sd
         );
         worst_gate = worst_gate.max((spl - want).abs());
-        worst_exact = worst_exact.max((spl - exact(*lw, *r)).abs());
-        assert!(gate_c(*spl, *lw, *r), "{label} {f} Hz");
+        worst_exact = worst_exact.max((spl - exact).abs());
+        assert!(gate_c(spl, lw, r), "{} {} Hz", x.label, x.freq_hz);
         // Says no: Night Mode's .gap level, energy over the intensity reference 1e-12.
-        let night_mode = 10.0 * (total / 1e-12).log10();
-        assert!(!gate_c(night_mode, *lw, *r), "{label} {f} Hz: {night_mode}");
+        let night_mode = 10.0 * (x.total / 1e-12).log10();
+        assert!(!gate_c(night_mode, lw, r), "{} Hz: {night_mode}", x.freq_hz);
         assert!((night_mode - spl - 26.0206).abs() < 1e-3);
         // Says no: 1 dB either way.
-        assert!(!gate_c(spl + 1.0, *lw, *r) && !gate_c(spl - 1.0, *lw, *r));
+        assert!(!gate_c(spl + 1.0, lw, r) && !gate_c(spl - 1.0, lw, r));
     }
     println!("worst |SPL - gate| {worst_gate:.3} dB, worst |SPL - exact| {worst_exact:.3} dB");
+
+    // The tighter check against the exact free field.
+    let (mean, sd, ok) = exact_check(&rows, radius, rho_c, 0.0);
+    println!(
+        "exact free field (rho c {rho_c:.2}): weighted mean SPL - exact {mean:+.4} dB, standard \
+         deviation {sd:.4} dB ({:+.1} of them): {}",
+        mean / sd,
+        if ok { "within" } else { "OUTSIDE" }
+    );
+    assert!(ok);
+    // Says no: 0.1 dB either way, and the level SPPS would give with ρc = 400 (−0.141 dB), each
+    // miss it. The smallest offsets it catches on this run, each way.
+    let rho_400 = 10.0 * (400.0 / rho_c).log10();
+    for offset in [0.1, -0.1, rho_400] {
+        let (m, _, ok) = exact_check(&rows, radius, rho_c, offset);
+        println!(
+            "exact says no: SPL {offset:+.3} dB gives a mean of {m:+.4} dB: {}",
+            if ok { "PASSES" } else { "caught" }
+        );
+        assert!(!ok, "{offset}");
+    }
+    let (up, down) = (4.0 * sd - mean, 4.0 * sd + mean);
+    println!(
+        "exact catches an offset above {up:+.3} dB or below {:+.3} dB",
+        -down
+    );
+    assert!(up < 0.1 && down < 0.1);
 }
 
 // --- gate (d): TCR against the analytic values ---------------------------------------------------
 
+/// How [`project_analytic`] combines the project's absorption: TCR's way, and the wrong ways
+/// gate M7(d)'s say-no holds against it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Rule {
+    /// Every face's area with its group's material in the band: what TCR does.
+    ByFace,
+    /// The same with the walls' α scaled.
+    WallsScaled(f64),
+    /// One α for the whole surface, the mean over the faces, not weighted by area.
+    FaceMean,
+    /// One α for the whole surface, the mean over the materials in use.
+    MaterialMean,
+    /// The floor's and the walls' materials swapped.
+    FloorWallsSwapped,
+    /// Each band with its neighbour's absorption: the next band's, the previous for the last.
+    NeighbourBand,
+}
+
 /// Sabine and Eyring per band from the project itself: faces and their groups' materials,
-/// the geometry's volume, the solver's air term; with the walls' α scaled by `walls`.
-fn project_analytic(p: &schema::Project, walls: f64) -> Vec<(u32, f64, f64)> {
+/// the geometry's volume, the solver's air term; the absorption combined by `rule`.
+fn project_analytic(p: &schema::Project, rule: Rule) -> Vec<(u32, f64, f64)> {
     let v = &p.geometry.vertices;
     let pt = |i: u32| v[i as usize].to_array();
+    let group_material = |name: &str| {
+        let g = p.surface_groups.iter().find(|g| g.name == name).unwrap();
+        p.material(g.material).unwrap()
+    };
     let mut volume = 0.0;
     let mut faces = Vec::new();
     for f in &p.geometry.faces {
@@ -664,10 +848,25 @@ fn project_analytic(p: &schema::Project, walls: f64) -> Vec<(u32, f64, f64)> {
             + a[2] * (b[0] * c[1] - b[1] * c[0]))
             / 6.0;
         let g = p.group(f.group).unwrap();
-        let m = p.material(g.material).unwrap();
-        let scale = if g.name == "Walls" { walls } else { 1.0 };
+        let m = match (rule, g.name.as_str()) {
+            (Rule::FloorWallsSwapped, "Floor") => group_material("Walls"),
+            (Rule::FloorWallsSwapped, "Walls") => group_material("Floor"),
+            _ => p.material(g.material).unwrap(),
+        };
+        let scale = match rule {
+            Rule::WallsScaled(s) if g.name == "Walls" => s,
+            _ => 1.0,
+        };
         faces.push((area, m, scale));
     }
+    let mut used: Vec<&schema::Material> = Vec::new();
+    for (_, m, _) in &faces {
+        if !used.iter().any(|u| u.id == m.id) {
+            used.push(m);
+        }
+    }
+    let total: f64 = faces.iter().map(|f| f.0).sum();
+    let n = p.bands.frequencies_hz.len();
     let env = &p.environment;
     let atm = Atmosphere {
         temperature_c: env.temperature_c.get(),
@@ -679,13 +878,33 @@ fn project_analytic(p: &schema::Project, walls: f64) -> Vec<(u32, f64, f64)> {
         .iter()
         .enumerate()
         .map(|(i, &f)| {
-            let s: Vec<Surface> = faces
-                .iter()
-                .map(|(area, m, scale)| Surface {
-                    area_m2: *area,
-                    absorption: m.absorption[i].get() * scale,
-                })
-                .collect();
+            let band = match rule {
+                Rule::NeighbourBand if i + 1 < n => i + 1,
+                Rule::NeighbourBand => i - 1,
+                _ => i,
+            };
+            let s: Vec<Surface> = match rule {
+                Rule::FaceMean => vec![Surface {
+                    area_m2: total,
+                    absorption: faces
+                        .iter()
+                        .map(|(_, m, _)| m.absorption[band].get())
+                        .sum::<f64>()
+                        / faces.len() as f64,
+                }],
+                Rule::MaterialMean => vec![Surface {
+                    area_m2: total,
+                    absorption: used.iter().map(|m| m.absorption[band].get()).sum::<f64>()
+                        / used.len() as f64,
+                }],
+                _ => faces
+                    .iter()
+                    .map(|(area, m, scale)| Surface {
+                        area_m2: *area,
+                        absorption: m.absorption[band].get() * scale,
+                    })
+                    .collect(),
+            };
             let m = p
                 .solvers
                 .tcr
@@ -700,56 +919,105 @@ fn project_analytic(p: &schema::Project, walls: f64) -> Vec<(u32, f64, f64)> {
         .collect()
 }
 
-fn within(a: f64, b: f64, rel: f64) -> bool {
-    (a / b - 1.0).abs() <= rel
+/// A TCR run's report, which must read; its analytic values computed from the run's inputs.
+fn tcr_report(run: &Path) -> Value {
+    let o = results(run, true);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let rep = json(&o);
+    assert_eq!(
+        rep["tcr"]["analytic"]["status"], "computed",
+        "{}",
+        rep["tcr"]["analytic"]
+    );
+    rep
+}
+
+/// Per band `(freq, Sabine, Eyring)`: TCR's times from a report, or with `analytic` the times
+/// core::params computed on the run's inputs.
+fn report_times(rep: &Value, analytic: bool) -> Vec<(u32, f64, f64)> {
+    let t = &rep["tcr"];
+    t["bands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let f = b["freq_hz"].as_i64().unwrap() as u32;
+            if analytic {
+                let a = &t["analytic"]["bands"][i];
+                assert_eq!(a["freq_hz"], b["freq_hz"]);
+                (
+                    f,
+                    a["sabine_s"]["value"].as_f64().unwrap(),
+                    a["eyring_s"]["value"].as_f64().unwrap(),
+                )
+            } else {
+                (
+                    f,
+                    b["sabine"]["reverberation_time_s"].as_f64().unwrap(),
+                    b["eyring"]["reverberation_time_s"].as_f64().unwrap(),
+                )
+            }
+        })
+        .collect()
+}
+
+/// Against TCR's times per band: the largest relative difference over bands and theories; the
+/// bands in which both theories are within `rel`; the bands in which both are outside it; and the
+/// smallest relative difference.
+fn compare(
+    tcr: &[(u32, f64, f64)],
+    ours: &[(u32, f64, f64)],
+    rel: f64,
+) -> (f64, usize, usize, f64) {
+    assert_eq!(tcr.len(), ours.len());
+    let (mut worst, mut inside, mut outside, mut closest) = (0.0f64, 0, 0, f64::MAX);
+    for (t, o) in tcr.iter().zip(ours) {
+        assert_eq!(t.0, o.0, "bands");
+        let (ds, de) = ((t.1 / o.1 - 1.0).abs(), (t.2 / o.2 - 1.0).abs());
+        worst = worst.max(ds).max(de);
+        closest = closest.min(ds).min(de);
+        if ds <= rel && de <= rel {
+            inside += 1;
+        }
+        if ds > rel && de > rel {
+            outside += 1;
+        }
+    }
+    (worst, inside, outside, closest)
 }
 
 #[test]
 fn gate_d_tcr_equals_the_analytic_sabine_and_eyring_and_says_no() {
     let root = scratch("gate-d");
     let run = run_ok(&fixture(TUTORIAL), "tcr", &root, &[]);
-    let o = results(&run, true);
-    assert_eq!(o.code, 0, "{o:#?}");
-    let rep = json(&o);
-    let t = &rep["tcr"];
+    let rep = tcr_report(&run);
     let p = schema::load(&fixture(TUTORIAL)).unwrap();
-    let ours = project_analytic(&p, 1.0);
-    let moved = project_analytic(&p, 1.05);
-    let from_run = &t["analytic"];
-    assert_eq!(from_run["status"], "computed", "{from_run}");
-    let (mut worst, mut moved_out) = (0.0f64, 0usize);
-    for (i, b) in t["bands"].as_array().unwrap().iter().enumerate() {
-        let f = b["freq_hz"].as_i64().unwrap() as u32;
-        let (of, sab, eyr) = ours[i];
-        assert_eq!(of, f);
-        let tcr_sab = b["sabine"]["reverberation_time_s"].as_f64().unwrap();
-        let tcr_eyr = b["eyring"]["reverberation_time_s"].as_f64().unwrap();
-        let run_sab = from_run["bands"][i]["sabine_s"]["value"].as_f64().unwrap();
-        let run_eyr = from_run["bands"][i]["eyring_s"]["value"].as_f64().unwrap();
-        for (what, x, y) in [
-            ("Sabine vs project", tcr_sab, sab),
-            ("Eyring vs project", tcr_eyr, eyr),
-            ("Sabine vs run inputs", tcr_sab, run_sab),
-            ("Eyring vs run inputs", tcr_eyr, run_eyr),
-        ] {
-            assert!(within(x, y, 0.005), "{f} Hz {what}: TCR {x}, ours {y}");
-            worst = worst.max((x / y - 1.0).abs());
-        }
-        // Says no: the walls 5 % more absorbing, against the unchanged run.
-        let (_, msab, meyr) = moved[i];
-        if !within(tcr_sab, msab, 0.005) && !within(tcr_eyr, meyr, 0.005) {
-            moved_out += 1;
-        } else {
-            println!(
-                "{f} Hz: walls +5 % stays within 0.5 %: {tcr_sab} vs {msab}, {tcr_eyr} vs {meyr}"
-            );
-        }
-    }
-    let n = t["bands"].as_array().unwrap().len();
+    let tcr = report_times(&rep, false);
+    let n = tcr.len();
+    assert_eq!(n, 27);
+    let (w1, in1, _, _) = compare(&tcr, &project_analytic(&p, Rule::ByFace), 0.005);
+    let (w2, in2, _, _) = compare(&tcr, &report_times(&rep, true), 0.005);
     println!(
-        "worst |TCR/ours - 1| {worst:.2e}; walls +5 % outside 0.5 % in {moved_out} of {n} bands"
+        "TCR against ours from the project: worst {w1:.2e}, within 0.5 % in {in1} of {n} bands; \
+         from the run's inputs: worst {w2:.2e}, within in {in2} of {n}"
     );
+    assert_eq!((in1, in2), (n, n));
+    // Says no: the walls 5 % more absorbing, against the unchanged run.
+    let (_, _, moved_out, _) = compare(&tcr, &project_analytic(&p, Rule::WallsScaled(1.05)), 0.005);
+    println!("walls +5 % outside 0.5 % in {moved_out} of {n} bands");
     assert_eq!(moved_out, n);
+    // What this room cannot say no to (M7 review): its floor's 0.1 and ceiling's 0.3 sit on equal
+    // areas and average to the walls' 0.2, so a mean over faces or over materials gives the same
+    // times as TCR. `gate_d_the_asymmetric_room_...` is the room that tells them apart.
+    for rule in [Rule::FaceMean, Rule::MaterialMean] {
+        let (w, inside, _, _) = compare(&tcr, &project_analytic(&p, rule), 0.005);
+        println!(
+            "tutorial 1 cannot tell {rule:?} apart: within 0.5 % in {inside} of {n} bands (worst \
+             {w:.2e})"
+        );
+        assert_eq!(inside, n);
+    }
 
     // No NaN or infinity in any value TCR wrote for display: every row of every table and every
     // .csbin value, read with the format readers alone. The one exception is Main results'
@@ -808,6 +1076,58 @@ fn gate_d_tcr_equals_the_analytic_sabine_and_eyring_and_says_no() {
     assert_eq!(o.code, 6, "{o:#?}");
     assert_eq!(refused_code(&o), "results_outputs_invalid");
     assert!(o.stderr.contains("nonfinite_result"), "{}", o.stderr);
+}
+
+#[test]
+fn gate_d_the_asymmetric_room_tells_apart_the_ways_of_combining_absorption() {
+    // The room: tutorial 1's box, the floor's α rising from 0.15 to 0.80 over the bands, the walls
+    // 0.1, the ceiling 0.3 (results_rooms.rs, asymmetric_box, which holds the recipe's margins).
+    let root = scratch("gate-d-asymmetric");
+    let run = run_ok(&fixture(ASYMMETRIC), "tcr", &root, &[]);
+    let rep = tcr_report(&run);
+    let p = schema::load(&fixture(ASYMMETRIC)).unwrap();
+    let tcr = report_times(&rep, false);
+    let n = tcr.len();
+    assert_eq!(n, 27);
+    let (w1, in1, _, _) = compare(&tcr, &project_analytic(&p, Rule::ByFace), 0.005);
+    let (w2, in2, _, _) = compare(&tcr, &report_times(&rep, true), 0.005);
+    println!(
+        "asymmetric: TCR against ours from the project: worst {w1:.2e}, within 0.5 % in {in1} of \
+         {n} bands; from the run's inputs: worst {w2:.2e}, within in {in2} of {n}"
+    );
+    assert_eq!((in1, in2), (n, n));
+    // Says no: each wrong way of combining the absorption is outside 0.5 % of TCR in every band,
+    // in both theories.
+    for rule in [
+        Rule::FaceMean,
+        Rule::MaterialMean,
+        Rule::FloorWallsSwapped,
+        Rule::NeighbourBand,
+    ] {
+        let (_, _, out, closest) = compare(&tcr, &project_analytic(&p, rule), 0.005);
+        println!(
+            "asymmetric says no: {rule:?} outside 0.5 % in {out} of {n} bands, closest {:.2} %",
+            100.0 * closest
+        );
+        assert_eq!(out, n, "{rule:?}");
+    }
+    // The absorption areas TCR wrote are the areas by face, band by band: 60·α_f + 27.6 m².
+    for (i, b) in rep["tcr"]["bands"].as_array().unwrap().iter().enumerate() {
+        let want = 60.0
+            * p.materials
+                .iter()
+                .find(|m| m.name == "Rising absorption")
+                .unwrap()
+                .absorption[i]
+                .get()
+            + 27.6;
+        let a = b["sabine"]["absorption_area_m2"].as_f64().unwrap();
+        assert!(
+            (a / want - 1.0).abs() < 1e-5,
+            "{} Hz: A {a}, want {want}",
+            b["freq_hz"]
+        );
+    }
 }
 
 fn walk(dir: &Path) -> Vec<PathBuf> {
@@ -1081,5 +1401,203 @@ fn tutorial1_parameters_beside_upstreams() {
             b["eyring"]["reverberation_time_s"].as_f64().unwrap(),
             a["eyring_s"]["value"].as_f64().unwrap(),
         );
+    }
+}
+
+// --- evidence for the noise model and the level calibration (run on purpose) --------------------
+
+/// `project` with SPPS seeded `seed` and changed by `edit`, saved into `dir`.
+fn seeded(project: &str, seed: u32, dir: &Path, edit: impl Fn(&mut schema::Project)) -> PathBuf {
+    let mut p = schema::load(&fixture(project)).unwrap();
+    p.solvers.spps.random_seed = seed;
+    edit(&mut p);
+    std::fs::create_dir_all(dir).unwrap();
+    let path = dir.join(format!("seed{seed}.simpa"));
+    schema::save(&p, &path).unwrap();
+    path
+}
+
+/// The mean and the sample standard deviation.
+fn mean_sd(x: &[f64]) -> (f64, f64) {
+    let n = x.len() as f64;
+    let m = x.iter().sum::<f64>() / n;
+    let v = x.iter().map(|v| (v - m).powi(2)).sum::<f64>() / (n - 1.0);
+    (m, v.sqrt())
+}
+
+#[test]
+#[ignore = "evidence, not a gate: runs the level box over ten SPPS seeds; run on purpose"]
+fn level_box_over_ten_seeds() {
+    let root = scratch("level-seeds");
+    let mut runs: Vec<Vec<LevelRow>> = Vec::new();
+    let mut radius = 0.0;
+    for seed in 1..=10u32 {
+        let project = seeded(LEVEL, seed, &root, |_| {});
+        let run = run_ok(&project, "spps", &root.join("runs"), &[]);
+        let (rows, r) = level_rows(&run);
+        radius = r;
+        runs.push(rows);
+    }
+    let rho_c = solver_rho_c(20.0, 101_325.0);
+    let cells = runs[0].len();
+    let mut ratios = Vec::new();
+    let (mut spread2, mut model2) = (0.0, 0.0);
+    for c in 0..cells {
+        let x = &runs[0][c];
+        let spl: Vec<f64> = runs.iter().map(|r| r[c].spl).collect();
+        let model = (runs.iter().map(|r| r[c].sd.powi(2)).sum::<f64>() / runs.len() as f64).sqrt();
+        let (m, sd) = mean_sd(&spl);
+        let exact = exact_free_field(x.lw, x.r, radius, rho_c);
+        println!(
+            "{} {:>5} Hz: mean SPL {m:.4} dB, exact {exact:.4} ({:+.4}); spread over the seeds \
+             {sd:.4} dB, mc_sd {model:.4} dB, ratio {:.2}",
+            x.label,
+            x.freq_hz,
+            m - exact,
+            sd / model
+        );
+        ratios.push(sd / model);
+        spread2 += sd * sd;
+        model2 += model * model;
+    }
+    // Each seed's mean difference from the exact free field, weighted by 1/mc_sd², and their
+    // spread over the seeds: a standard error that does not lean on mc_sd.
+    let per_seed: Vec<f64> = runs
+        .iter()
+        .map(|rows| exact_check(rows, radius, rho_c, 0.0).0)
+        .collect();
+    let (bias, spread) = mean_sd(&per_seed);
+    let se = spread / (per_seed.len() as f64).sqrt();
+    let pooled = (spread2 / model2).sqrt();
+    ratios.sort_by(f64::total_cmp);
+    println!(
+        "over {} seeds: each seed's weighted mean SPL - exact {per_seed:.4?}; their mean \
+         {bias:+.4} dB, standard error {se:.4} dB ({:+.1} of them)",
+        runs.len(),
+        bias / se
+    );
+    println!(
+        "spread over the seeds against mc_sd, {cells} receiver-bands: pooled {pooled:.2}, median \
+         {:.2}, from {:.2} to {:.2}",
+        ratios[cells / 2],
+        ratios[0],
+        ratios[cells - 1]
+    );
+    assert!(bias.abs() <= 4.0 * se, "a level bias of {bias:+.4} dB");
+    assert!((0.67..=1.5).contains(&pooled), "mc_sd is off by {pooled}");
+}
+
+/// A value and its standard deviation: a value with its `mc_sd`, or one refused for its noise with
+/// the standard deviation it had. `None` for any other refusal.
+fn value_and_sd(p: &Value) -> Option<(f64, f64)> {
+    if let (Some(v), Some(s)) = (p["value"].as_f64(), p["mc_sd"].as_f64()) {
+        return Some((v, s));
+    }
+    let why = &p["not_evaluable"]["error"]["why"];
+    if why["why"] == "monte_carlo_noise" {
+        return Some((why["value"].as_f64()?, why["sd"].as_f64()?));
+    }
+    None
+}
+
+#[test]
+#[ignore = "evidence, not a gate: runs tutorial 1 over twenty SPPS seeds on six octave bands; run \
+            on purpose"]
+fn noise_estimate_against_the_spread_of_twenty_seeds() {
+    // Tutorial 1 at its 150,000 particles, where T30 is mostly out of reach, and at ten times
+    // that for T30.
+    seed_spread(150_000);
+    seed_spread(1_500_000);
+}
+
+/// Tutorial 1 at `particles`, seeded 1 to 20, on the octave bands 125 Hz to 4 kHz, without its
+/// surface receiver (which the point receivers do not see): per receiver, band and quantity with a
+/// value in every seed, the spread of the values over the seeds against the estimated `mc_sd`.
+fn seed_spread(particles: u32) {
+    let root = scratch("tutorial1-seeds");
+    let keep = [125u32, 250, 500, 1000, 2000, 4000];
+    let mut reports = Vec::new();
+    let clock = std::time::Instant::now();
+    for seed in 1..=20u32 {
+        let project = seeded("rooms/tutorial1_box.simpa", seed, &root, |p| {
+            let all = p.bands.frequencies_hz.clone();
+            p.solvers.spps.bands_computed = all.iter().map(|f| keep.contains(f)).collect();
+            p.solvers.spps.particles_per_source = particles;
+            p.surface_receivers.clear();
+            p.solvers.spps.save_surface_intersections = false;
+        });
+        let run = run_ok(&project, "spps", &root.join("runs"), &[]);
+        let o = results(&run, true);
+        assert_eq!(o.code, 0, "{o:#?}");
+        reports.push(json(&o));
+        println!("seed {seed}: {:.0} s", clock.elapsed().as_secs_f64());
+    }
+    let n = reports.len();
+    println!("\n{particles} particles:");
+    println!(
+        "{:<11} {:>6} {:<7} {:>10} {:>10} {:>10} {:>6}",
+        "receiver", "band", "value", "mean", "spread", "model", "ratio"
+    );
+    let mut summary = Vec::new();
+    for q in EIGHT {
+        let (mut ratios, mut spread2, mut model2, mut short) = (Vec::new(), 0.0, 0.0, 0);
+        for (ri, r) in reports[0]["spps"]["point_receivers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .enumerate()
+        {
+            for (bi, b) in r["bands"].as_array().unwrap().iter().enumerate() {
+                let got: Vec<(f64, f64)> = reports
+                    .iter()
+                    .filter_map(|rep| {
+                        value_and_sd(
+                            &rep["spps"]["point_receivers"][ri]["bands"][bi]["parameters"][q],
+                        )
+                    })
+                    .collect();
+                // Only cells where every seed gives a value, so no seed is selected away.
+                if got.len() < n {
+                    short += 1;
+                    continue;
+                }
+                let values: Vec<f64> = got.iter().map(|g| g.0).collect();
+                let (m, spread) = mean_sd(&values);
+                let model = (got.iter().map(|g| g.1 * g.1).sum::<f64>() / n as f64).sqrt();
+                println!(
+                    "{:<11} {:>6} {q:<7} {m:>10.4} {spread:>10.4} {model:>10.4} {:>6.2}",
+                    r["label"].as_str().unwrap(),
+                    b["freq_hz"],
+                    spread / model
+                );
+                ratios.push(spread / model);
+                spread2 += spread * spread;
+                model2 += model * model;
+            }
+        }
+        ratios.sort_by(f64::total_cmp);
+        summary.push((q, ratios, (spread2 / model2).sqrt(), short));
+    }
+    println!(
+        "\n{particles} particles: spread over {n} seeds against the estimated mc_sd, per quantity:"
+    );
+    for (q, ratios, pooled, short) in &summary {
+        if ratios.is_empty() {
+            println!("{q:<7}: no receiver-band with a value in every seed ({short} short)");
+            continue;
+        }
+        println!(
+            "{q:<7}: {} receiver-bands, pooled {pooled:.2}, median {:.2}, from {:.2} to {:.2}; \
+             {short} left out (a seed without a value)",
+            ratios.len(),
+            ratios[ratios.len() / 2],
+            ratios[0],
+            ratios[ratios.len() - 1]
+        );
+    }
+    for (q, ratios, pooled, _) in &summary {
+        if !ratios.is_empty() {
+            assert!((0.67..=1.5).contains(pooled), "{q}: pooled ratio {pooled}");
+        }
     }
 }

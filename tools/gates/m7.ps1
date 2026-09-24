@@ -19,14 +19,20 @@
 #   simpa dump gabe|csbin <file>                                    cargo test -p simpa-core|simpa
 # Every check that can pass has a "says NO" partner that must refuse an input:
 # - (a), (b), (f): the gate's predicate is applied here to the numbers the tests print, and the
-#   tests' own refusals must run and pass: a decay 1 % off fails every bound, air 1 C or 5 % RH off
-#   misses the table, a natural-log or neighbouring-group DIN formula misses 0.552 s;
+#   tests' own refusals must run and pass: a decay 1 % off fails every bound, a decay kinked above
+#   -5 dB fails EDT only and one kinked below -25 dB T30 only (a wrong regression range breaks
+#   that), air 1 C or 5 % RH off misses the table, a natural-log or neighbouring-group DIN formula
+#   misses 0.552 s;
 # - (c): Night Mode's .gap level (energy over 1e-12, main:project/result_parser.cpp:486) and the
 #   SPL moved 1 dB either way miss the bound in every band. The reverberant field is kept out by
-#   the 20 ms duration (no particle reaches a wall), which the statistics must show;
+#   the 20 ms duration (no particle reaches a wall), which the statistics must show. Beyond the
+#   plan's bound (M7 review), the same run is held to the exact free field within its Monte-Carlo
+#   noise, and the SPL 0.1 dB either way, or with rho c = 400, misses that;
 # - (d): the walls' alpha 5 % higher, run through TCR, gives analytic times outside 0.5 % of the
 #   unchanged run in every band; a NaN planted in a copy of the run is found by the scan and the
-#   copy is refused by simpa results;
+#   copy is refused by simpa results. Beyond the plan's box (M7 review), an asymmetric box, where
+#   a mean over faces or materials, a swap of two groups' materials or a band's neighbour's
+#   absorption each miss TCR by more than 0.5 % in every band;
 # - (e): a copy with the two folders swapped reads the series swapped, and one with a third folder
 #   'Seat3' is refused (exit 6);
 # - the tail: cli_results' solver test must FAIL, with its panic, when the solvers are missing.
@@ -200,6 +206,23 @@ Check "(a) six exact decays, T 0.3/1/3 s x dt 1/10 ms: T20, T30, EDT within 0.5 
 }
 Check "(a) says NO: a decay 1 % off fails all seven bounds, in all six cases" { OneTest 'simpa-core' 'params_synthetic' 'a_decay_one_percent_off_fails_every_bound' }
 Check "(a) says NO: a series cut before -35 dB gives range_not_reached for T30, not a number" { OneTest 'simpa-core' 'params_synthetic' 'a_series_cut_before_minus_35_db_gives_not_evaluable_not_a_number' }
+# On an exact exponential every sub-range gives the same slope, so the six decays above cannot see
+# a wrong regression range (M7 review). A decay 5 % faster above -5 dB must fail EDT only, and one
+# 5 % slower below -25 dB T30 only: a T20 fitted over -5..-35 dB, a T30 over -5..-25 dB, or an EDT
+# or T20 starting at 0 or -5 dB where it should not, each breaks the pattern.
+Check "(a) says NO to a wrong regression range: a decay kinked above -5 dB fails EDT only, one kinked below -25 dB fails T30 only, for T 0.3/1/3 s" {
+    if (-not (OneTest 'simpa-core' 'params_synthetic' 'a_decay_off_only_where_one_parameter_looks_fails_that_parameter_only')) { return $false }
+    $m = [regex]::Matches($script:cargoText, '(?m)^(early|late) kink, T (\S+) s: EDT (within|OUTSIDE), T20 (within|OUTSIDE), T30 (within|OUTSIDE)')
+    $ok = $m.Count -eq 6
+    foreach ($x in $m) {
+        $g = $x.Groups
+        $want = if ($g[1].Value -eq 'early') { 'OUTSIDE,within,within' } else { 'within,within,OUTSIDE' }
+        $got = "$($g[3].Value),$($g[4].Value),$($g[5].Value)"
+        Write-Host ("      {0} kink, T {1} s: EDT {2}, T20 {3}, T30 {4}: {5}" -f $g[1].Value, $g[2].Value, $g[3].Value, $g[4].Value, $g[5].Value, $(if ($got -eq $want) { 'as it must' } else { 'WRONG' }))
+        if ($got -ne $want) { $ok = $false }
+    }
+    $ok
+}
 
 # --- (b) ISO 9613-1 ------------------------------------------------------------------------------
 Check "(b) ISO 9613-1 at 20 C, 50 % RH: every band of the table within 1 % relative" {
@@ -219,6 +242,26 @@ Check "(b) says NO: 1 C or 5 % RH off puts at least 20 of the 24 bands outside 1
 
 # --- (c) level calibration ------------------------------------------------------------------------
 function GateC([double]$spl, [double]$lw, [double]$r) { [math]::Abs($spl - ($lw - 20 * [math]::Log10($r) - 11)) -le 0.5 }
+# rho c as SPPS computes it: rho = P M / (R T), M 28.9644 kg/kmol, R 8314.32 J/(K kmol)
+# (Masse_volumique_air.cpp:45-52); c = 343.2 sqrt(T / 293.15) (Celerite_du_son.cpp:46).
+function SolverRhoC([double]$tc, [double]$p) { $k = $tc + 273.15; $p * 28.9644 / (8314.32 * $k) * 343.2 * [math]::Sqrt($k / 293.15) }
+# The mean of 1/d^2 over a ball of radius a centred r > a from the source:
+# 3/(2 r a^3) [(a^2 - r^2)/2 ln((r + a)/(r - a)) + r a].
+function MeanInvSq([double]$r, [double]$a) { 3.0 / (2.0 * $r * [math]::Pow($a, 3)) * (($a * $a - $r * $r) / 2.0 * [math]::Log(($r + $a) / ($r - $a)) + $r * $a) }
+# The free field at a receiver sphere, as SPPS's receiver averages it: W rho c <1/d^2> / (4 pi p0^2).
+function ExactLevel([double]$lw, [double]$r, [double]$a, [double]$rhoc) { 10 * [math]::Log10(1e-12 * [math]::Pow(10, $lw / 10) * $rhoc * (MeanInvSq $r $a) / (4 * [math]::PI * 4e-10)) }
+# Every band within 4 mc_sd of the exact free field, and the band mean weighted by 1/mc_sd^2 within
+# 4 of its standard deviation, with $offset dB added to every SPL.
+function ExactCheck($rows, [double]$a, [double]$rhoc, [double]$offset) {
+    $sum = 0.0; $w = 0.0; $bandsOk = $true
+    foreach ($x in $rows) {
+        $d = $x.Spl + $offset - (ExactLevel $x.Lw $x.R $a $rhoc)
+        if ([math]::Abs($d) -gt 4 * $x.Sd) { $bandsOk = $false }
+        $sum += $d / ($x.Sd * $x.Sd); $w += 1 / ($x.Sd * $x.Sd)
+    }
+    $mean = $sum / $w; $sd = 1 / [math]::Sqrt($w)
+    [pscustomobject]@{ Mean = $mean; Sd = $sd; Ok = ($bandsOk -and [math]::Abs($mean) -le 4 * $sd) }
+}
 $script:levelRows = $null
 function LevelRows {
     if ($null -ne $script:levelRows) { return , $script:levelRows }
@@ -226,7 +269,11 @@ function LevelRows {
     $rep = Results $run 'level-results'
     $script:levelRep = $rep
     [xml]$cfg = ReadText (Join-Path $run 'solve\config.xml')
-    $lw = @{}; foreach ($b in $cfg.configuration.sources.source.bfreq) { $lw[[int]$b.freq] = [double][single][double]::Parse($b.db, [Globalization.CultureInfo]::InvariantCulture) }
+    $inv = [Globalization.CultureInfo]::InvariantCulture
+    $atmo = $cfg.configuration.condition_atmospherique
+    $script:levelRhoC = SolverRhoC ([double]::Parse($atmo.temperature, $inv)) ([double]::Parse($atmo.pression, $inv))
+    $script:levelRadius = [double]$rep.spps.receiver_radius_m
+    $lw = @{}; foreach ($b in $cfg.configuration.sources.source.bfreq) { $lw[[int]$b.freq] = [double][single][double]::Parse($b.db, $inv) }
     $src = $rep.spps.sources[0].position_m
     $rows = @()
     foreach ($r in $rep.spps.point_receivers) {
@@ -235,7 +282,7 @@ function LevelRows {
         foreach ($b in $r.bands) {
             $spl = (Params $b).spl_db.value
             if ($null -eq $spl) { throw "$($r.label) $($b.freq_hz) Hz: SPL not evaluable: $((Params $b).spl_db.not_evaluable.message)" }
-            $rows += [pscustomobject]@{ Label = $r.label; F = [int]$b.freq_hz; R = $dist; Spl = [double]$spl; Total = [double]$b.total_pa2; Lw = $lw[[int]$b.freq_hz] }
+            $rows += [pscustomobject]@{ Label = $r.label; F = [int]$b.freq_hz; R = $dist; Spl = [double]$spl; Sd = [double](Params $b).spl_db.mc_sd; Total = [double]$b.total_pa2; Lw = $lw[[int]$b.freq_hz] }
         }
     }
     $script:levelRows = $rows
@@ -274,6 +321,29 @@ Check "(c) says NO: the SPL moved 1 dB up or down misses the bound in every band
     Write-Host "      caught in $($caught.Count) of $($rows.Count) bands"
     $caught.Count -eq $rows.Count
 }
+# The gate's reference assumes rho c = 400 and a point receiver, so it sits 0.11-0.30 dB below what
+# SPPS should give, and a calibration error between about -0.6 and +0.2 dB passes it (M7 review).
+# This check holds the same run to the exact free field, within the noise each value carries.
+Check "(c) the exact free field, W rho c <1/d^2> / (4 pi p0^2) with SPPS's rho c and the mean over the receiver sphere: every band within 4 mc_sd, the band mean weighted by 1/mc_sd^2 within 4 of its standard deviation" {
+    $rows = LevelRows
+    foreach ($x in $rows) {
+        $e = ExactLevel $x.Lw $x.R $script:levelRadius $script:levelRhoC
+        Write-Host ("      {0} {1,5} Hz: SPL {2:N3} dB, exact {3:N3} dB ({4:+0.000;-0.000}, {5:+0.0;-0.0} mc_sd)" -f $x.Label, $x.F, $x.Spl, $e, ($x.Spl - $e), (($x.Spl - $e) / $x.Sd))
+    }
+    $c = ExactCheck $rows $script:levelRadius $script:levelRhoC 0
+    Write-Host ("      rho c {0:N2}, R {1} m; weighted mean SPL - exact {2:+0.0000;-0.0000} dB, standard deviation {3:N4} dB: {4}" -f $script:levelRhoC, $script:levelRadius, $c.Mean, $c.Sd, $(if ($c.Ok) { 'within' } else { 'OUTSIDE' }))
+    $rows.Count -eq 12 -and $c.Ok
+}
+Check "(c) says NO to the exact free field: the SPL 0.1 dB up, 0.1 dB down, or as it would be with rho c = 400 (-0.14 dB) misses it" {
+    $rows = LevelRows
+    $caught = 0
+    foreach ($o in @(0.1, -0.1, (10 * [math]::Log10(400 / $script:levelRhoC)))) {
+        $c = ExactCheck $rows $script:levelRadius $script:levelRhoC $o
+        Write-Host ("      SPL {0:+0.000;-0.000} dB: weighted mean {1:+0.0000;-0.0000} dB: {2}" -f $o, $c.Mean, $(if ($c.Ok) { 'PASSES' } else { 'caught' }))
+        if (-not $c.Ok) { $caught++ }
+    }
+    $caught -eq 3
+}
 
 # --- (d) TCR against the analytic values ----------------------------------------------------------
 $tut = Join-Path $fx 'rooms\tutorial1_box_seeded.simpa'
@@ -283,8 +353,9 @@ function TcrRun {
     $script:tcrRun
 }
 function Within([double]$a, [double]$b) { [math]::Abs($a / $b - 1) -le 0.005 }
-Check "(d) tutorial-1 box through TCR: per band, TCR's Sabine and Eyring times equal core::params' on the run's inputs within 0.5 %" {
-    $rep = Results (TcrRun) 'tutorial-tcr-results'
+# Per band, TCR's Sabine and Eyring times against core::params' on the run's own inputs.
+function TcrAgainstAnalytic([string]$run, [string]$label) {
+    $rep = Results $run $label
     $t = $rep.tcr
     if ($t.analytic.status -ne 'computed') { throw "analytic: $($t.analytic.why)" }
     $worst = 0.0; $bad = @()
@@ -300,8 +371,26 @@ Check "(d) tutorial-1 box through TCR: per band, TCR's Sabine and Eyring times e
     $bad | Select-Object -First 5 | ForEach-Object { Write-Host "      $_" }
     $t.bands.Count -eq 27 -and $bad.Count -eq 0
 }
+Check "(d) tutorial-1 box through TCR: per band, TCR's Sabine and Eyring times equal core::params' on the run's inputs within 0.5 %" {
+    TcrAgainstAnalytic (TcrRun) 'tutorial-tcr-results'
+}
 Check "(d) the same from the project itself (cargo test gate_d_...): within 0.5 %, and the project's walls 5 % more absorbing outside it" {
     OneTest 'simpa' 'cli_results' 'gate_d_tcr_equals_the_analytic_sabine_and_eyring_and_says_no'
+}
+# Tutorial 1's floor (0.1) and ceiling (0.3) sit on equal areas and average to the walls' 0.2, so
+# a mean over faces or over materials gives TCR's times too, and the checks above cannot see how
+# the absorption is combined (M7 review). The asymmetric box can: the floor rising from 0.15 to
+# 0.80 over the bands, the walls 0.1, the ceiling 0.3 (results_rooms.rs, asymmetric_box).
+$asym = Join-Path $fx 'rooms\tutorial1_box_asymmetric.simpa'
+Check "(d) asymmetric box through TCR: per band, TCR's Sabine and Eyring times equal core::params' on the run's inputs within 0.5 %" {
+    TcrAgainstAnalytic (RunOk $asym 'tcr' (Join-Path $work 'tcr-asymmetric') 'asymmetric-tcr') 'asymmetric-tcr-results'
+}
+Check "(d) says NO on the asymmetric box: a mean over faces, a mean over materials, the floor's and walls' materials swapped, or each band's neighbour's absorption, is outside 0.5 % of TCR in all 27 bands, both theories" {
+    if (-not (OneTest 'simpa' 'cli_results' 'gate_d_the_asymmetric_room_tells_apart_the_ways_of_combining_absorption')) { return $false }
+    $m = [regex]::Matches($script:cargoText, '(?m)^asymmetric says no: (\w+) outside 0\.5 % in (\d+) of (\d+) bands, closest (\S+) %')
+    $m | ForEach-Object { Write-Host "      $($_.Groups[1].Value): outside in $($_.Groups[2].Value) of $($_.Groups[3].Value) bands, closest $($_.Groups[4].Value) %" }
+    $names = (@($m | ForEach-Object { $_.Groups[1].Value }) -join ',')
+    $m.Count -eq 4 -and $names -eq 'FaceMean,MaterialMean,FloorWallsSwapped,NeighbourBand' -and @($m | Where-Object { $_.Groups[2].Value -ne '27' -or $_.Groups[3].Value -ne '27' }).Count -eq 0
 }
 Check "(d) no NaN or infinity in any value TCR wrote for display: every row of every table (receiver Global rows included; Main results' Global areas and times are NaN by design and must be), every .csbin value" {
     $solve = Join-Path (TcrRun) 'solve'

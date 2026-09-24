@@ -304,6 +304,34 @@ deviation and refuses the value when it is too large.
   factor 0.85 to 1.25 for all eight quantities. At 4,000 crossings, tutorial 1's count at
   150,000 particles, 5 of 10 runs give a T30 more than 5 % off from the series alone, and every
   one is refused.
+- **Checked against real SPPS runs** (M7 review; `crates/simpa/tests/cli_results.rs`,
+  `noise_estimate_against_the_spread_of_twenty_seeds` and `level_box_over_ten_seeds`, run on
+  purpose). Tutorial 1, seeds 1 to 20, octave bands 125 Hz to 4 kHz, both receivers (12
+  receiver-bands); in each, the standard deviation of the values over the seeds against the
+  root-mean-square of the estimates, pooled over the receiver-bands where every seed gives a value:
+
+  | Quantity | 150,000 particles | 1,500,000 particles |
+  |---|---|---|
+  | SPL | 1.05 | 1.04 |
+  | EDT | 0.98 | 1.16 |
+  | T20 | 0.97 | 1.15 |
+  | T30 | no receiver-band with a value in every seed | 1.03 |
+  | C50 | 1.02 | 1.06 |
+  | C80 | 0.95 | 1.09 |
+  | D50 | 1.02 | 1.06 |
+  | Ts | 1.05 | 1.21 |
+
+  The level box over seeds 1 to 10 gives 1.12 for SPL. With 20 seeds a pooled ratio is uncertain
+  by about 5 %, so at 150,000 particles the estimate matches. **At 1,500,000 it runs 15–21 % low
+  for EDT, T20 and Ts**, about 3 standard errors: the spread falls more slowly than `1/√N`. Read
+  as a component that does not fall with `N`, it is 0.5 % for EDT and 1.4 % for T20. At the
+  limit the refusal acts on, 2.5 %, that makes the true standard deviation of an accepted EDT at
+  most 1.02 times the limit and of a T20 1.15 times; the other quantities 1.00 to 1.003 times. Not
+  explained: candidates are correlation between bins through a particle's shared path, which the
+  model leaves out, and SPPS's generator: `rand()/RAND_MAX` (`spps/sppsTypes.h:24-27`; upstream's
+  CMake defines no `__USE_BOOST_RANDOM_GENERATOR__`), 15 bits under the MSVC 19.44 runtime our
+  solvers are built with (`solvers/manifest.json`). M8's seed spread is the evidence that settles
+  it.
 - **What it assumes:** crossings independent between bins. A particle crossing twice is counted
   twice; at tutorial 1's counts (0.03 crossings per particle) that correlation is about 3 %.
 
@@ -546,7 +574,10 @@ and one of:
 - `monte_carlo_noise`, with the value, its standard deviation, the limit and the resamples that
   refused it; `noise_unknown`, with why ("Monte-Carlo noise");
 - `several_sources`, with the sources: made by `core::results`, not by `params`
-  (`docs/results.md`, "Several sources").
+  (`docs/results.md`, "Several sources");
+- `no_time_series`, with where the solver's own values are: made by `core::results` for every
+  parameter of a TCR receiver, which has steady-state levels and no series
+  (`docs/formats/results-json.md`, "`tcr`").
 
 `params_bad_noise_input` refuses a floor, a share alive or lost, or a mean deposit that is not a
 finite number in its domain.

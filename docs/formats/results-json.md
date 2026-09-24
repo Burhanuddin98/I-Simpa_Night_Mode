@@ -1,7 +1,8 @@
 # `simpa results --json`: the results of a run, for M12
 
-The JSON the Results screen (M12) reads: a verified run's results and, per SPPS point receiver and
-band, `core::params`' eight parameters. Written by `core::results::report`
+The JSON the Results screen (M12) reads: a verified run's results and, per point receiver and
+band, `core::params`' eight parameters, each a value or the reason it has none (for every TCR
+receiver, all eight refused `no_time_series`). Written by `core::results::report`
 (`crates/simpa-core/src/results/report.rs`); what is read and refused is `docs/results.md`.
 
 **The JSON Schema is `docs/formats/results-json.schema.json`**, generated from the same Rust types
@@ -22,6 +23,13 @@ simpa results --schema
 | 2 | a usage error: no folder, an unknown option, a second folder, a path that is not a folder, `--schema` with anything else | nothing | `simpa: <what>` |
 | 5 | the run is FAIL, CRASH or CANCELLED (`results_run_failed`, `results_run_cancelled`) | with `--json`, the refusal | `simpa: results refused: <code>: <detail>` |
 | 6 | the results do not verify (every other code of `docs/solver-contract.md`, "Result refusals") | with `--json`, the refusal | the same |
+
+5 and 6 are the plan's stable codes, "5 solver run, 6 result verification" (raw plan JSON, the
+`cli` component; `docs/m5-m6-design.md`, "Exit codes", which gives 6 to M7). A run whose verdict is
+FAIL, CRASH or CANCELLED is a failed solver run: 5. A folder whose verdict says OK but whose
+manifest, inputs or outputs no longer verify is not a failed run but results that fail
+verification: 6. `simpa run` itself exits 130 for a cancel; `simpa results` refuses the cancelled
+run's folder with 5, because it is a solver run that did not finish.
 
 Without `--json` the table starts with `UNVALIDATED: M8's physics bed has not passed; these numbers
 are not for publication.`
@@ -51,7 +59,8 @@ are not for publication.`
 
 ```
 {
-  "results_version": 2,               // 2: mc_sd, noise, floor, lost-share and per-source fields
+  "results_version": 3,               // 2: mc_sd, noise, floor, lost-share and per-source fields;
+                                      // 3: TCR receivers carry parameters and an aggregate
   "validated_by_bed": false,          // false until M8's bed passes: show nothing
   "run_folder": "<as given>",
   "solver": "spps" | "tcr",
@@ -87,7 +96,7 @@ A point receiver:
 | `label`, `folder` | the folder's name, which is exactly one `config.xml` label, and its path under `solve/` |
 | `position_m` | as SPPS stores it; `null` when not read |
 | `arrival_s` | the direct sound's arrival at the centre, which every onset-relative parameter is measured from; `null` when not computed, and the parameters then detect it |
-| `bands[]` | per computed band: `freq_hz`; `complete` (SPPS's statistics show nothing arrives after the series); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that lost particles can have taken, or `null` when none was lost); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …}` in Pa², or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters` |
+| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count no particle remaining when the steps ran out, so no tail after the series is bounded; lost particles do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that lost particles can have taken, or `null` when none was lost); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …}` in Pa², or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters` |
 | `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `parameters`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
 | `by_source[]` | `source` and its `energy` per band, Pa² |
 | `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `noise_model`, `crossings`, `energy_pa2`, `total_pa2`, `onset`, `parameters`) and `aggregate`: the parameters of that source–receiver pair. Empty otherwise |
@@ -109,7 +118,7 @@ carries one, and no value is reported whose standard deviation exceeds the run's
 limits. `code` is a row of `docs/solver-contract.md`, "Parameter refusals"; `error` is the typed
 refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `range_too_short`,
 `not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`, `monte_carlo_noise`,
-`noise_unknown`, `several_sources` for `params_not_evaluable` (`docs/params.md`).
+`noise_unknown`, `several_sources`, `no_time_series` for `params_not_evaluable` (`docs/params.md`).
 
 ### `tcr`
 
@@ -117,17 +126,29 @@ refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `range
 |---|---|
 | `bands[]` | per computed band: `freq_hz`, and for `sabine` and `eyring` each `absorption_area_m2`, `reverberation_time_s`, `level_db`, as TCR wrote them |
 | `global` | `aggregate` (the label), `sabine_level_db`, `eyring_level_db` |
-| `point_receivers[]` | `label`, `file`; per band `direct_db`, `total_sabine_db`, `total_eyring_db`; `global_direct_db`, `global_total_sabine_db`, `global_total_eyring_db` (the `Global` row, each column's energetic sum over the bands, **an aggregate**; a value that is not finite is refused, `results_value_invalid`) |
+| `point_receivers[]` | `label`, `file`; `bands[]`, per band `freq_hz`, `direct_db`, `total_sabine_db`, `total_eyring_db` (TCR's own levels) and `parameters`; `global_direct_db`, `global_total_sabine_db`, `global_total_eyring_db` (the `Global` row, each column's energetic sum over the bands, **an aggregate**; a value that is not finite is refused, `results_value_invalid`); `aggregate` (as SPPS's, `bands_hz` empty) |
 | `surfaces[]` | as for SPPS, with `field` one of `Direct field`, `Total field (Sabine)`, `Total field (Eyring)` |
 | `analytic` | `core::params`' Sabine and Eyring times on the run's own inputs: `{"status": "computed", "volume_m3", "area_m2", "bands": [{"freq_hz", "air_m_per_metre", "sabine_s", "eyring_s"}]}`, the two times as `{"value": …, "mc_sd": null}` or `{"not_evaluable": …}`; or `{"status": "not_computed", "why": …}` |
 
-TCR writes no time series, so a TCR report has no per-receiver `parameters`.
+TCR writes steady-state levels, not an energy time series, so `core::params` has nothing to compute
+from. A TCR receiver still has the same `bands[].parameters` and `aggregate.parameters` as an SPPS
+one, so M12 reads one shape, but each of the eight is refused:
+
+```
+{"not_evaluable": {"code": "params_not_evaluable",
+                   "message": "params_not_evaluable: SPL: no_time_series: the solver wrote none: ...",
+                   "error": {"kind": "not_evaluable", "quantity": {"quantity": "spl"},
+                             "why": {"why": "no_time_series", "detail": "TCR writes steady-state levels only; ..."}}}}
+```
+
+SPL is refused too: TCR gives two totals, Sabine's and Eyring's, and neither is `params`' SPL of a
+series. They are shown as TCR's own, `total_sabine_db` and `total_eyring_db`.
 
 ## A refusal
 
 ```
 {
-  "results_version": 2,
+  "results_version": 3,
   "run_folder": "<as given>",
   "refused": {
     "code": "results_run_failed",

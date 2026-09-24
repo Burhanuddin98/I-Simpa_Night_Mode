@@ -747,6 +747,24 @@
               "sources"
             ],
             "type": "object"
+          },
+          {
+            "description": "The solver wrote no energy time series for the receiver, so there is nothing to compute the\nquantity from. Made by `core::results` for TCR, whose receiver tables hold steady-state\nlevels only; `params` never sees such a receiver.",
+            "properties": {
+              "detail": {
+                "description": "The solver, and where its own values for the receiver are.",
+                "type": "string"
+              },
+              "why": {
+                "const": "no_time_series",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "detail"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -1109,47 +1127,6 @@
         ],
         "type": "object"
       },
-      "PointReceiver": {
-        "description": "A TCR point receiver: its file and its values.",
-        "properties": {
-          "bands": {
-            "items": {
-              "$ref": "#/$defs/ReceiverBand"
-            },
-            "type": "array"
-          },
-          "file": {
-            "description": "Relative to `solve/`.",
-            "type": "string"
-          },
-          "global_direct_db": {
-            "description": "The `Global` row: each column's energetic sum over the bands, an aggregate. A value that\nis not finite is refused, `results_value_invalid`.",
-            "format": "double",
-            "type": "number"
-          },
-          "global_total_eyring_db": {
-            "format": "double",
-            "type": "number"
-          },
-          "global_total_sabine_db": {
-            "format": "double",
-            "type": "number"
-          },
-          "label": {
-            "description": "The file's name without `.gabe`: exactly one `recepteur_ponctuel@lbl`.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "label",
-          "file",
-          "bands",
-          "global_direct_db",
-          "global_total_sabine_db",
-          "global_total_eyring_db"
-        ],
-        "type": "object"
-      },
       "Quantity": {
         "description": "What a refusal is about.",
         "oneOf": [
@@ -1264,34 +1241,6 @@
           }
         ]
       },
-      "ReceiverBand": {
-        "description": "One band of a TCR point receiver, dB.",
-        "properties": {
-          "direct_db": {
-            "format": "double",
-            "type": "number"
-          },
-          "freq_hz": {
-            "format": "int32",
-            "type": "integer"
-          },
-          "total_eyring_db": {
-            "format": "double",
-            "type": "number"
-          },
-          "total_sabine_db": {
-            "format": "double",
-            "type": "number"
-          }
-        },
-        "required": [
-          "freq_hz",
-          "direct_db",
-          "total_sabine_db",
-          "total_eyring_db"
-        ],
-        "type": "object"
-      },
       "ReceiverBandReport": {
         "description": "One band of an SPPS point receiver.",
         "properties": {
@@ -1301,7 +1250,7 @@
             "type": "number"
           },
           "complete": {
-            "description": "SPPS's statistics show that nothing arrives after the series' end (random mode, no\nparticle remaining, none lost: `spps::SppsResults::band_complete`), so the series is given\nto `params` as complete and no tail is bounded. Otherwise `params` bounds the tail.",
+            "description": "SPPS's statistics show that no particle was still alive when the steps ran out (random\nmode, `trans_epsilon` above 0, no particle remaining: `spps::SppsResults::band_complete`),\nso the series is given to `params` as complete and no tail after its end is bounded.\nOtherwise `params` bounds that tail. **Lost particles do not make a band incomplete:** the\nenergy their unfinished paths would have brought is bounded separately, `lost_share`.",
             "type": "boolean"
           },
           "contributing_sources": {
@@ -1868,8 +1817,87 @@
         ],
         "type": "object"
       },
+      "TcrReceiverBandReport": {
+        "description": "One band of a TCR point receiver: TCR's own levels, dB, and the eight parameters, every one\nrefused `no_time_series`.",
+        "properties": {
+          "direct_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "parameters": {
+            "$ref": "#/$defs/Parameters",
+            "description": "TCR writes steady-state levels, not an energy time series, so `core::params` has nothing\nto compute from: each of the eight is `params_not_evaluable`, `no_time_series`. Its SPL\ntoo, because TCR gives two totals, Sabine's and Eyring's, and neither is `params`' SPL of a\nseries; they are `total_sabine_db` and `total_eyring_db`."
+          },
+          "total_eyring_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "total_sabine_db": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "direct_db",
+          "total_sabine_db",
+          "total_eyring_db",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "TcrReceiverReport": {
+        "description": "A TCR point receiver, in the same shape as an SPPS one where the two meet: `label`, `bands[]`\nwith `freq_hz` and `parameters`, and `aggregate`.",
+        "properties": {
+          "aggregate": {
+            "$ref": "#/$defs/AggregateReport",
+            "description": "As SPPS's, with no band summed and every parameter refused `no_time_series`."
+          },
+          "bands": {
+            "items": {
+              "$ref": "#/$defs/TcrReceiverBandReport"
+            },
+            "type": "array"
+          },
+          "file": {
+            "description": "Relative to `solve/`.",
+            "type": "string"
+          },
+          "global_direct_db": {
+            "description": "The `Global` row: each column's energetic sum over the bands, **an aggregate**.",
+            "format": "double",
+            "type": "number"
+          },
+          "global_total_eyring_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "global_total_sabine_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "label": {
+            "description": "The file's name without `.gabe`: exactly one `recepteur_ponctuel@lbl`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "file",
+          "bands",
+          "global_direct_db",
+          "global_total_sabine_db",
+          "global_total_eyring_db",
+          "aggregate"
+        ],
+        "type": "object"
+      },
       "TcrReport": {
-        "description": "A TCR run: its values as TCR computed them, and `core::params`' analytic Sabine and Eyring\ntimes on the same inputs. TCR writes no time series, so there are no per-receiver parameters.",
+        "description": "A TCR run: its values as TCR computed them, and `core::params`' analytic Sabine and Eyring\ntimes on the same inputs. TCR writes no time series, so every per-receiver parameter is\nrefused, `no_time_series`.",
         "properties": {
           "analytic": {
             "$ref": "#/$defs/AnalyticReport"
@@ -1885,7 +1913,7 @@
           },
           "point_receivers": {
             "items": {
-              "$ref": "#/$defs/PointReceiver"
+              "$ref": "#/$defs/TcrReceiverReport"
             },
             "type": "array"
           },

@@ -202,6 +202,13 @@ pub enum NotEvaluable {
     /// quantities per source–receiver pair, and a sum of several sources' responses is not one.
     /// Made by `core::results`, which knows the sources; `params` never sees them.
     SeveralSources { sources: Vec<String> },
+    /// The solver wrote no energy time series for the receiver, so there is nothing to compute the
+    /// quantity from. Made by `core::results` for TCR, whose receiver tables hold steady-state
+    /// levels only; `params` never sees such a receiver.
+    NoTimeSeries {
+        /// The solver, and where its own values for the receiver are.
+        detail: String,
+    },
 }
 
 impl fmt::Display for NotEvaluable {
@@ -315,6 +322,9 @@ impl fmt::Display for NotEvaluable {
                 "several_sources: {sources:?} all contribute; the quantity is defined per source \
                  and receiver. Turn on the echogram per source"
             ),
+            NotEvaluable::NoTimeSeries { detail } => {
+                write!(f, "no_time_series: the solver wrote none: {detail}")
+            }
         }
     }
 }

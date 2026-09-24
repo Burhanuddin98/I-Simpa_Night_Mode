@@ -1,6 +1,7 @@
-//! The JSON `simpa results --json` prints: a [`RunResults`] and, per SPPS point receiver and band,
+//! The JSON `simpa results --json` prints: a [`RunResults`] and, per point receiver and band,
 //! `core::params`' SPL, EDT, T20, T30, C50, C80, D50 and Ts, each a value with its estimated
-//! Monte-Carlo standard deviation, or the reason it is not evaluable. The shape is documented in
+//! Monte-Carlo standard deviation, or the reason it is not evaluable (for a TCR receiver every
+//! one, `no_time_series`: TCR writes no series to compute them from). The shape is documented in
 //! `docs/formats/results-json.md` and generated as a JSON Schema by [`report_schema`]
 //! (`docs/formats/results-json.schema.json`), which M12 reads.
 //!
@@ -23,8 +24,9 @@ use crate::run::verdict::Status;
 use crate::schema::SolverKind;
 
 /// The layout of [`Report`]; bumped when a field changes meaning. 2: values carry `mc_sd`, and
-/// the Monte-Carlo, floor and per-source fields were added.
-pub const REPORT_VERSION: u32 = 2;
+/// the Monte-Carlo, floor and per-source fields were added. 3: TCR point receivers carry
+/// `parameters` per band and an `aggregate`, every value refused `no_time_series`.
+pub const REPORT_VERSION: u32 = 3;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -151,6 +153,29 @@ impl Parameters {
         self.d50 = refuse(Quantity::Definition { te_s: 0.05 });
         self.ts_s = refuse(Quantity::CentreTime);
     }
+
+    /// All eight refused as `no_time_series`: the solver wrote no series to compute them from
+    /// (TCR). `detail` says where the solver's own values are.
+    fn no_time_series(detail: &str) -> Self {
+        let refuse = |q: Quantity| {
+            Evaluated::refused(params::not_evaluable(
+                q,
+                NotEvaluable::NoTimeSeries {
+                    detail: detail.to_string(),
+                },
+            ))
+        };
+        Parameters {
+            spl_db: refuse(Quantity::Spl),
+            edt_s: refuse(Quantity::Edt),
+            t20_s: refuse(Quantity::T20),
+            t30_s: refuse(Quantity::T30),
+            c50_db: refuse(Quantity::Clarity { te_s: 0.05 }),
+            c80_db: refuse(Quantity::Clarity { te_s: 0.08 }),
+            d50: refuse(Quantity::Definition { te_s: 0.05 }),
+            ts_s: refuse(Quantity::CentreTime),
+        }
+    }
 }
 
 /// `core::params` on one series, measured from `arrival`, each value with its noise under `model`
@@ -182,9 +207,11 @@ pub fn parameters(
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct ReceiverBandReport {
     pub freq_hz: i32,
-    /// SPPS's statistics show that nothing arrives after the series' end (random mode, no
-    /// particle remaining, none lost: `spps::SppsResults::band_complete`), so the series is given
-    /// to `params` as complete and no tail is bounded. Otherwise `params` bounds the tail.
+    /// SPPS's statistics show that no particle was still alive when the steps ran out (random
+    /// mode, `trans_epsilon` above 0, no particle remaining: `spps::SppsResults::band_complete`),
+    /// so the series is given to `params` as complete and no tail after its end is bounded.
+    /// Otherwise `params` bounds that tail. **Lost particles do not make a band incomplete:** the
+    /// energy their unfinished paths would have brought is bounded separately, `lost_share`.
     pub complete: bool,
     /// The level below a particle's start at which SPPS drops it, dB, when that can cost the
     /// histogram energy (energetic mode: `-10·trans_epsilon`); `params` bounds what it can have
@@ -432,13 +459,79 @@ pub enum AnalyticReport {
     },
 }
 
+/// One band of a TCR point receiver: TCR's own levels, dB, and the eight parameters, every one
+/// refused `no_time_series`.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct TcrReceiverBandReport {
+    pub freq_hz: i32,
+    pub direct_db: f64,
+    pub total_sabine_db: f64,
+    pub total_eyring_db: f64,
+    /// TCR writes steady-state levels, not an energy time series, so `core::params` has nothing
+    /// to compute from: each of the eight is `params_not_evaluable`, `no_time_series`. Its SPL
+    /// too, because TCR gives two totals, Sabine's and Eyring's, and neither is `params`' SPL of a
+    /// series; they are `total_sabine_db` and `total_eyring_db`.
+    pub parameters: Parameters,
+}
+
+/// A TCR point receiver, in the same shape as an SPPS one where the two meet: `label`, `bands[]`
+/// with `freq_hz` and `parameters`, and `aggregate`.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct TcrReceiverReport {
+    /// The file's name without `.gabe`: exactly one `recepteur_ponctuel@lbl`.
+    pub label: String,
+    /// Relative to `solve/`.
+    pub file: String,
+    pub bands: Vec<TcrReceiverBandReport>,
+    /// The `Global` row: each column's energetic sum over the bands, **an aggregate**.
+    pub global_direct_db: f64,
+    pub global_total_sabine_db: f64,
+    pub global_total_eyring_db: f64,
+    /// As SPPS's, with no band summed and every parameter refused `no_time_series`.
+    pub aggregate: AggregateReport,
+}
+
+impl TcrReceiverReport {
+    fn of(r: &tcr::PointReceiver) -> Self {
+        let parameters = Parameters::no_time_series(&format!(
+            "TCR writes steady-state levels only; its own for this receiver are direct_db, \
+             total_sabine_db and total_eyring_db ({})",
+            r.file
+        ));
+        TcrReceiverReport {
+            label: r.label.clone(),
+            file: r.file.clone(),
+            bands: r
+                .bands
+                .iter()
+                .map(|b| TcrReceiverBandReport {
+                    freq_hz: b.freq_hz,
+                    direct_db: b.direct_db,
+                    total_sabine_db: b.total_sabine_db,
+                    total_eyring_db: b.total_eyring_db,
+                    parameters: parameters.clone(),
+                })
+                .collect(),
+            global_direct_db: r.global_direct_db,
+            global_total_sabine_db: r.global_total_sabine_db,
+            global_total_eyring_db: r.global_total_eyring_db,
+            aggregate: AggregateReport {
+                aggregate: "all computed bands summed bin by bin".into(),
+                bands_hz: Vec::new(),
+                parameters,
+            },
+        }
+    }
+}
+
 /// A TCR run: its values as TCR computed them, and `core::params`' analytic Sabine and Eyring
-/// times on the same inputs. TCR writes no time series, so there are no per-receiver parameters.
+/// times on the same inputs. TCR writes no time series, so every per-receiver parameter is
+/// refused, `no_time_series`.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct TcrReport {
     pub bands: Vec<MainBand>,
     pub global: TcrGlobal,
-    pub point_receivers: Vec<tcr::PointReceiver>,
+    pub point_receivers: Vec<TcrReceiverReport>,
     pub surfaces: Vec<SurfaceSummary>,
     pub analytic: AnalyticReport,
 }
@@ -714,7 +807,11 @@ fn tcr_report(t: &TcrResults) -> TcrReport {
             sabine_level_db: t.global_sabine_level_db,
             eyring_level_db: t.global_eyring_level_db,
         },
-        point_receivers: t.point_receivers.clone(),
+        point_receivers: t
+            .point_receivers
+            .iter()
+            .map(TcrReceiverReport::of)
+            .collect(),
         surfaces: t.surfaces.iter().map(SurfaceSummary::of).collect(),
         analytic: match &t.analytic {
             tcr::Analytic::Computed {
