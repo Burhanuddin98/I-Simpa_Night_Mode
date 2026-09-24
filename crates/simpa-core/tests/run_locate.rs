@@ -1,11 +1,14 @@
 //! `run::locate` against SPPS itself. The emulation of SPPS's `f32` point-in-tetrahedron test is
-//! checked on meshes made by the real TetGen of the M1 build (`$SIMPA_SOLVERS_DIR`, see
-//! `common/paths.rs`; a missing build panics, nothing skips), on a hand-made two-tetrahedron
-//! mesh, and then against `spps.exe` on points on and near every internal facet of the seeded
-//! tutorial box: the emulation says a source is in no tetrahedron exactly when SPPS crashes with
-//! `0xC0000005`. Last, the bed behind `receiver_unlocatable`: on a refined box, a point receiver
-//! the emulation locates nowhere reads exactly zero in a run SPPS calls finished, while the same
-//! receiver 1 mm away does not.
+//! checked on tutorial 1's box as TetGen 1.6.0 meshed it (6 tetrahedra, the tutorial's source
+//! exactly on an internal facet; `tests/fixtures/solver-outputs/tutorial1/tetgen_scene_mesh.1.*`,
+//! built by `mesh::mesh_from_tetgen`), in both corner orders: upstream's, which the builder writes,
+//! and TetGen's own (`mesh::in_tetgen_order`), in which that source is lost. Then on a hand-made
+//! two-tetrahedron mesh, and against `spps.exe` (`$SIMPA_SOLVERS_DIR`, see `common/paths.rs`; a
+//! missing build panics, nothing skips) on points on and near every internal facet of that box,
+//! in each order: the emulation says a source is in no tetrahedron exactly when SPPS crashes with
+//! `0xC0000005`. Last, the bed behind `receiver_unlocatable`: on a box refined by the M1 TetGen, a
+//! point receiver the emulation locates nowhere reads exactly zero in a run SPPS calls finished,
+//! while the same receiver 1 mm away does not.
 
 #[path = "run_support.rs"]
 mod support;
@@ -50,6 +53,30 @@ fn meshed(project: &Project, label: &str) -> (PathBuf, mbin::Mesh) {
     .unwrap();
     assert!(m.is_ok(), "{m:#?}");
     let mesh = mbin::read_file(&dir.join(names::TETRA_MESH)).unwrap();
+    (dir, mesh)
+}
+
+/// Tutorial 1's box as TetGen 1.6.0 meshed it, 6 tetrahedra with the tutorial's source on the
+/// internal facet x/6 + y/10 = 1, built for `project` by `mesh::mesh_from_tetgen` into a fresh
+/// folder: its `.mbin` in upstream's corner order, or with `tetgen_order` rewritten in TetGen's
+/// (`mesh::in_tetgen_order`). The folder and the `.mbin`.
+fn six_tetrahedra(project: &Project, label: &str, tetgen_order: bool) -> (PathBuf, mbin::Mesh) {
+    let dir = fresh_dir(label);
+    let m = mesh::mesh_from_tetgen(
+        project,
+        &fixture("solver-outputs/tutorial1"),
+        Some("tetgen_scene_mesh"),
+        &dir,
+    )
+    .unwrap();
+    assert!(m.is_ok(), "{m:#?}");
+    let path = dir.join(names::TETRA_MESH);
+    let mut mesh = mbin::read_file(&path).unwrap();
+    assert_eq!(mesh.tetrahedra.len(), 6);
+    if tetgen_order {
+        mesh = mesh::in_tetgen_order(&mesh);
+        mbin::write_file(&mesh, &path).unwrap();
+    }
     (dir, mesh)
 }
 
@@ -145,11 +172,10 @@ fn unit_normal([a, b, c]: [[f64; 3]; 3]) -> [f64; 3] {
 
 #[test]
 fn the_seeded_boxs_source_is_in_no_tetrahedron_and_its_neighbours_are() {
-    let (_, mesh) = meshed(&box_project(), "locate-box");
-    assert_eq!(mesh.tetrahedra.len(), 6);
+    let (_, mesh) = six_tetrahedra(&box_project(), "locate-box", true);
     let test = TetraTest::new(&mesh).unwrap();
-    // The tutorial's source, on the internal facet x/6 + y/10 = 1: outside both tetrahedra that
-    // share it, and outside the other four.
+    // In TetGen's corner order, the tutorial's source, on the internal facet x/6 + y/10 = 1: outside
+    // both tetrahedra that share it, and outside the other four.
     assert_eq!(test.locate(at("3", "5", "1.8")), None);
     // 5 cm and 10 cm off it, and 1 mm off it: inside one.
     assert!(test.locate(at("3.05", "5.1", "1.8")).is_some());
@@ -157,6 +183,12 @@ fn the_seeded_boxs_source_is_in_no_tetrahedron_and_its_neighbours_are() {
     // The source is on the facet in exact arithmetic: it is the f32 rounding that loses it.
     let a = at("3", "5", "1.8").map(f64::from);
     assert!((a[0] / 6.0 + a[1] / 10.0 - 1.0).abs() < 1e-12);
+    // The same six tetrahedra in upstream's corner order, which the builder writes: the faces are
+    // wound the other way round, the rounding falls the other way, and the source is found.
+    let (_, upstream) = six_tetrahedra(&box_project(), "locate-box-upstream", false);
+    let test = TetraTest::new(&upstream).unwrap();
+    assert!(test.locate(at("3", "5", "1.8")).is_some());
+    assert!(test.locate(at("3.05", "5.1", "1.8")).is_some());
 }
 
 /// The box's two tetrahedra across the facet that holds its source, rebuilt by hand with the
@@ -242,8 +274,24 @@ fn a_hand_made_two_tetrahedron_mesh_says_no_on_its_shared_face_and_yes_inside() 
 #[test]
 fn the_check_names_each_unlocatable_source_and_receiver_and_passes_the_rest() {
     let mut project = box_project();
-    let (mesh_dir, mesh) = meshed(&project, "locate-check");
+    let (mesh_dir, mesh) = six_tetrahedra(&project, "locate-check", true);
     let mbin_path = mesh_dir.join(names::TETRA_MESH);
+    // In upstream's corner order the same box passes as it is, and with Receiver 2 on the source's
+    // spot too: nothing the check names is lost there.
+    let (upstream_dir, _) = six_tetrahedra(&project, "locate-check-upstream", false);
+    let upstream_mbin = upstream_dir.join(names::TETRA_MESH);
+    for (label, receiver2) in [
+        ("check-up-box", None),
+        ("check-up-both", Some([3.0, 5.0, 1.8])),
+    ] {
+        let mut pr = project.clone();
+        if let Some(p) = receiver2 {
+            pr.point_receivers[1].position = Vec3::from(p);
+        }
+        let dir = fresh_dir(label);
+        stage(&pr, &upstream_mbin, &dir);
+        assert_eq!(locate::check_folder(&dir), [], "{label}");
+    }
     let reasons = |project: &Project, label: &str| {
         let dir = fresh_dir(label);
         stage(project, &mbin_path, &dir);
@@ -271,9 +319,11 @@ fn the_check_names_each_unlocatable_source_and_receiver_and_passes_the_rest() {
         got,
         [codes::SOURCE_UNLOCATABLE, codes::RECEIVER_UNLOCATABLE]
     );
+    // Numbered in config.xml's order, which lists receivers newest first as upstream writes them
+    // (`config_xml/write.rs`): Receiver 2 is the first.
     assert!(
         r[1].detail
-            .starts_with("point receiver 2 \"Receiver 2\" at (3, 5, 1.8): "),
+            .starts_with("point receiver 1 \"Receiver 2\" at (3, 5, 1.8): "),
         "{}",
         r[1].detail
     );
@@ -324,17 +374,16 @@ struct Row {
     end: bool,
 }
 
-#[test]
-fn the_emulation_agrees_with_spps_on_and_near_the_boxs_internal_facets() {
-    let mut project = box_project();
-    short_runs(&mut project, 10);
-    let (mesh_dir, mesh) = meshed(&project, "agree-mesh");
+/// The agreement table on the 6-tetrahedron box in one corner order: the three points known from
+/// the box's own run, two outside the room, then per internal facet a barycentric grid of 36
+/// points on it (s, t in tenths, both at least 0.1 and at most 0.9 together) and its centroid 1 mm
+/// off on either side; each staged as its own run folder, and SPPS run on each, eight at a time
+/// (about 1 s each, the crashes 2 s). The rows, after the table is printed.
+fn agreement(project: &Project, tetgen_order: bool, label: &str) -> Vec<Row> {
+    let (mesh_dir, mesh) = six_tetrahedra(project, &format!("{label}-mesh"), tetgen_order);
     let mbin_path = mesh_dir.join(names::TETRA_MESH);
     let test = TetraTest::new(&mesh).unwrap();
 
-    // The three points known from the box's own run, two outside the room, then per internal
-    // facet: a barycentric grid of 36 points on it (s, t in tenths, both at least 0.1 and at
-    // most 0.9 together), and its centroid 1 mm off on either side.
     let mut points: Vec<(String, [f64; 3])> = vec![
         ("known: the tutorial's source".into(), [3.0, 5.0, 1.8]),
         ("known: 5 cm, 10 cm off".into(), [3.05, 5.1, 1.8]),
@@ -365,9 +414,7 @@ fn the_emulation_agrees_with_spps_on_and_near_the_boxs_internal_facets() {
         }
     }
 
-    // Each point its own run folder, and SPPS on each, eight at a time (about 1 s each, the
-    // crashes 2 s).
-    let root = fresh_dir("agree-runs");
+    let root = fresh_dir(&format!("{label}-runs"));
     let dirs: Vec<PathBuf> = points
         .iter()
         .enumerate()
@@ -414,6 +461,12 @@ fn the_emulation_agrees_with_spps_on_and_near_the_boxs_internal_facets() {
         })
         .collect();
 
+    let order = if tetgen_order {
+        "TetGen's"
+    } else {
+        "upstream's"
+    };
+    println!("--- {order} corner order");
     println!(
         "{:<34} {:<52} {:>6} {:>10} end",
         "point", "x, y, z", "tet", "exit"
@@ -428,43 +481,98 @@ fn the_emulation_agrees_with_spps_on_and_near_the_boxs_internal_facets() {
             if r.end { "yes" } else { "no" }
         );
     }
-    let crashed = |r: &Row| r.exit == Some(ACCESS_VIOLATION);
-    let finished = |r: &Row| r.exit == Some(0) && r.end;
     let count = |f: &dyn Fn(&Row) -> bool| rows.iter().filter(|r| f(r)).count();
-    let (un_crash, un_fin) = (
+    println!(
+        "{} points in {order} order, SPPS on each in {secs:.1} s (8 at a time, 10 particles, 1 \
+         band)\n\
+         emulation \\ SPPS   crash 0xC0000005   End of calculation\n\
+         unlocated          {:>17}   {:>18}\n\
+         located            {:>17}   {:>18}",
+        rows.len(),
         count(&|r| r.tetrahedron.is_none() && crashed(r)),
         count(&|r| r.tetrahedron.is_none() && finished(r)),
-    );
-    let (lo_crash, lo_fin) = (
         count(&|r| r.tetrahedron.is_some() && crashed(r)),
         count(&|r| r.tetrahedron.is_some() && finished(r)),
     );
-    println!(
-        "{} points, SPPS on each in {secs:.1} s (8 at a time, 10 particles, 1 band)\n\
-         emulation \\ SPPS   crash 0xC0000005   End of calculation\n\
-         unlocated          {un_crash:>17}   {un_fin:>18}\n\
-         located            {lo_crash:>17}   {lo_fin:>18}",
-        rows.len()
-    );
+    rows
+}
 
-    // Every point: SPPS crashes exactly where the emulation locates the source nowhere, and
-    // finishes everywhere else; the manager's check refuses exactly those.
-    let bad: Vec<String> = rows
-        .iter()
+fn crashed(r: &Row) -> bool {
+    r.exit == Some(ACCESS_VIOLATION)
+}
+
+fn finished(r: &Row) -> bool {
+    r.exit == Some(0) && r.end
+}
+
+/// The rows where the emulation and SPPS disagree: SPPS must crash exactly where the emulation
+/// locates the source nowhere and finish everywhere else, and the manager's check must refuse
+/// exactly those.
+fn disagreements(rows: &[Row]) -> Vec<String> {
+    rows.iter()
         .filter(|r| {
             let unlocated = r.tetrahedron.is_none();
             (unlocated && !crashed(r)) || (!unlocated && !finished(r)) || r.refused != unlocated
         })
         .map(|r| format!("{} ({})", r.what, r.text.join(", ")))
-        .collect();
-    assert!(bad.is_empty(), "disagreements:\n{}", bad.join("\n"));
-    // Both answers occur often enough to be tested: the facet points that round out of both
-    // tetrahedra, the outside points, and the rest.
-    assert!(un_crash >= 10, "only {un_crash} unlocated points");
-    assert!(lo_fin >= 200, "only {lo_fin} located points");
-    assert_eq!(rows.len(), 5 + 6 * (36 + 2));
-    assert_eq!(rows[0].tetrahedron, None);
-    assert!(rows[1].tetrahedron.is_some() && rows[2].tetrahedron.is_some());
+        .collect()
+}
+
+#[test]
+fn the_emulation_agrees_with_spps_on_and_near_the_boxs_internal_facets() {
+    let mut project = box_project();
+    short_runs(&mut project, 10);
+    for (tetgen_order, label) in [(true, "agree-tetgen"), (false, "agree-upstream")] {
+        let rows = agreement(&project, tetgen_order, label);
+        let bad = disagreements(&rows);
+        assert!(
+            bad.is_empty(),
+            "{label}: disagreements:\n{}",
+            bad.join("\n")
+        );
+        assert_eq!(rows.len(), 5 + 6 * (36 + 2));
+        let unlocated = rows.iter().filter(|r| r.tetrahedron.is_none()).count();
+        let located = rows.len() - unlocated;
+        // The two outside points are lost in either order; 5 cm and 1 mm off the facet are found.
+        assert!(rows[3].tetrahedron.is_none() && rows[4].tetrahedron.is_none());
+        assert!(rows[1].tetrahedron.is_some() && rows[2].tetrahedron.is_some());
+        assert!(located >= 150, "{label}: only {located} located points");
+        if tetgen_order {
+            // Both answers occur often enough to be tested: the facet points that round out of
+            // both tetrahedra, the outside points, and the rest. The tutorial's source is lost.
+            assert!(
+                unlocated >= 10,
+                "{label}: only {unlocated} unlocated points"
+            );
+            assert_eq!(rows[0].tetrahedron, None);
+        } else {
+            // The builder's order: the tutorial's source is found.
+            assert!(rows[0].tetrahedron.is_some());
+        }
+    }
+    // Says no: the disagreement filter flags a row whose SPPS outcome is the other one.
+    let fake = |tetrahedron: Option<usize>, exit: u32, end: bool, refused: bool| Row {
+        what: "fake".into(),
+        text: ["0".into(), "0".into(), "0".into()],
+        tetrahedron,
+        refused,
+        exit: Some(exit),
+        end,
+    };
+    assert_eq!(
+        disagreements(&[fake(None, ACCESS_VIOLATION, false, true)]).len(),
+        0
+    );
+    assert_eq!(disagreements(&[fake(Some(0), 0, true, false)]).len(), 0);
+    assert_eq!(disagreements(&[fake(None, 0, true, true)]).len(), 1);
+    assert_eq!(
+        disagreements(&[fake(Some(0), ACCESS_VIOLATION, false, false)]).len(),
+        1
+    );
+    assert_eq!(
+        disagreements(&[fake(None, ACCESS_VIOLATION, false, false)]).len(),
+        1
+    );
 }
 
 /// The receiver bed. The box refined to at most 0.5 m^3 per tetrahedron, one source off every

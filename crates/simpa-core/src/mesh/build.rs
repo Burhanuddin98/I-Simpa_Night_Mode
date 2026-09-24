@@ -57,6 +57,27 @@ pub fn upstream_order<T: Copy>(row: [T; 4]) -> [T; 4] {
     UPSTREAM_CORNERS.map(|k| row[k])
 }
 
+/// `mesh` with each tetrahedron's corners put back in TetGen's `.ele` order: the inverse of
+/// [`upstream_order`], each face rebuilt from the reordered corners by [`FACE_CORNERS`], keeping
+/// the marker and neighbour of the face opposite the same node. This is the `.mbin` the builder
+/// wrote before it took upstream's order; the beds use it to show what the order changes (on
+/// tutorial 1's 6-tetrahedron box SPPS locates the source in upstream's order and crashes in this
+/// one, `crates/simpa/tests/cli_run.rs`). The permutation is even, so orientations keep their
+/// sign.
+pub fn in_tetgen_order(mesh: &mbin::Mesh) -> mbin::Mesh {
+    let mut out = mesh.clone();
+    for t in &mut out.tetrahedra {
+        let old = *t;
+        // UPSTREAM_CORNERS is its own inverse: (d,c,b,a) reversed is (a,b,c,d).
+        t.vertices = upstream_order(old.vertices);
+        t.faces = std::array::from_fn(|k| TetraFace {
+            vertices: FACE_CORNERS[k].map(|c| t.vertices[c]),
+            ..old.faces[UPSTREAM_CORNERS[k]]
+        });
+    }
+    out
+}
+
 /// Upstream's `UnitizeVar`: the centre and scale `CObjet3D::Unitize` fits to the scene
 /// (`isimpa/3dengine/Core/Objet3D.cpp:527-571`), in the GUI's GL axes, which are the scene's
 /// `(x, z, -y)`. The GUI holds every TetGen node in the frame this defines and converts it back

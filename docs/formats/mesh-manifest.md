@@ -17,9 +17,9 @@ decision 7). It is our own format: no upstream program reads or writes it.
 | `scene_mesh.var` | when `surface_receiver_max_area_m2` is set | `docs/formats/var.md` |
 | `mesh.cbin` | always, before TetGen | `config_xml::scene_mesh`: the scene the `.mbin` markers index |
 | `scene_mesh.1.{node,ele,face,edge,neigh}` | by TetGen | `docs/formats/tetgen.md` |
-| `scene_mesh_skipped.{node,face}` | by TetGen, on self-intersecting facets | then no `.1.neigh` |
+| `scene_mesh_skipped.{node,face}` | by TetGen 1.6.0, on self-intersecting facets | then no `.1.neigh`. TetGen 1.5.0, the mesher since decision 3, never writes them: it stops instead |
 | `tetgen.stdout.txt`, `tetgen.stderr.txt` | always, line by line as TetGen writes | |
-| `diag/` | after skipped facets | the `tetgen -d` follow-up: its own `scene_mesh.poly`, logs and TetGen files |
+| `diag/` | after skipped facets or a self-intersection stop | the `tetgen -d` follow-up: its own `scene_mesh.poly`, logs and TetGen files (1.5.0 writes `scene_mesh.1.node` and a `scene_mesh.1.face` of the intersecting triangles) |
 | `tetramesh.mbin` | **only when meshing succeeded** | `docs/formats/mbin.md` |
 | `mesh.json` | always, last | this page. The one exception: the folder cannot be created, or `mesh.json` cannot be written into it, and the call returns an error instead |
 
@@ -86,7 +86,8 @@ with `read_manifest`, which uses the crate's correctly rounded JSON reader
 | `zone_facets` | array | per box fitting zone: `zone` (its name), `solver_id`, `first_marker` of its 12 triangles |
 | `skipped_rows` | integer | rows of `scene_mesh_skipped.face` |
 | `skipped_facets` | array | per distinct skipped marker, ascending: `marker`, `scene_face` (when the marker is one), `group` (its surface group), `fitting_zone` (when it is a box zone's triangle) |
-| `diagnosis` | object or null | the `tetgen -d` follow-up, below. Null when no facet was skipped, when the run was cancelled, or when `diag/` could not be set up (a message then says why) |
+| `self_intersection` | object or null | TetGen 1.5.0's stop on a self-intersection, below; null when TetGen did not stop on one. Read as null when absent |
+| `diagnosis` | object or null | the `tetgen -d` follow-up, below. Null when no facet was skipped and TetGen did not stop on a self-intersection, when the run was cancelled, or when `diag/` could not be set up (a message then says why) |
 | `verify` | object or null | `mesh::verify::verify_mesh`'s report on the `.mbin` built, whether it passed or not |
 | `elapsed_ms` | number | wall time of the whole call |
 
@@ -96,16 +97,28 @@ with `read_manifest`, which uses the crate's correctly rounded JSON reader
 `attributes`: each TetGen region attribute seen, the `idVolume` written for it and its number of
 tetrahedra.
 
+`self_intersection` holds `stop`, the pair TetGen named before it stopped (an intersection as
+below, with `message` its `Found ...` line), or null when it named none; `pairs`, every pair of
+facet markers found intersecting, `[a, b]` with `a < b`, ascending, from the stop and the `-d`
+follow-up; and `facets`, every facet named by the stop, the `-d` pairs or the rows of
+`diag/scene_mesh.1.face`, once each, ascending, mapped as `skipped_facets` are (`marker`,
+`scene_face`, `group`, `fitting_zone`). How the stop's lines are read, and why a facet number maps
+through its position in the `.poly` while a segment maps by its points, is in
+`crates/simpa-core/src/mesh/diag.rs`.
+
 `diagnosis` holds `call` (as `tetgen`, with `argv` `["-d", "scene_mesh.poly"]` and `cwd` `diag`),
-`skipped_markers` (from `diag/scene_mesh_skipped.face`) and `intersections`. Each intersection has
+`skipped_markers` (from `diag/scene_mesh_skipped.face`, TetGen 1.6.0), `face_markers` (one per row
+of `diag/scene_mesh.1.face`, the intersecting triangles TetGen 1.5.0's `-d` writes; read as empty
+when absent) and `intersections`, each once however often TetGen printed it. Each intersection has
 TetGen's `message` and a `first` and `second` element, each with `kind` (`facet`, `segment`,
 `vertex`, or `unknown` when TetGen printed no detail), the `points` TetGen printed (`.poly` node
 numbers), the printed `tag`, and the facet `markers` it maps to. A segment's tag is -1, so a
 segment maps to every facet with that edge. Upstream's debug parser looks for TetGen 1.4's
 messages (`logger_tetgen_debug.hpp:47-71`), which TetGen 1.6.0 no longer prints; both forms are
-read (`crates/simpa-core/src/mesh/diag.rs`). Measured on the survey's self-intersecting cube: `-d`
-writes its own `_skipped.face` and exits 3, and the pairs are ({12}, {8}), ({12}, {9}) and
-({8, 9}, {12}).
+read (`crates/simpa-core/src/mesh/diag.rs`). Measured on the survey's self-intersecting cube: with
+TetGen 1.6.0, `-d` writes its own `_skipped.face` and exits 3, and the pairs are ({12}, {8}),
+({12}, {9}) and ({8, 9}, {12}); with TetGen 1.5.0, `-d` exits 0, prints the pairs (#9, #13) and
+(#10, #13) four times each, and writes a `.1.face` with markers 8, 9 and 12.
 
 ## Reason codes
 
@@ -126,8 +139,9 @@ The mesher's own codes:
 | `input_write_failed` | `mesh.cbin`, `scene_mesh.poly` or `scene_mesh.var` could not be written; TetGen does not run |
 | `tetgen_launch_failed` | TetGen could not be started (no such file), or its log could not be written |
 | `tetgen_crash` | the exit code is 0xC0000000 or above (an NTSTATUS error such as 0xC0000005) |
-| `tetgen_exit_nonzero` | the exit code is not 0; a crash has both codes. TetGen exits 3 after skipping facets |
-| `tetgen_skipped_facets` | `scene_mesh_skipped.face` has rows. Its markers are facet markers (`docs/formats/tetgen.md`) and are mapped to scene faces and groups; `diag/` then holds the `-d` follow-up |
+| `tetgen_exit_nonzero` | the exit code is not 0; a crash has both codes. TetGen exits 3 after skipping facets (1.6.0) and when it stops on a self-intersection (1.5.0) |
+| `tetgen_self_intersection` | TetGen stopped on a self-intersection of its input: exit code 3 with TetGen 1.5.0's line `A self-intersection was detected. Program stopped.` (`tetgen.h:2265-2267`), which it prints on every exit 3. The pair it names, when it names one, and the `-d` follow-up's pairs and `.1.face` rows are mapped to scene faces and groups in `self_intersection`; `diag/` holds the follow-up. TetGen 1.6.0's own stop line does not give this code: its `_skipped.face` does (`tetgen_skipped_facets`) |
+| `tetgen_skipped_facets` | `scene_mesh_skipped.face` has rows (TetGen 1.6.0; a committed 1.6.0 set such as `tests/fixtures/meshes/broken_hall` is still read). Its markers are facet markers (`docs/formats/tetgen.md`) and are mapped to scene faces and groups; `diag/` then holds the `-d` follow-up |
 | `tetgen_output_missing` | `.1.node`, `.1.ele` or `.1.face` is missing |
 | `neigh_missing` | `.1.neigh` is missing. Neighbours are never computed any other way. `mesh_from_tetgen` on a folder with no TetGen output reads it as `scene_mesh`, so it reports this and `tetgen_output_missing` |
 | `tetgen_output_invalid` | a TetGen file does not read (`scene_mesh_skipped.face` included), the files disagree (`formats::tetgen::check_mesh`), `.ele` has no `-A` attribute or a non-integral one, `.face` has no marker column, one triangle has two markers, or a `.face` triangle belongs to no tetrahedron |
@@ -170,7 +184,19 @@ any basename. Its own codes:
 | `manifest_mismatch` | `mesh.json` records a `.mbin` sha256 that is not the folder's `.mbin`'s, or one for a `.mbin` the folder lacks, or `files.mbin` null beside a `.mbin`. `run --mesh <dir>` refuses a folder whose `files.mbin` is not its `.mbin`'s sha256 with the same code |
 | `nothing_to_verify` | the folder holds neither TetGen output nor a `.mbin` |
 
-## Measured (2026-09-23, Grace, debug build of the tests)
+## Measured with TetGen 1.5.0 (2026-09-24, Grace, debug build of the tests)
+
+| Mesh | Flags | Result |
+|---|---|---|
+| tutorial 1's box | `-pq2 -A -n` + `.var` | 732 nodes, 2,257 tetrahedra, 934 floor faces of at most 0.09976 m², upstream's 2019 mesh (`tests/mesh_mbin_parity.rs`) |
+| tutorial 1's box without its `.var` | `-pq2 -A -n` | 60 tetrahedra, 10 floor faces, the largest 13.43 m² |
+| the survey's self-intersecting cube | `-pq5 -A -n -Y` | exit 3, `tetgen_self_intersection`: the stop names the edge [9, 10] (facet 12) against facet #9 (marker 8); `-d` names 8, 9 and 12 in the pairs [8, 12] and [9, 12]; no `_skipped.face`, no `.mbin` |
+| the box plus a baffle piercing wall face 9 | `-pq2 -A -n` + `.var` | exit 3, the stop names no pair (it stops in `Constrained Delaunay...`); `-d` names faces 9 (`Walls`) and 12 (`Baffle`), the pair [9, 12] |
+| the box plus two overlapping box zones | `-pq2 -A -n` + `.var` | exit 3, the stop names no pair; `-d` names 18 pairs over zone 1's markers 14, 15, 18-21 and zone 2's 24, 25, 28, 29, 34, 35, each named by its zone |
+
+## Measured with TetGen 1.6.0 (2026-09-23, Grace, debug build of the tests)
+
+The mesher before decision 3 moved to TetGen 1.5.0; kept as the record of what 1.6.0 does.
 
 | Mesh | Flags | Result |
 |---|---|---|

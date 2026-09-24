@@ -1,8 +1,8 @@
 //! `simpa mesh` and `simpa mesh-verify` through the built binary, with the M1 build of
 //! `tetgen.exe` (found as the CLI finds it: `$SIMPA_SOLVERS_DIR`, else the dev tree):
 //! - the tutorial box and the corrected hall mesh, and the result verifies (gates M5(a), M5(b));
-//! - a self-intersecting raw `.poly` is refused with its skipped facets named, and the committed
-//!   broken hall fails `mesh-verify` (M5(c));
+//! - a self-intersecting raw `.poly` is refused with its intersecting facets named, and the
+//!   committed broken hall fails `mesh-verify` (M5(c));
 //! - a cancel 50 ms into TetGen exits 130 with TetGen killed and nothing left running (M5(g)).
 
 mod support;
@@ -117,6 +117,10 @@ fn the_corrected_hall_meshes_with_every_scene_face_covered() {
     );
 }
 
+/// Gate M5(c) with TetGen 1.5.0: the survey's self-intersecting cube stops TetGen (exit 3), which
+/// writes no `_skipped.face`; `tetgen_self_intersection` names the facets its stop and its `-d`
+/// follow-up find, 8, 9 and 12, mapped to the same scene faces. The committed broken-hall set,
+/// TetGen 1.6.0's output with its `_skipped.face`, still verifies as before.
 #[test]
 fn a_self_intersecting_poly_is_refused_and_the_broken_hall_fails_verification() {
     let out = scratch("mesh-tg-bad");
@@ -124,22 +128,49 @@ fn a_self_intersecting_poly_is_refused_and_the_broken_hall_fails_verification() 
     assert_eq!(o.code, 4, "{o:#?}");
     let m = json(&o);
     assert_eq!(m["status"], "FAIL");
-    assert!(strings(&m["codes"]).contains(&"tetgen_skipped_facets".to_string()));
-    let markers: Vec<i64> = m["skipped_facets"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|s| s["marker"].as_i64().unwrap())
-        .collect();
-    assert_eq!(markers, [8, 9, 12]);
-    let faces: Vec<i64> = m["skipped_facets"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|s| s["scene_face"].as_i64().unwrap())
-        .collect();
-    assert_eq!(faces, [8, 9, 12], "mapped back to scene faces");
+    assert_eq!(
+        strings(&m["codes"]),
+        [
+            "tetgen_exit_nonzero",
+            "tetgen_self_intersection",
+            "tetgen_output_missing",
+            "neigh_missing"
+        ]
+    );
+    assert_eq!(m["skipped_facets"].as_array().unwrap().len(), 0);
+    let si = &m["self_intersection"];
+    let field = |key: &str| -> Vec<i64> {
+        si["facets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s[key].as_i64().unwrap())
+            .collect()
+    };
+    assert_eq!(field("marker"), [8, 9, 12]);
+    assert_eq!(
+        field("scene_face"),
+        [8, 9, 12],
+        "mapped back to scene faces"
+    );
+    assert_eq!(si["pairs"], serde_json::json!([[8, 12], [9, 12]]));
+    assert_eq!(si["stop"]["second"]["markers"], serde_json::json!([8]));
     assert!(!out.join("tetramesh.mbin").exists());
+    // Without --json: the summary names the code.
+    let plain = simpa_run(&[
+        "mesh".to_string(),
+        fixture("meshes/tg_bad/scene_mesh.poly")
+            .display()
+            .to_string(),
+        "--out".into(),
+        out.display().to_string(),
+    ]);
+    assert_eq!(plain.code, 4, "{plain:#?}");
+    assert!(
+        plain.stdout.contains("tetgen_self_intersection"),
+        "{}",
+        plain.stdout
+    );
 
     let v = verify(&fixture("meshes/broken_hall"), &[]);
     assert_eq!(v.code, 4, "{v:#?}");

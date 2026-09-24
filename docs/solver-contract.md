@@ -537,13 +537,21 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
 Meshing is M5's stage. The TetGen part of the survey's run contract is kept here for one place
 of reference; its file formats are in `docs/formats/tetgen.md`.
 
+**Which TetGen.** Ours is WIAS TetGen 1.5.0 (`third_party/tetgen-1.5.0`, built by
+`solvers/build.ps1`), the TetGen upstream shipped in 1.3.3 and 1.3.4 and made its 2019 tutorial
+meshes with, chosen by Burhan on 2026-09-23 (`docs/m5-m6-design.md`, decision 3). Upstream's pin,
+929a5c8, vendors 1.6.0, which ignores the `.var` area bound. The two differ where it matters here:
+1.6.0 skips self-intersecting facets into `<name>_skipped.face` and carries on; 1.5.0 stops at
+the first one. What follows marks each difference.
+
 - **Command:** `tetgen.exe <switches> <name>.poly`.
   - Upstream's GUI uses `-pq<minratio, default 5> [-a<maxvol>] -A -n <appendparams, default
     -Y>`, or `-d` for its self-intersection test (`projet_maillage.cpp:163-178`;
     `e_core_core_tetconf.h:86-103`).
   - The outputs are `<name>.1.{node,ele,face,neigh,edge}`, beside the input (VERIFIED S
     `tg_ok`).
-- **Exit codes** (`tetgen.h:2487-2524`). Messages go to stdout through `printf`.
+- **Exit codes** (`tetgen.h:2487-2524` in 1.6.0; `2247-2283` in 1.5.0, the same codes but 200).
+  Messages go to stdout through `printf`.
 
   | Exit | Meaning |
   |---|---|
@@ -556,9 +564,22 @@ of reference; its file formats are in `docs/formats/tetgen.md`.
   | 10 | input error |
   | 200 | Steiner points on the boundary under `-YY` |
 
-- **Failure signature** (VERIFIED S `tg_bad`): exit 3; partial `.1.node`, `.1.ele`, `.1.face`
-  and `.1.edge`; no `.1.neigh`; and `<name>_skipped.face` and `.node`, whose markers are `.cbin`
-  face indices. The line `Program stopped.` arrives on stdout, and stderr is empty.
+- **Failure signature, TetGen 1.5.0** (VERIFIED 2026-09-24 on `tests/fixtures/meshes/tg_bad`):
+  exit 3; no `.1.*` file and no `_skipped.*`; stdout ends with `A self-intersection was
+  detected. Program stopped.` and a hint to use `-d`, which 1.5.0 prints on every exit 3
+  (`tetgen.h:2265-2267`), and stderr is empty. Before that line it usually names the pair,
+  `Found a segment and a subface intersect.` with `  1st: [9, 10] 1.` and `  2nd: [1,4,6] 9`: a
+  facet by its points and its 1-based position in the `.poly`, a segment by its points. On other
+  paths it names nothing (the box with a piercing baffle stops in `Constrained Delaunay...`).
+  `tetgen -d` then exits 0, prints each intersecting pair as `  Facet #i intersects facet #j at
+  triangles:` (repeated), and writes `.1.node` and a `.1.face` of the intersecting triangles
+  whose markers are the facets' markers. The mesher reads both and reports
+  `tetgen_self_intersection` (`docs/formats/mesh-manifest.md`).
+- **Failure signature, TetGen 1.6.0** (VERIFIED S `tg_bad`): exit 3; partial `.1.node`, `.1.ele`,
+  `.1.face` and `.1.edge`; no `.1.neigh`; and `<name>_skipped.face` and `.node`, whose markers
+  are `.cbin` face indices. The line `The input surface mesh contain self-intersections. Program
+  stopped.` arrives on stdout, and stderr is empty. The mesher reports `tetgen_skipped_facets`,
+  and still reads a committed 1.6.0 set such as `tests/fixtures/meshes/broken_hall`.
 
 ### Corrections to the survey's run contract
 
