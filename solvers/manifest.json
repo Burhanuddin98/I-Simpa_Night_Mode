@@ -3,7 +3,7 @@
     "cmake_version":  "4.3.2",
     "generator":  "Visual Studio 17 2022 (x64)",
     "build_dir":  "build",
-    "build_log":  "build-build-20260924-011416.log",
+    "build_log":  "build-build-20260924-064739.log",
     "compiler":  "19.44.35226.0",
     "options":  [
                     "SKIPISIMPA=ON",
@@ -12,10 +12,10 @@
                 ],
     "crt":  "dynamic (upstream default)",
     "sha256":  {
-                   "spps.exe":  "22b55a0fcec17e6dbfb7c564ca6c8435d7a4e7864bc6858cf880f1fe97bced7e",
-                   "classicalTheory.exe":  "6f892a5b36f19247c051485b2b2362963c756514e2b612dae4e77907b9823299",
-                   "tetgen.exe":  "321491e555f8f425f315821b39de23be12c9f40f379d772dffb1ac69b5ac3ad8",
-                   "preprocess.exe":  "22d33f349b9c2ef22c1280eef81dea294f82fe06659449d463498135534cc9d3"
+                   "spps.exe":  "5b2fac424a025b948027d30692ff6897548d60bd138c66ecaa9c21f9631b8b7a",
+                   "classicalTheory.exe":  "9ea03b323df1be9e6ba0c859c35d132a987cc9a3bfecc055833189e676296f1f",
+                   "tetgen.exe":  "1b11ad94c54ddf5e4f7867b6da558b4cfa2d6e85cf32497ad232c014e2a0bc5b",
+                   "preprocess.exe":  "01a862c7220d756be4d95ac99530a8fcb335b22d2071305aef924a0514ccd4e9"
                },
     "tetgen":  {
                    "version":  "1.5.0",
@@ -36,9 +36,9 @@
                    "cmake":  "solvers/tetgen/CMakeLists.txt",
                    "build_dir":  "build-tetgen150",
                    "command_lines":  "equal to upstream\u0027s tetgen target at 929a5c8, 3 records",
-                   "exe_sha256":  "321491e555f8f425f315821b39de23be12c9f40f379d772dffb1ac69b5ac3ad8",
-                   "upstream_160_reference_sha256":  "fb9b7cdca35e37855e9561d062e13622ba3c97dbc7d8ff612927bb56df59b128",
+                   "exe_sha256":  "1b11ad94c54ddf5e4f7867b6da558b4cfa2d6e85cf32497ad232c014e2a0bc5b",
+                   "upstream_160_reference_sha256":  "e3170ef318490eb09b17529d2630f6665d8ee96ea356c1dfe8ce33152c2aef16",
                    "upstream_160_reference":  "build\\src\\tetgen\\Release\\tetgen.exe (not shipped)"
                },
-    "built_at":  "2026-09-24T01:14:20"
+    "built_at":  "2026-09-24T06:48:30"
 }
