@@ -804,6 +804,98 @@ fn every_upstream_project_imports_or_is_refused_by_name() {
     assert_eq!(refused, ["Industrial.proj"], "{table:?}");
 }
 
+/// Tutorial 3's `mesh_conf` properties: SPPS's (`Core/spps`), then TCR's (`Core/tc`).
+const SPPS_DEBUGMODE: &str =
+    "<p name=\"debugmode\" eid=\"26\" label=\"Test mesh topology\" value=\"0\" wxid=\"5636\"/>";
+const TCR_DEBUGMODE: &str =
+    "<p name=\"debugmode\" eid=\"26\" label=\"Test mesh topology\" value=\"0\" wxid=\"5698\"/>";
+const SPPS_PREPROCESS: &str = "<p name=\"preprocess\" eid=\"26\" label=\"Scene correction before meshing\" value=\"1\" wxid=\"5635\"/>";
+const SPPS_MINRATIO: &str = "<p name=\"minratio\" eid=\"25\" label=\"Radius/Edge ratio\" value=\"2\" pr=\"2\" minValue=\"1\" wxid=\"5629\"/>";
+const SPPS_APPEND: &str = "<p name=\"appendparams\" eid=\"20\" label=\"Additional parameters\" textValue=\"\" wxid=\"5630\"/>";
+const TCR_ISMAXVOL: &str =
+    "<p name=\"ismaxvol\" eid=\"26\" label=\"Volume constraint\" value=\"0\" wxid=\"5696\"/>";
+
+/// A meshing property the `.proj` lacks reads as upstream reads it: a loaded `mesh_conf` gets
+/// none of its GUI defaults (`e_core_core_tetconf.h:45-54`), so a missing switch is off, a
+/// missing number 0 and a missing text empty (`element.cpp:1173-1314`), each noted. TCR's
+/// settings are read too, and a difference from SPPS's is noted, since upstream meshes a TCR run
+/// with TCR's (`projet_maillage.cpp:40-59`).
+#[test]
+fn meshing_settings_read_as_upstreams_loader_reads_them() {
+    let (_, xml) = tutorial3_parts();
+    let notes_of = |i: &ProjImport| {
+        i.report.notes.join(
+            "
+",
+        )
+    };
+    // Control: as stored, preprocess on, -q2, no -Y, no volume bound, SPPS and TCR alike.
+    let stored = import_tutorial3_as(&xml).unwrap();
+    let m = &stored.project.solvers.meshing;
+    assert!(m.preprocess);
+    assert_eq!(m.min_radius_edge_ratio.get(), 2.0);
+    assert!(!m.preserve_boundary);
+    assert_eq!(m.max_volume_m3, None);
+    assert!(
+        !notes_of(&stored).contains("meshing"),
+        "{}",
+        notes_of(&stored)
+    );
+
+    // No `preprocess`: off, as upstream's GetBoolConfig reads it; the GUI's default (on) is not
+    // what a loaded project gets.
+    let i = tutorial3_edited(&xml, &[(SPPS_PREPROCESS, "")]).unwrap();
+    assert!(!i.project.solvers.meshing.preprocess);
+    assert!(
+        notes_of(&i).contains("SPPS meshing: no `preprocess`") && notes_of(&i).contains("off"),
+        "{}",
+        notes_of(&i)
+    );
+    // No `minratio`: 0, upstream's -pq0, which the mesher refuses rather than mesh otherwise.
+    let i = tutorial3_edited(&xml, &[(SPPS_MINRATIO, "")]).unwrap();
+    assert_eq!(i.project.solvers.meshing.min_radius_edge_ratio.get(), 0.0);
+    assert!(notes_of(&i).contains("no `minratio`"), "{}", notes_of(&i));
+    let e = simpa_core::mesh::project_input(&i.project).unwrap_err();
+    assert!(e.0.contains("radius-edge ratio (-q) is 0"), "{e}");
+    // `-Y` stored is -Y; no `appendparams` is none (upstream's GetStringConfig gives "", not the
+    // GUI's default "-Y").
+    let with_y = SPPS_APPEND.replace("textValue=\"\"", "textValue=\"-Y\"");
+    let i = tutorial3_edited(&xml, &[(SPPS_APPEND, &with_y)]).unwrap();
+    assert!(i.project.solvers.meshing.preserve_boundary);
+    let i = tutorial3_edited(&xml, &[(SPPS_APPEND, "")]).unwrap();
+    assert!(!i.project.solvers.meshing.preserve_boundary);
+    assert!(
+        notes_of(&i).contains("no `appendparams`"),
+        "{}",
+        notes_of(&i)
+    );
+    // No `debugmode`: off, which upstream's loader adds; imported, and noted.
+    let i = tutorial3_edited(&xml, &[(SPPS_DEBUGMODE, "")]).unwrap();
+    assert!(notes_of(&i).contains("no `debugmode`"), "{}", notes_of(&i));
+    // TCR's with a volume bound where SPPS's has none: SPPS's are imported, and the difference
+    // is noted.
+    let i = tutorial3_edited(
+        &xml,
+        &[(TCR_ISMAXVOL, &TCR_ISMAXVOL.replace("\"0\"", "\"1\""))],
+    )
+    .unwrap();
+    assert_eq!(i.project.solvers.meshing.max_volume_m3, None);
+    assert!(
+        notes_of(&i)
+            .contains("TCR's meshing settings differ from SPPS's (volume bound none / 100)"),
+        "{}",
+        notes_of(&i)
+    );
+    // The refusal names the core whose settings test the topology.
+    let (_, text) = tutorial3_edited(
+        &xml,
+        &[(TCR_DEBUGMODE, &TCR_DEBUGMODE.replace("\"0\"", "\"1\""))],
+    )
+    .map(|_| ())
+    .unwrap_err();
+    assert!(text.contains("TCR meshing"), "{text}");
+}
+
 /// Each refusal of the import, fed the tutorial 3 project edited to trip it, and nothing else:
 /// every one names its reason by its code (`geometry::import::proj::codes`).
 #[test]
@@ -941,6 +1033,24 @@ fn each_refusal_names_its_reason() {
                 "<volumes name=\"Volumes\" eid=\"85\" wxid=\"2240\"><volume name=\"Volume 1\" eid=\"86\" wxid=\"9999\"/></volumes>",
             ),
             codes::VOLUMES_UNSUPPORTED,
+        ),
+        (
+            "SPPS's meshing settings testing the mesh topology",
+            edited_once(
+                &xml,
+                SPPS_DEBUGMODE,
+                &SPPS_DEBUGMODE.replace("\"0\"", "\"1\""),
+            ),
+            codes::MESH_DEBUG_MODE,
+        ),
+        (
+            "TCR's meshing settings testing the mesh topology",
+            edited_once(
+                &xml,
+                TCR_DEBUGMODE,
+                &TCR_DEBUGMODE.replace("\"0\"", "\"1\""),
+            ),
+            codes::MESH_DEBUG_MODE,
         ),
     ];
     for (what, edited, code) in &cases {

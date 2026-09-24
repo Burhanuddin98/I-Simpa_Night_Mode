@@ -1797,3 +1797,90 @@ fn regions_are_held_to_the_cells_of_the_meshed_geometry() {
     // Nothing to move a seed already inside.
     assert!(seed_inside(&reference, &zone(inside, vec![8]), 1e-9).is_none());
 }
+
+/// The region volume tolerance is `2 · A · 16 · 2⁻²⁴ · R` (`mesh/verify/regions.rs`), from the
+/// scene's own extent `R` and the cell's boundary area `A`: a region half a tolerance off its
+/// cell's volume passes, one two tolerances off fails. The test above has an empty scene, so its
+/// tolerance is 0 and it cannot see a wrong scale; this one can.
+#[test]
+fn the_region_volume_tolerance_says_yes_at_half_and_no_at_twice() {
+    use simpa_core::mesh::verify::{Expectations, Reference, verify_mesh_with};
+    let w = wedges();
+    let check = w.check();
+    let markers: Vec<u32> = (0..w.facets.len() as u32).collect();
+    // The wedges' nodes as the scene: R = 1, so the distance tolerance is 16 · 2⁻²⁴ m.
+    let scene = cbin::Model {
+        vertices: w
+            .nodes
+            .iter()
+            .map(|p| cbin::Vertex {
+                x: p[0] as f32,
+                y: p[1] as f32,
+                z: p[2] as f32,
+            })
+            .collect(),
+        faces: Vec::new(),
+    };
+    let distance = 16.0 * 2f64.powi(-24);
+    // The first cell is the first tetrahedron: its boundary is its four faces.
+    let area = |a: usize, b: usize, c: usize| {
+        let (p, q, r) = (w.nodes[a], w.nodes[b], w.nodes[c]);
+        let u = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+        let v = [r[0] - p[0], r[1] - p[1], r[2] - p[2]];
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        0.5 * (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()
+    };
+    let [a, b, c, d] = w.tets[0].map(|i| i as usize);
+    let boundary = area(a, b, c) + area(a, b, d) + area(a, c, d) + area(b, c, d);
+    let tolerance = 2.0 * boundary * distance;
+    // The room's three parts, 1 to 3; no fitting.
+    let ids = VolumeIds::tetgen(Vec::new());
+    let run = |mesh: &Mesh| {
+        let reference = Reference {
+            vertices: &w.nodes,
+            facets: &w.facets,
+            markers: &markers,
+            check: &check,
+            fittings: &[],
+        };
+        verify_mesh_with(
+            mesh,
+            &scene,
+            &ids,
+            &Expectations {
+                unmeshed_faces: None,
+                reference: Some(reference),
+            },
+        )
+    };
+    let ok = run(&w.mesh([1, 2, 3]));
+    assert!(ok.regions_checked);
+    assert_eq!(ok.region_volume_mismatch, 0, "{:#?}", ok.regions);
+    let first = ok.regions.iter().find(|r| r.id == 1).unwrap();
+    assert!(
+        (first.tolerance_m3 - tolerance).abs() <= 1e-12 * tolerance,
+        "tolerance {:e} m³, expected 2 · {boundary} m² · {distance:e} m = {tolerance:e} m³",
+        first.tolerance_m3
+    );
+    // Node 3 belongs to the first tetrahedron alone, whose volume is its x / 6: moved along x by
+    // 6 · k · tolerance, the region is k tolerances off its cell.
+    let off_by = |k: f64| {
+        let mut mesh = w.mesh([1, 2, 3]);
+        let x = w.nodes[3][0] + 6.0 * k * tolerance;
+        mesh.nodes[3][0] = x as f32;
+        let r = run(&mesh);
+        let first = r.regions.iter().find(|r| r.id == 1).unwrap().clone();
+        let off = (first.volume_m3 - first.cell_volume_m3.unwrap()).abs() / tolerance;
+        (r.region_volume_mismatch, off)
+    };
+    let (mismatch, off) = off_by(0.5);
+    assert!((0.4..0.6).contains(&off), "{off}");
+    assert_eq!(mismatch, 0, "half a tolerance off ({off:.3}) passes");
+    let (mismatch, off) = off_by(2.0);
+    assert!((1.9..2.1).contains(&off), "{off}");
+    assert_eq!(mismatch, 1, "two tolerances off ({off:.3}) fails");
+}

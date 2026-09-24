@@ -607,9 +607,12 @@ fn run_input(
         return finish(dir, m, start);
     }
     // A seed on a facet leaves the zone to TetGen's choice of side (tutorial 3's zone 1: TetGen
-    // 1.5.0 labels the hall 1930 once the box's markers are restored). Outside parity mode it is
-    // moved into the zone's cell first.
-    if !refused && tools.markers == Markers::Restored {
+    // 1.5.0 labels the hall 1930 once the box's markers are restored). With upstream's scene
+    // correction, outside parity mode, it is moved into the zone's cell first. This rule is
+    // Burhan's to confirm (`docs/m5-m6-design.md`, decision 12); without the move, the region
+    // volume check refuses tutorial 3 as `fitting_region_misplaced`. Without the correction the
+    // `.poly` goes to TetGen as written, as before, and the region check judges what it makes.
+    if !refused && input.preprocess && tools.markers == Markers::Restored {
         match move_seeds(&mut tg_input, &report, &mut m) {
             Ok(true) => {
                 poly_bytes = poly::write(&tg_input.poly);
@@ -1556,7 +1559,10 @@ pub fn find_basename(dir: &Path) -> Result<String, FindBasename> {
 /// from `out_dir` first, so `out_dir` may be `tetgen_dir`. The project's box fitting zones and
 /// ids are applied as [`mesh_project`] applies them. A folder with no TetGen output is read as
 /// `scene_mesh`, so each missing file gets its code; a folder with several sets is
-/// `input_invalid` unless `basename` names one.
+/// `input_invalid` unless `basename` names one. The regions are always held to cells: those of
+/// `<base>.poly` beside the output, or, when there is none, of the project's own `.poly` as
+/// [`mesh_project`] writes it without upstream's scene correction; a geometry the check refuses
+/// is `geometry_refused`.
 pub fn mesh_from_tetgen(
     project: &Project,
     tetgen_dir: &Path,
@@ -1635,38 +1641,49 @@ pub fn mesh_from_tetgen(
             paths.face.display()
         ));
     }
-    // The .poly TetGen read, when the folder holds it: the region volume check's geometry.
+    // The geometry the regions are held to, always: the .poly TetGen read, when the folder holds
+    // it; otherwise the project's own, as `mesh_project` writes it without upstream's scene
+    // correction, which must then pass the geometry check itself. No region check is skipped.
     let poly_path = tetgen_dir.join(format!("{base}.poly"));
-    let checked = if poly_path.is_file() {
-        match poly::read_file(&poly_path) {
-            Ok(model) => {
-                let (report, gate) = check_poly(&model, "external");
-                m.geometry = Some(gate);
-                if !report.is_ok() {
-                    let why = refusal(m.geometry.as_ref().expect("set above"));
-                    fail(
-                        &mut m,
-                        codes::GEOMETRY_REFUSED,
-                        format!("{why}; {}", poly_path.display()),
-                    );
-                }
-                Some((model, report))
-            }
-            Err(e) => {
-                fail(
-                    &mut m,
-                    codes::INPUT_INVALID,
-                    format!("{}: {e}", poly_path.display()),
-                );
-                None
-            }
-        }
+    let reference = if poly_path.is_file() {
+        poly::read_file(&poly_path)
+            .map(|model| (model, "external", poly_path.display().to_string()))
+            .map_err(|e| format!("{}: {e}", poly_path.display()))
     } else {
         m.messages.push(format!(
-            "{} is not there: the regions are not held to the cells of the geometry TetGen read",
+            "{} is not there: the regions are held to the cells of the project's own .poly, as \
+             the mesher writes it without upstream's scene correction",
             poly_path.display()
         ));
-        None
+        let mut plain = project.clone();
+        plain.solvers.meshing.preprocess = false;
+        project_input(&plain)
+            .map(|i| (i.poly, "project", "the project's own .poly".to_string()))
+            .map_err(|e| {
+                format!(
+                    "the project's own .poly, standing in for {base}.poly: {}",
+                    e.0
+                )
+            })
+    };
+    let checked = match reference {
+        Ok((model, checked_as, what)) => {
+            let (report, gate) = check_poly(&model, checked_as);
+            m.geometry = Some(gate);
+            if !report.is_ok() {
+                let why = refusal(m.geometry.as_ref().expect("set above"));
+                fail(
+                    &mut m,
+                    codes::GEOMETRY_REFUSED,
+                    format!("{why}; {what}: no region can be held to cells it does not have"),
+                );
+            }
+            Some((model, report))
+        }
+        Err(e) => {
+            fail(&mut m, codes::INPUT_INVALID, e);
+            None
+        }
     };
     classify(&paths, None, &[], &input, &mut m);
     if m.codes.is_empty() {

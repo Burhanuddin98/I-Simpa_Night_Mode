@@ -121,9 +121,12 @@
 //!   `<position>` children, directions, delays and enable flags; **cutting-plane receivers** from
 //!   `verta`, `vertb`, `vertc` and `resolution`.
 //! - **Environment** from `atmoconfig`; **SPPS** and **TCR** settings and computed bands from
-//!   `Core/spps` and `Core/tc`; **meshing** from `Core/spps/mesh_conf`. A property the file lacks
-//!   keeps upstream's GUI default, as upstream's GUI does when it loads such a file; each one is
-//!   noted in the report.
+//!   `Core/spps` and `Core/tc`; **meshing** from `Core/spps/mesh_conf`, with `Core/tc/mesh_conf`
+//!   read the same way and any difference noted (upstream meshes each core's run with its own).
+//!   A settings property the file lacks keeps upstream's default where upstream's loader
+//!   supplies one; a meshing property it lacks reads as upstream's getters read a missing one
+//!   (off, 0, empty), since upstream's loader supplies none there but `debugmode`
+//!   (`read_mesh_conf`). Each one is noted in the report.
 //!
 //! Refused with [`ImportError::Unsupported`], by name: directivity balloons, user-defined TetGen
 //! parameters, and additional TetGen parameters other than `-Y`. Refused with its own code
@@ -229,6 +232,11 @@ pub mod codes {
     /// Volumes (`volumes/volume`): TetGen regions with their own seed and volume bound
     /// (`e_scene_volumes_volume.h:168-188`), which a project does not hold.
     pub const VOLUMES_UNSUPPORTED: &str = "proj_volumes_unsupported";
+    /// A `mesh_conf` of SPPS or TCR with "Test mesh topology" (`debugmode`) on. Upstream's GUI then
+    /// runs `tetgen -d` alone, skips the scene correction and loads no mesh
+    /// (`projet_maillage.cpp:165-174, 212, 242-275`), and runs the solver on whatever mesh it
+    /// already held (`projet.cpp:751-769`), which this import does not reproduce.
+    pub const MESH_DEBUG_MODE: &str = "proj_mesh_debug_mode";
 
     /// Every code above, in the order `docs/solver-contract.md` lists them.
     pub const ALL: &[&str] = &[
@@ -243,6 +251,7 @@ pub mod codes {
         TRANSMISSION_EXCEEDS_ABSORPTION,
         SOURCE_GROUP_MALFORMED,
         VOLUMES_UNSUPPORTED,
+        MESH_DEBUG_MODE,
     ];
 }
 
@@ -2394,6 +2403,187 @@ fn read_environment(project_el: Node<'_, '_>, notes: &mut Vec<String>) -> Result
     Ok(env)
 }
 
+/// One core's meshing settings (`mesh_conf`), as upstream's `RunCoreMaillage` reads them
+/// (`projet_maillage.cpp:50-58`). A loaded `mesh_conf` gets none of its GUI defaults: its XML
+/// constructor never calls `InitProperties` and adds only `debugmode`, off
+/// (`e_core_core_tetconf.h:45-54`, reached from `e_core_core.h:89-90`). So a property the file
+/// lacks reads as upstream's getters read a missing one, and each is noted: a switch off
+/// (`GetBoolConfig`, `element.cpp:1300-1314`), a number 0 (`GetDecimalConfig`, `:1252-1266`), a
+/// text empty (`GetStringConfig`, `:1173-1187`). A missing ratio is 0, which upstream gives
+/// TetGen as `-pq0`; so is a missing volume bound or area constraint that is switched on. The
+/// mesher refuses those (`input_invalid`) rather than mesh otherwise.
+///
+/// Refused: "Test mesh topology" on ([`codes::MESH_DEBUG_MODE`]); user-defined TetGen parameters,
+/// and additional ones other than `-Y` (unsupported).
+fn read_mesh_conf(mesh: Node<'_, '_>, mw: &str, notes: &mut Vec<String>) -> Result<MeshSettings> {
+    let mut missing = |name: &str, reads: &str| {
+        notes.push(format!(
+            "{mw}: no `{name}`, read as upstream reads a missing property: {reads} (a loaded \
+             mesh_conf gets none of its GUI defaults, e_core_core_tetconf.h:45-54)"
+        ));
+    };
+    match opt_prop_bool(mesh, "debugmode", mw)? {
+        Some(true) => {
+            return Err(ImportError::refused(
+                FMT_XML,
+                codes::MESH_DEBUG_MODE,
+                format!(
+                    "{mw}: \"Test mesh topology\" (`debugmode`) is on. Upstream's GUI then runs \
+                     `tetgen -d` alone, skips the scene correction, loads no mesh \
+                     (projet_maillage.cpp:165-174, 212, 242-275), and runs the solver on \
+                     whatever mesh it already held (projet.cpp:751-769)"
+                ),
+            ));
+        }
+        Some(false) => {}
+        None => missing(
+            "debugmode",
+            "off, which upstream's loader also adds (e_core_core_tetconf.h:50-53)",
+        ),
+    }
+    let q = match opt_prop_real(mesh, "minratio", mw)? {
+        Some(v) => v,
+        None => {
+            missing(
+                "minratio",
+                "0, so upstream gives TetGen -pq0, which the mesher refuses (input_invalid)",
+            );
+            0.0
+        }
+    };
+    let max_volume_m3 = match opt_prop_bool(mesh, "ismaxvol", mw)? {
+        Some(true) => Some(match opt_prop_real(mesh, "maxvol", mw)? {
+            Some(v) => v,
+            None => {
+                missing(
+                    "maxvol",
+                    "0, so upstream gives TetGen -a0, which the mesher refuses (input_invalid)",
+                );
+                0.0
+            }
+        }),
+        Some(false) => None,
+        None => {
+            missing("ismaxvol", "off, no volume bound");
+            None
+        }
+    };
+    let surface_receiver_max_area_m2 = match opt_prop_bool(mesh, "isareaconstraint", mw)? {
+        Some(true) => Some(match opt_prop_real(mesh, "constraintrecepteurss", mw)? {
+            Some(v) => v,
+            None => {
+                missing(
+                    "constraintrecepteurss",
+                    "0 m², which the mesher refuses (input_invalid)",
+                );
+                0.0
+            }
+        }),
+        Some(false) => None,
+        None => {
+            missing(
+                "isareaconstraint",
+                "off, no surface-receiver area constraint",
+            );
+            None
+        }
+    };
+    let user = match opt_prop_text(mesh, "userdefineparams") {
+        Some(t) => t.trim(),
+        None => {
+            missing("userdefineparams", "empty");
+            ""
+        }
+    };
+    if !user.is_empty() {
+        return Err(ImportError::unsupported(
+            FMT_XML,
+            format!("{mw}: user-defined TetGen parameters `{user}`"),
+        ));
+    }
+    let append = match opt_prop_text(mesh, "appendparams") {
+        Some(t) => t,
+        None => {
+            missing("appendparams", "empty, so no -Y");
+            ""
+        }
+    };
+    let mut preserve_boundary = false;
+    for t in append.split_ascii_whitespace() {
+        match t {
+            "-Y" => preserve_boundary = true,
+            other => {
+                return Err(ImportError::unsupported(
+                    FMT_XML,
+                    format!("{mw}: additional TetGen parameter `{other}`"),
+                ));
+            }
+        }
+    }
+    // "Scene correction before meshing": `projet_maillage.cpp:57, 212` runs `preprocess.exe` on
+    // the `.poly` when it is on (and "Test mesh topology" off, which is refused above).
+    let preprocess = match opt_prop_bool(mesh, "preprocess", mw)? {
+        Some(v) => v,
+        None => {
+            missing(
+                "preprocess",
+                "off, so the scene is meshed without preprocess.exe's correction",
+            );
+            false
+        }
+    };
+    Ok(MeshSettings {
+        min_radius_edge_ratio: F64::new(q),
+        max_volume_m3: max_volume_m3.map(F64::new),
+        surface_receiver_max_area_m2: surface_receiver_max_area_m2.map(F64::new),
+        preserve_boundary,
+        preprocess,
+    })
+}
+
+/// How `b` differs from `a`, one entry per setting that differs, `name a / b`.
+fn mesh_differences(a: &MeshSettings, b: &MeshSettings) -> Vec<String> {
+    let bound = |v: Option<F64>| v.map_or_else(|| "none".to_string(), |x| x.get().to_string());
+    let on = |v: bool| if v { "on" } else { "off" };
+    let mut out = Vec::new();
+    if a.min_radius_edge_ratio != b.min_radius_edge_ratio {
+        out.push(format!(
+            "radius-edge ratio {} / {}",
+            a.min_radius_edge_ratio.get(),
+            b.min_radius_edge_ratio.get()
+        ));
+    }
+    if a.max_volume_m3 != b.max_volume_m3 {
+        out.push(format!(
+            "volume bound {} / {}",
+            bound(a.max_volume_m3),
+            bound(b.max_volume_m3)
+        ));
+    }
+    if a.surface_receiver_max_area_m2 != b.surface_receiver_max_area_m2 {
+        out.push(format!(
+            "surface-receiver area constraint {} / {}",
+            bound(a.surface_receiver_max_area_m2),
+            bound(b.surface_receiver_max_area_m2)
+        ));
+    }
+    if a.preserve_boundary != b.preserve_boundary {
+        out.push(format!(
+            "-Y {} / {}",
+            on(a.preserve_boundary),
+            on(b.preserve_boundary)
+        ));
+    }
+    if a.preprocess != b.preprocess {
+        out.push(format!(
+            "scene correction (preprocess) {} / {}",
+            on(a.preprocess),
+            on(b.preprocess)
+        ));
+    }
+    out
+}
+
 fn band_switches(core: Node<'_, '_>, bands: &BandSet, what: &str) -> Result<Vec<bool>> {
     let conf = child(core, "core_conf_bfreq")?;
     let mut out = vec![None; bands.len()];
@@ -2502,58 +2692,11 @@ fn read_solvers(
     }
     sp.bands_computed = band_switches(spps, bands, "SPPS bands")?;
 
-    // Meshing, from SPPS's settings (TCR's are the same in upstream's GUI by default).
-    let mesh = child(spps, "mesh_conf")?;
-    let mw = "SPPS meshing";
-    let m: &mut MeshSettings = &mut s.meshing;
-    if let Some(v) = opt_prop_real(mesh, "minratio", mw)? {
-        m.min_radius_edge_ratio = F64::new(v);
-    }
-    m.max_volume_m3 = if opt_prop_bool(mesh, "ismaxvol", mw)?.unwrap_or(false) {
-        Some(F64::new(prop_real(mesh, "maxvol", mw)?))
-    } else {
-        None
-    };
-    m.surface_receiver_max_area_m2 =
-        if opt_prop_bool(mesh, "isareaconstraint", mw)?.unwrap_or(false) {
-            Some(F64::new(prop_real(mesh, "constraintrecepteurss", mw)?))
-        } else {
-            None
-        };
-    let user = opt_prop_text(mesh, "userdefineparams").unwrap_or("").trim();
-    if !user.is_empty() {
-        return Err(ImportError::unsupported(
-            FMT_XML,
-            format!("{mw}: user-defined TetGen parameters `{user}`"),
-        ));
-    }
-    let append = opt_prop_text(mesh, "appendparams").unwrap_or("-Y");
-    let mut preserve = false;
-    for t in append.split_ascii_whitespace() {
-        match t {
-            "-Y" => preserve = true,
-            other => {
-                return Err(ImportError::unsupported(
-                    FMT_XML,
-                    format!("{mw}: additional TetGen parameter `{other}`"),
-                ));
-            }
-        }
-    }
-    m.preserve_boundary = preserve;
-    // Upstream's "Scene correction before meshing": its GUI default is on
-    // (`e_core_core_tetconf.h:108`), and `projet_maillage.cpp:60, 206-213` runs `preprocess.exe`
-    // on the `.poly` when it is.
-    m.preprocess = match opt_prop_bool(mesh, "preprocess", mw)? {
-        Some(v) => v,
-        None => {
-            notes.push(format!(
-                "{mw}: no `preprocess`, upstream's default kept (on: the scene is corrected by \
-                 preprocess.exe before meshing)"
-            ));
-            true
-        }
-    };
+    // Meshing. Upstream meshes a run with the settings of the core it runs
+    // (`RunCoreMaillage(selectedCore)`, `projet_maillage.cpp:40-59`; each core has its own
+    // `mesh_conf`, `e_core_sppscore.h:142`, `e_core_tccore.h:87`). A project holds one set:
+    // SPPS's. TCR's is read the same way below, and any difference is noted.
+    s.meshing = read_mesh_conf(child(spps, "mesh_conf")?, "SPPS meshing", notes)?;
 
     // TCR.
     if let Some(tc) = opt_child(core, "tc") {
@@ -2562,6 +2705,26 @@ fn read_solvers(
             air_absorption: opt_prop_bool(conf, "abs_atmo_calc", "TCR settings")?.unwrap_or(true),
             bands_computed: band_switches(tc, bands, "TCR bands")?,
         };
+        match opt_child(tc, "mesh_conf") {
+            Some(tm) => {
+                let tcr_mesh = read_mesh_conf(tm, "TCR meshing", notes)?;
+                let differences = mesh_differences(&s.meshing, &tcr_mesh);
+                if !differences.is_empty() {
+                    notes.push(format!(
+                        "TCR's meshing settings differ from SPPS's ({}): upstream meshes a TCR run \
+                         with TCR's (projet_maillage.cpp:40-59), and a project holds one set, so \
+                         SPPS's are imported and a TCR run here meshes with them",
+                        differences.join("; ")
+                    ));
+                }
+            }
+            None => notes.push(
+                "TCR has no meshing settings (mesh_conf): upstream's GUI then runs TCR on the mesh \
+                 it already holds, without meshing (projet_maillage.cpp:45-62); a TCR run here \
+                 meshes with SPPS's settings"
+                    .to_string(),
+            ),
+        }
     } else {
         notes.push("no TCR settings: upstream's defaults are used".to_string());
     }

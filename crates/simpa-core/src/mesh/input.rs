@@ -350,39 +350,42 @@ fn tetgen_layout(project: &Project) -> Result<Layout, InputError> {
     })
 }
 
-/// Upstream's `BARELY_EPSILON`, `(decimal)0.0001` with `decimal` = `float` (`mathlib.h:58, 62`).
+/// Upstream's `BARELY_EPSILON`, `(decimal)0.0001` with `decimal` = `float`
+/// (`lib_interface/Core/mathlib.h:54, 58`).
 const BARELY_EPSILON: f32 = 0.0001;
 
 /// A rectangular zone's region seed as upstream's GUI computes it, `dotInsideVol = posFin -
 /// (posFin - posDeb) * BARELY_EPSILON` from the corners `ba` (`posDeb`) and `hc` (`posFin`) as
-/// stored, unordered (`e_scene_encombrements_encombrement_cuboide.h:336-338`), every operation
-/// per component in `f32` (`vec3` is `base_vec3<float>`, `mathlib.h:113, 124, 243`): a point just
+/// stored, unordered (`e_scene_encombrements_encombrement_cuboide.h:333-335`), every operation
+/// per component in `f32` (`vec3` is `base_vec3<float>`, `mathlib.h:109, 120, 239`): a point just
 /// inside the `hc` corner.
 pub fn upstream_box_seed(ba: [f32; 3], hc: [f32; 3]) -> [f32; 3] {
     [0, 1, 2].map(|k| hc[k] - (hc[k] - ba[k]) * BARELY_EPSILON)
 }
 
 /// The layout upstream's GUI writes for `preprocess.exe`, `CObjet3D::_SavePOLY(path, true,
-/// doMeshRepair = true, true, ...)` (`Objet3D_maillage.cpp:931-1041`, called at
+/// doMeshRepair = true, true, ...)` (`Objet3D_maillage.cpp:931-1044`, called at
 /// `projet_maillage.cpp:206`):
 /// - the scene is [`config_xml::scene_mesh`]: the room's faces, then each enabled box zone's 12
 ///   triangles with three vertices of their own (`ToCBINFormat`), so every `.poly` marker is a
 ///   `.cbin` face index, box triangles included;
-/// - nodes: that scene's vertices, widened to `f64` (`vec3_to_dvec3`, `:945, 983-988`);
-/// - Part 2, the facet list: the room's faces, marker = face index (`:950-968`);
+/// - nodes: that scene's vertices, widened to `f64` (`vec3_to_dvec3`, `:939-943, 984-990`);
+/// - Part 2, the facet list: the room's faces, marker = face index (`:950-965`);
 /// - Part 5, the user facet list: the box triangles, marker = their `.cbin` face index, each on
-///   its own three nodes (`:975-996`);
-/// - Part 4, the regions (`:998-1033`): one per enabled zone, attribute = its solver id (where
-///   upstream writes its element id, `xmlIdElement`, `:1000`; storing upstream's ids is Burhan's
+///   its own three nodes (`:968-1001`);
+/// - Part 4, the regions (`:1003-1037`): one per enabled zone, attribute = its solver id (where
+///   upstream writes its element id, `xmlIdElement`, `:1009`; storing upstream's ids is Burhan's
 ///   open decision, so ours are compared through the recorded id map), refinement -1
-///   (`drawable_element.h:104`). A box is seeded at [`upstream_box_seed`] of its corners as
+///   (`drawable_element.h:101`). A box is seeded at [`upstream_box_seed`] of its corners as
 ///   upstream holds them ([`FittingShape::box_corners`]); a `Surfaces` zone at its
-///   `inside_point` (upstream's `volpos`, `e_scene_encombrements_encombrement_model.h:180`),
+///   `inside_point` (upstream's `volpos`, `e_scene_encombrements_encombrement_model.h:177`),
 ///   narrowed to `f32` and written as it is, even on one of the zone's faces (tutorial 3's zone 1).
-///   The lines are in ascending solver id: upstream's order is its drawable table's, a wx hash map
-///   keyed by element id (`appconfig.h:55`) that its source does not fix; ascending id is tutorial
-///   3's stored order, and the parity bed's `.poly` byte comparison is what would show a scene
-///   where it is not.
+///   The user facets are in project order and the lines in ascending solver id. Upstream writes
+///   each drawable's triangles and then its region, drawable by drawable in its table's order, a
+///   wx hash map keyed by element id (`appconfig.h:52`) that this layout does not reproduce. With
+///   one box zone the files agree (tutorial 3, byte for byte); with two or more, `preprocess.exe`
+///   may meet the user facets in another order, which can change its splits
+///   (`docs/formats/mesh-manifest.md`, "Order, a known difference").
 pub fn preprocess_layout(project: &Project) -> Result<Layout, InputError> {
     let scene =
         config_xml::scene_mesh(project).map_err(|e| InputError(format!("scene mesh: {e}")))?;

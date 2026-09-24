@@ -227,10 +227,20 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
     mesher piece; the investigation is `docs/investigations/2026-09-24-tutorial3/`).
     - **The setting.** `MeshSettings::preprocess`, upstream's `mesh_conf@preprocess` ("Scene
       correction before meshing", on by default in upstream's GUI, `e_core_core_tetconf.h:108`).
-      `simpa import-proj` takes the `.proj`'s: every upstream project has it on. This crate's
-      default for a project made here is off, so nothing changes for them; the room fixtures,
-      which are the gates' rooms, keep it off explicitly. **Open for Burhan:** whether our
-      default follows upstream's.
+      `simpa import-proj` takes the `.proj`'s: every upstream project has it on. A `.proj`
+      without it reads as off, as upstream's loader reads it: a loaded `mesh_conf` gets none of
+      the GUI's defaults (`e_core_core_tetconf.h:45-54`) and `GetBoolConfig` gives false for a
+      missing property (`element.cpp:1300-1314`); every other meshing property it lacks reads
+      as upstream's getters read it too (0, empty), noted. "Test mesh topology" on is refused
+      (`proj_mesh_debug_mode`: upstream then meshes nothing and solves on the mesh it held). TCR's
+      `mesh_conf` is read like SPPS's and a difference noted, since upstream meshes each core's
+      run with its own and a project holds one set. This crate's default for a project made
+      here is off, so nothing changes for them; the room fixtures, which are the gates' rooms,
+      keep it off explicitly. **Open for Burhan:** whether our default follows upstream's.
+    - **The `.simpa` format.** `MeshSettings::preprocess` is a required field, and
+      `FORMAT_VERSION` was not bumped: the format has never been pushed, and every committed
+      `.simpa` carries the field. A `.simpa` written before 2026-09-24 fails to load with a
+      schema error (the missing field), not a version error.
     - **With it on,** the mesher does what upstream's GUI does (`projet_maillage.cpp:206-213`):
       the `.poly` with the box zones in its user facet list, 3 nodes each, markers their `.cbin`
       faces, and region lines derived from upstream's source, a box seeded at
@@ -238,8 +248,19 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
       (`mesh::preprocess_layout`, `docs/formats/mesh-manifest.md`); then `preprocess.exe
       scene_mesh.poly` in a Job Object like TetGen; then `geometry::check` on what it saved,
       the gate before TetGen (`geometry_refused`, exit 3); then TetGen 1.5.0 and the builder.
-      Without it nothing changes but one thing: the check also runs on the `.poly` TetGen reads,
-      and a mesh TetGen makes of one it refuses is `geometry_refused`.
+      Without it the `.poly` is written and meshed as before (decision 5's layout, seeds as
+      written, TetGen the first judge), and three checks now hold that mesh as they hold every
+      mesh: `geometry::check` also runs on the `.poly` TetGen reads, and a mesh TetGen makes of
+      one it refuses is `geometry_refused`; every region is held to its cell (below); and the
+      room's parts must be numbered without a gap. The last two are the piece's items 4 and 3,
+      which apply to every mesh, not only to a corrected one.
+    - **Order, a known difference.** Upstream writes each drawable's triangles and then its
+      region, drawable by drawable in its table's order (`Objet3D_maillage.cpp:970-1040`, a wx
+      hash map keyed by element id, `appconfig.h:52`); the mesher writes the user facets in
+      project order and the regions in ascending id. One box zone gives the same file (tutorial
+      3, byte for byte). With two or more, `preprocess.exe` may meet the user facets in another
+      order than upstream's, which can change its splits and so the mesh. No upstream project
+      has two box zones, and upstream's hash-map order is not reproduced.
     - **What `preprocess.exe` did is read, not trusted.** It exits 0 whatever happened: an
       abort (`Mesh reparation has been aborted`, nothing saved), a file it could not read, or
       user facets it never merged are `preprocess_aborted`. Tutorial 2's hall is the first: 104
@@ -256,17 +277,26 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
       and nothing runs it: `run` never meshes in parity mode and `run --mesh` refuses a
       manifest that is not OK; `run-folder` on its inputs is refused before launch (exit 5,
       `mesh_invalid`, `marker_geometry_mismatches`).
-    - **A seed on a facet is moved, outside parity mode.** Tutorial 3's zone 1 has its `volpos`
-      on its own top face (z = 1). With the markers restored, TetGen 1.5.0 then put zone 1's id
-      on the 755.648 m³ hall, which `fitting_region_misplaced` refused. The mesher moves such a
-      seed along the facet's normal into the zone's cell, halfway to the next facet
+    - **A seed on a facet is moved, with the scene correction on and outside parity mode.**
+      This is the mesher piece's own rule, not the spec's: **open for Burhan**, like the
+      marker decision beside it. Tutorial 3's zone 1 has its `volpos` on its own top face
+      (z = 1). With the markers restored, TetGen 1.5.0 then put zone 1's id on the 755.648 m³
+      hall, which `fitting_region_misplaced` refused. The mesher moves such a seed along the
+      facet's normal into the zone's cell, halfway to the next facet
       (`mesh::verify::seed_inside`; tutorial 3: to z = 0.5), and records it (`seeds_moved`).
-      With the seed moved, TetGen 1.6.0 labels the zones right too (measured).
+      With the seed moved, TetGen 1.6.0 labels the zones right too (measured). Upstream writes
+      `volpos` as it is, and so does parity mode, and so does the mesher without the scene
+      correction. The alternative, refusing such a project and asking for an inside point, is
+      one change: drop the `move_seeds` call in `mesh::run_input`, and the region check refuses
+      tutorial 3's default mesh as `fitting_region_misplaced`, as it did before the move.
     - **Regions are held to the geometry's cells** (`verify_mesh_with`, four codes in
       `docs/solver-contract.md` Part B): the check that sees a wrong room. Tutorial 3, default
       mode: zone 1 4.352, the box 18.000, room 2 without the box 93.445, the corridor 106.895,
       the hall 755.648 m³, each its cell's within 4.2e-6 m³ (tolerance 1.8e-2 m³ for the hall).
-      The room's parts must be numbered without a gap (`unknown_volume_ids`).
+      The room's parts must be numbered without a gap (`unknown_volume_ids`). `mesh_from_tetgen`
+      holds its regions too, to `<base>.poly` beside TetGen's output or, with none, to the
+      project's own `.poly` as the mesher writes it without the scene correction; the check is
+      never skipped.
     - **Measured on tutorial 3** (SPPS, 125 Hz, transmission on, seed 1, 50,000 particles per
       source, the same `config.xml` and `.cbin`): on the parity mesh 533,967 of 2,653,740
       particle records lost to loops (20.1 %) and 49 to meshing; on the default mesh 2 of

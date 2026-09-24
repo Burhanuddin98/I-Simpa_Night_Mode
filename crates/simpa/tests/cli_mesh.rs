@@ -238,6 +238,51 @@ fn a_cancel_50_ms_into_tetgen_exits_130_and_leaves_nothing_running() {
     );
 }
 
+/// `--cancel-after-ms` reaches `preprocess.exe` too: the corrected hall with upstream's scene
+/// correction on, whose `preprocess.exe` runs for longer than a second, cancelled 50 ms in, exits
+/// 130 with `preprocess.exe` killed, TetGen never started and nothing left running.
+#[test]
+fn a_cancel_50_ms_into_preprocess_exits_130_and_leaves_nothing_running() {
+    let dir = scratch("mesh-cancel-preprocess");
+    let text = std::fs::read_to_string(fixture("rooms/elmia_corrected.simpa")).unwrap();
+    assert_eq!(text.matches("\"preprocess\": false").count(), 1);
+    let project = dir.join("elmia_corrected_preprocess.simpa");
+    std::fs::write(
+        &project,
+        text.replace("\"preprocess\": false", "\"preprocess\": true"),
+    )
+    .unwrap();
+    let image = format!("preprocess-cancel-{}.exe", std::process::id());
+    let pre = private_copy(&solver_exe("preprocess.exe"), &dir, &image);
+    let out = dir.join("mesh");
+    let o = mesh(
+        &project,
+        &out,
+        &[
+            "--preprocess",
+            &pre.display().to_string(),
+            "--cancel-after-ms",
+            "50",
+        ],
+    );
+    assert_eq!(o.code, 130, "{o:#?}");
+    let m = json(&o);
+    assert_eq!(m["status"], "CANCELLED");
+    assert_eq!(strings(&m["codes"]), ["cancelled".to_string()]);
+    // preprocess.exe itself was killed: no exit code, cancelled; TetGen never ran.
+    let call = &m["preprocess"]["call"];
+    assert_eq!(call["cancelled"], true, "{}", m["preprocess"]);
+    assert_eq!(call["exit_code"], Value::Null);
+    assert_eq!(m["tetgen"], Value::Null);
+    assert!(!out.join("tetramesh.mbin").exists());
+    assert!(!image_running(&image), "{image} still runs");
+    std::fs::remove_file(&pre).expect("the preprocess.exe copy is no longer running");
+    println!(
+        "cancelled: preprocess.exe ran {:.0} ms before the kill, simpa mesh took {:.0} ms",
+        call["elapsed_ms"], o.ms
+    );
+}
+
 #[test]
 fn a_project_the_geometry_check_refuses_is_exit_3() {
     let o = mesh(

@@ -364,6 +364,53 @@ fn a_mesh_rebuilt_from_its_tetgen_output_is_identical() {
     let e = mesh_from_tetgen(&p, &c, None, &out).unwrap();
     assert!(e.is_ok(), "{e:#?}");
     assert_eq!(std::fs::read(out.join("tetramesh.mbin")).unwrap(), original);
+    // With no model.poly beside the output, the regions are held to the project's own .poly:
+    // never skipped.
+    assert_eq!(e.geometry.as_ref().unwrap().checked, "project");
+    let v = e.verify.as_ref().unwrap();
+    assert!(v.regions_checked, "{v:#?}");
+    assert_eq!(v.regions.len(), 1);
+    let cell = v.regions[0].cell_volume_m3.unwrap();
+    assert!((cell - 180.0).abs() < 1e-9, "{v:#?}");
+    // Says NO: every other tetrahedron given a second region, 2, in the room's one cell.
+    let d = scratch("external-split");
+    for ext in ["node", "face", "neigh"] {
+        std::fs::copy(
+            c.join(format!("model.1.{ext}")),
+            d.join(format!("model.1.{ext}")),
+        )
+        .unwrap();
+    }
+    let ele = std::fs::read_to_string(c.join("model.1.ele")).unwrap();
+    let split: String = ele
+        .lines()
+        .enumerate()
+        .map(|(i, l)| {
+            let mut cols: Vec<&str> = l.split_whitespace().collect();
+            if i > 0 && i % 2 == 0 && cols.len() == 6 && !l.starts_with('#') {
+                cols[5] = "2";
+                format!("{}\n", cols.join(" "))
+            } else {
+                format!("{l}\n")
+            }
+        })
+        .collect();
+    std::fs::write(d.join("model.1.ele"), split).unwrap();
+    let e = mesh_from_tetgen(&p, &d, None, &d.join("out")).unwrap();
+    assert_eq!(
+        e.codes,
+        [codes::MESH_INVALID, "region_volume_mismatch"],
+        "{:#?}",
+        e.verify.as_ref().map(|v| &v.regions)
+    );
+    assert!(!d.join("out/tetramesh.mbin").exists());
+    // Says NO: a project whose own .poly the geometry check refuses (a face gone, so the room
+    // is open) cannot stand in for the missing one: geometry_refused, nothing built.
+    let mut open = p.clone();
+    open.geometry.faces.pop();
+    let e = mesh_from_tetgen(&open, &c, None, &c.join("out-open")).unwrap();
+    assert_eq!(e.codes, [codes::GEOMETRY_REFUSED], "{e:#?}");
+    assert!(!c.join("out-open/tetramesh.mbin").exists());
 
     // No .neigh: refused, never recomputed.
     std::fs::remove_file(c.join("model.1.neigh")).unwrap();

@@ -23,8 +23,9 @@ const USAGE: &str = "usage:
              [--cancel-after-ms <n>]
       TetGen's and preprocess.exe's lines on stderr; exit 0, 2, 3, 4, 130. A project whose mesh
       settings ask for upstream's scene correction goes through preprocess.exe first; --parity
-      keeps its facet markers as it writes them (upstream's defect), fails the mesh when they do
-      not verify, and writes the .mbin for byte comparison only.
+      keeps preprocess.exe's facet markers byte for byte, as upstream's GUI meshes them, fails
+      the mesh when they do not verify, and writes the .mbin for byte comparison only.
+      --cancel-after-ms cancels preprocess.exe or TetGen that long after it starts.
   simpa mesh-verify <dir> [--json] [--room-id <n>] [--fittings <a,b,..>]   exit 4 when it fails
   simpa run <project.simpa> --solver spps|tcr [--variant <v>] [--mesh <dir>] [--runs <root>]
             [--loss-limit <f>] [--cancel-after-ms <n>] [--cancel-after-progress <p>]

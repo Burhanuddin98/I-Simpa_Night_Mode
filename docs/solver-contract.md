@@ -587,10 +587,12 @@ the first one. What follows marks each difference.
 ### Preprocessing and the meshed volume
 
 A project's mesh settings may ask for upstream's "Scene correction before meshing"
-(`MeshSettings::preprocess`, `mesh_conf@preprocess`, on in upstream's GUI by default,
-`e_core_core_tetconf.h:108`; `simpa import-proj` takes the `.proj`'s). The mesher then does what
+(`MeshSettings::preprocess`, `mesh_conf@preprocess`, on in upstream's GUI for a new project,
+`e_core_core_tetconf.h:108`; `simpa import-proj` takes the `.proj`'s, and reads a `.proj` without
+it as off, as upstream's loader does: a loaded `mesh_conf` gets no defaults, `:45-54`, and
+`GetBoolConfig` gives false for a missing property, `element.cpp:1300-1314`). The mesher then does what
 upstream's GUI does (`projet_maillage.cpp:206-213`): it writes the `.poly` with the box fitting
-zones' triangles in the user facet list (`Objet3D_maillage.cpp:931-1041`), runs
+zones' triangles in the user facet list (`Objet3D_maillage.cpp:931-1044`), runs
 `preprocess.exe scene_mesh.poly` (upstream's program, unchanged, built by `solvers/build.ps1`) in
 a Job Object like TetGen, cancellable, and meshes what it saved. What it does, and the defect in
 its reader that gives every user facet the first one's marker (`poly.cpp:418-423`), are in
@@ -607,8 +609,10 @@ its reader that gives every user facet the first one's marker (`poly.cpp:418-423
   verification by name and is never run.
 - **A fitting zone's seed on a facet** (tutorial 3's zone 1, whose inside position lies on its
   top face) leaves the zone to TetGen's choice of side: TetGen 1.5.0 puts zone 1's id on the hall
-  once the box's markers are restored. Outside parity mode the mesher moves such a seed into the
-  zone's cell first, and records it.
+  once the box's markers are restored. With the scene correction on, outside parity mode, the
+  mesher moves such a seed into the zone's cell first, and records it: this crate's rule, for
+  Burhan to confirm (`docs/m5-m6-design.md`, decision 12). Without the correction the seed is
+  written as it is, as upstream writes it, and the region check below judges what TetGen makes.
 - **Every region is held to the geometry's cells** (`mesh::verify_mesh_with`): each region
   TetGen made must fill one cell of the geometry it was given, with that cell's volume, and each
   fitting zone's id must be on its zone's cell. A lost-particle count cannot see a wrong room:
@@ -657,6 +661,7 @@ not in the file's.
 | `proj_transmission_exceeds_absorption` | A material band that transmits with a loss `R` whose `10^(-R/10)` exceeds the band's absorption, or with absorption 0 | Writes the stored loss unchanged (`e_data_row_materiau.h:98-107`): it enforces the rule only when the user edits the band (`:109-205`; loading calls `Modified` with the row itself, which matches no case). This crate's writer enforces it at every write (`config_xml::transmission_loss_written`), so it would not write the stored value |
 | `proj_source_group_malformed` | A child of the source list, or of a source group, whose element type is neither 16 (a source) nor 15 (a group), or has none | Skips it silently (`e_scene_sources.h:73-87`) |
 | `proj_volumes_unsupported` | Any volume (`volumes/volume`, element type 86) | Seeds a TetGen region with its own volume bound for it (`e_scene_volumes_volume.h:168-188`); a project holds no volumes. Upstream's `Industrial.proj` is refused for its three |
+| `proj_mesh_debug_mode` | SPPS's or TCR's meshing settings (`mesh_conf`) with "Test mesh topology" (`debugmode`) on | Runs `tetgen -d` alone, skips the scene correction and loads no mesh (`projet_maillage.cpp:165-174, 212, 242-275`), then runs the solver on whatever mesh it already held (`projet.cpp:751-769`). None of upstream's projects has it on |
 
 ### Corrections to the survey's run contract
 

@@ -61,7 +61,7 @@ For a project (`mesh_project`), per `docs/m5-m6-design.md` decisions 1-5:
 
 With upstream's scene correction (`MeshSettings::preprocess`; `docs/solver-contract.md` Part B,
 "Preprocessing and the meshed volume"), the `.poly` is upstream's GUI's for `preprocess.exe`
-(`CObjet3D::_SavePOLY(path, true, true, true, ...)`, `Objet3D_maillage.cpp:931-1041`;
+(`CObjet3D::_SavePOLY(path, true, true, true, ...)`, `Objet3D_maillage.cpp:931-1044`;
 `mesh::preprocess_layout`):
 - **Nodes and facets:** the scene is `config_xml::scene_mesh`, the room's faces and then each
   enabled box zone's 12 triangles on three nodes of their own, and every one of its vertices is a
@@ -71,16 +71,24 @@ With upstream's scene correction (`MeshSettings::preprocess`; `docs/solver-contr
 - **Regions**, in ascending solver id (upstream's order is its drawable table's, a wx hash map its
   source does not fix; ascending is tutorial 3's): a box seeded at `hc - (hc - ba) * 1e-4f`, per
   component in `f32`, from its corners as upstream holds them (`FittingShape::box_corners`;
-  `e_scene_encombrements_encombrement_cuboide.h:336-338`); a scene-fitted zone at its
+  `e_scene_encombrements_encombrement_cuboide.h:333-335`); a scene-fitted zone at its
   `inside_point` (upstream's `volpos`), as it is. The attribute is the solver id where upstream
   writes its element id: the parity bed compares through the id map the import records.
+- **Order, a known difference.** Upstream writes each drawable's triangles and then its region,
+  drawable by drawable in its table's order (`Objet3D_maillage.cpp:970-1040`); this mesher writes
+  the user facets in project order and the regions in ascending id. With one box zone the two
+  agree (tutorial 3, byte for byte). With two or more, `preprocess.exe` may meet the user facets
+  in another order than upstream's, which can change its splits and so the mesh; no upstream
+  project has two.
 - **Then `preprocess.exe`** (`mesh::preprocess`): the file it saved is read and accounted for
   facet by facet against the one it was given (`preprocess::account`), its user-facet markers
   are restored (each facet takes the marker of the facet it lies in) unless in parity mode, and
   `geometry::check` must pass it before TetGen runs.
 - **A seed on a facet** (within `16 · 2⁻²⁴ · R`) is moved, outside parity mode, along the
   normal of the facet it lies on into the zone's cell, halfway to the next facet
-  (`mesh::verify::seed_inside`), and recorded in `seeds_moved`.
+  (`mesh::verify::seed_inside`), and recorded in `seeds_moved`. This is this crate's rule, for
+  Burhan to confirm (`docs/m5-m6-design.md`, decision 12); upstream writes `volpos` as it is.
+  Without upstream's scene correction no seed is moved.
 
 For a raw `.poly` (`mesh_poly`): its facets are the scene. Vertices are narrowed to `f32`, each
 facet's marker becomes its position (a note records any that changed), its regions are kept,
@@ -115,7 +123,7 @@ with `read_manifest`, which uses the crate's correctly rounded JSON reader
 | `diagnosis` | object or null | the `tetgen -d` follow-up, below. Null when no facet was skipped and TetGen did not stop on a self-intersection, when the run was cancelled, or when `diag/` could not be set up (a message then says why) |
 | `verify` | object or null | `mesh::verify::verify_mesh_with`'s report on the `.mbin` built, whether it passed or not |
 | `preprocess` | object or null | `preprocess.exe`'s run, when the settings asked for it: `call` (as `tetgen`), `markers` (`restored` or `parity`), `printed` (`status`, `aborted`, `not_found`, `vertices_merged`, `faces_destroyed`, `faces_split`, `split_lines`, as it printed them), `input_sha256` and `output_sha256`, `input` and `output` (`vertices`, `facets`, `user_facets`, `regions`), `accounting` (below), `deleted_facets` (mapped to the scene as `skipped_facets`), `tolerance_m`, `markers_rewritten`, and `summary`, the line also printed among the messages. Read as null when absent |
-| `geometry` | object or null | `geometry::check` on the `.poly` TetGen read: `checked` (`preprocessed`, `written` or `external`), `vertices`, `facets`, `verdict` (`ok` or `refused`), `reasons` (`code`, `count`, `facets`: positions in the facet list, the first 20, `markers`, `message`), `pairs` (each self-intersecting pair as markers), `cells` (`id`, `depth`, `volume_m3`) and `enclosed_volume_m3`. With upstream's scene correction a refusal is the gate before TetGen; without it, TetGen judges first, and a mesh it makes of a refused `.poly` is `geometry_refused`. Read as null when absent |
+| `geometry` | object or null | `geometry::check` on the `.poly` TetGen read: `checked` (`preprocessed`, `written`, `external`, or `project`: for `external` with no `<base>.poly` beside TetGen's output, the project's own `.poly` as the mesher writes it without upstream's scene correction, which stands in for it; the region check is never skipped), `vertices`, `facets`, `verdict` (`ok` or `refused`), `reasons` (`code`, `count`, `facets`: positions in the facet list, the first 20, `markers`, `message`), `pairs` (each self-intersecting pair as markers), `cells` (`id`, `depth`, `volume_m3`) and `enclosed_volume_m3`. With upstream's scene correction a refusal is the gate before TetGen; without it, TetGen judges first, and a mesh it makes of a refused `.poly` is `geometry_refused`. Read as null when absent |
 | `parity` | boolean | parity mode: `preprocess.exe`'s markers kept, the `.mbin` written whether it verifies or not. Read as false when absent |
 | `seeds_moved` | array | per fitting zone whose seed lay on a facet and was moved into its cell: `zone`, `solver_id`, `from`, `to`, `on_facets`, `cell` |
 | `elapsed_ms` | number | wall time of the whole call |

@@ -227,9 +227,20 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
                 Err(code) => return code,
             };
             let program = preprocess_program(&a, &project);
+            // --cancel-after-ms reaches preprocess.exe as it reaches TetGen: each is cancelled
+            // that long after it starts.
+            let timed_pre;
+            let pre: Option<&dyn Mesher> = match (program.as_ref(), cancel_after) {
+                (Some(p), Some(after)) => {
+                    timed_pre = CancelAfterLaunch { inner: p, after };
+                    Some(&timed_pre)
+                }
+                (Some(p), None) => Some(p),
+                (None, _) => None,
+            };
             let tools = MeshTools {
                 tetgen: mesher,
-                preprocess: program.as_ref().map(|p| p as &dyn Mesher),
+                preprocess: pre,
                 markers: if a.switch("parity") {
                     Markers::Parity
                 } else {
