@@ -94,12 +94,30 @@ TetGen's numbers on the way, and both are needed to reproduce upstream's files:
    into the GL frame with `CommonCoordsToGlCoords`; `GetTetraMesh(.., true)` moves it back with
    `GlCoordsToCommonCoords` (`3dengine/Core/Mathlib.h:50-67`), all in `f32`:
    `g = ((x - cx)·s, (z - cy)·s, (-y - cz)·s)`, then `(g.x/s + cx, -(g.z/s + cz), g.y/s + cy)`.
-   `(cx, cy, cz, s)` is `UnitizeVar`, which `CObjet3D::Unitize` fits to the scene on load
+   `(cx, cy, cz, s)` is `UnitizeVar`, which `CObjet3D::Unitize` fits to the scene
    (`Objet3D.cpp:527-571`): the box of the scene's vertices in GL axes `(x, z, -y)`, **the last
    vertex left out** (the loop runs `v < size() - 1`), centre `(lo + hi) / 2.0` with the sum in
    `f32`, and `s = 2.0 / max(w, h, d)` divided in `f64` and narrowed to `f32`. Tutorial 1's box
    gives `(3, 1.5, -5, 0.2f)`. The round trip moves a coordinate by a few ulps at most, and a 0 in
    y always comes back as `-0.0`.
+
+   **Which vertices.** Upstream fits `_pVertices`, its list of scene vertices, each time it
+   replaces the list (a scene or project load, `Objet3D.cpp:441`; a cuboid built, `:480`; a
+   corrected `.poly` reloaded, `:393`; a boundary mesh, `Objet3D_maillage.cpp:1100`; nothing else
+   writes it), and hands the same list, verbatim and in order, to the solvers as the scene part
+   of the `.cbin` (`ToCBINFormat`, `:775-779`, before the fitting zones' triangles) and to TetGen
+   as the first nodes of the `.poly` (`_SavePOLY`, `:938-942`). We fit the vertices of our own
+   `.cbin` (`mesh::Unitize::of_scene`): the same rule on the same file's list, so when our `.cbin`
+   is upstream's, so is the frame. The lists can differ: upstream keeps a copy of a vertex per face
+   corner for an STL (`stl.cpp:274-287`) or a cuboid it builds (`Objet3D.cpp:462-471`), and
+   tutorial 1's `.cbin` holds 36 vertices where ours holds the 8 points. In such a list of a closed
+   surface every point appears at least three times, so leaving its last copy out changes
+   nothing, and the two frames differ exactly when our last vertex is the scene's only vertex at
+   its minimum or maximum on some axis (a box has none). Where upstream keeps one copy of each
+   point (a `.ply`; tutorial 3's `.cbin`, 40 vertices), its last is left out as ours is.
+   Tutorials 1 and 3 give the same frame from upstream's list as from ours, and no upstream file
+   at hand has a last vertex that decides the frame, so that rule rests on the code and on unit
+   tests (`mesh/build.rs`).
 
 Markers go to every tetrahedron face holding a `.face` row's three vertices (`:369-381`), and
 `idVolume` is the `.ele` attribute unchanged (`:165, 868`).
@@ -116,14 +134,24 @@ every `.ele` attribute). With one step undone the comparison fails:
 
 The same test rebuilds tutorial 3's 2019 `.mbin` (3,285 tetrahedra, 835 nodes, five regions,
 read from the upstream checkout's `tutorial_3.proj`) byte for byte with `build_mbin` given
-upstream's own region ids, the frame fitted to its `.poly`'s 57 vertices:
+upstream's own region ids, the frame fitted to the 40 scene vertices of upstream's own `.cbin`:
 `(9.548741, 5, -4, 0.10472585)`. That scene is no box of integers, so the frame's `f32`
-arithmetic is exercised for real.
+arithmetic is exercised for real. A frame one `f32` step off, or centred in the scene's axes
+rather than the GUI's, fails the tutorial-1 comparison.
 
-Neither changes an invariant below, which is why only a byte comparison can tell them apart. The
-corner order still matters to the solver: on the pinned TetGen's 6-tetrahedron tutorial box the
-source (3, 5, 1.8) lies on an internal facet, and SPPS locates it in upstream's order and crashes
-with an access violation in TetGen's (`crates/simpa/tests/cli_run.rs`).
+End to end, from the project: tutorial 1's box meshed by `mesh::mesh_project` with TetGen 1.5.0,
+the mesher Burhan chose ("Our own build",
+`docs/investigations/2026-09-23-upstream-meshing/DECISIONS.md`), gives TetGen's 2019 `.ele`,
+`.face` and `.neigh` (the command-line trailer apart) and its `.node` (the sign of the zeros in y
+apart: our `.poly` writes `0` where upstream's, back from the GL frame, wrote `-0`), and then
+upstream's 2019 `.mbin`, byte for byte except `idVolume`. A TetGen 1.6.0 build meshes that box
+into 6 tetrahedra, and the test says so.
+
+Neither conversion changes an invariant below, which is why only a byte comparison can tell them
+apart. The corner order still matters to the solver: on TetGen 1.6.0's 6-tetrahedron tutorial box
+(`tests/fixtures/solver-outputs/tutorial1/tetgen_scene_mesh.1.*`) the source (3, 5, 1.8) lies on
+an internal facet, and SPPS locates it in upstream's order and crashes with an access violation
+in TetGen's (`crates/simpa/tests/cli_run.rs`).
 
 ### Invariants
 

@@ -36,8 +36,8 @@ mod tetgen;
 pub mod verify;
 
 pub use build::{
-    AttributeMap, BuildStats, FACE_CORNERS, OutputPaths, TetgenOutput, UPSTREAM_CORNERS, Unitize,
-    build_mbin, upstream_order,
+    AttributeMap, BuildStats, COMPILED_FROM, FACE_CORNERS, OutputPaths, TetgenOutput,
+    UPSTREAM_CORNERS, Unitize, build_mbin, upstream_order,
 };
 pub use diag::{Element, Intersection, intersections};
 pub use flags::{

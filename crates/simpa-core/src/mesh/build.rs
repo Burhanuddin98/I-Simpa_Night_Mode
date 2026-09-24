@@ -18,6 +18,14 @@ use crate::formats::cbin;
 use crate::formats::mbin::{self, NO_MARKER, NO_NEIGHBOR, TetraFace, Tetrahedron};
 use crate::formats::tetgen::{self, EleFile, FaceFile, HULL, NeighFile, NodeFile};
 
+/// The `simpa-core` package folder this builder was compiled from. `tests/mesh_mbin_parity.rs`
+/// checks it against the package cargo runs the tests for: cargo judges a path package up to date
+/// by file times alone, so a build folder that two checkouts share can hand one of them a library
+/// compiled from the other's sources, and the byte comparisons would then pass or fail on code
+/// that is not in the tree under test.
+#[doc(hidden)]
+pub const COMPILED_FROM: &str = env!("CARGO_MANIFEST_DIR");
+
 /// Face `i` of a tetrahedron `(a, b, c, d)` is the face opposite corner `i`, wound as upstream
 /// winds it: `(b,d,c)`, `(c,d,a)`, `(a,d,b)`, `(b,c,a)` (`Objet3D_maillage.cpp:182-185`).
 pub const FACE_CORNERS: [[usize; 3]; 4] = [[1, 3, 2], [2, 3, 0], [0, 3, 1], [1, 2, 0]];
@@ -49,11 +57,31 @@ pub fn upstream_order<T: Copy>(row: [T; 4]) -> [T; 4] {
     UPSTREAM_CORNERS.map(|k| row[k])
 }
 
-/// Upstream's `UnitizeVar`: the centre and scale `CObjet3D::Unitize` fits to the scene when the
-/// GUI loads it (`isimpa/3dengine/Core/Objet3D.cpp:527-571`), in the GUI's GL axes, which are
-/// the scene's `(x, z, -y)`. The GUI holds every TetGen node in the frame this defines and
-/// converts it back when it writes the `.mbin`, so each node's `f32` coordinates go through
+/// Upstream's `UnitizeVar`: the centre and scale `CObjet3D::Unitize` fits to the scene
+/// (`isimpa/3dengine/Core/Objet3D.cpp:527-571`), in the GUI's GL axes, which are the scene's
+/// `(x, z, -y)`. The GUI holds every TetGen node in the frame this defines and converts it back
+/// when it writes the `.mbin`, so each node's `f32` coordinates go through
 /// [`Unitize::round_trip`].
+///
+/// **Which vertices.** Upstream fits `_pVertices`, the GUI's list of scene vertices, each time it
+/// replaces that list: after loading a scene file or a project's `sceneMesh.bin`
+/// (`Objet3D.cpp:441`), building a cuboid (`:480`), reloading a corrected `.poly` (`:393`) or a
+/// boundary mesh (`Objet3D_maillage.cpp:1100`); nothing else writes the list. The GUI hands the
+/// same list, verbatim and in order, to the solvers as the scene part of the `.cbin`
+/// (`ToCBINFormat`, `Objet3D_maillage.cpp:775-779`; the fitting zones' triangles follow it) and to
+/// TetGen as the first nodes of the `.poly` (`_SavePOLY`, `:938-942`). We fit the vertices of our
+/// own `.cbin` ([`Unitize::of_scene`]): the same rule on the same file's list, so when our `.cbin`
+/// is upstream's, the frame is upstream's.
+///
+/// Where the two lists differ, the frames can. Upstream keeps one copy of a vertex per face
+/// corner for an STL (`stl.cpp:274-287`) or a cuboid it builds (`Objet3D.cpp:462-471`), and so
+/// does tutorial 1's `.cbin`, 36 vertices for 12 faces, where our import welds them to 8. In such
+/// a list of a closed surface every point appears at least three times, so leaving the last copy
+/// out changes nothing, and the frames differ exactly when **our** last vertex is the scene's
+/// only vertex at its minimum or maximum on some axis (a box has none). In a list upstream keeps
+/// one copy of each point in (a `.ply`, tutorial 3's `.cbin`), its last vertex is left out as
+/// ours is. Tutorials 1 and 3 fit the same frame from upstream's list as from ours; no upstream
+/// file at hand has a last vertex that decides the frame (`tests/mesh_mbin_parity.rs`).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Unitize {
     /// `(cx, cy, cz)`: the middle of the scene's box, GL axes.
@@ -63,8 +91,8 @@ pub struct Unitize {
 }
 
 impl Unitize {
-    /// Fits the scene's vertices, in scene axes and in the `.cbin`'s order, as `CObjet3D::Unitize`
-    /// fits them after a load:
+    /// Fits a list of scene vertices, in scene axes and in order, as `CObjet3D::Unitize` fits
+    /// `_pVertices`:
     /// - each vertex in GL axes, `(x, z, -y)`: the project loader sets exactly that
     ///   (`3dengine/Core/bin.cpp:78`), and so does `CommonCoordsToGlCoords` with the identity
     ///   `(0, 0, 0, 1)` in the `.poly`, `.stl` and `.ply` loaders (`Objet3D.cpp:347, 1017, 1055,
@@ -77,10 +105,8 @@ impl Unitize {
     /// - `scale = 2.0 / max(w, h, d)`, divided in `f64` and narrowed to `f32` (`:560`, `Max` at
     ///   `:107-112`).
     ///
-    /// The `.cbin`'s vertices are the scene as the project holds it, which is what upstream's
-    /// loader reads back from its `.bin` (`bin.cpp:324` writes real coordinates, `:78` reads
-    /// them). Refuses a scene with no vertex, and one whose box (last vertex left out) has no
-    /// extent or is not finite: upstream would divide by zero.
+    /// Refuses a list with no vertex, and one whose box (last vertex left out) has no extent or is
+    /// not finite: upstream would divide by zero.
     pub fn fit(vertices: &[[f32; 3]]) -> Result<Self, String> {
         let gl = |v: &[f32; 3]| [v[0], v[2], -v[1]];
         let Some(first) = vertices.first() else {
@@ -117,7 +143,9 @@ impl Unitize {
         Ok(Unitize { centre, scale })
     }
 
-    /// [`Unitize::fit`] on the vertices of `scene`.
+    /// [`Unitize::fit`] on the vertices of `scene`, the `.cbin` model a run hands the solvers
+    /// (`config_xml::scene_mesh`: the project's vertices in order, as `f32`). See [`Unitize`] for
+    /// why that list, and when it is not upstream's.
     pub fn of_scene(scene: &cbin::Model) -> Result<Self, String> {
         let vertices: Vec<[f32; 3]> = scene.vertices.iter().map(|v| [v.x, v.y, v.z]).collect();
         Self::fit(&vertices)

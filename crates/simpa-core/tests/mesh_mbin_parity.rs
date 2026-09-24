@@ -21,30 +21,56 @@
 //!   nodes differ, 198 of them in value by up to 4.77e-7 m, the rest in the sign of a zero.
 //!
 //! Neither of those meshes breaks an invariant `mesh::verify` checks: only the byte comparison can
-//! tell them from upstream's. The tutorial-1 tests need nothing outside the repository.
+//! tell them from upstream's. Those two tests show that the comparison **can say no**: each
+//! undoes one conversion itself, anchored to TetGen's own files (the `.ele` rows, the `.node`
+//! values), and checks the rest against upstream's bytes. So neither can see its own conversion
+//! missing from the builder (with the round trip taken out of `build.rs`, the round-trip test
+//! still passes); what holds the builder to upstream is the byte-identity test, which fails when
+//! either conversion is taken out (at tetrahedron 0, field 0, and at node 9, coordinate 1). The
+//! tutorial-1 tests need nothing outside the repository.
+//!
+//! **The frame.** The round trip's `UnitizeVar` is fitted to a list of scene vertices, the last
+//! one left out (`mesh::Unitize`). Upstream's list is the one its GUI wrote into the run's
+//! `.cbin`: tutorial 1's has 36 vertices, a copy per face corner, where ours has the 8 points. Both
+//! fit `(3, 1.5, -5, 0.2)`, and so do tutorial 3's two; a frame one `f32` step off, or fitted in
+//! the scene's axes rather than the GUI's, fails the comparison. No upstream file here has a last
+//! vertex that decides the frame, so that rule is held to `Objet3D.cpp:542` by `build.rs`'s unit
+//! tests only.
+//!
+//! **From the project, through TetGen 1.5.0.** Tutorial 1's project meshed by the TetGen of the
+//! solver build (`$SIMPA_SOLVERS_DIR`), which is 1.5.0 by Burhan's decision ("Our own build",
+//! `docs/investigations/2026-09-23-upstream-meshing/DECISIONS.md`), gives TetGen's 2019 files
+//! and then upstream's 2019 `.mbin`, byte for byte (`idVolume` as above). Against a TetGen 1.6.0
+//! build that test fails, as it should: 1.6.0 meshes the box into 6 tetrahedra.
+//!
+//! **The code under test is this tree's.** The runs of this project share one cargo build folder
+//! between checkouts, and cargo judges a path package up to date by file times alone, so it can
+//! link another checkout's `simpa-core`. The first test compares the folder the library was
+//! compiled from (`mesh::COMPILED_FROM`) with the package cargo runs the tests for.
 //!
 //! **A second, independent case: tutorial 3**, read from the upstream checkout
 //! (`$SIMPA_UPSTREAM`, `tests/common/paths.rs`; missing, the test fails, it never skips). A scene
-//! of 57 `.poly` vertices in five TetGen regions (upstream's ids 1930 and 2083-2086; the project
-//! has fitting zones, which is why `import_proj` refuses it), meshed on 2019-06-18 into 3,285
+//! of 40 vertices and a fitting zone in five TetGen regions (upstream's ids 1930 and 2083-2086;
+//! the fitting zone is why `import_proj` refuses the project), meshed on 2019-06-18 into 3,285
 //! tetrahedra: `build_mbin` gives its `.mbin` byte for byte, told upstream's own ids, with the
-//! frame fitted to a scene that is not a box of integers.
+//! frame fitted to the scene part of upstream's `.cbin`, which is not a box of integers.
 
 #[path = "mesh_support.rs"]
 mod support;
 
-use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use simpa_core::formats::{cbin, mbin, poly, tetgen};
+use simpa_core::formats::{cbin, mbin, tetgen};
 use simpa_core::geometry::import::zip::Archive;
 use simpa_core::mesh::verify::{VolumeIds, verify_mesh};
 use simpa_core::mesh::{
-    self, FACE_CORNERS, MeshManifest, MeshStatus, UPSTREAM_CORNERS, Unitize, mesh_from_tetgen,
-    sha256_hex,
+    self, FACE_CORNERS, MeshManifest, MeshStatus, TetgenMesher, UPSTREAM_CORNERS, Unitize,
+    mesh_from_tetgen, mesh_project, sha256_hex,
 };
-use support::{fixture, invariants, load_room, scratch, upstream_file};
+use simpa_core::process::{CancelToken, Line};
+use support::{fixture, invariants, load_room, scratch, tetgen_exe, upstream_file};
 
 /// The TetGen output set upstream meshed tutorial 1 with.
 const TETGEN_DIR: &str = "upstream/tutorial1/tetgen";
@@ -145,6 +171,89 @@ fn plain_nodes() -> Vec<[f32; 3]> {
     }
 }
 
+/// The scene part of a `.cbin` upstream's GUI wrote, `_pVertices` verbatim: every vertex before
+/// the fitting zones' triangles, which `ToCBINFormat` appends last, each with three fresh
+/// vertices, `idMat` 0, `idRs` -1 and the zone's `idEn` (`Objet3D_maillage.cpp:775-815`).
+fn upstream_scene_vertices(model: &cbin::Model) -> Vec<[f32; 3]> {
+    let mut n = model.vertices.len();
+    for f in model.faces.iter().rev() {
+        let fresh = n >= 3 && [f.a, f.b, f.c] == [n - 3, n - 2, n - 1].map(|i| i as u32);
+        if !(fresh && f.id_mat == 0 && f.id_rs == -1 && f.id_en != -1) {
+            break;
+        }
+        n -= 3;
+    }
+    model.vertices[..n]
+        .iter()
+        .map(|v| [v.x, v.y, v.z])
+        .collect()
+}
+
+/// A list of vertices as a set of points, a zero's sign ignored.
+fn points(vertices: &[[f32; 3]]) -> BTreeSet<[u32; 3]> {
+    vertices
+        .iter()
+        .map(|v| v.map(|c| (c + 0.0).to_bits()))
+        .collect()
+}
+
+/// A TetGen output file's rows with its `#` lines left out (the trailer names the command line
+/// and the folder TetGen ran in), its columns single-spaced, and each `-0` read as `0`.
+fn tetgen_rows(path: &Path) -> Vec<String> {
+    std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .map(|l| {
+            l.split_whitespace()
+                .map(|t| if t == "-0" { "0" } else { t })
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect()
+}
+
+/// `Err`, naming both, unless `compiled_from`, the package folder some code was compiled from, is
+/// `running_for`, the package cargo runs the tests for.
+fn compiled_from_this_package(
+    what: &str,
+    compiled_from: &Path,
+    running_for: &Path,
+) -> Result<(), String> {
+    if compiled_from == running_for {
+        Ok(())
+    } else {
+        Err(format!(
+            "{what} was compiled from {}, but cargo runs the tests of {}: the shared build \
+             folder handed this tree another checkout's build. Touch this tree's sources (their \
+             content unchanged) and run again",
+            compiled_from.display(),
+            running_for.display()
+        ))
+    }
+}
+
+#[test]
+fn the_builder_under_test_was_compiled_from_this_tree() {
+    let running_for = PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR").expect("cargo test sets CARGO_MANIFEST_DIR"),
+    );
+    compiled_from_this_package("simpa-core", Path::new(mesh::COMPILED_FROM), &running_for).unwrap();
+    compiled_from_this_package(
+        "this test",
+        Path::new(env!("CARGO_MANIFEST_DIR")),
+        &running_for,
+    )
+    .unwrap();
+    // The input that makes it say no: another checkout's package folder.
+    let elsewhere = running_for
+        .parent()
+        .unwrap()
+        .join("../../other-checkout/crates/simpa-core");
+    let e = compiled_from_this_package("simpa-core", &elsewhere, &running_for).unwrap_err();
+    assert!(e.contains("other-checkout"), "{e}");
+}
+
 #[test]
 fn the_2019_tutorial_mesh_is_rebuilt_byte_for_byte() {
     let (out, m) = built();
@@ -194,12 +303,50 @@ fn the_2019_tutorial_mesh_is_rebuilt_byte_for_byte() {
 }
 
 #[test]
-fn the_frame_fitted_to_the_project_is_upstreams() {
+fn the_frame_fitted_to_our_list_is_the_one_upstreams_list_gives() {
+    // Upstream's list, as its run's .cbin carries it: a copy of each vertex per face corner.
+    let theirs_model = cbin::read_file(&fixture("upstream/tutorial1/spps/mesh.cbin")).unwrap();
+    let theirs = upstream_scene_vertices(&theirs_model);
+    assert_eq!((theirs.len(), theirs_model.faces.len()), (36, 12));
+    for (f, face) in theirs_model.faces.iter().enumerate() {
+        let k = 3 * f as u32;
+        assert_eq!([face.a, face.b, face.c], [k, k + 1, k + 2], "face {f}");
+    }
+    let upstream = Unitize::fit(&theirs).unwrap();
+    assert_eq!(upstream.centre, [3.0, 1.5, -5.0]);
+    assert_eq!(upstream.scale.to_bits(), 0.2f32.to_bits());
+
+    // Ours, the .cbin the build wrote and the project the run meshes: the same 8 points, once
+    // each, and the same frame.
+    let ours_model = cbin::read_file(&built().0.join("mesh.cbin")).unwrap();
+    let ours: Vec<[f32; 3]> = ours_model
+        .vertices
+        .iter()
+        .map(|v| [v.x, v.y, v.z])
+        .collect();
+    assert_eq!(ours.len(), 8);
+    assert_eq!(points(&ours), points(&theirs));
+    assert_eq!(Unitize::of_scene(&ours_model).unwrap(), upstream);
     let p = load_room("tutorial1_box.simpa");
     let scene = mesh::project_input(&p).unwrap().scene;
-    let u = Unitize::of_scene(&scene).unwrap();
-    assert_eq!(u.centre, [3.0, 1.5, -5.0]);
-    assert_eq!(u.scale.to_bits(), 0.2f32.to_bits());
+    assert_eq!(scene, ours_model);
+
+    // Why the last vertex left out decides neither frame here. In upstream's list every point
+    // appears 3 to 6 times, so its last copy is not missed; in ours, as in any box, no vertex is
+    // alone at a minimum or maximum, so whichever comes last, the frame is the same.
+    let mut copies: BTreeMap<[u32; 3], usize> = BTreeMap::new();
+    for p in points(&theirs) {
+        copies.insert(p, 0);
+    }
+    for v in &theirs {
+        *copies.get_mut(&v.map(|c| (c + 0.0).to_bits())).unwrap() += 1;
+    }
+    assert!(copies.values().all(|&n| (3..=6).contains(&n)), "{copies:?}");
+    for k in 0..ours.len() {
+        let mut rotated = ours.clone();
+        rotated.rotate_left(k);
+        assert_eq!(Unitize::fit(&rotated).unwrap(), upstream, "vertex {k} last");
+    }
 }
 
 #[test]
@@ -286,8 +433,10 @@ fn without_the_round_trip_the_comparison_fails() {
 }
 
 #[test]
-fn a_frame_one_ulp_off_fails_the_comparison() {
-    // The frame is part of the result: the scale one f32 step above upstream's 0.2 moves nodes.
+fn a_frame_one_ulp_off_or_in_the_scenes_axes_fails_the_comparison() {
+    // The frame is part of the result: the scale one f32 step above upstream's 0.2 moves nodes,
+    // and so does the box's centre taken in the scene's axes, (3, 5, 1.5), not the GUI's
+    // (x, z, -y).
     let out = mesh::TetgenOutput::read(&mesh::OutputPaths::new(&fixture(TETGEN_DIR), "scene_mesh"))
         .unwrap();
     let expected = with_room_as_zero(&upstream_bytes());
@@ -306,6 +455,62 @@ fn a_frame_one_ulp_off_fails_the_comparison() {
     assert_ne!(bytes, expected);
     println!(
         "scale one ulp off: first difference at {}",
+        first_difference(&bytes, &expected, NODES).unwrap()
+    );
+    let scene_axes = Unitize {
+        centre: [3.0, 5.0, 1.5],
+        ..right
+    };
+    let (mesh, _) = mesh::build_mbin(&out, 12, &[], &scene_axes).unwrap();
+    let bytes = mbin::write(&mesh);
+    assert_ne!(bytes, expected);
+    println!(
+        "centre in the scene's axes: first difference at {}",
+        first_difference(&bytes, &expected, NODES).unwrap()
+    );
+}
+
+#[test]
+fn the_tutorial_project_meshed_by_tetgen_150_gives_upstreams_2019_mbin() {
+    let exe = tetgen_exe();
+    let dir = scratch("tutorial1-tetgen150");
+    let p = load_room("tutorial1_box.simpa");
+    let m = mesh_project(
+        &p,
+        &dir,
+        &TetgenMesher::new(exe.clone()),
+        &CancelToken::new(),
+        &mut |_: &Line| {},
+    )
+    .unwrap();
+    assert!(m.is_ok(), "{m:#?}");
+
+    // TetGen's output is its 2019 output, the trailer apart. So is the .node, but for the sign
+    // of the zeros in y: our .poly writes the box's y = 0 as 0, upstream's as -0 (its vertices
+    // come back from the GL frame, `_SavePOLY`, Objet3D_maillage.cpp:941-942), and TetGen copies
+    // what it reads. The round trip writes both as -0.0 in the .mbin.
+    for ext in ["ele", "face", "neigh", "node"] {
+        let name = format!("scene_mesh.1.{ext}");
+        let ours = tetgen_rows(&dir.join(&name));
+        let theirs = tetgen_rows(&fixture(&format!("{TETGEN_DIR}/{name}")));
+        assert!(
+            ours == theirs,
+            "{}: TetGen's .{ext} is not upstream's 2019 one ({} rows against {}; header {:?} \
+             against {:?}). The mesher is TetGen 1.5.0 (DECISIONS.md, 'Our own build'); a 1.6.0 \
+             build meshes this box into 6 tetrahedra",
+            exe.display(),
+            ours.len(),
+            theirs.len(),
+            ours.first(),
+            theirs.first()
+        );
+    }
+
+    let bytes = std::fs::read(dir.join("tetramesh.mbin")).unwrap();
+    let expected = with_room_as_zero(&upstream_bytes());
+    assert!(
+        bytes == expected,
+        "the .mbin meshed from the project differs from upstream's (room mapped to 0) at {}",
         first_difference(&bytes, &expected, NODES).unwrap()
     );
 }
@@ -404,15 +609,12 @@ fn tutorial_3s_mesh_is_rebuilt_byte_for_byte_from_the_upstream_checkout() {
     )
     .unwrap();
 
-    // The frame, fitted to the vertices of the .poly upstream meshed: (9.548741, 5, -4) and
-    // 0.10472585, nothing like tutorial 1's round numbers.
-    let poly = poly::read(&zip.read("instance1/temp/scene_mesh.poly").unwrap()).unwrap();
-    let vertices: Vec<[f32; 3]> = poly
-        .model_vertices
-        .iter()
-        .map(|v| v.map(|c| c as f32))
-        .collect();
-    assert_eq!(vertices.len(), 57);
+    // The frame, fitted to upstream's list as its .cbin carries it: 40 scene vertices, one copy of
+    // each point, before the fitting zone's 12 triangles. (9.548741, 5, -4) and 0.10472585,
+    // nothing like tutorial 1's round numbers.
+    let vertices = upstream_scene_vertices(&scene);
+    assert_eq!((vertices.len(), scene.vertices.len()), (40, 76));
+    assert_eq!(points(&vertices).len(), 40);
     let unitize = Unitize::fit(&vertices).unwrap();
     assert_eq!(unitize.centre[1..], [5.0, -4.0]);
     assert!((unitize.centre[0] - 9.548_741).abs() < 1e-5, "{unitize:?}");
