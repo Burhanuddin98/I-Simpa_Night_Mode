@@ -98,6 +98,11 @@ function CargoTest([string]$cmdline, [string]$label, [hashtable]$vars = @{}) {
 # the binaries finished. When their failed counts do not add up to the names listed, no test that
 # ran is read as passed.
 function Get-TestVerdicts([string]$text) {
+    # CRLF reads as LF. '$' in .NET's multiline mode matches only before '\n', so a 'test <name> ...'
+    # line ending in '\r' went unread, its test with it: the transcript below is CRLF whenever git
+    # checks this file out with CRLF line ends (core.autocrlf true), and two of its three failed
+    # tests vanished from the verdicts.
+    $text = $text -replace "`r`n", "`n"
     $results = @{}
     $summary = [regex]::Matches($text, '(?m)^test result: \S+ (\d+) passed; (\d+) failed;')
     $failedCount = 0; foreach ($s in $summary) { $failedCount += [int]$s.Groups[2].Value }
