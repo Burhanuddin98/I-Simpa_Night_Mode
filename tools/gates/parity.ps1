@@ -20,7 +20,9 @@
 # Every check has a "says NO":
 # - (1) refuses upstream's own TetGen 1.6.0 build (the 929a5c8 reference, built by
 #   solvers/build.ps1 beside ours) in place of ours;
-# - (2) the bed run with that TetGen 1.6.0 in the solver folder must FAIL tutorial_1, naming
+# - (2) the verdict reader must read every test a bed transcript lists as failed as FAILED, and no
+#   test as passed when the failed count and that list disagree;
+#   the bed run with that TetGen 1.6.0 in the solver folder must FAIL tutorial_1, naming
 #   TetGen's files; the_comparisons_say_no feeds each comparison the input that fails it, and
 #   tutorial_3_same_seed_runs the room written 0; tutorial_3 must print its three says-no:
 #   preprocessing off refused on the box's self-intersections (our check's pairs TetGen's own),
@@ -83,24 +85,35 @@ function CargoTest([string]$cmdline, [string]$label, [hashtable]$vars = @{}) {
     try { $out = cmd /c "$cmdline 2>&1"; $code = $LASTEXITCODE } finally { foreach ($k in $saved.Keys) { [Environment]::SetEnvironmentVariable($k, $saved[$k]) } }
     $text = (@($out) | ForEach-Object { "$_" }) -join "`n"
     [IO.File]::WriteAllText((Join-Path $work "$label.txt"), $text)
-    # With --nocapture a test's own lines come between its 'test <name> ... ' and its verdict, so
-    # the verdict is read from what libtest prints last: an ignored test says so on its own line,
-    # a failed one is listed under the final 'failures:', and one that ran otherwise passed, once
-    # a 'test result:' line shows the binary finished.
+    [pscustomobject]@{ Code = $code; Text = $text; Results = (Get-TestVerdicts $text) }
+}
+# Per test of the output of one or more libtest binaries, 'ok', 'FAILED', 'ignored',
+# 'unfinished' or 'unreadable'. With --nocapture a test's own lines come between its
+# 'test <name> ... ' and its verdict, so the verdict is read from what libtest prints last: an
+# ignored test says so on its own line, a failed one is listed, one name per line, under its
+# binary's last 'failures:', and one that ran otherwise passed, once 'test result:' lines show
+# the binaries finished. When their failed counts do not add up to the names listed, no test that
+# ran is read as passed.
+function Get-TestVerdicts([string]$text) {
     $results = @{}
-    $finished = [regex]::IsMatch($text, '(?m)^test result: ')
-    $failed = @()
-    $lists = [regex]::Matches($text, '(?ms)^failures:\s*\n((?:    \S+\s*\n?)+)')
-    if ($lists.Count) { $failed = @($lists[$lists.Count - 1].Groups[1].Value -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
-    foreach ($m in [regex]::Matches($text, '(?m)^test (\S+) \.\.\. (.*)$')) {
+    $summary = [regex]::Matches($text, '(?m)^test result: \S+ (\d+) passed; (\d+) failed;')
+    $failedCount = 0; foreach ($s in $summary) { $failedCount += [int]$s.Groups[2].Value }
+    $failed = @(foreach ($l in [regex]::Matches($text, '(?m)^failures:[ \t]*\r?\n((?:    \S+[ \t]*(?:\r?\n|$))+)')) {
+        $l.Groups[1].Value -split "`n" | ForEach-Object { $_.Trim() } | Where-Object { $_ }
+    })
+    $readable = $summary.Count -gt 0 -and $failedCount -eq $failed.Count
+    # A test whose own output starts on the next line leaves 'test <name> ...' and a space, which
+    # an editor may strip: the space is optional.
+    foreach ($m in [regex]::Matches($text, '(?m)^test (\S+) \.\.\.(?:[ \t](.*))?$')) {
         $name = $m.Groups[1].Value
         # libtest prints an ignored test's reason after it: 'ignored, <reason>'.
         if ($m.Groups[2].Value.Trim() -match '^ignored(,|$)') { $results[$name] = 'ignored' }
         elseif ($failed -contains $name) { $results[$name] = 'FAILED' }
-        elseif ($finished) { $results[$name] = 'ok' }
-        else { $results[$name] = 'unfinished' }
+        elseif ($summary.Count -eq 0) { $results[$name] = 'unfinished' }
+        elseif ($readable) { $results[$name] = 'ok' }
+        else { $results[$name] = 'unreadable' }
     }
-    [pscustomobject]@{ Code = $code; Text = $text; Results = $results }
+    $results
 }
 function Sha([string]$path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() }
 
@@ -137,6 +150,34 @@ foreach ($t in @('tutorial_1', 'tutorial_2', 'tutorial_3', 'tutorial_3_same_seed
         Write-Host "      $t ... $r"
         $r -eq 'ok'
     }
+}
+# The shape of a real bed run's tail (2026-09-24, spps.exe with one code byte changed): three
+# tests failed, and before the reader took every listed name, two of them read as passed.
+$threeFailed = @'
+test the_comparisons_say_no ...
+thread 'the_comparisons_say_no' (6712) panicked at crates\simpa\tests\parity_tutorials.rs:394:5:
+test tutorial_1 ... t1-tcr: 15 output files from the original's inputs, 15 from ours; 0 differ
+thread 'tutorial_1' (7536) panicked at crates\simpa\tests\parity_tutorials.rs:394:5:
+test tutorial_2 ... tutorial 2: TetGen argv ["-pq2","-A","-n","scene_mesh.poly"]
+ok
+test tutorial_3_same_seed_runs ...
+FAILED
+
+failures:
+
+failures:
+    the_comparisons_say_no
+    tutorial_1
+    tutorial_3_same_seed_runs
+
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.42s
+'@
+Check "(2) says NO: the verdict reader reads each of 3 failed tests of a bed transcript as FAILED, and reads no test as passed when the failed count and the list disagree" {
+    $v = Get-TestVerdicts $threeFailed
+    $cut = Get-TestVerdicts ($threeFailed -replace '(?m)^    tutorial_1\r?\n', '')
+    Write-Host "      $(($v.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name) $($_.Value)" }) -join ', '); with tutorial_1 cut from the list: tutorial_1 $($cut['tutorial_1']), tutorial_2 $($cut['tutorial_2'])"
+    ($v['the_comparisons_say_no'] -eq 'FAILED') -and ($v['tutorial_1'] -eq 'FAILED') -and ($v['tutorial_3_same_seed_runs'] -eq 'FAILED') -and
+        ($v['tutorial_2'] -eq 'ok') -and ($cut['tutorial_1'] -eq 'unreadable') -and ($cut['tutorial_2'] -eq 'unreadable')
 }
 Check "(2) bed: the one test the plain suite ignores says so, with its reason, never skipped silently" {
     $b = $script:bed.Results['shipped_1_3_4_and_1_4_0_solvers_against_ours']
