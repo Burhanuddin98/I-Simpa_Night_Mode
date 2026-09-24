@@ -12,7 +12,9 @@
 //!   per-source echograms and the refusal of onset-relative parameters on a sum of sources;
 //! - `tutorial1_box_asymmetric.simpa`, gate M7(d)'s second room: tutorial 1's box with absorption
 //!   under which a mean by area, by face and by material, and a swap of the floor's and the
-//!   walls' materials, all give different reverberation times.
+//!   walls' materials, all give different reverberation times;
+//! - `outputs_box.simpa`: the Seat box with a cutting plane beside its surface receiver and
+//!   particles saved, for the `.csbin` files kept apart by name and the `.pbin` read.
 //!
 //! Regenerate with `cargo test -p simpa-core --test results_rooms -- --ignored write_m7_rooms`.
 
@@ -231,6 +233,40 @@ pub fn sources2_box() -> Project {
     p
 }
 
+/// The M7 follow-ups' room for the outputs no other fixture has (the M7 critic): [`seats_box`]
+/// with a cutting plane `Cut` beside the floor's surface receiver `Receiver`, 1.2 m above the floor
+/// over 5 × 9 m in 1 m cells, and 10 particles per source saved (`nbparticules_rendu`) without
+/// their collision files. Its run is `tests/fixtures/results/outputs_spps/`.
+pub fn outputs_box() -> Project {
+    let mut p = seats_box();
+    p.id = ProjectId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0e04);
+    p.name = "Outputs seats box".into();
+    p.description =
+        "M7 follow-ups: the Seat and Seat2 box with a cutting plane beside the floor's \
+                     surface receiver, and 10 particles per source saved. Written by \
+                     crates/simpa-core/tests/results_rooms.rs."
+            .into();
+    p.surface_receivers.push(schema::SurfaceReceiver {
+        id: schema::SurfaceReceiverId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0e05),
+        name: "Cut".into(),
+        enabled: true,
+        shape: schema::SurfaceReceiverShape::CuttingPlane {
+            a: Vec3::new(0.5, 9.5, 1.2),
+            b: Vec3::new(0.5, 0.5, 1.2),
+            c: Vec3::new(5.5, 0.5, 1.2),
+            resolution_m: schema::F64::new(1.0),
+        },
+        // A cutting plane made here: no upstream element id pinned, as the other entities the
+        // recipes create; the floor's receiver copied from the tutorial keeps its pin.
+        solver_id: None,
+    });
+    let spps = &mut p.solvers.spps;
+    spps.particles_saved = 10;
+    spps.save_surface_intersections = false;
+    spps.save_receiver_intersections = false;
+    p
+}
+
 /// The floor's absorption in band `i` (0 to 26) of [`asymmetric_box`]: `0.15 + 0.025·i`, to three
 /// decimals.
 pub fn asymmetric_floor_alpha(i: usize) -> f64 {
@@ -291,6 +327,7 @@ fn rooms() -> Vec<(&'static str, Project)> {
         ("energetic_box.simpa", energetic_box()),
         ("sources2_box.simpa", sources2_box()),
         ("tutorial1_box_asymmetric.simpa", asymmetric_box()),
+        ("outputs_box.simpa", outputs_box()),
     ]
 }
 

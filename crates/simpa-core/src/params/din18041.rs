@@ -83,5 +83,14 @@ pub fn target_s(group: Group, volume_m3: f64) -> Result<f64, ParamError> {
         return Ok(2.0);
     }
     let (a, b) = group.coefficients();
-    Ok(a * volume_m3.log10() + b)
+    Ok(a * lg(volume_m3) + b)
+}
+
+/// `lg V`; in a test build, `ln V` under [`crate::faults::Fault::DinNaturalLog`], gate M7(f)'s
+/// say-NO.
+fn lg(v: f64) -> f64 {
+    match crate::faults::active() {
+        Some(crate::faults::Fault::DinNaturalLog) => v.ln(),
+        _ => v.log10(),
+    }
 }

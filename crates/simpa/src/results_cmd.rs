@@ -1,10 +1,11 @@
 //! `simpa results <run-folder> [--json]` and `simpa results --schema` (milestone M7;
 //! `docs/formats/results-json.md`).
 //!
-//! Exit codes (`docs/m5-m6-design.md`, "Exit codes"): 0 the run's results were read; 2 a usage
-//! error, or a path that is not a folder; 5 the run is FAIL, CRASH or CANCELLED; 6 its results do
-//! not verify (`core::results`' other refusals). A refusal is printed on stderr as
-//! `simpa: results refused: <code>: <detail>`, and with `--json` also on stdout as JSON.
+//! Exit codes (`docs/formats/results-json.md`, "Command and exit codes"): 0 the run's results
+//! were read; 2 a usage error, or a path that is not a folder; 5 the run is FAIL, CRASH or
+//! CANCELLED, a solver run that did not succeed (the command itself was not cancelled, so not 130);
+//! 6 its results do not verify (`core::results`' other refusals). A refusal is printed on stderr
+//! as `simpa: results refused: <code>: <detail>`, and with `--json` also on stdout as JSON.
 
 use std::fmt::Write as _;
 use std::path::Path;

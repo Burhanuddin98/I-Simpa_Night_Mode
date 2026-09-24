@@ -1,6 +1,7 @@
-//! `core::results::load` on the committed run folders `tests/fixtures/results/seats_spps` and
-//! `seats_tcr` (tutorial 1's box, point receivers `Seat` and `Seat2`, written by
-//! `cargo test -p simpa --test cli_results -- --ignored write_results_fixtures`), with no solver.
+//! `core::results::load` on the committed run folders under `tests/fixtures/results/` (tutorial 1's
+//! box, point receivers `Seat` and `Seat2`; `outputs_spps` adds a cutting plane and saved
+//! particles; written by `cargo test -p simpa --test cli_results -- --ignored
+//! write_results_fixtures`), with no solver.
 //!
 //! - What is read is typed and consistent with itself: bands, steps, positions and arrivals, the
 //!   `.gap` against the `.recp`, the per-source totals, the surface files, TCR's tables and the
@@ -21,6 +22,7 @@ const SPPS: &str = "results/seats_spps";
 const TCR: &str = "results/seats_tcr";
 const ENERGETIC: &str = "results/energetic_spps";
 const SOURCES2: &str = "results/sources2_spps";
+const OUTPUTS: &str = "results/outputs_spps";
 
 fn load(name: &str) -> RunResults {
     results::load(&common::fixture(name)).unwrap_or_else(|r| panic!("{name}: {r}"))
@@ -69,6 +71,33 @@ fn value_offset(g: &Gabe, col: usize, row: usize) -> usize {
         ColumnData::ShortString(v) => 280 + 1 + 50 * v.len(),
     };
     20 + g.columns[..col].iter().map(size).sum::<usize>() + 280 + 4 + 4 * row
+}
+
+/// Sets row `row` of integer column `col` of a GABE file to `value` (an Int column's header is
+/// 280 + 1 bytes, `docs/formats/gabe.md`).
+fn plant_int(path: &Path, col: usize, row: usize, value: i32) {
+    let g = gabe::read_file(path).unwrap();
+    let ColumnData::Int(v) = &g.columns[col].data else {
+        panic!("column {col} is not an integer column");
+    };
+    let size = |c: &gabe::Column| match &c.data {
+        ColumnData::Float { values, .. } => 280 + 4 + 4 * values.len(),
+        ColumnData::Int(v) => 280 + 1 + 4 * v.len(),
+        ColumnData::ShortString(v) => 280 + 1 + 50 * v.len(),
+    };
+    let at = 20 + g.columns[..col].iter().map(size).sum::<usize>() + 280 + 1 + 4 * row;
+    let mut bytes = std::fs::read(path).unwrap();
+    assert_eq!(
+        i32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()),
+        v[row]
+    );
+    bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    std::fs::write(path, bytes).unwrap();
+    // It reads back as planted.
+    let ColumnData::Int(w) = &gabe::read_file(path).unwrap().columns[col].data else {
+        unreachable!()
+    };
+    assert_eq!(w[row], value);
 }
 
 fn plant(path: &Path, col: usize, row: usize, value: f32) {
@@ -123,13 +152,14 @@ fn the_spps_run_reads_typed_and_consistent() {
             assert_eq!(b.energy.len(), 100);
             assert!(b.energy.iter().sum::<f64>() > 0.0);
             // E·cos²φ ≤ E·|cos φ| ≤ E, step by step.
+            let (cos2, abs_cos) = (
+                b.lateral_cos2.as_ref().unwrap(),
+                b.lateral_abs_cos.as_ref().unwrap(),
+            );
             for k in 0..100 {
                 let tol = 1e-6 * b.energy[k] + 1e-30;
-                assert!(
-                    b.lateral_cos2[k] <= b.lateral_abs_cos[k] + tol,
-                    "{f} Hz step {k}"
-                );
-                assert!(b.lateral_abs_cos[k] <= b.energy[k] + tol, "{f} Hz step {k}");
+                assert!(cos2[k] <= abs_cos[k] + tol, "{f} Hz step {k}");
+                assert!(abs_cos[k] <= b.energy[k] + tol, "{f} Hz step {k}");
             }
             assert!(b.source_power_rho_c > 0.0);
             assert_eq!(
@@ -340,6 +370,124 @@ fn the_two_source_run_reads_each_sources_echogram_and_refuses_their_sum() {
     assert!((m.as_f64().unwrap() / d1 - 1.0).abs() < 1e-12, "{m}");
 }
 
+#[test]
+fn every_spps_band_is_measured_from_the_arrival_and_its_spread_with_its_early_reverberation_unresolved()
+ {
+    // `core::results` hands `params` the direct sound at the receiver's centre, spread over the
+    // time a particle takes to cross the ball, and marks SPPS's early reverberation unresolved
+    // (`report::known_arrival`, `report::series_of`). Says no: an impulse arrival (no spread), or
+    // a series left unmarked, fails here, although every value may still come out.
+    use simpa_core::params::decay::Arrival;
+    for name in [SPPS, ENERGETIC, SOURCES2] {
+        let r = load(name);
+        let s = r.spps().unwrap();
+        let half = s.receiver_crossing_s() / 2.0;
+        assert!(half > 0.0);
+        let rep = results::report(&r);
+        let sp = rep.spps.as_ref().unwrap();
+        for (p, raw) in sp.point_receivers.iter().zip(&s.point_receivers) {
+            for (bi, b) in p.bands.iter().enumerate() {
+                let contributing = raw.contributing(bi);
+                let t = if contributing.is_empty() {
+                    s.arrival_s(raw)
+                } else {
+                    s.arrival_from(raw, &contributing)
+                }
+                .unwrap();
+                assert_eq!(b.arrival, Arrival::spread(t, half), "{name} {}", p.label);
+                assert!(b.early_reverberation_unresolved, "{name} {}", p.label);
+                assert!(b.decay_arrival.is_some(), "{name} {}", p.label);
+            }
+            for e in &p.per_source {
+                let t = s.arrival_from(raw, &[e.source.as_str()]).unwrap();
+                for b in &e.bands {
+                    assert_eq!(b.arrival, Arrival::spread(t, half), "{name} {}", e.source);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn energetic_lost_particles_are_bounded_as_following_the_decay_through_the_report() {
+    use simpa_core::results::spps::ENERGETIC_LOST_ENERGY_RATIO;
+    // The committed energetic run lost 2 of 50,000 particles at 500 Hz and none at 1 kHz.
+    let r = load(ENERGETIC);
+    let s = r.spps().unwrap();
+    let rep = results::report(&r);
+    let sp = rep.spps.as_ref().unwrap();
+    for p in &sp.point_receivers {
+        for (b, st) in p.bands.iter().zip(&s.particles.bands) {
+            assert_eq!(b.freq_hz, st.freq_hz);
+            if st.lost() > 0 {
+                assert!(b.lost_follows_decay, "{} {}", p.label, b.freq_hz);
+                assert_eq!(
+                    b.lost_share,
+                    Some(ENERGETIC_LOST_ENERGY_RATIO * st.lost() as f64 / 50_000.0)
+                );
+            } else {
+                assert!(!b.lost_follows_decay && b.lost_share.is_none());
+            }
+        }
+    }
+    let seat = &sp.point_receivers[0];
+    assert_eq!(seat.label, "Seat");
+    assert!(seat.bands[0].parameters.spl_db.value().is_some());
+    // 200 lost at 500 Hz: a share of 10·200/50,000 = 0.04 following the decay moves every level by
+    // 10·lg(1.04) = 0.17 dB, beyond SPL's 0.1 dB, so SPL is refused there; as random mode's lump
+    // of 200/(50,000·f) from the arrival it would move SPL by about 0.02 dB and pass.
+    let run = copy_of(ENERGETIC, "energetic-lost-200");
+    // Column 1 is 500 Hz; row 4 is lost by meshing problems.
+    plant_int(&run.join("solve/SPPS particle statistics.gabe"), 1, 4, 200);
+    let r = results::load(&run).unwrap_or_else(|e| panic!("{e}"));
+    let s = r.spps().unwrap();
+    assert_eq!(s.particles.bands[0].lost(), 200);
+    let rep = results::report(&r);
+    let b = &rep.spps.as_ref().unwrap().point_receivers[0].bands[0];
+    assert!(b.lost_follows_decay);
+    assert_eq!(b.lost_share, Some(0.04));
+    let why = b.parameters.spl_db.refusal().expect("SPL refused");
+    assert!(
+        matches!(
+            why.error.not_evaluable(),
+            Some(simpa_core::params::NotEvaluable::MissingMoves { .. })
+        ),
+        "{}",
+        why.message
+    );
+    // The lump random mode would have used passes SPL: what the report would have said.
+    let bin = (s.arrival_s(&s.point_receivers[0]).unwrap() / s.time_step_s).floor() as usize;
+    let lump = s.lost_share(0, 500, bin).unwrap();
+    assert!(lump < 0.01, "{lump}");
+}
+
+#[test]
+fn random_mode_lost_particles_are_a_lump_from_the_arrival_through_the_report() {
+    // 20 lost at 500 Hz in a copy of the random-mode Seat run: the share is n/(N·f) of the energy
+    // from the arrival, as a lump, not following the decay.
+    let run = copy_of(SPPS, "random-lost-20");
+    plant_int(&run.join("solve/SPPS particle statistics.gabe"), 1, 4, 20);
+    let r = results::load(&run).unwrap_or_else(|e| panic!("{e}"));
+    let s = r.spps().unwrap();
+    let rep = results::report(&r);
+    for (p, raw) in rep
+        .spps
+        .as_ref()
+        .unwrap()
+        .point_receivers
+        .iter()
+        .zip(&s.point_receivers)
+    {
+        let bin = (s.arrival_s(raw).unwrap() / s.time_step_s).floor() as usize;
+        let b = &p.bands[0];
+        assert!(!b.lost_follows_decay);
+        assert_eq!(b.lost_share, s.lost_share(0, 500, bin));
+        let f = s.alive_share(0, bin).unwrap();
+        assert!((b.lost_share.unwrap() - 20.0 / (2000.0 * f)).abs() < 1e-12);
+        assert_eq!(p.bands[1].lost_share, None);
+    }
+}
+
 type Spoil = fn(&Path);
 
 /// `(fixture, what is spoiled, how, the code it must give)`.
@@ -541,6 +689,32 @@ fn cases() -> Vec<(&'static str, &'static str, Spoil, &'static str)> {
             codes::VALUE_INVALID,
         ),
         (
+            SPPS,
+            "a negative value in a .gap lateral column",
+            |r| {
+                plant(
+                    &r.join("solve/Punctual receivers/Seat/Advanced sound level.gap"),
+                    6,
+                    12,
+                    -1.0,
+                )
+            },
+            codes::VALUE_INVALID,
+        ),
+        (
+            SPPS,
+            "an infinite value in a .gap lateral column",
+            |r| {
+                plant(
+                    &r.join("solve/Punctual receivers/Seat/Advanced sound level.gap"),
+                    7,
+                    12,
+                    f32::INFINITY,
+                )
+            },
+            codes::VALUE_INVALID,
+        ),
+        (
             TCR,
             "NaN in Seat's Global row, an energetic sum the verdict does not scan",
             |r| {
@@ -595,7 +769,206 @@ fn cases() -> Vec<(&'static str, &'static str, Spoil, &'static str)> {
             |r| std::fs::create_dir(r.join("solve/Punctual receivers/Seat/Source 1")).unwrap(),
             codes::FILE_INVALID,
         ),
+        (
+            OUTPUTS,
+            "the 500 Hz .pbin removed",
+            |r| std::fs::remove_file(r.join(PBIN_500)).unwrap(),
+            codes::OUTPUTS_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "the 500 Hz .pbin cut short by one step record",
+            |r| {
+                let p = r.join(PBIN_500);
+                let b = std::fs::read(&p).unwrap();
+                std::fs::write(&p, &b[..b.len() - 16]).unwrap();
+            },
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a .pbin whose time step is not pasdetemps",
+            |r| patch(&r.join(PBIN_500), 24, &0.02f32.to_le_bytes()),
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a .pbin particle recorded past the last step",
+            // The first particle's firstTimeStep, a u16 after its u32 step count.
+            |r| patch(&r.join(PBIN_500), 28 + 4, &100u16.to_le_bytes()),
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a NaN energy in a .pbin",
+            // The first step record's energy: after the file header, the particle header and x,
+            // y, z.
+            |r| patch(&r.join(PBIN_500), 28 + 8 + 12, &f32::NAN.to_le_bytes()),
+            codes::VALUE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "the cutting plane's and the surface receiver's 500 Hz files swapped",
+            |r| {
+                let dir = r.join("solve/Surface receiver/500 Hz");
+                std::fs::rename(dir.join("rs_cut.csbin"), dir.join("tmp")).unwrap();
+                std::fs::rename(dir.join("Sound level.csbin"), dir.join("rs_cut.csbin")).unwrap();
+                std::fs::rename(dir.join("tmp"), dir.join("Sound level.csbin")).unwrap();
+            },
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "the cutting plane's Global file in the surface receiver's place",
+            |r| {
+                let dir = r.join("solve/Surface receiver/Global");
+                std::fs::copy(dir.join("rs_cut.csbin"), dir.join("Sound level.csbin")).unwrap();
+            },
+            codes::FILE_INVALID,
+        ),
     ]
+}
+
+/// The outputs run's 500 Hz particle file.
+const PBIN_500: &str = "solve/Particles/500/particles.pbin";
+
+/// Overwrites `bytes.len()` bytes of `path` at `at`.
+fn patch(path: &Path, at: usize, bytes: &[u8]) {
+    let mut b = std::fs::read(path).unwrap();
+    b[at..at + bytes.len()].copy_from_slice(bytes);
+    std::fs::write(path, b).unwrap();
+}
+
+#[test]
+fn saved_particles_are_read_through_the_results_and_held_to_their_run() {
+    // The M7 critic: no fixture saved particles, so the `.pbin` reading in `core::results` had no
+    // test. `outputs_spps` saves 10 per source (one source).
+    let r = load(OUTPUTS);
+    let s = r.spps().unwrap();
+    let files: Vec<(&str, i32)> = s
+        .particle_files
+        .iter()
+        .map(|p| (p.path.as_str(), p.freq_hz))
+        .collect();
+    assert_eq!(
+        files,
+        [
+            ("Particles/500/particles.pbin", 500),
+            ("Particles/1000/particles.pbin", 1000)
+        ]
+    );
+    for pf in &s.particle_files {
+        // As the format reader alone reads the same file.
+        let p = simpa_core::formats::pbin::read_file(
+            &common::fixture(OUTPUTS).join("solve").join(&pf.path),
+        )
+        .unwrap();
+        assert_eq!(pf.particles, p.particles.len());
+        assert_eq!(pf.recorded_steps, p.steps.len());
+        assert!(pf.particles > 0 && pf.particles <= 10, "{pf:?}");
+        assert!(pf.recorded_steps >= pf.particles, "{pf:?}");
+        println!(
+            "{}: {} particles, {} step records",
+            pf.path, pf.particles, pf.recorded_steps
+        );
+    }
+    // The other fixtures save none.
+    for name in [SPPS, ENERGETIC, SOURCES2] {
+        assert!(
+            load(name).spps().unwrap().particle_files.is_empty(),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn cutting_planes_and_surface_receivers_are_kept_apart_by_name() {
+    // The plan's core::results: surface receivers and cutting planes kept separate by name. The
+    // M7 critic: no fixture had a cutting plane. `outputs_spps` has the floor's scene receiver
+    // `Receiver` (config id 0) and the cutting plane `Cut` (id 1); per band and Global, SPPS writes
+    // `Sound level.csbin` and `rs_cut.csbin`.
+    let r = load(OUTPUTS);
+    let s = r.spps().unwrap();
+    let mut seen = Vec::new();
+    for f in &s.surfaces {
+        let names: Vec<(i32, String)> = f
+            .data
+            .receivers
+            .iter()
+            .map(|x| (x.xml_index, x.name_lossy().into_owned()))
+            .collect();
+        let want = if f.cutting_plane {
+            (1, "Cut".to_string())
+        } else {
+            (0, "Receiver".to_string())
+        };
+        assert_eq!(names, [want], "{}", f.path);
+        assert_eq!(
+            f.cutting_plane,
+            f.path.ends_with("/rs_cut.csbin"),
+            "{}",
+            f.path
+        );
+        seen.push((f.path.clone(), f.band_hz, f.cutting_plane));
+    }
+    let folder = |b: Option<i32>| b.map_or("Global".to_string(), |b| format!("{b} Hz"));
+    let mut want = Vec::new();
+    for b in [Some(500), Some(1000), None] {
+        for cut in [false, true] {
+            let file = if cut {
+                "rs_cut.csbin"
+            } else {
+                "Sound level.csbin"
+            };
+            want.push((format!("Surface receiver/{}/{file}", folder(b)), b, cut));
+        }
+    }
+    seen.sort();
+    want.sort();
+    assert_eq!(seen, want);
+    // Says no (`cases`): the two files swapped, or the cutting plane's in the receiver's place,
+    // are refused, `results_file_invalid`, not read as the other kind.
+}
+
+#[test]
+fn a_nan_in_a_gap_lateral_column_makes_that_column_unusable_not_the_run() {
+    // SPPS's own NaN (`spps::LateralNaN`): an unclamped acos of a direction along the receiver's
+    // orientation. Planted in Seat's 500 Hz E·cos²φ column (+1 of the band's energy column 5).
+    let want = load(SPPS);
+    let run = copy_of(SPPS, "lateral-nan");
+    plant(
+        &run.join("solve/Punctual receivers/Seat/Advanced sound level.gap"),
+        6,
+        12,
+        f32::NAN,
+    );
+    let got = results::load(&run).unwrap_or_else(|r| panic!("{r}"));
+    let (s, w) = (got.spps().unwrap(), want.spps().unwrap());
+    let (seat, seat_want) = (
+        s.point_receiver("Seat").unwrap(),
+        w.point_receiver("Seat").unwrap(),
+    );
+    assert_eq!(
+        seat.bands[0].lateral_cos2,
+        Err(simpa_core::results::spps::LateralNaN { step: 12 })
+    );
+    // The other lateral column, the energies and every other band are read as before.
+    assert_eq!(
+        seat.bands[0].lateral_abs_cos,
+        seat_want.bands[0].lateral_abs_cos
+    );
+    assert_eq!(seat.bands[0].energy, seat_want.bands[0].energy);
+    assert_eq!(seat.bands[1], seat_want.bands[1]);
+    // Says no: a NaN in the .gap's energy column, which must equal the .recp's, still refuses
+    // the run; so do a negative and an infinite lateral value (`cases`).
+    let run = copy_of(SPPS, "gap-energy-nan");
+    plant(
+        &run.join("solve/Punctual receivers/Seat/Advanced sound level.gap"),
+        5,
+        12,
+        f32::NAN,
+    );
+    assert_eq!(results::load(&run).unwrap_err().code, codes::FILE_INVALID);
 }
 
 #[test]

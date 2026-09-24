@@ -37,7 +37,7 @@ const DTS: [f64; 2] = [0.001, 0.01];
 /// Energy scale, Pa²: 1 Pa²·s of total energy is about 94 dB.
 const E0: f64 = 1.0;
 /// The gate's decays start at t = 0.
-const AT_ZERO: Arrival = Arrival::Known { time_s: 0.0 };
+const AT_ZERO: Arrival = Arrival::at(0.0);
 
 fn tau(t: f64) -> f64 {
     t / K60
@@ -158,7 +158,7 @@ fn exact_decays_meet_every_bound() {
     for t in TS {
         for dt in DTS {
             let s = exact_decay(t, dt, 150.0);
-            let p = evaluate(&s, AT_ZERO).unwrap();
+            let p = evaluate(&s, AT_ZERO);
             let closed = Closed::decay(t);
             let dev = deviations(&p, &closed);
             println!(
@@ -182,11 +182,105 @@ fn exact_decays_meet_every_bound() {
     }
 }
 
+/// What gate (a)'s six decays give with the arrival detected, not given: per quantity of
+/// `[EDT, T20, T30, C50, C80, D50, Ts]`, `Some(true)` when it meets its bound, `None` when it is
+/// refused `unresolved` with the closed form between the two ends of the onset bin; anything else
+/// panics (a value outside its bound, another refusal, or an `unresolved` that misses the closed
+/// form).
+fn detected_outcome(p: &BandParameters, c: &Closed) -> [Option<bool>; 7] {
+    let ok = gate_checks(p, c);
+    // The truth is one end of the bin, so it may lie a rounding step outside the pair.
+    let bracketed = |e: &simpa_core::params::ParamError, want: f64| match e.not_evaluable() {
+        Some(NotEvaluable::Unresolved { low, high, .. }) => {
+            let tol = 1e-9 * want.abs().max(1.0);
+            *low - tol <= want && want <= *high + tol
+        }
+        _ => false,
+    };
+    let times = [&p.edt, &p.t20, &p.t30];
+    let others = [
+        (&p.c50_db, c.c50),
+        (&p.c80_db, c.c80),
+        (&p.d50, c.d50),
+        (&p.ts_s, c.ts),
+    ];
+    let mut out = [None; 7];
+    for (i, r) in times.into_iter().enumerate() {
+        match r {
+            Ok(_) if ok[i] => out[i] = Some(true),
+            Err(e) if bracketed(e, c.t) => {}
+            other => panic!("quantity {i}: {other:?}"),
+        }
+    }
+    for (i, (r, want)) in others.into_iter().enumerate() {
+        match r {
+            Ok(_) if ok[3 + i] => out[3 + i] = Some(true),
+            Err(e) if bracketed(e, want) => {}
+            other => panic!("quantity {}: {other:?} against {want}", 3 + i),
+        }
+    }
+    out
+}
+
+#[test]
+fn gate_a_decays_with_the_arrival_detected() {
+    // M7 follow-ups (the M7 critic): gate (a) passes with the true arrival given, `Arrival::at(0)`.
+    // The plan's direct-arrival detection is `Arrival::Detected`: the arrival somewhere in the
+    // onset bin, every onset-relative quantity computed from both ends of it, and refused
+    // `unresolved` when the two differ by more than its limit. Run on the gate's six decays.
+    let mut table = Vec::new();
+    for t in TS {
+        for dt in DTS {
+            let s = exact_decay(t, dt, 150.0);
+            let p = evaluate(&s, Arrival::Detected);
+            let got = detected_outcome(&p, &Closed::decay(t));
+            let cell = |x: Option<bool>| if x.is_some() { "pass" } else { "unresolved" };
+            println!(
+                "detected, T {t} s, dt {dt} s: EDT {}, T20 {}, T30 {}, C50 {}, C80 {}, D50 {}, \
+                 Ts {}",
+                cell(got[0]),
+                cell(got[1]),
+                cell(got[2]),
+                cell(got[3]),
+                cell(got[4]),
+                cell(got[5]),
+                cell(got[6])
+            );
+            table.push(((t, dt), got.map(|x| x.is_some())));
+        }
+    }
+    // The decay times do not depend on where in the bin time starts: they pass everywhere. C50,
+    // C80 and D50 are refused in all six, the truth (the bin's start) one end of the bracket; Ts
+    // comes through only at T = 3 s, dt = 1 ms, where the two ends of the bin give Ts within its
+    // limit of each other. Gate (a)'s C80 and D50 therefore need the arrival given
+    // (`docs/params.md`).
+    let pinned = [
+        ((0.3, 0.001), [true, true, true, false, false, false, false]),
+        ((0.3, 0.01), [true, true, true, false, false, false, false]),
+        ((1.0, 0.001), [true, true, true, false, false, false, false]),
+        ((1.0, 0.01), [true, true, true, false, false, false, false]),
+        ((3.0, 0.001), [true, true, true, false, false, false, true]),
+        ((3.0, 0.01), [true, true, true, false, false, false, false]),
+    ];
+    assert_eq!(table, pinned);
+    // Says no: the same six decays 1 % off, detected, miss the decay times' bound.
+    for t in TS {
+        for dt in DTS {
+            let p = evaluate(&exact_decay(1.01 * t, dt, 150.0), Arrival::Detected);
+            assert_eq!(
+                gate_checks(&p, &Closed::decay(t))[..3],
+                [false; 3],
+                "T {t}, dt {dt}"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_decay_one_percent_off_fails_every_bound() {
     for t in TS {
         for dt in DTS {
-            let p = evaluate(&exact_decay(1.01 * t, dt, 150.0), AT_ZERO).unwrap();
+            let p = evaluate(&exact_decay(1.01 * t, dt, 150.0), AT_ZERO);
             // Every quantity is computed (none refused), and every one misses its bound.
             for r in [&p.edt, &p.t20, &p.t30] {
                 assert!(r.is_ok());
@@ -217,8 +311,7 @@ fn a_decay_off_only_where_one_parameter_looks_fails_that_parameter_only() {
                 -5.0 + slope * (x - t5)
             }
         });
-        let [edt, t20, t30, ..] =
-            gate_checks(&evaluate(&early, AT_ZERO).unwrap(), &Closed::decay(t));
+        let [edt, t20, t30, ..] = gate_checks(&evaluate(&early, AT_ZERO), &Closed::decay(t));
         println!("early kink, T {t} s: {}", kink_line([edt, t20, t30]));
         assert_eq!([edt, t20, t30], [false, true, true], "early kink, T {t}");
         // 5 % slower below −25 dB: only T30 sees it.
@@ -230,8 +323,7 @@ fn a_decay_off_only_where_one_parameter_looks_fails_that_parameter_only() {
                 -25.0 + slope / 1.05 * (x - t25)
             }
         });
-        let [edt, t20, t30, ..] =
-            gate_checks(&evaluate(&late, AT_ZERO).unwrap(), &Closed::decay(t));
+        let [edt, t20, t30, ..] = gate_checks(&evaluate(&late, AT_ZERO), &Closed::decay(t));
         println!("late kink, T {t} s: {}", kink_line([edt, t20, t30]));
         assert_eq!([edt, t20, t30], [true, true, false], "late kink, T {t}");
     }
@@ -296,7 +388,7 @@ fn a_series_cut_before_minus_35_db_gives_not_evaluable_not_a_number() {
             }
             // The whole band: T30 and T20 are refused, EDT survives (its truncation bias at
             // 30 dB is inside its 0.5 % limit).
-            let p = evaluate(&s, AT_ZERO).unwrap();
+            let p = evaluate(&s, AT_ZERO);
             assert!(p.t30.is_err());
             assert!(
                 matches!(
@@ -396,7 +488,7 @@ fn a_double_slope_decay_is_flagged_and_a_single_slope_is_not() {
             tau * ((-x / tau).exp() - (-y / tau).exp())
         };
         let v = (0..n).map(|k| bin(tau1, k) + a * bin(tau2, k)).collect();
-        let p = evaluate(&EnergySeries::new(dt, v).unwrap(), AT_ZERO).unwrap();
+        let p = evaluate(&EnergySeries::new(dt, v).unwrap(), AT_ZERO);
         let c = p.curvature.clone().unwrap();
         println!(
             "dt {dt}: T20 {:.3} s, T30 {:.3} s, curvature {:.1} %",
@@ -407,7 +499,6 @@ fn a_double_slope_decay_is_flagged_and_a_single_slope_is_not() {
         assert!(c.curved && c.percent > 10.0, "{c:?}");
         // The single slope at the same resolution is not flagged (exact_decays_meet_every_bound).
         let single = evaluate(&exact_decay(t1, dt, 150.0), AT_ZERO)
-            .unwrap()
             .curvature
             .unwrap();
         assert!(!single.curved);
@@ -448,7 +539,7 @@ fn a_direct_sound_inside_a_bin_meets_every_bound_from_its_arrival() {
         for dt in DTS {
             for f in OFFSETS {
                 let (s, t_a) = direct_and_decay(t, dt, f, DIRECT);
-                let p = evaluate(&s, Arrival::Known { time_s: t_a }).unwrap();
+                let p = evaluate(&s, Arrival::at(t_a));
                 assert_eq!(p.onset.index, (0.029 / dt).floor() as usize);
                 let closed = Closed::direct_and_decay(t, DIRECT);
                 assert_eq!(
@@ -478,7 +569,7 @@ fn a_direct_sound_measured_from_the_start_of_its_bin_fails() {
             let dt = 0.01;
             let (s, t_a) = direct_and_decay(t, dt, f, DIRECT);
             let start = decay::onset(&s).bin_start_s;
-            let p = evaluate(&s, Arrival::Known { time_s: start }).unwrap();
+            let p = evaluate(&s, Arrival::at(start));
             let closed = Closed::direct_and_decay(t, DIRECT);
             let ok = gate_checks(&p, &closed);
             println!(
@@ -506,7 +597,7 @@ fn the_first_versions_edt_regression_fails_with_a_direct_sound() {
         for f in OFFSETS {
             let (s, t_a) = direct_and_decay(t, 0.01, f, DIRECT);
             let naive = naive_fit(&s, 0.0, -10.0).unwrap();
-            let ours = decay::decay_time(&s, Arrival::Known { time_s: t_a }, DecayRange::Edt)
+            let ours = decay::decay_time(&s, Arrival::at(t_a), DecayRange::Edt)
                 .unwrap()
                 .t_s;
             println!(
@@ -526,7 +617,7 @@ fn an_arrival_not_given_leaves_c_d_and_ts_unresolved() {
         for dt in DTS {
             for f in OFFSETS {
                 let (s, _) = direct_and_decay(t, dt, f, DIRECT);
-                let p = evaluate(&s, Arrival::Detected).unwrap();
+                let p = evaluate(&s, Arrival::Detected);
                 let closed = Closed::direct_and_decay(t, DIRECT);
                 let ok = gate_checks(&p, &closed);
                 // The decay times are the same from either end of the onset bin.
@@ -575,7 +666,7 @@ fn an_arrival_not_given_is_resolved_on_a_fine_enough_step() {
     let (t, dt) = (3.0, 1e-4);
     for f in OFFSETS {
         let (s, _) = direct_and_decay(t, dt, f, DIRECT);
-        let p = evaluate(&s, Arrival::Detected).unwrap();
+        let p = evaluate(&s, Arrival::Detected);
         assert_eq!(
             gate_checks(&p, &Closed::direct_and_decay(t, DIRECT)),
             [true; 7],
@@ -585,10 +676,31 @@ fn an_arrival_not_given_is_resolved_on_a_fine_enough_step() {
 }
 
 #[test]
-fn a_given_arrival_outside_its_onset_bin_is_refused() {
-    let (s, t_a) = direct_and_decay(1.0, 0.01, 0.5, DIRECT);
-    for wrong in [t_a - 0.01, t_a + 0.01, 0.0] {
-        let e = evaluate(&s, Arrival::Known { time_s: wrong }).unwrap_err();
-        assert_eq!(e.code(), codes::BAD_ARRIVAL, "{wrong}: {e}");
+fn a_given_arrival_outside_its_onset_bin_refuses_c_d_and_ts_but_not_the_decay_times() {
+    // A bin early, a bin late, and at 0 s: C50, C80, D50 and Ts are refused. The decay times do
+    // not depend on where time starts; with an impulse, nothing before the arrival can be its
+    // direct sound, so they are measured as if no arrival were given, and meet gate (a)'s bound.
+    for t in TS {
+        let (s, t_a) = direct_and_decay(t, 0.01, 0.5, DIRECT);
+        for wrong in [t_a - 0.01, t_a + 0.01, 0.0] {
+            let p = evaluate(&s, Arrival::at(wrong));
+            for r in [&p.c50_db, &p.c80_db, &p.d50, &p.ts_s] {
+                let e = r.as_ref().unwrap_err();
+                assert_eq!(e.code(), codes::BAD_ARRIVAL, "{wrong}: {e}");
+            }
+            assert_eq!(p.decay_arrival, Arrival::Detected);
+            let ok = gate_checks(&p, &Closed::direct_and_decay(t, DIRECT));
+            assert_eq!(
+                ok,
+                [true, true, true, false, false, false, false],
+                "T {t}, {wrong}"
+            );
+        }
+        // Says no: the same series from its own arrival refuses nothing.
+        let p = evaluate(&s, Arrival::at(t_a));
+        assert_eq!(
+            gate_checks(&p, &Closed::direct_and_decay(t, DIRECT)),
+            [true; 7]
+        );
     }
 }

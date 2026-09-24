@@ -255,10 +255,11 @@ fn analytic_inner(solve: &Path, exp: &Expectation) -> Result<Analytic, String> {
         } else if user_air {
             Some(real(atmo, "absatmo")?)
         } else {
-            Some(
-                air::solver_air_absorption_per_m(f64::from(band.freq_hz), &atmosphere)
-                    .map_err(|e| e.to_string())?,
-            )
+            Some(solver_air(f64::from(band.freq_hz), &atmosphere).map_err(|e| e.to_string())?)
+        };
+        let air_m_per_metre = match crate::faults::active() {
+            Some(crate::faults::Fault::AirTermDropped) => None,
+            _ => air_m_per_metre,
         };
         bands.push(AnalyticBand {
             freq_hz: band.freq_hz,
@@ -272,6 +273,20 @@ fn analytic_inner(solve: &Path, exp: &Expectation) -> Result<Analytic, String> {
         area_m2: face_areas.iter().sum(),
         bands,
     })
+}
+
+/// The air term TCR adds for a band at nominal frequency `nominal_hz`: the solver's `m`
+/// ([`air::solver_air_absorption_per_m`]). In a test build,
+/// [`crate::faults::Fault::AirIsoExactMidband`] takes ISO 9613-1's own at the exact midband
+/// frequency instead, gate M7(d)'s say-NO for the air term.
+fn solver_air(nominal_hz: f64, atmosphere: &Atmosphere) -> Result<f64, ParamError> {
+    if let Some(crate::faults::Fault::AirIsoExactMidband) = crate::faults::active() {
+        let f = air::exact_midband_hz(nominal_hz).unwrap_or(nominal_hz);
+        return Ok(air::energy_attenuation_per_m(air::attenuation_db_per_m(
+            f, atmosphere,
+        )?));
+    }
+    air::solver_air_absorption_per_m(nominal_hz, atmosphere)
 }
 
 fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
