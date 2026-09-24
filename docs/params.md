@@ -14,9 +14,9 @@ M12). M7 builds the numbers; it does not publish them.
 | Source | What we took from it | Read by us? |
 |---|---|---|
 | ISO 3382-1 | The definitions of EDT, T20, T30, C50, C80, D50, Ts and the onset rule, **as commonly stated**. Marked [commonly stated] below | **No.** The text is paywalled and was not opened |
-| ISO 9613-1:1993(E) | Equations (1)–(6), clauses 5–7, Table 1 (a)–(h) (−20 °C to +15 °C) | **Yes**, pages 1–8 of the iTeh preview (`cdn.standards.iteh.ai/samples/17426/3a2d69b767024b74805b83b063a91445/ISO-9613-1-1993.pdf`, sha256 `cb0e28c6…`). Annex B and Table 1 (i) (20 °C) are **not** in the preview |
+| ISO 9613-1:1993(E) | Equations (1)–(6), clauses 5–7, Table 1 (a)–(h) (−20 °C to +15 °C) | **Yes**, pages 1–8 of the iTeh preview (`cdn.standards.iteh.ai/samples/17426/3a2d69b767024b74805b83b063a91445/ISO-9613-1-1993.pdf`, sha256 `cb0e28c6…`). Equations on printed page 3, clause 7 on printed page 4. Annex B and Table 1 (i) (20 °C) are **not** in the preview |
 | GOST 31295.1-2005 (ISO 9613-1:1993, MOD) | Table 1 (i), 20 °C: gate (b)'s values | **Yes**, printed page 13 (PDF page 18) of `meganorm.ru/Data2/1/4293849/4293849418.pdf` (sha256 `03f11462…`). It is the Russian adoption, **not ISO's own page.** Its Annex F lists only editorial changes. Its 15 °C, 50 % column equals ISO's own Table 1 (h), page 8, in all 24 bands (both transcribed into `params_air.rs`, where the test asserts they are equal) |
-| DIN 18041:2016-03 | The five group-A targets | **No.** Formulas from BNB V 2020, criterion 3.1.4 (BMI, `bnb-nachhaltigesbauen.de/.../BNB_LN2020_314.pdf`, sha256 `576bdfda…`), pages 4 and 6–8, which quote "nach DIN 18041:2016-03" |
+| DIN 18041:2016-03 | The five group-A targets and their volume ranges | **No.** Formulas from BNB V 2020, criterion 3.1.4 (BMI, `bnb-nachhaltigesbauen.de/.../BNB_LN2020_314.pdf`, sha256 `576bdfda…`), pages 4 and 6–8, which quote "nach DIN 18041:2016-03". Ranges from the standard's figure as reproduced by C. Nocke, "Die neue DIN 18041 – Hörsamkeit in Räumen", Lärmbekämpfung 11 (2016) Nr. 2, Bild 2, page 51 (sha256 `5154ce6b…`). Details below |
 | Upstream's GUI | How it computes every parameter: `src/isimpa/data_manager/projet_calculation.cpp`, `tree_rapport/e_report_gabe_recp.cpp` | Yes, at `929a5c8` (`B:\repos\I-Simpa-upstream`) |
 | Upstream's solvers | What the energy values mean, and TCR's Sabine and Eyring | Yes, same commit |
 | Night Mode `main:project/result_parser.cpp` | Nothing. Read only for its +26 dB bug (below) | Yes |
@@ -48,26 +48,81 @@ series labelled as an aggregate, as upstream's `Global` row does (`projet_calcul
 Series with a different `dt` or length are refused, `params_series_mismatch`. Upstream's `Average`
 row, the arithmetic mean of the band values (`projet_calculation.cpp:206-209`), is not computed.
 
-## Direct-arrival detection (the onset t₀)
+## Direct-arrival detection: the onset bin and the arrival
 
 - **ISO 3382-1** [commonly stated]: the impulse response starts where the squared response first
   rises to within 20 dB of its maximum.
-- **Applied to a histogram:** the onset bin `k₀` is the first bin whose energy is at least
-  1/100 of the largest bin, and `t₀ = k₀·dt`, the start of that bin.
-  - The comparison is between bins, so it depends on `dt`: a coarse bin mixes the direct sound
-    with early reflections. At SPPS's usual steps the direct sound sits in one bin and dominates.
-  - Energy before `t₀` is excluded from every onset-relative parameter (EDT, T20, T30, C, D and
-    Ts). SPL sums all of it.
+- **Applied to a histogram**, that finds a bin, not a time: the **onset bin** `k₀` is the first
+  bin whose energy is at least 1/100 of the largest bin. The direct sound arrived somewhere in
+  `[k₀·dt, (k₀+1)·dt)`. Energy before the onset bin is excluded from every onset-relative
+  parameter (EDT, T20, T30, C, D and Ts). SPL sums all of it.
+- **Where in the bin matters.** Every onset-relative parameter is measured from the **arrival**
+  `t_a`, which the caller passes as an `Arrival`:
+  - `Arrival::Known { time_s }`: the time is given, such as the source–receiver distance over the
+    speed of sound. It must lie in the onset bin, or the call is refused as `params_bad_arrival`:
+    before the bin, the direct sound is more than 20 dB below the strongest arrival and its time
+    does not place the onset; after it, energy within 20 dB of the maximum came before the
+    direct sound could have. A time a rounding step (10⁻⁹ dt) before the bin is taken as its
+    start.
+  - `Arrival::Detected`: not given. Every onset-relative parameter is computed with the arrival
+    at **both ends of the onset bin**. The value reported is the mean of the two; when either end
+    lies further from it than the parameter's limit (the truncation table below), the parameter is
+    refused as `params_not_evaluable` (`unresolved`), with both ends in the detail.
+- **Why, measured.** The first version of this module took `t_a` as the start of the onset bin.
+  For a direct sound as strong as the reverberant decay (`D/R = 1`) at `dt = 10 ms`, arriving 0.05
+  to 0.95 of the way into its bin (`params_synthetic.rs::a_direct_sound_measured_from_the_start_of_its_bin_fails`):
+
+  | T | C50 | C80 | D50 | Ts |
+  |---|---|---|---|---|
+  | 0.3 s | −0.105 to −2.027 dB | −0.101 to −1.930 dB | −0.12 to −2.74 points | +0.25 to +5.96 ms |
+  | 1 s | −0.040 to −0.779 dB | −0.036 to −0.693 dB | −0.17 to −3.51 points | +0.25 to +5.08 ms |
+  | 3 s | −0.017 to −0.320 dB | −0.015 to −0.294 dB | −0.09 to −1.78 points | +0.25 to +4.86 ms |
+
+  Every case misses the gate's bound on C, D or Ts. From the given arrival, all 30 cases (three
+  `T`, two `dt`, five offsets) are exact to 2·10⁻¹³ (`a_direct_sound_inside_a_bin_meets_every_bound_from_its_arrival`).
+- **What `Detected` can resolve, measured** (`D/R = 1`, the same five offsets): the decay times
+  always, since they do not depend on where the time axis starts. At `dt = 10 ms`, C50, C80, D50
+  and Ts are all `unresolved`; at `dt = 1 ms`, C50 and C80 still are, and D50 and Ts come through
+  only at `T = 3 s`; at `dt = 0.1 ms` and `T = 3 s` everything comes through within the gate's
+  bounds. Where refused, the two ends bracket the closed form. **So a run's C and D need the
+  arrival: piece B should pass `r/c`.** For a receiver of radius `R`, energy can reach it at
+  `(r − R)/c`; which of the two lands in SPPS's onset bin is for piece B and M8 to establish, not
+  assumed here.
 - **Upstream differs.** `GetTimeDecay` (`projet_calculation.cpp:127-139`) takes the last time label
   before the energy first changes by 10⁻¹⁸ in absolute value (`refValue`, lines 321, 357, 393,
-  424). That is an absolute threshold, not a relative one, and the decay times ignore the onset
-  altogether (below).
+  424). That is an absolute threshold, not a relative one, on labels that are bin ends; and the
+  decay times ignore the onset altogether (below).
 
-## Schroeder backward integration
+## The curve between bin edges
 
-`S(t) = ∫ₜ^∞ E dt`, in the histogram `S_k = Σ_{j≥k} B_j`, which is exactly `S` at `t = k·dt`, the
-start of bin `k`. The decay curve is `L_k = 10·lg(S_k / S_{k₀})`, 0 dB at the onset. Sums run from
-the last bin backwards, in `f64`.
+A histogram gives each bin's energy, not where in the bin it arrived. Every onset-relative
+parameter is read from one continuous Schroeder curve `S(u)`, `u` the time since the arrival:
+
+- **At every bin edge** after the arrival it is the histogram's backward sum, `S_k = Σ_{j≥k} B_j`,
+  exactly.
+- **Between two edges** it is log-linear: the energy inside the bin decays exponentially at the
+  rate the two edge values imply. For the last bin with energy, when nothing is added after it,
+  `S` falls linearly to 0 (energy spread evenly), since a logarithm cannot reach 0.
+- **In the onset bin** it is the direct sound, an impulse at `t_a`, plus the decay of the next bin
+  continued back to `t_a`: `S` just after the arrival is `S_{k₀+1}·(S_{k₀+1}/S_{k₀+2})^{(t₁−t_a)/dt}`,
+  `t₁` the end of the onset bin, at most `S_{k₀}`. The rest of the bin is the impulse.
+- **At the arrival itself**, `S(0) = S_{k₀}`, the direct sound included: 0 dB.
+
+The model is exact for an exponential decay from `t_a` and for an impulse followed by one,
+wherever in its bin `t_a` falls: gate (a) and its direct-sound cases meet every bound to
+3·10⁻¹³, Ts included.
+
+**What it assumes, and where it can be wrong.** Inside a bin, energy arrives as a smooth decay
+would bring it. A strong reflection inside the bin that a window edge falls in can put up to that
+bin's energy on the wrong side of the edge. In the onset bin, what the next bin's decay does not
+explain is taken as the direct sound, at `t_a`. A direct sound spread over two bins (a receiver
+whose crossing time is not small against `dt`), or an early reflection in the bin after the onset
+bin, breaks that. None of these is bounded here; M8's bed on real runs is where they show.
+
+## Schroeder backward integration and the unseen tail
+
+The decay curve is `L(u) = 10·lg(S(u) / S(0))`, 0 dB at the arrival. Sums run from the last bin
+backwards, in `f64`.
 
 **Truncation.** A simulation stops at a finite time. The integral from the last bin misses the
 energy that would have arrived after it, so the curve bends down near the end, and the fitted slope
@@ -88,18 +143,25 @@ extrapolation. Instead each parameter carries a bound:
      more.
    - Fewer than 2 bins from the onset to the last with energy: `params_series_too_short`.
 2. **The check.** Every parameter is computed twice: as reported, from the series alone; and with
-   `M` added after the last bin with energy. If the two differ by more than the limit below, the parameter is
-   refused as `params_not_evaluable` (`truncated`), with both numbers in the detail. An unbounded
-   tail refuses everything that depends on it. **The second number is never reported as the
-   value.**
+   `M` added to every backward sum and continued after the last bin with energy as an exponential
+   at the window's rate. If the two differ by more than the limit below, the parameter is refused
+   as `params_not_evaluable` (`truncated`), with both numbers in the detail. An unbounded tail
+   refuses everything that depends on it. **The second number is never reported as the value.**
 
-   | Quantity | Limit | Why this size |
-   |---|---|---|
-   | EDT, T20, T30 | 0.5 % relative | 1/10 of the 5 % difference limen, as commonly quoted from ISO 3382-1 Annex A; also gate (a)'s tolerance |
-   | C50, C80 | 0.1 dB | 1/10 of 1 dB, likewise |
-   | D50 | 0.005 (0.5 points) | 1/10 of 0.05, likewise |
-   | Ts | 1 ms | 1/10 of 10 ms, likewise |
-   | SPL | 0.1 dB | 1/10 of 1 dB (the limen quoted for G) |
+   The same limits bound what `Arrival::Detected` leaves open (`unresolved`, above). Each is the
+   tighter of 1/10 of the difference limen commonly quoted from ISO 3382-1 Annex A and gate (a)'s
+   bound:
+
+   | Quantity | Limit | 1/10 limen | Gate (a) |
+   |---|---|---|---|
+   | EDT, T20, T30 | 0.5 % relative | 0.5 % (of 5 %) | 0.5 % |
+   | C50, C80 | 0.01 dB | 0.1 dB (of 1 dB) | 0.01 dB |
+   | D50 | 0.001 (0.1 points) | 0.005 (of 0.05) | 0.1 points |
+   | Ts | 1 ms or 0.5 % of Ts, the tighter | 1 ms (of 10 ms) | none named; the test holds Ts to 0.5 % |
+   | SPL | 0.1 dB | 0.1 dB (of the 1 dB quoted for G) | none (gate (c) is ±0.5 dB) |
+
+   The first version used 1/10 of the limen alone, 0.1 dB for C and 0.5 points for D50, so a
+   truncated series could return a C80 0.1 dB off as a number while gate (a) asks for 0.01 dB.
 
 3. **The depth reached.** A decay time needs the curve to reach the bottom of its range. The depth
    is read from the curve **with** the tail added: that is how far the decay had fallen when the
@@ -107,7 +169,7 @@ extrapolation. Instead each parameter carries a bound:
    Not deep enough: `params_not_evaluable` (`range_not_reached`), with the depth reached.
 
 **Why the depth check alone is not enough, measured:** an exact exponential with `T = 1 s`,
-`dt = 1 ms`, cut where the true decay reaches `D` dB. T30 is fitted over the points of the
+`dt = 1 ms`, cut where the true decay reaches `D` dB. T30 is fitted over the bin-edge points of the
 truncated curve in −5 … −35 dB with nothing added, as upstream does bar its one extra point:
 
 | D at the end | 30 dB | 35 dB | 40 dB | 45 dB | 50 dB | 55 dB | 60 dB |
@@ -118,8 +180,8 @@ At D = 30 dB the truncated curve still passes −35 dB, in 5 of the 6 `(T, dt)` 
 so a T30 is produced, 12 % short, without a word. The same holds at `T = 0.3` and `3 s` and at
 `dt = 10 ms` to within a point. With our bound, T30 at `T = 1 s`, `dt = 1 ms` is first accepted at
 48 dB of true decay. That is close to the 45 dB of dynamic range usually quoted for T30 from
-ISO 3382-1. Both the table and the 48 dB are asserted by
-`params_synthetic.rs::the_documented_truncation_table_holds`.
+ISO 3382-1. Both the table, each entry to half a unit of its last printed digit, and the 48 dB are
+asserted by `params_synthetic.rs::the_documented_truncation_table_holds`.
 
 **Upstream differs.** `MakeSchroederArray` (`projet_calculation.cpp:68-83`) integrates backwards
 without any tail handling. `GetTimeRange` (lines 143-170) sets the end of the regression to the
@@ -137,11 +199,24 @@ extrapolated to 60 dB: `T = −60 / slope`.
 | T20 | −5 dB to −25 dB | 3 × the 20 dB decay time |
 | T30 | −5 dB to −35 dB | 2 × the 30 dB decay time |
 
-- **Points.** Every `(k·dt, L_k)`, `k ≥ k₀`, with `bottom ≤ L_k ≤ top`. At least 3 points are
-  needed, else `params_not_evaluable` (`too_few_points`). A slope that is not negative is
-  `params_not_evaluable` (`not_decaying`).
-- **Refused:** the depth reached is above the bottom (`range_not_reached`, with the depth); the
-  truncation bound is exceeded (`truncated`).
+- **The fit is over time, not over samples.** ISO 3382-1's regression runs over a finely sampled
+  curve; ours runs over all the time `L(u)` spends inside the range, on the curve above, each
+  stretch weighted by its length. Between bin edges `L` is linear, so the sums are exact. The
+  last bin's linear fall to nothing is left out.
+- **The direct sound is a step.** At the arrival the curve drops by the direct sound, `10·lg(1 + D/R)`
+  dB, in no time, so it adds nothing to the fit, as in a finely sampled impulse response. The
+  first version fitted the bin-edge points from the start of the onset bin, where one point at
+  0 dB then stands for a whole bin: with `D/R = 1` at `dt = 10 ms`, its EDT read −6.0 % to −30.4 %
+  short over `T` from 0.3 to 3 s and five offsets in the bin; ours reads exact to 4·10⁻¹⁵
+  (`params_synthetic.rs::the_first_versions_edt_regression_fails_with_a_direct_sound`).
+- **Refused:**
+  - the curve spends less than 2 bin widths inside the range: `params_not_evaluable`
+    (`range_too_short`). A direct sound more than 10 dB above the decay jumps over EDT's whole
+    range, so EDT is refused rather than fitted to the jump;
+  - a slope that is not negative: `not_decaying`;
+  - the depth reached is above the bottom (`range_not_reached`, with the depth); the truncation
+    bound is exceeded (`truncated`); and, detected, the two ends of the onset bin disagree
+    (`unresolved`).
 - **Curvature.** `C = 100·(T30/T20 − 1)` %, from ISO 3382-2 as commonly stated, which
   reads a value above 10 % as a curved (double-slope) decay. We flag `|C| > 10 %`. The flag is a
   typed field of the band's result, not a log line: M8 and M12 decide what a curved decay may show.
@@ -152,32 +227,37 @@ extrapolated to 60 dB: `T = −60 / slope`.
     long.
   - Each range ends at the first step past the bottom (lines 163-166), so one point below the
     range is included.
-  - Upstream fits in `f32`, on times in ms.
+  - Upstream fits in `f32`, on bin-edge points in ms.
   - It also computes T15 (`TRdefault = "15;30"`, line 803), which we do not.
 
 ## Clarity C50 and C80, definition D50, centre time Ts
 
-[commonly stated], with `t` measured from the onset and `E` the energy histogram:
+[commonly stated], with `u` the time since the arrival and `E` the energy:
 
-- **C_te** = `10·lg( ∫₀^te E dt / ∫_te^∞ E dt )` dB, te = 50 or 80 ms.
-- **D50** = `∫₀^50ms E dt / ∫₀^∞ E dt`, a fraction (shown in %).
-- **Ts** = `∫₀^∞ t·E dt / ∫₀^∞ E dt`, in seconds.
+- **C_te** = `10·lg( ∫₀^te E du / ∫_te^∞ E du )` dB, te = 50 or 80 ms.
+- **D50** = `∫₀^50ms E du / ∫₀^∞ E du`, a fraction (shown in %).
+- **Ts** = `∫₀^∞ u·E du / ∫₀^∞ E du`, in seconds.
 
-How they are evaluated:
-- **A window edge inside a bin** splits the bin in proportion, as if its energy were spread
-  evenly over it. With `t₀` on a bin edge and `te` a multiple of `dt`, no bin is split.
-- **Ts** puts each bin's energy at the bin's midpoint. For an exponential this reads long by
-  `(dt/τ)²/12` of τ: 1.8 % at `T = 0.3 s`, `dt = 10 ms`, and 0.02 % at `dt = 1 ms`. The test
-  checks the histogram's own closed form, `dt·(1/(e^{dt/τ} − 1) + 1/2)`, and that the
-  difference to τ is that bias.
+How they are evaluated, all from the curve `S(u)`:
+- **Windows.** The early energy is `S(0) − S(te)`, the late `S(te)`, the total `S(0)`. The direct
+  sound, and the whole onset bin with it, is early. A window edge inside a bin splits the bin as
+  the curve runs there, exponentially.
+- **Ts** is `∫₀^∞ S(u) du / S(0)`, the same integral by parts; the direct sound, at `u = 0`, adds
+  nothing to it. For an exponential this is `τ` exactly. (The first version put each bin's energy
+  at the bin's midpoint, which reads long by `(dt/τ)²/12` of τ: 1.8 % at `T = 0.3 s`,
+  `dt = 10 ms`.)
 - **Refused:**
-  - the series ends at or before `t₀ + te`: `params_series_too_short`;
-  - there is no energy after `t₀ + te`: `params_not_evaluable` (`empty_window`);
-  - the truncation bound is exceeded: `truncated`.
+  - the series ends at or before `t_a + te` (from either end of the onset bin, when detected):
+    `params_series_too_short`;
+  - there is no energy after `t_a + te`: `params_not_evaluable` (`empty_window`);
+  - the truncation bound is exceeded: `truncated`; detected, the two ends of the onset bin disagree:
+    `unresolved`.
 - **Upstream differs:**
   - `GetSumLimit` includes both window edges (`projet_calculation.cpp:102`), on time labels that
-    are bin ends. So the bin that ends at `t₀ + te` counts as early and as late (lines 366, 401).
-  - Its `t₀` is the absolute-threshold time above.
+    are bin ends. So for C the bin that ends at `t₀ + te` counts as early and as late (line 366).
+    D (line 401) divides the early sum by the sum from `t₀`, so its boundary bin is counted once in
+    each, which is right; D differs from ours only in its `t₀`.
+  - Its `t₀` is the absolute-threshold label above, the end of a bin.
   - **Its Ts is not measured from the onset.** Line 432 weights by the absolute time label, so
     upstream's Ts includes the propagation delay `r/c` and half a bin more.
 
@@ -186,7 +266,7 @@ How they are evaluated:
 `SPL = 10·lg( Σ_k B_k / p₀² )`, with `p₀² = (20 µPa)² = 4·10⁻¹⁰ Pa²`, over every bin of the band.
 It is the steady-state level of a source emitting its power continuously. This is upstream's
 `dB_Sum_Param` (`projet_calculation.cpp:220-240`, with `p_0` at line 41) and its receiver view
-(`e_report_gabe_recp.cpp:56, 145`).
+(`e_report_gabe_recp.cpp:56, 145`). It does not depend on the arrival.
 
 **Night Mode's +26 dB bug:** its `.gap` reader divided the energy by `10⁻¹²`, the intensity
 reference, instead of multiplying by `1/p₀²` (`main:project/result_parser.cpp:486`).
@@ -211,6 +291,21 @@ for Annex B:
 - `h = h_r·(p_sat/p_r)/(p_a/p_r)`. The division by the ambient pressure is the standard's own:
   `h` is the partial pressure of water vapour over the atmospheric pressure (clause 6.1, note 3,
   page 2).
+
+**The accuracy the standard states** (clause 7, page 4), each class also below 200 kPa and at a
+frequency-to-pressure ratio of 4·10⁻⁴ to 10 Hz/Pa:
+
+| Class | `h` | Temperature |
+|---|---|---|
+| ±10 % (7.1) | 0.05 % to 5 % | −20 °C to +50 °C |
+| ±20 % (7.2) | 0.005 % to 0.05 %, or above 5 % | −20 °C to +50 °C |
+| ±50 % (7.3) | below 0.005 % | above 200 K |
+
+Outside all three the standard states no accuracy. `air::attenuation` returns α with its class,
+or `None`; `air::stated_accuracy` gives the class alone. At 101.325 kPa the frequency ratio
+excludes the bands below 40.5 Hz, so a 25 Hz or 31.5 Hz band has no stated accuracy
+(`params_air.rs::the_stated_accuracy_follows_clause_7_and_says_none_outside_it`). The first
+version checked only that the inputs were physical.
 
 **Gate (b)**, at 20 °C, 50 % RH and 101.325 kPa, against GOST 31295.1-2005 Table 1 (i). Our
 equations at the exact midband frequencies are within **0.29 %** in every band from 50 Hz to
@@ -237,10 +332,13 @@ frequency, converted. The gates that compare against TCR (M7 (d), M8) use it. `a
 is the standard's.
 
 **The conversion SPPS and TCR use.** Upstream stores `m = α·ln(10)/10` per metre, the energy
-attenuation `I(x) = I₀·e^(−m·x)` (`base_core_configuration.cpp:114`). SPPS kills a particle over
-one step with probability `1 − e^(−m·c·dt)` (line 115), and TCR adds `4·m·V` to the absorption area
-(`TC_CalculationCore.cpp:138`). The header comment calls it "dB/m" (`coreTypes.h:47`); it is not.
-A user-set `absatmo` is used verbatim as `m` (`docs/formats/config_xml.md`).
+attenuation `I(x) = I₀·e^(−m·x)` (`base_core_configuration.cpp:114`), and the per-step factor
+`e^(−m·c·dt)` (line 115). SPPS applies that factor two ways: in energetic mode it multiplies the
+particle's energy by it (`spps/CalculationCore.cpp:57`); in random mode the particle survives the
+step with that probability and is otherwise destroyed (line 64). TCR adds `4·m·V` to the
+absorption area (`TC_CalculationCore.cpp:138`). The header comment calls it "dB/m"
+(`coreTypes.h:47`); it is not. A user-set `absatmo` is used verbatim as `m`
+(`docs/formats/config_xml.md`).
 
 ## Sabine and Eyring, as TCR computes them
 
@@ -271,23 +369,44 @@ Eyring time of 0 s, a fully absorbing room.
 
 ## DIN 18041 targets
 
-`T_soll`, in s, with `V` in m³ (BNB V 2020, 3.1.4, "nach DIN 18041:2016-03"):
+`T_soll`, in s, with `V` in m³:
 
-| Group | Use | T_soll | Page | Volume range |
-|---|---|---|---|---|
-| A1 | Music | 0.45·lg V + 0.07 | 6 | ≤ 5000 m³ |
-| A2 | Speech, lecture | 0.37·lg V − 0.14 | 7 | ≤ 5000 m³ |
-| A3 | Teaching, communication | 0.32·lg V − 0.17 | 7 | ≤ 5000 m³ |
-| A4 | Teaching, communication, inclusive | 0.26·lg V − 0.14 | 4 | ≤ 5000 m³ |
-| A5 | Sport | 0.75·lg V − 1.00 for 200 ≤ V ≤ 10 000 m³; 2.0 s above | 8 | from 200 m³ |
+| Group | Use | T_soll (BNB page) | Volumes |
+|---|---|---|---|
+| A1 | Music | 0.45·lg V + 0.07 (6) | 30 to 1000 m³ |
+| A2 | Speech, lecture | 0.37·lg V − 0.14 (7) | 50 to 5000 m³ |
+| A3 | Teaching, communication | 0.32·lg V − 0.17 (7) | 30 to 5000 m³ |
+| A4 | Teaching, communication, inclusive | 0.26·lg V − 0.14 (4) | 30 to 500 m³ |
+| A5 | Sport | 0.75·lg V − 1.00 to 10 000 m³, then 2.0 s (8) | 200 to 30 000 m³ |
 
 - **Gate (f):** A3 at 180 m³ gives 0.5517 s, within 0.552 ± 0.001, and 0.55 s in the design README.
-- **The upper limit of A1–A4** comes from the DEGA Akustik Journal 03/19, page 17 (sha256
-  `fb2ddd25…`): above 5000 m³ DIN 18041 sets requirements only for sports and swimming halls.
-  Such a volume is refused, `params_din_out_of_range`.
-- **The lower limits of A1–A4 are not sourced.** A volume is accepted down to where the formula
-  would give a target of 0 s or less, which is refused. **Open:** read the standard's own ranges.
-- The same article's example, 245 m³ in A3, prints 0.60 s. The formula gives 0.5945 s, which is
+- **The formulas** are BNB V 2020, criterion 3.1.4, which quotes them "nach DIN 18041:2016-03".
+- **The volumes** are where each group's line is drawn solid in the standard's figure of `T_soll`
+  against `V`, as reproduced by Nocke (Lärmbekämpfung 11 (2016) Nr. 2, Bild 2, page 51); the
+  article calls the solid stretches the typical volumes of each use, and draws the rest dotted.
+  The ends were measured on the figure against its 30, 50, 100, 200, 500, 1000, 5000 and 10 000
+  m³ grid lines; each falls within a line's end cap (under 4 % in volume) of one of them. The
+  text sources agree wherever they speak:
+  - A4 is not suitable for rooms above 500 m³: Nocke, Table 1, page 52; also fennext.eu,
+    "DIN 18041 Hörsamkeit in Räumen" (sha256 `9d9498f3…`).
+  - The equations apply between 30 and 5000 m³: C. Ruhe, "Akustik in Bildungsbauten", 5.2
+    (`carsten-ruhe.de/downloads/akustik-in-bildungsbauten/5-2-raumgruppe-a/`, sha256 `f4361626…`).
+  - A5 is the formula from 200 to 10 000 m³ and 2.0 s above: BNB, page 8. Sports halls are
+    covered up to 30 000 m³: fennext.eu.
+  - Above 5000 m³ only sport and swimming halls have requirements: DEGA Akustik Journal 03/19,
+    page 17 (sha256 `fb2ddd25…`). The same page says the exact formulas and volume ranges are in
+    the standard's text. **Open:** check the ranges, and whether their ends are inclusive,
+    against that text. Both ends are accepted here.
+  - A volume outside its group's range is refused, `params_din_out_of_range`. The first version
+    accepted A1–A4 up to 5000 m³ and down to where the formula reached 0 s (3.4 m³ for A3), and
+    A5 at any volume above 10 000 m³, and credited the 5000 m³ limit to the DEGA page, which
+    gives no per-group limit.
+- **What a target applies to.** `T_soll` is for the room **80 % occupied**, at mid frequencies
+  (Nocke, page 51: "beziehen sich auf den besetzten Zustand … 80%igen Ausschöpfung der
+  Regelbesetzung"; Ruhe, 5.2: "bei mittleren Frequenzen … für den zu 80 % besetzten Zustand"),
+  and `V` is the effective room volume (Ruhe, 5.2). An unoccupied model's T30 compared with
+  `target_s` is off by the audience's absorption.
+- The DEGA article's example, 245 m³ in A3, prints 0.60 s. The formula gives 0.5945 s, which is
   0.6 to one decimal but 0.59 to two. It confirms the formula to 0.01 s at best, and is not used
   as a check.
 
@@ -295,9 +414,14 @@ Eyring time of 0 s, a fully absorbing room.
 
 Each code is a row of `docs/solver-contract.md`, Part B, "Parameter refusals". A refusal is a
 typed `ParamError`, never a warning and never a number. `params_not_evaluable` carries the quantity
-and one of `range_not_reached` (with the depth reached), `truncated` (with the value and the value
-with the tail added; no second value when the tail is unbounded, or when the curve with the tail
-has too few points in the range to fit), `too_few_points`, `not_decaying` or `empty_window`.
+and one of:
+- `range_not_reached`, with the depth reached;
+- `truncated`, with the value and the value with the tail added (no second value when the tail is
+  unbounded, or when the curve with the tail spends too little time in the range to fit);
+- `unresolved`, with the values from both ends of the onset bin;
+- `range_too_short`, with the time spent in the range and the time needed;
+- `not_decaying`;
+- `empty_window`.
 
 The citations of upstream's lines in `params::air` and `params::room` are checked against the
 source at `929a5c8` by `params_air.rs` and `params_room.rs`, so a citation that drifts fails a test.

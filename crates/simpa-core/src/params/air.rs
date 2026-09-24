@@ -104,7 +104,8 @@ pub fn molar_concentration_percent(air: &Atmosphere) -> Result<f64, ParamError> 
     )
 }
 
-/// α in dB/m for a pure tone of `f_hz` by ISO 9613-1 equations (3) to (5).
+/// α in dB/m for a pure tone of `f_hz` by ISO 9613-1 equations (3) to (5). The value alone:
+/// [`attenuation`] carries the accuracy the standard states for it.
 pub fn attenuation_db_per_m(f_hz: f64, air: &Atmosphere) -> Result<f64, ParamError> {
     check_frequency(f_hz)?;
     let h = molar_concentration_percent(air)?;
@@ -121,6 +122,57 @@ pub fn attenuation_db_per_m(f_hz: f64, air: &Atmosphere) -> Result<f64, ParamErr
     let oxygen = 0.01275 * (-2239.1 / t).exp() / (fr_o + f2 / fr_o);
     let nitrogen = 0.1068 * (-3352.0 / t).exp() / (fr_n + f2 / fr_n);
     Ok(8.686 * f2 * (classical + tt0.powf(-2.5) * (oxygen + nitrogen)))
+}
+
+/// The accuracy ISO 9613-1 states for equations (3) to (5) (clause 7, printed page 4; PDF page 8
+/// of the iTeh preview).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum StatedAccuracy {
+    /// ±10 % (7.1): `h` from 0.05 % to 5 %, −20 °C to +50 °C.
+    TenPercent,
+    /// ±20 % (7.2): `h` from 0.005 % to 0.05 %, or above 5 %, −20 °C to +50 °C.
+    TwentyPercent,
+    /// ±50 % (7.3): `h` below 0.005 %, above 200 K.
+    FiftyPercent,
+}
+
+/// α with the accuracy the standard states for it.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct Attenuation {
+    pub db_per_m: f64,
+    /// `None` outside every range of clause 7: the standard states no accuracy there.
+    pub stated_accuracy: Option<StatedAccuracy>,
+}
+
+/// The class of clause 7 that `f_hz` and `air` fall in, or `None`. Every class also needs a
+/// pressure below 200 kPa and a frequency-to-pressure ratio from 4·10⁻⁴ to 10 Hz/Pa, which at
+/// 101.325 kPa excludes the bands below 40.5 Hz.
+pub fn stated_accuracy(f_hz: f64, air: &Atmosphere) -> Result<Option<StatedAccuracy>, ParamError> {
+    check_frequency(f_hz)?;
+    let h = molar_concentration_percent(air)?;
+    let (k, p) = (air.kelvin(), air.pressure_pa);
+    if p >= 200_000.0 || !(4e-4..=10.0).contains(&(f_hz / p)) {
+        return Ok(None);
+    }
+    let temperate = (253.15..=323.15).contains(&k);
+    Ok(if temperate && (0.05..=5.0).contains(&h) {
+        Some(StatedAccuracy::TenPercent)
+    } else if temperate && ((0.005..0.05).contains(&h) || h > 5.0) {
+        Some(StatedAccuracy::TwentyPercent)
+    } else if h < 0.005 && k > 200.0 {
+        Some(StatedAccuracy::FiftyPercent)
+    } else {
+        None
+    })
+}
+
+/// α in dB/m by ISO 9613-1, with the accuracy clause 7 states for it.
+pub fn attenuation(f_hz: f64, air: &Atmosphere) -> Result<Attenuation, ParamError> {
+    Ok(Attenuation {
+        db_per_m: attenuation_db_per_m(f_hz, air)?,
+        stated_accuracy: stated_accuracy(f_hz, air)?,
+    })
 }
 
 /// The speed of sound upstream derives from the temperature, `343.2·√(T/293.15)` m/s
@@ -157,8 +209,10 @@ pub fn upstream_attenuation_db_per_m(f_hz: f64, air: &Atmosphere) -> Result<f64,
 
 /// The per-metre energy attenuation `m` of `I(x) = I₀·e^(−m·x)` from α in dB/m:
 /// `m = α·ln(10)/10`, the conversion upstream applies (`base_core_configuration.cpp:114`). TCR adds
-/// `4·m·V` to the absorption area (`TC_CalculationCore.cpp:138`); SPPS kills a particle over a
-/// step with probability `1 − e^(−m·c·dt)` (`base_core_configuration.cpp:115`).
+/// `4·m·V` to the absorption area (`TC_CalculationCore.cpp:138`). SPPS stores `e^(−m·c·dt)` per
+/// step (`base_core_configuration.cpp:115`): in energetic mode it multiplies a particle's energy
+/// by it (`spps/CalculationCore.cpp:57`), in random mode it keeps the particle with that
+/// probability (`spps/CalculationCore.cpp:64`).
 pub fn energy_attenuation_per_m(alpha_db_per_m: f64) -> f64 {
     alpha_db_per_m * std::f64::consts::LN_10 / 10.0
 }

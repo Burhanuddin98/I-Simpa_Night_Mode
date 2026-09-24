@@ -191,6 +191,56 @@ fn the_energy_attenuation_is_alpha_times_ln10_over_10() {
     );
 }
 
+/// Clause 7 (printed page 4 of the preview): ±10 % for `h` from 0.05 % to 5 % between −20 °C
+/// and +50 °C, ±20 % for `h` from 0.005 % to 0.05 % or above 5 % in the same temperatures, ±50 %
+/// for `h` below 0.005 % above 200 K; each below 200 kPa and at 4·10⁻⁴ to 10 Hz/Pa.
+#[test]
+fn the_stated_accuracy_follows_clause_7_and_says_none_outside_it() {
+    use air::StatedAccuracy::{FiftyPercent, TenPercent, TwentyPercent};
+    let at = |t: f64, rh: f64, p: f64, f: f64| {
+        let air = Atmosphere {
+            temperature_c: t,
+            relative_humidity_percent: rh,
+            pressure_pa: p,
+        };
+        let h = molar_concentration_percent(&air).unwrap();
+        let a = air::attenuation(f, &air).unwrap();
+        assert_eq!(a.db_per_m, attenuation_db_per_m(f, &air).unwrap());
+        (h, a.stated_accuracy)
+    };
+    let sea = 101_325.0;
+    // Gate (b)'s air, in every band it checks.
+    for n in NOMINAL {
+        assert_eq!(
+            at(20.0, 50.0, sea, exact_midband_hz(n).unwrap()).1,
+            Some(TenPercent)
+        );
+    }
+    // Drier air steps down a class at h = 0.05 % and again at 0.005 %.
+    for (rh, class) in [
+        (50.0, TenPercent),
+        (1.0, TwentyPercent),
+        (0.1, FiftyPercent),
+        (0.0, FiftyPercent),
+    ] {
+        let (h, got) = at(20.0, rh, sea, 1000.0);
+        println!("20 °C, {rh} % RH: h = {h:.4} %, {got:?}");
+        assert_eq!(got, Some(class), "{rh} % RH, h {h}");
+    }
+    // Outside every class: below 40.5 Hz at sea level, above 200 kPa, and humid air above 50 °C
+    // or below −20 °C.
+    assert_eq!(at(20.0, 50.0, sea, 25.0).1, None);
+    assert_eq!(at(20.0, 50.0, sea, 50.0).1, Some(TenPercent));
+    assert_eq!(at(20.0, 50.0, 250_000.0, 1000.0).1, None);
+    for t in [60.0, -30.0] {
+        let (h, got) = at(t, 50.0, sea, 1000.0);
+        assert!(h >= 0.005, "{t} °C: h {h}");
+        assert_eq!(got, None, "{t} °C");
+    }
+    // Clause 7.3 has no upper temperature: bone-dry air at 60 °C is ±50 %.
+    assert_eq!(at(60.0, 0.0, sea, 1000.0).1, Some(FiftyPercent));
+}
+
 /// One line of an upstream source file, lossily decoded (the sources hold Latin-1 comments).
 fn upstream_line(rel: &str, line: usize) -> String {
     let bytes = std::fs::read(paths::upstream_file(rel)).unwrap();
@@ -268,4 +318,15 @@ fn the_upstream_lines_we_cite_say_what_we_transcribed() {
         .contains("GetProperty(\"freq\").ToInt()")
     );
     assert_eq!(air::speed_of_sound(20.0), 343.2);
+    // SPPS applies the per-step factor to a particle's energy in energetic mode and as a survival
+    // probability in random mode.
+    let spps = "src/spps/CalculationCore.cpp";
+    assert_eq!(
+        upstream_line(spps, 57).trim(),
+        "configurationP.energie*=densite_proba_absorption_atmospherique;"
+    );
+    assert_eq!(
+        upstream_line(spps, 64).trim(),
+        "if(GetRandValue()>=densite_proba_absorption_atmospherique)"
+    );
 }

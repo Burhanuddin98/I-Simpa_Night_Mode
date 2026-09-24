@@ -3,7 +3,8 @@
 //! upstream are in `docs/params.md`.
 //!
 //! - [`decay`]: onset, Schroeder integration, EDT, T20, T30, C50, C80, D50, Ts and SPL, each with
-//!   a bound on what the unseen tail after the series' end could change.
+//!   a bound on what the unseen tail after the series' end could change, and, when the direct
+//!   sound's arrival is not given, on what its place inside the onset bin could change.
 //! - [`air`]: ISO 9613-1 attenuation, and the value SPPS and TCR actually use.
 //! - [`room`]: Sabine and Eyring as TCR computes them.
 //! - [`din18041`]: the group-A target reverberation times.
@@ -33,6 +34,8 @@ pub mod codes {
     pub const BAD_ENERGY: &str = "params_bad_energy";
     /// Every value is zero.
     pub const NO_ENERGY: &str = "params_no_energy";
+    /// A given direct-arrival time is not a time, or lies outside the series' onset bin.
+    pub const BAD_ARRIVAL: &str = "params_bad_arrival";
     /// The series is valid but this quantity cannot be read from it honestly.
     pub const NOT_EVALUABLE: &str = "params_not_evaluable";
     /// Series to be aggregated differ in `dt` or length.
@@ -47,11 +50,12 @@ pub mod codes {
     pub const DIN_OUT_OF_RANGE: &str = "params_din_out_of_range";
 
     /// Every code, in the order of the documentation table.
-    pub const ALL: [&str; 10] = [
+    pub const ALL: [&str; 11] = [
         BAD_TIME_STEP,
         SERIES_TOO_SHORT,
         BAD_ENERGY,
         NO_ENERGY,
+        BAD_ARRIVAL,
         NOT_EVALUABLE,
         SERIES_MISMATCH,
         BAD_AIR,
@@ -122,14 +126,25 @@ pub enum NotEvaluable {
         /// The value from the series alone. Not reported as the quantity.
         value: f64,
         /// The value with the estimated tail added; `None` when the tail is unbounded (the
-        /// series was not decaying at its end), or when the decay curve with the tail has too
-        /// few points in the range to fit.
+        /// series was not decaying at its end), or when the decay curve with the tail spends too
+        /// little time in the range to fit.
         with_tail: Option<f64>,
         /// The largest difference allowed, in the quantity's unit (relative for decay times).
         limit: f64,
     },
-    /// Fewer points than a regression needs lie inside the range.
-    TooFewPoints { points: usize, needed: usize },
+    /// The arrival was not given, and where in the onset bin it lies moves the value by more
+    /// than `limit`: `low` and `high` are the values with the arrival at the two ends of the bin.
+    Unresolved {
+        /// Midway between `low` and `high`. Not reported as the quantity.
+        value: f64,
+        low: f64,
+        high: f64,
+        /// The largest distance allowed from `value` to either end, in the quantity's unit
+        /// (relative for decay times).
+        limit: f64,
+    },
+    /// The decay curve spends less time inside the range than a regression needs.
+    RangeTooShort { span_s: f64, needed_s: f64 },
     /// The fitted slope is not negative.
     NotDecaying,
     /// A window the quantity divides by holds no energy.
@@ -165,9 +180,21 @@ impl fmt::Display for NotEvaluable {
                 "truncated: {value} from the series, and the series is not decaying at its end, \
                  so the tail after it has no bound"
             ),
-            NotEvaluable::TooFewPoints { points, needed } => write!(
+            NotEvaluable::Unresolved {
+                value,
+                low,
+                high,
+                limit,
+            } => write!(
                 f,
-                "too_few_points: {points} in the range, at least {needed} needed"
+                "unresolved: {low} to {high} with the arrival at either end of the onset bin \
+                 (midway {value}); the limit is {limit}. Give the arrival time, or use a finer \
+                 time step"
+            ),
+            NotEvaluable::RangeTooShort { span_s, needed_s } => write!(
+                f,
+                "range_too_short: the curve spends {span_s} s in the range, at least {needed_s} s \
+                 needed"
             ),
             NotEvaluable::NotDecaying => {
                 write!(f, "not_decaying: the fitted slope is not negative")
@@ -196,6 +223,10 @@ pub enum ParamError {
         value: f64,
     },
     NoEnergy,
+    BadArrival {
+        time_s: f64,
+        detail: String,
+    },
     NotEvaluable {
         quantity: Quantity,
         why: NotEvaluable,
@@ -227,6 +258,7 @@ impl ParamError {
             ParamError::SeriesTooShort { .. } => codes::SERIES_TOO_SHORT,
             ParamError::BadEnergy { .. } => codes::BAD_ENERGY,
             ParamError::NoEnergy => codes::NO_ENERGY,
+            ParamError::BadArrival { .. } => codes::BAD_ARRIVAL,
             ParamError::NotEvaluable { .. } => codes::NOT_EVALUABLE,
             ParamError::SeriesMismatch { .. } => codes::SERIES_MISMATCH,
             ParamError::BadAir { .. } => codes::BAD_AIR,
@@ -265,6 +297,9 @@ impl fmt::Display for ParamError {
                 )
             }
             ParamError::NoEnergy => write!(f, "every value is zero"),
+            ParamError::BadArrival { time_s, detail } => {
+                write!(f, "the arrival at {time_s} s: {detail}")
+            }
             ParamError::NotEvaluable { quantity, why } => write!(f, "{quantity}: {why}"),
             ParamError::SeriesMismatch { detail } => write!(f, "{detail}"),
             ParamError::BadAir { field, value } => write!(f, "{field} = {value}"),
@@ -471,6 +506,10 @@ mod tests {
                 value: -1.0,
             },
             ParamError::NoEnergy,
+            ParamError::BadArrival {
+                time_s: -1.0,
+                detail: "x".into(),
+            },
             not_evaluable(Quantity::T30, NotEvaluable::NotDecaying),
             ParamError::SeriesMismatch { detail: "x".into() },
             ParamError::BadAir {

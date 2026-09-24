@@ -186,30 +186,44 @@ fn gate_f_din_18041_a3_at_180_m3_is_0_552_s() {
 #[test]
 fn din_18041_groups_and_ranges() {
     let at = |g, v| target_s(g, v).unwrap();
-    // The sourced formulas at 1000 m³ (lg V = 3).
-    for (g, want) in [
-        (Group::A1, 1.42),
-        (Group::A2, 0.97),
-        (Group::A3, 0.79),
-        (Group::A4, 0.64),
-        (Group::A5, 1.25),
+    // The sourced formulas where lg V is round (100 m³, 1000 m³).
+    for (g, v, want) in [
+        (Group::A1, 1000.0, 1.42),
+        (Group::A2, 1000.0, 0.97),
+        (Group::A3, 1000.0, 0.79),
+        (Group::A4, 100.0, 0.38),
+        (Group::A5, 1000.0, 1.25),
     ] {
-        assert!((at(g, 1000.0) - want).abs() < 1e-12, "{g:?}");
+        assert!((at(g, v) - want).abs() < 1e-12, "{g:?}");
     }
-    // A5: 2.0 s above 10 000 m³, and nothing below 200 m³.
-    assert_eq!(at(Group::A5, 20_000.0), 2.0);
+    // A5: the formula meets 2.0 s at 10 000 m³ and stays there to 30 000 m³.
     assert!((at(Group::A5, 10_000.0) - 2.0).abs() < 1e-12);
+    assert_eq!(at(Group::A5, 20_000.0), 2.0);
+    assert_eq!(at(Group::A5, 30_000.0), 2.0);
+    // Each group's range, both ends accepted, and just outside each end refused. The ranges are
+    // the solid stretches of the standard's figure (Nocke 2016, Bild 2): A4 stops at 500 m³.
     let code = |g, v| target_s(g, v).unwrap_err().code();
-    assert_eq!(code(Group::A5, 199.0), codes::DIN_OUT_OF_RANGE);
-    // A1–A4: no target above 5000 m³.
-    for g in [Group::A1, Group::A2, Group::A3, Group::A4] {
-        assert!(target_s(g, 5000.0).is_ok());
-        assert_eq!(code(g, 5001.0), codes::DIN_OUT_OF_RANGE);
+    for (g, lo, hi) in [
+        (Group::A1, 30.0, 1000.0),
+        (Group::A2, 50.0, 5000.0),
+        (Group::A3, 30.0, 5000.0),
+        (Group::A4, 30.0, 500.0),
+        (Group::A5, 200.0, 30_000.0),
+    ] {
+        assert_eq!(g.volume_range_m3(), (lo, hi));
+        assert!(target_s(g, lo).is_ok() && target_s(g, hi).is_ok(), "{g:?}");
+        assert_eq!(code(g, lo * 0.999), codes::DIN_OUT_OF_RANGE, "{g:?}");
+        assert_eq!(code(g, hi * 1.001), codes::DIN_OUT_OF_RANGE, "{g:?}");
     }
-    // A volume that is not positive, or small enough to give no positive target.
-    for v in [0.0, -1.0, f64::NAN] {
+    // The first version accepted A4 up to 5000 m³ and A3 down to 4 m³; both are refused now.
+    assert_eq!(code(Group::A4, 1000.0), codes::DIN_OUT_OF_RANGE);
+    assert_eq!(code(Group::A3, 4.0), codes::DIN_OUT_OF_RANGE);
+    // Every target in range is positive.
+    for g in [Group::A1, Group::A2, Group::A3, Group::A4, Group::A5] {
+        assert!(at(g, g.volume_range_m3().0) > 0.2, "{g:?}");
+    }
+    // A volume that is not a number.
+    for v in [0.0, -1.0, f64::NAN, f64::INFINITY] {
         assert_eq!(code(Group::A3, v), codes::DIN_OUT_OF_RANGE);
     }
-    assert_eq!(code(Group::A3, 3.0), codes::DIN_OUT_OF_RANGE);
-    assert!(target_s(Group::A3, 4.0).is_ok());
 }
