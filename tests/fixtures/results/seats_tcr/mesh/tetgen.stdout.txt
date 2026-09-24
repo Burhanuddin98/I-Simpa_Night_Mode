@@ -1,0 +1,41 @@
+Opening scene_mesh.poly.
+Opening scene_mesh.var.
+Delaunizing vertices...
+Delaunay seconds:  0
+Creating surface mesh ...
+Surface mesh seconds:  0
+Constrained Delaunay...
+Constrained Delaunay seconds:  0
+Removing exterior tetrahedra ...
+Spreading region attributes.
+Exterior tets removal seconds:  0
+Refining mesh...
+Refinement seconds:  0
+Optimizing mesh...
+Optimization seconds:  0
+
+Writing scene_mesh.1.node.
+Writing scene_mesh.1.ele.
+Writing scene_mesh.1.face.
+Writing scene_mesh.1.edge.
+Writing scene_mesh.1.neigh.
+
+Output seconds:  0.001
+Total running seconds:  0.001
+
+Statistics:
+
+  Input points: 8
+  Input facets: 12
+  Input segments: 18
+  Input holes: 0
+  Input regions: 0
+
+  Mesh points: 53
+  Mesh tetrahedra: 115
+  Mesh faces: 281
+  Mesh faces on facets: 102
+  Mesh edges on segments: 58
+  Steiner points on facets:  5
+  Steiner points on segments:  40
+

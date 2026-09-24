@@ -1,0 +1,154 @@
+{
+  "format_version": 1,
+  "id": "0c0be000-0000-4000-8000-000000000700",
+  "name": "Level calibration box",
+  "description": "Gate M7(c): a 20 x 20 x 20 m box, every surface fully absorbing, SPPS direct field only without air absorption, one omni source of 100 dB per band, receivers at 2 m and 4 m. Written by crates/simpa-core/tests/results_rooms.rs.",
+  "frame": {
+    "length_unit": "metre",
+    "up_axis": "z"
+  },
+  "bands": {
+    "kind": "octave",
+    "frequencies_hz": [125, 250, 500, 1000, 2000, 4000]
+  },
+  "geometry": {
+    "vertices": [
+      [20.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0],
+      [0.0, 20.0, 0.0],
+      [20.0, 20.0, 0.0],
+      [0.0, 20.0, 20.0],
+      [20.0, 20.0, 20.0],
+      [0.0, 0.0, 20.0],
+      [20.0, 0.0, 20.0]
+    ],
+    "faces": [
+      [0, 1, 2, "0c0be000-0000-4000-8000-000000000701"],
+      [0, 2, 3, "0c0be000-0000-4000-8000-000000000701"],
+      [2, 4, 5, "0c0be000-0000-4000-8000-000000000701"],
+      [2, 5, 3, "0c0be000-0000-4000-8000-000000000701"],
+      [2, 6, 4, "0c0be000-0000-4000-8000-000000000701"],
+      [2, 1, 6, "0c0be000-0000-4000-8000-000000000701"],
+      [1, 0, 7, "0c0be000-0000-4000-8000-000000000701"],
+      [6, 1, 7, "0c0be000-0000-4000-8000-000000000701"],
+      [0, 3, 5, "0c0be000-0000-4000-8000-000000000701"],
+      [7, 0, 5, "0c0be000-0000-4000-8000-000000000701"],
+      [7, 5, 4, "0c0be000-0000-4000-8000-000000000701"],
+      [6, 7, 4, "0c0be000-0000-4000-8000-000000000701"]
+    ]
+  },
+  "surface_groups": [
+    {
+      "id": "0c0be000-0000-4000-8000-000000000701",
+      "name": "Walls",
+      "material": "0c0be000-0000-4000-8000-000000000702"
+    }
+  ],
+  "materials": [
+    {
+      "id": "0c0be000-0000-4000-8000-000000000702",
+      "name": "Fully absorbing",
+      "color": "#b2b2b2",
+      "absorption": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+      "scattering": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": null
+    }
+  ],
+  "sources": [
+    {
+      "id": "0c0be000-0000-4000-8000-000000000703",
+      "name": "Source",
+      "enabled": true,
+      "position": [10.05, 9.97, 10.03],
+      "power": {
+        "global_db": 107.78151250383644,
+        "shape": {
+          "kind": "pink"
+        }
+      },
+      "directivity": {
+        "kind": "omni"
+      },
+      "delay_s": 0.0
+    }
+  ],
+  "point_receivers": [
+    {
+      "id": "0c0be000-0000-4000-8000-000000000710",
+      "name": "R2m",
+      "position": [11.25, 11.25, 10.99],
+      "orientation": [1.0, 0.0, 0.0],
+      "background_noise": {
+        "global_db": 0.0,
+        "shape": {
+          "kind": "white"
+        }
+      }
+    },
+    {
+      "id": "0c0be000-0000-4000-8000-000000000711",
+      "name": "R4m",
+      "position": [8.13, 12.37, 7.47],
+      "orientation": [1.0, 0.0, 0.0],
+      "background_noise": {
+        "global_db": 0.0,
+        "shape": {
+          "kind": "white"
+        }
+      }
+    }
+  ],
+  "surface_receivers": [],
+  "fitting_zones": [],
+  "environment": {
+    "temperature_c": 20.0,
+    "relative_humidity_percent": 50.0,
+    "pressure_pa": 101325.0,
+    "air_absorption": {
+      "kind": "iso9613"
+    },
+    "ground_roughness_m": 0.02,
+    "celerity_gradient_log": 0.0,
+    "celerity_gradient_lin": 0.0
+  },
+  "solvers": {
+    "spps": {
+      "particles_per_source": 1000000,
+      "particles_saved": 0,
+      "duration_s": 0.02,
+      "time_step_s": 0.0002,
+      "random_seed": 1,
+      "method": "random",
+      "air_absorption": false,
+      "fittings": true,
+      "direct_field_only": true,
+      "transmission": false,
+      "extinction_exponent": 5.0,
+      "receiver_radius_m": 0.5,
+      "sound_map": "intensity",
+      "sound_maps_per_band": true,
+      "echogram_per_source": false,
+      "save_surface_intersections": true,
+      "save_receiver_intersections": true,
+      "bands_computed": [true, true, true, true, true, true]
+    },
+    "tcr": {
+      "air_absorption": false,
+      "bands_computed": [true, true, true, true, true, true]
+    },
+    "meshing": {
+      "min_radius_edge_ratio": 2.0,
+      "max_volume_m3": null,
+      "surface_receiver_max_area_m2": 0.1,
+      "preserve_boundary": false
+    }
+  },
+  "variants": [],
+  "active_variant": null,
+  "view": {
+    "camera": null
+  }
+}

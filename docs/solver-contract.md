@@ -604,6 +604,25 @@ and still have a parameter refused.
 | `params_no_absorption` | the absorption area plus `4·m·V` is zero, so the reverberation time would be infinite | none |
 | `params_din_out_of_range` | a DIN 18041 volume outside its group's range: A1 30–1000 m³, A2 50–5000 m³, A3 30–5000 m³, A4 30–500 m³, A5 200–30 000 m³ (`docs/params.md`, "DIN 18041 targets") | the group, the volume and the range |
 
+### Result refusals
+
+`core::results::load` reads a run folder's results only for a run that is OK and still verifies
+when it is read (`docs/results.md`). Anything else is refused with one of these codes, never read
+in part. `simpa results` exits 5 for a run whose verdict is not OK (`results_run_failed`,
+`results_run_cancelled`) and 6 for every other refusal (`docs/m5-m6-design.md`,
+"Exit codes": 5 solver run, 6 result verification).
+
+| Code | Refused when | Exit |
+|---|---|---|
+| `results_manifest_missing` | the folder has no `run.json`: it is not a folder `simpa run` or `simpa run-folder` wrote | 6 |
+| `results_manifest_invalid` | `run.json` does not read as this core's manifest; names another manifest version or solver commit; or says OK while listing reasons, ending at a stage other than `solve`, with an exit class other than 0, with no solver outcome, a non-zero exit or a cancel, or with solver arguments other than `config.xml` | 6 |
+| `results_run_failed` | `run.json`'s verdict is FAIL or CRASH; its reasons are carried | 5 |
+| `results_run_cancelled` | `run.json`'s verdict is CANCELLED | 5 |
+| `results_inputs_changed` | an input the manifest recorded before launch (`config.xml`, the `.cbin`, the `.mbin`, directivity files) is missing from `solve/` or has another sha256 now | 6 |
+| `results_outputs_invalid` | the outputs, judged again now by the verdict's own output signals (`run::verdict::output_reasons`: statistics, expected files, TCR's non-finite and unreadable tables), fail them; their reasons are carried | 6 |
+| `results_file_invalid` | a result file read here does not decode or is not laid out as the solver writes it (band columns, row counts, the `.gap`'s index), disagrees with its sibling (the `.gap`'s energy is not the `.recp`'s bit for bit, or its time step is not `pasdetemps`), or the receiver folders or tables are not exactly the config's labels | 6 |
+| `results_value_invalid` | a value in a result file read here is NaN or infinite, or an energy is negative | 6 |
+
 ### Corrections to the survey's run contract
 
 - **Not every non-success SPPS exit is 0 or `0xC0000005`.** There is also `0xC0000409`, an

@@ -1,0 +1,86 @@
+{
+  "manifest_version": 1,
+  "simpa_core": "0.1.0",
+  "source": "project",
+  "input_path": null,
+  "status": "OK",
+  "codes": [],
+  "messages": [],
+  "mesh_input_hash": "8586f7b21eea088f1de1251c32725841",
+  "tetgen": {
+    "program": "B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\wf_b9ed1d0e-3d2-8\\target\\solvers\\bin\\tetgen.exe",
+    "program_sha256": "1b11ad94c54ddf5e4f7867b6da558b4cfa2d6e85cf32497ad232c014e2a0bc5b",
+    "argv": [
+      "-pq2",
+      "-A",
+      "-n",
+      "scene_mesh.poly"
+    ],
+    "cwd": ".",
+    "exit_code": 0,
+    "cancelled": false,
+    "elapsed_ms": 11.5292
+  },
+  "files": {
+    "poly": "ab598bcab1548cfe2440704e6e632e68930274fc2665b3314f6ea1ca9c4d8225",
+    "var": "42d19bdbb5cf086ae251fd9fae0d8461cf15039b596e497218431a342961b149",
+    "cbin": "d279779f3e625772b2c3ea6972fa384cf56d8923c2b94d0cd29357dd9f1528d7",
+    "mbin": "33f6d8c1dcd3ddd2a431a48b8090ed735e345c272b188ae97f507ea7bdb7750b"
+  },
+  "counts": {
+    "scene_vertices": 8,
+    "scene_faces": 12,
+    "poly_vertices": 8,
+    "poly_facets": 12,
+    "regions": 0,
+    "var_constraints": 2,
+    "build": {
+      "nodes": 53,
+      "tetrahedra": 115,
+      "face_rows": 102,
+      "marked_tet_faces": 102,
+      "zone_tet_faces": 0,
+      "hull_tet_faces": 102,
+      "attributes": [
+        {
+          "attribute": 1,
+          "id_volume": 1,
+          "tetrahedra": 115
+        }
+      ]
+    }
+  },
+  "volume_ids": {
+    "room": 1,
+    "fittings": []
+  },
+  "zone_facets": [],
+  "skipped_rows": 0,
+  "skipped_facets": [],
+  "self_intersection": null,
+  "diagnosis": null,
+  "verify": {
+    "tetrahedra": 115,
+    "nodes": 53,
+    "scene_faces": 12,
+    "index_errors": 0,
+    "degenerate_tets": 0,
+    "inverted_tets": 0,
+    "misordered_faces": 0,
+    "unmarked_boundary_faces": 0,
+    "marker_out_of_range": 0,
+    "nonmutual_neighbors": 0,
+    "asymmetric_internal_faces": 0,
+    "marker_geometry_mismatches": 0,
+    "uncovered_scene_faces": 0,
+    "uncovered_scene_faces_first": [],
+    "unknown_volume_ids": 0,
+    "volume_by_id": {
+      "1": 180.0
+    },
+    "marker_tolerance_m": 9.5367431640625e-6,
+    "max_marker_distance_m": 2.0444224554731183e-7,
+    "codes": []
+  },
+  "elapsed_ms": 38.8067
+}

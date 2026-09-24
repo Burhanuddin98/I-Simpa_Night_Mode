@@ -330,6 +330,8 @@ pub(crate) fn not_evaluable(quantity: Quantity, why: NotEvaluable) -> ParamError
 pub struct EnergySeries {
     dt: f64,
     values: Vec<f64>,
+    /// The caller knows that no energy arrives after the last bin ([`EnergySeries::complete`]).
+    complete: bool,
 }
 
 impl EnergySeries {
@@ -356,7 +358,27 @@ impl EnergySeries {
         if values.iter().all(|&v| v == 0.0) {
             return Err(ParamError::NoEnergy);
         }
-        Ok(EnergySeries { dt, values })
+        Ok(EnergySeries {
+            dt,
+            values,
+            complete: false,
+        })
+    }
+
+    /// A series whose caller knows that no energy arrives after its last bin, refused as
+    /// [`EnergySeries::new`]. Its tail is [`decay::Tail::Complete`]: nothing is estimated, added
+    /// or refused for the energy after the end (`docs/params.md`, "Truncation"). `core::results`
+    /// claims it for SPPS in random mode when the run's statistics count no particle remaining at
+    /// the end of the calculation; the claim changes numbers, so it needs such evidence.
+    pub fn complete(dt: f64, values: Vec<f64>) -> Result<Self, ParamError> {
+        let mut s = Self::new(dt, values)?;
+        s.complete = true;
+        Ok(s)
+    }
+
+    /// Whether the series was made with [`EnergySeries::complete`].
+    pub fn is_complete(&self) -> bool {
+        self.complete
     }
 
     /// The bin width, s.
@@ -391,8 +413,8 @@ impl EnergySeries {
 }
 
 /// Bands summed bin by bin into one series, labelled by its caller as an aggregate (upstream's
-/// `Global` row, `projet_calculation.cpp:898`). Refused when the series differ in `dt` or length,
-/// or when there are none.
+/// `Global` row, `projet_calculation.cpp:898`). It is complete when every band is. Refused when
+/// the series differ in `dt` or length, or when there are none.
 pub fn aggregate(bands: &[EnergySeries]) -> Result<EnergySeries, ParamError> {
     let Some(first) = bands.first() else {
         return Err(ParamError::SeriesMismatch {
@@ -418,7 +440,11 @@ pub fn aggregate(bands: &[EnergySeries]) -> Result<EnergySeries, ParamError> {
             *acc += v;
         }
     }
-    EnergySeries::new(first.dt, values)
+    if bands.iter().all(|b| b.complete) {
+        EnergySeries::complete(first.dt, values)
+    } else {
+        EnergySeries::new(first.dt, values)
+    }
 }
 
 #[cfg(test)]

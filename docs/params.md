@@ -142,6 +142,15 @@ extrapolation. Instead each parameter carries a bound:
      histogram that runs out of particles is bounded as if more were to come, which only refuses
      more.
    - Fewer than 2 bins from the onset to the last with energy: `params_series_too_short`.
+   - **A series known to be complete** (`EnergySeries::complete`; `Tail::Complete`) has no tail:
+     nothing is estimated, added or refused for it. Its caller must hold evidence that no energy
+     arrives after the last bin; `core::results` claims it only for SPPS in random mode when the
+     run's statistics count no particle remaining at the end (`docs/results.md`, "Complete
+     series"). A decay time still needs the curve to reach the bottom of its range before the
+     last bin with energy, inside which the curve has no shape: otherwise `range_not_reached`,
+     with the level at the start of that bin. Added by M7 piece B, with its tests in
+     `tests/params_complete.rs`: without it, random-mode runs were refused wholesale for a tail
+     they do not have.
 2. **The check.** Every parameter is computed twice: as reported, from the series alone; and with
    `M` added to every backward sum and continued after the last bin with energy as an exponential
    at the window's rate. If the two differ by more than the limit below, the parameter is refused

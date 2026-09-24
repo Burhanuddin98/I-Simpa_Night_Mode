@@ -128,7 +128,7 @@ const FAST_FAIL: u32 = 0xC000_0409;
 const CRASH_FLOOR: u32 = 0xC000_0000;
 
 /// How a run ended.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Status {
     Ok,
@@ -138,7 +138,7 @@ pub enum Status {
 }
 
 /// One reason, or one recorded WARN line.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Reason {
     pub code: String,
@@ -612,6 +612,34 @@ fn table_reasons(exp: &Expectation, outputs: &Outputs, out: &mut Vec<Reason>) {
     }
 }
 
+/// Signals 3 and 4 alone: the reasons [`judge`] gives, after a clean exit, for the expectation,
+/// the statistics and the files. `core::results` calls it on the outputs as they are when a run
+/// is read back, so a file removed or spoiled after the verdict refuses the run then too.
+pub fn output_reasons(
+    solver: SolverKind,
+    expectation: Result<&Expectation, &ExpectError>,
+    outputs: &Outputs,
+    loss_limit: f64,
+) -> Vec<Reason> {
+    let mut reasons = Vec::new();
+    match expectation {
+        Err(e) => reasons.push(Reason::new(
+            CONFIG_ATTRIBUTE_MISSING,
+            format!("{e}: no output can be expected"),
+        )),
+        Ok(exp) => {
+            if solver == SolverKind::Spps {
+                stats_reasons(exp, outputs.stats.as_ref(), loss_limit, &mut reasons);
+            }
+            file_reasons(exp, outputs, &mut reasons);
+            if solver == SolverKind::Tcr {
+                table_reasons(exp, outputs, &mut reasons);
+            }
+        }
+    }
+    reasons
+}
+
 /// Judges a run from its evidence.
 pub fn judge(ev: &Evidence) -> Verdict {
     let mut warned: Vec<&Classified> = ev
@@ -648,21 +676,12 @@ pub fn judge(ev: &Evidence) -> Verdict {
     reasons.extend(fail_line_reasons(ev.lines));
 
     if clean_exit {
-        match ev.expectation {
-            Err(e) => reasons.push(Reason::new(
-                CONFIG_ATTRIBUTE_MISSING,
-                format!("{e}: no output can be expected"),
-            )),
-            Ok(exp) => {
-                if ev.solver == SolverKind::Spps {
-                    stats_reasons(exp, ev.outputs.stats.as_ref(), ev.loss_limit, &mut reasons);
-                }
-                file_reasons(exp, ev.outputs, &mut reasons);
-                if ev.solver == SolverKind::Tcr {
-                    table_reasons(exp, ev.outputs, &mut reasons);
-                }
-            }
-        }
+        reasons.extend(output_reasons(
+            ev.solver,
+            ev.expectation,
+            ev.outputs,
+            ev.loss_limit,
+        ));
     }
 
     let status = match forced {

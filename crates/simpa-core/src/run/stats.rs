@@ -26,7 +26,7 @@ pub const ROW_LABELS: [&str; 7] = [
 ];
 
 /// One band's column. The field order is the row order.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct BandStats {
     /// The band, from the column label `<f> Hz`.
@@ -61,7 +61,7 @@ impl BandStats {
 }
 
 /// The whole table: one entry per band column, in file order.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ParticleStats {
     pub bands: Vec<BandStats>,

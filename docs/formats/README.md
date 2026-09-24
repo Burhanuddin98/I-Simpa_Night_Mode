@@ -1,6 +1,6 @@
 # Solver file formats
 
-One page per file the solvers or TetGen read or write, and one for a file of our own.
+One page per file the solvers or TetGen read or write, and two for files of our own.
 
 | Page | File | Canonical dump |
 |---|---|---|
@@ -14,6 +14,7 @@ One page per file the solvers or TetGen read or write, and one for a file of our
 | `pbin.md` | particle files, `.pbin` | yes |
 | `config_xml.md` | the solver configuration, `config.xml` | no: `docs/solver-contract.md` holds its rules |
 | `mesh-manifest.md` | `mesh.json`, the mesh folder, and the mesher's and mesh verifier's reason codes | no: our own format |
+| `results-json.md` | `simpa results --json`, a run's results and parameters for the Results screen, with its schema `results-json.schema.json` | no: our own format |
 
 Each binary format's page gives:
 - the byte layout

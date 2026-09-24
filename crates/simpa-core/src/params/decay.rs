@@ -16,7 +16,8 @@
 //! is not given, where in the onset bin it lies. Each quantity is computed with and without the
 //! tail, and with the arrival at each end of the onset bin. When either moves it by more than
 //! its limit ([`limits`]), it is refused, as `truncated` or `unresolved`. No alternative value is
-//! ever reported as the quantity.
+//! ever reported as the quantity. A series its caller knows to be complete
+//! ([`EnergySeries::complete`]) has no tail: [`Tail::Complete`] adds nothing and refuses nothing.
 
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -141,11 +142,15 @@ pub enum Tail {
     },
     /// The series is not decaying at its end: nothing bounds what follows.
     Unbounded,
+    /// The caller knows that nothing follows ([`EnergySeries::complete`]): nothing is added, and
+    /// no quantity is refused for the tail.
+    Complete,
 }
 
 /// The tail estimate of `series`: two windows of `w` bins ending at the last bin with energy,
 /// `w` a tenth of the bins from the onset to there and at least 1 (`docs/params.md`,
 /// "Truncation"). Refused when fewer than 2 bins from the onset hold energy up to the last.
+/// [`Tail::Complete`] for a series made with [`EnergySeries::complete`].
 pub fn tail(series: &EnergySeries) -> Result<Tail, ParamError> {
     tail_after(series, onset(series))
 }
@@ -157,6 +162,9 @@ fn energy_end(v: &[f64]) -> usize {
 }
 
 fn tail_after(series: &EnergySeries, o: Onset) -> Result<Tail, ParamError> {
+    if series.is_complete() {
+        return Ok(Tail::Complete);
+    }
     let v = series.values();
     let n = energy_end(v);
     let post = n - o.index;
@@ -577,12 +585,14 @@ impl<'a> Analysis<'a> {
         let tail = tail_after(series, onset);
         let sums = backward_sums(series.values());
         let end = energy_end(series.values());
+        // The curve "with the tail": `Some(None)` for a complete series, the same curve.
         let added = match tail {
             Ok(Tail::Bounded {
                 energy,
                 ratio_per_bin,
                 ..
-            }) => Some((energy, -ratio_per_bin.ln() / dt)),
+            }) => Some(Some((energy, -ratio_per_bin.ln() / dt))),
+            Ok(Tail::Complete) => Some(None),
             _ => None,
         };
         let times = match arrival {
@@ -594,7 +604,7 @@ impl<'a> Analysis<'a> {
             .map(|t| View {
                 arrival_s: t,
                 plain: Curve::new(&sums, dt, onset.index, end, t, None),
-                with_tail: added.map(|a| Curve::new(&sums, dt, onset.index, end, t, Some(a))),
+                with_tail: added.map(|a| Curve::new(&sums, dt, onset.index, end, t, a)),
             })
             .collect();
         Ok(Analysis {
@@ -664,20 +674,30 @@ impl<'a> Analysis<'a> {
     fn decay_time(&self, range: DecayRange) -> Result<DecayFit, ParamError> {
         let q = range.quantity();
         self.tail_ok()?;
-        if let Ok(Tail::Bounded { energy: m, .. }) = self.tail {
-            // How far the decay had fallen when the series ended, the tail included. The level at
-            // the arrival is the same from every arrival.
-            let top = self.views[0].plain.top;
-            let reached = 10.0 * (m / (top + m)).log10();
-            if reached > range.bottom_db() {
-                return Err(not_evaluable(
-                    q,
-                    NotEvaluable::RangeNotReached {
-                        needed_db: range.bottom_db(),
-                        reached_db: reached,
-                    },
-                ));
+        // The level at the arrival is the same from every arrival.
+        let top = self.views[0].plain.top;
+        let reached = match self.tail {
+            // How far the decay had fallen when the series ended, the tail included.
+            Ok(Tail::Bounded { energy: m, .. }) => Some(10.0 * (m / (top + m)).log10()),
+            // Where the curve stops having a shape: the start of the last bin with energy, after
+            // which it falls to nothing inside one bin and the fit leaves it out. Without this a
+            // range whose bottom lies in that bin would be fitted over its upper part only.
+            Ok(Tail::Complete) => {
+                let v = self.series.values();
+                Some(10.0 * (v[energy_end(v) - 1] / top).log10())
             }
+            _ => None,
+        };
+        if let Some(reached) = reached
+            && reached > range.bottom_db()
+        {
+            return Err(not_evaluable(
+                q,
+                NotEvaluable::RangeNotReached {
+                    needed_db: range.bottom_db(),
+                    reached_db: reached,
+                },
+            ));
         }
         let mut evals = Vec::with_capacity(self.views.len());
         let mut span = f64::INFINITY;
@@ -789,6 +809,7 @@ impl<'a> Analysis<'a> {
         let level = |e: f64| 10.0 * (e / P_REF_SQUARED).log10();
         let with_tail = match self.tail {
             Ok(Tail::Bounded { energy, .. }) => Some(level(total + energy)),
+            Ok(Tail::Complete) => Some(level(total)),
             _ => None,
         };
         Self::settle(
