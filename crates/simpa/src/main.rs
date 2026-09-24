@@ -19,12 +19,17 @@ const USAGE: &str = "usage:
   simpa check <model|project.simpa> [--unit ..] [--up ..] [--json]   exit 3 when refused
   simpa repair <in> <out.simpa> [--weld-tolerance <m>] [--json]      exit 3 when refused
   simpa mesh <project.simpa | file.poly> --out <dir> [--json] [--tetgen <exe>]
-             [--from-tetgen <dir> [--basename <b>]] [--cancel-after-ms <n>]
-                                                              TetGen's lines on stderr; exit 0, 2, 3, 4, 130
+             [--preprocess <exe>] [--parity] [--from-tetgen <dir> [--basename <b>]]
+             [--cancel-after-ms <n>]
+      TetGen's and preprocess.exe's lines on stderr; exit 0, 2, 3, 4, 130. A project whose mesh
+      settings ask for upstream's scene correction goes through preprocess.exe first; --parity
+      keeps preprocess.exe's facet markers byte for byte, as upstream's GUI meshes them, fails
+      the mesh when they do not verify, and writes the .mbin for byte comparison only.
+      --cancel-after-ms cancels preprocess.exe or TetGen that long after it starts.
   simpa mesh-verify <dir> [--json] [--room-id <n>] [--fittings <a,b,..>]   exit 4 when it fails
   simpa run <project.simpa> --solver spps|tcr [--variant <v>] [--mesh <dir>] [--runs <root>]
             [--loss-limit <f>] [--cancel-after-ms <n>] [--cancel-after-progress <p>]
-            [--solver-exe <exe>] [--tetgen <exe>] [--json]
+            [--solver-exe <exe>] [--tetgen <exe>] [--preprocess <exe>] [--json]
   simpa run-folder <dir> --solver spps|tcr [--runs <root>] [--solver-exe <exe>] [--loss-limit <f>]
             [--cancel-after-ms <n>] [--cancel-after-progress <p>] [--json]
       run and run-folder print each solver line on stderr as 'CLASS  text', and the run manifest
@@ -407,7 +412,32 @@ fn import_proj_cmd(args: &[&str]) -> ExitCode {
     if let Err(e) = schema::save(&imported.project, Path::new(out)) {
         return fail(&format!("{out}: {e}"));
     }
-    print_summary(&imported.project, a.json)
+    let report = &imported.report;
+    if !a.json {
+        for note in &report.notes {
+            eprintln!("note: {note}");
+        }
+        return print_summary(&imported.project, false);
+    }
+    // The summary, and what the import recorded: upstream's element id of each entity it made
+    // (the explicit id map, `geometry::import::proj`, "Element ids"), and its notes.
+    let mut s = project_summary(&imported.project);
+    s["upstream_ids"] = report
+        .upstream_ids
+        .iter()
+        .map(|u| {
+            serde_json::json!({
+                "kind": u.kind.name(),
+                "config_element": u.kind.config_element(),
+                "name": u.name,
+                "id": u.entity.to_string(),
+                "upstream": u.upstream,
+            })
+        })
+        .collect();
+    s["notes"] = serde_json::json!(report.notes);
+    println!("{s}");
+    ExitCode::SUCCESS
 }
 
 /// `check <model|project> [--unit ..] [--up ..] [--weld ..] [--json]`: exit 0 ok, 3 refused.

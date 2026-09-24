@@ -376,8 +376,20 @@ fn material(rng: &mut Rng, p: &Project) -> Material {
         color: Rgb(rng.next() as u8, rng.next() as u8, rng.next() as u8),
         absorption: values(rng, ka, 0.0, 1.0),
         scattering: values(rng, ks, 0.0, 1.0),
-        reflection_law: ReflectionLaw::ALL[rng.below(7)],
-        transmission_loss_db: rng.chance(2).then(|| values(rng, kt, 0.0, 60.0)),
+        // One law, or one per band (possibly the wrong count, which the ops must refuse).
+        reflection_law: if rng.chance(3) {
+            let kl = count(rng, n);
+            ReflectionLaws::PerBand((0..kl).map(|_| ReflectionLaw::ALL[rng.below(7)]).collect())
+        } else {
+            ReflectionLaw::ALL[rng.below(7)].into()
+        },
+        // Per band on or off.
+        transmission_loss_db: rng.chance(2).then(|| {
+            values(rng, kt, 0.0, 60.0)
+                .into_iter()
+                .map(|v| (!rng.chance(4)).then_some(v))
+                .collect()
+        }),
         double_sided: rng.chance(2),
         solver_id: rng.chance(3).then(|| rng.below(40) as u32),
     }
@@ -463,6 +475,15 @@ fn fitting_zone(rng: &mut Rng, p: &Project) -> FittingZone {
             FittingShape::Box {
                 min: vec3(rng),
                 max: vec3(rng),
+                destination: rng.chance(2).then(|| {
+                    [0, 1, 2].map(|_| {
+                        if rng.chance(2) {
+                            BoxBound::Min
+                        } else {
+                            BoxBound::Max
+                        }
+                    })
+                }),
             }
         } else {
             FittingShape::Surfaces {
@@ -1539,7 +1560,7 @@ fn cube_project() -> Project {
             color: Rgb(0xb0, 0xb0, 0xb0),
             absorption: vec![F64::new(0.2); n],
             scattering: vec![F64::new(0.1); n],
-            reflection_law: ReflectionLaw::Lambert,
+            reflection_law: ReflectionLaw::Lambert.into(),
             transmission_loss_db: None,
             double_sided: true,
             solver_id: Some(k),
@@ -1698,7 +1719,7 @@ fn generated_projects_meet_the_value_rules_generate_documents() {
         };
         let clear_of_fittings = |v: Vec3| {
             p.fitting_zones.iter().all(|z| match &z.shape {
-                FittingShape::Box { min, max } => (0..3).any(|a| {
+                FittingShape::Box { min, max, .. } => (0..3).any(|a| {
                     v.to_array()[a] < min.to_array()[a] - 0.3
                         || v.to_array()[a] > max.to_array()[a] + 0.3
                 }),
@@ -1735,11 +1756,8 @@ fn generated_projects_meet_the_value_rules_generate_documents() {
                 if a == 1.0 {
                     assert_eq!(s, 0.0);
                 }
-                if let Some(t) = &m.transmission_loss_db {
-                    assert!(
-                        a > 0.0 && 10f64.powf(-t[i].get() / 10.0) <= a,
-                        "seed {seed}"
-                    );
+                if let Some(Some(r)) = m.transmission_loss_db.as_ref().map(|t| t[i]) {
+                    assert!(a > 0.0 && 10f64.powf(-r.get() / 10.0) <= a, "seed {seed}");
                 }
             }
         }

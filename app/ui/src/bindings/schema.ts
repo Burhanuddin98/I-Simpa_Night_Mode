@@ -256,10 +256,32 @@ export type BandKind = 'octave' | 'third_octave';
  */
 export type DiffusionLaw = 'uniform' | 'uniform_reflection' | 'lambert_reflection';
 /**
- * Written on every band as `bfreq@loi`.
+ * One law, which fits any band set, or one per band.
+ */
+export type ReflectionLaws = ReflectionLaw | ReflectionLaw1[];
+/**
+ * The same law in every band.
  */
 export type ReflectionLaw =
   ('specular' | 'lambert' | 'w2' | 'w3' | 'w4' | 'semi_diffuse') | 'uniform';
+/**
+ * How a surface reflects the diffuse part of the energy: `type_surface/bfreq@loi`, the solver's
+ * `REFLECTION_LAW` (`lib_interface/coreTypes.h:83-92`). The discriminant is the solver code.
+ *
+ * SPPS draws a diffuse reflection with probability equal to the scattering coefficient
+ * (`spps/CalculationCore.cpp:318`), so the law has no effect at scattering 0.
+ * [`ReflectionLaw::SemiDiffuse`] has no case in SPPS's `ReflectionLaws::SolveReflection`
+ * (`spps/tools/dotreflection.h:23-45`) and falls to its default, a specular reflection.
+ *
+ * This interface was referenced by `SchemaBindings`'s JSON-Schema
+ * via the `definition` "ReflectionLaw".
+ */
+export type ReflectionLaw1 =
+  ('specular' | 'lambert' | 'w2' | 'w3' | 'w4' | 'semi_diffuse') | 'uniform';
+/**
+ * `bfreq@loi`, one law for every band or one per band.
+ */
+export type ReflectionLaws1 = ReflectionLaw | ReflectionLaw1[];
 /**
  * A per-band quantity of a material.
  *
@@ -396,6 +418,19 @@ export type SurfaceReceiverShape =
  */
 export type FittingShape =
   | {
+      /**
+       * Which bound upstream's destination corner `hc` ("Destination volume") takes on each
+       * axis; its origin corner `ba` takes the other. Upstream stores the two corners as the
+       * user typed them, not ordered (tutorial 3's box: `ba` (13, 4, 0), `hc` (18, 1, 1.2)),
+       * and seeds the box's TetGen region at `hc - (hc - ba) * 1e-4`
+       * (`e_scene_encombrements_encombrement_cuboide.h:333-336`), so this is what reproduces
+       * that seed ([`FittingShape::box_corners`]). `None`: `ba` is `min` and `hc` is `max`,
+       * as for a box drawn here.
+       *
+       * @minItems 3
+       * @maxItems 3
+       */
+      destination: [BoxBound, BoxBound, BoxBound] | null;
       kind: 'box';
       /**
        * [x, y, z] in metres, Z up
@@ -429,6 +464,13 @@ export type FittingShape =
       inside_point: [number | string, number | string, number | string];
       kind: 'surfaces';
     };
+/**
+ * One bound of a box on one axis: see `FittingShape::Box::destination`.
+ *
+ * This interface was referenced by `SchemaBindings`'s JSON-Schema
+ * via the `definition` "BoxBound".
+ */
+export type BoxBound = 'min' | 'max';
 /**
  * A per-band quantity of a fitting zone.
  *
@@ -497,19 +539,19 @@ export type LengthUnit = 'metre';
  */
 export type UpAxis = 'z';
 /**
- * How a surface reflects the diffuse part of the energy: `type_surface/bfreq@loi`, the solver's
- * `REFLECTION_LAW` (`lib_interface/coreTypes.h:83-92`). The discriminant is the solver code.
+ * A material's reflection law: one law for every band, or one per band. The solvers read it per
+ * band (`type_surface/bfreq@loi`, `base_core_configuration.cpp:210-219`), and upstream's GUI
+ * keeps one per band (the `loi` list of each row, `e_data_row_materiau.h:218`): tutorial 3's
+ * material 100 is Lambert in the six octave bands and specular in the others.
  *
- * SPPS draws a diffuse reflection with probability equal to the scattering coefficient
- * (`spps/CalculationCore.cpp:318`), so the law has no effect at scattering 0.
- * [`ReflectionLaw::SemiDiffuse`] has no case in SPPS's `ReflectionLaws::SolveReflection`
- * (`spps/tools/dotreflection.h:23-45`) and falls to its default, a specular reflection.
+ * In JSON: one law, `"lambert"`, or one per band in the band set's order,
+ * `["specular", "lambert", ...]`. [`ReflectionLaws::from_bands`] gives the single spelling
+ * whenever every band has the same law.
  *
  * This interface was referenced by `SchemaBindings`'s JSON-Schema
- * via the `definition` "ReflectionLaw".
+ * via the `definition` "ReflectionLaws".
  */
-export type ReflectionLaw1 =
-  ('specular' | 'lambert' | 'w2' | 'w3' | 'w4' | 'semi_diffuse') | 'uniform';
+export type ReflectionLaws2 = ReflectionLaw | ReflectionLaw1[];
 /**
  * What SPPS writes on surface receivers: `simulation@surf_receiv_method`.
  *
@@ -572,7 +614,7 @@ export interface FittingBands {
   mean_free_path_m: (number | string)[];
 }
 /**
- * A material's per-band arrays.
+ * A material's per-band values.
  *
  * This interface was referenced by `SchemaBindings`'s JSON-Schema
  * via the `definition` "MaterialBands".
@@ -582,11 +624,12 @@ export interface MaterialBands {
    * Items: A float. Finite values are numbers; non-finite values are strings.
    */
   absorption: (number | string)[];
+  reflection_law: ReflectionLaws;
   /**
    * Items: A float. Finite values are numbers; non-finite values are strings.
    */
   scattering: (number | string)[];
-  transmission_loss_db: (number | string)[] | null;
+  transmission_loss_db: ((number | string) | null)[] | null;
 }
 /**
  * The room's surface mesh, in world metres. Each face belongs to one surface group.
@@ -635,7 +678,7 @@ export interface Material {
   double_sided: boolean;
   id: string;
   name: string;
-  reflection_law: ReflectionLaw;
+  reflection_law: ReflectionLaws1;
   /**
    * Scattering coefficient per band, 0 to 1: the share of reflections that are diffuse
    * (`bfreq@diffusion`).
@@ -652,9 +695,13 @@ export interface Material {
   solver_id: number | null;
   /**
    * Transmission loss per band in dB (`bfreq@affaiblissement`, tau = 10^(-R/10)). `None`
-   * means no transmission: the attribute is then left out, which is how the solver knows.
+   * means no transmission in any band; a `None` band does not transmit. Either way the
+   * attribute is left out of that band, which is how the solver knows
+   * (`base_core_configuration.cpp:210-219`), as upstream's GUI leaves it out of a band whose
+   * `transmission` switch is off (`e_data_row_materiau.h:98-106`): tutorial 3's
+   * `Open_door` transmits from 250 Hz to 4 kHz but not at 125 Hz.
    */
-  transmission_loss_db: (number | string)[] | null;
+  transmission_loss_db: ((number | string) | null)[] | null;
 }
 /**
  * A point sound source: `sources/source`.
@@ -853,6 +900,15 @@ export interface MeshSettings {
    * `-q`: radius-to-edge quality bound.
    */
   min_radius_edge_ratio: number | string;
+  /**
+   * Upstream's "Scene correction before meshing" (`mesh_conf@preprocess`,
+   * `e_core_core_tetconf.h:108`): the `.poly` goes through upstream's `preprocess.exe` before
+   * TetGen, with box fitting zones in its user facet list, as upstream's GUI does it
+   * (`projet_maillage.cpp:206-213`). The geometry check then runs on what `preprocess.exe`
+   * wrote. Upstream's GUI default is on; this crate's default is off
+   * (`docs/m5-m6-design.md`, decision 12).
+   */
+  preprocess: boolean;
   /**
    * `-Y`: add no Steiner points on the boundary.
    */

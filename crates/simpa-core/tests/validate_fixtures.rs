@@ -152,7 +152,7 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
         p.materials[0].absorption[5] = F64::new(1.0);
     });
     add("material_transmission_exceeds_absorption", &|p| {
-        p.materials[0].transmission_loss_db = Some(f64s(&[3.0; 6]));
+        p.materials[0].transmission_loss_db = Some(f64s(&[3.0; 6]).into_iter().map(Some).collect());
     });
     add("source_none", &|p| {
         p.sources[0].enabled = false;
@@ -252,6 +252,7 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
             shape: FittingShape::Box {
                 min: Vec3::new(0.5, 0.5, 0.5),
                 max: Vec3::new(1.5, 1.5, 1.5),
+                destination: None,
             },
             absorption: f64s(&[0.1; 6]),
             mean_free_path_m: f64s(&[2.0, 2.0, 0.0, 2.0, 2.0, 2.0]),
@@ -392,6 +393,7 @@ fn negative_exports() -> Vec<(&'static str, String, Option<Project>)> {
         shape: FittingShape::Box {
             min: Vec3::new(0.5, 0.5, 0.5),
             max: Vec3::new(1.5, 1.5, 1.5),
+            destination: None,
         },
         absorption: [0.1; 6].map(F64::new).to_vec(),
         mean_free_path_m: [2.0; 6].map(F64::new).to_vec(),

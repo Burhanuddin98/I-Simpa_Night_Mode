@@ -93,7 +93,8 @@
       "shape": {
         "kind": "box",
         "min": [0.5, 0.5, 0.5],
-        "max": [1.5, 1.5, 1.5]
+        "max": [1.5, 1.5, 1.5],
+        "destination": null
       },
       "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
       "mean_free_path_m": [2.0, 2.0, 0.0, 2.0, 2.0, 2.0],
@@ -140,7 +141,8 @@
       "min_radius_edge_ratio": 5.0,
       "max_volume_m3": null,
       "surface_receiver_max_area_m2": null,
-      "preserve_boundary": true
+      "preserve_boundary": true,
+      "preprocess": false
     }
   },
   "variants": [],

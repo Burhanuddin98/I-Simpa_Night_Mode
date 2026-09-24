@@ -477,7 +477,8 @@ compared in `docs/formats/cbin.md`, "Parity with upstream's GUI".
 |---|---|
 | `tutorial_1.proj` imported, SPPS run | 16 lines: 3 ids, 6 stored directions and 7 by-design lines, all listed below |
 | `tutorial_1.proj` imported, TCR run | 15 lines: 3 ids, 6 stored directions and 6 by-design lines |
-| tutorial 3's config and `.cbin` imported (with the two edits below) and written back, each run | 36 lines: 8 ids, 21 by-design lines and the 7 band values of the two edits; and a same-seed run of ours beside upstream's config with the same two edits gives 24 of 24 output files identical, the cutting plane's `.csbin` once decoded with its id mapped (`tutorial3_written_back_gives_upstreams_output`) |
+| tutorial 3's config and `.cbin` imported and written back, each run | 29 lines: 8 ids and 21 by-design lines; material 100's law and materials 100 and 101's transmission are held per band (`tutorial3_config_written_back_is_upstreams_value_for_value`); and a same-seed run of ours beside upstream's config gives 24 of 24 output files identical, the cutting plane's `.csbin` once decoded with its id mapped (`tutorial3_written_back_gives_upstreams_output`) |
+| `tutorial_3.proj` imported with each run's saved project (`import_proj_with_config`) and exported, each run | 22 lines once upstream's ids are read through the map the import records: the 21 by-design lines and `workingdirectory`; the `.cbin` byte for byte, the drawn box's 12 triangles as faces 88 to 99 (`parity_tutorials.rs`, `tutorial_3`); and same-seed runs on our config, `.cbin` and the `.mbin` our TetGen and builder make of upstream's `.poly` give 24 of 24 output files identical in each run (`tutorial_3_same_seed_runs`) |
 | `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | the ids and the by-design lines (`config_xml_import.rs`); and a same-seed run of ours beside upstream's own config gives every output file identical, the `.csbin` files once decoded with the receiver's id mapped (`config_xml_solver.rs`, `tutorial1_runs_clean_and_matches_upstreams_own_configuration`) |
 
 Every expected line is listed in the test, so a new difference fails it and so does one that
@@ -516,7 +517,9 @@ line, while upstream's 15-digit text for a real and band entries in the other or
 - **Only upstream's:** `<subdomains>` (ignored); `source@u`, `@v` and `@w` on an omni source (read
   only for types 1 and 5, `base_core_configuration.cpp:135-139`); `type_surface` 0, the GUI's
   default material, when no face uses it (the solvers look material 0 up once,
-  `coreinitialisation.cpp:410`, and use it only for a face with `idMat` 0).
+  `coreinitialisation.cpp:410`, and use it only for a face with `idMat` 0). Ours declares it
+  whenever the scene mesh carries a drawn box zone's triangles, which have `idMat` 0 as
+  upstream's do (`config_xml::scene_mesh`).
 - **`directivities_directory` in TCR:** upstream's TCR config lacks it, so TCR prints
   `Xml Property directivities_directory doesn't exist !` and reads `""` (`cxml.cpp:108-118`).
   Ours writes `""`, the same value, without that line, which the contract fails
@@ -525,13 +528,12 @@ line, while upstream's 15-digit text for a real and band entries in the other or
 - **Only ours:** `save_surface_intersection` and `save_receivers_intersection`, at 1, the value
   SPPS takes when they are absent (`spps/core_configuration.cpp:50-59`). Upstream's
   GUI never writes them.
-- **Tutorial 3 needs two edits to become a project.** Its `.proj` is refused for its fitting zones
-  (`geometry::import`), and its config imports only with these:
-  - material 100 has reflection law 2 (Lambert) in 6 of 27 bands and 0 in the others; a project
-    holds one law per material, so the test sets law 0 in all, and those 6 values differ;
-  - material 101 ("Open_door") transmits with a 0 dB loss in 5 of the 6 bands where it absorbs,
-    but not at 125 Hz; a project's material transmits in every band that absorbs or in none, so
-    the test gives it 0 dB at 125 Hz too, and that one value differs.
+- **Tutorial 3 needs no edit to become a project** (since 2026-09-24): a material's reflection
+  law and its transmission are held per band (`schema::ReflectionLaws`, and
+  `Material::transmission_loss_db` with a `None` band where the band's switch is off), and
+  written per band as upstream writes them (`e_data_row_materiau.h:96-107`): material 100 is
+  Lambert and transmits in its 6 octave bands only, material 101 ("Open_door") transmits from
+  250 Hz to 4 kHz but not at 125 Hz.
 
 **Formatting only** (the solvers read the same values): upstream prints each real as its `f32`
 at 15 significant digits (`0.310000002384186`), ours as the shortest decimal of the project's

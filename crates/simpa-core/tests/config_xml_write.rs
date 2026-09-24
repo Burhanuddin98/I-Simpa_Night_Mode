@@ -559,8 +559,23 @@ fn solver_ids_follow_the_documented_rules() {
 fn scene_mesh_carries_the_same_ids_as_the_config() {
     let p = rich_cube();
     let mesh = scene_mesh(&p).unwrap();
-    assert_eq!(mesh.vertices.len(), p.geometry.vertices.len());
+    // The room, then the enabled box zone's 12 triangles, three vertices each, as upstream's GUI
+    // appends a drawn zone (`Objet3D_maillage.cpp:783-816`).
+    let (nv, nf) = (p.geometry.vertices.len(), p.geometry.faces.len());
+    assert_eq!((mesh.vertices.len(), mesh.faces.len()), (nv + 36, nf + 12));
     let ids = SolverIds::assign(&p).unwrap();
+    let chairs = ids.fitting_zone_id(p.fitting_zones[0].id).unwrap();
+    for (k, f) in mesh.faces[nf..].iter().enumerate() {
+        let first = (nv + 3 * k) as u32;
+        assert_eq!(
+            (f.a, f.b, f.c, f.id_mat, f.id_rs, f.id_en),
+            (first, first + 1, first + 2, 0, -1, chairs)
+        );
+    }
+    // Refusal: the room's own mesh has none of them.
+    let room = config_xml::room_mesh(&p).unwrap();
+    assert_eq!(room.faces[..], mesh.faces[..nf]);
+    assert_eq!(room.vertices[..], mesh.vertices[..nv]);
     let floor = p.surface_groups[1].id;
     for (f, pf) in mesh.faces.iter().zip(&p.geometry.faces) {
         assert_eq!([f.a, f.b, f.c], pf.vertices);
@@ -583,6 +598,20 @@ fn scene_mesh_carries_the_same_ids_as_the_config() {
         for f in mesh.faces.iter().filter(|f| f.id_rs != -1) {
             assert!(declared.contains(&i64::from(f.id_rs)));
         }
+    }
+    // The box's 36 vertices are its 8 corners, through the scene's round trip.
+    let drawn: BTreeSet<[u32; 3]> = mesh.vertices[nv..]
+        .iter()
+        .map(|v| [v.x.to_bits(), v.y.to_bits(), v.z.to_bits()])
+        .collect();
+    assert_eq!(drawn.len(), 8);
+    for c in &drawn {
+        let [x, y, z] = c.map(f32::from_bits);
+        let near = |v: f32, a: f32, b: f32| (v - a).abs() < 1e-5 || (v - b).abs() < 1e-5;
+        assert!(
+            near(x, 3.6, 4.4) && near(y, 3.6, 4.4) && near(z, 0.4, 1.2),
+            "{x} {y} {z}"
+        );
     }
     // Vertices narrow exactly: the cube's are all representable.
     for (v, pv) in mesh.vertices.iter().zip(&p.geometry.vertices) {
@@ -735,7 +764,7 @@ fn the_writer_refuses_what_the_solvers_cannot_do_as_meant() {
     let unused = q
         .materials
         .iter()
-        .find(|m| m.reflection_law == ReflectionLaw::SemiDiffuse)
+        .find(|m| m.reflection_law == ReflectionLaw::SemiDiffuse.into())
         .unwrap()
         .id;
     q.surface_groups[1].material = unused;
@@ -805,7 +834,11 @@ fn generated_projects_write_or_are_refused_for_a_stated_reason() {
         let semi_diffuse_on_a_group = |v: Option<schema::VariantId>| {
             p.surface_groups.iter().any(|g| {
                 let m = p.effective_material(g.id, v).unwrap();
-                p.material(m).unwrap().reflection_law == ReflectionLaw::SemiDiffuse
+                p.material(m)
+                    .unwrap()
+                    .reflection_law
+                    .first_band_with(ReflectionLaw::SemiDiffuse)
+                    .is_some()
             })
         };
         let variants = std::iter::once(None).chain(p.variants.iter().map(|v| Some(v.id)));
@@ -942,4 +975,62 @@ fn doc_kinds_cover_every_attribute_written() {
             .map(|s| s.to_string())
             .collect()
     );
+}
+
+/// A box zone's 12 triangles as upstream's `BuildModel` builds them
+/// (`e_scene_encombrements_encombrement_cuboide.h:113-173`), worked out by hand for corners
+/// `ba` (0, 0, 0) and `hc` (1, 2, 3) in the unit frame, where OpenGL `(x, y, z)` is world
+/// `(x, z, -y)` (`Mathlib.h:50-67`): `ba` is GL (0, 0, -0) and `hc` GL (1, 3, -2), so only `z`
+/// swaps, giving `BA` = GL (0, 0, -2) and `HC` = GL (1, 3, -0), and the other six corners from
+/// them (`:144-150`). Back in world coordinates: BA (0, 2, 0), BB (1, 2, 0), BC (1, -0, 0),
+/// BD (0, -0, 0), HA (0, 2, 3), HB (1, 2, 3), HC (1, -0, 3), HD (0, -0, 3); `-0` where GL `z` is
+/// `-0`. Then the triangles in `PushTriangle` order (`:157-172`), vertex order included: the
+/// winding is the solver's face normal. Compared bit for bit; the say-no is the first triangle
+/// with two vertices swapped.
+#[test]
+fn upstream_box_triangles_are_build_models_worked_by_hand() {
+    let (ba, bb, bc, bd) = (
+        [0.0f32, 2.0, 0.0],
+        [1.0, 2.0, 0.0],
+        [1.0, -0.0, 0.0],
+        [0.0, -0.0, 0.0],
+    );
+    let (ha, hb, hc, hd) = (
+        [0.0f32, 2.0, 3.0],
+        [1.0, 2.0, 3.0],
+        [1.0, -0.0, 3.0],
+        [0.0, -0.0, 3.0],
+    );
+    let expected = [
+        [bc, bd, ba],
+        [bc, ba, bb],
+        [ba, ha, hb],
+        [ba, hb, bb],
+        [ba, hd, ha],
+        [ba, bd, hd],
+        [bd, bc, hc],
+        [hd, bd, hc],
+        [bc, bb, hb],
+        [hc, bc, hb],
+        [hc, hb, ha],
+        [hd, hc, ha],
+    ];
+    let bits = |t: &[[[f32; 3]; 3]]| -> Vec<[[u32; 3]; 3]> {
+        t.iter()
+            .map(|tri| tri.map(|p| p.map(f32::to_bits)))
+            .collect()
+    };
+    let built =
+        simpa_core::config_xml::upstream_box_triangles(None, [0.0, 0.0, 0.0], [1.0, 2.0, 3.0]);
+    assert_eq!(bits(&built), bits(&expected));
+    // Say-no: one triangle wound the other way is a different list.
+    let mut flipped = expected;
+    flipped[0].swap(0, 1);
+    assert_ne!(bits(&built), bits(&flipped));
+    // `BuildModel` orders the corners itself (`:126-143`): from the other corner, the same list.
+    let other =
+        simpa_core::config_xml::upstream_box_triangles(None, [1.0, 2.0, 3.0], [0.0, 0.0, 0.0]);
+    assert_eq!(bits(&built), bits(&other));
+    // Equal corners build nothing (`:124-125`).
+    assert!(simpa_core::config_xml::upstream_box_triangles(None, [1.0; 3], [1.0; 3]).is_empty());
 }

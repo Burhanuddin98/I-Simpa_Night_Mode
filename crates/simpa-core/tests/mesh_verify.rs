@@ -1337,3 +1337,550 @@ fn broken_hall_verifies_in_under_two_seconds() {
     );
     assert!(elapsed.as_secs_f64() < 2.0, "{elapsed:?} ({profile})");
 }
+
+// ---------------------------------------------------------------------------------------------
+// A drawn fitting zone's triangles in the `.cbin`.
+
+/// Upstream's tutorial-1 mesh and scene, the scene with a drawn box zone's 12 triangles appended
+/// as upstream's GUI and `config_xml::scene_mesh` append them (`Objet3D_maillage.cpp:783-816`):
+/// three vertices of their own each, `idMat` 0, `idRs` -1, `idEn` 2. No marker names them.
+fn tutorial1_with_a_drawn_box() -> (Mesh, Model) {
+    let (mesh, mut scene) = tutorial1();
+    let frame = simpa_core::config_xml::GlFrame::of_vertices(
+        scene.vertices.iter().map(|v| [v.x, v.y, v.z]),
+    );
+    let triangles = simpa_core::config_xml::upstream_box_triangles(
+        frame.as_ref(),
+        [1.0, 1.0, 0.5],
+        [2.0, 2.5, 1.5],
+    );
+    assert_eq!(triangles.len(), 12);
+    for t in triangles {
+        let base = scene.vertices.len() as u32;
+        for [x, y, z] in t {
+            scene.vertices.push(cbin::Vertex { x, y, z });
+        }
+        scene.faces.push(cbin::Face {
+            a: base,
+            b: base + 1,
+            c: base + 2,
+            id_mat: 0,
+            id_rs: -1,
+            id_en: 2,
+        });
+    }
+    (mesh, scene)
+}
+
+/// The ids of tutorial 1's mesh with the box declared: the room stays upstream's 1.
+fn with_box_zone() -> VolumeIds {
+    VolumeIds {
+        room: 1,
+        fittings: vec![2],
+    }
+}
+
+/// A drawn box zone's triangles need no marker; each thing that makes them one, undone, makes
+/// them 12 uncovered scene faces again, and a room face left without a marker is still uncovered.
+#[test]
+fn a_drawn_zones_triangles_need_no_marker_and_nothing_else_does() {
+    let (mesh, scene) = tutorial1_with_a_drawn_box();
+    let r = verify_mesh(&mesh, &scene, &with_box_zone());
+    println!("{}", summary("tutorial 1 with a drawn box", &r));
+    assert!(r.passed(), "{}", summary("drawn box", &r));
+    assert_eq!((r.scene_faces, r.drawn_zone_faces), (24, 12));
+
+    // Each partner: the scene edited, and the triangles are scene faces no marker names.
+    let uncovered_box = |label: &str, scene: &Model, ids: &VolumeIds| {
+        let r = verify_mesh(&mesh, scene, ids);
+        println!("{}", summary(label, &r));
+        assert_eq!(codes(&r), ["uncovered_scene_faces"], "{label}");
+        assert_eq!(r.drawn_zone_faces, 0, "{label}");
+        r.uncovered_scene_faces
+    };
+    // The zone not declared.
+    assert_eq!(
+        uncovered_box("no fitting declared", &scene, &upstream()),
+        12
+    );
+    let edited = |edit: &dyn Fn(&mut Model)| {
+        let mut s = scene.clone();
+        edit(&mut s);
+        s
+    };
+    let ids = with_box_zone();
+    for (label, s) in [
+        (
+            "one triangle with a material",
+            edited(&|s| s.faces[17].id_mat = 5),
+        ),
+        (
+            "one triangle on a receiver",
+            edited(&|s| s.faces[17].id_rs = 0),
+        ),
+        (
+            "one triangle of another zone",
+            edited(&|s| s.faces[17].id_en = 3),
+        ),
+        (
+            "one vertex off the box's corners",
+            edited(&|s| s.vertices[s.faces[17].a as usize].x += 0.25),
+        ),
+        (
+            "one vertex shared with the room",
+            edited(&|s| s.faces[17].a = s.faces[0].a),
+        ),
+        (
+            "the last triangle moved onto the first's side",
+            edited(&|s| {
+                let (from, to) = (s.faces[12], s.faces[23]);
+                for (f, t) in [(from.a, to.a), (from.b, to.b), (from.c, to.c)] {
+                    s.vertices[t as usize] = s.vertices[f as usize];
+                }
+            }),
+        ),
+    ] {
+        assert_eq!(uncovered_box(label, &s, &ids), 12, "{label}");
+    }
+    // The triangles in another order within the box are still the box.
+    let reordered = edited(&|s| s.faces.swap(12, 23));
+    assert!(verify_mesh(&mesh, &reordered, &ids).passed());
+    // A triangle left out: the last 12 faces now hold a room face, which is covered, and the 11
+    // triangles are not.
+    let eleven = edited(&|s| {
+        s.faces.pop();
+    });
+    assert_eq!(uncovered_box("11 triangles", &eleven, &ids), 11);
+    // A face after the box: the box is no longer at the end, and that face is uncovered too.
+    let after = edited(&|s| {
+        let f = s.faces[0];
+        s.faces.push(f);
+    });
+    let r = verify_mesh(&mesh, &after, &ids);
+    assert_eq!(codes(&r), ["uncovered_scene_faces"]);
+    assert_eq!((r.uncovered_scene_faces, r.drawn_zone_faces), (13, 0));
+    // A room face no marker names is uncovered with the box beside it.
+    let (mut unmarked, _) = tutorial1_with_a_drawn_box();
+    for t in &mut unmarked.tetrahedra {
+        for f in &mut t.faces {
+            if f.marker == 3 {
+                f.marker = 4;
+            }
+        }
+    }
+    let r = verify_mesh(&unmarked, &scene, &ids);
+    println!("{}", summary("room face 3 unmarked", &r));
+    assert!(
+        r.codes.contains(&"uncovered_scene_faces".to_string()),
+        "{:?}",
+        r.codes
+    );
+    assert_eq!(r.uncovered_scene_faces_first, [3]);
+    assert_eq!(r.drawn_zone_faces, 12);
+}
+
+/// Upstream's own run folders of tutorial 3 carry the box's 12 triangles as faces 88 to 99, and
+/// they are what `drawn_zone_faces` takes for a drawn zone, with the box's id declared.
+#[test]
+fn upstreams_tutorial3_scene_carries_its_box_as_a_drawn_zone() {
+    use simpa_core::geometry::import::zip::Archive;
+    let proj =
+        paths::upstream_file(r"src/isimpa/resources/doc/tutorial/tutorial 3/tutorial_3.proj");
+    let bytes = std::fs::read(&proj).unwrap();
+    let archive = Archive::parse(&bytes).unwrap();
+    let mut runs = 0;
+    for e in archive.entries() {
+        if !(e.name.contains("/report/") && e.name.ends_with("/mesh.cbin")) {
+            continue;
+        }
+        runs += 1;
+        let scene = cbin::read(&archive.read(&e.name).unwrap()).unwrap();
+        let ids = VolumeIds::tetgen(vec![1930, 2083]);
+        let drawn = simpa_core::mesh::verify::drawn_zone_faces(&scene, &ids);
+        let which: Vec<usize> = (0..drawn.len()).filter(|&i| drawn[i]).collect();
+        assert_eq!(which, (88..100).collect::<Vec<_>>(), "{}", e.name);
+        // Without the box's id declared, none.
+        let only_model = VolumeIds::tetgen(vec![1930]);
+        let drawn = simpa_core::mesh::verify::drawn_zone_faces(&scene, &only_model);
+        assert!(drawn.iter().all(|d| !d), "{}", e.name);
+    }
+    assert_eq!(runs, 3);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The room's parts, and the region volume check.
+
+/// TetGen numbers the room's parts up by one from the first (`tetgen.cxx:22403-22436`), so a part
+/// past a gap is no id it gives.
+#[test]
+fn the_rooms_parts_are_numbered_without_a_gap() {
+    let (mesh, scene) = tutorial1();
+    assert!(verify_mesh(&mesh, &scene, &upstream()).passed());
+    // Half the tetrahedra made a second part, 2: TetGen's numbering, so no unknown id.
+    let mut two = mesh.clone();
+    for (i, t) in two.tetrahedra.iter_mut().enumerate() {
+        if i % 2 == 0 {
+            t.id_volume = 2;
+        }
+    }
+    let r = verify_mesh(&two, &scene, &upstream());
+    assert_eq!(r.unknown_volume_ids, 0, "{}", summary("parts 1 and 2", &r));
+    // Says no: numbered 3, past the missing 2.
+    let mut gap = mesh.clone();
+    for (i, t) in gap.tetrahedra.iter_mut().enumerate() {
+        if i % 2 == 0 {
+            t.id_volume = 3;
+        }
+    }
+    let r = verify_mesh(&gap, &scene, &upstream());
+    assert_eq!(
+        r.unknown_volume_ids,
+        mesh.tetrahedra.len().div_ceil(2),
+        "{}",
+        summary("parts 1 and 3", &r)
+    );
+    assert_eq!(codes(&r), ["unknown_volume_ids"]);
+}
+
+/// Three tetrahedra round the edge from the origin to (0, 0, 1), each a cell of its own: the
+/// first (the zone, id 2), the second and the third (the room's two parts, 3 and 4). Facets: the
+/// 8 outer ones, wound outward, then the first's wall with the second (8) and the second's with
+/// the third (9); a facet's marker is its position.
+struct Wedges {
+    nodes: Vec<[f64; 3]>,
+    facets: Vec<[u32; 3]>,
+    tets: [[i32; 4]; 3],
+}
+
+fn wedges() -> Wedges {
+    let nodes = vec![
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 1.0, 0.5],
+        [1.0, 0.0, 0.5],
+        [-1.0, 0.0, 0.5],
+        [0.0, -1.0, 0.5],
+    ];
+    let tets = [[0, 1, 3, 2], [0, 1, 2, 4], [0, 1, 4, 5]];
+    let outward = |f: [u32; 3], away_from: usize| -> [u32; 3] {
+        let p = |i: u32| nodes[i as usize];
+        let [a, b, c] = f.map(p);
+        let d = nodes[away_from];
+        let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        let w = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        if n[0] * w[0] + n[1] * w[1] + n[2] * w[2] > 0.0 {
+            [f[0], f[2], f[1]]
+        } else {
+            f
+        }
+    };
+    let facets = vec![
+        outward([0, 1, 3], 2),
+        outward([0, 3, 2], 1),
+        outward([1, 3, 2], 0),
+        outward([0, 2, 4], 1),
+        outward([1, 2, 4], 0),
+        outward([0, 4, 5], 1),
+        outward([1, 4, 5], 0),
+        outward([0, 1, 5], 4),
+        [0, 1, 2],
+        [0, 1, 4],
+    ];
+    Wedges {
+        nodes,
+        facets,
+        tets,
+    }
+}
+
+impl Wedges {
+    fn check(&self) -> simpa_core::geometry::check::CheckReport {
+        let group = simpa_core::schema::GroupId::from_u128(0);
+        let g = simpa_core::schema::Geometry {
+            vertices: self
+                .nodes
+                .iter()
+                .map(|&v| simpa_core::schema::Vec3::from(v))
+                .collect(),
+            faces: self
+                .facets
+                .iter()
+                .map(|&vertices| simpa_core::schema::Face { vertices, group })
+                .collect(),
+        };
+        let r = simpa_core::geometry::check::check(&g);
+        assert!(r.is_ok(), "{:?}", r.reasons);
+        assert_eq!(r.cells.len(), 3);
+        r
+    }
+
+    /// The three tetrahedra with these ids (only the corners and ids matter to the region check).
+    fn mesh(&self, ids: [i32; 3]) -> Mesh {
+        let face = TetraFace {
+            vertices: [0, 0, 0],
+            marker: -1,
+            neighbor: -2,
+        };
+        Mesh {
+            nodes: self.nodes.iter().map(|p| p.map(|c| c as f32)).collect(),
+            tetrahedra: (0..3)
+                .map(|t| Tetrahedron {
+                    vertices: self.tets[t],
+                    id_volume: ids[t],
+                    faces: [face; 4],
+                })
+                .collect(),
+        }
+    }
+}
+
+/// The zone of the wedges: id 2, seeded at `seed`, its faces the facets `faces`.
+fn zone(seed: [f32; 3], faces: Vec<u32>) -> simpa_core::mesh::FittingRegion {
+    simpa_core::mesh::FittingRegion {
+        zone: "zone".to_string(),
+        solver_id: 2,
+        seed,
+        box_centre: None,
+        faces,
+    }
+}
+
+/// Every region fills one cell with its volume, each fitting's id is on its zone's cell, and each
+/// of the four region codes says no to the mesh made to fail it.
+#[test]
+fn regions_are_held_to_the_cells_of_the_meshed_geometry() {
+    use simpa_core::mesh::verify::{
+        Expectations, Reference, seed_inside, verify_mesh_with, zone_cell,
+    };
+    let w = wedges();
+    let check = w.check();
+    let markers: Vec<u32> = (0..w.facets.len() as u32).collect();
+    let cell_of = |t: usize| {
+        let reference = Reference {
+            vertices: &w.nodes,
+            facets: &w.facets,
+            markers: &markers,
+            check: &check,
+            fittings: &[],
+        };
+        let c = [0, 1, 2, 3].map(|k| w.nodes[w.tets[t][k] as usize]);
+        let centroid = [0, 1, 2].map(|k| ((c[0][k] + c[1][k] + c[2][k] + c[3][k]) / 4.0) as f32);
+        zone_cell(&reference, &zone(centroid, vec![]), 1e-9)
+            .zone_cell
+            .unwrap()
+    };
+    let (first, second) = (cell_of(0), cell_of(1));
+    let scene = cbin::Model {
+        vertices: Vec::new(),
+        faces: Vec::new(),
+    };
+    let ids = VolumeIds::tetgen(vec![2]);
+    // The seed on the wall between the first and the second, the zone's own face (facet 8): the
+    // first is closed by it and the outer shell, the second is not (the wall behind it has the
+    // third cell behind it), so the zone is the first.
+    let on_wall = [0.0f32, 1.0 / 3.0, 0.5];
+    let fittings = [zone(on_wall, vec![8])];
+    let run = |ids_of: [i32; 3], fittings: &[simpa_core::mesh::FittingRegion]| {
+        let reference = Reference {
+            vertices: &w.nodes,
+            facets: &w.facets,
+            markers: &markers,
+            check: &check,
+            fittings,
+        };
+        verify_mesh_with(
+            &w.mesh(ids_of),
+            &scene,
+            &ids,
+            &Expectations {
+                unmeshed_faces: None,
+                reference: Some(reference),
+            },
+        )
+    };
+    let region_codes = |r: &VerifyReport| -> Vec<String> {
+        r.codes
+            .iter()
+            .filter(|c| {
+                [
+                    "region_volume_mismatch",
+                    "unmeshed_cells",
+                    "fitting_region_misplaced",
+                    "fitting_seed_ambiguous",
+                    "unknown_volume_ids",
+                ]
+                .contains(&c.as_str())
+            })
+            .cloned()
+            .collect()
+    };
+    let ok = run([2, 3, 4], &fittings);
+    assert!(region_codes(&ok).is_empty(), "{:#?}", ok.regions);
+    assert!(ok.regions_checked);
+    assert_eq!(ok.regions.len(), 3);
+    let zone_region = ok.regions.iter().find(|r| r.id == 2).unwrap();
+    assert_eq!(
+        (zone_region.cell, zone_region.zone_cell),
+        (Some(first), Some(first))
+    );
+    assert_eq!(zone_region.seed_on_facets, [8]);
+    for r in &ok.regions {
+        assert!((r.volume_m3 - 1.0 / 6.0).abs() < 1e-12, "{r:?}");
+    }
+
+    // Says no: the zone's id on the second (TetGen's other choice of side), the room's first part
+    // on the first.
+    let r = run([3, 2, 4], &fittings);
+    assert_eq!(
+        region_codes(&r),
+        ["fitting_region_misplaced"],
+        "{:#?}",
+        r.regions
+    );
+    // Says no: the zone's faces not given, so neither side is closed by them.
+    let r = run([2, 3, 4], &[zone(on_wall, vec![])]);
+    assert_eq!(
+        region_codes(&r),
+        ["fitting_seed_ambiguous"],
+        "{:#?}",
+        r.regions
+    );
+    // Says no: the second and the third one region, so it is not the second's volume and the
+    // third cell is meshed by none.
+    let r = run([2, 3, 3], &fittings);
+    assert_eq!(
+        region_codes(&r),
+        ["region_volume_mismatch", "unmeshed_cells"],
+        "{:#?}",
+        r.regions
+    );
+    // Says no: no tetrahedron carries the zone's id.
+    let r = run([3, 3, 3], &fittings);
+    assert!(
+        region_codes(&r).contains(&"fitting_region_misplaced".to_string()),
+        "{:#?}",
+        r.regions
+    );
+    // Says no: a node moved, so the first region's volume is not its cell's.
+    let mut moved = w.mesh([2, 3, 4]);
+    moved.nodes[3][0] = 1.5;
+    let reference = Reference {
+        vertices: &w.nodes,
+        facets: &w.facets,
+        markers: &markers,
+        check: &check,
+        fittings: &fittings,
+    };
+    let r = verify_mesh_with(
+        &moved,
+        &scene,
+        &ids,
+        &Expectations {
+            unmeshed_faces: None,
+            reference: Some(reference),
+        },
+    );
+    assert!(r.region_volume_mismatch >= 1, "{:#?}", r.regions);
+
+    // The mesher's move: the seed off the wall, strictly inside the first cell.
+    let inside = seed_inside(&reference, &fittings[0], 1e-9).expect("a point inside the zone");
+    let moved_zone = zone_cell(&reference, &zone(inside, vec![8]), 1e-9);
+    assert!(moved_zone.on_facets.is_empty(), "{moved_zone:?}");
+    assert_eq!(moved_zone.candidates, [first]);
+    assert_ne!(first, second);
+    // Nothing to move a seed already inside.
+    assert!(seed_inside(&reference, &zone(inside, vec![8]), 1e-9).is_none());
+}
+
+/// The region volume tolerance is `2 · A · 16 · 2⁻²⁴ · R` (`mesh/verify/regions.rs`), from the
+/// scene's own extent `R` and the cell's boundary area `A`: a region half a tolerance off its
+/// cell's volume passes, one two tolerances off fails. The test above has an empty scene, so its
+/// tolerance is 0 and it cannot see a wrong scale; this one can.
+#[test]
+fn the_region_volume_tolerance_says_yes_at_half_and_no_at_twice() {
+    use simpa_core::mesh::verify::{Expectations, Reference, verify_mesh_with};
+    let w = wedges();
+    let check = w.check();
+    let markers: Vec<u32> = (0..w.facets.len() as u32).collect();
+    // The wedges' nodes as the scene: R = 1, so the distance tolerance is 16 · 2⁻²⁴ m.
+    let scene = cbin::Model {
+        vertices: w
+            .nodes
+            .iter()
+            .map(|p| cbin::Vertex {
+                x: p[0] as f32,
+                y: p[1] as f32,
+                z: p[2] as f32,
+            })
+            .collect(),
+        faces: Vec::new(),
+    };
+    let distance = 16.0 * 2f64.powi(-24);
+    // The first cell is the first tetrahedron: its boundary is its four faces.
+    let area = |a: usize, b: usize, c: usize| {
+        let (p, q, r) = (w.nodes[a], w.nodes[b], w.nodes[c]);
+        let u = [q[0] - p[0], q[1] - p[1], q[2] - p[2]];
+        let v = [r[0] - p[0], r[1] - p[1], r[2] - p[2]];
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        0.5 * (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt()
+    };
+    let [a, b, c, d] = w.tets[0].map(|i| i as usize);
+    let boundary = area(a, b, c) + area(a, b, d) + area(a, c, d) + area(b, c, d);
+    let tolerance = 2.0 * boundary * distance;
+    // The room's three parts, 1 to 3; no fitting.
+    let ids = VolumeIds::tetgen(Vec::new());
+    let run = |mesh: &Mesh| {
+        let reference = Reference {
+            vertices: &w.nodes,
+            facets: &w.facets,
+            markers: &markers,
+            check: &check,
+            fittings: &[],
+        };
+        verify_mesh_with(
+            mesh,
+            &scene,
+            &ids,
+            &Expectations {
+                unmeshed_faces: None,
+                reference: Some(reference),
+            },
+        )
+    };
+    let ok = run(&w.mesh([1, 2, 3]));
+    assert!(ok.regions_checked);
+    assert_eq!(ok.region_volume_mismatch, 0, "{:#?}", ok.regions);
+    let first = ok.regions.iter().find(|r| r.id == 1).unwrap();
+    assert!(
+        (first.tolerance_m3 - tolerance).abs() <= 1e-12 * tolerance,
+        "tolerance {:e} m³, expected 2 · {boundary} m² · {distance:e} m = {tolerance:e} m³",
+        first.tolerance_m3
+    );
+    // Node 3 belongs to the first tetrahedron alone, whose volume is its x / 6: moved along x by
+    // 6 · k · tolerance, the region is k tolerances off its cell.
+    let off_by = |k: f64| {
+        let mut mesh = w.mesh([1, 2, 3]);
+        let x = w.nodes[3][0] + 6.0 * k * tolerance;
+        mesh.nodes[3][0] = x as f32;
+        let r = run(&mesh);
+        let first = r.regions.iter().find(|r| r.id == 1).unwrap().clone();
+        let off = (first.volume_m3 - first.cell_volume_m3.unwrap()).abs() / tolerance;
+        (r.region_volume_mismatch, off)
+    };
+    let (mismatch, off) = off_by(0.5);
+    assert!((0.4..0.6).contains(&off), "{off}");
+    assert_eq!(mismatch, 0, "half a tolerance off ({off:.3}) passes");
+    let (mismatch, off) = off_by(2.0);
+    assert!((1.9..2.1).contains(&off), "{off}");
+    assert_eq!(mismatch, 1, "two tolerances off ({off:.3}) fails");
+}

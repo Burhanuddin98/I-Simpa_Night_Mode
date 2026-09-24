@@ -36,7 +36,8 @@ ZONE = {
     "id": "0c0be000-0000-4000-8000-00000000f177",
     "name": "Fitting zone",
     "enabled": True,
-    "shape": {"kind": "box", "min": [1.0, 1.0, 0.5], "max": [2.0, 2.0, 1.5]},
+    # No upstream corner order: a box drawn here (schema FittingShape::Box::destination).
+    "shape": {"kind": "box", "min": [1.0, 1.0, 0.5], "max": [2.0, 2.0, 1.5], "destination": None},
     # Valid under fitting_parameters_invalid (docs/solver-contract.md:122): 0 <= alpha <= 1,
     # mean free path > 0, in every band.
     "absorption": 0.1,
@@ -93,7 +94,8 @@ def zone_text(n_bands: int) -> str:
         '      "shape": {',
         f'        "kind": "{z["shape"]["kind"]}",',
         f'        "min": {json.dumps(z["shape"]["min"])},',
-        f'        "max": {json.dumps(z["shape"]["max"])}',
+        f'        "max": {json.dumps(z["shape"]["max"])},',
+        f'        "destination": {json.dumps(z["shape"]["destination"])}',
         "      },",
         f'      "absorption": {json.dumps([z["absorption"]] * n_bands)},',
         f'      "mean_free_path_m": {json.dumps([z["mean_free_path_m"]] * n_bands)},',

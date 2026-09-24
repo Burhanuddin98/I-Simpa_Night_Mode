@@ -6,7 +6,8 @@ This page is the contract between our core and upstream's unchanged solvers, SPP
 - **Part A, the pre-launch rules.** Each has a stable reason code. `core::validate` implements
   them, and **the codes are its API.**
 - **Part B, the run contract:** how a solver is launched, what it must find and what it writes,
-  what its exit codes and output lines mean, and how a run is judged.
+  what its exit codes and output lines mean, and how a run is judged; and, before any of it, what
+  the import of an upstream project refuses by name ("Importing an upstream project").
 
 The file format itself is in `docs/formats/config_xml.md`. Receipts follow that page's
 conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, and the
@@ -438,7 +439,7 @@ order, and its status is OK exactly when it lists none.
 
 | Code | Status | Signal | When |
 |---|---|---|---|
-| `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry; its own codes and counts are in the detail. Exit class 3 |
+| `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry, or, for a project meshed through upstream's scene correction, what `preprocess.exe` made of it (the mesher's gate before TetGen, "Preprocessing and the meshed volume" below); its own codes and counts are in the detail. The mesher gives the same code, and `simpa mesh` exits 3 with it. Exit class 3 |
 | `mesh_missing` | FAIL | before launch | `run --mesh <dir>`: the folder has no readable `mesh.json`, a manifest that is not `OK`, or no `tetramesh.mbin`; or the run's own mesh folder cannot be used. Exit class 4 |
 | `export_failed` | FAIL | before launch | `run`: the run folder's inputs cannot be written. `config_xml`'s writer refuses the project or the variant (its code, such as `variant_not_found`, is in the detail), or a mesh or directivity file cannot be copied. Exit class 2 |
 | `source_unlocatable` | FAIL | before launch | SPPS only, `run` and `run-folder`: a source that SPPS's own `f32` test puts in no tetrahedron of the `.mbin` (`coreinitialisation.cpp:71-95`, emulated by `run::locate`), such as a source exactly on an internal facet where the product rounds positive from both sides. SPPS would crash with `0xC0000005` before any particle runs (`sppsInitialisation.cpp:20`). The detail names each source, its number in the project's order (`config.xml` lists them newest first, so the file's last is number 1), its name and its position as SPPS stores it. Exit class 5, the solver is not launched. VERIFIED against `spps.exe` on 233 points on and near the seeded box's internal facets (`tests/run_locate.rs`) |
@@ -479,7 +480,7 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   |---|---|---|
   | geometry | `geometry_refused` | 3 |
   | validate | each Part A error's code; Part A warnings are recorded as the verdict's warnings | 2 |
-  | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `manifest_mismatch` or Part A's `mesh_out_of_date` | 4 |
+  | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `manifest_mismatch` or Part A's `mesh_out_of_date`. The mesher's `geometry_refused` ends the run at stage geometry, exit class 3: with upstream's scene correction on, the geometry stage leaves the check to the mesher, on what `preprocess.exe` saves | 4 |
   | export | `export_failed`, or `validate_export`'s error codes | 2 |
   | pre_launch (SPPS only) | `source_unlocatable`, `receiver_unlocatable` | 5 |
   | solve | the verdict above | 0, 5 or 130 |
@@ -582,6 +583,85 @@ the first one. What follows marks each difference.
   are `.cbin` face indices. The line `The input surface mesh contain self-intersections. Program
   stopped.` arrives on stdout, and stderr is empty. The mesher reports `tetgen_skipped_facets`,
   and still reads a committed 1.6.0 set such as `tests/fixtures/meshes/broken_hall`.
+
+### Preprocessing and the meshed volume
+
+A project's mesh settings may ask for upstream's "Scene correction before meshing"
+(`MeshSettings::preprocess`, `mesh_conf@preprocess`, on in upstream's GUI for a new project,
+`e_core_core_tetconf.h:108`; `simpa import-proj` takes the `.proj`'s, and reads a `.proj` without
+it as off, as upstream's loader does: a loaded `mesh_conf` gets no defaults, `:45-54`, and
+`GetBoolConfig` gives false for a missing property, `element.cpp:1300-1314`). The mesher then does what
+upstream's GUI does (`projet_maillage.cpp:206-213`): it writes the `.poly` with the box fitting
+zones' triangles in the user facet list (`Objet3D_maillage.cpp:931-1044`), runs
+`preprocess.exe scene_mesh.poly` (upstream's program, unchanged, built by `solvers/build.ps1`) in
+a Job Object like TetGen, cancellable, and meshes what it saved. What it does, and the defect in
+its reader that gives every user facet the first one's marker (`poly.cpp:418-423`), are in
+`crates/simpa-core/src/mesh/preprocess.rs` and `docs/formats/mesh-manifest.md`. Then:
+- **`preprocess.exe` never fails by its exit code** (`Preprocess.cpp:112-121`), so its output is
+  read: its lines, and the file it saved, facet by facet against the file it was given.
+- **`geometry::check` runs on what it saved, before TetGen**: a refusal is `geometry_refused`
+  (above), exit 3, and TetGen does not run. Without the setting the project's geometry is checked
+  before meshing, as before, and TetGen judges the box zones' triangles first; the `.poly` it read
+  is checked too, and a mesh TetGen makes of one the check refuses is `geometry_refused`.
+- **Its markers are restored**, each facet taking the marker of the facet it lies in, and every
+  change is listed in `mesh.json`. **Parity mode** (`simpa mesh --parity`) keeps its bytes, as
+  upstream's GUI meshes them, to compare with upstream's files; its mesh then fails
+  verification by name and is never run.
+- **A fitting zone's seed on a facet** (tutorial 3's zone 1, whose inside position lies on its
+  top face) leaves the zone to TetGen's choice of side: TetGen 1.5.0 puts zone 1's id on the hall
+  once the box's markers are restored. With the scene correction on, outside parity mode, the
+  mesher moves such a seed into the zone's cell first, and records it: this crate's rule, for
+  Burhan to confirm (`docs/m5-m6-design.md`, decision 12). Without the correction the seed is
+  written as it is, as upstream writes it, and the region check below judges what TetGen makes.
+- **Every region is held to the geometry's cells** (`mesh::verify_mesh_with`): each region
+  TetGen made must fill one cell of the geometry it was given, with that cell's volume, and each
+  fitting zone's id must be on its zone's cell. A lost-particle count cannot see a wrong room:
+  TetGen 1.6.0 meshes tutorial 3's raw scene as 1,220.9 m³ against the room's 978.3 m³, both
+  fittings gone, and SPPS loses 1 particle in 60,000 on it.
+
+| Code | When |
+|---|---|
+| `preprocess_launch_failed` | The mesh settings ask for `preprocess.exe`, and it could not be started, none was given (the library's `mesh_project` without it, or not found by `simpa mesh`), or its log could not be written. Nothing is meshed |
+| `preprocess_crash` | `preprocess.exe`'s exit code is an NTSTATUS error (0xC0000000 and up); it comes with `preprocess_exit_nonzero` |
+| `preprocess_exit_nonzero` | `preprocess.exe` exited with a code other than 0, which its `main` never returns |
+| `preprocess_aborted` | `preprocess.exe` exited 0 but saved nothing: it printed `Mesh reparation has been aborted` (a repair loop ran out of its 100 passes, `Preprocess.cpp:100-108`; upstream's tutorial 2, the Elmia hall, does this), `The mesh file cant be found !`, or no statistics; or it saved user facets it never merged into the facet list (its coplanar step ran out of passes, `:79-88`), which TetGen would never read. Upstream's GUI meshes the uncorrected `.poly` then; nothing is meshed here |
+| `preprocess_output_invalid` | What `preprocess.exe` saved does not read as a `.poly`, or cannot be accounted for against what it was given: a facet that lies in no input facet (within `16 · 2⁻²⁴ · R`) or in two user facets, an input facet whose pieces do not cover its area (within its perimeter times that distance), deletions it did not count, or regions it changed |
+| `region_volume_mismatch` | A region (one `idVolume`) whose summed tetrahedron volume is not the volume of the cell of the meshed geometry it lies in, within twice the cell's boundary area times `16 · 2⁻²⁴ · R`, or that lies in the exterior or in a cell another region also fills. Checked by the mesher, against `geometry::check` on the `.poly` TetGen read; `mesh-verify` and `run-folder`, which hold no such geometry, do not check it |
+| `unmeshed_cells` | A cell of the meshed geometry no region fills |
+| `fitting_region_misplaced` | A fitting zone whose id is not on its zone's cell (the cell its seed lies in; a box's, the one its centre lies in), or on no tetrahedron |
+| `fitting_seed_ambiguous` | A fitting zone whose seed lies on facets between cells, none of which its own faces and the outer shell close alone: which side is the zone cannot be told |
+
+### Importing an upstream project
+
+Before any run, `simpa import-proj` (`core::geometry::import::proj`) turns an upstream `.proj`
+into a project. It reads what upstream's GUI loads and writes it the way the GUI would write it
+into `config.xml` and `mesh.cbin`, and it refuses, by name, what upstream would skip silently or
+take in a way this import does not reproduce. The file's own defects (a value that is not a
+number, a missing band) are `invalid`, and a feature it does not read is `unsupported`; those are
+the importer's error kinds (`ImportError::code`). The reasons below have their own codes, which
+the CLI prints before the message and exits 2 with.
+
+The zone refusals, and two zones listing one face, apply to *enabled* zones only
+(`useforcalculation`): upstream seeds no region for a disabled zone, tags no face with it and
+draws none of its triangles (`..._model.h:173-194`, `..._cuboide.h:311, 329-340`,
+`appconfig.cpp:185`), so a disabled zone is imported as stored, with a note on what enabling it
+would need. Every list is read in upstream's load order, by `wxid` (`element.cpp:64-106, 159`),
+not in the file's.
+
+| Code | Refused when | What upstream does |
+|---|---|---|
+| `proj_fitting_type_unknown` | A child of `encombrements` whose element type (`eid`) is neither 54 (a scene-fitted zone) nor 56 (a rectangular one), or has none | Skips it silently (`e_scene_encombrements.h:56-73`) |
+| `proj_fitting_inside_point_unset` | An enabled scene-fitted zone that lists faces and has no inside position (`volpos`), or (0, 0, 0) | Seeds its TetGen region at a point it derives from the zone's first face in its OpenGL frame (`Objet3D_maillage.cpp:1012-1031`), which is not reproduced |
+| `proj_fitting_face_group_missing` | An enabled scene-fitted zone without its face group (`gr`) | Writes the zone into `config.xml` but seeds no TetGen region for it (`e_scene_encombrements_encombrement_model.h:146-157, 178-191`), which a project cannot hold. Its GUI always creates the group (`:122`), so only an edited file lacks it |
+| `proj_fitting_box_empty` | An enabled rectangular zone whose corners `ba` and `hc` share a coordinate | Builds no triangles for equal corners and flat ones for a shared coordinate, and still seeds a region at `hc` (`e_scene_encombrements_encombrement_cuboide.h:113-165, 331-340`) |
+| `proj_face_in_two_fitting_zones` | A face listed by two enabled fitting zones | Gives it the last enabled zone's id, silently (`appconfig.cpp:174-200`) |
+| `proj_diffusion_law_out_of_range` | A fitting zone's diffusion law (`loi_diff`) outside 0 to 2, in a band upstream's loader keeps as stored | Writes it; SPPS has no case for it and leaves the direction unchanged (`coreTypes.h:108-113`; `CalculationCore.cpp:166-182`). A band upstream's loader resets to 0 (`e_gammeabsorption.cpp:43-59`) is imported as 0, with a note |
+| `proj_reflection_law_out_of_range` | A material's reflection law (`loi`) in some band that is none of upstream's seven, 0 to 6 | Writes it; SPPS reflects it specularly (`dotreflection.h:23-45`) (inferred) |
+| `proj_material_row_unreadable` | A material band row of a project older than 1.3.4 (`<bfreq absorb=..>`) whose `loi` holds no integer (missing, empty or no digit), or whose `absorb`, `diffusion` or `affaiblissement` is missing (`affaiblissement` excepted: then the band does not transmit) or not a number | For `loi`: `Convertor::ToInt` returns an uninitialised value (`sppsString.cpp:107-112`; `wxString::ToLong` leaves its output untouched when it reads no digit). For a number: `StringToFloat` logs "Cannot convert string" as an error and reads 0 (`e_data.h:212-252`). A `loi` with digits followed by more (`2.5`) reads as upstream reads it, 2 |
+| `proj_transmission_exceeds_absorption` | A material band that transmits with a loss `R` whose `10^(-R/10)` exceeds the band's absorption, or with absorption 0 | Writes the stored loss unchanged (`e_data_row_materiau.h:98-107`): it enforces the rule only when the user edits the band (`:109-205`; loading calls `Modified` with the row itself, which matches no case). This crate's writer enforces it at every write (`config_xml::transmission_loss_written`), so it would not write the stored value |
+| `proj_source_group_malformed` | A child of the source list, or of a source group, whose element type is neither 16 (a source) nor 15 (a group), or has none | Skips it silently (`e_scene_sources.h:73-87`) |
+| `proj_volumes_unsupported` | Any volume (`volumes/volume`, element type 86) | Seeds a TetGen region with its own volume bound for it (`e_scene_volumes_volume.h:168-188`); a project holds no volumes. Upstream's `Industrial.proj` is refused for its three |
+| `proj_mesh_debug_mode` | SPPS's or TCR's meshing settings (`mesh_conf`) with "Test mesh topology" (`debugmode`) on | Runs `tetgen -d` alone, skips the scene correction and loads no mesh (`projet_maillage.cpp:165-174, 212, 242-275`), then runs the solver on whatever mesh it already held (`projet.cpp:751-769`). None of upstream's projects has it on |
 
 ### Corrections to the survey's run contract
 

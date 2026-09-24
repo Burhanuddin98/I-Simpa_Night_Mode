@@ -70,7 +70,10 @@
 //! changes exactly the `type_surface` elements of the groups it overrides. Materials no group uses
 //! are not written. Groups whose base material pins the same id share one `type_surface`; a variant
 //! that overrides some of them but not all cannot be expressed and is
-//! [`WriteError::SharedSolverId`].
+//! [`WriteError::SharedSolverId`]. One more material is declared when the scene mesh carries a
+//! drawn box zone's triangles: upstream's default material, id 0 ([`DRAWN_ZONE_MATERIAL_ID`]),
+//! which those triangles carry as upstream's do, unless a surface group already declares id 0 (a
+//! project pinned to a solver mesh's ids can), whose declaration they then share.
 //!
 //! Fitting ids start at 2 because TetGen's `-A` numbers a region that no region seed marks with
 //! the next integer above the largest seeded attribute, starting from 1 (TetGen 1.5.0,
@@ -93,8 +96,11 @@
 //!
 //! [`scene_mesh`] takes every vertex through upstream's 32-bit OpenGL round trip ([`GlFrame`]), as
 //! upstream's GUI writes its `.cbin`, so the solvers read the same `f32` bits for the same scene
-//! (`docs/formats/cbin.md`, "Parity with upstream's GUI"). The mesher's `.poly` takes its vertices
-//! from it, as upstream's does.
+//! (`docs/formats/cbin.md`, "Parity with upstream's GUI"). After the room's faces it appends each
+//! enabled box zone's 12 triangles as upstream's GUI builds and appends them
+//! ([`upstream_box_triangles`]; tutorial 3's box is its faces 88 to 99, byte for byte). The
+//! mesher's `.poly` takes its vertices from the room alone ([`room_mesh`]), as upstream's does,
+//! and its markers index the room's faces.
 //!
 //! # Importing
 //!
@@ -113,9 +119,13 @@ mod num;
 mod write;
 
 pub use gl::GlFrame;
-pub use ids::{FIRST_ASSIGNED_MATERIAL_ID, FIRST_FITTING_ID, SolverIds, scene_mesh};
+pub use ids::{
+    DRAWN_ZONE_MATERIAL_ID, FIRST_ASSIGNED_MATERIAL_ID, FIRST_FITTING_ID, SolverIds, room_mesh,
+    scene_mesh, upstream_box_triangles,
+};
 pub use import::{ImportError, import_upstream, import_upstream_with_mesh};
 pub use num::widen_f32;
+pub(crate) use write::transmission_loss_written;
 pub use write::{
     StagedFile, WriteError, band_levels_written, directivity_files, resolve_variant,
     working_directory, write, write_file,

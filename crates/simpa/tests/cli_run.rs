@@ -713,3 +713,100 @@ fn bad_options_and_refused_projects_have_their_exit_codes() {
     assert_eq!(o.code, 2, "{o:#?}");
     assert_eq!(codes(&json(&o)), ["source_none"]);
 }
+
+/// The inputs of the run `m` (its `solve/` folder), copied into `folder` with the run's working
+/// directory written `__RUNDIR__`, as `run-folder` takes a folder of inputs.
+fn inputs_copied(m: &Value, folder: &Path) -> PathBuf {
+    let solve = run_dir(m).join("solve");
+    std::fs::create_dir_all(folder).unwrap();
+    for input in m["inputs"].as_array().unwrap() {
+        let name = input["path"].as_str().unwrap();
+        std::fs::copy(solve.join(name), folder.join(name)).unwrap();
+    }
+    let config = std::fs::read_to_string(folder.join("config.xml")).unwrap();
+    let solve_dir = format!("{}\\", solve.display());
+    assert!(config.contains(&solve_dir), "{config}");
+    std::fs::write(
+        folder.join("config.xml"),
+        config.replace(&solve_dir, "__RUNDIR__"),
+    )
+    .unwrap();
+    folder.to_path_buf()
+}
+
+/// A project with a box fitting zone. Its run's `mesh.cbin` carries the box's 12 triangles after
+/// the room's 12 faces, as upstream's GUI writes them (`idMat` 0, `idRs` -1, `idEn` the zone's
+/// id, 2), and no `.mbin` marker names them (`docs/m5-m6-design.md`, decision 5):
+/// `mesh::verify` takes them for a drawn zone's triangles, so the run's own folder passes
+/// `run-folder`'s pre-launch check, and `mesh-verify` with the zone declared. Before 2026-09-24's
+/// fix both refused it (`uncovered_scene_faces`, 12). The say-nos: `mesh-verify` without the
+/// zone declared, and the folder with one triangle given a material, refused before launch.
+#[test]
+fn a_box_fitting_zones_run_folder_passes_its_own_checks() {
+    let root = scratch("run-box-fitting");
+    let project = fixture("rooms/tutorial1_box_fitting.simpa");
+    let o = run(&project, "tcr", &root, &[]);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let m = json(&o);
+    let solve = run_dir(&m).join("solve");
+    let scene = simpa_core::formats::cbin::read_file(&solve.join("mesh.cbin")).unwrap();
+    assert_eq!(scene.faces.len(), 24);
+    assert!(
+        scene.faces[12..]
+            .iter()
+            .all(|f| (f.id_mat, f.id_rs, f.id_en) == (0, -1, 2)),
+        "{:?}",
+        &scene.faces[12..]
+    );
+
+    let verify = |dir: &Path, extra: &[&str]| {
+        let mut args = vec!["mesh-verify".to_string(), dir.display().to_string()];
+        args.extend(extra.iter().map(|s| s.to_string()));
+        simpa_run(&args)
+    };
+    let declared = verify(&solve, &["--fittings", "2"]);
+    assert_eq!(declared.code, 0, "{declared:#?}");
+    // Undeclared, the zone's triangles are scene faces no marker names, and TetGen's numbering
+    // starts the room at 1: the fitting's 2 and the room's 3 are then no ids it gives.
+    let undeclared = verify(&solve, &[]);
+    assert_eq!(undeclared.code, 4, "{undeclared:#?}");
+    assert!(
+        undeclared
+            .stdout
+            .starts_with("FAIL uncovered_scene_faces, unknown_volume_ids:"),
+        "{}",
+        undeclared.stdout
+    );
+
+    let folder_run = |folder: &Path| {
+        simpa_run(&[
+            "run-folder".to_string(),
+            folder.display().to_string(),
+            "--solver".into(),
+            "tcr".into(),
+            "--runs".into(),
+            root.display().to_string(),
+            "--json".into(),
+        ])
+    };
+    let folder = inputs_copied(&m, &root.join("as-run"));
+    let ok = folder_run(&folder);
+    let mo = json(&ok);
+    summary("box fitting, run-folder on its own inputs", &ok, &mo);
+    assert_eq!(ok.code, 0, "{ok:#?}");
+    assert_eq!(mo["verdict"]["status"], "OK");
+
+    // One box triangle given a material: no longer a drawn zone's, so 12 scene faces no marker
+    // names. Refused before launch.
+    let bad = inputs_copied(&m, &root.join("triangle-with-material"));
+    let mut edited = scene.clone();
+    edited.faces[17].id_mat = 5;
+    simpa_core::formats::cbin::write_file(&edited, &bad.join("mesh.cbin")).unwrap();
+    let refused = folder_run(&bad);
+    let mr = json(&refused);
+    summary("box fitting, one triangle with a material", &refused, &mr);
+    assert_eq!(refused.code, 5, "{refused:#?}");
+    assert_eq!(mr["stage"], "pre_launch");
+    assert_eq!(codes(&mr), ["mesh_invalid", "uncovered_scene_faces"]);
+    assert_eq!(mr["outcome"], Value::Null);
+}

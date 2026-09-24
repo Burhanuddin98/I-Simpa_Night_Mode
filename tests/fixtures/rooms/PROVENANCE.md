@@ -39,11 +39,13 @@ give back the same bytes.
 | fixture | from | edits | for | sha256 |
 |---|---|---|---|---|
 | `tutorial1_box_seeded.simpa` | `tutorial1_box.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 150,000 → 10,000: M1's reference configuration | gate M6(a) | `960dd67769665c29` |
-| `tutorial1_box_fitting.simpa` | `tutorial1_box_seeded.simpa` | one fitting zone, below | gate M5(e) | `fab25e56605b7008` |
+| `tutorial1_box_fitting.simpa` | `tutorial1_box_seeded.simpa` | one fitting zone, below | gate M5(e) | `5dda008fe04be568` |
 | `elmia_loss_gate.simpa` | `elmia_corrected.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 1,000,000 → 100,000; `bands_computed` true for 125, 250, 500, 1000, 2000 and 4000 Hz only, in both solvers (SPPS already had exactly these; TCR had all 27) | gate M6(c) | `d1c4245a41fb30ed` |
 
 The fitting zone: id `0c0be000-0000-4000-8000-00000000f177`, name `Fitting zone`, enabled, a
 box from (1, 1, 0.5) to (2, 2, 1.5) m (1 m³, dyadic corners, so the gate's 1e-9 volume check
-is exact), and in all 27 bands absorption 0.1, mean free path 1.0 m and diffusion law
+is exact) with no upstream corner order (`destination` null, a box drawn here; the key was added
+on 2026-09-24 with the `.proj` import of rectangular zones, which changed the file's hash from
+`fab25e56605b7008`), and in all 27 bands absorption 0.1, mean free path 1.0 m and diffusion law
 `uniform`. Those pass `fitting_parameters_invalid` (0 ≤ α ≤ 1, λ > 0). The zone clears the
 source (3, 5, 1.8) and both receivers, (1, 1, 1.8) and (3, 7, 1.8).

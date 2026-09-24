@@ -167,6 +167,9 @@ pub(crate) fn check_material(m: &Material, n: usize) -> Result {
     let what = |field: &str| format!("material '{}' {field}", m.name);
     band_count(|| what("absorption"), m.absorption.len(), n)?;
     band_count(|| what("scattering"), m.scattering.len(), n)?;
+    if let Some(k) = m.reflection_law.band_count() {
+        band_count(|| what("reflection law"), k, n)?;
+    }
     if let Some(t) = &m.transmission_loss_db {
         band_count(|| what("transmission loss"), t.len(), n)?;
     }

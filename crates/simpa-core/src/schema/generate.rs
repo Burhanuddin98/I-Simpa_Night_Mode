@@ -24,7 +24,9 @@ use super::real::{F64, Vec3};
 ///   0.3 m outside every fitting zone; receiver radius 0.05 to 0.5 m;
 /// - no directivity files (no balloon sources), no zero direction vectors;
 /// - absorption and scattering in [0, 1], scattering 0 wherever absorption is 1, transmission
-///   only where absorption is above 0 and with tau <= alpha;
+///   only in bands whose absorption is above 0 and with tau <= alpha;
+/// - reflection laws one per material or one per band, and box fitting zones with or without
+///   upstream's corner order (`FittingShape::Box::destination`);
 /// - time step 0.5 to 20 ms, duration 0.1 to 3 s (at most 6,000 steps), extinction exponent 1
 ///   to 10, random seed within a C `int`, at least one band computed per solver;
 /// - names ASCII, under 50 bytes and unique across the project;
@@ -95,6 +97,15 @@ pub fn generate(seed: u64) -> Project {
             shape: FittingShape::Box {
                 min: Vec3::from(lo),
                 max: Vec3::from(hi),
+                destination: (r.below(3) == 0).then(|| {
+                    [0, 1, 2].map(|_| {
+                        if r.bool() {
+                            BoxBound::Max
+                        } else {
+                            BoxBound::Min
+                        }
+                    })
+                }),
             },
             absorption: (0..n).map(|_| F64::new(r.value(0.0, 1.0))).collect(),
             mean_free_path_m: (0..n).map(|_| F64::new(r.value(0.5, 5.0))).collect(),
@@ -285,6 +296,8 @@ pub fn generate(seed: u64) -> Project {
                 max_volume_m3,
                 surface_receiver_max_area_m2,
                 preserve_boundary,
+                // Drawn last, below, so that every earlier draw stays as it was.
+                preprocess: false,
             }
         },
     };
@@ -297,7 +310,7 @@ pub fn generate(seed: u64) -> Project {
         }),
     };
 
-    Project {
+    let mut project = Project {
         format_version: FORMAT_VERSION,
         id: ProjectId(r.uuid()),
         name: format!("Generated {seed}"),
@@ -320,7 +333,9 @@ pub fn generate(seed: u64) -> Project {
         variants,
         active_variant,
         view,
-    }
+    };
+    project.solvers.meshing.preprocess = r.bool();
+    project
 }
 
 fn random_bands(r: &mut Rng) -> BandSet {
@@ -361,21 +376,38 @@ fn random_material(r: &mut Rng, index: usize, n: usize) -> Material {
         .iter()
         .map(|&a| F64::new(if a == 1.0 { 0.0 } else { r.value(0.0, 1.0) }))
         .collect();
-    // tau = 10^(-R/10) <= alpha  <=>  R >= -10 log10(alpha); keep a 0.5 dB margin.
-    let transmission_loss_db =
-        (r.below(4) == 0 && absorption.iter().all(|&a| a > 0.0)).then(|| {
+    // tau = 10^(-R/10) <= alpha  <=>  R >= -10 log10(alpha); keep a 0.5 dB margin. A band that
+    // absorbs nothing does not transmit, and one transmitting material in four switches some
+    // other bands off too, as upstream's per-band switch does (tutorial 3's `Open_door`).
+    let transmission_loss_db = (r.below(4) == 0)
+        .then(|| {
+            let some_off = r.below(4) == 0;
             absorption
                 .iter()
-                .map(|&a| F64::new(-10.0 * a.log10() + r.value(0.5, 30.0)))
-                .collect()
-        });
+                .map(|&a| {
+                    let on = a > 0.0 && !(some_off && r.below(2) == 0);
+                    on.then(|| F64::new(-10.0 * a.log10() + r.value(0.5, 30.0)))
+                })
+                .collect::<Vec<_>>()
+        })
+        .filter(|t| t.iter().any(Option::is_some));
+    // One law, or one per band (tutorial 3's material 100).
+    let reflection_law = if r.below(4) == 0 {
+        ReflectionLaws::from_bands(
+            (0..n)
+                .map(|_| ReflectionLaw::ALL[r.below(7) as usize])
+                .collect(),
+        )
+    } else {
+        ReflectionLaw::ALL[r.below(7) as usize].into()
+    };
     Material {
         id: MaterialId(r.uuid()),
         name: format!("Material {}", index + 1),
         color: Rgb(r.next() as u8, r.next() as u8, r.next() as u8),
         absorption: absorption.into_iter().map(F64::new).collect(),
         scattering,
-        reflection_law: ReflectionLaw::ALL[r.below(7) as usize],
+        reflection_law,
         transmission_loss_db,
         double_sided: r.bool(),
         solver_id: (r.below(3) == 0).then(|| index as u32 * 7 + r.below(7) as u32),

@@ -1,7 +1,10 @@
 # M1 gate: the solvers we build are upstream's unchanged solvers, and the mesher is TetGen 1.5.0.
+# - bin\ is solvers/manifest.json's build by code sha256 (solvers/pe-fingerprint.ps1): the sha256
+#   with the link timestamps zeroed. MSVC writes the link time into the COFF header and the debug
+#   directory, and nowhere else in these builds, so every build of the same code has the manifest's
+#   code sha256 and its own sha256; the gate holds bin\ to the first and prints the second.
 # - spps, classicalTheory and preprocess come from the pinned commit 929a5c8 and must equal the
-#   2026-09-08 reference build byte for byte outside the link timestamps (MSVC writes the link
-#   time into the COFF header and the debug directory, and nowhere else in these builds), and
+#   2026-09-08 reference build byte for byte outside the link timestamps, and
 #   produce the reference's outputs from identical, seeded inputs.
 # - tetgen.exe is WIAS TetGen 1.5.0 from third_party/tetgen-1.5.0, the TetGen upstream shipped in
 #   1.3.3 and 1.3.4 (decision of 2026-09-23, target/investigate/DECISIONS.md). It is checked by
@@ -16,7 +19,14 @@
 # refuse upstream's own 1.6.0 tetgen, built in the same run by solvers/build.ps1.
 # Each run writes a new folder under target\gates\m1 and deletes nothing; the last line says how
 # much the kept runs hold.
-# Run from anywhere: powershell -File tools/gates/m1.ps1
+# Run from anywhere: powershell -File tools/gates/m1.ps1 [-Solvers <folder>]
+param(
+    # The build under test, a folder this checkout's solvers/build.ps1 built into (its -Root):
+    # bin\, the build trees (named by solvers/manifest.json) and src-929a5c8\. Default
+    # <repo>\target\solvers. Another checkout's build fails the TetGen command-line check: its
+    # records name that checkout's third_party folder, which is not the one read here.
+    [string]$Solvers = ''
+)
 $ErrorActionPreference = 'Stop'
 $failures = @(); $script:checks = 0
 # A check body returns exactly one bool. Anything else (no value, several values, a non-bool)
@@ -40,8 +50,9 @@ function Check($name, [scriptblock]$body) {
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $up = 'B:\repos\I-Simpa-upstream'
 $commit = '929a5c8e5f590b189f29155faeff8670f3699479'
-$solvers = Join-Path $repo 'target\solvers'
+$solvers = if ($Solvers) { [IO.Path]::GetFullPath($Solvers) } else { Join-Path $repo 'target\solvers' }
 $bin = Join-Path $solvers 'bin'
+Write-Host "solvers: $solvers"
 $fix = Join-Path $repo 'tests\fixtures\upstream\tutorial1'
 $tgSrc = Join-Path $repo 'third_party\tetgen-1.5.0'
 $tarball = Join-Path $tgSrc 'tetgen1.5.0.tar.gz'
@@ -76,6 +87,7 @@ $blobs4db = [ordered]@{
 }
 . (Join-Path $repo 'solvers\tetgen\build-commands.ps1')
 . (Join-Path $repo 'solvers\tetgen\source.ps1')
+. (Join-Path $repo 'solvers\pe-fingerprint.ps1')
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 # Fresh folder per gate run, so no earlier output is ever reused or needs deleting.
@@ -152,57 +164,22 @@ function Get-Sizes([string]$dir) {
     Get-ChildItem $dir -Recurse -File -Filter *.csbin | ForEach-Object { $h[$_.FullName.Substring($dir.Length + 1)] = $_.Length }
     return $h
 }
-function Get-Sha([string]$path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() }
+function Get-Sha([string]$path) { Get-RawSha256 $path }
+# The first 16 hex digits of a hash, or what came instead (an error text) as it is.
+function Short($h) { if ("$h" -match '^[0-9a-f]{64}$') { "$h".Substring(0, 16) } else { "$h" } }
 
-# A PE32+ file's bytes with its link timestamps zeroed: the COFF header's TimeDateStamp and each
-# debug-directory entry's. Returns the section table too.
-function Read-MaskedPe([string]$path) {
-    $d = [IO.File]::ReadAllBytes($path)
-    $pe = [BitConverter]::ToInt32($d, 0x3C)
-    if ([BitConverter]::ToUInt32($d, $pe) -ne 0x4550) { throw "$path is not a PE file" }
-    $coff = $pe + 4
-    $nsec = [BitConverter]::ToUInt16($d, $coff + 2)
-    $optSize = [BitConverter]::ToUInt16($d, $coff + 16)
-    $opt = $coff + 20
-    if ([BitConverter]::ToUInt16($d, $opt) -ne 0x20B) { throw "$path is not PE32+" }
-    [Array]::Clear($d, $coff + 4, 4)
-    $dbgRva = [BitConverter]::ToUInt32($d, $opt + 112 + 48)
-    $dbgSize = [BitConverter]::ToUInt32($d, $opt + 112 + 52)
-    $sections = @()
-    for ($i = 0; $i -lt $nsec; $i++) {
-        $s = $opt + $optSize + 40 * $i
-        $sec = [pscustomobject]@{
-            Name = [Text.Encoding]::ASCII.GetString($d, $s, 8).TrimEnd([char]0)
-            VSize = [BitConverter]::ToUInt32($d, $s + 8); Va = [BitConverter]::ToUInt32($d, $s + 12)
-            RSize = [BitConverter]::ToUInt32($d, $s + 16); RPtr = [BitConverter]::ToUInt32($d, $s + 20)
-        }
-        $sections += $sec
-        if ($dbgSize -gt 0 -and $dbgRva -ge $sec.Va -and $dbgRva -lt $sec.Va + $sec.VSize) {
-            $off = $sec.RPtr + ($dbgRva - $sec.Va)
-            for ($k = 0; $k -lt [int][math]::Floor($dbgSize / 28); $k++) { [Array]::Clear($d, $off + 28 * $k + 4, 4) }
-        }
-    }
-    [pscustomobject]@{ Bytes = $d; Sections = $sections }
-}
-# How many bytes two PE files differ in outside their link timestamps; -1 when their sizes differ.
+# How many bytes two PE files differ in outside their link timestamps (the fields the code sha256
+# zeroes, solvers/pe-fingerprint.ps1); -1 when their sizes differ.
 function Compare-Pe([string]$a, [string]$b) {
-    $x = (Read-MaskedPe $a).Bytes; $y = (Read-MaskedPe $b).Bytes
+    $x = Get-PeCodeBytes $a; $y = Get-PeCodeBytes $b
     if ($x.Length -ne $y.Length) { return -1 }
-    $sha = [Security.Cryptography.SHA256]::Create()
-    if ([BitConverter]::ToString($sha.ComputeHash($x)) -eq [BitConverter]::ToString($sha.ComputeHash($y))) { return 0 }
+    if ((ConvertTo-Sha256Hex $x) -eq (ConvertTo-Sha256Hex $y)) { return 0 }
     $n = 0
     for ($i = 0; $i -lt $x.Length; $i++) { if ($x[$i] -ne $y[$i]) { $n++ } }
     return $n
 }
 # A copy of a PE file with the middle byte of its .text section inverted.
-function Copy-Flipped([string]$from, [string]$to) {
-    $text = (Read-MaskedPe $from).Sections | Where-Object { $_.Name -eq '.text' }
-    $d = [IO.File]::ReadAllBytes($from)
-    $i = $text.RPtr + [int]($text.RSize / 2)
-    $d[$i] = $d[$i] -bxor 0xFF
-    [IO.File]::WriteAllBytes($to, $d)
-    return $to
-}
+function Copy-Flipped([string]$from, [string]$to) { Copy-PeFlippedText $from $to }
 # A copy of any file with its middle byte inverted.
 function Copy-FlippedFile([string]$from, [string]$to) {
     $d = [IO.File]::ReadAllBytes($from)
@@ -224,19 +201,32 @@ function Get-BlobMismatches([string]$dir) {
 }
 # Whether a solver manifest records this build: the pinned commit; TetGen 1.5.0 whose tarball
 # sha256 is the one this run computed from the committed tarball (and that is WIAS's); the
-# member hashes this run read out of that tarball; upstream 4db335c's blobs; and the shipped
-# tetgen's hash.
+# member hashes this run read out of that tarball; upstream 4db335c's blobs; the shipped
+# tetgen's hashes; and a code sha256 for each of the four executables and the 1.6.0 reference.
 function Test-Manifest($m) {
     $t = $m.tetgen
     if ($null -eq $t -or $null -eq $t.files_sha256 -or $tarMembers -isnot [Collections.IDictionary]) { return $false }
     $listed = @($t.files_sha256.PSObject.Properties)
     $filesOk = ($listed.Count -eq $tarMembers.Count) -and (@($tarMembers.Keys | Where-Object { $t.files_sha256.$_ -ne $tarMembers[$_] }).Count -eq 0)
+    $hex = '^[0-9a-f]{64}$'
+    $codeOk = ($null -ne $m.code_sha256) -and (@($m.code_sha256.PSObject.Properties).Count -eq 4) -and
+        (@('spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe' | Where-Object { "$($m.code_sha256.$_)" -notmatch $hex }).Count -eq 0) -and
+        ("$($t.upstream_160_reference_code_sha256)" -match $hex)
     return ($m.upstream_commit -eq $commit) -and ($t.version -eq '1.5.0') -and ($tarSha -eq $TetgenTarballSha256) -and
         ($t.tarball_sha256 -eq $tarSha) -and ($t.same_blobs_as_upstream -eq $blobCommit) -and $filesOk -and
-        ($t.exe_sha256 -eq $m.sha256.'tetgen.exe')
+        ($t.exe_sha256 -eq $m.sha256.'tetgen.exe') -and $codeOk -and ($t.exe_code_sha256 -eq $m.code_sha256.'tetgen.exe')
 }
+# Whether a file is the manifest's build of `name`: its code sha256 is the manifest's. Its sha256,
+# which every link changes, is not held; see Get-LinkNote.
 function Test-ManifestHash([string]$path, [string]$name) {
-    (Test-Path -LiteralPath $path) -and ((Get-Sha $path) -eq $manifest.sha256.$name)
+    (Test-Path -LiteralPath $path) -and ("$($manifest.code_sha256.$name)" -match '^[0-9a-f]{64}$') -and
+        ((Get-CodeSha256 $path) -eq $manifest.code_sha256.$name)
+}
+# The file's sha256 against the manifest's: the same link, or another link of it.
+function Get-LinkNote([string]$path, [string]$name) {
+    $raw = Get-RawSha256 $path
+    if ($raw -eq $manifest.sha256.$name) { "sha256 $(Short $raw), the manifest's link" }
+    else { "sha256 $(Short $raw), another link than the manifest's $(Short $manifest.sha256.$name)" }
 }
 # `tetgen -h`: TetGen prints its banner in the help text (in 1.5.0, -v selects Voronoi output).
 function Test-Banner150([string]$exe, [string]$label) {
@@ -319,15 +309,37 @@ $tarMembers = Safe { Read-TetgenTarball $tarball }
 # --- (1) What we built is what the manifest says --------------------------------------------------
 
 foreach ($exeName in 'spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe') {
-    Check "$exeName exists and matches manifest.json" { Test-ManifestHash (Join-Path $bin $exeName) $exeName }
+    $p = Join-Path $bin $exeName
+    $code = Safe { Get-CodeSha256 $p }; $link = Safe { Get-LinkNote $p $exeName }
+    Check "$exeName exists and its code sha256 $(Short $code) is manifest.json's ($link)" { Test-ManifestHash $p $exeName }
 }
 $flipped = Safe { Copy-Flipped $new.spps (Join-Path $no 'spps-flipped.exe') }
-Check "says NO: spps.exe with one .text byte inverted does not match manifest.json" {
-    (Test-Path -LiteralPath $flipped) -and -not (Test-ManifestHash $flipped 'spps.exe')
+$flippedCode = Safe { Get-CodeSha256 $flipped }
+Check "says NO: spps.exe with one .text byte inverted (code sha256 $(Short $flippedCode)) is not manifest.json's" {
+    (Test-Path -LiteralPath $flipped) -and ("$flippedCode" -match '^[0-9a-f]{64}$') -and -not (Test-ManifestHash $flipped 'spps.exe')
+}
+# The same code linked at another time, as a rebuild gives it: every link-time field set to
+# 2000-01-01 00:00:00 UTC.
+$restamped = Safe { Copy-PeRestamped $new.spps (Join-Path $no 'spps-restamped.exe') 946684800 }
+$restampedRaw = Safe { Get-Sha $restamped }
+$sppsRaw = Safe { Get-Sha $new.spps }
+Check "spps.exe with its link timestamps set to 2000-01-01 has another sha256 ($(Short $restampedRaw), not $(Short $sppsRaw)) and is still manifest.json's by code sha256" {
+    ("$restampedRaw" -match '^[0-9a-f]{64}$') -and ($restampedRaw -ne $sppsRaw) -and (Test-ManifestHash $restamped 'spps.exe')
 }
 
-Check "manifest.json records this build: solvers from $($commit.Substring(0,7)); tetgen 1.5.0 with the tarball sha256 and member hashes this run computed, upstream $($blobCommit.Substring(0,7))'s blobs, and the shipped exe's hash" {
+Check "manifest.json records this build: solvers from $($commit.Substring(0,7)); tetgen 1.5.0 with the tarball sha256 and member hashes this run computed, upstream $($blobCommit.Substring(0,7))'s blobs, and the shipped exe's hashes; a code sha256 for each executable" {
     Test-Manifest $manifest
+}
+$noCode = Safe { $m2 = $manifest | ConvertTo-Json -Depth 6 | ConvertFrom-Json; $m2.code_sha256.PSObject.Properties.Remove('tetgen.exe'); $m2 }
+Check "says NO: manifest.json without the code sha256 of tetgen.exe is refused" {
+    ($noCode -isnot [string]) -and ($null -eq $noCode.code_sha256.'tetgen.exe') -and -not (Test-Manifest $noCode)
+}
+$ref16Code = Safe { Get-CodeSha256 $tg16 }
+Check "the build tree's upstream TetGen 1.6.0 (code sha256 $(Short $ref16Code)) is manifest.json's 1.6.0 reference, the one the parity bed refuses with" {
+    ("$ref16Code" -match '^[0-9a-f]{64}$') -and ($ref16Code -eq $manifest.tetgen.upstream_160_reference_code_sha256)
+}
+Check "says NO: bin\tetgen.exe is not manifest.json's 1.6.0 reference by code sha256" {
+    (Test-Path -LiteralPath $new.tetgen) -and ((Get-CodeSha256 $new.tetgen) -ne $manifest.tetgen.upstream_160_reference_code_sha256)
 }
 $oldManifest = Safe { $s = (git -C $repo show 'a8a0889:solvers/manifest.json') -join "`n"; $s.Substring($s.IndexOf('{')) | ConvertFrom-Json }
 Check "says NO: the manifest of the 1.6.0 build (a8a0889, tetgen $("$($oldManifest.sha256.'tetgen.exe')".PadRight(8).Substring(0,8))) is refused" {
@@ -422,6 +434,13 @@ $ErrorActionPreference = 'Stop'
 $n = if (Test-Path $rbExe) { Safe { Compare-Pe $rbExe $new.tetgen } } else { 'no exe' }
 Check "a from-scratch build of third_party/tetgen-1.5.0 (configure $rbConfigure, build $rbBuild) gives bin\tetgen.exe byte for byte outside the link timestamps ($n differ)" {
     ($rbConfigure -eq 0) -and ($rbBuild -eq 0) -and ($n -eq 0)
+}
+# Two from-scratch links of one source: different sha256, one code sha256, the manifest's.
+$rbRaw = if (Test-Path $rbExe) { Safe { Get-Sha $rbExe } } else { 'no exe' }
+$rbCode = if (Test-Path $rbExe) { Safe { Get-CodeSha256 $rbExe } } else { 'no exe' }
+$binRaw = Safe { Get-Sha $new.tetgen }; $binCode = Safe { Get-CodeSha256 $new.tetgen }
+Check "the rebuild and bin\tetgen.exe: sha256 $(Short $rbRaw) and $(Short $binRaw) differ, code sha256 $(Short $rbCode) and $(Short $binCode) are equal and manifest.json's" {
+    ("$rbRaw" -match '^[0-9a-f]{64}$') -and ($rbRaw -ne $binRaw) -and ($rbCode -eq $binCode) -and (Test-ManifestHash $rbExe 'tetgen.exe')
 }
 $n16 = Safe { Compare-Pe $tg16 $new.tetgen }
 Check "says NO: upstream's 1.6.0 tetgen from the same build is not bin\tetgen.exe (compare gives $n16)" { ($n16 -is [int]) -and ($n16 -ne 0) }

@@ -297,6 +297,9 @@ pub fn solver_exe_name(solver: SolverKind) -> &'static str {
 /// TetGen's executable file name.
 pub const TETGEN_EXE_NAME: &str = "tetgen.exe";
 
+/// Upstream's scene correction's executable file name (`mesh::PREPROCESS_EXE_NAME`).
+pub const PREPROCESS_EXE_NAME: &str = crate::mesh::PREPROCESS_EXE_NAME;
+
 fn solver_name(solver: SolverKind) -> &'static str {
     match solver {
         SolverKind::Spps => "spps",
@@ -412,8 +415,14 @@ pub struct RunOptions {
 /// Where `run_project`'s mesh comes from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MeshChoice {
-    /// Mesh the project into `<run>/mesh/` with this `tetgen.exe`.
-    Build { tetgen: PathBuf },
+    /// Mesh the project into `<run>/mesh/` with this `tetgen.exe`, and this `preprocess.exe` when
+    /// its settings ask for upstream's scene correction (`None` then fails the mesh with
+    /// `preprocess_launch_failed`). A run's mesh keeps the facet markers restored
+    /// (`mesh::Markers::Restored`): parity mode is never run.
+    Build {
+        tetgen: PathBuf,
+        preprocess: Option<PathBuf>,
+    },
     /// Use this mesh folder, after checking its `mesh.json` ([`check_mesh_dir`]).
     Reuse(PathBuf),
 }
@@ -588,10 +597,12 @@ pub fn run_project(
         warnings: Vec::new(),
     };
 
-    // Geometry: refused is exit class 3.
+    // Geometry: refused is exit class 3. With upstream's scene correction on, what TetGen meshes
+    // is what preprocess.exe makes of the scene: the mesher checks that before TetGen runs, and
+    // its refusal is `geometry_refused` at this stage too (below).
     on_event(&RunEvent::Stage(Stage::Geometry));
     let report = check::check(&project.geometry);
-    if report.verdict != check::Verdict::Ok {
+    if report.verdict != check::Verdict::Ok && !project.solvers.meshing.preprocess {
         let detail = report
             .reasons
             .iter()
@@ -637,10 +648,16 @@ pub fn run_project(
             }
             d.clone()
         }
-        MeshChoice::Build { tetgen } => {
+        MeshChoice::Build { tetgen, preprocess } => {
             let d = rec.dir.join(MESH_DIR);
             let mesher = TetgenMesher::new(tetgen);
-            let built = mesh::mesh_project(&project, &d, &mesher, cancel, &mut |l: &Line| {
+            let program = preprocess.as_ref().map(mesh::PreprocessProgram::new);
+            let tools = mesh::MeshTools {
+                tetgen: &mesher,
+                preprocess: program.as_ref().map(|p| p as &dyn mesh::Mesher),
+                markers: mesh::Markers::Restored,
+            };
+            let built = mesh::mesh_project_with(&project, &d, &tools, cancel, &mut |l: &Line| {
                 on_event(&RunEvent::MeshLine(l))
             });
             let m = match built {
@@ -655,7 +672,12 @@ pub fn run_project(
             };
             if !m.is_ok() {
                 let reasons = mesh_reasons(&m, &d);
-                return rec.refuse(Stage::Mesh, m.status == MeshStatus::Cancelled, reasons);
+                let stage = if m.codes.iter().any(|c| c == mesh::codes::GEOMETRY_REFUSED) {
+                    Stage::Geometry
+                } else {
+                    Stage::Mesh
+                };
+                return rec.refuse(stage, m.status == MeshStatus::Cancelled, reasons);
             }
             rec.mesh = Some(MeshRef {
                 manifest: Some(d.join(mesh::MANIFEST_FILE).display().to_string()),

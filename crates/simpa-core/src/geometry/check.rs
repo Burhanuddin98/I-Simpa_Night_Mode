@@ -344,6 +344,11 @@ pub struct CheckReport {
     pub internal_faces: Vec<InternalFace>,
     /// The enclosed cells.
     pub cells: Vec<CellReport>,
+    /// Per face, the cell on its front (normal) side and on its back, `[front, back]`; 0 is the
+    /// exterior, and `u32::MAX` marks a face that was not analysed. Not serialised: it is for
+    /// callers that locate points in the cells (`mesh::verify`'s region volume check).
+    #[serde(skip)]
+    pub face_cells: Vec<[u32; 2]>,
 }
 
 impl CheckReport {
@@ -883,5 +888,8 @@ pub fn check(geometry: &Geometry) -> CheckReport {
         inverted_faces,
         internal_faces,
         cells: cell_reports,
+        face_cells: (0..nf)
+            .map(|f| [cells.front_cell[f], cells.back_cell[f]])
+            .collect(),
     }
 }

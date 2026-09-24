@@ -14,7 +14,7 @@ use super::integrity::{self, IntegrityError};
 use super::json::{LoadError, from_json_exact};
 use super::model::{
     Camera, DiffusionLaw, Environment, FittingShape, FittingZone, Geometry, Material, Nullable,
-    PointReceiver, Project, SolverSettings, Source, SurfaceGroup, SurfaceReceiver,
+    PointReceiver, Project, ReflectionLaws, SolverSettings, Source, SurfaceGroup, SurfaceReceiver,
     SurfaceReceiverShape, Variant, required,
 };
 use super::real::{F64, Vec3};
@@ -44,7 +44,7 @@ pub enum EntityRef {
 pub enum MaterialQuantity {
     Absorption,
     Scattering,
-    /// Only on a material that has a transmission loss.
+    /// Only in a band where the material transmits (its loss is not `None` there).
     TransmissionLoss,
 }
 
@@ -63,15 +63,17 @@ pub enum SolverKind {
     Tcr,
 }
 
-/// A material's per-band arrays.
+/// A material's per-band values.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MaterialBands {
     pub absorption: Vec<F64>,
     pub scattering: Vec<F64>,
+    /// One law, which fits any band set, or one per band.
+    pub reflection_law: ReflectionLaws,
     #[serde(deserialize_with = "required")]
-    #[schemars(with = "Nullable<Vec<F64>>")]
-    pub transmission_loss_db: Option<Vec<F64>>,
+    #[schemars(with = "Nullable<Vec<Option<F64>>>")]
+    pub transmission_loss_db: Option<Vec<Option<F64>>>,
 }
 
 /// A fitting zone's per-band arrays.
@@ -279,7 +281,7 @@ pub enum OpError {
         id: Uuid,
         by: String,
     },
-    /// A transmission-loss edit on a material without transmission.
+    /// A transmission-loss edit on a material, or a band of it, that does not transmit.
     NoTransmission {
         material: Uuid,
     },
@@ -470,6 +472,9 @@ fn check_band_data(p: &Project, data: &BandData, n: usize) -> Result<()> {
     for (id, b) in &data.materials {
         count(format!("material {id} absorption"), b.absorption.len())?;
         count(format!("material {id} scattering"), b.scattering.len())?;
+        if let Some(k) = b.reflection_law.band_count() {
+            count(format!("material {id} reflection law"), k)?;
+        }
         if let Some(t) = &b.transmission_loss_db {
             count(format!("material {id} transmission loss"), t.len())?;
         }
@@ -530,6 +535,7 @@ fn swap_band_data(p: &mut Project, mut data: BandData) -> BandData {
     for (m, (_, b)) in p.materials.iter_mut().zip(&mut data.materials) {
         swap(&mut m.absorption, &mut b.absorption);
         swap(&mut m.scattering, &mut b.scattering);
+        swap(&mut m.reflection_law, &mut b.reflection_law);
         swap(&mut m.transmission_loss_db, &mut b.transmission_loss_db);
     }
     for (s, (_, shape)) in p.sources.iter_mut().zip(&mut data.source_shapes) {
@@ -575,6 +581,7 @@ impl Project {
                         MaterialBands {
                             absorption: m.absorption.clone(),
                             scattering: m.scattering.clone(),
+                            reflection_law: m.reflection_law.clone(),
                             transmission_loss_db: m.transmission_loss_db.clone(),
                         },
                     )
@@ -635,6 +642,9 @@ impl Project {
         for (_, b) in &mut data.materials {
             b.absorption = map(&pick, &b.absorption);
             b.scattering = map(&pick, &b.scattering);
+            if let ReflectionLaws::PerBand(laws) = &b.reflection_law {
+                b.reflection_law = ReflectionLaws::from_bands(map(&pick, laws));
+            }
             if let Some(t) = &mut b.transmission_loss_db {
                 *t = map(&pick, t);
             }
@@ -837,18 +847,24 @@ impl Op {
             } => {
                 let i = position(&p.materials, "material", material, |m| m.id)?;
                 let m = &mut p.materials[i];
-                let values = match quantity {
-                    MaterialQuantity::Absorption => &mut m.absorption,
-                    MaterialQuantity::Scattering => &mut m.scattering,
+                let no_transmission = OpError::NoTransmission {
+                    material: material.0,
+                };
+                let slot = match quantity {
+                    MaterialQuantity::Absorption => band_slot(&mut m.absorption, band)?,
+                    MaterialQuantity::Scattering => band_slot(&mut m.scattering, band)?,
                     MaterialQuantity::TransmissionLoss => {
-                        m.transmission_loss_db
+                        let losses = m.transmission_loss_db.as_mut().ok_or(no_transmission)?;
+                        let bands = losses.len();
+                        losses
+                            .get_mut(band)
+                            .ok_or(OpError::Band { band, bands })?
                             .as_mut()
                             .ok_or(OpError::NoTransmission {
                                 material: material.0,
                             })?
                     }
                 };
-                let slot = band_slot(values, band)?;
                 Ok(Op::SetMaterialBand {
                     material,
                     quantity,

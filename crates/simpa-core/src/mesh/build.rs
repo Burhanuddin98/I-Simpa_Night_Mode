@@ -164,8 +164,9 @@ impl Unitize {
         Ok(Unitize { centre, scale })
     }
 
-    /// [`Unitize::fit`] on the vertices of `scene`, the `.cbin` model a run hands the solvers
-    /// (`config_xml::scene_mesh`: the project's vertices in order, as `f32`). See [`Unitize`] for
+    /// [`Unitize::fit`] on the vertices of `scene`, the room's `.cbin` model
+    /// (`config_xml::room_mesh`: the project's vertices in order, as `f32`; upstream's frame is
+    /// its scene's, without the drawn zones a run's `.cbin` adds after them). See [`Unitize`] for
     /// why that list, and when it is not upstream's.
     pub fn of_scene(scene: &cbin::Model) -> Result<Self, String> {
         let vertices: Vec<[f32; 3]> = scene.vertices.iter().map(|v| [v.x, v.y, v.z]).collect();
