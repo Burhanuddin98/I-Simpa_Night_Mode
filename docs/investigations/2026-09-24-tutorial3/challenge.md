@@ -1,0 +1,9 @@
+VERDICT: CRACKS(2)
+
+WRONG · `refusal/tgd15_A/stdout.txt:222` (verified: re-ran the cheapest check, reading the stored TetGen 1.5.0 log) · Synthesis's verdict table claims "TetGen 1.5.0 `-d` lists exactly our 20 pairs and exits 3" — the actual log says `!! Found 93 pairs of faces are intersecting` and `exit=0`. Neither the pair count nor the exit code matches. This is the load-bearing evidence for "Gate B's self_intersections refusal is right" and for recommending the check stay strict — it is unsupported by the very file the synthesis cites.
+
+WRONG (self-contradiction) · `preprocess/runs/ours_pre_part5/ours_ec9-1/scene_mesh.poly` vs `preprocess/runs/up_pre/ours_target/scene_mesh.poly` · Bottom line states "Our preprocess.exe is not faulty. It gives upstream's stored .poly byte for byte" — I re-hashed: stored/matching runs are all `74b8f831...` (4889 B), but the Part-5 variant (`ours_pre_part5`) that stands in for our own pipeline is `7f5d38...` (4874 B, a 15-byte/2-line gap). Section 2 admits "except its 2 region lines"; the bottom line drops that caveat, so the headline claim is stronger than its own receipts.
+
+Both cracks sit under the M6(a) recommendation: if the geometry gate's own justifying evidence (TetGen's -d run) doesn't say what the table says it says, the claim "our geometry refusal is right" needs re-derivation from the actual pair set (93, with duplicates from repeated warnings — unique-pair count still likely >>20), not asserted as settled. Consequence: Burhan's M6(a) decision and the "keep the check strict" recommendation are being asked on a receipt that doesn't hold up when reopened.
+
+Files: `B:/repos/I-Simpa_Night_Mode/target/investigate/tutorial3/refusal/tgd15_A/stdout.txt`, `B:/repos/I-Simpa_Night_Mode/target/investigate/tutorial3/preprocess/runs/{up_pre,ours_pre_part5}/`
