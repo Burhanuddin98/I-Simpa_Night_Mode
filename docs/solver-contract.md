@@ -583,6 +583,26 @@ the first one. What follows marks each difference.
   stopped.` arrives on stdout, and stderr is empty. The mesher reports `tetgen_skipped_facets`,
   and still reads a committed 1.6.0 set such as `tests/fixtures/meshes/broken_hall`.
 
+### Parameter refusals
+
+`core::params` computes the acoustic parameters from a run's energy histograms and the analytic
+references (`docs/params.md`). A quantity it cannot compute honestly is a typed refusal with one
+of these codes, never a number and never a warning. They are not run verdicts: a run can be OK
+and still have a parameter refused.
+
+| Code | Refused when | Detail |
+|---|---|---|
+| `params_bad_time_step` | a series' `dt`, or a clarity or definition window, is not a finite positive number | the value |
+| `params_series_too_short` | a series is empty; ends at or before `t₀ + te` for C or D; or has fewer than 2 bins after its onset, so its tail cannot be estimated | what needed how many seconds, and how many the series has |
+| `params_bad_energy` | a value is NaN, ±inf or negative | the first bad index and its value |
+| `params_no_energy` | every value of a series is zero | none |
+| `params_not_evaluable` | the series is valid but the quantity cannot be read from it: `range_not_reached`, `truncated`, `too_few_points`, `not_decaying` or `empty_window` (`docs/params.md`) | the quantity; the depth reached, or the value and the value with the unseen tail added |
+| `params_series_mismatch` | bands to be aggregated differ in `dt` or length, or there are none | the two shapes |
+| `params_bad_air` | an ISO 9613-1 input is out of its domain: a frequency or pressure that is not positive, a temperature at or below absolute zero, a humidity outside 0–100 % | the field and value |
+| `params_bad_room` | a Sabine or Eyring input is out of its domain: a volume that is not positive, a negative area, α outside [0, 1], a negative air term, no surface area | the field and value |
+| `params_no_absorption` | the absorption area plus `4·m·V` is zero, so the reverberation time would be infinite | none |
+| `params_din_out_of_range` | a DIN 18041 volume outside what the sourced formula covers: A1–A4 above 5000 m³, A5 below 200 m³, or a volume whose formula gives no positive target | the group and volume |
+
 ### Corrections to the survey's run contract
 
 - **Not every non-success SPPS exit is 0 or `0xC0000005`.** There is also `0xC0000409`, an
