@@ -439,7 +439,7 @@ fn tutorial1_reads_as_upstreams_gui_wrote_its_spps_run() {
 // The committed fixtures.
 
 #[test]
-#[ignore]
+#[ignore = "rewrites tests/fixtures/rooms/tutorial1_box.simpa and elmia_corrected.simpa; run it on purpose to regenerate them, room_fixtures_are_the_import_of_upstreams_tutorials checks them"]
 fn write_room_fixtures() {
     let (t1, t2) = (upstream(TUTORIAL1), upstream(TUTORIAL2));
     std::fs::create_dir_all(repo_file("tests/fixtures/rooms")).unwrap();
