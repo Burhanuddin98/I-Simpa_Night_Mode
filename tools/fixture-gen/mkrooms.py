@@ -43,6 +43,9 @@ ZONE = {
     "absorption": 0.1,
     "mean_free_path_m": 1.0,
     "diffusion_law": "uniform",
+    # No pinned solver id: a zone drawn here takes the numbering export assigns, 2 as the first
+    # zone (docs/m5-m6-design.md, decision 13 pins only what a .proj import brings).
+    "solver_id": None,
 }
 
 
@@ -99,7 +102,8 @@ def zone_text(n_bands: int) -> str:
         "      },",
         f'      "absorption": {json.dumps([z["absorption"]] * n_bands)},',
         f'      "mean_free_path_m": {json.dumps([z["mean_free_path_m"]] * n_bands)},',
-        f'      "diffusion_law": {json.dumps([z["diffusion_law"]] * n_bands)}',
+        f'      "diffusion_law": {json.dumps([z["diffusion_law"]] * n_bands)},',
+        f'      "solver_id": {json.dumps(z["solver_id"])}',
         "    }",
         "  ],",
     ]

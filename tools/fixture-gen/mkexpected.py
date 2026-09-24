@@ -88,10 +88,13 @@ EXPECT = {
         status="FAIL", codes=["band_set_mismatch"],
         observed_status="OK", observed_codes=[],
         receipt="Source spectrum with 1 of 2 bands. Run anyway, no Part B signal fires: exit 0, no "
-        "FAIL line, totals 2000 per band, no loss; the 1000 Hz band loses every particle to the "
-        "atmosphere at the first step instead. So run-folder's config-only band check refuses it "
-        "before launch with band_set_mismatch (m5-m6-design.md decision 11; SC:55, VERIFIED S "
-        "run_oneband; RAW:1471)."),
+        "FAIL line, totals 2000 per band, no loss. SPPS reads the 1000 Hz power past the end of the "
+        "source's one-entry spectrum (base_core_configuration.cpp:141, sppsNantes.cpp:73): in most "
+        "runs the band loses every particle to the atmosphere at the first step, in some (7 of 230 "
+        "measured) its particles run on whatever power the heap held (UNREPRODUCIBLE, "
+        "mkexpected.py). So run-folder's config-only band check refuses it before launch with "
+        "band_set_mismatch (m5-m6-design.md decision 11; SC:55, VERIFIED S run_oneband; "
+        "RAW:1471)."),
     "spps_dirmiss": dict(
         status="FAIL", codes=["directivity_not_open"],
         receipt="directivity_file names a missing file: row directivity_not_open (SC:319, "
@@ -541,6 +544,63 @@ STATS_ROWS = {
 }
 
 
+# ---------------------------------------------------------------------------------------------
+# The one case whose run does not reproduce, and the tolerance it is given
+#
+# spps_oneband's 1000 Hz statistics differ between runs of one spps.exe with one seed. The cause is
+# upstream's, and it is the case's own fault: SPPS sizes a source's band array by the <bfreq>
+# entries the source lists (base_core_configuration.cpp:141, one here) and reads a band's power at
+# the band's index in the band list sorted by frequency (sppsNantes.cpp:73; 1 for 1000 Hz), so the
+# 1000 Hz power is read past the end of the array, from whatever the heap holds there. Where that is
+# zero (or a power too small to stay above its own epsilon) every particle dies at the first step,
+# absorbed by the atmosphere; where it is a positive power, the particles have the fates of a real
+# one, which the same case with its spectrum complete gives in every run. Measured 2026-09-24 with
+# spps.exe code sha256 550485c695292501, seed 1 (docs/upstream-findings.md): 7 of 230 runs gave the
+# second outcome (1 of 30 in fresh folders, 6 of 200 in one reused folder, the 1000 Hz energy
+# summed over time from 1.2e-34 to 4.8e34), and 2 of 15 in an earlier count; 30 of 30 runs with the
+# spectrum complete gave the second outcome's statistics. No verdict of `run-folder` depends on it:
+# its band check refuses the case before launch.
+#
+# The tolerance: the first outcome is the one expected.json records. A run that gives another
+# outcome listed here is judged with the first in its place, and a NOTE line says so on stdout. A
+# run that gives any other statistics for that band is a disagreement, as is any difference
+# elsewhere.
+UNREPRODUCIBLE = {
+    "spps_oneband": {
+        "band": "1000 Hz",
+        "outcomes": [
+            {"absorbed_atmosphere": 2000, "absorbed_materials": 0, "absorbed_fittings": 0,
+             "lost_loops": 0, "lost_meshing": 0, "remaining": 0, "total": 2000},
+            {"absorbed_atmosphere": 41, "absorbed_materials": 1959, "absorbed_fittings": 0,
+             "lost_loops": 0, "lost_meshing": 0, "remaining": 0, "total": 2000},
+        ],
+        "measured": "the second in 7 of 230 runs of spps.exe 550485c695292501, 2026-09-24",
+    },
+}
+
+
+def tolerate(name: str, post: dict) -> tuple[dict, str | None, str | None]:
+    """`post_run`'s result for case `name` with UNREPRODUCIBLE's tolerance applied: the result
+    (the recorded outcome in place of another listed one), a note when the tolerance was applied,
+    and a disagreement when the band's statistics are no listed outcome."""
+    t = UNREPRODUCIBLE.get(name)
+    if t is None or "stats" not in post:
+        return post, None, None
+    band = t["band"]
+    got = post["stats"].get(band)
+    first, others = t["outcomes"][0], t["outcomes"][1:]
+    if got == first:
+        return post, None, None
+    if got in others:
+        stats = dict(post["stats"])
+        stats[band] = dict(first)
+        note = (f"NOTE {name}: the {band} statistics came out as another outcome UNREPRODUCIBLE "
+                f"lists ({got}); judged as the recorded one ({t['measured']})")
+        return {**post, "stats": stats}, note, None
+    return post, None, (f"{name}: the {band} statistics {got} are no outcome UNREPRODUCIBLE lists "
+                        f"({t['outcomes']})")
+
+
 def post_run(solver: str, solve: Path, cfg: Config, simpa: Simpa) -> dict:
     """The post-run checks of SC:346-369. Returns codes and what they were computed from."""
     codes, detail = [], {}
@@ -908,7 +968,7 @@ def judge(case: Path, obs_root: Path, rows: list[Row], simpa: Simpa) -> dict:
         rundir = str(solve) + "\\"
     lines = classify(split_stream(out, "stdout") + split_stream(err, "stderr"), rows)
     cfg = Config(solve / "config.xml")
-    post = post_run(solver, solve, cfg, simpa)
+    post, note, odd = tolerate(name, post_run(solver, solve, cfg, simpa))
     fail = unique([ln.row for ln in lines if ln.cls == "FAIL"]) + exit_class(code)
     if solver == "spps" and not fail and not any(ln.row == "spps_end_of_calculation" for ln in lines):
         fc.die(f"{name}: SPPS exited 0 with no FAIL line and no End of calculation; no code for that")
@@ -952,7 +1012,8 @@ def judge(case: Path, obs_root: Path, rows: list[Row], simpa: Simpa) -> dict:
         final_status, final_codes = status, codes
     return {"solver": solver, "status": final_status, "codes": final_codes, "codes_any_of": any_of,
             "warnings": warnings if pre_ok(pre) else [],
-            "pre_launch": pre, "observed": observed, "_lines": lines, "_solver": solver_ran}
+            "pre_launch": pre, "observed": observed, "_lines": lines, "_solver": solver_ran,
+            "_note": note, "_odd": odd}
 
 
 def shape_disagreements(name: str, lines: list[Line], rows: list[Row]) -> list[str]:
@@ -977,6 +1038,8 @@ def disagreements(name: str, got: dict, rows: list[Row]) -> list[str]:
     if exp is None:
         return [f"{name}: no expectation written down"]
     bad = shape_disagreements(name, got["_lines"], rows)
+    if got.get("_odd"):
+        bad.append(got["_odd"])
     if got["status"] != exp["status"] or got["codes"] != exp["codes"]:
         bad.append(f"{name}: expected {exp['status']} {exp['codes']}, got {got['status']} {got['codes']}")
     if got["codes_any_of"] != exp.get("codes_any_of", []):
@@ -1157,10 +1220,16 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "receipts reproduced.",
         "Beyond it:",
         "",
-        "- **`spps_oneband` is not caught by any Part B signal.** Exit 0, no FAIL line, 2,000",
-        "  particles per band, no loss: the 1000 Hz band's particles are all absorbed by the",
-        "  atmosphere at the first step. `run-folder`'s band check refuses it before launch with",
-        "  `band_set_mismatch` (decision 11).",
+        "- **`spps_oneband` is not caught by any Part B signal, and it does not reproduce.** Exit",
+        "  0, no FAIL line, 2,000 particles per band, no loss. SPPS reads the 1000 Hz band's power",
+        "  past the end of the source's one-entry spectrum (`base_core_configuration.cpp:141`,",
+        "  `sppsNantes.cpp:73`), whatever the heap holds there. In most runs the band's particles",
+        "  are all absorbed by the atmosphere at the first step; in 7 of 230 runs measured",
+        "  (2026-09-24) they ran on a positive power, 41 absorbed by the atmosphere and 1,959 by",
+        "  materials. `expected.json` records the first; `mkexpected.py` judges the second as the",
+        "  first and says so in a NOTE (`UNREPRODUCIBLE`), and any other outcome is a disagreement.",
+        "  `run-folder`'s band check refuses the case before launch with `band_set_mismatch`",
+        "  (decision 11), so no verdict depends on it.",
         "- **`tcr_srcout` is caught after all**, by `nonfinite_result`: the direct field at R1 is",
         "  -inf in every band, although TCR exits 0.",
         "- **`spps_srcout` never reaches SPPS.** `run-folder`'s location check finds its source in",
@@ -1241,6 +1310,9 @@ def main() -> None:
     for n, r in runs.items():
         print(f"{n:34} {r['status']:5} {', '.join(r['codes']) or '-':60} "
               f"(solver alone: {r['observed']['status']} {', '.join(r['observed']['codes']) or '-'})")
+    for n, r in runs.items():
+        if r.get("_note"):
+            print(r["_note"])
     if bad:
         print("\nDISAGREEMENTS:\n  " + "\n  ".join(bad))
         sys.exit(1)

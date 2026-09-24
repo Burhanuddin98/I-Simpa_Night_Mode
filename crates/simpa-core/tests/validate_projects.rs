@@ -181,6 +181,7 @@ fn structural_mutations() -> Vec<Mutation> {
                 shape: SurfaceReceiverShape::Scene {
                     groups: vec![GroupId::from_u128(4)],
                 },
+                solver_id: None,
             });
             true
         }),
@@ -191,6 +192,7 @@ fn structural_mutations() -> Vec<Mutation> {
                 name: "Twice".to_string(),
                 enabled: true,
                 shape: SurfaceReceiverShape::Scene { groups: vec![g, g] },
+                solver_id: None,
             });
             true
         }),
@@ -299,6 +301,48 @@ fn projects_that_pass_integrity_get_no_structural_code() {
             "{issues:#?}"
         );
     }
+}
+
+/// An enabled fitting zone's pin must leave TetGen room for the room's ids above it: at most
+/// `SOLVER_INT_MAX` minus the `.poly`'s facets (the scene's faces and 12 per enabled box zone). A
+/// `.proj` import pins upstream's ids, which may be anything a C `int` holds. Says no: one above
+/// the limit, and `SOLVER_INT_MAX` itself, each `solver_id_mapping_invalid` and refused by the
+/// mesher's input too. At the limit, and on a disabled zone (which reaches no solver), it passes.
+#[test]
+fn a_fitting_pin_leaves_room_for_tetgens_room_ids() {
+    let mut p = schema::load(&repo("tests/fixtures/rooms/tutorial1_box_fitting.simpa")).unwrap();
+    assert_eq!(p.fitting_zones.len(), 1);
+    assert!(matches!(
+        p.fitting_zones[0].shape,
+        schema::FittingShape::Box { .. }
+    ));
+    let limit = SOLVER_INT_MAX - (p.geometry.faces.len() as u32 + 12);
+    let headroom = |p: &Project| -> Vec<Issue> {
+        validate::validate(p)
+            .into_iter()
+            .filter(|i| i.code == codes::SOLVER_ID_MAPPING_INVALID)
+            .collect()
+    };
+    p.fitting_zones[0].solver_id = Some(limit);
+    assert_eq!(headroom(&p), Vec::new());
+    assert!(simpa_core::mesh::project_input(&p).is_ok());
+    for id in [limit + 1, SOLVER_INT_MAX] {
+        p.fitting_zones[0].solver_id = Some(id);
+        let issues = headroom(&p);
+        assert_eq!(issues.len(), 1, "{id}: {issues:#?}");
+        assert_eq!(issues[0].path, "/fitting_zones/0/solver_id");
+        assert!(
+            issues[0]
+                .message
+                .contains(&format!("pin it at most {limit}")),
+            "{}",
+            issues[0].message
+        );
+        let e = simpa_core::mesh::project_input(&p).unwrap_err();
+        assert!(e.0.contains("TetGen numbers the room's regions"), "{e}");
+    }
+    p.fitting_zones[0].enabled = false;
+    assert_eq!(headroom(&p), Vec::new());
 }
 
 /// xorshift64*, for the perturbation test.
@@ -511,10 +555,28 @@ fn geometry_rules_follow_the_room() {
     p.sources[0].position = Vec3::new(f64::NAN, 1.0, 1.0);
     only(&validate::validate(&p), codes::SOURCE_OUTSIDE_VOLUME);
 
-    // A receiver on a face is not strictly inside.
+    // A receiver on a face is not strictly inside: its own code, naming the wall and asking for
+    // the receiver to be moved inside (Burhan, 2026-09-24 14:11).
     let mut p = cube();
     p.point_receivers[0].position = Vec3::new(5.0, 2.0, 2.0);
+    let issues = validate::validate(&p);
+    only(&issues, codes::RECEIVER_ON_SURFACE);
+    let m = &issues[0].message;
+    assert!(
+        m.contains("on face ") && m.contains("of surface group 'Cube faces (idMat 0)'"),
+        "{m}"
+    );
+    assert!(m.contains("move it inside the room"), "{m}");
+    // Says no, each rule to the other's input: 1 mm outside is outside, never on the surface;
+    // 1 mm inside is neither.
+    p.point_receivers[0].position = Vec3::new(5.001, 2.0, 2.0);
     only(&validate::validate(&p), codes::RECEIVER_OUTSIDE_VOLUME);
+    p.point_receivers[0].position = Vec3::new(4.999, 2.0, 2.0);
+    assert!(
+        codes_of(&validate::validate(&p))
+            .iter()
+            .all(|c| *c != codes::RECEIVER_ON_SURFACE && *c != codes::RECEIVER_OUTSIDE_VOLUME)
+    );
 
     // Flipping every triangle leaves inside inside.
     let mut p = cube();
@@ -559,6 +621,53 @@ fn names_are_compared_as_windows_compares_them() {
         p.sources[0].name = bad.to_string();
         only(&validate::validate(&p), codes::NAME_NOT_FILENAME_SAFE);
     }
+}
+
+/// Source names need be unique only within their source group (Burhan, 2026-09-24 14:11), as
+/// tutorial 3's two groups each hold `Source 1` to `Source 3`; with per-source output on, a source
+/// name is a folder name, and two anywhere in the project collide.
+#[test]
+fn source_names_are_unique_within_their_group() {
+    let mut p = cube();
+    let mut second = p.sources[0].clone();
+    second.id = schema::SourceId::from_u128(31);
+    second.position = Vec3::new(3.0, 3.0, 3.0);
+    p.sources[0].group = Some("Milling Machine".to_string());
+    second.group = Some("Milling Machine 2".to_string());
+    p.sources.push(second);
+    assert!(!p.solvers.spps.echogram_per_source);
+    // Two groups may each hold "Source 1".
+    assert_eq!(validate::validate(&p), Vec::new());
+    // Says no: the same name twice in one group, compared without case.
+    p.sources[1].group = Some("Milling Machine".to_string());
+    p.sources[1].name = "SOURCE 1".to_string();
+    let issues = validate::validate(&p);
+    only(&issues, codes::NAME_DUPLICATE);
+    assert!(
+        issues[0]
+            .message
+            .contains("in source group 'Milling Machine'"),
+        "{}",
+        issues[0].message
+    );
+    // Says no: twice outside every group.
+    p.sources[0].group = None;
+    p.sources[1].group = None;
+    only(&validate::validate(&p), codes::NAME_DUPLICATE);
+    // Says no: two groups, per-source output on: one folder for both.
+    p.sources[0].group = Some("Milling Machine".to_string());
+    p.sources[1].group = Some("Milling Machine 2".to_string());
+    p.solvers.spps.echogram_per_source = true;
+    let issues = validate::validate(&p);
+    only(&issues, codes::NAME_DUPLICATE);
+    assert!(
+        issues[0].message.contains("per-source output"),
+        "{}",
+        issues[0].message
+    );
+    // A disabled source reaches no solver: its name is free.
+    p.sources[1].enabled = false;
+    assert_eq!(validate::validate(&p), Vec::new());
 }
 
 #[test]

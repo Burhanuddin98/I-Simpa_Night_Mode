@@ -40,6 +40,14 @@ pub enum WriteError {
     GroupInTwo { group: String, what: &'static str },
     /// More entities than solver ids fit in a C `int`.
     TooManyIds { what: &'static str },
+    /// A pinned solver id that cannot be written: two entities of one kind pinned to it, a
+    /// fitting zone pinned to 0 (the solvers' "no fitting"), or one above the C `int` range
+    /// (`SolverIds::assign`).
+    SolverIdClash {
+        what: &'static str,
+        id: u32,
+        reason: String,
+    },
     /// Writing the file failed.
     Io(io::Error),
 }
@@ -57,6 +65,7 @@ impl WriteError {
             WriteError::SharedSolverId { .. } => "shared_solver_id",
             WriteError::GroupInTwo { .. } => "group_in_two_zones",
             WriteError::TooManyIds { .. } => "solver_id_overflow",
+            WriteError::SolverIdClash { .. } => "solver_id_clash",
             WriteError::Io(_) => "io",
         }
     }
@@ -98,6 +107,9 @@ impl fmt::Display for WriteError {
             }
             WriteError::TooManyIds { what } => {
                 write!(f, "too many {what}: their solver ids do not fit in a C int")
+            }
+            WriteError::SolverIdClash { what, id, reason } => {
+                write!(f, "{what}: solver id {id} cannot be written: {reason}")
             }
             WriteError::Io(e) => write!(f, "i/o error: {e}"),
         }
@@ -675,14 +687,23 @@ fn write_source(
 ) -> Result<(), WriteError> {
     let what = |f: &str| format!("source '{}' {f}", s.name);
     let [px, py, pz] = s.position.to_array();
-    let mut attrs = vec![
+    // Upstream's element id, when the source pins one (a `.proj` import, `docs/m5-m6-design.md`,
+    // decision 13), first as upstream's GUI writes it (`e_scene_sources_source.h:114`). The
+    // solvers never read it: they number sources by position (`base_core_configuration.cpp:153`).
+    // It is written so that an imported project's config.xml carries every id upstream's does;
+    // a source made here pins none, and none is written.
+    let mut attrs = Vec::new();
+    if let Some(id) = s.solver_id {
+        attrs.push(("id", id.to_string()));
+    }
+    attrs.extend([
         ("name", text(&what("name"), &s.name)?),
         ("x", real(&what("x"), px)?),
         ("y", real(&what("y"), py)?),
         ("z", real(&what("z"), pz)?),
         ("directivite", s.directivity.solver_code().to_string()),
         ("delay", real(&what("delay"), s.delay_s.get())?),
-    ];
+    ]);
     // u, v, w are read only for types 1 and 5 (base_core_configuration.cpp:135-139).
     if let Some(d) = s.directivity.direction() {
         let [u, v, w] = d.to_array();

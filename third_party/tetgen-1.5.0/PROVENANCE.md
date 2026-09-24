@@ -95,10 +95,14 @@ build").
 ## Measured
 
 Built with MSVC 19.44.35226.0 on 2026-09-23. The exe's sha256 changes with every link, because
-the link time is written into it, so `solvers/manifest.json` holds the current one. Relinks of the
-same source differ only in those timestamp bytes; M1 checks this on every run. The manifest also
-holds the exe's code sha256, the sha256 with those bytes zeroed (`solvers/pe-fingerprint.ps1`),
-which every relink keeps; M1 and the parity gate hold the build to it. Each run used
+the link time is written into it. Each build records its own link in its own manifest,
+`<root>\manifest.json` (`target\solvers\manifest.json` for the default build). The committed
+`solvers/manifest.json` records the link of the build that last wrote it (2026-09-24 06:48, its
+`build_log` and `built_at`); `solvers/build.ps1` writes it only with `-UpdateCommittedManifest`,
+since a plain rebuild changes nothing the gates hold. Relinks of the same source differ only in
+those timestamp bytes; M1 checks this on every run. The manifest also holds the exe's code
+sha256, the sha256 with those bytes zeroed (`solvers/pe-fingerprint.ps1`), which every relink
+keeps; M1 and the parity gate hold the build to it. Each run used
 `-pq2 -A -n`, upstream's tutorial settings. That is the command recorded in the trailer of every
 2019 `.1.*` file.
 

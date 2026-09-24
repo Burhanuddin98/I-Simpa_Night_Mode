@@ -119,6 +119,9 @@ pub fn level_box() -> Project {
     // Equal power in every band, summing to 100 dB + 10·lg(6): 100 dB in each.
     s.power = Spectrum::new(100.0 + 10.0 * (n as f64).log10(), SpectrumShape::Pink);
     s.directivity = Directivity::Omni;
+    // A source made here: no upstream element id pinned (the tutorial's is 1799), as the
+    // material above.
+    s.solver_id = None;
     p.sources = vec![s];
     p.point_receivers = LEVEL_RECEIVERS
         .iter()
@@ -131,6 +134,9 @@ pub fn level_box() -> Project {
             r.name = (*name).into();
             r.position = Vec3::new(at[0], at[1], at[2]);
             r.orientation = Vec3::new(1.0, 0.0, 0.0);
+            // Receivers made here, both cloned from the tutorial's first: its pinned id 1473 on
+            // both would be `solver_id_mapping_invalid`, so neither keeps it.
+            r.solver_id = None;
             r
         })
         .collect();
@@ -217,6 +223,9 @@ pub fn sources2_box() -> Project {
     s.position = Vec3::new(5.0, 8.5, 1.2);
     s.power = Spectrum::new(s.power.global_db.get() - 3.0, s.power.shape.clone());
     s.delay_s = schema::F64::new(0.02);
+    // A source made here: `Source 1` keeps the tutorial's pinned element id 1799, and two
+    // sources cannot share one (`solver_id_mapping_invalid`).
+    s.solver_id = None;
     p.sources.push(s);
     p.solvers.spps.echogram_per_source = true;
     p

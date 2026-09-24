@@ -362,8 +362,8 @@ pub fn check(doc: &Document, mesh: &mbin::Mesh, mbin_name: &str) -> Vec<Reason> 
                 "{l}: SPPS's f32 point test links it to none of the {n} tetrahedra of \
                  {mbin_name} (coreinitialisation.cpp:178-212), so it collects energy only from \
                  where an uninitialised tetrahedron index leads (sppsInitialisation.cpp:82-90), \
-                 and its levels are wrong, zero when that index leads nowhere near it, with no \
-                 message. Move it off the facet or refine the mesh"
+                 so its levels are not its own position's, zero when that index leads nowhere \
+                 near it, with no message. Move it off the facet or refine the mesh"
             ),
         ));
     }

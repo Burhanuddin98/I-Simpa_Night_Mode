@@ -30,10 +30,15 @@ use super::real::{F64, Vec3};
 /// - time step 0.5 to 20 ms, duration 0.1 to 3 s (at most 6,000 steps), extinction exponent 1
 ///   to 10, random seed within a C `int`, at least one band computed per solver;
 /// - names ASCII, under 50 bytes and unique across the project;
-/// - pinned material solver ids unique; a surface group in at most one scene receiver;
+/// - pinned material solver ids unique; one seed in three pins the other entities' ids too
+///   (unique within each kind, a fitting zone never 0), and puts every source but the first in
+///   a source group; a surface group in at most one scene receiver;
 /// - no surface-receiver area constraint together with `-Y` (`preserve_boundary`).
 pub fn generate(seed: u64) -> Project {
     let mut r = Rng::new(seed);
+    // One seed in three pins every entity's solver id, as a `.proj` import does; taken from the
+    // seed, not the generator, so the rest of the project is what it was before pins existed.
+    let pinned = seed.is_multiple_of(3);
     let bands = random_bands(&mut r);
     let n = bands.len();
 
@@ -112,6 +117,7 @@ pub fn generate(seed: u64) -> Project {
             diffusion_law: (0..n)
                 .map(|_| DiffusionLaw::ALL[r.below(3) as usize])
                 .collect(),
+            solver_id: pinned.then_some(2083),
         });
     }
 
@@ -153,6 +159,8 @@ pub fn generate(seed: u64) -> Project {
                 } else {
                     F64::new(r.value(0.0, 0.05))
                 },
+                group: (pinned && i > 0).then(|| "Group 1".to_string()),
+                solver_id: pinned.then_some(974 + i as u32),
             }
         })
         .collect();
@@ -164,6 +172,7 @@ pub fn generate(seed: u64) -> Project {
             position: inside(&mut r, 0.6),
             orientation: r.direction(),
             background_noise: (r.below(3) == 0).then(|| random_spectrum(&mut r, 0.0, 40.0, n)),
+            solver_id: pinned.then_some(155 + i as u32),
         })
         .collect();
 
@@ -193,6 +202,7 @@ pub fn generate(seed: u64) -> Project {
                 name: format!("Map {}", i + 1),
                 enabled: r.below(4) != 0,
                 shape,
+                solver_id: pinned.then_some(951 + i as u32),
             }
         })
         .collect();

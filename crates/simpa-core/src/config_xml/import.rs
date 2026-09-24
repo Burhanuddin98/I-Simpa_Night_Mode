@@ -294,6 +294,7 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
                 name: attr(r, "name", &what)?.to_string(),
                 enabled: true,
                 shape,
+                solver_id: None,
             });
         }
     }
@@ -348,6 +349,7 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
                     absorption,
                     mean_free_path_m,
                     diffusion_law,
+                    solver_id: None,
                 },
             ));
         }
@@ -741,6 +743,8 @@ fn read_source(
         power: spectrum_from_levels(bands, &levels),
         directivity,
         delay_s: F64::new(real_attr(s, "delay", &what)?),
+        group: None,
+        solver_id: None,
     })
 }
 
@@ -775,6 +779,7 @@ fn read_point_receiver(
             real_attr(r, "w", &what)?,
         ),
         background_noise,
+        solver_id: None,
     })
 }
 

@@ -228,19 +228,36 @@ fn every_writer_obligation_holds_for_both_solvers() {
     println!("obligations checked on {checked} element instances");
 }
 
-/// Every attribute that upstream's GUI writes and no solver reads stays out.
+/// Every attribute that upstream's GUI writes and no solver reads stays out, but `source@id` on a
+/// source that pins upstream's element id (decision 13), written as that pin, source by source,
+/// and on no other source. The generator pins every entity in one project of three.
 #[test]
 fn nothing_the_solvers_ignore_is_written() {
     let (ignored, elements) = doc_ignored();
     let mut projects = vec![rich_cube()];
     projects.extend((0..50).map(schema::generate));
+    let mut pinned_sources = 0;
     for p in &projects {
         for solver in SOLVERS {
             let Ok(xml) = write(p, solver, None, &workdir()) else {
                 continue;
             };
             let pairs = written_pairs(&xml);
+            // Written last first, enabled sources only.
+            let written: Vec<Option<String>> = source_ids(&xml);
+            let expected: Vec<Option<String>> = p
+                .sources
+                .iter()
+                .rev()
+                .filter(|s| s.enabled)
+                .map(|s| s.solver_id.map(|id| id.to_string()))
+                .collect();
+            assert_eq!(written, expected, "{solver:?}: source@id");
+            pinned_sources += expected.iter().flatten().count();
             for key in &ignored {
+                if key == "source@id" {
+                    continue;
+                }
                 let (e, a) = key.split_once('@').unwrap();
                 let hit = pairs.iter().any(|(pe, pa)| {
                     pe == e
@@ -254,6 +271,59 @@ fn nothing_the_solvers_ignore_is_written() {
             }
         }
     }
+    assert!(pinned_sources > 0, "no generated project pins a source");
+}
+
+/// Each `<source>`'s `id`, in the file's order.
+fn source_ids(xml: &str) -> Vec<Option<String>> {
+    roxmltree::Document::parse(xml)
+        .unwrap()
+        .descendants()
+        .filter(|n| n.has_tag_name("source"))
+        .map(|n| n.attribute("id").map(str::to_string))
+        .collect()
+}
+
+/// A source pinned to upstream's element id writes it as `source@id`, first, as upstream's GUI
+/// does (`e_scene_sources_source.h:114`), so an imported project's config carries every id
+/// upstream's does; a source made here pins none and writes none. Says no: the pin changed gives
+/// the changed id, and two sources pinned alike are refused before anything is written.
+#[test]
+fn a_pinned_source_writes_its_element_id() {
+    let mut p = rich_cube();
+    assert!(p.sources.iter().all(|s| s.solver_id.is_none()));
+    let enabled = p.sources.iter().filter(|s| s.enabled).count();
+    assert!(enabled >= 2, "rich_cube has {enabled} enabled sources");
+    for solver in SOLVERS {
+        assert_eq!(source_ids(&wr(&p, solver, None)), vec![None; enabled]);
+    }
+    for (i, s) in p.sources.iter_mut().enumerate() {
+        s.solver_id = Some(974 + 159 * i as u32);
+    }
+    let expected: Vec<Option<String>> = p
+        .sources
+        .iter()
+        .rev()
+        .filter(|s| s.enabled)
+        .map(|s| s.solver_id.map(|id| id.to_string()))
+        .collect();
+    for solver in SOLVERS {
+        let xml = wr(&p, solver, None);
+        assert_eq!(source_ids(&xml), expected, "{solver:?}");
+        assert!(xml.contains("<source id=\""), "{solver:?}: id first");
+    }
+    // Says no: one pin changed.
+    let mut other = p.clone();
+    other.sources[0].solver_id = Some(975);
+    let xml = wr(&other, SolverKind::Spps, None);
+    assert!(source_ids(&xml).contains(&Some("975".to_string())));
+    assert!(!source_ids(&xml).contains(&Some("974".to_string())));
+    // Says no: two sources pinned alike.
+    let mut twice = p.clone();
+    twice.sources[1].solver_id = twice.sources[0].solver_id;
+    let e = write(&twice, SolverKind::Spps, None, &workdir()).unwrap_err();
+    assert_eq!(e.code(), "integrity", "{e}");
+    assert!(e.to_string().contains("pin the solver id 974"), "{e}");
 }
 
 #[test]
@@ -321,7 +391,13 @@ fn reals_are_exact_shortest_c_locale_decimals() {
         let view = solver_view(&xml);
         for i in view.values() {
             for (a, text) in &i.attrs {
-                let d = &doc[&format!("{}@{a}", i.key)];
+                let key = format!("{}@{a}", i.key);
+                // A pinned source's element id, which no solver reads: an integer.
+                if key == "source@id" {
+                    assert!(text.parse::<u32>().is_ok(), "source@id {text:?}");
+                    continue;
+                }
+                let d = &doc[&key];
                 match d.kind {
                     Kind::Real => {
                         assert!(
@@ -549,10 +625,107 @@ fn solver_ids_follow_the_documented_rules() {
             groups += 1;
         }
         for (i, z) in p.fitting_zones.iter().enumerate() {
-            assert_eq!(ids.fitting_zone_id(z.id), Some(2 + i as i32));
+            let want = z.solver_id.map_or(2 + i as i32, |pin| pin as i32);
+            assert_eq!(ids.fitting_zone_id(z.id), Some(want));
+        }
+        for (i, r) in p.point_receivers.iter().enumerate() {
+            let want = r.solver_id.map_or(i as i32, |pin| pin as i32);
+            assert_eq!(ids.point_receiver_id(r.id), Some(want));
         }
     }
     println!("{groups} generated surface groups checked");
+}
+
+/// Decision 13 (`docs/m5-m6-design.md`): a pinned id is kept, as a `.proj` import pins upstream's
+/// element ids; the others are numbered around the pins, and a project with none keeps the
+/// numbering above. Says no: two entities of one kind pinned to one id, and a fitting zone pinned
+/// to 0, are refused by name.
+#[test]
+fn pinned_solver_ids_are_kept_and_a_clash_is_refused() {
+    let p = rich_cube();
+    let base = SolverIds::assign(&p).unwrap();
+    let mut q = p.clone();
+    q.point_receivers[1].solver_id = Some(3510);
+    q.surface_receivers[0].solver_id = Some(3503);
+    q.fitting_zones[0].solver_id = Some(2083);
+    let ids = SolverIds::assign(&q).unwrap();
+    let pr: Vec<i32> = q
+        .point_receivers
+        .iter()
+        .map(|r| ids.point_receiver_id(r.id).unwrap())
+        .collect();
+    assert_eq!(
+        pr,
+        vec![0, 3510],
+        "the pin kept, the other numbered as before"
+    );
+    let rs: Vec<i32> = q
+        .surface_receivers
+        .iter()
+        .map(|r| ids.surface_receiver_id(r.id).unwrap())
+        .collect();
+    assert_eq!(rs, vec![3503, 0, 1], "numbered around the pin from 0");
+    assert_eq!(ids.fitting_zone_id(q.fitting_zones[0].id), Some(2083));
+    // A pin on an id an unpinned item would have taken moves that item on.
+    let mut r = p.clone();
+    r.point_receivers[1].solver_id = Some(0);
+    let ids = SolverIds::assign(&r).unwrap();
+    let pr: Vec<i32> = r
+        .point_receivers
+        .iter()
+        .map(|x| ids.point_receiver_id(x.id).unwrap())
+        .collect();
+    assert_eq!(pr, vec![1, 0]);
+    // The written config and scene mesh carry the pins.
+    let view = solver_view(&wr(&q, SolverKind::Spps, None));
+    let fitting_ids: Vec<&String> = view
+        .values()
+        .filter(|i| i.key == "encombrement")
+        .map(|i| &i.attrs["id"])
+        .collect();
+    assert_eq!(fitting_ids, ["2083"]);
+    let mesh = scene_mesh(&q).unwrap();
+    assert!(mesh.faces.iter().any(|f| f.id_en == 2083));
+    assert!(mesh.faces.iter().any(|f| f.id_rs == 3503));
+    // A project with no pins: exactly the ids it had before pins existed.
+    assert_eq!(
+        base.point_receivers.iter().map(|x| x.1).collect::<Vec<_>>(),
+        [0, 1]
+    );
+
+    // Says no: two point receivers pinned to one id.
+    let mut clash = p.clone();
+    clash.point_receivers[0].solver_id = Some(155);
+    clash.point_receivers[1].solver_id = Some(155);
+    let e = SolverIds::assign(&clash).unwrap_err();
+    assert_eq!(e.code(), "solver_id_clash", "{e}");
+    assert!(e.to_string().contains("155"), "{e}");
+    // ... which the project's integrity refuses too, and the writer.
+    let integrity = clash.check_integrity().unwrap_err();
+    assert_eq!(integrity.code(), "duplicate_solver_id", "{integrity}");
+    assert!(write(&clash, SolverKind::Spps, None, &workdir()).is_err());
+    // Two fitting zones (one disabled) pinned alike: refused whatever the enabled flags.
+    let mut zones = q.clone();
+    let mut second = zones.fitting_zones[0].clone();
+    second.id = schema::FittingZoneId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0999);
+    second.enabled = false;
+    zones.fitting_zones.push(second);
+    assert_eq!(
+        SolverIds::assign(&zones).unwrap_err().code(),
+        "solver_id_clash"
+    );
+    // A fitting zone pinned to 0, the solvers' "no fitting".
+    let mut zero = p.clone();
+    zero.fitting_zones[0].solver_id = Some(0);
+    let e = SolverIds::assign(&zero).unwrap_err();
+    assert_eq!(e.code(), "solver_id_clash");
+    assert!(e.to_string().contains("no fitting"), "{e}");
+    // Control: the same pins on different kinds do not clash.
+    let mut kinds = p.clone();
+    kinds.point_receivers[0].solver_id = Some(7);
+    kinds.surface_receivers[0].solver_id = Some(7);
+    kinds.fitting_zones[0].solver_id = Some(7);
+    assert!(SolverIds::assign(&kinds).is_ok());
 }
 
 #[test]

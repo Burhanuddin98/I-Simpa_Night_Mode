@@ -21,6 +21,7 @@
   "name_not_filename_safe.simpa": "name_not_filename_safe",
   "name_too_long.simpa": "name_too_long",
   "particle_count_invalid.simpa": "particle_count_invalid",
+  "receiver_on_surface.simpa": "receiver_on_surface",
   "receiver_outside_volume.simpa": "receiver_outside_volume",
   "receiver_radius_invalid.simpa": "receiver_radius_invalid",
   "receiver_sphere_crosses_surface.simpa": "receiver_sphere_crosses_surface",

@@ -79,8 +79,9 @@ the `.var` refines each receiver face to its bound.**
   934 tetrahedron faces on faces 0 and 1, the largest 0.0998 m², 60.000 m² in all. That is
   upstream's own tutorial-1 mesh (`tests/fixtures/upstream/tutorial1/spps/tetramesh.mbin`, written
   by the GUI in 2019 with TetGen 1.5.0): TetGen's `.1.*` byte for byte but the trailer
-  (`crates/simpa/tests/parity_tutorials.rs`), the `.mbin` byte for byte once its room is read as
-  our 0 (`crates/simpa-core/tests/mesh_mbin_parity.rs`). Gate M5(a)'s refinement check ("more
+  (`crates/simpa/tests/parity_tutorials.rs`), the `.mbin` byte for byte, `idVolume` included: the
+  room is TetGen's 1 on both sides since decision 1 was reversed (`docs/m5-m6-design.md`;
+  `crates/simpa-core/tests/mesh_mbin_parity.rs`). Gate M5(a)'s refinement check ("more
   than 2 tetrahedron faces carry markers 0/1, each at most 0.1 m² × (1 + 1e-4)") passes
   (`mesh_project.rs`, `the_var_refines_the_receiver_faces`).
 - **The same box without its `.var`**: 60 tetrahedra, 10 floor faces, the largest 13.43 m². The

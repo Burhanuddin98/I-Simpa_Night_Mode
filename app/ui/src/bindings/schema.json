@@ -887,6 +887,16 @@
         },
         "shape": {
           "$ref": "#/$defs/FittingShape"
+        },
+        "solver_id": {
+          "description": "A pinned solver id (`encombrement@id`, the `.cbin` `idEn`, and the TetGen region\nattribute its tetrahedra carry as `idVolume`; the room's parts are numbered by TetGen\nabove the largest). `None` lets export assign one (`config_xml`, \"Solver ids\"). A `.proj`\nimport pins upstream's element id (tutorial 3: 1930 and 2083, its room then 2084 to 2086;\ndecision 13). At least 1 (the solvers read `idVolume` 0 as no fitting), at most\n[`SOLVER_INT_MAX`], unique among fitting zones, and, when enabled, low enough that\nTetGen's room ids fit above it (`solver_id_mapping_invalid`).",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -896,7 +906,8 @@
         "shape",
         "absorption",
         "mean_free_path_m",
-        "diffusion_law"
+        "diffusion_law",
+        "solver_id"
       ],
       "type": "object"
     },
@@ -1234,7 +1245,7 @@
           ]
         },
         "preprocess": {
-          "description": "Upstream's \"Scene correction before meshing\" (`mesh_conf@preprocess`,\n`e_core_core_tetconf.h:108`): the `.poly` goes through upstream's `preprocess.exe` before\nTetGen, with box fitting zones in its user facet list, as upstream's GUI does it\n(`projet_maillage.cpp:206-213`). The geometry check then runs on what `preprocess.exe`\nwrote. Upstream's GUI default is on; this crate's default is off\n(`docs/m5-m6-design.md`, decision 12).",
+          "description": "Upstream's \"Scene correction before meshing\" (`mesh_conf@preprocess`,\n`e_core_core_tetconf.h:108`): the `.poly` goes through upstream's `preprocess.exe` before\nTetGen, with box fitting zones in its user facet list, as upstream's GUI does it\n(`projet_maillage.cpp:206-213`). The geometry check then runs on what `preprocess.exe`\nwrote; when it gives up and saves nothing, the `.poly` as written is meshed, as upstream's\nGUI meshes it, and the check runs on that, the abort recorded in the mesh manifest.\nUpstream's GUI default is on; this crate's default is off (`docs/m5-m6-design.md`,\ndecision 12).",
           "type": "boolean"
         },
         "preserve_boundary": {
@@ -2162,6 +2173,16 @@
           "maxItems": 3,
           "minItems": 3,
           "type": "array"
+        },
+        "solver_id": {
+          "description": "A pinned solver id (`recepteur_ponctuel@id`). `None` lets export assign one\n(`config_xml`, \"Solver ids\"). A `.proj` import pins upstream's element id (its `wxid`,\n`docs/m5-m6-design.md`, decision 13), so an imported project writes upstream's ids. At\nmost [`SOLVER_INT_MAX`], and unique among point receivers.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -2169,7 +2190,8 @@
         "name",
         "position",
         "orientation",
-        "background_noise"
+        "background_noise",
+        "solver_id"
       ],
       "type": "object"
     },
@@ -2389,6 +2411,13 @@
           "description": "A disabled source is left out of config.xml.",
           "type": "boolean"
         },
+        "group": {
+          "description": "The source group it sits in, as upstream's GUI groups sources (a source list's element of\ntype 15, `e_scene_sources.h:73-87`): the groups' names from the outermost, joined by\n` / `. `None` at the top level, as for every source made here. It reaches no solver:\nupstream writes a group's sources in its place. Source names need be unique only within\none group (`name_duplicate`), unless per-source output makes them folder names.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "format": "uuid",
           "type": "string"
@@ -2418,6 +2447,16 @@
         "power": {
           "$ref": "#/$defs/Spectrum",
           "description": "Sound power, dB re 1 pW (`bfreq@db` per band, from [`Spectrum::band_levels_db`])."
+        },
+        "solver_id": {
+          "description": "A pinned element id: upstream's `source@id` for a source imported from a `.proj` (its\n`wxid`, `docs/m5-m6-design.md`, decision 13). `None` for a source made here. The solvers\nnumber sources by position and never read `source@id`\n(`base_core_configuration.cpp:153`); `config.xml` carries it when pinned, as upstream's\nGUI writes it, so that an imported project keeps upstream's ids. At most\n[`SOLVER_INT_MAX`], and unique among sources.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
@@ -2427,7 +2466,9 @@
         "position",
         "power",
         "directivity",
-        "delay_s"
+        "delay_s",
+        "group",
+        "solver_id"
       ],
       "type": "object"
     },
@@ -2703,13 +2744,24 @@
         },
         "shape": {
           "$ref": "#/$defs/SurfaceReceiverShape"
+        },
+        "solver_id": {
+          "description": "A pinned solver id (`recepteur_surfacique@id` or `recepteur_surfacique_coupe@id`, and a\nscene receiver's `.cbin` `idRs`). `None` lets export assign one (`config_xml`, \"Solver\nids\"). A `.proj` import pins upstream's element id (decision 13). At most\n[`SOLVER_INT_MAX`], and unique among surface receivers and cutting planes.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
         "id",
         "name",
         "enabled",
-        "shape"
+        "shape",
+        "solver_id"
       ],
       "type": "object"
     },

@@ -203,11 +203,104 @@ fn the_pre_launch_checks_pass_a_good_folder_and_say_no_to_each_fault() {
         let from = fixture("runs/spps_degenerate/tetramesh.mbin");
         std::fs::copy(from, d.join("tetramesh.mbin")).unwrap();
     });
+    // Its region, the cube's, then lacks the collapsed tetrahedron's volume too.
     assert_eq!(
         codes(&broken),
-        ["mesh_invalid", "degenerate_tets"],
+        ["mesh_invalid", "degenerate_tets", "region_volume_mismatch"],
         "{broken:#?}"
     );
+
+    // The regions are held to the cells of the folder's own geometry (decision 15): the good
+    // folder's, from its mesh.cbin.
+    let v = good.verify.as_ref().unwrap();
+    assert!(v.regions_checked, "{v:#?}");
+    assert_eq!(v.regions.len(), 1, "{:#?}", v.regions);
+    // Says no: the room's tetrahedra split between two ids without a gap, which TetGen's numbering
+    // alone accepted: two regions in one cell, neither its volume.
+    let split = stage("pre-split-room", &|d| {
+        let path = d.join("tetramesh.mbin");
+        let mut m = simpa_core::formats::mbin::read_file(&path).unwrap();
+        let first = m.tetrahedra.iter().map(|t| t.id_volume).min().unwrap();
+        let half = m.tetrahedra.len() / 2;
+        for t in &mut m.tetrahedra[..half] {
+            t.id_volume = first + 1;
+        }
+        simpa_core::formats::mbin::write_file(&m, &path).unwrap();
+    });
+    assert_eq!(
+        codes(&split),
+        ["mesh_invalid", "region_volume_mismatch"],
+        "{split:#?}"
+    );
+    assert!(
+        !split
+            .verify
+            .as_ref()
+            .unwrap()
+            .codes
+            .contains(&"unknown_volume_ids".to_string()),
+        "the numbering alone accepts it"
+    );
+    // Says no: a folder whose geometry the check refuses (its .poly, which takes precedence over
+    // the .cbin, with a facet gone, so open) holds its regions to no cells: refused...
+    let open_poly = |d: &Path| {
+        let model = simpa_core::formats::poly::Model {
+            save_face_index: true,
+            user_defined_faces: Vec::new(),
+            model_faces: vec![
+                simpa_core::formats::poly::Face {
+                    vertices: [0, 2, 1],
+                    face_index: 0,
+                },
+                simpa_core::formats::poly::Face {
+                    vertices: [0, 1, 3],
+                    face_index: 1,
+                },
+            ],
+            model_vertices: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            model_regions: Vec::new(),
+        };
+        simpa_core::formats::poly::write_file(&model, &d.join("scene_mesh.poly")).unwrap();
+    };
+    let unchecked = stage("pre-unchecked", &|d| open_poly(d));
+    assert_eq!(
+        codes(&unchecked),
+        ["mesh_invalid", "regions_unchecked"],
+        "{unchecked:#?}"
+    );
+    assert!(!unchecked.verify.as_ref().unwrap().regions_checked);
+    // ... unless the folder's mesh.json is the mesher's record of this .mbin, regions checked.
+    let proven = |sha_ok: bool, checked: bool| {
+        move |d: &Path| {
+            open_poly(d);
+            let sha = simpa_core::mesh::sha256_file(&d.join("tetramesh.mbin")).unwrap();
+            let manifest = serde_json::json!({
+                "status": "OK",
+                "files": { "mbin": if sha_ok { sha } else { "0".repeat(64) } },
+                "verify": { "regions_checked": checked },
+            });
+            std::fs::write(d.join("mesh.json"), manifest.to_string()).unwrap();
+        }
+    };
+    let accepted = stage("pre-proven", &proven(true, true));
+    assert_eq!(accepted.reasons, [], "{accepted:#?}");
+    // Says no: a manifest of another .mbin, or one whose regions were not checked.
+    for (label, sha_ok, checked) in [
+        ("pre-other-mbin", false, true),
+        ("pre-not-checked", true, false),
+    ] {
+        let refused = stage(label, &proven(sha_ok, checked));
+        assert_eq!(
+            codes(&refused),
+            ["mesh_invalid", "regions_unchecked"],
+            "{label}: {refused:#?}"
+        );
+    }
 }
 
 #[test]

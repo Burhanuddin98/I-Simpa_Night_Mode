@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use simpa_core::mesh::{
     self, Markers, MeshManifest, MeshStatus, MeshTools, Mesher, PreprocessProgram, TetgenMesher,
-    verify,
+    Timeouts, verify,
 };
 use simpa_core::process::{CancelToken, Line};
 use simpa_core::run::manager::{self, PREPROCESS_EXE_NAME, TETGEN_EXE_NAME, solver_exe_name};
@@ -132,10 +132,13 @@ fn find_exe(explicit: Option<PathBuf>, name: &str) -> Result<PathBuf, String> {
 // ---------------------------------------------------------------------------------------------
 // simpa mesh
 
-/// Rules a project must pass before it is meshed: the structural faults, and the settings
-/// conflict the mesher would refuse anyway.
+/// Rules a project must pass before it is meshed: the structural faults, the settings conflict the
+/// mesher would refuse anyway, and pinned solver ids that clash (a fitting zone's id is its TetGen
+/// region's attribute, `docs/m5-m6-design.md`, decision 13).
 fn mesh_relevant(code: &str) -> bool {
-    validate::STRUCTURAL_CODES.contains(&code) || code == validate::codes::MESH_SETTINGS_CONFLICT
+    validate::STRUCTURAL_CODES.contains(&code)
+        || code == validate::codes::MESH_SETTINGS_CONFLICT
+        || code == validate::codes::SOLVER_ID_MAPPING_INVALID
 }
 
 /// `preprocess.exe` for a project whose settings ask for it: `--preprocess`, else the design's
@@ -158,7 +161,8 @@ fn preprocess_program(
 }
 
 /// `mesh <project.simpa | file.poly> --out <dir> [--json] [--tetgen <exe>] [--preprocess <exe>]
-/// [--parity] [--from-tetgen <dir> [--basename <b>]] [--cancel-after-ms <n>]`.
+/// [--parity] [--from-tetgen <dir> [--basename <b>]] [--cancel-after-ms <n>]
+/// [--tetgen-timeout-ms <n>] [--preprocess-timeout-ms <n>]`.
 pub fn mesh_cmd(args: &[&str]) -> ExitCode {
     let a = match Args::parse(
         args,
@@ -169,12 +173,28 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
             "from-tetgen",
             "basename",
             "cancel-after-ms",
+            "tetgen-timeout-ms",
+            "preprocess-timeout-ms",
         ],
         &["json", "parity"],
     ) {
         Ok(a) => a,
         Err(e) => return usage_error(&e),
     };
+    let mut timeouts = Timeouts::default();
+    for (name, slot) in [
+        ("tetgen-timeout-ms", &mut timeouts.tetgen),
+        ("preprocess-timeout-ms", &mut timeouts.preprocess),
+    ] {
+        match a.millis(name) {
+            Ok(Some(ms)) => *slot = Duration::from_millis(ms),
+            Ok(None) => {}
+            Err(e) => return usage_error(&e),
+        }
+    }
+    // Whether --parity acts (a project whose settings ask for the scene correction) or its lack of
+    // effect was said already (a raw .poly, --from-tetgen).
+    let mut parity_handled = false;
     let ([input], Some(out)) = (a.positional.as_slice(), a.path("out")) else {
         return usage_error("mesh needs <project.simpa | file.poly> and --out <dir>");
     };
@@ -194,6 +214,13 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
             Ok(p) => p,
             Err(code) => return code,
         };
+        if a.switch("parity") {
+            eprintln!(
+                "simpa: note: --parity has no effect with --from-tetgen: no preprocess.exe runs, \
+                 so there are no markers of its to keep"
+            );
+            parity_handled = true;
+        }
         mesh::mesh_from_tetgen(&project, &tg, a.value("basename"), &out)
     } else {
         let exe = match find_exe(a.path("tetgen"), TETGEN_EXE_NAME) {
@@ -213,6 +240,13 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
             None => &tetgen,
         };
         if is_poly {
+            if a.switch("parity") {
+                eprintln!(
+                    "simpa: note: --parity has no effect on a raw .poly: no preprocess.exe runs, \
+                     so there are no markers of its to keep"
+                );
+                parity_handled = true;
+            }
             mesh::mesh_poly(
                 input,
                 &MeshSettings::default(),
@@ -226,6 +260,7 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
                 Ok(p) => p,
                 Err(code) => return code,
             };
+            parity_handled = project.solvers.meshing.preprocess;
             let program = preprocess_program(&a, &project);
             // --cancel-after-ms reaches preprocess.exe as it reaches TetGen: each is cancelled
             // that long after it starts.
@@ -246,6 +281,7 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
                 } else {
                     Markers::Restored
                 },
+                timeouts,
             };
             mesh::mesh_project_with(&project, &out, &tools, &cancel, &mut on_line)
         }
@@ -257,6 +293,9 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
             return exit(ExitClass::Mesh);
         }
     };
+    for note in notes(&m, a.switch("parity") && !parity_handled) {
+        eprintln!("simpa: note: {note}");
+    }
     print_mesh(&m, &out, a.switch("json"));
     exit(match m.status {
         MeshStatus::Ok => ExitClass::Ok,
@@ -266,6 +305,34 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
         MeshStatus::Fail => ExitClass::Mesh,
         MeshStatus::Cancelled => ExitClass::Cancelled,
     })
+}
+
+/// The lines `simpa mesh` prints on stderr, whatever `--json` says, for what a user must not
+/// miss in a mesh that may have succeeded: `preprocess.exe` giving up, so that the `.poly` as
+/// written was meshed (in the manifest's `preprocess`); and `--parity` having no effect on a
+/// project whose settings ask for no scene correction, so that there are no `preprocess.exe`
+/// markers to keep (`parity_ignored`).
+fn notes(m: &MeshManifest, parity_ignored: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(pre) = &m.preprocess
+        && pre.outcome == Some(mesh::PreprocessOutcome::Aborted)
+    {
+        out.push(format!(
+            "preprocess.exe {}; the mesher went on with the .poly as written, uncorrected, as \
+             upstream's GUI does, the geometry check on it the gate before TetGen (mesh.json: \
+             preprocess.outcome \"aborted\")",
+            pre.aborted_reason.as_deref().unwrap_or("saved nothing")
+        ));
+    }
+    if parity_ignored {
+        out.push(
+            "--parity has no effect: the project's mesh settings do not ask for upstream's scene \
+             correction (preprocess), so there are no preprocess.exe markers to keep; the mesh \
+             is the default one"
+                .to_string(),
+        );
+    }
+    out
 }
 
 /// The project in `path`, once it passes the geometry check (exit 3) and the mesh-relevant

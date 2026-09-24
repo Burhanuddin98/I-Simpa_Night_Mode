@@ -406,7 +406,12 @@ Upstream's GUI writes the following, and no solver reads any of it.
   `lst_soltype`, `intensity_*` or `subdomains`. `id` and `name` are read only on the other
   elements listed above.
 
-Our writer writes none of them, and no `<surface_mesh>` or `<vertices>` either (M3).
+Our writer writes none of them, and no `<surface_mesh>` or `<vertices>` either (M3), with one
+exception since 2026-09-24: `source@id` on a source that pins upstream's element id (a `.proj`
+import, `docs/m5-m6-design.md`, decision 13), first, as upstream's GUI writes it, so that an
+imported project's config carries every id upstream's does. A source made here pins none and
+gets no `id` (`config_xml_write.rs`, `nothing_the_solvers_ignore_is_written` and
+`a_pinned_source_writes_its_element_id`).
 
 ## Parity with upstream's GUI
 
@@ -478,7 +483,7 @@ compared in `docs/formats/cbin.md`, "Parity with upstream's GUI".
 | `tutorial_1.proj` imported, SPPS run | 16 lines: 3 ids, 6 stored directions and 7 by-design lines, all listed below |
 | `tutorial_1.proj` imported, TCR run | 15 lines: 3 ids, 6 stored directions and 6 by-design lines |
 | tutorial 3's config and `.cbin` imported and written back, each run | 29 lines: 8 ids and 21 by-design lines; material 100's law and materials 100 and 101's transmission are held per band (`tutorial3_config_written_back_is_upstreams_value_for_value`); and a same-seed run of ours beside upstream's config gives 24 of 24 output files identical, the cutting plane's `.csbin` once decoded with its id mapped (`tutorial3_written_back_gives_upstreams_output`) |
-| `tutorial_3.proj` imported with each run's saved project (`import_proj_with_config`) and exported, each run | 22 lines once upstream's ids are read through the map the import records: the 21 by-design lines and `workingdirectory`; the `.cbin` byte for byte, the drawn box's 12 triangles as faces 88 to 99 (`parity_tutorials.rs`, `tutorial_3`); and same-seed runs on our config, `.cbin` and the `.mbin` our TetGen and builder make of upstream's `.poly` give 24 of 24 output files identical in each run (`tutorial_3_same_seed_runs`) |
+| `tutorial_3.proj` imported with each run's saved project (`import_proj_with_config`) and exported, each run | 22 lines, with no id map (the import pins upstream's ids, `docs/m5-m6-design.md`, decision 13): the 21 by-design lines and `workingdirectory`; every id equal, the six `source@id` included (1770 down to 974, which the solvers do not read, checked apart); the `.cbin` byte for byte, the drawn box's 12 triangles as faces 88 to 99 (`parity_tutorials.rs`, `tutorial_3`); and same-seed runs on our config, `.cbin` and the `.mbin` of our own parity mesh (`simpa mesh --parity` from the `.proj`: our `.poly` through `preprocess.exe`, TetGen 1.5.0 and our builder, upstream's `.mbin` byte for byte) give 24 of 24 output files identical in each run (`tutorial_3_same_seed_runs`) |
 | `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | the ids and the by-design lines (`config_xml_import.rs`); and a same-seed run of ours beside upstream's own config gives every output file identical, the `.csbin` files once decoded with the receiver's id mapped (`config_xml_solver.rs`, `tutorial1_runs_clean_and_matches_upstreams_own_configuration`) |
 
 Every expected line is listed in the test, so a new difference fails it and so does one that
@@ -492,20 +497,26 @@ line, while upstream's 15-digit text for a real and band entries in the other or
 **What still differs, why, and what the solver does with it.**
 
 - **Ids.** `recepteur_ponctuel@id`, `recepteur_surfacique@id`, `recepteur_surfacique_coupe@id`
-  and `encombrement@id` are ours, assigned from project order (`config_xml.rs`, "Solver ids"):
-  tutorial 1's receivers 3669 and 3510 are our 1 and 0 and its scene receiver 3503 our 0;
-  tutorial 3's fitting zones 2083 and 1930 are our 3 and 2. Upstream's are its GUI's session
-  counters, renumbered at every load (`element.cpp:134, 143-144`; `docs/formats/cbin.md`, "What
-  still differs", 1), and a project has nowhere to hold them. A point receiver's id is only
-  stored in GUI mode. A scene receiver's and a fitting's are matched with the `.cbin` and
-  `.mbin`, which carry ours, so every face gets the same receiver and fitting. A scene
+  and `encombrement@id` are the project's solver ids (`config_xml.rs`, "Solver ids"). A project
+  imported from a `.proj` pins the ids the file holds (`docs/m5-m6-design.md`, decision 13), so
+  it writes them, and `source@id` too, which the solvers do not read: tutorial 3's fitting zones
+  1930 and 2083 and sources 974 to 1770, and tutorial 1's receivers 3669, 3510 and 3503 when
+  read with a run's saved project. Upstream's are its GUI's session counters, renumbered at
+  every load (`element.cpp:134, 143-144`; `docs/formats/cbin.md`, "What still differs", 1), so
+  a `.proj` holds the ids of the session that last saved it: tutorial 1's holds 1792, 1473 and
+  1632, not its runs' (the first two rows). A project this `config.xml` importer made pins none
+  but its materials', and gets ours, assigned from project order: tutorial 1's receivers 3669
+  and 3510 are our 1 and 0 and its scene receiver 3503 our 0; tutorial 3's fitting zones 2083
+  and 1930 are our 3 and 2 (the third and fifth rows). A point receiver's id is stored as its
+  TCR column label only. A scene receiver's and a fitting's are matched with the `.cbin` and
+  `.mbin`, which carry the same ids, so every face gets the same receiver and fitting. A scene
   receiver's or cutting plane's id is also written into its `.csbin` output (`xmlIndex`), where
-  3503 reads 0. **Measured:** same-seed runs of upstream's config against ours give every other
-  output file byte for byte: tutorial 1 (`config_xml_solver.rs`), and each of tutorial 3's three
-  runs, 24 of 24 files, its receivers, cutting plane and fitting zones all numbered ours
-  (`parity_inputs.rs`, `tutorial3_written_back_gives_upstreams_output`; `docs/formats/cbin.md`).
-  Equal ids would need upstream's stored in the project, a change to the `.simpa` format: a
-  decision, not a writer fix.
+  3503 reads 0 for a project numbered ours. **Measured:** same-seed runs of upstream's config
+  against ours give every other output file byte for byte: tutorial 1 (`config_xml_solver.rs`),
+  and each of tutorial 3's three runs, 24 of 24 files, its receivers, cutting plane and fitting
+  zones all numbered ours (`parity_inputs.rs`, `tutorial3_written_back_gives_upstreams_output`;
+  `docs/formats/cbin.md`), and with upstream's ids pinned from the `.proj`, 24 of 24 with no map
+  (`parity_tutorials.rs`, `tutorial_3_same_seed_runs`).
 - **Point-receiver directions (tutorial 1).** Upstream's GUI computes a receiver's direction when
   its position changes, and holds it at full precision for the rest of that session, which is
   when these runs were written (`-0.436852067708969`). Its project file keeps 6 significant

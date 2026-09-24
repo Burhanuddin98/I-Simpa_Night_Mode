@@ -27,6 +27,12 @@ the same files again apart from the
 `.csbin` padding bytes (`docs/rebuild-plan.md`, "Found while building"); `run.json` differs in its
 time, paths and hashes of the executables.
 
+The rooms were rewritten after these runs (`rooms/PROVENANCE.md`, "M7 rooms"): they now pin the
+seeded box's element ids, so a run made today writes `config.xml` with the source's id 1799,
+the receivers 1473 and 1632 and the surface receiver 1792, where these carry no source id and
+the ids export assigned then (0 and 1, and 0); each `run.json` records the room's sha256 before
+the rewrite.
+
 Written 2026-09-24 by the solvers of `.claude/worktrees/wf_b9ed1d0e-3d2-8/target/solvers/bin`,
 the build `solvers/manifest.json` records at this branch's base (`spps.exe`, `classicalTheory.exe`
 and TetGen 1.5.0; their sha256 values are in each `run.json` and `mesh/mesh.json`).

@@ -103,13 +103,13 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
 
      | | Inputs | Same-seed results |
      |---|---|---|
-     | Tutorial 1 | `.poly`, `.var`, TetGen's `.1.*` and the `.mbin` byte-identical, `idVolume` included; `config.xml` and `.cbin` the original's but the ids, the stored receiver directions and the listed differences by design | TCR: 15 of 15 files identical. SPPS: 15 of 17, and the two `Advanced sound level.gap` differ in the last bits; with the run's own receiver directions, 17 of 17 |
-     | Tutorial 2 | `.poly` and `.1.node` equal in every value; 307 and 1,036 lines differ in text at exact decimal ties (below); the other `.1.*` byte-identical. Its settings ask for `preprocess.exe`, which gives up on the hall (decision 12): refused as `preprocess_aborted`, and compared with the setting off, the `.poly` upstream's TetGen got | none: the `.proj` holds no run folder |
-     | Tutorial 3 | End to end since 2026-09-24 (decision 12): `simpa import-proj`, then `simpa mesh --parity`: our `.poly` through `preprocess.exe` is upstream's `temp/scene_mesh.poly` byte for byte (4,889 bytes, sha256 `74b8f831…`), TetGen's `.1.*` its `temp/` files, and the `.mbin` each run's (338,528 bytes, `bc2f0904…`), all through the id map the import records (our fittings 2 and 3 and the room's parts 4 to 6 for upstream's 1930, 2083 and 2084 to 2086); `config.xml` and `.cbin` the original's, `.cbin` byte for byte | 3 runs: 24 of 24 files identical in each, on our `.proj`'s config and `.cbin` and our own parity mesh's `.mbin`. The refusal: the room written 0, as the builder wrote it until 2026-09-24, gives different results |
+     | Tutorial 1 | `.poly`, `.var`, TetGen's `.1.*` and the `.mbin` byte-identical, `idVolume` included; `config.xml` and `.cbin` of the `.proj` read with each run's saved project the original's, ids included with no map (3503, 3510, 3669, pinned on import, decision 13), but the stored receiver directions and the listed differences by design. The `.proj`'s own project carries the ids of the session that last saved it (1792, 1473, 1632): upstream renumbers every element on load | TCR: 15 of 15 files identical. SPPS: 15 of 17, and the two `Advanced sound level.gap` differ in the last bits; with the run's own receiver directions, 17 of 17 |
+     | Tutorial 2 | `.poly` and `.1.node` equal in every value; 307 and 1,036 lines differ in text at exact decimal ties (below); the other `.1.*` byte-identical. Its settings ask for `preprocess.exe`, which gives up on the hall after 104 splits and saves nothing: the `.poly` as written is meshed, as upstream's GUI meshes it, the abort recorded and said (decision 12), and the `.proj` as it is meshes to these files | none: the `.proj` holds no run folder |
+     | Tutorial 3 | End to end since 2026-09-24 (decision 12): `simpa import-proj`, then `simpa mesh --parity`: our `.poly` through `preprocess.exe` is upstream's `temp/scene_mesh.poly` byte for byte (4,889 bytes, sha256 `74b8f831…`), TetGen's `.1.*` its `temp/` files, and the `.mbin` each run's (338,528 bytes, `bc2f0904…`), all with no id map: the import pins upstream's ids (decision 13), the fittings 1930 and 2083, and TetGen numbers the room's parts 2084 to 2086 above them; `config.xml` and `.cbin` the original's, ids included, `.cbin` byte for byte | 3 runs: 24 of 24 files identical in each, on our `.proj`'s config and `.cbin` and our own parity mesh's `.mbin`. The refusal: the room written 0, as the builder wrote it until 2026-09-24, gives different results |
 
    - **What does not match**, each measured:
-     1. **Tutorial 3 matches only in parity mode, which carries upstream's defect.**
-        `preprocess.exe`'s reader gives every box facet marker 88 (`poly.cpp:418-423`); kept
+     1. **Tutorial 3 matches only in parity mode, which keeps `preprocess.exe`'s markers.**
+        Measured: its reader gives every box facet marker 88 (`poly.cpp:418-423`); kept
         byte for byte, the mesh fails our verification by name (280 marker mismatches, faces
         90 to 99 uncovered) and loses 20.1 % of its particle records to loops with transmission
         on (decision 12). The default mode restores the markers and meshes another, sound mesh
@@ -130,7 +130,9 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
         2019 session, from the direction computed at full precision (`-0.3833573`). Reopened, the
         original writes the 6-digit value, as we do (`parity_inputs.rs::tutorial1_directions`).
      4. **Element ids.** Upstream's are GUI session ids; they reach no output but the `.csbin`
-        `xmlIndex` (`docs/formats/config_xml.md`).
+        `xmlIndex` (`docs/formats/config_xml.md`). An imported project keeps them (decision 13), so
+        a project read with a run's saved project writes that run's ids; the `.proj`'s own
+        carries its last session's, which differ from its runs' (tutorial 1: 1792 against 3503).
    - **Upstream's shipped solvers against ours** (the bed's `shipped_…` test, tutorial 1, seed 1,
      10,000 particles, 500, 1000 and 2000 Hz):
      - **v1.4.0** (`929a5c8`, the pin): SPPS 17 of 17 and TCR 15 of 15 files identical to ours.
@@ -152,8 +154,10 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
    index), with one global area. It must be byte-identical to
    `tests/fixtures/upstream/tutorial1/tetgen/scene_mesh.var` for tutorial 1: CRLF, `k  marker area`,
    the area as `f32` printed at 15 significant digits, and no newline after the final `0`.
-5. **Box fitting zones get 12 triangles in the `.poly` only.** Their markers are
-   `scene_faces + k`, and the `.mbin` builder writes them as -1: a plain tet-to-tet transition.
+5. **Without the scene correction, a box fitting zone's 12 triangles go in the `.poly`'s facet
+   list, welded, and reach the `.mbin` as plain faces; the `.cbin` carries them as upstream's
+   does.** Their `.poly` markers are `scene_faces + k`, and the `.mbin` builder writes them as -1:
+   a plain tet-to-tet transition.
    Each zone gets one region seed at the box centre, with attribute = its solver id. This is
    the layout without upstream's scene correction; with it (decision 12) the box's triangles
    are upstream's, in the user facet list, each marked with its `.cbin` face, and the markers of
@@ -172,6 +176,8 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
      ordered by the tutorial-3 import piece's spec ("as upstream's does"); taking it back is
      `scene_mesh` returning `room_mesh`, and the exemption then never applies.
    - **Physical equivalence is unproven.** No gate runs a fitting zone through a solver before M8.
+   - **Upstream's layout without the scene correction, measured (2026-09-24, item 8 of the
+     tutorial-3 follow-ups): not adopted.** See "Decision 5 against upstream's layout" below.
 6. **Internal facets are marked on both sides**, as upstream does (`Objet3D_maillage.cpp:369-381`).
    The `.mbin` invariant is therefore:
    - a face with neighbour -2 has a marker ≥ 0
@@ -261,22 +267,41 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
       3, byte for byte). With two or more, `preprocess.exe` may meet the user facets in another
       order than upstream's, which can change its splits and so the mesh. No upstream project
       has two box zones, and upstream's hash-map order is not reproduced.
-    - **What `preprocess.exe` did is read, not trusted.** It exits 0 whatever happened: an
-      abort (`Mesh reparation has been aborted`, nothing saved), a file it could not read, or
-      user facets it never merged are `preprocess_aborted`. Tutorial 2's hall is the first: 104
-      splits, abort, 2.2 s. What it saved is accounted for facet by facet against its input
-      (`preprocess::account`, `preprocess_output_invalid`), and `mesh.json` lists what it
-      deleted, split, merged and added. Tutorial 3: 76 -> 57 vertices (28 merged, 9 new), 88
+    - **What `preprocess.exe` did is read, not trusted.** It exits 0 whatever happened. When it
+      saves nothing (`Mesh reparation has been aborted`, a file it could not read, or no
+      statistics) upstream's GUI does not look and meshes the `.poly` it wrote
+      (`projet_maillage.cpp:212-213`), and since 2026-09-24 so does the mesher, loudly: the
+      `.poly` as written, which such a run leaves as it was, byte for byte, is meshed (a file
+      changed or gone after it is `preprocess_output_invalid`, refused: upstream's program saves
+      nothing when it gives up, `Preprocess.cpp:100-106`, so a change is something it saved that
+      cannot be accounted for); `mesh.json` records `preprocess.outcome` `aborted`, its
+      `aborted_reason`, and `files.poly` the input's hash; `simpa mesh` prints a note on stderr whatever `--json` says; a run records
+      `preprocess_aborted` as a warning. `preprocess_aborted` is now a recorded outcome, not a
+      refusal (`docs/solver-contract.md`, "Preprocessing and the meshed volume"). The geometry
+      check on that `.poly` is the gate before TetGen, as it is for what `preprocess.exe` saves:
+      an aborted `.poly` the check refuses is refused (`geometry_refused`,
+      `mesh_project.rs::every_preprocess_failure_code_fires_on_its_input`, `tools/gates/m5.ps1`
+      (h)). A box zone's triangles sit in that `.poly`'s user facet list, which TetGen never
+      reads: its id would fill the room cell around it, and the region check refuses that
+      (`fitting_region_misplaced`: a box zone's cell must have the box's volume). Tutorial 2's hall
+      is the first: 104 splits, abort, 2.2 s; it now meshes as its `.proj` asks, to upstream's
+      TetGen files. User facets it saved but never merged are `preprocess_output_invalid`, still a
+      refusal, as is anything else it saved that cannot be accounted for facet by facet against
+      its input (`preprocess::account`); `mesh.json` lists what it deleted, split, merged and
+      added. Tutorial 3: 76 -> 57 vertices (28 merged, 9 new), 88
       facets and 12 user facets -> 133 (the box's bottom, 88 and 89, deleted; 7 facets split
       into 42 pieces; 31 splits), the pieces' areas their facets' within 4.4e-7 m².
-    - **Markers.** DECISION (Jarvis, 2026-09-24 07:45; reversible; for Burhan to confirm). The
-      default mode restores each facet's true marker, the facet it lies in (19 box facets on
-      tutorial 3, all written 88), and the mesh verifies clean. **Parity mode** (`simpa mesh
-      --parity`, `mesh::Markers::Parity`) keeps `preprocess.exe`'s bytes, as upstream's GUI
-      meshes them: verification then fails by name, the `.mbin` is written for byte comparison,
-      and nothing runs it: `run` never meshes in parity mode and `run --mesh` refuses a
-      manifest that is not OK; `run-folder` on its inputs is refused before launch (exit 5,
-      `mesh_invalid`, `marker_geometry_mismatches`).
+    - **Markers.** Confirmed by Burhan, 2026-09-24 14:11 ("Correct labels default"; proposed by
+      Jarvis at 07:45). The default mode restores each facet's true marker, the facet it lies in
+      (19 box facets on tutorial 3, all written 88), and the mesh verifies clean. **Parity mode**
+      (`simpa mesh --parity`, `mesh::Markers::Parity`) keeps `preprocess.exe`'s bytes, as
+      upstream's GUI meshes them: verification then fails by name, the `.mbin` is written for
+      byte comparison, and nothing runs it, a run on that mesh is never OK: `run` never meshes in
+      parity mode and `run --mesh` refuses a manifest that is not OK; `run-folder` on its inputs
+      is refused before launch (exit 5, `mesh_invalid`, `marker_geometry_mismatches`). On a project
+      whose settings ask for no scene correction, and on a raw `.poly` or `--from-tetgen`,
+      `--parity` has nothing to keep: `simpa mesh` says so in a note on stderr
+      (`cli_mesh.rs::parity_without_the_scene_correction_says_it_has_no_effect`).
     - **A seed on a facet is moved, with the scene correction on and outside parity mode.**
       This is the mesher piece's own rule, not the spec's: **open for Burhan**, like the
       marker decision beside it. Tutorial 3's zone 1 has its `volpos` on its own top face
@@ -297,14 +322,176 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
       holds its regions too, to `<base>.poly` beside TetGen's output or, with none, to the
       project's own `.poly` as the mesher writes it without the scene correction; the check is
       never skipped.
-    - **Measured on tutorial 3** (SPPS, 125 Hz, transmission on, seed 1, 50,000 particles per
-      source, the same `config.xml` and `.cbin`): on the parity mesh 533,967 of 2,653,740
-      particle records lost to loops (20.1 %) and 49 to meshing; on the default mesh 2 of
-      2,922,796 to loops and 59 to meshing, run by `simpa run` to OK. `simpa run` on the project
-      as imported is refused before meshing: `receiver_outside_volume` (Receiver 1 at x = 0,
-      on the wall) and `name_duplicate` (the two source groups name their sources alike), Part
-      A's rules, which upstream does not have; the run above moved Receiver 1 1 mm inside and
-      renamed the second group's sources.
+    - **Measured on tutorial 3, a committed test**
+      (`parity_tutorials.rs::tutorial_3_loops_parity_against_default`, heavy, so ignored in the
+      plain suite and run by `tools/gates/parity.ps1` (5)): the stored run with transmission on
+      (`2019-06-18_14h28m18s`: SPPS, 125 Hz, `trans_calc` 1, 50,000 particles per source), our
+      `config.xml` and `.cbin` of that run's project, `random_seed` 1 and nothing else changed.
+      - **The parity mesh**, run by `spps.exe` directly: 533,967 of 2,653,740 particle records lost
+        to loops (20.12 %; the test requires more than 10 %) and 49 to meshing. Judged by the run
+        verdict (`run::judge`, the proposed 1 % limit) the run fails with exactly two codes:
+        `particle_loss_excess`, 534,016 of 2,653,740 lost (20.12 %), and `particle_loss_reported`,
+        SPPS's own warning, which it prints above 5 % (`sppsNantes.cpp:33, 437-439`).
+      - **The run manager refuses the parity mesh before launch:** `simpa run-folder` on it (with
+        the `.poly` its TetGen read) exits 5 at the pre-launch stage with `mesh_invalid` and
+        `marker_geometry_mismatches`; `simpa run --mesh` on the parity mesh folder exits 4 at the
+        mesh stage with `mesh_missing`, its manifest not being OK (the project with Receiver 1 moved
+        1 mm off the wall, which the validator otherwise refuses first).
+      - **The default mesh**, the same folder but for the mesh, run by `simpa run-folder`: OK, 2 of
+        2,922,796 lost to loops (0.00007 %; the test requires under 0.01 %) and 59 to meshing.
+      - Without the `.poly` its TetGen read, the default mesh's folder is refused before launch too,
+        `mesh_invalid` and `regions_unchecked`: its `.cbin`'s box stands on the floor, which the
+        geometry check refuses, so the folder holds no cells to hold its regions to (decision 15).
+        Upstream's own run folders are refused the same way, which is open (the tutorial-3
+        follow-ups: whether `run-folder` should accept such a folder, and on what proof).
+      - Seeds 2 and 3 on each mesh, the shipped 1.3.4 and 1.4.0 `spps.exe` on the parity mesh, and
+        the receiver levels of the two meshes are in `docs/upstream-findings.md`: every build loses
+        about 20.1 % on the parity mesh, and the receiver levels differ by at most 0.12 dB.
+    - **Tutorial 3 as imported.** `simpa run` on the project as imported was refused before meshing
+      by `receiver_outside_volume` (Receiver 1 at x = 0, on the wall) and `name_duplicate` (the
+      two source groups name their sources alike), Part A's rules, which upstream does not have.
+      Since Burhan's decision of 14:11 ("Allow names, refuse wall"), source names need be unique
+      only within their source group (`Source::group`, set on import; across the project still
+      when per-source output makes them folder names), and a receiver on a face has its own code:
+      measured, `simpa validate` on tutorial 3 as imported now gives exactly one error,
+      `receiver_on_surface` for Receiver 1, "on face 12, of surface group 'diff_wall'", asking for
+      it to be moved inside (`parity_tutorials.rs::tutorial_3`).
+    - **Each region check says no on its own** (`parity_tutorials.rs::
+      tutorial_3_each_region_check_says_no_alone`, in the plain suite): tutorial 3's default mesh,
+      which passes, fed one change per check that only that check can see, must give that code
+      and no other: the room's last part numbered one further (`unknown_volume_ids`, the no-gap
+      rule); zone 1's id and the hall's swapped (`fitting_region_misplaced`); 1.1 m³ of hall
+      tetrahedra given the corridor's id (`region_volume_mismatch`); the box's cell carved out and
+      the box undeclared (`unmeshed_cells`).
+
+13. **Imported projects keep upstream's element ids** (Burhan, 2026-09-24 14:11: "Keep
+    upstream's"; the tutorial-3 follow-up piece).
+    - **The pins.** Fitting zones, point receivers, surface receivers and cutting planes, and
+      sources carry a `solver_id: Option<u32>` beside materials' (`schema::model`), `null` in every
+      project made here. `simpa import-proj` sets each from the element's `wxid`
+      (`geometry::import::proj`, "Element ids"); a `wxid` outside 0 to `i32::MAX` is invalid.
+      The `config.xml` importer pins none but the materials, as before (open, below).
+    - **`SolverIds::assign`** keeps a pin and numbers the rest around the pins, from the old
+      bases (fittings from 2, receivers from 0), so a project with no pins gets exactly its old
+      ids. Two entities of one kind pinned to one id, a fitting zone pinned to 0 (the solvers'
+      "no fitting" on a tetrahedron) or a pin above `i32::MAX` is `WriteError::SolverIdClash`
+      (`solver_id_clash`). `Project::check_integrity` refuses a duplicate pin within a kind
+      (`duplicate_solver_id`) and ops keep that; the validator reports a clash, and a fitting
+      pinned to 0, as `solver_id_mapping_invalid`, which `simpa mesh` also refuses before
+      meshing (exit 2). So is an enabled fitting zone pinned too high for TetGen's room ids above
+      it (at most `i32::MAX` minus the `.poly`'s facets; TetGen numbers them in a C `int`), which
+      the mesher's input refuses too (`input_invalid`); before that rule a fitting pinned to
+      `i32::MAX` passed `simpa validate` and made `simpa mesh` panic. A source's pin is written
+      as `source@id`, first, as upstream's GUI writes it (`e_scene_sources_source.h:114`), though
+      the solvers never read it: the one attribute of "Ignored by the solvers" the writer writes,
+      and only when pinned, so that an imported project's `config.xml` carries every id
+      upstream's does (tutorial 3's six, 974 to 1770).
+    - **What follows.** TetGen's room regions follow from `maxattr + 1` as before: on tutorial 3,
+      1930 and 2083 for the fittings and 2084 to 2086 for the room's parts. The mesh stamp
+      (`validate::mesh_input_hash`, stamp version 2) now includes each enabled zone's solver id,
+      since it is the region attribute (a disabled zone removed also shifts an unpinned id). The
+      parity bed's id map is the identity: tutorial 3's parity `.poly` is the stored
+      `74b8f831…` (4,889 bytes) and its `.mbin` the stored `bc2f0904…` (338,528 bytes), both byte
+      for byte, and each run's `config.xml` and `.cbin` carry upstream's ids, the `.cbin` byte for
+      byte, with no map; tutorial 1 read with a run's saved project writes 3503, 3510 and 3669.
+      Says no: zone 1 pinned to 1931 gives another `.poly` (byte 4,773) and `.mbin` (byte
+      11,344); both zones pinned to 1930 are refused before meshing; the project unpinned writes
+      8 ids apart (`parity_tutorials.rs::tutorial_3`, `config_xml_write.rs::
+      pinned_solver_ids_are_kept_and_a_clash_is_refused`).
+    - **The room fixtures** carry the pins of `tutorial_1.proj` and `tutorial_2.proj` (the box's
+      surface receiver 1792, receivers 1473 and 1632, source 1799); the derived rooms were
+      regenerated (`tests/fixtures/rooms/PROVENANCE.md`). The `.simpa` format gained the keys
+      without a version bump, as decision 12 did: the format has never been pushed.
+    - **Open:** whether the `config.xml` importer (`config_xml::import_upstream`) should pin too.
+      It keeps materials' ids only; a generated project's pinned ids come back as ours, in the
+      same order (`config_xml_import.rs` compares them by rank).
+14. **The mesher's programs run under a time limit** (the tutorial-3 follow-up piece). Each
+    `tetgen.exe` call (the mesh and its `-d` follow-up) and each `preprocess.exe` call runs under a
+    limit, `mesh::Timeouts` in `MeshTools`: proposed one hour for TetGen and ten minutes for
+    `preprocess.exe`, far above what the corpus takes (the hall: TetGen about 5 s, `preprocess.exe`
+    giving up in 2.2 s), open for Burhan. A watchdog cancels the call's own token at the limit, so
+    the process tree is killed as on a cancel; the call records `timeout_ms` and `timed_out`, and
+    the mesh fails by name, `tetgen_timeout` or `preprocess_timeout` (a `-d` follow-up stopped at
+    its limit is a message, the mesh having failed already). A cancel the mesher itself sets on
+    its token still reaches the caller's (`run::CancelAfterLaunch`). `simpa mesh` takes
+    `--tetgen-timeout-ms` and `--preprocess-timeout-ms`. Says no: the hall under 100 ms of TetGen
+    (`mesh_project.rs::tetgen_is_stopped_at_the_meshers_limit`), a `preprocess.exe` that never
+    finishes under 50 ms (`every_preprocess_failure_code_fires_on_its_input`), and the real one on
+    the hall under 50 ms through the CLI, nothing left running
+    (`cli_mesh.rs::a_preprocess_timeout_exits_4_and_leaves_nothing_running`, `m5.ps1` (h)).
+15. **A mesh the verifier did not build is held to the folder's own geometry** (the critic's
+    finding on the tutorial-3 piece). `mesh-verify` and `run-folder`'s pre-launch check had no
+    geometry reference, so they accepted any run of room ids without a gap above the fittings: a
+    room split between two ids, or a wrong room, passed. Now (`mesh::verify::folder`):
+    - the regions are held to the cells of the folder's `.poly` (TetGen's basename's,
+      `scene_mesh.poly`, or its only one), its region lines giving the fittings' seeds, or,
+      without one, of its `.cbin`, welded where its `f32` coordinates are equal, each fitting then
+      found by its own faces (`idEn`) with no seed: its cell is the one its faces alone close, or
+      failing that the one they and the outer shell close. A drawn box is held to its box's volume;
+    - a folder whose geometry the check refuses, or whose `.poly` does not read, is
+      `regions_checked` false: `mesh-verify` fails it with the folder code `regions_unchecked`, and
+      `run-folder` refuses it before launch (`mesh_invalid`, `regions_unchecked`), unless its
+      `mesh.json` is the mesher's record of this very `.mbin` (status `OK`, `files.mbin` its
+      sha256) with `verify.regions_checked` true.
+    Says no: the cube's tetrahedra split between two ids (`region_volume_mismatch`), a folder
+    with an open `.poly`, a manifest of another `.mbin`, and one whose regions were not checked
+    (`mesh_verify.rs::a_folders_regions_are_held_to_its_own_geometry`,
+    `run_manager.rs::the_pre_launch_checks_pass_a_good_folder_and_say_no_to_each_fault`). Every
+    committed run-folder fixture keeps its verdict; the broken hall adds `regions_unchecked`.
+
+## Decision 5 against upstream's layout (measured 2026-09-24)
+
+With the scene correction off, upstream's GUI still writes each box zone as `BuildModel`'s 12
+triangles, 36 vertices of their own, in the facet list (Part 2), markers their `.cbin` faces,
+seeded near `hc` (`_SavePOLY(path, true, doMeshRepair = false, ...)`,
+`Objet3D_maillage.cpp:931-1044`, called at `projet_maillage.cpp:206`). Decision 5 writes the
+box welded to 8 corners, triangulated our way, markers after the room's (written -1 in the
+`.mbin`), seeded at its centre. Measured on every corpus project with an enabled box zone
+(`rooms/tutorial1_box_fitting.simpa`, tutorial 3 as imported with the correction switched off,
+and the first four generated projects with one), each meshed both ways with the project's flags
+and `.var` (scratch test, not committed; transcript in
+`target/agents/fu-fix-behaviour-scratch/item8-2.txt`, a rerun of
+`target/agents/fu-behaviour-scratch/item8.txt` with the region check against the geometry as
+written added):
+
+| Project | Decision 5 | Upstream's layout |
+|---|---|---|
+| `tutorial1_box_fitting` | 2,358 tetrahedra; regions 1.0 and 179.0 m³; no tetrahedron face carries a box marker | 2,404 tetrahedra; the same region volumes; 56 tetrahedron faces carry the box triangles' `.cbin` markers 12 to 23 |
+| generated, seed 0 | 54 | 48; same volumes; 24 box-marked faces |
+| generated, seed 5 | 1,485 | 1,591; same volumes; 188 |
+| generated, seed 7 | 928 | 1,008; same volumes; 108 |
+| generated, seed 12 | 993 | 1,160; same volumes; 356 |
+| tutorial 3, correction off | refused: our check, 22 self-intersecting pairs; TetGen 1.5.0 exit 3 | refused: our check, 20 pairs (the investigation's), 6 open edges, 2 unplaced components; TetGen 1.5.0 exit 3 |
+
+- **Every mesh the corpus produces would change**, in tetrahedra and nodes (the box faces'
+  diagonals differ). In the `.mbin` upstream's box faces carry their `.cbin` markers (the scene
+  faces 12 to 23 of the box fixture, 56 tetrahedron faces), where decision 5's are plain
+  tetrahedron-to-tetrahedron faces, marker -1. To SPPS that is no difference for an interior
+  box, read in its source: it passes through a scene face that carries a fitting whenever a
+  tetrahedron lies behind it, as through a plain face (`CalculationCore.cpp:214-220`, with
+  `UTILISER_MAILLAGE_OPTIMISATION` defined at `sppsTypes.h:7`; the box faces' fitting is set
+  from the `.cbin`'s `idEn`, `coreinitialisation.cpp:437-446`). The difference is the mesh
+  itself; whether meshes that different give the same results is M8's question (decision 5,
+  "Physical equivalence is unproven").
+- **The checks would not stay strict as written.** `geometry::check` on the `.poly` as upstream
+  writes it sees the 36 unwelded vertices as 12 loose triangles, internal sheets it tolerates,
+  and reports one cell of the room's and the box's volume together (180 m³ for the box
+  fixture), while TetGen merges coincident points and meshes the box as its own region: the
+  cells the check sees are not the ones TetGen meshes. Measured, each of the five meshes held
+  to the geometry as written: `region_volume_mismatch` and `fitting_region_misplaced` (two
+  regions in the one cell, and the box's cell not the box's volume). So no wrong mesh would
+  pass, but the gate before TetGen and the region check after it would disagree about the
+  same file, and every upstream-layout mesh of a box zone would be refused. Welding the `.poly`
+  before the check gives the two cells TetGen meshes (179.0 and 1.0 m³), and our verification
+  then passes every one of the five meshes; that is a change to what the check reads, not the
+  file as written.
+- **No upstream project meshes as upstream does because of it.** Tutorial 3, the one upstream
+  project with a box zone, has the correction on; with it off, both layouts are refused and
+  TetGen stops.
+
+So decision 5 stands, departing from upstream precisely in the layout above, and the adoption is
+left for M8, where the zone boundary's physics can be judged: it would need the check to weld
+first.
 
 ## Exit codes (CLI)
 
@@ -322,8 +509,11 @@ These are the plan's codes (raw json line 3); M5 and M6 implement 4, 5 and 130.
 
 **`simpa mesh <project.simpa | file.poly> --out <dir>`**
 - Options: `--json`, `--tetgen <exe>`, `--preprocess <exe>`, `--parity`, `--from-tetgen <dir>`,
-  `--cancel-after-ms <n>`. `preprocess.exe` is found as TetGen is, when the project's settings
-  ask for it; `--parity` is decision 12's parity mode.
+  `--cancel-after-ms <n>`, `--tetgen-timeout-ms <n>`, `--preprocess-timeout-ms <n>` (decision
+  14). `preprocess.exe` is found as TetGen is, when the project's settings ask for it; `--parity`
+  is decision 12's parity mode, and without the scene correction a note says it has no effect.
+- Notes on stderr, whatever `--json` says: `preprocess.exe` giving up (the `.poly` as written
+  meshed), and `--parity` having no effect.
 - A project must pass `geometry::check` first (exit 3) and the mesh-relevant validator rules
   (exit 2).
 - stdout carries the mesh manifest (`--json`) or a summary; TetGen's lines go to stderr.
@@ -331,7 +521,8 @@ These are the plan's codes (raw json line 3); M5 and M6 implement 4, 5 and 130.
 
 **`simpa mesh-verify <dir>`**
 - Options: `--json`, `--room-id <n>`, `--fittings <a,b,..>`. Without `--room-id` the room's
-  first id is TetGen's, one above the largest fitting or 1 (decision 1).
+  first id is TetGen's, one above the largest fitting or 1 (decision 1). The regions are held to
+  the folder's own geometry (decision 15).
 - stdout carries the `DirReport`.
 - Exits: 0 on a pass, 4 on a failure.
 
@@ -406,7 +597,8 @@ Expected files are derived from the `config.xml` actually in `solve/`, for both 
 
 `run-folder` skips only the *project* validator. Before launch it runs `mesh::verify` on the
 folder's `.mbin` and the `.cbin` it indexes, with the config's fittings and the room from one
-above the largest of them, or, with none, from the smallest `idVolume` (decision 1). A failure there is a run failure: status FAIL, reason
+above the largest of them, or, with none, from the smallest `idVolume` (decision 1), its regions
+held to the folder's own geometry (decision 15). A failure there is a run failure: status FAIL, reason
 `mesh_invalid` plus the verifier's codes, exit 5. This is what refuses the broken-hall TCR
 folder, since TCR itself exits 0 on it. A missing `.mbin` or an unreadable `.cbin` is
 `mesh_invalid` alone. The config-only band check of decision 11 runs beside it:
@@ -468,8 +660,9 @@ Counts in the report:
   (`region_volume_mismatch`, `unmeshed_cells`, `fitting_region_misplaced`,
   `fitting_seed_ambiguous`; decision 12)
 
-`verify_dir` adds `tetgen_skipped_facets` (count and markers), `neigh_missing` and
-`tetgen_output_missing`, and accepts any basename (`model.*` as well as `scene_mesh.*`).
+`verify_dir` adds `tetgen_skipped_facets` (count and markers), `neigh_missing`,
+`tetgen_output_missing` and `regions_unchecked` (decision 15), and accepts any basename
+(`model.*` as well as `scene_mesh.*`).
 
 **`run` classifier:** a static table equal to `docs/solver-contract.md` Part B, 22 rows (ids,
 streams, anchored patterns, classes PROGRESS/INFO/OK/WARN/FAIL). A test fails if the table and
@@ -506,10 +699,17 @@ the doc drift apart. The classifier holds the continuation-line state for
   `tools/gates/m6.ps1`).
 - **Parity:** `tools/gates/parity.ps1` runs the parity bed of decision 3 and its refusals, and
   checks tutorial 3 end to end (decision 12): the parity mesh's `.poly`, `.1.*` and `.mbin`
-  upstream's through the id map, the default mesh clean with its region volumes; its says-no:
+  upstream's byte for byte with no id map (decision 13), the default mesh clean with its region
+  volumes; tutorial 2 meshed as its `.proj` asks, `preprocess.exe`'s abort said; its says-no:
   preprocessing off refused on the box's self-intersections (our check's pairs are TetGen's),
-  TetGen 1.6.0's wrong room refused by the region volume check, and a changed region line
-  giving another `.mbin`.
+  TetGen 1.6.0's wrong room refused by the region volume check, a changed region line giving
+  another `.mbin`, a changed pin giving another `.poly` and `.mbin`, and two zones pinned alike
+  refused; each region check refused on its own (decision 12). The `.poly` and `.mbin` sizes and
+  hashes it reads are our files' own, and its reading of the bed's lines refuses a transcript
+  with any one value changed. It also runs the bed's four ignored tests: upstream's shipped 1.3.4
+  and 1.4.0 solvers on tutorial 1 (decision 3) and on tutorial 3's parity mesh, and tutorial 3's
+  parity mesh against its default mesh, its loss to loops, the run manager's refusal and the
+  receiver levels (decision 12, `docs/upstream-findings.md`).
 - **M6(c):** uses the derived fixture `rooms/elmia_loss_gate.simpa`: seed 1, bands 125-4,000 Hz
   computed. The floor mesh is upstream's tutorial_2 `.1.*`, taken from the zip at gate time and
   built by `simpa mesh <project> --from-tetgen <dir>`. The tolerance follows decision 9.

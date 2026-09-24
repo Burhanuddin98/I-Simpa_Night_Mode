@@ -30,9 +30,15 @@
 # (h) Upstream's scene correction (docs/m5-m6-design.md, decision 12): the box with its settings'
 #     preprocess switched on meshes through preprocess.exe, which changes nothing on it (the .poly
 #     it saves is the one it was given, byte for byte), to the same .mbin as (a), and the region
-#     volume check holds its one region to its cell (180 m3). Says NO: preprocess.exe named by a
-#     path that is no file gives preprocess_launch_failed; the corrected hall, on which
-#     preprocess.exe gives up and saves nothing while exiting 0, gives preprocess_aborted.
+#     volume check holds its one region to its cell (180 m3). The corrected hall, on which
+#     preprocess.exe gives up and saves nothing while exiting 0, is meshed from the .poly as
+#     written, as upstream's GUI meshes it: exit 0, OK, preprocess.outcome "aborted", a note on
+#     stderr. Says NO: preprocess.exe named by a path that is no file gives
+#     preprocess_launch_failed; the hall with one face removed, on which it gives up too, is
+#     refused by our geometry check on the .poly as written (exit 3, geometry_refused), TetGen
+#     never run; preprocess.exe and TetGen each stopped at the mesher's time limit
+#     (--preprocess-timeout-ms, --tetgen-timeout-ms; decision 14) give preprocess_timeout and
+#     tetgen_timeout, exit 4, nothing left running.
 # (g) `simpa mesh rooms/elmia_corrected.simpa --cancel-after-ms 50` exits 130 with TetGen killed
 #     while it ran (tetgen.cancelled true, tetgen.exit_code null, no .1.ele written), and 2 s
 #     later `tasklist /FI "IMAGENAME eq tetgen.exe"` lists none.
@@ -494,13 +500,55 @@ Check "(h) says NO: preprocess.exe named by a path that is no file: exit 4, prep
     Write-Host "      exit $($r.Exit), $($r.Json.status), [$(@($r.Json.codes) -join ', ')]"
     $r.Exit -eq 4 -and (@($r.Json.codes) -join ',') -eq 'preprocess_launch_failed' -and -not (Test-Path (Join-Path $out 'tetramesh.mbin'))
 }
-Check "(h) says NO: the corrected hall through preprocess.exe, which gives up and saves nothing (exit 0): exit 4, preprocess_aborted, no .mbin" {
+Check "(h) the corrected hall through preprocess.exe, which gives up and saves nothing (exit 0): meshed from the .poly as written, exit 0, OK, outcome aborted, a note on stderr" {
     $out = Join-Path $work 'hall-preprocess-mesh'
     $r = Simpa @('mesh', $hallPre, '--out', $out, '--json') 'mesh-hall-preprocess'
     $p = $r.Json.preprocess
-    Write-Host "      exit $($r.Exit), $($r.Json.status), [$(@($r.Json.codes) -join ', ')]; preprocess.exe exit $($p.call.exit_code), aborted $($p.printed.aborted), $($p.printed.split_lines) splits printed, $([math]::Round($p.call.elapsed_ms)) ms"
-    $r.Exit -eq 4 -and (@($r.Json.codes) -join ',') -eq 'preprocess_aborted' -and $p.call.exit_code -eq 0 -and $p.printed.aborted -and
+    $note = @($r.Err -split "`n" | Where-Object { $_.StartsWith('simpa: note: preprocess.exe') }).Count
+    Write-Host "      exit $($r.Exit), $($r.Json.status), [$(@($r.Json.codes) -join ', ')]; preprocess.exe exit $($p.call.exit_code), aborted $($p.printed.aborted), $($p.printed.split_lines) splits printed, $([math]::Round($p.call.elapsed_ms)) ms; outcome $($p.outcome); files.poly = input: $($r.Json.files.poly -eq $p.input_sha256); gate $($r.Json.geometry.checked) $($r.Json.geometry.verdict); notes on stderr: $note"
+    (Meshed $r $out) -and $p.outcome -eq 'aborted' -and $p.call.exit_code -eq 0 -and $p.printed.aborted -and
+        $r.Json.files.poly -eq $p.input_sha256 -and $r.Json.geometry.verdict -eq 'ok' -and $note -eq 1
+}
+$hallOpenPre = Join-Path $work 'hall-open-preprocess.simpa'
+Check "(h) says NO: the hall with one face removed, on which preprocess.exe gives up too: refused by our check on the .poly as written, exit 3, geometry_refused, TetGen never run" {
+    $text = [IO.File]::ReadAllText($hallPre)
+    $i = $text.IndexOf('"faces": ['); $a = $text.IndexOf("`n", $i) + 1; $b = $text.IndexOf("`n", $a) + 1
+    [IO.File]::WriteAllText($hallOpenPre, $text.Remove($a, $b - $a), (New-Object Text.UTF8Encoding $false))
+    $out = Join-Path $work 'hall-open-preprocess-mesh'
+    $r = Simpa @('mesh', $hallOpenPre, '--out', $out, '--json') 'mesh-hall-open-preprocess'
+    $g = $r.Json.geometry
+    Write-Host "      exit $($r.Exit), $($r.Json.status), [$(@($r.Json.codes) -join ', ')]; outcome $($r.Json.preprocess.outcome); gate '$($g.checked)' $($g.verdict) [$(@($g.reasons | ForEach-Object { $_.code }) -join ', ')]; TetGen $(if ($null -eq $r.Json.tetgen) { 'not run' } else { 'RAN' })"
+    $r.Exit -eq 3 -and (@($r.Json.codes) -join ',') -eq 'geometry_refused' -and $r.Json.preprocess.outcome -eq 'aborted' -and
+        $g.verdict -eq 'refused' -and (@($g.reasons | ForEach-Object { $_.code }) -contains 'open_boundary') -and $null -eq $r.Json.tetgen -and
         -not (Test-Path (Join-Path $out 'tetramesh.mbin'))
+}
+Check "(h) timeout says NO: preprocess.exe on the hall stopped at a 50 ms limit: exit 4, preprocess_timeout, timed out, not running 2 s later" {
+    $probe = Join-Path $work 'preprocess-timeout'; New-Item -ItemType Directory -Force $probe | Out-Null
+    $image = "m5-preprocess-timeout-$PID.exe"
+    # The build simpa.exe finds (docs/m5-m6-design.md, "Finding the executables"): the variable, else the dev tree.
+    $solvers = if ($env:SIMPA_SOLVERS_DIR) { $env:SIMPA_SOLVERS_DIR } else { Join-Path $repo 'target\solvers\bin' }
+    Copy-Item (Join-Path $solvers 'preprocess.exe') (Join-Path $probe $image)
+    $out = Join-Path $work 'hall-preprocess-timeout-mesh'
+    $r = Simpa @('mesh', $hallPre, '--out', $out, '--json', '--preprocess', (Join-Path $probe $image), '--preprocess-timeout-ms', '50') 'mesh-hall-preprocess-timeout'
+    Start-Sleep -Seconds 2
+    $running = ImageRunning $image
+    $c = $r.Json.preprocess.call
+    Write-Host "      exit $($r.Exit), $($r.Json.status), [$(@($r.Json.codes) -join ', ')]; call timed_out $($c.timed_out), limit $($c.timeout_ms) ms, ran $([math]::Round($c.elapsed_ms)) ms, exit_code $(if ($null -eq $c.exit_code) { 'null' } else { $c.exit_code }); running 2 s later: $running"
+    $ok = $r.Exit -eq 4 -and (@($r.Json.codes) -join ',') -eq 'preprocess_timeout' -and $c.timed_out -eq $true -and $null -eq $c.exit_code -and
+        $null -eq $r.Json.tetgen -and -not $running
+    if (-not $running) { Remove-Item (Join-Path $probe $image) }
+    $ok
+}
+Check "(h) timeout says NO: TetGen on the hall stopped at a 100 ms limit: exit 4, tetgen_timeout, no .1.ele, not running 2 s later" {
+    if (ImageRunning 'tetgen.exe') { throw 'cannot judge: a tetgen.exe was already running' }
+    $out = Join-Path $work 'hall-tetgen-timeout-mesh'
+    $r = Simpa @('mesh', $hallRoom, '--out', $out, '--json', '--tetgen-timeout-ms', '100') 'mesh-hall-tetgen-timeout'
+    Start-Sleep -Seconds 2
+    $running = ImageRunning 'tetgen.exe'
+    $c = $r.Json.tetgen
+    Write-Host "      exit $($r.Exit), $($r.Json.status), [$(@($r.Json.codes) -join ', ')]; call timed_out $($c.timed_out), limit $($c.timeout_ms) ms, ran $([math]::Round($c.elapsed_ms)) ms; .1.ele $(Test-Path (Join-Path $out 'scene_mesh.1.ele')); tetgen.exe 2 s later: $running"
+    $r.Exit -eq 4 -and (@($r.Json.codes) -join ',') -eq 'tetgen_timeout' -and $c.timed_out -eq $true -and $null -eq $c.exit_code -and
+        -not (Test-Path (Join-Path $out 'scene_mesh.1.ele')) -and -not (Test-Path (Join-Path $out 'tetramesh.mbin')) -and -not $running
 }
 
 # --- (g) cancel --------------------------------------------------------------------------------------

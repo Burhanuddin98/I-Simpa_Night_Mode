@@ -6,7 +6,7 @@
 //! proceeds. No rule turns a solver failure into a warning.
 //!
 //! There are two stages, as on the contract page:
-//! - [`validate`] and [`validate_with`] check a typed [`Project`] (34 `project` rules), with its
+//! - [`validate`] and [`validate_with`] check a typed [`Project`] (35 `project` rules), with its
 //!   geometry, its directivity files and, when one is given, the stamp of its tetrahedral mesh.
 //! - [`validate_export`] checks the exact files the exporter wrote to a run folder
 //!   (`config.xml`, the `.cbin` and the `.mbin`) immediately before launch (7 `export` rules).
@@ -142,6 +142,7 @@ pub mod codes {
     pub const SOURCE_OUTSIDE_VOLUME: &str = "source_outside_volume";
     pub const SOURCE_NEAR_SURFACE: &str = "source_near_surface";
     pub const RECEIVER_OUTSIDE_VOLUME: &str = "receiver_outside_volume";
+    pub const RECEIVER_ON_SURFACE: &str = "receiver_on_surface";
     pub const RECEIVER_SPHERE_CROSSES_SURFACE: &str = "receiver_sphere_crosses_surface";
     pub const RECEIVER_RADIUS_INVALID: &str = "receiver_radius_invalid";
     pub const DIRECTION_VECTOR_ZERO: &str = "direction_vector_zero";
@@ -196,7 +197,7 @@ pub mod codes {
     pub const REPEATED_GROUP: &str = "repeated_group";
     /// A variant's overrides are not strictly ascending by group id.
     pub const OVERRIDE_ORDER: &str = "override_order";
-    /// The random seed or a pinned material solver id does not fit a C `int`.
+    /// The random seed or a pinned solver id does not fit a C `int`.
     pub const SOLVER_INT_RANGE: &str = "solver_int_range";
 }
 
@@ -211,9 +212,9 @@ const fn rule(code: &'static str, stage: Stage, severity: Severity) -> Rule {
 use Severity::{Error as E, Warning as W};
 use Stage::{Export as X, Project as P};
 
-/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 34 project rules and 7
-/// export rules, 38 errors and 3 warnings.
-pub const RULES: [Rule; 41] = [
+/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 35 project rules and 7
+/// export rules, 39 errors and 3 warnings.
+pub const RULES: [Rule; 42] = [
     rule(codes::BAND_SET_EMPTY, P, E),
     rule(codes::BAND_DUPLICATE, P, E),
     rule(codes::BAND_FREQUENCY_NOT_INTEGER, P, E),
@@ -226,6 +227,7 @@ pub const RULES: [Rule; 41] = [
     rule(codes::SOURCE_OUTSIDE_VOLUME, P, E),
     rule(codes::SOURCE_NEAR_SURFACE, P, E),
     rule(codes::RECEIVER_OUTSIDE_VOLUME, P, E),
+    rule(codes::RECEIVER_ON_SURFACE, P, E),
     rule(codes::RECEIVER_SPHERE_CROSSES_SURFACE, P, W),
     rule(codes::RECEIVER_RADIUS_INVALID, P, E),
     rule(codes::DIRECTION_VECTOR_ZERO, P, E),
@@ -391,7 +393,9 @@ struct MeshInputs<'a> {
     stamp_version: u32,
     vertices: &'a [Vec3],
     faces: Vec<[u32; 3]>,
-    fitting_zones: Vec<(FittingZoneId, &'a FittingShape)>,
+    /// Each enabled zone, its solver id (the region attribute TetGen gives its tetrahedra, pinned
+    /// or assigned; `None` when no id can be assigned) and its shape.
+    fitting_zones: Vec<(FittingZoneId, Option<i32>, &'a FittingShape)>,
     meshing: &'a MeshSettings,
     refined_faces: Vec<usize>,
 }
@@ -399,9 +403,10 @@ struct MeshInputs<'a> {
 /// The stamp a tetrahedral mesh must carry to be launched with this project: a 128-bit FNV-1a
 /// hash, as 32 lowercase hex digits, of every input the mesher uses. Those are the vertices (bit
 /// for bit), each face's three vertex indices in order (the `.mbin` face markers index this
-/// list), the enabled fitting zones in order with their shapes (they become TetGen regions), the
-/// meshing settings, and the faces refined for surface receivers. Materials, names, sources and
-/// receivers do not change the mesh and are not hashed.
+/// list), the enabled fitting zones in order with their shapes and solver ids (they become TetGen
+/// regions whose attribute is the id; stamp version 2 added the id, which a pin or a disabled
+/// zone removed before it can change), the meshing settings, and the faces refined for surface
+/// receivers. Materials, names, sources and receivers do not change the mesh and are not hashed.
 ///
 /// FNV-1a detects accidental change, not tampering. The mesher (M5) must record this value when
 /// it builds a mesh, and pass it back through [`Context::mesh_input_hash`].
@@ -432,15 +437,22 @@ pub fn mesh_input_hash(project: &Project) -> String {
     } else {
         Vec::new()
     };
+    let ids = crate::config_xml::SolverIds::assign(project).ok();
     let inputs = MeshInputs {
-        stamp_version: 1,
+        stamp_version: 2,
         vertices: &project.geometry.vertices,
         faces: project.geometry.faces.iter().map(|f| f.vertices).collect(),
         fitting_zones: project
             .fitting_zones
             .iter()
             .filter(|z| z.enabled)
-            .map(|z| (z.id, &z.shape))
+            .map(|z| {
+                (
+                    z.id,
+                    ids.as_ref().and_then(|ids| ids.fitting_zone_id(z.id)),
+                    &z.shape,
+                )
+            })
             .collect(),
         meshing: &project.solvers.meshing,
         refined_faces,
@@ -463,14 +475,14 @@ mod tests {
 
     #[test]
     fn rule_table_matches_the_contract_counts() {
-        assert_eq!(RULES.len(), 41);
+        assert_eq!(RULES.len(), 42);
         let project = RULES.iter().filter(|r| r.stage == Stage::Project).count();
         let warnings = RULES
             .iter()
             .filter(|r| r.severity == Severity::Warning)
             .count();
-        assert_eq!((project, 41 - project), (34, 7));
-        assert_eq!((41 - warnings, warnings), (38, 3));
+        assert_eq!((project, 42 - project), (35, 7));
+        assert_eq!((42 - warnings, warnings), (39, 3));
         let mut all: Vec<&str> = RULES.iter().map(|r| r.code).collect();
         all.extend(STRUCTURAL_CODES);
         let n = all.len();

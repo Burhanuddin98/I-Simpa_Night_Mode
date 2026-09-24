@@ -719,6 +719,14 @@ export interface Source {
    * A disabled source is left out of config.xml.
    */
   enabled: boolean;
+  /**
+   * The source group it sits in, as upstream's GUI groups sources (a source list's element of
+   * type 15, `e_scene_sources.h:73-87`): the groups' names from the outermost, joined by
+   * ` / `. `None` at the top level, as for every source made here. It reaches no solver:
+   * upstream writes a group's sources in its place. Source names need be unique only within
+   * one group (`name_duplicate`), unless per-source output makes them folder names.
+   */
+  group: string | null;
   id: string;
   /**
    * `@name`.
@@ -735,6 +743,15 @@ export interface Source {
    */
   position: [number | string, number | string, number | string];
   power: Spectrum;
+  /**
+   * A pinned element id: upstream's `source@id` for a source imported from a `.proj` (its
+   * `wxid`, `docs/m5-m6-design.md`, decision 13). `None` for a source made here. The solvers
+   * number sources by position and never read `source@id`
+   * (`base_core_configuration.cpp:153`); `config.xml` carries it when pinned, as upstream's
+   * GUI writes it, so that an imported project keeps upstream's ids. At most
+   * [`SOLVER_INT_MAX`], and unique among sources.
+   */
+  solver_id: number | null;
 }
 /**
  * Sound power, dB re 1 pW (`bfreq@db` per band, from [`Spectrum::band_levels_db`]).
@@ -780,6 +797,13 @@ export interface PointReceiver {
    * Items: A float. Finite values are numbers; non-finite values are strings.
    */
   position: [number | string, number | string, number | string];
+  /**
+   * A pinned solver id (`recepteur_ponctuel@id`). `None` lets export assign one
+   * (`config_xml`, "Solver ids"). A `.proj` import pins upstream's element id (its `wxid`,
+   * `docs/m5-m6-design.md`, decision 13), so an imported project writes upstream's ids. At
+   * most [`SOLVER_INT_MAX`], and unique among point receivers.
+   */
+  solver_id: number | null;
 }
 /**
  * A level spectrum: a global level spread over the project's bands by a shape.
@@ -811,6 +835,13 @@ export interface SurfaceReceiver {
    */
   name: string;
   shape: SurfaceReceiverShape;
+  /**
+   * A pinned solver id (`recepteur_surfacique@id` or `recepteur_surfacique_coupe@id`, and a
+   * scene receiver's `.cbin` `idRs`). `None` lets export assign one (`config_xml`, "Solver
+   * ids"). A `.proj` import pins upstream's element id (decision 13). At most
+   * [`SOLVER_INT_MAX`], and unique among surface receivers and cutting planes.
+   */
+  solver_id: number | null;
 }
 /**
  * A fitting zone (encombrement): a volume filled with scattering objects, `encombrement_enum`.
@@ -839,6 +870,16 @@ export interface FittingZone {
   mean_free_path_m: (number | string)[];
   name: string;
   shape: FittingShape;
+  /**
+   * A pinned solver id (`encombrement@id`, the `.cbin` `idEn`, and the TetGen region
+   * attribute its tetrahedra carry as `idVolume`; the room's parts are numbered by TetGen
+   * above the largest). `None` lets export assign one (`config_xml`, "Solver ids"). A `.proj`
+   * import pins upstream's element id (tutorial 3: 1930 and 2083, its room then 2084 to 2086;
+   * decision 13). At least 1 (the solvers read `idVolume` 0 as no fitting), at most
+   * [`SOLVER_INT_MAX`], unique among fitting zones, and, when enabled, low enough that
+   * TetGen's room ids fit above it (`solver_id_mapping_invalid`).
+   */
+  solver_id: number | null;
 }
 /**
  * The medium: `condition_atmospherique`. A missing element would leave the sound speed and
@@ -905,8 +946,10 @@ export interface MeshSettings {
    * `e_core_core_tetconf.h:108`): the `.poly` goes through upstream's `preprocess.exe` before
    * TetGen, with box fitting zones in its user facet list, as upstream's GUI does it
    * (`projet_maillage.cpp:206-213`). The geometry check then runs on what `preprocess.exe`
-   * wrote. Upstream's GUI default is on; this crate's default is off
-   * (`docs/m5-m6-design.md`, decision 12).
+   * wrote; when it gives up and saves nothing, the `.poly` as written is meshed, as upstream's
+   * GUI meshes it, and the check runs on that, the abort recorded in the mesh manifest.
+   * Upstream's GUI default is on; this crate's default is off (`docs/m5-m6-design.md`,
+   * decision 12).
    */
   preprocess: boolean;
   /**

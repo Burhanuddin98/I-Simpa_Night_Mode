@@ -85,12 +85,23 @@
 //!
 //! Upstream writes its GUI's element ids into `config.xml` (`encombrement@id` 1930,
 //! `recepteur_ponctuel@id` 155, ...). The file holds them as each element's `wxid`: the ids of the
-//! session that saved it, which the runs saved beside it carry (upstream renumbers every element
-//! when it loads a project, `docs/formats/cbin.md`, "What still differs"). A project keeps none,
-//! and export assigns its own (`config_xml`, "Solver ids"). Whether a project should keep
-//! upstream's is Burhan's open decision (1). Until then [`ProjReport::upstream_ids`] records, for
-//! every source, point receiver, surface receiver and fitting zone, the `wxid` beside the entity
-//! it became, so upstream's files and ours are compared through an explicit one-to-one map.
+//! session that last saved it. Upstream does not reuse them: it gives every element a new id from
+//! a global counter each time it loads a project (`Element::Element` → `SetXmlId`,
+//! `element.cpp:134, 231-244`, overwriting the node's `wxid`, `:142-144`; the counter restarts at
+//! project close, `projet.cpp:625`; `docs/formats/cbin.md`, "What still differs"). So a run
+//! carries the ids of the session that wrote it, which are the `.proj`'s only when that session
+//! also saved the file: tutorial 3's runs carry its `.proj`'s ids, tutorial 1's carry 3503, 3510
+//! and 3669 where its `.proj` holds 1792, 1473 and 1632. Imported projects keep the file's ids
+//! (Burhan, 2026-09-24 14:11; `docs/m5-m6-design.md`, decision 13): every source, point receiver,
+//! surface receiver or cutting plane and fitting zone is pinned to its `wxid` (`solver_id`), so
+//! export writes the ids the `.proj` holds (`config_xml`, "Solver ids"), not the ones upstream
+//! would give after reopening it, and TetGen numbers the room's parts above those fitting ids,
+//! as upstream's own meshes carry them (tutorial 3: fittings 1930 and 2083, the room 2084 to
+//! 2086). The ids reach labels and matching only: the solvers match them between `config.xml`,
+//! the `.cbin` and the `.mbin`, and write them into `.csbin` and TCR output names and labels. A
+//! `wxid` outside 0 to `SOLVER_INT_MAX` is invalid. [`ProjReport::upstream_ids`] still records
+//! each `wxid` beside the entity it became. Each source also keeps the source group it sat in
+//! (`Source::group`).
 //!
 //! # Everything else
 //!
@@ -816,6 +827,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
         let receiver = match r {
             Rs::Scene { name, enabled } => SurfaceReceiver {
                 id,
+                solver_id: pin(wxid, &format!("surface receiver `{name}`"))?,
                 name,
                 enabled,
                 shape: SurfaceReceiverShape::Scene {
@@ -824,6 +836,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
             },
             Rs::Plane(shape, name, enabled) => SurfaceReceiver {
                 id,
+                solver_id: pin(wxid, &format!("surface receiver `{name}`"))?,
                 name,
                 enabled,
                 shape,
@@ -864,6 +877,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
         }
         fitting_zones.push(FittingZone {
             id,
+            solver_id: pin(z.wxid, &format!("fitting zone `{}`", z.name))?,
             name: z.name,
             enabled: z.enabled,
             shape,
@@ -879,7 +893,8 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
         for (s, group) in source_elements(list)? {
             let index = sources.len();
             let id = SourceId(ids.uuid("source", index));
-            let source = read_source(s, &bands, id).map_err(|e| in_group(e, &group))?;
+            let mut source = read_source(s, &bands, id).map_err(|e| in_group(e, &group))?;
+            source.group = (!group.is_empty()).then(|| group.clone());
             if let Some(upstream) = element_id(s) {
                 report.upstream_ids.push(UpstreamId {
                     kind: UpstreamKind::Source,
@@ -985,6 +1000,28 @@ fn element_type(node: Node<'_, '_>) -> Option<i64> {
 fn element_id(node: Node<'_, '_>) -> Option<i64> {
     node.attribute("wxid")
         .and_then(|v| v.trim().parse::<i64>().ok())
+}
+
+/// The solver id an imported entity is pinned to: its element id (`wxid`), which upstream writes
+/// as its `@id` (see the module docs, "Element ids"); `None` without one. An id the solvers
+/// cannot read as a C `int`, or below 0, is invalid.
+fn pin(wxid: Option<i64>, what: &str) -> Result<Option<u32>> {
+    match wxid {
+        None => Ok(None),
+        Some(id) => u32::try_from(id)
+            .ok()
+            .filter(|&v| v <= crate::schema::SOLVER_INT_MAX)
+            .map(Some)
+            .ok_or_else(|| {
+                ImportError::invalid(
+                    FMT_XML,
+                    format!(
+                        "{what} has element id {id}, which no solver reads as an id (0 to {})",
+                        crate::schema::SOLVER_INT_MAX
+                    ),
+                )
+            }),
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -2343,6 +2380,8 @@ fn read_source(s: Node<'_, '_>, bands: &BandSet, id: SourceId) -> Result<Source>
         power: read_spectrum(spectre, bands, &what)?,
         directivity,
         delay_s: F64::new(opt_prop_real(props, "delay", &what)?.unwrap_or(0.0)),
+        group: None,
+        solver_id: pin(element_id(s), &what)?,
         name,
     })
 }
@@ -2368,6 +2407,7 @@ fn read_point_receiver(
             prop_real(props, "w", &what)?,
         ),
         background_noise,
+        solver_id: pin(element_id(r), &what)?,
         name,
     })
 }
