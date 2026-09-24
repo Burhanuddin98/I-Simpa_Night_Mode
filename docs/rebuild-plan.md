@@ -166,12 +166,17 @@ geometry is fine but the grouping is wrong. It is regenerated from `tutorial_2.p
 
 ## Found while building, with receipts
 
-- **M0 passed on 2026-09-23 with 9 of 9 checks** (`tools/gates/m0.ps1`). **M1 passed with 24 of 24** (`tools/gates/m1.ps1`), on a from-scratch compile.
+- **M0 passed on 2026-09-23 with 9 of 9 checks** (`tools/gates/m0.ps1`). **M1 passed with 24 of 24**
+  (`tools/gates/m1.ps1`) on a from-scratch compile with TetGen 1.6.0; amended for TetGen 1.5.0
+  (decision 3), it passed with **62 of 62** on 2026-09-24 at `46b265b`.
 - **What M1 proves.** Our solver build from `929a5c8` produces the same results as the
   2026-09-08 reference build, compared on a seeded tutorial-1 fixture:
   - SPPS: every file except `.csbin` is byte-identical, including the statistics table and every `.recp`
   - TCR: every file except `.csbin` is byte-identical
-  - TetGen: the `.node`, `.ele`, `.face` and `.neigh` files are identical
+  - TetGen 1.5.0 (from WIAS's tarball, sha256 `4d114861…`): on tutorials 1 and 3, the `.node`,
+    `.ele`, `.face`, `.neigh` and `.edge` equal the files upstream's GUI wrote in 2019, byte for
+    byte but the trailer line; upstream's 1.6.0 is refused. Tutorial 2 differs in 1,036 `.node`
+    lines printed at exact decimal ties, every value equal (`third_party/tetgen-1.5.0/PROVENANCE.md`)
 - **`.csbin` output is nondeterministic by construction.** The surface-receiver format dumps whole
   C structs, padding included. Two runs of the *same* executable differ in the last 2 bytes of
   every 8-byte record. `.csbin` must only ever be compared after decoding, never byte for byte.
@@ -193,4 +198,8 @@ geometry is fine but the grouping is wrong. It is regenerated from `tutorial_2.p
 - **Missing:** Rust and the Tauri CLI.
 - **Present:** Node v24.15.0 and npm 11.12.1, CMake 4.3.2, MSVC 14.44, the Windows SDK, and the WebView2 runtime 153.0.4234.48.
 - **Ninja is broken.** The WinGet `ninja` returns "Access is denied", so the plan uses the Visual Studio generator.
-- **Today's solver binaries match upstream.** They are byte-identical to the ones built from `929a5c8` on 2026-09-08.
+- **Today's solver binaries match upstream.** `spps.exe`, `classicalTheory.exe` and
+  `preprocess.exe` equal the ones built from `929a5c8` on 2026-09-08 byte for byte outside the
+  link timestamps (6 bytes each, M1). `tetgen.exe` is 1.5.0 now, not that build's 1.6.0. Upstream's
+  shipped 1.4.0 `spps.exe` and `classicalTheory.exe` give our results bit for bit on tutorial 1
+  (the parity bed, `tools/gates/parity.ps1`).

@@ -1047,6 +1047,17 @@ def floor_notes(runs: dict) -> list[str]:
     return out
 
 
+def observed_sha(runs: dict, exe: str) -> str:
+    """The sha256 prefix every real run of `exe` records in its `observed.source`: the README names
+    the build the runs came from, not a literal that outlives it. Several builds among the runs, or
+    none, is refused."""
+    shas = {r["observed"]["source"].split(" ")[2].rstrip(",") for n, r in runs.items()
+            if not n.startswith("stub_") and r["observed"]["source"].startswith(f"{exe} sha256 ")}
+    if len(shas) != 1:
+        fc.die(f"the runs of {exe} name {len(shas)} builds, not one: {sorted(shas)}")
+    return shas.pop()
+
+
 def readme(runs: dict, rows: list[Row]) -> str:
     real = [n for n in runs if not n.startswith("stub_")]
     stubs = [n for n in runs if n.startswith("stub_")]
@@ -1099,8 +1110,10 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "",
         "## What the runs showed",
         "",
-        "Observed with the M1 solvers of `solvers/manifest.json` (`spps.exe` `cacbbee25d70e6ff`,",
-        "`classicalTheory.exe` `6382f32139097604`). Every survey behaviour cited in the receipts",
+        "Observed with the M1 solvers of `solvers/manifest.json` (`spps.exe` "
+        f"`{observed_sha(runs, 'spps.exe')}`,",
+        f"`classicalTheory.exe` `{observed_sha(runs, 'classicalTheory.exe')}`). Every survey "
+        "behaviour cited in the receipts",
         "reproduced. Beyond it:",
         "",
         "- **`spps_oneband` is not caught by any Part B signal.** Exit 0, no FAIL line, 2,000",
