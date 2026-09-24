@@ -3,6 +3,7 @@
 
 use std::f64::consts::LN_10;
 
+use simpa_core::faults::{self, Fault};
 use simpa_core::params::codes;
 use simpa_core::params::din18041::{Group, target_s};
 use simpa_core::params::room::{
@@ -175,10 +176,18 @@ fn gate_f_din_18041_a3_at_180_m3_is_0_552_s() {
     let t = target_s(Group::A3, 180.0).unwrap();
     println!("A3, 180 m³: {t:.4} s");
     assert!(within(t), "{t}");
-    // Say-no partners: the neighbouring group, and the natural logarithm for lg, both miss.
-    assert!(!within(target_s(Group::A2, 180.0).unwrap()));
-    assert!(!within(target_s(Group::A4, 180.0).unwrap()));
-    assert!(!within(0.32 * 180f64.ln() - 0.17));
+    // Say-no partners, through the code (M7 follow-ups; the first ones recomputed the formulas
+    // beside it): the neighbouring groups' formulas, as the code would give them had it taken the
+    // wrong group, and the natural logarithm for lg put into the code
+    // (`simpa_core::faults::Fault::DinNaturalLog`). Each misses.
+    let a2 = target_s(Group::A2, 180.0).unwrap();
+    let a4 = target_s(Group::A4, 180.0).unwrap();
+    let ln = faults::with(Fault::DinNaturalLog, || target_s(Group::A3, 180.0)).unwrap();
+    println!("says no through the code: ln for lg {ln:.4} s, A2 {a2:.4} s, A4 {a4:.4} s");
+    assert!(!within(a2) && !within(a4) && !within(ln));
+    assert!((ln - (0.32 * 180f64.ln() - 0.17)).abs() < 1e-12, "{ln}");
+    // The fault holds for its call only.
+    assert_eq!(target_s(Group::A3, 180.0).unwrap(), t);
     // The design README's 0.55 s to two decimals.
     assert_eq!(format!("{t:.2}"), "0.55");
 }

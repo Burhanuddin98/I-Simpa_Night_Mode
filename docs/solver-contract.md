@@ -690,8 +690,10 @@ and still have a parameter refused.
 `core::results::load` reads a run folder's results only for a run that is OK and still verifies
 when it is read (`docs/results.md`). Anything else is refused with one of these codes, never read
 in part. `simpa results` exits 5 for a run whose verdict is not OK (`results_run_failed`,
-`results_run_cancelled`) and 6 for every other refusal (`docs/m5-m6-design.md`,
-"Exit codes": 5 solver run, 6 result verification).
+`results_run_cancelled`) and 6 for every other refusal: the plan's "5 solver run, 6 result
+verification" (`docs/rebuild-plan-raw-2026-09-23.json`, `plan.architecture`). A cancelled run is
+5, not 130: 130 is for a command that was itself cancelled, and `simpa results` was not; it read a
+solver run that did not succeed (`docs/results.md`, "Verified runs only").
 
 | Code | Refused when | Exit |
 |---|---|---|
@@ -701,8 +703,8 @@ in part. `simpa results` exits 5 for a run whose verdict is not OK (`results_run
 | `results_run_cancelled` | `run.json`'s verdict is CANCELLED | 5 |
 | `results_inputs_changed` | an input the manifest recorded before launch (`config.xml`, the `.cbin`, the `.mbin`, directivity files) is missing from `solve/` or has another sha256 now | 6 |
 | `results_outputs_invalid` | the outputs, judged again now by the verdict's own output signals (`run::verdict::output_reasons`: statistics, expected files, TCR's non-finite and unreadable tables), fail them; their reasons are carried | 6 |
-| `results_file_invalid` | a result file read here does not decode or is not laid out as the solver writes it (band columns, row counts, the `.gap`'s index), disagrees with its sibling (the `.gap`'s energy is not the `.recp`'s bit for bit, or its time step is not `pasdetemps`), or the receiver folders or tables are not exactly the config's labels | 6 |
-| `results_value_invalid` | a value in a result file read here is NaN or infinite, or an energy is negative. One exception: a NaN in a `.gap` lateral column (the `E·cos²φ` or the `E·abs(cos φ)` sums) marks that column unusable and does not refuse the run, since SPPS writes it from an unclamped `acos` and the energy the parameters read is written apart (`spps::LateralNaN`; `docs/results.md`, "Verified runs only", step 6); an infinite or negative value there still does | 6 |
+| `results_file_invalid` | a result file read here does not decode or is not laid out as the solver writes it (band columns, row counts, the `.gap`'s index), disagrees with its sibling (the `.gap`'s energy is not the `.recp`'s bit for bit, or its time step is not `pasdetemps`; a `.pbin`'s time step or step count is not the run's, it holds more particles than `nbparticules_rendu` per source, or a particle with no step or one past the last), the receiver folders or tables are not exactly the config's labels, or a surface-receiver or cutting-plane `.csbin` holds a receiver whose id is not one of the config's receivers of its kind (the two are kept apart by file name) | 6 |
+| `results_value_invalid` | a value in a result file read here is NaN or infinite, or an energy is negative (a `.pbin` position or energy included). One exception: a NaN in a `.gap` lateral column (the `E·cos²φ` or the `E·abs(cos φ)` sums) marks that column unusable and does not refuse the run, since SPPS writes it from an unclamped `acos` and the energy the parameters read is written apart (`spps::LateralNaN`; `docs/results.md`, "Verified runs only", step 6); an infinite or negative value there still does | 6 |
 
 ### Corrections to the survey's run contract
 

@@ -182,6 +182,100 @@ fn exact_decays_meet_every_bound() {
     }
 }
 
+/// What gate (a)'s six decays give with the arrival detected, not given: per quantity of
+/// `[EDT, T20, T30, C50, C80, D50, Ts]`, `Some(true)` when it meets its bound, `None` when it is
+/// refused `unresolved` with the closed form between the two ends of the onset bin; anything else
+/// panics (a value outside its bound, another refusal, or an `unresolved` that misses the closed
+/// form).
+fn detected_outcome(p: &BandParameters, c: &Closed) -> [Option<bool>; 7] {
+    let ok = gate_checks(p, c);
+    // The truth is one end of the bin, so it may lie a rounding step outside the pair.
+    let bracketed = |e: &simpa_core::params::ParamError, want: f64| match e.not_evaluable() {
+        Some(NotEvaluable::Unresolved { low, high, .. }) => {
+            let tol = 1e-9 * want.abs().max(1.0);
+            *low - tol <= want && want <= *high + tol
+        }
+        _ => false,
+    };
+    let times = [&p.edt, &p.t20, &p.t30];
+    let others = [
+        (&p.c50_db, c.c50),
+        (&p.c80_db, c.c80),
+        (&p.d50, c.d50),
+        (&p.ts_s, c.ts),
+    ];
+    let mut out = [None; 7];
+    for (i, r) in times.into_iter().enumerate() {
+        match r {
+            Ok(_) if ok[i] => out[i] = Some(true),
+            Err(e) if bracketed(e, c.t) => {}
+            other => panic!("quantity {i}: {other:?}"),
+        }
+    }
+    for (i, (r, want)) in others.into_iter().enumerate() {
+        match r {
+            Ok(_) if ok[3 + i] => out[3 + i] = Some(true),
+            Err(e) if bracketed(e, want) => {}
+            other => panic!("quantity {}: {other:?} against {want}", 3 + i),
+        }
+    }
+    out
+}
+
+#[test]
+fn gate_a_decays_with_the_arrival_detected() {
+    // M7 follow-ups (the M7 critic): gate (a) passes with the true arrival given, `Arrival::at(0)`.
+    // The plan's direct-arrival detection is `Arrival::Detected`: the arrival somewhere in the
+    // onset bin, every onset-relative quantity computed from both ends of it, and refused
+    // `unresolved` when the two differ by more than its limit. Run on the gate's six decays.
+    let mut table = Vec::new();
+    for t in TS {
+        for dt in DTS {
+            let s = exact_decay(t, dt, 150.0);
+            let p = evaluate(&s, Arrival::Detected);
+            let got = detected_outcome(&p, &Closed::decay(t));
+            let cell = |x: Option<bool>| if x.is_some() { "pass" } else { "unresolved" };
+            println!(
+                "detected, T {t} s, dt {dt} s: EDT {}, T20 {}, T30 {}, C50 {}, C80 {}, D50 {}, \
+                 Ts {}",
+                cell(got[0]),
+                cell(got[1]),
+                cell(got[2]),
+                cell(got[3]),
+                cell(got[4]),
+                cell(got[5]),
+                cell(got[6])
+            );
+            table.push(((t, dt), got.map(|x| x.is_some())));
+        }
+    }
+    // The decay times do not depend on where in the bin time starts: they pass everywhere. C50,
+    // C80 and D50 are refused in all six, the truth (the bin's start) one end of the bracket; Ts
+    // comes through only at T = 3 s, dt = 1 ms, where the two ends of the bin give Ts within its
+    // limit of each other. Gate (a)'s C80 and D50 therefore need the arrival given
+    // (`docs/params.md`).
+    let pinned = [
+        ((0.3, 0.001), [true, true, true, false, false, false, false]),
+        ((0.3, 0.01), [true, true, true, false, false, false, false]),
+        ((1.0, 0.001), [true, true, true, false, false, false, false]),
+        ((1.0, 0.01), [true, true, true, false, false, false, false]),
+        ((3.0, 0.001), [true, true, true, false, false, false, true]),
+        ((3.0, 0.01), [true, true, true, false, false, false, false]),
+    ];
+    assert_eq!(table, pinned);
+    // Says no: the same six decays 1 % off, detected, miss the decay times' bound.
+    for t in TS {
+        for dt in DTS {
+            let p = evaluate(&exact_decay(1.01 * t, dt, 150.0), Arrival::Detected);
+            assert_eq!(
+                gate_checks(&p, &Closed::decay(t))[..3],
+                [false; 3],
+                "T {t}, dt {dt}"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_decay_one_percent_off_fails_every_bound() {
     for t in TS {

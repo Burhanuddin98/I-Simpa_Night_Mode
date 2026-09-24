@@ -30,7 +30,10 @@ use crate::schema::SolverKind;
 /// the energy from every time on; a given arrival outside the onset bin refuses C50, C80, D50 and
 /// Ts only; bands carry the `arrival` and `decay_arrival` they were measured from, with the direct
 /// sound's spread, and `early_reverberation_unresolved`: each value is midway between the early
-/// reverberation continued and absent, or refused `early_unresolved`.
+/// reverberation continued and absent, or refused `early_unresolved`; bands and aggregates carry
+/// `curvature` and `decay_curve`; a TCR receiver's `Global` row is the labelled object `global`, and
+/// its `aggregate` says it sums nothing; surface files carry `aggregate` and each receiver its `id`.
+/// Version 4 has not been merged yet, so these are 4 as well.
 pub const REPORT_VERSION: u32 = 4;
 
 /// A quantity's value, or why it has none.
@@ -192,20 +195,73 @@ pub fn parameters(
     arrival: Arrival,
     model: &NoiseModel,
 ) -> (Parameters, Option<Onset>) {
-    let (p, onset, _) = evaluated(series, arrival, model);
-    (p, onset)
+    let e = evaluated(series, arrival, model);
+    (e.parameters, e.onset)
 }
 
-/// [`parameters`], with what the decay times were measured from
-/// (`params::decay::BandParameters::decay_arrival`).
+/// The curvature of a decay (`params::decay::curvature`), for M8 and M12 to decide what a curved
+/// decay may show: its value with its Monte-Carlo standard deviation, and the flag.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct CurvatureReport {
+    /// `100·(T30/T20 − 1)`, %, from the reported T20 and T30, with its standard deviation over
+    /// the Monte-Carlo resamples; refused, with T30's refusal or else T20's, when either is.
+    pub percent: Evaluated,
+    /// `|percent| > limit_percent`: a curved (double-slope) decay. `null` when `percent` is
+    /// refused.
+    pub curved: Option<bool>,
+    /// 10 %, ISO 3382-2's, as commonly stated (`params::decay::CURVATURE_LIMIT_PERCENT`).
+    pub limit_percent: f64,
+}
+
+impl CurvatureReport {
+    fn of(r: Result<noise::Estimate, ParamError>) -> Self {
+        let percent = Evaluated::of_estimate(r);
+        CurvatureReport {
+            curved: percent
+                .value()
+                .map(|p| p.abs() > decay::CURVATURE_LIMIT_PERCENT),
+            percent,
+            limit_percent: decay::CURVATURE_LIMIT_PERCENT,
+        }
+    }
+}
+
+/// One series through `core::params`: the eight parameters, the curvature, the onset, what the
+/// decay times were measured from, and the Schroeder curve they were fitted to.
+struct Evaluation {
+    parameters: Parameters,
+    curvature: CurvatureReport,
+    onset: Option<Onset>,
+    decay_arrival: Option<Arrival>,
+    decay_curve: Option<decay::DecayCurve>,
+}
+
+impl Evaluation {
+    /// The seven onset-relative quantities refused as `several_sources` ([`Parameters`]), the
+    /// curvature with them, and no decay curve: the decay of several sources' sum is no
+    /// source–receiver pair's.
+    fn several_sources(&mut self, sources: &[&str]) {
+        self.parameters.several_sources(sources);
+        self.curvature = CurvatureReport::of(Err(params::not_evaluable(
+            Quantity::Curvature,
+            NotEvaluable::SeveralSources {
+                sources: sources.iter().map(|s| s.to_string()).collect(),
+            },
+        )));
+        self.decay_curve = None;
+    }
+}
+
+/// [`parameters`], with the curvature, what the decay times were measured from
+/// (`params::decay::BandParameters::decay_arrival`) and the curve they were fitted to.
 fn evaluated(
     series: &Result<EnergySeries, ParamError>,
     arrival: Arrival,
     model: &NoiseModel,
-) -> (Parameters, Option<Onset>, Option<Arrival>) {
+) -> Evaluation {
     let p = noise::evaluate(series, arrival, model);
-    (
-        Parameters {
+    Evaluation {
+        parameters: Parameters {
             spl_db: Evaluated::of_estimate(p.spl_db),
             edt_s: Evaluated::of_estimate(p.edt_s),
             t20_s: Evaluated::of_estimate(p.t20_s),
@@ -215,9 +271,11 @@ fn evaluated(
             d50: Evaluated::of_estimate(p.d50),
             ts_s: Evaluated::of_estimate(p.ts_s),
         },
-        p.onset,
-        p.decay_arrival,
-    )
+        curvature: CurvatureReport::of(p.curvature_percent),
+        onset: p.onset,
+        decay_arrival: p.decay_arrival,
+        decay_curve: series.as_ref().ok().map(|s| decay::decay_curve(s, arrival)),
+    }
 }
 
 /// One band of an SPPS point receiver.
@@ -278,18 +336,37 @@ pub struct ReceiverBandReport {
     /// The first bin within 20 dB of the largest; `null` when the series is refused.
     pub onset: Option<Onset>,
     pub parameters: Parameters,
+    /// T20 against T30: the curved-decay flag.
+    pub curvature: CurvatureReport,
+    /// The Schroeder curve EDT, T20 and T30 were fitted to, thinned for display
+    /// (`params::decay::DecayCurve`); `null` when the series is refused, or when several sources
+    /// contribute (the decay of their sum is no source–receiver pair's).
+    pub decay_curve: Option<decay::DecayCurve>,
 }
+
+/// The label of an SPPS aggregate.
+pub const AGGREGATE_BANDS_SUMMED: &str = "all computed bands summed bin by bin";
+/// The label of a TCR receiver's aggregate, which sums nothing.
+pub const AGGREGATE_NO_SERIES: &str = "none: TCR writes no series to sum";
+/// The label of the energetic sums over bands that TCR writes as its `Global` rows.
+pub const AGGREGATE_ENERGETIC_SUM: &str = "energetic sum of the band levels";
+/// The label of a surface receiver's or cutting plane's `Global` file.
+pub const AGGREGATE_GLOBAL_FILE: &str = "all computed bands: the solver's Global file";
 
 /// All bands of a receiver summed bin by bin (`params::aggregate`): **an aggregate, not a band,
 /// and not ISO 3382-1's single-number value** (the arithmetic mean of band values), since its
 /// decay is weighted by the source spectrum.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct AggregateReport {
-    /// Always `"all computed bands summed bin by bin"`.
+    /// [`AGGREGATE_BANDS_SUMMED`] for SPPS; [`AGGREGATE_NO_SERIES`] for a TCR receiver.
     pub aggregate: String,
-    /// The bands summed: those whose series `params` accepts.
+    /// The bands summed: those whose series `params` accepts. Empty for TCR.
     pub bands_hz: Vec<i32>,
     pub parameters: Parameters,
+    /// As for a band.
+    pub curvature: CurvatureReport,
+    /// As for a band.
+    pub decay_curve: Option<decay::DecayCurve>,
 }
 
 /// One source's own echogram at a receiver, one band.
@@ -307,6 +384,10 @@ pub struct SourceBandReport {
     pub total_pa2: f64,
     pub onset: Option<Onset>,
     pub parameters: Parameters,
+    /// As for the receiver's band.
+    pub curvature: CurvatureReport,
+    /// As for the receiver's band.
+    pub decay_curve: Option<decay::DecayCurve>,
 }
 
 /// One source's own echogram at a receiver (`output_recp_bysource`): the parameters of that
@@ -353,6 +434,10 @@ pub struct SurfaceSummary {
     pub field: Option<String>,
     /// The band; `null` for the `Global` file, **an aggregate of all bands**.
     pub band_hz: Option<i32>,
+    /// [`AGGREGATE_GLOBAL_FILE`] for the `Global` file; `null` for a band's.
+    pub aggregate: Option<String>,
+    /// The cutting-plane file (`rs_cut.csbin`), not the surface receivers' (`Sound level.csbin`):
+    /// told apart by the file's name, and each holds exactly the receivers `config.xml` gives it.
     pub cutting_plane: bool,
     /// `recordType` (`docs/formats/csbin.md`).
     pub record_type: String,
@@ -364,6 +449,9 @@ pub struct SurfaceSummary {
 /// One receiver of a surface file.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct SurfaceReceiverSummary {
+    /// `xmlIndex`: its id in `config.xml`, of a `recepteur_surfacique` in a receivers' file and of
+    /// a `recepteur_surfacique_coupe` in a cutting planes' file.
+    pub id: i32,
     pub name: String,
     pub faces: usize,
     pub records: usize,
@@ -377,6 +465,10 @@ impl SurfaceSummary {
             path: s.path.clone(),
             field: s.field.clone(),
             band_hz: s.band_hz,
+            aggregate: s
+                .band_hz
+                .is_none()
+                .then(|| AGGREGATE_GLOBAL_FILE.to_string()),
             cutting_plane: s.cutting_plane,
             record_type: format!("{:?}", s.data.record_type),
             time_steps: s.data.time_step_count,
@@ -386,6 +478,7 @@ impl SurfaceSummary {
                 .receivers
                 .iter()
                 .map(|r| SurfaceReceiverSummary {
+                    id: r.xml_index,
                     name: r.name_lossy().into_owned(),
                     faces: r.faces.len(),
                     records: r.faces.iter().map(|f| f.records.len()).sum(),
@@ -467,10 +560,21 @@ pub struct SppsReport {
 /// TCR's `Global` row: the energetic sum of the band levels, **an aggregate**.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct TcrGlobal {
-    /// Always `"energetic sum of the band levels"`.
+    /// Always [`AGGREGATE_ENERGETIC_SUM`].
     pub aggregate: String,
     pub sabine_level_db: f64,
     pub eyring_level_db: f64,
+}
+
+/// A TCR receiver's `Global` row: each column's energetic sum over the bands, **an aggregate**
+/// (`ctr/input_output/reportmanager.cpp:131-143`).
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct TcrReceiverGlobal {
+    /// Always [`AGGREGATE_ENERGETIC_SUM`].
+    pub aggregate: String,
+    pub direct_db: f64,
+    pub total_sabine_db: f64,
+    pub total_eyring_db: f64,
 }
 
 /// `core::params`' Sabine and Eyring times for one band, on the run's inputs.
@@ -512,10 +616,14 @@ pub struct TcrReceiverBandReport {
     /// too, because TCR gives two totals, Sabine's and Eyring's, and neither is `params`' SPL of a
     /// series; they are `total_sabine_db` and `total_eyring_db`.
     pub parameters: Parameters,
+    /// Refused as the parameters are.
+    pub curvature: CurvatureReport,
+    /// Always `null`: no series, no curve.
+    pub decay_curve: Option<decay::DecayCurve>,
 }
 
 /// A TCR point receiver, in the same shape as an SPPS one where the two meet: `label`, `bands[]`
-/// with `freq_hz` and `parameters`, and `aggregate`.
+/// with `freq_hz`, `parameters`, `curvature` and `decay_curve`, and `aggregate`.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct TcrReceiverReport {
     /// The file's name without `.gabe`: exactly one `recepteur_ponctuel@lbl`.
@@ -523,21 +631,25 @@ pub struct TcrReceiverReport {
     /// Relative to `solve/`.
     pub file: String,
     pub bands: Vec<TcrReceiverBandReport>,
-    /// The `Global` row: each column's energetic sum over the bands, **an aggregate**.
-    pub global_direct_db: f64,
-    pub global_total_sabine_db: f64,
-    pub global_total_eyring_db: f64,
-    /// As SPPS's, with no band summed and every parameter refused `no_time_series`.
+    /// The `Global` row, **an aggregate**, labelled.
+    pub global: TcrReceiverGlobal,
+    /// SPPS's shape, labelled [`AGGREGATE_NO_SERIES`]: no band summed, every parameter refused
+    /// `no_time_series`.
     pub aggregate: AggregateReport,
 }
 
 impl TcrReceiverReport {
     fn of(r: &tcr::PointReceiver) -> Self {
-        let parameters = Parameters::no_time_series(&format!(
+        let detail = format!(
             "TCR writes steady-state levels only; its own for this receiver are direct_db, \
              total_sabine_db and total_eyring_db ({})",
             r.file
-        ));
+        );
+        let parameters = Parameters::no_time_series(&detail);
+        let curvature = CurvatureReport::of(Err(params::not_evaluable(
+            Quantity::Curvature,
+            NotEvaluable::NoTimeSeries { detail },
+        )));
         TcrReceiverReport {
             label: r.label.clone(),
             file: r.file.clone(),
@@ -550,15 +662,22 @@ impl TcrReceiverReport {
                     total_sabine_db: b.total_sabine_db,
                     total_eyring_db: b.total_eyring_db,
                     parameters: parameters.clone(),
+                    curvature: curvature.clone(),
+                    decay_curve: None,
                 })
                 .collect(),
-            global_direct_db: r.global_direct_db,
-            global_total_sabine_db: r.global_total_sabine_db,
-            global_total_eyring_db: r.global_total_eyring_db,
+            global: TcrReceiverGlobal {
+                aggregate: AGGREGATE_ENERGETIC_SUM.into(),
+                direct_db: r.global_direct_db,
+                total_sabine_db: r.global_total_sabine_db,
+                total_eyring_db: r.global_total_eyring_db,
+            },
             aggregate: AggregateReport {
-                aggregate: "all computed bands summed bin by bin".into(),
+                aggregate: AGGREGATE_NO_SERIES.into(),
                 bands_hz: Vec::new(),
                 parameters,
+                curvature,
+                decay_curve: None,
             },
         }
     }
@@ -696,14 +815,16 @@ fn aggregate_report(
             e
         }
     });
-    let (mut p, _) = parameters(&aggregate, arrival, &aggregate_model(&used));
+    let mut e = evaluated(&aggregate, arrival, &aggregate_model(&used));
     if contributing.len() > 1 {
-        p.several_sources(contributing);
+        e.several_sources(contributing);
     }
     AggregateReport {
-        aggregate: "all computed bands summed bin by bin".into(),
+        aggregate: AGGREGATE_BANDS_SUMMED.into(),
         bands_hz: valid,
-        parameters: p,
+        parameters: e.parameters,
+        curvature: e.curvature,
+        decay_curve: e.decay_curve,
     }
 }
 
@@ -744,9 +865,9 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             known_arrival(s, s.arrival_from(r, &contributing))
         };
         let se = series_of(s, i, b.freq_hz, &b.energy, arrival);
-        let (mut parameters, onset, decay_arrival) = evaluated(&se, arrival, &model);
+        let mut e = evaluated(&se, arrival, &model);
         if contributing.len() > 1 {
-            parameters.several_sources(&contributing);
+            e.several_sources(&contributing);
         }
         let total_pa2: f64 = b.energy.iter().sum();
         bands.push(ReceiverBandReport {
@@ -763,7 +884,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                 .ok()
                 .is_some_and(EnergySeries::early_reverberation_unresolved),
             arrival,
-            decay_arrival,
+            decay_arrival: e.decay_arrival,
             contributing_sources: contributing.iter().map(|c| c.to_string()).collect(),
             crossings: crossings(&model, total_pa2),
             noise_model: model.clone(),
@@ -771,8 +892,10 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             total_pa2,
             source_power_rho_c: b.source_power_rho_c,
             background_noise_db: b.background_noise_db,
-            onset,
-            parameters,
+            onset: e.onset,
+            parameters: e.parameters,
+            curvature: e.curvature,
+            decay_curve: e.decay_curve,
         });
         series.push(se);
         models.push(model);
@@ -802,18 +925,20 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                 .zip(&series)
                 .zip(&models)
                 .map(|(((b, energy), se), model)| {
-                    let (parameters, onset, decay_arrival) = evaluated(se, arrival, model);
+                    let e = evaluated(se, arrival, model);
                     let total_pa2: f64 = energy.iter().sum();
                     SourceBandReport {
                         freq_hz: b.freq_hz,
                         arrival,
-                        decay_arrival,
+                        decay_arrival: e.decay_arrival,
                         noise_model: model.clone(),
                         crossings: crossings(model, total_pa2),
                         energy_pa2: energy.clone(),
                         total_pa2,
-                        onset,
-                        parameters,
+                        onset: e.onset,
+                        parameters: e.parameters,
+                        curvature: e.curvature,
+                        decay_curve: e.decay_curve,
                     }
                 })
                 .collect();
@@ -869,7 +994,7 @@ fn tcr_report(t: &TcrResults) -> TcrReport {
     TcrReport {
         bands: t.bands.clone(),
         global: TcrGlobal {
-            aggregate: "energetic sum of the band levels".into(),
+            aggregate: AGGREGATE_ENERGETIC_SUM.into(),
             sabine_level_db: t.global_sabine_level_db,
             eyring_level_db: t.global_eyring_level_db,
         },
@@ -1312,6 +1437,34 @@ mod tests {
         assert_eq!(j["not_evaluable"]["code"], "params_no_energy");
         assert_eq!(r.value(), None);
         assert_eq!(r.refusal().unwrap().code, crate::params::codes::NO_ENERGY);
+    }
+
+    #[test]
+    fn the_curvature_flag_follows_its_value_and_is_null_when_refused() {
+        let at = |value: f64| CurvatureReport::of(Ok(noise::Estimate { value, sd: 0.5 }));
+        assert_eq!(at(12.0).curved, Some(true));
+        assert_eq!(at(-10.5).curved, Some(true));
+        assert_eq!(at(10.0).curved, Some(false));
+        assert_eq!(at(-3.0).curved, Some(false));
+        assert_eq!(at(4.0).percent.value(), Some(4.0));
+        let refused = CurvatureReport::of(Err(ParamError::NoEnergy));
+        assert_eq!(refused.curved, None);
+        assert_eq!(refused.limit_percent, 10.0);
+        assert_eq!(
+            refused.percent.refusal().unwrap().code,
+            crate::params::codes::NO_ENERGY
+        );
+        // Several sources withhold the curve with the curvature.
+        let s = EnergySeries::new(0.01, (0..100).map(|k| 0.9f64.powi(k)).collect()).unwrap();
+        let model = NoiseModel::crossings(1e-6).unwrap();
+        let mut e = evaluated(&Ok(s), Arrival::at(0.0), &model);
+        assert!(e.decay_curve.is_some());
+        e.several_sources(&["A", "B"]);
+        assert!(e.decay_curve.is_none());
+        assert!(matches!(
+            e.curvature.percent.refusal().unwrap().error.not_evaluable(),
+            Some(NotEvaluable::SeveralSources { .. })
+        ));
     }
 
     #[test]

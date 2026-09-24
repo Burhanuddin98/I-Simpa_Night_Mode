@@ -170,10 +170,76 @@ pub struct BandEnergy {
 /// A saved particle file (`nbparticules_rendu` > 0), decoded and summarised.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct ParticleFileSummary {
+    /// Relative to `solve/`.
     pub path: String,
     pub freq_hz: i32,
+    /// The particles written: those of the `nbparticules_rendu` per source that recorded at least
+    /// one step (`docs/formats/pbin.md`).
     pub particles: usize,
+    /// Their step records, all particles together.
     pub recorded_steps: usize,
+}
+
+/// A decoded `.pbin` against its siblings (`docs/formats/pbin.md`): its time step is `pasdetemps`'s
+/// `f32` bit for bit and its step count the run's; it holds at most the particles requested, each
+/// with at least one step and none past the last step; and every energy is finite and not
+/// negative (`results_value_invalid` otherwise, `results_file_invalid` for the rest).
+fn check_particles(
+    rel: &str,
+    p: &pbin::ParticleFile,
+    dt: f32,
+    steps: usize,
+    requested: usize,
+) -> Result<(), Refusal> {
+    let h = &p.header;
+    if h.time_step.to_bits() != dt.to_bits() {
+        return Err(file_invalid(
+            rel,
+            format!("its time step is {} s, pasdetemps is {dt} s", h.time_step),
+        ));
+    }
+    if h.nb_time_step_max as usize != steps {
+        return Err(file_invalid(
+            rel,
+            format!(
+                "it counts {} time steps, the run has {steps}",
+                h.nb_time_step_max
+            ),
+        ));
+    }
+    if p.particles.len() > requested {
+        return Err(file_invalid(
+            rel,
+            format!(
+                "it holds {} particles, {requested} were asked for",
+                p.particles.len()
+            ),
+        ));
+    }
+    for (i, (ph, _)) in p.iter().enumerate() {
+        let end = usize::from(ph.first_time_step) + ph.nb_time_step as usize;
+        if ph.nb_time_step == 0 || end > steps {
+            return Err(file_invalid(
+                rel,
+                format!(
+                    "particle {i} records {} steps from step {}, the run has {steps}",
+                    ph.nb_time_step, ph.first_time_step
+                ),
+            ));
+        }
+    }
+    if let Some((i, s)) = p.steps.iter().enumerate().find(|(_, s)| {
+        !s.energy.is_finite() || s.energy < 0.0 || s.position.iter().any(|x| !x.is_finite())
+    }) {
+        return Err(value_invalid(
+            rel,
+            format!(
+                "step record {i} has position {:?} and energy {}",
+                s.position, s.energy
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Everything read from an SPPS run.
@@ -1049,13 +1115,16 @@ pub(crate) fn read(
         table(solve, &rel)?;
     }
     let mut particle_files = Vec::new();
-    if exp.spps.as_ref().is_some_and(|s| s.nbparticules_rendu > 0) {
+    let saved = exp.spps.as_ref().map_or(0, |s| s.nbparticules_rendu);
+    if saved > 0 {
+        let requested = saved as usize * sources.len();
         for &f in &bands {
             let rel = key(&format!(
                 "{}{f}\\{}",
                 names.particules_directory, names.particules_filename
             ));
             let p = pbin::read_file(&solve.join(&rel)).map_err(|e| file_invalid(&rel, e))?;
+            check_particles(&rel, &p, dt, steps, requested)?;
             particle_files.push(ParticleFileSummary {
                 path: rel,
                 freq_hz: f,

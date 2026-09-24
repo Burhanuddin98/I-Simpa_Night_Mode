@@ -42,10 +42,21 @@ of `docs/solver-contract.md`, Part B, "Result refusals", and nothing is read in 
    equal to the `.recp`'s. A negative or infinite lateral value still refuses the run
    (`results_load.rs`, `a_nan_in_a_gap_lateral_column_makes_that_column_unusable_not_the_run`).
 
-`simpa results` exits 6 for steps 1, 3, 4, 5 and 6: the plan's stable exit codes give 5 to a
-solver run that failed and 6 to result verification (`docs/rebuild-plan-raw-2026-09-23.json`,
-the `cli` component; `docs/m5-m6-design.md`, "Exit codes"). A run whose verdict is OK but whose
-folder no longer verifies is not a failed run, and a caller that sees 5 knows the solver failed.
+`simpa results` exits 6 for steps 1, 3, 4, 5 and 6, and 5 for step 2. The plan's stable exit codes
+are "0 OK, 2 validation, 3 geometry, 4 mesh, 5 solver run, 6 result verification, 130 cancelled"
+(`docs/rebuild-plan-raw-2026-09-23.json`, `plan.architecture`, the `cli` line; the `cli` component
+itself lists no codes); `docs/m5-m6-design.md`, "Exit codes", words 5 as "solver run FAIL or
+CRASH" and 130 as "cancelled".
+- **A cancelled run is refused with 5, not 130** (corrected after the M7 review, which found the
+  earlier text citing "5 solver run" for it without saying why). 130 says that the command itself
+  was cancelled: `simpa run` exits 130 when its run is cancelled. `simpa results` was not cancelled;
+  it read to the end a folder whose run did not finish, a solver run that did not succeed, which is
+  what 5 reports for FAIL and CRASH too. A caller that sees 5 knows the run's solver did not
+  succeed, whichever way, and the refusal's code (`results_run_failed`, `results_run_cancelled`)
+  says which.
+- **A run whose verdict is OK but whose folder no longer verifies** is not a failed run but results
+  that fail verification: 6.
+
 A report holding a number that is not finite is refused the same way, `results_value_invalid`
 (`report::checked_report`), since JSON would print it as `null`. Every code is produced by a spoiled copy of a
 committed run in `results_load.rs`; the CLI's exits in `cli_results.rs`, among them a real FAIL
@@ -69,6 +80,29 @@ e_report_file.cpp:296-321` maps each extension to its report class):
 Besides them: `<cumul_filename>` (the room's energy per band and step), the statistics, every
 surface-receiver and cutting-plane `.csbin`, each band's `Intensity.rpi` (decoded to check it
 reads, not kept) and, when particles are saved, each band's `.pbin` (summarised).
+- **Surface receivers and cutting planes are kept apart by name** (the plan's `core::results`):
+  the file named `recepteurss_cut_filename` (`rs_cut.csbin`) is the cutting planes', the other
+  (`Sound level.csbin`) the scene receivers', per band and in `Global`. Each must hold only
+  receivers of its own kind, told by their `xmlIndex`, the id `config.xml` gives each
+  `recepteur_surfacique` and `recepteur_surfacique_coupe`; a file holding the other kind's is
+  refused, `results_file_invalid`, not read as it. The JSON gives each receiver's `id`. Tested on
+  the committed run `results/outputs_spps` (`rooms/outputs_box.simpa`: the Seat box with the floor's
+  receiver `Receiver`, id 0, and a cutting plane `Cut`, id 1, 1.2 m up over 5 × 9 m in 1 m cells):
+  all six files read as their kind (`results_load.rs`,
+  `cutting_planes_and_surface_receivers_are_kept_apart_by_name`); says no: the two 500 Hz files
+  swapped, or the cutting plane's `Global` file copied over the receiver's, is refused. The M7
+  critic found no fixture with a cutting plane.
+- **Saved particles** (`nbparticules_rendu`): each band's `Particles/<f>/particles.pbin`, decoded
+  (`docs/formats/pbin.md`) and held to its run: its time step is `pasdetemps`'s `f32` bit for bit,
+  its step count the run's, it holds at most `nbparticules_rendu` per source, each particle has at
+  least one step and none past the last (`results_file_invalid`), and every position and energy is
+  finite and every energy at least 0 (`results_value_invalid`). The JSON gives each file's particles
+  and step records. `results/outputs_spps` saves 10 per source: 8 particles in each band, 28 and
+  39 step records (`saved_particles_are_read_through_the_results_and_held_to_their_run`, which
+  compares with the format reader's own read); says no: a `.pbin` removed
+  (`results_outputs_invalid`), cut short by one record, with another time step, or with a particle
+  past the last step (`results_file_invalid`), or with a NaN energy (`results_value_invalid`). The
+  M7 critic found no fixture that saved particles.
 
 **What a `.recp` value is.** `energy_sum × c·ρ / V_receiver` (`baseReportManager.cpp:183`;
 `sppsInitialisation.cpp:86`), where `energy_sum` adds each particle's energy `W/N`
@@ -127,6 +161,36 @@ materials by 6.6 %, the floor's and the walls' materials swapped by 4.9 %, each 
 absorption by 0.92 %. A swap of the floor and the ceiling cannot show in a box like this, nor in
 Sabine or Eyring at all when the two have equal areas: they see only `A` and `S`.
 
+**What gate M7(d) can detect, measured** (M7 follow-ups; `cli_results.rs`,
+`gate_d_says_no_through_the_code_to_one_surface_and_to_the_air_term`). The M7 critic: the gate's
+say-NO was specified as one surface's α 5 % higher and run as the whole Walls group (96 of
+216 m²), and the air term `4mV` had none.
+- **One surface.** Each of the box's six planes gets a group and a copy of its material of its own
+  with α scaled, is run through TCR, and its analytic times (`results::tcr::analytic` on that
+  run's inputs) are held against the unchanged run's TCR times. The smallest α increase that fails
+  the gate (either theory outside 0.5 % in some band), found on the project and confirmed through
+  TCR 2 % below it (passes in all 27 bands) and 2 % above (fails in 15):
+
+  | Plane | Area | α | +5 % fails the gate in | Smallest increase caught |
+  |---|---|---|---|---|
+  | floor | 60 m² | 0.1 | 24 of 27 bands | +3.21 % |
+  | ceiling | 60 m² | 0.3 | 27 of 27 | +1.07 % |
+  | walls x = 0 and x = 6 | 30 m² each | 0.2 | 24 of 27 | +3.21 % |
+  | walls y = 0 and y = 10 | 18 m² each | 0.2 | **0 of 27** | +5.35 % |
+
+  Every threshold is the same error in absorption area, `S·Δα` = 0.193 m², 0.45 % of `A` in the
+  low bands where the air adds least; above them `4mV` dilutes it. **One 18 m² wall 5 % more
+  absorbing passes the gate**: it moves the times by 0.42 %, as the critic computed. The gate
+  resolves one surface's error only when it moves `A` by more than 0.19 m² in some band.
+- **The air term**, through the code: `results::tcr`'s analytic references on the same run's inputs
+  with a test-only fault (`simpa_core::faults`). Dropping `4mV` fails the gate in 20 of 27 bands,
+  from 250 Hz up (+0.50 % there, +201 % at 20 kHz). Taking `m` from ISO 9613-1 at the exact
+  midband frequency instead of the solver's value at the nominal one fails it in 2 bands only,
+  12.5 kHz (−0.59 %) and 16 kHz (+0.96 %); at 8 kHz it moves the times by 0.39 %, inside the gate.
+  So gate (d) catches a missing air term, but not the choice of midband frequency below 12.5 kHz on
+  this room (`docs/params.md`, "The reference M8 compares against", measures that choice in M8's
+  rooms).
+
 ## Receivers are enumerated by folder
 
 SPPS writes each point receiver into a folder named by its label, TCR into a file `<lbl>.gabe`.
@@ -143,6 +207,17 @@ For each SPPS point receiver and band, `report::parameters` gives piece A's SPL,
 C80, D50 and Ts, each a value or its refusal; the same for an explicitly labelled aggregate of all
 bands summed bin by bin (`params::aggregate`). For a TCR receiver each of the eight is refused,
 `no_time_series` (above).
+
+Beside them (M7 follow-ups, for M12; the M7 critic): the **curvature** of the decay, T20 against
+T30 with its flag (`docs/params.md`, "Decay times"), and the **Schroeder curve** the decay times
+were fitted to, thinned to within 0.01 dB (`docs/params.md`, "The decay curve, for display"), so
+that M12's decay charts and curved-decay warnings come from the code that gives the numbers. With
+several sources in a band both are withheld as the seven onset-relative values are
+(`several_sources`); for TCR the curvature is refused `no_time_series` and there is no curve.
+
+**Upstream's GUI on the same tutorial 1 run**: `docs/params.md`, "Upstream's GUI reproduced on
+tutorial 1", ports its algorithm, reproduces its stored table and measures each step from its
+method to ours.
 
 **The arrival.** Every onset-relative parameter is measured from the direct sound's arrival at the
 receiver's centre, `params::decay::Arrival::Known`, with the direct sound spread over the time a
@@ -415,8 +490,14 @@ off, an omni source of 100 dB per band (octaves 125 Hz–4 kHz), receivers 2 m a
 - **What keeps the reverberant field out is the duration** (corrected after the M7 review). The
   source is 9.97 m from the nearest wall and a particle covers `c·20 ms` = 6.86 m in the whole run,
   so none reaches a surface: the statistics count 0 absorbed by the materials and every particle
-  remaining in every band, which `gate_c_...` asserts. The receivers see the direct field and
-  nothing else.
+  remaining in every band, which `gate_c_...` asserts, and nothing reaches a receiver after the
+  direct sound has passed it. The receivers see the direct field and nothing else. **Says no**
+  (M7 follow-ups; the M7 critic: the check had no partner): the same box with its walls
+  reflecting (α 0.5, `direct_calc` off) over 120 ms, 100,000 particles, through SPPS
+  (`gate_c_says_no_to_a_run_whose_walls_are_reached`): the statistics count 86,945 to 87,155 of
+  100,000 absorbed by the materials and 12,845 to 13,055 remaining, so the check fails in every
+  band; what it keeps out, energy after the direct sound, is 4.0 to 6.3 % of the total at 2 m and
+  14.4 to 18.2 % at 4 m.
 - **Two guards the run does not exercise.** `direct_calc` stops a particle at its first surface
   hit (`spps/CalculationCore.cpp:236-242`), and α = 1 does the same without it in both computation
   methods (`CalculationCore.cpp:249-261, 288-300`), with no transmission. The earlier text gave
@@ -437,9 +518,14 @@ averaging `1/d²` over a sphere of radius `R` reads `10·lg(1 + R²/(5r²))` hig
 | 2 m | +0.19 to +0.28 dB | −0.01 to +0.08 dB |
 | 4 m | +0.11 to +0.30 dB | −0.05 to +0.14 dB |
 
-Says no: Night Mode's `.gap` echogram level, the energy over the intensity reference 10⁻¹²
-instead of `p₀²` (`main:project/result_parser.cpp:486`), reads 26.02 dB high and misses the gate in
-every band; so does the SPL moved 1 dB either way.
+Says no, **through the code** (M7 follow-ups; the M7 critic: the first partners added 26 dB and
+1 dB to the SPL the correct run had produced). The test computes the run's report again in its
+own process, by the code the CLI runs (`results::load`, `report::checked_report`; without a fault
+it is the CLI's report, which the test asserts), with the level code path's calibration constant
+replaced through a test-only seam (`simpa_core::faults::Fault::LevelReference`, compiled only into
+test builds): Night Mode's `.gap` reference, the intensity reference 10⁻¹² instead of `p₀²`
+(`main:project/result_parser.cpp:486`), reads +26.02 dB and misses the gate in all 12
+receiver-bands; `p₀²` 1 dB off either way reads ±1.00 dB and misses it in all 12.
 
 **The exact free field** (M7 review). Because its reference sits 0.11–0.30 dB below what SPPS should
 give, the gate's ±0.5 dB lets a calibration error between about −0.6 and +0.2 dB through. The same
@@ -450,8 +536,8 @@ the receiver ball in closed form, `3/(2r·R³)·[(R² − r²)/2·ln((r+R)/(r−
 `the_ball_average_of_the_inverse_square_is_its_closed_form`). Every band must lie within 4 of its
 `mc_sd`, and the mean of the 12, weighted by `1/mc_sd²`, within 4 of its standard deviation. On
 seed 1 that mean is +0.028 dB with a standard deviation of 0.014 dB; it catches an offset above
-+0.028 dB or below −0.083 dB, so the SPL moved 0.1 dB either way, or computed with `ρc` = 400
-(−0.14 dB), is caught.
++0.028 dB or below −0.083 dB. Through the same seam, `p₀²` 0.1 dB off either way (weighted means
++0.128 and −0.072 dB), and the reference as it would read with `ρc` = 400 (−0.114 dB), are caught.
 
 **Over ten seeds** (`cli_results.rs`, `level_box_over_ten_seeds`, run on purpose: seeds 1–10,
 1,000,000 particles each): each seed's weighted mean difference from the exact free field runs from

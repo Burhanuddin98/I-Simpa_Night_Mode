@@ -38,9 +38,9 @@ give back the same bytes.
 
 | fixture | from | edits | for | sha256 |
 |---|---|---|---|---|
-| `tutorial1_box_seeded.simpa` | `tutorial1_box.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 150,000 → 10,000: M1's reference configuration | gate M6(a) | `960dd67769665c29` |
-| `tutorial1_box_fitting.simpa` | `tutorial1_box_seeded.simpa` | one fitting zone, below | gate M5(e) | `5dda008fe04be568` |
-| `elmia_loss_gate.simpa` | `elmia_corrected.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 1,000,000 → 100,000; `bands_computed` true for 125, 250, 500, 1000, 2000 and 4000 Hz only, in both solvers (SPPS already had exactly these; TCR had all 27) | gate M6(c) | `d1c4245a41fb30ed` |
+| `tutorial1_box_seeded.simpa` | `tutorial1_box.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 150,000 → 10,000: M1's reference configuration | gate M6(a) | `59e2e534b51f0930` |
+| `tutorial1_box_fitting.simpa` | `tutorial1_box_seeded.simpa` | one fitting zone, below | gate M5(e) | `e228a3b64e57e930` |
+| `elmia_loss_gate.simpa` | `elmia_corrected.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 1,000,000 → 100,000; `bands_computed` true for 125, 250, 500, 1000, 2000 and 4000 Hz only, in both solvers (SPPS already had exactly these; TCR had all 27) | gate M6(c) | `d359fdfe5dc7cf21` |
 
 The fitting zone: id `0c0be000-0000-4000-8000-00000000f177`, name `Fitting zone`, enabled, a
 box from (1, 1, 0.5) to (2, 2, 1.5) m (1 m³, dyadic corners, so the gate's 1e-9 volume check
@@ -60,8 +60,9 @@ the validator reports anything on it.
 
 | fixture | recipe | for | sha256 |
 |---|---|---|---|
-| `level_box_20m.simpa` | tutorial 1's box stretched to 20 × 20 × 20 m, one group `Walls` of a material with α = 1 in every band; octave bands 125 Hz–4 kHz; one omni source of 100 dB per band at (10.05, 9.97, 10.03); receivers `R2m` and `R4m` 2 m and 4 m from it; SPPS direct field only, air absorption off, random mode, seed 1, 1,000,000 particles, 20 ms in 0.2 ms steps, receiver radius 0.5 m | gate M7(c) | `88a6a29bc49b797d` |
-| `seats_box.simpa` | tutorial 1's box on the octave bands 500 Hz and 1 kHz, its receivers renamed `Seat` and `Seat2`, 2,000 particles over 1 s, the floor receiver's faces refined to 4 m² | gate M7(e); its runs are `tests/fixtures/results/` | `e030381d37e5c7ea` |
-| `energetic_box.simpa` | `seats_box.simpa` in energetic mode, `trans_epsilon` 3, 50,000 particles | the M7 review: the solver's floor, energetic completeness; its run is `results/energetic_spps/` | `65f81942d1e7487b` |
-| `sources2_box.simpa` | `seats_box.simpa` with a second source `Source 2` at (5, 8.5, 1.2), 3 dB below `Source 1` and 20 ms late, and `echogram_per_source` on | the M7 review: echograms per source, several sources; its run is `results/sources2_spps/` | `dd31727243d1075c` |
-| `tutorial1_box_asymmetric.simpa` | `tutorial1_box_seeded.simpa` with the floor's material renamed `Rising absorption`, its α `0.15 + 0.025·i` in band `i` (0.15 to 0.80 over the 27 bands), and the walls' α 0.1 in every band; the ceiling stays 0.3 | gate M7(d), the M7 review: tutorial 1's own absorption averages to the same α by area, by face and by material; here each way, a swap of the floor's and walls' materials, and a band's neighbour's α miss TCR by more than 0.5 % | `36241b6793a52118` |
+| `level_box_20m.simpa` | tutorial 1's box stretched to 20 × 20 × 20 m, one group `Walls` of a material with α = 1 in every band; octave bands 125 Hz–4 kHz; one omni source of 100 dB per band at (10.05, 9.97, 10.03); receivers `R2m` and `R4m` 2 m and 4 m from it; SPPS direct field only, air absorption off, random mode, seed 1, 1,000,000 particles, 20 ms in 0.2 ms steps, receiver radius 0.5 m | gate M7(c) | `1dc535d60fa4fdbb` |
+| `seats_box.simpa` | tutorial 1's box on the octave bands 500 Hz and 1 kHz, its receivers renamed `Seat` and `Seat2`, 2,000 particles over 1 s, the floor receiver's faces refined to 4 m² | gate M7(e); its runs are `tests/fixtures/results/` | `af6918a138535dfe` |
+| `energetic_box.simpa` | `seats_box.simpa` in energetic mode, `trans_epsilon` 3, 50,000 particles | the M7 review: the solver's floor, energetic completeness; its run is `results/energetic_spps/` | `1d46c8fc9d25ff9d` |
+| `sources2_box.simpa` | `seats_box.simpa` with a second source `Source 2` at (5, 8.5, 1.2), 3 dB below `Source 1` and 20 ms late, and `echogram_per_source` on | the M7 review: echograms per source, several sources; its run is `results/sources2_spps/` | `1b29fbe96ba953ad` |
+| `outputs_box.simpa` | `seats_box.simpa` with a cutting plane `Cut` 1.2 m above the floor, corners (0.5, 9.5, 1.2), (0.5, 0.5, 1.2) and (5.5, 0.5, 1.2), 1 m resolution, and 10 particles per source saved (`particles_saved`) with the surface and receiver collision files off | the M7 follow-ups: cutting planes kept apart from surface receivers by name, and the `.pbin` read; its run is `results/outputs_spps/` | `b0b183de0b84bf29` |
+| `tutorial1_box_asymmetric.simpa` | `tutorial1_box_seeded.simpa` with the floor's material renamed `Rising absorption`, its α `0.15 + 0.025·i` in band `i` (0.15 to 0.80 over the 27 bands), and the walls' α 0.1 in every band; the ceiling stays 0.3 | gate M7(d), the M7 review: tutorial 1's own absorption averages to the same α by area, by face and by material; here each way, a swap of the floor's and walls' materials, and a band's neighbour's α miss TCR by more than 0.5 % | `b0a829b9cd56ac93` |

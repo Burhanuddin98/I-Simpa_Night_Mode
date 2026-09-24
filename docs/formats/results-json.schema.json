@@ -83,16 +83,31 @@
         "description": "All bands of a receiver summed bin by bin (`params::aggregate`): **an aggregate, not a band,\nand not ISO 3382-1's single-number value** (the arithmetic mean of band values), since its\ndecay is weighted by the source spectrum.",
         "properties": {
           "aggregate": {
-            "description": "Always `\"all computed bands summed bin by bin\"`.",
+            "description": "[`AGGREGATE_BANDS_SUMMED`] for SPPS; [`AGGREGATE_NO_SERIES`] for a TCR receiver.",
             "type": "string"
           },
           "bands_hz": {
-            "description": "The bands summed: those whose series `params` accepts.",
+            "description": "The bands summed: those whose series `params` accepts. Empty for TCR.",
             "items": {
               "format": "int32",
               "type": "integer"
             },
             "type": "array"
+          },
+          "curvature": {
+            "$ref": "#/$defs/CurvatureReport",
+            "description": "As for a band."
+          },
+          "decay_curve": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DecayCurve"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "As for a band."
           },
           "parameters": {
             "$ref": "#/$defs/Parameters"
@@ -101,7 +116,8 @@
         "required": [
           "aggregate",
           "bands_hz",
-          "parameters"
+          "parameters",
+          "curvature"
         ],
         "type": "object"
       },
@@ -310,6 +326,79 @@
           "lost_by_meshing_problems",
           "remaining",
           "total"
+        ],
+        "type": "object"
+      },
+      "CurvatureReport": {
+        "description": "The curvature of a decay (`params::decay::curvature`), for M8 and M12 to decide what a curved\ndecay may show: its value with its Monte-Carlo standard deviation, and the flag.",
+        "properties": {
+          "curved": {
+            "description": "`|percent| > limit_percent`: a curved (double-slope) decay. `null` when `percent` is\nrefused.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "limit_percent": {
+            "description": "10 %, ISO 3382-2's, as commonly stated (`params::decay::CURVATURE_LIMIT_PERCENT`).",
+            "format": "double",
+            "type": "number"
+          },
+          "percent": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "`100·(T30/T20 − 1)`, %, from the reported T20 and T30, with its standard deviation over\nthe Monte-Carlo resamples; refused, with T30's refusal or else T20's, when either is."
+          }
+        },
+        "required": [
+          "percent",
+          "limit_percent"
+        ],
+        "type": "object"
+      },
+      "DecayCurve": {
+        "description": "The Schroeder curve EDT, T20 and T30 are fitted to, for display (`docs/formats/results-json.md`,\n\"The decay curve\"): the same curve, from the same code, not a second computation of it.",
+        "properties": {
+          "from_s": {
+            "description": "The time, s, of the curve's `u = 0`: the arrival the decay times are measured from\n([`BandParameters::decay_arrival`]); with the arrival detected, the start of the onset bin,\nthe first of the two ends the decay times are read from.",
+            "format": "double",
+            "type": "number"
+          },
+          "histogram_from_s": {
+            "description": "From this `u` on, every knot is the histogram's own backward sum at a bin edge. Before it\nthe curve is the model's reading: the direct sound a step at `u = 0`, then the decay of the\nfirst bin wholly after the direct sound continued back to the arrival\n(`docs/params.md`, \"The curve between bin edges\"). When the series' early reverberation is\nunresolved, the values are read two more ways over this stretch\n([`EnergySeries::with_early_reverberation_unresolved`]); the curve shown is this reading.",
+            "format": "double",
+            "type": "number"
+          },
+          "knots": {
+            "description": "The knots of the whole curve, before any is left out.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "points": {
+            "description": "`[u, level]`: `u` in s since `from_s`, the level in dB re the curve's value at `u = 0`,\nwhich includes the direct sound. Joined by straight lines they are the curve within\n`tolerance_db`: the curve is straight in dB between its knots, and a knot is left out only\nwhen the line through the points kept either side of it passes within `tolerance_db` of it\nand of every other knot left out between them. The first point is `[0, 0]`; the second,\nalso at `u = 0`, is the level just after the direct sound (the curve steps down by it at\nthe arrival). The last is the start of the last bin with energy: inside that bin the curve\nfalls to nothing, which a level cannot show, and the fits leave it out.",
+            "items": {
+              "items": {
+                "format": "double",
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "type": "array"
+          },
+          "tolerance_db": {
+            "description": "[`CURVE_TOLERANCE_DB`].",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "from_s",
+          "points",
+          "tolerance_db",
+          "knots",
+          "histogram_from_s"
         ],
         "type": "object"
       },
@@ -1176,14 +1265,17 @@
             "type": "integer"
           },
           "particles": {
+            "description": "The particles written: those of the `nbparticules_rendu` per source that recorded at least\none step (`docs/formats/pbin.md`).",
             "format": "uint",
             "minimum": 0,
             "type": "integer"
           },
           "path": {
+            "description": "Relative to `solve/`.",
             "type": "string"
           },
           "recorded_steps": {
+            "description": "Their step records, all particles together.",
             "format": "uint",
             "minimum": 0,
             "type": "integer"
@@ -1358,6 +1450,10 @@
               "null"
             ]
           },
+          "curvature": {
+            "$ref": "#/$defs/CurvatureReport",
+            "description": "T20 against T30: the curved-decay flag."
+          },
           "decay_arrival": {
             "anyOf": [
               {
@@ -1368,6 +1464,17 @@
               }
             ],
             "description": "What EDT, T20 and T30 are measured from (`params::decay::BandParameters::decay_arrival`):\n`arrival` when it fits the onset bin, or follows it within the direct sound's spread;\notherwise `detected`. `null` when the series is refused."
+          },
+          "decay_curve": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DecayCurve"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The Schroeder curve EDT, T20 and T30 were fitted to, thinned for display\n(`params::decay::DecayCurve`); `null` when the series is refused, or when several sources\ncontribute (the decay of their sum is no source–receiver pair's)."
           },
           "early_reverberation_unresolved": {
             "description": "Always true for SPPS, whose reverberation begins with the first reflection: how it ran\nbetween the arrival and the first bin wholly after the direct sound is not known, so each\nvalue is taken midway between that stretch continuing the decay and holding none, and\nrefused, `early_unresolved`, when the two differ by more than its limit\n(`params::EnergySeries::with_early_reverberation_unresolved`).",
@@ -1446,7 +1553,8 @@
           "total_pa2",
           "source_power_rho_c",
           "background_noise_db",
-          "parameters"
+          "parameters",
+          "curvature"
         ],
         "type": "object"
       },
@@ -1494,10 +1602,25 @@
               "null"
             ]
           },
+          "curvature": {
+            "$ref": "#/$defs/CurvatureReport",
+            "description": "As for the receiver's band."
+          },
           "decay_arrival": {
             "anyOf": [
               {
                 "$ref": "#/$defs/Arrival"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "As for the receiver's band."
+          },
+          "decay_curve": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DecayCurve"
               },
               {
                 "type": "null"
@@ -1544,7 +1667,8 @@
           "noise_model",
           "energy_pa2",
           "total_pa2",
-          "parameters"
+          "parameters",
+          "curvature"
         ],
         "type": "object"
       },
@@ -1845,6 +1969,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "id": {
+            "description": "`xmlIndex`: its id in `config.xml`, of a `recepteur_surfacique` in a receivers' file and of\na `recepteur_surfacique_coupe` in a cutting planes' file.",
+            "format": "int32",
+            "type": "integer"
+          },
           "name": {
             "type": "string"
           },
@@ -1860,6 +1989,7 @@
           }
         },
         "required": [
+          "id",
           "name",
           "faces",
           "records",
@@ -1870,6 +2000,13 @@
       "SurfaceSummary": {
         "description": "One surface-receiver or cutting-plane file, summarised (the values stay in the file; M12 reads\nit with the `.csbin` reader).",
         "properties": {
+          "aggregate": {
+            "description": "[`AGGREGATE_GLOBAL_FILE`] for the `Global` file; `null` for a band's.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "band_hz": {
             "description": "The band; `null` for the `Global` file, **an aggregate of all bands**.",
             "format": "int32",
@@ -1879,6 +2016,7 @@
             ]
           },
           "cutting_plane": {
+            "description": "The cutting-plane file (`rs_cut.csbin`), not the surface receivers' (`Sound level.csbin`):\ntold apart by the file's name, and each holds exactly the receivers `config.xml` gives it.",
             "type": "boolean"
           },
           "field": {
@@ -1926,7 +2064,7 @@
         "description": "TCR's `Global` row: the energetic sum of the band levels, **an aggregate**.",
         "properties": {
           "aggregate": {
-            "description": "Always `\"energetic sum of the band levels\"`.",
+            "description": "Always [`AGGREGATE_ENERGETIC_SUM`].",
             "type": "string"
           },
           "eyring_level_db": {
@@ -1948,6 +2086,21 @@
       "TcrReceiverBandReport": {
         "description": "One band of a TCR point receiver: TCR's own levels, dB, and the eight parameters, every one\nrefused `no_time_series`.",
         "properties": {
+          "curvature": {
+            "$ref": "#/$defs/CurvatureReport",
+            "description": "Refused as the parameters are."
+          },
+          "decay_curve": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/DecayCurve"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Always `null`: no series, no curve."
+          },
           "direct_db": {
             "format": "double",
             "type": "number"
@@ -1974,16 +2127,45 @@
           "direct_db",
           "total_sabine_db",
           "total_eyring_db",
-          "parameters"
+          "parameters",
+          "curvature"
+        ],
+        "type": "object"
+      },
+      "TcrReceiverGlobal": {
+        "description": "A TCR receiver's `Global` row: each column's energetic sum over the bands, **an aggregate**\n(`ctr/input_output/reportmanager.cpp:131-143`).",
+        "properties": {
+          "aggregate": {
+            "description": "Always [`AGGREGATE_ENERGETIC_SUM`].",
+            "type": "string"
+          },
+          "direct_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "total_eyring_db": {
+            "format": "double",
+            "type": "number"
+          },
+          "total_sabine_db": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "aggregate",
+          "direct_db",
+          "total_sabine_db",
+          "total_eyring_db"
         ],
         "type": "object"
       },
       "TcrReceiverReport": {
-        "description": "A TCR point receiver, in the same shape as an SPPS one where the two meet: `label`, `bands[]`\nwith `freq_hz` and `parameters`, and `aggregate`.",
+        "description": "A TCR point receiver, in the same shape as an SPPS one where the two meet: `label`, `bands[]`\nwith `freq_hz`, `parameters`, `curvature` and `decay_curve`, and `aggregate`.",
         "properties": {
           "aggregate": {
             "$ref": "#/$defs/AggregateReport",
-            "description": "As SPPS's, with no band summed and every parameter refused `no_time_series`."
+            "description": "SPPS's shape, labelled [`AGGREGATE_NO_SERIES`]: no band summed, every parameter refused\n`no_time_series`."
           },
           "bands": {
             "items": {
@@ -1995,18 +2177,9 @@
             "description": "Relative to `solve/`.",
             "type": "string"
           },
-          "global_direct_db": {
-            "description": "The `Global` row: each column's energetic sum over the bands, **an aggregate**.",
-            "format": "double",
-            "type": "number"
-          },
-          "global_total_eyring_db": {
-            "format": "double",
-            "type": "number"
-          },
-          "global_total_sabine_db": {
-            "format": "double",
-            "type": "number"
+          "global": {
+            "$ref": "#/$defs/TcrReceiverGlobal",
+            "description": "The `Global` row, **an aggregate**, labelled."
           },
           "label": {
             "description": "The file's name without `.gabe`: exactly one `recepteur_ponctuel@lbl`.",
@@ -2017,9 +2190,7 @@
           "label",
           "file",
           "bands",
-          "global_direct_db",
-          "global_total_sabine_db",
-          "global_total_eyring_db",
+          "global",
           "aggregate"
         ],
         "type": "object"

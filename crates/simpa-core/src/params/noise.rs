@@ -108,6 +108,10 @@ pub struct Parameters {
     /// A fraction.
     pub d50: Result<Estimate, ParamError>,
     pub ts_s: Result<Estimate, ParamError>,
+    /// `100·(T30/T20 − 1)`, %, from the reported T20 and T30, its standard deviation over the
+    /// resamples that give both; refused, with T30's refusal or else T20's, when either is
+    /// ([`decay::curvature`]). No limit of its own: its noise follows from theirs.
+    pub curvature_percent: Result<Estimate, ParamError>,
 }
 
 /// The eight quantities in [`Parameters`]' order, with their limits: `(quantity, limit,
@@ -174,6 +178,7 @@ pub fn evaluate(
                 c80_db: r(),
                 d50: r(),
                 ts_s: r(),
+                curvature_percent: r(),
             };
         }
     };
@@ -222,6 +227,28 @@ pub fn evaluate(
             }
         }));
     }
+    // The curvature of the reported T20 and T30, with its spread over the resamples giving both.
+    let curvature_percent = match (&out[2], &out[3]) {
+        // T30's refusal first, then T20's.
+        (_, Err(e)) | (Err(e), _) => Err(match e {
+            ParamError::NotEvaluable { why, .. } => not_evaluable(Quantity::Curvature, why.clone()),
+            other => other.clone(),
+        }),
+        (Ok(t20), Ok(t30)) => {
+            let percent = |t20: f64, t30: f64| 100.0 * (t30 / t20 - 1.0);
+            let got: Vec<f64> = samples
+                .iter()
+                .filter_map(|s| Some(percent(s[2]?, s[3]?)))
+                .collect();
+            let value = percent(t20.value, t30.value);
+            // Both passed their own judgement, so at least 180 resamples give both. Were there
+            // fewer than two, the two spreads added as if independent would stand in.
+            let sd = standard_deviation(&got).unwrap_or_else(|| {
+                100.0 * (t30.value / t20.value) * (t30.sd / t30.value).hypot(t20.sd / t20.value)
+            });
+            Ok(Estimate { value, sd })
+        }
+    };
     let mut it = out.into_iter();
     let mut next = || it.next().expect("eight quantities");
     Parameters {
@@ -235,6 +262,7 @@ pub fn evaluate(
         c80_db: next(),
         d50: next(),
         ts_s: next(),
+        curvature_percent,
     }
 }
 

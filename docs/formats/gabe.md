@@ -17,7 +17,7 @@ The extension says what the table holds. The layout is the same in every case.
 | SPPS statistics `.gabe` | `spps/input_output/reportmanager.cpp:503-517` | Particle fates by band. Integer columns. Row labels in column 0 |
 | SPPS sound level over time `.gabe` | `spps/input_output/reportmanager.cpp:538` | Float columns, rows labelled `"<n> ms"` |
 | `.recp` (punctual receiver) | `lib_interface/input_output/baseReportManager.cpp:190`, `spps/input_output/reportmanager.cpp:614,704,871` | Float column per band, row labels `"<t> ms"` |
-| `.recps` | `spps/sppsNantes.cpp:406` (`Sound level per source.recps`) | Level per source |
+| `.recps` | `spps/sppsNantes.cpp:406` (`Sound level per source.recps`) | Each source's energy at the receiver per band, the time series summed, in the `.recp`'s unit (Pa², not a level in dB; `docs/results.md`, "What is read"). One row per source |
 | `.gap` | GUI name `Advanced sound level.gap` (`isimpa/data_manager/tree_core/e_core_core.h:108`) | Advanced receiver parameters |
 | `.rpi` | `spps/input_output/reportmanager.cpp:755` (`Intensity.rpi`) | Intensity |
 | TCR `Main results.gabe` | `ctr/main_tc.cpp:137`, `ctr/input_output/reportmanager.cpp:154-216` | Float column per quantity (`A_Sabine`, `TR_Sabine`, `L_Sabine` and the Eyring ones). One row per band, then a `Global` row |

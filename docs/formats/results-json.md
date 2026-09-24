@@ -7,8 +7,19 @@ receiver, all eight refused `no_time_series`). Written by `core::results::report
 
 **The JSON Schema is `docs/formats/results-json.schema.json`**, generated from the same Rust types
 that serialise the output (`simpa results --schema`; object `report` for a run read, `refusal`
-for a run refused). `crates/simpa/tests/cli_results.rs` fails when the committed file differs from
-what the binary prints, and when the report prints a top-level key the schema does not have.
+for a run refused; draft 2020-12). `crates/simpa/tests/cli_results.rs` holds the output to it:
+- `the_committed_schema_is_the_one_results_schema_prints`: the committed file is what the binary
+  prints;
+- `every_report_and_refusal_validates_against_the_committed_schema` (M7 follow-ups; the M7 critic:
+  only the text and one report's top-level keys had been checked): a JSON Schema validator (the
+  `boon` crate) validates the report of every committed run, SPPS and TCR, and a refusal of
+  each exit, 5 and 6, against the committed schema, every field at every depth. Says no: a report
+  with a string for a number, a fraction for a band, a required field removed, a value that is
+  neither a value nor a refusal, a `null` energy or a number for the curvature flag fails it, and
+  so does a refusal with a string for its exit code.
+
+The schema does not forbid extra fields (`additionalProperties` is not set): a reader may meet a
+field this page does not list, and must ignore it.
 
 ## Command and exit codes
 
@@ -24,12 +35,16 @@ simpa results --schema
 | 5 | the run is FAIL, CRASH or CANCELLED (`results_run_failed`, `results_run_cancelled`) | with `--json`, the refusal | `simpa: results refused: <code>: <detail>` |
 | 6 | the results do not verify (every other code of `docs/solver-contract.md`, "Result refusals") | with `--json`, the refusal | the same |
 
-5 and 6 are the plan's stable codes, "5 solver run, 6 result verification" (raw plan JSON, the
-`cli` component; `docs/m5-m6-design.md`, "Exit codes", which gives 6 to M7). A run whose verdict is
-FAIL, CRASH or CANCELLED is a failed solver run: 5. A folder whose verdict says OK but whose
-manifest, inputs or outputs no longer verify is not a failed run but results that fail
-verification: 6. `simpa run` itself exits 130 for a cancel; `simpa results` refuses the cancelled
-run's folder with 5, because it is a solver run that did not finish.
+5 and 6 are the plan's stable codes, "5 solver run, 6 result verification" (raw plan JSON,
+`plan.architecture`, its `cli` line; the `cli` component lists none), which `docs/m5-m6-design.md`,
+"Exit codes", words as "5: solver run FAIL or CRASH", "6: result verification (M7)" and "130:
+cancelled". A run whose verdict is FAIL or CRASH is a failed solver run: 5. **A CANCELLED run is
+refused with 5 as well, not 130**: 130 says the command itself was cancelled, as `simpa run` exits
+130 when its run is; `simpa results` was not cancelled, it read to the end the folder of a solver
+run that did not succeed, and the refusal's code, `results_run_cancelled`, says how. (The first
+text justified 5 for a cancelled run by the plan's "5 solver run" alone, which the design words as
+FAIL or CRASH; the M7 critic.) A folder whose verdict says OK but whose manifest, inputs or outputs
+no longer verify is not a failed run but results that fail verification: 6.
 
 Without `--json` the table starts with `UNVALIDATED: M8's physics bed has not passed; these numbers
 are not for publication.`
@@ -42,19 +57,26 @@ are not for publication.`
   exit 6, `results_value_invalid`), because JSON would print one as `null`, indistinguishable from
   an absent value.
 - **`null` appears only at these keys:** `spps`, `tcr` (the other solver's), `mc_sd` (a value not
-  from a Monte-Carlo histogram), `band_hz`, `field`, `air_m_per_metre`, `onset`, `position_m`,
-  `arrival_s`, `decay_arrival`, `floor_db`, `lost_share`, `crossings`, and inside a refusal's typed
-  `error`, `sd`, `with_tail`, `with_missing`, `low` and `high` (`cli_results.rs`,
-  `every_null_in_a_report_is_at_a_nullable_key`).
+  from a Monte-Carlo histogram), `band_hz` and `aggregate` (a surface file's: the first for the
+  `Global` file, the second for a band's), `curved`, `decay_curve`, `field`, `air_m_per_metre`,
+  `onset`, `position_m`, `arrival_s`, `decay_arrival`, `floor_db`, `lost_share`, `crossings`, and
+  inside a refusal's typed `error`, `sd`, `with_tail`, `with_missing`, `low` and `high`
+  (`cli_results.rs`, `every_null_in_a_report_is_at_a_nullable_key`).
 - Values read from the solvers' files are their `f32`, widened exactly. A reader that is not
   correctly rounded (serde_json's default is not) can come back one `f64` unit off; compare such
   values as `f32`. JavaScript's `JSON.parse` is correctly rounded.
 - Units are in the field names: `_s` seconds, `_db` decibels, `_m` metres, `_m2`, `_m3`, `_hz`,
   `_pa2` pascals squared. `d50` is a fraction from 0 to 1, shown as a percentage.
-- **Aggregates are labelled.** A value over all bands is never in a band's place: SPPS's
-  `aggregate` object says `"aggregate": "all computed bands summed bin by bin"`; TCR's `global`
-  object says `"aggregate": "energetic sum of the band levels"`; a surface file with `"band_hz":
-  null` is the `Global` file of all bands.
+- **Aggregates are labelled.** A value over all bands is never in a band's place, and every one
+  sits in an object whose `aggregate` field says what it is (M7 follow-ups; the M7 critic found
+  TCR's receiver `Global` values unlabelled):
+  - an SPPS receiver's (and a source's) `aggregate`: `"all computed bands summed bin by bin"`;
+  - a TCR receiver's `aggregate`, which sums nothing: `"none: TCR writes no series to sum"`, with
+    `bands_hz` empty and every value refused `no_time_series`;
+  - TCR's `global` and a TCR receiver's `global` (its `Global` row): `"energetic sum of the band
+    levels"`;
+  - a surface file's `Global` file: `"aggregate": "all computed bands: the solver's Global file"`,
+    with `"band_hz": null`; a band's file has `"aggregate": null`.
 
 ## A report
 
@@ -65,7 +87,10 @@ are not for publication.`
                                       // 4: lost_follows_decay; an arrival outside the onset
                                       //    bin refuses C50, C80, D50 and Ts only; bands carry
                                       //    arrival, decay_arrival and
-                                      //    early_reverberation_unresolved
+                                      //    early_reverberation_unresolved; bands and
+                                      //    aggregates carry curvature and decay_curve; TCR
+                                      //    receivers' global; surfaces' aggregate and
+                                      //    receivers' id (4 is not merged yet)
   "validated_by_bed": false,          // false until M8's bed passes: show nothing
   "run_folder": "<as given>",
   "solver": "spps" | "tcr",
@@ -91,8 +116,8 @@ are not for publication.`
 | `particles` | the statistics per band: absorbed by the atmosphere, the materials, the fittings; lost by loops and meshing; remaining; total |
 | `total_energy[]` | per band, the room's energy per step (`<cumul_filename>`) |
 | `point_receivers[]` | below, in the order of their folder names |
-| `surfaces[]` | each surface-receiver and cutting-plane file, summarised: `path`, `field` (`null`), `band_hz` (`null` for `Global`), `cutting_plane`, `record_type`, `time_steps`, `time_step_s`, and per receiver its `name`, `faces`, `records` and `value_sum`. The values stay in the `.csbin` |
-| `particle_files[]` | when particles were saved: `path`, `freq_hz`, `particles`, `recorded_steps` |
+| `surfaces[]` | each surface-receiver and cutting-plane file, summarised: `path`, `field` (`null`), `band_hz` (`null` for `Global`), `aggregate` (the `Global` file's label, `null` for a band's), `cutting_plane` (the cutting planes' file, `rs_cut.csbin`, not the scene receivers' `Sound level.csbin`: kept apart by name, each holding only receivers of its kind, `docs/results.md`), `record_type`, `time_steps`, `time_step_s`, and per receiver its `id` (its `config.xml` id), `name`, `faces`, `records` and `value_sum`. The values stay in the `.csbin` |
+| `particle_files[]` | when particles were saved: `path`, `freq_hz`, `particles` (those written: of the `nbparticules_rendu` per source, the ones that recorded a step) and `recorded_steps` (their step records together). Each file is checked against its run (`docs/results.md`, "Saved particles") |
 
 A point receiver:
 
@@ -101,10 +126,10 @@ A point receiver:
 | `label`, `folder` | the folder's name, which is exactly one `config.xml` label, and its path under `solve/` |
 | `position_m` | as SPPS stores it; `null` when not read |
 | `arrival_s` | the direct sound's arrival at the centre, which every onset-relative parameter is measured from, the direct sound spread over `±receiver_crossing_s/2` about it; `null` when not computed, and the parameters then detect it. When it lies outside a band's onset bin, C50, C80, D50 and Ts are refused `params_bad_arrival`; SPL, EDT, T20 and T30 are not |
-| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that unfinished particles can have taken, or `null` when there are none); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …}` in Pa², or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters` |
-| `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `parameters`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
+| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that unfinished particles can have taken, or `null` when there are none); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …}` in Pa², or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters`; `curvature` and `decay_curve` (below) |
+| `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `parameters`, `curvature`, `decay_curve`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
 | `by_source[]` | `source` and its `energy` per band, Pa² |
-| `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `arrival`, `decay_arrival`, `noise_model`, `crossings`, `energy_pa2`, `total_pa2`, `onset`, `parameters`) and `aggregate`: the parameters of that source–receiver pair. Empty otherwise |
+| `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `arrival`, `decay_arrival`, `noise_model`, `crossings`, `energy_pa2`, `total_pa2`, `onset`, `parameters`, `curvature`, `decay_curve`) and `aggregate`: the parameters of that source–receiver pair. Empty otherwise |
 
 `parameters` holds `spl_db`, `edt_s`, `t20_s`, `t30_s`, `c50_db`, `c80_db`, `d50` and `ts_s`, each
 exactly one of:
@@ -126,13 +151,47 @@ refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `early
 `monte_carlo_noise`, `noise_unknown`, `several_sources`, `no_time_series` for
 `params_not_evaluable` (`docs/params.md`).
 
+#### `curvature` and `decay_curve`
+
+Added by the M7 follow-ups (the M7 critic: the curved-decay flag was computed and dropped, and the
+curve the parameters come from was internal), so that M12's decay charts and curved-decay warnings
+come from the code that gives the numbers, not from a second implementation.
+
+```
+"curvature": {"percent": {"value": 3.1, "mc_sd": 0.9},   // 100·(T30/T20 − 1), % (or a refusal)
+              "curved": false,                            // |percent| > limit_percent; null
+              "limit_percent": 10.0},                     //   when percent is refused
+"decay_curve": {"from_s": 0.01303,           // the absolute time of u = 0: what EDT, T20 and
+                                             //   T30 were measured from (the start of the onset
+                                             //   bin when the arrival is detected)
+                "points": [[0.0, 0.0], [0.0, -0.68], [0.017, -1.91], ...],   // [u s, level dB]
+                "tolerance_db": 0.01,
+                "knots": 30,                 // the whole curve's knots, before thinning
+                "histogram_from_s": 0.00697} // from this u on, every knot is the histogram's own
+```
+
+- **`curvature.percent`** is `100·(T30/T20 − 1)` from the reported T20 and T30, with its
+  Monte-Carlo standard deviation over the resamples that give both; refused, with T30's refusal
+  or else T20's, whenever either is (the refusal's `quantity` is `curvature`). `curved` flags a
+  double-slope decay, ISO 3382-2's `|C| > 10 %` as commonly stated. What a curved decay may show is
+  M8's and M12's decision (`docs/params.md`, "Decay times").
+- **`decay_curve.points`**, joined by straight lines, are the Schroeder curve EDT, T20 and T30 were
+  fitted to within `tolerance_db` everywhere: `u` in seconds from `from_s`, the level in dB re the
+  curve's value at `u = 0`, the direct sound included. The first point is `[0, 0]`; the second,
+  also at `u = 0` when the direct sound steps the curve down, is the level just after it. The last
+  is the start of the last bin with energy (the curve then falls to nothing inside one bin, which
+  the fits leave out). How the knots are thinned: `docs/params.md`, "The decay curve, for display".
+- `decay_curve` is `null` when the series is refused, when several sources contribute to the band
+  (the seven onset-relative values are refused `several_sources`, and so is `curvature`), and for
+  TCR, which writes no series (its `curvature` is refused `no_time_series`).
+
 ### `tcr`
 
 | Field | What |
 |---|---|
 | `bands[]` | per computed band: `freq_hz`, and for `sabine` and `eyring` each `absorption_area_m2`, `reverberation_time_s`, `level_db`, as TCR wrote them |
 | `global` | `aggregate` (the label), `sabine_level_db`, `eyring_level_db` |
-| `point_receivers[]` | `label`, `file`; `bands[]`, per band `freq_hz`, `direct_db`, `total_sabine_db`, `total_eyring_db` (TCR's own levels) and `parameters`; `global_direct_db`, `global_total_sabine_db`, `global_total_eyring_db` (the `Global` row, each column's energetic sum over the bands, **an aggregate**; a value that is not finite is refused, `results_value_invalid`); `aggregate` (as SPPS's, `bands_hz` empty) |
+| `point_receivers[]` | `label`, `file`; `bands[]`, per band `freq_hz`, `direct_db`, `total_sabine_db`, `total_eyring_db` (TCR's own levels), `parameters`, `curvature` (refused `no_time_series`) and `decay_curve` (`null`); `global` (the `Global` row, each column's energetic sum over the bands, **an aggregate**, labelled: `aggregate`, `direct_db`, `total_sabine_db`, `total_eyring_db`; a value that is not finite is refused, `results_value_invalid`); `aggregate` (SPPS's shape, labelled `"none: TCR writes no series to sum"`, `bands_hz` empty) |
 | `surfaces[]` | as for SPPS, with `field` one of `Direct field`, `Total field (Sabine)`, `Total field (Eyring)` |
 | `analytic` | `core::params`' Sabine and Eyring times on the run's own inputs: `{"status": "computed", "volume_m3", "area_m2", "bands": [{"freq_hz", "air_m_per_metre", "sabine_s", "eyring_s"}]}`, the two times as `{"value": …, "mc_sd": null}` or `{"not_evaluable": …}`; or `{"status": "not_computed", "why": …}` |
 

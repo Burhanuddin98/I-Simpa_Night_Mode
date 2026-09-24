@@ -1,8 +1,8 @@
 # Provenance: results fixtures
 
-Four run folders, exactly as `simpa run` wrote them, for `core::results` and `simpa results`
-(milestone M7, gate (e), and the M7 review). Acoustic values in them are format evidence only,
-never results to quote.
+Five run folders, exactly as `simpa run` wrote them, for `core::results` and `simpa results`
+(milestone M7, gate (e), the M7 review and its follow-ups). Acoustic values in them are format
+evidence only, never results to quote.
 
 | Folder | What |
 |---|---|
@@ -10,6 +10,7 @@ never results to quote.
 | `seats_tcr/` | the same project through TCR |
 | `energetic_spps/` | `rooms/energetic_box.simpa` through SPPS: the same box in energetic mode, `trans_epsilon` 3, 50,000 particles: every particle dropped, absorbed or lost by the end, for the solver's floor and energetic mode's completeness |
 | `sources2_spps/` | `rooms/sources2_box.simpa` through SPPS: the same box with a second source, `Source 2` at (5, 8.5, 1.2), 3 dB weaker and 20 ms late, and `output_recp_bysource` on: each receiver folder holds `Source 1/` and `Source 2/`, for the echograms per source and the refusal of onset-relative parameters on their sum |
+| `outputs_spps/` | `rooms/outputs_box.simpa` through SPPS: the Seat box with a cutting plane `Cut` (config id 1) beside the floor's surface receiver `Receiver` (id 0), and 10 particles per source saved without collision files: `Surface receiver/<band>/` and `Global/` hold `Sound level.csbin` and `rs_cut.csbin`, and `Particles/500/` and `Particles/1000/` a `particles.pbin` each (8 particles written in each band), for the surface files kept apart by name and the `.pbin` read (M7 follow-ups; the M7 critic found neither in any fixture). Written 2026-09-24 by the solvers of `.claude/worktrees/t3-proj/target/solvers/bin`, whose code sha256 equals `solvers/manifest.json` (the `run.json` records their paths and sha256) |
 
 Each holds `run.json`, `solver.stdout.txt`, `solver.stderr.txt`, `mesh/` (the run's own mesh) and
 `solve/` (the solver's inputs and every file it wrote). `run.json`'s absolute paths (`exe`, `cwd`)

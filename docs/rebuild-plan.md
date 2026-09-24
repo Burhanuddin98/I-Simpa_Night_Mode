@@ -197,6 +197,43 @@ geometry is fine but the grouping is wrong. It is regenerated from `tutorial_2.p
     Upstream's shipped 1.4.0 SPPS and TCR are bit-identical to ours on tutorial 1.
   - **Not yet:** tutorial 3 from its `.proj` through our pipeline (fitting zones, `preprocess.exe`).
     The M6(c) loss bound (floor + 4√floor) and the 1 % run limit stay PROPOSED, open decision 7.
+- **M7 passed 30 of 30 checks at its merge into `rebuild`, `e942813`** (M6 37 of 37, parity 12 of
+  12, `cargo test` 693 passed), 2026-09-24. Its follow-ups on `m7-followups` (for M8, and for the
+  M7 critic's coverage gaps) change what the gate holds: every say-NO now puts its fault into the
+  code or the input, through test-only seams (`simpa_core::faults`, the `fault-injection` feature
+  no normal build has), and the gate gains the arrival detected on (a), a run whose walls are
+  reached for (c), one surface's α and the air term for (d), and a JSON Schema validator for the
+  deliverable's `results --json`. **The gate passed 32 of 32 on 2026-09-24** on `m7-followups` with
+  those changes, on the from-scratch solver build whose code sha256 equals
+  `solvers/manifest.json`. `docs/params.md` and `docs/results.md` hold the measurements.
+  - **Gate (d) resolves one surface only when it moves the absorption area by more than
+    0.19 m²** in the low bands: one 18 m² wall of tutorial 1 5 % more absorbing passes it (0.42 %).
+    A dropped `4mV` fails it from 250 Hz up; ISO's exact midband frequency for `m` only at 12.5 and
+    16 kHz.
+  - **With the arrival detected**, gate (a)'s six decays give EDT, T20 and T30 within 0.5 %, and
+    C50, C80 and D50 refused `unresolved` in all six: gate (a)'s C80 and D50 hold with the arrival
+    given.
+- **Upstream differences M7 measured** (internal, for the record and for M8; each with its receipt
+  in `docs/params.md` or `docs/results.md`; none raised upstream):
+  - ISO 9613-1 in `Coef_Att_Atmos.cpp`: the humidity `h` lacks the standard's pressure factor
+    (line 56; the same at 101.325 kPa, 24.6 % off in the worst band at 80 kPa), and α is taken at
+    the nominal band frequency, not the exact midband (up to 1.6 % off the standard's table).
+    `coreTypes.h:47` calls the stored energy attenuation "dB/m"; it is `α·ln(10)/10` per metre.
+  - TCR's constant is 0.163, 1.23 % above `24·ln(10)/c` at TCR's own `c`.
+  - Upstream's GUI (`projet_calculation.cpp`), reproduced on tutorial 1's 2019 `.recp` to the last
+    bits of `f32`: time zero at a bin edge by an absolute threshold on the energy (10⁻⁶ Pa² until
+    upstream's `f50c36febd` of 2020-12-04, which left the 50–125 Hz bands' C, D and Ts NaN in the
+    stored table; 10⁻¹⁸ at `929a5c8`); C's boundary bin counted as early and as late (+1.05 dB on
+    C80 on average when counted once); Ts weighted by the absolute time label, so the propagation
+    delay and half a bin are in it; EDT's regression starting at the first time step, so the
+    propagation delay is in it; a decay range that is never reached regressed down to the series'
+    end without a word.
+  - Upstream's `.gap` viewer labels its two lateral columns the other way round from what SPPS
+    writes in them (`e_report_gabe_gap.cpp:80-81` against `spps/reportmanager.cpp:226-227`).
+  - SPPS writes NaN into a `.gap` lateral column from an unclamped `acos` (`mathlib.h:176-180`):
+    once in ten tutorial-1 runs at 1,500,000 particles in energetic mode.
+  - SPPS leaves about one particle in 10⁸ alive, trapped, at the end of random-mode runs in the
+    6×10×3 m mesh; they reach no receiver.
 - **`.csbin` output is nondeterministic by construction.** The surface-receiver format dumps whole
   C structs, padding included. Two runs of the *same* executable differ in the last 2 bytes of
   every 8-byte record. `.csbin` must only ever be compared after decoding, never byte for byte.

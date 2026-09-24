@@ -33,7 +33,9 @@ mod support;
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+use simpa_core::faults::{self, Fault};
 use simpa_core::params::air::{self, Atmosphere};
+use simpa_core::params::decay::P_REF_SQUARED;
 use simpa_core::params::room::{self, RtConstant, Surface};
 use simpa_core::schema;
 use support::*;
@@ -48,6 +50,8 @@ const SOURCES2: &str = "rooms/sources2_box.simpa";
 const ENERGETIC_SPPS: &str = "results/energetic_spps";
 const SOURCES2_SPPS: &str = "results/sources2_spps";
 const ASYMMETRIC: &str = "rooms/tutorial1_box_asymmetric.simpa";
+const OUTPUTS: &str = "rooms/outputs_box.simpa";
+const OUTPUTS_SPPS: &str = "results/outputs_spps";
 
 fn results(folder: &Path, json: bool) -> Out {
     let mut args = vec!["results".to_string(), folder.display().to_string()];
@@ -122,11 +126,14 @@ fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
 
 /// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
 /// typed `error`.
-const NULLABLE: [&str; 18] = [
+const NULLABLE: [&str; 21] = [
     ".spps",
     ".tcr",
     ".mc_sd",
     ".band_hz",
+    ".aggregate",
+    ".curved",
+    ".decay_curve",
     ".field",
     ".air_m_per_metre",
     ".onset",
@@ -168,6 +175,7 @@ fn write_results_fixtures() {
         (SEATS, "tcr", SEATS_TCR),
         (ENERGETIC, "spps", ENERGETIC_SPPS),
         (SOURCES2, "spps", SOURCES2_SPPS),
+        (OUTPUTS, "spps", OUTPUTS_SPPS),
     ] {
         let to = fixture(name);
         // This writer deletes nothing: to regenerate a fixture, remove its folder first.
@@ -361,6 +369,141 @@ fn a_tcr_receiver_has_all_eight_parameters_each_refused_for_having_no_series() {
             assert!(b["total_eyring_db"].is_f64());
         }
     }
+}
+
+/// A band's (or an aggregate's) curvature against its reported T20 and T30, and its decay curve's
+/// shape. Returns whether the curvature is a value.
+fn check_curvature_and_curve(b: &Value, what: &str) -> bool {
+    let p = &b["parameters"];
+    let c = &b["curvature"];
+    assert_eq!(c["limit_percent"], 10.0, "{what}");
+    let value = match (p["t20_s"]["value"].as_f64(), p["t30_s"]["value"].as_f64()) {
+        (Some(t20), Some(t30)) => {
+            let v = c["percent"]["value"]
+                .as_f64()
+                .unwrap_or_else(|| panic!("{what}: {c}"));
+            assert!((v - 100.0 * (t30 / t20 - 1.0)).abs() < 1e-9, "{what}: {c}");
+            assert!(c["percent"]["mc_sd"].is_f64(), "{what}");
+            assert_eq!(c["curved"], Value::Bool(v.abs() > 10.0), "{what}");
+            true
+        }
+        _ => {
+            let r = &c["percent"]["not_evaluable"];
+            assert_eq!(
+                r["error"]["quantity"]["quantity"], "curvature",
+                "{what}: {c}"
+            );
+            assert!(c["curved"].is_null(), "{what}");
+            false
+        }
+    };
+    if let Some(curve) = b["decay_curve"].as_object() {
+        let points = curve["points"].as_array().unwrap();
+        assert_eq!(points[0], serde_json::json!([0.0, 0.0]), "{what}");
+        assert_eq!(curve["tolerance_db"], 0.01);
+        assert!(
+            points.len() as u64 <= curve["knots"].as_u64().unwrap(),
+            "{what}"
+        );
+        for w in points.windows(2) {
+            let (a, z) = (w[0].as_array().unwrap(), w[1].as_array().unwrap());
+            assert!(z[0].as_f64() >= a[0].as_f64(), "{what}: u goes back");
+            assert!(z[1].as_f64() <= a[1].as_f64(), "{what}: the level rises");
+        }
+    }
+    value
+}
+
+#[test]
+fn every_aggregate_is_labelled_and_every_band_carries_its_curvature_and_curve() {
+    // M7 follow-ups (the M7 critic): a TCR receiver's Global values carried no label, its
+    // aggregate claimed to sum bands it did not, a surface Global file was told only by a null
+    // band, and the curvature flag and the curve the decay times come from were not in the JSON.
+    use simpa_core::results::report::{
+        AGGREGATE_BANDS_SUMMED, AGGREGATE_ENERGETIC_SUM, AGGREGATE_GLOBAL_FILE, AGGREGATE_NO_SERIES,
+    };
+    let (mut values, mut refused, mut curves) = (0, 0, 0);
+    for name in [
+        SEATS_SPPS,
+        SEATS_TCR,
+        ENERGETIC_SPPS,
+        SOURCES2_SPPS,
+        OUTPUTS_SPPS,
+    ] {
+        let rep = json(&results(&fixture(name), true));
+        assert!(
+            !rep.to_string().contains("\"global_"),
+            "{name}: a bare global_ key"
+        );
+        let solver = if rep["spps"].is_null() { "tcr" } else { "spps" };
+        for f in rep[solver]["surfaces"].as_array().unwrap() {
+            let want = if f["band_hz"].is_null() {
+                Value::from(AGGREGATE_GLOBAL_FILE)
+            } else {
+                Value::Null
+            };
+            assert_eq!(f["aggregate"], want, "{name} {}", f["path"]);
+        }
+        if solver == "tcr" {
+            assert_eq!(rep["tcr"]["global"]["aggregate"], AGGREGATE_ENERGETIC_SUM);
+            for r in rep["tcr"]["point_receivers"].as_array().unwrap() {
+                assert_eq!(r["global"]["aggregate"], AGGREGATE_ENERGETIC_SUM);
+                for k in ["direct_db", "total_sabine_db", "total_eyring_db"] {
+                    assert!(r["global"][k].is_f64(), "{name} {k}");
+                }
+                assert_eq!(r["aggregate"]["aggregate"], AGGREGATE_NO_SERIES);
+                for b in r["bands"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .chain([&r["aggregate"]])
+                {
+                    let why = &b["curvature"]["percent"]["not_evaluable"]["error"]["why"];
+                    assert_eq!(why["why"], "no_time_series", "{name}");
+                    assert!(b["decay_curve"].is_null());
+                }
+            }
+            continue;
+        }
+        for r in rep["spps"]["point_receivers"].as_array().unwrap() {
+            let mut all = vec![(&r["aggregate"], true)];
+            assert_eq!(r["aggregate"]["aggregate"], AGGREGATE_BANDS_SUMMED);
+            for b in r["bands"].as_array().unwrap() {
+                all.push((b, false));
+            }
+            for s in r["per_source"].as_array().unwrap() {
+                assert_eq!(s["aggregate"]["aggregate"], AGGREGATE_BANDS_SUMMED);
+                all.push((&s["aggregate"], true));
+                for b in s["bands"].as_array().unwrap() {
+                    all.push((b, false));
+                }
+            }
+            for (b, aggregate) in all {
+                let what = format!("{name} {} {}", r["label"], b["freq_hz"]);
+                if check_curvature_and_curve(b, &what) {
+                    values += 1;
+                } else {
+                    refused += 1;
+                }
+                // A band's series that reads has its curve, unless several sources share it.
+                let several = b["contributing_sources"]
+                    .as_array()
+                    .is_some_and(|c| c.len() > 1);
+                if !aggregate {
+                    assert_eq!(
+                        b["decay_curve"].is_object(),
+                        !b["onset"].is_null() && !several,
+                        "{what}"
+                    );
+                }
+                curves += usize::from(b["decay_curve"].is_object());
+            }
+        }
+    }
+    println!(
+        "curvature: {values} values, {refused} refused with T20 or T30; {curves} decay curves"
+    );
+    assert!(curves > 0 && refused > 0);
 }
 
 // --- exit 2 --------------------------------------------------------------------------------------
@@ -578,6 +721,157 @@ fn the_committed_schema_is_the_one_results_schema_prints() {
     }
 }
 
+/// One schema compiled by a JSON Schema validator, the `boon` crate (draft 2020-12, as the schema
+/// declares; format keywords are annotations, as that draft has them by default). `boon` reads
+/// with plain `serde_json`; the `jsonschema` crate, tried first, turns on `serde_json`'s
+/// `float_roundtrip` for every test build of the workspace, which changes the reader
+/// `schema_roundtrip.rs` holds to its own.
+struct Validator {
+    schemas: boon::Schemas,
+    index: boon::SchemaIndex,
+}
+
+impl Validator {
+    fn new(name: &str, schema: &Value) -> Self {
+        let url = format!("http://simpa.invalid/{name}.json");
+        let mut schemas = boon::Schemas::new();
+        let mut c = boon::Compiler::new();
+        c.add_resource(&url, schema.clone())
+            .unwrap_or_else(|e| panic!("{e}"));
+        let index = c
+            .compile(&url, &mut schemas)
+            .unwrap_or_else(|e| panic!("{name}: {e}"));
+        Validator { schemas, index }
+    }
+
+    /// The deepest errors found in `instance`, each with where it is.
+    fn errors(&self, instance: &Value) -> Vec<String> {
+        fn leaves(e: &boon::ValidationError, out: &mut Vec<String>) {
+            if e.causes.is_empty() {
+                out.push(format!("at {}: {}", e.instance_location, e.kind));
+            }
+            for c in &e.causes {
+                leaves(c, out);
+            }
+        }
+        let mut out = Vec::new();
+        if let Err(e) = self.schemas.validate(instance, self.index) {
+            leaves(&e, &mut out);
+        }
+        out
+    }
+
+    fn is_valid(&self, instance: &Value) -> bool {
+        self.schemas.validate(instance, self.index).is_ok()
+    }
+}
+
+/// The committed schema's validators: `(report, refusal)`.
+fn committed_validators() -> (Validator, Validator) {
+    let path = paths::repo_file("docs/formats/results-json.schema.json");
+    let schema: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    (
+        Validator::new("report", &schema["report"]),
+        Validator::new("refusal", &schema["refusal"]),
+    )
+}
+
+/// Every error `v` finds in `instance`, with where.
+fn schema_errors(v: &Validator, instance: &Value) -> Vec<String> {
+    v.errors(instance)
+}
+
+#[test]
+fn every_report_and_refusal_validates_against_the_committed_schema() {
+    // The plan's M7 deliverable: `results --json`, validated against the schemars schema. The M7
+    // critic: only the schema's text and the top-level keys of one SPPS report had been checked.
+    // Here a JSON Schema validator (the `boon` crate, draft 2020-12 as the schema declares)
+    // holds every committed run's report, SPPS and TCR, and refusals of both exit codes, to the
+    // committed schema, which `the_committed_schema_is_the_one_results_schema_prints` holds to the
+    // Rust types.
+    let (report, refusal) = committed_validators();
+    let mut reports = Vec::new();
+    for name in [
+        SEATS_SPPS,
+        SEATS_TCR,
+        ENERGETIC_SPPS,
+        SOURCES2_SPPS,
+        OUTPUTS_SPPS,
+    ] {
+        let o = results(&fixture(name), true);
+        assert_eq!(o.code, 0, "{name}: {o:#?}");
+        let rep = json(&o);
+        let errors = schema_errors(&report, &rep);
+        assert!(errors.is_empty(), "{name}: {errors:#?}");
+        // A report is not a refusal.
+        assert!(!refusal.is_valid(&rep), "{name}");
+        reports.push(rep);
+    }
+    // Refusals: exit 6 (no run.json) and exit 5 (a FAIL verdict).
+    let run = fixture_copy(SEATS_SPPS, "schema-refused-6");
+    std::fs::remove_file(run.join("run.json")).unwrap();
+    let o = results(&run, true);
+    assert_eq!(o.code, 6);
+    let r6 = json(&o);
+    let run = fixture_copy(SEATS_SPPS, "schema-refused-5");
+    let p = run.join("run.json");
+    let mut m: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+    m["verdict"]["status"] = "FAIL".into();
+    m["verdict"]["reasons"] = serde_json::json!([{"code": "particle_loss_excess", "detail": "x"}]);
+    std::fs::write(&p, serde_json::to_string_pretty(&m).unwrap()).unwrap();
+    let o = results(&run, true);
+    assert_eq!(o.code, 5);
+    let r5 = json(&o);
+    for r in [&r6, &r5] {
+        let errors = schema_errors(&refusal, r);
+        assert!(errors.is_empty(), "{errors:#?}");
+        assert!(!report.is_valid(r));
+    }
+
+    // Says no: an output with a wrong type, or a required field gone, fails validation, at every
+    // depth.
+    let spps = &reports[0];
+    type Edit = fn(&mut Value);
+    let wrong: [(&str, Edit); 7] = [
+        ("results_version a string", |v| {
+            v["results_version"] = "4".into()
+        }),
+        ("a band a fraction", |v| v["bands_hz"][0] = 500.5.into()),
+        ("solver missing", |v| {
+            v.as_object_mut().unwrap().remove("solver");
+        }),
+        ("a value a string", |v| {
+            v["spps"]["point_receivers"][0]["bands"][0]["parameters"]["spl_db"] =
+                serde_json::json!({"value": "64.3", "mc_sd": 0.1});
+        }),
+        ("a value neither a value nor a refusal", |v| {
+            v["spps"]["point_receivers"][0]["bands"][0]["parameters"]["t30_s"] =
+                serde_json::json!({"mc_sd": 0.1});
+        }),
+        ("an energy null", |v| {
+            v["spps"]["point_receivers"][1]["bands"][1]["energy_pa2"][3] = Value::Null;
+        }),
+        ("the curvature flag a number", |v| {
+            v["spps"]["point_receivers"][0]["bands"][0]["curvature"]["curved"] = 1.into();
+        }),
+    ];
+    for (what, edit) in wrong {
+        let mut bad = spps.clone();
+        edit(&mut bad);
+        assert_ne!(&bad, spps, "{what}: the edit changed nothing");
+        let errors = schema_errors(&report, &bad);
+        let short: Vec<String> = errors
+            .iter()
+            .map(|e| e.chars().take(160).collect())
+            .collect();
+        println!("schema says no: {what}: {}", short.join("; "));
+        assert!(!errors.is_empty(), "{what}");
+    }
+    let mut bad = r6.clone();
+    bad["exit_code"] = "6".into();
+    assert!(!refusal.is_valid(&bad));
+}
+
 // --- gate (c): level calibration -----------------------------------------------------------------
 
 /// The source's level in each band as SPPS reads it from `config.xml` (an `f32`).
@@ -610,8 +904,6 @@ struct LevelRow {
     spl: f64,
     /// SPL's estimated Monte-Carlo standard deviation, dB.
     sd: f64,
-    /// The `.recp`'s total, Pa².
-    total: f64,
     /// The source's level in the band, as SPPS reads it.
     lw: f64,
 }
@@ -620,7 +912,28 @@ struct LevelRow {
 fn level_rows(run: &Path) -> (Vec<LevelRow>, f64) {
     let o = results(run, true);
     assert_eq!(o.code, 0, "{o:#?}");
-    let rep = json(&o);
+    level_rows_of(&json(&o), run)
+}
+
+/// A run's report computed in this process by the same code the CLI runs (`results::load`, then
+/// `report::checked_report`), with `fault` put into that code (`simpa_core::faults`).
+fn report_in_process(run: &Path, fault: Option<Fault>) -> Value {
+    let go = || {
+        let r = simpa_core::results::load(run).unwrap_or_else(|e| panic!("{e}"));
+        let rep = simpa_core::results::checked_report(&r).unwrap_or_else(|e| panic!("{e}"));
+        // Printed as the CLI prints it and read back as `json` reads the CLI's: serde_json's
+        // reader is not correctly rounded, so a value read from text can be one f64 unit off the
+        // value itself, and the two must go the same way to compare.
+        serde_json::from_str(&serde_json::to_string_pretty(&rep).unwrap()).unwrap()
+    };
+    match fault {
+        Some(f) => faults::with(f, go),
+        None => go(),
+    }
+}
+
+/// The level box's rows from its report `rep`, and its receiver radius.
+fn level_rows_of(rep: &Value, run: &Path) -> (Vec<LevelRow>, f64) {
     let s = &rep["spps"];
     let radius = s["receiver_radius_m"].as_f64().unwrap();
     let src: Vec<f64> = s["sources"][0]["position_m"]
@@ -652,7 +965,6 @@ fn level_rows(run: &Path) -> (Vec<LevelRow>, f64) {
                 r: dist,
                 spl,
                 sd: p["mc_sd"].as_f64().unwrap(),
-                total: b["total_pa2"].as_f64().unwrap(),
                 lw: lw.iter().find(|x| x.0 == f).unwrap().1,
             });
         }
@@ -737,11 +1049,17 @@ fn gate_c_level_calibration_and_the_offsets_it_catches() {
     assert_eq!(rows.len(), 12, "2 receivers x 6 bands");
     assert_eq!(radius, 0.5);
     // What keeps the reverberant field out is the duration: no particle reaches a surface, so
-    // none is absorbed and every one remains (results_rooms.rs, level_box).
+    // none is absorbed and every one remains (results_rooms.rs, level_box). Its say-NO, a run
+    // whose walls are reached and reflect: `gate_c_says_no_to_a_run_whose_walls_are_reached`.
     let rep = json(&results(&run, true));
-    for b in rep["spps"]["particles"]["bands"].as_array().unwrap() {
-        assert_eq!(b["absorbed_by_materials"], 0, "{b}");
-        assert_eq!(b["remaining"], b["total"], "{b}");
+    assert!(
+        reverberant_field_kept_out(&rep),
+        "{}",
+        rep["spps"]["particles"]
+    );
+    // And the receivers hold nothing after the direct sound has passed.
+    for (label, late) in late_shares(&rep) {
+        assert!(late.iter().all(|&x| x == 0.0), "{label}: {late:?}");
     }
     // The run's own atmosphere.
     let text = std::fs::read_to_string(run.join("solve/config.xml")).unwrap();
@@ -771,12 +1089,6 @@ fn gate_c_level_calibration_and_the_offsets_it_catches() {
         worst_gate = worst_gate.max((spl - want).abs());
         worst_exact = worst_exact.max((spl - exact).abs());
         assert!(gate_c(spl, lw, r), "{} {} Hz", x.label, x.freq_hz);
-        // Says no: Night Mode's .gap level, energy over the intensity reference 1e-12.
-        let night_mode = 10.0 * (x.total / 1e-12).log10();
-        assert!(!gate_c(night_mode, lw, r), "{} Hz: {night_mode}", x.freq_hz);
-        assert!((night_mode - spl - 26.0206).abs() < 1e-3);
-        // Says no: 1 dB either way.
-        assert!(!gate_c(spl + 1.0, lw, r) && !gate_c(spl - 1.0, lw, r));
     }
     println!("worst |SPL - gate| {worst_gate:.3} dB, worst |SPL - exact| {worst_exact:.3} dB");
 
@@ -789,23 +1101,147 @@ fn gate_c_level_calibration_and_the_offsets_it_catches() {
         if ok { "within" } else { "OUTSIDE" }
     );
     assert!(ok);
-    // Says no: 0.1 dB either way, and the level SPPS would give with ρc = 400 (−0.141 dB), each
-    // miss it. The smallest offsets it catches on this run, each way.
-    let rho_400 = 10.0 * (400.0 / rho_c).log10();
-    for offset in [0.1, -0.1, rho_400] {
-        let (m, _, ok) = exact_check(&rows, radius, rho_c, offset);
-        println!(
-            "exact says no: SPL {offset:+.3} dB gives a mean of {m:+.4} dB: {}",
-            if ok { "PASSES" } else { "caught" }
-        );
-        assert!(!ok, "{offset}");
-    }
     let (up, down) = (4.0 * sd - mean, 4.0 * sd + mean);
     println!(
         "exact catches an offset above {up:+.3} dB or below {:+.3} dB",
         -down
     );
     assert!(up < 0.1 && down < 0.1);
+
+    // Says no, through the code (M7 follow-ups; the M7 critic: the first say-NOs added offsets to
+    // the SPL the correct run produced). The report is computed again in this process by the code
+    // the CLI runs, with the calibration constant of the level code path, p0², replaced
+    // (`simpa_core::faults::Fault::LevelReference`). Without the fault it is the CLI's report.
+    let clean = report_in_process(&run, None);
+    assert_eq!(clean, rep, "the in-process report is the CLI's");
+    let at = |pa2: f64| {
+        level_rows_of(
+            &report_in_process(&run, Some(Fault::LevelReference { pa2 })),
+            &run,
+        )
+        .0
+    };
+    // Night Mode's bug (main:project/result_parser.cpp:486): the energy over 1e-12, the intensity
+    // reference, instead of p0²: 26.02 dB high. And p0² off by 1 dB either way.
+    let db = |x: f64| 10f64.powf(x / 10.0);
+    for (name, pa2, moved) in [
+        ("the intensity reference 1e-12", 1e-12, 26.0206),
+        ("p0^2 1 dB low", P_REF_SQUARED / db(1.0), 1.0),
+        ("p0^2 1 dB high", P_REF_SQUARED * db(1.0), -1.0),
+    ] {
+        let faulty = at(pa2);
+        let caught = faulty.iter().filter(|x| !gate_c(x.spl, x.lw, x.r)).count();
+        let shift: f64 = faulty
+            .iter()
+            .zip(&rows)
+            .map(|(f, x)| f.spl - x.spl)
+            .sum::<f64>()
+            / rows.len() as f64;
+        println!(
+            "gate (c) says no through the code: {name}: SPL {shift:+.4} dB, outside the gate's \
+             bound in {caught} of {} bands",
+            rows.len()
+        );
+        assert!((shift - moved).abs() < 1e-3, "{name}: {shift}");
+        assert_eq!(caught, rows.len(), "{name}");
+    }
+    // The exact free field through the same seam: p0² moved 0.1 dB either way, and the reference
+    // as it would read with rho c = 400 instead of SPPS's (-0.141 dB), each miss it.
+    for (name, pa2) in [
+        ("p0^2 0.1 dB low", P_REF_SQUARED / db(0.1)),
+        ("p0^2 0.1 dB high", P_REF_SQUARED * db(0.1)),
+        ("rho c 400", P_REF_SQUARED * rho_c / 400.0),
+    ] {
+        let (m, _, ok) = exact_check(&at(pa2), radius, rho_c, 0.0);
+        println!(
+            "exact says no through the code: {name}: weighted mean {m:+.4} dB: {}",
+            if ok { "PASSES" } else { "caught" }
+        );
+        assert!(!ok, "{name}");
+    }
+}
+
+/// Gate M7(c)'s room holds the direct field alone when SPPS's statistics count, in every band, no
+/// particle absorbed by the materials and every particle still alive at the end: none reached a
+/// surface, so none came back.
+fn reverberant_field_kept_out(rep: &Value) -> bool {
+    let bands = rep["spps"]["particles"]["bands"].as_array().unwrap();
+    !bands.is_empty()
+        && bands
+            .iter()
+            .all(|b| b["absorbed_by_materials"] == 0 && b["remaining"] == b["total"])
+}
+
+#[test]
+fn gate_c_says_no_to_a_run_whose_walls_are_reached() {
+    // The level box with its walls reflecting half the energy (α 0.5, not the direct field only)
+    // and a duration that lets reflections reach both receivers: the walls are 9.97 m or more
+    // from the source, so the first reflection reaches the receiver 2 m away after
+    // (2·9.97 − 2)/c = 52 ms at the earliest. The fault is in the input; the check is the one the
+    // gate holds the level run to.
+    let root = scratch("gate-c-reflecting");
+    let mut p = schema::load(&fixture(LEVEL)).unwrap();
+    let n = p.bands.len();
+    p.materials[0].absorption = vec![schema::F64::new(0.5); n];
+    p.solvers.spps.direct_field_only = false;
+    p.solvers.spps.duration_s = schema::F64::new(0.12);
+    p.solvers.spps.particles_per_source = 100_000;
+    let project = root.join("reflecting.simpa");
+    schema::save(&p, &project).unwrap();
+    let run = run_ok(&project, "spps", &root.join("runs"), &[]);
+    let rep = json(&results(&run, true));
+    for b in rep["spps"]["particles"]["bands"].as_array().unwrap() {
+        println!(
+            "reflecting walls, {} Hz: absorbed by the materials {}, remaining {} of {}",
+            b["freq_hz"], b["absorbed_by_materials"], b["remaining"], b["total"]
+        );
+    }
+    assert!(!reverberant_field_kept_out(&rep));
+    // What the check keeps out, for information: the reflections' energy, the share of each
+    // receiver's energy that arrives after the direct sound has passed, which the level run holds
+    // none of (`gate_c_level_calibration_...`).
+    for (label, late) in late_shares(&rep) {
+        println!(
+            "reflecting walls, {label}: energy after the direct sound {:.2} % to {:.2} % of the \
+             total over the bands",
+            100.0 * late.iter().copied().fold(f64::INFINITY, f64::min),
+            100.0 * late.iter().copied().fold(0.0, f64::max)
+        );
+        assert!(late.iter().all(|&x| x > 0.0), "{label}");
+    }
+}
+
+/// Per SPPS receiver and band, the share of its energy that arrives after the direct sound has
+/// passed the receiver sphere: from the second bin that starts after `arrival + R/c` (one bin of
+/// margin for the solver's `f32` positions and times).
+fn late_shares(rep: &Value) -> Vec<(String, Vec<f64>)> {
+    let s = &rep["spps"];
+    let dt = s["time_step_s"].as_f64().unwrap();
+    let passed_after = s["receiver_crossing_s"].as_f64().unwrap() / 2.0;
+    s["point_receivers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            let passed =
+                ((r["arrival_s"].as_f64().unwrap() + passed_after) / dt).ceil() as usize + 1;
+            let shares = r["bands"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|b| {
+                    let e: Vec<f64> = b["energy_pa2"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|x| x.as_f64().unwrap())
+                        .collect();
+                    e[passed..].iter().sum::<f64>() / e.iter().sum::<f64>()
+                })
+                .collect();
+            (r["label"].as_str().unwrap().to_string(), shares)
+        })
+        .collect()
 }
 
 // --- gate (d): TCR against the analytic values ---------------------------------------------------
@@ -1130,6 +1566,204 @@ fn gate_d_the_asymmetric_room_tells_apart_the_ways_of_combining_absorption() {
             "{} Hz: A {a}, want {want}",
             b["freq_hz"]
         );
+    }
+}
+
+/// Bands in which either theory of `ours` lies outside 0.5 % of TCR's: a band that fails gate
+/// M7(d). The gate fails when any does.
+fn gate_d_failing_bands(tcr: &[(u32, f64, f64)], ours: &[(u32, f64, f64)]) -> Vec<u32> {
+    assert_eq!(tcr.len(), ours.len());
+    tcr.iter()
+        .zip(ours)
+        .filter(|(t, o)| (t.1 / o.1 - 1.0).abs() > 0.005 || (t.2 / o.2 - 1.0).abs() > 0.005)
+        .map(|(t, _)| t.0)
+        .collect()
+}
+
+/// The planes of a box project: each group's faces split by the axis plane they lie in, as
+/// `(name, faces, area m²)`.
+fn planes(p: &schema::Project) -> Vec<(String, Vec<usize>, f64)> {
+    let v = &p.geometry.vertices;
+    let mut out: Vec<(String, Vec<usize>, f64)> = Vec::new();
+    for (i, f) in p.geometry.faces.iter().enumerate() {
+        let [a, b, c] = f.vertices.map(|k| v[k as usize].to_array());
+        let axis = (0..3)
+            .find(|&k| a[k] == b[k] && b[k] == c[k])
+            .expect("a box face lies in an axis plane");
+        let name = format!(
+            "{} {}={}",
+            p.group(f.group).unwrap().name,
+            ["x", "y", "z"][axis],
+            a[axis]
+        );
+        let (u, w) = (
+            [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+            [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
+        );
+        let n = [
+            u[1] * w[2] - u[2] * w[1],
+            u[2] * w[0] - u[0] * w[2],
+            u[0] * w[1] - u[1] * w[0],
+        ];
+        let area = 0.5 * (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        match out.iter_mut().find(|o| o.0 == name) {
+            Some(o) => {
+                o.1.push(i);
+                o.2 += area;
+            }
+            None => out.push((name, vec![i], area)),
+        }
+    }
+    out
+}
+
+/// `p` with the absorption of `faces`, one plane, times `factor` in every band: the plane gets a
+/// group and a copy of its material of its own. A group left with no face goes, and the scene
+/// surface receiver on it moves to the plane's group.
+fn with_plane_scaled(
+    p: &schema::Project,
+    faces: &[usize],
+    factor: f64,
+    tag: u128,
+) -> schema::Project {
+    let mut q = p.clone();
+    let old = q.geometry.faces[faces[0]].group;
+    let g = q.group(old).unwrap().clone();
+    let mut m = q.material(g.material).unwrap().clone();
+    let gid = schema::GroupId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_d100 + tag);
+    let mid = schema::MaterialId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_d200 + tag);
+    m.id = mid;
+    m.name = format!("{} times {factor}", m.name);
+    m.solver_id = None;
+    m.absorption = m
+        .absorption
+        .iter()
+        .map(|a| schema::F64::new(a.get() * factor))
+        .collect();
+    q.materials.push(m);
+    q.surface_groups.push(schema::SurfaceGroup {
+        id: gid,
+        name: format!("Plane {tag}"),
+        material: mid,
+    });
+    for &i in faces {
+        q.geometry.faces[i].group = gid;
+    }
+    if !q.geometry.faces.iter().any(|f| f.group == old) {
+        q.surface_groups.retain(|x| x.id != old);
+        for r in &mut q.surface_receivers {
+            if let schema::SurfaceReceiverShape::Scene { groups } = &mut r.shape {
+                for x in groups.iter_mut().filter(|x| **x == old) {
+                    *x = gid;
+                }
+            }
+        }
+        if !q.surface_groups.iter().any(|x| x.material == g.material) {
+            q.materials.retain(|x| x.id != g.material);
+        }
+    }
+    q
+}
+
+#[test]
+fn gate_d_says_no_through_the_code_to_one_surface_and_to_the_air_term() {
+    // M7 follow-ups (the M7 critic): gate (d)'s say-NO was the whole Walls group's α 5 % higher
+    // (96 of 216 m²), specified as one surface's; and the air term, 4·m·V, had none.
+    let root = scratch("gate-d-through-the-code");
+    let run = run_ok(&fixture(TUTORIAL), "tcr", &root, &[]);
+    let rep = tcr_report(&run);
+    let tcr = report_times(&rep, false);
+    let n = tcr.len();
+    assert_eq!(n, 27);
+    assert!(gate_d_failing_bands(&tcr, &report_times(&rep, true)).is_empty());
+
+    // The air term, through the code: `results::tcr`'s analytic references on the same run's
+    // inputs with 4mV dropped, or with m from ISO 9613-1 at the exact midband frequency.
+    for (fault, name) in [
+        (Fault::AirTermDropped, "the air term 4mV dropped"),
+        (
+            Fault::AirIsoExactMidband,
+            "ISO 9613-1's m at the exact midband",
+        ),
+    ] {
+        let ours = report_times(&report_in_process(&run, Some(fault)), true);
+        for (t, o) in tcr.iter().zip(&ours) {
+            println!(
+                "{name}: {:>5} Hz: Sabine {:+.3} %, Eyring {:+.3} %",
+                t.0,
+                100.0 * (o.1 / t.1 - 1.0),
+                100.0 * (o.2 / t.2 - 1.0)
+            );
+        }
+        let failing = gate_d_failing_bands(&tcr, &ours);
+        println!(
+            "gate (d) says no through the code: {name}: outside 0.5 % in {} of {n} bands: \
+             {failing:?}",
+            failing.len()
+        );
+        assert!(!failing.is_empty(), "{name}");
+    }
+
+    // One surface: each plane of the box, its α 5 % higher, through TCR (the plane's own run and
+    // its analytic references, against the unchanged run's TCR times); and the smallest increase
+    // of its α that makes the gate fail, found on the project (`project_analytic`, which equals
+    // TCR within 3.3e-7) and confirmed through TCR 2 % below it (the gate passes) and 2 % above
+    // (it fails).
+    let p = schema::load(&fixture(TUTORIAL)).unwrap();
+    let ps = planes(&p);
+    assert_eq!(ps.len(), 6, "{ps:?}");
+    let through_tcr = |factor: f64, faces: &[usize], tag: u128, label: &str| {
+        let q = with_plane_scaled(&p, faces, factor, tag);
+        let path = root.join(format!("{label}.simpa"));
+        schema::save(&q, &path).unwrap();
+        let r = run_ok(&path, "tcr", &root.join(label), &[]);
+        gate_d_failing_bands(&tcr, &report_times(&tcr_report(&r), true))
+    };
+    for (i, (name, faces, area)) in ps.iter().enumerate() {
+        let tag = i as u128;
+        let at5 = through_tcr(1.05, faces, tag, &format!("plane{i}-5"));
+        let fails = |e: f64| {
+            !gate_d_failing_bands(
+                &tcr,
+                &project_analytic(&with_plane_scaled(&p, faces, 1.0 + e, tag), Rule::ByFace),
+            )
+            .is_empty()
+        };
+        // Up to the increase that takes the plane's α to 1 in its most absorbing band.
+        let group = p.group(p.geometry.faces[faces[0]].group).unwrap();
+        let most = p
+            .material(group.material)
+            .unwrap()
+            .absorption
+            .iter()
+            .map(|a| a.get())
+            .fold(0.0, f64::max);
+        let (mut lo, mut hi) = (0.0, 1.0 / most - 1.0);
+        assert!(fails(hi), "{name}: not caught at α 1");
+        for _ in 0..40 {
+            let mid = 0.5 * (lo + hi);
+            if fails(mid) {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+        let below = through_tcr(1.0 + 0.98 * hi, faces, tag, &format!("plane{i}-below"));
+        let above = through_tcr(1.0 + 1.02 * hi, faces, tag, &format!("plane{i}-above"));
+        println!(
+            "gate (d), one surface: {name} ({area:.0} m2): alpha +5 % fails the gate in {} of {n} \
+             bands; the smallest increase it catches is +{:.2} % (through TCR: +{:.2} % caught in \
+             {} bands, +{:.2} % in {})",
+            at5.len(),
+            100.0 * hi,
+            100.0 * 0.98 * hi,
+            below.len(),
+            100.0 * 1.02 * hi,
+            above.len()
+        );
+        assert!(below.is_empty(), "{name}: {below:?}");
+        assert!(!above.is_empty(), "{name}");
+        assert_eq!(at5.is_empty(), hi > 0.05, "{name}");
     }
 }
 

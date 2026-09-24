@@ -75,10 +75,14 @@ pub mod codes {
     ];
 }
 
-/// The CLI's exit code for a run that is not OK (`docs/m5-m6-design.md`, "Exit codes": 5, a solver
-/// run that failed).
+/// The CLI's exit code for a run whose verdict is FAIL, CRASH or CANCELLED: the solver run did not
+/// succeed, which is the plan's 5 ("5 solver run", `docs/rebuild-plan-raw-2026-09-23.json`,
+/// `plan.architecture`). A cancelled run is refused with 5 as well, not 130: 130 says that the
+/// command itself was cancelled (`simpa run` exits 130 for the cancel), and `simpa results` was
+/// not; it read a run that did not finish (`docs/results.md`, "Verified runs only").
 pub const EXIT_RUN_NOT_OK: u8 = 5;
-/// The CLI's exit code for a run whose results do not verify (6, result verification).
+/// The CLI's exit code for a run whose results do not verify (the plan's 6, "result
+/// verification").
 pub const EXIT_UNVERIFIED: u8 = 6;
 
 /// Why a run's results were refused.
@@ -432,8 +436,33 @@ pub struct SurfaceFile {
     pub data: crate::formats::csbin::Csbin,
 }
 
+/// `recepteur_surfacique_coupe@id` of each cutting plane in `solve/config.xml`, read as the solver
+/// reads it (`atoi`).
+fn cutting_plane_ids(solve: &Path) -> Result<Vec<i32>, Refusal> {
+    let config = crate::config_xml::names::CONFIG;
+    let text = std::fs::read(solve.join(config)).map_err(|e| file_invalid(config, e))?;
+    let text = text.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&text);
+    let text = std::str::from_utf8(text).map_err(|e| file_invalid(config, e))?;
+    let doc = roxmltree::Document::parse(text).map_err(|e| file_invalid(config, e))?;
+    Ok(expect::child(doc.root_element(), "recepteurss")
+        .map(|rs| {
+            rs.children()
+                .filter(|c| c.is_element() && c.tag_name().name() == "recepteur_surfacique_coupe")
+                .map(|c| expect::atoi(c.attribute("id").unwrap_or("")))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 /// Decodes every `.csbin` of `paths` (relative to `solve`), refusing one that does not decode or
 /// holds a value that is not finite. `fields` are the TCR prefixes to recognise in a path.
+///
+/// **Surface receivers and cutting planes are kept apart by name** (the plan's `core::results`):
+/// a file named `recepteurss_cut_filename` is the cutting planes', any other the scene surface
+/// receivers'. Each file must hold only receivers of its kind, told by their `xmlIndex`, the id
+/// `config.xml` gives each `recepteur_surfacique` and `recepteur_surfacique_coupe`
+/// (`results_file_invalid` otherwise): a cutting plane in the receivers' file, or the reverse, is
+/// refused, not read as the other.
 pub(crate) fn read_surfaces(
     solve: &Path,
     paths: &[String],
@@ -441,6 +470,11 @@ pub(crate) fn read_surfaces(
     fields: &[String],
 ) -> Result<Vec<SurfaceFile>, Refusal> {
     let cut_name = key(&exp.names.recepteurss_cut_filename);
+    let cut_ids = if paths.is_empty() {
+        Vec::new()
+    } else {
+        cutting_plane_ids(solve)?
+    };
     let mut out = Vec::with_capacity(paths.len());
     for p in paths {
         let data =
@@ -468,11 +502,28 @@ pub(crate) fn read_surfaces(
             .iter()
             .find(|f| !f.is_empty() && p.starts_with(&key(f)))
             .map(|f| key(f));
+        let cutting_plane = p.ends_with(&cut_name) && !cut_name.is_empty();
+        let (own, kind) = if cutting_plane {
+            (&cut_ids, "recepteur_surfacique_coupe")
+        } else {
+            (&exp.surface_receivers, "recepteur_surfacique")
+        };
+        if let Some(r) = data.receivers.iter().find(|r| !own.contains(&r.xml_index)) {
+            return Err(file_invalid(
+                p,
+                format!(
+                    "it holds receiver {} ({:?}), which is no {kind} of config.xml (their ids \
+                     are {own:?})",
+                    r.xml_index,
+                    r.name_lossy()
+                ),
+            ));
+        }
         out.push(SurfaceFile {
             path: p.clone(),
             field,
             band_hz,
-            cutting_plane: p.ends_with(&cut_name) && !cut_name.is_empty(),
+            cutting_plane,
             data,
         });
     }

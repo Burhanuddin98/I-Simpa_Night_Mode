@@ -33,6 +33,16 @@ use super::{EnergySeries, NotEvaluable, ParamError, Quantity, not_evaluable};
 /// `p₀² = (20 µPa)²`, Pa².
 pub const P_REF_SQUARED: f64 = 20e-6 * 20e-6;
 
+/// The reference SPL divides the energy by: [`P_REF_SQUARED`], or in a test build the one a
+/// [`crate::faults::Fault::LevelReference`] sets, so that gate M7(c)'s say-NO runs through this
+/// code path.
+fn level_reference_pa2() -> f64 {
+    match crate::faults::active() {
+        Some(crate::faults::Fault::LevelReference { pa2 }) => pa2,
+        _ => P_REF_SQUARED,
+    }
+}
+
 /// The onset is the first bin within this many dB of the largest (ISO 3382-1's 20 dB rule, as
 /// commonly stated).
 pub const ONSET_THRESHOLD_DB: f64 = 20.0;
@@ -410,6 +420,93 @@ pub fn spl_db(series: &EnergySeries) -> Result<f64, ParamError> {
     Analysis::new(series, Arrival::Detected).spl_db()
 }
 
+/// The largest distance, dB, between the Schroeder curve and the straight lines through the points
+/// [`decay_curve`] keeps of it.
+pub const CURVE_TOLERANCE_DB: f64 = 0.01;
+
+/// The Schroeder curve EDT, T20 and T30 are fitted to, for display (`docs/formats/results-json.md`,
+/// "The decay curve"): the same curve, from the same code, not a second computation of it.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct DecayCurve {
+    /// The time, s, of the curve's `u = 0`: the arrival the decay times are measured from
+    /// ([`BandParameters::decay_arrival`]); with the arrival detected, the start of the onset bin,
+    /// the first of the two ends the decay times are read from.
+    pub from_s: f64,
+    /// `[u, level]`: `u` in s since `from_s`, the level in dB re the curve's value at `u = 0`,
+    /// which includes the direct sound. Joined by straight lines they are the curve within
+    /// `tolerance_db`: the curve is straight in dB between its knots, and a knot is left out only
+    /// when the line through the points kept either side of it passes within `tolerance_db` of it
+    /// and of every other knot left out between them. The first point is `[0, 0]`; the second,
+    /// also at `u = 0`, is the level just after the direct sound (the curve steps down by it at
+    /// the arrival). The last is the start of the last bin with energy: inside that bin the curve
+    /// falls to nothing, which a level cannot show, and the fits leave it out.
+    pub points: Vec<[f64; 2]>,
+    /// [`CURVE_TOLERANCE_DB`].
+    pub tolerance_db: f64,
+    /// The knots of the whole curve, before any is left out.
+    pub knots: usize,
+    /// From this `u` on, every knot is the histogram's own backward sum at a bin edge. Before it
+    /// the curve is the model's reading: the direct sound a step at `u = 0`, then the decay of the
+    /// first bin wholly after the direct sound continued back to the arrival
+    /// (`docs/params.md`, "The curve between bin edges"). When the series' early reverberation is
+    /// unresolved, the values are read two more ways over this stretch
+    /// ([`EnergySeries::with_early_reverberation_unresolved`]); the curve shown is this reading.
+    pub histogram_from_s: f64,
+}
+
+/// The Schroeder curve of `series` that EDT, T20 and T30 are read from, from `arrival` as
+/// [`evaluate`] takes it, thinned for display ([`DecayCurve`]). Nothing is added for the unseen
+/// tail, the floor or lost particles: this is the curve the values come from, and those bounds
+/// judge them.
+pub fn decay_curve(series: &EnergySeries, arrival: Arrival) -> DecayCurve {
+    let a = Analysis::new(series, arrival);
+    let view = &a.decay_views()[0];
+    let knots = view.plain.knots();
+    DecayCurve {
+        from_s: view.arrival_s,
+        knots: knots.len(),
+        points: thin(&knots, CURVE_TOLERANCE_DB),
+        tolerance_db: CURVE_TOLERANCE_DB,
+        histogram_from_s: view.histogram_from_s,
+    }
+}
+
+/// The points of the polyline `knots` that straight lines through them keep within `tol` of every
+/// knot: from each point kept, the furthest knot the line to which passes within `tol` of every
+/// knot between them (the slopes each of those allows, intersected as the line is extended).
+/// `u` increases strictly, except at the first two knots, a step at `u = 0`, both kept.
+fn thin(knots: &[[f64; 2]], tol: f64) -> Vec<[f64; 2]> {
+    if knots.len() <= 2 {
+        return knots.to_vec();
+    }
+    let lead = if knots[1][0] == knots[0][0] { 2 } else { 1 };
+    let mut kept: Vec<[f64; 2]> = knots[..lead].to_vec();
+    let mut a = lead - 1;
+    let (mut lo, mut hi) = (f64::NEG_INFINITY, f64::INFINITY);
+    let mut k = a + 1;
+    while k < knots.len() {
+        let du = knots[k][0] - knots[a][0];
+        let slope = (knots[k][1] - knots[a][1]) / du;
+        if slope >= lo && slope <= hi {
+            lo = lo.max((knots[k][1] - tol - knots[a][1]) / du);
+            hi = hi.min((knots[k][1] + tol - knots[a][1]) / du);
+            k += 1;
+        } else {
+            // The line cannot reach k: the knot before it is kept, and the next line starts there
+            // (the knot right after an anchor is always reachable, so this moves on).
+            a = k - 1;
+            kept.push(knots[a]);
+            lo = f64::NEG_INFINITY;
+            hi = f64::INFINITY;
+        }
+    }
+    let last = knots[knots.len() - 1];
+    if kept.last() != Some(&last) {
+        kept.push(last);
+    }
+    kept
+}
+
 /// `100·(T30/T20 − 1)`, and whether it marks a curved decay.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct Curvature {
@@ -626,6 +723,28 @@ impl Curve {
         self.pieces.last().map_or(0.0, |p| p.u1)
     }
 
+    /// `[u, level dB]` at every knot the fits see: `[0, 0]`, the level just after the direct
+    /// sound when it steps the curve down, and the end of every log-linear piece. The last piece,
+    /// where the curve falls linearly to nothing, is left out, as the fits leave it out.
+    fn knots(&self) -> Vec<[f64; 2]> {
+        let db = |s: f64| 10.0 * (s / self.top).log10();
+        let mut knots: Vec<[f64; 2]> = vec![[0.0, 0.0]];
+        let mut shown = self
+            .pieces
+            .iter()
+            .filter(|p| matches!(p.shape, Shape::LogLinear))
+            .peekable();
+        if let Some(first) = shown.peek() {
+            // A step of rounding size is no direct sound.
+            let after = db(first.s0);
+            if after < -1e-9 {
+                knots.push([0.0, after]);
+            }
+        }
+        knots.extend(shown.map(|p| [p.u1, db(p.s1)]));
+        knots
+    }
+
     /// `S(u)`; at `u = 0` the direct sound is included.
     fn at(&self, u: f64) -> f64 {
         if u <= 0.0 {
@@ -713,6 +832,9 @@ struct Line {
 /// added as well.
 struct View {
     arrival_s: f64,
+    /// `u` of the start of the first bin wholly after the direct sound: from there on the curve is
+    /// the histogram's own.
+    histogram_from_s: f64,
     plain: Curve,
     /// `None` when the tail is unbounded.
     with_tail: Option<Curve>,
@@ -932,6 +1054,7 @@ impl<'a> Analysis<'a> {
         };
         let curves = |start: Start, early: Early| View {
             arrival_s: start.time_s,
+            histogram_from_s: (start.exact_bin as f64 * dt - start.time_s).max(0.0),
             plain: Curve::new(&sums, dt, start, end, None, early),
             with_tail: added.map(|a| Curve::new(&sums, dt, start, end, a, early)),
             with_missing: with_missing.map(|a| Curve::new(&sums, dt, start, end, Some(a), early)),
@@ -1354,7 +1477,8 @@ impl<'a> Analysis<'a> {
     fn spl_db(&self) -> Result<f64, ParamError> {
         self.tail_ok()?;
         let total = self.series.total();
-        let level = |e: f64| 10.0 * (e / P_REF_SQUARED).log10();
+        let reference = level_reference_pa2();
+        let level = |e: f64| 10.0 * (e / reference).log10();
         let tail_energy = match self.tail {
             Ok(Tail::Bounded { energy, .. }) => Some(energy),
             Ok(Tail::Complete) => Some(0.0),
@@ -1657,6 +1781,95 @@ mod tests {
         assert!((spread.t_s / t - 1.0).abs() < 1e-9, "{} vs {t}", spread.t_s);
         let impulse = decay_time(&s, Arrival::at(t_a), DecayRange::Edt).unwrap();
         assert!(impulse.t_s / t - 1.0 < -0.05, "{} vs {t}", impulse.t_s);
+    }
+
+    /// The thinned polyline's level at `u`, straight between its points.
+    fn level_on(points: &[[f64; 2]], u: f64) -> f64 {
+        let i = points.iter().rposition(|p| p[0] <= u).unwrap();
+        match points.get(i + 1) {
+            Some(q) if q[0] > points[i][0] => {
+                let p = points[i];
+                p[1] + (q[1] - p[1]) * (u - p[0]) / (q[0] - p[0])
+            }
+            _ => points[i][1],
+        }
+    }
+
+    #[test]
+    fn the_decay_curve_is_the_fitted_curve_thinned_within_its_tolerance() {
+        // A direct sound of 1 in bin 2 at 25 ms (an impulse), then a decay halving every bin: the
+        // curve steps down at the arrival and then falls in one straight line, bending only in
+        // its last bins, below −150 dB, where the series' end cuts the backward sums short. So
+        // one line stands for 150 dB of it.
+        let dt = 0.01;
+        let mut v = vec![0.0, 0.0];
+        let continued = 2.0 * (2f64.sqrt() - 1.0);
+        v.push(1.0 + continued);
+        v.extend((0..60).map(|k| 0.5f64.powi(k)));
+        let s = series(dt, v);
+        let c = decay_curve(&s, Arrival::at(0.025));
+        assert_eq!(c.from_s, 0.025);
+        assert_eq!(c.tolerance_db, CURVE_TOLERANCE_DB);
+        assert!((c.histogram_from_s - 0.005).abs() < 1e-12);
+        assert_eq!(c.points[0], [0.0, 0.0]);
+        assert_eq!(c.points[1][0], 0.0);
+        // The step is the direct sound: 10·lg(S just after / S at 0).
+        let top = 1.0 + continued + (2.0 - 0.5f64.powi(59));
+        let after = continued + (2.0 - 0.5f64.powi(59));
+        assert!((c.points[1][1] - 10.0 * (after / top).log10()).abs() < 1e-9);
+        // One line to below −150 dB, whose slope is the decay the fits read: EDT from it is EDT.
+        assert!(c.points[2][1] < -150.0, "{:?}", c.points);
+        let slope = (c.points[2][1] - c.points[1][1]) / (c.points[2][0] - c.points[1][0]);
+        let edt = decay_time(&s, Arrival::at(0.025), DecayRange::Edt).unwrap();
+        assert!((-60.0 / slope / edt.t_s - 1.0).abs() < 1e-3, "{slope}");
+        // It ends at the start of the last bin with energy.
+        let last_start = (s.len() - 1) as f64 * dt - 0.025;
+        assert!((c.points.last().unwrap()[0] - last_start).abs() < 1e-12);
+        assert_eq!(c.knots, 2 + 60);
+        assert!(c.points.len() < 15, "{:?}", c.points);
+
+        // A double slope: every knot of the whole curve lies within the tolerance of the thinned
+        // line, and the thinning keeps the knee. Says no: with no tolerance at all the curved
+        // stretch keeps its knots, and a knot moved by twice the tolerance is off the line.
+        let knee = 0.3;
+        let w: Vec<f64> = (0..400)
+            .map(|k| {
+                let t = k as f64 * 0.001;
+                if t < knee {
+                    (-t / 0.02).exp()
+                } else {
+                    (-knee / 0.02).exp() * (-(t - knee) / 0.1).exp()
+                }
+            })
+            .collect();
+        let s = series(0.001, w);
+        let a = Analysis::new(&s, Arrival::at(0.0));
+        let knots = a.decay_views()[0].plain.knots();
+        let c = decay_curve(&s, Arrival::at(0.0));
+        assert_eq!(c.knots, knots.len());
+        assert!(
+            c.points.len() < knots.len() / 4,
+            "{} points",
+            c.points.len()
+        );
+        for k in &knots {
+            let d = (level_on(&c.points, k[0]) - k[1]).abs();
+            assert!(d <= CURVE_TOLERANCE_DB * (1.0 + 1e-9), "{k:?}: {d}");
+        }
+        assert!(
+            c.points.iter().any(|p| (p[0] - knee).abs() < 0.01),
+            "the knee is kept: {:?}",
+            c.points
+        );
+        assert!(thin(&knots, 0.0).len() > 2 * c.points.len());
+        let mut moved = c.points.clone();
+        let mid = moved.len() / 2;
+        moved[mid][1] += 2.0 * CURVE_TOLERANCE_DB;
+        assert!(
+            knots
+                .iter()
+                .any(|k| (level_on(&moved, k[0]) - k[1]).abs() > CURVE_TOLERANCE_DB)
+        );
     }
 
     #[test]

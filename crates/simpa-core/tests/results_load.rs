@@ -1,6 +1,7 @@
-//! `core::results::load` on the committed run folders `tests/fixtures/results/seats_spps` and
-//! `seats_tcr` (tutorial 1's box, point receivers `Seat` and `Seat2`, written by
-//! `cargo test -p simpa --test cli_results -- --ignored write_results_fixtures`), with no solver.
+//! `core::results::load` on the committed run folders under `tests/fixtures/results/` (tutorial 1's
+//! box, point receivers `Seat` and `Seat2`; `outputs_spps` adds a cutting plane and saved
+//! particles; written by `cargo test -p simpa --test cli_results -- --ignored
+//! write_results_fixtures`), with no solver.
 //!
 //! - What is read is typed and consistent with itself: bands, steps, positions and arrivals, the
 //!   `.gap` against the `.recp`, the per-source totals, the surface files, TCR's tables and the
@@ -21,6 +22,7 @@ const SPPS: &str = "results/seats_spps";
 const TCR: &str = "results/seats_tcr";
 const ENERGETIC: &str = "results/energetic_spps";
 const SOURCES2: &str = "results/sources2_spps";
+const OUTPUTS: &str = "results/outputs_spps";
 
 fn load(name: &str) -> RunResults {
     results::load(&common::fixture(name)).unwrap_or_else(|r| panic!("{name}: {r}"))
@@ -767,7 +769,165 @@ fn cases() -> Vec<(&'static str, &'static str, Spoil, &'static str)> {
             |r| std::fs::create_dir(r.join("solve/Punctual receivers/Seat/Source 1")).unwrap(),
             codes::FILE_INVALID,
         ),
+        (
+            OUTPUTS,
+            "the 500 Hz .pbin removed",
+            |r| std::fs::remove_file(r.join(PBIN_500)).unwrap(),
+            codes::OUTPUTS_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "the 500 Hz .pbin cut short by one step record",
+            |r| {
+                let p = r.join(PBIN_500);
+                let b = std::fs::read(&p).unwrap();
+                std::fs::write(&p, &b[..b.len() - 16]).unwrap();
+            },
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a .pbin whose time step is not pasdetemps",
+            |r| patch(&r.join(PBIN_500), 24, &0.02f32.to_le_bytes()),
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a .pbin particle recorded past the last step",
+            // The first particle's firstTimeStep, a u16 after its u32 step count.
+            |r| patch(&r.join(PBIN_500), 28 + 4, &100u16.to_le_bytes()),
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a NaN energy in a .pbin",
+            // The first step record's energy: after the file header, the particle header and x,
+            // y, z.
+            |r| patch(&r.join(PBIN_500), 28 + 8 + 12, &f32::NAN.to_le_bytes()),
+            codes::VALUE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "the cutting plane's and the surface receiver's 500 Hz files swapped",
+            |r| {
+                let dir = r.join("solve/Surface receiver/500 Hz");
+                std::fs::rename(dir.join("rs_cut.csbin"), dir.join("tmp")).unwrap();
+                std::fs::rename(dir.join("Sound level.csbin"), dir.join("rs_cut.csbin")).unwrap();
+                std::fs::rename(dir.join("tmp"), dir.join("Sound level.csbin")).unwrap();
+            },
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "the cutting plane's Global file in the surface receiver's place",
+            |r| {
+                let dir = r.join("solve/Surface receiver/Global");
+                std::fs::copy(dir.join("rs_cut.csbin"), dir.join("Sound level.csbin")).unwrap();
+            },
+            codes::FILE_INVALID,
+        ),
     ]
+}
+
+/// The outputs run's 500 Hz particle file.
+const PBIN_500: &str = "solve/Particles/500/particles.pbin";
+
+/// Overwrites `bytes.len()` bytes of `path` at `at`.
+fn patch(path: &Path, at: usize, bytes: &[u8]) {
+    let mut b = std::fs::read(path).unwrap();
+    b[at..at + bytes.len()].copy_from_slice(bytes);
+    std::fs::write(path, b).unwrap();
+}
+
+#[test]
+fn saved_particles_are_read_through_the_results_and_held_to_their_run() {
+    // The M7 critic: no fixture saved particles, so the `.pbin` reading in `core::results` had no
+    // test. `outputs_spps` saves 10 per source (one source).
+    let r = load(OUTPUTS);
+    let s = r.spps().unwrap();
+    let files: Vec<(&str, i32)> = s
+        .particle_files
+        .iter()
+        .map(|p| (p.path.as_str(), p.freq_hz))
+        .collect();
+    assert_eq!(
+        files,
+        [
+            ("Particles/500/particles.pbin", 500),
+            ("Particles/1000/particles.pbin", 1000)
+        ]
+    );
+    for pf in &s.particle_files {
+        // As the format reader alone reads the same file.
+        let p = simpa_core::formats::pbin::read_file(
+            &common::fixture(OUTPUTS).join("solve").join(&pf.path),
+        )
+        .unwrap();
+        assert_eq!(pf.particles, p.particles.len());
+        assert_eq!(pf.recorded_steps, p.steps.len());
+        assert!(pf.particles > 0 && pf.particles <= 10, "{pf:?}");
+        assert!(pf.recorded_steps >= pf.particles, "{pf:?}");
+        println!(
+            "{}: {} particles, {} step records",
+            pf.path, pf.particles, pf.recorded_steps
+        );
+    }
+    // The other fixtures save none.
+    for name in [SPPS, ENERGETIC, SOURCES2] {
+        assert!(
+            load(name).spps().unwrap().particle_files.is_empty(),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn cutting_planes_and_surface_receivers_are_kept_apart_by_name() {
+    // The plan's core::results: surface receivers and cutting planes kept separate by name. The
+    // M7 critic: no fixture had a cutting plane. `outputs_spps` has the floor's scene receiver
+    // `Receiver` (config id 0) and the cutting plane `Cut` (id 1); per band and Global, SPPS writes
+    // `Sound level.csbin` and `rs_cut.csbin`.
+    let r = load(OUTPUTS);
+    let s = r.spps().unwrap();
+    let mut seen = Vec::new();
+    for f in &s.surfaces {
+        let names: Vec<(i32, String)> = f
+            .data
+            .receivers
+            .iter()
+            .map(|x| (x.xml_index, x.name_lossy().into_owned()))
+            .collect();
+        let want = if f.cutting_plane {
+            (1, "Cut".to_string())
+        } else {
+            (0, "Receiver".to_string())
+        };
+        assert_eq!(names, [want], "{}", f.path);
+        assert_eq!(
+            f.cutting_plane,
+            f.path.ends_with("/rs_cut.csbin"),
+            "{}",
+            f.path
+        );
+        seen.push((f.path.clone(), f.band_hz, f.cutting_plane));
+    }
+    let folder = |b: Option<i32>| b.map_or("Global".to_string(), |b| format!("{b} Hz"));
+    let mut want = Vec::new();
+    for b in [Some(500), Some(1000), None] {
+        for cut in [false, true] {
+            let file = if cut {
+                "rs_cut.csbin"
+            } else {
+                "Sound level.csbin"
+            };
+            want.push((format!("Surface receiver/{}/{file}", folder(b)), b, cut));
+        }
+    }
+    seen.sort();
+    want.sort();
+    assert_eq!(seen, want);
+    // Says no (`cases`): the two files swapped, or the cutting plane's in the receiver's place,
+    // are refused, `results_file_invalid`, not read as the other kind.
 }
 
 #[test]

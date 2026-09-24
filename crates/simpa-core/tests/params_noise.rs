@@ -214,6 +214,70 @@ fn enough_crossings_pass_every_value_and_too_few_do_not() {
 }
 
 #[test]
+fn the_curvature_carries_its_noise_and_its_refusals_and_flags_a_double_slope() {
+    // The curvature `simpa results` reports (M7 follow-ups: it had been computed and dropped):
+    // `100·(T30/T20 − 1)` from the reported T20 and T30, its standard deviation over the
+    // resamples, refused with T30's refusal (or T20's) when either is.
+    let mut g = Gen(0x0c0f_fee0_0000_0001);
+    let v = realise(&expected(400_000.0), &mut g);
+    let p = noise::evaluate(&series(v.clone()), AT, &NoiseModel::crossings(1.0).unwrap());
+    let (t20, t30) = (p.t20_s.unwrap(), p.t30_s.unwrap());
+    let c = p.curvature_percent.unwrap();
+    assert_eq!(c.value, 100.0 * (t30.value / t20.value - 1.0));
+    // A single slope: within its own noise of 0, far from the 10 % flag; its noise is about the
+    // two decay times' together.
+    println!("single slope: curvature {:.3} ± {:.3} %", c.value, c.sd);
+    assert!(c.value.abs() < 4.0 * c.sd && c.value.abs() < decay::CURVATURE_LIMIT_PERCENT);
+    let both = 100.0 * (t30.sd / t30.value).hypot(t20.sd / t20.value);
+    assert!(c.sd > 0.1 * both && c.sd < 1.5 * both, "{} vs {both}", c.sd);
+
+    // A double slope: the decay after −20 dB twice as slow. T30 reads it, T20 barely: flagged.
+    let tau = T / (6.0 * LN_10);
+    let knee = 20.0 / 60.0 * T;
+    let n = (DURATION / DT).round() as usize;
+    let level = |t: f64| {
+        let u = (t - ARRIVAL).max(0.0);
+        if u < knee {
+            (-u / tau).exp()
+        } else {
+            (-knee / tau).exp() * (-(u - knee) / (2.0 * tau)).exp()
+        }
+    };
+    let dbl: Vec<f64> = (0..n)
+        .map(|k| 4.0e7 * (level(k as f64 * DT) - level((k + 1) as f64 * DT)))
+        .collect();
+    let p = noise::evaluate(&series(dbl), AT, &NoiseModel::crossings(1.0).unwrap());
+    let c = p.curvature_percent.unwrap();
+    println!("double slope: curvature {:.2} ± {:.2} %", c.value, c.sd);
+    assert!(c.value > decay::CURVATURE_LIMIT_PERCENT, "{c:?}");
+
+    // Refused with its decay times: at 4,000 crossings T30 is noise, and so is the curvature.
+    let v = realise(&expected(4_000.0), &mut g);
+    let p = noise::evaluate(&series(v), AT, &NoiseModel::crossings(1.0).unwrap());
+    let e = p.curvature_percent.unwrap_err();
+    assert!(
+        matches!(
+            e,
+            ParamError::NotEvaluable {
+                quantity: simpa_core::params::Quantity::Curvature,
+                why: NotEvaluable::MonteCarloNoise { .. }
+            }
+        ),
+        "{e:?}"
+    );
+    // And with no model at all.
+    let p = noise::evaluate(
+        &series(realise(&expected(400_000.0), &mut g)),
+        AT,
+        &NoiseModel::Unknown { detail: "x".into() },
+    );
+    assert!(matches!(
+        p.curvature_percent.unwrap_err().not_evaluable(),
+        Some(NotEvaluable::NoiseUnknown { .. })
+    ));
+}
+
+#[test]
 fn without_a_noise_model_every_value_is_refused() {
     let v = realise(&expected(400_000.0), &mut Gen(77));
     let p = noise::evaluate(

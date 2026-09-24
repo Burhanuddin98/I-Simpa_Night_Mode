@@ -6,8 +6,9 @@ later gates need: ISO 9613-1 air attenuation, Sabine and Eyring as TCR computes 
 `crates/simpa-core/tests/params_synthetic.rs` (gate (a)), `params_air.rs` (gate (b)),
 `params_room.rs` (Sabine, Eyring, gate (f)), `params_complete.rs` (complete series, lost
 particles), `params_floor.rs` (the solver's floor), `params_noise.rs` (Monte-Carlo noise),
-`params_arrival.rs` (the direct sound's spread, an arrival outside the onset bin) and
-`params_reference.rs` (the reference M8 compares against).
+`params_arrival.rs` (the direct sound's spread, an arrival outside the onset bin),
+`params_reference.rs` (the reference M8 compares against) and `params_upstream_gui.rs` (upstream's
+GUI reproduced on tutorial 1, and the steps from its method to ours).
 
 **No number computed here is shown to a user until M8's physics bed passes** (`docs/rebuild-plan.md`,
 M12). M7 builds the numbers; it does not publish them.
@@ -24,8 +25,21 @@ M12). M7 builds the numbers; it does not publish them.
 | Upstream's solvers | What the energy values mean, and TCR's Sabine and Eyring | Yes, same commit |
 | Night Mode `main:project/result_parser.cpp` | Nothing. Read only for its +26 dB bug (below) | Yes |
 
-Local copies of every downloaded file are in `target/agents/m7-params-scratch/`, which is not
-committed.
+**The receipts** are in `target/investigate/m7-standards-sources/` of the main checkout
+(`B:\repos\I-Simpa_Night_Mode`), copied there on 2026-09-24 from the M7 agents' scratch folders and
+kept on Burhan's word ("do not delete; move only with Burhan's permission", its `README.txt`). They
+are not committed: the standards' PDFs are copyrighted.
+- `m7-params-scratch/`: the ISO 9613-1 preview PDFs (`iso9613-1_sample_en.pdf` and its French and
+  SIST versions), GOST 31295.1-2005 (`gost31295-1-2005.pdf`) with renders of its 20 °C and 15 °C
+  table pages (`gost_p18_20C*.png`, `gost_p17_15C.png`) and of ISO's own page 8 at 15 °C and
+  10 °C (`iso_p8_15C.png`, `iso_p8_10C.png`), `iso9613_check.py`; for DIN 18041 the BNB 2020
+  criterion (`bnb_ln2020_314.pdf`), Nocke's article (`laermbekaempfung_2016.pdf`), the DEGA
+  journal (`dega_aj_2019_03.pdf`), Ruhe's and fennext's pages, and the standard's preview from
+  normenportal (`din18041_normenportal.pdf`);
+- `m7-fix-params-scratch/`: the measurement of the DIN figure's line ends, `din_figure.py`
+  (sha256 `42eefdc4…`), on Nocke's Bild 2 extracted from the article (`laerm_bild2.png`, stored
+  flipped; `laerm_bild2_upright.png`), its text pages (`laerm_p1..6.txt`), and renders of ISO's
+  preview pages 7 and 8 (`iso_pdf7_*.png`, `iso_pdf8_*.png`).
 
 ## The input: one band's energy histogram
 
@@ -116,6 +130,14 @@ the receiver. It must never be shown as "the room's T30".
   bounds. Where refused, the two ends bracket the closed form. **So a run's C and D need the
   arrival: piece B passes `r/c`, with the spread `R/c`.** Which bin the leading edge `(r − R)/c`
   lands in is measured in `docs/results.md`, "The arrival".
+- **Gate (a)'s six decays with the arrival detected** (M7 follow-ups; the M7 critic: the gate had
+  been run with the true arrival given only; `params_synthetic.rs::gate_a_decays_with_the_arrival_detected`):
+  EDT, T20 and T30 meet the gate's 0.5 % in all six; C50, C80 and D50 are refused `unresolved` in
+  all six, the closed form (the bin's start, where the decay begins) one end of the bracket; Ts
+  comes through only at `T` = 3 s, `dt` = 1 ms, and meets its bound there. No value outside its
+  bound is returned. Gate (a) as the plan words it, C80 and D50 included, therefore holds with the
+  arrival given, not detected. Says no: the same decays 1 % off, detected, miss the decay times'
+  bound in all six.
 
 ### The direct sound's spread
 
@@ -484,6 +506,38 @@ extrapolated to 60 dB: `T = −60 / slope`.
 - **Curvature.** `C = 100·(T30/T20 − 1)` %, from ISO 3382-2 as commonly stated, which
   reads a value above 10 % as a curved (double-slope) decay. We flag `|C| > 10 %`. The flag is a
   typed field of the band's result, not a log line: M8 and M12 decide what a curved decay may show.
+  `simpa results --json` carries it per band, per source and for each aggregate (M7 follow-ups; the
+  M7 critic found it computed and dropped): `curvature.percent` from the reported T20 and T30 with
+  its Monte-Carlo standard deviation over the resamples that give both (no limit of its own: its
+  noise follows from theirs, and both passed theirs), refused with T30's refusal or else T20's
+  when either is refused; `curvature.curved`, `null` when it is refused. Checked on a noisy decay
+  (`params_noise.rs`): a single slope reads 0.3 ± 1.0 %, a decay twice as slow below −20 dB
+  30.9 ± 0.2 % and is flagged.
+
+### The decay curve, for display
+
+`params::decay::decay_curve` gives the Schroeder curve EDT, T20 and T30 are fitted to, the same
+curve from the same code (M7 follow-ups; the M7 critic: M12's decay charts would otherwise need a
+second implementation), as `[u, level]` points: `u` in seconds from the arrival the decay times
+are measured from, the level in dB re the curve at `u = 0`, which includes the direct sound.
+- **The knots** are `[0, 0]`, the level just after the direct sound (the curve steps down by it at
+  the arrival), and the end of every bin up to the start of the last bin with energy, where the
+  curve falls to nothing and the fits leave it out. Between knots the curve is straight in dB.
+- **Thinned** for the JSON: a knot is left out when the straight line through the points kept
+  either side of it passes within 0.01 dB of it and of every other knot left out between them (the
+  slopes each knot allows, intersected as the line is extended; one pass). Straight in dB between
+  knots, the curve is then everywhere within 0.01 dB of the thinned line. An exponential decay is
+  one line from the direct sound's step down to where the series' end bends the backward sums (in
+  the test, below −150 dB); a ragged random-mode curve keeps most of its knots.
+- **Before the first bin wholly after the direct sound** (`histogram_from_s`) the curve is the
+  model's reading, the decay of that bin continued back to the arrival; from there on every knot is
+  the histogram's own backward sum. When the early reverberation is unresolved, the values are
+  read two more ways over that stretch ("The early reverberation"); the curve shown is this
+  reading. With the arrival detected, it is read from the start of the onset bin.
+- **Tested** (`decay.rs`, `the_decay_curve_is_the_fitted_curve_thinned_within_its_tolerance`): the
+  step is the direct sound's, the line's slope gives EDT to 10⁻³, every knot of a double-slope decay
+  lies within 0.01 dB of the thinned line and the knee is kept; says no: a kept point moved by
+  twice the tolerance leaves knots off the line.
 - **Upstream differs.**
   - EDT's regression starts at the first time step, not at the onset (`GetTimeRange` with
     `fromdB = 0` takes `timeTable[0]`, line 149). Before the direct sound the curve is flat at
@@ -521,9 +575,52 @@ How they are evaluated, all from the curve `S(u)`:
     are bin ends. So for C the bin that ends at `t₀ + te` counts as early and as late (line 366).
     D (line 401) divides the early sum by the sum from `t₀`, so its boundary bin is counted once in
     each, which is right; D differs from ours only in its `t₀`.
-  - Its `t₀` is the absolute-threshold label above, the end of a bin.
+  - Its `t₀` is the absolute-threshold label above: the end of the bin before the first bin whose
+    energy differs from the first bin's by the threshold, in Pa², so the start of that bin.
   - **Its Ts is not measured from the onset.** Line 432 weights by the absolute time label, so
     upstream's Ts includes the propagation delay `r/c` and half a bin more.
+
+### Upstream's GUI reproduced on tutorial 1 (measured)
+
+The M7 critic: on the same 2019 `.recp`, upstream's stored `Acoustic parameters.gabe` gives C80,
+D50 and Ts that differ from ours (5.55 against 6.57 dB and 65.9 against 67.6 % at 250 Hz), and
+nothing showed that the method explains all of it. `tests/params_upstream_gui.rs` ports
+`OnMenuDoAcousticParametersComputation` and what it calls line by line, in `f32` as upstream
+computes, and runs it on the `.recp` stored in `tutorial_1.proj` (Receiver 1; Receiver 2's folder
+holds no stored table):
+- **It reproduces the stored table**, all 216 values (27 bands × SPL, C50, C80, D50, Ts, RT-15,
+  RT-30, EDT): 195 bit for bit, 37 of them NaN where the table holds NaN; the other 21 within 2
+  units in the last place of `f32` (6·10⁻⁶ relative for a decay time, whose regression carries it),
+  the GUI's C runtime rounding `log10f` differently from Rust's. Upstream's stored Schroeder curves
+  agree with the port's to 7.6·10⁻⁶ dB.
+- **Only with the 2019 GUI's threshold.** The table was written by a GUI whose `GetTimeDecay` took
+  `EPSILON`, `(decimal)0.000001` (`lib_interface/Core/mathlib.h:56`), as its threshold; upstream's
+  commit `f50c36febd` (2020-12-04, "about issue #7 set epsilon value as low as possible in order to
+  not skip first sound wave") replaced it with `pow(10, -180.0f/10.0f)`, 10⁻¹⁸, the pinned
+  commit's. The file at `e9da8b3f12`, the last change before (fetched from GitHub,
+  `target/agents/m7fu-coverage-scratch/projet_calculation_e9da8b3f12.cpp`, sha256 `0f2529aa…`),
+  differs from `929a5c8`'s in that threshold and in translation macros only. At 10⁻⁶ Pa², an
+  absolute level, no bin of the 50 to 125 Hz bands (levels 36 to 40 dB) ever differs that much from
+  the first: `t₀` becomes the last label, and C, D and Ts come out 0/0, the stored NaN. The pinned
+  GUI gives numbers there, and the same as 2019's in every other band (`t₀` 10 ms in both).
+- **From upstream's method to ours, one step at a time** (22 bands where the stored C80 is a
+  number; mean, and the range over the bands):
+
+  | Step | C80 | D50 | Ts |
+  |---|---|---|---|
+  | the 2019 GUI to the pinned one | 0 | 0 | 0 |
+  | the boundary bin counted once | +1.05 dB (+0.71 to +1.96) | (counted once already) | |
+  | time zero at `r/c` = 13.03 ms instead of the 10 ms label, the edge's bin split in proportion | +0.32 dB (+0.22 to +1.22) | +1.51 points (+0.54 to +1.83) | −13.03 ms (upstream weights by the absolute time) and −5.00 ms (its labels are the bins' ends) |
+  | ours: the curve inside a bin (`params::decay`) | +0.06 dB (+0.01 to +0.94) | +0.11 points (+0.07 to +0.17) | −0.17 ms (−0.60 to −0.09) |
+
+  The last step is the model inside the bin the window's edge falls in: the test holds our C80
+  and D50, and the proportional split's, between that bin counted wholly early and wholly late,
+  in every band. Its largest, 0.94 dB, is at 20 kHz, where the decay is fastest. **So the gap is
+  the method**: upstream counting C's boundary bin twice (the largest part), its time zero at a bin
+  edge by an absolute threshold rather than at the direct sound, its Ts from the source's emission
+  on bin-end labels; no defect of ours was found. Says no: the pinned GUI's threshold does not give
+  the stored NaN, and C with the boundary bin counted once is at least 0.5 dB off the stored C80,
+  in every band.
 
 ## Sound pressure level
 
@@ -535,7 +632,10 @@ It is the steady-state level of a source emitting its power continuously. This i
 **Night Mode's +26 dB bug:** its `.gap` reader divided the energy by `10⁻¹²`, the intensity
 reference, instead of multiplying by `1/p₀²` (`main:project/result_parser.cpp:486`).
 `10·lg(4·10⁻¹⁰ / 10⁻¹²) = 26.02 dB`. The SPL function takes no reference argument, so the mistake
-cannot be made through it; gate (c) checks the level end to end.
+cannot be made through it; gate (c) checks the level end to end. Its say-NO puts the mistake into
+this code path (M7 follow-ups): a test-only seam replaces `p₀²` by 10⁻¹², and by `p₀²` 1 dB off
+either way, and the level box's report computed again with it misses the gate in all 12
+receiver-bands (`docs/results.md`, "Level calibration").
 
 ## ISO 9613-1: air attenuation
 
@@ -689,13 +789,19 @@ nothing: the numbers are above.
 | A5 | Sport | 0.75·lg V − 1.00 to 10 000 m³, then 2.0 s (8) | 200 to 30 000 m³ |
 
 - **Gate (f):** A3 at 180 m³ gives 0.5517 s, within 0.552 ± 0.001, and 0.55 s in the design README.
+  Says no through the code (M7 follow-ups; the first partners recomputed the formulas beside it):
+  the natural logarithm put into `din18041`'s `lg` by a test-only fault seam
+  (`simpa_core::faults::Fault::DinNaturalLog`, compiled only into test builds) gives 1.4917 s, and
+  the code's own A2 and A4 formulas give 0.6945 s and 0.4464 s; each misses
+  (`params_room.rs::gate_f_din_18041_a3_at_180_m3_is_0_552_s`).
 - **The formulas** are BNB V 2020, criterion 3.1.4, which quotes them "nach DIN 18041:2016-03".
 - **The volumes** are where each group's line is drawn solid in the standard's figure of `T_soll`
   against `V`, as reproduced by Nocke (Lärmbekämpfung 11 (2016) Nr. 2, Bild 2, page 51); the
   article calls the solid stretches the typical volumes of each use, and draws the rest dotted.
-  The ends were measured on the figure against its 30, 50, 100, 200, 500, 1000, 5000 and 10 000
-  m³ grid lines; each falls within a line's end cap (under 4 % in volume) of one of them. The
-  text sources agree wherever they speak:
+  The ends were measured on the figure (`din_figure.py`, receipts above) against its 50, 100, 200,
+  500, 1000, 5000 and 10 000 m³ grid lines and the axis's ends at 30 and 30 000 m³; each falls
+  within a line's end cap (under 4 % in volume) of one of them (A5's upper end, measured at
+  29 911 m³, is the axis's right end). The text sources agree wherever they speak:
   - A4 is not suitable for rooms above 500 m³: Nocke, Table 1, page 52; also fennext.eu,
     "DIN 18041 Hörsamkeit in Räumen" (sha256 `9d9498f3…`).
   - The equations apply between 30 and 5000 m³: C. Ruhe, "Akustik in Bildungsbauten", 5.2
