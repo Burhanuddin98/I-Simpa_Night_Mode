@@ -7,15 +7,35 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
 
 ## Decisions
 
-1. **Fitting ids stay as M3 set them. The `.mbin` builder writes the room as 0.**
+1. **Fitting ids stay as M3 set them, and the `.mbin` builder writes TetGen's region attribute
+   unchanged, as upstream does.** Reversed on 2026-09-24; until then the builder wrote the room
+   as 0.
    - `FIRST_FITTING_ID` stays 2 (`config_xml/ids.rs:20`), and the zone ids stay whatever
-     `SolverIds::assign` gives. TetGen's `-A` gives every unseeded region the next attribute
-     above the largest seed, starting at 1 (`tetgen.cxx:24223-24306`).
-   - The builder maps each tet's attribute: a seeded fitting id stays itself, and anything else
-     becomes 0. That is the documented meaning of 0, "main volume" (`coreTypes.h:445`).
-   - Upstream's own meshes carry the room as 1, which the solver looks up and gets NULL
-     (`coreinitialisation.cpp:158-173`).
-   - **M5(e) reads "the first fitting zone, solver id 2"**, not "id 1".
+     `SolverIds::assign` gives. TetGen 1.5.0's `-A` gives a seeded region its seed's attribute,
+     and each region no seed reaches the next attribute above the largest located seed, starting
+     at 1, one per region (`tetgen.cxx:22352-22436`). A room without fitting zones is therefore 1,
+     as in every upstream tutorial mesh; with fittings 2 and 3 its parts are 4, 5, ...; tutorial
+     3's room is three regions, 2084 to 2086, above its fittings 1930 and 2083.
+   - The builder writes that attribute as `idVolume` (`mesh/build.rs`), as upstream's GUI does
+     (`Objet3D_maillage.cpp:165, 868`). `mesh::verify` checks TetGen's numbering
+     (`VolumeIds::tetgen`: the fittings, and the room from one above the largest) and refuses any
+     other id as `unknown_volume_ids`, a room written 0 included. `run-folder`, which has no
+     project, takes the room from one above the declared fittings or, with none, from the
+     smallest id in the mesh: upstream's Python-binding test mesh and Night Mode's broken hall
+     carry 0, which the solver also reads as the room (`coreTypes.h:445`).
+   - **Why it was reversed.** SPPS gives every tetrahedron with a nonzero `idVolume` the fitting
+     of that id, NULL for an id no `encombrement` declares, and hands it to the tetrahedron's scene
+     faces in tetrahedron order; 0 is skipped (`coreinitialisation.cpp:151-176`). Upstream's room
+     tetrahedra therefore overwrite a fitting on the scene faces they share with it, and a room
+     written 0 did not. On tutorial 3 (the parity bed, decision 3), with the room written 0 all 24
+     output files of each of its 3 runs differed from the original's; with TetGen's numbering none
+     does. Recorded in `DECISIONS.md` (05:13 on 2026-09-24): Burhan was told at 05:03 and did not
+     object.
+   - **M5(e) reads "the first fitting zone, solver id 2, and the room 3"**, not "id 1" and 0.
+   - A hazard upstream shares: when TetGen locates no tetrahedron for a fitting's seed, the room's
+     first id can be that fitting's own. `validate_export` refuses such a run before launch
+     (`fitting_id_collides_with_room_region`: room tetrahedra, outside every zone, carrying a
+     declared fitting id).
 2. **The mesher takes its flags from the project's `MeshSettings`.** The flags are
    `[-a<v>] -pq<r> -A -n [-Y]`, in upstream's order (`projet_maillage.cpp:167-170`).
    - Numbers are narrowed to f32 first, as upstream's float settings are (`projet.h:98-99`),
@@ -25,28 +45,110 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
      0.1 m². That gives `-pq2 -A -n`, the same flags as upstream's tutorial_2 mesh.
    - The default `MeshSettings` gives upstream's GUI default, `-pq5 -A -n -Y`.
    - **M5(b):** without `-Y`, the hall's `.1.face` has far more rows than 7,860. Measured with
-     the pinned TetGen: 36,716 rows; upstream's older build gave 60,974. The gate instead
+     TetGen 1.6.0: 36,716 rows; with 1.5.0, upstream's older build and ours since decision 3,
+     60,974. The gate instead
      checks three things: every row has a marker ≥ 0, the markers cover all 7,860 scene faces,
      and no marker's geometry mismatches.
-3. **Surface-receiver refinement does not work with the pinned TetGen. This is an open
-   architecture decision.**
-   - **Why.** TetGen 1.6.0 at `929a5c8` never reads a facet's area bound when it splits a
-     subface. `check_subface` tests only the radius-edge ratio (`tetgen.cxx:27347-27388`), and
-     every other `areabound` read is commented out or merely copies the value.
-   - **Measured:** the tutorial box meshes to the same 6 tetrahedra with and without its
-     `.var`, and with or without `-Y`. The floor receiver comes out as 2 faces of 30 m².
-     Upstream's 2019 tutorial mesh, made by an older TetGen, has 934 floor faces of at most
-     0.0998 m².
-   - **Consequence:** current upstream builds almost certainly draw unrefined surface-receiver
-     maps too. That is not to be claimed publicly before a bed shows it.
-   - **The two ways out, for Burhan and Michael:**
-     - patch TetGen, which breaks "solvers unchanged" and M1's byte identity
-     - pre-split the receiver faces in our `.poly` and keep TetGen stock
-   - Until one is chosen, M5(a)'s area check is an ignored test, beside a test that pins
-     today's behaviour.
+3. **The mesher is TetGen 1.5.0, and a parity bed holds our whole pipeline to original
+   I-Simpa's.**
+   - **Decided by Burhan.** On 2026-09-23 at 22:53 he chose TetGen 1.5.0 ("C: TetGen 1.5.0, if
+     the hall passes"), and at 23:45 made it unconditional with the order to build our own
+     version, "a proper build, proper and works as a solver should". Upstream's SPPS and TCR stay
+     as `929a5c8` has them; our solver inputs must equal what original I-Simpa writes, proven on
+     upstream's tutorials. His words are in
+     `docs/investigations/2026-09-23-upstream-meshing/DECISIONS.md`.
+   - **Why 1.5.0** (`docs/investigations/2026-09-23-upstream-meshing/`, with receipts):
+     - The pinned TetGen 1.6.0 never tests a facet's area bound: `check_subface` tests only the
+       radius-edge ratio (`tetgen.cxx:27347-27388`). So the `.var` does nothing, and the box
+       stays 6 tetrahedra with the floor receiver 2 faces of 30 m². Upstream moved to 1.6.0 in
+       PR #275 (2021-04-20); a contributor asked for a revert three days later and had no answer.
+       v1.4.0 (January 2026) is the first release to ship it.
+     - WIAS TetGen 1.5.0 (tarball sha256 `4d114861…9cf3`, the same files as upstream's
+       `4db335c`) is what upstream shipped in 1.3.3 and 1.3.4, and made its 2019 tutorial meshes.
+     - On the Elmia hall with a scene receiver, 1.5.0 keeps every receiver face at or under
+       0.5 m² (1.6.0: up to 6.14 m²) and loses 6.8e-4 of particles to meshing against 1.6.0's
+       5.0e-4, 15 times under the 1 % run limit. Criterion 3 was restated as "within the 1 % run
+       limit, and identical to original I-Simpa's meshes" (`confirm150.md`).
+     - On the self-intersecting raw hall, 1.6.0 crashes on every flag set; 1.5.0 stops with
+       exit 3 and names the pair.
+   - **Built and gated.** `third_party/tetgen-1.5.0/` holds the tarball and its files;
+     `solvers/build.ps1` and M1 hash the tarball and build it with the command lines of
+     upstream's own tetgen target. M1 gates tutorials 1 and 3 byte for byte.
+   - **What changed with it:**
+     - **The `.var` refines.** The box meshes to upstream's 2019 mesh: 732 nodes, 2,257
+       tetrahedra, 934 floor faces of at most 0.0998 m². M5(a)'s area check runs
+       (`mesh_project.rs::the_var_refines_the_receiver_faces`) beside its refusal: the same box
+       without its `.var` gives 60 tetrahedra and a floor face of 13.43 m².
+     - **Self-intersections stop TetGen.** 1.5.0 writes no `_skipped.face`; it exits 3 at the
+       first self-intersection, sometimes naming the pair (on `tg_bad`; not on the box with a
+       piercing baffle, nor with two overlapping zones). The mesher reports
+       `tetgen_self_intersection` with that pair and the findings of a `tetgen -d` follow-up
+       (which 1.5.0 runs to exit 0, writing the intersecting triangles as a `.1.face`), mapped to
+       scene faces, groups and box zones (`docs/formats/mesh-manifest.md`). A 1.6.0
+       `_skipped.face`, such as the committed broken hall's, still gives `tetgen_skipped_facets`.
+     - **The `.mbin` takes upstream's corner order**, `(d,c,b,a)`, and the `float` GL round trip
+       (`docs/formats/mbin.md`). SPPS then locates tutorial 1's source, by a margin of 2.4e-7,
+       and `run::locate` refuses before launch any source or point receiver SPPS would lose
+       (`source_unlocatable`, `receiver_unlocatable`).
+     - **Gate M6(a)** is judged against upstream's own mesh (Burhan, 2026-09-24 05:13, "No worse
+       than upstream"): the seeded box runs OK and loses 1 particle of 10,000 at 2 kHz, and so does
+       the same project, seed and config on upstream's 2019 mesh of the box, byte for byte its
+       `tetramesh.mbin`. The gate text's "none lost" is replaced by that comparison, as M6(c)
+       judges the hall.
+   - **The parity bed**, `crates/simpa/tests/parity_tutorials.rs`, run by
+     `tools/gates/parity.ps1`. For upstream's tutorials 1, 2 and 3: `simpa import-proj`, then
+     `simpa mesh`, then our files against the ones original I-Simpa wrote into the `.proj`, then
+     SPPS and TCR with one seed on our inputs and on the original's, every output file compared
+     (`.csbin` decoded, the rest byte for byte). Measured on 2026-09-24:
+
+     | | Inputs | Same-seed results |
+     |---|---|---|
+     | Tutorial 1 | `.poly`, `.var`, TetGen's `.1.*` and the `.mbin` byte-identical, `idVolume` included; `config.xml` and `.cbin` the original's but the ids, the stored receiver directions and the listed differences by design | TCR: 15 of 15 files identical. SPPS: 15 of 17, and the two `Advanced sound level.gap` differ in the last bits; with the run's own receiver directions, 17 of 17 |
+     | Tutorial 2 | `.poly` and `.1.node` equal in every value; 307 and 1,036 lines differ in text at exact decimal ties (below); the other `.1.*` byte-identical | none: the `.proj` holds no run folder |
+     | Tutorial 3 | not meshable by us (below). Our TetGen on upstream's own `.poly` gives its `.1.*` byte for byte, and our builder its `.mbin`; `config.xml` and `.cbin` the original's but the ids | 3 runs: 24 of 24 files identical in each, with the fittings under our ids and the room as TetGen numbers it above them (decision 1). The refusal: the room written 0, as the builder wrote it until 2026-09-24, gives different results |
+
+   - **What does not match**, each measured:
+     1. **Tutorial 3 cannot go through our pipeline.** `simpa import-proj` refuses its fitting
+        zones, and `simpa mesh` refuses the scene its runs hold (`self_intersections`,
+        `open_boundary`, `unresolved_topology`). Upstream's GUI took its `.poly` through
+        `preprocess.exe` (the mesh settings' "preprocess", `projet_maillage.cpp:206-213`): its
+        `.poly` has 57 vertices and 133 facets for the run's 100 faces. Our `.poly` of the same
+        scene, taken through our build of `preprocess.exe`, has 56 and 140. Running
+        `preprocess.exe` in our mesher, and what our geometry check should accept before it, is
+        not built: Burhan chose to investigate tutorial 3 first (05:13 on 2026-09-24, "i think we
+        should investigate tutorial 3"; `DECISIONS.md`).
+     2. **Decimal ties in text.** A coordinate at an exact tie in the 17th significant digit is
+        printed rounded to even by programs built with Visual Studio 2019 16.2 or later, and up
+        by older ones. Our `.poly` writer and our TetGen build round to even; the 2019 files
+        round up. The values are equal. Linking TetGen with `legacy_stdio_float_rounding.obj`
+        (`third_party/tetgen-1.5.0/PROVENANCE.md`) and rounding ties up in our writer would give
+        the 2019 text; the default follows upstream's own 1.3.4 TetGen, which prints as ours
+        does. Open for Burhan.
+     3. **Receiver directions: a difference from the stored runs, not from what original I-Simpa
+        writes from this `.proj`.** The GUI saves a direction with `ostream`'s default 6 digits
+        (`e_data_float.h:163, 249-257`: tutorial 1 stores `-0.383357`), reads that text back on
+        load (`:65-66`), and recomputes a direction only when a position is edited, never while
+        loading (`e_scene_recepteursp_recepteur.h:63, 105, 195-219`). Its runs were written in the
+        2019 session, from the direction computed at full precision (`-0.3833573`). Reopened, the
+        original writes the 6-digit value, as we do (`parity_inputs.rs::tutorial1_directions`).
+     4. **Element ids.** Upstream's are GUI session ids; they reach no output but the `.csbin`
+        `xmlIndex` (`docs/formats/config_xml.md`).
+   - **Upstream's shipped solvers against ours** (the bed's `shipped_…` test, tutorial 1, seed 1,
+     10,000 particles, 500, 1000 and 2000 Hz):
+     - **v1.4.0** (`929a5c8`, the pin): SPPS 17 of 17 and TCR 15 of 15 files identical to ours.
+     - **v1.3.4** (2020-12-23, the last stable release): TCR identical but for the sign of 4 NaNs
+       in `Main results.gabe`. SPPS: the particle statistics and `Total energy.recp` identical (the
+       same particle fates, inferred); 15 of 17 files differ. Point receivers' levels differ by at most
+       1.9e-4 relative (`Sound level.recp` and `Advanced sound level.gap`), per source by 4.1e-6,
+       and their intensity components by up to 3.1e-3 relative (small components, 1.8e-13
+       absolute at most; ratio taken over every value, not only those above 1e-3 of the file's
+       largest). Surface receivers differ far more: single time-step records by up to 98 %, and
+       each face's energy summed over time by up to 84 % (2 kHz). Why the surface receivers differ
+       between the two releases is not examined.
    - `mesh_settings_conflict` (`.var` together with `-Y`) stays as a project-stage error. It
      keeps parity with upstream's GUI, which clears `-Y` whenever the constraint is on
-     (`e_core_core_tetconf.h:82-90`), but it prevents no measured failure with this build.
+     (`e_core_core_tetconf.h:82-90`), and with 1.5.0 `-Y` would forbid the splits the `.var`
+     asks for.
 4. **The `.var` file** follows `var.cpp:54-64`. It has one row per face whose group belongs to
    an *enabled scene* surface receiver, keyed by the face's `.poly` marker (the `.cbin` face
    index), with one global area. It must be byte-identical to
@@ -132,7 +234,8 @@ These are the plan's codes (raw json line 3); M5 and M6 implement 4, 5 and 130.
 - Exits: 0, 2, 3, 4 or 130.
 
 **`simpa mesh-verify <dir>`**
-- Options: `--json`, `--room-id <n>`, `--fittings <a,b,..>`.
+- Options: `--json`, `--room-id <n>`, `--fittings <a,b,..>`. Without `--room-id` the room's
+  first id is TetGen's, one above the largest fitting or 1 (decision 1).
 - stdout carries the `DirReport`.
 - Exits: 0 on a pass, 4 on a failure.
 
@@ -176,8 +279,9 @@ tools/fixture-gen/      the generators that made them                           
 
 **Mesh folder** (`simpa mesh <project> --out <dir>`):
 - inputs: `scene_mesh.poly` and `scene_mesh.var`
-- TetGen outputs: `scene_mesh.1.{node,ele,face,neigh,edge}`, and `scene_mesh_skipped.*` on
-  failure
+- TetGen outputs: `scene_mesh.1.{node,ele,face,neigh,edge}`; after a self-intersection, TetGen
+  1.5.0 writes none of them, and `diag/` holds the `-d` follow-up (TetGen 1.6.0 wrote
+  `scene_mesh_skipped.*` instead)
 - logs: `tetgen.stdout.txt` and `tetgen.stderr.txt`
 - `mesh.cbin`, and `tetramesh.mbin` only on success
 - `mesh.json`, the manifest, always written
@@ -189,7 +293,8 @@ files with narrow `fopen` (a `Ł` path works this way, `m1.ps1:117`).
 - `<root>/<yyyyMMdd-HHmmss-fff>-<solver>[-n]/` is created with `create_dir`, never reused
 - `mesh/` inside it, when no `--mesh` is given
 - `solve/`, the solver's fresh working folder: only `config.xml`, `mesh.cbin`,
-  `tetramesh.mbin` and `directivities\` before launch (`validate/export.rs:494-523`)
+  `tetramesh.mbin` and `loudspeakers\` (upstream's folder name, `config_xml::names::DIRECTIVITY_DIR`)
+  before launch (`validate/export.rs:494-523`)
 - `run.json` and `solver.{stdout,stderr}.txt`, beside `solve/`, not in it
 
 The solver runs with cwd = `solve/` and the argument `config.xml`.
@@ -202,8 +307,8 @@ Expected files are derived from the `config.xml` actually in `solve/`, for both 
 `run-folder`. That file is the one source of truth.
 
 `run-folder` skips only the *project* validator. Before launch it runs `mesh::verify` on the
-folder's `.mbin` and the `.cbin` it indexes, with the room id taken as the most common
-`idVolume` that is no declared fitting's. A failure there is a run failure: status FAIL, reason
+folder's `.mbin` and the `.cbin` it indexes, with the config's fittings and the room from one
+above the largest of them, or, with none, from the smallest `idVolume` (decision 1). A failure there is a run failure: status FAIL, reason
 `mesh_invalid` plus the verifier's codes, exit 5. This is what refuses the broken-hall TCR
 folder, since TCR itself exits 0 on it. A missing `.mbin` or an unreadable `.cbin` is
 `mesh_invalid` alone. The config-only band check of decision 11 runs beside it:
@@ -245,7 +350,7 @@ pub fn run(spec: &Spec, cancel: &CancelToken, on_line: &mut dyn FnMut(&Line)) ->
 **`mesh::verify`**, used by the mesher before writing, by `mesh-verify` and by `run`. The types
 are fixed in `crates/simpa-core/src/mesh/verify.rs` (scaffold):
 ```rust
-pub struct VolumeIds { pub room: i32 /* 0 ours, 1 upstream's */, pub fittings: Vec<i32> }
+pub struct VolumeIds { pub room: i32 /* the room's first id, TetGen's numbering */, pub fittings: Vec<i32> }
 pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> VerifyReport
 pub fn verify_dir(dir: &Path, ids: &VolumeIds) -> Result<DirReport, FormatError>
 ```
@@ -256,7 +361,7 @@ Counts in the report:
 - `marker_geometry_mismatches`: a marked face must lie on its scene face, within a tolerance
   scaled to f32 and the model size
 - `uncovered_scene_faces`, as a count plus the first 20
-- `unknown_volume_ids`, plus the volume per id
+- `unknown_volume_ids` (an id below `room` that is no fitting's), plus the volume per id
 
 `verify_dir` adds `tetgen_skipped_facets` (count and markers), `neigh_missing` and
 `tetgen_output_missing`, and accepts any basename (`model.*` as well as `scene_mesh.*`).
@@ -271,12 +376,13 @@ the doc drift apart. The classifier holds the continuation-line state for
 - **M5(a):** the box is meshed with its own settings, plus these checks:
   - the `.var` is byte-identical to upstream's tutorial-1 `.var`
   - more than 2 tet faces carry markers 0/1, and each such face has area ≤ 0.1 m² × (1 + 1e-4)
-    **(blocked by decision 3)**
+    (TetGen 1.5.0, decision 3; the same box without its `.var` must fail it)
 - **M5(b):** as in decision 2.
 - **M5(c):** `simpa mesh <file.poly>` accepts a raw `.poly`, whose facets then act as the scene.
-  The survey's `tg_bad` poly gives exit 4, `tetgen_skipped_facets` with markers [8, 9, 12],
-  and no `.mbin`. The committed broken-hall set gives `mesh-verify` exit 4 with
-  `tetgen_skipped_facets` (535) and `neigh_missing`.
+  The survey's `tg_bad` poly gives exit 4, `tetgen_self_intersection` naming facets [8, 9, 12]
+  in the pairs [8, 12] and [9, 12], mapped to scene faces [8, 9, 12], and no `.mbin` (TetGen
+  1.5.0 stops and writes no `_skipped.face`). The committed broken-hall set, TetGen 1.6.0's
+  output, gives `mesh-verify` exit 4 with `tetgen_skipped_facets` (535) and `neigh_missing`.
 - **M5(d):** as in decision 7.
 - **M5(e):** as in decision 1.
 - **M5(g):** also asserts that the cancel hit a running TetGen. The manifest must show
@@ -285,7 +391,15 @@ the doc drift apart. The classifier holds the continuation-line state for
   been written. Run it on a release build, since TetGen starts 36-45 ms into the call in a
   debug build.
 - **M6(a):** uses a derived fixture, `rooms/tutorial1_box_seeded.simpa`: seed 1 and 10,000
-  particles, M1's reference configuration. Totals as in decision 10.
+  particles, M1's reference configuration. Totals as in decision 10. **Losses are judged against
+  upstream's own mesh of the box** (Burhan, 2026-09-24 05:13): per band, lost by meshing and lost
+  by loops no higher than the same project, seed and config give on upstream's 2019 tutorial-1
+  mesh, built with `--from-tetgen` from its 2019 TetGen output and checked byte for byte against
+  its `tetramesh.mbin`. Measured: both lose 1 particle at 2 kHz. The control is the box on TetGen
+  1.6.0's 6-tetrahedron mesh in upstream's corner order, which loses none; judged against that
+  control, the box's own run is refused at 2 kHz (`cli_run.rs::spps_runs_the_seeded_box_ok`,
+  `tools/gates/m6.ps1`).
+- **Parity:** `tools/gates/parity.ps1` runs the parity bed of decision 3 and its refusals.
 - **M6(c):** uses the derived fixture `rooms/elmia_loss_gate.simpa`: seed 1, bands 125-4,000 Hz
   computed. The floor mesh is upstream's tutorial_2 `.1.*`, taken from the zip at gate time and
   built by `simpa mesh <project> --from-tetgen <dir>`. The tolerance follows decision 9.

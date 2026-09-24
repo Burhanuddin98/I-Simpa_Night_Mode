@@ -61,7 +61,7 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 | `material_unassigned` | project | error | Every surface group has a material in the active variant | Where a face's material is undeclared, both solvers print `Wrong project configuration…` on stderr and exit -1 (VERIFIED P2 `mat22_miss`, `tcr_mat22_miss`). For material id 0 on the first faces there is no check at all, and SPPS crashes `0xC0000005` (VERIFIED S `run_mat0miss`; `coreinitialisation.cpp:409-434`) |
 | `material_value_out_of_range` | project | error | 0 ≤ α ≤ 1, 0 ≤ diffusion ≤ 1, transmission loss R ≥ 0 dB, all finite | The solvers check none of these. Energetic mode multiplies energy by (1 - α) and by τ = 10^(-R/10) (`CalculationCore.cpp:249-285`), so α > 1 or R < 0 negates or creates energy. Random mode compares α and diffusion with a uniform draw (`CalculationCore.cpp:288-300, 318`) (inferred) |
 | `material_diffusion_ignored` | project | warning | α = 1 while diffusion > 0: the diffusion value has no effect | An α = 1 hit never reflects (`CalculationCore.cpp:249-261`). Upstream's GUI forces diffusion to 0 in that case (`e_data_row_materiau.h:116-120`) |
-| `material_transmission_exceeds_absorption` | project | warning, corrected | The transmission coefficient τ = 10^(-R/10) must not exceed α, and transmission needs α > 0. The exporter writes τ = α (R = -10·log10 α) and says so (`config_xml::write::transmission_loss_written`); for α = 0, where the solver transmits nothing anyway, it writes 300 dB | Random mode transmits an absorbed particle when rand·α ≤ τ, so τ > α acts as τ = α (`CalculationCore.cpp:292`). Energetic mode keeps (1 - α) of the energy and adds a τ copy, which creates energy when τ > α (`CalculationCore.cpp:262-285`). With α = 0 no transmission happens in either mode (`CalculationCore.cpp:262, 288`). Upstream's GUI makes the same correction, with a warning (`e_data_row_materiau.h:128-143, 185-197`) |
+| `material_transmission_exceeds_absorption` | project | warning, corrected | The transmission coefficient τ = 10^(-R/10) must not exceed α, and transmission needs α > 0. The exporter writes τ = α (R = -10·log10 α) and says so (`config_xml::write::transmission_loss_written`); for α = 0 it leaves `affaiblissement` out of the band, as upstream's GUI does (`e_data_row_materiau.h:98-106, 131-134`), so the band does not transmit | Random mode transmits an absorbed particle when rand·α ≤ τ, so τ > α acts as τ = α (`CalculationCore.cpp:292`). Energetic mode keeps (1 - α) of the energy and adds a τ copy, which creates energy when τ > α (`CalculationCore.cpp:262-285`). With α = 0 no transmission happens in either mode (`CalculationCore.cpp:262, 288`). Upstream's GUI makes the same correction, with a warning (`e_data_row_materiau.h:128-143, 185-197`) |
 
 #### Sources and receivers
 
@@ -132,7 +132,7 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 
 | Code | Stage | Severity | Rule | What it prevents |
 |---|---|---|---|---|
-| `mesh_settings_conflict` | project | error | A surface-receiver area constraint (`surface_receiver_max_area_m2`, the `.var`) is not combined with `-Y` (`preserve_boundary`) | The two ask for opposite things. The `.var` asks TetGen to split the receiver's facets down to an area; `-Y` (`nobisect`) forbids splitting any boundary facet, since the whole facet-refinement block is under `if (!b->nobisect)` (`tetgen.cxx:29377-29551`). Upstream's GUI clears `-Y` whenever the constraint is turned on (`e_core_core_tetconf.h:82-90`). **The pinned TetGen refines nothing for a `.var` either way:** 1.6.0 loads it and records each facet's bound (`tetgen.cxx:2446-2449, 25066-25077`) but never reads a bound when it decides a split (`check_subface`, `:27347-27388`). Measured 2026-09-23: tutorial 1's box with upstream's own `.var` gives the same 6-tetrahedron mesh with `-pq2 -A -n` as with no `.var`, where upstream's 2019 mesh has 2,257 (`docs/formats/var.md`). So the rule keeps parity with upstream's GUI and with a TetGen that honours the bound; with the pinned build it prevents no measured failure. The mesher refuses the same combination with the same code (`docs/formats/mesh-manifest.md`) |
+| `mesh_settings_conflict` | project | error | A surface-receiver area constraint (`surface_receiver_max_area_m2`, the `.var`) is not combined with `-Y` (`preserve_boundary`) | The two ask for opposite things. The `.var` asks TetGen to split the receiver's facets down to an area; `-Y` (`nobisect`) forbids splitting any boundary facet, since the whole facet-refinement block is under `if (!b->nobisect)` (`tetgen.cxx:29377-29551`). Upstream's GUI clears `-Y` whenever the constraint is turned on (`e_core_core_tetconf.h:82-90`). TetGen 1.5.0, our mesher since `docs/m5-m6-design.md` decision 3, honours the bound (`checkfac4split`, `tetgen.cxx:24580-24582`): tutorial 1's box with upstream's own `.var` and `-pq2 -A -n` gives upstream's 2019 mesh, 2,257 tetrahedra, where the pinned 1.6.0 gave 6 with or without the `.var` (`docs/formats/var.md`). So the rule keeps parity with upstream's GUI, and with 1.5.0 `-Y` would forbid the very splits the `.var` asks for. The mesher refuses the same combination with the same code (`docs/formats/mesh-manifest.md`) |
 
 #### Export checks
 
@@ -296,7 +296,7 @@ when the first receiver owns no face.
 | 0 | not evidence of success | Success, and also: no argument; unparseable config (P2 `bad_xml`); unreadable mesh; the on-face stop; a missing separator on `workingdirectory` (P2 `wd_nosep`); 100 % particle loss (S `run_lossy`); a missing directivity file or band (S `run_dirmiss`, P2 `dir_partial`, `dir_badrow`); a short spectrum (S `run_oneband`); zero `trans_epsilon` (P2 `eps_short`); a receiver outside (P2 `rcv_out`); receiver radius 0 (P2 `radius0`); a name overflow (P2 `name_long`); a wrapped delay (P2 `delay_wrap`) | `sppsNantes.cpp:449-460` |
 | `0xFFFFFFFF` (-1) | FAIL | A face's material is undeclared | `coreinitialisation.cpp:429-432`; VERIFIED P2 `mat22_miss` |
 | 1 | FAIL | A degenerate tetrahedron in the `.mbin`: the `degenerate_tetrahedron` line on stderr, with no newline, then exit 1 | `coreTypes.cpp:210-216`; VERIFIED fixture `runs/spps_degenerate` (corner D set to corner A) |
-| `0xC0000005` | CRASH | Access violation, with no message: a source outside the mesh, an undeclared material 0 on the first faces, or a balloon source with no file attribute | VERIFIED P2 `src_out`, `dir_noattr`; S `run_mat0miss` |
+| `0xC0000005` | CRASH | Access violation, with no message: a source outside the mesh or on an internal facet that SPPS's `f32` test puts in no tetrahedron (both refused before launch: `source_unlocatable`), an undeclared material 0 on the first faces, or a balloon source with no file attribute | VERIFIED P2 `src_out`, `dir_noattr`; S `run_mat0miss`; `tests/run_locate.rs` |
 | `0xC0000409` | CRASH | Abort from an uncaught C++ exception: a non-numeric directivity value, an empty `workingdirectory`, or a missing time step | VERIFIED P2 `dir_nan`, `wd_empty`, `no_dt` |
 
 TCR returns `MainProcess`'s value (`main_tc.cpp:160-173`):
@@ -441,6 +441,8 @@ order, and its status is OK exactly when it lists none.
 | `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry; its own codes and counts are in the detail. Exit class 3 |
 | `mesh_missing` | FAIL | before launch | `run --mesh <dir>`: the folder has no readable `mesh.json`, a manifest that is not `OK`, or no `tetramesh.mbin`; or the run's own mesh folder cannot be used. Exit class 4 |
 | `export_failed` | FAIL | before launch | `run`: the run folder's inputs cannot be written. `config_xml`'s writer refuses the project or the variant (its code, such as `variant_not_found`, is in the detail), or a mesh or directivity file cannot be copied. Exit class 2 |
+| `source_unlocatable` | FAIL | before launch | SPPS only, `run` and `run-folder`: a source that SPPS's own `f32` test puts in no tetrahedron of the `.mbin` (`coreinitialisation.cpp:71-95`, emulated by `run::locate`), such as a source exactly on an internal facet where the product rounds positive from both sides. SPPS would crash with `0xC0000005` before any particle runs (`sppsInitialisation.cpp:20`). The detail names each source, its number in the project's order (`config.xml` lists them newest first, so the file's last is number 1), its name and its position as SPPS stores it. Exit class 5, the solver is not launched. VERIFIED against `spps.exe` on 233 points on and near the seeded box's internal facets (`tests/run_locate.rs`) |
+| `receiver_unlocatable` | FAIL | before launch | SPPS only, as `source_unlocatable`, for a point receiver (`coreinitialisation.cpp:178-212`). SPPS runs to the end, but the receiver collects energy only from where its never-written `indexTetra` leads (`coreTypes.h:425`; `sppsInitialisation.cpp:82-90`). VERIFIED on the box refined to 0.5 m³: 0 at 1000 Hz on the facet, a level 1 mm away (`tests/run_locate.rs`). Exit class 5 |
 | `launch_failed` | FAIL | exit | the solver cannot be started (`crate::process`), or its logs beside `solve/` cannot be created, so it is not started; or its process tree cannot be ended within 10 s of the kill. Exit class 5 |
 | `log_write_failed` | unchanged: a warning, never a reason | logs | writing `solver.stdout.txt` or `solver.stderr.txt` failed during the run. The lines were classified as they arrived, so the verdict stands and `run.json` is written; the logs are incomplete |
 | `cancelled` | CANCELLED | exit | the run was cancelled (the process layer killed the tree); never OK, and its outputs are partial. The mesher gives the same code for a cancelled mesh (`docs/formats/mesh-manifest.md`) |
@@ -479,23 +481,38 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   | validate | each Part A error's code; Part A warnings are recorded as the verdict's warnings | 2 |
   | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `manifest_mismatch` or Part A's `mesh_out_of_date` | 4 |
   | export | `export_failed`, or `validate_export`'s error codes | 2 |
+  | pre_launch (SPPS only) | `source_unlocatable`, `receiver_unlocatable` | 5 |
   | solve | the verdict above | 0, 5 or 130 |
 
 - **`run-folder`** copies the folder into `solve/` without its `expected.json`, replaces
   `__RUNDIR__` in `config.xml` with the absolute `solve\` path, runs no project validator, and
   checks before launch:
   - **the mesh.** The `.mbin` that `tetrameshFileName` names must exist and read, the `.cbin`
-    that `modelName` names must read, and `mesh::verify` must pass them. The room id is the most
-    common `idVolume` that is no declared fitting's (0 in our meshes, 1 in upstream's), and the
-    fittings are the config's `encombrement` ids. Otherwise the reason is the mesher's
+    that `modelName` names must read, and `mesh::verify` must pass them. The fittings are the
+    config's `encombrement` ids, and the room's ids are TetGen's numbering above them, as both
+    upstream's meshes and ours carry them (`docs/m5-m6-design.md`, decision 1); with no fitting
+    declared, the room starts at the smallest `idVolume` in the mesh (1 from TetGen, 0 in upstream's
+    Python-binding mesh and Night Mode's broken hall). Otherwise the reason is the mesher's
     `mesh_invalid`, followed by the verifier's codes. This refuses the broken-hall TCR folder,
     which TCR itself runs to exit 0 (fixture `runs/tcr_broken_hall`).
   - **the bands.** Every source's spectrum must reach the position of the last computed band,
     or the reason is Part A's `band_set_mismatch`. No signal after the run catches a short
     spectrum: VERIFIED fixture `runs/spps_oneband`, exit 0 with every file written.
+  - **the sources and point receivers (SPPS, once the mesh check passed).** Each must be in a
+    tetrahedron by SPPS's own test, or the reason is `source_unlocatable` or
+    `receiver_unlocatable`. This refuses fixture `runs/spps_srcout`, which SPPS crashes on.
   - A `config.xml` that does not parse is `config_attribute_missing`.
 
   Any of these is FAIL with exit class 5, and the solver is not launched.
+- **Locating a point as SPPS does** (`run::locate`, which holds every receipt). SPPS takes the
+  first tetrahedron in file order for which no face has `(node[a] - p) . normal > 0`, where `a`
+  is the face's first vertex and `normal` is `FaceNormal(a, b, c)` computed at load, all in
+  `f32` (`coreTypes.cpp:227-233`; `mathlib.h:120-173, 344-397`). The position is `ToFloat` of
+  the attribute: the first `,` becomes `.`, then `atof`, then `float` (`coreString.cpp:89-105`).
+  The emulation repeats each `f32` operation in the same order; the solvers are built by MSVC
+  x64 with `/fp:precise` and no `/arch`, so there is no FMA and no extended precision. TCR runs
+  the same test at load (`main_tc.cpp:78`) but never reads its result, so the check is SPPS's
+  only.
 - **Cancel.** The caller's token stops the run at the next stage, TetGen, or the solver.
   `--cancel-after-ms` counts from the solver's launch, and `--cancel-after-progress p` cancels at
   the first progress line at or above `p`. A cancelled run is CANCELLED, exit class 130.
@@ -522,13 +539,21 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
 Meshing is M5's stage. The TetGen part of the survey's run contract is kept here for one place
 of reference; its file formats are in `docs/formats/tetgen.md`.
 
+**Which TetGen.** Ours is WIAS TetGen 1.5.0 (`third_party/tetgen-1.5.0`, built by
+`solvers/build.ps1`), the TetGen upstream shipped in 1.3.3 and 1.3.4 and made its 2019 tutorial
+meshes with, chosen by Burhan on 2026-09-23 (`docs/m5-m6-design.md`, decision 3). Upstream's pin,
+929a5c8, vendors 1.6.0, which ignores the `.var` area bound. The two differ where it matters here:
+1.6.0 skips self-intersecting facets into `<name>_skipped.face` and carries on; 1.5.0 stops at
+the first one. What follows marks each difference.
+
 - **Command:** `tetgen.exe <switches> <name>.poly`.
   - Upstream's GUI uses `-pq<minratio, default 5> [-a<maxvol>] -A -n <appendparams, default
     -Y>`, or `-d` for its self-intersection test (`projet_maillage.cpp:163-178`;
     `e_core_core_tetconf.h:86-103`).
   - The outputs are `<name>.1.{node,ele,face,neigh,edge}`, beside the input (VERIFIED S
     `tg_ok`).
-- **Exit codes** (`tetgen.h:2487-2524`). Messages go to stdout through `printf`.
+- **Exit codes** (`tetgen.h:2487-2524` in 1.6.0; `2247-2283` in 1.5.0, the same codes but 200).
+  Messages go to stdout through `printf`.
 
   | Exit | Meaning |
   |---|---|
@@ -541,9 +566,22 @@ of reference; its file formats are in `docs/formats/tetgen.md`.
   | 10 | input error |
   | 200 | Steiner points on the boundary under `-YY` |
 
-- **Failure signature** (VERIFIED S `tg_bad`): exit 3; partial `.1.node`, `.1.ele`, `.1.face`
-  and `.1.edge`; no `.1.neigh`; and `<name>_skipped.face` and `.node`, whose markers are `.cbin`
-  face indices. The line `Program stopped.` arrives on stdout, and stderr is empty.
+- **Failure signature, TetGen 1.5.0** (VERIFIED 2026-09-24 on `tests/fixtures/meshes/tg_bad`):
+  exit 3; no `.1.*` file and no `_skipped.*`; stdout ends with `A self-intersection was
+  detected. Program stopped.` and a hint to use `-d`, which 1.5.0 prints on every exit 3
+  (`tetgen.h:2265-2267`), and stderr is empty. Before that line it may name the pair,
+  `Found a segment and a subface intersect.` with `  1st: [9, 10] 1.` and `  2nd: [1,4,6] 9`: a
+  facet by its points and its 1-based position in the `.poly`, a segment by its points. On other
+  paths it names nothing (the box with a piercing baffle stops in `Constrained Delaunay...`).
+  `tetgen -d` then exits 0, prints each intersecting pair as `  Facet #i intersects facet #j at
+  triangles:` (repeated), and writes `.1.node` and a `.1.face` of the intersecting triangles
+  whose markers are the facets' markers. The mesher reads both and reports
+  `tetgen_self_intersection` (`docs/formats/mesh-manifest.md`).
+- **Failure signature, TetGen 1.6.0** (VERIFIED S `tg_bad`): exit 3; partial `.1.node`, `.1.ele`,
+  `.1.face` and `.1.edge`; no `.1.neigh`; and `<name>_skipped.face` and `.node`, whose markers
+  are `.cbin` face indices. The line `The input surface mesh contain self-intersections. Program
+  stopped.` arrives on stdout, and stderr is empty. The mesher reports `tetgen_skipped_facets`,
+  and still reads a committed 1.6.0 set such as `tests/fixtures/meshes/broken_hall`.
 
 ### Corrections to the survey's run contract
 

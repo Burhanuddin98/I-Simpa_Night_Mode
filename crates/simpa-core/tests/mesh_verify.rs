@@ -13,10 +13,25 @@ use simpa_core::formats::mbin::{self, Mesh, TetraFace, Tetrahedron};
 use simpa_core::formats::{FormatError, tetgen};
 use simpa_core::mesh::verify::{FACE_CORNERS, VerifyReport, VolumeIds, verify_dir, verify_mesh};
 
-/// Upstream's meshes carry the room as 1 (`docs/m5-m6-design.md`, decision 1).
+/// Upstream's meshes carry the room as TetGen numbers it, 1 without fitting zones
+/// (`docs/m5-m6-design.md`, decision 1): the default ids, which this crate's mesher uses too.
 fn upstream() -> VolumeIds {
+    let ids = VolumeIds::default();
+    assert_eq!(
+        ids,
+        VolumeIds {
+            room: 1,
+            fittings: vec![]
+        }
+    );
+    ids
+}
+
+/// The ids of a mesh whose room is 0: upstream's Python-binding test mesh and Night Mode's broken
+/// hall, built by other tools than TetGen's numbering.
+fn room_0() -> VolumeIds {
     VolumeIds {
-        room: 1,
+        room: 0,
         fittings: vec![],
     }
 }
@@ -133,26 +148,38 @@ fn upstream_python_bindings_mesh_passes_with_room_0() {
         "upstream/python_bindings/tetramesh.mbin",
         "upstream/python_bindings/mesh.cbin",
     );
-    let r = verify_mesh(&mesh, &scene, &VolumeIds::default());
+    let r = verify_mesh(&mesh, &scene, &room_0());
     println!("{}", summary("python_bindings", &r));
     assert!(r.passed(), "{}", summary("python_bindings", &r));
     assert_eq!((r.tetrahedra, r.nodes, r.scene_faces), (102, 46, 76));
+    // Under TetGen's numbering its 0 is no room part: every tetrahedron is unknown.
+    let r = verify_mesh(&mesh, &scene, &VolumeIds::default());
+    assert_eq!(codes(&r), ["unknown_volume_ids"]);
+    assert_eq!(r.unknown_volume_ids, 102);
 }
 
 #[test]
-fn upstream_mesh_fails_with_this_crates_room_id() {
-    // The default ids are this crate's convention, room 0: every upstream tetrahedron (room 1)
-    // is then an unknown volume, and nothing else.
-    let (mesh, scene) = tutorial1();
+fn a_room_written_0_fails_under_tetgens_numbering() {
+    // Upstream's tutorial-1 mesh with its room written 0, as this crate's builder wrote it before
+    // decision 1 was reversed (2026-09-24): every tetrahedron is an unknown volume, and nothing
+    // else. Read with the room from 0 it passes.
+    let (mut mesh, scene) = tutorial1();
+    for t in &mut mesh.tetrahedra {
+        t.id_volume = 0;
+    }
     let r = verify_mesh(&mesh, &scene, &VolumeIds::default());
     assert_eq!(codes(&r), ["unknown_volume_ids"]);
     assert_eq!(r.unknown_volume_ids, 2257);
-    // A declared fitting id is known too.
-    let ids = VolumeIds {
-        room: 0,
-        fittings: vec![1],
-    };
-    assert!(verify_mesh(&mesh, &scene, &ids).passed());
+    assert!(verify_mesh(&mesh, &scene, &room_0()).passed());
+    // With one fitting zone, TetGen's room starts above it: upstream's 1 is then a fitting's id,
+    // known, and a room at 1 beside a fitting declared as 2 is not.
+    let (mesh, scene) = tutorial1();
+    let with_fitting = VolumeIds::tetgen(vec![2]);
+    assert_eq!(with_fitting.room, 3);
+    let r = verify_mesh(&mesh, &scene, &with_fitting);
+    assert_eq!(codes(&r), ["unknown_volume_ids"]);
+    assert_eq!(r.unknown_volume_ids, 2257);
+    assert!(verify_mesh(&mesh, &scene, &VolumeIds::tetgen(vec![1])).passed());
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -462,17 +489,24 @@ fn scene_face_with_no_markers_is_uncovered_scene_faces_only() {
 
 #[test]
 fn volume_id_without_a_fitting_is_unknown_volume_ids_only() {
+    // Fittings 7 and 9 seeded: TetGen's room starts at 10. One tetrahedron carrying 8, below the
+    // room and no fitting's, is unknown.
     let (mut mesh, scene) = tutorial1();
-    mesh.tetrahedra[7].id_volume = 7;
-    let r = verify_mesh(&mesh, &scene, &upstream());
+    for t in &mut mesh.tetrahedra {
+        t.id_volume = 10;
+    }
+    mesh.tetrahedra[3].id_volume = 7;
+    mesh.tetrahedra[7].id_volume = 8;
+    let ids = VolumeIds::tetgen(vec![7, 9]);
+    let r = verify_mesh(&mesh, &scene, &ids);
     assert_only(&r, "unknown_volume_ids");
     assert_eq!(r.unknown_volume_ids, 1);
-    assert!(r.volume_by_id.contains_key(&7));
-    // Declaring 7 as a fitting makes it known.
-    let ids = VolumeIds {
-        room: 1,
-        fittings: vec![7],
-    };
+    assert!(r.volume_by_id.contains_key(&8));
+    // Declaring 8 as a fitting makes it known.
+    assert!(verify_mesh(&mesh, &scene, &VolumeIds::tetgen(vec![7, 8, 9])).passed());
+    // An id above the room is a further room part, as TetGen numbers a second unseeded region
+    // (tutorial 3's room is 2084 to 2086).
+    mesh.tetrahedra[7].id_volume = 11;
     assert!(verify_mesh(&mesh, &scene, &ids).passed());
 }
 
@@ -573,7 +607,7 @@ fn single_tet(h: f32) -> (Mesh, Model) {
     let mesh = Mesh {
         tetrahedra: vec![Tetrahedron {
             vertices: v,
-            id_volume: 0,
+            id_volume: 1,
             faces,
         }],
         nodes: nodes.clone(),
@@ -654,7 +688,8 @@ fn marker_geometry_tolerance_says_yes_at_f32_noise_and_no_just_past_it() {
 #[test]
 fn broken_hall_folder() {
     let dir = fixture("meshes/broken_hall");
-    let r = verify_dir(&dir, &VolumeIds::default()).unwrap();
+    // Night Mode's own .mbin, which writes the room as 0.
+    let r = verify_dir(&dir, &room_0()).unwrap();
     let mesh = r
         .mesh
         .as_ref()
@@ -988,11 +1023,14 @@ fn mesher_manifest_files_mbin_is_checked() {
 
 #[test]
 fn mesh_codes_follow_the_folder_codes() {
-    // The cube with this crate's room id: the mesh check fails, and its code reaches the folder.
-    let dir = cube_folder("cube_room0", None);
-    let r = verify_dir(&dir, &VolumeIds::default()).unwrap();
+    // The cube (room 1) read with the ids of a project with one fitting zone, 2: TetGen would put
+    // that room at 3, so the mesh check fails, and its code reaches the folder.
+    let dir = cube_folder("cube_room1_fitting2", None);
+    let r = verify_dir(&dir, &VolumeIds::tetgen(vec![2])).unwrap();
     assert_eq!(r.codes, ["unknown_volume_ids"]);
     assert_eq!(r.mesh.as_ref().unwrap().unknown_volume_ids, 6);
+    // With the default ids it passes.
+    assert!(verify_dir(&dir, &VolumeIds::default()).unwrap().passed());
 }
 
 #[test]
@@ -1223,7 +1261,7 @@ fn grid(n: usize, size: f32) -> (Mesh, Model) {
         .enumerate()
         .map(|(t, &tet)| Tetrahedron {
             vertices: tet,
-            id_volume: 0,
+            id_volume: 1,
             faces: std::array::from_fn(|i| {
                 let vertices = FACE_CORNERS[i].map(|c| tet[c]);
                 let nb = neighbor[4 * t + i];
@@ -1274,7 +1312,7 @@ fn hall_sized_grid_verifies_in_under_two_seconds() {
     );
     assert!(r.passed(), "{}", summary("grid", &r));
     assert_eq!(r.tetrahedra, 162_000);
-    assert!((r.volume_by_id[&0] - 27_000.0).abs() < 1e-6);
+    assert!((r.volume_by_id[&1] - 27_000.0).abs() < 1e-6);
     assert!(elapsed.as_secs_f64() < 2.0, "{elapsed:?} ({profile})");
 }
 
@@ -1285,7 +1323,7 @@ fn broken_hall_verifies_in_under_two_seconds() {
         "meshes/broken_hall/model.cbin",
     );
     let start = Instant::now();
-    let r = verify_mesh(&mesh, &scene, &VolumeIds::default());
+    let r = verify_mesh(&mesh, &scene, &room_0());
     let elapsed = start.elapsed();
     let profile = if cfg!(debug_assertions) {
         "debug"

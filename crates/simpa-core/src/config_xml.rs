@@ -18,13 +18,25 @@
 //!   two-space indent. Attribute values escape `& < > "` and tab, line feed and carriage return;
 //!   a character XML 1.0 cannot carry at all is [`WriteError::Unencodable`].
 //! - **Deterministic.** The same project, solver, variant and folder always give the same bytes:
-//!   elements and attributes are written in a fixed order, lists in the project's order, and every
-//!   spectrum in the band set's ascending order.
+//!   elements and attributes are written in a fixed order, and every spectrum in the band set's
+//!   ascending order.
+//! - **Lists last item first,** as upstream's GUI writes them: sources, point receivers, surface
+//!   receivers and fitting zones. It holds a list in the order its elements were loaded or
+//!   created and writes each one in front of the last, so its lists come out newest first. The
+//!   solvers number sources and receivers by their position in the file, so this is part of
+//!   their input (`docs/formats/config_xml.md`, "Parity with upstream's GUI").
+//!   [`import_upstream`] reverses them back into project order.
+//! - **`directivities_directory`** is upstream's [`names::DIRECTIVITY_DIR`] folder for every
+//!   SPPS run, as its GUI writes it; for TCR, whose config upstream writes without it, only when
+//!   a source has a directivity file, and `""` (the value TCR reads when it is absent) otherwise.
 //! - **Numbers as the C locale reads them.** A real is the shortest decimal that reads back to the
 //!   same `f64` bits (never more than C++'s `max_digits10`, 17 significant digits), with `.` as
 //!   the decimal point, no exponent and no grouping; `atof` then reads exactly that `f64`, and the
 //!   solver stores it as `value as f32`. A non-finite real is [`WriteError::NonFinite`]. Integers
 //!   are plain decimal, and every switch is `"1"` or `"0"`, `docalc` included.
+//! - **Spectra as upstream computes them:** white and pink noise on upstream's 27 bands are the
+//!   `f32` levels upstream's GUI computes ([`band_levels_written`]); a transmitting material has
+//!   no `affaiblissement` in a band that absorbs nothing, as upstream writes it.
 //! - **`workingdirectory`** is the run folder as an absolute path ending in the platform
 //!   separator ([`working_directory`]).
 //! - **No dead payload:** no `<surface_mesh>`, `<vertices>` or `<subdomains>`, and none of the
@@ -37,7 +49,10 @@
 //! The project's ids are UUIDs and never reach a solver. The integers the solvers match between
 //! `config.xml`, the scene mesh (`.cbin`) and the tetrahedral mesh (`.mbin`) are assigned here, by
 //! [`SolverIds::assign`], from the project's own order, so the same project always gets the same
-//! ids, whatever its variant:
+//! ids, whatever its variant. Upstream's GUI writes its own element ids instead (3503, 1930, ...),
+//! which a project has nowhere to hold, so for the same scene ours differ from upstream's. In the
+//! mode the writer selects, the solvers match them between the three files and write a scene
+//! receiver's id into its `.csbin` output, and nothing else reads them:
 //!
 //! | Solver id | Written as | Assigned |
 //! |---|---|---|
@@ -58,19 +73,28 @@
 //! [`WriteError::SharedSolverId`].
 //!
 //! Fitting ids start at 2 because TetGen's `-A` numbers a region that no region seed marks with
-//! the next integer above the largest seeded attribute, starting from 1 (`tetgen.cxx:24218-24300`):
-//! a mesh made with no fitting regions gives every room tetrahedron the attribute 1, and
-//! upstream's meshes keep it, so tutorial 1's `tetramesh.mbin` carries the room as `idVolume` 1.
-//! The `.mbin` builder of [`crate::mesh`] does not: it writes the room as `idVolume` 0, the
-//! solver's "main volume" (`coreTypes.h:445`), and a seeded fitting as its own id
-//! (`docs/m5-m6-design.md`, decision 1). To the solver `idVolume` 0 means no fitting. So no
-//! fitting id can be 0, nor 1, the room's attribute in TetGen's output and upstream's meshes.
+//! the next integer above the largest seeded attribute, starting from 1 (TetGen 1.5.0,
+//! `tetgen.cxx:22403-22436`): a mesh made with no fitting regions gives every room tetrahedron the
+//! attribute 1, and upstream's meshes keep it, so tutorial 1's `tetramesh.mbin` carries the room
+//! as `idVolume` 1. The `.mbin` builder of [`crate::mesh`] writes the attribute unchanged too
+//! (`docs/m5-m6-design.md`, decision 1): a seeded fitting carries its own id and the room's parts
+//! the ids above the largest one. To the solver `idVolume` 0 means no fitting, and any other id
+//! that no `encombrement` declares a NULL fitting, handed to the tetrahedron's scene faces
+//! (`coreinitialisation.cpp:151-176`). So no fitting id can be 0, nor 1, the room's attribute
+//! in TetGen's output and upstream's meshes.
 //!
 //! # Variants
 //!
 //! [`write()`]'s `variant` is `None` for the base project, or a variant's name or id (its
 //! hyphenated UUID). A name two variants share is [`WriteError::VariantAmbiguous`]; pass the id.
 //! To write what the GUI shows, pass `project.active_variant.map(|v| v.to_string())`.
+//!
+//! # The scene mesh
+//!
+//! [`scene_mesh`] takes every vertex through upstream's 32-bit OpenGL round trip ([`GlFrame`]), as
+//! upstream's GUI writes its `.cbin`, so the solvers read the same `f32` bits for the same scene
+//! (`docs/formats/cbin.md`, "Parity with upstream's GUI"). The mesher's `.poly` takes its vertices
+//! from it, as upstream's does.
 //!
 //! # Importing
 //!
@@ -82,17 +106,19 @@
 //! [`Spectrum`](crate::schema::Spectrum) when one reproduces every band's `f32` exactly, and a
 //! custom one otherwise.
 
+mod gl;
 mod ids;
 mod import;
 mod num;
 mod write;
 
+pub use gl::GlFrame;
 pub use ids::{FIRST_ASSIGNED_MATERIAL_ID, FIRST_FITTING_ID, SolverIds, scene_mesh};
 pub use import::{ImportError, import_upstream, import_upstream_with_mesh};
 pub use num::widen_f32;
 pub use write::{
-    StagedFile, WriteError, directivity_files, resolve_variant, working_directory, write,
-    write_file,
+    StagedFile, WriteError, band_levels_written, directivity_files, resolve_variant,
+    working_directory, write, write_file,
 };
 
 pub use crate::schema::SolverKind;
@@ -121,8 +147,9 @@ pub mod names {
     pub const POINT_RECEIVER_ADVANCED_FILE: &str = "Advanced sound level.gap";
     /// `simulation@cumul_filename`.
     pub const TOTAL_ENERGY_FILE: &str = "Total energy.recp";
-    /// `simulation@directivities_directory`, when a source uses a directivity file.
-    pub const DIRECTIVITY_DIR: &str = "directivities";
+    /// `simulation@directivities_directory`: upstream's `CONST_REPORT_DIRECTIVITIES_FOLDER_PATH`
+    /// (`appconfig.cpp:61`), written for every SPPS run and for a TCR run with a directivity file.
+    pub const DIRECTIVITY_DIR: &str = "loudspeakers";
     /// SPPS `simulation@stats_filename`.
     pub const SPPS_STATS_FILE: &str = "SPPS particle statistics.gabe";
     /// SPPS `simulation@particules_directory`.

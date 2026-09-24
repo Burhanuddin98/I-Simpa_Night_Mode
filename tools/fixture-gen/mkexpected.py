@@ -12,11 +12,13 @@ For every fixture this script computes, independently of the Rust crates:
    non-finite values), read through `simpa dump`;
 2. the pre-launch checks `run-folder` makes (docs/m5-m6-design.md, "Run folder", and decision
    11): the decision-6 invariants and the VerifyReport counts, on the fixture's .mbin and .cbin,
-   and the config-only band check (every source's spectrum reaches the last computed band);
-3. the final verdict: mesh_invalid plus the failing counts when the mesh check fails, and
-   band_set_mismatch when the band check fails, else (1). A count that depends on
-   mesh::verify's noise floor goes to `codes_any_of` instead: the verdict must carry one code of
-   each group.
+   the config-only band check (every source's spectrum reaches the last computed band), and,
+   for SPPS on a mesh that passed, the location check (every source and point receiver is in a
+   tetrahedron by SPPS's own f32 test, emulated here from the .mbin's bytes);
+3. the final verdict: mesh_invalid plus the failing counts when the mesh check fails,
+   band_set_mismatch when the band check fails, and source_unlocatable / receiver_unlocatable
+   when the location check fails, else (1). A count that depends on mesh::verify's noise floor
+   goes to `codes_any_of` instead: the verdict must carry one code of each group.
 
 It then compares both verdicts with EXPECT, the expectation written down before the runs with
 its receipt, and stops with exit 1 on any disagreement, writing nothing. Only when every case
@@ -104,9 +106,12 @@ EXPECT = {
         "coreinitialisation.cpp:430) and exit 0xFFFFFFFF (SC:264, VERIFIED S run_mat7miss; "
         "RAW:1477)."),
     "spps_srcout": dict(
-        status="CRASH", codes=["crash_access_violation"],
-        receipt="Source at x = 12 m in a 5 m cube: NULL tetrahedron, 0xC0000005 with no message "
-        "(SC:71, SC:266, VERIFIED S run_srcout; RAW:1435)."),
+        status="FAIL", codes=["source_unlocatable"],
+        observed_status="CRASH", observed_codes=["crash_access_violation"],
+        receipt="Source at x = 12 m in a 5 m cube: SPPS's own f32 test puts it in no tetrahedron "
+        "(coreinitialisation.cpp:71-95), so run-folder refuses it before launch with "
+        "source_unlocatable. Run anyway, NULL tetrahedron, 0xC0000005 with no message (SC:71, "
+        "SC:266, VERIFIED S run_srcout; RAW:1435)."),
     "spps_unreadable_mesh": dict(
         status="FAIL", codes=["mesh_invalid"],
         observed_status="FAIL", observed_codes=["scene_mesh_unreadable"],
@@ -669,9 +674,15 @@ def mesh_check(folder: Path, cfg: Config, simpa: Simpa) -> dict:
     scale = max([1.0] + [abs(x) for v in verts for x in v])
     tol = 32 * 2.0 ** -24 * scale
     covered = set()
-    ids = collections.Counter(t[1] for t in tets)
-    room = ids.most_common(1)[0][0] if ids else None
-    allowed = {room} | set(cfg.fittings())
+    # run-folder's volume ids (run/manager.rs, volume_ids): with fittings declared, TetGen's
+    # numbering, the room from one above the largest; without, the room from the smallest id
+    # (None for a mesh with no tetrahedron, where nothing is judged). An id is known when it is a
+    # fitting's or at least the room's.
+    fittings = set(cfg.fittings())
+    if fittings:
+        room = max(max(fittings), 0) + 1
+    else:
+        room = min((t[1] for t in tets), default=None)
     for k, (corners, idv, fcs) in enumerate(tets):
         if any(not 0 <= x < nn for x in corners) or any(
                 not 0 <= x < nn for fv, _, _ in fcs for x in fv) or any(n >= nt for _, _, n in fcs):
@@ -682,7 +693,7 @@ def mesh_check(folder: Path, cfg: Config, simpa: Simpa) -> dict:
         edge = max(math.dist(p, q) for p in (A, B, C, D) for q in (A, B, C, D))
         repeated = len(set(corners)) < 4
         shapes.append((repeated, 0.0 if repeated else abs(det) / edge ** 3, det >= 0))
-        if idv not in allowed:
+        if idv not in fittings and idv < room:
             c["unknown_volume_ids"] += 1
         for fv, marker, n in fcs:
             if n < 0 and marker < 0:
@@ -753,9 +764,110 @@ def band_check(cfg: Config) -> dict:
     return {"bands": "fail", "short_sources": short} if short else {"bands": "pass"}
 
 
+# ---------------------------------------------------------------------------------------------
+# SPPS's point location, emulated independently of run::locate
+
+F32_MAX = struct.unpack("<f", bytes.fromhex("ffff7f7f"))[0]
+
+
+def r32(x: float) -> float:
+    """x rounded to the nearest f32. An f32 +, -, *, / or sqrt equals the f64 one rounded to f32,
+    because f64 carries more than 2 x 24 + 2 bits (double rounding is innocuous)."""
+    if math.isfinite(x) and abs(x) > F32_MAX:
+        return math.copysign(F32_MAX if abs(x) < 2.0 ** 128 - 2.0 ** 103 else math.inf, x)
+    return struct.unpack("<f", struct.pack("<f", x))[0]
+
+
+EPS32 = r32(0.000001)  # EPSILON, Core/mathlib.h:56
+ATOF = re.compile(r"[ \t\n\v\f\r]*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)")
+
+
+def to_float(text: str) -> float | None:
+    """CoreString::ToFloat (coreString.cpp:89-105): the first ',' becomes '.', then atof, then
+    float. None for a hexadecimal float, which is not emulated."""
+    i = text.find(",")
+    if i >= 0:
+        text = text[:i] + "." + text[i + 1:]
+    s = text.lstrip(" \t\n\v\f\r")
+    body = s[1:] if s[:1] in ("+", "-") else s
+    if body[:3].lower() in ("inf", "nan"):
+        return r32(float(s[:len(s) - len(body)] + body[:3]))
+    if re.match(r"0[xX](?:[0-9a-fA-F]|\.[0-9a-fA-F])", body):
+        return None
+    m = ATOF.match(text)
+    return r32(float(m.group(1))) if m else 0.0
+
+
+def face_normal(p1, p2, p3):
+    """FaceNormal (mathlib.h:391-397): Cross_r(p1 - p2, p2 - p3), normalised unless < EPSILON."""
+    u = [r32(p1[k] - p2[k]) for k in range(3)]
+    v = [r32(p2[k] - p3[k]) for k in range(3)]
+    c = [r32(r32(u[1] * v[2]) - r32(u[2] * v[1])),
+         r32(r32(u[2] * v[0]) - r32(u[0] * v[2])),
+         r32(r32(u[0] * v[1]) - r32(u[1] * v[0]))]
+    ln = r32(math.sqrt(r32(r32(r32(c[0] * c[0]) + r32(c[1] * c[1])) + r32(c[2] * c[2]))))
+    if ln < EPS32:
+        return c
+    inv = r32(1.0 / ln)
+    return [r32(x * inv) for x in c]
+
+
+def outside(a, n, p) -> bool:
+    """(a - p) . n > 0 in f32 (coreinitialisation.cpp:84-85, mathlib.h:173)."""
+    d = [r32(a[k] - p[k]) for k in range(3)]
+    return r32(r32(r32(d[0] * n[0]) + r32(d[1] * n[1])) + r32(d[2] * n[2])) > 0
+
+
+def read_mbin(path: Path):
+    """Per tetrahedron, (first vertex, normal) per face, from the .mbin's bytes; None when a face
+    names a node the mesh does not have."""
+    b = path.read_bytes()
+    nt, nn = struct.unpack_from("<II", b, 0)
+    nodes = [struct.unpack_from("<3f", b, 8 + 12 * i) for i in range(nn)]
+    tets, o = [], 8 + 12 * nn
+    for _ in range(nt):
+        faces = []
+        for f in range(4):
+            fa, fb, fc = struct.unpack_from("<3i", b, o + 20 + 20 * f)
+            if not all(0 <= x < nn for x in (fa, fb, fc)):
+                return None
+            faces.append((nodes[fa], face_normal(nodes[fa], nodes[fb], nodes[fc])))
+        tets.append(faces)
+        o += 100
+    return tets
+
+
+def location_check(folder: Path, cfg: Config, pre: dict) -> dict:
+    """run-folder's SPPS location check (run::locate): every source and point receiver must be in
+    a tetrahedron by SPPS's test, which no face of it puts the point outside of."""
+    if pre["mesh_check"] != "pass":
+        return {"location": "not run: the mesh check failed"}
+    tets = read_mbin(folder / cfg.get("tetrameshFileName"))
+    if tets is None:
+        return {"location": "not run: a face names a missing node"}
+    lost, codes = [], []
+    for kind, tag, label, code in (("source", "sources", "name", "source_unlocatable"),
+                                   ("point receiver", "recepteursp", "lbl", "receiver_unlocatable")):
+        node = cfg.root.find(tag)
+        items = [] if node is None else list(node)
+        for k, e in enumerate(items):
+            p = [to_float(e.get(a, "")) for a in ("x", "y", "z")]
+            if None in p or any(not any(outside(a, n, p) for a, n in t) for t in tets):
+                continue
+            # Numbered in the project's order: config.xml lists them newest first (run/locate.rs).
+            i = len(items) - k
+            lost.append(f"{kind} {i} \"{e.get(label, '')}\" at ({', '.join(f'{x:g}' for x in p)})")
+            if code not in codes:
+                codes.append(code)
+    if not lost:
+        return {"location": "pass"}
+    return {"location": "fail", "unlocated": lost, "location_codes": codes}
+
+
 def pre_ok(pre: dict) -> bool:
-    """Both pre-launch checks pass: the solver would start."""
-    return pre["mesh_check"] == "pass" and pre.get("bands") != "fail"
+    """Every pre-launch check passes: the solver would start."""
+    return (pre["mesh_check"] == "pass" and pre.get("bands") != "fail"
+            and pre.get("location") != "fail")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -812,6 +924,8 @@ def judge(case: Path, obs_root: Path, rows: list[Row], simpa: Simpa) -> dict:
     }
     pre = mesh_check(case, Config(case / "config.xml"), simpa)
     pre.update(band_check(Config(case / "config.xml")))
+    if solver == "spps":
+        pre.update(location_check(case, Config(case / "config.xml"), pre))
     any_of = pre.get("codes_any_of", [])
     final_codes = []
     if pre["mesh_check"] == "fail":
@@ -819,6 +933,8 @@ def judge(case: Path, obs_root: Path, rows: list[Row], simpa: Simpa) -> dict:
         final_codes = ["mesh_invalid"] + [x for x in pre["codes"] if x not in moving]
     if pre["bands"] == "fail":
         final_codes.append("band_set_mismatch")
+    if pre.get("location") == "fail":
+        final_codes += pre["location_codes"]
     if final_codes:
         final_status = "FAIL"
     else:
@@ -931,6 +1047,17 @@ def floor_notes(runs: dict) -> list[str]:
     return out
 
 
+def observed_sha(runs: dict, exe: str) -> str:
+    """The sha256 prefix every real run of `exe` records in its `observed.source`: the README names
+    the build the runs came from, not a literal that outlives it. Several builds among the runs, or
+    none, is refused."""
+    shas = {r["observed"]["source"].split(" ")[2].rstrip(",") for n, r in runs.items()
+            if not n.startswith("stub_") and r["observed"]["source"].startswith(f"{exe} sha256 ")}
+    if len(shas) != 1:
+        fc.die(f"the runs of {exe} name {len(shas)} builds, not one: {sorted(shas)}")
+    return shas.pop()
+
+
 def readme(runs: dict, rows: list[Row]) -> str:
     real = [n for n in runs if not n.startswith("stub_")]
     stubs = [n for n in runs if n.startswith("stub_")]
@@ -970,9 +1097,11 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "  - `warnings`: WARN-class rows seen.",
         "  - `pre_launch`: the checks `run-folder` makes before launch, computed by",
         "    `mkexpected.py`'s references: the mesh check (decision 6 and the VerifyReport",
-        "    counts, with the noise floor it used) and the band check (decision 11). A failed",
-        "    mesh check makes the verdict FAIL with `mesh_invalid` and the failing counts' codes;",
-        "    a failed band check adds `band_set_mismatch`.",
+        "    counts, with the noise floor it used), the band check (decision 11) and, for SPPS",
+        "    on a mesh that passed, the location check (SPPS's own f32 point test, emulated). A",
+        "    failed mesh check makes the verdict FAIL with `mesh_invalid` and the failing counts'",
+        "    codes; a failed band check adds `band_set_mismatch`, a failed location check",
+        "    `source_unlocatable` or `receiver_unlocatable`.",
         "  - `observed`: what the real solver did when run anyway, launched as Part B says",
         "    (fresh copy, cwd = the folder, argument `config.xml`): exit code, the solver's own",
         "    status and codes, the decisive lines, the full transcript classified by row (paths",
@@ -981,8 +1110,10 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "",
         "## What the runs showed",
         "",
-        "Observed with the M1 solvers of `solvers/manifest.json` (`spps.exe` `cacbbee25d70e6ff`,",
-        "`classicalTheory.exe` `6382f32139097604`). Every survey behaviour cited in the receipts",
+        "Observed with the M1 solvers of `solvers/manifest.json` (`spps.exe` "
+        f"`{observed_sha(runs, 'spps.exe')}`,",
+        f"`classicalTheory.exe` `{observed_sha(runs, 'classicalTheory.exe')}`). Every survey "
+        "behaviour cited in the receipts",
         "reproduced. Beyond it:",
         "",
         "- **`spps_oneband` is not caught by any Part B signal.** Exit 0, no FAIL line, 2,000",
@@ -991,6 +1122,9 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "  `band_set_mismatch` (decision 11).",
         "- **`tcr_srcout` is caught after all**, by `nonfinite_result`: the direct field at R1 is",
         "  -inf in every band, although TCR exits 0.",
+        "- **`spps_srcout` never reaches SPPS.** `run-folder`'s location check finds its source in",
+        "  no tetrahedron by SPPS's own f32 test and refuses it with `source_unlocatable`; run",
+        "  anyway, SPPS crashes with `0xC0000005`.",
         "- **Exit `0xFFFFFFFF` is FAIL**, as the exit tables say (SC:264, SC:275). The rule at",
         "  SC:278, \"any exit at or above `0xC0000000` is CRASH\", would make it `crash_other`.",
         "- **Night Mode's broken-hall config fails on its own**: TCR prints `xml_property_missing`",

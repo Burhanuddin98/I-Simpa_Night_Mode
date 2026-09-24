@@ -78,7 +78,8 @@ fn the_box_meshes_with_its_own_settings() {
 
     let mesh = mbin::read_file(&dir.join("tetramesh.mbin")).unwrap();
     assert_eq!(invariants(&mesh), Vec::<String>::new());
-    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 0));
+    // The room as TetGen numbers it, 1 without fitting zones, written unchanged (decision 1).
+    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 1));
     let markers = marker_counts(&mesh);
     assert_eq!(
         markers.keys().copied().collect::<Vec<_>>(),
@@ -146,32 +147,47 @@ fn floor_faces(mesh: &mbin::Mesh) -> (usize, f64) {
     (areas.len(), areas.iter().copied().fold(0.0, f64::max))
 }
 
-/// Gate M5(a)'s refinement check as `docs/m5-m6-design.md` states it: more than 2 tetrahedron
-/// faces on the receiver's faces, none above 0.1 m². It cannot pass with the pinned TetGen
-/// (1.6.0 at upstream 929a5c8), which reads the `.var` but never consults a facet's area bound
-/// when it decides a split (`tetgen.cxx:27347-27388`; `areabound` is read only to copy it,
-/// `:12362, 12607, 12727, 16539`). See `docs/formats/var.md`, and the measured behaviour in
-/// `the_pinned_tetgen_reads_the_var_and_refines_nothing`.
+/// Whether a mesh passes gate M5(a)'s refinement check as `docs/m5-m6-design.md` states it: more
+/// than 2 tetrahedron faces on the receiver's faces, none above 0.1 m² × (1 + 1e-4).
+fn floor_refined(mesh: &mbin::Mesh) -> bool {
+    let (floor, largest) = floor_faces(mesh);
+    floor > 2 && largest <= 0.1 * (1.0 + 1e-4)
+}
+
+/// Gate M5(a)'s refinement check on the box meshed with its own settings: TetGen 1.5.0, the mesher
+/// since decision 3, honours the `.var` (0.1 m² on faces 0 and 1): its `checkfac4split` splits a
+/// subface whose area is above the facet's bound (`third_party/tetgen-1.5.0/tetgen.cxx`, 24580 ff.).
+/// The mesh is upstream's own 2019 tutorial mesh: 732 nodes, 2,257 tetrahedra and 934 floor faces
+/// of at most 0.0998 m² (`docs/investigations/2026-09-23-upstream-meshing/synthesise.md` §4). The
+/// input that makes it say no is the next test's: the same box without its `.var`.
 #[test]
-#[ignore = "fails with the pinned TetGen 1.6.0, which ignores .var area bounds: docs/formats/var.md"]
 fn the_var_refines_the_receiver_faces() {
     let (dir, m) = box_mesh();
     assert!(m.is_ok(), "{m:#?}");
     let mesh = mbin::read_file(&dir.join("tetramesh.mbin")).unwrap();
     let (floor, largest) = floor_faces(&mesh);
-    assert!(floor > 2, "{floor} floor faces");
-    assert!(
-        largest <= 0.1 * (1.0 + 1e-4),
-        "largest floor face {largest} m²"
+    println!(
+        "box with its .var: {} nodes, {} tetrahedra, {floor} floor faces, largest {largest} m²",
+        mesh.nodes.len(),
+        mesh.tetrahedra.len()
     );
+    assert!(
+        floor_refined(&mesh),
+        "{floor} floor faces, largest {largest} m²"
+    );
+    assert_eq!(
+        (mesh.nodes.len(), mesh.tetrahedra.len(), floor),
+        (732, 2257, 934)
+    );
+    assert!(largest <= 0.0998, "largest floor face {largest} m²");
 }
 
-/// What the pinned TetGen does with the box's `.var` (0.1 m² on faces 0 and 1), measured: it
-/// opens it and refines nothing, so the mesh is the one it makes with no `.var` at all. If this
-/// fails, TetGen has changed: rerun `the_var_refines_the_receiver_faces` and revisit
-/// `docs/formats/var.md`.
+/// What the `.var` does, measured against the same box without it: TetGen 1.5.0 opens it and
+/// refines the floor to the bound, and without it the floor stays coarse, so the refinement check
+/// refuses that mesh. With the pinned TetGen 1.6.0 both meshes were the same 6 tetrahedra, with
+/// the floor 2 faces of 30 m² (decision 3); this test fails on that TetGen.
 #[test]
-fn the_pinned_tetgen_reads_the_var_and_refines_nothing() {
+fn without_the_var_the_floor_is_not_refined() {
     let (with_dir, with) = box_mesh();
     assert!(with.is_ok(), "{with:#?}");
     let mut p = load_room("tutorial1_box.simpa");
@@ -190,8 +206,13 @@ fn the_pinned_tetgen_reads_the_var_and_refines_nothing() {
         a.tetrahedra.len(),
         b.tetrahedra.len()
     );
-    assert_eq!(a, b);
-    assert_eq!((fa, la), (2, 30.0));
+    assert_ne!(a, b);
+    assert!(floor_refined(&a));
+    assert!(
+        !floor_refined(&b),
+        "without the .var the floor is refined anyway"
+    );
+    assert!(lb > 0.1, "largest floor face without the .var {lb} m²");
 }
 
 fn with_box_zone(p: &mut Project, min: [f64; 3], max: [f64; 3]) {
@@ -236,10 +257,10 @@ fn a_box_fitting_zone_is_its_own_region() {
     assert_eq!(invariants(&mesh), Vec::<String>::new());
     let volumes = volume_by_id(&mesh);
     println!("box with a zone: volume per idVolume {volumes:?}");
-    assert_eq!(volumes.keys().copied().collect::<Vec<_>>(), [0, 2]);
+    assert_eq!(volumes.keys().copied().collect::<Vec<_>>(), [2, 3]);
     let zone = volumes[&2];
     assert!(((zone - 1.0) / 1.0).abs() <= 1e-9, "zone volume {zone} m³");
-    assert!(((volumes[&0] + zone - 180.0) / 180.0).abs() <= 1e-9);
+    assert!(((volumes[&3] + zone - 180.0) / 180.0).abs() <= 1e-9);
     // The zone's triangles (markers 12..24) are plain tet-to-tet transitions.
     assert!(
         mesh.tetrahedra
@@ -249,13 +270,15 @@ fn a_box_fitting_zone_is_its_own_region() {
     );
     let stats = m.counts.build.as_ref().unwrap();
     assert!(stats.zone_tet_faces >= 24, "{stats:?}");
-    // TetGen gave the unseeded room the next attribute, 3; the builder wrote it as 0.
+    // TetGen gave the unseeded room the next attribute, 3, and the builder wrote it unchanged, as
+    // upstream does; the verifier took the room from 3 (VolumeIds::tetgen).
     let attrs: Vec<(i64, i32)> = stats
         .attributes
         .iter()
         .map(|a| (a.attribute, a.id_volume))
         .collect();
-    assert_eq!(attrs, [(2, 2), (3, 0)]);
+    assert_eq!(attrs, [(2, 2), (3, 3)]);
+    assert_eq!(m.volume_ids.room, 3);
 }
 
 #[test]
@@ -636,6 +659,168 @@ fn every_failure_code_fires_on_its_input() {
     assert_eq!(m.codes, [codes::CANCELLED]);
 }
 
+/// A mesher that answers from a script: the main call prints `main` on stdout and exits
+/// `main_exit`; the `-d` follow-up (in `diag/`) writes `diag_face` as `scene_mesh.1.face` when
+/// given, prints `diag` and exits 0, as TetGen 1.5.0's does.
+struct Scripted {
+    main: &'static str,
+    main_exit: u32,
+    diag: &'static str,
+    diag_face: Option<&'static str>,
+}
+
+impl Mesher for Scripted {
+    fn program(&self) -> Option<&Path> {
+        None
+    }
+
+    fn run(
+        &self,
+        dir: &Path,
+        args: &[String],
+        _cancel: &CancelToken,
+        on_line: &mut dyn FnMut(&Line),
+    ) -> io::Result<Outcome> {
+        let follow_up = args.first().is_some_and(|a| a == "-d");
+        let (text, exit) = if follow_up {
+            if let Some(face) = self.diag_face {
+                std::fs::write(dir.join("scene_mesh.1.face"), face)?;
+            }
+            (self.diag, 0)
+        } else {
+            (self.main, self.main_exit)
+        };
+        for l in text.lines() {
+            on_line(&Line {
+                stream: simpa_core::process::Stream::Stdout,
+                t_ms: 0.0,
+                text: l.to_string(),
+                terminated: true,
+            });
+        }
+        Ok(exited(exit))
+    }
+}
+
+/// TetGen 1.5.0's stop, read from its stdout and exit code by the mesher: `tetgen_self_intersection`
+/// fires exactly on exit 3 with 1.5.0's `A self-intersection was detected. Program stopped.`, and
+/// the facets named are mapped to scene faces and groups. The inputs that make it say no: the
+/// same stdout with exit 0, and exit 3 with TetGen 1.6.0's own stop line.
+#[test]
+fn a_self_intersection_stop_is_read_from_tetgen_1_5s_stdout() {
+    let p = load_room("tutorial1_box.simpa");
+    // Facet #10 is the box's scene face 9 (a wall), facet #2 its face 1 (the floor).
+    const STOP: &str = "Recovering boundaries...
+Found two facets intersect each other.
+  1st: [3, 5, 6] #10
+  2nd: [3, 5, 1] #2
+A self-intersection was detected. Program stopped.
+Hint: use -d option to detect all self-intersections.";
+    const DIAG: &str = "Detecting self-intersecting facets...
+  Facet #10 intersects facet #2 at triangles:
+    (   3,    5,    6) and (   3,    5,    1)
+  Facet #10 intersects facet #3 at triangles:
+    (   3,    5,    6) and (   2,    3,    4)
+  Facet #10 intersects facet #2 at triangles:
+    (   3,    5,    6) and (   3,    5,    1)
+
+!! Found 3 pairs of faces are intersecting.";
+    let stopped = Scripted {
+        main: STOP,
+        main_exit: 3,
+        diag: DIAG,
+        diag_face: Some("3  1\n1 3 5 6 9\n2 3 5 1 1\n3 2 3 4 2\n"),
+    };
+    let (dir, m) = fake_run("scripted-stop", &p, &stopped);
+    assert_eq!(
+        m.codes,
+        [
+            codes::TETGEN_EXIT_NONZERO,
+            codes::TETGEN_SELF_INTERSECTION,
+            codes::TETGEN_OUTPUT_MISSING,
+            codes::NEIGH_MISSING
+        ],
+        "{m:#?}"
+    );
+    let si = m.self_intersection.as_ref().unwrap();
+    let stop = si.stop.as_ref().unwrap();
+    assert_eq!(stop.message, "Found two facets intersect each other.");
+    assert_eq!(stop.first.markers, [9]);
+    assert_eq!(stop.second.as_ref().unwrap().markers, [1]);
+    assert_eq!(si.pairs, [[1, 9], [2, 9]]);
+    let named: Vec<(i64, Option<u32>, Option<&str>)> = si
+        .facets
+        .iter()
+        .map(|f| (f.marker, f.scene_face, f.group.as_deref()))
+        .collect();
+    let groups: Vec<Option<String>> = [1usize, 2, 9]
+        .iter()
+        .map(|&k| {
+            let gid = p.geometry.faces[k].group;
+            p.surface_groups
+                .iter()
+                .find(|g| g.id == gid)
+                .map(|g| g.name.clone())
+        })
+        .collect();
+    assert_eq!(
+        named,
+        [
+            (1, Some(1), groups[0].as_deref()),
+            (2, Some(2), groups[1].as_deref()),
+            (9, Some(9), groups[2].as_deref())
+        ]
+    );
+    assert_eq!(groups[2].as_deref(), Some("Walls"));
+    let d = m.diagnosis.as_ref().unwrap();
+    assert_eq!(d.face_markers, [9, 1, 2]);
+    assert_eq!(d.intersections.len(), 2, "the repeated pair is read once");
+    assert!(dir.join("diag/scene_mesh.poly").is_file());
+    // No pair named, and a follow-up that names nothing: the code stands on the stop alone.
+    let bare = Scripted {
+        main: "A self-intersection was detected. Program stopped.",
+        main_exit: 3,
+        diag: "No faces are intersecting.",
+        diag_face: None,
+    };
+    let (_, m) = fake_run("scripted-bare", &p, &bare);
+    assert!(has(&m, codes::TETGEN_SELF_INTERSECTION), "{m:#?}");
+    let si = m.self_intersection.as_ref().unwrap();
+    assert!(si.stop.is_none() && si.pairs.is_empty() && si.facets.is_empty());
+    assert!(m.messages.iter().any(|s| s.contains("it named no pair")));
+
+    // Says no: the same stdout with exit 0 is no stop (and no follow-up runs).
+    let exit0 = Scripted {
+        main_exit: 0,
+        ..stopped
+    };
+    let (_, m) = fake_run("scripted-exit0", &p, &exit0);
+    assert_eq!(
+        m.codes,
+        [codes::TETGEN_OUTPUT_MISSING, codes::NEIGH_MISSING],
+        "{m:#?}"
+    );
+    assert!(m.self_intersection.is_none() && m.diagnosis.is_none());
+    // Says no: exit 3 with TetGen 1.6.0's stop line, and no _skipped.face, is a nonzero exit only.
+    let v16 = Scripted {
+        main: "The input surface mesh contain self-intersections. Program stopped.",
+        main_exit: 3,
+        diag: "",
+        diag_face: None,
+    };
+    let (_, m) = fake_run("scripted-16", &p, &v16);
+    assert_eq!(
+        m.codes,
+        [
+            codes::TETGEN_EXIT_NONZERO,
+            codes::TETGEN_OUTPUT_MISSING,
+            codes::NEIGH_MISSING
+        ],
+        "{m:#?}"
+    );
+    assert!(m.self_intersection.is_none() && m.diagnosis.is_none());
+}
+
 #[test]
 fn invariant_checker_says_no() {
     // The test-side checker used above must be able to fail.
@@ -706,7 +891,11 @@ fn a_face_row_short_gives_a_mesh_the_invariants_refuse() {
     let dir = scratch("unmarked-hull");
     copy_box_output_less_one_face_row(&dir);
     let out = mesh::TetgenOutput::read(&mesh::OutputPaths::new(&dir, "scene_mesh")).unwrap();
-    let (built, _) = mesh::build_mbin(&out, 12, &[]).unwrap();
+    let scene = mesh::project_input(&load_room("tutorial1_box.simpa"))
+        .unwrap()
+        .scene;
+    let unitize = mesh::Unitize::of_scene(&scene).unwrap();
+    let (built, _) = mesh::build_mbin(&out, 12, &unitize).unwrap();
     let bad = invariants(&built);
     assert!(
         bad.iter().any(|s| s.starts_with("unmarked hull")),
@@ -725,19 +914,19 @@ fn a_mesh_that_fails_verification_is_not_written() {
         act: |d: &Path| copy_box_output_less_one_face_row(d),
         outcome: exited(0),
     };
-    // `fake_run` also asserts that no `tetramesh.mbin` is in the folder. The box's 6-tetrahedron
-    // mesh carries each scene face on exactly one tetrahedron face, so the face that lost its
-    // row also leaves its scene face uncovered.
+    // `fake_run` also asserts that no `tetramesh.mbin` is in the folder. TetGen 1.5.0 meshes the
+    // box to 2,257 tetrahedra, so each scene face is carried by many tetrahedron faces and the
+    // one that lost its row leaves its scene face covered. (TetGen 1.6.0's 6-tetrahedron box
+    // carried each scene face on one tetrahedron face, and the same drop also gave
+    // `uncovered_scene_faces`.)
     let (_, m) = fake_run("fake-unmarked", &p, &fake);
     assert_eq!(
         m.codes,
-        [
-            codes::MESH_INVALID,
-            "unmarked_boundary_faces",
-            "uncovered_scene_faces"
-        ],
+        [codes::MESH_INVALID, "unmarked_boundary_faces"],
         "{m:#?}"
     );
+    let report = m.verify.as_ref().unwrap();
+    assert_eq!(report.unmarked_boundary_faces, 1, "{report:#?}");
     assert_eq!(m.status, MeshStatus::Fail);
     assert_eq!(m.files.mbin, None);
     assert!(m.verify.as_ref().is_some_and(|r| !r.passed()));
@@ -820,9 +1009,10 @@ fn a_surfaces_zone_marks_its_internal_facets_on_both_sides() {
     assert_eq!(invariants(&mesh), Vec::<String>::new());
     let volumes = volume_by_id(&mesh);
     println!("Surfaces zone: volume per idVolume {volumes:?}");
-    assert_eq!(volumes.keys().copied().collect::<Vec<_>>(), [0, 2]);
+    // The zone, 2, and the room as TetGen numbered it, 3.
+    assert_eq!(volumes.keys().copied().collect::<Vec<_>>(), [2, 3]);
     assert!((volumes[&2] - 1.0).abs() <= 1e-9, "{volumes:?}");
-    assert!((volumes[&0] - 179.0).abs() / 179.0 <= 1e-9, "{volumes:?}");
+    assert!((volumes[&3] - 179.0).abs() / 179.0 <= 1e-9, "{volumes:?}");
 
     // Per internal marker (12..24): as many .face rows as triangles, each on two tetrahedron
     // faces, and every one of those faces has a neighbour.
@@ -860,10 +1050,11 @@ fn a_surfaces_zone_marks_its_internal_facets_on_both_sides() {
     );
 }
 
-/// Skipped facets of a project are named by scene face and surface group, and a box fitting
-/// zone's triangles by the zone.
+/// A self-intersecting project with the real TetGen (1.5.0): the stop and the `-d` follow-up's
+/// facets are named by scene face and surface group, and a box fitting zone's triangles by the
+/// zone.
 #[test]
-fn skipped_facets_are_named_by_group_and_fitting_zone() {
+fn self_intersecting_facets_are_named_by_group_and_fitting_zone() {
     // A baffle (its own group) that pierces the x = 6 wall inside wall face 9: the segment it
     // cuts runs (6, 3, 1.25)-(6, 3, 1.75), above that wall's diagonal (z = 0.3 y).
     let mut p = load_room("tutorial1_box.simpa");
@@ -876,44 +1067,51 @@ fn skipped_facets_are_named_by_group_and_fitting_zone() {
         vertices: [v, v + 1, v + 2],
         group: gid,
     });
-    let m = run(&p, &scratch("skipped-baffle"));
+    let m = run(&p, &scratch("stopped-baffle"));
+    let si = m.self_intersection.as_ref();
     println!(
-        "baffle: codes {:?}, skipped {:?}, diagnosis pairs {:?}",
+        "baffle: codes {:?}, stop {:?}, pairs {:?}, facets {:?}, -d face markers {:?}",
         m.codes,
-        m.skipped_facets,
-        m.diagnosis.as_ref().map(|d| &d.intersections)
+        si.and_then(|s| s.stop.as_ref()),
+        si.map(|s| &s.pairs),
+        si.map(|s| &s.facets),
+        m.diagnosis.as_ref().map(|d| &d.face_markers)
     );
-    assert!(has(&m, codes::TETGEN_SKIPPED_FACETS), "{m:#?}");
-    // Measured: TetGen skips the pierced wall face, not the baffle; the -d follow-up names the
-    // baffle's edge as what pierces it.
-    let named: Vec<(i64, Option<u32>, Option<&str>)> = m
-        .skipped_facets
+    assert!(has(&m, codes::TETGEN_SELF_INTERSECTION), "{m:#?}");
+    assert!(!has(&m, codes::TETGEN_SKIPPED_FACETS), "{m:#?}");
+    let si = si.unwrap();
+    let named: Vec<(i64, Option<u32>, Option<&str>)> = si
+        .facets
         .iter()
         .map(|s| (s.marker, s.scene_face, s.group.as_deref()))
         .collect();
-    assert_eq!(named, [(9, Some(9), Some("Walls"))]);
-    assert!(m.skipped_facets.iter().all(|s| s.fitting_zone.is_none()));
-    let d = m.diagnosis.as_ref().expect("a diagnosis");
-    assert!(
-        d.intersections.iter().any(|i| {
-            i.first.markers == [12] && i.second.as_ref().is_some_and(|s| s.markers == [9])
-        }),
-        "{d:#?}"
+    assert_eq!(
+        named,
+        [(9, Some(9), Some("Walls")), (12, Some(12), Some("Baffle"))]
     );
+    assert!(si.facets.iter().all(|s| s.fitting_zone.is_none()));
+    assert_eq!(si.pairs, [[9, 12]]);
 
-    // Two box zones that overlap: TetGen skips zone triangles (markers past the 12 scene
-    // faces), which are named by their zone and carry no scene face or group.
+    // Two box zones that overlap: the facets named are zone triangles (markers past the 12 scene
+    // faces), each named by its zone, with no scene face or group.
     let mut p = load_room("tutorial1_box.simpa");
     with_named_box_zone(&mut p, "Zone 1", 1, [1.0, 1.0, 0.5], [2.0, 2.0, 1.5]);
     with_named_box_zone(&mut p, "Zone 2", 2, [1.5, 1.5, 1.0], [2.5, 2.5, 2.0]);
-    let m = run(&p, &scratch("skipped-zones"));
+    let m = run(&p, &scratch("stopped-zones"));
+    let si = m.self_intersection.as_ref();
     println!(
-        "overlapping zones: codes {:?}, zone facets {:?}, skipped {:?}",
-        m.codes, m.zone_facets, m.skipped_facets
+        "overlapping zones: codes {:?}, zone facets {:?}, stop {:?}, pairs {:?}, facets {:?}",
+        m.codes,
+        m.zone_facets,
+        si.and_then(|s| s.stop.as_ref()),
+        si.map(|s| &s.pairs),
+        si.map(|s| &s.facets)
     );
-    assert!(has(&m, codes::TETGEN_SKIPPED_FACETS), "{m:#?}");
-    assert!(!m.skipped_facets.is_empty());
-    for s in &m.skipped_facets {
+    assert!(has(&m, codes::TETGEN_SELF_INTERSECTION), "{m:#?}");
+    let si = si.unwrap();
+    assert!(!si.facets.is_empty());
+    let mut zones = BTreeSet::new();
+    for s in &si.facets {
         let zone = match s.marker {
             12..24 => "Zone 1",
             24..36 => "Zone 2",
@@ -921,5 +1119,15 @@ fn skipped_facets_are_named_by_group_and_fitting_zone() {
         };
         assert_eq!((s.scene_face, s.group.as_deref()), (None, None), "{s:?}");
         assert_eq!(s.fitting_zone.as_deref(), Some(zone), "{s:?}");
+        zones.insert(zone);
     }
+    assert_eq!(zones.len(), 2, "both zones are named");
+    // Every pair is one triangle of each zone.
+    assert!(
+        si.pairs
+            .iter()
+            .all(|&[a, b]| (12..24).contains(&a) && (24..36).contains(&b)),
+        "{:?}",
+        si.pairs
+    );
 }

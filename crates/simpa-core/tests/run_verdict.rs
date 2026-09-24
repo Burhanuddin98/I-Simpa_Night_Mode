@@ -783,15 +783,18 @@ fn result_unreadable() {
 #[test]
 fn every_verdict_code_is_exercised_above() {
     // The tests above cover every code of `codes::ALL` that `judge` gives; this keeps the list
-    // and the tests in step when a code is added. The first four are the run manager's refusals,
-    // exercised in tests/run_manager.rs, and the fifth its warning for a failed log write
-    // (the manager's unit tests).
+    // and the tests in step when a code is added. The first six are the run manager's refusals,
+    // exercised in tests/run_manager.rs, and for the two SPPS location codes in
+    // tests/run_locate.rs, and the seventh its warning for a failed log write (the manager's
+    // unit tests).
     assert_eq!(
         ALL,
         [
             GEOMETRY_REFUSED,
             MESH_MISSING,
             EXPORT_FAILED,
+            SOURCE_UNLOCATABLE,
+            RECEIVER_UNLOCATABLE,
             LAUNCH_FAILED,
             LOG_WRITE_FAILED,
             CANCELLED,

@@ -5,11 +5,15 @@
 #   simpa run-folder <dir> --solver spps|tcr [--solver-exe <exe>] --runs <root> --json   exit 0, 5, 130
 #   simpa mesh <project> --from-tetgen <dir> --out <dir> --json
 # (a) rooms/tutorial1_box_seeded.simpa (seed 1, 10,000 particles), SPPS: exit 0, OK; 0 FAIL, 0 WARN
-#     and 0 'Xml Property' lines; 0 stderr 'particles has been in error' lines; lost_by_meshing and
-#     lost_by_loops 0 in every band, total = nbparticules x sources per band (decision 10); every
-#     expected file present, the surface receiver's Global .csbin included. BLOCKED while open
-#     decision 3 stands, on its measured signature only; a control with the source 5 cm away must
-#     meet every clause.
+#     and 0 'Xml Property' lines; 0 stderr 'particles has been in error' lines; per band,
+#     lost_by_meshing and lost_by_loops no higher than on upstream's own mesh of the same room with
+#     the same seed and config (Burhan, 2026-09-24 05:13, "No worse than upstream", as (c) judges
+#     the hall): its 2019 TetGen output (tests/fixtures/upstream/tutorial1/tetgen) built with
+#     --from-tetgen, whose .mbin must be the 2019 tetramesh.mbin byte for byte; total = nbparticules
+#     x sources per band (decision 10); every expected file present, the surface receiver's Global
+#     .csbin included. A control, the box on TetGen 1.6.0's 6-tetrahedron mesh in upstream's corner
+#     order (tests/fixtures/solver-outputs/tutorial1), must meet every clause; judged against that
+#     control, which loses none, the box's own run must be refused.
 # (b) The same box, TCR: exit 0, OK, 'Main results.gabe' and 'Punctual receivers/<lbl>.gabe' present.
 # (c) rooms/elmia_loss_gate.simpa (seed 1, 100,000 particles per source, 125-4,000 Hz), SPPS: exit 0,
 #     OK, 0 stderr particle-loss lines. Per band, its lost_by_meshing must be <= the floor measured in
@@ -184,8 +188,10 @@ $controlBox = Edited $seeded (Join-Path $work 'box_source_moved.simpa') @(, $mov
 $longBox = Edited $seeded (Join-Path $work 'box_long_run.simpa') @($moveSource, @('"particles_per_source": 10000,', '"particles_per_source": 1000000,'))
 
 # --- (a) the seeded box, SPPS ----------------------------------------------------------------------
-# Every way a run misses gate (a), in words; none when it meets every clause.
-function UnmetA($o, $m, [int]$bands) {
+# Every way a run misses gate (a), in words; none when it meets every clause. Losses are judged
+# against $ref, a run of the same project on upstream's own mesh of the room (Burhan, 2026-09-24
+# 05:13, "No worse than upstream"): per band, lost by meshing and lost by loops no higher than its.
+function UnmetA($o, $m, [int]$bands, $ref) {
     $why = @()
     if ($o.Exit -ne 0) { $why += "exit $($o.Exit)" }
     if ($m.verdict.status -ne 'OK') { $why += "status $($m.verdict.status) [$((Codes $m) -join ', ')]" }
@@ -202,8 +208,15 @@ function UnmetA($o, $m, [int]$bands) {
     $sources = @($cfg.SelectNodes('//source')).Count
     $bs = @($m.particles.bands | Where-Object { $null -ne $_ })
     if ($bs.Count -ne $bands) { $why += "$($bs.Count) bands in the statistics, expected $bands" }
+    $refBands = @{}
+    foreach ($b in @($ref.particles.bands | Where-Object { $null -ne $_ })) { $refBands[[string]$b.freq_hz] = $b }
+    if ($refBands.Count -ne $bands) { $why += "$($refBands.Count) bands in the reference run, expected $bands" }
     foreach ($b in $bs) {
-        if ($b.lost_by_meshing_problems -ne 0 -or $b.lost_by_infinite_loops -ne 0) { $why += "$($b.freq_hz) Hz lost $($b.lost_by_meshing_problems) by meshing and $($b.lost_by_infinite_loops) by loops" }
+        $r = $refBands[[string]$b.freq_hz]
+        if ($null -eq $r) { $why += "$($b.freq_hz) Hz is not in the reference run" }
+        elseif ($b.lost_by_meshing_problems -gt $r.lost_by_meshing_problems -or $b.lost_by_infinite_loops -gt $r.lost_by_infinite_loops) {
+            $why += "$($b.freq_hz) Hz lost $($b.lost_by_meshing_problems) by meshing and $($b.lost_by_infinite_loops) by loops, the reference $($r.lost_by_meshing_problems) and $($r.lost_by_infinite_loops)"
+        }
         if ($b.total -ne $nb * $sources) { $why += "$($b.freq_hz) Hz total $($b.total), expected $nb x $sources" }
     }
     if ($m.files.expected -eq 0 -or $m.files.present -ne $m.files.expected) { $why += "files $($m.files.present)/$($m.files.expected)" }
@@ -212,70 +225,64 @@ function UnmetA($o, $m, [int]$bands) {
     if (-not (Test-Path -LiteralPath $csbin) -or (Get-Item -LiteralPath $csbin).Length -eq 0) { $why += "no surface receiver file $csbin" }
     , $why
 }
-# How many internal tetrahedron faces of a .mbin hold point p: on the face's plane to 1e-9 m and
-# inside its triangle (both sides of one internal facet count twice).
-function FacesHolding([string]$mbin, [double[]]$p) {
-    $r = Simpa @('dump', 'mbin', $mbin) 'dump-mbin'
-    if ($r.Exit -ne 0) { throw "simpa dump mbin $mbin exited $($r.Exit)" }
-    $nodes = @(); $n = 0
-    $sub = { param($a, $b) [double[]]@(($a[0] - $b[0]), ($a[1] - $b[1]), ($a[2] - $b[2])) }
-    $cross = { param($a, $b) [double[]]@(($a[1] * $b[2] - $a[2] * $b[1]), ($a[2] * $b[0] - $a[0] * $b[2]), ($a[0] * $b[1] - $a[1] * $b[0])) }
-    $dot = { param($a, $b) $a[0] * $b[0] + $a[1] * $b[1] + $a[2] * $b[2] }
-    $f32 = { param($h) [double][BitConverter]::ToSingle([BitConverter]::GetBytes([Convert]::ToUInt32($h, 16)), 0) }
-    foreach ($line in $r.Out -split "`n") {
-        $t = $line.Trim() -split '\s+'
-        if ($t[0] -eq 'node') { $nodes += , ([double[]]@((& $f32 $t[1]), (& $f32 $t[2]), (& $f32 $t[3]))) }
-        elseif ($t[0] -eq 'tetra') {
-            for ($k = 0; $k -lt 4; $k++) {
-                $o = 6 + 6 * $k
-                if ([int]$t[$o + 5] -lt 0) { continue }
-                $a = $nodes[[int]$t[$o + 1]]; $b = $nodes[[int]$t[$o + 2]]; $c = $nodes[[int]$t[$o + 3]]
-                $normal = & $cross (& $sub $b $a) (& $sub $c $a)
-                $len = [math]::Sqrt((& $dot $normal $normal))
-                if ([math]::Abs((& $dot $normal (& $sub $p $a)) / $len) -gt 1e-9) { continue }
-                $inside = $true
-                foreach ($e in @(@($a, $b), @($b, $c), @($c, $a))) { if ((& $dot (& $cross (& $sub $e[1] $e[0]) (& $sub $p $e[0])) $normal) -lt -1e-12) { $inside = $false } }
-                if ($inside) { $n++ }
-            }
-        }
-    }
-    $n
-}
+# The bands of a run with a loss, as 'Hz: meshing/loops'.
+function Lossy($m) { (@($m.particles.bands | Where-Object { $null -ne $_ -and ($_.lost_by_meshing_problems + $_.lost_by_infinite_loops) -gt 0 }) | ForEach-Object { "$($_.freq_hz) Hz: $($_.lost_by_meshing_problems)/$($_.lost_by_infinite_loops)" }) -join ', ' }
 $aRuns = Join-Path $work 'box-spps-runs'
-Check "(a) seeded box, SPPS: exit 0, OK; 0 FAIL/WARN/'Xml Property' lines; no particle-loss line; 0 lost in 27 bands; totals nbparticules x sources; 65/65 files with the Global .csbin" {
+$script:refA = $null; $script:boxA = $null
+Check "(a) reference: upstream's own mesh of the box (its 2019 TetGen output, --from-tetgen) is the 2019 tetramesh.mbin byte for byte, and SPPS on it with the seeded box's config exits 0, OK" {
+    $ref = Join-Path $work 'box-upstream-2019'
+    $r = Simpa @('mesh', $seeded, '--from-tetgen', (Join-Path $fx 'upstream\tutorial1\tetgen'), '--out', $ref, '--json') 'mesh-box-upstream'
+    if ($r.Exit -ne 0) { throw "mesh --from-tetgen exited $($r.Exit)" }
+    $mine = Get-FileHash -Algorithm SHA256 (Join-Path $ref 'tetramesh.mbin'); $theirs = Get-FileHash -Algorithm SHA256 (Join-Path $fx 'upstream\tutorial1\spps\tetramesh.mbin')
+    $o = Simpa @('run', $seeded, '--solver', 'spps', '--mesh', $ref, '--runs', $aRuns, '--json') 'run-box-spps-upstream-mesh'
+    $script:refA = $o
+    Write-Host "      $($r.Json.counts.build.tetrahedra) tetrahedra, sha256 $($mine.Hash.Substring(0, 16)) (2019: $($theirs.Hash.Substring(0, 16))); $(Summary $o); bands with a loss (meshing/loops): [$(Lossy $o.Json)]"
+    $mine.Hash -eq $theirs.Hash -and $o.Exit -eq 0 -and $null -ne $o.Json -and $o.Json.verdict.status -eq 'OK'
+}
+Check "(a) seeded box, SPPS: exit 0, OK; 0 FAIL/WARN/'Xml Property' lines; no particle-loss line; per band lost no more than on upstream's own mesh (27 bands); totals nbparticules x sources; 65/65 files with the Global .csbin" {
+    if ($null -eq $script:refA -or $null -eq $script:refA.Json) { throw 'the reference run gave no manifest' }
     $o = Simpa @('run', $seeded, '--solver', 'spps', '--runs', $aRuns, '--json') 'run-box-spps-seeded'
+    $script:boxA = $o
     $m = $o.Json
     Write-Host "      $(Summary $o)"
     if ($null -eq $m) { return $false }
-    $why = UnmetA $o $m 27
-    if ($why.Count -eq 0) { return $true }
-    $why | ForEach-Object { Write-Host "      unmet: $_" }
-    # Blocked only on decision 3's measured signature: SPPS's access violation on the pinned
-    # TetGen's 6-tetrahedron box, whose internal facet holds the source.
     $tets = ((ReadText (Join-Path (RunDir $m) 'mesh\mesh.json')) | ConvertFrom-Json).counts.build.tetrahedra
-    $holding = FacesHolding (Join-Path $m.cwd 'tetramesh.mbin') ([double[]]@(3, 5, 1.8))
-    Write-Host "      the run's mesh: $tets tetrahedra; internal tetrahedron faces holding the source (3, 5, 1.8): $holding"
-    if ($o.Exit -eq 5 -and $m.verdict.status -eq 'CRASH' -and ((Codes $m) -join ',') -eq 'crash_access_violation' -and $tets -eq 6 -and $holding -eq 2) {
-        return (Blocked 'open decision 3 (docs/m5-m6-design.md): the pinned TetGen meshes the box to 6 tetrahedra and puts the source (3, 5, 1.8) on an internal facet, which SPPS''s float32 point location (coreinitialisation.cpp:71-95) gives to neither tetrahedron; SPPS then dereferences the NULL tetrahedron (sppsInitialisation.cpp:20). Ways out, for Burhan and Michael: settle decision 3, refuse such a source before launch (decision 11), or change the fixture')
-    }
-    $false
-}
-$script:controlA = $null
-Check "(a) control: the same box with its source 5 cm off the internal facet meets every (a) clause" {
-    $o = Simpa @('run', $controlBox, '--solver', 'spps', '--runs', $aRuns, '--json') 'run-box-spps-control'
-    Write-Host "      $(Summary $o)"
-    $script:controlA = $o
-    if ($null -eq $o.Json) { return $false }
-    $why = UnmetA $o $o.Json 27
+    Write-Host "      the run's mesh: $tets tetrahedra; bands with a loss (meshing/loops): ours [$(Lossy $m)], upstream's own mesh [$(Lossy $script:refA.Json)]"
+    $why = UnmetA $o $m 27 $script:refA.Json
     $why | ForEach-Object { Write-Host "      unmet: $_" }
-    $b = @($o.Json.particles.bands)
-    Write-Host "      $($b.Count) bands, totals $(($b | ForEach-Object { $_.total } | Sort-Object -Unique) -join ', '), lost by meshing $(($b | Measure-Object lost_by_meshing_problems -Sum).Sum), by loops $(($b | Measure-Object lost_by_infinite_loops -Sum).Sum)"
     $why.Count -eq 0
 }
-Check "(a) says NO: the control's manifest with one particle lost by meshing at 50 Hz misses (a)" {
-    $c = $script:controlA.Json | ConvertTo-Json -Depth 32 | ConvertFrom-Json
-    $c.particles.bands[0].lost_by_meshing_problems = 1
-    $why = UnmetA $script:controlA $c 27
+$script:controlA = $null; $script:controlSix = $null
+Check "(a) control: the seeded box on TetGen 1.6.0's 6-tetrahedron mesh in upstream's corner order meets every (a) clause against upstream's own mesh" {
+    if ($null -eq $script:refA -or $null -eq $script:refA.Json) { throw 'the reference run gave no manifest' }
+    # The run (g) and (h) reuse: the box with its source 5 cm off, on its own mesh.
+    $script:controlA = Simpa @('run', $controlBox, '--solver', 'spps', '--runs', $aRuns, '--json') 'run-box-spps-control'
+    Write-Host "      moved source, its own mesh (for (g) and (h)): $(Summary $script:controlA)"
+    # The predicate's control: tests/fixtures/solver-outputs/tutorial1's 6 tetrahedra, built by
+    # --from-tetgen in upstream's corner order, on which SPPS locates the source and loses nothing.
+    $six = Join-Path $work 'box-six-tetrahedra'
+    $r = Simpa @('mesh', $seeded, '--from-tetgen', (Join-Path $fx 'solver-outputs\tutorial1'), '--basename', 'tetgen_scene_mesh', '--out', $six, '--json') 'mesh-box-six'
+    if ($r.Exit -ne 0) { throw "mesh --from-tetgen exited $($r.Exit)" }
+    $o = Simpa @('run', $seeded, '--solver', 'spps', '--mesh', $six, '--runs', $aRuns, '--json') 'run-box-spps-six'
+    Write-Host "      $(Summary $o)"
+    $script:controlSix = $o
+    if ($null -eq $o.Json) { return $false }
+    $why = UnmetA $o $o.Json 27 $script:refA.Json
+    $why | ForEach-Object { Write-Host "      unmet: $_" }
+    $b = @($o.Json.particles.bands)
+    Write-Host "      $($r.Json.counts.build.tetrahedra) tetrahedra; $($b.Count) bands, totals $(($b | ForEach-Object { $_.total } | Sort-Object -Unique) -join ', '), lost by meshing $(($b | Measure-Object lost_by_meshing_problems -Sum).Sum), by loops $(($b | Measure-Object lost_by_infinite_loops -Sum).Sum)"
+    $why.Count -eq 0 -and $script:controlA.Exit -eq 0
+}
+Check "(a) says NO: the seeded box's own run judged against the 6-tetrahedron mesh, which loses none, misses (a) at 2 kHz only" {
+    if ($null -eq $script:boxA.Json -or $null -eq $script:controlSix.Json) { throw 'a run gave no manifest' }
+    $why = UnmetA $script:boxA $script:boxA.Json 27 $script:controlSix.Json
+    Write-Host "      unmet: $($why -join '; ')"
+    $why.Count -eq 1 -and $why[0] -like '2000 Hz lost 1 by meshing and 0 by loops, the reference 0 and 0'
+}
+Check "(a) says NO: the control's manifest with one particle more lost by meshing at 50 Hz misses (a) against the control itself" {
+    $c = $script:controlSix.Json | ConvertTo-Json -Depth 32 | ConvertFrom-Json
+    $c.particles.bands[0].lost_by_meshing_problems = $c.particles.bands[0].lost_by_meshing_problems + 1
+    $why = UnmetA $script:controlSix $c 27 $script:controlSix.Json
     Write-Host "      unmet: $($why -join '; ')"
     $why.Count -eq 1 -and $why[0] -like '50 Hz lost 1 by meshing*'
 }

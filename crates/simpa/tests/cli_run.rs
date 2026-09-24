@@ -3,9 +3,13 @@
 //! configuration), with the M1 solvers and TetGen:
 //! - TCR is OK with every expected file (gate M6(b)), twice into two distinct folders (M6(h)),
 //!   and under a path with `Ł` (M6(g));
-//! - SPPS crashes on the box's own mesh, because the pinned TetGen's 6-tetrahedron mesh puts the
-//!   tutorial's source exactly on an internal facet (pinned here; gate M6(a) is the ignored test);
-//!   with the source 5 cm away it is OK with 10,000 particles per band and none lost;
+//! - SPPS locates a source lying exactly on an internal facet of TetGen 1.6.0's 6-tetrahedron box
+//!   because the `.mbin` carries upstream's corner order; in TetGen's order the run is refused
+//!   before launch (`source_unlocatable`, exit 5), and `spps.exe` launched on those same inputs
+//!   crashes. The seeded box itself, meshed by TetGen 1.5.0 as upstream's 2019 mesh, is OK and
+//!   loses per band no more particles than upstream's own mesh of the box, same seed (gate M6(a),
+//!   as Burhan judged it on 2026-09-24); the box with its source 5 cm away is OK too, its losses
+//!   measured and pinned;
 //! - `--mesh <dir>` reuses a mesh, and refuses a stale one (`mesh_out_of_date`, M5(d1)) or one
 //!   whose re-mesh was cancelled (`mesh_missing`, M5(d2)) before any solver starts;
 //! - a cancel exits 130 with the solver killed mid-run, and `simpa` itself killed mid-run leaves
@@ -142,41 +146,155 @@ fn a_run_folder_under_a_non_ascii_path_is_ok() {
     assert!(m["cwd"].as_str().unwrap().contains("Łódź"));
 }
 
-/// Pins today's SPPS result on the box's own mesh: the pinned TetGen meshes the box to 6
-/// tetrahedra (docs/m5-m6-design.md decision 3), and the tutorial's source (3, 5, 1.8) lies
-/// exactly on the internal facet x/6 + y/10 = 1 between two of them. SPPS finds no tetrahedron
-/// for it and crashes with an access violation, as it does for a source outside the mesh:
-/// - `InitSourcesTetraLocalisation` (`lib_interface/coreinitialisation.cpp:71-95`) counts a
-///   point as outside a tetrahedron when `(node - source) . normal > 0` for any face, in `f32`.
-///   On this facet the product rounds to +2.4e-7 from both sides (an `f32` emulation on this
-///   mesh), so neither tetrahedron takes the source and `currentVolume` stays NULL;
-/// - `TranslateSourceAtTetrahedronVertex` (`spps/sppsInitialisation.cpp:20`, called at
-///   `sppsNantes.cpp:321`) dereferences it without a check, before any particle runs.
+/// SPPS with its source on an internal facet, where the corner order decides whether it finds
+/// the source. The mesh is the 6-tetrahedron box TetGen 1.6.0 makes of tutorial 1
+/// (`tests/fixtures/solver-outputs/tutorial1/tetgen_scene_mesh.1.*`, the same six tetrahedra the
+/// pinned 1.6.0 build gave before decision 3 moved the mesher to 1.5.0), built into a mesh folder
+/// by `mesh::mesh_from_tetgen`, so the test holds whichever TetGen the solver build carries. The
+/// tutorial's source (3, 5, 1.8) lies exactly on its internal facet x/6 + y/10 = 1.
+/// `InitSourcesTetraLocalisation` (`lib_interface/coreinitialisation.cpp:71-95`) counts a point
+/// as outside a tetrahedron when `(node - source) . normal > 0` for any face, in `f32`, with the
+/// normals built from each face's winding (`coreTypes.cpp:233`). On this facet that product is
+/// about 2.4e-7, and its sign follows the corner order:
+/// - in upstream's order, `(d,c,b,a)` of each `.ele` row as the GUI writes it
+///   (`mesh::upstream_order`), it is negative from both sides: the source is inside both
+///   tetrahedra, SPPS takes the first, and `simpa run --mesh` on that folder is OK with 10,000
+///   particles per band and none lost;
+/// - in TetGen's own order, which the builder wrote until upstream's was adopted, it is positive
+///   from both sides: neither tetrahedron takes the source, `currentVolume` stays NULL, and
+///   `TranslateSourceAtTetrahedronVertex` (`spps/sppsInitialisation.cpp:20`, called at
+///   `sppsNantes.cpp:321`) dereferences it before any particle runs: an access violation.
 ///
-/// When this changes (refinement decided, or a guard added), update it with gate M6(a).
+/// The second half runs the first run's own inputs with only the `.mbin`'s corners put back in
+/// TetGen's order, through `run-folder`. `run::locate` emulates SPPS's test, so the run manager
+/// refuses that folder before launch: `source_unlocatable`, exit 5, no solver started, `run.json`
+/// written. Then `spps.exe` is launched on the refused folder's own inputs by hand, and crashes
+/// with `0xC0000005`: the refusal stands for a real crash, and that folder is the input that
+/// makes this test say no. The emulation agrees with `spps.exe` on 233 points on and near this
+/// mesh's facets (`crates/simpa-core/tests/run_locate.rs`).
+///
+/// `mesh::verify` passes both meshes. A margin of 2.4e-7 is why the pre-launch source-location
+/// check stays (decision 3's notes).
 #[test]
-fn spps_crashes_on_the_boxs_own_mesh_with_its_source_on_an_internal_facet() {
-    let root = scratch("run-spps-box");
-    let o = run(&fixture(BOX), "spps", &root, &[]);
-    let m = json(&o);
-    summary("box SPPS", &o, &m);
-    assert_eq!(o.code, 5, "{o:#?}");
-    assert_eq!(m["verdict"]["status"], "CRASH");
-    assert_eq!(codes(&m), ["crash_access_violation"]);
-    // The mesh the run built: 6 tetrahedra, and the source on an internal face of two of them.
-    let dir = run_dir(&m);
-    let mm: Value =
-        serde_json::from_str(&std::fs::read_to_string(dir.join("mesh/mesh.json")).unwrap())
-            .unwrap();
-    assert_eq!(mm["counts"]["build"]["tetrahedra"], 6);
-    let mesh = simpa_core::formats::mbin::read_file(&dir.join("solve/tetramesh.mbin")).unwrap();
+fn spps_finds_a_source_on_an_internal_facet_only_in_upstreams_corner_order() {
+    let root = scratch("run-spps-facet");
+    let project = simpa_core::schema::load(&fixture(BOX)).unwrap();
+    let mesh_dir = root.join("six-tetrahedra");
+    let mm = simpa_core::mesh::mesh_from_tetgen(
+        &project,
+        &fixture("solver-outputs/tutorial1"),
+        Some("tetgen_scene_mesh"),
+        &mesh_dir,
+    )
+    .unwrap();
+    assert!(mm.is_ok(), "{mm:#?}");
+    let mesh = simpa_core::formats::mbin::read_file(&mesh_dir.join("tetramesh.mbin")).unwrap();
+    assert_eq!(mesh.tetrahedra.len(), 6);
     let on = internal_faces_holding(&mesh, [3.0, 5.0, 1.8]);
     assert_eq!(
         on, 2,
         "tetrahedron faces holding the source (both sides of one facet)"
     );
-    // The moved source of the OK test below is on none.
+    // The moved source of the test below is on none.
     assert_eq!(internal_faces_holding(&mesh, [3.05, 5.1, 1.8]), 0);
+
+    let mesh_arg = mesh_dir.display().to_string();
+    let o = run(&fixture(BOX), "spps", &root, &["--mesh", &mesh_arg]);
+    let m = json(&o);
+    summary("box SPPS, 6 tetrahedra, upstream's corner order", &o, &m);
+    assert_eq!(o.code, 0, "{o:#?}");
+    assert_eq!(m["verdict"]["status"], "OK");
+    let bands = m["particles"]["bands"].as_array().unwrap();
+    assert_eq!(bands.len(), 27);
+    for b in bands {
+        assert_eq!(b["total"], 10_000, "{b}");
+        assert_eq!(b["lost_by_meshing_problems"], 0, "{b}");
+    }
+    let solve = run_dir(&m).join("solve");
+    assert_eq!(
+        std::fs::read(solve.join("tetramesh.mbin")).unwrap(),
+        std::fs::read(mesh_dir.join("tetramesh.mbin")).unwrap(),
+        "the run solved the 6-tetrahedron mesh"
+    );
+
+    // The same inputs, the .mbin in TetGen's corner order: refused before launch.
+    let folder = root.join("tetgen-order");
+    std::fs::create_dir_all(&folder).unwrap();
+    for input in m["inputs"].as_array().unwrap() {
+        let name = input["path"].as_str().unwrap();
+        std::fs::copy(solve.join(name), folder.join(name)).unwrap();
+    }
+    let config = std::fs::read_to_string(folder.join("config.xml")).unwrap();
+    let solve_dir = format!("{}\\", solve.display());
+    assert!(config.contains(&solve_dir), "{config}");
+    std::fs::write(
+        folder.join("config.xml"),
+        config.replace(&solve_dir, "__RUNDIR__"),
+    )
+    .unwrap();
+    let tetgen_order = simpa_core::mesh::in_tetgen_order(&mesh);
+    simpa_core::formats::mbin::write_file(&tetgen_order, &folder.join("tetramesh.mbin")).unwrap();
+    let folder_run = |json_out: bool| {
+        let mut args = vec![
+            "run-folder".to_string(),
+            folder.display().to_string(),
+            "--solver".into(),
+            "spps".into(),
+            "--runs".into(),
+            root.display().to_string(),
+        ];
+        if json_out {
+            args.push("--json".into());
+        }
+        simpa_run(&args)
+    };
+    let o = folder_run(true);
+    let m = json(&o);
+    summary("box SPPS, .mbin in TetGen's corner order", &o, &m);
+    assert_eq!(o.code, 5, "{o:#?}");
+    assert_eq!(m["verdict"]["status"], "FAIL");
+    assert_eq!(m["stage"], "pre_launch");
+    assert_eq!(m["exit_class"], 5);
+    assert_eq!(codes(&m), ["source_unlocatable"]);
+    let detail = m["verdict"]["reasons"][0]["detail"].as_str().unwrap();
+    assert!(
+        detail.starts_with("source 1 \"Source 1\" at (3, 5, 1.8): "),
+        "{detail}"
+    );
+    // Not launched: no outcome, no solver logs, no solver output; run.json written.
+    let dir = run_dir(&m);
+    assert_eq!(m["outcome"], Value::Null);
+    assert!(dir.join("run.json").is_file());
+    assert!(!dir.join("solver.stdout.txt").exists());
+    assert!(!dir.join("solver.stderr.txt").exists());
+    assert!(!dir.join("solve/SPPS particle statistics.gabe").exists());
+    // Without --json: the one verdict line names the refusal.
+    let plain = folder_run(false);
+    assert_eq!(plain.code, 5);
+    assert!(
+        plain.stdout.starts_with("FAIL source_unlocatable exit 5: "),
+        "{}",
+        plain.stdout
+    );
+    // What the refusal spares: spps.exe on the refused folder's own inputs, launched by hand.
+    let refused = dir.join("solve");
+    let crashed = std::process::Command::new(solver_exe("spps.exe"))
+        .arg("config.xml")
+        .current_dir(&refused)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .expect("spps.exe starts");
+    let exit = crashed.status.code().map(|c| c as u32);
+    println!(
+        "spps.exe by hand on the refused inputs: exit {:?}",
+        exit.map(|c| format!("0x{c:08X}"))
+    );
+    assert_eq!(
+        exit,
+        Some(0xC000_0005),
+        "SPPS did not crash on the inputs the check refused: {}",
+        String::from_utf8_lossy(&crashed.stdout)
+    );
 }
 
 /// How many internal tetrahedron faces (with a neighbour) hold `p`: on the face's plane to
@@ -211,17 +329,154 @@ fn internal_faces_holding(mesh: &simpa_core::formats::mbin::Mesh, p: [f64; 3]) -
     n
 }
 
-/// Gate M6(a) as written: the seeded box with SPPS is OK, with 10,000 particles per band and
-/// none lost. Blocked by decision 3 (the pinned TetGen does not refine the box), see the pinned
-/// test above. The ways out are Burhan's and Michael's to choose: settle decision 3, change the
-/// fixture's source or mesh settings (it follows upstream's tutorial 1 SPPS settings, `-pq2 -A
-/// -n` with no volume constraint), or refuse before launch a source SPPS's own `f32` test would
-/// not locate (decision 11 keeps a pre-launch source check open).
+/// Per band of a run manifest: `(freq_hz, lost_by_meshing_problems, lost_by_infinite_loops)`,
+/// after checking that every band ran all 10,000 particles.
+fn losses(m: &Value) -> Vec<(u64, u64, u64)> {
+    let bands = m["particles"]["bands"].as_array().unwrap();
+    assert_eq!(bands.len(), 27);
+    bands
+        .iter()
+        .map(|b| {
+            assert_eq!(b["total"], 10_000, "{b}");
+            let n = |k: &str| b[k].as_u64().unwrap();
+            (
+                n("freq_hz"),
+                n("lost_by_meshing_problems"),
+                n("lost_by_infinite_loops"),
+            )
+        })
+        .collect()
+}
+
+/// The bands of `l` that lost any particle.
+fn lossy(l: &[(u64, u64, u64)]) -> Vec<(u64, u64, u64)> {
+    l.iter().copied().filter(|&(_, a, b)| a + b > 0).collect()
+}
+
+/// `Err` naming each band in which `ours` loses more particles than `reference`, by meshing or by
+/// infinite loops: gate M6(a)'s test ("no worse than upstream"), band by band, both runs having
+/// the same bands.
+fn no_worse(ours: &[(u64, u64, u64)], reference: &[(u64, u64, u64)]) -> Result<(), String> {
+    let bands = |l: &[(u64, u64, u64)]| l.iter().map(|b| b.0).collect::<Vec<_>>();
+    if bands(ours) != bands(reference) {
+        return Err(format!(
+            "the runs computed different bands: {:?} and {:?}",
+            bands(ours),
+            bands(reference)
+        ));
+    }
+    let worse: Vec<String> = ours
+        .iter()
+        .zip(reference)
+        .filter(|(o, r)| o.1 > r.1 || o.2 > r.2)
+        .map(|(o, r)| {
+            format!(
+                "{} Hz: ours loses {} by meshing and {} by loops, the reference {} and {}",
+                o.0, o.1, o.2, r.1, r.2
+            )
+        })
+        .collect();
+    if worse.is_empty() {
+        Ok(())
+    } else {
+        Err(worse.join("; "))
+    }
+}
+
+/// A mesh folder built by `mesh::mesh_from_tetgen` from the TetGen output set `base` in the
+/// fixture folder `tetgen_rel`, against the seeded box, for `simpa run --mesh`.
+fn box_mesh_from(root: &Path, name: &str, tetgen_rel: &str, base: &str) -> PathBuf {
+    let project = simpa_core::schema::load(&fixture(BOX)).unwrap();
+    let dir = root.join(name);
+    let mm = simpa_core::mesh::mesh_from_tetgen(&project, &fixture(tetgen_rel), Some(base), &dir)
+        .unwrap();
+    assert!(mm.is_ok(), "{mm:#?}");
+    dir
+}
+
+/// Gate M6(a), as Burhan judged it on 2026-09-24 at 05:13 ("No worse than upstream",
+/// `docs/investigations/2026-09-23-upstream-meshing/DECISIONS.md`): the seeded box with SPPS runs
+/// OK, and in no band loses more particles than upstream's own mesh of the same room, with the
+/// same seed and configuration. M6(c) judges the hall the same way.
+///
+/// - **Ours:** `simpa run` meshes the box with TetGen 1.5.0, the mesher since decision 3, into
+///   2,257 tetrahedra in upstream's corner order; the tutorial's source is inside it by SPPS's own
+///   test (`run::locate`), and the run launches, exits 0 and writes all 65 files.
+/// - **Upstream's own mesh:** the TetGen output its GUI meshed tutorial 1 with on 2019-06-07
+///   (`tests/fixtures/upstream/tutorial1/tetgen`), built into a mesh folder whose `.mbin` must be
+///   the 2019 `tetramesh.mbin` byte for byte (sha256 `8a6b3943…`), then `simpa run --mesh` on it:
+///   the same project, seed 1 and 10,000 particles, 27 bands.
+/// - **Says no:** the same comparison against the 6-tetrahedron mesh TetGen 1.6.0 makes of the box
+///   (`tests/fixtures/solver-outputs/tutorial1/tetgen_scene_mesh.1.*`), which loses none: ours,
+///   which loses one particle at 2 kHz, is refused.
+///
+/// Measured on 2026-09-24: both 2,257-tetrahedron runs lose one particle by meshing at 2 kHz and
+/// none elsewhere.
 #[test]
-#[ignore = "gate M6(a) is blocked: the box's 6-tetrahedron mesh puts the source on an internal facet"]
 fn spps_runs_the_seeded_box_ok() {
-    let o = run(&fixture(BOX), "spps", &scratch("run-spps-gate"), &[]);
-    assert_eq!(o.code, 0, "{}", o.stdout);
+    let root = scratch("run-spps-gate");
+    let o = run(&fixture(BOX), "spps", &root, &[]);
+    let m = json(&o);
+    summary("box SPPS, gate M6(a)", &o, &m);
+    assert_eq!(o.code, 0, "{o:#?}");
+    assert_eq!(m["verdict"]["status"], "OK");
+    assert_eq!(m["stage"], "solve");
+    assert_eq!(codes(&m), Vec::<String>::new());
+    assert_eq!(m["lines"]["fail"], 0);
+    assert_eq!(m["files"]["expected"], 65);
+    assert_eq!(m["files"]["present"], 65);
+    let mm: Value =
+        serde_json::from_str(&std::fs::read_to_string(run_dir(&m).join("mesh/mesh.json")).unwrap())
+            .unwrap();
+    assert_eq!(mm["counts"]["build"]["tetrahedra"], 2257);
+    let ours = losses(&m);
+
+    // Upstream's own mesh of the box, the same project.
+    let upstream_dir = box_mesh_from(
+        &root,
+        "upstream-2019",
+        "upstream/tutorial1/tetgen",
+        "scene_mesh",
+    );
+    let upstream_mbin = std::fs::read(upstream_dir.join("tetramesh.mbin")).unwrap();
+    assert_eq!(
+        upstream_mbin,
+        std::fs::read(fixture("upstream/tutorial1/spps/tetramesh.mbin")).unwrap(),
+        "the reference mesh is upstream's 2019 tetramesh.mbin"
+    );
+    let arg = upstream_dir.display().to_string();
+    let u = run(&fixture(BOX), "spps", &root, &["--mesh", &arg]);
+    let um = json(&u);
+    summary("box SPPS on upstream's 2019 mesh", &u, &um);
+    assert_eq!(u.code, 0, "{u:#?}");
+    let reference = losses(&um);
+    println!(
+        "M6(a) bands with a loss (Hz, meshing, loops): ours {:?}, upstream's own mesh {:?}",
+        lossy(&ours),
+        lossy(&reference)
+    );
+    no_worse(&ours, &reference).unwrap();
+
+    // Says no: judged against a mesh of the box that loses fewer, ours is refused.
+    let six_dir = box_mesh_from(
+        &root,
+        "six-tetrahedra",
+        "solver-outputs/tutorial1",
+        "tetgen_scene_mesh",
+    );
+    let arg = six_dir.display().to_string();
+    let s = run(&fixture(BOX), "spps", &root, &["--mesh", &arg]);
+    assert_eq!(s.code, 0, "{s:#?}");
+    let six = losses(&json(&s));
+    assert!(lossy(&six).is_empty(), "{six:?}");
+    let refused = no_worse(&ours, &six).unwrap_err();
+    println!("M6(a) against the 6-tetrahedron mesh: {refused}");
+    assert!(
+        refused.starts_with("2000 Hz: ours loses 1 by meshing"),
+        "{refused}"
+    );
+    // And bands that do not line up are refused, not compared.
+    assert!(no_worse(&ours, &six[1..]).is_err());
 }
 
 #[test]
@@ -237,20 +492,22 @@ fn spps_runs_the_box_ok_with_its_source_off_the_internal_facets() {
     assert_eq!(m["lines"]["warn"], 0);
     assert_eq!(m["files"]["expected"], 65);
     assert_eq!(m["files"]["present"], 65);
-    let bands = m["particles"]["bands"].as_array().unwrap();
-    assert_eq!(bands.len(), 27);
-    for b in bands {
-        assert_eq!(b["total"], 10_000, "{b}");
-        assert_eq!(b["lost_by_meshing_problems"], 0, "{b}");
-        assert_eq!(b["lost_by_infinite_loops"], 0, "{b}");
-    }
+    // On TetGen 1.6.0's 6-tetrahedron box none was lost. On TetGen 1.5.0's mesh, upstream's own
+    // 2019 one, SPPS loses one particle by meshing at 500 Hz and one at 1250 Hz (measured
+    // 2026-09-24, seed 1), as it loses one at 2 kHz with the tutorial's own source (gate M6(a)):
+    // far inside the 1 % run limit, and pinned so that a change shows.
+    let l = losses(&m);
+    println!(
+        "moved source: bands with a loss (Hz, meshing, loops): {:?}",
+        lossy(&l)
+    );
+    assert_eq!(lossy(&l), [(500, 1, 0), (1250, 1, 0)]);
     let solve = run_dir(&m).join("solve");
     assert!(
         solve
             .join("Surface receiver/Global/Sound level.csbin")
             .is_file()
     );
-    assert!(!o.stderr.contains("particles has been in error"));
 }
 
 #[test]

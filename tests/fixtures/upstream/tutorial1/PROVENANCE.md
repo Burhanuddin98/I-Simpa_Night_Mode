@@ -7,7 +7,7 @@ Edits, all in config.xml:
 - SPPS `random_seed` 0 (unseeded) becomes 1, so two builds can be compared exactly. A seed makes SPPS run single-threaded.
 - SPPS `nbparticules` 150000 becomes 10000, so the comparison runs in seconds.
 
-Meshes and the TetGen input are unmodified. These are format and equivalence fixtures:
+Meshes, the TetGen input and TetGen's output are unmodified. These are format and equivalence fixtures:
 the acoustic values they produce are not evidence of anything.
 
 | fixture | zip member | sha256 |
@@ -20,3 +20,8 @@ the acoustic values they produce are not evidence of anything.
 | `tcr/config.xml` | `instance2/report/Classical theory of reverberation/2019-06-07_11h57m58s/config.xml` | `1d809d40d869947c` |
 | `tetgen/scene_mesh.poly` | `instance2/temp/scene_mesh.poly` | `ab598bcab1548cfe` |
 | `tetgen/scene_mesh.var` | `instance2/temp/scene_mesh.var` | `89355d3d2aa95bb6` |
+| `tetgen/scene_mesh.1.node` | `instance2/temp/scene_mesh.1.node` | `6d45dd221c49f72b` |
+| `tetgen/scene_mesh.1.ele` | `instance2/temp/scene_mesh.1.ele` | `a008e8b021a515a3` |
+| `tetgen/scene_mesh.1.face` | `instance2/temp/scene_mesh.1.face` | `cff82acabfe834cc` |
+| `tetgen/scene_mesh.1.neigh` | `instance2/temp/scene_mesh.1.neigh` | `66acb1484c2804ad` |
+| `tetgen/scene_mesh.1.edge` | `instance2/temp/scene_mesh.1.edge` | `db4aaed3a2b7924c` |

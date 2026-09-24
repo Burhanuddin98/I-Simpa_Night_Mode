@@ -20,7 +20,8 @@
     "codes": [],
     "noise_floor": "|6V| <= 2^-23 * (longest edge)^3",
     "codes_any_of": [],
-    "bands": "pass"
+    "bands": "pass",
+    "location": "pass"
   },
   "observed": {
     "source": "stub.json, played back by the stub solver (not run here)",

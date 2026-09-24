@@ -10,9 +10,10 @@
 //! The mesh folder holds `scene_mesh.poly`, `scene_mesh.var` (when the settings ask for one),
 //! TetGen's `scene_mesh.1.*` (or `scene_mesh_skipped.*`), `tetgen.stdout.txt` and
 //! `tetgen.stderr.txt`, `mesh.cbin`, `tetramesh.mbin` **only when meshing succeeded**, `mesh.json`
-//! always, and `diag/` after skipped facets. Every file a mesh writes, and every file TetGen
-//! would read beside the `.poly` (`.var`, `.edge`, `.mtr`: `tetgen.cxx:2446-2449`), is deleted
-//! before meshing starts ([`delete_stale`]), so nothing from an earlier mesh is silently reused.
+//! always, and `diag/` after skipped facets or a self-intersection stop. Every file a mesh
+//! writes, and every file TetGen would read beside the `.poly` (`.var`, `.edge`, `.mtr`:
+//! `tetgen.cxx:2446-2449`), is deleted before meshing starts ([`delete_stale`]), so nothing from
+//! an earlier mesh is silently reused.
 //!
 //! The outcome carries every reason code that applies ([`codes`]), and `status` is `OK` exactly
 //! when there is none. A `.mbin` is written only after [`verify::verify_mesh`] passes it.
@@ -35,8 +36,14 @@ mod manifest;
 mod tetgen;
 pub mod verify;
 
-pub use build::{AttributeMap, BuildStats, FACE_CORNERS, OutputPaths, TetgenOutput, build_mbin};
-pub use diag::{Element, Intersection, intersections};
+pub use build::{
+    AttributeMap, BuildStats, COMPILED_FROM, FACE_CORNERS, OutputPaths, TetgenOutput,
+    UPSTREAM_CORNERS, Unitize, build_mbin, in_tetgen_order, upstream_order,
+};
+pub use diag::{
+    Element, Intersection, SELF_INTERSECTION_STOP, intersections, marker_pairs, stop_pair,
+    stopped_on_self_intersection,
+};
 pub use flags::{
     TetgenCommand, format_g, setting_g15, settings_conflict, tetgen_flags, to_string_g15,
     trailer_command,
@@ -46,7 +53,8 @@ pub use input::{
 };
 pub use manifest::{
     Counts, Diagnosis, Hashes, MANIFEST_FILE, MANIFEST_VERSION, MeshManifest, MeshSource,
-    MeshStatus, SkippedFacet, TetgenCall, read_manifest, sha256_file, sha256_hex, write_manifest,
+    MeshStatus, SelfIntersection, SkippedFacet, TetgenCall, read_manifest, sha256_file, sha256_hex,
+    write_manifest,
 };
 pub use tetgen::{Mesher, STDERR_LOG, STDOUT_LOG, TetgenMesher};
 
@@ -78,8 +86,13 @@ pub mod codes {
     pub const TETGEN_CRASH: &str = "tetgen_crash";
     /// TetGen exited with a code other than 0.
     pub const TETGEN_EXIT_NONZERO: &str = "tetgen_exit_nonzero";
-    /// TetGen skipped input facets as self-intersecting (`<base>_skipped.face` has rows).
+    /// TetGen skipped input facets as self-intersecting (`<base>_skipped.face` has rows). TetGen
+    /// 1.6.0 does this; 1.5.0 stops instead ([`TETGEN_SELF_INTERSECTION`]).
     pub const TETGEN_SKIPPED_FACETS: &str = "tetgen_skipped_facets";
+    /// TetGen stopped on a self-intersection of its input: exit code 3 and TetGen 1.5.0's line
+    /// `A self-intersection was detected. Program stopped.` The pair it names and the `-d`
+    /// follow-up's findings are mapped to scene faces and groups.
+    pub const TETGEN_SELF_INTERSECTION: &str = "tetgen_self_intersection";
     /// `.1.node`, `.1.ele` or `.1.face` is missing.
     pub const TETGEN_OUTPUT_MISSING: &str = "tetgen_output_missing";
     /// `.1.neigh` is missing. There is no fallback that computes neighbours.
@@ -181,6 +194,7 @@ fn new_manifest(source: MeshSource) -> MeshManifest {
         zone_facets: Vec::new(),
         skipped_rows: 0,
         skipped_facets: Vec::new(),
+        self_intersection: None,
         diagnosis: None,
         verify: None,
         elapsed_ms: 0.0,
@@ -227,9 +241,10 @@ fn prepare(dir: &Path, m: &mut MeshManifest) -> Result<bool, MeshError> {
 
 /// Meshes `project` into `out_dir` with its own [`MeshSettings`] (flags from [`tetgen_flags`]).
 /// Stale files go first ([`delete_stale`]). A settings conflict or a project that cannot be
-/// expressed as TetGen input fails before TetGen runs. On skipped facets a `tetgen -d` follow-up
-/// runs in `<out_dir>/diag/` and its findings go in the manifest. `on_line` sees TetGen's output
-/// as it arrives; `cancel` stops TetGen and leaves no `.mbin`.
+/// expressed as TetGen input fails before TetGen runs. On skipped facets (TetGen 1.6.0) or a stop
+/// on a self-intersection (TetGen 1.5.0) a `tetgen -d` follow-up runs in `<out_dir>/diag/` and its
+/// findings go in the manifest. `on_line` sees TetGen's output as it arrives; `cancel` stops
+/// TetGen and leaves no `.mbin`.
 ///
 /// `Err` only when the folder cannot be created, or `mesh.json` cannot be written into it; every
 /// other failure is in the manifest.
@@ -382,9 +397,10 @@ fn run_input(
             codes::CANCELLED,
             "meshing was cancelled before TetGen started",
         );
-        classify(&paths, None, input, &mut m);
+        classify(&paths, None, &[], input, &mut m);
         return finish(dir, m, start);
     }
+    let mut stdout = Vec::new();
     let outcome = match call(
         mesher,
         dir,
@@ -393,7 +409,7 @@ fn run_input(
         cancel,
         on_line,
         &mut m.tetgen,
-        None,
+        Some(&mut stdout),
     ) {
         Ok(o) => o,
         Err(e) => {
@@ -401,9 +417,12 @@ fn run_input(
             return finish(dir, m, start);
         }
     };
-    let skipped = classify(&paths, Some(&outcome), input, &mut m);
-    if skipped && !cancel.is_cancelled() {
+    let found = classify(&paths, Some(&outcome), &stdout, input, &mut m);
+    if (found.skipped || found.stopped) && !cancel.is_cancelled() {
         m.diagnosis = diagnose(input, &poly_bytes, dir, mesher, cancel, on_line, &mut m);
+    }
+    if found.stopped {
+        name_self_intersection(input, &mut m);
     }
     if m.codes.is_empty() {
         build_and_write(&paths, input, dir, cancel, &mut m, verify::verify_mesh);
@@ -451,16 +470,31 @@ fn call(
     result.map_err(|e| e.to_string())
 }
 
-/// The codes for one TetGen run's outcome and files, in this order: `cancelled`, `tetgen_crash`,
-/// `tetgen_exit_nonzero`, `tetgen_skipped_facets`, `tetgen_output_missing`, `neigh_missing`
-/// (and `tetgen_output_invalid` for an unreadable `_skipped.face`). Returns whether facets were
-/// skipped.
+/// What [`classify`] found that calls for the `-d` follow-up.
+#[derive(Clone, Copy, Debug, Default)]
+struct Found {
+    /// `_skipped.face` has rows (TetGen 1.6.0).
+    skipped: bool,
+    /// TetGen stopped on a self-intersection (TetGen 1.5.0).
+    stopped: bool,
+}
+
+/// The codes for one TetGen run's outcome, its stdout lines and its files, in this order:
+/// `cancelled`, `tetgen_crash`, `tetgen_exit_nonzero`, `tetgen_self_intersection`,
+/// `tetgen_skipped_facets`, `tetgen_output_missing`, `neigh_missing` (and
+/// `tetgen_output_invalid` for an unreadable `_skipped.face`).
+///
+/// A self-intersection stop is exit code 3 with TetGen 1.5.0's line
+/// [`diag::SELF_INTERSECTION_STOP`] on stdout; the pair it names goes into
+/// `m.self_intersection`. A `_skipped.face` is read whichever TetGen wrote it.
 fn classify(
     paths: &OutputPaths,
     outcome: Option<&Outcome>,
+    stdout: &[String],
     input: &MeshInput,
     m: &mut MeshManifest,
-) -> bool {
+) -> Found {
+    let mut found = Found::default();
     if let Some(o) = outcome {
         if o.cancelled {
             fail(
@@ -482,6 +516,31 @@ fn classify(
                     m,
                     codes::TETGEN_EXIT_NONZERO,
                     format!("TetGen exited with code {code} (0x{code:08X})"),
+                );
+            }
+            if code == 3 && diag::stopped_on_self_intersection(stdout) {
+                found.stopped = true;
+                let stop = diag::stop_pair(stdout, &input.poly);
+                let said = match &stop {
+                    Some(p) => format!(
+                        "{} ({} against {})",
+                        p.message,
+                        describe(&p.first),
+                        p.second.as_ref().map_or_else(String::new, describe)
+                    ),
+                    None => "it named no pair".to_string(),
+                };
+                m.self_intersection = Some(SelfIntersection {
+                    stop,
+                    ..SelfIntersection::default()
+                });
+                fail(
+                    m,
+                    codes::TETGEN_SELF_INTERSECTION,
+                    format!(
+                        "TetGen stopped on a self-intersection of the input: {said}; no mesh \
+                         is built from a self-intersecting boundary"
+                    ),
                 );
             }
         }
@@ -554,10 +613,75 @@ fn classify(
             ),
         );
     }
-    skipped
+    found.skipped = skipped;
+    found
 }
 
-/// One entry per distinct skipped marker, mapped to its scene face and group, or its box zone.
+/// `segment [9, 10] (facet markers 12)`, `facet [1, 4, 6] (facet markers 8)`: one element of a
+/// pair, in words.
+fn describe(e: &Element) -> String {
+    let points: Vec<String> = e.points.iter().map(i64::to_string).collect();
+    let markers: Vec<String> = e.markers.iter().map(u32::to_string).collect();
+    format!(
+        "{} [{}] (facet markers {})",
+        e.kind,
+        points.join(", "),
+        if markers.is_empty() {
+            "none".to_string()
+        } else {
+            markers.join(", ")
+        }
+    )
+}
+
+/// Completes `m.self_intersection` after a self-intersection stop: the pairs of the stop and of
+/// the `-d` follow-up, and every facet they name or `diag/scene_mesh.1.face` holds, mapped to the
+/// scene. Its summary goes into the messages.
+fn name_self_intersection(input: &MeshInput, m: &mut MeshManifest) {
+    let Some(si) = m.self_intersection.as_mut() else {
+        return;
+    };
+    let mut named: Vec<&Intersection> = si.stop.iter().collect();
+    let mut markers: Vec<i64> = Vec::new();
+    if let Some(d) = &m.diagnosis {
+        named.extend(d.intersections.iter());
+        markers.extend(d.face_markers.iter().copied());
+    }
+    si.pairs = diag::marker_pairs(named.iter().copied());
+    for i in &named {
+        markers.extend(i.first.markers.iter().map(|&k| i64::from(k)));
+        if let Some(s) = &i.second {
+            markers.extend(s.markers.iter().map(|&k| i64::from(k)));
+        }
+    }
+    si.facets = map_skipped(&markers, input);
+    let list: Vec<String> = si
+        .facets
+        .iter()
+        .take(20)
+        .map(|f| match (&f.group, &f.fitting_zone) {
+            (Some(g), _) => format!("{} ({g})", f.marker),
+            (None, Some(z)) => format!("{} (zone {z})", f.marker),
+            (None, None) => f.marker.to_string(),
+        })
+        .collect();
+    let more = si.facets.len().saturating_sub(20);
+    let message = format!(
+        "self-intersecting facets named by TetGen and its -d follow-up: {} pairs over {} facets, \
+         markers [{}{}]",
+        si.pairs.len(),
+        si.facets.len(),
+        list.join(", "),
+        if more > 0 {
+            format!(", and {more} more")
+        } else {
+            String::new()
+        }
+    );
+    m.messages.push(message);
+}
+
+/// One entry per distinct marker, ascending, mapped to its scene face and group, or its box zone.
 fn map_skipped(markers: &[i64], input: &MeshInput) -> Vec<SkippedFacet> {
     let mut distinct = markers.to_vec();
     distinct.sort_unstable();
@@ -589,7 +713,8 @@ fn map_skipped(markers: &[i64], input: &MeshInput) -> Vec<SkippedFacet> {
 }
 
 /// `tetgen -d` on the same `.poly` (no `.var`) in `<dir>/diag/`: the intersecting pairs it
-/// reports, and its own `_skipped.face` markers. The outcome is a failure already, so a
+/// reports, its own `_skipped.face` markers (TetGen 1.6.0) and the markers of the `.1.face` of
+/// intersecting triangles it writes (TetGen 1.5.0). The outcome is a failure already, so a
 /// follow-up that cannot be set up is a message and no diagnosis.
 fn diagnose(
     input: &MeshInput,
@@ -630,16 +755,19 @@ fn diagnose(
             .messages
             .push(format!("the tetgen -d follow-up could not run: {e}")),
     }
-    let skipped = OutputPaths::new(&diag_dir, BASENAME).skipped_face;
-    let skipped_markers = crate::formats::read_file(&skipped)
-        .and_then(|b| tetgen_files::read_face(&b))
-        .ok()
-        .and_then(|f| f.markers)
-        .map(|ms| ms.into_iter().map(i64::from).collect())
-        .unwrap_or_default();
+    let out = OutputPaths::new(&diag_dir, BASENAME);
+    let markers_of = |path: &Path| -> Vec<i64> {
+        crate::formats::read_file(path)
+            .and_then(|b| tetgen_files::read_face(&b))
+            .ok()
+            .and_then(|f| f.markers)
+            .map(|ms| ms.into_iter().map(i64::from).collect())
+            .unwrap_or_default()
+    };
     Some(Diagnosis {
         call: call_record,
-        skipped_markers,
+        skipped_markers: markers_of(&out.skipped_face),
+        face_markers: markers_of(&out.face),
         intersections: intersections(&lines, &input.poly),
     })
 }
@@ -648,8 +776,8 @@ fn diagnose(
 /// in this module's tests.
 type Verifier = fn(&mbin::Mesh, &cbin::Model, &verify::VolumeIds) -> verify::VerifyReport;
 
-/// Reads TetGen's output, builds the `.mbin`, runs `verifier` on it, and writes it only when it
-/// passes.
+/// Reads TetGen's output, builds the `.mbin` in the frame upstream's GUI would fit to the scene
+/// ([`Unitize::of_scene`]), runs `verifier` on it, and writes it only when it passes.
 fn build_and_write(
     paths: &OutputPaths,
     input: &MeshInput,
@@ -658,8 +786,12 @@ fn build_and_write(
     m: &mut MeshManifest,
     verifier: Verifier,
 ) {
+    let unitize = match Unitize::of_scene(&input.scene) {
+        Ok(u) => u,
+        Err(e) => return fail(m, codes::INPUT_INVALID, e),
+    };
     let built = TetgenOutput::read(paths)
-        .and_then(|out| build_mbin(&out, input.scene.faces.len(), &input.volume_ids.fittings));
+        .and_then(|out| build_mbin(&out, input.scene.faces.len(), &unitize));
     let (mesh, stats) = match built {
         Ok(b) => b,
         Err(e) => return fail(m, codes::TETGEN_OUTPUT_INVALID, e),
@@ -852,7 +984,7 @@ pub fn mesh_from_tetgen(
             paths.face.display()
         ));
     }
-    classify(&paths, None, &input, &mut m);
+    classify(&paths, None, &[], &input, &mut m);
     if m.codes.is_empty() {
         build_and_write(
             &paths,
@@ -942,8 +1074,11 @@ mod tests {
         let mbin_path = dir.join(names::TETRA_MESH);
         assert_eq!(m.files.mbin, Some(sha256_file(&mbin_path).unwrap()));
         let mesh = mbin::read_file(&mbin_path).unwrap();
+        // The .ele row (1,2,3,4) is written in upstream's order, (4,3,2,1): face i is opposite
+        // node 4 - i, which is the scene face with marker i.
+        assert_eq!(mesh.tetrahedra[0].vertices, [3, 2, 1, 0]);
         let markers: Vec<i32> = mesh.tetrahedra[0].faces.iter().map(|f| f.marker).collect();
-        assert_eq!(markers, [3, 2, 1, 0]);
+        assert_eq!(markers, [0, 1, 2, 3]);
         std::fs::remove_dir_all(&dir).unwrap();
 
         // Refused: mesh_invalid, then the verifier's own codes, its report kept, no .mbin.
@@ -952,6 +1087,27 @@ mod tests {
         assert_eq!(m.codes, [codes::MESH_INVALID, "unmarked_boundary_faces"]);
         assert!(m.verify.as_ref().is_some_and(|r| !r.passed()));
         assert_eq!(m.files.mbin, None);
+        assert!(!dir.join(names::TETRA_MESH).exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_scene_no_frame_fits_is_input_invalid_and_writes_no_mbin() {
+        // Control: the scene as it is fits a frame (the other tests write its .mbin).
+        let (dir, mut input) = one_tetrahedron("noframe");
+        assert!(Unitize::of_scene(&input.scene).is_ok());
+        // Every vertex but the last at one point: upstream's Unitize would divide by zero.
+        let last = input.scene.vertices.len() - 1;
+        let first = input.scene.vertices[0];
+        for v in &mut input.scene.vertices[..last] {
+            *v = first;
+        }
+        let m = build_with(&dir, &input, passes);
+        assert_eq!(m.codes, [codes::INPUT_INVALID], "{m:#?}");
+        assert!(
+            m.messages.iter().any(|s| s.contains("UnitizeVar")),
+            "{m:#?}"
+        );
         assert!(!dir.join(names::TETRA_MESH).exists());
         std::fs::remove_dir_all(&dir).unwrap();
     }

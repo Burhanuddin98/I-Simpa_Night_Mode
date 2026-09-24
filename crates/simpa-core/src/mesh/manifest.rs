@@ -58,10 +58,12 @@ pub struct TetgenCall {
     pub elapsed_ms: f64,
 }
 
-/// A facet TetGen skipped, mapped back to the scene.
+/// A facet TetGen skipped (TetGen 1.6.0), or named as self-intersecting (TetGen 1.5.0), mapped
+/// back to the scene.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SkippedFacet {
-    /// The `.poly` facet marker TetGen wrote in `_skipped.face` (its `shellmark`).
+    /// The `.poly` facet marker: as TetGen wrote it in `_skipped.face` (its `shellmark`), or of
+    /// the facet TetGen named.
     pub marker: i64,
     /// The scene face (`.cbin` index), when the marker is one.
     pub scene_face: Option<u32>,
@@ -71,14 +73,33 @@ pub struct SkippedFacet {
     pub fitting_zone: Option<String>,
 }
 
-/// The `tetgen -d` follow-up run after skipped facets, in `diag/`.
+/// The `tetgen -d` follow-up run after skipped facets or a self-intersection stop, in `diag/`.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Diagnosis {
     pub call: TetgenCall,
-    /// The markers of `diag/scene_mesh_skipped.face`.
+    /// The markers of `diag/scene_mesh_skipped.face` (TetGen 1.6.0).
     pub skipped_markers: Vec<i64>,
-    /// The intersections TetGen reported, as facet markers.
+    /// The markers of `diag/scene_mesh.1.face`, one per row: the intersecting triangles TetGen
+    /// 1.5.0's `-d` writes, each with its facet's marker.
+    #[serde(default)]
+    pub face_markers: Vec<i64>,
+    /// The intersections TetGen reported, as facet markers, each once.
     pub intersections: Vec<Intersection>,
+}
+
+/// TetGen 1.5.0's stop on a self-intersection (exit 3 and its `A self-intersection was detected`
+/// line), with what it and the `-d` follow-up name.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SelfIntersection {
+    /// The pair the stop names, e.g. `Found two facets intersect each other.` with its two
+    /// elements; `None` when TetGen stopped without naming one.
+    pub stop: Option<Intersection>,
+    /// Every pair of facet markers found intersecting, `[a, b]` with `a < b`, ascending: the
+    /// stop's pair and the `-d` follow-up's.
+    pub pairs: Vec<[u32; 2]>,
+    /// Every facet named, by the stop, the `-d` pairs or the rows of `diag/scene_mesh.1.face`,
+    /// once each, ascending by marker, mapped to its scene face and group or its box zone.
+    pub facets: Vec<SkippedFacet>,
 }
 
 /// Sizes of what went in and came out.
@@ -130,6 +151,9 @@ pub struct MeshManifest {
     pub skipped_rows: usize,
     /// The distinct markers of those rows, ascending, each mapped back to the scene.
     pub skipped_facets: Vec<SkippedFacet>,
+    /// TetGen 1.5.0 stopped on a self-intersection: what it and the `-d` follow-up name.
+    #[serde(default)]
+    pub self_intersection: Option<SelfIntersection>,
     pub diagnosis: Option<Diagnosis>,
     /// `mesh::verify::verify_mesh`'s report on the `.mbin` built, whether it passed or not.
     pub verify: Option<VerifyReport>,

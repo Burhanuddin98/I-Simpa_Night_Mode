@@ -67,31 +67,33 @@ The file is written with `fopen(.., "w")`, which is text mode, so every `\n` is 
   deletes any `scene_mesh.var` (and `scene_mesh.edge` and `.mtr`, which TetGen loads the same
   way) before every mesh.
 
-## The pinned TetGen ignores the bound
+## TetGen 1.5.0 honours the bound; 1.6.0 does not
 
-**Measured 2026-09-23: with the TetGen we ship, a `.var` changes nothing.**
+**Measured 2026-09-24, with TetGen 1.5.0, the mesher since decision 3 (`docs/m5-m6-design.md`):
+the `.var` refines each receiver face to its bound.**
 
-- TetGen 1.6.0 as built from upstream `929a5c8` never reads a subface's area bound when it
-  decides whether to split it. `check_subface` tests only the radius-edge ratio
-  (`tetgen.cxx:27347-27388`), and `areabound()` is read only to copy a bound onto the pieces of a
-  split subface or segment (`:12362, 12607, 12727, 12899-12900, 13030, 16539`).
-- **The box with upstream's own `.var`**, meshed `-pq2 -A -n`: TetGen prints
-  `Opening scene_mesh.var.`, then makes 6 tetrahedra on the 8 corners. The floor stays 2 faces of
-  30 m² each, and the `.mbin` is identical to the one made with no `.var` at all
-  (`mesh_project.rs`, `the_pinned_tetgen_reads_the_var_and_refines_nothing`).
-- **Upstream's own tutorial-1 mesh** (`tests/fixtures/upstream/tutorial1/spps/tetramesh.mbin`,
-  written by the GUI in 2019) has 2,257 tetrahedra and 732 nodes. 934 of its tetrahedron faces
-  lie on faces 0 and 1, the largest 0.0998 m², 60.000 m² in all. It was made by a TetGen that
-  honoured the bound, which the pinned build cannot reproduce.
-- Consequences:
-  - Gate M5(a)'s refinement check ("more than 2 tetrahedron faces carry markers 0/1, each at
-    most 0.1 m² × (1 + 1e-4)") cannot pass. It is kept, ignored, as `the_var_refines_the_receiver_faces`.
-  - The "6 tetrahedra instead of 2,257" that decision 3 attributes to `-Y` has this cause:
-    without `-Y` the count is 6 as well. `mesh_settings_conflict` stands for the reason given in
-    `docs/solver-contract.md` Part A, but it does not restore refinement.
-  - Two ways out, neither decided: a fix to TetGen as a file in `patches/`, or splitting each
-    receiver face in the `.poly` before meshing (every piece keeping its face's marker, so the
-    markers still index the `.cbin`).
+- TetGen 1.5.0 (`third_party/tetgen-1.5.0`) splits a subface whose area is above its facet's
+  bound: `checkfac4split` tests `area > areabound(*chkfac)` when constraints are loaded
+  (`tetgen.cxx:24580-24582`).
+- **The box with upstream's own `.var`**, meshed `-pq2 -A -n`: 732 nodes, 2,257 tetrahedra, and
+  934 tetrahedron faces on faces 0 and 1, the largest 0.0998 m², 60.000 m² in all. That is
+  upstream's own tutorial-1 mesh (`tests/fixtures/upstream/tutorial1/spps/tetramesh.mbin`, written
+  by the GUI in 2019 with TetGen 1.5.0): TetGen's `.1.*` byte for byte but the trailer
+  (`crates/simpa/tests/parity_tutorials.rs`), the `.mbin` byte for byte once its room is read as
+  our 0 (`crates/simpa-core/tests/mesh_mbin_parity.rs`). Gate M5(a)'s refinement check ("more
+  than 2 tetrahedron faces carry markers 0/1, each at most 0.1 m² × (1 + 1e-4)") passes
+  (`mesh_project.rs`, `the_var_refines_the_receiver_faces`).
+- **The same box without its `.var`**: 60 tetrahedra, 10 floor faces, the largest 13.43 m². The
+  refinement check refuses it (`without_the_var_the_floor_is_not_refined`).
+
+**TetGen 1.6.0, upstream's at `929a5c8` and our mesher before decision 3, ignores the bound.** It
+never reads a subface's area bound when it decides whether to split it: `check_subface` tests
+only the radius-edge ratio (1.6.0 `tetgen.cxx:27347-27388`), and `areabound()` is read only to
+copy a bound onto the pieces of a split subface or segment (`:12362, 12607, 12727, 12899-12900,
+13030, 16539`). Measured 2026-09-23: the box with upstream's own `.var` gave 6 tetrahedra on its
+8 corners, the floor 2 faces of 30 m² each, the `.mbin` identical to the one made with no `.var`.
+The whole history, and why 1.5.0 was chosen over patching 1.6.0 or splitting receiver faces in
+the `.poly`, is in `docs/investigations/2026-09-23-upstream-meshing/`.
 
 ## `-Y`
 

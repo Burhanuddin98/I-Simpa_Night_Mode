@@ -11,10 +11,11 @@
     "mesh_check": "fail",
     "error": "tetramesh.mbin is missing",
     "codes": [],
-    "bands": "pass"
+    "bands": "pass",
+    "location": "not run: the mesh check failed"
   },
   "observed": {
-    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "source": "spps.exe sha256 5b2fac424a025b94, run by runsolvers.ps1",
     "exit_code": "0x00000000",
     "status": "FAIL",
     "codes": [

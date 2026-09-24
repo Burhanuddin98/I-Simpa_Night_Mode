@@ -1,6 +1,6 @@
-//! `mesh::mesh_poly` with the real `tetgen.exe`: the survey's self-intersecting cube
-//! (`target/scr-libif-backup/mkpolybad.py`) is refused with its skipped facets named, and the
-//! same cube without the piercing facet meshes.
+//! `mesh::mesh_poly` with the real `tetgen.exe` (TetGen 1.5.0, the M1 build): the survey's
+//! self-intersecting cube (`target/scr-libif-backup/mkpolybad.py`) is refused with its
+//! intersecting facets named, and the same cube without the piercing facet meshes.
 
 #[path = "mesh_support.rs"]
 mod support;
@@ -74,6 +74,13 @@ fn mesh(poly_path: &Path, out: &Path) -> simpa_core::mesh::MeshManifest {
     .unwrap()
 }
 
+/// TetGen 1.5.0, the mesher since decision 3, stops at the first self-intersection it meets (exit
+/// 3, `A self-intersection was detected. Program stopped.`) and writes no `_skipped.face`: the
+/// piercing facet's edge [9, 10] against facet #9, the wall's triangle (1, 4, 6), marker 8. The
+/// `-d` follow-up exits 0 and names every intersecting facet, in its pairs and in the markers of
+/// the `.1.face` it writes: 8, 9 and 12, each a scene face of this raw `.poly`. The control that
+/// makes this say no is the next test: the same cube without facet 12 meshes, with no
+/// `self_intersection`.
 #[test]
 fn a_self_intersecting_poly_is_refused_with_its_facets_named() {
     let dir = scratch("poly-bad");
@@ -84,55 +91,63 @@ fn a_self_intersecting_poly_is_refused_with_its_facets_named() {
     println!("{}", serde_json::to_string_pretty(&m).unwrap());
 
     assert_eq!(m.status, MeshStatus::Fail);
-    for code in [
-        codes::TETGEN_EXIT_NONZERO,
-        codes::TETGEN_SKIPPED_FACETS,
-        codes::NEIGH_MISSING,
-    ] {
-        assert!(m.codes.iter().any(|c| c == code), "{code} in {:?}", m.codes);
-    }
-    assert_eq!(m.tetgen.as_ref().unwrap().exit_code, Some(3));
-    assert_eq!(m.mesh_input_hash, None);
-    let markers: Vec<i64> = m.skipped_facets.iter().map(|s| s.marker).collect();
-    assert_eq!(markers, [8, 9, 12]);
-    assert_eq!(m.skipped_rows, 3);
-    assert!(
-        m.skipped_facets
-            .iter()
-            .all(|s| s.scene_face == Some(s.marker as u32))
-    );
-    assert!(!out.join("tetramesh.mbin").exists());
-
-    // The tetgen -d follow-up names the pairs.
-    let d = m
-        .diagnosis
-        .as_ref()
-        .expect("a diagnosis after skipped facets");
-    assert_eq!(d.call.argv, ["-d", "scene_mesh.poly"]);
-    assert_eq!(d.call.exit_code, Some(3));
-    assert_eq!(d.skipped_markers, [8, 9, 12]);
-    let pairs: Vec<(Vec<u32>, Vec<u32>)> = d
-        .intersections
-        .iter()
-        .map(|i| {
-            (
-                i.first.markers.clone(),
-                i.second
-                    .as_ref()
-                    .map(|s| s.markers.clone())
-                    .unwrap_or_default(),
-            )
-        })
-        .collect();
     assert_eq!(
-        pairs,
+        m.codes,
         [
-            (vec![12], vec![8]),
-            (vec![12], vec![9]),
-            (vec![8, 9], vec![12])
+            codes::TETGEN_EXIT_NONZERO,
+            codes::TETGEN_SELF_INTERSECTION,
+            codes::TETGEN_OUTPUT_MISSING,
+            codes::NEIGH_MISSING,
         ]
     );
-    assert!(out.join("diag/scene_mesh_skipped.face").is_file());
+    assert_eq!(m.tetgen.as_ref().unwrap().exit_code, Some(3));
+    assert_eq!(m.mesh_input_hash, None);
+    // No _skipped.face from 1.5.0.
+    assert_eq!((m.skipped_rows, m.skipped_facets.len()), (0, 0));
+    assert!(!out.join("scene_mesh_skipped.face").exists());
+    assert!(!out.join("tetramesh.mbin").exists());
+
+    // The stop names the pair: the segment [9, 10], an edge of facet 12, and facet #9 (marker 8).
+    let si = m
+        .self_intersection
+        .as_ref()
+        .expect("a self-intersection stop");
+    let stop = si.stop.as_ref().expect("the stop names its pair");
+    assert_eq!(stop.message, "Found a segment and a subface intersect.");
+    assert_eq!(
+        (stop.first.kind.as_str(), &stop.first.points),
+        ("segment", &vec![9, 10])
+    );
+    assert_eq!(stop.first.markers, [12]);
+    let second = stop.second.as_ref().unwrap();
+    assert_eq!(
+        (second.kind.as_str(), &second.points),
+        ("facet", &vec![1, 4, 6])
+    );
+    assert_eq!(second.markers, [8]);
+
+    // The tetgen -d follow-up exits 0 and names every intersecting facet.
+    let d = m.diagnosis.as_ref().expect("a diagnosis after the stop");
+    assert_eq!(d.call.argv, ["-d", "scene_mesh.poly"]);
+    assert_eq!(d.call.exit_code, Some(0));
+    assert_eq!(d.skipped_markers, Vec::<i64>::new());
+    assert_eq!(d.face_markers, [8, 9, 12]);
+    assert!(out.join("diag/scene_mesh.1.face").is_file());
+    assert_eq!(
+        simpa_core::mesh::marker_pairs(&d.intersections),
+        [[8, 12], [9, 12]]
+    );
+    assert_eq!(si.pairs, [[8, 12], [9, 12]]);
+    let named: Vec<(i64, Option<u32>)> =
+        si.facets.iter().map(|f| (f.marker, f.scene_face)).collect();
+    assert_eq!(named, [(8, Some(8)), (9, Some(9)), (12, Some(12))]);
+    assert!(
+        m.messages
+            .iter()
+            .any(|s| s.contains("2 pairs over 3 facets, markers [8, 9, 12]")),
+        "{:?}",
+        m.messages
+    );
     assert_eq!(read_manifest(&out).unwrap(), m);
 }
 
@@ -149,6 +164,7 @@ fn the_same_cube_without_the_piercing_facet_meshes() {
         ["-pq5", "-A", "-n", "-Y", "scene_mesh.poly"]
     );
     assert!(m.diagnosis.is_none());
+    assert!(m.self_intersection.is_none());
     let mesh = mbin::read_file(&out.join("tetramesh.mbin")).unwrap();
     assert_eq!(invariants(&mesh), Vec::<String>::new());
     let mut markers: Vec<i32> = mesh
@@ -161,7 +177,8 @@ fn the_same_cube_without_the_piercing_facet_meshes() {
     markers.sort_unstable();
     markers.dedup();
     assert_eq!(markers, (0..12).collect::<Vec<i32>>());
-    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 0));
+    // One region, TetGen's attribute 1, written unchanged (decision 1).
+    assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 1));
 }
 
 #[test]

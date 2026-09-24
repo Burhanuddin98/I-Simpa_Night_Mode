@@ -16,10 +16,13 @@
 //! - [`manager`] runs a project or a run folder end to end: the run folder, the pre-launch
 //!   refusals, the launch through [`crate::process`], and the verdict, reported to an event
 //!   callback and written to `run.json`.
+//! - [`locate`] emulates SPPS's own `f32` test for which tetrahedron holds a source or a point
+//!   receiver, for the manager's SPPS-only refusal before launch.
 
 pub mod classify;
 pub mod clock;
 pub mod expect;
+pub mod locate;
 pub mod manager;
 pub mod manifest;
 pub mod stats;

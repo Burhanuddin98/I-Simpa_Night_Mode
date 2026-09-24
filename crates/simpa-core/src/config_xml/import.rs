@@ -6,6 +6,7 @@ use roxmltree::Node;
 use uuid::{Builder, Uuid};
 
 use super::num::{solver_int, solver_real, widen_f32};
+use super::write::band_levels_written;
 use crate::formats::cbin;
 use crate::schema::{
     AirAbsorption, AttenuationUnit, BandKind, BandSet, ComputationMethod, DiffusionLaw,
@@ -92,7 +93,11 @@ type Result<T> = std::result::Result<T, ImportError>;
 ///   level with at most 6 decimals when that reproduces every band's `f32` exactly, and custom
 ///   otherwise;
 /// - a material's reflection law, and whether it has a transmission loss, must be the same in
-///   every band, since the project holds one of each per material;
+///   every band, since the project holds one of each per material; a band that absorbs nothing
+///   may lack the loss, as upstream's GUI writes it (such a band gets 0 dB, which the writer
+///   leaves out again);
+/// - lists (sources, receivers, fitting zones) in the reverse of their order in the file, which
+///   is the order of upstream's own project: its GUI writes each list last item first;
 /// - a point receiver's name is its `@lbl`, the name the solvers use;
 /// - file and folder names, `workingdirectory` and everything the solvers ignore are dropped.
 ///
@@ -222,6 +227,9 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
             sources.push(read_source(s, i, &bands, &ids, dir_prefix)?);
         }
     }
+    // Upstream's GUI writes every list last item first (see `write()`); the project holds them
+    // in its own order, so that writing it back gives the solvers the same order.
+    sources.reverse();
 
     // Point receivers.
     let mut point_receivers = Vec::new();
@@ -230,6 +238,7 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
             point_receivers.push(read_point_receiver(r, i, &bands, &ids)?);
         }
     }
+    point_receivers.reverse();
 
     // Surface receivers (only these two element names count) and their declared ids. The
     // solvers keep scene receivers and cutting planes in two lists, and match a face's idRs
@@ -288,6 +297,8 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
             });
         }
     }
+    surface_receivers.reverse();
+    surface_receiver_xml_ids.reverse();
 
     // Fitting zones: their declared data now, their shape from the mesh below.
     let mut fittings: Vec<(i32, FittingZone)> = Vec::new();
@@ -340,6 +351,7 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
             ));
         }
     }
+    fittings.reverse();
 
     // Environment.
     let atmo = child(root, "condition_atmospherique")?;
@@ -657,14 +669,28 @@ fn read_material(
             what: format!("{what} loi"),
             reason: format!("{law} is not a reflection law (0 to 6)"),
         })?;
-    let transmission_loss_db = if transmission.iter().all(Option::is_some) && n > 0 {
-        Some(transmission.into_iter().map(Option::unwrap).collect())
-    } else if transmission.iter().all(Option::is_none) {
+    // Upstream's GUI leaves the loss out of a band that absorbs nothing (e_data_row_materiau.h:
+    // 98-106, 131-134), and so does our writer, whatever the project holds there: such a band
+    // gets 0 dB. A band that absorbs and has no loss cannot be held.
+    let silent = |i: usize| absorption[i].get() as f32 <= 0.0;
+    let transmission_loss_db = if transmission.iter().all(Option::is_none) {
         None
+    } else if transmission
+        .iter()
+        .enumerate()
+        .all(|(i, t)| t.is_some() || silent(i))
+    {
+        Some(
+            transmission
+                .into_iter()
+                .map(|t| t.unwrap_or(F64::new(0.0)))
+                .collect(),
+        )
     } else {
         return Err(ImportError::Unsupported {
             what: format!("{what} affaiblissement"),
-            reason: "only some bands have a transmission loss".to_string(),
+            reason: "only some bands have a transmission loss, and a band without one absorbs"
+                .to_string(),
         });
     };
     Ok(Material {
@@ -768,17 +794,18 @@ fn read_point_receiver(
     })
 }
 
-/// The spectrum whose band levels, as `f32`, are exactly `levels`: pink, then white, at a global
-/// level rounded to 0 to 6 decimals, then at the unrounded estimate; custom if none matches. A
-/// custom spectrum holds the widened levels as its relative levels and their energetic sum as its
-/// global level, which [`Spectrum::band_levels_db`] turns back into exactly those levels.
+/// The spectrum whose band levels, as the writer writes them ([`band_levels_written`]) and the
+/// solver reads them (`f32`), are exactly `levels`: pink, then white, at a global level rounded to
+/// 0 to 6 decimals, then at the unrounded estimate; custom if none matches. A custom spectrum holds
+/// the widened levels as its relative levels and their energetic sum as its global level, which
+/// [`Spectrum::band_levels_db`] turns back into exactly those levels.
 pub(crate) fn spectrum_from_levels(bands: &BandSet, levels: &[f32]) -> Spectrum {
     let widened: Vec<f64> = levels.iter().map(|&l| widen_f32(l)).collect();
     // The same expression band_levels_db uses, so a custom spectrum's offset is exactly 0.
     let total: f64 = widened.iter().map(|r| 10f64.powf(r / 10.0)).sum();
     let estimate = 10.0 * total.log10();
     let matches = |s: &Spectrum| {
-        s.band_levels_db(bands).is_some_and(|l| {
+        band_levels_written(s, bands).is_some_and(|l| {
             l.len() == levels.len()
                 && l.iter()
                     .zip(levels)
@@ -788,7 +815,9 @@ pub(crate) fn spectrum_from_levels(bands: &BandSet, levels: &[f32]) -> Spectrum 
     if estimate.is_finite() {
         let candidates = (0..=6usize)
             .filter_map(|d| format!("{estimate:.d$}").parse::<f64>().ok())
-            .chain([estimate]);
+            .chain([estimate])
+            // `-0` rounds a tiny negative estimate; the level is 0.
+            .map(|g| g + 0.0);
         for global in candidates {
             for shape in [SpectrumShape::Pink, SpectrumShape::White] {
                 let s = Spectrum::new(global, shape);
