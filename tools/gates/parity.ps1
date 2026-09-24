@@ -126,8 +126,9 @@ function Get-TestVerdicts([string]$text) {
     })
     $readable = $summary.Count -gt 0 -and $failedCount -eq $failed.Count
     # A test whose own output starts on the next line leaves 'test <name> ...' and a space, which
-    # an editor may strip: the space is optional.
-    foreach ($m in [regex]::Matches($text, '(?m)^test (\S+) \.\.\.(?:[ \t](.*))?$')) {
+    # an editor may strip: the space is optional. `\r?` before `$`: .NET's `$` does not match
+    # before a `\r`, so a CRLF checkout (core.autocrlf) would otherwise miss every bare line.
+    foreach ($m in [regex]::Matches($text, '(?m)^test (\S+) \.\.\.(?:[ \t](.*?))?\r?$')) {
         $name = $m.Groups[1].Value
         # libtest prints an ignored test's reason after it: 'ignored, <reason>'.
         if ($m.Groups[2].Value.Trim() -match '^ignored(,|$)') { $results[$name] = 'ignored' }
