@@ -477,7 +477,7 @@ compared in `docs/formats/cbin.md`, "Parity with upstream's GUI".
 |---|---|
 | `tutorial_1.proj` imported, SPPS run | 16 lines: 3 ids, 6 stored directions and 7 by-design lines, all listed below |
 | `tutorial_1.proj` imported, TCR run | 15 lines: 3 ids, 6 stored directions and 6 by-design lines |
-| tutorial 3's config and `.cbin` imported (with the two edits below) and written back, each run | 36 lines: 8 ids, 21 by-design lines and the 7 band values of the two edits |
+| tutorial 3's config and `.cbin` imported (with the two edits below) and written back, each run | 36 lines: 8 ids, 21 by-design lines and the 7 band values of the two edits; and a same-seed run of ours beside upstream's config with the same two edits gives 24 of 24 output files identical, the cutting plane's `.csbin` once decoded with its id mapped (`tutorial3_written_back_gives_upstreams_output`) |
 | `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | the ids and the by-design lines (`config_xml_import.rs`); and a same-seed run of ours beside upstream's own config gives every output file identical, the `.csbin` files once decoded with the receiver's id mapped (`config_xml_solver.rs`, `tutorial1_runs_clean_and_matches_upstreams_own_configuration`) |
 
 Every expected line is listed in the test, so a new difference fails it and so does one that
@@ -494,10 +494,17 @@ line, while upstream's 15-digit text for a real and band entries in the other or
   and `encombrement@id` are ours, assigned from project order (`config_xml.rs`, "Solver ids"):
   tutorial 1's receivers 3669 and 3510 are our 1 and 0 and its scene receiver 3503 our 0;
   tutorial 3's fitting zones 2083 and 1930 are our 3 and 2. Upstream's are its GUI's session
-  counters, renumbered at every load, and a project has nowhere to hold them. A point receiver's
-  id is only stored in GUI mode. A scene receiver's and a fitting's are matched with the `.cbin`
-  and `.mbin`, which carry ours, so every face gets the same receiver and fitting. A scene
-  receiver's id is also written into its `.csbin` output (`xmlIndex`), where 3503 reads 0.
+  counters, renumbered at every load (`element.cpp:134, 143-144`; `docs/formats/cbin.md`, "What
+  still differs", 1), and a project has nowhere to hold them. A point receiver's id is only
+  stored in GUI mode. A scene receiver's and a fitting's are matched with the `.cbin` and
+  `.mbin`, which carry ours, so every face gets the same receiver and fitting. A scene
+  receiver's or cutting plane's id is also written into its `.csbin` output (`xmlIndex`), where
+  3503 reads 0. **Measured:** same-seed runs of upstream's config against ours give every other
+  output file byte for byte: tutorial 1 (`config_xml_solver.rs`), and each of tutorial 3's three
+  runs, 24 of 24 files, its receivers, cutting plane and fitting zones all numbered ours
+  (`parity_inputs.rs`, `tutorial3_written_back_gives_upstreams_output`; `docs/formats/cbin.md`).
+  Equal ids would need upstream's stored in the project, a change to the `.simpa` format: a
+  decision, not a writer fix.
 - **Point-receiver directions (tutorial 1).** Upstream's GUI computes a receiver's direction when
   its position changes, and holds it at full precision for the rest of that session, which is
   when these runs were written (`-0.436852067708969`). Its project file keeps 6 significant
@@ -564,7 +571,8 @@ The survey's 57 `config_xml` rows were checked against the source and against P1
 ## Not examined
 
 - TCR external mode in an actual run.
-- Cutting planes and fittings in an actual run: they were read from the code only.
+- Cutting planes and fittings in an actual run, beyond parity: tutorial 3's runs show that ours
+  and upstream's inputs give the same output (`parity_inputs.rs`), not what that output means.
 - Source types 1 to 4 in an actual run.
 - The directivity balloon's orientation convention (`directivityBalloon.cpp:109-150`).
 - Configs in UTF-16 or Latin-1: pugixml supports them, and the writer uses UTF-8.

@@ -189,7 +189,8 @@ files with narrow `fopen` (a `Ł` path works this way, `m1.ps1:117`).
 - `<root>/<yyyyMMdd-HHmmss-fff>-<solver>[-n]/` is created with `create_dir`, never reused
 - `mesh/` inside it, when no `--mesh` is given
 - `solve/`, the solver's fresh working folder: only `config.xml`, `mesh.cbin`,
-  `tetramesh.mbin` and `directivities\` before launch (`validate/export.rs:494-523`)
+  `tetramesh.mbin` and `loudspeakers\` (upstream's folder name, `config_xml::names::DIRECTIVITY_DIR`)
+  before launch (`validate/export.rs:494-523`)
 - `run.json` and `solver.{stdout,stderr}.txt`, beside `solve/`, not in it
 
 The solver runs with cwd = `solve/` and the argument `config.xml`.

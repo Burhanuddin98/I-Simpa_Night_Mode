@@ -194,36 +194,88 @@ the same round trip (`Objet3D_maillage.cpp:942`).
 
 **Measured** (`crates/simpa-core/tests/parity_inputs.rs`, against every run folder stored in
 upstream's tutorials at 929a5c8: tutorial 1's SPPS and TCR runs, tutorial 3's three SPPS runs;
-tutorial 2 and `Industrial.proj` store none):
+tutorial 2 and `Industrial.proj` store none).
 
-| Our project | Result against upstream's `mesh.cbin` |
+*The round trip, from vertices that have not taken it.* These fail without `GlFrame`:
+
+| Input | Result |
 |---|---|
-| `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | **Byte-identical**, 1,016 bytes, once our receiver id 0 is written as upstream's 3503 |
-| `tutorial_1.proj` imported (`simpa import-proj`) | All 12 faces equal corner for corner (`f32` bits, in face order a, b, c), every `idMat` equal, `idRs` 3503 is our 0. Our vertex list is the welded one: 8 vertices against upstream's 36 (one copy per face), holding exactly upstream's 8 distinct vertices |
-| tutorial 3 (its config, with the two edits of `config_xml.md`'s parity section, and its `.cbin`, imported) | All 76 vertices and 100 faces equal bit for bit, the drawn box's 12 faces included; `idEn` 2083 and 1930 are our 3 and 2 |
-| upstream's own `sceneMesh.bin` of tutorial 3, through `GlFrame` | The run's 40 scene vertices, bit for bit |
-| `tests/fixtures/rooms/tutorial1_box.simpa`, and `tutorial_1.proj` imported: the mesher's input | `scene_mesh.poly` and `scene_mesh.var` byte-identical to the ones upstream's GUI wrote in 2019 (`tests/fixtures/upstream/tutorial1/tetgen/`) |
+| `tutorial_1.proj` imported (`simpa import-proj`) | All 12 faces equal upstream's corner for corner (`f32` bits, in face order a, b, c), every `idMat` equal, `idRs` 3503 is our 0. Without the round trip, 18 corners of 8 faces differ (`+0` where upstream has `-0`). Our vertex list is the welded one: 8 vertices against upstream's 36 (one copy per face), holding exactly upstream's 8 distinct vertices |
+| `tests/fixtures/rooms/tutorial1_box.simpa`, and `tutorial_1.proj` imported: the mesher's input | `scene_mesh.poly` and `scene_mesh.var` byte-identical to the ones upstream's GUI wrote in 2019 (`tests/fixtures/upstream/tutorial1/tetgen/`). Without the round trip the `.poly` differs |
+| tutorial 1's TetGen output `temp/scene_mesh.1.node`, through `GlFrame` of the project's `sceneMesh.bin`: upstream's `.mbin` path (`LoadNodeFile`, `GetTetraMesh`) | Both runs' `tetramesh.mbin` nodes, 2,196 of 2,196 coordinates bit for bit. Only narrowed to `f32`, 229 differ by value (268 by bits). This is the one stored case where the round trip moves values; on the scene meshes above it only turns `+0` into `-0` |
 
-Each check has its refusal in the same test: without the round trip, 18 corners of tutorial 1
-differ (`+0` where upstream has `-0`) and the box's `.poly` differs; one vertex one `f32` step off
-is reported at every corner that names it; one face's `idMat` changed is reported; an id left
-unmapped is reported; a frame one `f32` step off in scale moves 4 of tutorial 3's 40 vertices.
+*Writer fidelity, not the round trip.* In these the vertices were read from upstream's own
+`.cbin`, which already took the round trip, and taking them through it again changes none of
+them, so they pass with or without `GlFrame` (checked 2026-09-24 by switching it off). They show
+the layout, the face order and the ids:
+
+| Input | Result |
+|---|---|
+| `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | **Byte-identical** to upstream's `mesh.cbin`, 1,016 bytes, once our receiver id 0 is written as upstream's 3503 |
+| tutorial 3 (its config, with the two edits of `config_xml.md`'s parity section, and its `.cbin`, imported) | All 76 vertices and 100 faces equal bit for bit, the drawn box's 12 faces included; `idEn` 2083 and 1930 are our 3 and 2 |
+| upstream's own `sceneMesh.bin` of tutorial 3, through `GlFrame` | The run's 40 scene vertices, bit for bit (plain narrowing gives the same 40; a frame one `f32` step off in scale moves 4) |
+
+Each check has its refusal in the same test: one vertex one `f32` step off is reported at every
+corner that names it; one face's `idMat` changed is reported; an id left unmapped is reported.
+
+*The mesher's box zones.* A box fitting zone's corners take the same round trip as the scene
+(`mesh::project_input`), as upstream's drawn boxes do (in through
+`e_scene_encombrements_encombrement_cuboide.h:180`, out through `Objet3D_maillage.cpp:984-990`).
+The round trip works coordinate by coordinate, so a box face flush with a wall stays in the
+wall's plane: the tutorial box with its west wall moved to x = 0.37 and a box from x = 0.37 gives
+the `.poly` 0.36999988555908203 for the wall and for the box's 4 corners there, where the corners
+only narrowed, as the mesher wrote them before, would be 0.3700000047683716
+(`a_box_zone_flush_with_a_wall_lies_in_the_walls_plane`).
+
+*What the solvers make of it.* Same-seed runs of our M1 SPPS and TCR builds, upstream's inputs
+against ours, every output file compared byte for byte (a `.csbin` decoded, since its padding
+differs from run to run):
+
+| Comparison | Result |
+|---|---|
+| Tutorial 1's run config and `.mbin`, with upstream's `mesh.cbin` and with our welded one from the `.proj` import (`the_welded_scene_mesh_gives_upstreams_output`) | SPPS: 65 of 65 output files identical; TCR: 87 of 87. Refusal: our mesh with face 3's material 22 changed to 21 gives 65 and 59 files that differ |
+| Tutorial 3, each of the three runs: upstream's config (the two edits applied) with its `.cbin` and `.mbin`, against ours written back from it (`tutorial3_written_back_gives_upstreams_output`) | 24 of 24 output files identical in each run, once the cutting plane's `xmlIndex` 951 is read as our 0. Refusal: our first fitting zone absorbing 0.9 gives 24 that differ |
+| `tutorial1.simpa` written, against upstream's config (`config_xml_solver.rs`, `tutorial1_runs_clean_and_matches_upstreams_own_configuration`) | Every output file identical, the `.csbin` files once `xmlIndex` 3503 is read as our 0 |
+
+A stored run's SPPS config has `random_seed` 0, which seeds from the clock and runs a thread per
+band, so no two runs agree; each comparison sets it to 1 and `nbparticules` to 10,000 on both
+sides, as `tests/fixtures/upstream/tutorial1/PROVENANCE.md` does.
+
+What the round trip is worth to the solvers on these tutorials: with `GlFrame` switched off in
+`scene_mesh` (probe, 2026-09-24, reverted), the welded tutorial-1 comparison still gives 65 of
+65 and 87 of 87 identical files. There the round trip only turns `+0` into `-0`, which the
+solvers' arithmetic does not see. It is kept because it is what upstream writes, and because on
+a scene whose frame moves values (the `.mbin` case above) the solver would read different
+coordinates without it.
 
 **What still differs, why, and what the solver sees.**
 
 1. **Ids.** Our `idRs` and `idEn` are assigned from project order (receivers from 0, fitting zones
-   from 2; `config_xml.rs`); upstream's are its GUI's element ids (3503; 1930, 2083). The project
-   has nowhere to hold upstream's ids. The solvers only match these ids with `config.xml`, which
-   carries the same ones, so every face gets the same receiver and fitting. The one place an id
-   leaves the solver is a surface receiver's `.csbin` output, which records it as `xmlIndex`
-   (`baseReportManager.cpp:40`): there 3503 reads 0.
+   from 2; `config_xml.rs`); upstream's are its GUI's element ids (3503; 1930, 2083). Those are
+   session state, not part of the project: upstream gives every element a new id from a global
+   counter each time it loads a project (`Element::Element` → `SetXmlId`, `element.cpp:134`), and
+   overwrites the id the file holds (`:143-144`); loading first closes the current project, which
+   restarts the counter at the number of live references (`LoadCurrentProject` → `CloseApp`,
+   `projet.cpp:1855, 625`; `instanceManager.cpp:60-67`), and the counter counts every element of
+   the tree, each property row and band included. The project has
+   nowhere to hold them. The solvers only match these ids with `config.xml`, which carries the
+   same ones, so every face gets the same receiver and fitting. The one place an id leaves the
+   solver is a surface receiver's `.csbin` output, which records it as `xmlIndex`
+   (`baseReportManager.cpp:40`): there 3503 reads 0. Measured above: the same-seed runs differ in
+   nothing else. Making them equal needs upstream's ids stored in the project (a field like
+   `Material::solver_id` on receivers and fitting zones, filled by both importers): a change to
+   the `.simpa` format and to the 2026-09-23 convention that solver ids are assigned at export,
+   so it is a decision, not a fix in this writer.
 2. **The vertex list of a `.proj` import.** The import welds equal vertices (tutorial 1: 8 for
-   upstream's 36). The solvers use a scene vertex only as a corner of the faces that name it
+   upstream's 36), by design (`geometry::import::proj`: without welding no edge would be shared,
+   and the checks would see an open mesh); upstream's own 2019 `scene_mesh.poly` holds the same 8.
+   The solvers use a scene vertex only as a corner of the faces that name it
    (`coreinitialisation.cpp:417-422`, `CalculationCore.cpp:524-526`,
    `sppsInitialisation.cpp:99-101`, `TC_CalculationCore.cpp:33, 97, 117, 127, 524-526`), and their
    surface-receiver output takes its nodes from the tetrahedral mesh, not the scene
    (`UTILISER_MAILLAGE_OPTIMISATION`, `sppsTypes.h:7`; `TC_CalculationCore.cpp:390, 400`). So the
-   solver sees the same triangles.
+   solver sees the same triangles. Measured above: with the same seed, SPPS and TCR write every
+   output file byte for byte as with upstream's 36-vertex file.
 3. **One vertex of the bounding box.** Upstream's `Unitize` leaves its list's last vertex out of the
    bounding box (`v < size() - 1`, `Objet3D.cpp:542`); `GlFrame` takes every vertex, since a welded
    list has no such order to follow. They agree unless that one vertex alone sets an extreme of the

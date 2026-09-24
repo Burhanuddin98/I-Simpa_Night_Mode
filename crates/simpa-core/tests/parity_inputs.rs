@@ -16,6 +16,10 @@
 //! `f32` for a real (compared by bits), a string verbatim; for the scene mesh, each face's corners
 //! as `f32` bits and its ids. Every check has a refusal beside it: the same comparison on an input
 //! changed in one value, which it must report.
+//!
+//! The last section runs the differences that remain through the solvers: our M1 builds of SPPS
+//! and TCR (`$SIMPA_SOLVERS_DIR`, else `target/solvers/bin`; a missing build panics, naming where
+//! it looked), same seed, upstream's inputs against ours, every output file compared.
 
 #[path = "config_xml_support.rs"]
 mod support;
@@ -26,11 +30,14 @@ use std::path::Path;
 use simpa_core::config_xml::{
     GlFrame, SolverKind, band_levels_written, import_upstream_with_mesh, scene_mesh, write,
 };
-use simpa_core::formats::{cbin, poly};
+use simpa_core::formats::{cbin, csbin, mbin, poly, tetgen};
 use simpa_core::geometry::import::import_proj;
 use simpa_core::geometry::import::proj::read_scene_mesh;
 use simpa_core::geometry::import::zip::Archive;
-use simpa_core::schema::{Project, Spectrum, SpectrumShape};
+use simpa_core::schema::{
+    DiffusionLaw, F64, FittingShape, FittingZone, FittingZoneId, Project, Spectrum, SpectrumShape,
+    Vec3,
+};
 use support::{
     Value, doc_attrs, doc_ignored, load_project, parse_value, solver_view, upstream_file,
 };
@@ -52,6 +59,8 @@ struct Run {
     config: String,
     mesh_bytes: Vec<u8>,
     mesh: cbin::Model,
+    /// The run's `tetramesh.mbin`.
+    tetra_bytes: Vec<u8>,
     /// The project file the GUI saved beside the run (`projet_config.xml`).
     project_file: String,
 }
@@ -89,6 +98,7 @@ fn tutorial(rel: &str) -> Tutorial {
             config,
             mesh_bytes,
             mesh,
+            tetra_bytes: read("tetramesh.mbin"),
             project_file: String::from_utf8(read("projet_config.xml")).unwrap(),
         });
     }
@@ -148,10 +158,14 @@ fn what_the_tutorials_hold() {
 /// by id, `element.cpp:159`; a new element is appended), and it writes each one with
 /// `new wxXmlNode(parent, ...)`, which puts the new node first among its parent's children. So in
 /// every stored run each list of two or more is in strictly descending id: sources, point
-/// receivers, surface receivers with cutting planes, fitting zones. The refusal: ascending id,
-/// the order of a writer that writes each list first to last, matches none of those lists.
+/// receivers, surface receivers with cutting planes, fitting zones.
+///
+/// This characterises upstream's data; our writer's order is held by the config tests below,
+/// which fail when a list is written first to last. The refusal here is of the check itself:
+/// each list put in the order a first-to-last writer would give (ascending id) is refused.
 #[test]
 fn upstream_writes_every_list_newest_element_first() {
+    let newest_first = |ids: &[i64]| ids.windows(2).all(|w| w[0] > w[1]);
     let mut lists = 0;
     for rel in [TUTORIAL1, TUTORIAL3] {
         for run in &tutorial(rel).runs {
@@ -167,10 +181,14 @@ fn upstream_writes_every_list_newest_element_first() {
                     continue;
                 }
                 lists += 1;
-                let descending = ids.windows(2).all(|w| w[0] > w[1]);
-                let ascending = ids.windows(2).all(|w| w[0] < w[1]);
-                assert!(descending, "{} {parent}: {ids:?}", run.folder);
-                assert!(!ascending, "{} {parent}: {ids:?}", run.folder);
+                assert!(newest_first(&ids), "{} {parent}: {ids:?}", run.folder);
+                let mut first_to_last = ids.clone();
+                first_to_last.sort_unstable();
+                assert!(
+                    !newest_first(&first_to_last),
+                    "{} {parent}: {first_to_last:?} passes",
+                    run.folder
+                );
             }
         }
     }
@@ -550,28 +568,7 @@ fn tutorial3_config_written_back_is_upstreams_value_for_value() {
         for d in &got {
             println!("  {d}");
         }
-        let mut expected = vec![
-            "other:subdomains: only upstream's".to_string(),
-            "simulation@save_receivers_intersection: only ours (1)".to_string(),
-            "simulation@save_surface_intersection: only ours (1)".to_string(),
-            // Ids by project order: receivers 155..791 are our 0..4, written last first; the
-            // cutting plane 951 is our 0; the fitting zones 1930 and 2083 are our 2 and 3.
-            "encombrement_enum/encombrement[0]@id: upstream 2083, ours 3".to_string(),
-            "encombrement_enum/encombrement[1]@id: upstream 1930, ours 2".to_string(),
-            "recepteurss/recepteur_surfacique_coupe[0]@id: upstream 951, ours 0".to_string(),
-        ];
-        for (i, id) in [791, 632, 473, 314, 155].iter().enumerate() {
-            expected.push(format!(
-                "recepteursp/recepteur_ponctuel[{i}]@id: upstream {id}, ours {}",
-                4 - i
-            ));
-        }
-        // Read only for source types 1 and 5; every source here is omni.
-        for i in 0..6 {
-            for a in ["u", "v", "w"] {
-                expected.push(format!("sources/source[{i}]@{a}: only upstream's (1)"));
-            }
-        }
+        let mut expected = tutorial3_ids_and_by_design();
         // Material 100's law in the 6 bands the project cannot hold (125 Hz to 4 kHz, octaves).
         for rank in [4, 7, 10, 13, 16, 19] {
             expected.push(format!(
@@ -599,6 +596,34 @@ fn tutorial3_config_written_back_is_upstreams_value_for_value() {
         ));
         assert_eq!(solver_differences(&run.config, &edited), sorted(with_edit));
     }
+}
+
+/// What differs between tutorial 3's config and ours written back, apart from the two edits: the
+/// ids and the differences by design.
+fn tutorial3_ids_and_by_design() -> Vec<String> {
+    let mut expected = vec![
+        "other:subdomains: only upstream's".to_string(),
+        "simulation@save_receivers_intersection: only ours (1)".to_string(),
+        "simulation@save_surface_intersection: only ours (1)".to_string(),
+        // Ids by project order: receivers 155..791 are our 0..4, written last first; the
+        // cutting plane 951 is our 0; the fitting zones 1930 and 2083 are our 2 and 3.
+        "encombrement_enum/encombrement[0]@id: upstream 2083, ours 3".to_string(),
+        "encombrement_enum/encombrement[1]@id: upstream 1930, ours 2".to_string(),
+        "recepteurss/recepteur_surfacique_coupe[0]@id: upstream 951, ours 0".to_string(),
+    ];
+    for (i, id) in [791, 632, 473, 314, 155].iter().enumerate() {
+        expected.push(format!(
+            "recepteursp/recepteur_ponctuel[{i}]@id: upstream {id}, ours {}",
+            4 - i
+        ));
+    }
+    // Read only for source types 1 and 5; every source here is omni.
+    for i in 0..6 {
+        for a in ["u", "v", "w"] {
+            expected.push(format!("sources/source[{i}]@{a}: only upstream's (1)"));
+        }
+    }
+    expected
 }
 
 /// Tutorial 3's config with the two edits a project needs (see
@@ -911,6 +936,11 @@ fn tutorial1_scene_mesh_from_the_proj_is_upstreams_corner_for_corner() {
 
 /// Tutorial 1 as `tutorial1.simpa` holds it (its config and scene mesh imported): our `mesh.cbin`
 /// is upstream's, byte for byte, once our receiver id 0 is written as upstream's 3503.
+///
+/// This shows the writer's layout, face order and ids, not the round trip: the fixture's
+/// vertices were read from upstream's `.cbin`, which already took it, and taking them through it
+/// again changes none of them. The round trip is held by the `.proj` import above and the `.poly`
+/// and `.mbin` tests below, whose vertices have not taken it.
 #[test]
 fn tutorial1_scene_mesh_from_its_config_is_upstreams_byte_for_byte() {
     let t = tutorial(TUTORIAL1);
@@ -984,6 +1014,10 @@ fn the_box_poly_from_the_scene_mesh_is_upstreams_byte_for_byte() {
 /// scene mesh is upstream's vertex for vertex and face for face, the drawn fitting box's 12
 /// faces included, with the fitting ids mapped. And upstream's own scene file, `sceneMesh.bin`,
 /// taken through [`GlFrame`]'s round trip, gives the run's `.cbin` vertices bit for bit.
+///
+/// Like the test above, this holds the layout and the ids, not the round trip: the vertices come
+/// from upstream's `.cbin`, and plain narrowing of `sceneMesh.bin` also gives its 40 scene
+/// vertices. What it does show of the frame is that one `f32` step off in scale moves some.
 #[test]
 fn tutorial3_scene_mesh_is_upstreams_vertex_for_vertex() {
     let t = tutorial(TUTORIAL3);
@@ -1044,5 +1078,364 @@ fn tutorial3_scene_mesh_is_upstreams_vertex_for_vertex() {
             .count();
         println!("a frame one step off moves {moved} of 40 vertices");
         assert!(moved > 0);
+    }
+}
+
+/// The round trip where it moves values. Upstream's tetrahedral mesh takes every node TetGen
+/// wrote through it: `LoadNodeFile` reads each `.node` coordinate as a `double` narrowed to
+/// `float` (`Convertor::ToFloat`) and converts it to OpenGL coordinates
+/// (`Objet3D_maillage.cpp:93-98`), and `GetTetraMesh` converts it back (`:857`). Tutorial 1's
+/// project keeps TetGen's output under `temp/`, so [`GlFrame`] over the project's own scene
+/// (`sceneMesh.bin`) must turn `scene_mesh.1.node` into the nodes of both runs'
+/// `tetramesh.mbin`, bit for bit. The scene mesh's own round trip, above, only turns `+0` into
+/// `-0` on these tutorials; here it moves values. The refusal: the nodes only narrowed to `f32`.
+#[test]
+fn tutorial1_mbin_nodes_are_tetgens_nodes_through_the_round_trip() {
+    let t = tutorial(TUTORIAL1);
+    let archive = Archive::parse(&t.bytes).unwrap();
+    let scene = read_scene_mesh(&archive.read("instance2/sceneMesh.bin").unwrap()).unwrap();
+    let frame = GlFrame::of_vertices(scene.vertices.iter().copied()).unwrap();
+    let node =
+        tetgen::read_node(&archive.read("instance2/temp/scene_mesh.1.node").unwrap()).unwrap();
+    let narrowed: Vec<[f32; 3]> = node.points.iter().map(|p| p.map(|c| c as f32)).collect();
+    for run in &t.runs {
+        let mesh = mbin::read(&run.tetra_bytes).unwrap();
+        assert_eq!(mesh.nodes.len(), narrowed.len(), "{}", run.folder);
+        let differing = |take: &dyn Fn([f32; 3]) -> [f32; 3]| -> (usize, usize) {
+            let mut bits = 0;
+            let mut values = 0;
+            for (&n, m) in narrowed.iter().zip(&mesh.nodes) {
+                let ours = take(n);
+                bits += (0..3)
+                    .filter(|&k| ours[k].to_bits() != m[k].to_bits())
+                    .count();
+                values += (0..3).filter(|&k| ours[k] != m[k]).count();
+            }
+            (bits, values)
+        };
+        let tripped = differing(&|n| frame.round_trip(n));
+        let plain = differing(&|n| n);
+        println!(
+            "{}: {} nodes; through the round trip {} coordinates differ by bits; only narrowed \
+             {} by bits, {} by value",
+            run.folder,
+            narrowed.len(),
+            tripped.0,
+            plain.0,
+            plain.1
+        );
+        assert_eq!(tripped, (0, 0), "{}", run.folder);
+        assert_eq!(plain.1, 229, "{}", run.folder);
+    }
+}
+
+/// A box fitting zone flush with a wall lies exactly in that wall's plane. The mesher takes the
+/// scene's vertices through the round trip (from [`scene_mesh`]) and a box's corners through the
+/// same one, which works coordinate by coordinate, so equal coordinates come back equal. The case:
+/// the tutorial box with its west wall moved from x = 0 to x = 0.37, a coordinate the round trip
+/// moves in that scene's frame, and a box from x = 0.37. The refusal: the corner only narrowed to
+/// `f32`, as the mesher wrote it before, is off the wall's plane.
+#[test]
+fn a_box_zone_flush_with_a_wall_lies_in_the_walls_plane() {
+    let wall = 0.37;
+    let mut project = load_project(TUTORIAL1_BOX);
+    let mut moved = 0;
+    for v in &mut project.geometry.vertices {
+        if v.x.get() == 0.0 {
+            v.x = F64::new(wall);
+            moved += 1;
+        }
+    }
+    assert_eq!(moved, 4, "the west wall's corners");
+    let n = project.bands.frequencies_hz.len();
+    project.fitting_zones.push(FittingZone {
+        id: FittingZoneId::from_u128(0x0f17_0000_0000_4000_8000_0000_0000_0001),
+        name: "Against the west wall".to_string(),
+        enabled: true,
+        shape: FittingShape::Box {
+            min: Vec3::new(wall, 1.0, 0.5),
+            max: Vec3::new(2.0, 2.0, 1.5),
+        },
+        absorption: vec![F64::new(0.1); n],
+        mean_free_path_m: vec![F64::new(2.0); n],
+        diffusion_law: vec![DiffusionLaw::Uniform; n],
+    });
+    let input = simpa_core::mesh::project_input(&project).unwrap();
+    let scene = project.geometry.vertices.len();
+    let near = |x: f64| (x - wall).abs() < 1e-5;
+    let walls: BTreeSet<u64> = input.poly.model_vertices[..scene]
+        .iter()
+        .filter(|v| near(v[0]))
+        .map(|v| v[0].to_bits())
+        .collect();
+    assert_eq!(walls.len(), 1, "the wall's corners share one x");
+    let wall_x = f64::from_bits(*walls.first().unwrap());
+    let corners: Vec<f64> = input.poly.model_vertices[scene..]
+        .iter()
+        .map(|v| v[0])
+        .filter(|&x| near(x))
+        .collect();
+    println!(
+        "wall at x = {wall}: the .poly holds {wall_x:?}; the box's min-x corners {corners:?}; \
+         narrowed only, {:?}",
+        f64::from(wall as f32)
+    );
+    assert_eq!(corners.len(), 4, "the box's corners at its min x");
+    assert!(corners.iter().all(|x| x.to_bits() == wall_x.to_bits()));
+    assert_ne!(
+        f64::from(wall as f32).to_bits(),
+        wall_x.to_bits(),
+        "the round trip must move the wall here, or this case shows nothing"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------
+// What the solvers make of the differences left
+//
+// Upstream's SPPS and TCR, our M1 builds (`$SIMPA_SOLVERS_DIR`, `common/paths.rs`), each run in
+// a fresh folder under `target/test-runs/config_xml/` (kept), once on upstream's inputs and once
+// with ours in their place, with the same seed. The outputs must be the same files, byte for
+// byte, apart from the ids the differences carry.
+
+fn solver(kind: SolverKind) -> std::path::PathBuf {
+    support::solver_exe(match kind {
+        SolverKind::Spps => "spps.exe",
+        SolverKind::Tcr => "classicalTheory.exe",
+    })
+}
+
+/// A stored run's configuration made repeatable, as `tests/fixtures/upstream/tutorial1/`
+/// (`PROVENANCE.md`) makes it: SPPS's `random_seed` 0 (seeded from the clock, one thread per band,
+/// so no two runs agree) becomes 1, and `nbparticules` becomes 10,000, so a run takes seconds.
+/// Every run of a comparison gets the same edits. TCR draws no random numbers: unchanged.
+fn repeatable(config: &str, kind: SolverKind) -> String {
+    match kind {
+        SolverKind::Spps => {
+            let seeded = edit_attr(config, "<simulation ", "random_seed", "1");
+            edit_attr(&seeded, "<simulation ", "nbparticules", "10000")
+        }
+        SolverKind::Tcr => config.to_string(),
+    }
+}
+
+/// Runs `kind` in a fresh folder on `config` (its working directory set to that folder), the
+/// scene mesh `cbin` and the tetrahedral mesh `mbin`, and returns its output files. It must exit
+/// 0 and print its completion line.
+fn run_on(
+    label: &str,
+    kind: SolverKind,
+    config: &str,
+    cbin: &[u8],
+    mbin: &[u8],
+) -> BTreeMap<String, Vec<u8>> {
+    let dir = support::fresh_run_dir(label);
+    // The solvers open plain paths: a file whose full path reaches 260 characters is skipped
+    // with exit 0 and no message (config_xml_solver.rs). Leave room for the deepest output.
+    let longest = dir.as_os_str().len()
+        + "/Punctual receivers/Receiver 1/Punctual receiver intensity.gabe".len();
+    assert!(longest < 240, "{} is too deep for MAX_PATH", dir.display());
+    let wd = simpa_core::config_xml::working_directory(&dir).unwrap();
+    let text = edit_attr(config, "<configuration ", "workingdirectory", &wd);
+    std::fs::write(dir.join("config.xml"), text).unwrap();
+    std::fs::write(dir.join("mesh.cbin"), cbin).unwrap();
+    std::fs::write(dir.join("tetramesh.mbin"), mbin).unwrap();
+    let run = support::run_solver(&solver(kind), &dir);
+    assert_eq!(run.exit, Some(0), "{}: {}", dir.display(), run.stderr);
+    let done = match kind {
+        SolverKind::Spps => "End of calculation.",
+        SolverKind::Tcr => "Step 3/3",
+    };
+    assert!(run.has_line(done), "{}:\n{}", dir.display(), run.stdout);
+    support::outputs(&dir, &["config.xml", "mesh.cbin", "tetramesh.mbin"])
+}
+
+/// The output files that differ between two runs, as sorted lines: a file only one run wrote, or
+/// one whose bytes differ. A `.csbin` is compared decoded (its padding differs from run to run,
+/// M1), with upstream's surface-receiver ids first mapped to ours through `rs_ids`.
+fn output_differences(
+    theirs: &BTreeMap<String, Vec<u8>>,
+    ours: &BTreeMap<String, Vec<u8>>,
+    rs_ids: &BTreeMap<i32, i32>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for k in theirs.keys().filter(|k| !ours.contains_key(*k)) {
+        out.push(format!("{k}: only upstream's run"));
+    }
+    for k in ours.keys().filter(|k| !theirs.contains_key(*k)) {
+        out.push(format!("{k}: only ours"));
+    }
+    for (k, t) in theirs {
+        let Some(o) = ours.get(k) else { continue };
+        let same = if k.ends_with(".csbin") {
+            let mut t = csbin::read(t).unwrap();
+            for r in &mut t.receivers {
+                r.xml_index = *rs_ids.get(&r.xml_index).unwrap_or(&r.xml_index);
+            }
+            csbin::dump(&t) == csbin::dump(&csbin::read(o).unwrap())
+        } else {
+            t == o
+        };
+        if !same {
+            out.push(format!("{k}: differs"));
+        }
+    }
+    out.sort();
+    out
+}
+
+/// Tutorial 1, the `.proj` imported: our scene mesh welds upstream's 36 vertices into 8
+/// (`docs/formats/cbin.md`, "What still differs", 2). Upstream's own run configuration
+/// ([`repeatable`]) and tetrahedral mesh, run once with upstream's `mesh.cbin` and once with
+/// ours (its receiver id 0 written as upstream's 3503, which the configuration names), give the
+/// same output files byte for byte, in SPPS and in TCR: the solvers see the same triangles. The
+/// refusal: ours with one face's material changed (22 to 21, both declared) gives different
+/// output.
+#[test]
+fn the_welded_scene_mesh_gives_upstreams_output() {
+    let t = tutorial(TUTORIAL1);
+    let project = import_proj(&t.bytes).unwrap().project;
+    let mut ours = scene_mesh(&project).unwrap();
+    assert_eq!(ours.vertices.len(), 8);
+    for f in &mut ours.faces {
+        if f.id_rs == 0 {
+            f.id_rs = 3503;
+        }
+    }
+    let mut other_material = ours.clone();
+    assert_eq!(other_material.faces[3].id_mat, 22);
+    other_material.faces[3].id_mat = 21;
+    let none = BTreeMap::new();
+    for run in &t.runs {
+        let kind = if run.solver == SolverKind::Spps {
+            "spps"
+        } else {
+            "tcr"
+        };
+        let config = &repeatable(&run.config, run.solver);
+        let mbin = &run.tetra_bytes;
+        let theirs = run_on(
+            &format!("weld-{kind}-t"),
+            run.solver,
+            config,
+            &run.mesh_bytes,
+            mbin,
+        );
+        let welded = run_on(
+            &format!("weld-{kind}-o"),
+            run.solver,
+            config,
+            &cbin::write(&ours),
+            mbin,
+        );
+        let got = output_differences(&theirs, &welded, &none);
+        println!(
+            "{} ({:?}): {} output files; with our welded mesh.cbin {} differ",
+            run.folder,
+            run.solver,
+            theirs.len(),
+            got.len()
+        );
+        assert!(!theirs.is_empty());
+        assert_eq!(got, Vec::<String>::new(), "{}", run.folder);
+
+        let changed = run_on(
+            &format!("weld-{kind}-x"),
+            run.solver,
+            config,
+            &cbin::write(&other_material),
+            mbin,
+        );
+        let refused = output_differences(&theirs, &changed, &none);
+        println!(
+            "  face 3 with material 21: {} differ {refused:?}",
+            refused.len()
+        );
+        assert!(!refused.is_empty(), "{}", run.folder);
+    }
+}
+
+/// Tutorial 3, each stored run: its config with [`importable`]'s two edits, made [`repeatable`],
+/// is run as upstream wrote it, with the run's `mesh.cbin` and `tetramesh.mbin`; then imported
+/// with its scene mesh and written back, and ours is run with our `config.xml` and `mesh.cbin`.
+/// The inputs differ only in the ids and the differences by design
+/// ([`tutorial3_ids_and_by_design`]). Upstream's `.mbin` carries the fitting zones as 2083 and
+/// 1930; ours is given the same tetrahedra with those written as our 3 and 2, as our mesher
+/// writes a fitting's tetrahedra. (The room's keep upstream's 2084 to 2086, which name no
+/// fitting.) Every output file is upstream's, byte for byte, the cutting plane's `.csbin` once
+/// its id 951 is read as our 0: the ids reach no output but that one. The refusal: ours with the
+/// first fitting zone absorbing 0.9 in every band gives different output.
+#[test]
+fn tutorial3_written_back_gives_upstreams_output() {
+    let t = tutorial(TUTORIAL3);
+    for (i, run) in t.runs.iter().enumerate() {
+        let config = repeatable(&importable(&run.config), run.solver);
+        let project = import_upstream_with_mesh(&config, &run.mesh).unwrap();
+        let wd = working_folder(&config);
+        let ours = write(&project, run.solver, None, Path::new(&wd)).unwrap();
+        assert_eq!(
+            solver_differences(&config, &ours),
+            sorted(tutorial3_ids_and_by_design()),
+            "{}",
+            run.folder
+        );
+        let id_en = id_map(&config, &ours, "encombrement");
+        let id_rs = id_map(&config, &ours, "recepteur_surfacique_coupe");
+        assert_eq!(id_rs, BTreeMap::from([(951, 0)]));
+        let mut tetra = mbin::read(&run.tetra_bytes).unwrap();
+        let volumes: BTreeSet<i32> = tetra.tetrahedra.iter().map(|t| t.id_volume).collect();
+        println!("{}: idVolume {volumes:?}", run.folder);
+        assert!(volumes.contains(&2083) && volumes.contains(&1930));
+        assert!(
+            !volumes.contains(&2) && !volumes.contains(&3),
+            "our ids must not name another volume"
+        );
+        for t in &mut tetra.tetrahedra {
+            if let Some(&o) = id_en.get(&t.id_volume) {
+                t.id_volume = o;
+            }
+        }
+        let tetra = mbin::write(&tetra);
+        let our_mesh = cbin::write(&scene_mesh(&project).unwrap());
+
+        let theirs = run_on(
+            &format!("t3-{i}-t"),
+            run.solver,
+            &config,
+            &run.mesh_bytes,
+            &run.tetra_bytes,
+        );
+        let mine = run_on(&format!("t3-{i}-o"), run.solver, &ours, &our_mesh, &tetra);
+        let got = output_differences(&theirs, &mine, &id_rs);
+        println!(
+            "{} ({:?}): {} output files; ours {} differ {got:?}",
+            run.folder,
+            run.solver,
+            theirs.len(),
+            got.len()
+        );
+        assert!(!theirs.is_empty());
+        assert_eq!(got, Vec::<String>::new(), "{}", run.folder);
+        // The one id that reaches an output, as each side wrote it.
+        let cut = "Surface receiver/Global/rs_cut.csbin";
+        let index = |files: &BTreeMap<String, Vec<u8>>| -> Vec<i32> {
+            let c = csbin::read(&files[cut]).unwrap();
+            c.receivers.iter().map(|r| r.xml_index).collect()
+        };
+        assert_eq!((index(&theirs), index(&mine)), (vec![951], vec![0]));
+
+        if i == 0 {
+            let mut denser = project.clone();
+            for a in &mut denser.fitting_zones[0].absorption {
+                *a = F64::new(0.9);
+            }
+            let x = write(&denser, run.solver, None, Path::new(&wd)).unwrap();
+            let changed = run_on(&format!("t3-{i}-x"), run.solver, &x, &our_mesh, &tetra);
+            let refused = output_differences(&theirs, &changed, &id_rs);
+            println!(
+                "  first fitting zone absorbing 0.9: {} differ",
+                refused.len()
+            );
+            assert!(!refused.is_empty(), "{}", run.folder);
+        }
     }
 }

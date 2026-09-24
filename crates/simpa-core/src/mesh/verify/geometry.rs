@@ -76,9 +76,10 @@ pub fn volume_floor(r: f64, g: f64) -> f64 {
 /// largest |coordinate| is `r`: `16 * U32 * r`.
 ///
 /// The `.cbin` vertices are the `f32` values TetGen was given (upstream writes the `.poly` and the
-/// `.cbin` from the same `f32` vertices, `Objet3D_maillage.cpp:777, 941-942`; our mesher narrows
-/// with `c as f32`, `config_xml/ids.rs:191`), and TetGen places a node on a facet in f64, exact to
-/// f64 rounding. What then moves a node off its facet, per coordinate:
+/// `.cbin` from the same `f32` vertices, `Objet3D_maillage.cpp:777, 941-942`; our mesher takes
+/// both from `config_xml::scene_mesh`, which narrows with `c as f32` and then applies upstream's
+/// round trip, `config_xml/gl.rs`), and TetGen places a node on a facet in f64, exact to f64
+/// rounding. What then moves a node off its facet, per coordinate:
 /// - narrowing TetGen's f64 node to `f32`: at most `U32 * r`;
 /// - upstream's GUI only: `LoadNodeFile` carries every node through `CommonCoordsToGlCoords`
 ///   (`Objet3D_maillage.cpp:98`) and `GetTetraMesh` back through `GlCoordsToCommonCoords`
