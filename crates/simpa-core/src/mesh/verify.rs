@@ -21,8 +21,10 @@ mod dir;
 mod geometry;
 
 /// Face `i` of a tetrahedron `(A, B, C, D)`, as corner positions: `B D C`, `C D A`, `A D B`,
-/// `B C A`. Face `i` is opposite corner `i` and its neighbour is TetGen's neighbour `i`
-/// (`Objet3D_maillage.cpp:182-185`, `docs/formats/mbin.md`).
+/// `B C A`. Face `i` is opposite corner `i` and its neighbour is the tetrahedron across it
+/// (`Objet3D_maillage.cpp:182-185`, `docs/formats/mbin.md`). `(A, B, C, D)` is a `.ele` row in
+/// upstream's order, `(d, c, b, a)` ([`crate::mesh::upstream_order`]); every check here holds in
+/// either order, the permutation being even.
 pub const FACE_CORNERS: [[usize; 3]; 4] = [[1, 3, 2], [2, 3, 0], [0, 3, 1], [1, 2, 0]];
 
 /// How many uncovered scene faces [`VerifyReport::uncovered_scene_faces_first`] lists.

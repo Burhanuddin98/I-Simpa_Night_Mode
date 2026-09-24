@@ -66,15 +66,99 @@ The GUI builds the faces of every tetrahedron `(A, B, C, D)` in one fixed patter
 | 2 | `A, D, B` | C |
 | 3 | `B, C, A` | D |
 
-Face `i` is the face opposite vertex `i`, and its neighbour is TetGen's neighbour `i`. The
-winding sets the face normal the solver computes (`coreTypes.cpp:233`), which it compares with
-the scene face's normal when attaching surface receivers (`coreinitialisation.cpp:292`).
+Face `i` is the face opposite vertex `i`, and its neighbour is the tetrahedron across that
+face. The winding sets the face normal the solver computes (`coreTypes.cpp:233`), which it
+compares with the scene face's normal when attaching surface receivers
+(`coreinitialisation.cpp:292`) and when it locates a source (`coreinitialisation.cpp:71-95`).
+
+`(A, B, C, D)` is **not** TetGen's `.ele` row as written: the GUI stores each row `(a, b, c, d)`
+as `(d, c, b, a)`, and each `.neigh` row reversed with it. See "How the GUI builds it" below.
+
+### How the GUI builds it from TetGen's output
+
+`CObjet3D::LoadMaillage` reads TetGen's `.node`, `.ele`, `.face` and `.neigh`
+(`isimpa/3dengine/Core/Objet3D_maillage.cpp:54-488`), and `SaveMaillage(.., true)` writes the
+`.mbin` from what it read (`:830-898`, called at `data_manager/projet.cpp:769`). Two steps change
+TetGen's numbers on the way, and both are needed to reproduce upstream's files:
+
+1. **Corner order `(d, c, b, a)`.** `LoadEleFile` builds the corners as
+   `ivec4 sommets(ToInt(GetNextToken()) - 1, ...)`, four token reads as the arguments of one call
+   (`:161-164`). C++ leaves the order of argument evaluation unspecified; MSVC, which builds
+   upstream's Windows releases, evaluates right to left, so the row's first corner lands in `D`.
+   `LoadNeighFile` reads the neighbours the same way (`:435-438`), so neighbour `i` stays the
+   tetrahedron across the face opposite corner `i`, and TetGen's `-1` becomes `-2` by the same
+   `- 1`. The cause is inferred from the code; the effect is measured (below). The permutation
+   `(a d)(b c)` is even, so every tetrahedron keeps the sign of its orientation determinant.
+2. **A float round trip through the GUI's GL frame.** `LoadNodeFile` reads each coordinate as a
+   `double` narrowed to `float` (`Convertor::ToFloat`, `manager/sppsString.cpp:43-50`) and moves it
+   into the GL frame with `CommonCoordsToGlCoords`; `GetTetraMesh(.., true)` moves it back with
+   `GlCoordsToCommonCoords` (`3dengine/Core/Mathlib.h:50-67`), all in `f32`:
+   `g = ((x - cx)·s, (z - cy)·s, (-y - cz)·s)`, then `(g.x/s + cx, -(g.z/s + cz), g.y/s + cy)`.
+   `(cx, cy, cz, s)` is `UnitizeVar`, which `CObjet3D::Unitize` fits to the scene
+   (`Objet3D.cpp:527-571`): the box of the scene's vertices in GL axes `(x, z, -y)`, **the last
+   vertex left out** (the loop runs `v < size() - 1`), centre `(lo + hi) / 2.0` with the sum in
+   `f32`, and `s = 2.0 / max(w, h, d)` divided in `f64` and narrowed to `f32`. Tutorial 1's box
+   gives `(3, 1.5, -5, 0.2f)`. The round trip moves a coordinate by a few ulps at most, and a 0 in
+   y always comes back as `-0.0`.
+
+   **Which vertices.** Upstream fits `_pVertices`, its list of scene vertices, each time it
+   replaces the list (a scene or project load, `Objet3D.cpp:441`; a cuboid built, `:480`; a
+   corrected `.poly` reloaded, `:393`; a boundary mesh, `Objet3D_maillage.cpp:1100`; nothing else
+   writes it), and hands the same list, verbatim and in order, to the solvers as the scene part
+   of the `.cbin` (`ToCBINFormat`, `:775-779`, before the fitting zones' triangles) and to TetGen
+   as the first nodes of the `.poly` (`_SavePOLY`, `:938-942`). We fit the vertices of our own
+   `.cbin` (`mesh::Unitize::of_scene`): the same rule on the same file's list, so when our `.cbin`
+   is upstream's, so is the frame. The lists can differ: upstream keeps a copy of a vertex per face
+   corner for an STL (`stl.cpp:274-287`) or a cuboid it builds (`Objet3D.cpp:462-471`), and
+   tutorial 1's `.cbin` holds 36 vertices where ours holds the 8 points. In such a list of a closed
+   surface every point appears at least three times, so leaving its last copy out changes
+   nothing, and the two frames differ exactly when our last vertex is the scene's only vertex at
+   its minimum or maximum on some axis (a box has none). Where upstream keeps one copy of each
+   point (a `.ply`; tutorial 3's `.cbin`, 40 vertices), its last is left out as ours is.
+   Tutorials 1 and 3 give the same frame from upstream's list as from ours, and no upstream file
+   at hand has a last vertex that decides the frame, so that rule rests on the code and on unit
+   tests (`mesh/build.rs`).
+
+Markers go to every tetrahedron face holding a `.face` row's three vertices (`:369-381`), and
+`idVolume` is the `.ele` attribute unchanged (`:165, 868`).
+
+**Evidence.** `crates/simpa-core/tests/mesh_mbin_parity.rs` builds tutorial 1's 2019 TetGen output
+(`tests/fixtures/upstream/tutorial1/tetgen/scene_mesh.1.*`) with `core::mesh` and gets upstream's
+2019 `tetramesh.mbin` (sha256 `8a6b3943dd47126b`, 234,492 bytes) byte for byte, except the 2,257
+`idVolume` fields that decision 1 writes as 0 (every one of them is 1 in upstream's file, as is
+every `.ele` attribute). With one step undone the comparison fails:
+- TetGen's own corner order: all 2,257 tetrahedron records differ (47,524 of their 56,425 `i32`
+  fields);
+- no round trip: 230 of the 732 nodes differ, 198 of them in value by at most 2^-21 m
+  (4.77e-7 m), the other 32 only in the sign of a zero.
+
+The same test rebuilds tutorial 3's 2019 `.mbin` (3,285 tetrahedra, 835 nodes, five regions,
+read from the upstream checkout's `tutorial_3.proj`) byte for byte with `build_mbin` given
+upstream's own region ids, the frame fitted to the 40 scene vertices of upstream's own `.cbin`:
+`(9.548741, 5, -4, 0.10472585)`. That scene is no box of integers, so the frame's `f32`
+arithmetic is exercised for real. A frame one `f32` step off, or centred in the scene's axes
+rather than the GUI's, fails the tutorial-1 comparison.
+
+End to end, from the project: tutorial 1's box meshed by `mesh::mesh_project` with TetGen 1.5.0,
+the mesher Burhan chose ("Our own build",
+`docs/investigations/2026-09-23-upstream-meshing/DECISIONS.md`), gives TetGen's 2019 `.ele`,
+`.face` and `.neigh` (the command-line trailer apart) and its `.node` (the sign of the zeros in y
+apart: our `.poly` writes `0` where upstream's, back from the GL frame, wrote `-0`), and then
+upstream's 2019 `.mbin`, byte for byte except `idVolume`. A TetGen 1.6.0 build meshes that box
+into 6 tetrahedra, and the test says so.
+
+Neither conversion changes an invariant below, which is why only a byte comparison can tell them
+apart. The corner order still matters to the solver: on TetGen 1.6.0's 6-tetrahedron tutorial box
+(`tests/fixtures/solver-outputs/tutorial1/tetgen_scene_mesh.1.*`) the source (3, 5, 1.8) lies on
+an internal facet, and SPPS locates it in upstream's order and crashes with an access violation
+in TetGen's (`crates/simpa/tests/cli_run.rs`).
 
 ### Invariants
 
 The invariants of a usable `.mbin` (`docs/m5-m6-design.md`, decision 6). The meshes `core::mesh`
 builds (`crates/simpa-core/src/mesh/build.rs`) keep them, and `mesh::verify` checks them:
-- every face follows the table above, and face `i`'s neighbour is TetGen's neighbour `i`;
+- every face follows the table above, and face `i`'s neighbour is the tetrahedron across the face
+  opposite corner `i`;
 - a face with neighbour `-2` has a marker `≥ 0`: the hull is made of scene faces;
 - a face with a marker `≥ 0` and a neighbour `≥ 0` lies on an internal facet, and the face across
   it, in that neighbour, carries the same marker. Upstream marks **both** sides of such a facet:
@@ -83,7 +167,8 @@ builds (`crates/simpa-core/src/mesh/build.rs`) keep them, and `mesh::verify` che
 - neighbours are mutual;
 - every tetrahedron has `(A−D)·((B−D)×(C−D)) < 0`.
 
-Two conventions of the meshes `core::mesh` builds depart from upstream's own:
+Two conventions of the meshes `core::mesh` builds depart from upstream's own, and nothing else
+does (evidence above):
 - **`idVolume`** is 0 for the room and a fitting zone's solver id (2 and up) inside it
   (decision 1). Upstream's meshes carry TetGen's attribute unchanged, so their room is 1, or the
   largest fitting id plus 1 (`tetgen.cxx:24223-24306`).
@@ -100,7 +185,9 @@ tetrahedron has the negative orientation.
 
 Measured on meshes `core::mesh` built on 2026-09-23 (`crates/simpa-core/tests/mesh_*.rs`): the
 box (6 tetrahedra), the box with a box fitting zone, the corrected hall (123,718 tetrahedra) and
-the survey's cube all keep every invariant.
+the survey's cube all keep every invariant. Those were built in TetGen's corner order; the same
+tests pass in upstream's order, and so do tutorial 1's 2019 mesh and its rebuild
+(`mesh_mbin_parity.rs`, which also checks every orientation sign exactly in both orders).
 
 None of this is checked by upstream's reader or by `read`: they are properties of the files, not
 of the format. `generate` produces meshes that follow all of them.

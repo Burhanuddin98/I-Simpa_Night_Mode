@@ -706,7 +706,11 @@ fn a_face_row_short_gives_a_mesh_the_invariants_refuse() {
     let dir = scratch("unmarked-hull");
     copy_box_output_less_one_face_row(&dir);
     let out = mesh::TetgenOutput::read(&mesh::OutputPaths::new(&dir, "scene_mesh")).unwrap();
-    let (built, _) = mesh::build_mbin(&out, 12, &[]).unwrap();
+    let scene = mesh::project_input(&load_room("tutorial1_box.simpa"))
+        .unwrap()
+        .scene;
+    let unitize = mesh::Unitize::of_scene(&scene).unwrap();
+    let (built, _) = mesh::build_mbin(&out, 12, &[], &unitize).unwrap();
     let bad = invariants(&built);
     assert!(
         bad.iter().any(|s| s.starts_with("unmarked hull")),

@@ -18,7 +18,7 @@ use simpa_core::schema::{self, Project};
 #[path = "common/paths.rs"]
 mod paths;
 #[allow(unused_imports)]
-pub use paths::{fixture, repo_root, solvers_dir, tetgen_exe};
+pub use paths::{fixture, repo_root, solvers_dir, tetgen_exe, upstream_file};
 
 static N: AtomicUsize = AtomicUsize::new(0);
 
