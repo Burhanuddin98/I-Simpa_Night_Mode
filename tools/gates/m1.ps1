@@ -199,10 +199,16 @@ function Get-BlobId([string]$path) {
 function Get-BlobMismatches([string]$dir) {
     @($blobs4db.Keys | Where-Object { -not (Test-Path -LiteralPath (Join-Path $dir $_)) -or (Get-BlobId (Join-Path $dir $_)) -ne $blobs4db[$_] })
 }
-# Whether a solver manifest records this build: the pinned commit; TetGen 1.5.0 whose tarball
-# sha256 is the one this run computed from the committed tarball (and that is WIAS's); the
-# member hashes this run read out of that tarball; upstream 4db335c's blobs; the shipped
-# tetgen's hashes; and a code sha256 for each of the four executables and the 1.6.0 reference.
+# Whether a solver manifest names this run's sources and has well-formed executable records:
+# - its sources, held to what this run computed: the pinned commit; TetGen 1.5.0, whose tarball
+#   sha256 is the one this run computed from the committed tarball (and that is WIAS's); the member
+#   hashes this run read out of that tarball; upstream 4db335c's blobs;
+# - its executable records, held to their form and to each other only: a code sha256 (64 hex
+#   digits) for each of the four executables and for the 1.6.0 reference, and tetgen's own
+#   records (exe_sha256, exe_code_sha256) equal to its entries in the sha256 and code_sha256 lists.
+# It does not hold the executables in bin\ to the manifest (the code sha256 checks do that), nor its
+# build_log, built_at or raw sha256 to this build: those name the build that wrote the committed
+# manifest, which may be another link of the same code.
 function Test-Manifest($m) {
     $t = $m.tetgen
     if ($null -eq $t -or $null -eq $t.files_sha256 -or $tarMembers -isnot [Collections.IDictionary]) { return $false }
@@ -327,7 +333,7 @@ Check "spps.exe with its link timestamps set to 2000-01-01 has another sha256 ($
     ("$restampedRaw" -match '^[0-9a-f]{64}$') -and ($restampedRaw -ne $sppsRaw) -and (Test-ManifestHash $restamped 'spps.exe')
 }
 
-Check "manifest.json records this build: solvers from $($commit.Substring(0,7)); tetgen 1.5.0 with the tarball sha256 and member hashes this run computed, upstream $($blobCommit.Substring(0,7))'s blobs, and the shipped exe's hashes; a code sha256 for each executable" {
+Check "manifest.json names this run's sources (solvers from $($commit.Substring(0,7)); tetgen 1.5.0 with the tarball sha256 and member hashes this run computed; upstream $($blobCommit.Substring(0,7))'s blobs) and has well-formed executable records (a 64-hex code sha256 for each of the 4 executables and the 1.6.0 reference; tetgen's exe_sha256 and exe_code_sha256 equal to its sha256 and code_sha256 entries); the executables are held to it by the code sha256 checks above, and its build log, build time and raw sha256 are not checked" {
     Test-Manifest $manifest
 }
 $noCode = Safe { $m2 = $manifest | ConvertTo-Json -Depth 6 | ConvertFrom-Json; $m2.code_sha256.PSObject.Properties.Remove('tetgen.exe'); $m2 }

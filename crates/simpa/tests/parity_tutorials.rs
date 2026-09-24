@@ -47,10 +47,20 @@
 //!   each run's `config.xml` and `mesh.cbin` with ours from the `.proj` read with that run's saved
 //!   project, all byte for byte or value for value with no id map (the import pins upstream's
 //!   element ids, Burhan's decision of 2026-09-24 14:11, `docs/m5-m6-design.md`, decision 13),
-//!   and the runs on our own mesh ([`tutorial_3_same_seed_runs`]).
+//!   and the runs on our own mesh ([`tutorial_3_same_seed_runs`]). Each region check of the
+//!   default mesh says no on its own ([`tutorial_3_each_region_check_says_no_alone`]).
 //!
 //! Every comparison has a refusal beside it, the input that makes it say no
 //! (`the_comparisons_say_no`).
+//!
+//! Four tests are ignored in the plain suite, each with its reason, and run by
+//! `tools/gates/parity.ps1`: upstream's shipped solvers on tutorial 1
+//! ([`shipped_1_3_4_and_1_4_0_solvers_against_ours`]) and on tutorial 3's parity mesh
+//! ([`shipped_solvers_on_tutorial_3_parity_mesh`]), which need the installed releases; and
+//! tutorial 3's parity mesh against its default mesh, run at the stored configuration
+//! ([`tutorial_3_loops_parity_against_default`],
+//! [`tutorial_3_receiver_levels_default_against_parity`]), which are heavy. What they measure is
+//! in `docs/upstream-findings.md`.
 
 mod support;
 
@@ -1027,7 +1037,10 @@ struct Tutorial3 {
     /// The parity mesh folder and its manifest.
     parity_dir: PathBuf,
     parity: Value,
-    /// Our `.mbin` from the parity mesh, as written: upstream's ids, pinned.
+    /// The parity mesh's `tetramesh.mbin`, the file's own bytes as the mesher wrote them:
+    /// upstream's ids, pinned.
+    parity_mbin: Vec<u8>,
+    /// The same file, decoded.
     built: mbin::Mesh,
 }
 
@@ -1069,7 +1082,8 @@ fn tutorial3(label: &str) -> Tutorial3 {
         "{parity:#}"
     );
     assert_eq!(parity["parity"], true);
-    let built = mbin::read_file(&parity_dir.join("tetramesh.mbin")).unwrap();
+    let parity_mbin = std::fs::read(parity_dir.join("tetramesh.mbin")).unwrap();
+    let built = mbin::read(&parity_mbin).unwrap();
     Tutorial3 {
         t,
         dir,
@@ -1079,6 +1093,7 @@ fn tutorial3(label: &str) -> Tutorial3 {
         summary,
         parity_dir,
         parity,
+        parity_mbin,
         built,
     }
 }
@@ -1105,12 +1120,14 @@ fn tutorial3(label: &str) -> Tutorial3 {
 ///   no map, the differences by design aside; the `.cbin` byte for byte, the box's 12 triangles as
 ///   faces 88 to 99.
 ///
-/// Its say-nos: without preprocess the box standing on the floor is refused (our check's 20 pairs,
-/// and TetGen's); TetGen 1.6.0's mesh of the raw scene, the wrong room, fails the region volume
-/// check, and 1.6.0 on the parity `.poly` puts zone 1 on the hall; upstream's `.poly` with one
-/// region line changed gives another `.mbin`; zone 1 pinned to 1931 gives another `.poly` and
-/// `.mbin`; both zones pinned to 1930 are refused before meshing; one band's law changed, the
-/// box's triangles left out, and the ids unpinned.
+/// Its say-nos: without preprocess the box standing on the floor is refused (our check's 22 pairs,
+/// the box triangulated our way, decision 5, where the investigation's upstream layout gave 20;
+/// TetGen names the same 22); TetGen 1.6.0's mesh of the raw scene, the wrong room, fails the
+/// region volume check, and 1.6.0 on the parity `.poly` puts zone 1 on the hall; upstream's
+/// `.poly` with one region line changed gives another `.mbin`; zone 1 pinned to 1931 gives another
+/// `.poly` and `.mbin`; both zones pinned to 1930 are refused before meshing; one band's law
+/// changed, the box's triangles left out, and the ids unpinned. Each region check alone:
+/// [`tutorial_3_each_region_check_says_no_alone`].
 #[test]
 fn tutorial_3() {
     let Tutorial3 {
@@ -1122,6 +1139,7 @@ fn tutorial_3() {
         summary,
         parity_dir,
         parity: pm,
+        parity_mbin: our_mbin,
         built,
     } = tutorial3("t3");
 
@@ -1344,10 +1362,15 @@ fn tutorial_3() {
             )
         ));
     }
-    let our_mbin = mbin::write(&built);
-    assert!(
-        our_mbin == std::fs::read(parity_dir.join("tetramesh.mbin")).unwrap(),
-        "the .mbin the mesher wrote"
+    // The .mbin the mesher wrote, its own bytes (not a decode written again): its size and hash
+    // are upstream's, and so is every byte of it.
+    assert_eq!(
+        (
+            our_mbin.len(),
+            &simpa_core::mesh::sha256_hex(&our_mbin)[..8]
+        ),
+        (T3_MBIN.0, T3_MBIN.1),
+        "the parity mesh's tetramesh.mbin"
     );
     for (i, r) in t.runs.iter().enumerate() {
         assert_eq!(
@@ -1829,10 +1852,10 @@ fn tutorial_3_same_seed_runs() {
         dir,
         projects,
         ids,
+        parity_mbin: our_mbin,
         built,
         ..
     } = tutorial3("t3r");
-    let our_mbin = mbin::write(&built);
     let mut report = Vec::new();
     for (i, r) in t.runs.iter().enumerate() {
         let (our_config, our_cbin) = export_config(
@@ -1890,6 +1913,870 @@ fn tutorial_3_same_seed_runs() {
         }
     }
     print_report("tutorial 3, same-seed runs", &report);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tutorial 3: each region check on its own
+
+/// `mesh` with every tetrahedron whose `idVolume` is in `from` given `to`'s id of the same rank.
+fn relabelled(mesh: &mbin::Mesh, from: &[i32], to: &[i32]) -> mbin::Mesh {
+    let mut out = mesh.clone();
+    for tet in &mut out.tetrahedra {
+        if let Some(k) = from.iter().position(|&f| f == tet.id_volume) {
+            tet.id_volume = to[k];
+        }
+    }
+    out
+}
+
+/// `mesh` with the tetrahedra of region `id` removed, as TetGen removes a cell a hole point lies
+/// in: every other tetrahedron renumbered, and each face a removed tetrahedron lay behind left on
+/// the boundary (neighbour -2), its marker kept.
+fn carved(mesh: &mbin::Mesh, id: i32) -> mbin::Mesh {
+    let mut index = vec![-1i32; mesh.tetrahedra.len()];
+    let mut n = 0;
+    for (k, t) in mesh.tetrahedra.iter().enumerate() {
+        if t.id_volume != id {
+            index[k] = n;
+            n += 1;
+        }
+    }
+    let tetrahedra = mesh
+        .tetrahedra
+        .iter()
+        .filter(|t| t.id_volume != id)
+        .map(|t| {
+            let mut t = *t;
+            for f in &mut t.faces {
+                if let Ok(j) = usize::try_from(f.neighbor) {
+                    f.neighbor = if index[j] < 0 { -2 } else { index[j] };
+                }
+            }
+            t
+        })
+        .collect();
+    mbin::Mesh {
+        nodes: mesh.nodes.clone(),
+        tetrahedra,
+    }
+}
+
+/// Tutorial 3's default mesh against the geometry its TetGen read, each of the four checks of the
+/// region rule (`docs/m5-m6-design.md`, decision 12; `docs/solver-contract.md` Part B) fed a change
+/// that it alone can see, so a regression in any one of them fails its own case. Each case must
+/// give its code and no other; the mesh as written gives none.
+/// - **`unknown_volume_ids`, the no-gap rule:** the room's last part (TetGen numbers the parts
+///   2084 to 2086, in its own order) written one further, so its parts run with a gap. Every
+///   region still fills its own cell with its volume.
+/// - **`fitting_region_misplaced`:** zone 1's id 1930 and the hall's swapped, the fault TetGen
+///   1.6.0 makes of upstream's seed on zone 1's top face (`tutorial_3`). Each region still fills
+///   one cell with that cell's volume; zone 1's id is on the wrong one.
+/// - **`region_volume_mismatch`:** hall tetrahedra, together more than 0.5 m³ and each smaller than
+///   the corridor's largest, written with the corridor's id. Each region's largest tetrahedron,
+///   which places it, stays in its own cell; the corridor's region and the hall's no longer have
+///   their cells' volumes.
+/// - **`unmeshed_cells`:** the box's cell carved out, as TetGen carves out a cell a hole point lies
+///   in (the faces its tetrahedra shared left on the boundary, their markers kept), and the box
+///   left out of the declared fittings, the room still numbered from 2084: a cell of the geometry
+///   that no region fills, every other region its cell's, and the mesh otherwise sound. (Zone 1
+///   would not do: it is the only region against part of the scene, so carving it out also leaves
+///   scene faces uncovered.)
+#[test]
+fn tutorial_3_each_region_check_says_no_alone() {
+    let dir = bed_dir("t3regions");
+    let (imported, _) = import_proj_json(parity::TUTORIAL3, &dir);
+    let p = simpa_core::schema::load(&imported).unwrap();
+    let mesh_dir = dir.join("mesh-default");
+    let (code, dm) = mesh_with(&imported, &mesh_dir, &[]);
+    assert_eq!(code, 0, "{dm:#}");
+    let mesh = mbin::read_file(&mesh_dir.join("tetramesh.mbin")).unwrap();
+    let scene = cbin::read_file(&mesh_dir.join("mesh.cbin")).unwrap();
+    let poly = std::fs::read(mesh_dir.join("scene_mesh.poly")).unwrap();
+    let deleted: Vec<u32> = dm["verify"]["expected_unmeshed_faces"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f.as_u64().unwrap() as u32)
+        .collect();
+    assert_eq!(
+        deleted,
+        [88, 89],
+        "the box's bottom, deleted by preprocess.exe"
+    );
+    let verify =
+        |m: &mbin::Mesh, ids: simpa_core::mesh::verify::VolumeIds, reference: &Reference| {
+            simpa_core::mesh::verify::verify_mesh_with(
+                m,
+                &scene,
+                &ids,
+                &simpa_core::mesh::verify::Expectations {
+                    unmeshed_faces: Some(deleted.as_slice()),
+                    reference: Some(reference.get()),
+                },
+            )
+        };
+    let reference = Reference::of(&poly, &p);
+    let ids: BTreeSet<i32> = mesh.tetrahedra.iter().map(|t| t.id_volume).collect();
+    assert_eq!(ids, BTreeSet::from([1930, 2083, 2084, 2085, 2086]));
+    let (zone1, boxed) = (1930, 2083);
+    let declared = || simpa_core::mesh::verify::VolumeIds::tetgen(vec![zone1, boxed]);
+    let control = verify(&mesh, declared(), &reference);
+    assert!(
+        control.passed() && control.regions_checked,
+        "{:?}",
+        control.codes
+    );
+    // The room's parts by their volumes: TetGen numbers them in its own order.
+    let part = |m3: f64| {
+        *control
+            .volume_by_id
+            .iter()
+            .find(|(_, v)| (**v - m3).abs() < 1e-3)
+            .unwrap_or_else(|| panic!("no region of {m3} m³: {:?}", control.volume_by_id))
+            .0
+    };
+    let (hall, corridor) = (part(755.648), part(106.895));
+    let volume = |m: &mbin::Mesh, k: usize| {
+        let c = m.tetrahedra[k]
+            .vertices
+            .map(|v| m.nodes[v as usize].map(f64::from));
+        let d = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+        let (a, b, e) = (d(c[0], c[3]), d(c[1], c[3]), d(c[2], c[3]));
+        (a[0] * (b[1] * e[2] - b[2] * e[1]) - a[1] * (b[0] * e[2] - b[2] * e[0])
+            + a[2] * (b[0] * e[1] - b[1] * e[0]))
+            .abs()
+            / 6.0
+    };
+    let mut report = vec![format!(
+        "the default mesh as written: passes, regions {:?}",
+        control.volume_by_id
+    )];
+    let mut case = |name: &str, what: String, report_of: simpa_core::mesh::verify::VerifyReport| {
+        assert_eq!(
+            report_of.codes,
+            [name],
+            "{what}: {:#?}",
+            report_of
+                .regions
+                .iter()
+                .filter(|r| !r.problems.is_empty())
+                .collect::<Vec<_>>()
+        );
+        let mut problems: Vec<String> = report_of
+            .regions
+            .iter()
+            .flat_map(|r| r.problems.iter().map(move |x| format!("{}: {x}", r.id)))
+            .collect();
+        problems.extend(
+            report_of
+                .cells
+                .iter()
+                .filter(|c| c.regions.is_empty())
+                .map(|c| format!("cell {} of {:.3} m³ holds no region", c.cell, c.volume_m3)),
+        );
+        if report_of.unknown_volume_ids > 0 {
+            problems.push(format!(
+                "{} tetrahedra of an unknown id",
+                report_of.unknown_volume_ids
+            ));
+        }
+        report.push(format!("{what}: {name} alone ({})", problems.join("; ")));
+    };
+
+    // The no-gap rule: the room's last part numbered one further.
+    let last = *control.volume_by_id.keys().max().unwrap();
+    case(
+        "unknown_volume_ids",
+        format!("the room's last part, {last}, written {}", last + 1),
+        verify(
+            &relabelled(&mesh, &[last], &[last + 1]),
+            declared(),
+            &reference,
+        ),
+    );
+    // Zone 1's id on the hall's cell, the hall's on zone 1's.
+    case(
+        "fitting_region_misplaced",
+        format!("zone 1's id and the hall's ({hall}) swapped"),
+        verify(
+            &relabelled(&mesh, &[zone1, hall], &[hall, zone1]),
+            declared(),
+            &reference,
+        ),
+    );
+    // Hall tetrahedra given the corridor's id.
+    let corridor_largest = (0..mesh.tetrahedra.len())
+        .filter(|&k| mesh.tetrahedra[k].id_volume == corridor)
+        .map(|k| volume(&mesh, k))
+        .fold(0.0, f64::max);
+    let mut hall_tets: Vec<(f64, usize)> = (0..mesh.tetrahedra.len())
+        .filter(|&k| mesh.tetrahedra[k].id_volume == hall)
+        .map(|k| (volume(&mesh, k), k))
+        .filter(|&(v, _)| v < corridor_largest)
+        .collect();
+    hall_tets.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let (mut moved, mut moved_m3) = (mbin::Mesh::clone(&mesh), 0.0);
+    for &(v, k) in &hall_tets {
+        if moved_m3 > 0.5 {
+            break;
+        }
+        moved.tetrahedra[k].id_volume = corridor;
+        moved_m3 += v;
+    }
+    assert!(moved_m3 > 0.5, "{moved_m3}");
+    case(
+        "region_volume_mismatch",
+        format!("{moved_m3:.3} m³ of hall tetrahedra written with the corridor's id ({corridor})"),
+        verify(&moved, declared(), &reference),
+    );
+    // The box carved out and not declared; the room still numbered from 2084, as
+    // `mesh-verify --room-id 2084` would say.
+    let mut undeclared = Reference::of(&poly, &p);
+    undeclared.fittings.retain(|f| f.solver_id != boxed);
+    assert_eq!(undeclared.fittings.len(), 1);
+    let holed = carved(&mesh, boxed);
+    assert!(holed.tetrahedra.len() < mesh.tetrahedra.len());
+    case(
+        "unmeshed_cells",
+        format!(
+            "the box's {} tetrahedra carved out, the box undeclared",
+            mesh.tetrahedra.len() - holed.tetrahedra.len()
+        ),
+        verify(
+            &holed,
+            simpa_core::mesh::verify::VolumeIds {
+                room: 2084,
+                fittings: vec![zone1],
+            },
+            &undeclared,
+        ),
+    );
+    print_report("tutorial 3, each region check on its own", &report);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tutorial 3: the parity mesh against the default mesh, run
+
+/// The stored run of tutorial 3 with transmission on and results (125 Hz, `trans_calc` 1, 50,000
+/// particles per source; the 2019 run it lost 20.1 % of its particle records to loops in).
+const T3_TRANSMISSION_RUN: &str = "2019-06-18_14h28m18s";
+
+/// What tutorial 3's runs on the two meshes need: [`tutorial3`] (its parity mesh), the index of
+/// the stored run with transmission on, our `config.xml` and `mesh.cbin` as that run's project
+/// exports them with `random_seed` 1 and nothing else changed (50,000 particles per source, 125 Hz,
+/// as stored), and the default mesh of the same project.
+struct Tutorial3Runs {
+    t3: Tutorial3,
+    run: usize,
+    config: String,
+    cbin: Vec<u8>,
+    default_dir: PathBuf,
+    default_mbin: Vec<u8>,
+}
+
+fn tutorial3_runs(label: &str) -> Tutorial3Runs {
+    let t3 = tutorial3(label);
+    let run =
+        t3.t.runs
+            .iter()
+            .position(|r| r.folder.contains(T3_TRANSMISSION_RUN))
+            .expect("the stored run with transmission on");
+    let stored = &t3.t.runs[run].config;
+    let (config, cbin) = export_config(
+        &t3.projects[run],
+        &t3.dir.join("export-trans"),
+        SolverKind::Spps,
+    );
+    for (attr, want) in [
+        ("trans_calc", "1"),
+        ("nbparticules", "50000"),
+        ("random_seed", "0"),
+    ] {
+        assert_eq!(
+            parity::attr_in(stored, "<simulation ", attr),
+            want,
+            "{attr}"
+        );
+        assert_eq!(
+            parity::attr_in(&config, "<simulation ", attr),
+            want,
+            "ours: {attr}"
+        );
+    }
+    assert_eq!(config.matches("docalc=\"1\"").count(), 1);
+    assert!(config.contains("<bfreq freq=\"125\" docalc=\"1\"/>"));
+    assert_eq!(cbin, t3.t.runs[run].mesh_bytes, "mesh.cbin, upstream's");
+    let config = edit_attr(&config, "<simulation ", "random_seed", "1");
+    let default_dir = t3.dir.join("mesh-default");
+    let (code, dm) = mesh_with(&t3.projects[run], &default_dir, &[]);
+    assert_eq!(code, 0, "{dm:#}");
+    let default_mbin = std::fs::read(default_dir.join("tetramesh.mbin")).unwrap();
+    assert!(default_mbin != t3.parity_mbin);
+    Tutorial3Runs {
+        t3,
+        run,
+        config,
+        cbin,
+        default_dir,
+        default_mbin,
+    }
+}
+
+/// A folder for `simpa run-folder`: `config` with its working folder `__RUNDIR__`, `cbin`, and the
+/// mesh folder's `tetramesh.mbin` and `scene_mesh.poly`, the geometry its TetGen read, which the
+/// pre-launch check holds the regions to (decision 15).
+fn run_folder_fixture(dir: &Path, config: &str, cbin: &[u8], mesh_dir: &Path, poly: bool) {
+    std::fs::create_dir_all(dir).unwrap();
+    std::fs::write(
+        dir.join("config.xml"),
+        edit_attr(config, "<configuration ", "workingdirectory", "__RUNDIR__"),
+    )
+    .unwrap();
+    std::fs::write(dir.join("mesh.cbin"), cbin).unwrap();
+    std::fs::copy(mesh_dir.join("tetramesh.mbin"), dir.join("tetramesh.mbin")).unwrap();
+    if poly {
+        std::fs::copy(
+            mesh_dir.join("scene_mesh.poly"),
+            dir.join("scene_mesh.poly"),
+        )
+        .unwrap();
+    }
+}
+
+/// `simpa run-folder <fixture> --solver spps --json`, with the bed's `spps.exe`: its exit code
+/// and run manifest.
+fn run_folder_cli(fixture: &Path, runs: &Path) -> (i32, Value) {
+    let o = simpa_run(&[
+        "run-folder".to_string(),
+        fixture.display().to_string(),
+        "--solver".into(),
+        "spps".into(),
+        "--runs".into(),
+        runs.display().to_string(),
+        "--solver-exe".into(),
+        solver_exe("spps.exe").display().to_string(),
+        "--json".into(),
+    ]);
+    (o.code, json(&o))
+}
+
+/// One band's particle statistics as a line: loops, meshing and the total.
+fn loss_line(b: &simpa_core::run::BandStats) -> String {
+    format!(
+        "{} of {} particle records lost to loops ({:.4} %), {} to meshing",
+        b.lost_by_infinite_loops,
+        b.total,
+        100.0 * f64::from(b.lost_by_infinite_loops) / f64::from(b.total),
+        b.lost_by_meshing_problems
+    )
+}
+
+/// Tutorial 3's stored run with transmission on (125 Hz, `trans_calc` 1, 50,000 particles per
+/// source), seed 1, on our parity mesh and on our default mesh (`docs/m5-m6-design.md`, decision
+/// 12; follow-up (g) of Burhan's decisions of 2026-09-24):
+/// - **the parity mesh**, `preprocess.exe`'s markers kept (upstream's `.mbin` byte for byte), run by
+///   `spps.exe` directly as the bed runs it: more than 10 % of the particle records are lost to
+///   loops. Judged by the run verdict (`run::judge`, the default 1 % limit), the run fails with
+///   exactly two codes: `particle_loss_excess`, the statistics against the limit, and
+///   `particle_loss_reported`, SPPS's own warning line, which it prints above 5 %
+///   (`sppsNantes.cpp:33, 437-439`);
+/// - **the run manager refuses it before launch:** `simpa run-folder` on it exits 5 at the
+///   pre-launch stage with `mesh_invalid` and `marker_geometry_mismatches`, and `simpa run --mesh`
+///   on the parity mesh folder exits 4 with `mesh_missing` (its manifest is not OK; the project
+///   has Receiver 1 moved 1 mm off the wall, which the validator refuses first otherwise);
+/// - **the default mesh**, the markers restored, through `simpa run-folder` with the same inputs
+///   but the mesh: OK, fewer than 0.01 % lost to loops, so the loss rule says yes to it;
+/// - without the `.poly` its TetGen read, the same folder is refused before launch as
+///   `regions_unchecked`: its `.cbin`'s box stands on the floor, which the geometry check
+///   refuses, so the folder holds no cells to hold its regions to (decision 15).
+///
+/// Heavy: two SPPS runs of 300,000 particles, about 35 s each on Grace. Ignored in the plain
+/// suite; `tools/gates/parity.ps1` runs it.
+#[test]
+#[ignore = "heavy: two SPPS runs of tutorial 3's stored configuration, about 35 s each; tools/gates/parity.ps1 runs it"]
+fn tutorial_3_loops_parity_against_default() {
+    let Tutorial3Runs {
+        t3,
+        run: stored_run,
+        config,
+        cbin,
+        default_dir,
+        ..
+    } = tutorial3_runs("t3loops");
+    let dir = &t3.dir;
+    let runs = dir.join("runs");
+    let mut report = vec![format!(
+        "the stored run {T3_TRANSMISSION_RUN} (125 Hz, trans_calc 1, 50,000 particles per \
+         source), our config.xml and mesh.cbin of its project, random_seed 1"
+    )];
+
+    // The parity mesh, refused by run-folder before launch.
+    let parity_fixture = dir.join("fixture-parity");
+    run_folder_fixture(&parity_fixture, &config, &cbin, &t3.parity_dir, true);
+    let (code, pm) = run_folder_cli(&parity_fixture, &runs);
+    assert_eq!(
+        (code, pm["stage"].as_str(), pm["verdict"]["status"].as_str()),
+        (5, Some("pre_launch"), Some("FAIL")),
+        "{pm:#}"
+    );
+    assert_eq!(
+        support::codes(&pm),
+        ["mesh_invalid", "marker_geometry_mismatches"],
+        "{pm:#}"
+    );
+    report.push(format!(
+        "parity mesh, simpa run-folder: exit {code}, stage pre_launch, FAIL: {}",
+        support::codes(&pm).join(", ")
+    ));
+
+    // The parity mesh folder, refused by run --mesh.
+    let mut moved = simpa_core::schema::load(&t3.projects[stored_run]).unwrap();
+    assert_eq!(f64::from(moved.point_receivers[0].position.x), 0.0);
+    moved.point_receivers[0].position.x = simpa_core::schema::F64::from(0.001);
+    let moved_path = dir.join("receiver-moved.simpa");
+    simpa_core::schema::save(&moved, &moved_path).unwrap();
+    let o = simpa_run(&[
+        "run".to_string(),
+        moved_path.display().to_string(),
+        "--solver".into(),
+        "spps".into(),
+        "--mesh".into(),
+        t3.parity_dir.display().to_string(),
+        "--runs".into(),
+        runs.display().to_string(),
+        "--solver-exe".into(),
+        solver_exe("spps.exe").display().to_string(),
+        "--json".into(),
+    ]);
+    let rm = json(&o);
+    assert_eq!(
+        (o.code, rm["stage"].as_str(), support::codes(&rm)),
+        (4, Some("mesh"), vec!["mesh_missing".to_string()]),
+        "{rm:#}"
+    );
+    report.push(format!(
+        "parity mesh, simpa run --mesh: exit {}, stage mesh, FAIL: {}",
+        o.code,
+        support::codes(&rm).join(", ")
+    ));
+
+    // The default mesh without its .poly: no cells to hold the regions to.
+    let bare = dir.join("fixture-default-no-poly");
+    run_folder_fixture(&bare, &config, &cbin, &default_dir, false);
+    let (code, bm) = run_folder_cli(&bare, &runs);
+    assert_eq!(
+        (code, bm["stage"].as_str(), support::codes(&bm)),
+        (
+            5,
+            Some("pre_launch"),
+            vec!["mesh_invalid".to_string(), "regions_unchecked".to_string()]
+        ),
+        "{bm:#}"
+    );
+    report.push(format!(
+        "default mesh without its .poly, simpa run-folder: exit {code}, stage pre_launch, FAIL: {}",
+        support::codes(&bm).join(", ")
+    ));
+
+    // The default mesh, run by the run manager.
+    let default_fixture = dir.join("fixture-default");
+    run_folder_fixture(&default_fixture, &config, &cbin, &default_dir, true);
+    let (code, dm) = run_folder_cli(&default_fixture, &runs);
+    assert_eq!(
+        (code, dm["stage"].as_str(), dm["verdict"]["status"].as_str()),
+        (0, Some("solve"), Some("OK")),
+        "{dm:#}"
+    );
+    let default_stats: simpa_core::run::ParticleStats =
+        serde_json::from_value(dm["particles"].clone()).unwrap();
+    assert_eq!(default_stats.freqs(), [125]);
+    let d = default_stats.bands[0];
+    let default_loops = f64::from(d.lost_by_infinite_loops) / f64::from(d.total);
+    assert!(default_loops < 1e-4, "{}", loss_line(&d));
+    report.push(format!(
+        "default mesh, simpa run-folder: exit {code}, OK; {}",
+        loss_line(&d)
+    ));
+
+    // The parity mesh, run directly, judged by the run verdict.
+    let direct = dir.join("direct-parity");
+    run(&direct, SolverKind::Spps, &config, &cbin, &t3.parity_mbin);
+    let stats =
+        simpa_core::run::stats::read_file(&direct.join("SPPS particle statistics.gabe")).unwrap();
+    assert_eq!(stats.freqs(), [125]);
+    let b = stats.bands[0];
+    let parity_loops = f64::from(b.lost_by_infinite_loops) / f64::from(b.total);
+    assert!(parity_loops > 0.1, "{}", loss_line(&b));
+    let exp = simpa_core::run::Expectation::read(&direct, SolverKind::Spps).unwrap();
+    let outputs = simpa_core::run::Outputs::read(&direct, &exp);
+    let line = |stream, text: &str| simpa_core::process::Line {
+        stream,
+        t_ms: 0.0,
+        text: text.to_string(),
+        terminated: true,
+    };
+    let stdout = std::fs::read_to_string(direct.join("_stdout.txt")).unwrap();
+    let stderr = std::fs::read_to_string(direct.join("_stderr.txt")).unwrap();
+    let lines: Vec<simpa_core::process::Line> = stdout
+        .lines()
+        .map(|t| line(simpa_core::process::Stream::Stdout, t))
+        .chain(
+            stderr
+                .lines()
+                .map(|t| line(simpa_core::process::Stream::Stderr, t)),
+        )
+        .collect();
+    let classified = simpa_core::run::classify_all(&lines);
+    let outcome = simpa_core::process::Outcome {
+        exit_code: Some(0),
+        cancelled: false,
+        elapsed_ms: 0.0,
+    };
+    let verdict = simpa_core::run::judge(&simpa_core::run::Evidence {
+        solver: SolverKind::Spps,
+        outcome: &outcome,
+        lines: &classified,
+        expectation: Ok(&exp),
+        outputs: &outputs,
+        loss_limit: simpa_core::run::DEFAULT_LOSS_LIMIT,
+    });
+    // SPPS's own warning above 5 % (`sppsNantes.cpp:33, 437-439`), a FAIL row, and the
+    // statistics against the 1 % limit.
+    assert_eq!(
+        (verdict.status, verdict.codes()),
+        (
+            simpa_core::run::Status::Fail,
+            vec!["particle_loss_reported", "particle_loss_excess"]
+        ),
+        "{verdict:#?}"
+    );
+    report.push(format!(
+        "parity mesh, spps.exe run directly: {}; judged by the run verdict (limit {} %): FAIL, {} \
+         ({})",
+        loss_line(&b),
+        simpa_core::run::DEFAULT_LOSS_LIMIT * 100.0,
+        verdict.codes().join(", "),
+        verdict
+            .reasons
+            .iter()
+            .map(|r| r.detail.as_str())
+            .collect::<Vec<_>>()
+            .join("; ")
+    ));
+    print_report(
+        "tutorial 3, the parity mesh against the default mesh",
+        &report,
+    );
+}
+
+/// A run's point receivers' levels at 125 Hz: per receiver folder, 10·log10 of its
+/// `Sound level.recp` summed over the time steps.
+fn receiver_levels(dir: &Path) -> BTreeMap<String, f64> {
+    let mut out = BTreeMap::new();
+    for e in std::fs::read_dir(dir.join("Punctual receivers")).unwrap() {
+        let p = e.unwrap().path();
+        let g = gabe::read(&std::fs::read(p.join("Sound level.recp")).unwrap()).unwrap();
+        let sum: f64 = g
+            .column(b"125 Hz")
+            .and_then(|c| c.floats())
+            .expect("a 125 Hz column")
+            .iter()
+            .map(|&v| f64::from(v))
+            .sum();
+        assert!(sum > 0.0 && sum.is_finite(), "{}: {sum}", p.display());
+        out.insert(
+            p.file_name().unwrap().to_string_lossy().into_owned(),
+            10.0 * sum.log10(),
+        );
+    }
+    out
+}
+
+/// One run of [`tutorial_3_receiver_levels_default_against_parity`]: its mesh and seed, its point
+/// receivers' levels ([`receiver_levels`]) and its particle statistics.
+type LevelRun = (
+    (&'static str, u32),
+    BTreeMap<String, f64>,
+    simpa_core::run::BandStats,
+);
+
+/// One receiver in [`level_differences`].
+#[derive(Debug)]
+struct LevelDifference {
+    receiver: String,
+    /// The default mesh's mean level over the seeds minus the parity mesh's, dB.
+    mean_db: f64,
+    /// Each mesh's seed spread, the largest level minus the smallest, dB.
+    spread_default_db: f64,
+    spread_parity_db: f64,
+    /// Whether the two meshes' seed ranges do not overlap: a difference the seeds resolve.
+    resolved: bool,
+}
+
+/// Per receiver, the default mesh's levels over the seeds against the parity mesh's.
+fn level_differences(
+    default: &[BTreeMap<String, f64>],
+    parity: &[BTreeMap<String, f64>],
+) -> Vec<LevelDifference> {
+    let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
+    let range = |v: &[f64]| {
+        (
+            v.iter().copied().fold(f64::INFINITY, f64::min),
+            v.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        )
+    };
+    let names: BTreeSet<&String> = default
+        .iter()
+        .chain(parity)
+        .flat_map(|r| r.keys())
+        .collect();
+    names
+        .into_iter()
+        .map(|name| {
+            let d: Vec<f64> = default.iter().map(|r| r[name]).collect();
+            let p: Vec<f64> = parity.iter().map(|r| r[name]).collect();
+            let ((dl, dh), (pl, ph)) = (range(&d), range(&p));
+            LevelDifference {
+                receiver: name.clone(),
+                mean_db: mean(&d) - mean(&p),
+                spread_default_db: dh - dl,
+                spread_parity_db: ph - pl,
+                resolved: dh < pl || ph < dl,
+            }
+        })
+        .collect()
+}
+
+/// The bound [`tutorial_3_receiver_levels_default_against_parity`] holds every receiver's mean
+/// difference to, dB: a tenth of the 1 dB difference limen of a level, twice over (measured: at
+/// most 0.12 dB).
+const T3_LEVEL_BOUND_DB: f64 = 0.2;
+
+/// Receiver levels of tutorial 3's stored run with transmission on (125 Hz, `trans_calc` 1,
+/// 50,000 particles per source), on our default mesh against our parity mesh (upstream's `.mbin`
+/// byte for byte), seeds 1, 2 and 3 on each, SPPS run directly as the bed runs it. The level of a
+/// point receiver is its `Sound level.recp` summed over the time steps, in dB (the calibration
+/// cancels in a difference). The question the tutorial-3 investigation left open: does the
+/// scene correction's marker fix move what a user reads, beyond the seed spread?
+///
+/// Measured (`docs/upstream-findings.md`): every receiver's mean difference within
+/// [`T3_LEVEL_BOUND_DB`], which the test holds; which receivers' seed ranges do not overlap is
+/// printed. Says no: the default mesh's levels 1 dB up, as every source 1 dB louder gives them
+/// (SPPS's energies scale with the source power, its particle fates do not), exceed the bound at
+/// every receiver.
+///
+/// Heavy: six SPPS runs of 300,000 particles, three at a time. Ignored in the plain suite;
+/// `tools/gates/parity.ps1` runs it.
+#[test]
+#[ignore = "heavy: six SPPS runs of tutorial 3's stored configuration, three at a time; tools/gates/parity.ps1 runs it"]
+fn tutorial_3_receiver_levels_default_against_parity() {
+    let Tutorial3Runs {
+        t3,
+        config,
+        cbin,
+        default_mbin,
+        ..
+    } = tutorial3_runs("t3levels");
+    let jobs: Vec<(&'static str, u32, &[u8])> = [1u32, 2, 3]
+        .iter()
+        .flat_map(|&s| {
+            [
+                ("default", s, default_mbin.as_slice()),
+                ("parity", s, t3.parity_mbin.as_slice()),
+            ]
+        })
+        .collect();
+    let levels: Vec<LevelRun> = std::thread::scope(|scope| {
+        let mut all = Vec::new();
+        for chunk in jobs.chunks(3) {
+            let handles: Vec<_> = chunk
+                .iter()
+                .map(|&(mesh, seed, mbin)| {
+                    let dir = t3.dir.join(format!("{mesh}-s{seed}"));
+                    let config =
+                        edit_attr(&config, "<simulation ", "random_seed", &seed.to_string());
+                    let cbin = &cbin;
+                    scope.spawn(move || {
+                        run(&dir, SolverKind::Spps, &config, cbin, mbin);
+                        let stats = simpa_core::run::stats::read_file(
+                            &dir.join("SPPS particle statistics.gabe"),
+                        )
+                        .unwrap();
+                        ((mesh, seed), receiver_levels(&dir), stats.bands[0])
+                    })
+                })
+                .collect();
+            all.extend(handles.into_iter().map(|h| h.join().unwrap()));
+        }
+        all
+    });
+    let of = |mesh: &str| -> Vec<BTreeMap<String, f64>> {
+        levels
+            .iter()
+            .filter(|(k, _, _)| k.0 == mesh)
+            .map(|(_, l, _)| l.clone())
+            .collect()
+    };
+    let (default, parity) = (of("default"), of("parity"));
+    assert_eq!((default.len(), parity.len()), (3, 3));
+    let names: Vec<&String> = default[0].keys().collect();
+    assert_eq!(names.len(), 5, "{names:?}");
+    let mut report = Vec::new();
+    for ((mesh, seed), l, b) in &levels {
+        report.push(format!(
+            "{mesh} mesh, seed {seed}: {}; levels {}",
+            loss_line(b),
+            l.iter()
+                .map(|(n, v)| format!("{n} {v:.3} dB"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    // The seeds differ: otherwise the spread says nothing.
+    assert!(default.windows(2).all(|w| w[0] != w[1]));
+    let found = level_differences(&default, &parity);
+    for d in &found {
+        report.push(format!(
+            "{}: default minus parity {:+.3} dB (mean of 3 seeds); seed spread default {:.3} dB, \
+             parity {:.3} dB; {}",
+            d.receiver,
+            d.mean_db,
+            d.spread_default_db,
+            d.spread_parity_db,
+            if d.resolved {
+                "the seed ranges do not overlap"
+            } else {
+                "within the seed spread"
+            }
+        ));
+    }
+    let largest = found.iter().map(|d| d.mean_db.abs()).fold(0.0, f64::max);
+    report.push(format!(
+        "largest mean difference {largest:.3} dB, bound {T3_LEVEL_BOUND_DB} dB; resolved at {} of {} \
+         receivers",
+        found.iter().filter(|d| d.resolved).count(),
+        found.len()
+    ));
+    assert!(largest <= T3_LEVEL_BOUND_DB, "{found:#?}");
+    // Says no: the default mesh's levels 1 dB up.
+    let louder: Vec<BTreeMap<String, f64>> = default
+        .iter()
+        .map(|r| r.iter().map(|(n, v)| (n.clone(), v + 1.0)).collect())
+        .collect();
+    let refused = level_differences(&louder, &parity);
+    assert!(
+        refused.iter().all(|d| d.mean_db.abs() > T3_LEVEL_BOUND_DB),
+        "{refused:#?}"
+    );
+    report.push(format!(
+        "says no, the default mesh's levels 1 dB up: every receiver beyond the bound (smallest {:.3} dB)",
+        refused.iter().map(|d| d.mean_db.abs()).fold(f64::INFINITY, f64::min)
+    ));
+    print_report(
+        "tutorial 3, receiver levels, default mesh against parity mesh",
+        &report,
+    );
+}
+
+/// Upstream's shipped SPPS on tutorial 3's parity mesh, upstream's own `.mbin` byte for byte:
+/// the stored run with transmission on (125 Hz, `trans_calc` 1, 50,000 particles per source),
+/// seed 1, our `config.xml` and `mesh.cbin`, run by our build, v1.4.0's `spps.exe` and v1.3.4's.
+/// The question: is the loss to loops of the parity mesh ours, or what original I-Simpa does? 1.4.0
+/// (the pinned 929a5c8) must write every output file exactly as ours, and 1.3.4 (the last stable
+/// release, 2020-12-23) must lose more than 10 % of its particle records to loops too. The
+/// finding is in `docs/upstream-findings.md`.
+///
+/// `$SIMPA_RELEASE_BINARIES` names the folder holding the installed releases, as for
+/// `shipped_1_3_4_and_1_4_0_solvers_against_ours`: ignored in the plain suite, run by
+/// `tools/gates/parity.ps1`, and a panic when the variable or a solver is missing.
+#[test]
+#[ignore = "needs upstream's installed 1.3.4 and 1.4.0 releases, and three SPPS runs of tutorial 3: tools/gates/parity.ps1 runs it with SIMPA_RELEASE_BINARIES"]
+fn shipped_solvers_on_tutorial_3_parity_mesh() {
+    let root = std::env::var_os("SIMPA_RELEASE_BINARIES")
+        .map(PathBuf::from)
+        .expect("SIMPA_RELEASE_BINARIES must name the folder holding inst134 and inst140");
+    let exe = |p: &str| {
+        let p = root.join(p);
+        assert!(p.is_file(), "{} is missing", p.display());
+        p
+    };
+    let builds = [
+        ("ours", solver_exe("spps.exe")),
+        ("1.4.0", exe("inst140/spps.exe")),
+        ("1.3.4", exe("inst134/core/spps/spps.exe")),
+    ];
+    let Tutorial3Runs {
+        t3, config, cbin, ..
+    } = tutorial3_runs("t3shipped");
+    let done: Vec<(&str, Outputs, simpa_core::run::BandStats)> = std::thread::scope(|scope| {
+        let handles: Vec<_> = builds
+            .iter()
+            .map(|(label, program)| {
+                let dir = t3.dir.join(label.replace('.', ""));
+                let (config, cbin, mbin) = (&config, &cbin, &t3.parity_mbin);
+                scope.spawn(move || {
+                    std::fs::create_dir_all(&dir).unwrap();
+                    let wd = simpa_core::config_xml::working_directory(&dir).unwrap();
+                    std::fs::write(
+                        dir.join("config.xml"),
+                        edit_attr(config, "<configuration ", "workingdirectory", &wd),
+                    )
+                    .unwrap();
+                    std::fs::write(dir.join("mesh.cbin"), cbin).unwrap();
+                    std::fs::write(dir.join("tetramesh.mbin"), mbin).unwrap();
+                    let r = parity::support::run_solver(program, &dir);
+                    assert_eq!(r.exit, Some(0), "{label}: {}\n{}", r.stdout, r.stderr);
+                    assert!(r.has_line("End of calculation."), "{label}: {}", r.stdout);
+                    let stats = simpa_core::run::stats::read_file(
+                        &dir.join("SPPS particle statistics.gabe"),
+                    )
+                    .unwrap();
+                    (
+                        *label,
+                        parity::support::outputs(
+                            &dir,
+                            &["config.xml", "mesh.cbin", "tetramesh.mbin"],
+                        ),
+                        stats.bands[0],
+                    )
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let mut report = Vec::new();
+    for (label, outputs, b) in &done {
+        report.push(format!(
+            "{label} spps.exe on the parity mesh: {}; {} output files",
+            loss_line(b),
+            outputs.len()
+        ));
+    }
+    let none = BTreeMap::new();
+    let d140 = output_differences(&done[1].1, &done[0].1, &none);
+    assert_eq!(d140, Vec::<String>::new(), "1.4.0 against ours");
+    report.push(format!(
+        "1.4.0 against ours: all {} output files identical",
+        done[0].1.len()
+    ));
+    let b134 = done[2].2;
+    let loops134 = f64::from(b134.lost_by_infinite_loops) / f64::from(b134.total);
+    assert!(loops134 > 0.1, "1.3.4: {}", loss_line(&b134));
+    let d134 = output_differences(&done[2].1, &done[0].1, &none);
+    assert!(
+        !d134.is_empty(),
+        "1.3.4 bit-identical to ours: this cannot tell builds apart"
+    );
+    report.push(format!(
+        "1.3.4 against ours: {} of {} output files differ; it loses {:.4} % to loops too",
+        d134.len(),
+        done[0].1.len(),
+        100.0 * loops134
+    ));
+    print_report(
+        "tutorial 3, upstream's shipped SPPS on the parity mesh",
+        &report,
+    );
 }
 
 // ---------------------------------------------------------------------------------------------
