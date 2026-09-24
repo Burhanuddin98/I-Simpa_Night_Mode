@@ -1009,7 +1009,13 @@ fn tutorial_3() {
 /// an unknown one, and hands it to the tetrahedron's scene faces
 /// (`coreinitialisation.cpp:151-176`); a room written 0 is skipped, so the faces a fitting's
 /// tetrahedra share with the room keep the fitting, where upstream's room overwrites it.
+///
+/// Measured 2026-09-24: all 24 output files of each of the 3 runs differ with the room as 0, and
+/// none with the room kept. So this test fails until decision 1 is reversed, which is Burhan's and
+/// Michael's call: it is ignored in the plain suite, with that reason, and `tools/gates/parity.ps1`
+/// runs it and reports it BLOCKED on exactly that signature, never passed.
 #[test]
+#[ignore = "BLOCKED by decision 1 (the room written as idVolume 0 changes SPPS's results on tutorial 3): tools/gates/parity.ps1 runs it"]
 fn tutorial_3_same_seed_runs() {
     let Tutorial3 {
         t,

@@ -9,14 +9,15 @@
 #     mesh-verify reports unmarked_boundary_faces, degenerate_tets, uncovered_scene_faces and
 #     index_errors 0, and every tetrahedron is oriented and wound as the .mbin says. The .var is
 #     byte-identical to upstream's tutorial-1 .var. More than 2 tet faces carry markers 0/1, each
-#     <= 0.1 m2 x (1 + 1e-4): BLOCKED while open decision 3 stands (the pinned TetGen ignores it).
+#     <= 0.1 m2 x (1 + 1e-4): TetGen 1.5.0 (decision 3, settled 2026-09-23) honours the .var.
 # (b) Corrected hall: no *_skipped.face; every .1.face row has a marker >= 0 and the markers cover
 #     all 7,860 scene faces; marker_geometry_mismatches and unmarked_boundary_faces 0; the .poly
 #     coordinates parsed back equal the .cbin float32 vertices exactly (max |delta| = 0).
 # (c) `simpa mesh <file.poly>` takes a raw .poly: the survey's tg_bad exits 4 with
-#     tetgen_skipped_facets, markers [8, 9, 12] mapped to scene faces [8, 9, 12], and no .mbin.
-#     The committed broken hall gives mesh-verify exit 4 with tetgen_skipped_facets (535) and
-#     neigh_missing.
+#     tetgen_self_intersection (TetGen 1.5.0 stops, exit 3, and writes no _skipped.face), the
+#     facets its stop and its -d follow-up name, markers [8, 9, 12], mapped to scene faces
+#     [8, 9, 12], and no .mbin. The committed broken hall, TetGen 1.6.0's output, still gives
+#     mesh-verify exit 4 with tetgen_skipped_facets (535) and neigh_missing.
 # (d) (d1) Mesh the box, then move a vertex: `run --mesh <dir>` exits 4 with mesh_out_of_date and
 #     no solver starts. (d2) A re-mesh cancelled 1 ms into TetGen leaves no tetramesh.mbin, and
 #     `run --mesh <dir>` exits 4 with mesh_missing.
@@ -294,12 +295,20 @@ Check "(a) receiver faces refined: more than 2 tet faces carry markers 0/1, each
     $areas = @($floor | ForEach-Object { FaceArea $script:boxM $_ })
     $max = ($areas | Measure-Object -Maximum).Maximum
     Write-Host "      $($floor.Count) tet faces carry marker 0 or 1, largest $max m2 (bound $(0.1 * (1 + 1e-4)) m2)"
-    if ($floor.Count -gt 2 -and $max -le 0.1 * (1 + 1e-4)) { return $true }
-    # Blocked only on decision 3's measured signature: the floor unrefined, 2 faces of 30 m2.
-    if ($floor.Count -eq 2 -and @($areas | Where-Object { [math]::Abs($_ - 30) -le 1e-3 }).Count -eq 2) {
-        return (Blocked 'open decision 3 (docs/m5-m6-design.md): the pinned TetGen 1.6.0 ignores the .var area bound (check_subface, tetgen.cxx:27347-27388), so the floor receiver stays 2 faces of 30 m2. Ways out, for Burhan and Michael: patch TetGen, or pre-split the receiver faces in the .poly')
-    }
-    $false
+    # Decision 3 is settled: TetGen 1.5.0. TetGen 1.6.0's signature (2 floor faces of 30 m2) is a
+    # FAIL now, not BLOCKED.
+    $floor.Count -gt 2 -and $max -le 0.1 * (1 + 1e-4)
+}
+Check "(a) says NO: the refinement check refuses the box meshed without its .var (the floor stays coarse)" {
+    $noVar = Edited $boxRoom (Join-Path $work 'box_novar.simpa') '"surface_receiver_max_area_m2": 0.1' '"surface_receiver_max_area_m2": null'
+    $out = Join-Path $work 'box-novar-mesh'
+    $r = Simpa @('mesh', $noVar, '--out', $out, '--json') 'mesh-box-novar'
+    if (-not (Meshed $r $out)) { throw "meshing the box without its .var exited $($r.Exit)" }
+    $m = Read-Mbin (Join-Path $out 'tetramesh.mbin')
+    $floor = @(); foreach ($t in $m.Tets) { foreach ($f in $t.faces) { if ($f[3] -eq 0 -or $f[3] -eq 1) { $floor += , $f } } }
+    $max = (@($floor | ForEach-Object { FaceArea $m $_ }) | Measure-Object -Maximum).Maximum
+    Write-Host "      without the .var: $($floor.Count) tet faces carry marker 0 or 1, largest $max m2"
+    -not ($floor.Count -gt 2 -and $max -le 0.1 * (1 + 1e-4))
 }
 
 # --- (b) the corrected hall -----------------------------------------------------------------------
@@ -344,23 +353,31 @@ Check "(b) says NO: one .poly coordinate one ulp off gives max |delta| > 0" {
 }
 
 # --- (c) broken input -----------------------------------------------------------------------------
-$script:tgBad = $null
+$script:tgBad = $null; $script:rawPoly = $null
 Check "(c) control: a valid raw .poly (upstream's tutorial-1 scene_mesh.poly) meshes: exit 0, OK, .mbin written" {
     $out = Join-Path $work 'raw-poly-mesh'
     $r = Simpa @('mesh', (Join-Path $fx 'upstream\tutorial1\tetgen\scene_mesh.poly'), '--out', $out, '--json') 'mesh-raw-poly'
+    $script:rawPoly = $r
     Write-Host "      exit $($r.Exit), $($r.Json.status), argv '$(@($r.Json.tetgen.argv) -join ' ')', $($r.Json.counts.build.tetrahedra) tetrahedra"
     Meshed $r $out
 }
-Check "(c) tg_bad .poly: exit 4, tetgen_skipped_facets, markers [8, 9, 12] mapped to scene faces [8, 9, 12], no .mbin" {
+Check "(c) tg_bad .poly: exit 4, tetgen_self_intersection, the facets named [8, 9, 12] mapped to scene faces [8, 9, 12], no .mbin" {
     $out = Join-Path $work 'tg-bad-mesh'
     $r = Simpa @('mesh', (Join-Path $fx 'meshes\tg_bad\scene_mesh.poly'), '--out', $out, '--json') 'mesh-tg-bad'
     $script:tgBad = [pscustomobject]@{ R = $r; Out = $out }
     $m = $r.Json
-    $markers = (@($m.skipped_facets) | ForEach-Object { $_.marker }) -join ','
-    $faces = (@($m.skipped_facets) | ForEach-Object { $_.scene_face }) -join ','
+    $markers = (@($m.self_intersection.facets) | ForEach-Object { $_.marker }) -join ','
+    $faces = (@($m.self_intersection.facets) | ForEach-Object { $_.scene_face }) -join ','
+    $pairs = (@($m.self_intersection.pairs) | ForEach-Object { "[$($_ -join ',')]" }) -join ' '
     $mbin = Test-Path (Join-Path $out 'tetramesh.mbin')
-    Write-Host "      exit $($r.Exit), $($m.status) [$(@($m.codes) -join ', ')], skipped markers [$markers] -> scene faces [$faces], .mbin written: $mbin"
-    $r.Exit -eq 4 -and $m.status -eq 'FAIL' -and (@($m.codes) -contains 'tetgen_skipped_facets') -and $markers -eq '8,9,12' -and $faces -eq '8,9,12' -and -not $mbin
+    Write-Host "      exit $($r.Exit), $($m.status) [$(@($m.codes) -join ', ')], TetGen exit $($m.tetgen.exit_code), stop '$($m.self_intersection.stop.message)', pairs $pairs, facets [$markers] -> scene faces [$faces], -d exit $($m.diagnosis.call.exit_code), .mbin written: $mbin"
+    $r.Exit -eq 4 -and $m.status -eq 'FAIL' -and (@($m.codes) -contains 'tetgen_self_intersection') -and $markers -eq '8,9,12' -and $faces -eq '8,9,12' -and $pairs -eq '[8,12] [9,12]' -and -not $mbin
+}
+Check "(c) says NO: a clean raw .poly gives no tetgen_self_intersection and no self_intersection" {
+    $r = $script:rawPoly
+    if ($null -eq $r) { throw 'the raw .poly control did not run' }
+    Write-Host "      control: codes [$(@($r.Json.codes) -join ', ')], self_intersection $(if ($null -eq $r.Json.self_intersection) { 'null' } else { 'present' })"
+    -not (@($r.Json.codes) -contains 'tetgen_self_intersection') -and $null -eq $r.Json.self_intersection
 }
 Check "(c) broken hall: mesh-verify exit 4 with tetgen_skipped_facets (535) and neigh_missing" {
     $r = Simpa @('mesh-verify', (Join-Path $fx 'meshes\broken_hall'), '--json') 'verify-broken-hall'
