@@ -154,8 +154,10 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
    index), with one global area. It must be byte-identical to
    `tests/fixtures/upstream/tutorial1/tetgen/scene_mesh.var` for tutorial 1: CRLF, `k  marker area`,
    the area as `f32` printed at 15 significant digits, and no newline after the final `0`.
-5. **Box fitting zones get 12 triangles in the `.poly` only.** Their markers are
-   `scene_faces + k`, and the `.mbin` builder writes them as -1: a plain tet-to-tet transition.
+5. **Without the scene correction, a box fitting zone's 12 triangles go in the `.poly`'s facet
+   list, welded, and reach the `.mbin` as plain faces; the `.cbin` carries them as upstream's
+   does.** Their `.poly` markers are `scene_faces + k`, and the `.mbin` builder writes them as -1:
+   a plain tet-to-tet transition.
    Each zone gets one region seed at the box centre, with attribute = its solver id. This is
    the layout without upstream's scene correction; with it (decision 12) the box's triangles
    are upstream's, in the user facet list, each marked with its `.cbin` face, and the markers of
@@ -320,19 +322,47 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
       holds its regions too, to `<base>.poly` beside TetGen's output or, with none, to the
       project's own `.poly` as the mesher writes it without the scene correction; the check is
       never skipped.
-    - **Measured on tutorial 3** (SPPS, 125 Hz, transmission on, seed 1, 50,000 particles per
-      source, the same `config.xml` and `.cbin`): on the parity mesh 533,967 of 2,653,740
-      particle records lost to loops (20.1 %) and 49 to meshing; on the default mesh 2 of
-      2,922,796 to loops and 59 to meshing, run by `simpa run` to OK. `simpa run` on the project
-      as imported was refused before meshing by `receiver_outside_volume` (Receiver 1 at x = 0,
-      on the wall) and `name_duplicate` (the two source groups name their sources alike), Part
-      A's rules, which upstream does not have; the run above moved Receiver 1 1 mm inside and
-      renamed the second group's sources. Since Burhan's decision of 14:11 ("Allow names, refuse
-      wall"), source names need be unique only within their source group (`Source::group`, set
-      on import; across the project still when per-source output makes them folder names), and a
-      receiver on a face has its own code: measured, `simpa validate` on tutorial 3 as imported
-      now gives exactly one error, `receiver_on_surface` for Receiver 1, "on face 12, of surface
-      group 'diff_wall'", asking for it to be moved inside (`parity_tutorials.rs::tutorial_3`).
+    - **Measured on tutorial 3, a committed test**
+      (`parity_tutorials.rs::tutorial_3_loops_parity_against_default`, heavy, so ignored in the
+      plain suite and run by `tools/gates/parity.ps1` (5)): the stored run with transmission on
+      (`2019-06-18_14h28m18s`: SPPS, 125 Hz, `trans_calc` 1, 50,000 particles per source), our
+      `config.xml` and `.cbin` of that run's project, `random_seed` 1 and nothing else changed.
+      - **The parity mesh**, run by `spps.exe` directly: 533,967 of 2,653,740 particle records lost
+        to loops (20.12 %; the test requires more than 10 %) and 49 to meshing. Judged by the run
+        verdict (`run::judge`, the proposed 1 % limit) the run fails with exactly two codes:
+        `particle_loss_excess`, 534,016 of 2,653,740 lost (20.12 %), and `particle_loss_reported`,
+        SPPS's own warning, which it prints above 5 % (`sppsNantes.cpp:33, 437-439`).
+      - **The run manager refuses the parity mesh before launch:** `simpa run-folder` on it (with
+        the `.poly` its TetGen read) exits 5 at the pre-launch stage with `mesh_invalid` and
+        `marker_geometry_mismatches`; `simpa run --mesh` on the parity mesh folder exits 4 at the
+        mesh stage with `mesh_missing`, its manifest not being OK (the project with Receiver 1 moved
+        1 mm off the wall, which the validator otherwise refuses first).
+      - **The default mesh**, the same folder but for the mesh, run by `simpa run-folder`: OK, 2 of
+        2,922,796 lost to loops (0.00007 %; the test requires under 0.01 %) and 59 to meshing.
+      - Without the `.poly` its TetGen read, the default mesh's folder is refused before launch too,
+        `mesh_invalid` and `regions_unchecked`: its `.cbin`'s box stands on the floor, which the
+        geometry check refuses, so the folder holds no cells to hold its regions to (decision 15).
+        Upstream's own run folders are refused the same way, which is open (the tutorial-3
+        follow-ups: whether `run-folder` should accept such a folder, and on what proof).
+      - Seeds 2 and 3 on each mesh, the shipped 1.3.4 and 1.4.0 `spps.exe` on the parity mesh, and
+        the receiver levels of the two meshes are in `docs/upstream-findings.md`: every build loses
+        about 20.1 % on the parity mesh, and the receiver levels differ by at most 0.12 dB.
+    - **Tutorial 3 as imported.** `simpa run` on the project as imported was refused before meshing
+      by `receiver_outside_volume` (Receiver 1 at x = 0, on the wall) and `name_duplicate` (the
+      two source groups name their sources alike), Part A's rules, which upstream does not have.
+      Since Burhan's decision of 14:11 ("Allow names, refuse wall"), source names need be unique
+      only within their source group (`Source::group`, set on import; across the project still
+      when per-source output makes them folder names), and a receiver on a face has its own code:
+      measured, `simpa validate` on tutorial 3 as imported now gives exactly one error,
+      `receiver_on_surface` for Receiver 1, "on face 12, of surface group 'diff_wall'", asking for
+      it to be moved inside (`parity_tutorials.rs::tutorial_3`).
+    - **Each region check says no on its own** (`parity_tutorials.rs::
+      tutorial_3_each_region_check_says_no_alone`, in the plain suite): tutorial 3's default mesh,
+      which passes, fed one change per check that only that check can see, must give that code
+      and no other: the room's last part numbered one further (`unknown_volume_ids`, the no-gap
+      rule); zone 1's id and the hall's swapped (`fitting_region_misplaced`); 1.1 m³ of hall
+      tetrahedra given the corridor's id (`region_volume_mismatch`); the box's cell carved out and
+      the box undeclared (`unmeshed_cells`).
 
 13. **Imported projects keep upstream's element ids** (Burhan, 2026-09-24 14:11: "Keep
     upstream's"; the tutorial-3 follow-up piece).
@@ -674,7 +704,12 @@ the doc drift apart. The classifier holds the continuation-line state for
   preprocessing off refused on the box's self-intersections (our check's pairs are TetGen's),
   TetGen 1.6.0's wrong room refused by the region volume check, a changed region line giving
   another `.mbin`, a changed pin giving another `.poly` and `.mbin`, and two zones pinned alike
-  refused.
+  refused; each region check refused on its own (decision 12). The `.poly` and `.mbin` sizes and
+  hashes it reads are our files' own, and its reading of the bed's lines refuses a transcript
+  with any one value changed. It also runs the bed's four ignored tests: upstream's shipped 1.3.4
+  and 1.4.0 solvers on tutorial 1 (decision 3) and on tutorial 3's parity mesh, and tutorial 3's
+  parity mesh against its default mesh, its loss to loops, the run manager's refusal and the
+  receiver levels (decision 12, `docs/upstream-findings.md`).
 - **M6(c):** uses the derived fixture `rooms/elmia_loss_gate.simpa`: seed 1, bands 125-4,000 Hz
   computed. The floor mesh is upstream's tutorial_2 `.1.*`, taken from the zip at gate time and
   built by `simpa mesh <project> --from-tetgen <dir>`. The tolerance follows decision 9.

@@ -204,7 +204,7 @@ tutorial 2 and `Industrial.proj` store none).
 
 | Input | Result |
 |---|---|
-| `tutorial_1.proj` imported (`simpa import-proj`) | All 12 faces equal upstream's corner for corner (`f32` bits, in face order a, b, c), every `idMat` equal, `idRs` 3503 is our 0. Without the round trip, 18 corners of 8 faces differ (`+0` where upstream has `-0`). Our vertex list is the welded one: 8 vertices against upstream's 36 (one copy per face), holding exactly upstream's 8 distinct vertices |
+| `tutorial_1.proj` imported with each run's saved project (`import_proj_with_config`; `parity_inputs.rs`, `tutorial1_scene_mesh_from_the_proj_is_upstreams_corner_for_corner`) | All 12 faces equal upstream's corner for corner (`f32` bits, in face order a, b, c), every `idMat` equal, `idRs` 3503 as upstream's, pinned from its `wxid` with no id map (`docs/m5-m6-design.md`, decision 13; the `.proj` alone, as `simpa import-proj` reads it, pins its last session's 1792). Without the round trip, 18 corners of 8 faces differ (`+0` where upstream has `-0`). Our vertex list is the welded one: 8 vertices against upstream's 36 (one copy per face), holding exactly upstream's 8 distinct vertices |
 | `tests/fixtures/rooms/tutorial1_box.simpa`, and `tutorial_1.proj` imported: the mesher's input | `scene_mesh.poly` and `scene_mesh.var` byte-identical to the ones upstream's GUI wrote in 2019 (`tests/fixtures/upstream/tutorial1/tetgen/`). Without the round trip the `.poly` differs |
 | tutorial 1's TetGen output `temp/scene_mesh.1.node`, through `GlFrame` of the project's `sceneMesh.bin`: upstream's `.mbin` path (`LoadNodeFile`, `GetTetraMesh`) | Both runs' `tetramesh.mbin` nodes, 2,196 of 2,196 coordinates bit for bit. Only narrowed to `f32`, 229 differ by value (268 by bits). This is the one stored case where the round trip moves values; on the scene meshes above it only turns `+0` into `-0` |
 
@@ -217,7 +217,7 @@ the layout, the face order and the ids:
 |---|---|
 | `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | **Byte-identical** to upstream's `mesh.cbin`, 1,016 bytes, once our receiver id 0 is written as upstream's 3503 |
 | tutorial 3 (its config and its `.cbin`, imported) | All 76 vertices and 100 faces equal bit for bit, the drawn box's 12 faces included; `idEn` 2083 and 1930 are our 3 and 2 |
-| `tutorial_3.proj` imported, each run's saved project (`parity_tutorials.rs`, `tutorial_3`) | **Byte-identical** to each run's `mesh.cbin`, 3,608 bytes, once upstream's `idEn` 1930 and 2083 are read as our 2 and 3 through the map the import records: the 40 scene vertices and 88 faces, and the box built from its stored corners `ba` (13, 4, 0) and `hc` (18, 1, 1.2) as faces 88 to 99 with their 36 vertices |
+| `tutorial_3.proj` imported, each run's saved project (`parity_tutorials.rs`, `tutorial_3`) | **Byte-identical** to each run's `mesh.cbin`, 3,608 bytes, with no id map: the import pins upstream's `idEn` 1930 and 2083 (`docs/m5-m6-design.md`, decision 13); the 40 scene vertices and 88 faces, and the box built from its stored corners `ba` (13, 4, 0) and `hc` (18, 1, 1.2) as faces 88 to 99 with their 36 vertices |
 | upstream's own `sceneMesh.bin` of tutorial 3, through `GlFrame` | The run's 40 scene vertices, bit for bit (plain narrowing gives the same 40; a frame one `f32` step off in scale moves 4) |
 
 Each check has its refusal in the same test: one vertex one `f32` step off is reported at every
@@ -293,10 +293,19 @@ coordinates without it.
    box; then the frame differs, and some coordinates move by about one unit in the last place.
    None of the tutorials is such a case.
 4. **Fitting boxes drawn by the user.** Upstream appends each box's 12 triangles to the `.cbin`,
-   and so does ours since 2026-09-24 (above). Our mesher still puts a box's triangles in the
-   `.poly` as 8 welded corners in the facet list (Part 2, not upstream's Part 5 user list) and
-   writes them as plain tetrahedron-to-tetrahedron faces in the `.mbin`, markers -1, so no
-   marker names the `.cbin`'s box faces (`docs/m5-m6-design.md`, decision 5). A particle crosses
+   and so does ours since 2026-09-24 (above). What the mesher does with them depends on the
+   project's scene correction (`docs/m5-m6-design.md`, decisions 5 and 12):
+   - **With it on** (every upstream project; tutorial 3), as upstream's GUI does: the box's 12
+     triangles go in the `.poly`'s Part 5 user facet list, 3 nodes each, markers their `.cbin`
+     faces (88 to 99 on tutorial 3), through `preprocess.exe`. The default mode then restores
+     each surviving facet's true marker (19 on tutorial 3, all written 88 by `preprocess.exe`), so
+     the `.mbin`'s markers name the `.cbin`'s box faces 90 to 99, 88 and 89 having been deleted as
+     the box's bottom; parity mode keeps `preprocess.exe`'s 88.
+   - **With it off** (the default for a project made here): 8 welded corners in the facet list
+     (Part 2), written as plain tetrahedron-to-tetrahedron faces in the `.mbin`, markers -1, so no
+     marker names the `.cbin`'s box faces.
+
+   A particle crosses
    both (`CalculationCore.cpp:218, 226` for upstream's fitting faces), and TCR leaves the `.cbin`'s
    box faces, ours as upstream's, out of the room's surfaces: they carry a fitting
    (`TC_CalculationCore.cpp:11-17`). That the two meshes are the same physics is not yet shown by

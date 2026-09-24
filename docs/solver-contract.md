@@ -502,7 +502,9 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
     broken-hall TCR folder, which TCR itself runs to exit 0 (fixture `runs/tcr_broken_hall`).
   - **the bands.** Every source's spectrum must reach the position of the last computed band,
     or the reason is Part A's `band_set_mismatch`. No signal after the run catches a short
-    spectrum: VERIFIED fixture `runs/spps_oneband`, exit 0 with every file written.
+    spectrum: VERIFIED fixture `runs/spps_oneband`, exit 0 with every file written, and the
+    band read past the spectrum's end does not give the same statistics from run to run
+    (measured: 7 of 230 runs differ, `docs/upstream-findings.md`, 4).
   - **the sources and point receivers (SPPS, once the mesh check passed).** Each must be in a
     tetrahedron by SPPS's own test, or the reason is `source_unlocatable` or
     `receiver_unlocatable`. This refuses fixture `runs/spps_srcout`, which SPPS crashes on.

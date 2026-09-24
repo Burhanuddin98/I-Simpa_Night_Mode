@@ -45,3 +45,18 @@ Scripts and outputs are in `target/agents/t3-cracks-scratch/`.
     iteration order. The stored file has 1930 first.
   - One caveat: "our input" here is the lens's Python model of our writer, not our Rust writer's
     own bytes. The tutorial 3 piece measures the real writer.
+
+## Settled since (2026-09-24, the tutorial-3 follow-ups, piece B)
+
+Two of the synthesis's UNKNOWNs are now measured, in committed tests the parity gate runs; the
+findings are in `docs/upstream-findings.md` (internal):
+- **Whether upstream's shipped 1.3.4 and 1.4.0 `spps.exe` loop the same way on tutorial 3:**
+  they do. On the parity mesh (upstream's `.mbin`), the stored run with transmission on and seed
+  1, 1.4.0 writes every file as ours (20.12 % of records lost to loops), and 1.3.4 loses 20.13 %
+  (`parity_tutorials.rs::shipped_solvers_on_tutorial_3_parity_mesh`).
+- **The effect on receiver levels:** at the stored configuration, 3 seeds on each mesh, the
+  default mesh (markers restored) and the parity mesh agree within 0.12 dB at every receiver;
+  only Receiver 3's difference is resolved by the seeds
+  (`parity_tutorials.rs::tutorial_3_receiver_levels_default_against_parity`).
+- The loss to loops itself, and the run manager's refusal of the parity mesh, are
+  `tutorial_3_loops_parity_against_default` (`docs/m5-m6-design.md`, decision 12).
