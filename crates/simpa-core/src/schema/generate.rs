@@ -296,6 +296,8 @@ pub fn generate(seed: u64) -> Project {
                 max_volume_m3,
                 surface_receiver_max_area_m2,
                 preserve_boundary,
+                // Drawn last, below, so that every earlier draw stays as it was.
+                preprocess: false,
             }
         },
     };
@@ -308,7 +310,7 @@ pub fn generate(seed: u64) -> Project {
         }),
     };
 
-    Project {
+    let mut project = Project {
         format_version: FORMAT_VERSION,
         id: ProjectId(r.uuid()),
         name: format!("Generated {seed}"),
@@ -331,7 +333,9 @@ pub fn generate(seed: u64) -> Project {
         variants,
         active_variant,
         view,
-    }
+    };
+    project.solvers.meshing.preprocess = r.bool();
+    project
 }
 
 fn random_bands(r: &mut Rng) -> BandSet {

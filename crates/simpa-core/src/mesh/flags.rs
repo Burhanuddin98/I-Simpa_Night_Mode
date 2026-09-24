@@ -151,6 +151,7 @@ mod tests {
             max_volume_m3: a.map(F64::new),
             surface_receiver_max_area_m2: area.map(F64::new),
             preserve_boundary: y,
+            preprocess: false,
         }
     }
 

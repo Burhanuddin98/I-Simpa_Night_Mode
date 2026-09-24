@@ -1506,3 +1506,294 @@ fn upstreams_tutorial3_scene_carries_its_box_as_a_drawn_zone() {
     }
     assert_eq!(runs, 3);
 }
+
+// ---------------------------------------------------------------------------------------------
+// The room's parts, and the region volume check.
+
+/// TetGen numbers the room's parts up by one from the first (`tetgen.cxx:22403-22436`), so a part
+/// past a gap is no id it gives.
+#[test]
+fn the_rooms_parts_are_numbered_without_a_gap() {
+    let (mesh, scene) = tutorial1();
+    assert!(verify_mesh(&mesh, &scene, &upstream()).passed());
+    // Half the tetrahedra made a second part, 2: TetGen's numbering, so no unknown id.
+    let mut two = mesh.clone();
+    for (i, t) in two.tetrahedra.iter_mut().enumerate() {
+        if i % 2 == 0 {
+            t.id_volume = 2;
+        }
+    }
+    let r = verify_mesh(&two, &scene, &upstream());
+    assert_eq!(r.unknown_volume_ids, 0, "{}", summary("parts 1 and 2", &r));
+    // Says no: numbered 3, past the missing 2.
+    let mut gap = mesh.clone();
+    for (i, t) in gap.tetrahedra.iter_mut().enumerate() {
+        if i % 2 == 0 {
+            t.id_volume = 3;
+        }
+    }
+    let r = verify_mesh(&gap, &scene, &upstream());
+    assert_eq!(
+        r.unknown_volume_ids,
+        mesh.tetrahedra.len().div_ceil(2),
+        "{}",
+        summary("parts 1 and 3", &r)
+    );
+    assert_eq!(codes(&r), ["unknown_volume_ids"]);
+}
+
+/// Three tetrahedra round the edge from the origin to (0, 0, 1), each a cell of its own: the
+/// first (the zone, id 2), the second and the third (the room's two parts, 3 and 4). Facets: the
+/// 8 outer ones, wound outward, then the first's wall with the second (8) and the second's with
+/// the third (9); a facet's marker is its position.
+struct Wedges {
+    nodes: Vec<[f64; 3]>,
+    facets: Vec<[u32; 3]>,
+    tets: [[i32; 4]; 3],
+}
+
+fn wedges() -> Wedges {
+    let nodes = vec![
+        [0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 1.0, 0.5],
+        [1.0, 0.0, 0.5],
+        [-1.0, 0.0, 0.5],
+        [0.0, -1.0, 0.5],
+    ];
+    let tets = [[0, 1, 3, 2], [0, 1, 2, 4], [0, 1, 4, 5]];
+    let outward = |f: [u32; 3], away_from: usize| -> [u32; 3] {
+        let p = |i: u32| nodes[i as usize];
+        let [a, b, c] = f.map(p);
+        let d = nodes[away_from];
+        let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        let w = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        if n[0] * w[0] + n[1] * w[1] + n[2] * w[2] > 0.0 {
+            [f[0], f[2], f[1]]
+        } else {
+            f
+        }
+    };
+    let facets = vec![
+        outward([0, 1, 3], 2),
+        outward([0, 3, 2], 1),
+        outward([1, 3, 2], 0),
+        outward([0, 2, 4], 1),
+        outward([1, 2, 4], 0),
+        outward([0, 4, 5], 1),
+        outward([1, 4, 5], 0),
+        outward([0, 1, 5], 4),
+        [0, 1, 2],
+        [0, 1, 4],
+    ];
+    Wedges {
+        nodes,
+        facets,
+        tets,
+    }
+}
+
+impl Wedges {
+    fn check(&self) -> simpa_core::geometry::check::CheckReport {
+        let group = simpa_core::schema::GroupId::from_u128(0);
+        let g = simpa_core::schema::Geometry {
+            vertices: self
+                .nodes
+                .iter()
+                .map(|&v| simpa_core::schema::Vec3::from(v))
+                .collect(),
+            faces: self
+                .facets
+                .iter()
+                .map(|&vertices| simpa_core::schema::Face { vertices, group })
+                .collect(),
+        };
+        let r = simpa_core::geometry::check::check(&g);
+        assert!(r.is_ok(), "{:?}", r.reasons);
+        assert_eq!(r.cells.len(), 3);
+        r
+    }
+
+    /// The three tetrahedra with these ids (only the corners and ids matter to the region check).
+    fn mesh(&self, ids: [i32; 3]) -> Mesh {
+        let face = TetraFace {
+            vertices: [0, 0, 0],
+            marker: -1,
+            neighbor: -2,
+        };
+        Mesh {
+            nodes: self.nodes.iter().map(|p| p.map(|c| c as f32)).collect(),
+            tetrahedra: (0..3)
+                .map(|t| Tetrahedron {
+                    vertices: self.tets[t],
+                    id_volume: ids[t],
+                    faces: [face; 4],
+                })
+                .collect(),
+        }
+    }
+}
+
+/// The zone of the wedges: id 2, seeded at `seed`, its faces the facets `faces`.
+fn zone(seed: [f32; 3], faces: Vec<u32>) -> simpa_core::mesh::FittingRegion {
+    simpa_core::mesh::FittingRegion {
+        zone: "zone".to_string(),
+        solver_id: 2,
+        seed,
+        box_centre: None,
+        faces,
+    }
+}
+
+/// Every region fills one cell with its volume, each fitting's id is on its zone's cell, and each
+/// of the four region codes says no to the mesh made to fail it.
+#[test]
+fn regions_are_held_to_the_cells_of_the_meshed_geometry() {
+    use simpa_core::mesh::verify::{
+        Expectations, Reference, seed_inside, verify_mesh_with, zone_cell,
+    };
+    let w = wedges();
+    let check = w.check();
+    let markers: Vec<u32> = (0..w.facets.len() as u32).collect();
+    let cell_of = |t: usize| {
+        let reference = Reference {
+            vertices: &w.nodes,
+            facets: &w.facets,
+            markers: &markers,
+            check: &check,
+            fittings: &[],
+        };
+        let c = [0, 1, 2, 3].map(|k| w.nodes[w.tets[t][k] as usize]);
+        let centroid = [0, 1, 2].map(|k| ((c[0][k] + c[1][k] + c[2][k] + c[3][k]) / 4.0) as f32);
+        zone_cell(&reference, &zone(centroid, vec![]), 1e-9)
+            .zone_cell
+            .unwrap()
+    };
+    let (first, second) = (cell_of(0), cell_of(1));
+    let scene = cbin::Model {
+        vertices: Vec::new(),
+        faces: Vec::new(),
+    };
+    let ids = VolumeIds::tetgen(vec![2]);
+    // The seed on the wall between the first and the second, the zone's own face (facet 8): the
+    // first is closed by it and the outer shell, the second is not (the wall behind it has the
+    // third cell behind it), so the zone is the first.
+    let on_wall = [0.0f32, 1.0 / 3.0, 0.5];
+    let fittings = [zone(on_wall, vec![8])];
+    let run = |ids_of: [i32; 3], fittings: &[simpa_core::mesh::FittingRegion]| {
+        let reference = Reference {
+            vertices: &w.nodes,
+            facets: &w.facets,
+            markers: &markers,
+            check: &check,
+            fittings,
+        };
+        verify_mesh_with(
+            &w.mesh(ids_of),
+            &scene,
+            &ids,
+            &Expectations {
+                unmeshed_faces: None,
+                reference: Some(reference),
+            },
+        )
+    };
+    let region_codes = |r: &VerifyReport| -> Vec<String> {
+        r.codes
+            .iter()
+            .filter(|c| {
+                [
+                    "region_volume_mismatch",
+                    "unmeshed_cells",
+                    "fitting_region_misplaced",
+                    "fitting_seed_ambiguous",
+                    "unknown_volume_ids",
+                ]
+                .contains(&c.as_str())
+            })
+            .cloned()
+            .collect()
+    };
+    let ok = run([2, 3, 4], &fittings);
+    assert!(region_codes(&ok).is_empty(), "{:#?}", ok.regions);
+    assert!(ok.regions_checked);
+    assert_eq!(ok.regions.len(), 3);
+    let zone_region = ok.regions.iter().find(|r| r.id == 2).unwrap();
+    assert_eq!(
+        (zone_region.cell, zone_region.zone_cell),
+        (Some(first), Some(first))
+    );
+    assert_eq!(zone_region.seed_on_facets, [8]);
+    for r in &ok.regions {
+        assert!((r.volume_m3 - 1.0 / 6.0).abs() < 1e-12, "{r:?}");
+    }
+
+    // Says no: the zone's id on the second (TetGen's other choice of side), the room's first part
+    // on the first.
+    let r = run([3, 2, 4], &fittings);
+    assert_eq!(
+        region_codes(&r),
+        ["fitting_region_misplaced"],
+        "{:#?}",
+        r.regions
+    );
+    // Says no: the zone's faces not given, so neither side is closed by them.
+    let r = run([2, 3, 4], &[zone(on_wall, vec![])]);
+    assert_eq!(
+        region_codes(&r),
+        ["fitting_seed_ambiguous"],
+        "{:#?}",
+        r.regions
+    );
+    // Says no: the second and the third one region, so it is not the second's volume and the
+    // third cell is meshed by none.
+    let r = run([2, 3, 3], &fittings);
+    assert_eq!(
+        region_codes(&r),
+        ["region_volume_mismatch", "unmeshed_cells"],
+        "{:#?}",
+        r.regions
+    );
+    // Says no: no tetrahedron carries the zone's id.
+    let r = run([3, 3, 3], &fittings);
+    assert!(
+        region_codes(&r).contains(&"fitting_region_misplaced".to_string()),
+        "{:#?}",
+        r.regions
+    );
+    // Says no: a node moved, so the first region's volume is not its cell's.
+    let mut moved = w.mesh([2, 3, 4]);
+    moved.nodes[3][0] = 1.5;
+    let reference = Reference {
+        vertices: &w.nodes,
+        facets: &w.facets,
+        markers: &markers,
+        check: &check,
+        fittings: &fittings,
+    };
+    let r = verify_mesh_with(
+        &moved,
+        &scene,
+        &ids,
+        &Expectations {
+            unmeshed_faces: None,
+            reference: Some(reference),
+        },
+    );
+    assert!(r.region_volume_mismatch >= 1, "{:#?}", r.regions);
+
+    // The mesher's move: the seed off the wall, strictly inside the first cell.
+    let inside = seed_inside(&reference, &fittings[0], 1e-9).expect("a point inside the zone");
+    let moved_zone = zone_cell(&reference, &zone(inside, vec![8]), 1e-9);
+    assert!(moved_zone.on_facets.is_empty(), "{moved_zone:?}");
+    assert_eq!(moved_zone.candidates, [first]);
+    assert_ne!(first, second);
+    // Nothing to move a seed already inside.
+    assert!(seed_inside(&reference, &zone(inside, vec![8]), 1e-9).is_none());
+}

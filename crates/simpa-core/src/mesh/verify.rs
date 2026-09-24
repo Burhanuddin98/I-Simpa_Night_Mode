@@ -19,6 +19,10 @@ use crate::formats::{FormatError, cbin, mbin};
 
 mod dir;
 mod geometry;
+mod regions;
+
+pub(crate) use geometry::point_triangle_distance;
+pub use regions::{CellCheck, Reference, RegionCheck, ZoneCell, seed_inside, zone_cell};
 
 /// Face `i` of a tetrahedron `(A, B, C, D)`, as corner positions: `B D C`, `C D A`, `A D B`,
 /// `B C A`. Face `i` is opposite corner `i` and its neighbour is the tetrahedron across it
@@ -35,11 +39,13 @@ pub const UNCOVERED_LISTED: usize = 20;
 /// decision 1).
 ///
 /// TetGen's `-A` gives each seeded region its seed's attribute, a fitting zone's solver id, and
-/// each region no seed reaches the next number above the largest seed, one per region
-/// (`tetgen.cxx:22403-22436`): the room is 1 without fitting zones, and its parts are
-/// `room, room + 1, ...` (tutorial 3's room is three regions, 2084 to 2086, above its fittings
-/// 1930 and 2083). An id is known when it is a fitting's or at least `room`; anything else,
-/// such as a room written 0 beside TetGen's numbering, is `unknown_volume_ids`.
+/// each region no seed reaches the next number above the largest seed, one per region, counting
+/// up by one with no gap (`attr++`, `tetgen.cxx:22403-22436`): the room is 1 without fitting
+/// zones, and its parts are `room, room + 1, ...` (tutorial 3's room is three regions, 2084 to
+/// 2086, above its fittings 1930 and 2083). An id is known when it is a fitting's, or one of the
+/// room's parts: `room + k` where the mesh also carries every id from `room` to it. Anything else,
+/// such as a room written 0 beside TetGen's numbering, or a part numbered past a gap, is
+/// `unknown_volume_ids`.
 ///
 /// The default is a mesh without fitting zones: room 1 ([`VolumeIds::tetgen`]).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -58,9 +64,27 @@ impl VolumeIds {
         VolumeIds { room, fittings }
     }
 
-    /// Whether a tetrahedron may carry `id`: a fitting's id, or a room part's.
+    /// Whether a tetrahedron may carry `id`, on its own: a fitting's id, or `room` and above.
+    /// [`verify_mesh`] also requires the room's parts to be numbered without a gap
+    /// ([`VolumeIds::known_ids`]).
     pub fn knows(&self, id: i32) -> bool {
         self.fittings.contains(&id) || id >= self.room
+    }
+
+    /// Of the distinct ids a mesh carries (ascending), those TetGen's numbering allows: the
+    /// fittings', and the room's parts from `room` up to the first missing number.
+    pub fn known_ids(&self, present: &[i32]) -> Vec<i32> {
+        let mut next = self.room;
+        let mut known = Vec::new();
+        for &id in present {
+            if self.fittings.contains(&id) {
+                known.push(id);
+            } else if id == next {
+                known.push(id);
+                next = next.saturating_add(1);
+            }
+        }
+        known
     }
 }
 
@@ -115,8 +139,9 @@ pub struct VerifyReport {
     /// has to name. Not an offence: a count of what the coverage check left out.
     #[serde(default)]
     pub drawn_zone_faces: usize,
-    /// Tetrahedra whose `idVolume` is neither a fitting's nor a room part's, that is below
-    /// [`VolumeIds::room`] and no fitting's (`unknown_volume_ids`).
+    /// Tetrahedra whose `idVolume` is neither a fitting's nor a room part's: below
+    /// [`VolumeIds::room`] and no fitting's, or a room part numbered past a gap
+    /// ([`VolumeIds::known_ids`]) (`unknown_volume_ids`).
     pub unknown_volume_ids: usize,
     /// Total volume in cubic metres per `idVolume`.
     pub volume_by_id: BTreeMap<i32, f64>,
@@ -126,6 +151,35 @@ pub struct VerifyReport {
     /// The largest finite distance from a marked face's node to the scene face its in-range
     /// marker names: how close the mesh comes to `marker_tolerance_m`.
     pub max_marker_distance_m: f64,
+    /// Regions whose volume is not the volume of the cell of the meshed geometry they fill, or
+    /// that fill no cell, lie in the exterior, or share a cell (`region_volume_mismatch`). Only
+    /// checked against a [`Reference`] ([`verify_mesh_with`]).
+    #[serde(default)]
+    pub region_volume_mismatch: usize,
+    /// Cells of the meshed geometry no region fills (`unmeshed_cells`).
+    #[serde(default)]
+    pub unmeshed_cells: usize,
+    /// Fitting zones whose id is not on their zone's cell, or on no tetrahedron
+    /// (`fitting_region_misplaced`).
+    #[serde(default)]
+    pub fitting_region_misplaced: usize,
+    /// Fitting zones whose seed lies on facets between cells that the zone's own faces do not
+    /// tell apart (`fitting_seed_ambiguous`).
+    #[serde(default)]
+    pub fitting_seed_ambiguous: usize,
+    /// Whether the region volume check ran: only against a [`Reference`].
+    #[serde(default)]
+    pub regions_checked: bool,
+    /// Each region against its cell, ascending by id.
+    #[serde(default)]
+    pub regions: Vec<RegionCheck>,
+    /// Each cell of the meshed geometry, and the regions found in it.
+    #[serde(default)]
+    pub cells: Vec<CellCheck>,
+    /// The scene faces [`Expectations::unmeshed_faces`] named: left out of the coverage check
+    /// in place of [`drawn_zone_faces`]' recognition.
+    #[serde(default)]
+    pub expected_unmeshed_faces: Vec<u32>,
     pub codes: Vec<String>,
 }
 
@@ -135,7 +189,7 @@ impl VerifyReport {
     }
 
     /// Each count with its reason code, in report order.
-    fn counts(&self) -> [(&'static str, usize); 11] {
+    fn counts(&self) -> [(&'static str, usize); 15] {
         [
             ("index_errors", self.index_errors),
             ("degenerate_tets", self.degenerate_tets),
@@ -151,6 +205,10 @@ impl VerifyReport {
             ),
             ("uncovered_scene_faces", self.uncovered_scene_faces),
             ("unknown_volume_ids", self.unknown_volume_ids),
+            ("region_volume_mismatch", self.region_volume_mismatch),
+            ("unmeshed_cells", self.unmeshed_cells),
+            ("fitting_region_misplaced", self.fitting_region_misplaced),
+            ("fitting_seed_ambiguous", self.fitting_seed_ambiguous),
         ]
     }
 }
@@ -168,9 +226,34 @@ fn same_winding(face: [i32; 3], expected: [i32; 3]) -> bool {
     face == [a, b, c] || face == [b, c, a] || face == [c, a, b]
 }
 
+/// What a caller that built the mesh knows beyond the `.mbin` and the `.cbin`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Expectations<'a> {
+    /// The scene faces no tetrahedron face need carry, in place of [`drawn_zone_faces`]'
+    /// recognition: the facets `preprocess.exe` deleted (a box zone's bottom lying on the floor).
+    /// Every other scene face must be covered.
+    pub unmeshed_faces: Option<&'a [u32]>,
+    /// The geometry TetGen was given and its cells: the region volume check runs against it.
+    pub reference: Option<Reference<'a>>,
+}
+
 /// Checks `mesh` against the `.mbin` invariants (`docs/m5-m6-design.md`, decision 6) and against
-/// the scene its markers index.
+/// the scene its markers index: [`verify_mesh_with`] with no [`Expectations`], so a drawn zone's
+/// triangles are recognised ([`drawn_zone_faces`]) and no region volume is checked.
 pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> VerifyReport {
+    verify_mesh_with(mesh, scene, ids, &Expectations::default())
+}
+
+/// [`verify_mesh`], and what `expect` adds: its list of faces that need no marker in place of
+/// [`drawn_zone_faces`], and the region volume check against its [`Reference`]
+/// (`region_volume_mismatch`, `unmeshed_cells`, `fitting_region_misplaced`,
+/// `fitting_seed_ambiguous`; `mesh/verify/regions.rs`).
+pub fn verify_mesh_with(
+    mesh: &mbin::Mesh,
+    scene: &cbin::Model,
+    ids: &VolumeIds,
+    expect: &Expectations,
+) -> VerifyReport {
     let n_tets = mesh.tetrahedra.len();
     let n_scene = scene.faces.len();
     let mut r = VerifyReport {
@@ -186,10 +269,9 @@ pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> V
             .map(|p| p.map(f64::from))
     };
     // Pass 1, per tetrahedron: indices, volume ids, degeneracy, orientation, face order.
+    let mut tets_by_id: BTreeMap<i32, usize> = BTreeMap::new();
     for tet in &mesh.tetrahedra {
-        if !ids.knows(tet.id_volume) {
-            r.unknown_volume_ids += 1;
-        }
+        *tets_by_id.entry(tet.id_volume).or_default() += 1;
         for face in &tet.faces {
             r.index_errors += face.vertices.iter().filter(|&&v| node(v).is_none()).count();
             if usize::try_from(face.neighbor).is_ok_and(|n| n >= n_tets) {
@@ -258,9 +340,31 @@ pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> V
             Some([v(f.a)?, v(f.b)?, v(f.c)?])
         })
         .collect();
+    let present: Vec<i32> = tets_by_id.keys().copied().collect();
+    let known = ids.known_ids(&present);
+    r.unknown_volume_ids = tets_by_id
+        .iter()
+        .filter(|(id, _)| !known.contains(id))
+        .map(|(_, n)| n)
+        .sum();
     let mut covered = vec![false; n_scene];
-    let drawn = drawn_zone_faces(scene, ids);
-    r.drawn_zone_faces = drawn.iter().filter(|d| **d).count();
+    let drawn = match expect.unmeshed_faces {
+        Some(list) => {
+            let mut d = vec![false; n_scene];
+            for &f in list {
+                if let Some(x) = d.get_mut(f as usize) {
+                    *x = true;
+                }
+            }
+            r.expected_unmeshed_faces = list.to_vec();
+            d
+        }
+        None => {
+            let d = drawn_zone_faces(scene, ids);
+            r.drawn_zone_faces = d.iter().filter(|x| **x).count();
+            d
+        }
+    };
     for (t, tet) in mesh.tetrahedra.iter().enumerate() {
         for (i, face) in tet.faces.iter().enumerate() {
             match usize::try_from(face.neighbor) {
@@ -331,6 +435,17 @@ pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> V
         if r.uncovered_scene_faces_first.len() < UNCOVERED_LISTED {
             r.uncovered_scene_faces_first.push(s as u32);
         }
+    }
+
+    if let Some(reference) = &expect.reference {
+        let o = regions::check(mesh, reference, tolerance);
+        r.region_volume_mismatch = o.region_volume_mismatch;
+        r.unmeshed_cells = o.unmeshed_cells;
+        r.fitting_region_misplaced = o.fitting_region_misplaced;
+        r.fitting_seed_ambiguous = o.fitting_seed_ambiguous;
+        r.regions = o.regions;
+        r.cells = o.cells;
+        r.regions_checked = true;
     }
 
     r.codes = r
@@ -506,4 +621,9 @@ impl DirReport {
 /// `mesh.cbin` among them, are errors.
 pub fn verify_dir(dir: &Path, ids: &VolumeIds) -> Result<DirReport, FormatError> {
     dir::verify(dir, ids)
+}
+
+/// The largest |coordinate| of `vertices`, the `r` of the verifier's distance tolerance.
+pub(crate) fn geometry_max_abs(vertices: &[[f64; 3]]) -> f64 {
+    geometry::max_abs(vertices.iter().copied())
 }

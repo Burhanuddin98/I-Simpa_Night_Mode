@@ -57,38 +57,59 @@ impl Mesher for TetgenMesher {
         cancel: &CancelToken,
         on_line: &mut dyn FnMut(&Line),
     ) -> io::Result<Outcome> {
-        if !self.exe.is_file() {
-            return Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("{} is not a file", self.exe.display()),
-            ));
-        }
-        let mut out = BufWriter::new(File::create(dir.join(STDOUT_LOG))?);
-        let mut err = BufWriter::new(File::create(dir.join(STDERR_LOG))?);
-        let mut write_error: Option<io::Error> = None;
-        let spec = Spec {
-            program: self.exe.clone(),
-            args: args.iter().map(OsString::from).collect(),
-            cwd: dir.to_path_buf(),
+        run_logged(
+            &self.exe,
+            dir,
+            args,
+            cancel,
+            on_line,
+            (STDOUT_LOG, STDERR_LOG),
+        )
+    }
+}
+
+/// Runs `exe` with `dir` as its working folder through [`process::run`] (a Job Object, killed on
+/// cancel), logging its two streams line by line as they arrive to `logs` (stdout, stderr) in
+/// that folder. `Err` when `exe` is not a file, it cannot start, or a log cannot be written.
+pub(super) fn run_logged(
+    exe: &Path,
+    dir: &Path,
+    args: &[String],
+    cancel: &CancelToken,
+    on_line: &mut dyn FnMut(&Line),
+    logs: (&str, &str),
+) -> io::Result<Outcome> {
+    if !exe.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("{} is not a file", exe.display()),
+        ));
+    }
+    let mut out = BufWriter::new(File::create(dir.join(logs.0))?);
+    let mut err = BufWriter::new(File::create(dir.join(logs.1))?);
+    let mut write_error: Option<io::Error> = None;
+    let spec = Spec {
+        program: exe.to_path_buf(),
+        args: args.iter().map(OsString::from).collect(),
+        cwd: dir.to_path_buf(),
+    };
+    let outcome = process::run(&spec, cancel, &mut |line: &Line| {
+        let log = match line.stream {
+            Stream::Stdout => &mut out,
+            Stream::Stderr => &mut err,
         };
-        let outcome = process::run(&spec, cancel, &mut |line: &Line| {
-            let log = match line.stream {
-                Stream::Stdout => &mut out,
-                Stream::Stderr => &mut err,
-            };
-            let eol = if line.terminated { "\n" } else { "" };
-            if let Err(e) = write!(log, "{}{eol}", line.text)
-                && write_error.is_none()
-            {
-                write_error = Some(e);
-            }
-            on_line(line);
-        })?;
-        out.flush()?;
-        err.flush()?;
-        match write_error {
-            Some(e) => Err(e),
-            None => Ok(outcome),
+        let eol = if line.terminated { "\n" } else { "" };
+        if let Err(e) = write!(log, "{}{eol}", line.text)
+            && write_error.is_none()
+        {
+            write_error = Some(e);
         }
+        on_line(line);
+    })?;
+    out.flush()?;
+    err.flush()?;
+    match write_error {
+        Some(e) => Err(e),
+        None => Ok(outcome),
     }
 }

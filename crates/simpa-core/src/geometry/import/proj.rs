@@ -2541,13 +2541,19 @@ fn read_solvers(
         }
     }
     m.preserve_boundary = preserve;
-    if opt_prop_bool(mesh, "preprocess", mw)?.unwrap_or(false) {
-        notes.push(
-            "upstream ran its scene correction (preprocess) before meshing this project; this \
-             import does not"
-                .to_string(),
-        );
-    }
+    // Upstream's "Scene correction before meshing": its GUI default is on
+    // (`e_core_core_tetconf.h:108`), and `projet_maillage.cpp:60, 206-213` runs `preprocess.exe`
+    // on the `.poly` when it is.
+    m.preprocess = match opt_prop_bool(mesh, "preprocess", mw)? {
+        Some(v) => v,
+        None => {
+            notes.push(format!(
+                "{mw}: no `preprocess`, upstream's default kept (on: the scene is corrected by \
+                 preprocess.exe before meshing)"
+            ));
+            true
+        }
+    };
 
     // TCR.
     if let Some(tc) = opt_child(core, "tc") {

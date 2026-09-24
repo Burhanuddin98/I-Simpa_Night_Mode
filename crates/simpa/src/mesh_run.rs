@@ -8,9 +8,12 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
-use simpa_core::mesh::{self, MeshManifest, MeshStatus, Mesher, TetgenMesher, verify};
+use simpa_core::mesh::{
+    self, Markers, MeshManifest, MeshStatus, MeshTools, Mesher, PreprocessProgram, TetgenMesher,
+    verify,
+};
 use simpa_core::process::{CancelToken, Line};
-use simpa_core::run::manager::{self, TETGEN_EXE_NAME, solver_exe_name};
+use simpa_core::run::manager::{self, PREPROCESS_EXE_NAME, TETGEN_EXE_NAME, solver_exe_name};
 use simpa_core::run::{
     CancelAfterLaunch, DEFAULT_LOSS_LIMIT, ExeSearch, ExitClass, MeshChoice, RunEvent, RunOptions,
     RunReport, Status,
@@ -135,19 +138,39 @@ fn mesh_relevant(code: &str) -> bool {
     validate::STRUCTURAL_CODES.contains(&code) || code == validate::codes::MESH_SETTINGS_CONFLICT
 }
 
-/// `mesh <project.simpa | file.poly> --out <dir> [--json] [--tetgen <exe>] [--from-tetgen <dir>
-/// [--basename <b>]] [--cancel-after-ms <n>]`.
+/// `preprocess.exe` for a project whose settings ask for it: `--preprocess`, else the design's
+/// search. Not found is `None`, said on stderr: the mesher then fails with
+/// `preprocess_launch_failed`, in its manifest.
+fn preprocess_program(
+    a: &Args,
+    project: &simpa_core::schema::Project,
+) -> Option<PreprocessProgram> {
+    if !project.solvers.meshing.preprocess {
+        return None;
+    }
+    match find_exe(a.path("preprocess"), PREPROCESS_EXE_NAME) {
+        Ok(exe) => Some(PreprocessProgram::new(exe)),
+        Err(e) => {
+            eprintln!("simpa: {e}");
+            None
+        }
+    }
+}
+
+/// `mesh <project.simpa | file.poly> --out <dir> [--json] [--tetgen <exe>] [--preprocess <exe>]
+/// [--parity] [--from-tetgen <dir> [--basename <b>]] [--cancel-after-ms <n>]`.
 pub fn mesh_cmd(args: &[&str]) -> ExitCode {
     let a = match Args::parse(
         args,
         &[
             "out",
             "tetgen",
+            "preprocess",
             "from-tetgen",
             "basename",
             "cancel-after-ms",
         ],
-        &["json"],
+        &["json", "parity"],
     ) {
         Ok(a) => a,
         Err(e) => return usage_error(&e),
@@ -203,7 +226,17 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
                 Ok(p) => p,
                 Err(code) => return code,
             };
-            mesh::mesh_project(&project, &out, mesher, &cancel, &mut on_line)
+            let program = preprocess_program(&a, &project);
+            let tools = MeshTools {
+                tetgen: mesher,
+                preprocess: program.as_ref().map(|p| p as &dyn Mesher),
+                markers: if a.switch("parity") {
+                    Markers::Parity
+                } else {
+                    Markers::Restored
+                },
+            };
+            mesh::mesh_project_with(&project, &out, &tools, &cancel, &mut on_line)
         }
     };
     let m = match manifest {
@@ -216,20 +249,25 @@ pub fn mesh_cmd(args: &[&str]) -> ExitCode {
     print_mesh(&m, &out, a.switch("json"));
     exit(match m.status {
         MeshStatus::Ok => ExitClass::Ok,
+        MeshStatus::Fail if m.codes.iter().any(|c| c == mesh::codes::GEOMETRY_REFUSED) => {
+            ExitClass::Geometry
+        }
         MeshStatus::Fail => ExitClass::Mesh,
         MeshStatus::Cancelled => ExitClass::Cancelled,
     })
 }
 
 /// The project in `path`, once it passes the geometry check (exit 3) and the mesh-relevant
-/// validator rules (exit 2); the refusal is printed.
+/// validator rules (exit 2); the refusal is printed. A project meshed through upstream's scene
+/// correction is checked after it instead, on what `preprocess.exe` saves (the mesher's
+/// `geometry_refused`, exit 3 too).
 fn mesh_ready_project(path: &Path) -> Result<simpa_core::schema::Project, ExitCode> {
     let project = validate::read_project(path).map_err(|e| {
         eprintln!("simpa: {}: {} ({e})", path.display(), e.code());
         ExitCode::from(2)
     })?;
     let report = geometry::check::check(&project.geometry);
-    if report.verdict != geometry::check::Verdict::Ok {
+    if report.verdict != geometry::check::Verdict::Ok && !project.solvers.meshing.preprocess {
         for r in &report.reasons {
             eprintln!("refused {}: {}", r.code.as_str(), r.message);
         }
@@ -419,7 +457,7 @@ const RUN_VALUES: [&str; 6] = [
 /// project file.
 pub fn run_cmd(args: &[&str]) -> ExitCode {
     let mut with_value = RUN_VALUES.to_vec();
-    with_value.extend(["variant", "mesh", "tetgen"]);
+    with_value.extend(["variant", "mesh", "tetgen", "preprocess"]);
     let a = match Args::parse(args, &with_value, &["json"]) {
         Ok(a) => a,
         Err(e) => return usage_error(&e),
@@ -436,7 +474,11 @@ pub fn run_cmd(args: &[&str]) -> ExitCode {
     let mesh = match a.path("mesh") {
         Some(dir) => MeshChoice::Reuse(dir),
         None => match find_exe(a.path("tetgen"), TETGEN_EXE_NAME) {
-            Ok(tetgen) => MeshChoice::Build { tetgen },
+            // Found whether or not the project asks for it: the run manager reads the project.
+            Ok(tetgen) => MeshChoice::Build {
+                tetgen,
+                preprocess: find_exe(a.path("preprocess"), PREPROCESS_EXE_NAME).ok(),
+            },
             Err(e) => return usage_error(&e),
         },
     };

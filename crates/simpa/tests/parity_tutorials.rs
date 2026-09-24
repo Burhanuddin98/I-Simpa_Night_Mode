@@ -35,15 +35,18 @@
 //! - **tutorial 1**: TetGen's files under `temp/` and two run folders (SPPS, TCR): everything;
 //! - **tutorial 2**: TetGen's files under `temp/` (no `.var`: its project constrains no surface) and
 //!   no run folder: the mesher's inputs and outputs only. There is no original `.mbin`, `.cbin`,
-//!   `config.xml` or result to compare with;
-//! - **tutorial 3**: TetGen's files under `temp/` and three SPPS run folders. `simpa import-proj`
-//!   reads it, fitting zones, per-band laws and transmission and source groups included, and
-//!   records upstream's element ids beside the entities they became; each run's `config.xml` and
-//!   `mesh.cbin` are compared with ours from the `.proj` read with that run's saved project,
-//!   upstream's ids read through that recorded map (Burhan's open decision 1). `simpa mesh`
-//!   refuses the project: TetGen stops on the box standing on the floor, which upstream took
-//!   through `preprocess.exe` (not built), so what follows upstream's own `.poly` is compared: our
-//!   TetGen, our builder, and the runs ([`tutorial_3_same_seed_runs`]).
+//!   `config.xml` or result to compare with. Its settings ask for `preprocess.exe`, which gives
+//!   up on the hall and saves nothing: ours refuses that (`preprocess_aborted`), and the files are
+//!   compared with the setting off, which gives TetGen the `.poly` upstream's got;
+//! - **tutorial 3**: TetGen's files under `temp/` and three SPPS run folders, end to end.
+//!   `simpa import-proj` reads it, fitting zones, per-band laws and transmission, source groups
+//!   and the mesh settings' "preprocess" included, and records upstream's element ids beside the
+//!   entities they became; `simpa mesh --parity` takes it through our `.poly`, `preprocess.exe`,
+//!   our geometry check, TetGen 1.5.0 and our builder (`docs/m5-m6-design.md`, decision 12); the
+//!   `.poly` `preprocess.exe` saves, TetGen's `.1.*` and the `.mbin` are compared with upstream's,
+//!   each run's `config.xml` and `mesh.cbin` with ours from the `.proj` read with that run's saved
+//!   project, all through that recorded map (Burhan's open decision 1), and the runs on our own
+//!   mesh ([`tutorial_3_same_seed_runs`]).
 //!
 //! Every comparison has a refusal beside it, the input that makes it say no
 //! (`the_comparisons_say_no`).
@@ -583,7 +586,19 @@ fn tutorial_1() {
         serde_json::json!(["-pq2", "-A", "-n", "scene_mesh.poly"]),
         "the original's flags, from the .proj's SPPS meshing settings"
     );
-    let mut report = compare_mesher_files(&t, &mesh_dir, (0, 0), "tutorial 1");
+    // Its mesh settings ask for upstream's scene correction, as the original's did: on the box it
+    // changes nothing, and the .poly TetGen reads is the one written, byte for byte.
+    let pre = &m["preprocess"];
+    assert_eq!(pre["input_sha256"], pre["output_sha256"], "{pre:#}");
+    assert_eq!(pre["accounting"]["deleted"], serde_json::json!([]));
+    assert_eq!(pre["accounting"]["split"], serde_json::json!([]));
+    assert_eq!(pre["accounting"]["marker_changes"], serde_json::json!([]));
+    let mut report = vec![format!(
+        "preprocess.exe, which the .proj's mesh settings ask for: {}; the .poly it saved is the \
+         one it was given, byte for byte",
+        pre["summary"].as_str().unwrap()
+    )];
+    report.extend(compare_mesher_files(&t, &mesh_dir, (0, 0), "tutorial 1"));
     let our_mbin = std::fs::read(mesh_dir.join("tetramesh.mbin")).unwrap();
 
     assert_eq!(t.runs.len(), 2);
@@ -741,6 +756,14 @@ const TUTORIAL2_TIES: Ties = (307, 1036);
 /// Tutorial 2 (the Elmia hall, 7,860 faces): the mesher's inputs and TetGen's output equal to
 /// original I-Simpa's. It holds no run folder, so there is no original `.mbin`, `.cbin`,
 /// `config.xml` or result to compare: said, not skipped.
+///
+/// Its mesh settings ask for upstream's scene correction, and on this hall `preprocess.exe` gives
+/// up: its splitting loop runs out of its 100 passes, it prints `Mesh reparation has been
+/// aborted`, saves nothing, and exits 0. Upstream's GUI does not look, and meshes the `.poly` it
+/// wrote (its stored `temp/scene_mesh.poly` is that file: ours without preprocessing, below).
+/// Ours refuses it (`preprocess_aborted`): that is the say-no of the abort's detection, on
+/// upstream's own tutorial. The comparison is then made with the setting off, which gives TetGen
+/// the same `.poly` upstream's did.
 #[test]
 fn tutorial_2() {
     let t = tutorial(parity::TUTORIAL2);
@@ -750,10 +773,35 @@ fn tutorial_2() {
     );
     let dir = bed_dir("t2");
     let project = import_proj(parity::TUTORIAL2, &dir);
+    let mut p = simpa_core::schema::load(&project).unwrap();
+    assert!(
+        p.solvers.meshing.preprocess,
+        "the .proj asks for preprocess"
+    );
+    let (code, aborted) = mesh_with(&project, &dir.join("mesh-preprocess"), &[]);
+    assert_eq!(code, 4, "{aborted:#}");
+    assert_eq!(mesh_codes(&aborted), ["preprocess_aborted"], "{aborted:#}");
+    assert_eq!(aborted["preprocess"]["printed"]["aborted"], true);
+    assert!(aborted["files"]["mbin"].is_null());
+    let preprocess_line = format!(
+        "with upstream's setting, preprocess.exe gives up after {} splits and saves nothing: \
+         refused, {}",
+        aborted["preprocess"]["printed"]["split_lines"],
+        mesh_codes(&aborted).join(", ")
+    );
+    p.solvers.meshing.preprocess = false;
+    let project = dir.join("project-no-preprocess.simpa");
+    simpa_core::schema::save(&p, &project).unwrap();
     let mesh_dir = dir.join("mesh");
     let m = mesh(&project, &mesh_dir);
     println!("tutorial 2: TetGen argv {}", m["tetgen"]["argv"]);
-    let mut report = compare_mesher_files(&t, &mesh_dir, TUTORIAL2_TIES, "tutorial 2");
+    let mut report = vec![preprocess_line];
+    report.extend(compare_mesher_files(
+        &t,
+        &mesh_dir,
+        TUTORIAL2_TIES,
+        "tutorial 2",
+    ));
     report.push(
         "tetramesh.mbin, mesh.cbin, config.xml, results: the .proj holds no run folder, so no \
          original to compare with"
@@ -865,19 +913,184 @@ fn import_proj_json(rel: &str, dir: &Path) -> (PathBuf, Value) {
     (out, json(&o))
 }
 
+/// `simpa mesh <project> --out <out> --json` with `extra` options: its exit code and manifest.
+fn mesh_with(project: &Path, out: &Path, extra: &[&str]) -> (i32, Value) {
+    let mut args = vec![
+        "mesh".to_string(),
+        project.display().to_string(),
+        "--out".into(),
+        out.display().to_string(),
+        "--json".into(),
+    ];
+    args.extend(extra.iter().map(|s| s.to_string()));
+    let o = simpa_run(&args);
+    (o.code, json(&o))
+}
+
+/// A manifest's reason codes.
+fn mesh_codes(m: &Value) -> Vec<String> {
+    m["codes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c.as_str().unwrap().to_string())
+        .collect()
+}
+
+/// `map` turned round: ours to theirs. Panics unless it is one-to-one.
+fn inverse(map: &BTreeMap<i32, i32>) -> BTreeMap<i32, i32> {
+    let out: BTreeMap<i32, i32> = map.iter().map(|(&a, &b)| (b, a)).collect();
+    assert_eq!(out.len(), map.len(), "not one-to-one: {map:?}");
+    out
+}
+
+/// Our `.poly` with each region line's attribute read through `ours_to_theirs`, written again by
+/// our writer (which gives back a `.poly` it read byte for byte, `formats::poly`).
+fn poly_through_ids(ours: &[u8], ours_to_theirs: &BTreeMap<i32, i32>) -> Vec<u8> {
+    let mut model = simpa_core::formats::poly::read(ours).unwrap();
+    assert_eq!(
+        simpa_core::formats::poly::write(&model),
+        ours,
+        "our .poly round-trips"
+    );
+    for r in &mut model.model_regions {
+        r.region_index = *ours_to_theirs
+            .get(&r.region_index)
+            .unwrap_or_else(|| panic!("region {} unmapped", r.region_index));
+    }
+    simpa_core::formats::poly::write(&model)
+}
+
+/// Our `.1.ele` with each tetrahedron's region attribute (its last column) read through
+/// `ours_to_theirs`; the header, the `#` lines and the spacing kept.
+fn ele_through_ids(ours: &[u8], ours_to_theirs: &BTreeMap<i32, i32>) -> Vec<u8> {
+    let text = String::from_utf8(ours.to_vec()).unwrap();
+    let mut out = String::with_capacity(text.len());
+    for (i, line) in text.split_inclusive('\n').enumerate() {
+        let body = line.trim_end_matches(['\r', '\n']);
+        if i == 0 || body.trim_start().starts_with('#') || body.trim().is_empty() {
+            out.push_str(line);
+            continue;
+        }
+        let cut = body.trim_end().rfind(|c: char| c.is_whitespace()).unwrap() + 1;
+        let id: i32 = body[cut..].trim().parse().unwrap();
+        out.push_str(&body[..cut]);
+        out.push_str(&ours_to_theirs[&id].to_string());
+        out.push_str(&line[body.len()..]);
+    }
+    out.into_bytes()
+}
+
+/// The tetrahedra of `<dir>/scene_mesh.1.{node,ele}` as a `.mbin` mesh holds them (upstream's
+/// corner order, each node through upstream's OpenGL round trip in `unitize`, `idVolume` the
+/// region attribute), with no face data: for a TetGen 1.6.0 output that stopped, whose `.face` is
+/// cut short and which wrote no `.neigh`, so no `.mbin` can be built from it. The region volume
+/// check reads the corners and the ids only.
+fn tetrahedra_only(dir: &Path, unitize: &simpa_core::mesh::Unitize) -> mbin::Mesh {
+    use simpa_core::formats::tetgen as tg;
+    let node = tg::read_node(&std::fs::read(dir.join("scene_mesh.1.node")).unwrap()).unwrap();
+    let ele = tg::read_ele(&std::fs::read(dir.join("scene_mesh.1.ele")).unwrap()).unwrap();
+    let face = mbin::TetraFace {
+        vertices: [0, 0, 0],
+        marker: -1,
+        neighbor: -2,
+    };
+    mbin::Mesh {
+        nodes: node
+            .points
+            .iter()
+            .map(|p| unitize.round_trip(p.map(|c| c as f32)))
+            .collect(),
+        tetrahedra: (0..ele.len())
+            .map(|k| {
+                let c = ele.tet(k);
+                let b = node.first;
+                mbin::Tetrahedron {
+                    vertices: simpa_core::mesh::upstream_order([
+                        c[0] - b,
+                        c[1] - b,
+                        c[2] - b,
+                        c[3] - b,
+                    ]),
+                    id_volume: *ele.tet_attributes(k).last().unwrap() as i32,
+                    faces: [face; 4],
+                }
+            })
+            .collect(),
+    }
+}
+
+/// The region volume check's reference, built as the mesher builds it: `geometry::check` on a
+/// `.poly`'s nodes and facet list, its facet markers, and the project's fitting zones.
+struct Reference {
+    model: simpa_core::formats::poly::Model,
+    facets: Vec<[u32; 3]>,
+    markers: Vec<u32>,
+    check: simpa_core::geometry::check::CheckReport,
+    fittings: Vec<simpa_core::mesh::FittingRegion>,
+}
+
+impl Reference {
+    fn of(poly: &[u8], project: &Project) -> Self {
+        let model = simpa_core::formats::poly::read(poly).unwrap();
+        let group = simpa_core::schema::GroupId::from_u128(0);
+        let geometry = simpa_core::schema::Geometry {
+            vertices: model
+                .model_vertices
+                .iter()
+                .map(|&v| simpa_core::schema::Vec3::from(v))
+                .collect(),
+            faces: model
+                .model_faces
+                .iter()
+                .map(|f| simpa_core::schema::Face {
+                    vertices: f.vertices,
+                    group,
+                })
+                .collect(),
+        };
+        let check = simpa_core::geometry::check::check(&geometry);
+        assert!(check.is_ok(), "{:?}", check.reasons);
+        Reference {
+            facets: model.model_faces.iter().map(|f| f.vertices).collect(),
+            markers: model.model_faces.iter().map(|f| f.face_index).collect(),
+            fittings: simpa_core::mesh::project_input(project).unwrap().fittings,
+            check,
+            model,
+        }
+    }
+
+    fn get(&self) -> simpa_core::mesh::verify::Reference<'_> {
+        simpa_core::mesh::verify::Reference {
+            vertices: &self.model.model_vertices,
+            facets: &self.facets,
+            markers: &self.markers,
+            check: &self.check,
+            fittings: &self.fittings,
+        }
+    }
+}
+
 /// Tutorial 3 made ready for the bed: the `.proj`; per stored run, its project (the `.proj` read
 /// with the `projet_config.xml` upstream saved beside that run, `import_proj_with_config`: the
 /// three runs differ in `nbparticules` and `trans_calc` only), saved as `.simpa`, and the id map
-/// its import recorded ([`recorded_ids`]); and the `.mbin` our TetGen and our builder make of
-/// upstream's own `.poly` (see [`tutorial_3`] for why that `.poly`).
+/// its import recorded ([`recorded_ids`]); the `.proj` imported by `simpa import-proj` as a user
+/// does it, and meshed by `simpa mesh --parity` end to end: our `.poly`, `preprocess.exe`, our
+/// geometry check, TetGen 1.5.0 and our `.mbin`, with `preprocess.exe`'s facet markers kept as
+/// upstream's GUI meshes them.
 struct Tutorial3 {
     t: Tutorial,
     dir: PathBuf,
     projects: Vec<PathBuf>,
     ids: Vec<IdMap>,
-    /// Our `.mbin` with TetGen's region attributes as they came (upstream's ids).
+    /// `simpa import-proj`'s project, and the JSON it printed.
+    imported: PathBuf,
+    summary: Value,
+    /// The parity mesh folder and its manifest.
+    parity_dir: PathBuf,
+    parity: Value,
+    /// Our `.mbin` from the parity mesh, as written: our ids.
     built: mbin::Mesh,
-    report: Vec<String>,
 }
 
 fn tutorial3(label: &str) -> Tutorial3 {
@@ -897,110 +1110,68 @@ fn tutorial3(label: &str) -> Tutorial3 {
         simpa_core::schema::save(&imported.project, &path).unwrap();
         projects.push(path);
     }
-    let mut report = Vec::new();
-
-    // TetGen 1.5.0 (ours) on upstream's own .poly, with the flags its trailer records.
-    let tg = dir.join("tetgen");
-    std::fs::create_dir_all(&tg).unwrap();
-    std::fs::write(
-        tg.join("scene_mesh.poly"),
-        entry(&t, "temp/scene_mesh.poly"),
-    )
-    .unwrap();
-    let trailer = String::from_utf8(entry(&t, "temp/scene_mesh.1.face")).unwrap();
-    let call = simpa_core::mesh::trailer_command(&trailer).expect("a trailer");
-    assert_eq!(call.flags, ["-pq2", "-A", "-n"]);
-    let ran = std::process::Command::new(solver_exe("tetgen.exe"))
-        .args(&call.flags)
-        .arg("scene_mesh.poly")
-        .current_dir(&tg)
-        .output()
-        .unwrap();
-    assert_eq!(
-        ran.status.code(),
-        Some(0),
-        "{}",
-        String::from_utf8_lossy(&ran.stdout)
+    let (imported, summary) = import_proj_json(parity::TUTORIAL3, &dir);
+    let p = simpa_core::schema::load(&imported).unwrap();
+    assert!(
+        p.solvers.meshing.preprocess,
+        "tutorial 3's mesh settings ask for preprocess"
     );
-    for ext in TETGEN_FILES {
-        let name = format!("scene_mesh.1.{ext}");
-        let ours = std::fs::read(tg.join(&name)).unwrap();
-        report.push(format!(
-            "{} (our TetGen on upstream's .poly)",
-            compare_text(
-                &name,
-                &ours,
-                &entry(&t, &format!("temp/{name}")),
-                0,
-                "tutorial 3"
-            )
-        ));
-    }
-    // Our builder on our TetGen's output, in the frame of the project's scene, writing the region
-    // attributes TetGen gave: upstream's ids, 1930 and 2083 seeded, 2084 to 2086 the room's parts.
-    let out = simpa_core::mesh::TetgenOutput::read(&simpa_core::mesh::OutputPaths::new(
-        &tg,
-        "scene_mesh",
-    ))
-    .unwrap();
-    let attributes: BTreeSet<i32> = (0..out.ele.len())
-        .map(|k| *out.ele.tet_attributes(k).last().unwrap() as i32)
-        .collect();
-    let attributes: Vec<i32> = attributes.into_iter().collect();
-    assert_eq!(attributes, [1930, 2083, 2084, 2085, 2086]);
-    let project = simpa_core::schema::load(&projects[2]).unwrap();
-    // The markers of upstream's .poly index its .cbin, which our scene mesh is (the drawn box's
-    // 12 triangles after the room's 88 faces); the frame is the room's, as upstream's.
-    let scene = simpa_core::config_xml::scene_mesh(&project).unwrap();
-    assert_eq!(scene.faces.len(), 100);
-    let room = simpa_core::config_xml::room_mesh(&project).unwrap();
-    let unitize = simpa_core::mesh::Unitize::of_scene(&room).unwrap();
-    let (built, _) = simpa_core::mesh::build_mbin(&out, scene.faces.len(), &unitize).unwrap();
+    let parity_dir = dir.join("mesh-parity");
+    let (code, parity) = mesh_with(&imported, &parity_dir, &["--parity"]);
+    // Parity mode keeps preprocess.exe's markers, so the mesh fails verification, by name, and its
+    // .mbin is written for the comparison only.
+    assert_eq!(code, 4, "{parity:#}");
+    assert_eq!(
+        mesh_codes(&parity),
+        [
+            "mesh_invalid",
+            "marker_geometry_mismatches",
+            "uncovered_scene_faces"
+        ],
+        "{parity:#}"
+    );
+    assert_eq!(parity["parity"], true);
+    let built = mbin::read_file(&parity_dir.join("tetramesh.mbin")).unwrap();
     Tutorial3 {
         t,
         dir,
         projects,
         ids,
+        imported,
+        summary,
+        parity_dir,
+        parity,
         built,
-        report,
     }
-}
-
-/// Our `.mbin` for tutorial 3's run `r` and our `config`: [`Tutorial3::built`] with each
-/// `idVolume` read through `ids`, an id missing from it written as `unmapped` gives it.
-fn tutorial3_mbin(
-    built: &mbin::Mesh,
-    ids: &BTreeMap<i32, i32>,
-    unmapped: impl Fn(i32) -> i32,
-) -> Vec<u8> {
-    let mut mesh = built.clone();
-    for tet in &mut mesh.tetrahedra {
-        tet.id_volume = ids
-            .get(&tet.id_volume)
-            .copied()
-            .unwrap_or_else(|| unmapped(tet.id_volume));
-    }
-    mbin::write(&mesh)
 }
 
 /// Tutorial 3 (a room with two fitting zones, a scene-fitted one and a box, six sources in two
-/// source groups, five point receivers and a cutting plane), from its `.proj`:
+/// source groups, five point receivers and a cutting plane), from its `.proj`, end to end:
 /// - **`simpa import-proj`** reads it: the zones (the box's corners as upstream stores them, not
 ///   ordered), material 100's reflection law and materials 100 and 101's transmission per band,
-///   and the sources through their groups. Its say-no: the same `.proj` with the box's element
-///   type made unknown is refused by name;
+///   the sources through their groups, and the mesh settings' "preprocess". Its say-no: the same
+///   `.proj` with the box's element type made unknown is refused by name;
+/// - **`simpa mesh --parity`** meshes it as upstream's GUI does (`projet_maillage.cpp:206-213`):
+///   our `.poly`, the box in its user facet list, through `preprocess.exe`, our geometry check,
+///   TetGen 1.5.0 and our builder. `preprocess.exe`'s `.poly` is upstream's `temp/scene_mesh.poly`
+///   byte for byte, TetGen's `.1.*` its `temp/` files, and the `.mbin` each run's
+///   `tetramesh.mbin`, all through the recorded id map (the region attribute: our fittings 2 and 3
+///   for upstream's 1930 and 2083, the room's parts 4 to 6 for its 2084 to 2086). Upstream's
+///   defect comes with it: `preprocess.exe`'s reader gives every box facet marker 88
+///   (`poly.cpp:418-423`), and verification names what that does (280 marker mismatches, faces
+///   90 to 99 uncovered), so the mesh never passes;
+/// - **`simpa mesh`**, the default mode: the same, the markers restored and zone 1's seed, which
+///   lies on its top face, moved inside it; it verifies clean, each region's volume its cell's;
 /// - **each stored run's `config.xml` and `mesh.cbin`**, against ours from the `.proj` read with
 ///   that run's saved project: every value the solver reads is the original's once upstream's ids
 ///   are read through the map the import recorded, the differences by design aside; the `.cbin`
-///   byte for byte, the box's 12 triangles as faces 88 to 99. Their say-nos: one band's law
-///   changed, the box's triangles left out, and the ids not mapped;
-/// - **`simpa mesh`** refuses the project: TetGen stops on the box's bottom, which lies on the
-///   floor. Upstream's GUI took its `.poly` through `preprocess.exe` (the mesh settings'
-///   "preprocess", `projet_maillage.cpp:206-213`), which merges vertices and splits faces: its
-///   `temp/scene_mesh.poly` has 133 facets for the run's 100 faces. That step is not built.
+///   byte for byte, the box's 12 triangles as faces 88 to 99.
 ///
-/// So the mesher's `.poly` is upstream's own here, and what is compared after it is our TetGen's
-/// `.1.*` against `temp/` and our builder's `.mbin` against each run's.
+/// Its say-nos: without preprocess the box standing on the floor is refused (our check's 20 pairs,
+/// and TetGen's); TetGen 1.6.0's mesh of the raw scene, the wrong room, fails the region volume
+/// check, and 1.6.0 on the parity `.poly` puts zone 1 on the hall; upstream's `.poly` with one
+/// region line changed gives another `.mbin`; one band's law changed, the box's triangles left
+/// out, and the ids not mapped.
 #[test]
 fn tutorial_3() {
     let Tutorial3 {
@@ -1008,12 +1179,14 @@ fn tutorial_3() {
         dir,
         projects,
         ids,
+        imported,
+        summary,
+        parity_dir,
+        parity: pm,
         built,
-        report: made,
     } = tutorial3("t3");
 
     // The import, as a user meets it.
-    let (imported, summary) = import_proj_json(parity::TUTORIAL3, &dir);
     let p = simpa_core::schema::load(&imported).unwrap();
     assert_eq!(
         (
@@ -1051,12 +1224,13 @@ fn tutorial_3() {
     let mut report = vec![
         format!(
             "import-proj: exit 0; {} faces, {} vertices, {} sources, zones {zones:?}; {} upstream \
-             ids recorded, the fittings {:?}",
+             ids recorded, the fittings {:?}; mesh settings preprocess = {}",
             p.geometry.faces.len(),
             p.geometry.vertices.len(),
             p.sources.len(),
             recorded.len(),
-            fittings
+            fittings,
+            p.solvers.meshing.preprocess
         ),
         format!("import-proj notes: {}", summary["notes"]),
     ];
@@ -1099,78 +1273,373 @@ fn tutorial_3() {
         o.stderr.trim()
     ));
 
-    // The mesher, as a user meets it: TetGen refuses the box standing on the floor.
-    let o = simpa_run(&[
-        "mesh".to_string(),
-        imported.display().to_string(),
-        "--out".into(),
-        dir.join("refused-mesh").display().to_string(),
-        "--json".into(),
-    ]);
-    assert_eq!(o.code, 4, "{o:#?}");
-    let m = json(&o);
-    let codes: Vec<&str> = m["codes"]
+    // The id map for the mesher's files: ours to upstream's, the fittings as recorded and the
+    // room's parts as TetGen numbers them above each side's fittings.
+    let fittings_map = &ids[2]["encombrement"];
+    assert!(ids.iter().all(|m| &m["encombrement"] == fittings_map));
+    let volumes = volume_ids(&t.runs[2].tetra_bytes, fittings_map);
+    assert_eq!(
+        volumes,
+        BTreeMap::from([(1930, 2), (2083, 3), (2084, 4), (2085, 5), (2086, 6)]),
+        "our fittings are 2 and 3, TetGen's room parts 4 to 6"
+    );
+    let to_theirs = inverse(&volumes);
+
+    // --- The parity mesh, end to end. ---
+    let pre = &pm["preprocess"];
+    let printed = &pre["printed"];
+    assert_eq!(
+        (
+            printed["vertices_merged"].as_u64(),
+            printed["faces_destroyed"].as_u64(),
+            printed["faces_split"].as_u64()
+        ),
+        (Some(28), Some(2), Some(31)),
+        "{pre:#}"
+    );
+    let acc = &pre["accounting"];
+    assert_eq!(
+        acc["deleted"],
+        serde_json::json!([88, 89]),
+        "the box's bottom"
+    );
+    assert_eq!(acc["marker_changes"].as_array().unwrap().len(), 19);
+    assert!(
+        acc["marker_changes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|c| c["written"] == 88 && (90..100).contains(&c["restored"].as_u64().unwrap())),
+        "every box facet written 88, each in one of 90 to 99: {acc:#}"
+    );
+    assert_eq!(pre["markers_rewritten"], false, "parity keeps them");
+    assert_eq!(pm["geometry"]["verdict"], "ok");
+    let ours_poly = std::fs::read(parity_dir.join("scene_mesh.poly")).unwrap();
+    let theirs_poly = entry(&t, "temp/scene_mesh.poly");
+    let through = poly_through_ids(&ours_poly, &to_theirs);
+    assert_eq!(
+        byte_difference(&through, &theirs_poly),
+        None,
+        "preprocess.exe's .poly, through the id map"
+    );
+    let input_poly = std::fs::read(parity_dir.join("scene_mesh.input.poly")).unwrap();
+    report.push(format!(
+        "simpa mesh --parity: our .poly ({} bytes, {} facets, the box's 12 triangles in the user \
+         facet list) through preprocess.exe ({}): {} bytes, sha256 {}, upstream's \
+         temp/scene_mesh.poly byte for byte through the id map {to_theirs:?}",
+        input_poly.len(),
+        pm["preprocess"]["input"]["facets"],
+        pm["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|l| l.as_str().unwrap().starts_with("preprocess.exe"))
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        through.len(),
+        &simpa_core::mesh::sha256_hex(&through)[..16]
+    ));
+    for ext in TETGEN_FILES {
+        let name = format!("scene_mesh.1.{ext}");
+        let mut ours = std::fs::read(parity_dir.join(&name)).unwrap();
+        if ext == "ele" {
+            ours = ele_through_ids(&ours, &to_theirs);
+        }
+        report.push(format!(
+            "{} (the parity mesh's TetGen{})",
+            compare_text(
+                &name,
+                &ours,
+                &entry(&t, &format!("temp/{name}")),
+                0,
+                "tutorial 3"
+            ),
+            if ext == "ele" {
+                ", the attribute through the id map"
+            } else {
+                ""
+            }
+        ));
+    }
+    for (i, r) in t.runs.iter().enumerate() {
+        assert_eq!(
+            mbin_difference(&mbin::write(&built), &r.tetra_bytes, &volumes),
+            None,
+            "run {i}: tetramesh.mbin"
+        );
+    }
+    report.push(format!(
+        "the parity mesh's tetramesh.mbin: each run's, byte for byte ({} bytes), through the id \
+         map; {} tetrahedra, idVolume {:?}",
+        t.runs[0].tetra_bytes.len(),
+        built.tetrahedra.len(),
+        built
+            .tetrahedra
+            .iter()
+            .map(|t| t.id_volume)
+            .collect::<BTreeSet<i32>>()
+    ));
+    let v = &pm["verify"];
+    assert_eq!(v["marker_geometry_mismatches"], 280, "{v:#}");
+    assert_eq!(
+        v["uncovered_scene_faces_first"],
+        serde_json::json!([90, 91, 92, 93, 94, 95, 96, 97, 98, 99])
+    );
+    assert_eq!(v["expected_unmeshed_faces"], serde_json::json!([88, 89]));
+    assert_eq!(
+        (
+            v["region_volume_mismatch"].as_u64(),
+            v["unmeshed_cells"].as_u64(),
+            v["fitting_region_misplaced"].as_u64(),
+            v["fitting_seed_ambiguous"].as_u64()
+        ),
+        (Some(0), Some(0), Some(0), Some(0)),
+        "{v:#}"
+    );
+    report.push(format!(
+        "the parity mesh's verification: FAIL, by name: 280 marker mismatches (the box's facets \
+         all marker 88, upstream's reader), faces {} uncovered, 88 and 89 deleted by preprocess; \
+         every region its cell's volume",
+        v["uncovered_scene_faces_first"]
+    ));
+
+    // --- The default mode: markers restored, the seed on a face moved inside. ---
+    let default_dir = dir.join("mesh-default");
+    let (code, dm) = mesh_with(&imported, &default_dir, &[]);
+    assert_eq!(code, 0, "{dm:#}");
+    assert_eq!(dm["status"], "OK");
+    assert_eq!(dm["preprocess"]["markers_rewritten"], true);
+    let moved = dm["seeds_moved"].as_array().unwrap();
+    assert_eq!(moved.len(), 1, "{dm:#}");
+    assert_eq!(moved[0]["zone"], "Fitting zone 1");
+    let dv = &dm["verify"];
+    assert_eq!(dv["regions_checked"], true);
+    let mut cells: Vec<(f64, i64)> = dv["regions"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|c| c.as_str().unwrap())
+        .map(|r| {
+            let (v, c) = (
+                r["volume_m3"].as_f64().unwrap(),
+                r["cell_volume_m3"].as_f64().unwrap(),
+            );
+            assert!(
+                (v - c).abs() <= r["tolerance_m3"].as_f64().unwrap(),
+                "{r:#}"
+            );
+            (v, r["id"].as_i64().unwrap())
+        })
         .collect();
-    assert!(codes.contains(&"tetgen_self_intersection"), "{m:#}");
+    cells.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let volumes_m3: Vec<f64> = cells.iter().map(|c| (c.0 * 1e3).round() / 1e3).collect();
+    assert_eq!(
+        volumes_m3,
+        [4.352, 18.0, 93.445, 106.895, 755.648],
+        "zone 1, the box, room 2 without it, the corridor, the hall"
+    );
     report.push(format!(
-        "simpa mesh: refused (exit 4: {}); upstream took this scene through preprocess.exe",
-        codes.join(", ")
+        "simpa mesh (default): OK; {} of preprocess.exe's markers restored; zone 1's seed {} moved \
+         to {} (it lay on facet {}); {} tetrahedra; region volumes (id, m³) {:?}, each its cell's",
+        dm["preprocess"]["accounting"]["marker_changes"]
+            .as_array()
+            .unwrap()
+            .len(),
+        moved[0]["from"],
+        moved[0]["to"],
+        moved[0]["on_facets"],
+        dm["counts"]["build"]["tetrahedra"],
+        cells.iter().map(|c| (c.1, c.0)).collect::<Vec<_>>()
     ));
 
-    // Upstream's .poly against ours, and ours through preprocess.exe.
-    let theirs_poly = entry(&t, "temp/scene_mesh.poly");
-    let theirs_model = simpa_core::formats::poly::read(&theirs_poly).unwrap();
-    let input = simpa_core::mesh::project_input(&p).unwrap();
-    assert_eq!(
-        (
-            theirs_model.model_vertices.len(),
-            theirs_model.model_faces.len()
-        ),
-        (57, 133)
+    // --- Says no: without preprocess.exe the box stands on the floor. ---
+    let off = dir.join("preprocess-off.simpa");
+    let mut po = p.clone();
+    po.solvers.meshing.preprocess = false;
+    simpa_core::schema::save(&po, &off).unwrap();
+    let (code, om) = mesh_with(&off, &dir.join("mesh-off"), &[]);
+    assert_eq!(code, 4, "{om:#}");
+    assert!(
+        mesh_codes(&om).contains(&"tetgen_self_intersection".to_string()),
+        "{om:#}"
     );
-    let last = t.runs.len() - 1;
-    assert_eq!(t.runs[last].mesh.faces.len(), 100);
-    let pre = dir.join("preprocess");
-    std::fs::create_dir_all(&pre).unwrap();
+    let gate = &om["geometry"];
+    assert_eq!(gate["verdict"], "refused");
+    let ours_pairs: BTreeSet<(u64, u64)> = gate["pairs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p[0].as_u64().unwrap(), p[1].as_u64().unwrap()))
+        .collect();
+    let tetgen_pairs: BTreeSet<(u64, u64)> = om["self_intersection"]["pairs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p[0].as_u64().unwrap(), p[1].as_u64().unwrap()))
+        .collect();
+    // Every pair is the box (markers 88 to 99) against the floor, as TetGen names them. There are
+    // 22 here, not the investigation's 20: without preprocessing the mesher triangulates the box
+    // its own way (decision 5), not as upstream's BuildModel does.
+    assert!(!ours_pairs.is_empty(), "{gate:#}");
+    assert!(
+        ours_pairs
+            .iter()
+            .all(|&(a, b)| a < 88 && (88..100).contains(&b)),
+        "{ours_pairs:?}"
+    );
+    assert_eq!(
+        ours_pairs, tetgen_pairs,
+        "our check and TetGen 1.5.0 name the same pairs"
+    );
+    report.push(format!(
+        "says no, preprocess off: exit 4, {}; our check on the .poly refuses it with \
+         self_intersections, the same {} pairs TetGen 1.5.0's -d names, {:?}",
+        mesh_codes(&om).join(", "),
+        ours_pairs.len(),
+        ours_pairs
+    ));
+
+    // --- Says no: TetGen 1.6.0. ---
+    let tg160 = support::paths::tetgen160_exe();
+    let tg160_arg = tg160.display().to_string();
+    // (a) Its mesh of the raw scene (preprocess off): it skips facets and leaves a partial mesh,
+    // the wrong room, which the mesher refuses for the skipped facets. Its tetrahedra, held to the
+    // room's cells, fail the region volume check too: the check that sees a wrong room whatever
+    // TetGen's exit code said.
+    let raw160 = dir.join("mesh-off-tetgen160");
+    let (code, rm) = mesh_with(&off, &raw160, &["--tetgen", &tg160_arg]);
+    assert_eq!(code, 4, "{rm:#}");
+    let room = simpa_core::config_xml::room_mesh(&po).unwrap();
+    let unitize = simpa_core::mesh::Unitize::of_scene(&room).unwrap();
+    let wrong = tetrahedra_only(&raw160, &unitize);
+    let reference = Reference::of(&ours_poly, &p);
+    let ids160 = simpa_core::mesh::verify::VolumeIds::tetgen(vec![2, 3]);
+    let checked = simpa_core::mesh::verify::verify_mesh_with(
+        &wrong,
+        &room,
+        &ids160,
+        &simpa_core::mesh::verify::Expectations {
+            unmeshed_faces: None,
+            reference: Some(reference.get()),
+        },
+    );
+    let total: f64 = checked.volume_by_id.values().sum();
+    let room_total: f64 = reference.check.cells.iter().map(|c| c.volume_m3).sum();
+    assert!(
+        checked
+            .codes
+            .contains(&"region_volume_mismatch".to_string())
+            && checked.codes.contains(&"unmeshed_cells".to_string()),
+        "{:#?}",
+        checked.regions
+    );
+    // Control: our own default mesh of the room passes the same check.
+    let ours_default = mbin::read_file(&default_dir.join("tetramesh.mbin")).unwrap();
+    let default_scene = cbin::read_file(&default_dir.join("mesh.cbin")).unwrap();
+    let control = simpa_core::mesh::verify::verify_mesh_with(
+        &ours_default,
+        &default_scene,
+        &simpa_core::mesh::verify::VolumeIds::tetgen(vec![2, 3]),
+        &simpa_core::mesh::verify::Expectations {
+            unmeshed_faces: Some(&[88, 89]),
+            reference: Some(
+                Reference::of(
+                    &std::fs::read(default_dir.join("scene_mesh.poly")).unwrap(),
+                    &p,
+                )
+                .get(),
+            ),
+        },
+    );
+    assert!(control.passed(), "{:?}", control.codes);
+    report.push(format!(
+        "says no, TetGen 1.6.0 on the raw scene: exit 4 ({}); its partial mesh, {} tetrahedra of \
+         {:.1} m³ against the room's {:.1} m³ (idVolume {:?}), fails the region volume check: {} \
+         (region_volume_mismatch {}, unmeshed_cells {}); our default mesh passes it",
+        mesh_codes(&rm).join(", "),
+        wrong.tetrahedra.len(),
+        total,
+        room_total,
+        checked.volume_by_id,
+        checked.codes.join(", "),
+        checked.region_volume_mismatch,
+        checked.unmeshed_cells
+    ));
+    // (b) 1.6.0 on the parity .poly, upstream's seed on zone 1's top face: it labels the hall as
+    // zone 1, and the check names it.
+    let (code, p160) = mesh_with(
+        &imported,
+        &dir.join("mesh-parity-tetgen160"),
+        &["--parity", "--tetgen", &tg160_arg],
+    );
+    assert_eq!(code, 4, "{p160:#}");
+    assert!(
+        mesh_codes(&p160).contains(&"fitting_region_misplaced".to_string()),
+        "{p160:#}"
+    );
+    report.push(format!(
+        "says no, TetGen 1.6.0 in parity mode: {}; {}",
+        mesh_codes(&p160).join(", "),
+        p160["verify"]["regions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| !r["problems"].as_array().unwrap().is_empty())
+            .map(|r| r["problems"].to_string())
+            .collect::<Vec<_>>()
+            .join("; ")
+    ));
+    // Measured, not asserted: 1.6.0 in the default mode, the seed moved inside zone 1.
+    let (code, d160) = mesh_with(
+        &imported,
+        &dir.join("mesh-default-tetgen160"),
+        &["--tetgen", &tg160_arg],
+    );
+    report.push(format!(
+        "TetGen 1.6.0 in the default mode (measured): exit {code}, {} {}",
+        d160["status"],
+        mesh_codes(&d160).join(", ")
+    ));
+
+    // --- Says no: upstream's .poly with zone 1's region line changed (its seed 1 cm up, into the
+    // hall) gives another .mbin. ---
+    let mut changed = simpa_core::formats::poly::read(&theirs_poly).unwrap();
+    assert_eq!(changed.model_regions[0].region_index, 1930);
+    changed.model_regions[0].dot_in_region[2] += 0.01;
+    let tg = dir.join("region-changed");
+    std::fs::create_dir_all(&tg).unwrap();
     std::fs::write(
-        pre.join("scene_mesh.poly"),
-        simpa_core::formats::poly::write(&input.poly),
+        tg.join("scene_mesh.poly"),
+        simpa_core::formats::poly::write(&changed),
     )
     .unwrap();
-    let ran = std::process::Command::new(solver_exe("preprocess.exe"))
-        .arg("scene_mesh.poly")
-        .current_dir(&pre)
+    let ran = std::process::Command::new(solver_exe("tetgen.exe"))
+        .args(["-pq2", "-A", "-n", "scene_mesh.poly"])
+        .current_dir(&tg)
         .output()
         .unwrap();
     assert_eq!(ran.status.code(), Some(0));
-    let after = simpa_core::formats::poly::read_file(&pre.join("scene_mesh.poly")).unwrap();
-    let stdout = String::from_utf8_lossy(&ran.stdout);
-    let status: Vec<&str> = stdout
-        .lines()
-        .filter(|l| l.contains(" : "))
-        .map(str::trim)
-        .collect();
+    let out = simpa_core::mesh::TetgenOutput::read(&simpa_core::mesh::OutputPaths::new(
+        &tg,
+        "scene_mesh",
+    ))
+    .unwrap();
+    let scene = simpa_core::config_xml::scene_mesh(&p).unwrap();
+    let (other, _) = simpa_core::mesh::build_mbin(&out, scene.faces.len(), &unitize).unwrap();
+    let identity: BTreeMap<i32, i32> = BTreeMap::new();
+    let d = mbin_difference(&mbin::write(&other), &t.runs[0].tetra_bytes, &identity);
+    assert!(d.is_some(), "a changed region line gave the stored .mbin");
+    let relabelled = other
+        .tetrahedra
+        .iter()
+        .zip(&mbin::read(&t.runs[0].tetra_bytes).unwrap().tetrahedra)
+        .filter(|(a, b)| a.id_volume != b.id_volume)
+        .count();
     report.push(format!(
-        "upstream's temp/scene_mesh.poly: {} vertices, {} facets for the run's 100 .cbin faces; \
-         ours: {} vertices, {} facets; ours through our preprocess.exe: {} vertices, {} facets ({})",
-        theirs_model.model_vertices.len(),
-        theirs_model.model_faces.len(),
-        input.poly.model_vertices.len(),
-        input.poly.model_faces.len(),
-        after.model_vertices.len(),
-        after.model_faces.len(),
-        status.join("; ")
+        "says no, upstream's .poly with zone 1's seed 1 cm up: another .mbin, {relabelled} \
+         tetrahedra with another idVolume ({})",
+        d.unwrap()
     ));
-    assert_ne!(
-        (after.model_vertices.len(), after.model_faces.len()),
-        (57, 133),
-        "our .poly through preprocess.exe now has upstream's counts: compare it byte for byte"
-    );
-    report.extend(made);
 
     for (i, r) in t.runs.iter().enumerate() {
         let (our_config, our_cbin) = export_config(
@@ -1186,30 +1655,6 @@ fn tutorial_3() {
                 "run {i}: {element}"
             );
         }
-        // The .mbin, as upstream's run holds it: our TetGen and builder on upstream's .poly, whose
-        // seeds are upstream's ids, give it byte for byte.
-        let with_upstream_ids = mbin::write(&built);
-        assert_eq!(
-            byte_difference(&with_upstream_ids, &r.tetra_bytes),
-            None,
-            "run {i}: tetramesh.mbin"
-        );
-        // And as ours: the fittings under our ids, the room's parts as TetGen numbers them above
-        // ours.
-        let volumes = volume_ids(&r.tetra_bytes, &ids[i]["encombrement"]);
-        assert_eq!(
-            [2084, 2085, 2086].map(|k| volumes[&k]),
-            [4, 5, 6],
-            "our fittings are 2 and 3: {volumes:?}"
-        );
-        let our_mbin = tutorial3_mbin(&built, &volumes, |id| panic!("idVolume {id} unmapped"));
-        assert_eq!(mbin_difference(&our_mbin, &r.tetra_bytes, &volumes), None);
-        report.push(format!(
-            "run {i} tetramesh.mbin: our TetGen and builder on upstream's .poly give the run's, byte \
-             for byte ({} bytes); with our fitting ids, TetGen numbers the room {volumes:?}",
-            our_mbin.len()
-        ));
-
         // config.xml, value by value, upstream's ids read through the recorded map.
         let theirs = through_ids(&r.config, &ids[i]);
         let got = parity::solver_differences(&theirs, &our_config);
@@ -1220,12 +1665,18 @@ fn tutorial_3() {
             parity::working_folder(&our_config)
         ));
         assert_eq!(got, parity::sorted(expected.clone()), "run {i}: config.xml");
-        // mesh.cbin, byte for byte once upstream's idEn are read through the map.
+        // mesh.cbin, byte for byte once upstream's idEn are read through the map, and the mesh
+        // folder's the same bytes.
         let their_cbin = cbin_through_ids(&r.mesh, &ids[i]);
         assert_eq!(
             byte_difference(&our_cbin, &their_cbin),
             None,
             "run {i}: mesh.cbin"
+        );
+        assert_eq!(
+            std::fs::read(parity_dir.join("mesh.cbin")).unwrap(),
+            our_cbin,
+            "the mesh folder's mesh.cbin"
         );
         let ours = cbin::read(&our_cbin).unwrap();
         let box_faces: BTreeSet<(u32, i32, i32)> = ours.faces[88..]
@@ -1246,7 +1697,7 @@ fn tutorial_3() {
             our_cbin.len()
         ));
 
-        if i == last {
+        if i == t.runs.len() - 1 {
             // Says no, the config: material 100's law at 125 Hz, Lambert, written specular (one
             // law per material, as the importer held it before).
             let at = our_config.find("<type_surface id=\"100\"").unwrap();
@@ -1284,10 +1735,9 @@ fn tutorial_3() {
 
 /// Tutorial 3's three SPPS runs, same seed, on the original inputs (unedited: `parity::repeatable`
 /// only) and on ours: our `config.xml` and `mesh.cbin` from the `.proj` read with each run's saved
-/// project, and the `.mbin` our TetGen and builder make of upstream's `.poly` ([`tutorial3`]) with
-/// the ids our mesher gives ([`volume_ids`]): the fittings under our ids, the room's parts as
-/// TetGen numbers them above ours. Every output file must be the original's (the cutting plane's
-/// `.csbin` id read through the recorded map).
+/// project, and our `.mbin` from `simpa mesh --parity` ([`tutorial3`]), as written: the fittings
+/// under our ids, the room's parts as TetGen numbers them above ours. Every output file must be
+/// the original's (the cutting plane's `.csbin` id read through the recorded map).
 ///
 /// **The input that makes it say no** is the room written 0, as this crate's builder wrote it
 /// until decision 1 was reversed on 2026-09-24, on run 0. SPPS gives every tetrahedron with a
@@ -1306,6 +1756,7 @@ fn tutorial_3_same_seed_runs() {
         built,
         ..
     } = tutorial3("t3r");
+    let our_mbin = mbin::write(&built);
     let mut report = Vec::new();
     for (i, r) in t.runs.iter().enumerate() {
         let (our_config, our_cbin) = export_config(
@@ -1315,7 +1766,6 @@ fn tutorial_3_same_seed_runs() {
         );
         let cut = ids[i]["recepteur_surfacique_coupe"].clone();
         let volumes = volume_ids(&r.tetra_bytes, &ids[i]["encombrement"]);
-        let our_mbin = tutorial3_mbin(&built, &volumes, |id| panic!("idVolume {id} unmapped"));
         let (theirs, d) = same_seed(
             &format!("t3-{i}"),
             SolverKind::Spps,
@@ -1329,19 +1779,24 @@ fn tutorial_3_same_seed_runs() {
             "run {i}: results (idVolume {volumes:?}, cutting plane {cut:?})"
         );
         report.push(format!(
-            "run {i}: all {} output files equal to the original inputs' run (idVolume {volumes:?}, \
-             cutting plane {cut:?})",
+            "run {i}: all {} output files equal to the original inputs' run (our parity mesh's \
+             .mbin, idVolume {volumes:?}, cutting plane {cut:?})",
             theirs.len()
         ));
         if i == 0 {
             // Says no: the room written 0, the fittings as before.
-            let fittings = &ids[i]["encombrement"];
-            let room_zero = tutorial3_mbin(&built, fittings, |_| 0);
+            let fittings: BTreeSet<i32> = ids[i]["encombrement"].values().copied().collect();
+            let mut room_zero = built.clone();
+            for tet in &mut room_zero.tetrahedra {
+                if !fittings.contains(&tet.id_volume) {
+                    tet.id_volume = 0;
+                }
+            }
             let (_, dz) = same_seed(
                 "t3-0-room0",
                 SolverKind::Spps,
                 (&r.config, &r.mesh_bytes, &r.tetra_bytes),
-                (&our_config, &our_cbin, &room_zero),
+                (&our_config, &our_cbin, &mbin::write(&room_zero)),
                 &cut,
             );
             assert!(

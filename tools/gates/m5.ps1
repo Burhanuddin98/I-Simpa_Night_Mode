@@ -27,6 +27,12 @@
 #     (decision 1, reversed 2026-09-24); and the id-2 volume equals the zone's 1 m3 to 1e-9 relative.
 # (f) The oracle dump of every .mbin this gate wrote equals the Rust dump
 #     (tools/oracle/diff.ps1 -Corpus <work> -Generated 0: mismatches 0).
+# (h) Upstream's scene correction (docs/m5-m6-design.md, decision 12): the box with its settings'
+#     preprocess switched on meshes through preprocess.exe, which changes nothing on it (the .poly
+#     it saves is the one it was given, byte for byte), to the same .mbin as (a), and the region
+#     volume check holds its one region to its cell (180 m3). Says NO: preprocess.exe named by a
+#     path that is no file gives preprocess_launch_failed; the corrected hall, on which
+#     preprocess.exe gives up and saves nothing while exiting 0, gives preprocess_aborted.
 # (g) `simpa mesh rooms/elmia_corrected.simpa --cancel-after-ms 50` exits 130 with TetGen killed
 #     while it ran (tetgen.cancelled true, tetgen.exit_code null, no .1.ele written), and 2 s
 #     later `tasklist /FI "IMAGENAME eq tetgen.exe"` lists none.
@@ -465,6 +471,36 @@ Check "(e) says NO: the same census against the zone moved 0.5 m in x finds id-2
     $s = ZoneCensus $script:fitM @(1.5, 1.0, 0.5) @(2.5, 2.0, 1.5)
     Write-Host "      $($s.out2) id-2 tets outside the moved zone, $($s.in0) id-3 tets inside it"
     $s.out2 -gt 0
+}
+
+# --- (h) upstream's scene correction ----------------------------------------------------------------
+$boxPre = Edited $boxRoom (Join-Path $work 'box-preprocess.simpa') '"preprocess": false' '"preprocess": true'
+$hallPre = Edited $hallRoom (Join-Path $work 'hall-preprocess.simpa') '"preprocess": false' '"preprocess": true'
+Check "(h) the box through preprocess.exe: exit 0, OK, the .poly unchanged, the same .mbin as (a), one region of 180 m3, its cell's" {
+    $out = Join-Path $work 'box-preprocess-mesh'
+    $r = Simpa @('mesh', $boxPre, '--out', $out, '--json') 'mesh-box-preprocess'
+    $m = $r.Json; $p = $m.preprocess
+    $same = (Test-Path (Join-Path $out 'tetramesh.mbin')) -and (Test-Path (Join-Path $boxMesh 'tetramesh.mbin')) -and
+        ((Get-FileHash (Join-Path $out 'tetramesh.mbin')).Hash -eq (Get-FileHash (Join-Path $boxMesh 'tetramesh.mbin')).Hash)
+    $regions = @($m.verify.regions)
+    Write-Host "      exit $($r.Exit), $($m.status); $($p.summary); input = output: $($p.input_sha256 -eq $p.output_sha256); .mbin as (a): $same; regions: $(@($regions | ForEach-Object { "$($_.id): $($_.volume_m3) m3 in cell $($_.cell) of $($_.cell_volume_m3) m3" }) -join '; ')"
+    (Meshed $r $out) -and $p.input_sha256 -eq $p.output_sha256 -and @($p.accounting.deleted).Count -eq 0 -and
+        @($p.accounting.split).Count -eq 0 -and @($p.accounting.marker_changes).Count -eq 0 -and $same -and
+        $m.verify.regions_checked -and $regions.Count -eq 1 -and [math]::Abs($regions[0].volume_m3 - 180) -le 1e-6
+}
+Check "(h) says NO: preprocess.exe named by a path that is no file: exit 4, preprocess_launch_failed, no .mbin" {
+    $out = Join-Path $work 'box-preprocess-missing'
+    $r = Simpa @('mesh', $boxPre, '--out', $out, '--json', '--preprocess', (Join-Path $work 'no-such-preprocess.exe')) 'mesh-box-preprocess-missing'
+    Write-Host "      exit $($r.Exit), $($r.Json.status), [$(@($r.Json.codes) -join ', ')]"
+    $r.Exit -eq 4 -and (@($r.Json.codes) -join ',') -eq 'preprocess_launch_failed' -and -not (Test-Path (Join-Path $out 'tetramesh.mbin'))
+}
+Check "(h) says NO: the corrected hall through preprocess.exe, which gives up and saves nothing (exit 0): exit 4, preprocess_aborted, no .mbin" {
+    $out = Join-Path $work 'hall-preprocess-mesh'
+    $r = Simpa @('mesh', $hallPre, '--out', $out, '--json') 'mesh-hall-preprocess'
+    $p = $r.Json.preprocess
+    Write-Host "      exit $($r.Exit), $($r.Json.status), [$(@($r.Json.codes) -join ', ')]; preprocess.exe exit $($p.call.exit_code), aborted $($p.printed.aborted), $($p.printed.split_lines) splits printed, $([math]::Round($p.call.elapsed_ms)) ms"
+    $r.Exit -eq 4 -and (@($r.Json.codes) -join ',') -eq 'preprocess_aborted' -and $p.call.exit_code -eq 0 -and $p.printed.aborted -and
+        -not (Test-Path (Join-Path $out 'tetramesh.mbin'))
 }
 
 # --- (g) cancel --------------------------------------------------------------------------------------

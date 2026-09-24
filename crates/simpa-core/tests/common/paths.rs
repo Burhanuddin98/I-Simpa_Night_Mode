@@ -7,7 +7,8 @@
 //   "/tests/common/paths.rs"))`, which is why this file has no inner attributes or `//!` docs.
 //
 // The locations:
-// - `$SIMPA_SOLVERS_DIR`: the folder holding `spps.exe`, `classicalTheory.exe` and `tetgen.exe`.
+// - `$SIMPA_SOLVERS_DIR`: the folder holding `spps.exe`, `classicalTheory.exe`, `tetgen.exe` and
+//   `preprocess.exe`.
 //   Default `<repo>/target/solvers/bin`, where `solvers/build.ps1` puts the M1 build.
 // - `$SIMPA_UPSTREAM`: an upstream source tree at `simpa_core::SOLVER_COMMIT`, the folder holding
 //   `src/`. Default `<repo>/target/solvers/src-929a5c8`, the archive `solvers/build.ps1`
@@ -55,7 +56,8 @@ pub fn solver_exe(name: &str) -> PathBuf {
         p.is_file(),
         "{} is missing: this test runs the M1 solver build. Build it with \
          `powershell -File solvers/build.ps1` (into <repo>/target/solvers/bin), or set \
-         SIMPA_SOLVERS_DIR to a folder holding spps.exe, classicalTheory.exe and tetgen.exe",
+         SIMPA_SOLVERS_DIR to a folder holding spps.exe, classicalTheory.exe, tetgen.exe and \
+         preprocess.exe",
         p.display()
     );
     p
@@ -64,6 +66,45 @@ pub fn solver_exe(name: &str) -> PathBuf {
 /// `tetgen.exe` from the M1 build ([`solver_exe`]).
 pub fn tetgen_exe() -> PathBuf {
     solver_exe("tetgen.exe")
+}
+
+/// Upstream's own TetGen 1.6.0, the pinned commit's `tetgen` target, which `solvers/build.ps1`
+/// builds beside ours as the reference the parity bed's refusals need (never the mesher):
+/// `$SIMPA_TETGEN160`, else `<solvers_dir>/../build/src/tetgen/Release/tetgen.exe`, the place
+/// `tools/gates/parity.ps1` takes it from. Panics, naming where it looked, when it is absent, and
+/// when its sha256 is not `solvers/manifest.json`'s `tetgen.upstream_160_reference_sha256`.
+pub fn tetgen160_exe() -> PathBuf {
+    let p = match std::env::var_os("SIMPA_TETGEN160") {
+        Some(d) if !d.is_empty() => PathBuf::from(d),
+        _ => solvers_dir()
+            .parent()
+            .map(|d| d.join("build/src/tetgen/Release/tetgen.exe"))
+            .unwrap_or_default(),
+    };
+    assert!(
+        p.is_file(),
+        "{} is missing: this test runs upstream's TetGen 1.6.0 build as a refusal. Build it with \
+         `powershell -File solvers/build.ps1`, or set SIMPA_TETGEN160 to it",
+        p.display()
+    );
+    let manifest = std::fs::read_to_string(repo_file("solvers/manifest.json")).unwrap();
+    let want = manifest
+        .split("\"upstream_160_reference_sha256\"")
+        .nth(1)
+        .and_then(|s| s.split('"').nth(1))
+        .expect("solvers/manifest.json names the TetGen 1.6.0 reference's sha256")
+        .to_string();
+    let out = Command::new("certutil")
+        .args(["-hashfile", &p.display().to_string(), "SHA256"])
+        .output()
+        .expect("certutil runs");
+    let text = String::from_utf8_lossy(&out.stdout).to_lowercase();
+    assert!(
+        text.lines().any(|l| l.trim().replace(' ', "") == want),
+        "{} is not solvers/manifest.json's TetGen 1.6.0 reference (sha256 {want}): {text}",
+        p.display()
+    );
+    p
 }
 
 /// The upstream source tree: `$SIMPA_UPSTREAM`, else `<repo>/target/solvers/src-929a5c8`. Panics

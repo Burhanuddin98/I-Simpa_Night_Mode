@@ -901,6 +901,15 @@ export interface MeshSettings {
    */
   min_radius_edge_ratio: number | string;
   /**
+   * Upstream's "Scene correction before meshing" (`mesh_conf@preprocess`,
+   * `e_core_core_tetconf.h:108`): the `.poly` goes through upstream's `preprocess.exe` before
+   * TetGen, with box fitting zones in its user facet list, as upstream's GUI does it
+   * (`projet_maillage.cpp:206-213`). The geometry check then runs on what `preprocess.exe`
+   * wrote. Upstream's GUI default is on; this crate's default is off
+   * (`docs/m5-m6-design.md`, decision 12).
+   */
+  preprocess: boolean;
+  /**
    * `-Y`: add no Steiner points on the boundary.
    */
   preserve_boundary: boolean;

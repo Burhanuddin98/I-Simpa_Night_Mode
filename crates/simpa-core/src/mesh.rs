@@ -10,14 +10,24 @@
 //! The mesh folder holds `scene_mesh.poly`, `scene_mesh.var` (when the settings ask for one),
 //! TetGen's `scene_mesh.1.*` (or `scene_mesh_skipped.*`), `tetgen.stdout.txt` and
 //! `tetgen.stderr.txt`, `mesh.cbin`, `tetramesh.mbin` **only when meshing succeeded**, `mesh.json`
-//! always, and `diag/` after skipped facets or a self-intersection stop. Every file a mesh
-//! writes, and every file TetGen would read beside the `.poly` (`.var`, `.edge`, `.mtr`:
-//! `tetgen.cxx:2446-2449`), is deleted before meshing starts ([`delete_stale`]), so nothing from
-//! an earlier mesh is silently reused.
+//! always, and `diag/` after skipped facets or a self-intersection stop. When the settings ask
+//! for upstream's scene correction, `preprocess.exe` rewrites `scene_mesh.poly` first
+//! ([`preprocess`]); the `.poly` as written is kept as `scene_mesh.input.poly`, with its logs
+//! `preprocess.stdout.txt` and `preprocess.stderr.txt`. Every file a mesh writes, and every file
+//! TetGen would read beside the `.poly` (`.var`, `.edge`, `.mtr`: `tetgen.cxx:2446-2449`), is
+//! deleted before meshing starts ([`delete_stale`]), so nothing from an earlier mesh is silently
+//! reused.
+//!
+//! The geometry TetGen is given must pass `geometry::check`: for a project meshed with
+//! `preprocess.exe`, the check of what it saved is the gate before TetGen (`geometry_refused`);
+//! otherwise TetGen decides, as before, and a mesh it makes of geometry the check refuses is
+//! refused after it. The check's cells are what [`verify::verify_mesh_with`] holds the regions
+//! to.
 //!
 //! The outcome carries every reason code that applies ([`codes`]), and `status` is `OK` exactly
-//! when there is none. A `.mbin` is written only after [`verify::verify_mesh`] passes it.
-//! Specified in `docs/formats/mesh-manifest.md`.
+//! when there is none. A `.mbin` is written only after [`verify::verify_mesh_with`] passes it, but
+//! in parity mode ([`Markers::Parity`]), whose `.mbin` is written for byte comparison and whose
+//! manifest then fails. Specified in `docs/formats/mesh-manifest.md`.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -25,14 +35,16 @@ use std::time::Instant;
 
 use crate::config_xml::names;
 use crate::formats::{cbin, mbin, poly, tetgen as tetgen_files};
+use crate::geometry::check::{self as geometry_check, CheckReport};
 use crate::process::{CancelToken, Line, Outcome, Stream};
-use crate::schema::{MeshSettings, Project};
+use crate::schema::{Geometry, MeshSettings, Project};
 
 mod build;
 mod diag;
 mod flags;
 mod input;
 mod manifest;
+pub mod preprocess;
 mod tetgen;
 pub mod verify;
 
@@ -49,12 +61,17 @@ pub use flags::{
     trailer_command,
 };
 pub use input::{
-    InputError, MeshInput, ZoneFacets, poly_input, project_input, refined_faces, var_bytes,
+    FittingRegion, InputError, Layout, MeshInput, ZoneFacets, poly_input, preprocess_layout,
+    project_input, refined_faces, upstream_box_seed, var_bytes,
 };
 pub use manifest::{
-    Counts, Diagnosis, Hashes, MANIFEST_FILE, MANIFEST_VERSION, MeshManifest, MeshSource,
-    MeshStatus, SelfIntersection, SkippedFacet, TetgenCall, read_manifest, sha256_file, sha256_hex,
-    write_manifest,
+    Counts, Diagnosis, GateCell, GateReason, GeometryGate, Hashes, MANIFEST_FILE, MANIFEST_VERSION,
+    MeshManifest, MeshSource, MeshStatus, SeedMove, SelfIntersection, SkippedFacet, TetgenCall,
+    read_manifest, sha256_file, sha256_hex, write_manifest,
+};
+pub use preprocess::{
+    Markers, PREPROCESS_EXE_NAME, PREPROCESS_STDERR_LOG, PREPROCESS_STDOUT_LOG, PreprocessProgram,
+    PreprocessReport,
 };
 pub use tetgen::{Mesher, STDERR_LOG, STDOUT_LOG, TetgenMesher};
 
@@ -103,6 +120,23 @@ pub mod codes {
     pub const MESH_INVALID: &str = "mesh_invalid";
     /// The `.mbin` could not be written.
     pub const MBIN_WRITE_FAILED: &str = "mbin_write_failed";
+    /// `geometry::check` refuses the geometry TetGen is given: what `preprocess.exe` saved (then
+    /// TetGen does not run), or the `.poly` a mesh was made of. Its reasons are in the message
+    /// and the manifest's `geometry`. The run contract's code of the same name (Part B).
+    pub const GEOMETRY_REFUSED: &str = "geometry_refused";
+    /// The settings ask for `preprocess.exe` and it could not be started, none was given, or its
+    /// log could not be written.
+    pub const PREPROCESS_LAUNCH_FAILED: &str = "preprocess_launch_failed";
+    /// `preprocess.exe`'s exit code is an NTSTATUS error (0xC0000000 and up).
+    pub const PREPROCESS_CRASH: &str = "preprocess_crash";
+    /// `preprocess.exe` exited with a code other than 0 (it returns 0 whatever it did).
+    pub const PREPROCESS_EXIT_NONZERO: &str = "preprocess_exit_nonzero";
+    /// `preprocess.exe` gave up and saved nothing (`Mesh reparation has been aborted`), could not
+    /// read the file, printed no statistics, or saved user facets it never merged.
+    pub const PREPROCESS_ABORTED: &str = "preprocess_aborted";
+    /// What `preprocess.exe` saved does not read, or cannot be accounted for facet by facet
+    /// against what it was given (`preprocess::account`).
+    pub const PREPROCESS_OUTPUT_INVALID: &str = "preprocess_output_invalid";
 }
 
 /// A failure to use the mesh folder at all: it could not be created, or no manifest could be
@@ -138,6 +172,9 @@ fn is_stale(name: &str) -> bool {
         VAR_FILE,
         "scene_mesh.edge",
         "scene_mesh.mtr",
+        preprocess::INPUT_POLY,
+        PREPROCESS_STDOUT_LOG,
+        PREPROCESS_STDERR_LOG,
         names::TETRA_MESH,
         names::SCENE_MESH,
         MANIFEST_FILE,
@@ -197,6 +234,10 @@ fn new_manifest(source: MeshSource) -> MeshManifest {
         self_intersection: None,
         diagnosis: None,
         verify: None,
+        preprocess: None,
+        geometry: None,
+        parity: false,
+        seeds_moved: Vec::new(),
         elapsed_ms: 0.0,
     }
 }
@@ -239,19 +280,50 @@ fn prepare(dir: &Path, m: &mut MeshManifest) -> Result<bool, MeshError> {
     }
 }
 
-/// Meshes `project` into `out_dir` with its own [`MeshSettings`] (flags from [`tetgen_flags`]).
-/// Stale files go first ([`delete_stale`]). A settings conflict or a project that cannot be
-/// expressed as TetGen input fails before TetGen runs. On skipped facets (TetGen 1.6.0) or a stop
-/// on a self-intersection (TetGen 1.5.0) a `tetgen -d` follow-up runs in `<out_dir>/diag/` and its
-/// findings go in the manifest. `on_line` sees TetGen's output as it arrives; `cancel` stops
-/// TetGen and leaves no `.mbin`.
-///
-/// `Err` only when the folder cannot be created, or `mesh.json` cannot be written into it; every
-/// other failure is in the manifest.
+/// The programs a project is meshed with.
+#[derive(Clone, Copy)]
+pub struct MeshTools<'a> {
+    /// TetGen.
+    pub tetgen: &'a dyn Mesher,
+    /// `preprocess.exe`, for a project whose settings ask for it ([`PreprocessProgram`]); `None`
+    /// makes such a project fail with `preprocess_launch_failed`.
+    pub preprocess: Option<&'a dyn Mesher>,
+    /// What becomes of `preprocess.exe`'s facet markers.
+    pub markers: Markers,
+}
+
+/// [`mesh_project_with`] with TetGen only: a project whose settings ask for `preprocess.exe`
+/// fails (`preprocess_launch_failed`).
 pub fn mesh_project(
     project: &Project,
     out_dir: &Path,
     mesher: &dyn Mesher,
+    cancel: &CancelToken,
+    on_line: &mut dyn FnMut(&Line),
+) -> Result<MeshManifest, MeshError> {
+    let tools = MeshTools {
+        tetgen: mesher,
+        preprocess: None,
+        markers: Markers::Restored,
+    };
+    mesh_project_with(project, out_dir, &tools, cancel, on_line)
+}
+
+/// Meshes `project` into `out_dir` with its own [`MeshSettings`] (flags from [`tetgen_flags`]).
+/// Stale files go first ([`delete_stale`]). A settings conflict or a project that cannot be
+/// expressed as TetGen input fails before TetGen runs. When the settings ask for it,
+/// `preprocess.exe` rewrites the `.poly` first, and `geometry::check` must pass what it saved
+/// before TetGen runs. On skipped facets (TetGen 1.6.0) or a stop on a self-intersection (TetGen
+/// 1.5.0) a `tetgen -d` follow-up runs in `<out_dir>/diag/` and its findings go in the manifest.
+/// `on_line` sees both programs' output as it arrives; `cancel` stops either and leaves no
+/// `.mbin`.
+///
+/// `Err` only when the folder cannot be created, or `mesh.json` cannot be written into it; every
+/// other failure is in the manifest.
+pub fn mesh_project_with(
+    project: &Project,
+    out_dir: &Path,
+    tools: &MeshTools,
     cancel: &CancelToken,
     on_line: &mut dyn FnMut(&Line),
 ) -> Result<MeshManifest, MeshError> {
@@ -272,7 +344,7 @@ pub fn mesh_project(
         return finish(out_dir, m, start);
     }
     match project_input(project) {
-        Ok(input) => run_input(&input, settings, out_dir, mesher, cancel, on_line, m, start),
+        Ok(input) => run_input(&input, settings, out_dir, tools, cancel, on_line, m, start),
         Err(e) => {
             fail(&mut m, codes::INPUT_INVALID, e.0);
             finish(out_dir, m, start)
@@ -303,8 +375,13 @@ pub fn mesh_poly(
     let input = poly::read_file(poly_path)
         .map_err(|e| InputError(format!("{}: {e}", poly_path.display())))
         .and_then(|model| poly_input(&model));
+    let tools = MeshTools {
+        tetgen: mesher,
+        preprocess: None,
+        markers: Markers::Restored,
+    };
     match input {
-        Ok(input) => run_input(&input, settings, out_dir, mesher, cancel, on_line, m, start),
+        Ok(input) => run_input(&input, settings, out_dir, &tools, cancel, on_line, m, start),
         Err(e) => {
             fail(&mut m, codes::INPUT_INVALID, e.0);
             finish(out_dir, m, start)
@@ -360,18 +437,118 @@ fn write_scene(dir: &Path, scene: &cbin::Model, m: &mut MeshManifest) -> bool {
     }
 }
 
+/// The geometry of a `.poly`'s nodes and facet list, as `geometry::check` reads it (the groups
+/// play no part in the check).
+fn poly_geometry(model: &poly::Model) -> Geometry {
+    let group = crate::schema::GroupId::from_u128(0);
+    Geometry {
+        vertices: model
+            .model_vertices
+            .iter()
+            .map(|&v| crate::schema::Vec3::from(v))
+            .collect(),
+        faces: model
+            .model_faces
+            .iter()
+            .map(|f| crate::schema::Face {
+                vertices: f.vertices,
+                group,
+            })
+            .collect(),
+    }
+}
+
+/// `geometry::check` on `model`'s nodes and facet list, and its record for the manifest.
+fn check_poly(model: &poly::Model, checked: &str) -> (CheckReport, GeometryGate) {
+    let report = geometry_check::check(&poly_geometry(model));
+    let marker = |f: &u32| {
+        model
+            .model_faces
+            .get(*f as usize)
+            .map_or(u32::MAX, |x| x.face_index)
+    };
+    let gate = GeometryGate {
+        checked: checked.to_string(),
+        vertices: model.model_vertices.len(),
+        facets: model.model_faces.len(),
+        verdict: if report.is_ok() { "ok" } else { "refused" }.to_string(),
+        reasons: report
+            .reasons
+            .iter()
+            .map(|r| {
+                let facets: Vec<u32> = r.faces.iter().take(20).copied().collect();
+                let mut markers: Vec<u32> = r.faces.iter().map(marker).collect();
+                markers.sort_unstable();
+                markers.dedup();
+                GateReason {
+                    code: r.code.as_str().to_string(),
+                    count: r.count,
+                    markers: markers.into_iter().take(20).collect(),
+                    facets,
+                    message: r.message.clone(),
+                }
+            })
+            .collect(),
+        pairs: {
+            let mut p: Vec<[u32; 2]> = report
+                .self_intersections
+                .iter()
+                .map(|&[a, b]| {
+                    let (x, y) = (marker(&a), marker(&b));
+                    [x.min(y), x.max(y)]
+                })
+                .collect();
+            p.sort_unstable();
+            p.dedup();
+            p
+        },
+        cells: report
+            .cells
+            .iter()
+            .map(|c| GateCell {
+                id: c.id,
+                depth: c.depth,
+                volume_m3: c.volume_m3,
+            })
+            .collect(),
+        enclosed_volume_m3: report.measures.enclosed_volume_m3,
+    };
+    (report, gate)
+}
+
+/// The refusal of `geometry::check` on what TetGen is given, in words.
+fn refusal(gate: &GeometryGate) -> String {
+    let reasons: Vec<String> = gate
+        .reasons
+        .iter()
+        .map(|r| {
+            format!(
+                "{} ({}; facets {:?}, markers {:?})",
+                r.code, r.count, r.facets, r.markers
+            )
+        })
+        .collect();
+    format!(
+        "the geometry check refuses the {} .poly ({} facets): {}",
+        gate.checked,
+        gate.facets,
+        reasons.join("; ")
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn run_input(
     input: &MeshInput,
     settings: &MeshSettings,
     dir: &Path,
-    mesher: &dyn Mesher,
+    tools: &MeshTools,
     cancel: &CancelToken,
     on_line: &mut dyn FnMut(&Line),
     mut m: MeshManifest,
     start: Instant,
 ) -> Result<MeshManifest, MeshError> {
     scene_counts(&mut m, input);
+    m.parity = input.preprocess && tools.markers == Markers::Parity;
     if !write_scene(dir, &input.scene, &mut m) {
         return finish(dir, m, start);
     }
@@ -388,6 +565,70 @@ fn run_input(
         return finish(dir, m, start);
     }
 
+    // What TetGen reads: the .poly as written, or as preprocess.exe saved it.
+    let mut tg_input = input.clone();
+    let mut unmeshed: Option<Vec<u32>> = None;
+    let mut poly_bytes = poly_bytes;
+    if input.preprocess {
+        match run_preprocess(input, &poly_bytes, dir, tools, cancel, on_line, &mut m) {
+            Some((model, deleted)) => {
+                poly_bytes = poly::write(&model);
+                m.files.poly = Some(sha256_hex(&poly_bytes));
+                m.counts.poly_vertices = model.model_vertices.len();
+                m.counts.poly_facets = model.model_faces.len();
+                tg_input.poly = model;
+                unmeshed = Some(deleted);
+            }
+            None => return finish(dir, m, start),
+        }
+        // In parity mode the file is preprocess.exe's own bytes, which the model written back
+        // gives exactly (`formats::poly`); its hash is the file's.
+        if let Ok(sha) = sha256_file(&dir.join(POLY_FILE)) {
+            m.files.poly = Some(sha);
+        }
+    }
+    let (report, gate) = check_poly(
+        &tg_input.poly,
+        if input.preprocess {
+            "preprocessed"
+        } else {
+            "written"
+        },
+    );
+    let refused = !report.is_ok();
+    m.geometry = Some(gate);
+    if refused && input.preprocess {
+        let why = refusal(m.geometry.as_ref().expect("set above"));
+        fail(
+            &mut m,
+            codes::GEOMETRY_REFUSED,
+            format!("{why}; TetGen does not run"),
+        );
+        return finish(dir, m, start);
+    }
+    // A seed on a facet leaves the zone to TetGen's choice of side (tutorial 3's zone 1: TetGen
+    // 1.5.0 labels the hall 1930 once the box's markers are restored). Outside parity mode it is
+    // moved into the zone's cell first.
+    if !refused && tools.markers == Markers::Restored {
+        match move_seeds(&mut tg_input, &report, &mut m) {
+            Ok(true) => {
+                poly_bytes = poly::write(&tg_input.poly);
+                match write_file(dir, POLY_FILE, &poly_bytes) {
+                    Ok(sha) => m.files.poly = Some(sha),
+                    Err(e) => {
+                        fail(&mut m, codes::INPUT_WRITE_FAILED, e);
+                        return finish(dir, m, start);
+                    }
+                }
+            }
+            Ok(false) => {}
+            Err(e) => {
+                fail(&mut m, codes::INPUT_INVALID, e);
+                return finish(dir, m, start);
+            }
+        }
+    }
+
     let mut argv = tetgen_flags(settings);
     argv.push(POLY_FILE.to_string());
     let paths = OutputPaths::new(dir, BASENAME);
@@ -397,12 +638,12 @@ fn run_input(
             codes::CANCELLED,
             "meshing was cancelled before TetGen started",
         );
-        classify(&paths, None, &[], input, &mut m);
+        classify(&paths, None, &[], &tg_input, &mut m);
         return finish(dir, m, start);
     }
     let mut stdout = Vec::new();
     let outcome = match call(
-        mesher,
+        tools.tetgen,
         dir,
         ".",
         &argv,
@@ -417,17 +658,402 @@ fn run_input(
             return finish(dir, m, start);
         }
     };
-    let found = classify(&paths, Some(&outcome), &stdout, input, &mut m);
+    let found = classify(&paths, Some(&outcome), &stdout, &tg_input, &mut m);
     if (found.skipped || found.stopped) && !cancel.is_cancelled() {
-        m.diagnosis = diagnose(input, &poly_bytes, dir, mesher, cancel, on_line, &mut m);
+        m.diagnosis = diagnose(
+            &tg_input,
+            &poly_bytes,
+            dir,
+            tools.tetgen,
+            cancel,
+            on_line,
+            &mut m,
+        );
     }
     if found.stopped {
-        name_self_intersection(input, &mut m);
+        name_self_intersection(&tg_input, &mut m);
+    }
+    if m.codes.is_empty() && refused {
+        // TetGen meshed a .poly the check refuses (never the gate here: the mesher's own .poly
+        // without preprocess.exe is TetGen's to judge first). No region volume check can hold
+        // such a mesh to cells, so none is written.
+        let why = refusal(m.geometry.as_ref().expect("set above"));
+        fail(
+            &mut m,
+            codes::GEOMETRY_REFUSED,
+            format!("{why}; TetGen meshed it, and no .mbin is written"),
+        );
     }
     if m.codes.is_empty() {
-        build_and_write(&paths, input, dir, cancel, &mut m, verify::verify_mesh);
+        let facets: Vec<[u32; 3]> = tg_input
+            .poly
+            .model_faces
+            .iter()
+            .map(|f| f.vertices)
+            .collect();
+        let markers: Vec<u32> = tg_input
+            .poly
+            .model_faces
+            .iter()
+            .map(|f| f.face_index)
+            .collect();
+        let expect = verify::Expectations {
+            unmeshed_faces: unmeshed.as_deref(),
+            reference: Some(verify::Reference {
+                vertices: &tg_input.poly.model_vertices,
+                facets: &facets,
+                markers: &markers,
+                check: &report,
+                fittings: &tg_input.fittings,
+            }),
+        };
+        let parity = m.parity;
+        build_and_write(
+            &paths,
+            &tg_input,
+            dir,
+            cancel,
+            &mut m,
+            verify::verify_mesh_with,
+            &expect,
+            parity,
+        );
     }
     finish(dir, m, start)
+}
+
+/// Moves each fitting zone's seed that lies on a facet of `input.poly` (within the verifier's
+/// tolerance) into the zone's cell ([`verify::seed_inside`]), in `input.fittings` and the region
+/// list, and records each move in `m.seeds_moved` and the messages. `Ok(true)` when one moved; a
+/// seed that cannot be moved stays, said in the messages, for the region volume check to judge.
+fn move_seeds(
+    input: &mut MeshInput,
+    report: &CheckReport,
+    m: &mut MeshManifest,
+) -> Result<bool, String> {
+    let tolerance = preprocess::tolerance(verify::geometry_max_abs(&input.poly.model_vertices));
+    let facets: Vec<[u32; 3]> = input.poly.model_faces.iter().map(|f| f.vertices).collect();
+    let markers: Vec<u32> = input
+        .poly
+        .model_faces
+        .iter()
+        .map(|f| f.face_index)
+        .collect();
+    let mut moves = Vec::new();
+    {
+        let reference = verify::Reference {
+            vertices: &input.poly.model_vertices,
+            facets: &facets,
+            markers: &markers,
+            check: report,
+            fittings: &input.fittings,
+        };
+        for f in &input.fittings {
+            let zone = verify::zone_cell(&reference, f, tolerance);
+            if zone.on_facets.is_empty() {
+                continue;
+            }
+            match verify::seed_inside(&reference, f, tolerance) {
+                Some(to) => moves.push(SeedMove {
+                    zone: f.zone.clone(),
+                    solver_id: f.solver_id,
+                    from: f.seed,
+                    to,
+                    on_facets: zone.on_facets.clone(),
+                    cell: zone.zone_cell.unwrap_or(0),
+                }),
+                None => m.messages.push(format!(
+                    "fitting zone '{}': its seed {:?} lies on facets {:?} (cells {:?}), and no \
+                     point inside its zone was found to move it to; it is left as it is",
+                    f.zone, f.seed, zone.on_facets, zone.candidates
+                )),
+            }
+        }
+    }
+    for mv in &moves {
+        let region = input
+            .poly
+            .model_regions
+            .iter_mut()
+            .find(|r| r.region_index == mv.solver_id)
+            .ok_or_else(|| format!("no region line carries fitting id {}", mv.solver_id))?;
+        region.dot_in_region = mv.to;
+        if let Some(f) = input
+            .fittings
+            .iter_mut()
+            .find(|f| f.solver_id == mv.solver_id)
+        {
+            f.seed = mv.to;
+        }
+        m.messages.push(format!(
+            "fitting zone '{}': its seed {:?} lies on facets {:?}, where TetGen chooses its side; \
+             moved into the zone's cell {} at {:?}",
+            mv.zone, mv.from, mv.on_facets, mv.cell, mv.to
+        ));
+    }
+    let moved = !moves.is_empty();
+    m.seeds_moved.extend(moves);
+    Ok(moved)
+}
+
+/// Runs `preprocess.exe` on `scene_mesh.poly` (written from `input.poly`, whose bytes are
+/// `poly_bytes`), keeps the input as `scene_mesh.input.poly`, reads what it saved, accounts for
+/// it facet by facet ([`preprocess::account`]), restores its user-facet markers unless in parity
+/// mode, and records all of it in `m.preprocess` with a one-line summary in the messages. Returns
+/// the `.poly` TetGen will read and the markers of the facets `preprocess.exe` deleted; `None`
+/// after a failure, whose codes are in `m`.
+fn run_preprocess(
+    input: &MeshInput,
+    poly_bytes: &[u8],
+    dir: &Path,
+    tools: &MeshTools,
+    cancel: &CancelToken,
+    on_line: &mut dyn FnMut(&Line),
+    m: &mut MeshManifest,
+) -> Option<(poly::Model, Vec<u32>)> {
+    use preprocess::{Markers as Mk, PolyCounts, PreprocessReport};
+    let r = verify::geometry_max_abs(&input.poly.model_vertices);
+    let mut report = PreprocessReport {
+        markers: tools.markers,
+        input_sha256: sha256_hex(poly_bytes),
+        input: PolyCounts::of(&input.poly),
+        tolerance_m: preprocess::tolerance(r),
+        ..PreprocessReport::default()
+    };
+    let result = run_preprocess_inner(
+        input,
+        poly_bytes,
+        dir,
+        tools,
+        cancel,
+        on_line,
+        m,
+        &mut report,
+    );
+    if let Some((_, acc)) = &result {
+        let deleted: Vec<String> = report
+            .deleted_facets
+            .iter()
+            .map(|f| match (&f.fitting_zone, &f.group) {
+                (Some(z), _) => format!("{} (zone '{z}')", f.marker),
+                (None, Some(g)) => format!("{} ({g})", f.marker),
+                (None, None) => f.marker.to_string(),
+            })
+            .collect();
+        let pieces: usize = acc.split.iter().map(|s| s.pieces).sum();
+        let out = report.output.clone().unwrap_or_default();
+        report.summary = format!(
+            "preprocess.exe: {} -> {} vertices ({} merged, {} new), {} facets and {} user facets \
+             -> {} facets ({} deleted{}; {} split into {} pieces, {} splits printed); {} \
+             user-facet markers {}",
+            report.input.vertices,
+            out.vertices,
+            report.printed.vertices_merged.unwrap_or(0),
+            acc.new_vertices.len(),
+            report.input.facets,
+            report.input.user_facets,
+            out.facets,
+            acc.deleted.len(),
+            if deleted.is_empty() {
+                String::new()
+            } else {
+                format!(": {}", deleted.join(", "))
+            },
+            acc.split.len(),
+            pieces,
+            report.printed.faces_split.unwrap_or(0),
+            acc.marker_changes.len(),
+            match (tools.markers, acc.marker_changes.is_empty()) {
+                (_, true) => "to restore",
+                (Mk::Restored, false) => "restored",
+                (Mk::Parity, false) => "kept as preprocess.exe wrote them (parity mode)",
+            }
+        );
+        m.messages.push(report.summary.clone());
+    }
+    m.preprocess = Some(report);
+    result.map(|(model, acc)| (model, acc.deleted))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_preprocess_inner(
+    input: &MeshInput,
+    poly_bytes: &[u8],
+    dir: &Path,
+    tools: &MeshTools,
+    cancel: &CancelToken,
+    on_line: &mut dyn FnMut(&Line),
+    m: &mut MeshManifest,
+    report: &mut preprocess::PreprocessReport,
+) -> Option<(poly::Model, preprocess::Accounting)> {
+    let Some(program) = tools.preprocess else {
+        fail(
+            m,
+            codes::PREPROCESS_LAUNCH_FAILED,
+            "the mesh settings ask for upstream's scene correction (preprocess) and no \
+             preprocess.exe was given; nothing is meshed without it",
+        );
+        return None;
+    };
+    if let Err(e) = write_file(dir, preprocess::INPUT_POLY, poly_bytes) {
+        fail(m, codes::INPUT_WRITE_FAILED, e);
+        return None;
+    }
+    if cancel.is_cancelled() {
+        fail(
+            m,
+            codes::CANCELLED,
+            "meshing was cancelled before preprocess.exe started",
+        );
+        return None;
+    }
+    let mut stdout = Vec::new();
+    let mut slot = None;
+    let outcome = call(
+        program,
+        dir,
+        ".",
+        &[POLY_FILE.to_string()],
+        cancel,
+        on_line,
+        &mut slot,
+        Some(&mut stdout),
+    );
+    report.call = slot.unwrap_or_default();
+    let outcome = match outcome {
+        Ok(o) => o,
+        Err(e) => {
+            fail(m, codes::PREPROCESS_LAUNCH_FAILED, e);
+            return None;
+        }
+    };
+    if outcome.cancelled {
+        fail(
+            m,
+            codes::CANCELLED,
+            "meshing was cancelled; preprocess.exe was stopped",
+        );
+        return None;
+    }
+    report.printed = preprocess::parse_stdout(&stdout);
+    if let Some(code) = outcome.exit_code
+        && code != 0
+    {
+        if code >= 0xC000_0000 {
+            fail(
+                m,
+                codes::PREPROCESS_CRASH,
+                format!("preprocess.exe crashed with exit code 0x{code:08X}"),
+            );
+        }
+        fail(
+            m,
+            codes::PREPROCESS_EXIT_NONZERO,
+            format!("preprocess.exe exited with code {code} (0x{code:08X})"),
+        );
+        return None;
+    }
+    let p = &report.printed;
+    if p.aborted || p.not_found || !p.status {
+        let last = stdout
+            .iter()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .map_or("nothing", |l| l.trim());
+        let why = if p.aborted {
+            "gave up (a repair loop ran out of its 100 passes) and saved nothing"
+        } else if p.not_found {
+            "could not read the .poly"
+        } else {
+            "printed no statistics, which it prints only when it saves"
+        };
+        fail(
+            m,
+            codes::PREPROCESS_ABORTED,
+            format!(
+                "preprocess.exe exited 0 but {why}; its last line: {last:?}. Upstream's GUI \
+                 meshes the uncorrected .poly then; nothing is meshed here"
+            ),
+        );
+        return None;
+    }
+    let after = match std::fs::read(dir.join(POLY_FILE)) {
+        Ok(b) => b,
+        Err(e) => {
+            fail(
+                m,
+                codes::PREPROCESS_OUTPUT_INVALID,
+                format!("{POLY_FILE} after preprocess.exe: {e}"),
+            );
+            return None;
+        }
+    };
+    report.output_sha256 = Some(sha256_hex(&after));
+    let model = match poly::read(&after) {
+        Ok(model) => model,
+        Err(e) => {
+            fail(
+                m,
+                codes::PREPROCESS_OUTPUT_INVALID,
+                format!("{POLY_FILE} as preprocess.exe saved it does not read: {e}"),
+            );
+            return None;
+        }
+    };
+    report.output = Some(preprocess::PolyCounts::of(&model));
+    if !model.user_defined_faces.is_empty() {
+        fail(
+            m,
+            codes::PREPROCESS_ABORTED,
+            format!(
+                "preprocess.exe saved {} user facets it never merged into the facet list (its \
+                 coplanar step ran out of passes, Preprocess.cpp:79-88); TetGen would never read \
+                 them",
+                model.user_defined_faces.len()
+            ),
+        );
+        return None;
+    }
+    let acc = match preprocess::account(
+        &input.poly,
+        &model,
+        report.printed.faces_destroyed,
+        report.tolerance_m,
+    ) {
+        Ok(a) => a,
+        Err(errors) => {
+            fail(
+                m,
+                codes::PREPROCESS_OUTPUT_INVALID,
+                format!(
+                    "what preprocess.exe saved cannot be accounted for against what it was given: \
+                     {}",
+                    errors.join("; ")
+                ),
+            );
+            return None;
+        }
+    };
+    report.deleted_facets = map_skipped(
+        &acc.deleted
+            .iter()
+            .map(|&k| i64::from(k))
+            .collect::<Vec<_>>(),
+        input,
+    );
+    let mut tg = model;
+    if tools.markers == Markers::Restored && !acc.marker_changes.is_empty() {
+        for (f, &t) in tg.model_faces.iter_mut().zip(&acc.true_markers) {
+            f.face_index = t;
+        }
+        if let Err(e) = write_file(dir, POLY_FILE, &poly::write(&tg)) {
+            fail(m, codes::INPUT_WRITE_FAILED, e);
+            return None;
+        }
+        report.markers_rewritten = true;
+    }
+    report.accounting = Some(acc.clone());
+    Some((tg, acc))
 }
 
 /// Runs one mesher call and records it in `slot`; `Err` holds why it could not start. `lines`,
@@ -772,12 +1398,21 @@ fn diagnose(
     })
 }
 
-/// The check a built mesh must pass before it is written: [`verify::verify_mesh`], or a stand-in
-/// in this module's tests.
-type Verifier = fn(&mbin::Mesh, &cbin::Model, &verify::VolumeIds) -> verify::VerifyReport;
+/// The check a built mesh must pass before it is written: [`verify::verify_mesh_with`], or a
+/// stand-in in this module's tests.
+type Verifier = fn(
+    &mbin::Mesh,
+    &cbin::Model,
+    &verify::VolumeIds,
+    &verify::Expectations,
+) -> verify::VerifyReport;
 
-/// Reads TetGen's output, builds the `.mbin` in the frame upstream's GUI would fit to the scene
-/// ([`Unitize::of_scene`]), runs `verifier` on it, and writes it only when it passes.
+/// Reads TetGen's output, builds the `.mbin` in the frame upstream's GUI would fit to the room
+/// ([`Unitize::fit`] on the scene's first `frame_vertices`), runs `verifier` on it with `expect`,
+/// and writes it only when it passes, or, with `write_failing` (parity mode), whatever it says:
+/// the manifest then fails with the verifier's codes, and the `.mbin` is there to be compared
+/// byte for byte, never run.
+#[allow(clippy::too_many_arguments)]
 fn build_and_write(
     paths: &OutputPaths,
     input: &MeshInput,
@@ -785,8 +1420,17 @@ fn build_and_write(
     cancel: &CancelToken,
     m: &mut MeshManifest,
     verifier: Verifier,
+    expect: &verify::Expectations,
+    write_failing: bool,
 ) {
-    let unitize = match Unitize::of_scene(&input.scene) {
+    let frame: Vec<[f32; 3]> = input
+        .scene
+        .vertices
+        .iter()
+        .take(input.frame_vertices)
+        .map(|v| [v.x, v.y, v.z])
+        .collect();
+    let unitize = match Unitize::fit(&frame) {
         Ok(u) => u,
         Err(e) => return fail(m, codes::INPUT_INVALID, e),
     };
@@ -797,7 +1441,7 @@ fn build_and_write(
         Err(e) => return fail(m, codes::TETGEN_OUTPUT_INVALID, e),
     };
     m.counts.build = Some(stats);
-    let report = verifier(&mesh, &input.scene, &input.volume_ids);
+    let report = verifier(&mesh, &input.scene, &input.volume_ids, expect);
     let passed = report.passed();
     let verify_codes = report.codes.clone();
     m.verify = Some(report);
@@ -806,8 +1450,13 @@ fn build_and_write(
             m,
             codes::MESH_INVALID,
             format!(
-                "the mesh fails verification ({}); no .mbin is written",
-                verify_codes.join(", ")
+                "the mesh fails verification ({}); {}",
+                verify_codes.join(", "),
+                if write_failing {
+                    "parity mode writes its .mbin for byte comparison only"
+                } else {
+                    "no .mbin is written"
+                }
             ),
         );
         for c in verify_codes {
@@ -815,7 +1464,9 @@ fn build_and_write(
                 m.codes.push(c);
             }
         }
-        return;
+        if !write_failing {
+            return;
+        }
     }
     if cancel.is_cancelled() {
         return fail(
@@ -984,15 +1635,70 @@ pub fn mesh_from_tetgen(
             paths.face.display()
         ));
     }
+    // The .poly TetGen read, when the folder holds it: the region volume check's geometry.
+    let poly_path = tetgen_dir.join(format!("{base}.poly"));
+    let checked = if poly_path.is_file() {
+        match poly::read_file(&poly_path) {
+            Ok(model) => {
+                let (report, gate) = check_poly(&model, "external");
+                m.geometry = Some(gate);
+                if !report.is_ok() {
+                    let why = refusal(m.geometry.as_ref().expect("set above"));
+                    fail(
+                        &mut m,
+                        codes::GEOMETRY_REFUSED,
+                        format!("{why}; {}", poly_path.display()),
+                    );
+                }
+                Some((model, report))
+            }
+            Err(e) => {
+                fail(
+                    &mut m,
+                    codes::INPUT_INVALID,
+                    format!("{}: {e}", poly_path.display()),
+                );
+                None
+            }
+        }
+    } else {
+        m.messages.push(format!(
+            "{} is not there: the regions are not held to the cells of the geometry TetGen read",
+            poly_path.display()
+        ));
+        None
+    };
     classify(&paths, None, &[], &input, &mut m);
     if m.codes.is_empty() {
+        let (facets, markers): (Vec<[u32; 3]>, Vec<u32>) = checked
+            .as_ref()
+            .map(|(model, _)| {
+                model
+                    .model_faces
+                    .iter()
+                    .map(|f| (f.vertices, f.face_index))
+                    .unzip()
+            })
+            .unwrap_or_default();
+        let expect = verify::Expectations {
+            unmeshed_faces: None,
+            reference: checked.as_ref().map(|(model, report)| verify::Reference {
+                vertices: &model.model_vertices,
+                facets: &facets,
+                markers: &markers,
+                check: report,
+                fittings: &input.fittings,
+            }),
+        };
         build_and_write(
             &paths,
             &input,
             out_dir,
             &CancelToken::new(),
             &mut m,
-            verify::verify_mesh,
+            verify::verify_mesh_with,
+            &expect,
+            false,
         );
     }
     finish(out_dir, m, start)
@@ -1046,11 +1752,21 @@ mod tests {
         (dir, input)
     }
 
-    fn passes(_: &mbin::Mesh, _: &cbin::Model, _: &verify::VolumeIds) -> verify::VerifyReport {
+    fn passes(
+        _: &mbin::Mesh,
+        _: &cbin::Model,
+        _: &verify::VolumeIds,
+        _: &verify::Expectations,
+    ) -> verify::VerifyReport {
         verify::VerifyReport::default()
     }
 
-    fn refuses(_: &mbin::Mesh, _: &cbin::Model, _: &verify::VolumeIds) -> verify::VerifyReport {
+    fn refuses(
+        _: &mbin::Mesh,
+        _: &cbin::Model,
+        _: &verify::VolumeIds,
+        _: &verify::Expectations,
+    ) -> verify::VerifyReport {
         verify::VerifyReport {
             unmarked_boundary_faces: 1,
             codes: vec!["unmarked_boundary_faces".to_string()],
@@ -1061,7 +1777,17 @@ mod tests {
     fn build_with(dir: &Path, input: &MeshInput, verifier: Verifier) -> MeshManifest {
         let mut m = new_manifest(MeshSource::Poly);
         let paths = OutputPaths::new(dir, BASENAME);
-        build_and_write(&paths, input, dir, &CancelToken::new(), &mut m, verifier);
+        let expect = verify::Expectations::default();
+        build_and_write(
+            &paths,
+            input,
+            dir,
+            &CancelToken::new(),
+            &mut m,
+            verifier,
+            &expect,
+            false,
+        );
         m
     }
 

@@ -1233,6 +1233,10 @@
             }
           ]
         },
+        "preprocess": {
+          "description": "Upstream's \"Scene correction before meshing\" (`mesh_conf@preprocess`,\n`e_core_core_tetconf.h:108`): the `.poly` goes through upstream's `preprocess.exe` before\nTetGen, with box fitting zones in its user facet list, as upstream's GUI does it\n(`projet_maillage.cpp:206-213`). The geometry check then runs on what `preprocess.exe`\nwrote. Upstream's GUI default is on; this crate's default is off\n(`docs/m5-m6-design.md`, decision 12).",
+          "type": "boolean"
+        },
         "preserve_boundary": {
           "description": "`-Y`: add no Steiner points on the boundary.",
           "type": "boolean"
@@ -1262,7 +1266,8 @@
         "min_radius_edge_ratio",
         "max_volume_m3",
         "surface_receiver_max_area_m2",
-        "preserve_boundary"
+        "preserve_boundary",
+        "preprocess"
       ],
       "type": "object"
     },

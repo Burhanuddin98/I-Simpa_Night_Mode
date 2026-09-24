@@ -1132,3 +1132,217 @@ fn self_intersecting_facets_are_named_by_group_and_fitting_zone() {
         si.pairs
     );
 }
+
+/// A stand-in for `preprocess.exe`: it applies `edit` to the folder's `scene_mesh.poly`, prints
+/// `lines` on stdout and exits `exit`.
+struct FakePreprocess {
+    lines: &'static str,
+    exit: u32,
+    edit: fn(&Path),
+}
+
+impl Mesher for FakePreprocess {
+    fn program(&self) -> Option<&Path> {
+        None
+    }
+
+    fn run(
+        &self,
+        dir: &Path,
+        args: &[String],
+        _cancel: &CancelToken,
+        on_line: &mut dyn FnMut(&Line),
+    ) -> io::Result<Outcome> {
+        assert_eq!(args, ["scene_mesh.poly"], "preprocess.exe's one argument");
+        (self.edit)(dir);
+        for l in self.lines.lines() {
+            on_line(&Line {
+                stream: simpa_core::process::Stream::Stdout,
+                t_ms: 0.0,
+                text: l.to_string(),
+                terminated: true,
+            });
+        }
+        Ok(exited(self.exit))
+    }
+}
+
+/// `preprocess.exe`'s statistics as it prints them when it saves.
+const SAVED: &str = "Coplanar correction step and vertices merging step has finished.\n\
+                     Remesh status : \nVertices merged : 0\nCoplanar Faces destroyed : 0\n\
+                     Face splitted : 0\n";
+const SAVED_ONE_DESTROYED: &str = "Remesh status : \nVertices merged : 0\n\
+                                   Coplanar Faces destroyed : 1\nFace splitted : 0\n";
+
+/// The folder's `.poly` with `f` applied to its model.
+fn edit_poly(dir: &Path, f: impl FnOnce(&mut poly::Model)) {
+    let path = dir.join("scene_mesh.poly");
+    let mut m = poly::read_file(&path).unwrap();
+    f(&mut m);
+    poly::write_file(&m, &path).unwrap();
+}
+
+/// Upstream's scene correction in the mesher (`docs/m5-m6-design.md`, decision 12), each of its
+/// codes on the input that fires it, with `preprocess.exe` played by [`FakePreprocess`] and the
+/// real TetGen after it. `preprocess.exe` exits 0 whatever it did, so its lines and the file it
+/// saved are what the mesher reads.
+#[test]
+fn every_preprocess_failure_code_fires_on_its_input() {
+    let mut p = load_room("tutorial1_box.simpa");
+    p.solvers.meshing.preprocess = true;
+    let tetgen = tetgen();
+    let go = |label: &str, pre: Option<&dyn Mesher>| -> (PathBuf, MeshManifest) {
+        let dir = scratch(label);
+        let tools = mesh::MeshTools {
+            tetgen: &tetgen,
+            preprocess: pre,
+            markers: mesh::Markers::Restored,
+        };
+        let m = mesh::mesh_project_with(&p, &dir, &tools, &CancelToken::new(), &mut |_: &Line| {})
+            .unwrap();
+        (dir, m)
+    };
+    let failed = |dir: &Path, m: &MeshManifest, codes_: &[&str]| {
+        assert_eq!(m.codes, codes_, "{m:#?}");
+        assert_eq!(m.status, MeshStatus::Fail);
+        assert!(!dir.join("tetramesh.mbin").exists());
+        assert!(m.tetgen.is_none(), "TetGen ran: {m:#?}");
+    };
+
+    // Control: it saves the file unchanged and prints its statistics: the box meshes.
+    let same = FakePreprocess {
+        lines: SAVED,
+        exit: 0,
+        edit: |_| {},
+    };
+    let (dir, m) = go("pre-ok", Some(&same));
+    assert!(m.is_ok(), "{m:#?}");
+    let report = m.preprocess.as_ref().unwrap();
+    assert_eq!(report.input_sha256, report.output_sha256.clone().unwrap());
+    assert!(dir.join("scene_mesh.input.poly").is_file());
+    assert!(m.verify.as_ref().unwrap().regions_checked);
+
+    // None given.
+    let (dir, m) = go("pre-none", None);
+    failed(&dir, &m, &[codes::PREPROCESS_LAUNCH_FAILED]);
+
+    // It gives up: the abort line and no statistics, the file untouched, exit 0.
+    let aborted = FakePreprocess {
+        lines: "Split Triangle for the 104 times. [41.1;-0.65;8.55]\nMesh reparation has been \
+                aborted. The algorithm enter into an infinite loop. Try to stick coplanar faces \
+                or destroy manually.\n",
+        exit: 0,
+        edit: |_| {},
+    };
+    let (dir, m) = go("pre-aborted", Some(&aborted));
+    failed(&dir, &m, &[codes::PREPROCESS_ABORTED]);
+    assert!(m.messages[0].contains("gave up"), "{m:#?}");
+    // It cannot read the file.
+    let not_found = FakePreprocess {
+        lines: "The mesh file cant be found !\n",
+        exit: 0,
+        edit: |_| {},
+    };
+    let (dir, m) = go("pre-not-found", Some(&not_found));
+    failed(&dir, &m, &[codes::PREPROCESS_ABORTED]);
+    // It prints no statistics at all.
+    let silent = FakePreprocess {
+        lines: "",
+        exit: 0,
+        edit: |_| {},
+    };
+    let (dir, m) = go("pre-silent", Some(&silent));
+    failed(&dir, &m, &[codes::PREPROCESS_ABORTED]);
+    // It saves a user facet it never merged.
+    let unmerged = FakePreprocess {
+        lines: SAVED,
+        exit: 0,
+        edit: |d| {
+            edit_poly(d, |m| {
+                let f = m.model_faces[0];
+                m.user_defined_faces.push(f);
+            })
+        },
+    };
+    let (dir, m) = go("pre-unmerged", Some(&unmerged));
+    failed(&dir, &m, &[codes::PREPROCESS_ABORTED]);
+
+    // Its exit code: a crash, and any other nonzero code.
+    let crash = FakePreprocess {
+        lines: "",
+        exit: 0xC000_0005,
+        edit: |_| {},
+    };
+    let (dir, m) = go("pre-crash", Some(&crash));
+    failed(
+        &dir,
+        &m,
+        &[codes::PREPROCESS_CRASH, codes::PREPROCESS_EXIT_NONZERO],
+    );
+    let one = FakePreprocess {
+        lines: SAVED,
+        exit: 1,
+        edit: |_| {},
+    };
+    let (dir, m) = go("pre-exit-1", Some(&one));
+    failed(&dir, &m, &[codes::PREPROCESS_EXIT_NONZERO]);
+
+    // What it saved cannot be accounted for: a facet gone that it did not count, and a facet
+    // moved off the one it came from.
+    let lost = FakePreprocess {
+        lines: SAVED,
+        exit: 0,
+        edit: |d| {
+            edit_poly(d, |m| {
+                m.model_faces.remove(3);
+            })
+        },
+    };
+    let (dir, m) = go("pre-lost", Some(&lost));
+    failed(&dir, &m, &[codes::PREPROCESS_OUTPUT_INVALID]);
+    assert!(m.messages[0].contains("counted 0 destroyed"), "{m:#?}");
+    let moved = FakePreprocess {
+        lines: SAVED,
+        exit: 0,
+        edit: |d| {
+            edit_poly(d, |m| {
+                m.model_faces[0].face_index = 5;
+            })
+        },
+    };
+    let (dir, m) = go("pre-moved", Some(&moved));
+    failed(&dir, &m, &[codes::PREPROCESS_OUTPUT_INVALID]);
+
+    // Accounted for, and refused by the geometry check before TetGen runs: a wall facet deleted,
+    // and counted, leaves the room open.
+    let open = FakePreprocess {
+        lines: SAVED_ONE_DESTROYED,
+        exit: 0,
+        edit: |d| {
+            edit_poly(d, |m| {
+                m.model_faces.remove(3);
+            })
+        },
+    };
+    let (dir, m) = go("pre-open", Some(&open));
+    failed(&dir, &m, &[codes::GEOMETRY_REFUSED]);
+    let gate = m.geometry.as_ref().unwrap();
+    assert_eq!(
+        (gate.checked.as_str(), gate.verdict.as_str()),
+        ("preprocessed", "refused")
+    );
+    assert!(
+        gate.reasons.iter().any(|r| r.code == "open_boundary"),
+        "{gate:#?}"
+    );
+    assert_eq!(
+        m.preprocess
+            .as_ref()
+            .unwrap()
+            .accounting
+            .as_ref()
+            .unwrap()
+            .deleted,
+        [3]
+    );
+}

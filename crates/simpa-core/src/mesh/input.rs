@@ -7,6 +7,7 @@ use super::flags::to_string_g15;
 use super::verify::VolumeIds;
 use crate::config_xml::{self, GlFrame, SolverIds};
 use crate::formats::{cbin, poly};
+use crate::mesh::verify::DRAWN_ZONE_TRIANGLES;
 use crate::schema::{FittingShape, Project, SurfaceReceiverShape, Vec3};
 
 /// What a `.poly` marker at or above the scene's face count stands for: one triangle of a `Box`
@@ -19,10 +20,25 @@ pub struct ZoneFacets {
     pub first_marker: u32,
 }
 
+/// One enabled fitting zone, as the region volume check needs it (`mesh::verify`, "Regions").
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FittingRegion {
+    pub zone: String,
+    pub solver_id: i32,
+    /// The region seed the `.poly` carries, as written.
+    pub seed: [f32; 3],
+    /// A `Box` zone's centre, `(min + max) / 2`: a point strictly inside it, whatever its seed.
+    pub box_centre: Option<[f64; 3]>,
+    /// A `Surfaces` zone's scene faces (`.cbin` indices, ascending): the faces of its groups.
+    pub faces: Vec<u32>,
+}
+
 /// Everything the mesher writes before it runs TetGen.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MeshInput {
-    /// `scene_mesh.poly`: facet `i` of the scene carries marker `i`; box-zone triangles follow.
+    /// `scene_mesh.poly`: facet `i` of the scene carries marker `i`; box-zone triangles follow,
+    /// in the facet list ([`project_input`] without preprocessing) or in the Part 5 user facet
+    /// list, as upstream's GUI writes them for `preprocess.exe` (with it).
     pub poly: poly::Model,
     /// `scene_mesh.var`, when the settings ask for a facet-area constraint.
     pub var: Option<Vec<u8>>,
@@ -41,6 +57,14 @@ pub struct MeshInput {
     pub zone_facets: Vec<ZoneFacets>,
     /// Remarks the manifest records (for example, markers a raw `.poly` had that were replaced).
     pub notes: Vec<String>,
+    /// Whether the `.poly` goes through upstream's `preprocess.exe` before TetGen (the project's
+    /// `MeshSettings::preprocess`; never for a raw `.poly`).
+    pub preprocess: bool,
+    /// How many of `scene`'s vertices, from the first, upstream's `UnitizeVar` is fitted to: the
+    /// room's ([`config_xml::room_mesh`]), never the drawn zones' after them.
+    pub frame_vertices: usize,
+    /// The enabled fitting zones, in solver-id order: the regions the `.poly` seeds.
+    pub fittings: Vec<FittingRegion>,
 }
 
 /// Why no input could be built.
@@ -86,7 +110,13 @@ const BOX_TRIANGLES: [[usize; 3]; 12] = [
     [3, 4, 7],
 ];
 
-/// Builds the mesher input for `project`:
+/// Builds the mesher input for `project`. Common to both layouts:
+/// - the `.var` when `surface_receiver_max_area_m2` is set ([`var_bytes`]);
+/// - per enabled fitting zone, one region, attribute = its solver id, no volume bound (-1),
+///   written as upstream's `ExportPOLY` writes a region (`poly.cpp:220-231`);
+/// - the flags' `-q` and `-a` values must be above 0 and finite as `f32`.
+///
+/// Without preprocessing (`MeshSettings::preprocess` off; `docs/m5-m6-design.md`, decision 5):
 /// - vertices taken from [`config_xml::room_mesh`] (narrowed to `f32`, then through upstream's
 ///   OpenGL round trip in the scene's [`GlFrame`]) and written back as `f64`, so the `.poly`
 ///   holds exactly the `.cbin`'s values, as upstream's `_SavePOLY` and `ToCBINFormat` write the
@@ -98,15 +128,11 @@ const BOX_TRIANGLES: [[usize; 3]; 12] = [
 ///   drawn box's corners (in, `e_scene_encombrements_encombrement_cuboide.h:180`; out,
 ///   `Objet3D_maillage.cpp:984-990`). The round trip works coordinate by coordinate, so a box
 ///   face flush with a wall stays exactly in that wall's plane;
-/// - per enabled fitting zone, one region: the box centre, or the zone's `inside_point`, narrowed
-///   to `f32`, attribute = its solver id, no volume bound (-1);
-/// - the `.var` when `surface_receiver_max_area_m2` is set ([`var_bytes`]).
+/// - regions in project order, a box seeded at its centre, a `Surfaces` zone at its
+///   `inside_point`, narrowed to `f32`.
+///
+/// With preprocessing, upstream's GUI layout for `preprocess.exe`: [`preprocess_layout`].
 pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
-    let scene =
-        config_xml::room_mesh(project).map_err(|e| InputError(format!("scene mesh: {e}")))?;
-    // The frame room_mesh took the scene's vertices through.
-    let frame = GlFrame::of_project(project);
-    let ids = SolverIds::assign(project).map_err(|e| InputError(format!("solver ids: {e}")))?;
     let settings = &project.solvers.meshing;
     // The flags carry these as the f32 upstream holds (`flags::setting_g15`).
     let q = settings.min_radius_edge_ratio.get();
@@ -119,10 +145,104 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
         && !((a as f32).is_finite() && a as f32 > 0.0)
     {
         return Err(InputError(format!(
-            "the maximum tetrahedron volume (-a) is {a} m³; it must be above 0 and finite as a              32-bit float"
+            "the maximum tetrahedron volume (-a) is {a} m³; it must be above 0 and finite as a \
+             32-bit float"
         )));
     }
+    let face_groups = project
+        .geometry
+        .faces
+        .iter()
+        .map(|f| {
+            project
+                .group(f.group)
+                .map_or_else(String::new, |g| g.name.clone())
+        })
+        .collect();
+    let (var, var_markers) = match settings.surface_receiver_max_area_m2 {
+        None => (None, Vec::new()),
+        Some(area) => {
+            let area32 = area.get() as f32;
+            if !(area32.is_finite() && area32 > 0.0) {
+                return Err(InputError(format!(
+                    "the surface-receiver area constraint is {area} m²; it must be above 0 and \
+                     finite as a 32-bit float"
+                )));
+            }
+            let markers = refined_faces(project);
+            (Some(var_bytes(&markers, area32)), markers)
+        }
+    };
+    let layout = if settings.preprocess {
+        preprocess_layout(project)?
+    } else {
+        tetgen_layout(project)?
+    };
+    let fittings: Vec<i32> = layout.fittings.iter().map(|f| f.solver_id).collect();
+    Ok(MeshInput {
+        poly: layout.poly,
+        var,
+        var_markers,
+        scene: layout.scene,
+        volume_ids: VolumeIds::tetgen(fittings),
+        face_groups,
+        zone_facets: layout.zone_facets,
+        notes: Vec::new(),
+        preprocess: settings.preprocess,
+        frame_vertices: layout.frame_vertices,
+        fittings: layout.fittings,
+    })
+}
 
+/// What [`tetgen_layout`] and [`preprocess_layout`] build: the `.poly`, the `.cbin` its markers
+/// index, and what the manifest and the region volume check need.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Layout {
+    pub poly: poly::Model,
+    pub scene: cbin::Model,
+    pub zone_facets: Vec<ZoneFacets>,
+    pub frame_vertices: usize,
+    pub fittings: Vec<FittingRegion>,
+}
+
+/// The scene faces of a `Surfaces` zone's groups, ascending.
+fn zone_faces(project: &Project, groups: &[crate::schema::GroupId]) -> Vec<u32> {
+    project
+        .geometry
+        .faces
+        .iter()
+        .enumerate()
+        .filter(|(_, f)| groups.contains(&f.group))
+        .map(|(i, _)| i as u32)
+        .collect()
+}
+
+/// A box zone's bounds as the mesher checks them: `f32`, `min` below `max` on every axis.
+fn box_bounds(
+    z: &crate::schema::FittingZone,
+    i: usize,
+    min: Vec3,
+    max: Vec3,
+) -> Result<([f32; 3], [f32; 3]), InputError> {
+    let what = |s: &str| format!("fitting zone '{}' {s}", z.name);
+    let (lo, hi) = (narrow(min, &what("min"))?, narrow(max, &what("max"))?);
+    if (0..3).any(|a| lo[a] >= hi[a]) {
+        return Err(InputError(format!(
+            "fitting zone '{}' (/fitting_zones/{i}) is an empty box: min {lo:?} is not below max \
+             {hi:?} on every axis as 32-bit floats",
+            z.name
+        )));
+    }
+    Ok((lo, hi))
+}
+
+/// The layout without preprocessing (decision 5): see [`project_input`].
+fn tetgen_layout(project: &Project) -> Result<Layout, InputError> {
+    let scene =
+        config_xml::room_mesh(project).map_err(|e| InputError(format!("scene mesh: {e}")))?;
+    // The frame room_mesh took the scene's vertices through.
+    let frame = GlFrame::of_project(project);
+    let ids = SolverIds::assign(project).map_err(|e| InputError(format!("solver ids: {e}")))?;
     let mut model_vertices: Vec<[f64; 3]> = scene
         .vertices
         .iter()
@@ -148,7 +268,7 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
         }
         let id = ids.fitting_zone_id(z.id).expect("every zone has an id");
         let what = |s: &str| format!("fitting zone '{}' {s}", z.name);
-        let seed = match &z.shape {
+        let (seed, box_centre, faces) = match &z.shape {
             FittingShape::Box { min, max, .. } => {
                 let (lo, hi) = (narrow(*min, &what("min"))?, narrow(*max, &what("max"))?);
                 let (lo, hi) = match &frame {
@@ -157,8 +277,9 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
                 };
                 if (0..3).any(|a| lo[a] >= hi[a]) {
                     return Err(InputError(format!(
-                        "fitting zone '{}' (/fitting_zones/{i}) is an empty box: min {lo:?} is not \
-                         below max {hi:?} on every axis as 32-bit floats, as the mesher writes them",
+                        "fitting zone '{}' (/fitting_zones/{i}) is an empty box: min {lo:?} is \
+                         not below max {hi:?} on every axis as 32-bit floats, as the mesher \
+                         writes them",
                         z.name
                     )));
                 }
@@ -183,50 +304,38 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
                     first_marker,
                 });
                 // The centre, from the corners as written, narrowed again.
-                [0, 1, 2].map(|a| ((f64::from(lo[a]) + f64::from(hi[a])) / 2.0) as f32)
+                let centre = [0, 1, 2].map(|a| (f64::from(lo[a]) + f64::from(hi[a])) / 2.0);
+                (centre.map(|c| c as f32), Some(centre), Vec::new())
             }
-            FittingShape::Surfaces { inside_point, .. } => {
-                narrow(*inside_point, &what("inside_point"))?
-            }
+            FittingShape::Surfaces {
+                inside_point,
+                groups,
+            } => (
+                narrow(*inside_point, &what("inside_point"))?,
+                None,
+                zone_faces(project, groups),
+            ),
         };
         model_regions.push(poly::Region {
             region_index: id,
             dot_in_region: seed,
             region_refinement: -1.0,
         });
-        fittings.push(id);
+        fittings.push(FittingRegion {
+            zone: z.name.clone(),
+            solver_id: id,
+            seed,
+            box_centre,
+            faces,
+        });
     }
-
-    let face_groups = project
-        .geometry
-        .faces
-        .iter()
-        .map(|f| {
-            project
-                .group(f.group)
-                .map_or_else(String::new, |g| g.name.clone())
-        })
-        .collect();
-    let (var, var_markers) = match settings.surface_receiver_max_area_m2 {
-        None => (None, Vec::new()),
-        Some(area) => {
-            let area32 = area.get() as f32;
-            if !(area32.is_finite() && area32 > 0.0) {
-                return Err(InputError(format!(
-                    "the surface-receiver area constraint is {area} m²; it must be above 0 and \
-                     finite as a 32-bit float"
-                )));
-            }
-            let markers = refined_faces(project);
-            (Some(var_bytes(&markers, area32)), markers)
-        }
-    };
     debug_assert!(
         zone_facets
             .iter()
             .all(|z| z.first_marker as usize >= scene_faces)
     );
-    Ok(MeshInput {
+    let frame_vertices = scene.vertices.len();
+    Ok(Layout {
         poly: poly::Model {
             save_face_index: true,
             user_defined_faces: Vec::new(),
@@ -234,13 +343,145 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
             model_vertices,
             model_regions,
         },
-        var,
-        var_markers,
         scene,
-        volume_ids: VolumeIds::tetgen(fittings),
-        face_groups,
         zone_facets,
-        notes: Vec::new(),
+        frame_vertices,
+        fittings,
+    })
+}
+
+/// Upstream's `BARELY_EPSILON`, `(decimal)0.0001` with `decimal` = `float` (`mathlib.h:58, 62`).
+const BARELY_EPSILON: f32 = 0.0001;
+
+/// A rectangular zone's region seed as upstream's GUI computes it, `dotInsideVol = posFin -
+/// (posFin - posDeb) * BARELY_EPSILON` from the corners `ba` (`posDeb`) and `hc` (`posFin`) as
+/// stored, unordered (`e_scene_encombrements_encombrement_cuboide.h:336-338`), every operation
+/// per component in `f32` (`vec3` is `base_vec3<float>`, `mathlib.h:113, 124, 243`): a point just
+/// inside the `hc` corner.
+pub fn upstream_box_seed(ba: [f32; 3], hc: [f32; 3]) -> [f32; 3] {
+    [0, 1, 2].map(|k| hc[k] - (hc[k] - ba[k]) * BARELY_EPSILON)
+}
+
+/// The layout upstream's GUI writes for `preprocess.exe`, `CObjet3D::_SavePOLY(path, true,
+/// doMeshRepair = true, true, ...)` (`Objet3D_maillage.cpp:931-1041`, called at
+/// `projet_maillage.cpp:206`):
+/// - the scene is [`config_xml::scene_mesh`]: the room's faces, then each enabled box zone's 12
+///   triangles with three vertices of their own (`ToCBINFormat`), so every `.poly` marker is a
+///   `.cbin` face index, box triangles included;
+/// - nodes: that scene's vertices, widened to `f64` (`vec3_to_dvec3`, `:945, 983-988`);
+/// - Part 2, the facet list: the room's faces, marker = face index (`:950-968`);
+/// - Part 5, the user facet list: the box triangles, marker = their `.cbin` face index, each on
+///   its own three nodes (`:975-996`);
+/// - Part 4, the regions (`:998-1033`): one per enabled zone, attribute = its solver id (where
+///   upstream writes its element id, `xmlIdElement`, `:1000`; storing upstream's ids is Burhan's
+///   open decision, so ours are compared through the recorded id map), refinement -1
+///   (`drawable_element.h:104`). A box is seeded at [`upstream_box_seed`] of its corners as
+///   upstream holds them ([`FittingShape::box_corners`]); a `Surfaces` zone at its
+///   `inside_point` (upstream's `volpos`, `e_scene_encombrements_encombrement_model.h:180`),
+///   narrowed to `f32` and written as it is, even on one of the zone's faces (tutorial 3's zone 1).
+///   The lines are in ascending solver id: upstream's order is its drawable table's, a wx hash map
+///   keyed by element id (`appconfig.h:55`) that its source does not fix; ascending id is tutorial
+///   3's stored order, and the parity bed's `.poly` byte comparison is what would show a scene
+///   where it is not.
+pub fn preprocess_layout(project: &Project) -> Result<Layout, InputError> {
+    let scene =
+        config_xml::scene_mesh(project).map_err(|e| InputError(format!("scene mesh: {e}")))?;
+    let room_faces = project.geometry.faces.len();
+    let frame_vertices = project.geometry.vertices.len();
+    let ids = SolverIds::assign(project).map_err(|e| InputError(format!("solver ids: {e}")))?;
+    let model_vertices: Vec<[f64; 3]> = scene
+        .vertices
+        .iter()
+        .map(|v| [v.x, v.y, v.z].map(f64::from))
+        .collect();
+    let face = |(i, f): (usize, &cbin::Face)| poly::Face {
+        vertices: [f.a, f.b, f.c],
+        face_index: i as u32,
+    };
+    let model_faces: Vec<poly::Face> = scene.faces[..room_faces]
+        .iter()
+        .enumerate()
+        .map(face)
+        .collect();
+    let user_defined_faces: Vec<poly::Face> = scene
+        .faces
+        .iter()
+        .enumerate()
+        .skip(room_faces)
+        .map(face)
+        .collect();
+    let mut zone_facets = Vec::new();
+    let mut fittings = Vec::new();
+    let mut next_marker = room_faces;
+    for (i, z) in project.fitting_zones.iter().enumerate() {
+        if !z.enabled {
+            continue;
+        }
+        let id = ids.fitting_zone_id(z.id).expect("every zone has an id");
+        let what = |s: &str| format!("fitting zone '{}' {s}", z.name);
+        match &z.shape {
+            FittingShape::Box { min, max, .. } => {
+                let (lo, hi) = box_bounds(z, i, *min, *max)?;
+                let (ba, hc) = z.shape.box_corners().expect("a box");
+                let (ba, hc) = (narrow(ba, &what("ba"))?, narrow(hc, &what("hc"))?);
+                let first_marker = u32::try_from(next_marker)
+                    .map_err(|_| InputError("too many facets".to_string()))?;
+                next_marker += DRAWN_ZONE_TRIANGLES;
+                zone_facets.push(ZoneFacets {
+                    zone: z.name.clone(),
+                    solver_id: id,
+                    first_marker,
+                });
+                fittings.push(FittingRegion {
+                    zone: z.name.clone(),
+                    solver_id: id,
+                    seed: upstream_box_seed(ba, hc),
+                    box_centre: Some(
+                        [0, 1, 2].map(|a| (f64::from(lo[a]) + f64::from(hi[a])) / 2.0),
+                    ),
+                    faces: Vec::new(),
+                });
+            }
+            FittingShape::Surfaces {
+                inside_point,
+                groups,
+            } => fittings.push(FittingRegion {
+                zone: z.name.clone(),
+                solver_id: id,
+                seed: narrow(*inside_point, &what("inside_point"))?,
+                box_centre: None,
+                faces: zone_faces(project, groups),
+            }),
+        }
+    }
+    if next_marker != scene.faces.len() {
+        return Err(InputError(format!(
+            "the scene mesh holds {} drawn-zone triangles, the enabled box zones {}",
+            scene.faces.len() - room_faces,
+            next_marker - room_faces
+        )));
+    }
+    fittings.sort_by_key(|f| f.solver_id);
+    let model_regions = fittings
+        .iter()
+        .map(|f| poly::Region {
+            region_index: f.solver_id,
+            dot_in_region: f.seed,
+            region_refinement: -1.0,
+        })
+        .collect();
+    Ok(Layout {
+        poly: poly::Model {
+            save_face_index: true,
+            user_defined_faces,
+            model_faces,
+            model_vertices,
+            model_regions,
+        },
+        scene,
+        zone_facets,
+        frame_vertices,
+        fittings,
     })
 }
 
@@ -360,6 +601,7 @@ pub fn poly_input(model: &poly::Model) -> Result<MeshInput, InputError> {
         model_regions: model.model_regions.clone(),
     };
     let n = model.model_faces.len();
+    let frame_vertices = vertices.len();
     Ok(MeshInput {
         poly,
         var: None,
@@ -369,6 +611,9 @@ pub fn poly_input(model: &poly::Model) -> Result<MeshInput, InputError> {
         face_groups: vec![String::new(); n],
         zone_facets: Vec::new(),
         notes,
+        preprocess: false,
+        frame_vertices,
+        fittings: Vec::new(),
     })
 }
 

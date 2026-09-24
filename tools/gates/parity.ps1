@@ -6,9 +6,12 @@
 #     and meshed by `simpa`, against the files original I-Simpa wrote into each .proj, and SPPS and
 #     TCR run with one seed on our inputs and on the original inputs, every output compared.
 #     tutorial_1, tutorial_2, tutorial_3, tutorial_3_same_seed_runs and the_comparisons_say_no must
-#     pass, and the one test the plain suite ignores (4) must say so. tutorial_3_same_seed_runs holds
-#     the room written as TetGen numbers it (decision 1, reversed 2026-09-24): every output of the 3
-#     runs equals the original's, and the room written 0 on run 0 must differ.
+#     pass, and the one test the plain suite ignores (4) must say so. tutorial_3 is end to end
+#     (decision 12): import-proj, then `simpa mesh --parity` through preprocess.exe, our geometry
+#     check, TetGen 1.5.0 and our builder, whose .poly, .1.* and .mbin must be upstream's through
+#     the recorded id map, and the default mode must mesh it clean, each region its cell's volume.
+#     tutorial_3_same_seed_runs runs the 3 runs on that parity mesh's own .mbin: every output
+#     equals the original's, and the room written 0 on run 0 must differ.
 # (3) The tests the bed rests on: parity_inputs.rs (config.xml and mesh.cbin, value by value) and
 #     mesh_mbin_parity.rs (the .mbin builder, byte for byte).
 # (4) Upstream's shipped 1.3.4 and 1.4.0 SPPS and TCR against ours on tutorial 1's original inputs
@@ -19,7 +22,10 @@
 #   solvers/build.ps1 beside ours) in place of ours;
 # - (2) the bed run with that TetGen 1.6.0 in the solver folder must FAIL tutorial_1, naming
 #   TetGen's files; the_comparisons_say_no feeds each comparison the input that fails it, and
-#   tutorial_3_same_seed_runs the room written 0;
+#   tutorial_3_same_seed_runs the room written 0; tutorial_3 must print its three says-no:
+#   preprocessing off refused on the box's self-intersections (our check's pairs TetGen's own),
+#   TetGen 1.6.0's wrong room (1,220.9 m3 of 978.3) refused by the region volume check, and
+#   upstream's .poly with one region line changed giving another .mbin;
 # - (4) asserts that 1.3.4 differs, so the comparison can tell two builds apart.
 # A check an open decision blocks prints BLOCKED; the gate then exits 3, never 0.
 # Run: powershell -File tools/gates/parity.ps1 [-SolversDir <bin>] [-ReleaseBinaries <folder>]
@@ -124,7 +130,7 @@ Check "(1) says NO: upstream's TetGen 1.6.0 build is not the manifest's tetgen.e
 }
 
 # --- (2) the bed -------------------------------------------------------------------------------------
-$script:bed = CargoTest 'cargo test -p simpa --test parity_tutorials --no-fail-fast -- --nocapture --test-threads=1' 'bed'
+$script:bed = CargoTest 'cargo test -p simpa --test parity_tutorials --no-fail-fast -- --nocapture --test-threads=1' 'bed' @{ SIMPA_TETGEN160 = $Tetgen160 }
 foreach ($t in @('tutorial_1', 'tutorial_2', 'tutorial_3', 'tutorial_3_same_seed_runs', 'the_comparisons_say_no')) {
     Check "(2) bed: $t" {
         $r = $script:bed.Results[$t]
@@ -137,6 +143,27 @@ Check "(2) bed: the one test the plain suite ignores says so, with its reason, n
     $ignored = @($script:bed.Results.GetEnumerator() | Where-Object { $_.Value -eq 'ignored' } | ForEach-Object { $_.Key })
     Write-Host "      shipped_1_3_4_and_1_4_0_solvers_against_ours ... $b; ignored: [$($ignored -join ', ')]"
     $b -eq 'ignored' -and $ignored.Count -eq 1
+}
+Check "(2) bed: tutorial_3 end to end: the parity mesh's .poly, .1.* and .mbin are upstream's through the id map, and the default mesh verifies clean" {
+    $t = $script:bed.Text
+    $poly = [regex]::Match($t, '(?m)^  simpa mesh --parity: .*?: (\d+) bytes, sha256 ([0-9a-f]{16}), upstream''s temp/scene_mesh\.poly byte for byte through the id map')
+    $tg = [regex]::Matches($t, '(?m)^  scene_mesh\.1\.(node|ele|face|neigh|edge): byte-identical, trailer excluded \(the parity mesh''s TetGen').Count
+    $mbin = [regex]::Match($t, '(?m)^  the parity mesh''s tetramesh\.mbin: each run''s, byte for byte \((\d+) bytes\), through the id map')
+    $verify = [regex]::IsMatch($t, '(?m)^  the parity mesh''s verification: FAIL, by name: 280 marker mismatches')
+    $default = [regex]::Match($t, '(?m)^  simpa mesh \(default\): OK; .*')
+    Write-Host "      .poly: $(if ($poly.Success) { "$($poly.Groups[1].Value) bytes, $($poly.Groups[2].Value)" } else { 'no line' }); TetGen files equal: $tg of 5; .mbin: $(if ($mbin.Success) { "$($mbin.Groups[1].Value) bytes" } else { 'no line' }); parity verification names the defect: $verify"
+    Write-Host "      $(if ($default.Success) { $default.Value.Trim() } else { 'default mode: no line' })"
+    $poly.Success -and $poly.Groups[1].Value -eq '4889' -and $poly.Groups[2].Value -eq '74b8f8311d5d0f64' -and $tg -eq 5 -and
+        $mbin.Success -and $mbin.Groups[1].Value -eq '338528' -and $verify -and $default.Success
+}
+Check "(2) says NO: tutorial_3 printed its three refusals (preprocessing off, TetGen 1.6.0's wrong room, a changed region line)" {
+    $t = $script:bed.Text
+    $off = [regex]::Match($t, '(?m)^  says no, preprocess off: exit 4, .*?tetgen_self_intersection.*?the same (\d+) pairs TetGen 1\.5\.0''s -d names')
+    $wrong = [regex]::Match($t, '(?m)^  says no, TetGen 1\.6\.0 on the raw scene: .*?of ([0-9.]+) m\S* against the room''s ([0-9.]+) m\S*.*?fails the region volume check: .*?region_volume_mismatch.*?unmeshed_cells')
+    $misplaced = [regex]::IsMatch($t, '(?m)^  says no, TetGen 1\.6\.0 in parity mode: .*fitting_region_misplaced')
+    $region = [regex]::Match($t, '(?m)^  says no, upstream''s \.poly with zone 1''s seed 1 cm up: another \.mbin, (\d+) tetrahedra with another idVolume')
+    Write-Host "      preprocess off: $(if ($off.Success) { "$($off.Groups[1].Value) pairs, ours = TetGen's" } else { 'no line' }); TetGen 1.6.0: $(if ($wrong.Success) { "$($wrong.Groups[1].Value) m3 of $($wrong.Groups[2].Value) m3, refused by the volume check" } else { 'no line' }); 1.6.0 in parity mode names zone 1 misplaced: $misplaced; region line: $(if ($region.Success) { "$($region.Groups[1].Value) tetrahedra relabelled" } else { 'no line' })"
+    $off.Success -and $wrong.Success -and $misplaced -and $region.Success -and [int]$region.Groups[1].Value -gt 0
 }
 Check "(2) bed: tutorial_3_same_seed_runs printed its 3 runs equal and the room written 0 refused" {
     $eq = [regex]::Matches($script:bed.Text, '(?m)^  run \d: all \d+ output files equal to the original inputs'' run').Count

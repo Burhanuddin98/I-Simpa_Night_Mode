@@ -95,9 +95,16 @@ fn faces_by_group(p: &Project) -> BTreeMap<String, BTreeSet<usize>> {
     out
 }
 
-/// The project the tutorial 1 fixture holds: `tutorial_1.proj` imported, then named.
+/// The project the tutorial 1 fixture holds: `tutorial_1.proj` imported, then named, with
+/// upstream's scene correction switched off: the room fixtures are the gates' rooms (M5, M6),
+/// measured and gated without `preprocess.exe` (`docs/m5-m6-design.md`, decision 12).
 fn tutorial1_box(proj: &Path) -> Project {
     let mut p = import_proj_file(proj).unwrap().project;
+    assert!(
+        p.solvers.meshing.preprocess,
+        "tutorial_1.proj asks for preprocess"
+    );
+    p.solvers.meshing.preprocess = false;
     p.name = "Tutorial 1 box".into();
     p.description = "Upstream I-Simpa tutorial 1 (tutorial_1.proj at 929a5c8), imported by \
                      geometry::import::import_proj: a 6 x 10 x 3 m box, groups and materials \
@@ -107,9 +114,17 @@ fn tutorial1_box(proj: &Path) -> Project {
     p
 }
 
-/// The project the corrected Elmia fixture holds: `tutorial_2.proj` imported, then named.
+/// The project the corrected Elmia fixture holds: `tutorial_2.proj` imported, then named, with
+/// upstream's scene correction switched off, as for [`tutorial1_box`]. On this hall
+/// `preprocess.exe` gives up and saves nothing ("Mesh reparation has been aborted"), which the
+/// mesher refuses as `preprocess_aborted`.
 fn elmia_corrected(proj: &Path) -> Project {
     let mut p = import_proj_file(proj).unwrap().project;
+    assert!(
+        p.solvers.meshing.preprocess,
+        "tutorial_2.proj asks for preprocess"
+    );
+    p.solvers.meshing.preprocess = false;
     p.name = "Elmia (corrected)".into();
     p.description = "Upstream I-Simpa tutorial 2 (tutorial_2.proj at 929a5c8), imported by \
                      geometry::import::import_proj: the Elmia hall as upstream's scene correction \

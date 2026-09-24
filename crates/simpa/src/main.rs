@@ -19,12 +19,16 @@ const USAGE: &str = "usage:
   simpa check <model|project.simpa> [--unit ..] [--up ..] [--json]   exit 3 when refused
   simpa repair <in> <out.simpa> [--weld-tolerance <m>] [--json]      exit 3 when refused
   simpa mesh <project.simpa | file.poly> --out <dir> [--json] [--tetgen <exe>]
-             [--from-tetgen <dir> [--basename <b>]] [--cancel-after-ms <n>]
-                                                              TetGen's lines on stderr; exit 0, 2, 3, 4, 130
+             [--preprocess <exe>] [--parity] [--from-tetgen <dir> [--basename <b>]]
+             [--cancel-after-ms <n>]
+      TetGen's and preprocess.exe's lines on stderr; exit 0, 2, 3, 4, 130. A project whose mesh
+      settings ask for upstream's scene correction goes through preprocess.exe first; --parity
+      keeps its facet markers as it writes them (upstream's defect), fails the mesh when they do
+      not verify, and writes the .mbin for byte comparison only.
   simpa mesh-verify <dir> [--json] [--room-id <n>] [--fittings <a,b,..>]   exit 4 when it fails
   simpa run <project.simpa> --solver spps|tcr [--variant <v>] [--mesh <dir>] [--runs <root>]
             [--loss-limit <f>] [--cancel-after-ms <n>] [--cancel-after-progress <p>]
-            [--solver-exe <exe>] [--tetgen <exe>] [--json]
+            [--solver-exe <exe>] [--tetgen <exe>] [--preprocess <exe>] [--json]
   simpa run-folder <dir> --solver spps|tcr [--runs <root>] [--solver-exe <exe>] [--loss-limit <f>]
             [--cancel-after-ms <n>] [--cancel-after-progress <p>] [--json]
       run and run-folder print each solver line on stderr as 'CLASS  text', and the run manifest

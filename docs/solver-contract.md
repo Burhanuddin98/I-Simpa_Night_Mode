@@ -439,7 +439,7 @@ order, and its status is OK exactly when it lists none.
 
 | Code | Status | Signal | When |
 |---|---|---|---|
-| `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry; its own codes and counts are in the detail. Exit class 3 |
+| `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry, or, for a project meshed through upstream's scene correction, what `preprocess.exe` made of it (the mesher's gate before TetGen, "Preprocessing and the meshed volume" below); its own codes and counts are in the detail. The mesher gives the same code, and `simpa mesh` exits 3 with it. Exit class 3 |
 | `mesh_missing` | FAIL | before launch | `run --mesh <dir>`: the folder has no readable `mesh.json`, a manifest that is not `OK`, or no `tetramesh.mbin`; or the run's own mesh folder cannot be used. Exit class 4 |
 | `export_failed` | FAIL | before launch | `run`: the run folder's inputs cannot be written. `config_xml`'s writer refuses the project or the variant (its code, such as `variant_not_found`, is in the detail), or a mesh or directivity file cannot be copied. Exit class 2 |
 | `source_unlocatable` | FAIL | before launch | SPPS only, `run` and `run-folder`: a source that SPPS's own `f32` test puts in no tetrahedron of the `.mbin` (`coreinitialisation.cpp:71-95`, emulated by `run::locate`), such as a source exactly on an internal facet where the product rounds positive from both sides. SPPS would crash with `0xC0000005` before any particle runs (`sppsInitialisation.cpp:20`). The detail names each source, its number in the project's order (`config.xml` lists them newest first, so the file's last is number 1), its name and its position as SPPS stores it. Exit class 5, the solver is not launched. VERIFIED against `spps.exe` on 233 points on and near the seeded box's internal facets (`tests/run_locate.rs`) |
@@ -480,7 +480,7 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   |---|---|---|
   | geometry | `geometry_refused` | 3 |
   | validate | each Part A error's code; Part A warnings are recorded as the verdict's warnings | 2 |
-  | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `manifest_mismatch` or Part A's `mesh_out_of_date` | 4 |
+  | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `manifest_mismatch` or Part A's `mesh_out_of_date`. The mesher's `geometry_refused` ends the run at stage geometry, exit class 3: with upstream's scene correction on, the geometry stage leaves the check to the mesher, on what `preprocess.exe` saves | 4 |
   | export | `export_failed`, or `validate_export`'s error codes | 2 |
   | pre_launch (SPPS only) | `source_unlocatable`, `receiver_unlocatable` | 5 |
   | solve | the verdict above | 0, 5 or 130 |
@@ -583,6 +583,49 @@ the first one. What follows marks each difference.
   are `.cbin` face indices. The line `The input surface mesh contain self-intersections. Program
   stopped.` arrives on stdout, and stderr is empty. The mesher reports `tetgen_skipped_facets`,
   and still reads a committed 1.6.0 set such as `tests/fixtures/meshes/broken_hall`.
+
+### Preprocessing and the meshed volume
+
+A project's mesh settings may ask for upstream's "Scene correction before meshing"
+(`MeshSettings::preprocess`, `mesh_conf@preprocess`, on in upstream's GUI by default,
+`e_core_core_tetconf.h:108`; `simpa import-proj` takes the `.proj`'s). The mesher then does what
+upstream's GUI does (`projet_maillage.cpp:206-213`): it writes the `.poly` with the box fitting
+zones' triangles in the user facet list (`Objet3D_maillage.cpp:931-1041`), runs
+`preprocess.exe scene_mesh.poly` (upstream's program, unchanged, built by `solvers/build.ps1`) in
+a Job Object like TetGen, cancellable, and meshes what it saved. What it does, and the defect in
+its reader that gives every user facet the first one's marker (`poly.cpp:418-423`), are in
+`crates/simpa-core/src/mesh/preprocess.rs` and `docs/formats/mesh-manifest.md`. Then:
+- **`preprocess.exe` never fails by its exit code** (`Preprocess.cpp:112-121`), so its output is
+  read: its lines, and the file it saved, facet by facet against the file it was given.
+- **`geometry::check` runs on what it saved, before TetGen**: a refusal is `geometry_refused`
+  (above), exit 3, and TetGen does not run. Without the setting the project's geometry is checked
+  before meshing, as before, and TetGen judges the box zones' triangles first; the `.poly` it read
+  is checked too, and a mesh TetGen makes of one the check refuses is `geometry_refused`.
+- **Its markers are restored**, each facet taking the marker of the facet it lies in, and every
+  change is listed in `mesh.json`. **Parity mode** (`simpa mesh --parity`) keeps its bytes, as
+  upstream's GUI meshes them, to compare with upstream's files; its mesh then fails
+  verification by name and is never run.
+- **A fitting zone's seed on a facet** (tutorial 3's zone 1, whose inside position lies on its
+  top face) leaves the zone to TetGen's choice of side: TetGen 1.5.0 puts zone 1's id on the hall
+  once the box's markers are restored. Outside parity mode the mesher moves such a seed into the
+  zone's cell first, and records it.
+- **Every region is held to the geometry's cells** (`mesh::verify_mesh_with`): each region
+  TetGen made must fill one cell of the geometry it was given, with that cell's volume, and each
+  fitting zone's id must be on its zone's cell. A lost-particle count cannot see a wrong room:
+  TetGen 1.6.0 meshes tutorial 3's raw scene as 1,220.9 m³ against the room's 978.3 m³, both
+  fittings gone, and SPPS loses 1 particle in 60,000 on it.
+
+| Code | When |
+|---|---|
+| `preprocess_launch_failed` | The mesh settings ask for `preprocess.exe`, and it could not be started, none was given (the library's `mesh_project` without it, or not found by `simpa mesh`), or its log could not be written. Nothing is meshed |
+| `preprocess_crash` | `preprocess.exe`'s exit code is an NTSTATUS error (0xC0000000 and up); it comes with `preprocess_exit_nonzero` |
+| `preprocess_exit_nonzero` | `preprocess.exe` exited with a code other than 0, which its `main` never returns |
+| `preprocess_aborted` | `preprocess.exe` exited 0 but saved nothing: it printed `Mesh reparation has been aborted` (a repair loop ran out of its 100 passes, `Preprocess.cpp:100-108`; upstream's tutorial 2, the Elmia hall, does this), `The mesh file cant be found !`, or no statistics; or it saved user facets it never merged into the facet list (its coplanar step ran out of passes, `:79-88`), which TetGen would never read. Upstream's GUI meshes the uncorrected `.poly` then; nothing is meshed here |
+| `preprocess_output_invalid` | What `preprocess.exe` saved does not read as a `.poly`, or cannot be accounted for against what it was given: a facet that lies in no input facet (within `16 · 2⁻²⁴ · R`) or in two user facets, an input facet whose pieces do not cover its area (within its perimeter times that distance), deletions it did not count, or regions it changed |
+| `region_volume_mismatch` | A region (one `idVolume`) whose summed tetrahedron volume is not the volume of the cell of the meshed geometry it lies in, within twice the cell's boundary area times `16 · 2⁻²⁴ · R`, or that lies in the exterior or in a cell another region also fills. Checked by the mesher, against `geometry::check` on the `.poly` TetGen read; `mesh-verify` and `run-folder`, which hold no such geometry, do not check it |
+| `unmeshed_cells` | A cell of the meshed geometry no region fills |
+| `fitting_region_misplaced` | A fitting zone whose id is not on its zone's cell (the cell its seed lies in; a box's, the one its centre lies in), or on no tetrahedron |
+| `fitting_seed_ambiguous` | A fitting zone whose seed lies on facets between cells, none of which its own faces and the outer shell close alone: which side is the zone cannot be told |
 
 ### Importing an upstream project
 

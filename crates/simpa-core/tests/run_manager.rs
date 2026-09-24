@@ -34,6 +34,7 @@ fn options(label: &str, solver: SolverKind, exe: PathBuf) -> RunOptions {
 fn tetgen() -> MeshChoice {
     MeshChoice::Build {
         tetgen: solver_exe("tetgen.exe"),
+        preprocess: Some(solver_exe("preprocess.exe")),
     }
 }
 
@@ -428,5 +429,48 @@ fn executables_are_found_in_the_designs_order() {
     assert_eq!(
         explicit.find("probe.exe").unwrap_err().tried,
         [root.join("nope.exe")]
+    );
+}
+
+/// A project whose mesh settings ask for upstream's scene correction is checked on what
+/// `preprocess.exe` saves, by the mesher (`docs/m5-m6-design.md`, decision 12), not on its scene
+/// before meshing: the two interpenetrating boxes the geometry stage refuses (above) go on to the
+/// mesh stage then. Without a `preprocess.exe` the mesh stage refuses such a project by name.
+#[test]
+fn a_project_meshed_through_preprocess_is_checked_by_the_mesher() {
+    let spps = exe_for(SolverKind::Spps);
+    let opts = options("mgr-preprocess", SolverKind::Spps, spps);
+    let dir = fresh_dir("preprocess-projects");
+    let switched = |rel: &str| {
+        let text = std::fs::read_to_string(fixture(rel)).unwrap();
+        assert_eq!(text.matches("\"preprocess\": false").count(), 1, "{rel}");
+        let path = dir.join(Path::new(rel).file_name().unwrap());
+        std::fs::write(
+            &path,
+            text.replace("\"preprocess\": false", "\"preprocess\": true"),
+        )
+        .unwrap();
+        path
+    };
+    let no_preprocess = MeshChoice::Build {
+        tetgen: solver_exe("tetgen.exe"),
+        preprocess: None,
+    };
+    let box_ = switched("rooms/tutorial1_box_seeded.simpa");
+    let r = project("no-preprocess", &box_, &no_preprocess, &opts);
+    assert_refused(
+        &r,
+        Stage::Mesh,
+        &["preprocess_launch_failed"],
+        ExitClass::Mesh,
+    );
+    // The scene check is the mesher's then: the geometry stage lets the boxes through.
+    let boxes = switched("geometry/two_boxes_interpenetrating.simpa");
+    let r = project("boxes-no-preprocess", &boxes, &no_preprocess, &opts);
+    let m = written(&r);
+    assert_ne!(m.stage, Stage::Geometry, "{m:#?}");
+    assert!(
+        !m.verdict.codes().contains(&codes::GEOMETRY_REFUSED),
+        "{m:#?}"
     );
 }

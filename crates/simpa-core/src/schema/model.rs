@@ -977,6 +977,13 @@ pub struct MeshSettings {
     pub surface_receiver_max_area_m2: Option<F64>,
     /// `-Y`: add no Steiner points on the boundary.
     pub preserve_boundary: bool,
+    /// Upstream's "Scene correction before meshing" (`mesh_conf@preprocess`,
+    /// `e_core_core_tetconf.h:108`): the `.poly` goes through upstream's `preprocess.exe` before
+    /// TetGen, with box fitting zones in its user facet list, as upstream's GUI does it
+    /// (`projet_maillage.cpp:206-213`). The geometry check then runs on what `preprocess.exe`
+    /// wrote. Upstream's GUI default is on; this crate's default is off
+    /// (`docs/m5-m6-design.md`, decision 12).
+    pub preprocess: bool,
 }
 
 impl Default for MeshSettings {
@@ -986,6 +993,7 @@ impl Default for MeshSettings {
             max_volume_m3: None,
             surface_receiver_max_area_m2: None,
             preserve_boundary: true,
+            preprocess: false,
         }
     }
 }

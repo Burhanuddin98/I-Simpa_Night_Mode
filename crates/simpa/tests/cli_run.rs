@@ -766,10 +766,14 @@ fn a_box_fitting_zones_run_folder_passes_its_own_checks() {
     };
     let declared = verify(&solve, &["--fittings", "2"]);
     assert_eq!(declared.code, 0, "{declared:#?}");
+    // Undeclared, the zone's triangles are scene faces no marker names, and TetGen's numbering
+    // starts the room at 1: the fitting's 2 and the room's 3 are then no ids it gives.
     let undeclared = verify(&solve, &[]);
     assert_eq!(undeclared.code, 4, "{undeclared:#?}");
     assert!(
-        undeclared.stdout.starts_with("FAIL uncovered_scene_faces:"),
+        undeclared
+            .stdout
+            .starts_with("FAIL uncovered_scene_faces, unknown_volume_ids:"),
         "{}",
         undeclared.stdout
     );

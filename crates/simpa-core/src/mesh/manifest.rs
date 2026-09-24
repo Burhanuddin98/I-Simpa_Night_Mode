@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use super::build::BuildStats;
 use super::diag::Intersection;
 use super::input::ZoneFacets;
+use super::preprocess::PreprocessReport;
 use super::verify::{VerifyReport, VolumeIds};
 use crate::formats::FormatError;
 
@@ -115,6 +116,63 @@ pub struct Counts {
     pub build: Option<BuildStats>,
 }
 
+/// One reason `geometry::check` refused the geometry TetGen would mesh.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct GateReason {
+    /// `geometry::check`'s reason code (`self_intersections`, `open_boundary`, ...).
+    pub code: String,
+    pub count: usize,
+    /// The facets involved (positions in the `.poly`'s facet list), the first 20.
+    pub facets: Vec<u32>,
+    /// Their markers: the scene faces they lie in.
+    pub markers: Vec<u32>,
+    pub message: String,
+}
+
+/// A cell of the geometry TetGen would mesh.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct GateCell {
+    pub id: u32,
+    pub depth: u32,
+    pub volume_m3: f64,
+}
+
+/// `geometry::check` on the geometry TetGen is given, the `.poly`'s nodes and facet list as
+/// `preprocess.exe` left them, or as the mesher wrote them: the gate before TetGen, and the cells
+/// the region volume check holds the mesh to.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct GeometryGate {
+    /// `preprocessed` (the `.poly` `preprocess.exe` saved, markers as TetGen reads them),
+    /// `written` (the mesher's `.poly`) or `external` (`mesh_from_tetgen`'s `<base>.poly`).
+    pub checked: String,
+    pub vertices: usize,
+    pub facets: usize,
+    /// `ok` or `refused`.
+    pub verdict: String,
+    pub reasons: Vec<GateReason>,
+    /// Every self-intersecting pair, as the markers of its two facets, `[a, b]` with `a <= b`,
+    /// each pair once, ascending.
+    pub pairs: Vec<[u32; 2]>,
+    pub cells: Vec<GateCell>,
+    pub enclosed_volume_m3: f64,
+}
+
+/// A fitting zone's region seed the mesher moved off a facet, into the zone's cell
+/// (`mesh::verify::seed_inside`), before TetGen ran.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SeedMove {
+    pub zone: String,
+    pub solver_id: i32,
+    /// The seed as the project gives it (upstream's `volpos`, or its box seed).
+    pub from: [f32; 3],
+    /// The seed the `.poly` carries.
+    pub to: [f32; 3],
+    /// The facets (positions in the `.poly`'s facet list) `from` lies on.
+    pub on_facets: Vec<u32>,
+    /// The zone's cell in the geometry check.
+    pub cell: u32,
+}
+
 /// sha256 of the files in the folder, lowercase hex; `None` for a file not written.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hashes {
@@ -157,6 +215,20 @@ pub struct MeshManifest {
     pub diagnosis: Option<Diagnosis>,
     /// `mesh::verify::verify_mesh`'s report on the `.mbin` built, whether it passed or not.
     pub verify: Option<VerifyReport>,
+    /// `preprocess.exe`'s run and what it changed, when the settings asked for it.
+    #[serde(default)]
+    pub preprocess: Option<PreprocessReport>,
+    /// The geometry check on what TetGen was given (the gate before TetGen for a project).
+    #[serde(default)]
+    pub geometry: Option<GeometryGate>,
+    /// Parity mode (`Markers::Parity`): `preprocess.exe`'s facet markers were kept, and the
+    /// `.mbin` is written whatever `verify` says, for byte comparison with original I-Simpa's.
+    /// Such a manifest is never `OK` when `verify` fails.
+    #[serde(default)]
+    pub parity: bool,
+    /// Region seeds moved off a facet into their zone's cell (not in parity mode).
+    #[serde(default)]
+    pub seeds_moved: Vec<SeedMove>,
     /// Wall time of the whole meshing call.
     pub elapsed_ms: f64,
 }
