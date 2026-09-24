@@ -181,6 +181,7 @@ fn structural_mutations() -> Vec<Mutation> {
                 shape: SurfaceReceiverShape::Scene {
                     groups: vec![GroupId::from_u128(4)],
                 },
+                solver_id: None,
             });
             true
         }),
@@ -191,6 +192,7 @@ fn structural_mutations() -> Vec<Mutation> {
                 name: "Twice".to_string(),
                 enabled: true,
                 shape: SurfaceReceiverShape::Scene { groups: vec![g, g] },
+                solver_id: None,
             });
             true
         }),
@@ -511,10 +513,28 @@ fn geometry_rules_follow_the_room() {
     p.sources[0].position = Vec3::new(f64::NAN, 1.0, 1.0);
     only(&validate::validate(&p), codes::SOURCE_OUTSIDE_VOLUME);
 
-    // A receiver on a face is not strictly inside.
+    // A receiver on a face is not strictly inside: its own code, naming the wall and asking for
+    // the receiver to be moved inside (Burhan, 2026-09-24 14:11).
     let mut p = cube();
     p.point_receivers[0].position = Vec3::new(5.0, 2.0, 2.0);
+    let issues = validate::validate(&p);
+    only(&issues, codes::RECEIVER_ON_SURFACE);
+    let m = &issues[0].message;
+    assert!(
+        m.contains("on face ") && m.contains("of surface group 'Cube faces (idMat 0)'"),
+        "{m}"
+    );
+    assert!(m.contains("move it inside the room"), "{m}");
+    // Says no, each rule to the other's input: 1 mm outside is outside, never on the surface;
+    // 1 mm inside is neither.
+    p.point_receivers[0].position = Vec3::new(5.001, 2.0, 2.0);
     only(&validate::validate(&p), codes::RECEIVER_OUTSIDE_VOLUME);
+    p.point_receivers[0].position = Vec3::new(4.999, 2.0, 2.0);
+    assert!(
+        codes_of(&validate::validate(&p))
+            .iter()
+            .all(|c| *c != codes::RECEIVER_ON_SURFACE && *c != codes::RECEIVER_OUTSIDE_VOLUME)
+    );
 
     // Flipping every triangle leaves inside inside.
     let mut p = cube();
@@ -559,6 +579,53 @@ fn names_are_compared_as_windows_compares_them() {
         p.sources[0].name = bad.to_string();
         only(&validate::validate(&p), codes::NAME_NOT_FILENAME_SAFE);
     }
+}
+
+/// Source names need be unique only within their source group (Burhan, 2026-09-24 14:11), as
+/// tutorial 3's two groups each hold `Source 1` to `Source 3`; with per-source output on, a source
+/// name is a folder name, and two anywhere in the project collide.
+#[test]
+fn source_names_are_unique_within_their_group() {
+    let mut p = cube();
+    let mut second = p.sources[0].clone();
+    second.id = schema::SourceId::from_u128(31);
+    second.position = Vec3::new(3.0, 3.0, 3.0);
+    p.sources[0].group = Some("Milling Machine".to_string());
+    second.group = Some("Milling Machine 2".to_string());
+    p.sources.push(second);
+    assert!(!p.solvers.spps.echogram_per_source);
+    // Two groups may each hold "Source 1".
+    assert_eq!(validate::validate(&p), Vec::new());
+    // Says no: the same name twice in one group, compared without case.
+    p.sources[1].group = Some("Milling Machine".to_string());
+    p.sources[1].name = "SOURCE 1".to_string();
+    let issues = validate::validate(&p);
+    only(&issues, codes::NAME_DUPLICATE);
+    assert!(
+        issues[0]
+            .message
+            .contains("in source group 'Milling Machine'"),
+        "{}",
+        issues[0].message
+    );
+    // Says no: twice outside every group.
+    p.sources[0].group = None;
+    p.sources[1].group = None;
+    only(&validate::validate(&p), codes::NAME_DUPLICATE);
+    // Says no: two groups, per-source output on: one folder for both.
+    p.sources[0].group = Some("Milling Machine".to_string());
+    p.sources[1].group = Some("Milling Machine 2".to_string());
+    p.solvers.spps.echogram_per_source = true;
+    let issues = validate::validate(&p);
+    only(&issues, codes::NAME_DUPLICATE);
+    assert!(
+        issues[0].message.contains("per-source output"),
+        "{}",
+        issues[0].message
+    );
+    // A disabled source reaches no solver: its name is free.
+    p.sources[1].enabled = false;
+    assert_eq!(validate::validate(&p), Vec::new());
 }
 
 #[test]

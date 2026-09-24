@@ -81,27 +81,13 @@
     {
       "id": "0c0be000-0000-4000-8000-000000000400",
       "name": "Receiver 1",
-      "position": [2.0, 3.75, 2.5],
+      "position": [2.0, 3.75, 0.0],
       "orientation": [1.0, 0.0, 0.0],
       "background_noise": null,
       "solver_id": null
     }
   ],
-  "surface_receivers": [
-    {
-      "id": "0c0be000-0000-4000-8000-000000000904",
-      "name": "Cut 1",
-      "enabled": true,
-      "shape": {
-        "kind": "cutting_plane",
-        "a": [0.1, 4.9, 2.5],
-        "b": [0.1, 0.1, 2.5],
-        "c": [4.9, 0.1, 2.5],
-        "resolution_m": 0.0
-      },
-      "solver_id": null
-    }
-  ],
+  "surface_receivers": [],
   "fitting_zones": [],
   "environment": {
     "temperature_c": 20.0,

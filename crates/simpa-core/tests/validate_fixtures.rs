@@ -166,6 +166,10 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
     add("receiver_outside_volume", &|p| {
         p.point_receivers[0].position = Vec3::new(2.0, 3.75, 5.5);
     });
+    add("receiver_on_surface", &|p| {
+        // On the floor, as tutorial 3's Receiver 1 is on its x = 0 wall.
+        p.point_receivers[0].position = Vec3::new(2.0, 3.75, 0.0);
+    });
     add("receiver_sphere_crosses_surface", &|p| {
         p.point_receivers[0].position = Vec3::new(2.0, 3.75, 0.2);
     });
@@ -221,6 +225,7 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
             position: Vec3::new(3.0, 3.75, 2.5),
             orientation: Vec3::new(1.0, 0.0, 0.0),
             background_noise: None,
+            solver_id: None,
         });
     });
     add("surface_receiver_empty", &|p| {
@@ -229,6 +234,7 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
             name: "Map 1".to_string(),
             enabled: true,
             shape: SurfaceReceiverShape::Scene { groups: Vec::new() },
+            solver_id: None,
         });
     });
     add("cutting_plane_invalid", &|p| {
@@ -242,6 +248,7 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
                 c: Vec3::new(4.9, 0.1, 2.5),
                 resolution_m: F64::new(0.0),
             },
+            solver_id: None,
         });
     });
     add("fitting_parameters_invalid", &|p| {
@@ -257,6 +264,7 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
             absorption: f64s(&[0.1; 6]),
             mean_free_path_m: f64s(&[2.0, 2.0, 0.0, 2.0, 2.0, 2.0]),
             diffusion_law: vec![DiffusionLaw::Uniform; 6],
+            solver_id: None,
         });
     });
     add("variant_reference_invalid", &|p| {
@@ -398,6 +406,7 @@ fn negative_exports() -> Vec<(&'static str, String, Option<Project>)> {
         absorption: [0.1; 6].map(F64::new).to_vec(),
         mean_free_path_m: [2.0; 6].map(F64::new).to_vec(),
         diffusion_law: vec![DiffusionLaw::Uniform; 6],
+        solver_id: None,
     });
     vec![
         (

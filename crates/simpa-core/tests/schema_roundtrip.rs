@@ -415,6 +415,8 @@ fn source(rng: &mut Rng, p: &Project) -> Source {
             },
         },
         delay_s: rng.f64(0.0, 1.0),
+        group: None,
+        solver_id: None,
     }
 }
 
@@ -426,6 +428,7 @@ fn point_receiver(rng: &mut Rng, p: &Project) -> PointReceiver {
         position: vec3(rng),
         orientation: vec3(rng),
         background_noise: rng.chance(2).then(|| spectrum(rng, n)),
+        solver_id: None,
     }
 }
 
@@ -461,6 +464,7 @@ fn surface_receiver(rng: &mut Rng, p: &Project) -> SurfaceReceiver {
                 resolution_m: rng.f64(0.05, 2.0),
             }
         },
+        solver_id: None,
     }
 }
 
@@ -494,6 +498,7 @@ fn fitting_zone(rng: &mut Rng, p: &Project) -> FittingZone {
         absorption: values(rng, ka, 0.0, 1.0),
         mean_free_path_m: values(rng, km, 0.1, 10.0),
         diffusion_law: (0..kl).map(|_| DiffusionLaw::ALL[rng.below(3)]).collect(),
+        solver_id: None,
     }
 }
 
@@ -1371,6 +1376,7 @@ fn every_kind_project() -> Project {
         absorption: vec![F64::new(0.3); n],
         mean_free_path_m: vec![F64::new(2.0); n],
         diffusion_law: vec![DiffusionLaw::LambertReflection; n],
+        solver_id: None,
     });
     p.check_integrity().unwrap();
     p
@@ -1617,6 +1623,8 @@ fn cube_project() -> Project {
             power: Spectrum::new(90.0, SpectrumShape::Pink),
             directivity: Directivity::Omni,
             delay_s: F64::ZERO,
+            group: None,
+            solver_id: None,
         }],
         point_receivers: vec![PointReceiver {
             id: PointReceiverId::from_u128(id(0x400)),
@@ -1624,6 +1632,7 @@ fn cube_project() -> Project {
             position: Vec3::new(2.0, 3.75, 2.5),
             orientation: Vec3::new(1.0, 0.0, 0.0),
             background_noise: None,
+            solver_id: None,
         }],
         surface_receivers: Vec::new(),
         fitting_zones: Vec::new(),

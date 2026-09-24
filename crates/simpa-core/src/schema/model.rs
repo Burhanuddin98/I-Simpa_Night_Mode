@@ -550,6 +550,22 @@ pub struct Source {
     pub directivity: Directivity,
     /// `@delay`, seconds.
     pub delay_s: F64,
+    /// The source group it sits in, as upstream's GUI groups sources (a source list's element of
+    /// type 15, `e_scene_sources.h:73-87`): the groups' names from the outermost, joined by
+    /// ` / `. `None` at the top level, as for every source made here. It reaches no solver:
+    /// upstream writes a group's sources in its place. Source names need be unique only within
+    /// one group (`name_duplicate`), unless per-source output makes them folder names.
+    #[serde(deserialize_with = "required")]
+    #[schemars(with = "Nullable<String>")]
+    pub group: Option<String>,
+    /// A pinned element id: upstream's `source@id` for a source imported from a `.proj` (its
+    /// `wxid`, `docs/m5-m6-design.md`, decision 13). `None` for a source made here. The solvers
+    /// number sources by position and never read `source@id`
+    /// (`base_core_configuration.cpp:153`), so `config.xml` does not carry it; the project keeps
+    /// it so that an imported project keeps upstream's ids. At most [`SOLVER_INT_MAX`].
+    #[serde(deserialize_with = "required")]
+    #[schemars(with = "Nullable<u32>", range(max = 2_147_483_647))]
+    pub solver_id: Option<u32>,
 }
 
 /// A point receiver: `recepteursp/recepteur_ponctuel`.
@@ -567,6 +583,13 @@ pub struct PointReceiver {
     #[serde(deserialize_with = "required")]
     #[schemars(with = "Nullable<Spectrum>")]
     pub background_noise: Option<Spectrum>,
+    /// A pinned solver id (`recepteur_ponctuel@id`). `None` lets export assign one
+    /// (`config_xml`, "Solver ids"). A `.proj` import pins upstream's element id (its `wxid`,
+    /// `docs/m5-m6-design.md`, decision 13), so an imported project writes upstream's ids. At
+    /// most [`SOLVER_INT_MAX`], and unique among point receivers.
+    #[serde(deserialize_with = "required")]
+    #[schemars(with = "Nullable<u32>", range(max = 2_147_483_647))]
+    pub solver_id: Option<u32>,
 }
 
 /// A surface receiver (sound map): `recepteurss/recepteur_surfacique` or
@@ -579,6 +602,13 @@ pub struct SurfaceReceiver {
     pub name: String,
     pub enabled: bool,
     pub shape: SurfaceReceiverShape,
+    /// A pinned solver id (`recepteur_surfacique@id` or `recepteur_surfacique_coupe@id`, and a
+    /// scene receiver's `.cbin` `idRs`). `None` lets export assign one (`config_xml`, "Solver
+    /// ids"). A `.proj` import pins upstream's element id (decision 13). At most
+    /// [`SOLVER_INT_MAX`], and unique among surface receivers and cutting planes.
+    #[serde(deserialize_with = "required")]
+    #[schemars(with = "Nullable<u32>", range(max = 2_147_483_647))]
+    pub solver_id: Option<u32>,
 }
 
 /// Where a surface receiver lies.
@@ -641,6 +671,15 @@ pub struct FittingZone {
     pub mean_free_path_m: Vec<F64>,
     /// `bfreq@loi_diff` per band.
     pub diffusion_law: Vec<DiffusionLaw>,
+    /// A pinned solver id (`encombrement@id`, the `.cbin` `idEn`, and the TetGen region
+    /// attribute its tetrahedra carry as `idVolume`; the room's parts are numbered by TetGen
+    /// above the largest). `None` lets export assign one (`config_xml`, "Solver ids"). A `.proj`
+    /// import pins upstream's element id (tutorial 3: 1930 and 2083, its room then 2084 to 2086;
+    /// decision 13). At least 1 (the solvers read `idVolume` 0 as no fitting), at most
+    /// [`SOLVER_INT_MAX`], and unique among fitting zones.
+    #[serde(deserialize_with = "required")]
+    #[schemars(with = "Nullable<u32>", range(max = 2_147_483_647))]
+    pub solver_id: Option<u32>,
 }
 
 /// The volume of a fitting zone. Export marks it as a TetGen region whose attribute is the zone's

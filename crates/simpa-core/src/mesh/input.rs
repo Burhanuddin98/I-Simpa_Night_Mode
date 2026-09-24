@@ -29,6 +29,11 @@ pub struct FittingRegion {
     pub seed: [f32; 3],
     /// A `Box` zone's centre, `(min + max) / 2`: a point strictly inside it, whatever its seed.
     pub box_centre: Option<[f64; 3]>,
+    /// A `Box` zone's volume from its bounds as written, m³: its cell must have it, or the box's
+    /// faces are not what bounds the cell its id is on (`mesh::verify`, "Regions"). Read as
+    /// `None` when absent.
+    #[serde(default)]
+    pub box_volume_m3: Option<f64>,
     /// A `Surfaces` zone's scene faces (`.cbin` indices, ascending): the faces of its groups.
     pub faces: Vec<u32>,
 }
@@ -236,6 +241,13 @@ fn box_bounds(
     Ok((lo, hi))
 }
 
+/// A box's volume from its `f32` bounds, m³.
+fn box_volume(lo: [f32; 3], hi: [f32; 3]) -> f64 {
+    (0..3)
+        .map(|a| f64::from(hi[a]) - f64::from(lo[a]))
+        .product()
+}
+
 /// The layout without preprocessing (decision 5): see [`project_input`].
 fn tetgen_layout(project: &Project) -> Result<Layout, InputError> {
     let scene =
@@ -305,7 +317,11 @@ fn tetgen_layout(project: &Project) -> Result<Layout, InputError> {
                 });
                 // The centre, from the corners as written, narrowed again.
                 let centre = [0, 1, 2].map(|a| (f64::from(lo[a]) + f64::from(hi[a])) / 2.0);
-                (centre.map(|c| c as f32), Some(centre), Vec::new())
+                (
+                    centre.map(|c| c as f32),
+                    Some((centre, box_volume(lo, hi))),
+                    Vec::new(),
+                )
             }
             FittingShape::Surfaces {
                 inside_point,
@@ -325,7 +341,8 @@ fn tetgen_layout(project: &Project) -> Result<Layout, InputError> {
             zone: z.name.clone(),
             solver_id: id,
             seed,
-            box_centre,
+            box_centre: box_centre.map(|b| b.0),
+            box_volume_m3: box_centre.map(|b| b.1),
             faces,
         });
     }
@@ -442,6 +459,7 @@ pub fn preprocess_layout(project: &Project) -> Result<Layout, InputError> {
                     box_centre: Some(
                         [0, 1, 2].map(|a| (f64::from(lo[a]) + f64::from(hi[a])) / 2.0),
                     ),
+                    box_volume_m3: Some(box_volume(lo, hi)),
                     faces: Vec::new(),
                 });
             }
@@ -453,6 +471,7 @@ pub fn preprocess_layout(project: &Project) -> Result<Layout, InputError> {
                 solver_id: id,
                 seed: narrow(*inside_point, &what("inside_point"))?,
                 box_centre: None,
+                box_volume_m3: None,
                 faces: zone_faces(project, groups),
             }),
         }

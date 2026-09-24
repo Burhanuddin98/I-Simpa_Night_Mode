@@ -375,7 +375,8 @@ fn the_scene_mesh_of_tutorial1_is_upstreams_with_our_receiver_id() {
 
 /// Write, import the result with its scene mesh, write again: the solver reads the same values
 /// from both configurations. (Surface-receiver ids are renumbered when a disabled receiver is
-/// dropped, so they are compared through the faces they label.)
+/// dropped, and this importer keeps no pinned receiver or fitting id, so those ids are compared by
+/// rank and through the faces they label.)
 #[test]
 fn write_import_write_gives_the_solver_the_same_input() {
     let docs: BTreeMap<String, support::DocAttr> = doc_attrs()
@@ -403,11 +404,13 @@ fn write_import_write_gives_the_solver_the_same_input() {
             };
             let x2 = write(&q, solver, None, &workdir()).unwrap();
             let m2 = scene_mesh(&q).unwrap();
-            // Surface-receiver ids: rank-map both and compare per face.
-            let rank = |x: &str| -> BTreeMap<i64, usize> {
+            // Receiver and fitting ids: rank-map both and compare per face and per element. This
+            // importer pins no id but the materials' (a `.proj` import pins them all, decision 13),
+            // so a generated project's pinned ids come back as ours, in the same order.
+            let rank = |x: &str, prefix: &str| -> BTreeMap<i64, usize> {
                 solver_view(x)
                     .values()
-                    .filter(|i| i.key.starts_with("recepteur_surfacique"))
+                    .filter(|i| i.key.starts_with(prefix) && i.attrs.contains_key("id"))
                     .map(|i| i.attrs["id"].parse::<i64>().unwrap())
                     .collect::<BTreeSet<_>>()
                     .into_iter()
@@ -415,12 +418,17 @@ fn write_import_write_gives_the_solver_the_same_input() {
                     .map(|(r, id)| (id, r))
                     .collect()
             };
-            let (r1, r2) = (rank(&x1), rank(&x2));
+            let ranked = ["recepteur_surfacique", "recepteur_ponctuel", "encombrement"];
+            let ranks = |x: &str| -> Vec<BTreeMap<i64, usize>> {
+                ranked.iter().map(|p| rank(x, p)).collect()
+            };
+            let (r1, r2) = (ranks(&x1), ranks(&x2));
             assert_eq!(m1.faces.len(), m2.faces.len());
             for (f1, f2) in m1.faces.iter().zip(&m2.faces) {
                 assert_eq!((f1.a, f1.b, f1.c, f1.id_mat), (f2.a, f2.b, f2.c, f2.id_mat));
                 let map = |r: &BTreeMap<i64, usize>, id: i32| (id != -1).then(|| r[&i64::from(id)]);
-                assert_eq!(map(&r1, f1.id_rs), map(&r2, f2.id_rs), "project {k}");
+                assert_eq!(map(&r1[0], f1.id_rs), map(&r2[0], f2.id_rs), "project {k}");
+                assert_eq!(map(&r1[2], f1.id_en), map(&r2[2], f2.id_en), "project {k}");
             }
             let (v1, v2) = (solver_view(&x1), solver_view(&x2));
             assert_eq!(
@@ -436,7 +444,15 @@ fn write_import_write_gives_the_solver_the_same_input() {
                     "project {k} {path}"
                 );
                 for (a, t1) in &i1.attrs {
-                    if i1.key.starts_with("recepteur_surfacique") && a == "id" {
+                    if let Some(p) = ranked.iter().position(|p| i1.key.starts_with(p))
+                        && a == "id"
+                    {
+                        let id = |t: &str| t.parse::<i64>().unwrap();
+                        assert_eq!(
+                            r1[p][&id(t1)],
+                            r2[p][&id(&i2.attrs[a])],
+                            "project {k} {solver:?} {path}@id, by rank"
+                        );
                         continue;
                     }
                     let kind = docs[&format!("{}@{a}", i1.key)].kind;

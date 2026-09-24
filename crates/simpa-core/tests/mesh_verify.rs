@@ -717,11 +717,16 @@ fn broken_hall_folder() {
         [
             "tetgen_skipped_facets",
             "neigh_missing",
+            "regions_unchecked",
             "degenerate_tets",
             "unmarked_boundary_faces",
             "uncovered_scene_faces"
         ]
     );
+    // Its model.poly does not read with this crate's reader, and is not replaced by the .cbin:
+    // its regions are held to no cells (decision 15).
+    let why = r.regions.unchecked.as_deref().unwrap();
+    assert!(why.contains("model.poly does not read"), "{why}");
     // Arc item 12: faces with neither a marker nor a neighbour, where SPPS destroys particles,
     // and scene faces the mesh never reaches.
     assert_eq!(
@@ -1024,10 +1029,11 @@ fn mesher_manifest_files_mbin_is_checked() {
 #[test]
 fn mesh_codes_follow_the_folder_codes() {
     // The cube (room 1) read with the ids of a project with one fitting zone, 2: TetGen would put
-    // that room at 3, so the mesh check fails, and its code reaches the folder.
+    // that room at 3, so the mesh check fails, and its code reaches the folder. The region check
+    // against the folder's .cbin adds that no tetrahedron carries the fitting's id.
     let dir = cube_folder("cube_room1_fitting2", None);
     let r = verify_dir(&dir, &VolumeIds::tetgen(vec![2])).unwrap();
-    assert_eq!(r.codes, ["unknown_volume_ids"]);
+    assert_eq!(r.codes, ["unknown_volume_ids", "fitting_region_misplaced"]);
     assert_eq!(r.mesh.as_ref().unwrap().unknown_volume_ids, 6);
     // With the default ids it passes.
     assert!(verify_dir(&dir, &VolumeIds::default()).unwrap().passed());
@@ -1647,6 +1653,7 @@ fn zone(seed: [f32; 3], faces: Vec<u32>) -> simpa_core::mesh::FittingRegion {
         solver_id: 2,
         seed,
         box_centre: None,
+        box_volume_m3: None,
         faces,
     }
 }
@@ -1883,4 +1890,88 @@ fn the_region_volume_tolerance_says_yes_at_half_and_no_at_twice() {
     let (mismatch, off) = off_by(2.0);
     assert!((1.9..2.1).contains(&off), "{off}");
     assert_eq!(mismatch, 1, "two tolerances off ({off:.3}) fails");
+}
+
+/// A folder's regions are held to the cells of the geometry it holds (decision 15): its `.poly`
+/// when it has one, else its `.cbin`. Without that, any run of room ids without a gap passed.
+/// Says no: the cube's tetrahedra split between two ids; a folder whose `.poly` the geometry
+/// check refuses, unless its `mesh.json` proves the mesher checked this `.mbin`'s regions; a
+/// manifest proving nothing.
+#[test]
+fn a_folders_regions_are_held_to_its_own_geometry() {
+    let dir = cube_folder("regions_cbin", None);
+    let r = verify_dir(&dir, &upstream()).unwrap();
+    assert!(r.passed(), "{r:?}");
+    assert_eq!(r.regions.reference.as_deref(), Some("mesh.cbin"));
+    let m = r.mesh.as_ref().unwrap();
+    assert!(m.regions_checked);
+    assert_eq!(m.regions.len(), 1, "{:?}", m.regions);
+
+    // Says no: half the cube's tetrahedra given the room's next id.
+    let dir = cube_folder("regions_split", None);
+    let path = dir.join("tetramesh.mbin");
+    let mut mesh = mbin::read_file(&path).unwrap();
+    let half = mesh.tetrahedra.len() / 2;
+    for t in &mut mesh.tetrahedra[..half] {
+        t.id_volume += 1;
+    }
+    mbin::write_file(&mesh, &path).unwrap();
+    let r = verify_dir(&dir, &upstream()).unwrap();
+    assert_eq!(r.codes, ["region_volume_mismatch"], "{r:?}");
+
+    // Says no: a .poly the check refuses (two facets, open) takes precedence over the .cbin, and
+    // gives no cells.
+    let open = |dir: &Path| {
+        use simpa_core::formats::poly;
+        let face = |vertices: [u32; 3], face_index: u32| poly::Face {
+            vertices,
+            face_index,
+        };
+        let model = poly::Model {
+            save_face_index: true,
+            user_defined_faces: Vec::new(),
+            model_faces: vec![face([0, 2, 1], 0), face([0, 1, 3], 1)],
+            model_vertices: vec![
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+            ],
+            model_regions: Vec::new(),
+        };
+        poly::write_file(&model, &dir.join("scene_mesh.poly")).unwrap();
+    };
+    let dir = cube_folder("regions_unchecked", None);
+    open(&dir);
+    let r = verify_dir(&dir, &upstream()).unwrap();
+    assert_eq!(r.codes, ["regions_unchecked"], "{r:?}");
+    assert_eq!(r.regions.reference, None);
+    assert!(
+        r.regions
+            .unchecked
+            .as_deref()
+            .unwrap()
+            .contains("scene_mesh.poly"),
+        "{:?}",
+        r.regions
+    );
+    // The mesher's manifest of this .mbin, regions checked: proven.
+    let proof = |sha: &str, checked: bool| {
+        format!(
+            "{{\"status\": \"OK\", \"files\": {{\"mbin\": \"{sha}\"}}, \"verify\": \
+             {{\"regions_checked\": {checked}}}}}"
+        )
+    };
+    let dir = cube_folder("regions_proven", Some(&proof(CUBE_MBIN_SHA256, true)));
+    open(&dir);
+    let r = verify_dir(&dir, &upstream()).unwrap();
+    assert!(r.passed(), "{r:?}");
+    assert!(r.regions.proven_by_manifest);
+    // Says no: a manifest whose regions were not checked.
+    let dir = cube_folder("regions_not_proven", Some(&proof(CUBE_MBIN_SHA256, false)));
+    open(&dir);
+    assert_eq!(
+        verify_dir(&dir, &upstream()).unwrap().codes,
+        ["regions_unchecked"]
+    );
 }

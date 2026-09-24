@@ -18,9 +18,12 @@ use serde::{Deserialize, Serialize};
 use crate::formats::{FormatError, cbin, mbin};
 
 mod dir;
+mod folder;
 mod geometry;
 mod regions;
 
+pub use dir::{FolderPoly, folder_poly, manifest_proves_regions, read_manifest_json};
+pub use folder::{FolderRegions, verify_with_folder_geometry};
 pub(crate) use geometry::point_triangle_distance;
 pub use regions::{CellCheck, Reference, RegionCheck, ZoneCell, seed_inside, zone_cell};
 
@@ -590,6 +593,10 @@ pub struct DirReport {
     pub mbin_sha256: Option<String>,
     /// The `.mbin` check, when the folder holds a `.mbin` and the `.cbin` it indexes.
     pub mesh: Option<VerifyReport>,
+    /// How its regions were held to the folder's own geometry (`folder.rs`). Read as the default
+    /// when absent.
+    #[serde(default)]
+    pub regions: FolderRegions,
     /// Reason codes: the folder-level ones (`tetgen_skipped_facets`, `neigh_missing`,
     /// `tetgen_output_missing`, `cbin_missing`, `manifest_mismatch`, `nothing_to_verify`)
     /// followed by the mesh report's.
@@ -614,7 +621,15 @@ impl DirReport {
 ///   one for a `.mbin` the folder lacks, or records no `.mbin` beside one. Its records are the
 ///   mesher's `files.mbin` (`docs/formats/mesh-manifest.md`; null when it wrote none) and a
 ///   top-level `mbin_sha256` (null: not recorded); an absent record is not checked;
+/// - `regions_unchecked`: the `.mbin`'s regions could not be held to cells, the folder's
+///   geometry (its `.poly`, else its `.cbin`) being refused by the geometry check
+///   ([`verify_with_folder_geometry`]), and its `mesh.json` does not prove that the mesher held
+///   them when it built this `.mbin` ([`FolderRegions::proven_by_manifest`]);
 /// - `nothing_to_verify`: neither TetGen output nor a `.mbin`.
+///
+/// The `.mbin` is checked with [`verify_with_folder_geometry`]: its regions are held to the
+/// cells of the folder's `.poly` (TetGen's basename's, `scene_mesh.poly`, or the only one) or,
+/// without one, of its `.cbin`.
 ///
 /// Unreadable files, a folder with TetGen output under two basenames, several `.mbin` files
 /// without `tetramesh.mbin` among them, and, beside a `.mbin`, several `.cbin` files without

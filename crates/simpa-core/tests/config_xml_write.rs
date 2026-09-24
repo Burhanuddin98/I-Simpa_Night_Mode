@@ -549,10 +549,107 @@ fn solver_ids_follow_the_documented_rules() {
             groups += 1;
         }
         for (i, z) in p.fitting_zones.iter().enumerate() {
-            assert_eq!(ids.fitting_zone_id(z.id), Some(2 + i as i32));
+            let want = z.solver_id.map_or(2 + i as i32, |pin| pin as i32);
+            assert_eq!(ids.fitting_zone_id(z.id), Some(want));
+        }
+        for (i, r) in p.point_receivers.iter().enumerate() {
+            let want = r.solver_id.map_or(i as i32, |pin| pin as i32);
+            assert_eq!(ids.point_receiver_id(r.id), Some(want));
         }
     }
     println!("{groups} generated surface groups checked");
+}
+
+/// Decision 13 (`docs/m5-m6-design.md`): a pinned id is kept, as a `.proj` import pins upstream's
+/// element ids; the others are numbered around the pins, and a project with none keeps the
+/// numbering above. Says no: two entities of one kind pinned to one id, and a fitting zone pinned
+/// to 0, are refused by name.
+#[test]
+fn pinned_solver_ids_are_kept_and_a_clash_is_refused() {
+    let p = rich_cube();
+    let base = SolverIds::assign(&p).unwrap();
+    let mut q = p.clone();
+    q.point_receivers[1].solver_id = Some(3510);
+    q.surface_receivers[0].solver_id = Some(3503);
+    q.fitting_zones[0].solver_id = Some(2083);
+    let ids = SolverIds::assign(&q).unwrap();
+    let pr: Vec<i32> = q
+        .point_receivers
+        .iter()
+        .map(|r| ids.point_receiver_id(r.id).unwrap())
+        .collect();
+    assert_eq!(
+        pr,
+        vec![0, 3510],
+        "the pin kept, the other numbered as before"
+    );
+    let rs: Vec<i32> = q
+        .surface_receivers
+        .iter()
+        .map(|r| ids.surface_receiver_id(r.id).unwrap())
+        .collect();
+    assert_eq!(rs, vec![3503, 0, 1], "numbered around the pin from 0");
+    assert_eq!(ids.fitting_zone_id(q.fitting_zones[0].id), Some(2083));
+    // A pin on an id an unpinned item would have taken moves that item on.
+    let mut r = p.clone();
+    r.point_receivers[1].solver_id = Some(0);
+    let ids = SolverIds::assign(&r).unwrap();
+    let pr: Vec<i32> = r
+        .point_receivers
+        .iter()
+        .map(|x| ids.point_receiver_id(x.id).unwrap())
+        .collect();
+    assert_eq!(pr, vec![1, 0]);
+    // The written config and scene mesh carry the pins.
+    let view = solver_view(&wr(&q, SolverKind::Spps, None));
+    let fitting_ids: Vec<&String> = view
+        .values()
+        .filter(|i| i.key == "encombrement")
+        .map(|i| &i.attrs["id"])
+        .collect();
+    assert_eq!(fitting_ids, ["2083"]);
+    let mesh = scene_mesh(&q).unwrap();
+    assert!(mesh.faces.iter().any(|f| f.id_en == 2083));
+    assert!(mesh.faces.iter().any(|f| f.id_rs == 3503));
+    // A project with no pins: exactly the ids it had before pins existed.
+    assert_eq!(
+        base.point_receivers.iter().map(|x| x.1).collect::<Vec<_>>(),
+        [0, 1]
+    );
+
+    // Says no: two point receivers pinned to one id.
+    let mut clash = p.clone();
+    clash.point_receivers[0].solver_id = Some(155);
+    clash.point_receivers[1].solver_id = Some(155);
+    let e = SolverIds::assign(&clash).unwrap_err();
+    assert_eq!(e.code(), "solver_id_clash", "{e}");
+    assert!(e.to_string().contains("155"), "{e}");
+    // ... which the project's integrity refuses too, and the writer.
+    let integrity = clash.check_integrity().unwrap_err();
+    assert_eq!(integrity.code(), "duplicate_solver_id", "{integrity}");
+    assert!(write(&clash, SolverKind::Spps, None, &workdir()).is_err());
+    // Two fitting zones (one disabled) pinned alike: refused whatever the enabled flags.
+    let mut zones = q.clone();
+    let mut second = zones.fitting_zones[0].clone();
+    second.id = schema::FittingZoneId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0999);
+    second.enabled = false;
+    zones.fitting_zones.push(second);
+    assert_eq!(
+        SolverIds::assign(&zones).unwrap_err().code(),
+        "solver_id_clash"
+    );
+    // A fitting zone pinned to 0, the solvers' "no fitting".
+    let mut zero = p.clone();
+    zero.fitting_zones[0].solver_id = Some(0);
+    let e = SolverIds::assign(&zero).unwrap_err();
+    assert_eq!(e.code(), "solver_id_clash");
+    assert!(e.to_string().contains("no fitting"), "{e}");
+    // Control: the same pins on different kinds do not clash.
+    let mut kinds = p.clone();
+    kinds.point_receivers[0].solver_id = Some(7);
+    kinds.surface_receivers[0].solver_id = Some(7);
+    kinds.fitting_zones[0].solver_id = Some(7);
+    assert!(SolverIds::assign(&kinds).is_ok());
 }
 
 #[test]

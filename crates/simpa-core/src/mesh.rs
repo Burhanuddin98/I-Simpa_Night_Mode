@@ -19,7 +19,8 @@
 //! reused.
 //!
 //! The geometry TetGen is given must pass `geometry::check`: for a project meshed with
-//! `preprocess.exe`, the check of what it saved is the gate before TetGen (`geometry_refused`);
+//! `preprocess.exe`, the check of what it saved, or of the `.poly` as written when it saved
+//! nothing (as upstream's GUI then meshes it), is the gate before TetGen (`geometry_refused`);
 //! otherwise TetGen decides, as before, and a mesh it makes of geometry the check refuses is
 //! refused after it. The check's cells are what [`verify::verify_mesh_with`] holds the regions
 //! to.
@@ -31,7 +32,9 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use crate::config_xml::names;
 use crate::formats::{cbin, mbin, poly, tetgen as tetgen_files};
@@ -70,8 +73,8 @@ pub use manifest::{
     read_manifest, sha256_file, sha256_hex, write_manifest,
 };
 pub use preprocess::{
-    Markers, PREPROCESS_EXE_NAME, PREPROCESS_STDERR_LOG, PREPROCESS_STDOUT_LOG, PreprocessProgram,
-    PreprocessReport,
+    Markers, PREPROCESS_EXE_NAME, PREPROCESS_STDERR_LOG, PREPROCESS_STDOUT_LOG, PreprocessOutcome,
+    PreprocessProgram, PreprocessReport,
 };
 pub use tetgen::{Mesher, STDERR_LOG, STDOUT_LOG, TetgenMesher};
 
@@ -103,6 +106,9 @@ pub mod codes {
     pub const TETGEN_CRASH: &str = "tetgen_crash";
     /// TetGen exited with a code other than 0.
     pub const TETGEN_EXIT_NONZERO: &str = "tetgen_exit_nonzero";
+    /// TetGen still ran at the mesher's time limit (`MeshTools::timeouts`) and was stopped; no
+    /// mesh is built.
+    pub const TETGEN_TIMEOUT: &str = "tetgen_timeout";
     /// TetGen skipped input facets as self-intersecting (`<base>_skipped.face` has rows). TetGen
     /// 1.6.0 does this; 1.5.0 stops instead ([`TETGEN_SELF_INTERSECTION`]).
     pub const TETGEN_SKIPPED_FACETS: &str = "tetgen_skipped_facets";
@@ -131,11 +137,16 @@ pub mod codes {
     pub const PREPROCESS_CRASH: &str = "preprocess_crash";
     /// `preprocess.exe` exited with a code other than 0 (it returns 0 whatever it did).
     pub const PREPROCESS_EXIT_NONZERO: &str = "preprocess_exit_nonzero";
-    /// `preprocess.exe` gave up and saved nothing (`Mesh reparation has been aborted`), could not
-    /// read the file, printed no statistics, or saved user facets it never merged.
+    /// `preprocess.exe` still ran at the mesher's time limit (`MeshTools::timeouts`) and was
+    /// stopped; nothing is meshed.
+    pub const PREPROCESS_TIMEOUT: &str = "preprocess_timeout";
+    /// Not a refusal: a recorded outcome (`preprocess.outcome` `aborted` in the manifest, and a
+    /// run's warning). `preprocess.exe` gave up and saved nothing (`Mesh reparation has been
+    /// aborted`), could not read the file, or printed no statistics; the `.poly` as written is
+    /// then meshed, as upstream's GUI meshes it, and the geometry check on it is the gate.
     pub const PREPROCESS_ABORTED: &str = "preprocess_aborted";
-    /// What `preprocess.exe` saved does not read, or cannot be accounted for facet by facet
-    /// against what it was given (`preprocess::account`).
+    /// What `preprocess.exe` saved does not read, cannot be accounted for facet by facet against
+    /// what it was given (`preprocess::account`), or holds user facets it never merged.
     pub const PREPROCESS_OUTPUT_INVALID: &str = "preprocess_output_invalid";
 }
 
@@ -290,6 +301,37 @@ pub struct MeshTools<'a> {
     pub preprocess: Option<&'a dyn Mesher>,
     /// What becomes of `preprocess.exe`'s facet markers.
     pub markers: Markers,
+    /// How long each program may run.
+    pub timeouts: Timeouts,
+}
+
+/// How long each program the mesher runs may run before it is stopped, its process tree killed,
+/// and the mesh failed (`tetgen_timeout`, `preprocess_timeout`); a hung program must not hang the
+/// mesher. Each call's limit is recorded in the manifest (`timeout_ms`). The defaults are
+/// proposed, far above what the corpus takes (TetGen on the Elmia hall about 5 s, `preprocess.exe`
+/// giving up on it in 2.2 s), and open for Burhan (`docs/m5-m6-design.md`, decision 14).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Timeouts {
+    /// TetGen, each call: the mesh and its `-d` follow-up.
+    pub tetgen: Duration,
+    /// `preprocess.exe`.
+    pub preprocess: Duration,
+}
+
+impl Timeouts {
+    /// TetGen: one hour.
+    pub const TETGEN: Duration = Duration::from_secs(3600);
+    /// `preprocess.exe`: ten minutes.
+    pub const PREPROCESS: Duration = Duration::from_secs(600);
+}
+
+impl Default for Timeouts {
+    fn default() -> Self {
+        Timeouts {
+            tetgen: Timeouts::TETGEN,
+            preprocess: Timeouts::PREPROCESS,
+        }
+    }
 }
 
 /// [`mesh_project_with`] with TetGen only: a project whose settings ask for `preprocess.exe`
@@ -305,6 +347,7 @@ pub fn mesh_project(
         tetgen: mesher,
         preprocess: None,
         markers: Markers::Restored,
+        timeouts: Timeouts::default(),
     };
     mesh_project_with(project, out_dir, &tools, cancel, on_line)
 }
@@ -313,10 +356,12 @@ pub fn mesh_project(
 /// Stale files go first ([`delete_stale`]). A settings conflict or a project that cannot be
 /// expressed as TetGen input fails before TetGen runs. When the settings ask for it,
 /// `preprocess.exe` rewrites the `.poly` first, and `geometry::check` must pass what it saved
-/// before TetGen runs. On skipped facets (TetGen 1.6.0) or a stop on a self-intersection (TetGen
-/// 1.5.0) a `tetgen -d` follow-up runs in `<out_dir>/diag/` and its findings go in the manifest.
-/// `on_line` sees both programs' output as it arrives; `cancel` stops either and leaves no
-/// `.mbin`.
+/// before TetGen runs; when it saves nothing, the `.poly` as written goes on, as upstream's GUI
+/// meshes it, the abort recorded (`preprocess_aborted`). On skipped facets (TetGen 1.6.0) or a
+/// stop on a self-intersection (TetGen 1.5.0) a `tetgen -d` follow-up runs in `<out_dir>/diag/`
+/// and its findings go in the manifest. `on_line` sees both programs' output as it arrives;
+/// `cancel` stops either and leaves no `.mbin`, and so does a program still running at its limit
+/// ([`MeshTools::timeouts`]).
 ///
 /// `Err` only when the folder cannot be created, or `mesh.json` cannot be written into it; every
 /// other failure is in the manifest.
@@ -379,6 +424,7 @@ pub fn mesh_poly(
         tetgen: mesher,
         preprocess: None,
         markers: Markers::Restored,
+        timeouts: Timeouts::default(),
     };
     match input {
         Ok(input) => run_input(&input, settings, out_dir, &tools, cancel, on_line, m, start),
@@ -565,34 +611,39 @@ fn run_input(
         return finish(dir, m, start);
     }
 
-    // What TetGen reads: the .poly as written, or as preprocess.exe saved it.
+    // What TetGen reads: the .poly as written, or as preprocess.exe saved it; or, when it gave up
+    // and saved nothing, the .poly as written, as upstream's GUI meshes it then.
     let mut tg_input = input.clone();
     let mut unmeshed: Option<Vec<u32>> = None;
     let mut poly_bytes = poly_bytes;
+    let mut corrected = false;
     if input.preprocess {
         match run_preprocess(input, &poly_bytes, dir, tools, cancel, on_line, &mut m) {
-            Some((model, deleted)) => {
+            Preprocessed::Corrected(model, deleted) => {
                 poly_bytes = poly::write(&model);
                 m.files.poly = Some(sha256_hex(&poly_bytes));
                 m.counts.poly_vertices = model.model_vertices.len();
                 m.counts.poly_facets = model.model_faces.len();
                 tg_input.poly = model;
                 unmeshed = Some(deleted);
+                corrected = true;
             }
-            None => return finish(dir, m, start),
+            Preprocessed::Aborted => {}
+            Preprocessed::Failed => return finish(dir, m, start),
         }
         // In parity mode the file is preprocess.exe's own bytes, which the model written back
-        // gives exactly (`formats::poly`); its hash is the file's.
+        // gives exactly (`formats::poly`); its hash is the file's. After an abort it is the .poly
+        // as written, byte for byte.
         if let Ok(sha) = sha256_file(&dir.join(POLY_FILE)) {
             m.files.poly = Some(sha);
         }
     }
     let (report, gate) = check_poly(
         &tg_input.poly,
-        if input.preprocess {
-            "preprocessed"
-        } else {
-            "written"
+        match (input.preprocess, corrected) {
+            (true, true) => "preprocessed",
+            (true, false) => "written, preprocess.exe having given up",
+            (false, _) => "written",
         },
     );
     let refused = !report.is_ok();
@@ -612,7 +663,7 @@ fn run_input(
     // Burhan's to confirm (`docs/m5-m6-design.md`, decision 12); without the move, the region
     // volume check refuses tutorial 3 as `fitting_region_misplaced`. Without the correction the
     // `.poly` goes to TetGen as written, as before, and the region check judges what it makes.
-    if !refused && input.preprocess && tools.markers == Markers::Restored {
+    if !refused && corrected && tools.markers == Markers::Restored {
         match move_seeds(&mut tg_input, &report, &mut m) {
             Ok(true) => {
                 poly_bytes = poly::write(&tg_input.poly);
@@ -651,6 +702,7 @@ fn run_input(
         ".",
         &argv,
         cancel,
+        tools.timeouts.tetgen,
         on_line,
         &mut m.tetgen,
         Some(&mut stdout),
@@ -661,17 +713,21 @@ fn run_input(
             return finish(dir, m, start);
         }
     };
+    if m.tetgen.as_ref().is_some_and(|t| t.timed_out) {
+        fail(
+            &mut m,
+            codes::TETGEN_TIMEOUT,
+            format!(
+                "TetGen still ran after {:.1} s, the mesher's limit, and was stopped; no mesh is \
+                 built",
+                tools.timeouts.tetgen.as_secs_f64()
+            ),
+        );
+        return finish(dir, m, start);
+    }
     let found = classify(&paths, Some(&outcome), &stdout, &tg_input, &mut m);
     if (found.skipped || found.stopped) && !cancel.is_cancelled() {
-        m.diagnosis = diagnose(
-            &tg_input,
-            &poly_bytes,
-            dir,
-            tools.tetgen,
-            cancel,
-            on_line,
-            &mut m,
-        );
+        m.diagnosis = diagnose(&tg_input, &poly_bytes, dir, tools, cancel, on_line, &mut m);
     }
     if found.stopped {
         name_self_intersection(&tg_input, &mut m);
@@ -799,12 +855,23 @@ fn move_seeds(
     Ok(moved)
 }
 
+/// What [`run_preprocess`] leaves TetGen.
+enum Preprocessed {
+    /// What `preprocess.exe` saved, accounted for, and the markers of the facets it deleted.
+    Corrected(poly::Model, Vec<u32>),
+    /// It saved nothing: `scene_mesh.poly` is the `.poly` as written, and TetGen meshes that, as
+    /// upstream's GUI does. Recorded in `m.preprocess` and the messages, not a failure.
+    Aborted,
+    /// A failure, whose codes are in the manifest.
+    Failed,
+}
+
 /// Runs `preprocess.exe` on `scene_mesh.poly` (written from `input.poly`, whose bytes are
 /// `poly_bytes`), keeps the input as `scene_mesh.input.poly`, reads what it saved, accounts for
 /// it facet by facet ([`preprocess::account`]), restores its user-facet markers unless in parity
-/// mode, and records all of it in `m.preprocess` with a one-line summary in the messages. Returns
-/// the `.poly` TetGen will read and the markers of the facets `preprocess.exe` deleted; `None`
-/// after a failure, whose codes are in `m`.
+/// mode, and records all of it in `m.preprocess` with a one-line summary in the messages. When
+/// it saved nothing ([`Preprocessed::Aborted`]) the `.poly` as written is put back in
+/// `scene_mesh.poly`, if it is not still there, and the abort and its reason are recorded.
 fn run_preprocess(
     input: &MeshInput,
     poly_bytes: &[u8],
@@ -813,7 +880,7 @@ fn run_preprocess(
     cancel: &CancelToken,
     on_line: &mut dyn FnMut(&Line),
     m: &mut MeshManifest,
-) -> Option<(poly::Model, Vec<u32>)> {
+) -> Preprocessed {
     use preprocess::{Markers as Mk, PolyCounts, PreprocessReport};
     let r = verify::geometry_max_abs(&input.poly.model_vertices);
     let mut report = PreprocessReport {
@@ -833,7 +900,25 @@ fn run_preprocess(
         m,
         &mut report,
     );
+    let result = match result {
+        Inner::Aborted(why) => {
+            report.outcome = Some(preprocess::PreprocessOutcome::Aborted);
+            report.aborted_reason = Some(why.clone());
+            report.summary = format!(
+                "preprocess.exe {why}; the mesher goes on with the .poly as written, uncorrected \
+                 ({} facets, {} user facets TetGen does not read), as upstream's GUI does; the \
+                 geometry check on it is the gate before TetGen",
+                report.input.facets, report.input.user_facets
+            );
+            m.messages.push(report.summary.clone());
+            m.preprocess = Some(report);
+            return Preprocessed::Aborted;
+        }
+        Inner::Failed => None,
+        Inner::Corrected(corrected) => Some(*corrected),
+    };
     if let Some((_, acc)) = &result {
+        report.outcome = Some(preprocess::PreprocessOutcome::Corrected);
         let deleted: Vec<String> = report
             .deleted_facets
             .iter()
@@ -875,7 +960,18 @@ fn run_preprocess(
         m.messages.push(report.summary.clone());
     }
     m.preprocess = Some(report);
-    result.map(|(model, acc)| (model, acc.deleted))
+    match result {
+        Some((model, acc)) => Preprocessed::Corrected(model, acc.deleted),
+        None => Preprocessed::Failed,
+    }
+}
+
+/// What [`run_preprocess_inner`] found.
+enum Inner {
+    Corrected(Box<(poly::Model, preprocess::Accounting)>),
+    /// It saved nothing; why, in words.
+    Aborted(String),
+    Failed,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -888,7 +984,7 @@ fn run_preprocess_inner(
     on_line: &mut dyn FnMut(&Line),
     m: &mut MeshManifest,
     report: &mut preprocess::PreprocessReport,
-) -> Option<(poly::Model, preprocess::Accounting)> {
+) -> Inner {
     let Some(program) = tools.preprocess else {
         fail(
             m,
@@ -896,11 +992,11 @@ fn run_preprocess_inner(
             "the mesh settings ask for upstream's scene correction (preprocess) and no \
              preprocess.exe was given; nothing is meshed without it",
         );
-        return None;
+        return Inner::Failed;
     };
     if let Err(e) = write_file(dir, preprocess::INPUT_POLY, poly_bytes) {
         fail(m, codes::INPUT_WRITE_FAILED, e);
-        return None;
+        return Inner::Failed;
     }
     if cancel.is_cancelled() {
         fail(
@@ -908,7 +1004,7 @@ fn run_preprocess_inner(
             codes::CANCELLED,
             "meshing was cancelled before preprocess.exe started",
         );
-        return None;
+        return Inner::Failed;
     }
     let mut stdout = Vec::new();
     let mut slot = None;
@@ -918,6 +1014,7 @@ fn run_preprocess_inner(
         ".",
         &[POLY_FILE.to_string()],
         cancel,
+        tools.timeouts.preprocess,
         on_line,
         &mut slot,
         Some(&mut stdout),
@@ -927,16 +1024,28 @@ fn run_preprocess_inner(
         Ok(o) => o,
         Err(e) => {
             fail(m, codes::PREPROCESS_LAUNCH_FAILED, e);
-            return None;
+            return Inner::Failed;
         }
     };
+    if report.call.timed_out {
+        fail(
+            m,
+            codes::PREPROCESS_TIMEOUT,
+            format!(
+                "preprocess.exe still ran after {:.1} s, the mesher's limit, and was stopped; \
+                 nothing is meshed",
+                tools.timeouts.preprocess.as_secs_f64()
+            ),
+        );
+        return Inner::Failed;
+    }
     if outcome.cancelled {
         fail(
             m,
             codes::CANCELLED,
             "meshing was cancelled; preprocess.exe was stopped",
         );
-        return None;
+        return Inner::Failed;
     }
     report.printed = preprocess::parse_stdout(&stdout);
     if let Some(code) = outcome.exit_code
@@ -954,7 +1063,7 @@ fn run_preprocess_inner(
             codes::PREPROCESS_EXIT_NONZERO,
             format!("preprocess.exe exited with code {code} (0x{code:08X})"),
         );
-        return None;
+        return Inner::Failed;
     }
     let p = &report.printed;
     if p.aborted || p.not_found || !p.status {
@@ -970,15 +1079,16 @@ fn run_preprocess_inner(
         } else {
             "printed no statistics, which it prints only when it saves"
         };
-        fail(
-            m,
-            codes::PREPROCESS_ABORTED,
-            format!(
-                "preprocess.exe exited 0 but {why}; its last line: {last:?}. Upstream's GUI \
-                 meshes the uncorrected .poly then; nothing is meshed here"
-            ),
-        );
-        return None;
+        // The .poly as written is what TetGen reads next, as upstream's GUI meshes it: put it
+        // back if preprocess.exe left anything else in its place.
+        let now = std::fs::read(dir.join(POLY_FILE)).ok();
+        if now.as_deref() != Some(poly_bytes)
+            && let Err(e) = write_file(dir, POLY_FILE, poly_bytes)
+        {
+            fail(m, codes::INPUT_WRITE_FAILED, e);
+            return Inner::Failed;
+        }
+        return Inner::Aborted(format!("exited 0 but {why} (its last line: {last:?})"));
     }
     let after = match std::fs::read(dir.join(POLY_FILE)) {
         Ok(b) => b,
@@ -988,7 +1098,7 @@ fn run_preprocess_inner(
                 codes::PREPROCESS_OUTPUT_INVALID,
                 format!("{POLY_FILE} after preprocess.exe: {e}"),
             );
-            return None;
+            return Inner::Failed;
         }
     };
     report.output_sha256 = Some(sha256_hex(&after));
@@ -1000,22 +1110,22 @@ fn run_preprocess_inner(
                 codes::PREPROCESS_OUTPUT_INVALID,
                 format!("{POLY_FILE} as preprocess.exe saved it does not read: {e}"),
             );
-            return None;
+            return Inner::Failed;
         }
     };
     report.output = Some(preprocess::PolyCounts::of(&model));
     if !model.user_defined_faces.is_empty() {
         fail(
             m,
-            codes::PREPROCESS_ABORTED,
+            codes::PREPROCESS_OUTPUT_INVALID,
             format!(
                 "preprocess.exe saved {} user facets it never merged into the facet list (its \
                  coplanar step ran out of passes, Preprocess.cpp:79-88); TetGen would never read \
-                 them",
+                 them, so what it saved cannot be accounted for as a correction",
                 model.user_defined_faces.len()
             ),
         );
-        return None;
+        return Inner::Failed;
     }
     let acc = match preprocess::account(
         &input.poly,
@@ -1034,7 +1144,7 @@ fn run_preprocess_inner(
                     errors.join("; ")
                 ),
             );
-            return None;
+            return Inner::Failed;
         }
     };
     report.deleted_facets = map_skipped(
@@ -1051,16 +1161,20 @@ fn run_preprocess_inner(
         }
         if let Err(e) = write_file(dir, POLY_FILE, &poly::write(&tg)) {
             fail(m, codes::INPUT_WRITE_FAILED, e);
-            return None;
+            return Inner::Failed;
         }
         report.markers_rewritten = true;
     }
     report.accounting = Some(acc.clone());
-    Some((tg, acc))
+    Inner::Corrected(Box::new((tg, acc)))
 }
 
+/// How often the watchdog of [`call`] looks at the caller's cancel and the clock.
+const WATCH: Duration = Duration::from_millis(20);
+
 /// Runs one mesher call and records it in `slot`; `Err` holds why it could not start. `lines`,
-/// when given, collects the stdout lines.
+/// when given, collects the stdout lines. The call is stopped when `cancel` is, or when it still
+/// runs `limit` after it started: a watchdog then cancels it, and the record says `timed_out`.
 #[allow(clippy::too_many_arguments)]
 fn call(
     mesher: &dyn Mesher,
@@ -1068,6 +1182,7 @@ fn call(
     cwd_label: &str,
     argv: &[String],
     cancel: &CancelToken,
+    limit: Duration,
     on_line: &mut dyn FnMut(&Line),
     slot: &mut Option<TetgenCall>,
     mut lines: Option<&mut Vec<String>>,
@@ -1077,16 +1192,53 @@ fn call(
         program: program.map(|p| p.display().to_string()),
         argv: argv.to_vec(),
         cwd: cwd_label.to_string(),
+        timeout_ms: Some(limit.as_secs_f64() * 1e3),
         ..TetgenCall::default()
     };
-    let result = mesher.run(dir, argv, cancel, &mut |l: &Line| {
-        if let Some(lines) = lines.as_deref_mut()
-            && l.stream == Stream::Stdout
-        {
-            lines.push(l.text.clone());
-        }
-        on_line(l);
+    // The call's own token: cancelled by the caller's, or by the clock.
+    let local = CancelToken::new();
+    let done = Arc::new(AtomicBool::new(false));
+    let timed_out = Arc::new(AtomicBool::new(false));
+    let result = std::thread::scope(|scope| {
+        let watch = {
+            let (local, done, timed_out) = (local.clone(), done.clone(), timed_out.clone());
+            let outer = cancel.clone();
+            let started = Instant::now();
+            scope.spawn(move || {
+                while !done.load(Ordering::SeqCst) {
+                    if outer.is_cancelled() {
+                        local.cancel();
+                        return;
+                    }
+                    if started.elapsed() >= limit {
+                        timed_out.store(true, Ordering::SeqCst);
+                        local.cancel();
+                        return;
+                    }
+                    std::thread::sleep(WATCH);
+                }
+            })
+        };
+        let result = mesher.run(dir, argv, &local, &mut |l: &Line| {
+            if let Some(lines) = lines.as_deref_mut()
+                && l.stream == Stream::Stdout
+            {
+                lines.push(l.text.clone());
+            }
+            on_line(l);
+        });
+        done.store(true, Ordering::SeqCst);
+        let _ = watch.join();
+        result
     });
+    // A limit hit after the program had exited stopped nothing.
+    let hit = timed_out.load(Ordering::SeqCst);
+    record.timed_out = hit && result.as_ref().is_ok_and(|o| o.cancelled);
+    // A cancel the mesher itself set on its token (`run::CancelAfterLaunch`) is the caller's, as
+    // it was when the mesher held the caller's token: the rest of the pipeline sees it.
+    if local.is_cancelled() && !hit {
+        cancel.cancel();
+    }
     // Hashed after the run, so the hash does not delay the launch (and a cancel) by the time it
     // takes; Windows keeps a running image from being replaced.
     record.program_sha256 = program.and_then(|p| sha256_file(p).ok());
@@ -1349,7 +1501,7 @@ fn diagnose(
     input: &MeshInput,
     poly_bytes: &[u8],
     dir: &Path,
-    mesher: &dyn Mesher,
+    tools: &MeshTools,
     cancel: &CancelToken,
     on_line: &mut dyn FnMut(&Line),
     m: &mut MeshManifest,
@@ -1367,17 +1519,24 @@ fn diagnose(
     let mut lines = Vec::new();
     let mut slot = None;
     let result = call(
-        mesher,
+        tools.tetgen,
         &diag_dir,
         DIAG_DIR,
         &argv,
         cancel,
+        tools.timeouts.tetgen,
         on_line,
         &mut slot,
         Some(&mut lines),
     );
     let call_record = slot.unwrap_or_default();
     match result {
+        // The mesh has failed already: a follow-up stopped at its limit is said, not a code.
+        Ok(_) if call_record.timed_out => m.messages.push(format!(
+            "the tetgen -d follow-up still ran after {:.1} s, the mesher's limit, and was \
+             stopped; its findings are partial",
+            tools.timeouts.tetgen.as_secs_f64()
+        )),
         Ok(o) if o.cancelled => fail(m, codes::CANCELLED, "the tetgen -d follow-up was cancelled"),
         Ok(_) => {}
         Err(e) => m

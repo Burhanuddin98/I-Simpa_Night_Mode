@@ -234,6 +234,7 @@ fn with_named_box_zone(p: &mut Project, name: &str, k: u128, min: [f64; 3], max:
         absorption: vec![F64::new(0.1); n],
         mean_free_path_m: vec![F64::new(2.0); n],
         diffusion_law: vec![DiffusionLaw::Uniform; n],
+        solver_id: None,
     });
 }
 
@@ -1045,6 +1046,7 @@ fn a_surfaces_zone_marks_its_internal_facets_on_both_sides() {
         absorption: vec![F64::new(0.1); n],
         mean_free_path_m: vec![F64::new(2.0); n],
         diffusion_law: vec![DiffusionLaw::Uniform; n],
+        solver_id: None,
     });
     let dir = scratch("surfaces-zone");
     let m = run(&p, &dir);
@@ -1229,26 +1231,61 @@ fn edit_poly(dir: &Path, f: impl FnOnce(&mut poly::Model)) {
     poly::write_file(&m, &path).unwrap();
 }
 
+/// A `preprocess.exe` that never finishes on its own: it waits for its cancel, for at most 20 s.
+struct HungPreprocess;
+
+impl Mesher for HungPreprocess {
+    fn program(&self) -> Option<&Path> {
+        None
+    }
+
+    fn run(
+        &self,
+        _dir: &Path,
+        _args: &[String],
+        cancel: &CancelToken,
+        _on_line: &mut dyn FnMut(&Line),
+    ) -> io::Result<Outcome> {
+        let start = std::time::Instant::now();
+        while !cancel.is_cancelled() && start.elapsed().as_secs() < 20 {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        Ok(Outcome {
+            exit_code: None,
+            cancelled: cancel.is_cancelled(),
+            elapsed_ms: start.elapsed().as_secs_f64() * 1e3,
+        })
+    }
+}
+
 /// Upstream's scene correction in the mesher (`docs/m5-m6-design.md`, decision 12), each of its
 /// codes on the input that fires it, with `preprocess.exe` played by [`FakePreprocess`] and the
 /// real TetGen after it. `preprocess.exe` exits 0 whatever it did, so its lines and the file it
-/// saved are what the mesher reads.
+/// saved are what the mesher reads. When it saves nothing (it gives up, cannot read the file, or
+/// prints no statistics), the `.poly` as written is meshed, as upstream's GUI meshes it, the abort
+/// recorded, and the geometry check on that `.poly` is the gate.
 #[test]
 fn every_preprocess_failure_code_fires_on_its_input() {
     let mut p = load_room("tutorial1_box.simpa");
     p.solvers.meshing.preprocess = true;
     let tetgen = tetgen();
-    let go = |label: &str, pre: Option<&dyn Mesher>| -> (PathBuf, MeshManifest) {
+    let run = |p: &simpa_core::schema::Project,
+               label: &str,
+               pre: Option<&dyn Mesher>,
+               timeouts: mesh::Timeouts|
+     -> (PathBuf, MeshManifest) {
         let dir = scratch(label);
         let tools = mesh::MeshTools {
             tetgen: &tetgen,
             preprocess: pre,
             markers: mesh::Markers::Restored,
+            timeouts,
         };
-        let m = mesh::mesh_project_with(&p, &dir, &tools, &CancelToken::new(), &mut |_: &Line| {})
+        let m = mesh::mesh_project_with(p, &dir, &tools, &CancelToken::new(), &mut |_: &Line| {})
             .unwrap();
         (dir, m)
     };
+    let go = |label: &str, pre: Option<&dyn Mesher>| run(&p, label, pre, mesh::Timeouts::default());
     let failed = |dir: &Path, m: &MeshManifest, codes_: &[&str]| {
         assert_eq!(m.codes, codes_, "{m:#?}");
         assert_eq!(m.status, MeshStatus::Fail);
@@ -1266,8 +1303,20 @@ fn every_preprocess_failure_code_fires_on_its_input() {
     assert!(m.is_ok(), "{m:#?}");
     let report = m.preprocess.as_ref().unwrap();
     assert_eq!(report.input_sha256, report.output_sha256.clone().unwrap());
+    assert_eq!(report.outcome, Some(mesh::PreprocessOutcome::Corrected));
     assert!(dir.join("scene_mesh.input.poly").is_file());
     assert!(m.verify.as_ref().unwrap().regions_checked);
+    // The limits each call ran under are recorded: the defaults.
+    assert_eq!(
+        (
+            m.tetgen.as_ref().unwrap().timeout_ms,
+            report.call.timeout_ms
+        ),
+        (
+            Some(mesh::Timeouts::TETGEN.as_secs_f64() * 1e3),
+            Some(mesh::Timeouts::PREPROCESS.as_secs_f64() * 1e3)
+        )
+    );
 
     // None given.
     let (dir, m) = go("pre-none", None);
@@ -1281,9 +1330,28 @@ fn every_preprocess_failure_code_fires_on_its_input() {
         exit: 0,
         edit: |_| {},
     };
+    // Each of the three: the .poly as written is meshed, OK, and the abort is recorded.
+    let meshed_as_written = |dir: &Path, m: &MeshManifest, why: &str| {
+        assert!(m.is_ok(), "{m:#?}");
+        let report = m.preprocess.as_ref().unwrap();
+        assert_eq!(report.outcome, Some(mesh::PreprocessOutcome::Aborted));
+        assert!(
+            report.aborted_reason.as_deref().unwrap().contains(why),
+            "{report:#?}"
+        );
+        assert!(
+            m.messages.iter().any(|l| l.contains("uncorrected")),
+            "{m:#?}"
+        );
+        // TetGen read the .poly as written, byte for byte.
+        let written = std::fs::read(dir.join("scene_mesh.input.poly")).unwrap();
+        assert!(std::fs::read(dir.join("scene_mesh.poly")).unwrap() == written);
+        assert_eq!(m.files.poly.as_deref(), Some(report.input_sha256.as_str()));
+        assert_eq!(m.geometry.as_ref().unwrap().verdict, "ok");
+        assert!(dir.join("tetramesh.mbin").is_file());
+    };
     let (dir, m) = go("pre-aborted", Some(&aborted));
-    failed(&dir, &m, &[codes::PREPROCESS_ABORTED]);
-    assert!(m.messages[0].contains("gave up"), "{m:#?}");
+    meshed_as_written(&dir, &m, "gave up");
     // It cannot read the file.
     let not_found = FakePreprocess {
         lines: "The mesh file cant be found !\n",
@@ -1291,7 +1359,7 @@ fn every_preprocess_failure_code_fires_on_its_input() {
         edit: |_| {},
     };
     let (dir, m) = go("pre-not-found", Some(&not_found));
-    failed(&dir, &m, &[codes::PREPROCESS_ABORTED]);
+    meshed_as_written(&dir, &m, "could not read");
     // It prints no statistics at all.
     let silent = FakePreprocess {
         lines: "",
@@ -1299,8 +1367,44 @@ fn every_preprocess_failure_code_fires_on_its_input() {
         edit: |_| {},
     };
     let (dir, m) = go("pre-silent", Some(&silent));
-    failed(&dir, &m, &[codes::PREPROCESS_ABORTED]);
-    // It saves a user facet it never merged.
+    meshed_as_written(&dir, &m, "no statistics");
+    // It gives up after leaving something else in the file: the .poly as written is put back.
+    let aborted_after_edit = FakePreprocess {
+        lines: "Mesh reparation has been aborted. The algorithm enter into an infinite loop.\n",
+        exit: 0,
+        edit: |d| {
+            edit_poly(d, |m| {
+                m.model_faces.remove(3);
+            })
+        },
+    };
+    let (dir, m) = go("pre-aborted-edited", Some(&aborted_after_edit));
+    meshed_as_written(&dir, &m, "gave up");
+    // Says no: it gives up on a .poly the geometry check refuses (a wall face gone, so the room
+    // is open), and the check refuses it, before TetGen runs.
+    let mut open_room = p.clone();
+    open_room.geometry.faces.remove(3);
+    let (dir, m) = run(
+        &open_room,
+        "pre-aborted-open",
+        Some(&aborted),
+        mesh::Timeouts::default(),
+    );
+    failed(&dir, &m, &[codes::GEOMETRY_REFUSED]);
+    assert_eq!(
+        m.preprocess.as_ref().unwrap().outcome,
+        Some(mesh::PreprocessOutcome::Aborted)
+    );
+    let gate = m.geometry.as_ref().unwrap();
+    assert_eq!(
+        (gate.checked.as_str(), gate.verdict.as_str()),
+        ("written, preprocess.exe having given up", "refused")
+    );
+    assert!(
+        gate.reasons.iter().any(|r| r.code == "open_boundary"),
+        "{gate:#?}"
+    );
+    // It saves a user facet it never merged: what it saved cannot be accounted for.
     let unmerged = FakePreprocess {
         lines: SAVED,
         exit: 0,
@@ -1312,7 +1416,23 @@ fn every_preprocess_failure_code_fires_on_its_input() {
         },
     };
     let (dir, m) = go("pre-unmerged", Some(&unmerged));
-    failed(&dir, &m, &[codes::PREPROCESS_ABORTED]);
+    failed(&dir, &m, &[codes::PREPROCESS_OUTPUT_INVALID]);
+    assert!(m.messages[0].contains("never merged"), "{m:#?}");
+
+    // It never finishes: stopped at the mesher's limit, nothing meshed; the control above ran
+    // under the default limit.
+    let limit = mesh::Timeouts {
+        preprocess: std::time::Duration::from_millis(50),
+        ..mesh::Timeouts::default()
+    };
+    let (dir, m) = run(&p, "pre-hung", Some(&HungPreprocess), limit);
+    failed(&dir, &m, &[codes::PREPROCESS_TIMEOUT]);
+    let call = &m.preprocess.as_ref().unwrap().call;
+    assert!(
+        call.timed_out && call.cancelled && call.exit_code.is_none(),
+        "{call:#?}"
+    );
+    assert!(call.elapsed_ms < 5_000.0, "{call:#?}");
 
     // Its exit code: a crash, and any other nonzero code.
     let crash = FakePreprocess {
@@ -1392,4 +1512,38 @@ fn every_preprocess_failure_code_fires_on_its_input() {
             .deleted,
         [3]
     );
+}
+
+/// TetGen still running at the mesher's limit is stopped, its process tree killed, and the mesh
+/// fails by name (`tetgen_timeout`), with no `.1.ele` and no `.mbin`: the Elmia hall, which TetGen
+/// meshes in seconds, under a 100 ms limit. The limit is recorded in the call. (The control, a
+/// mesh under the default limit, is every other test here; `every_preprocess_failure_code_...`
+/// asserts the default is what the manifest records.)
+#[test]
+fn tetgen_is_stopped_at_the_meshers_limit() {
+    let p = load_room("elmia_corrected.simpa");
+    let tetgen = tetgen();
+    let tools = mesh::MeshTools {
+        tetgen: &tetgen,
+        preprocess: None,
+        markers: mesh::Markers::Restored,
+        timeouts: mesh::Timeouts {
+            tetgen: std::time::Duration::from_millis(100),
+            ..mesh::Timeouts::default()
+        },
+    };
+    let dir = scratch("tetgen-timeout");
+    let m =
+        mesh::mesh_project_with(&p, &dir, &tools, &CancelToken::new(), &mut |_: &Line| {}).unwrap();
+    assert_eq!(m.codes, [codes::TETGEN_TIMEOUT], "{m:#?}");
+    assert_eq!(m.status, MeshStatus::Fail);
+    let call = m.tetgen.as_ref().unwrap();
+    assert!(
+        call.timed_out && call.cancelled && call.exit_code.is_none(),
+        "{call:#?}"
+    );
+    assert_eq!(call.timeout_ms, Some(100.0));
+    assert!(call.elapsed_ms < 10_000.0, "{call:#?}");
+    assert!(!dir.join("scene_mesh.1.ele").exists());
+    assert!(!dir.join("tetramesh.mbin").exists());
 }

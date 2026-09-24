@@ -75,9 +75,13 @@ fn the_box_meshes_and_verifies() {
     assert_eq!(upstream.code, 0, "{upstream:#?}");
     let wrong = verify(&out, &["--fittings", "2"]);
     assert_eq!(wrong.code, 4, "{wrong:#?}");
+    // The region check against the folder's .poly adds that no tetrahedron carries id 2.
     assert_eq!(
         strings(&json(&wrong)["codes"]),
-        ["unknown_volume_ids".to_string()]
+        [
+            "unknown_volume_ids".to_string(),
+            "fitting_region_misplaced".to_string()
+        ]
     );
 
     // --from-tetgen builds the same .mbin from that TetGen output, with no TetGen run.
@@ -183,6 +187,9 @@ fn a_self_intersecting_poly_is_refused_and_the_broken_hall_fails_verification() 
 
     // Night Mode's own .mbin of the broken hall writes the room as 0: read so, its codes are the
     // folder's and the mesh's own; read with TetGen's numbering, every tetrahedron is also unknown.
+    // Its model.poly does not read with this crate's reader (a facet header of one field), and a
+    // .poly that does not read is not replaced by the .cbin: its regions are held to no cells
+    // (decision 15).
     let v = verify(&fixture("meshes/broken_hall"), &["--room-id", "0"]);
     assert_eq!(v.code, 4, "{v:#?}");
     let r = json(&v);
@@ -191,6 +198,7 @@ fn a_self_intersecting_poly_is_refused_and_the_broken_hall_fails_verification() 
         [
             "tetgen_skipped_facets",
             "neigh_missing",
+            "regions_unchecked",
             "degenerate_tets",
             "unmarked_boundary_faces",
             "uncovered_scene_faces"
@@ -292,4 +300,81 @@ fn a_project_the_geometry_check_refuses_is_exit_3() {
     );
     assert_eq!(o.code, 3, "{o:#?}");
     assert!(o.stderr.contains("self_intersections"), "{}", o.stderr);
+}
+
+/// `preprocess.exe` still running at the mesher's limit (`--preprocess-timeout-ms`) is stopped,
+/// its process killed, and the mesh fails by name: `preprocess_timeout`, exit 4, TetGen never
+/// run. The hall's preprocess.exe takes about 2 s to give up; the limit is 50 ms.
+#[test]
+fn a_preprocess_timeout_exits_4_and_leaves_nothing_running() {
+    let dir = scratch("mesh-timeout-preprocess");
+    let text = std::fs::read_to_string(fixture("rooms/elmia_corrected.simpa")).unwrap();
+    let project = dir.join("elmia_corrected_preprocess.simpa");
+    std::fs::write(
+        &project,
+        text.replace("\"preprocess\": false", "\"preprocess\": true"),
+    )
+    .unwrap();
+    let image = format!("preprocess-timeout-{}.exe", std::process::id());
+    let pre = private_copy(&solver_exe("preprocess.exe"), &dir, &image);
+    let out = dir.join("mesh");
+    let o = mesh(
+        &project,
+        &out,
+        &[
+            "--preprocess",
+            &pre.display().to_string(),
+            "--preprocess-timeout-ms",
+            "50",
+        ],
+    );
+    assert_eq!(o.code, 4, "{o:#?}");
+    let m = json(&o);
+    assert_eq!(m["status"], "FAIL");
+    assert_eq!(strings(&m["codes"]), ["preprocess_timeout".to_string()]);
+    let call = &m["preprocess"]["call"];
+    assert_eq!(call["timed_out"], true, "{}", m["preprocess"]);
+    assert_eq!(call["timeout_ms"], 50.0);
+    assert_eq!(call["exit_code"], Value::Null);
+    assert_eq!(m["tetgen"], Value::Null);
+    assert!(!out.join("tetramesh.mbin").exists());
+    assert!(!image_running(&image), "{image} still runs");
+    std::fs::remove_file(&pre).expect("the preprocess.exe copy is no longer running");
+    // Says no: a limit that is not a whole number of milliseconds is a usage error.
+    let bad = mesh(
+        &project,
+        &dir.join("bad"),
+        &["--preprocess-timeout-ms", "1.5"],
+    );
+    assert_eq!(bad.code, 2, "{bad:#?}");
+}
+
+/// `--parity` on a project whose mesh settings ask for no scene correction has nothing to keep:
+/// a note on stderr says so, and the mesh is the default one. Says no: with the correction asked
+/// for, no note, and the manifest is in parity mode; without `--parity`, no note.
+#[test]
+fn parity_without_the_scene_correction_says_it_has_no_effect() {
+    let note = "simpa: note: --parity has no effect";
+    let box_ = fixture("rooms/tutorial1_box.simpa");
+    let o = mesh(&box_, &scratch("mesh-parity-off"), &["--parity"]);
+    assert_eq!(o.code, 0, "{o:#?}");
+    assert!(o.stderr.contains(note), "{}", o.stderr);
+    assert_eq!(json(&o)["parity"], false);
+
+    let plain = mesh(&box_, &scratch("mesh-parity-none"), &[]);
+    assert_eq!(plain.code, 0, "{plain:#?}");
+    assert!(!plain.stderr.contains(note), "{}", plain.stderr);
+
+    let dir = scratch("mesh-parity-on");
+    let text = std::fs::read_to_string(&box_).unwrap();
+    let project = dir.join("box_preprocess.simpa");
+    std::fs::write(
+        &project,
+        text.replace("\"preprocess\": false", "\"preprocess\": true"),
+    )
+    .unwrap();
+    let on = mesh(&project, &dir.join("mesh"), &["--parity"]);
+    assert_eq!(on.code, 0, "{on:#?}");
+    assert!(!on.stderr.contains(note), "{}", on.stderr);
+    assert_eq!(json(&on)["parity"], true);
 }

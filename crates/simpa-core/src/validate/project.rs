@@ -218,6 +218,31 @@ fn fmt_point(v: Vec3) -> String {
     format!("({x}, {y}, {z})")
 }
 
+/// The face nearest to `point`, in words: its index and its surface group (`face 23, of surface
+/// group 'ext_walls'`), the wall a receiver on the surface lies on.
+fn nearest_face(p: &Project, point: Vec3) -> String {
+    let v = &p.geometry.vertices;
+    let q = point.to_array();
+    let nearest = p
+        .geometry
+        .faces
+        .iter()
+        .enumerate()
+        .filter_map(|(i, f)| {
+            let [a, b, c] = f.vertices.map(|k| v.get(k as usize).map(|x| x.to_array()));
+            Some((i, geometry::distance_to_triangle(q, &[a?, b?, c?]), f.group))
+        })
+        .filter(|(_, d, _)| !d.is_nan())
+        .min_by(|x, y| x.1.total_cmp(&y.1));
+    match nearest {
+        Some((i, _, g)) => match p.group(g) {
+            Some(group) => format!("on face {i}, of surface group '{}'", group.name),
+            None => format!("on face {i}"),
+        },
+        None => "on a face".to_string(),
+    }
+}
+
 fn sources_and_receivers(p: &Project, triangles: &[[[f64; 3]; 3]], out: &mut Vec<Issue>) {
     let enabled: Vec<usize> = (0..p.sources.len())
         .filter(|&i| p.sources[i].enabled)
@@ -287,13 +312,15 @@ fn sources_and_receivers(p: &Project, triangles: &[[[f64; 3]; 3]], out: &mut Vec
                     distance_m
                 ),
             )),
-            PointLocation::OnSurface { .. } => r_outside.push(issue(
-                RECEIVER_OUTSIDE_VOLUME,
+            PointLocation::OnSurface { distance_m } => r_outside.push(issue(
+                RECEIVER_ON_SURFACE,
                 path,
                 format!(
-                    "receiver '{}' at {} lies on a face, not strictly inside the room",
+                    "receiver '{}' at {} lies on the room's surface, {}, {distance_m} m away: a \
+                     receiver exactly on a wall is refused; move it inside the room, off the wall",
                     r.name,
-                    fmt_point(r.position)
+                    fmt_point(r.position),
+                    nearest_face(p, r.position)
                 ),
             )),
             PointLocation::Inside { clearance_m } if radius_ok && clearance_m < radius => {
@@ -697,22 +724,55 @@ fn names(p: &Project, out: &mut Vec<Issue>) {
             }
         }
     }
-    for (kind, list) in groups {
-        let mut first: HashMap<String, &str> = HashMap::new();
-        for (path, name) in list.iter() {
-            let key = collision_key(name);
-            if let Some(earlier) = first.get(&key) {
-                out.push(issue(
-                    NAME_DUPLICATE,
-                    path.clone(),
-                    format!(
-                        "the {kind} '{name}' is the same file name as '{earlier}' (compared \
-                         without case): the solvers would overwrite or rename its results"
-                    ),
-                ));
-            } else {
-                first.insert(key, name);
-            }
+    // Receiver labels are unique across the project: each is a folder or file name.
+    let mut first: HashMap<String, &str> = HashMap::new();
+    for &(ref path, name) in &receivers {
+        let key = collision_key(name);
+        if let Some(earlier) = first.get(&key) {
+            out.push(issue(
+                NAME_DUPLICATE,
+                path.clone(),
+                format!(
+                    "the receiver label '{name}' is the same file name as '{earlier}' (compared \
+                     without case): the solvers would overwrite or rename its results"
+                ),
+            ));
+        } else {
+            first.insert(key, name);
+        }
+    }
+    // Source names are unique within their source group (Burhan, 2026-09-24 14:11), and across
+    // the project when per-source output makes each a folder name (`output_recp_bysource`,
+    // `<receiver>/<source name>/`, written for every source in turn, `spps/reportmanager.cpp:
+    // 617-652`): two sources of one name would then write one folder, the second over the first.
+    let per_source = p.solvers.spps.echogram_per_source;
+    let mut first: HashMap<(Option<&str>, String), &str> = HashMap::new();
+    for (i, s) in p.sources.iter().enumerate().filter(|(_, s)| s.enabled) {
+        let group = if per_source { None } else { s.group.as_deref() };
+        let key = (group, collision_key(&s.name));
+        if let Some(earlier) = first.get(&key) {
+            let scope = match (per_source, &s.group) {
+                (true, _) => {
+                    " anywhere in the project, since per-source output (echogram_per_source) \
+                     makes each source name a folder name: the second source's results would \
+                     overwrite the first's"
+                        .to_string()
+                }
+                (false, Some(g)) => {
+                    format!(" in source group '{g}': a name need be unique only within its group")
+                }
+                (false, None) => " among the sources outside every source group".to_string(),
+            };
+            out.push(issue(
+                NAME_DUPLICATE,
+                format!("/sources/{i}/name"),
+                format!(
+                    "the source name '{}' is the same as '{earlier}' (compared without case){scope}",
+                    s.name
+                ),
+            ));
+        } else {
+            first.insert(key, &s.name);
         }
     }
 }

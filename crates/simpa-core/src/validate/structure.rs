@@ -446,4 +446,88 @@ fn solver_ints(p: &Project, out: &mut Vec<Issue>) {
             }
         }
     }
+    // The other kinds' pinned ids (a `.proj` import pins upstream's element ids, decision 13).
+    let pins = |list: &str, kind: &str, pins: Vec<(Option<u32>, &str)>, out: &mut Vec<Issue>| {
+        let mut first: HashMap<u32, &str> = HashMap::new();
+        for (i, (pin, name)) in pins.into_iter().enumerate() {
+            let Some(id) = pin else { continue };
+            let path = format!("/{list}/{i}/solver_id");
+            if id > SOLVER_INT_MAX {
+                out.push(issue(
+                    SOLVER_INT_RANGE,
+                    path.clone(),
+                    format!(
+                        "{kind} '{name}' pins solver id {id}, which does not fit the C int the \
+                         solver reads it into (at most {SOLVER_INT_MAX})"
+                    ),
+                ));
+            }
+            if list == "fitting_zones" && id == 0 {
+                out.push(issue(
+                    SOLVER_ID_MAPPING_INVALID,
+                    path.clone(),
+                    format!(
+                        "fitting zone '{name}' pins solver id 0, which the solvers read on a \
+                         tetrahedron as no fitting: its tetrahedra would carry none"
+                    ),
+                ));
+            }
+            match first.get(&id) {
+                Some(earlier) => out.push(issue(
+                    SOLVER_ID_MAPPING_INVALID,
+                    path,
+                    if list == "sources" {
+                        format!(
+                            "sources '{earlier}' and '{name}' both pin element id {id}: the id \
+                             reaches no solver, but it names one element, and two cannot share it"
+                        )
+                    } else {
+                        format!(
+                            "{kind}s '{earlier}' and '{name}' both pin solver id {id}: the \
+                             solver takes the first with an id, so the second would be hidden"
+                        )
+                    },
+                )),
+                None => {
+                    first.insert(id, name);
+                }
+            }
+        }
+    };
+    pins(
+        "point_receivers",
+        "point receiver",
+        p.point_receivers
+            .iter()
+            .map(|r| (r.solver_id, r.name.as_str()))
+            .collect(),
+        out,
+    );
+    pins(
+        "surface_receivers",
+        "surface receiver",
+        p.surface_receivers
+            .iter()
+            .map(|r| (r.solver_id, r.name.as_str()))
+            .collect(),
+        out,
+    );
+    pins(
+        "fitting_zones",
+        "fitting zone",
+        p.fitting_zones
+            .iter()
+            .map(|z| (z.solver_id, z.name.as_str()))
+            .collect(),
+        out,
+    );
+    pins(
+        "sources",
+        "source",
+        p.sources
+            .iter()
+            .map(|s| (s.solver_id, s.name.as_str()))
+            .collect(),
+        out,
+    );
 }

@@ -492,11 +492,14 @@ line, while upstream's 15-digit text for a real and band entries in the other or
 **What still differs, why, and what the solver does with it.**
 
 - **Ids.** `recepteur_ponctuel@id`, `recepteur_surfacique@id`, `recepteur_surfacique_coupe@id`
-  and `encombrement@id` are ours, assigned from project order (`config_xml.rs`, "Solver ids"):
-  tutorial 1's receivers 3669 and 3510 are our 1 and 0 and its scene receiver 3503 our 0;
-  tutorial 3's fitting zones 2083 and 1930 are our 3 and 2. Upstream's are its GUI's session
-  counters, renumbered at every load (`element.cpp:134, 143-144`; `docs/formats/cbin.md`, "What
-  still differs", 1), and a project has nowhere to hold them. A point receiver's id is only
+  and `encombrement@id` are the project's solver ids (`config_xml.rs`, "Solver ids"). A project
+  imported from a `.proj` pins upstream's (`docs/m5-m6-design.md`, decision 13), so it writes
+  them: tutorial 3's fitting zones 1930 and 2083, and tutorial 1's receivers 3669, 3510 and 3503
+  when read with a run's saved project. A project this `config.xml` importer made pins none but
+  its materials', and gets ours, assigned from project order: tutorial 1's receivers 3669 and
+  3510 are our 1 and 0 and its scene receiver 3503 our 0; tutorial 3's fitting zones 2083 and
+  1930 are our 3 and 2, the rows below. Upstream's are its GUI's session counters, renumbered at
+  every load (`element.cpp:134, 143-144`; `docs/formats/cbin.md`, "What still differs", 1). A point receiver's id is only
   stored in GUI mode. A scene receiver's and a fitting's are matched with the `.cbin` and
   `.mbin`, which carry ours, so every face gets the same receiver and fitting. A scene
   receiver's or cutting plane's id is also written into its `.csbin` output (`xmlIndex`), where

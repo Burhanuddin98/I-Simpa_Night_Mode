@@ -5,8 +5,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use super::{DirReport, VolumeIds, verify_mesh};
-use crate::formats::{self, FormatError, cbin, mbin, tetgen};
+use super::{DirReport, VolumeIds, verify_with_folder_geometry};
+use crate::formats::{self, FormatError, cbin, mbin, poly, tetgen};
 
 /// Suffixes of the files TetGen writes for input `<base>.poly`; any one of them names the base.
 const TETGEN_SUFFIXES: [&str; 6] = [
@@ -103,6 +103,68 @@ impl Listing {
     }
 }
 
+/// A folder's `.poly`: its file name, and its model or why it does not read.
+pub type FolderPoly = (String, Result<poly::Model, String>);
+
+/// The `.poly` TetGen read in `dir`, if the folder holds one: `<base>.poly` for TetGen's basename
+/// `base` (lowercased), else `scene_mesh.poly`, else its only `.poly` other than the mesher's
+/// `scene_mesh.input.poly`. `Err` only when the folder cannot be listed.
+pub fn folder_poly(dir: &Path, base: Option<&str>) -> Result<Option<FolderPoly>, FormatError> {
+    let listing = Listing::read(dir)?;
+    Ok(listing.poly(base))
+}
+
+/// Whether `manifest` is the mesher's record of the `.mbin` hashing to `mbin_sha256`, status `OK`,
+/// with its regions checked (`verify.regions_checked`).
+pub fn manifest_proves_regions(manifest: &serde_json::Value, mbin_sha256: &str) -> bool {
+    manifest.get("status").and_then(|s| s.as_str()) == Some("OK")
+        && manifest
+            .get("files")
+            .and_then(|f| f.get("mbin"))
+            .and_then(|m| m.as_str())
+            .is_some_and(|h| h.eq_ignore_ascii_case(mbin_sha256))
+        && manifest
+            .get("verify")
+            .and_then(|v| v.get("regions_checked"))
+            .and_then(|r| r.as_bool())
+            == Some(true)
+}
+
+/// A folder's `mesh.json`, when it has one, as JSON (a UTF-8 BOM tolerated).
+pub fn read_manifest_json(path: &Path) -> Result<serde_json::Value, FormatError> {
+    let bytes = formats::read_file(path)?;
+    // A UTF-8 BOM is tolerated: this repo's `solvers/manifest.json` carries one.
+    let json = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes);
+    serde_json::from_slice(json)
+        .map_err(|e| FormatError::Invalid(format!("{}: not JSON: {e}", path.display())))
+}
+
+impl Listing {
+    fn poly(&self, base: Option<&str>) -> Option<FolderPoly> {
+        let mut names: Vec<String> = Vec::new();
+        if let Some(b) = base {
+            names.push(format!("{b}.poly"));
+        }
+        names.push("scene_mesh.poly".to_string());
+        let found = match names.iter().find_map(|n| self.files.get(n)) {
+            Some(f) => Some(f.clone()),
+            None => {
+                let polys: Vec<&(String, PathBuf)> = self
+                    .files
+                    .iter()
+                    .filter(|(l, _)| l.ends_with(".poly") && !l.ends_with(".input.poly"))
+                    .map(|(_, v)| v)
+                    .collect();
+                match polys.as_slice() {
+                    [one] => Some((*one).clone()),
+                    _ => None,
+                }
+            }
+        };
+        found.map(|(name, path)| (name, poly::read_file(&path).map_err(|e| e.to_string())))
+    }
+}
+
 /// True when every record `manifest` keeps of the `.mbin` agrees with the folder, whose `.mbin`
 /// hashes to `mbin_sha256` (`None`: the folder has no `.mbin`). Two records are read, and nothing
 /// else in the manifest:
@@ -168,31 +230,52 @@ pub(super) fn verify(dir: &Path, ids: &VolumeIds) -> Result<DirReport, FormatErr
         Some(_) => listing.pick("mesh.cbin", ".cbin")?,
         None => None,
     };
+    let manifest = match listing.get(MANIFEST) {
+        Some(path) => Some(read_manifest_json(path)?),
+        None => None,
+    };
     if let Some(path) = &mbin_path {
         let bytes = formats::read_file(path)?;
-        report.mbin_sha256 = Some(crate::run::manifest::sha256_bytes(&bytes));
+        let sha = crate::run::manifest::sha256_bytes(&bytes);
         let mesh = mbin::read(&bytes)?;
         match &cbin_path {
             Some(cpath) => {
                 let scene = cbin::read_file(cpath)?;
-                report.mesh = Some(verify_mesh(&mesh, &scene, ids));
+                let poly = listing.poly(base.as_ref().map(|(lower, _)| lower.as_str()));
+                let cbin_name = cpath
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
+                let (mesh_report, mut regions) = verify_with_folder_geometry(
+                    &mesh,
+                    &scene,
+                    ids,
+                    poly.as_ref()
+                        .map(|(n, m)| (n.as_str(), m.as_ref().map_err(String::as_str))),
+                    &cbin_name,
+                );
+                regions.proven_by_manifest = manifest
+                    .as_ref()
+                    .is_some_and(|m| manifest_proves_regions(m, &sha));
+                if !mesh_report.regions_checked && !regions.proven_by_manifest {
+                    codes.push("regions_unchecked");
+                }
+                report.mesh = Some(mesh_report);
+                report.regions = regions;
             }
             None => codes.push("cbin_missing"),
         }
+        report.mbin_sha256 = Some(sha);
     }
     report.mbin_file = mbin_path;
     report.cbin_file = cbin_path;
 
     // The manifest's record of the `.mbin`, when it keeps one.
-    if let Some(path) = listing.get(MANIFEST) {
-        let bytes = formats::read_file(path)?;
-        // A UTF-8 BOM is tolerated: this repo's `solvers/manifest.json` carries one.
-        let json = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes);
-        let manifest: serde_json::Value = serde_json::from_slice(json)
-            .map_err(|e| FormatError::Invalid(format!("{}: not JSON: {e}", path.display())))?;
-        if !manifest_agrees(&manifest, report.mbin_sha256.as_deref()) {
-            codes.push("manifest_mismatch");
-        }
+    if let Some(manifest) = &manifest
+        && !manifest_agrees(manifest, report.mbin_sha256.as_deref())
+    {
+        codes.push("manifest_mismatch");
     }
 
     if base.is_none() && report.mbin_file.is_none() {

@@ -656,6 +656,7 @@ pub fn run_project(
                 tetgen: &mesher,
                 preprocess: program.as_ref().map(|p| p as &dyn mesh::Mesher),
                 markers: mesh::Markers::Restored,
+                timeouts: mesh::Timeouts::default(),
             };
             let built = mesh::mesh_project_with(&project, &d, &tools, cancel, &mut |l: &Line| {
                 on_event(&RunEvent::MeshLine(l))
@@ -678,6 +679,20 @@ pub fn run_project(
                     Stage::Mesh
                 };
                 return rec.refuse(stage, m.status == MeshStatus::Cancelled, reasons);
+            }
+            // preprocess.exe gave up and the .poly as written was meshed, as upstream's GUI
+            // meshes it: not a failure (the geometry check gated that .poly), recorded.
+            if let Some(pre) = &m.preprocess
+                && pre.outcome == Some(mesh::PreprocessOutcome::Aborted)
+            {
+                rec.warnings.push(Reason::new(
+                    mesh::codes::PREPROCESS_ABORTED,
+                    format!(
+                        "preprocess.exe {}; the .poly as written, uncorrected, was meshed ({})",
+                        pre.aborted_reason.as_deref().unwrap_or("saved nothing"),
+                        d.join(mesh::MANIFEST_FILE).display()
+                    ),
+                ));
             }
             rec.mesh = Some(MeshRef {
                 manifest: Some(d.join(mesh::MANIFEST_FILE).display().to_string()),
@@ -1002,9 +1017,12 @@ pub struct PreLaunch {
 /// The checks `run_folder` makes on a working folder before launch, in place of the project
 /// validator (`docs/m5-m6-design.md`, "Run folder", and decision 11):
 /// - **the mesh:** the `.mbin` `tetrameshFileName` names must exist and read, the `.cbin`
-///   `modelName` names must read, and [`verify::verify_mesh`] must pass them, with the fittings
-///   the config's `encombrement` ids and the room's first id as `volume_ids` chooses it. Anything
-///   else is `mesh_invalid`, followed by the verifier's codes;
+///   `modelName` names must read, and [`verify::verify_with_folder_geometry`] must pass them, with
+///   the fittings the config's `encombrement` ids and the room's first id as `volume_ids` chooses
+///   it, the regions held to the cells of the folder's `.poly`, or else of its `.cbin`. Anything
+///   else is `mesh_invalid`, followed by the verifier's codes; regions the folder's geometry
+///   cannot check are `regions_unchecked`, unless the folder's `mesh.json` is the mesher's record
+///   of this `.mbin` with its regions checked;
 /// - **the bands:** every source's spectrum must reach every computed band. Spectra are mapped
 ///   to bands by position (Part A, `band_set_mismatch`), so a source with fewer entries than a
 ///   computed band's position is read past its end, and nothing after the run shows it.
@@ -1099,19 +1117,64 @@ fn mesh_check(solve: &Path, doc: &Document, out: &mut PreLaunch) {
         })
         .unwrap_or_default();
     let ids = volume_ids(&mesh, fittings);
-    let report = verify::verify_mesh(&mesh, &scene, &ids);
-    if !report.passed() {
+    // The regions are held to the cells of the geometry the folder holds, its `.poly` or else its
+    // `.cbin` (decision 15); a folder whose geometry gives none is refused unless its mesh.json
+    // is the mesher's record of this `.mbin` with its regions checked.
+    let poly = match verify::folder_poly(solve, None) {
+        Ok(p) => p,
+        Err(e) => {
+            return out
+                .reasons
+                .push(invalid(format!("the folder's .poly cannot be read: {e}")));
+        }
+    };
+    let (report, regions) = verify::verify_with_folder_geometry(
+        &mesh,
+        &scene,
+        &ids,
+        poly.as_ref()
+            .map(|(n, m)| (n.as_str(), m.as_ref().map_err(String::as_str))),
+        cbin_name,
+    );
+    let proven = verify::read_manifest_json(&solve.join(mesh::MANIFEST_FILE))
+        .ok()
+        .is_some_and(|m| verify::manifest_proves_regions(&m, &sha256_bytes(&bytes)));
+    let unchecked = !report.regions_checked && !proven;
+    if !report.passed() || unchecked {
         let counts = serde_json::to_value(&report).unwrap_or_default();
+        let mut why = Vec::new();
+        if !report.passed() {
+            why.push(format!(
+                "it fails mesh::verify with the room from id {}: {}",
+                ids.room,
+                report.codes.join(", ")
+            ));
+        }
+        if unchecked {
+            why.push(format!(
+                "its regions are held to no cells: {}, and no mesh.json proves that the mesher \
+                 checked them",
+                regions.unchecked.as_deref().unwrap_or("no geometry")
+            ));
+        }
         out.reasons.push(invalid(format!(
-            "{} fails mesh::verify with the room from id {}: {}",
+            "{}: {}",
             mbin_path.display(),
-            ids.room,
-            report.codes.join(", ")
+            why.join("; ")
         )));
         for c in &report.codes {
             let n = counts.get(c.as_str()).cloned().unwrap_or_default();
             out.reasons
                 .push(Reason::new(c, format!("{n}, counted by mesh::verify")));
+        }
+        if unchecked {
+            out.reasons.push(Reason::new(
+                "regions_unchecked",
+                regions
+                    .unchecked
+                    .clone()
+                    .unwrap_or_else(|| "no geometry".to_string()),
+            ));
         }
     }
     out.verify = Some(report);

@@ -53,10 +53,19 @@ pub struct TetgenCall {
     pub argv: Vec<String>,
     /// The folder it ran in, relative to the mesh folder (`.` or `diag`).
     pub cwd: String,
-    /// The raw exit code; `None` when cancelled, or not run here.
+    /// The raw exit code; `None` when cancelled or timed out, or not run here.
     pub exit_code: Option<u32>,
+    /// Stopped by the caller's cancel, or by the time limit (then `timed_out` too).
     pub cancelled: bool,
     pub elapsed_ms: f64,
+    /// The time limit the call ran under, ms (`MeshTools::timeouts`); `None` when not run here.
+    /// Read as `None` when absent.
+    #[serde(default)]
+    pub timeout_ms: Option<f64>,
+    /// The call still ran at its time limit and was stopped, its process tree killed. Read as
+    /// false when absent.
+    #[serde(default)]
+    pub timed_out: bool,
 }
 
 /// A facet TetGen skipped (TetGen 1.6.0), or named as self-intersecting (TetGen 1.5.0), mapped

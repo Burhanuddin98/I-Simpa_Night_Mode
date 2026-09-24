@@ -196,6 +196,18 @@ impl Reference<'_> {
             _ => true,
         })
     }
+
+    /// Whether every facet bounding `cell` is one of `zone_faces`: the cell is closed by the
+    /// zone's own faces alone (a zone that touches no wall, such as a drawn box inside the room,
+    /// whose surrounding cell the outer shell and its faces also close).
+    fn bounded_only_by(&self, cell: u32, zone_faces: &[u32]) -> bool {
+        (0..self.facets.len()).all(|f| match self.cells_of(f) {
+            Some([a, b]) if a != b && (a == cell || b == cell) => {
+                zone_faces.binary_search(&self.markers[f]).is_ok()
+            }
+            _ => true,
+        })
+    }
 }
 
 /// Where a fitting zone's seed lies among `reference`'s cells, and which cell the zone is.
@@ -213,11 +225,30 @@ pub struct ZoneCell {
     pub zone_cell: Option<u32>,
 }
 
-/// [`ZoneCell`] for `fitting` in `reference`, within `tolerance`.
+/// [`ZoneCell`] for `fitting` in `reference`, within `tolerance`. Of several candidate cells
+/// (a seed on facets between cells, or no seed), the zone is the one its own faces alone close,
+/// or failing that the one they and the outer shell close; `None` when that decides nothing.
 pub fn zone_cell(reference: &Reference, fitting: &FittingRegion, tolerance: f64) -> ZoneCell {
     let seed = fitting.seed.map(f64::from);
-    let on = reference.facets_near(seed, tolerance);
-    let mut candidates: Vec<u32> = if on.is_empty() {
+    let mut faces = fitting.faces.clone();
+    faces.sort_unstable();
+    // A zone with no seed (a folder's `.cbin` holds none, `folder.rs`): the cells on either side
+    // of its own faces, one of which its faces and the outer shell close alone.
+    let seeded = seed.iter().all(|c| c.is_finite());
+    let on = if seeded {
+        reference.facets_near(seed, tolerance)
+    } else {
+        Vec::new()
+    };
+    let mut candidates: Vec<u32> = if !seeded {
+        let mut c: Vec<u32> = (0..reference.facets.len())
+            .filter(|&f| faces.binary_search(&reference.markers[f]).is_ok())
+            .flat_map(|f| reference.cells_of(f).unwrap_or([0, 0]))
+            .collect();
+        c.sort_unstable();
+        c.dedup();
+        c
+    } else if on.is_empty() {
         reference.locate(seed).into_iter().collect()
     } else {
         let mut c: Vec<u32> = on
@@ -229,20 +260,27 @@ pub fn zone_cell(reference: &Reference, fitting: &FittingRegion, tolerance: f64)
         c
     };
     candidates.retain(|&c| c != 0);
-    let mut faces = fitting.faces.clone();
-    faces.sort_unstable();
     let zone_cell = match fitting.box_centre {
         Some(centre) => reference
             .locate(centre)
             .filter(|c| candidates.contains(c) || candidates.is_empty()),
         None if candidates.len() == 1 => Some(candidates[0]),
         None => {
+            let only: Vec<u32> = candidates
+                .iter()
+                .copied()
+                .filter(|&c| reference.bounded_only_by(c, &faces))
+                .collect();
             let enclosed: Vec<u32> = candidates
                 .iter()
                 .copied()
                 .filter(|&c| reference.enclosed_by(c, &faces))
                 .collect();
-            (enclosed.len() == 1).then(|| enclosed[0])
+            match (only.as_slice(), enclosed.as_slice()) {
+                ([one], _) => Some(*one),
+                (_, [one]) => Some(*one),
+                _ => None,
+            }
         }
     };
     ZoneCell {
@@ -440,6 +478,17 @@ pub fn check(mesh: &mbin::Mesh, reference: &Reference, tolerance: f64) -> Outcom
         } = zone_cell(reference, f, tolerance);
         let region = out.regions.iter_mut().find(|r| r.id == f.solver_id);
         let ambiguous = zone_cell.is_none() && f.box_centre.is_none() && candidates.len() > 1;
+        // A box zone's cell is the box: a cell of another volume is one the box's faces do not
+        // bound (a `.poly` whose box triangles TetGen never read, such as upstream's user facet
+        // list meshed after `preprocess.exe` gave up), and its id on that cell fills it all.
+        let not_the_box = match (f.box_volume_m3, zone_cell) {
+            (Some(v), Some(c)) => cells
+                .iter()
+                .find(|x| x.cell == c)
+                .filter(|x| (x.volume_m3 - v).abs() > 2.0 * x.boundary_area_m2 * tolerance)
+                .map(|x| (v, x.volume_m3)),
+            _ => None,
+        };
         if ambiguous {
             out.fitting_seed_ambiguous += 1;
         }
@@ -461,6 +510,13 @@ pub fn check(mesh: &mbin::Mesh, reference: &Reference, tolerance: f64) -> Outcom
                         f.zone,
                         zone_cell.map_or_else(|| "?".to_string(), |c| c.to_string()),
                         r.cell.map_or_else(|| "?".to_string(), |c| c.to_string())
+                    ));
+                } else if let Some((box_m3, cell_m3)) = not_the_box {
+                    out.fitting_region_misplaced += 1;
+                    r.problems.push(format!(
+                        "zone '{}' is a box of {box_m3:.6} m³, and the cell its id is on, the one \
+                         its centre lies in, is {cell_m3:.6} m³: the box's faces do not bound it",
+                        f.zone
                     ));
                 }
             }

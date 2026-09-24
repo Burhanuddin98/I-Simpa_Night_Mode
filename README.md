@@ -313,13 +313,16 @@ src/newgui/
 
 ## Changelog
 
-### v0.3.1 &mdash; Solver Bug Fixes (2026-04-04)
+### v0.3.1 &mdash; Solver changes (2026-04-04)
 
-**Upstream Solver Fixes** (in `src/spps/` and `src/ctr/`)
-- Fixed SPPS atmospheric absorption probability: `>=` &rarr; `<=` (was ~10x too strong in random mode)
-- Fixed SPPS transmission probability: removed incorrect `*absorption` factor (was severely underestimating wall transmission)
-- Fixed TCR `isTransparent()`: now frequency-dependent (was hardcoded to band [0], ignoring freq-dependent encumbrances)
-- Fixed TCR Eyring formula: clamped `alpha_mean < 0.99` to prevent `log(0)` / NaN when absorption &ge; 1.0
+**Changes to the solvers' code** (in `src/spps/` and `src/ctr/`). Each changes what the solver
+computes; none is shown to be more accurate than the original's code until the physics bed
+(`docs/release-arc-plan.md`, item 4) has run, so none is claimed as a correction:
+- SPPS atmospheric absorption test: the comparison `>=` changed to `<=` (random mode)
+- SPPS transmission probability: the `*absorption` factor removed
+- TCR `isTransparent()`: evaluated per frequency band, where the original reads band [0]
+- TCR Eyring formula: `alpha_mean` clamped below 0.99, so that absorption &ge; 1.0 gives no
+  `log(0)` / NaN
 
 **Release**
 - Added prebuilt Windows binary release (download &rarr; unzip &rarr; run)

@@ -72,8 +72,10 @@ With upstream's scene correction (`MeshSettings::preprocess`; `docs/solver-contr
   source does not fix; ascending is tutorial 3's): a box seeded at `hc - (hc - ba) * 1e-4f`, per
   component in `f32`, from its corners as upstream holds them (`FittingShape::box_corners`;
   `e_scene_encombrements_encombrement_cuboide.h:333-335`); a scene-fitted zone at its
-  `inside_point` (upstream's `volpos`), as it is. The attribute is the solver id where upstream
-  writes its element id: the parity bed compares through the id map the import records.
+  `inside_point` (upstream's `volpos`), as it is. The attribute is the zone's solver id, which
+  for a project imported from a `.proj` is upstream's element id, pinned on import
+  (`docs/m5-m6-design.md`, decision 13): tutorial 3's region lines are upstream's, 1930 and 2083,
+  byte for byte.
 - **Order, a known difference.** Upstream writes each drawable's triangles and then its region,
   drawable by drawable in its table's order (`Objet3D_maillage.cpp:970-1040`); this mesher writes
   the user facets in project order and the regions in ascending id. With one box zone the two
@@ -112,7 +114,7 @@ with `read_manifest`, which uses the crate's correctly rounded JSON reader
 | `codes` | array of strings | reason codes, below, in the order they were found |
 | `messages` | array of strings | the same failures in words, then remarks on the input |
 | `mesh_input_hash` | string or null | `validate::mesh_input_hash` of the project meshed (32 hex digits); null for a raw `.poly` |
-| `tetgen` | object or null | the TetGen call: `program`, `program_sha256` (hashed after the run, so hashing does not delay the launch), `argv` (after the program), `cwd` (`.`), `exit_code` (raw `u32`, null when cancelled), `cancelled`, `elapsed_ms`. For `external`, `program` and `argv` come from the `.1.face` trailer, `cwd` is the TetGen folder, and there is no hash, exit code or time |
+| `tetgen` | object or null | the TetGen call: `program`, `program_sha256` (hashed after the run, so hashing does not delay the launch), `argv` (after the program), `cwd` (`.`), `exit_code` (raw `u32`, null when cancelled or timed out), `cancelled`, `elapsed_ms`, `timeout_ms` (the limit it ran under, `mesh::Timeouts`; null when not run here) and `timed_out` (stopped at that limit; decision 14). For `external`, `program` and `argv` come from the `.1.face` trailer, `cwd` is the TetGen folder, and there is no hash, exit code, time or limit. `timeout_ms` and `timed_out` are read as null and false when absent |
 | `files` | object | sha256 (64 lowercase hex digits) of `poly`, `var`, `cbin` and `mbin`; null for a file not written |
 | `counts` | object | `scene_vertices`, `scene_faces`, `poly_vertices`, `poly_facets`, `regions`, `var_constraints`, and `build` (below) once TetGen's output was read |
 | `volume_ids` | object | `fittings` (the seeded solver ids) and `room`, the room's first id as TetGen numbers it, one above the largest fitting or 1 (`VolumeIds::tetgen`; its further parts carry the ids above): the `idVolume` values the `.mbin` may carry (`docs/m5-m6-design.md`, decision 1) |
@@ -122,7 +124,7 @@ with `read_manifest`, which uses the crate's correctly rounded JSON reader
 | `self_intersection` | object or null | TetGen 1.5.0's stop on a self-intersection, below; null when TetGen did not stop on one. Read as null when absent |
 | `diagnosis` | object or null | the `tetgen -d` follow-up, below. Null when no facet was skipped and TetGen did not stop on a self-intersection, when the run was cancelled, or when `diag/` could not be set up (a message then says why) |
 | `verify` | object or null | `mesh::verify::verify_mesh_with`'s report on the `.mbin` built, whether it passed or not |
-| `preprocess` | object or null | `preprocess.exe`'s run, when the settings asked for it: `call` (as `tetgen`), `markers` (`restored` or `parity`), `printed` (`status`, `aborted`, `not_found`, `vertices_merged`, `faces_destroyed`, `faces_split`, `split_lines`, as it printed them), `input_sha256` and `output_sha256`, `input` and `output` (`vertices`, `facets`, `user_facets`, `regions`), `accounting` (below), `deleted_facets` (mapped to the scene as `skipped_facets`), `tolerance_m`, `markers_rewritten`, and `summary`, the line also printed among the messages. Read as null when absent |
+| `preprocess` | object or null | `preprocess.exe`'s run, when the settings asked for it: `call` (as `tetgen`), `markers` (`restored` or `parity`), `printed` (`status`, `aborted`, `not_found`, `vertices_merged`, `faces_destroyed`, `faces_split`, `split_lines`, as it printed them), `input_sha256` and `output_sha256`, `input` and `output` (`vertices`, `facets`, `user_facets`, `regions`), `accounting` (below), `deleted_facets` (mapped to the scene as `skipped_facets`), `tolerance_m`, `markers_rewritten`, `summary`, the line also printed among the messages, `outcome` (`corrected`: TetGen read what it saved; `aborted`: it saved nothing, and the `.poly` as written went on to the geometry check and TetGen, as upstream's GUI meshes it; null when the run failed) and `aborted_reason` (why, with its last line). Read as null when absent |
 | `geometry` | object or null | `geometry::check` on the `.poly` TetGen read: `checked` (`preprocessed`, `written`, `external`, or `project`: for `external` with no `<base>.poly` beside TetGen's output, the project's own `.poly` as the mesher writes it without upstream's scene correction, which stands in for it; the region check is never skipped), `vertices`, `facets`, `verdict` (`ok` or `refused`), `reasons` (`code`, `count`, `facets`: positions in the facet list, the first 20, `markers`, `message`), `pairs` (each self-intersecting pair as markers), `cells` (`id`, `depth`, `volume_m3`) and `enclosed_volume_m3`. With upstream's scene correction a refusal is the gate before TetGen; without it, TetGen judges first, and a mesh it makes of a refused `.poly` is `geometry_refused`. Read as null when absent |
 | `parity` | boolean | parity mode: `preprocess.exe`'s markers kept, the `.mbin` written whether it verifies or not. Read as false when absent |
 | `seeds_moved` | array | per fitting zone whose seed lay on a facet and was moved into its cell: `zone`, `solver_id`, `from`, `to`, `on_facets`, `cell` |
@@ -253,7 +255,11 @@ declared fails `uncovered_scene_faces`.
 
 `verify_dir` adds what only the folder shows. The mesher's `tetgen_skipped_facets`,
 `neigh_missing` and `tetgen_output_missing` (above) mean the same there, for TetGen output under
-any basename. Its own codes:
+any basename. It also holds the `.mbin`'s regions to the folder's own geometry (its `.poly`,
+else its `.cbin`), and a folder whose geometry gives no cells is `regions_unchecked`, a code of
+`docs/solver-contract.md` Part B ("Preprocessing and the meshed volume"), beside the region
+check's own. Its
+own codes:
 
 | Code | When |
 |---|---|
@@ -271,7 +277,7 @@ any basename. Its own codes:
 | the box plus a baffle piercing wall face 9 | `-pq2 -A -n` + `.var` | exit 3, the stop names no pair (it stops in `Constrained Delaunay...`); `-d` names faces 9 (`Walls`) and 12 (`Baffle`), the pair [9, 12] |
 | the box plus two overlapping box zones | `-pq2 -A -n` + `.var` | exit 3, the stop names no pair; `-d` names 18 pairs over zone 1's markers 14, 15, 18-21 and zone 2's 24, 25, 28, 29, 34, 35, each named by its zone |
 | upstream's raw Elmia hall as a `.poly` (`elmia.ply`, 1,086 faces, self-intersecting; release `simpa mesh`) | `-pq5 -A -n -Y` | exit 3 after 0.25 s, `tetgen_self_intersection`: the stop names facets 553 and 581 (`Found two facets intersect each other.`); `-d` exits 0 and names 1,397 distinct pairs over 897 facets, its `.1.face` 897 rows |
-| upstream's tutorial 3 through `preprocess.exe`, parity mode (`simpa mesh --parity`, debug build) | `-pq2 -A -n` | `preprocess.exe` 76 -> 57 vertices, 88 + 12 user facets -> 133; 3,285 tetrahedra, 835 nodes, upstream's `.1.*` and `.mbin` byte for byte through the id map; FAIL by name: `mesh_invalid`, `marker_geometry_mismatches` (280), `uncovered_scene_faces` (90-99) |
+| upstream's tutorial 3 through `preprocess.exe`, parity mode (`simpa mesh --parity`, debug build) | `-pq2 -A -n` | `preprocess.exe` 76 -> 57 vertices, 88 + 12 user facets -> 133; 3,285 tetrahedra, 835 nodes, upstream's `.1.*` and `.mbin` byte for byte with no id map (decision 13); FAIL by name: `mesh_invalid`, `marker_geometry_mismatches` (280), `uncovered_scene_faces` (90-99) |
 | upstream's tutorial 3 through `preprocess.exe`, default mode | `-pq2 -A -n` | OK: 19 markers restored, zone 1's seed moved off its top face; 3,394 tetrahedra, 843 nodes; regions 4.352, 18.000, 93.445, 106.895 and 755.648 m³, each its cell's |
 | upstream's tutorial 2 (the Elmia hall) through `preprocess.exe` | | `preprocess.exe` prints 104 splits and `Mesh reparation has been aborted`, saves nothing and exits 0 after 2.2 s: `preprocess_aborted`, TetGen does not run |
 | tutorial 3 without `preprocess.exe` (the box in the facet list) | `-pq2 -A -n` | exit 3, `tetgen_self_intersection`; `geometry` refused with `self_intersections`, 22 pairs, the same set as the `-d` follow-up's |

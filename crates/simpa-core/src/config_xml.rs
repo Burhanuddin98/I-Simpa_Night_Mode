@@ -48,20 +48,24 @@
 //!
 //! The project's ids are UUIDs and never reach a solver. The integers the solvers match between
 //! `config.xml`, the scene mesh (`.cbin`) and the tetrahedral mesh (`.mbin`) are assigned here, by
-//! [`SolverIds::assign`], from the project's own order, so the same project always gets the same
-//! ids, whatever its variant. Upstream's GUI writes its own element ids instead (3503, 1930, ...),
-//! which a project has nowhere to hold, so for the same scene ours differ from upstream's. In the
-//! mode the writer selects, the solvers match them between the three files and write a scene
-//! receiver's id into its `.csbin` output, and nothing else reads them:
+//! [`SolverIds::assign`], from the project's own order and its pinned ids, so the same project
+//! always gets the same ids, whatever its variant. Upstream's GUI writes its own element ids
+//! (3503, 1930, ...); a project imported from a `.proj` keeps them as pins (each entity's
+//! `solver_id`, set from its `wxid`; `docs/m5-m6-design.md`, decision 13), so it writes the ids
+//! upstream wrote, and a project made here pins none and keeps the numbering below. The solvers
+//! match the ids between the three files and write a scene receiver's id into its `.csbin`
+//! output, and nothing else reads them:
 //!
 //! | Solver id | Written as | Assigned |
 //! |---|---|---|
 //! | material, per **surface group** | `type_surface@id`, `.cbin` face `idMat` | The group's base material's pinned [`Material::solver_id`](crate::schema::Material::solver_id) if it has one. Otherwise, in surface-group order, the smallest id from [`FIRST_ASSIGNED_MATERIAL_ID`] (1) up that no pinned id and no earlier group uses |
-//! | surface receiver or cutting plane | `recepteur_surfacique@id`, `recepteur_surfacique_coupe@id`, `.cbin` face `idRs` | Its position in `surface_receivers`, from 0, disabled ones counted |
-//! | fitting zone | `encombrement@id`, `.cbin` face `idEn`, `.mbin` `idVolume` | [`FIRST_FITTING_ID`] (2) plus its position in `fitting_zones`, disabled ones counted |
-//! | point receiver | `recepteur_ponctuel@id` | Its position in `point_receivers`, from 0 |
+//! | surface receiver or cutting plane | `recepteur_surfacique@id`, `recepteur_surfacique_coupe@id`, `.cbin` face `idRs` | Its pinned `solver_id`; otherwise, in list order, the smallest id from 0 up that no pin and no earlier receiver uses: its position in `surface_receivers`, disabled ones counted, when none is pinned |
+//! | fitting zone | `encombrement@id`, `.cbin` face `idEn`, `.mbin` `idVolume` | Its pinned `solver_id` (never 0); otherwise the same from [`FIRST_FITTING_ID`] (2) up: 2 plus its position in `fitting_zones`, disabled ones counted, when none is pinned |
+//! | point receiver | `recepteur_ponctuel@id` | Its pinned `solver_id`; otherwise the same from 0 up: its position in `point_receivers` when none is pinned |
 //!
-//! Sources carry no id: the solvers number them by position and do not read `source@id`.
+//! Sources carry no id in `config.xml`: the solvers number them by position and do not read
+//! `source@id`. An imported source keeps upstream's as its pinned `solver_id`, unwritten. Two
+//! entities of one kind pinned to one id cannot be written ([`WriteError::SolverIdClash`]).
 //!
 //! **Materials are declared per surface group, not per library entry.** Each surface group gets
 //! its own solver material id, and `config.xml` declares one `type_surface` per id, holding the

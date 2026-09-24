@@ -40,6 +40,14 @@ pub enum WriteError {
     GroupInTwo { group: String, what: &'static str },
     /// More entities than solver ids fit in a C `int`.
     TooManyIds { what: &'static str },
+    /// A pinned solver id that cannot be written: two entities of one kind pinned to it, a
+    /// fitting zone pinned to 0 (the solvers' "no fitting"), or one above the C `int` range
+    /// (`SolverIds::assign`).
+    SolverIdClash {
+        what: &'static str,
+        id: u32,
+        reason: String,
+    },
     /// Writing the file failed.
     Io(io::Error),
 }
@@ -57,6 +65,7 @@ impl WriteError {
             WriteError::SharedSolverId { .. } => "shared_solver_id",
             WriteError::GroupInTwo { .. } => "group_in_two_zones",
             WriteError::TooManyIds { .. } => "solver_id_overflow",
+            WriteError::SolverIdClash { .. } => "solver_id_clash",
             WriteError::Io(_) => "io",
         }
     }
@@ -98,6 +107,9 @@ impl fmt::Display for WriteError {
             }
             WriteError::TooManyIds { what } => {
                 write!(f, "too many {what}: their solver ids do not fit in a C int")
+            }
+            WriteError::SolverIdClash { what, id, reason } => {
+                write!(f, "{what}: solver id {id} cannot be written: {reason}")
             }
             WriteError::Io(e) => write!(f, "i/o error: {e}"),
         }

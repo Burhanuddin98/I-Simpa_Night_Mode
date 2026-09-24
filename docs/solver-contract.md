@@ -71,7 +71,8 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 | `source_none` | project | error | At least one source is enabled | An empty `<sources>` runs, emits nothing and exits 0, and TCR's level becomes 10·log10(0) (`base_core_configuration.cpp:121-183`; `TC_CalculationCore.cpp:142-158`) (inferred). Upstream's GUI refuses such a run (`projet.cpp:649-653`) |
 | `source_outside_volume` | project | error | Every source is strictly inside the room volume | SPPS dereferences a NULL tetrahedron and crashes `0xC0000005` with no message. TCR computes and exits 0 (VERIFIED P2 `src_out`, `tcr_src_out`; S `run_srcout`; `sppsInitialisation.cpp:13-20`). SPPS's own guard at `sppsNantes.cpp:58-65` is never reached |
 | `source_near_surface` | project | error | Every source is at least a clearance d_min from every model face. The value is proposed at 1 mm and open; the solver's own test uses 10⁻⁴ m (`mathlib.h:58`) | When SPPS's on-face check fires, it prints to stderr and exits 0 without results (`sppsNantes.cpp:322-325`). When it does not fire, a point on a face belongs to either adjacent tetrahedron (`coreinitialisation.cpp:79-92`). VERIFIED P2 `src_face`: a source on the floor plane passed the check silently. A source exactly on a mesh vertex is moved 0.5 % of the way towards the tetrahedron's centre (`sppsInitialisation.cpp:13-34`) |
-| `receiver_outside_volume` | project | error | Every point receiver is strictly inside the room volume | The receiver is never linked to a tetrahedron and records zero, silently. VERIFIED P2 `rcv_out`: `.recp` sum 0.0 (`coreinitialisation.cpp:178-213`; `sppsInitialisation.cpp:82`) |
+| `receiver_outside_volume` | project | error | No point receiver lies outside the room volume (one on a face is `receiver_on_surface`) | The receiver is never linked to a tetrahedron and records zero, silently. VERIFIED P2 `rcv_out`: `.recp` sum 0.0 (`coreinitialisation.cpp:178-213`; `sppsInitialisation.cpp:82`) |
+| `receiver_on_surface` | project | error | No point receiver lies on a model face (within 1e-9 m, `ON_SURFACE_M`). The message names the face and its surface group, and asks for the receiver to be moved inside the room (Burhan, 2026-09-24 14:11: a receiver exactly on a wall stays refused, with a clear message) | A point on a face belongs to either tetrahedron beside it, or, by SPPS's `f32` test, to none (`coreinitialisation.cpp:79-92, 178-213`; `run::locate`, `receiver_unlocatable`), and half its sphere of radius `rayon_recepteurp` lies outside the room, while SPPS normalises by the whole sphere (`sppsInitialisation.cpp:43-93`) (inferred). Upstream's tutorial 3 has `Receiver 1` at x = 0, on its wall |
 | `receiver_sphere_crosses_surface` | project | warning | A point receiver's sphere of radius `rayon_recepteurp` does not cross a model face | SPPS normalises by the full sphere volume 4/3·π·r³ but collects energy only in tetrahedra it reaches inside the room, so a sphere cut by a wall reads low (`sppsInitialisation.cpp:43-93`) (inferred) |
 | `receiver_radius_invalid` | project | error | The receiver radius is > 0 and finite | r = 0 gives NaN in every `.recp` value, silently (VERIFIED P2 `radius0`; `sppsInitialisation.cpp:79, 86`) |
 | `direction_vector_zero` | project | error | Direction vectors are non-zero: those of unidirectional and directivity-balloon sources, and every point receiver's | Vectors are divided by their length with no check, so a zero vector gives 0/0 = NaN (`base_core_configuration.cpp:137-138, 248-249`). A receiver's orientation feeds SPPS's lateral-energy terms (`spps/reportmanager.cpp:222`) (inferred) |
@@ -112,7 +113,7 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 |---|---|---|---|---|
 | `name_too_long` | project | error | Source names and point-receiver labels are at most 49 bytes in UTF-8 | A source name is copied with `strcpy` into a 50-byte GABE cell (`gabe.cpp:174-178`; `gabe.h:230-233`; `spps/reportmanager.cpp:593-595`). VERIFIED P2 `name_long`: a 120-byte name overflowed the heap and left an unterminated cell, and SPPS still exited 0. Labels have the same limit because they become path components (`output_path_too_long`) |
 | `name_not_filename_safe` | project | error | Source names and point-receiver labels are valid Windows file names: not empty; no control characters; none of `< > : " / \ \| ? *`; no trailing space or dot; not a reserved device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9) | Labels become SPPS folder names and TCR file names unvalidated (`baseReportManager.cpp:193-203`; `ctr/reportmanager.cpp:148`). Source names become folder names when per-source output is on (`spps/reportmanager.cpp:650`). UTF-8 is fine (VERIFIED P2 `label_utf8`). No solver passes a label to `printf`: grep of `spps/` and `ctr/`. The `%` trap is in upstream's GUI only |
-| `name_duplicate` | project | error | Point-receiver labels are unique, compared case-insensitively. So are source names | SPPS resolves a clash by appending 0 to 19, silently: VERIFIED P2 `label_dup` gave `Receiver 10` (`baseReportManager.cpp:196-199`). TCR writes `<lbl>.gabe`, and the second overwrites the first: VERIFIED P2 `tcr_label_dup` gave one file for two receivers. NTFS names are case-insensitive. Duplicate source names collide in per-source folders (`spps/reportmanager.cpp:650`) (inferred) |
+| `name_duplicate` | project | error | Point-receiver labels are unique, compared case-insensitively. Source names are unique within their source group (`Source::group`, Burhan, 2026-09-24 14:11), and across the project when per-source output is on (`echogram_per_source`, `output_recp_bysource`) | SPPS resolves a label clash by appending 0 to 19, silently: VERIFIED P2 `label_dup` gave `Receiver 10` (`baseReportManager.cpp:196-199`). TCR writes `<lbl>.gabe`, and the second overwrites the first: VERIFIED P2 `tcr_label_dup` gave one file for two receivers. NTFS names are case-insensitive. With per-source output SPPS writes `<receiver>/<source name>/` for every source in turn, with no suffixing, so two sources of one name write one folder (`spps/reportmanager.cpp:617-652`) (inferred); without it a source name reaches only a GABE label cell |
 
 #### Surface receivers, cutting planes and fittings
 
@@ -144,10 +145,10 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 | `config_attribute_missing` | export | error | `config.xml` contains every attribute that `docs/formats/config_xml.md`'s Writer column requires for that solver | Each missing attribute prints `Xml Property <name> doesn't exist !` and silently becomes 0 or empty (`cxml.cpp:108-118`). Upstream's own tutorial-1 TCR config trips this on `directivities_directory` (VERIFIED P1) |
 | `docalc_not_literal_one` | export | error | Every computed band is written `docalc="1"`, exactly | Only the string `"1"` computes a band, and `"true"` drops it silently. VERIFIED P2 `docalc_true` (`base_core_configuration.cpp:106`) |
 | `config_value_format` | export | error | Numbers are plain C-locale literals: integers as decimal integers, reals with `.` and no grouping separator. Enumerations are in range: `directivite` 0-5, `loi` 0-5, `loi_diff` 0-2, `surf_receiv_method` 0-1, `computation_method` 0-1 | `atoi` stops at the first non-digit, so `"1e3"` reads 1. `atof` runs after the first `,` becomes `.`, so `"1,000.5"` reads 1.0 (`coreString.cpp:84-105`). `loi` 6 (semi-diffuse) is declared but falls to the default branch and reflects specularly (`coreTypes.h:83-92`; `dotreflection.h:23-45`). A `loi_diff` outside 0-2 leaves the direction unchanged (`CalculationCore.cpp:166-182`). An unknown source type matches no emission branch (`sppsNantes.cpp:107-127`) (inferred) |
-| `solver_id_mapping_invalid` | export | error | Solver ids are unique within materials, within surface receivers and within fittings. Every id used by a face (idMat, idRs, idEn) or by a tetrahedron (idVolume ≠ 0) is declared | Lookups return the first match, so a duplicate id silently hides the second item (`base_core_configuration.cpp:374-391`). An undeclared idMat exits -1 or crashes (`material_unassigned`). An undeclared idRs indexes a vector at -1 (`coreinitialisation.cpp:291-304, 353-360`). An undeclared fitting id drops the fitting silently (`coreinitialisation.cpp:151-176, 437-445`) (inferred) |
+| `solver_id_mapping_invalid` | export | error | Solver ids are unique within materials, within surface receivers and within fittings. Every id used by a face (idMat, idRs, idEn) or by a tetrahedron (idVolume ≠ 0) is declared. At the project stage: pinned solver ids (`solver_id` of materials, point receivers, surface receivers, fitting zones and sources, which a `.proj` import sets to upstream's element ids, `docs/m5-m6-design.md`, decision 13) are unique within each kind, and no fitting zone is pinned to 0 | Lookups return the first match, so a duplicate id silently hides the second item (`base_core_configuration.cpp:374-391`). An undeclared idMat exits -1 or crashes (`material_unassigned`). An undeclared idRs indexes a vector at -1 (`coreinitialisation.cpp:291-304, 353-360`). An undeclared fitting id drops the fitting silently (`coreinitialisation.cpp:151-176, 437-445`) (inferred) |
 | `fitting_id_collides_with_room_region` | export | error | No fitting's solver id equals the TetGen region attribute of the room's own tetrahedra | Every tetrahedron whose idVolume is not 0 gets the fitting with that id (`coreinitialisation.cpp:151-176`). TetGen `-A` gave all 2,257 of tutorial 1's room tetrahedra idVolume 1 (read from `tests/fixtures/upstream/tutorial1/spps/tetramesh.mbin` on 2026-09-23), so a fitting with id 1 would fill the whole room (inferred) |
 
-**Count: 41 rules.** 34 are `project` rules and 7 are `export` rules; 38 are errors and 3 are
+**Count: 42 rules.** 35 are `project` rules and 7 are `export` rules; 39 are errors and 3 are
 warnings. Every item in `plan.components[core::validate]` maps to a rule:
 
 | Plan item | Rule(s) |
@@ -155,7 +156,7 @@ warnings. Every item in `plan.components[core::validate]` maps to a rule:
 | same band set everywhere, no duplicate frequencies | `band_set_mismatch`, `band_duplicate`, `band_set_empty`, `band_frequency_not_integer` |
 | `docalc` as the literal `'1'` | `docalc_not_literal_one` |
 | material 0 defined; every idMat, idRs and idEn declared | `material_unassigned`, `solver_id_mapping_invalid` |
-| sources and receivers strictly inside and off every face | `source_outside_volume`, `source_near_surface`, `receiver_outside_volume`, `receiver_sphere_crosses_surface` |
+| sources and receivers strictly inside and off every face | `source_outside_volume`, `source_near_surface`, `receiver_outside_volume`, `receiver_on_surface`, `receiver_sphere_crosses_surface` |
 | type-5 directivity files parsed | `directivity_file_missing`, `directivity_file_invalid`, `directivity_band_missing` |
 | `trans_epsilon` present, `rayon_recepteurp` > 0, `pasdetemps` > 0 | `trans_epsilon_invalid`, `receiver_radius_invalid`, `time_step_invalid` |
 | duree/pasdetemps below 65,536 steps | `step_count_overflow`, `source_delay_invalid` |
@@ -193,7 +194,7 @@ project that has one. The other integrity faults map to the rules above.
 | `face_vertex` | structure | error | a face indexes past the vertex list |
 | `repeated_group` | structure | error | a list of group references names one group twice |
 | `override_order` | structure | error | a variant's overrides are not strictly ascending by group id |
-| `solver_int_range` | structure | error | the random seed or a pinned material solver id does not fit a C `int` |
+| `solver_int_range` | structure | error | the random seed or a pinned solver id (of a material, point receiver, surface receiver, fitting zone or source) does not fit a C `int` |
 
 ### Rules that belong to other stages
 
@@ -434,7 +435,7 @@ actually in the working directory, and a config that cannot be read after the ru
 ### Reason codes
 
 Every reason a verdict can carry, besides the FAIL rows' ids in the classification table and the
-Part A codes named in the text above, and the one warning the run manager adds itself. A verdict lists at most one entry per code, in signal
+Part A codes named in the text above, and the one warning the run manager adds itself (`log_write_failed`; `run` also records the mesher's `preprocess_aborted` as a warning when `preprocess.exe` gave up and the `.poly` as written was meshed). A verdict lists at most one entry per code, in signal
 order, and its status is OK exactly when it lists none.
 
 | Code | Status | Signal | When |
@@ -493,9 +494,12 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
     config's `encombrement` ids, and the room's ids are TetGen's numbering above them, as both
     upstream's meshes and ours carry them (`docs/m5-m6-design.md`, decision 1); with no fitting
     declared, the room starts at the smallest `idVolume` in the mesh (1 from TetGen, 0 in upstream's
-    Python-binding mesh and Night Mode's broken hall). Otherwise the reason is the mesher's
-    `mesh_invalid`, followed by the verifier's codes. This refuses the broken-hall TCR folder,
-    which TCR itself runs to exit 0 (fixture `runs/tcr_broken_hall`).
+    Python-binding mesh and Night Mode's broken hall). The regions are held to the cells of the
+    folder's own geometry, its `.poly` or else its `.cbin` (`docs/m5-m6-design.md`, decision 15);
+    a folder whose geometry gives no cells is refused with `regions_unchecked` unless its
+    `mesh.json` is the mesher's record of this `.mbin` with its regions checked. Otherwise the
+    reason is the mesher's `mesh_invalid`, followed by the verifier's codes. This refuses the
+    broken-hall TCR folder, which TCR itself runs to exit 0 (fixture `runs/tcr_broken_hall`).
   - **the bands.** Every source's spectrum must reach the position of the last computed band,
     or the reason is Part A's `band_set_mismatch`. No signal after the run catches a short
     spectrum: VERIFIED fixture `runs/spps_oneband`, exit 0 with every file written.
@@ -594,13 +598,16 @@ it as off, as upstream's loader does: a loaded `mesh_conf` gets no defaults, `:4
 upstream's GUI does (`projet_maillage.cpp:206-213`): it writes the `.poly` with the box fitting
 zones' triangles in the user facet list (`Objet3D_maillage.cpp:931-1044`), runs
 `preprocess.exe scene_mesh.poly` (upstream's program, unchanged, built by `solvers/build.ps1`) in
-a Job Object like TetGen, cancellable, and meshes what it saved. What it does, and the defect in
-its reader that gives every user facet the first one's marker (`poly.cpp:418-423`), are in
+a Job Object like TetGen, cancellable and under a time limit (`preprocess_timeout`), and meshes
+what it saved, or, when it saved nothing, the `.poly` as written, as upstream's GUI does
+(`preprocess_aborted`, a recorded outcome). What it does, and how its reader marks user facets
+(measured: every one gets the first one's marker, `poly.cpp:418-423`), are in
 `crates/simpa-core/src/mesh/preprocess.rs` and `docs/formats/mesh-manifest.md`. Then:
 - **`preprocess.exe` never fails by its exit code** (`Preprocess.cpp:112-121`), so its output is
   read: its lines, and the file it saved, facet by facet against the file it was given.
-- **`geometry::check` runs on what it saved, before TetGen**: a refusal is `geometry_refused`
-  (above), exit 3, and TetGen does not run. Without the setting the project's geometry is checked
+- **`geometry::check` runs on what it saved, or on the `.poly` as written when it saved
+  nothing, before TetGen**: a refusal is `geometry_refused` (above), exit 3, and TetGen does not
+  run. Without the setting the project's geometry is checked
   before meshing, as before, and TetGen judges the box zones' triangles first; the `.poly` it read
   is checked too, and a mesh TetGen makes of one the check refuses is `geometry_refused`.
 - **Its markers are restored**, each facet taking the marker of the facet it lies in, and every
@@ -624,12 +631,15 @@ its reader that gives every user facet the first one's marker (`poly.cpp:418-423
 | `preprocess_launch_failed` | The mesh settings ask for `preprocess.exe`, and it could not be started, none was given (the library's `mesh_project` without it, or not found by `simpa mesh`), or its log could not be written. Nothing is meshed |
 | `preprocess_crash` | `preprocess.exe`'s exit code is an NTSTATUS error (0xC0000000 and up); it comes with `preprocess_exit_nonzero` |
 | `preprocess_exit_nonzero` | `preprocess.exe` exited with a code other than 0, which its `main` never returns |
-| `preprocess_aborted` | `preprocess.exe` exited 0 but saved nothing: it printed `Mesh reparation has been aborted` (a repair loop ran out of its 100 passes, `Preprocess.cpp:100-108`; upstream's tutorial 2, the Elmia hall, does this), `The mesh file cant be found !`, or no statistics; or it saved user facets it never merged into the facet list (its coplanar step ran out of passes, `:79-88`), which TetGen would never read. Upstream's GUI meshes the uncorrected `.poly` then; nothing is meshed here |
-| `preprocess_output_invalid` | What `preprocess.exe` saved does not read as a `.poly`, or cannot be accounted for against what it was given: a facet that lies in no input facet (within `16 · 2⁻²⁴ · R`) or in two user facets, an input facet whose pieces do not cover its area (within its perimeter times that distance), deletions it did not count, or regions it changed |
-| `region_volume_mismatch` | A region (one `idVolume`) whose summed tetrahedron volume is not the volume of the cell of the meshed geometry it lies in, within twice the cell's boundary area times `16 · 2⁻²⁴ · R`, or that lies in the exterior or in a cell another region also fills. Checked by the mesher, against `geometry::check` on the `.poly` TetGen read; `mesh-verify` and `run-folder`, which hold no such geometry, do not check it |
+| `tetgen_timeout` | TetGen still ran at the mesher's time limit (`mesh::Timeouts`, one hour by default, `simpa mesh --tetgen-timeout-ms`; `docs/m5-m6-design.md`, decision 14) and was stopped, its process tree killed; no mesh is built. The call records `timeout_ms` and `timed_out`. A `-d` follow-up stopped at the limit is a message, the mesh having failed already |
+| `preprocess_timeout` | `preprocess.exe` still ran at the mesher's time limit (`mesh::Timeouts`, 10 minutes by default, `simpa mesh --preprocess-timeout-ms`; decision 14) and was stopped, its process tree killed. Nothing is meshed |
+| `preprocess_aborted` | **Not a refusal: a recorded outcome** (the manifest's `preprocess.outcome` `aborted`, with `aborted_reason`, and a warning of the run). `preprocess.exe` exited 0 but saved nothing: it printed `Mesh reparation has been aborted` (a repair loop ran out of its 100 passes, `Preprocess.cpp:100-108`; upstream's tutorial 2, the Elmia hall, does this), `The mesh file cant be found !`, or no statistics. Upstream's GUI then meshes the `.poly` it wrote, uncorrected, since it does not look at the result (`projet_maillage.cpp:206-213`), and so does the mesher: TetGen reads the `.poly` as written (put back, byte for byte, if anything else was left in its place), and `geometry::check` on it is the gate before TetGen, as it is for what `preprocess.exe` saves. `simpa mesh` says so on stderr whatever `--json` says. Until 2026-09-24 this was a refusal |
+| `preprocess_output_invalid` | What `preprocess.exe` saved does not read as a `.poly`, or cannot be accounted for against what it was given: a facet that lies in no input facet (within `16 · 2⁻²⁴ · R`) or in two user facets, an input facet whose pieces do not cover its area (within its perimeter times that distance), deletions it did not count, regions it changed, or user facets it never merged into the facet list (its coplanar step ran out of passes, `:79-88`), which TetGen would never read |
+| `region_volume_mismatch` | A region (one `idVolume`) whose summed tetrahedron volume is not the volume of the cell of the meshed geometry it lies in, within twice the cell's boundary area times `16 · 2⁻²⁴ · R`, or that lies in the exterior or in a cell another region also fills. Checked by the mesher, against `geometry::check` on the `.poly` TetGen read; `mesh-verify` and `run-folder` hold a folder's regions to the folder's own `.poly`, or else its `.cbin`, and a folder whose geometry gives no cells is `regions_unchecked` (`docs/formats/mesh-manifest.md`; decision 15) |
 | `unmeshed_cells` | A cell of the meshed geometry no region fills |
-| `fitting_region_misplaced` | A fitting zone whose id is not on its zone's cell (the cell its seed lies in; a box's, the one its centre lies in), or on no tetrahedron |
+| `fitting_region_misplaced` | A fitting zone whose id is not on its zone's cell (the cell its seed lies in; a box's, the one its centre lies in), or on no tetrahedron; or a box zone whose cell is not the box's volume (within twice the cell's boundary area times `16 · 2⁻²⁴ · R`): the box's faces do not bound it, as when TetGen never read them (a `.poly` whose box triangles are in its user facet list, meshed after `preprocess.exe` gave up), and its id fills the room cell around it |
 | `fitting_seed_ambiguous` | A fitting zone whose seed lies on facets between cells, none of which its own faces and the outer shell close alone: which side is the zone cannot be told |
+| `regions_unchecked` | the `.mbin`'s regions could not be held to cells: the folder's geometry (its `.poly`, TetGen's basename's or `scene_mesh.poly` or the only one, else its `.cbin` welded where its `f32` coordinates are equal) is refused by the geometry check, and its `mesh.json` is not the mesher's record of this `.mbin` (`status` `OK`, `files.mbin` its sha256) with `verify.regions_checked` true. `run-folder` refuses such a folder before launch with `mesh_invalid` and this code (`docs/m5-m6-design.md`, decision 15) |
 
 ### Importing an upstream project
 
@@ -646,7 +656,9 @@ The zone refusals, and two zones listing one face, apply to *enabled* zones only
 draws none of its triangles (`..._model.h:173-194`, `..._cuboide.h:311, 329-340`,
 `appconfig.cpp:185`), so a disabled zone is imported as stored, with a note on what enabling it
 would need. Every list is read in upstream's load order, by `wxid` (`element.cpp:64-106, 159`),
-not in the file's.
+not in the file's, and every source, point receiver, surface receiver or cutting plane and
+fitting zone keeps its `wxid` as its pinned solver id (`docs/m5-m6-design.md`, decision 13), so
+the project writes upstream's ids.
 
 | Code | Refused when | What upstream does |
 |---|---|---|

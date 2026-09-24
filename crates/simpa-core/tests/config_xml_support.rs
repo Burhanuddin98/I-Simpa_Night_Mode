@@ -132,6 +132,8 @@ pub fn rich_cube() -> Project {
         power,
         directivity,
         delay_s: F64::new(0.01),
+        group: None,
+        solver_id: None,
     };
     p.sources.push(src(
         21,
@@ -168,6 +170,7 @@ pub fn rich_cube() -> Project {
         position: Vec3::new(0.5, 2.5, 3.75),
         orientation: Vec3::new(0.0, 0.0, 1.0),
         background_noise: Some(Spectrum::new(20.0, SpectrumShape::White)),
+        solver_id: None,
     });
     p.surface_receivers = vec![
         SurfaceReceiver {
@@ -177,6 +180,7 @@ pub fn rich_cube() -> Project {
             shape: SurfaceReceiverShape::Scene {
                 groups: vec![floor],
             },
+            solver_id: None,
         },
         SurfaceReceiver {
             id: SurfaceReceiverId::from_u128(id(42)),
@@ -188,6 +192,7 @@ pub fn rich_cube() -> Project {
                 c: Vec3::new(4.5, 0.5, 2.5),
                 resolution_m: F64::new(0.5),
             },
+            solver_id: None,
         },
         SurfaceReceiver {
             id: SurfaceReceiverId::from_u128(id(43)),
@@ -196,6 +201,7 @@ pub fn rich_cube() -> Project {
             shape: SurfaceReceiverShape::Scene {
                 groups: vec![ceiling],
             },
+            solver_id: None,
         },
     ];
     p.fitting_zones.push(FittingZone {
@@ -210,6 +216,7 @@ pub fn rich_cube() -> Project {
         absorption: vec![F64::new(0.2); n],
         mean_free_path_m: vec![F64::new(1.5); n],
         diffusion_law: (0..n).map(|i| DiffusionLaw::ALL[i % 3]).collect(),
+        solver_id: None,
     });
     let mut v = Variant {
         id: VariantId::from_u128(id(61)),
