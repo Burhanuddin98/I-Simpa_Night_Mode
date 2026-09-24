@@ -6,7 +6,8 @@ This page is the contract between our core and upstream's unchanged solvers, SPP
 - **Part A, the pre-launch rules.** Each has a stable reason code. `core::validate` implements
   them, and **the codes are its API.**
 - **Part B, the run contract:** how a solver is launched, what it must find and what it writes,
-  what its exit codes and output lines mean, and how a run is judged.
+  what its exit codes and output lines mean, and how a run is judged; and, before any of it, what
+  the import of an upstream project refuses by name ("Importing an upstream project").
 
 The file format itself is in `docs/formats/config_xml.md`. Receipts follow that page's
 conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, and the
@@ -582,6 +583,27 @@ the first one. What follows marks each difference.
   are `.cbin` face indices. The line `The input surface mesh contain self-intersections. Program
   stopped.` arrives on stdout, and stderr is empty. The mesher reports `tetgen_skipped_facets`,
   and still reads a committed 1.6.0 set such as `tests/fixtures/meshes/broken_hall`.
+
+### Importing an upstream project
+
+Before any run, `simpa import-proj` (`core::geometry::import::proj`) turns an upstream `.proj`
+into a project. It reads what upstream's GUI loads and writes it the way the GUI would write it
+into `config.xml` and `mesh.cbin`, and it refuses, by name, what upstream would skip silently or
+take in a way this import does not reproduce. The file's own defects (a value that is not a
+number, a missing band) are `invalid`, and a feature it does not read is `unsupported`; those are
+the importer's error kinds (`ImportError::code`). The reasons below have their own codes, which
+the CLI prints before the message and exits 2 with.
+
+| Code | Refused when | What upstream does |
+|---|---|---|
+| `proj_fitting_type_unknown` | A child of `encombrements` whose element type (`eid`) is neither 54 (a scene-fitted zone) nor 56 (a rectangular one), or has none | Skips it silently (`e_scene_encombrements.h:56-73`) |
+| `proj_fitting_inside_point_unset` | A scene-fitted zone that lists faces and has no inside position (`volpos`), or (0, 0, 0) | Seeds its TetGen region at a point it derives from the zone's first face in its OpenGL frame (`Objet3D_maillage.cpp:1011-1031`), which is not reproduced |
+| `proj_fitting_box_empty` | A rectangular zone whose corners `ba` and `hc` share a coordinate | Builds no triangles for equal corners and flat ones for a shared coordinate, and still seeds a region at `hc` (`e_scene_encombrements_encombrement_cuboide.h:113-165, 333-336`) |
+| `proj_face_in_two_fitting_zones` | A face listed by two fitting zones | Gives it the last zone's id, silently (`appconfig.cpp:174-200`) |
+| `proj_diffusion_law_out_of_range` | A fitting zone's diffusion law (`loi_diff`) outside 0 to 2, in a band upstream's loader keeps as stored | Writes it; SPPS has no case for it and leaves the direction unchanged (`coreTypes.h:108-113`; `CalculationCore.cpp:166-182`). A band upstream's loader resets to 0 (`e_gammeabsorption.cpp:43-59`) is imported as 0, with a note |
+| `proj_reflection_law_out_of_range` | A material's reflection law (`loi`) in some band that is none of upstream's seven, 0 to 6 | Writes it; SPPS reflects it specularly (`dotreflection.h:23-45`) (inferred) |
+| `proj_source_group_malformed` | A child of the source list, or of a source group, whose element type is neither 16 (a source) nor 15 (a group), or has none | Skips it silently (`e_scene_sources.h:73-87`) |
+| `proj_volumes_unsupported` | Any volume (`volumes/volume`, element type 86) | Seeds a TetGen region with its own volume bound for it (`e_scene_volumes_volume.h:168-188`); a project holds no volumes. Upstream's `Industrial.proj` is refused for its three |
 
 ### Corrections to the survey's run contract
 

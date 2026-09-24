@@ -229,6 +229,7 @@ fn with_named_box_zone(p: &mut Project, name: &str, k: u128, min: [f64; 3], max:
         shape: FittingShape::Box {
             min: Vec3::from(min),
             max: Vec3::from(max),
+            destination: None,
         },
         absorption: vec![F64::new(0.1); n],
         mean_free_path_m: vec![F64::new(2.0); n],

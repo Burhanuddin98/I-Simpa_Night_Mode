@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use simpa_core::config_xml::SolverKind;
 use simpa_core::formats::cbin;
-use simpa_core::geometry::import::zip::Archive;
+use simpa_core::geometry::import::zip::{Archive, crc32};
 
 #[path = "config_xml_support.rs"]
 pub mod support;
@@ -31,6 +31,75 @@ pub fn entry(t: &Tutorial, suffix: &str) -> Vec<u8> {
         .collect();
     assert_eq!(names.len(), 1, "entries ending with {suffix}: {names:?}");
     archive.read(&names[0]).unwrap()
+}
+
+/// A stored (uncompressed) zip archive of `entries`, in order, which `Archive` reads: a test
+/// input made from a tutorial with some entries replaced.
+pub fn stored_zip(entries: &[(String, Vec<u8>)]) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::new();
+    let mut cd: Vec<u8> = Vec::new();
+    let u16le = |v: usize| u16::try_from(v).unwrap().to_le_bytes();
+    let u32le = |v: usize| u32::try_from(v).unwrap().to_le_bytes();
+    for (name, data) in entries {
+        let offset = out.len();
+        let crc = crc32(data).to_le_bytes();
+        let n = name.as_bytes();
+        // Local header: signature, version 2.0, no flags, method 0 (stored), no time or date.
+        out.extend(0x0403_4b50u32.to_le_bytes());
+        out.extend(u16le(20));
+        out.extend([0u8; 8]);
+        out.extend(crc);
+        out.extend(u32le(data.len()));
+        out.extend(u32le(data.len()));
+        out.extend(u16le(n.len()));
+        out.extend(u16le(0));
+        out.extend(n);
+        out.extend(data);
+        // Central directory record.
+        cd.extend(0x0201_4b50u32.to_le_bytes());
+        cd.extend(u16le(20));
+        cd.extend(u16le(20));
+        cd.extend([0u8; 8]);
+        cd.extend(crc);
+        cd.extend(u32le(data.len()));
+        cd.extend(u32le(data.len()));
+        cd.extend(u16le(n.len()));
+        cd.extend([0u8; 12]);
+        cd.extend(u32le(offset));
+        cd.extend(n);
+    }
+    let cd_offset = out.len();
+    out.extend(&cd);
+    out.extend(0x0605_4b50u32.to_le_bytes());
+    out.extend([0u8; 4]);
+    out.extend(u16le(entries.len()));
+    out.extend(u16le(entries.len()));
+    out.extend(u32le(cd.len()));
+    out.extend(u32le(cd_offset));
+    out.extend(u16le(0));
+    out
+}
+
+/// A tutorial's archive with its entry `name` replaced by `edit` of it, every other entry kept,
+/// written stored ([`stored_zip`]).
+pub fn with_entry(t: &Tutorial, name: &str, edit: impl Fn(&[u8]) -> Vec<u8>) -> Vec<u8> {
+    let archive = Archive::parse(&t.bytes).unwrap();
+    let mut found = 0;
+    let entries: Vec<(String, Vec<u8>)> = archive
+        .entries()
+        .iter()
+        .map(|e| {
+            let data = archive.read_entry(e).unwrap();
+            if e.name == name {
+                found += 1;
+                (e.name.clone(), edit(&data))
+            } else {
+                (e.name.clone(), data)
+            }
+        })
+        .collect();
+    assert_eq!(found, 1, "{name}");
+    stored_zip(&entries)
 }
 
 /// Whether a tutorial project holds a file whose name ends with `suffix`.
@@ -286,8 +355,27 @@ pub fn drop_attr(xml: &str, element_start: &str, attr: &str) -> String {
     format!("{}{}", &xml[..a], &xml[b..])
 }
 
-/// What differs between tutorial 3's config and ours written back, apart from the two edits: the
-/// ids and the differences by design.
+/// What differs by design between a tutorial 3 run's config, its ids read through the id map, and
+/// ours from the `.proj` (`docs/formats/config_xml.md`, "Parity with upstream's GUI").
+pub fn tutorial3_by_design() -> Vec<String> {
+    let mut expected = vec![
+        // The GUI's section of the project tree for volumes, which no solver looks up.
+        "other:subdomains: only upstream's".to_string(),
+        // Optional attributes upstream's GUI never writes, written at the solver's default (1).
+        "simulation@save_receivers_intersection: only ours (1)".to_string(),
+        "simulation@save_surface_intersection: only ours (1)".to_string(),
+    ];
+    // Read only for source types 1 and 5; every source here is omni.
+    for i in 0..6 {
+        for a in ["u", "v", "w"] {
+            expected.push(format!("sources/source[{i}]@{a}: only upstream's (1)"));
+        }
+    }
+    expected
+}
+
+/// What differs between a tutorial 3 run's config and ours written back from it (imported with
+/// `config_xml::import_upstream_with_mesh`): the ids and the differences by design.
 pub fn tutorial3_ids_and_by_design() -> Vec<String> {
     let mut expected = vec![
         "other:subdomains: only upstream's".to_string(),
@@ -312,33 +400,6 @@ pub fn tutorial3_ids_and_by_design() -> Vec<String> {
         }
     }
     expected
-}
-
-/// Tutorial 3's config with the two edits a project needs (see
-/// [`tutorial3_config_written_back_is_upstreams_value_for_value`]): material 100 gets reflection
-/// law 0 in every band, and material 101 a 0 dB loss at 125 Hz, like its other absorbing bands.
-pub fn importable(xml: &str) -> String {
-    let xml = one_law(xml);
-    let (a, b) = material_span(&xml, "101");
-    let band = "<bfreq freq=\"125\" absorb=\"1\" diffusion=\"0\" loi=\"0\"/>";
-    assert_eq!(xml[a..b].matches(band).count(), 1, "material 101 at 125 Hz");
-    format!(
-        "{}{}{}",
-        &xml[..a],
-        xml[a..b].replace(
-            band,
-            "<bfreq freq=\"125\" absorb=\"1\" diffusion=\"0\" loi=\"0\" affaiblissement=\"0\"/>"
-        ),
-        &xml[b..]
-    )
-}
-
-/// Tutorial 3's config with the first edit only: material 100 gets reflection law 0 in every band.
-pub fn one_law(xml: &str) -> String {
-    let (a, b) = material_span(xml, "100");
-    let changed = xml[a..b].replace("loi=\"2\"", "loi=\"0\"");
-    assert_ne!(changed, xml[a..b], "material 100 has law 2 somewhere");
-    format!("{}{changed}{}", &xml[..a], &xml[b..])
 }
 
 /// The byte range of `<type_surface id="{id}" ...>` up to its closing tag.

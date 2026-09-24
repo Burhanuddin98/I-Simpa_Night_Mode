@@ -185,12 +185,16 @@ with a tolerance, `bin.h:60-62`.)
 - then each fitting box the user drew: 12 triangles, 3 new vertices each, `idMat` 0, `idRs` -1,
   `idEn` = the box's id (`:783-815`).
 
-**What ours writes.** `config_xml::scene_mesh`: the project's faces in project order, and its
-vertices narrowed to `f32` and then taken through the same round trip in the scene's frame
-(`config_xml::GlFrame`: upstream's `UnitizeVar`, computed with upstream's own `f32` and `f64`
-steps). A project imported from a `.proj` keeps the scene's face order. The mesher's `.poly`
-takes its vertices from it (`mesh::project_input`), as upstream's `_SavePOLY` takes them through
-the same round trip (`Objet3D_maillage.cpp:942`).
+**What ours writes.** `config_xml::scene_mesh`: the room (`config_xml::room_mesh`), the
+project's faces in project order and its vertices narrowed to `f32` and then taken through the
+same round trip in the scene's frame (`config_xml::GlFrame`: upstream's `UnitizeVar`, computed
+with upstream's own `f32` and `f64` steps); then, per enabled box fitting zone, its 12 triangles
+as upstream builds them (`config_xml::upstream_box_triangles`: `BuildModel` in OpenGL
+coordinates, `e_scene_encombrements_encombrement_cuboide.h:113-165`), 3 new vertices each,
+`idMat` 0, `idRs` -1, `idEn` the zone's id. A project imported from a `.proj` keeps the scene's
+face order. The mesher's `.poly` takes its vertices from the room (`mesh::project_input`), as
+upstream's `_SavePOLY` takes them through the same round trip (`Objet3D_maillage.cpp:942`), and
+its markers index the room's faces.
 
 **Measured** (`crates/simpa-core/tests/parity_inputs.rs`, against every run folder stored in
 upstream's tutorials at 929a5c8: tutorial 1's SPPS and TCR runs, tutorial 3's three SPPS runs;
@@ -212,7 +216,8 @@ the layout, the face order and the ids:
 | Input | Result |
 |---|---|
 | `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | **Byte-identical** to upstream's `mesh.cbin`, 1,016 bytes, once our receiver id 0 is written as upstream's 3503 |
-| tutorial 3 (its config, with the two edits of `config_xml.md`'s parity section, and its `.cbin`, imported) | All 76 vertices and 100 faces equal bit for bit, the drawn box's 12 faces included; `idEn` 2083 and 1930 are our 3 and 2 |
+| tutorial 3 (its config and its `.cbin`, imported) | All 76 vertices and 100 faces equal bit for bit, the drawn box's 12 faces included; `idEn` 2083 and 1930 are our 3 and 2 |
+| `tutorial_3.proj` imported, each run's saved project (`parity_tutorials.rs`, `tutorial_3`) | **Byte-identical** to each run's `mesh.cbin`, 3,608 bytes, once upstream's `idEn` 1930 and 2083 are read as our 2 and 3 through the map the import records: the 40 scene vertices and 88 faces, and the box built from its stored corners `ba` (13, 4, 0) and `hc` (18, 1, 1.2) as faces 88 to 99 with their 36 vertices |
 | upstream's own `sceneMesh.bin` of tutorial 3, through `GlFrame` | The run's 40 scene vertices, bit for bit (plain narrowing gives the same 40; a frame one `f32` step off in scale moves 4) |
 
 Each check has its refusal in the same test: one vertex one `f32` step off is reported at every
@@ -281,13 +286,17 @@ coordinates without it.
    list has no such order to follow. They agree unless that one vertex alone sets an extreme of the
    box; then the frame differs, and some coordinates move by about one unit in the last place.
    None of the tutorials is such a case.
-4. **Fitting boxes drawn by the user.** Upstream appends each box's 12 triangles to the `.cbin`;
-   our box zones go to the `.poly` only, and their triangles are plain tetrahedron-to-tetrahedron
-   faces in the `.mbin` (`docs/m5-m6-design.md`, decision 5). A particle crosses both
-   (`CalculationCore.cpp:218, 226` for upstream's fitting faces), and TCR leaves upstream's out of
-   the room's surfaces (`TC_CalculationCore.cpp:13`), where ours has none. That the two are the
-   same physics is not yet shown by a run (decision 5). A zone imported from a `.cbin`, like
-   tutorial 3's drawn box, is a surface zone and keeps its 12 faces.
+4. **Fitting boxes drawn by the user.** Upstream appends each box's 12 triangles to the `.cbin`,
+   and so does ours since 2026-09-24 (above). Our mesher still puts a box's triangles in the
+   `.poly` as 8 welded corners in the facet list (Part 2, not upstream's Part 5 user list) and
+   writes them as plain tetrahedron-to-tetrahedron faces in the `.mbin`, markers -1, so no
+   marker names the `.cbin`'s box faces (`docs/m5-m6-design.md`, decision 5). A particle crosses
+   both (`CalculationCore.cpp:218, 226` for upstream's fitting faces), and TCR leaves the `.cbin`'s
+   box faces, ours as upstream's, out of the room's surfaces: they carry a fitting
+   (`TC_CalculationCore.cpp:11-17`). That the two meshes are the same physics is not yet shown by
+   a run (decision 5). A zone imported from a `.cbin`, like tutorial 3's drawn box through
+   `config_xml::import_upstream_with_mesh`, is a surface zone and keeps its 12 faces; imported
+   from the `.proj`, it is a box.
 
 ## Verification (2026-09-23)
 

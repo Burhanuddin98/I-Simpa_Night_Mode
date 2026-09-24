@@ -407,7 +407,32 @@ fn import_proj_cmd(args: &[&str]) -> ExitCode {
     if let Err(e) = schema::save(&imported.project, Path::new(out)) {
         return fail(&format!("{out}: {e}"));
     }
-    print_summary(&imported.project, a.json)
+    let report = &imported.report;
+    if !a.json {
+        for note in &report.notes {
+            eprintln!("note: {note}");
+        }
+        return print_summary(&imported.project, false);
+    }
+    // The summary, and what the import recorded: upstream's element id of each entity it made
+    // (the explicit id map, `geometry::import::proj`, "Element ids"), and its notes.
+    let mut s = project_summary(&imported.project);
+    s["upstream_ids"] = report
+        .upstream_ids
+        .iter()
+        .map(|u| {
+            serde_json::json!({
+                "kind": u.kind.name(),
+                "config_element": u.kind.config_element(),
+                "name": u.name,
+                "id": u.entity.to_string(),
+                "upstream": u.upstream,
+            })
+        })
+        .collect();
+    s["notes"] = serde_json::json!(report.notes);
+    println!("{s}");
+    ExitCode::SUCCESS
 }
 
 /// `check <model|project> [--unit ..] [--up ..] [--weld ..] [--json]`: exit 0 ok, 3 refused.

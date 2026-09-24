@@ -565,8 +565,11 @@ fn names_are_compared_as_windows_compares_them() {
 fn transmission_and_diffusion_warnings_do_not_block() {
     let mut p = cube();
     p.materials[0].absorption = [0.0, 1.0, 0.2, 0.2, 0.2, 0.2].map(F64::new).to_vec();
-    p.materials[0].transmission_loss_db =
-        Some([10.0, 10.0, 10.0, 10.0, 7.0, 6.0].map(F64::new).to_vec());
+    p.materials[0].transmission_loss_db = Some(
+        [10.0, 10.0, 10.0, 10.0, 7.0, 6.0]
+            .map(|r| Some(F64::new(r)))
+            .to_vec(),
+    );
     let issues = validate::validate(&p);
     // 125 Hz: alpha = 0 cannot transmit. 250 Hz: alpha = 1 with scattering 0.1. 2 kHz: tau =
     // 0.1995 < 0.2 passes; 4 kHz: tau = 0.2512 > 0.2 does not.

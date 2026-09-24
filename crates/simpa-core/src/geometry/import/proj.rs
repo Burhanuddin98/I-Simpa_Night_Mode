@@ -29,15 +29,51 @@
 //!
 //! # Surface groups
 //!
-//! Each face gets the material group (`Scene/donnees/sgroupes/gr`) whose `.finfo` lists it, and
-//! the scene surface receiver (`recepteurss/recepteurs/gr`) whose `.finfo` lists it, if any. Each
-//! distinct (material group, receiver) pair becomes one [`SurfaceGroup`], ordered by material group
-//! then receiver, carrying the material group's name, with ` / <receiver>` appended only when a
-//! receiver splits the material group. A scene receiver covers the groups whose faces it lists.
-//! A face that no material group lists gets upstream's default material (reference material 0,
-//! `data_manager/appconfig.h:122`) in a group named `(no surface group)`, noted in the report. A
-//! face listed by two material groups, or by two receivers, is refused: upstream would let the
-//! last one win, silently.
+//! Each face gets the material group (`Scene/donnees/sgroupes/gr`) whose `.finfo` lists it, the
+//! scene surface receiver (`recepteurss/recepteurs/gr`) whose `.finfo` lists it, if any, and the
+//! scene-fitted zone (`encombrements/encombrement`, element type 54) whose `.finfo` lists it, if
+//! any. Each distinct (material group, receiver, zone) triple becomes one [`SurfaceGroup`], ordered
+//! by material group, then receiver, then zone, carrying the material group's name, with
+//! ` / <receiver>` appended only when receivers split the material group and ` / <zone>` only when
+//! zones do. A scene receiver covers the groups whose faces it lists, and a scene-fitted zone is
+//! the [`FittingShape::Surfaces`] of the groups whose faces it lists. A face that no material group
+//! lists gets upstream's default material (reference material 0, `data_manager/appconfig.h:122`)
+//! in a group named `(no surface group)`, noted in the report. A face listed by two material
+//! groups, two receivers or two zones is refused: upstream would let the last one win, silently.
+//!
+//! # Fitting zones
+//!
+//! Read as upstream's GUI loads them (`tree_scene/e_scene_encombrements.h:56-73`), in file order,
+//! told apart by their element type `eid`: 54 is a scene-fitted zone
+//! (`e_scene_encombrements_encombrement_model.h`), 56 a rectangular one
+//! (`e_scene_encombrements_encombrement_cuboide.h`). Upstream skips any other child silently; this
+//! import refuses it ([`codes::FITTING_TYPE_UNKNOWN`]). Each keeps its name and
+//! `useforcalculation` (as `enabled`: a disabled zone is left out of `config.xml`, the `.cbin` and
+//! the `.poly`, `..._cuboide.h:311, 352`, `..._model.h:148`), and per band `alpha`, `lambda` and
+//! `loi_diff` from its `absorption` rows (see [`read_zone_bands`] for how upstream's loader resets
+//! the diffusion law).
+//! - **A scene-fitted zone** is the faces its own `gr/@facesFile` lists, and its region seed is
+//!   its `volpos`, as upstream seeds it (`Objet3D_maillage.cpp:1002-1036`). Upstream derives a
+//!   seed from the zone's first face when `volpos` is (0, 0, 0); that is not reproduced
+//!   ([`codes::FITTING_INSIDE_POINT_UNSET`]).
+//! - **A rectangular zone** is a [`FittingShape::Box`] over its corners `ba` and `hc`, which
+//!   upstream keeps as typed, not ordered (tutorial 3: `ba` (13, 4, 0), `hc` (18, 1, 1.2)):
+//!   `min` and `max` are their bounds, and `destination` records which bound `hc` takes, which
+//!   upstream's region seed `hc - (hc - ba) * 1e-4` needs (`..._cuboide.h:333-336`). A box
+//!   with no volume is refused ([`codes::FITTING_BOX_EMPTY`]).
+//!
+//! Volumes (`volumes/volume`, element type 86) are refused ([`codes::VOLUMES_UNSUPPORTED`]).
+//!
+//! # Element ids
+//!
+//! Upstream writes its GUI's element ids into `config.xml` (`encombrement@id` 1930,
+//! `recepteur_ponctuel@id` 155, ...). The file holds them as each element's `wxid`: the ids of the
+//! session that saved it, which the runs saved beside it carry (upstream renumbers every element
+//! when it loads a project, `docs/formats/cbin.md`, "What still differs"). A project keeps none,
+//! and export assigns its own (`config_xml`, "Solver ids"). Whether a project should keep
+//! upstream's is Burhan's open decision (1). Until then [`ProjReport::upstream_ids`] records, for
+//! every source, point receiver, surface receiver and fitting zone, the `wxid` beside the entity
+//! it became, so upstream's files and ours are compared through an explicit one-to-one map.
 //!
 //! # Everything else
 //!
@@ -45,10 +81,13 @@
 //! widened with [`widen_f32`]:
 //!
 //! - **Materials:** every material of the project's own database (`bdd/materiaux`) with its name,
-//!   colour, side and per-band absorption, scattering, law and transmission loss (written only
-//!   where `transmission` is on, `e_data_row_materiau.h`), pinned to its `idmateriau`; then each
-//!   reference material a group uses, from upstream's reference database (`REFERENCE_MATERIALS`).
-//!   A group whose `idmat` is in neither is refused.
+//!   colour, side and per-band absorption, scattering, reflection law ([`ReflectionLaws`]) and
+//!   transmission loss (per band, only where that band's `transmission` is on: upstream writes
+//!   `affaiblissement` only there, `e_data_row_materiau.h:98-106`), pinned to its `idmateriau`;
+//!   then each reference material a group uses, from upstream's reference database
+//!   (`REFERENCE_MATERIALS`). A group whose `idmat` is in neither is refused. A law outside
+//!   upstream's seven (`appconfig.cpp:110-117`) is refused
+//!   ([`codes::REFLECTION_LAW_OUT_OF_RANGE`]).
 //! - **Spectra** (source power, receiver background noise): upstream writes each band as the
 //!   chosen spectrum's band level plus the user's global level `Lw` (normalised so the reference
 //!   sums to `Lw`), minus the band's attenuation (`E_Property_Freq::LoadLwFromBdd`); the band
@@ -56,29 +95,38 @@
 //!   (tutorial 1's receivers store 0 dB per band and write -6.86 dB at 20 kHz). Reference
 //!   spectrum `White noise` with no attenuation becomes a white [`Spectrum`] at `Lw`, `Pink
 //!   noise` a pink one; anything else a custom one with those relative levels.
-//! - **Sources, point receivers** with their `<position>` children, directions, delays and enable
-//!   flags; **cutting-plane receivers** from `verta`, `vertb`, `vertc` and `resolution`.
+//! - **Sources**, in file order through any nesting of source groups (a `sources` element of type
+//!   15 inside the list), as upstream's GUI loads them (`e_scene_sources.h:73-87`) and writes them,
+//!   a group's sources in place of the group (`e_scene_sources.h:190-201`); a child of any other
+//!   type is refused ([`codes::SOURCE_GROUP_MALFORMED`]). **Point receivers.** Both with their
+//!   `<position>` children, directions, delays and enable flags; **cutting-plane receivers** from
+//!   `verta`, `vertb`, `vertc` and `resolution`.
 //! - **Environment** from `atmoconfig`; **SPPS** and **TCR** settings and computed bands from
 //!   `Core/spps` and `Core/tc`; **meshing** from `Core/spps/mesh_conf`. A property the file lacks
 //!   keeps upstream's GUI default, as upstream's GUI does when it loads such a file; each one is
 //!   noted in the report.
 //!
-//! Refused with [`ImportError::Unsupported`], by name: fitting zones and volumes, directivity
-//! balloons, user-defined TetGen parameters, and additional TetGen parameters other than `-Y`.
+//! Refused with [`ImportError::Unsupported`], by name: directivity balloons, user-defined TetGen
+//! parameters, and additional TetGen parameters other than `-Y`. Refused with its own code
+//! ([`ImportError::Refused`], [`codes`]): what upstream would skip silently or take in a way this
+//! import does not reproduce, each listed in `docs/solver-contract.md`, "Importing an upstream
+//! project".
 
 use std::path::Path;
 
 use roxmltree::{Document, Node};
+use uuid::Uuid;
 
 use super::appconst::{reference_material, reference_spectrum};
 use super::zip::Archive;
 use super::{IdSource, ImportError, Result, default_material, read_bytes, weld_key};
 use crate::config_xml::widen_f32;
 use crate::schema::{
-    AirAbsorption, AttenuationUnit, BandKind, BandSet, ComputationMethod, Directivity, Environment,
-    F64, Face, Geometry, GroupId, Material, MaterialId, MeshSettings, PointReceiver,
-    PointReceiverId, Project, ProjectId, ReflectionLaw, Rgb, SolverSettings, SoundMapQuantity,
-    Source, SourceId, Spectrum, SpectrumShape, SurfaceGroup, SurfaceReceiver, SurfaceReceiverId,
+    AirAbsorption, AttenuationUnit, BandKind, BandSet, BoxBound, ComputationMethod, DiffusionLaw,
+    Directivity, Environment, F64, Face, FittingShape, FittingZone, FittingZoneId, Geometry,
+    GroupId, Material, MaterialId, MeshSettings, PointReceiver, PointReceiverId, Project,
+    ProjectId, ReflectionLaw, ReflectionLaws, Rgb, SolverSettings, SoundMapQuantity, Source,
+    SourceId, Spectrum, SpectrumShape, SurfaceGroup, SurfaceReceiver, SurfaceReceiverId,
     SurfaceReceiverShape, TcrSettings, Vec3,
 };
 
@@ -89,6 +137,57 @@ const FMT_XML: &str = "projet_config.xml";
 
 /// The element type upstream gives its reference spectra (`typespectre`).
 const APP_SPECTRUM_TYPE: i64 = 45;
+
+/// Upstream's element types (`data_manager/element.h:97-206`, numbered from 0; `PROPERTY_FREQ`
+/// is pinned at 49, `:145`) that this import tells apart by `eid`.
+mod eid {
+    /// `ELEMENT_TYPE_SCENE_SOURCES`: the source list, and a source group inside it.
+    pub const SOURCES: i64 = 15;
+    /// `ELEMENT_TYPE_SCENE_SOURCES_SOURCE`.
+    pub const SOURCE: i64 = 16;
+    /// `ELEMENT_TYPE_ROW`: one band of a fitting zone's `absorption`.
+    pub const ROW: i64 = 50;
+    /// `ELEMENT_TYPE_ROW_MATERIAU`: one band of a material.
+    pub const ROW_MATERIAU: i64 = 52;
+    /// `ELEMENT_TYPE_SCENE_ENCOMBREMENTS_ENCOMBREMENT`: a scene-fitted zone.
+    pub const FITTING_MODEL: i64 = 54;
+    /// `ELEMENT_TYPE_SCENE_ENCOMBREMENTS_ENCOMBREMENT_CUBOIDE`: a rectangular zone.
+    pub const FITTING_BOX: i64 = 56;
+}
+
+/// The reasons this import refuses a project with, each its own stable code
+/// ([`ImportError::Refused`], [`ImportError::code`]). `docs/solver-contract.md` lists each once,
+/// under "Importing an upstream project".
+pub mod codes {
+    /// A child of `encombrements` whose element type is neither a scene-fitted zone (54) nor a
+    /// rectangular one (56), or has none. Upstream's GUI skips it silently
+    /// (`e_scene_encombrements.h:56-73`).
+    pub const FITTING_TYPE_UNKNOWN: &str = "proj_fitting_type_unknown";
+    /// A scene-fitted zone whose inside point `volpos` is missing or (0, 0, 0). Upstream then
+    /// derives a seed from the zone's first face (`Objet3D_maillage.cpp:1017-1030`), which this
+    /// import does not reproduce.
+    pub const FITTING_INSIDE_POINT_UNSET: &str = "proj_fitting_inside_point_unset";
+    /// A rectangular zone whose corners `ba` and `hc` share a coordinate: it has no volume.
+    /// Upstream builds no triangles for equal corners and flat ones for a shared coordinate
+    /// (`e_scene_encombrements_encombrement_cuboide.h:113-165`), and still seeds a region at `hc`.
+    pub const FITTING_BOX_EMPTY: &str = "proj_fitting_box_empty";
+    /// A face listed by two fitting zones. Upstream would give it the last one's id, silently
+    /// (`appconfig.cpp:174-200`).
+    pub const FACE_IN_TWO_FITTING_ZONES: &str = "proj_face_in_two_fitting_zones";
+    /// A fitting zone's diffusion law (`loi_diff`) that SPPS has no case for (0 to 2,
+    /// `coreTypes.h:108-113`), in a band upstream's loader keeps as stored.
+    pub const DIFFUSION_LAW_OUT_OF_RANGE: &str = "proj_diffusion_law_out_of_range";
+    /// A material's reflection law (`loi`) in some band that is none of upstream's seven (0 to 6,
+    /// `appconfig.cpp:110-117`).
+    pub const REFLECTION_LAW_OUT_OF_RANGE: &str = "proj_reflection_law_out_of_range";
+    /// A child of the source list or of a source group that is neither a source (16) nor a
+    /// source group (15), or has no element type. Upstream's GUI skips it silently
+    /// (`e_scene_sources.h:73-87`).
+    pub const SOURCE_GROUP_MALFORMED: &str = "proj_source_group_malformed";
+    /// Volumes (`volumes/volume`): TetGen regions with their own seed and volume bound
+    /// (`e_scene_volumes_volume.h:168-188`), which a project does not hold.
+    pub const VOLUMES_UNSUPPORTED: &str = "proj_volumes_unsupported";
+}
 
 /// A `.proj` imported: the project, and what the import did.
 #[derive(Clone, Debug)]
@@ -117,8 +216,58 @@ pub struct ProjReport {
     pub faces: usize,
     /// Faces per material group of the file, in its order: (name, `idmat`, faces).
     pub material_groups: Vec<(String, u32, usize)>,
+    /// Upstream's element id of every source, point receiver, surface receiver and fitting zone
+    /// this import made, in project order within each kind (see the module docs, "Element ids").
+    pub upstream_ids: Vec<UpstreamId>,
     /// Anything else worth knowing, one sentence each.
     pub notes: Vec<String>,
+}
+
+/// One entity of an imported project and the element id upstream's GUI gave it (`wxid`), which
+/// upstream writes into `config.xml` as the entity's `@id`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpstreamId {
+    pub kind: UpstreamKind,
+    /// The entity's id in the project.
+    pub entity: Uuid,
+    pub name: String,
+    /// Upstream's element id.
+    pub upstream: i64,
+}
+
+/// The kinds of entity [`UpstreamId`] records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum UpstreamKind {
+    Source,
+    PointReceiver,
+    /// A scene surface receiver.
+    SurfaceReceiver,
+    /// A cutting-plane surface receiver.
+    CuttingPlane,
+    FittingZone,
+}
+
+impl UpstreamKind {
+    /// The `config.xml` element that carries this kind's id.
+    pub fn config_element(self) -> &'static str {
+        match self {
+            UpstreamKind::Source => "source",
+            UpstreamKind::PointReceiver => "recepteur_ponctuel",
+            UpstreamKind::SurfaceReceiver => "recepteur_surfacique",
+            UpstreamKind::CuttingPlane => "recepteur_surfacique_coupe",
+            UpstreamKind::FittingZone => "encombrement",
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            UpstreamKind::Source => "source",
+            UpstreamKind::PointReceiver => "point receiver",
+            UpstreamKind::SurfaceReceiver => "surface receiver",
+            UpstreamKind::CuttingPlane => "cutting plane",
+            UpstreamKind::FittingZone => "fitting zone",
+        }
+    }
 }
 
 /// Reads a `.proj` file.
@@ -128,6 +277,19 @@ pub fn import_proj_file(path: &Path) -> Result<ProjImport> {
 
 /// Reads a `.proj` archive held in memory. See the module docs.
 pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
+    import(bytes, None)
+}
+
+/// Reads a `.proj` archive with another element tree in place of its own `projet_config.xml`:
+/// the scene, face lists and databases the archive holds, with `projet_config` as the project.
+/// Upstream's GUI saves the project it ran beside each run (`report/<core>/<run>/projet_config.xml`),
+/// so this reads a run's project as it was when upstream wrote that run's inputs (tutorial 3's
+/// three runs differ in `nbparticules` and `trans_calc`).
+pub fn import_proj_with_config(bytes: &[u8], projet_config: &[u8]) -> Result<ProjImport> {
+    import(bytes, Some(projet_config))
+}
+
+fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     let archive = Archive::parse(bytes)?;
     // The project folder: the one `projet_config.xml` directly inside a top-level folder (or at
     // the root). Copies under report/ are snapshots of past runs.
@@ -164,7 +326,10 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
         ..ProjReport::default()
     };
 
-    let xml_bytes = archive.read(&config_name)?;
+    let xml_bytes = match projet_config {
+        Some(b) => b.to_vec(),
+        None => archive.read(&config_name)?,
+    };
     let xml_text = match std::str::from_utf8(&xml_bytes) {
         Ok(t) => t.to_string(),
         Err(_) => {
@@ -279,12 +444,12 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
         report.material_groups.push((name.clone(), *idmat, count));
     }
 
-    // Surface receivers.
+    // Surface receivers, with upstream's element id.
     enum Rs {
         Scene { name: String, enabled: bool },
         Plane(SurfaceReceiverShape, String, bool),
     }
-    let mut receivers: Vec<Rs> = Vec::new();
+    let mut receivers: Vec<(Rs, Option<i64>)> = Vec::new();
     let mut face_receiver: Vec<Option<usize>> = vec![None; n_faces];
     if let Some(list) = opt_child(data, "recepteurss") {
         for r in list.children().filter(|c| c.is_element()) {
@@ -326,7 +491,7 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
                             }
                         }
                     }
-                    receivers.push(Rs::Scene { name, enabled });
+                    receivers.push((Rs::Scene { name, enabled }, element_id(r)));
                 }
                 "recepteurscoupe" => {
                     let a = position(r, "verta", &what)?;
@@ -341,15 +506,18 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
                             ));
                         }
                     };
-                    receivers.push(Rs::Plane(
-                        SurfaceReceiverShape::CuttingPlane {
-                            a,
-                            b,
-                            c,
-                            resolution_m: F64::new(resolution),
-                        },
-                        name,
-                        enabled,
+                    receivers.push((
+                        Rs::Plane(
+                            SurfaceReceiverShape::CuttingPlane {
+                                a,
+                                b,
+                                c,
+                                resolution_m: F64::new(resolution),
+                            },
+                            name,
+                            enabled,
+                        ),
+                        element_id(r),
                     ));
                 }
                 other => {
@@ -362,30 +530,62 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
         }
     }
 
-    // Fitting zones and volumes are not read.
-    for tag in ["encombrements", "volumes"] {
-        if let Some(list) = opt_child(data, tag)
-            && let Some(first) = list.children().find(|c| c.is_element())
-        {
-            return Err(ImportError::unsupported(
-                FMT_PROJ,
-                format!(
-                    "{} `{}`: fitting zones and volumes are not imported from a .proj",
-                    first.tag_name().name(),
-                    first.attribute("name").unwrap_or("")
-                ),
-            ));
+    // Bands: upstream's GUI always holds all 27 third-octave bands.
+    let bands = BandSet::range(BandKind::ThirdOctave, 50, 20_000).expect("nominal range");
+    let n = bands.len();
+
+    // Fitting zones, and the faces each scene-fitted zone lists.
+    let mut zones: Vec<ZoneIn> = Vec::new();
+    let mut face_zone: Vec<Option<usize>> = vec![None; n_faces];
+    if let Some(list) = opt_child(data, "encombrements") {
+        let files = ZoneFiles {
+            archive: &archive,
+            folder: &folder,
+            mesh: &mesh,
+            group_start: &group_start,
+        };
+        for z in list.children().filter(|c| c.is_element()) {
+            let k = zones.len();
+            let zone = read_zone(z, &files, &bands, &mut digest_parts, &mut report.notes)?;
+            if let ZoneKind::Model { faces, .. } = &zone.kind {
+                for &f in faces {
+                    if let Some(prev) = face_zone[f].replace(k)
+                        && prev != k
+                    {
+                        return Err(ImportError::refused(
+                            FMT_PROJ,
+                            codes::FACE_IN_TWO_FITTING_ZONES,
+                            format!(
+                                "face {f} is in two fitting zones, `{}` and `{}`; upstream would \
+                                 give it the last one's id, silently (appconfig.cpp:174-200)",
+                                zones[prev].name, zone.name
+                            ),
+                        ));
+                    }
+                }
+            }
+            zones.push(zone);
         }
+    }
+    // Volumes are not read.
+    if let Some(list) = opt_child(data, "volumes")
+        && let Some(first) = list.children().find(|c| c.is_element())
+    {
+        return Err(ImportError::refused(
+            FMT_XML,
+            codes::VOLUMES_UNSUPPORTED,
+            format!(
+                "volume `{}`: volumes are TetGen regions with their own seed and volume bound \
+                 (e_scene_volumes_volume.h:168-188), which a project does not hold",
+                first.attribute("name").unwrap_or("")
+            ),
+        ));
     }
 
     let digest_refs: Vec<&[u8]> = digest_parts.iter().map(Vec::as_slice).collect();
     let mut all_parts: Vec<&[u8]> = vec![b"upstream proj"];
     all_parts.extend(digest_refs);
     let ids = IdSource::from_parts(&all_parts);
-
-    // Bands: upstream's GUI always holds all 27 third-octave bands.
-    let bands = BandSet::range(BandKind::ThirdOctave, 50, 20_000).expect("nominal range");
-    let n = bands.len();
 
     // Materials: the project's own database, then the reference materials groups use.
     let mut materials: Vec<Material> = Vec::new();
@@ -430,22 +630,25 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
         Ok(materials[index].id)
     };
 
-    // Surface groups: one per (material group, scene receiver) pair.
+    // Surface groups: one per (material group, scene receiver, scene-fitted zone) triple.
     const NONE: usize = usize::MAX;
-    let mut keys: Vec<(usize, usize)> = (0..n_faces)
-        .map(|f| {
-            (
-                face_group[f].unwrap_or(NONE),
-                face_receiver[f].unwrap_or(NONE),
-            )
-        })
-        .collect();
-    keys.sort_unstable_by_key(|&(g, r)| (g, r.wrapping_add(1)));
+    let key_of = |f: usize| {
+        (
+            face_group[f].unwrap_or(NONE),
+            face_receiver[f].unwrap_or(NONE),
+            face_zone[f].unwrap_or(NONE),
+        )
+    };
+    // "None" sorts first: NONE + 1 wraps to 0.
+    let order = |&(g, r, z): &(usize, usize, usize)| (g, r.wrapping_add(1), z.wrapping_add(1));
+    let mut keys: Vec<(usize, usize, usize)> = (0..n_faces).map(key_of).collect();
+    keys.sort_unstable_by_key(order);
     keys.dedup();
     let mut surface_groups: Vec<SurfaceGroup> = Vec::with_capacity(keys.len());
     let unassigned = face_group.iter().filter(|g| g.is_none()).count();
-    for (i, &(g, r)) in keys.iter().enumerate() {
-        let split = keys.iter().filter(|k| k.0 == g).count() > 1;
+    for (i, &(g, r, z)) in keys.iter().enumerate() {
+        let split_by_receiver = keys.iter().any(|k| k.0 == g && k.1 != r);
+        let split_by_zone = keys.iter().any(|k| k.0 == g && k.2 != z);
         let (base, material) = if g == NONE {
             (
                 "(no surface group)".to_string(),
@@ -457,10 +660,13 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
                 material_for(groups_in[g].1, &mut materials)?,
             )
         };
-        let name = match (&receivers.get(r), split) {
-            (Some(Rs::Scene { name, .. }), true) => format!("{base} / {name}"),
-            _ => base,
-        };
+        let mut name = base;
+        if split_by_receiver && let Some((Rs::Scene { name: receiver, .. }, _)) = receivers.get(r) {
+            name = format!("{name} / {receiver}");
+        }
+        if split_by_zone && let Some(zone) = zones.get(z) {
+            name = format!("{name} / {}", zone.name);
+        }
         surface_groups.push(SurfaceGroup {
             id: GroupId(ids.uuid("surface group", i)),
             name,
@@ -474,14 +680,8 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
         ));
     }
     let key_group = |f: usize| -> GroupId {
-        let key = (
-            face_group[f].unwrap_or(NONE),
-            face_receiver[f].unwrap_or(NONE),
-        );
         let i = keys
-            .binary_search_by_key(&(key.0, key.1.wrapping_add(1)), |&(g, r)| {
-                (g, r.wrapping_add(1))
-            })
+            .binary_search_by_key(&order(&key_of(f)), order)
             .expect("every face's key is listed");
         surface_groups[i].id
     };
@@ -522,23 +722,25 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
             })
             .collect(),
     };
+    let groups_where = |keep: &dyn Fn(&(usize, usize, usize)) -> bool| -> Vec<GroupId> {
+        keys.iter()
+            .zip(&surface_groups)
+            .filter(|(key, _)| keep(key))
+            .map(|(_, g)| g.id)
+            .collect()
+    };
 
     // Surface receivers.
     let mut surface_receivers = Vec::with_capacity(receivers.len());
-    for (k, r) in receivers.into_iter().enumerate() {
+    for (k, (r, wxid)) in receivers.into_iter().enumerate() {
         let id = SurfaceReceiverId(ids.uuid("surface receiver", k));
-        surface_receivers.push(match r {
+        let receiver = match r {
             Rs::Scene { name, enabled } => SurfaceReceiver {
                 id,
                 name,
                 enabled,
                 shape: SurfaceReceiverShape::Scene {
-                    groups: keys
-                        .iter()
-                        .zip(&surface_groups)
-                        .filter(|(key, _)| key.1 == k)
-                        .map(|(_, g)| g.id)
-                        .collect(),
+                    groups: groups_where(&|key| key.1 == k),
                 },
             },
             Rs::Plane(shape, name, enabled) => SurfaceReceiver {
@@ -547,21 +749,67 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
                 enabled,
                 shape,
             },
+        };
+        if let Some(upstream) = wxid {
+            report.upstream_ids.push(UpstreamId {
+                kind: match receiver.shape {
+                    SurfaceReceiverShape::Scene { .. } => UpstreamKind::SurfaceReceiver,
+                    SurfaceReceiverShape::CuttingPlane { .. } => UpstreamKind::CuttingPlane,
+                },
+                entity: id.0,
+                name: receiver.name.clone(),
+                upstream,
+            });
+        }
+        surface_receivers.push(receiver);
+    }
+
+    // Fitting zones.
+    let mut fitting_zones = Vec::with_capacity(zones.len());
+    for (k, z) in zones.into_iter().enumerate() {
+        let id = FittingZoneId(ids.uuid("fitting zone", k));
+        let shape = match z.kind {
+            ZoneKind::Model { inside_point, .. } => FittingShape::Surfaces {
+                groups: groups_where(&|key| key.2 == k),
+                inside_point,
+            },
+            ZoneKind::Box { ba, hc } => box_shape(ba, hc),
+        };
+        if let Some(upstream) = z.wxid {
+            report.upstream_ids.push(UpstreamId {
+                kind: UpstreamKind::FittingZone,
+                entity: id.0,
+                name: z.name.clone(),
+                upstream,
+            });
+        }
+        fitting_zones.push(FittingZone {
+            id,
+            name: z.name,
+            enabled: z.enabled,
+            shape,
+            absorption: z.bands.absorption,
+            mean_free_path_m: z.bands.mean_free_path_m,
+            diffusion_law: z.bands.diffusion_law,
         });
     }
 
-    // Sources and point receivers.
+    // Sources, through any nesting of source groups, and point receivers.
     let mut sources = Vec::new();
     if let Some(list) = opt_child(data, "sources") {
-        for s in list.children().filter(|c| c.is_element()) {
-            if !(s.has_tag_name("source") || s.has_tag_name("sources")) {
-                return Err(ImportError::unsupported(
-                    FMT_XML,
-                    format!("<{}> in the sound sources", s.tag_name().name()),
-                ));
-            }
+        for (s, group) in source_elements(list)? {
             let index = sources.len();
-            sources.push(read_source(s, &bands, SourceId(ids.uuid("source", index)))?);
+            let id = SourceId(ids.uuid("source", index));
+            let source = read_source(s, &bands, id).map_err(|e| in_group(e, &group))?;
+            if let Some(upstream) = element_id(s) {
+                report.upstream_ids.push(UpstreamId {
+                    kind: UpstreamKind::Source,
+                    entity: id.0,
+                    name: source.name.clone(),
+                    upstream,
+                });
+            }
+            sources.push(source);
         }
     }
     let mut point_receivers = Vec::new();
@@ -574,11 +822,20 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
                 ));
             }
             let index = point_receivers.len();
-            point_receivers.push(read_point_receiver(
+            let receiver = read_point_receiver(
                 r,
                 &bands,
                 PointReceiverId(ids.uuid("point receiver", index)),
-            )?);
+            )?;
+            if let Some(upstream) = element_id(r) {
+                report.upstream_ids.push(UpstreamId {
+                    kind: UpstreamKind::PointReceiver,
+                    entity: receiver.id.0,
+                    name: receiver.name.clone(),
+                    upstream,
+                });
+            }
+            point_receivers.push(receiver);
         }
     }
 
@@ -625,7 +882,7 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
         sources,
         point_receivers,
         surface_receivers,
-        fitting_zones: Vec::new(),
+        fitting_zones,
         environment,
         solvers,
         variants: Vec::new(),
@@ -634,6 +891,431 @@ pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
     };
     project.check_integrity().map_err(ImportError::Integrity)?;
     Ok(ProjImport { project, report })
+}
+
+// ---------------------------------------------------------------------------------------------
+// Element types and ids.
+
+/// An element's type, `@eid`, as upstream's loaders read it.
+fn element_type(node: Node<'_, '_>) -> Option<i64> {
+    node.attribute("eid")
+        .and_then(|v| v.trim().parse::<i64>().ok())
+}
+
+/// An element's id in upstream's GUI, `@wxid`: what it writes as the entity's `@id` in
+/// `config.xml`.
+fn element_id(node: Node<'_, '_>) -> Option<i64> {
+    node.attribute("wxid")
+        .and_then(|v| v.trim().parse::<i64>().ok())
+}
+
+// ---------------------------------------------------------------------------------------------
+// Sources and source groups.
+
+/// Every source element of the source list `list`, in file order through any nesting of source
+/// groups, with the path of the groups it sits in (`Milling Machine`, or empty at the top level).
+/// Upstream's GUI loads a child of type 16 as a source and one of type 15 as a group, whose
+/// children it reads the same way (`e_scene_sources.h:73-87`); on writing, a group writes each of
+/// its sources in its place (`Element::SaveXMLCoreDoc`, `element.cpp:635-644`; the group's own
+/// `SaveXMLCoreDoc`, `e_scene_sources.h:190-201`), so the file order is the order upstream writes
+/// (newest first, as every list, `config_xml`). Any other child is refused, where upstream skips it
+/// silently: [`codes::SOURCE_GROUP_MALFORMED`]. Walked with an explicit stack, so no nesting depth
+/// can overflow the call stack.
+fn source_elements<'a, 'i>(list: Node<'a, 'i>) -> Result<Vec<(Node<'a, 'i>, String)>> {
+    let mut out = Vec::new();
+    let children = |n: Node<'a, 'i>| n.children().filter(|c| c.is_element()).collect::<Vec<_>>();
+    let mut stack: Vec<(Node<'a, 'i>, String)> = children(list)
+        .into_iter()
+        .rev()
+        .map(|c| (c, String::new()))
+        .collect();
+    while let Some((node, group)) = stack.pop() {
+        let name = node.attribute("name").unwrap_or("");
+        match element_type(node) {
+            Some(eid::SOURCE) => out.push((node, group)),
+            Some(eid::SOURCES) => {
+                let path = if group.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{group} / {name}")
+                };
+                for c in children(node).into_iter().rev() {
+                    stack.push((c, path.clone()));
+                }
+            }
+            other => {
+                let place = if group.is_empty() {
+                    "the sound sources".to_string()
+                } else {
+                    format!("source group `{group}`")
+                };
+                let what = match other {
+                    Some(t) => format!("element type {t}"),
+                    None => "no element type (eid)".to_string(),
+                };
+                return Err(ImportError::refused(
+                    FMT_XML,
+                    codes::SOURCE_GROUP_MALFORMED,
+                    format!(
+                        "<{} name=\"{name}\"> in {place} has {what}: it is neither a source (16) \
+                         nor a source group (15), and upstream's GUI would skip it silently \
+                         (e_scene_sources.h:73-87)",
+                        node.tag_name().name()
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// A source's error, naming the group the source sits in.
+fn in_group(e: ImportError, group: &str) -> ImportError {
+    if group.is_empty() {
+        return e;
+    }
+    match e {
+        ImportError::Invalid { format, message } => ImportError::Invalid {
+            format,
+            message: format!("source group `{group}`: {message}"),
+        },
+        ImportError::Unsupported { format, message } => ImportError::Unsupported {
+            format,
+            message: format!("source group `{group}`: {message}"),
+        },
+        other => other,
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Fitting zones.
+
+/// A fitting zone as the project file holds it (see the module docs).
+struct ZoneIn {
+    name: String,
+    wxid: Option<i64>,
+    enabled: bool,
+    kind: ZoneKind,
+    bands: ZoneBands,
+}
+
+enum ZoneKind {
+    /// Element type 54: the faces its own face list names, and its `volpos`.
+    Model {
+        faces: Vec<usize>,
+        inside_point: Vec3,
+    },
+    /// Element type 56: its corners `ba` and `hc`, as stored.
+    Box { ba: Vec3, hc: Vec3 },
+}
+
+/// A fitting zone's per-band values.
+struct ZoneBands {
+    absorption: Vec<F64>,
+    mean_free_path_m: Vec<F64>,
+    diffusion_law: Vec<DiffusionLaw>,
+}
+
+/// What a scene-fitted zone's face list is read from.
+struct ZoneFiles<'r, 'a> {
+    archive: &'r Archive<'a>,
+    folder: &'r str,
+    mesh: &'r SceneMesh,
+    group_start: &'r [usize],
+}
+
+/// One child of `encombrements` (see the module docs).
+fn read_zone(
+    z: Node<'_, '_>,
+    files: &ZoneFiles<'_, '_>,
+    bands: &BandSet,
+    digest_parts: &mut Vec<Vec<u8>>,
+    notes: &mut Vec<String>,
+) -> Result<ZoneIn> {
+    let name = z.attribute("name").unwrap_or("").to_string();
+    let what = format!("fitting zone `{name}`");
+    let is_model = match element_type(z) {
+        Some(eid::FITTING_MODEL) => true,
+        Some(eid::FITTING_BOX) => false,
+        other => {
+            let found = match other {
+                Some(t) => format!("element type {t}"),
+                None => "no element type (eid)".to_string(),
+            };
+            return Err(ImportError::refused(
+                FMT_XML,
+                codes::FITTING_TYPE_UNKNOWN,
+                format!(
+                    "<{}> `{name}` in the fitting zones has {found}: it is neither a scene-fitted \
+                     zone (54) nor a rectangular one (56), and upstream's GUI would skip it \
+                     silently (e_scene_encombrements.h:56-73)",
+                    z.tag_name().name()
+                ),
+            ));
+        }
+    };
+    // `useforcalculation`, read through `GetBoolConfig`, which gives false for a missing
+    // property (`element.cpp:1300-1314`); a missing `prop` element would crash upstream's GUI,
+    // which looks the property up on it unchecked (`..._cuboide.h:311`, `..._model.h:148`).
+    let props = opt_child(z, "prop")
+        .ok_or_else(|| ImportError::invalid(FMT_XML, format!("{what} has no properties (prop)")))?;
+    let enabled = match opt_prop_bool(props, "useforcalculation", &what)? {
+        Some(on) => on,
+        None => {
+            notes.push(format!(
+                "{what} has no `useforcalculation`: upstream reads that as off, so the zone is \
+                 disabled"
+            ));
+            false
+        }
+    };
+    let zone_bands = read_zone_bands(z, bands, &what, notes)?;
+    let kind = if is_model {
+        let faces = match z.children().find(|c| c.has_tag_name("gr")) {
+            Some(gr) => match finfo_faces(
+                files.archive,
+                files.folder,
+                gr,
+                files.mesh,
+                files.group_start,
+                &what,
+            )? {
+                Some((faces, bytes)) => {
+                    digest_parts.push(bytes);
+                    faces
+                }
+                None => {
+                    notes.push(format!(
+                        "{what}: its face list is not in the archive, so it lists no face (as \
+                         upstream reads it)"
+                    ));
+                    Vec::new()
+                }
+            },
+            None => {
+                notes.push(format!("{what} has no face list: it lists no face"));
+                Vec::new()
+            }
+        };
+        // Upstream's GUI gives a zone without `volpos` one at (0, 0, 0)
+        // (`..._model.h:104-108`), and replaces (0, 0, 0) by a point it derives from the zone's
+        // first face whenever the zone has one (`Objet3D_maillage.cpp:1011-1031`).
+        let has_volpos = z
+            .children()
+            .any(|c| c.has_tag_name("position") && c.attribute("name") == Some("volpos"));
+        let inside_point = if has_volpos {
+            position(z, "volpos", &what)?
+        } else {
+            Vec3::ZERO
+        };
+        if inside_point.to_array() == [0.0; 3] && !faces.is_empty() {
+            return Err(ImportError::refused(
+                FMT_XML,
+                codes::FITTING_INSIDE_POINT_UNSET,
+                format!(
+                    "{what} has {}: upstream seeds its region at a point derived from its first \
+                     face in its OpenGL frame (Objet3D_maillage.cpp:1011-1031), which this \
+                     import does not reproduce; set the zone's inside position",
+                    if has_volpos {
+                        "the inside position (0, 0, 0)"
+                    } else {
+                        "no inside position (volpos)"
+                    }
+                ),
+            ));
+        }
+        if faces.is_empty() {
+            notes.push(format!(
+                "{what} lists no face: upstream still seeds a region at its inside position"
+            ));
+        }
+        ZoneKind::Model {
+            faces,
+            inside_point,
+        }
+    } else {
+        let ba = position(z, "ba", &what)?;
+        let hc = position(z, "hc", &what)?;
+        let (a, c) = (ba.to_array(), hc.to_array());
+        if let Some(axis) = (0..3).find(|&k| a[k] == c[k]) {
+            return Err(ImportError::refused(
+                FMT_XML,
+                codes::FITTING_BOX_EMPTY,
+                format!(
+                    "{what}: its corners ba {a:?} and hc {c:?} share the {} coordinate, so it has \
+                     no volume; upstream would still seed a region at hc \
+                     (e_scene_encombrements_encombrement_cuboide.h:113-165, 333-336)",
+                    ["x", "y", "z"][axis]
+                ),
+            ));
+        }
+        ZoneKind::Box { ba, hc }
+    };
+    Ok(ZoneIn {
+        name,
+        wxid: element_id(z),
+        enabled,
+        kind,
+        bands: zone_bands,
+    })
+}
+
+/// A rectangular zone's shape: its bounds, and which bound `hc` takes on each axis (`None` when
+/// `hc` is the upper corner, as for a box drawn here).
+fn box_shape(ba: Vec3, hc: Vec3) -> FittingShape {
+    let (a, c) = (ba.to_array(), hc.to_array());
+    let bound = |k: usize| {
+        if c[k] > a[k] {
+            BoxBound::Max
+        } else {
+            BoxBound::Min
+        }
+    };
+    let destination = [bound(0), bound(1), bound(2)];
+    FittingShape::Box {
+        min: Vec3::from([0, 1, 2].map(|k| a[k].min(c[k]))),
+        max: Vec3::from([0, 1, 2].map(|k| a[k].max(c[k]))),
+        destination: (destination != [BoxBound::Max; 3]).then_some(destination),
+    }
+}
+
+/// A fitting zone's `absorption` rows: per band `alpha`, `lambda` and `loi_diff`, as upstream
+/// writes them (`E_GammeAbsorption::SaveXMLCoreDoc`, `generic_element/e_gammeabsorption.cpp:
+/// 76-87`; the `Average` row, `moyenne`, is not written).
+///
+/// **The diffusion law as upstream's loader leaves it.** Loading a zone, upstream's GUI walks its
+/// rows in order and replaces the `loi_diff` list of each by a new one set to 0 ("Uniform
+/// reflection"), until it meets a row whose list already has at least two entries, the first
+/// labelled "Uniform reflection"; that row and every later one keep their value
+/// (`e_gammeabsorption.cpp:43-59`). A list is read from the file in document order
+/// (`e_data_list.h:52-82`), and upstream saves every list newest entry first
+/// (`e_data_list.h:160-167`, `wxXmlNode` puts a new child first), so a list upstream saved starts
+/// with "Lambert reflection" and is replaced on every load: every zone of every project upstream
+/// saved is written with law 0 in every band. This import does the same, and notes each stored
+/// law it resets. A band with no `loi_diff` gets 0, the value SPPS reads for the missing
+/// attribute. A law kept as stored must be one SPPS has a case for, 0 to 2
+/// ([`codes::DIFFUSION_LAW_OUT_OF_RANGE`]).
+fn read_zone_bands(
+    z: Node<'_, '_>,
+    bands: &BandSet,
+    what: &str,
+    notes: &mut Vec<String>,
+) -> Result<ZoneBands> {
+    let rows = opt_child(z, "absorption").ok_or_else(|| {
+        ImportError::invalid(
+            FMT_XML,
+            format!("{what} has no acoustic parameters (absorption)"),
+        )
+    })?;
+    let n = bands.len();
+    let mut alpha = vec![None; n];
+    let mut lambda = vec![None; n];
+    let mut law = vec![None; n];
+    let mut replacing = true;
+    let mut reset: Vec<(u32, i64)> = Vec::new();
+    let mut missing: Vec<u32> = Vec::new();
+    // Upstream writes, and resets the law of, the rows of element type ROW only
+    // (`e_gammeabsorption.cpp:47, 79`).
+    let band_rows = rows
+        .children()
+        .filter(|c| c.has_tag_name("p") && element_type(*c) == Some(eid::ROW));
+    for row in band_rows {
+        let Some(freq) = row
+            .attribute("name")
+            .and_then(|f| f.trim().parse::<u32>().ok())
+        else {
+            continue;
+        };
+        let b = bands
+            .index_of(freq)
+            .ok_or_else(|| ImportError::unsupported(FMT_XML, format!("{what}: band {freq} Hz")))?;
+        let w = format!("{what} at {freq} Hz");
+        alpha[b] = Some(F64::new(prop_real(row, "alpha", &w)?));
+        lambda[b] = Some(F64::new(prop_real(row, "lambda", &w)?));
+        let code = match prop(row, "loi_diff") {
+            None => {
+                missing.push(freq);
+                0
+            }
+            Some(list) if replacing && !upstream_list_format(list) => {
+                let stored = opt_prop_choice(row, "loi_diff", &w).unwrap_or(None);
+                if let Some(s) = stored.filter(|&s| s != 0) {
+                    reset.push((freq, s));
+                }
+                0
+            }
+            Some(_) => {
+                replacing = false;
+                opt_prop_choice(row, "loi_diff", &w)?.ok_or_else(|| {
+                    ImportError::invalid(FMT_XML, format!("{w}: `loi_diff` has no choice"))
+                })?
+            }
+        };
+        law[b] = Some(
+            u8::try_from(code)
+                .ok()
+                .and_then(DiffusionLaw::from_solver_code)
+                .ok_or_else(|| {
+                    ImportError::refused(
+                        FMT_XML,
+                        codes::DIFFUSION_LAW_OUT_OF_RANGE,
+                        format!(
+                            "{w}: diffusion law {code} has no case in SPPS (0 to 2, \
+                             coreTypes.h:108-113; CalculationCore.cpp:166-182 leaves the \
+                             direction unchanged for it)"
+                        ),
+                    )
+                })?,
+        );
+    }
+    if let Some(b) = (0..n).find(|&b| alpha[b].is_none()) {
+        return Err(ImportError::invalid(
+            FMT_XML,
+            format!("{what} has no value for {} Hz", bands.frequencies_hz[b]),
+        ));
+    }
+    if !reset.is_empty() {
+        notes.push(format!(
+            "{what}: the stored diffusion law {reset:?} (Hz, law) is reset to 0, as upstream's \
+             loader resets it (e_gammeabsorption.cpp:43-59)"
+        ));
+    }
+    if !missing.is_empty() {
+        notes.push(format!(
+            "{what}: no diffusion law at {missing:?} Hz; 0 is written, the value SPPS reads for \
+             the attribute upstream leaves out"
+        ));
+    }
+    Ok(ZoneBands {
+        absorption: alpha.into_iter().flatten().collect(),
+        mean_free_path_m: lambda.into_iter().flatten().collect(),
+        diffusion_law: law.into_iter().flatten().collect(),
+    })
+}
+
+/// Whether a `loi_diff` list is in the format upstream's loader keeps: read as `E_Data_List`
+/// reads it (`e_data_list.h:52-82`: only with an `nb` attribute, entries in document order, a
+/// repeated id skipped), at least two entries, the first labelled "Uniform reflection"
+/// (`e_gammeabsorption.cpp:50-51`).
+fn upstream_list_format(list: Node<'_, '_>) -> bool {
+    if !list.has_attribute("nb") {
+        return false;
+    }
+    let mut ids: Vec<i64> = Vec::new();
+    let mut labels: Vec<&str> = Vec::new();
+    for e in list.children().filter(|c| c.has_tag_name("enumeration")) {
+        let (Some(id), Some(value)) = (
+            e.attribute("id").and_then(|v| v.trim().parse::<i64>().ok()),
+            e.attribute("value"),
+        ) else {
+            continue;
+        };
+        if !ids.contains(&id) {
+            ids.push(id);
+            labels.push(value);
+        }
+    }
+    labels.len() >= 2 && labels[0] == "Uniform reflection"
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1069,7 +1751,13 @@ fn read_material(m: Node<'_, '_>, bands: &BandSet, id: MaterialId) -> Result<Mat
     let mut scattering = vec![None; n];
     let mut law = vec![None; n];
     let mut transmission = vec![None; n];
-    for row in m.children().filter(|c| c.has_tag_name("p")) {
+    // A band's row is `<p>` since 1.3.4 and `<bfreq>`, its values as attributes, before (Industrial,
+    // 1.1.5); upstream's loader takes either by its element type (`e_data_row_materiau.h:55-84`).
+    let rows = m.children().filter(|c| {
+        c.has_tag_name("p")
+            || (c.has_tag_name("bfreq") && element_type(*c) == Some(eid::ROW_MATERIAU))
+    });
+    for row in rows {
         let Some(freq) = row
             .attribute("name")
             .and_then(|f| f.trim().parse::<u32>().ok())
@@ -1118,30 +1806,34 @@ fn read_material(m: Node<'_, '_>, bands: &BandSet, id: MaterialId) -> Result<Mat
             format!("{what} has no value for {} Hz", bands.frequencies_hz[b]),
         ));
     }
-    let laws: Vec<i64> = law.into_iter().flatten().collect();
-    if laws.iter().any(|&l| l != laws[0]) {
-        return Err(ImportError::unsupported(
-            FMT_XML,
-            format!("{what}: the reflection law differs between bands ({laws:?})"),
-        ));
+    // One law per band, as each row holds its own and upstream writes it per band
+    // (`e_data_row_materiau.h:96-107, 218`): tutorial 3's material 100 is Lambert in its six
+    // octave bands and specular in the others.
+    let mut laws = Vec::with_capacity(n);
+    for (b, code) in law.into_iter().flatten().enumerate() {
+        let known = u8::try_from(code)
+            .ok()
+            .and_then(ReflectionLaw::from_solver_code)
+            .ok_or_else(|| {
+                ImportError::refused(
+                    FMT_XML,
+                    codes::REFLECTION_LAW_OUT_OF_RANGE,
+                    format!(
+                        "{what} at {} Hz: reflection law {code} is none of upstream's seven, 0 to \
+                         6 (appconfig.cpp:110-117)",
+                        bands.frequencies_hz[b]
+                    ),
+                )
+            })?;
+        laws.push(known);
     }
-    let reflection_law = u8::try_from(laws[0])
-        .ok()
-        .and_then(ReflectionLaw::from_solver_code)
-        .ok_or_else(|| {
-            ImportError::unsupported(FMT_XML, format!("{what}: reflection law {}", laws[0]))
-        })?;
-    let tl: Vec<Option<f64>> = transmission.into_iter().map(Option::flatten).collect();
-    let transmission_loss_db = if tl.iter().all(Option::is_some) {
-        Some(tl.into_iter().map(|v| F64::new(v.unwrap_or(0.0))).collect())
-    } else if tl.iter().all(Option::is_none) {
-        None
-    } else {
-        return Err(ImportError::unsupported(
-            FMT_XML,
-            format!("{what}: only some bands have transmission on"),
-        ));
-    };
+    let reflection_law = ReflectionLaws::from_bands(laws);
+    // Per band: a loss where the band's `transmission` switch is on, none where it is off.
+    let tl: Vec<Option<F64>> = transmission
+        .into_iter()
+        .map(|t| t.flatten().map(F64::new))
+        .collect();
+    let transmission_loss_db = tl.iter().any(Option::is_some).then_some(tl);
     let props = owner.and_then(|o| opt_child(o, "property"));
     let double_sided = match props {
         Some(p) => opt_prop_choice(p, "side_material", &what)?.is_none_or(|c| c == 1),

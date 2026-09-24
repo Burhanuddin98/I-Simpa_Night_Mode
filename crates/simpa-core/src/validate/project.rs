@@ -113,9 +113,20 @@ fn materials(p: &Project, out: &mut Vec<Issue>) {
                 ));
             }
         }
-        if let Some(t) = &m.transmission_loss_db
-            && let Some((j, more)) = first_bad(t, |r| !(finite(r) && r >= 0.0))
-        {
+        // A band that does not transmit (None) has no loss to check.
+        let losses: Vec<(usize, f64)> = m
+            .transmission_loss_db
+            .iter()
+            .flatten()
+            .enumerate()
+            .filter_map(|(j, r)| r.map(|r| (j, r.get())))
+            .collect();
+        let bad: Vec<(usize, f64)> = losses
+            .iter()
+            .copied()
+            .filter(|&(_, r)| !(finite(r) && r >= 0.0))
+            .collect();
+        if let Some(&(j, r)) = bad.first() {
             out_of_range.push(issue(
                 MATERIAL_VALUE_OUT_OF_RANGE,
                 format!("/materials/{i}/transmission_loss_db/{j}"),
@@ -123,9 +134,9 @@ fn materials(p: &Project, out: &mut Vec<Issue>) {
                     "material '{}' transmission loss is {} dB at {}{}; it must be finite and at \
                      least 0 dB, or tau = 10^(-R/10) exceeds 1",
                     m.name,
-                    t[j],
+                    F64::new(r),
                     band_label(p, j),
-                    and_more(more)
+                    and_more(bad.len() - 1)
                 ),
             ));
         }
@@ -153,15 +164,19 @@ fn materials(p: &Project, out: &mut Vec<Issue>) {
                 ),
             ));
         }
-        if let Some(t) = &m.transmission_loss_db {
-            let exceeds: Vec<usize> = (0..m.absorption.len().min(t.len()))
-                .filter(|&j| {
-                    let (a, r) = (m.absorption[j].get(), t[j].get());
+        {
+            let exceeds: Vec<(usize, f64)> = losses
+                .iter()
+                .copied()
+                .filter(|&(j, r)| {
+                    let Some(a) = m.absorption.get(j).map(|a| a.get()) else {
+                        return false;
+                    };
                     unit(a) && finite(r) && r >= 0.0 && (a == 0.0 || 10f64.powf(-r / 10.0) > a)
                 })
                 .collect();
-            if let Some(&j) = exceeds.first() {
-                let (a, r) = (m.absorption[j].get(), t[j].get());
+            if let Some(&(j, r)) = exceeds.first() {
+                let a = m.absorption[j].get();
                 let tau = 10f64.powf(-r / 10.0);
                 let why = if a == 0.0 {
                     "transmission needs alpha > 0: with alpha = 0 neither mode transmits"

@@ -354,6 +354,70 @@ impl ReflectionLaw {
     }
 }
 
+/// A material's reflection law: one law for every band, or one per band. The solvers read it per
+/// band (`type_surface/bfreq@loi`, `base_core_configuration.cpp:210-219`), and upstream's GUI
+/// keeps one per band (the `loi` list of each row, `e_data_row_materiau.h:218`): tutorial 3's
+/// material 100 is Lambert in the six octave bands and specular in the others.
+///
+/// In JSON: one law, `"lambert"`, or one per band in the band set's order,
+/// `["specular", "lambert", ...]`. [`ReflectionLaws::from_bands`] gives the single spelling
+/// whenever every band has the same law.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ReflectionLaws {
+    /// The same law in every band.
+    All(ReflectionLaw),
+    /// One law per band; its length is the band count (`Project::check_integrity`).
+    PerBand(Vec<ReflectionLaw>),
+}
+
+impl Default for ReflectionLaws {
+    fn default() -> Self {
+        ReflectionLaws::All(ReflectionLaw::default())
+    }
+}
+
+impl From<ReflectionLaw> for ReflectionLaws {
+    fn from(law: ReflectionLaw) -> Self {
+        ReflectionLaws::All(law)
+    }
+}
+
+impl ReflectionLaws {
+    /// One law per band: [`ReflectionLaws::All`] when every band has the same law (and there is
+    /// at least one band), [`ReflectionLaws::PerBand`] otherwise.
+    pub fn from_bands(laws: Vec<ReflectionLaw>) -> Self {
+        match laws.first() {
+            Some(&first) if laws.iter().all(|&l| l == first) => ReflectionLaws::All(first),
+            _ => ReflectionLaws::PerBand(laws),
+        }
+    }
+
+    /// The law of band `band`: `None` only past the end of a per-band list.
+    pub fn at(&self, band: usize) -> Option<ReflectionLaw> {
+        match self {
+            ReflectionLaws::All(law) => Some(*law),
+            ReflectionLaws::PerBand(laws) => laws.get(band).copied(),
+        }
+    }
+
+    /// The per-band list's length; `None` for one law, which fits every band set.
+    pub fn band_count(&self) -> Option<usize> {
+        match self {
+            ReflectionLaws::All(_) => None,
+            ReflectionLaws::PerBand(laws) => Some(laws.len()),
+        }
+    }
+
+    /// The first band (0 for one law) whose law is `law`, if any.
+    pub fn first_band_with(&self, law: ReflectionLaw) -> Option<usize> {
+        match self {
+            ReflectionLaws::All(l) => (*l == law).then_some(0),
+            ReflectionLaws::PerBand(laws) => laws.iter().position(|&l| l == law),
+        }
+    }
+}
+
 /// A surface material: `surface_absorption_enum/type_surface`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -367,13 +431,17 @@ pub struct Material {
     /// Scattering coefficient per band, 0 to 1: the share of reflections that are diffuse
     /// (`bfreq@diffusion`).
     pub scattering: Vec<F64>,
-    /// Written on every band as `bfreq@loi`.
-    pub reflection_law: ReflectionLaw,
+    /// `bfreq@loi`, one law for every band or one per band.
+    pub reflection_law: ReflectionLaws,
     /// Transmission loss per band in dB (`bfreq@affaiblissement`, tau = 10^(-R/10)). `None`
-    /// means no transmission: the attribute is then left out, which is how the solver knows.
+    /// means no transmission in any band; a `None` band does not transmit. Either way the
+    /// attribute is left out of that band, which is how the solver knows
+    /// (`base_core_configuration.cpp:210-219`), as upstream's GUI leaves it out of a band whose
+    /// `transmission` switch is off (`e_data_row_materiau.h:98-106`): tutorial 3's
+    /// `Open_door` transmits from 250 Hz to 4 kHz but not at 125 Hz.
     #[serde(deserialize_with = "required")]
-    #[schemars(with = "Nullable<Vec<F64>>")]
-    pub transmission_loss_db: Option<Vec<F64>>,
+    #[schemars(with = "Nullable<Vec<Option<F64>>>")]
+    pub transmission_loss_db: Option<Vec<Option<F64>>>,
     /// `@side_material`: the material acts on both sides of a face.
     pub double_sided: bool,
     /// A pinned solver id (`type_surface@id`, the `.cbin` face `idMat`). `None` lets export
@@ -580,13 +648,63 @@ pub struct FittingZone {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum FittingShape {
-    /// An axis-aligned box.
-    Box { min: Vec3, max: Vec3 },
+    /// An axis-aligned box, upstream's rectangular fitting zone (element type 56,
+    /// `e_scene_encombrements_encombrement_cuboide.h`). `min` and `max` are its bounds, for every
+    /// geometric use.
+    Box {
+        min: Vec3,
+        max: Vec3,
+        /// Which bound upstream's destination corner `hc` ("Destination volume") takes on each
+        /// axis; its origin corner `ba` takes the other. Upstream stores the two corners as the
+        /// user typed them, not ordered (tutorial 3's box: `ba` (13, 4, 0), `hc` (18, 1, 1.2)),
+        /// and seeds the box's TetGen region at `hc - (hc - ba) * 1e-4`
+        /// (`e_scene_encombrements_encombrement_cuboide.h:333-336`), so this is what reproduces
+        /// that seed ([`FittingShape::box_corners`]). `None`: `ba` is `min` and `hc` is `max`,
+        /// as for a box drawn here.
+        #[serde(deserialize_with = "required")]
+        #[schemars(with = "Nullable<[BoxBound; 3]>")]
+        destination: Option<[BoxBound; 3]>,
+    },
     /// The volume closed by the faces of these surface groups; `inside_point` seeds the region.
     Surfaces {
         groups: Vec<GroupId>,
         inside_point: Vec3,
     },
+}
+
+/// One bound of a box on one axis: see `FittingShape::Box::destination`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum BoxBound {
+    Min,
+    Max,
+}
+
+impl FittingShape {
+    /// A box's corners as upstream holds them, `(ba, hc)`: the origin and the destination, each
+    /// taking on every axis the bound `destination` gives it (`hc`) or the other one (`ba`).
+    /// `None` for a zone that is not a box.
+    pub fn box_corners(&self) -> Option<(Vec3, Vec3)> {
+        let FittingShape::Box {
+            min,
+            max,
+            destination,
+        } = self
+        else {
+            return None;
+        };
+        let (lo, hi) = (min.to_array(), max.to_array());
+        let bounds = destination.unwrap_or([BoxBound::Max; 3]);
+        let mut ba = [0.0; 3];
+        let mut hc = [0.0; 3];
+        for a in 0..3 {
+            (ba[a], hc[a]) = match bounds[a] {
+                BoxBound::Max => (lo[a], hi[a]),
+                BoxBound::Min => (hi[a], lo[a]),
+            };
+        }
+        Some((Vec3::from(ba), Vec3::from(hc)))
+    }
 }
 
 /// Unit of a user-defined air absorption.

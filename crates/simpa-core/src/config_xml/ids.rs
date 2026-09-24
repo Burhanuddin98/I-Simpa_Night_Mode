@@ -174,18 +174,160 @@ pub(crate) fn group_zone_ids(
     Ok(out)
 }
 
-/// The scene mesh (`mesh.cbin`) of a project, carrying the same solver ids as [`super::write()`]'s
-/// `config.xml`: the project's vertices and its faces in order, each face with `idMat` = its
-/// group's material id, `idRs` = the id of the enabled scene receiver covering its group (-1 for
-/// none) and `idEn` = the id of the enabled fitting zone its group bounds (-1 for none). It does
-/// not depend on the variant. Write it with [`cbin::write_file`].
+/// The scene mesh (`mesh.cbin`) the solvers read, carrying the same solver ids as
+/// [`super::write()`]'s `config.xml`, as upstream's GUI writes it (`CObjet3D::ToCBINFormat`,
+/// `Objet3D_maillage.cpp:765-816`):
+/// - first the room, [`room_mesh`]: the project's vertices and its faces in order;
+/// - then, per enabled [`FittingShape::Box`] zone in project order, its 12 triangles as upstream
+///   builds a rectangular zone ([`upstream_box_triangles`]), each with three vertices of its own,
+///   `idMat` 0 (upstream's default material, which [`super::write()`] declares), `idRs` -1 and
+///   `idEn` the zone's id (`:790-813`). Tutorial 3's box is its faces 88 to 99.
+///
+/// Upstream appends every drawn element's triangles in the order of its element table
+/// (`ELEMENT_REF_TYPE_DRAWABLE`); with more than one box that order is not reproduced here
+/// (upstream's tutorials hold one). No `.mbin` marker names a box triangle: the mesher's markers
+/// index [`room_mesh`] (`docs/m5-m6-design.md`, decision 5). It does not depend on the variant.
+/// Write it with [`cbin::write_file`].
+pub fn scene_mesh(project: &Project) -> Result<cbin::Model, WriteError> {
+    let mut model = room_mesh(project)?;
+    let ids = SolverIds::assign(project)?;
+    let frame = GlFrame::of_project(project);
+    for z in project.fitting_zones.iter().filter(|z| z.enabled) {
+        let Some((ba, hc)) = z.shape.box_corners() else {
+            continue;
+        };
+        let id = ids.fitting_zone_id(z.id).expect("every zone has an id");
+        let narrow = |v: crate::schema::Vec3, corner: &str| -> Result<[f32; 3], WriteError> {
+            let p = v.to_array().map(|c| c as f32);
+            if p.iter().all(|c| c.is_finite()) {
+                Ok(p)
+            } else {
+                Err(WriteError::NonFinite {
+                    what: format!(
+                        "fitting zone '{}' corner {corner} (as a 32-bit float)",
+                        z.name
+                    ),
+                })
+            }
+        };
+        let (ba, hc) = (narrow(ba, "ba")?, narrow(hc, "hc")?);
+        for triangle in upstream_box_triangles(frame.as_ref(), ba, hc) {
+            let first = u32::try_from(model.vertices.len())
+                .map_err(|_| WriteError::TooManyIds { what: "vertices" })?;
+            for [x, y, z] in triangle {
+                if ![x, y, z].iter().all(|c| c.is_finite()) {
+                    return Err(WriteError::NonFinite {
+                        what: "a fitting zone's triangle vertex (as a 32-bit float)".to_string(),
+                    });
+                }
+                model.vertices.push(cbin::Vertex { x, y, z });
+            }
+            model.faces.push(cbin::Face {
+                a: first,
+                b: first + 1,
+                c: first + 2,
+                id_mat: DRAWN_ZONE_MATERIAL_ID,
+                id_rs: -1,
+                id_en: id,
+            });
+        }
+    }
+    Ok(model)
+}
+
+/// The material id upstream gives a drawn fitting zone's triangles in the `.cbin`
+/// (`Objet3D_maillage.cpp:810`): its default material, reference material 0.
+pub const DRAWN_ZONE_MATERIAL_ID: u32 = 0;
+
+/// Whether [`scene_mesh`] gives this project's scene triangles of drawn zones, which need
+/// [`DRAWN_ZONE_MATERIAL_ID`] declared.
+pub(crate) fn has_drawn_zones(project: &Project) -> bool {
+    project
+        .fitting_zones
+        .iter()
+        .any(|z| z.enabled && matches!(z.shape, FittingShape::Box { .. }))
+}
+
+/// A rectangular fitting zone's triangles, in world coordinates, as upstream's GUI makes them for
+/// its `.cbin` and `.poly`: its corners `ba` and `hc` taken into OpenGL coordinates
+/// (`CommonCoordsToGlCoords`, `e_scene_encombrements_encombrement_cuboide.h:180`), made the lower
+/// and upper corner coordinate by coordinate there, the 12 triangles of `BuildModel` built from
+/// them (`:113-165`), and each vertex taken back to world coordinates (`GlCoordsToCommonCoords`,
+/// `Objet3D_maillage.cpp:800-807`), every step in `f32` ([`GlFrame`]). Equal corners give none,
+/// as upstream's `BuildModel` returns before building. Without a frame (a scene with no extent)
+/// the unit frame is used: upstream's axes only.
+///
+/// The OpenGL `z` axis is world `-y`, so upstream's lower corner `BA` there is the world corner
+/// with the *largest* `y`: tutorial 3's box from `ba` (13, 4, 0) to `hc` (18, 1, 1.2) builds from
+/// `BA` = (13, 4, 0) and `HC` = (18, 1, 1.2) with no swap.
+pub fn upstream_box_triangles(
+    frame: Option<&GlFrame>,
+    ba: [f32; 3],
+    hc: [f32; 3],
+) -> Vec<[[f32; 3]; 3]> {
+    let unit = GlFrame {
+        centre: [0.0; 3],
+        scale: 1.0,
+    };
+    let frame = frame.unwrap_or(&unit);
+    let (mut lo, mut hi) = (frame.to_gl(ba), frame.to_gl(hc));
+    if lo == hi {
+        return Vec::new();
+    }
+    for k in 0..3 {
+        // `if (origine.x - destination.x > 0)`: swap that coordinate only.
+        if lo[k] - hi[k] > 0.0 {
+            std::mem::swap(&mut lo[k], &mut hi[k]);
+        }
+    }
+    let [bx, by, bz] = lo;
+    let [hx, hy, hz] = hi;
+    // Upstream's names: B* on the lower OpenGL y (world z), H* on the upper.
+    let ba_ = [bx, by, bz];
+    let hc_ = [hx, hy, hz];
+    let ha = [bx, hy, bz];
+    let hb = [hx, hy, bz];
+    let hd = [bx, hy, hz];
+    let bb = [hx, by, bz];
+    let bc = [hx, by, hz];
+    let bd = [bx, by, hz];
+    [
+        // The bottom.
+        [bc, bd, ba_],
+        [bc, ba_, bb],
+        // Side ab.
+        [ba_, ha, hb],
+        [ba_, hb, bb],
+        // Side ad.
+        [ba_, hd, ha],
+        [ba_, bd, hd],
+        // Side dc.
+        [bd, bc, hc_],
+        [hd, bd, hc_],
+        // Side cb.
+        [bc, bb, hb],
+        [hc_, bc, hb],
+        // The top.
+        [hc_, hb, ha],
+        [hd, hc_, ha],
+    ]
+    .into_iter()
+    .map(|t| t.map(|p| frame.to_world(p)))
+    .collect()
+}
+
+/// The room's scene mesh: the project's vertices and its faces in order, each face with `idMat`
+/// = its group's material id, `idRs` = the id of the enabled scene receiver covering its group
+/// (-1 for none) and `idEn` = the id of the enabled fitting zone its group bounds (-1 for none).
+/// [`scene_mesh`] is this, then the drawn zones' triangles; the mesher's `.poly` markers index
+/// this. It does not depend on the variant.
 ///
 /// Each vertex is narrowed to `f32` and then taken through upstream's OpenGL round trip in the
 /// scene's [`GlFrame`], as upstream's GUI writes its `.cbin` (`Objet3D_maillage.cpp:777`), so
 /// the solver reads the same `f32` bits for the same scene (a world `y` of 0 becomes `-0`, and a
 /// coordinate may move by about one unit in the last place of the scene's largest coordinate). A
 /// scene with no frame (no vertices, or every vertex at one point) is written narrowed only.
-pub fn scene_mesh(project: &Project) -> Result<cbin::Model, WriteError> {
+pub fn room_mesh(project: &Project) -> Result<cbin::Model, WriteError> {
     project.check_integrity().map_err(WriteError::Integrity)?;
     let ids = SolverIds::assign(project)?;
     let zones = group_zone_ids(project, &ids)?;

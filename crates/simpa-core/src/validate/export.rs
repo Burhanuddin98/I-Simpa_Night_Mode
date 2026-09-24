@@ -1015,7 +1015,7 @@ fn tetrahedra_in_fitting_zones(mesh: &mbin::Mesh, project: &Project) -> Vec<Opti
         .filter(|z| z.enabled)
         .map(|z| -> Box<dyn Fn([f64; 3]) -> bool> {
             match &z.shape {
-                FittingShape::Box { min, max } => {
+                FittingShape::Box { min, max, .. } => {
                     let (a, b) = (min.to_array(), max.to_array());
                     Box::new(move |c: [f64; 3]| {
                         (0..3).all(|k| a[k].min(b[k]) <= c[k] && c[k] <= a[k].max(b[k]))

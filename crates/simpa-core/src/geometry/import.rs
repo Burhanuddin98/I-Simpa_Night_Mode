@@ -64,7 +64,10 @@ mod stl;
 pub mod zip;
 
 pub use appconst::{REFERENCE_MATERIALS, REFERENCE_SPECTRA, ReferenceMaterial, ReferenceSpectrum};
-pub use proj::{ProjImport, ProjReport, import_proj, import_proj_file};
+pub use proj::{
+    ProjImport, ProjReport, UpstreamId, UpstreamKind, import_proj, import_proj_file,
+    import_proj_with_config,
+};
 pub use reassign::{DEFAULT_REASSIGN_TOLERANCE_M, Reassigned, reassign};
 
 /// A length unit a mesh file may be drawn in.
@@ -257,6 +260,13 @@ pub enum ImportError {
         format: &'static str,
         message: String,
     },
+    /// A project refused for a reason with its own stable code (`reason`, one of
+    /// [`proj::codes`]), which [`ImportError::code`] returns and `docs/solver-contract.md` lists.
+    Refused {
+        format: &'static str,
+        reason: &'static str,
+        message: String,
+    },
     /// The file holds no face.
     Empty { format: &'static str },
     /// The imported project fails its integrity check.
@@ -272,6 +282,7 @@ impl ImportError {
             ImportError::Truncated { .. } => "truncated",
             ImportError::Invalid { .. } => "invalid",
             ImportError::Unsupported { .. } => "unsupported",
+            ImportError::Refused { reason, .. } => reason,
             ImportError::Empty { .. } => "empty",
             ImportError::Integrity(_) => "integrity",
         }
@@ -287,6 +298,18 @@ impl ImportError {
     pub(crate) fn unsupported(format: &'static str, message: impl Into<String>) -> Self {
         ImportError::Unsupported {
             format,
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn refused(
+        format: &'static str,
+        reason: &'static str,
+        message: impl Into<String>,
+    ) -> Self {
+        ImportError::Refused {
+            format,
+            reason,
             message: message.into(),
         }
     }
@@ -334,6 +357,9 @@ impl fmt::Display for ImportError {
             ImportError::Unsupported { format, message } => {
                 write!(f, "{format}: not supported: {message}")
             }
+            ImportError::Refused {
+                format, message, ..
+            } => write!(f, "{format}: {message}"),
             ImportError::Empty { format } => write!(f, "{format}: the file holds no face"),
             ImportError::Integrity(e) => write!(f, "imported project is inconsistent: {e}"),
         }
@@ -492,7 +518,7 @@ pub(crate) fn default_material(id: MaterialId, n_bands: usize) -> Material {
         color: Rgb(r.color[0], r.color[1], r.color[2]),
         absorption: vec![crate::schema::F64::new(widen_f32(r.absorption)); n_bands],
         scattering: vec![crate::schema::F64::ZERO; n_bands],
-        reflection_law: ReflectionLaw::Specular,
+        reflection_law: ReflectionLaw::Specular.into(),
         transmission_loss_db: None,
         double_sided: true,
         solver_id: None,

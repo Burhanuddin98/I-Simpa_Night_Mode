@@ -36,15 +36,14 @@
 //! - **tutorial 2**: TetGen's files under `temp/` (no `.var`: its project constrains no surface) and
 //!   no run folder: the mesher's inputs and outputs only. There is no original `.mbin`, `.cbin`,
 //!   `config.xml` or result to compare with;
-//! - **tutorial 3**: TetGen's files under `temp/` and three SPPS run folders, but our pipeline
-//!   cannot take it from the `.proj`: `simpa import-proj` refuses its fitting zones, and `simpa
-//!   mesh` refuses the scene its runs hold, which upstream took through `preprocess.exe`. Both are
-//!   checked as refusals. The projects are taken from each run's `config.xml` and `mesh.cbin` with
-//!   the two edits a project needs (`parity::importable`), and what follows upstream's own `.poly`
-//!   is compared: our TetGen, our builder, our `config.xml` and `mesh.cbin`, and the runs
-//!   ([`tutorial_3_same_seed_runs`]). Whether our mesher should take such a scene through
-//!   `preprocess.exe`, as upstream's GUI did, is under investigation (Burhan, 2026-09-24 05:13:
-//!   "i think we should investigate tutorial 3"; `DECISIONS.md`).
+//! - **tutorial 3**: TetGen's files under `temp/` and three SPPS run folders. `simpa import-proj`
+//!   reads it, fitting zones, per-band laws and transmission and source groups included, and
+//!   records upstream's element ids beside the entities they became; each run's `config.xml` and
+//!   `mesh.cbin` are compared with ours from the `.proj` read with that run's saved project,
+//!   upstream's ids read through that recorded map (Burhan's open decision 1). `simpa mesh`
+//!   refuses the project: TetGen stops on the box standing on the floor, which upstream took
+//!   through `preprocess.exe` (not built), so what follows upstream's own `.poly` is compared: our
+//!   TetGen, our builder, and the runs ([`tutorial_3_same_seed_runs`]).
 //!
 //! Every comparison has a refusal beside it, the input that makes it say no
 //! (`the_comparisons_say_no`).
@@ -63,8 +62,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use parity::{Tutorial, edit_attr, entry, has_entry, tutorial};
 use serde_json::Value;
-use simpa_core::config_xml::SolverKind;
+use simpa_core::config_xml::{SolverIds, SolverKind};
 use simpa_core::formats::{cbin, csbin, gabe, mbin};
+use simpa_core::geometry::import::{ProjReport, UpstreamKind};
+use simpa_core::schema::{FittingZoneId, PointReceiverId, Project, SurfaceReceiverId};
 use support::{json, simpa_run, solver_exe};
 
 // ---------------------------------------------------------------------------------------------
@@ -523,13 +524,12 @@ fn compare_mesher_files(t: &Tutorial, mesh_dir: &Path, ties: Ties, label: &str) 
 }
 
 /// The original's `idVolume` to ours, as TetGen numbers the regions of a `.poly` whose fitting
-/// seeds carry our ids instead of the original's: a fitting maps through the configs'
-/// `encombrement` lists, and each room part, numbered by TetGen from one above the largest seed
-/// (`VolumeIds::tetgen`), keeps its place above ours (tutorial 3: 2084 to 2086 become 4 to 6;
-/// tutorial 1, without fittings: 1 stays 1). Both sides write the attribute unchanged
-/// (decision 1), and the regions are the same, so this is our mesher's numbering.
-fn volume_ids(theirs_mbin: &[u8], theirs_config: &str, ours_config: &str) -> BTreeMap<i32, i32> {
-    let fittings = parity::id_map(theirs_config, ours_config, "encombrement");
+/// seeds carry our ids instead of the original's: a fitting maps through `fittings` (the
+/// original's `encombrement@id` to ours), and each room part, numbered by TetGen from one above
+/// the largest seed (`VolumeIds::tetgen`), keeps its place above ours (tutorial 3: 2084 to 2086
+/// become 4 to 6; tutorial 1, without fittings: 1 stays 1). Both sides write the attribute
+/// unchanged (decision 1), and the regions are the same, so this is our mesher's numbering.
+fn volume_ids(theirs_mbin: &[u8], fittings: &BTreeMap<i32, i32>) -> BTreeMap<i32, i32> {
     let start = |ids: Vec<i32>| simpa_core::mesh::verify::VolumeIds::tetgen(ids).room;
     let (theirs_room, ours_room) = (
         start(fittings.keys().copied().collect()),
@@ -595,7 +595,10 @@ fn tutorial_1() {
 
         // The .mbin, byte for byte: no fitting, so no id differs; the room is TetGen's 1 on
         // both sides.
-        let ids = volume_ids(&r.tetra_bytes, &r.config, &our_config);
+        let ids = volume_ids(
+            &r.tetra_bytes,
+            &parity::id_map(&r.config, &our_config, "encombrement"),
+        );
         assert_eq!(
             ids,
             BTreeMap::from([(1, 1)]),
@@ -762,13 +765,116 @@ fn tutorial_2() {
 // ---------------------------------------------------------------------------------------------
 // Tutorial 3
 
-/// Tutorial 3 made ready for the bed: the `.proj`, each run's project (from its `config.xml` and
-/// `mesh.cbin` with `parity::importable`'s two edits, saved as `.simpa`), and the `.mbin` our TetGen
-/// and our builder make of upstream's own `.poly` (see [`tutorial_3`] for why that `.poly`).
+/// Upstream's element id to our solver id, per `config.xml` element (`encombrement`,
+/// `recepteur_ponctuel`, `recepteur_surfacique_coupe`, ...): the explicit, recorded map through
+/// which upstream's files and ours are compared while a project does not keep upstream's ids
+/// (Burhan's open decision 1; `geometry::import::proj`, "Element ids").
+type IdMap = BTreeMap<&'static str, BTreeMap<i32, i32>>;
+
+/// The map a `.proj` import recorded (`ProjReport::upstream_ids`: upstream's id beside the entity
+/// it became), composed with the solver ids our export gives those entities
+/// (`SolverIds::assign`). Sources are left out: the solvers read no source id
+/// (`docs/formats/config_xml.md`). Panics unless each element's map is one-to-one.
+fn recorded_ids(report: &ProjReport, project: &Project) -> IdMap {
+    let solver = SolverIds::assign(project).unwrap();
+    let mut out = IdMap::new();
+    for u in &report.upstream_ids {
+        let ours = match u.kind {
+            UpstreamKind::Source => continue,
+            UpstreamKind::PointReceiver => solver.point_receiver_id(PointReceiverId(u.entity)),
+            UpstreamKind::SurfaceReceiver | UpstreamKind::CuttingPlane => {
+                solver.surface_receiver_id(SurfaceReceiverId(u.entity))
+            }
+            UpstreamKind::FittingZone => solver.fitting_zone_id(FittingZoneId(u.entity)),
+        };
+        let ours =
+            ours.unwrap_or_else(|| panic!("{} `{}` has no solver id", u.kind.name(), u.name));
+        let upstream = i32::try_from(u.upstream).unwrap();
+        let map = out.entry(u.kind.config_element()).or_default();
+        assert!(
+            map.insert(upstream, ours).is_none(),
+            "upstream id {upstream} recorded twice"
+        );
+    }
+    for (element, map) in &out {
+        let ours: BTreeSet<&i32> = map.values().collect();
+        assert_eq!(ours.len(), map.len(), "{element}: not one-to-one: {map:?}");
+    }
+    out
+}
+
+/// `config` with every id `ids` names replaced by ours, in one pass (so no id is replaced twice):
+/// upstream's config read through the recorded map. An id the map lacks stays as it is, and shows
+/// as a difference.
+fn through_ids(config: &str, ids: &IdMap) -> String {
+    let mut edits: Vec<(usize, usize, String)> = Vec::new();
+    for (element, map) in ids {
+        let open = format!("<{element} id=\"");
+        let mut from = 0;
+        while let Some(at) = config[from..].find(&open) {
+            let a = from + at + open.len();
+            let b = a + config[a..].find('"').unwrap();
+            if let Some(ours) = config[a..b].parse::<i32>().ok().and_then(|u| map.get(&u)) {
+                edits.push((a, b, ours.to_string()));
+            }
+            from = b;
+        }
+    }
+    edits.sort();
+    let mut out = String::with_capacity(config.len());
+    let mut at = 0;
+    for (a, b, text) in edits {
+        out.push_str(&config[at..a]);
+        out.push_str(&text);
+        at = b;
+    }
+    out.push_str(&config[at..]);
+    out
+}
+
+/// A run's scene mesh with its `idRs` and `idEn` read through the recorded map, written again: the
+/// original's `.cbin` bytes as ours would be, byte for byte, when every other value is equal.
+fn cbin_through_ids(theirs: &cbin::Model, ids: &IdMap) -> Vec<u8> {
+    let empty = BTreeMap::new();
+    let rs = ids.get("recepteur_surfacique").unwrap_or(&empty);
+    let en = ids.get("encombrement").unwrap_or(&empty);
+    let mut m = theirs.clone();
+    for f in &mut m.faces {
+        if let Some(&o) = rs.get(&f.id_rs) {
+            f.id_rs = o;
+        }
+        if let Some(&o) = en.get(&f.id_en) {
+            f.id_en = o;
+        }
+    }
+    cbin::write(&m)
+}
+
+/// `simpa import-proj <tutorial> <dir>/project.simpa --json`: must exit 0. The project's path and
+/// the JSON it printed (the summary, the recorded upstream ids and the notes).
+fn import_proj_json(rel: &str, dir: &Path) -> (PathBuf, Value) {
+    let proj = support::paths::upstream_file(rel);
+    let out = dir.join("project.simpa");
+    let o = simpa_run(&[
+        "import-proj".to_string(),
+        proj.display().to_string(),
+        out.display().to_string(),
+        "--json".into(),
+    ]);
+    assert_eq!(o.code, 0, "import-proj {rel}: {o:#?}");
+    (out, json(&o))
+}
+
+/// Tutorial 3 made ready for the bed: the `.proj`; per stored run, its project (the `.proj` read
+/// with the `projet_config.xml` upstream saved beside that run, `import_proj_with_config`: the
+/// three runs differ in `nbparticules` and `trans_calc` only), saved as `.simpa`, and the id map
+/// its import recorded ([`recorded_ids`]); and the `.mbin` our TetGen and our builder make of
+/// upstream's own `.poly` (see [`tutorial_3`] for why that `.poly`).
 struct Tutorial3 {
     t: Tutorial,
     dir: PathBuf,
     projects: Vec<PathBuf>,
+    ids: Vec<IdMap>,
     /// Our `.mbin` with TetGen's region attributes as they came (upstream's ids).
     built: mbin::Mesh,
     report: Vec<String>,
@@ -778,21 +884,19 @@ fn tutorial3(label: &str) -> Tutorial3 {
     let t = tutorial(parity::TUTORIAL3);
     let dir = bed_dir(label);
     assert_eq!(t.runs.len(), 3);
-    let projects: Vec<PathBuf> = t
-        .runs
-        .iter()
-        .enumerate()
-        .map(|(i, r)| {
-            let project = simpa_core::config_xml::import_upstream_with_mesh(
-                &parity::importable(&r.config),
-                &r.mesh,
-            )
-            .unwrap_or_else(|e| panic!("run {i}: {e}"));
-            let path = dir.join(format!("run{i}.simpa"));
-            simpa_core::schema::save(&project, &path).unwrap();
-            path
-        })
-        .collect();
+    let mut projects = Vec::new();
+    let mut ids = Vec::new();
+    for (i, r) in t.runs.iter().enumerate() {
+        let imported = simpa_core::geometry::import::import_proj_with_config(
+            &t.bytes,
+            r.project_file.as_bytes(),
+        )
+        .unwrap_or_else(|e| panic!("run {i}: {} ({e})", e.code()));
+        ids.push(recorded_ids(&imported.report, &imported.project));
+        let path = dir.join(format!("run{i}.simpa"));
+        simpa_core::schema::save(&imported.project, &path).unwrap();
+        projects.push(path);
+    }
     let mut report = Vec::new();
 
     // TetGen 1.5.0 (ours) on upstream's own .poly, with the flags its trailer records.
@@ -845,13 +949,18 @@ fn tutorial3(label: &str) -> Tutorial3 {
     let attributes: Vec<i32> = attributes.into_iter().collect();
     assert_eq!(attributes, [1930, 2083, 2084, 2085, 2086]);
     let project = simpa_core::schema::load(&projects[2]).unwrap();
+    // The markers of upstream's .poly index its .cbin, which our scene mesh is (the drawn box's
+    // 12 triangles after the room's 88 faces); the frame is the room's, as upstream's.
     let scene = simpa_core::config_xml::scene_mesh(&project).unwrap();
-    let unitize = simpa_core::mesh::Unitize::of_scene(&scene).unwrap();
+    assert_eq!(scene.faces.len(), 100);
+    let room = simpa_core::config_xml::room_mesh(&project).unwrap();
+    let unitize = simpa_core::mesh::Unitize::of_scene(&room).unwrap();
     let (built, _) = simpa_core::mesh::build_mbin(&out, scene.faces.len(), &unitize).unwrap();
     Tutorial3 {
         t,
         dir,
         projects,
+        ids,
         built,
         report,
     }
@@ -874,75 +983,148 @@ fn tutorial3_mbin(
     mbin::write(&mesh)
 }
 
-/// Tutorial 3 (a room with two fitting zones, six sources, five point receivers and a cutting
-/// plane), its inputs. What our pipeline cannot do with it, measured and said:
-/// - `simpa import-proj` refuses it: a `.proj`'s fitting zones are not imported. Each run's project
-///   is taken from its `config.xml` and `mesh.cbin` instead ([`tutorial3`]);
-/// - `simpa mesh` refuses that project: our geometry check finds its scene self-intersecting and
-///   open, where upstream's GUI took its `.poly` through `preprocess.exe` (the mesh settings'
+/// Tutorial 3 (a room with two fitting zones, a scene-fitted one and a box, six sources in two
+/// source groups, five point receivers and a cutting plane), from its `.proj`:
+/// - **`simpa import-proj`** reads it: the zones (the box's corners as upstream stores them, not
+///   ordered), material 100's reflection law and materials 100 and 101's transmission per band,
+///   and the sources through their groups. Its say-no: the same `.proj` with the box's element
+///   type made unknown is refused by name;
+/// - **each stored run's `config.xml` and `mesh.cbin`**, against ours from the `.proj` read with
+///   that run's saved project: every value the solver reads is the original's once upstream's ids
+///   are read through the map the import recorded, the differences by design aside; the `.cbin`
+///   byte for byte, the box's 12 triangles as faces 88 to 99. Their say-nos: one band's law
+///   changed, the box's triangles left out, and the ids not mapped;
+/// - **`simpa mesh`** refuses the project: TetGen stops on the box's bottom, which lies on the
+///   floor. Upstream's GUI took its `.poly` through `preprocess.exe` (the mesh settings'
 ///   "preprocess", `projet_maillage.cpp:206-213`), which merges vertices and splits faces: its
-///   `temp/scene_mesh.poly` has 133 facets for the run's 100 faces. Our own `.poly` of the project,
-///   taken through our build of `preprocess.exe`, is not upstream's either (measured below).
+///   `temp/scene_mesh.poly` has 133 facets for the run's 100 faces. That step is not built.
 ///
-/// So the mesher's `.poly` is upstream's own here, and what is compared is what comes after it:
-/// our TetGen's `.1.*` against `temp/`, our builder's `.mbin` against each run's, and our
-/// `config.xml` and `mesh.cbin` against each run's, as for tutorial 1.
+/// So the mesher's `.poly` is upstream's own here, and what is compared after it is our TetGen's
+/// `.1.*` against `temp/` and our builder's `.mbin` against each run's.
 #[test]
 fn tutorial_3() {
     let Tutorial3 {
         t,
         dir,
         projects,
+        ids,
         built,
         report: made,
     } = tutorial3("t3");
-    // The refusals, as a user meets them.
+
+    // The import, as a user meets it.
+    let (imported, summary) = import_proj_json(parity::TUTORIAL3, &dir);
+    let p = simpa_core::schema::load(&imported).unwrap();
+    assert_eq!(
+        (
+            p.geometry.vertices.len(),
+            p.geometry.faces.len(),
+            p.sources.len(),
+            p.point_receivers.len(),
+            p.surface_receivers.len(),
+            p.fitting_zones.len(),
+        ),
+        (40, 88, 6, 5, 1, 2)
+    );
+    let zones: Vec<String> = p
+        .fitting_zones
+        .iter()
+        .map(|z| format!("{} {}", z.name, serde_json::to_string(&z.shape).unwrap()))
+        .collect();
+    let recorded: Vec<(String, String)> = summary["upstream_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|u| {
+            (
+                u["kind"].as_str().unwrap().to_string(),
+                format!("{} = {}", u["name"], u["upstream"]),
+            )
+        })
+        .collect();
+    assert_eq!(recorded.len(), 6 + 5 + 1 + 2, "{recorded:#?}");
+    let fittings: Vec<&String> = recorded
+        .iter()
+        .filter(|(kind, _)| kind == "fitting zone")
+        .map(|(_, u)| u)
+        .collect();
+    let mut report = vec![
+        format!(
+            "import-proj: exit 0; {} faces, {} vertices, {} sources, zones {zones:?}; {} upstream \
+             ids recorded, the fittings {:?}",
+            p.geometry.faces.len(),
+            p.geometry.vertices.len(),
+            p.sources.len(),
+            recorded.len(),
+            fittings
+        ),
+        format!("import-proj notes: {}", summary["notes"]),
+    ];
+    // The CLI's project is the last run's (the .proj's own project file is saved with it): the
+    // same config.xml and mesh.cbin, but the working folder.
+    let cli = export_config(&imported, &dir.join("export-cli"), SolverKind::Spps);
+    let run2 = export_config(&projects[2], &dir.join("export-run2"), SolverKind::Spps);
+    assert_eq!(
+        parity::solver_differences(&cli.0, &run2.0),
+        vec![format!(
+            "configuration@workingdirectory: upstream '{}', ours '{}'",
+            parity::working_folder(&cli.0),
+            parity::working_folder(&run2.0)
+        )]
+    );
+    assert_eq!(cli.1, run2.1, "mesh.cbin");
+
+    // Says no: the box's element type 56 made 57 (no element type upstream knows).
+    let unknown = parity::with_entry(&t, "instance1/projet_config.xml", |xml| {
+        let xml = String::from_utf8(xml.to_vec()).unwrap();
+        let from = "eid=\"56\" wxid=\"2083\"";
+        assert_eq!(xml.matches(from).count(), 1);
+        xml.replace(from, "eid=\"57\" wxid=\"2083\"").into_bytes()
+    });
+    let unknown_path = dir.join("unknown_zone_type.proj");
+    std::fs::write(&unknown_path, unknown).unwrap();
     let o = simpa_run(&[
         "import-proj".to_string(),
-        support::paths::upstream_file(parity::TUTORIAL3)
-            .display()
-            .to_string(),
+        unknown_path.display().to_string(),
         dir.join("refused.simpa").display().to_string(),
     ]);
     assert_eq!(o.code, 2, "{o:#?}");
     assert!(
-        o.stderr
-            .contains("fitting zones and volumes are not imported from a .proj"),
-        "{}",
-        o.stderr
-    );
-    let mut report = vec![
-        "import-proj: refused (exit 2): fitting zones are not imported from a .proj".to_string(),
-    ];
-    let last = t.runs.len() - 1;
-    let o = simpa_run(&[
-        "mesh".to_string(),
-        projects[last].display().to_string(),
-        "--out".into(),
-        dir.join("refused-mesh").display().to_string(),
-    ]);
-    assert_eq!(o.code, 3, "{o:#?}");
-    let refused: Vec<&str> = o
-        .stderr
-        .lines()
-        .filter_map(|l| l.strip_prefix("refused ").and_then(|l| l.split(':').next()))
-        .collect();
-    assert_eq!(
-        refused,
-        ["self_intersections", "open_boundary", "unresolved_topology"],
+        o.stderr.contains("proj_fitting_type_unknown"),
         "{}",
         o.stderr
     );
     report.push(format!(
-        "simpa mesh: refused by our geometry check (exit 3: {})",
-        refused.join(", ")
+        "import-proj says no: the box's element type made 57: exit 2, {}",
+        o.stderr.trim()
+    ));
+
+    // The mesher, as a user meets it: TetGen refuses the box standing on the floor.
+    let o = simpa_run(&[
+        "mesh".to_string(),
+        imported.display().to_string(),
+        "--out".into(),
+        dir.join("refused-mesh").display().to_string(),
+        "--json".into(),
+    ]);
+    assert_eq!(o.code, 4, "{o:#?}");
+    let m = json(&o);
+    let codes: Vec<&str> = m["codes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c.as_str().unwrap())
+        .collect();
+    assert!(codes.contains(&"tetgen_self_intersection"), "{m:#}");
+    report.push(format!(
+        "simpa mesh: refused (exit 4: {}); upstream took this scene through preprocess.exe",
+        codes.join(", ")
     ));
 
     // Upstream's .poly against ours, and ours through preprocess.exe.
     let theirs_poly = entry(&t, "temp/scene_mesh.poly");
     let theirs_model = simpa_core::formats::poly::read(&theirs_poly).unwrap();
-    let project = simpa_core::schema::load(&projects[last]).unwrap();
-    let input = simpa_core::mesh::project_input(&project).unwrap();
+    let input = simpa_core::mesh::project_input(&p).unwrap();
     assert_eq!(
         (
             theirs_model.model_vertices.len(),
@@ -950,6 +1132,7 @@ fn tutorial_3() {
         ),
         (57, 133)
     );
+    let last = t.runs.len() - 1;
     assert_eq!(t.runs[last].mesh.faces.len(), 100);
     let pre = dir.join("preprocess");
     std::fs::create_dir_all(&pre).unwrap();
@@ -995,6 +1178,14 @@ fn tutorial_3() {
             &dir.join(format!("export{i}")),
             SolverKind::Spps,
         );
+        // The recorded map is the one both files' list orders give: the cross-check.
+        for (element, map) in &ids[i] {
+            assert_eq!(
+                map,
+                &parity::id_map(&r.config, &our_config, element),
+                "run {i}: {element}"
+            );
+        }
         // The .mbin, as upstream's run holds it: our TetGen and builder on upstream's .poly, whose
         // seeds are upstream's ids, give it byte for byte.
         let with_upstream_ids = mbin::write(&built);
@@ -1005,46 +1196,98 @@ fn tutorial_3() {
         );
         // And as ours: the fittings under our ids, the room's parts as TetGen numbers them above
         // ours.
-        let ids = volume_ids(&r.tetra_bytes, &r.config, &our_config);
+        let volumes = volume_ids(&r.tetra_bytes, &ids[i]["encombrement"]);
         assert_eq!(
-            [2084, 2085, 2086].map(|k| ids[&k]),
+            [2084, 2085, 2086].map(|k| volumes[&k]),
             [4, 5, 6],
-            "our fittings are 2 and 3: {ids:?}"
+            "our fittings are 2 and 3: {volumes:?}"
         );
-        let our_mbin = tutorial3_mbin(&built, &ids, |id| panic!("idVolume {id} unmapped"));
-        assert_eq!(mbin_difference(&our_mbin, &r.tetra_bytes, &ids), None);
+        let our_mbin = tutorial3_mbin(&built, &volumes, |id| panic!("idVolume {id} unmapped"));
+        assert_eq!(mbin_difference(&our_mbin, &r.tetra_bytes, &volumes), None);
         report.push(format!(
             "run {i} tetramesh.mbin: our TetGen and builder on upstream's .poly give the run's, byte \
-             for byte ({} bytes); with our fitting ids, TetGen numbers the room {ids:?}",
+             for byte ({} bytes); with our fitting ids, TetGen numbers the room {volumes:?}",
             our_mbin.len()
         ));
-        // config.xml and mesh.cbin as parity_inputs.rs defines them.
-        let original = parity::importable(&r.config);
-        let got = parity::solver_differences(&original, &our_config);
-        let mut expected = parity::tutorial3_ids_and_by_design();
+
+        // config.xml, value by value, upstream's ids read through the recorded map.
+        let theirs = through_ids(&r.config, &ids[i]);
+        let got = parity::solver_differences(&theirs, &our_config);
+        let mut expected = parity::tutorial3_by_design();
         expected.push(format!(
             "configuration@workingdirectory: upstream '{}', ours '{}'",
             parity::working_folder(&r.config),
             parity::working_folder(&our_config)
         ));
-        assert_eq!(got, parity::sorted(expected), "run {i}: config.xml");
-        let en = parity::id_map(&r.config, &our_config, "encombrement");
-        let rs = parity::id_map(&r.config, &our_config, "recepteur_surfacique");
-        let faces = parity::face_differences(&r.mesh, &cbin::read(&our_cbin).unwrap(), &rs, &en);
-        assert_eq!(faces, Vec::<String>::new(), "run {i}: mesh.cbin");
+        assert_eq!(got, parity::sorted(expected.clone()), "run {i}: config.xml");
+        // mesh.cbin, byte for byte once upstream's idEn are read through the map.
+        let their_cbin = cbin_through_ids(&r.mesh, &ids[i]);
+        assert_eq!(
+            byte_difference(&our_cbin, &their_cbin),
+            None,
+            "run {i}: mesh.cbin"
+        );
+        let ours = cbin::read(&our_cbin).unwrap();
+        let box_faces: BTreeSet<(u32, i32, i32)> = ours.faces[88..]
+            .iter()
+            .map(|f| (f.id_mat, f.id_rs, f.id_en))
+            .collect();
+        assert_eq!(
+            box_faces,
+            BTreeSet::from([(0, -1, 3)]),
+            "faces 88 to 99: the box"
+        );
         report.push(format!(
-            "run {i} config.xml and mesh.cbin: the original's (with the two edits), but the ids \
-             (fittings {en:?}) and the differences by design"
+            "run {i} config.xml: every value the solver reads is the original's, upstream's ids \
+             read through the recorded map {:?}, but the {} differences by design; mesh.cbin: \
+             byte for byte ({} bytes), faces 88 to 99 the box's 12 triangles (idMat 0, idEn 3)",
+            ids[i],
+            expected.len(),
+            our_cbin.len()
         ));
+
+        if i == last {
+            // Says no, the config: material 100's law at 125 Hz, Lambert, written specular (one
+            // law per material, as the importer held it before).
+            let at = our_config.find("<type_surface id=\"100\"").unwrap();
+            let band = at + our_config[at..].find("<bfreq freq=\"125\"").unwrap();
+            let one_law = format!(
+                "{}{}",
+                &our_config[..band],
+                edit_attr(&our_config[band..], "<bfreq", "loi", "0")
+            );
+            let mut with_edit = expected.clone();
+            with_edit.push("type_surface[id=100]/bfreq[4]@loi: upstream 2, ours 0".to_string());
+            assert_eq!(
+                parity::solver_differences(&theirs, &one_law),
+                parity::sorted(with_edit)
+            );
+            // Says no, the ids: upstream's config not read through the map.
+            let unmapped = parity::solver_differences(&r.config, &our_config);
+            assert_eq!(unmapped.len(), got.len() + 8, "{unmapped:#?}");
+            // Says no, the scene mesh: the room's faces alone, without the box's triangles.
+            let room =
+                simpa_core::config_xml::room_mesh(&simpa_core::schema::load(&projects[i]).unwrap())
+                    .unwrap();
+            let faces =
+                parity::face_differences(&r.mesh, &room, &BTreeMap::new(), &ids[i]["encombrement"]);
+            assert_eq!(faces, ["faces: upstream 100, ours 88"]);
+            report.push(format!(
+                "run {i} says no: one band's law changed gives its line; unmapped, {} lines; the \
+                 room's faces alone: {faces:?}",
+                unmapped.len()
+            ));
+        }
     }
     print_report("tutorial 3", &report);
 }
 
-/// Tutorial 3's three SPPS runs, same seed, on the original inputs (with `parity::importable`'s two
-/// edits) and on ours: our `config.xml` and `mesh.cbin`, and the `.mbin` our TetGen and builder
-/// make of upstream's `.poly` ([`tutorial3`]) with the ids our mesher gives ([`volume_ids`]): the
-/// fittings under our ids, the room's parts as TetGen numbers them above ours. Every output file
-/// must be the original's (the cutting plane's `.csbin` id read through the map).
+/// Tutorial 3's three SPPS runs, same seed, on the original inputs (unedited: `parity::repeatable`
+/// only) and on ours: our `config.xml` and `mesh.cbin` from the `.proj` read with each run's saved
+/// project, and the `.mbin` our TetGen and builder make of upstream's `.poly` ([`tutorial3`]) with
+/// the ids our mesher gives ([`volume_ids`]): the fittings under our ids, the room's parts as
+/// TetGen numbers them above ours. Every output file must be the original's (the cutting plane's
+/// `.csbin` id read through the recorded map).
 ///
 /// **The input that makes it say no** is the room written 0, as this crate's builder wrote it
 /// until decision 1 was reversed on 2026-09-24, on run 0. SPPS gives every tetrahedron with a
@@ -1059,6 +1302,7 @@ fn tutorial_3_same_seed_runs() {
         t,
         dir,
         projects,
+        ids,
         built,
         ..
     } = tutorial3("t3r");
@@ -1069,35 +1313,34 @@ fn tutorial_3_same_seed_runs() {
             &dir.join(format!("export{i}")),
             SolverKind::Spps,
         );
-        let original = parity::importable(&r.config);
-        let cut = parity::id_map(&r.config, &our_config, "recepteur_surfacique_coupe");
-        let ids = volume_ids(&r.tetra_bytes, &r.config, &our_config);
-        let our_mbin = tutorial3_mbin(&built, &ids, |id| panic!("idVolume {id} unmapped"));
+        let cut = ids[i]["recepteur_surfacique_coupe"].clone();
+        let volumes = volume_ids(&r.tetra_bytes, &ids[i]["encombrement"]);
+        let our_mbin = tutorial3_mbin(&built, &volumes, |id| panic!("idVolume {id} unmapped"));
         let (theirs, d) = same_seed(
             &format!("t3-{i}"),
             SolverKind::Spps,
-            (&original, &r.mesh_bytes, &r.tetra_bytes),
+            (&r.config, &r.mesh_bytes, &r.tetra_bytes),
             (&our_config, &our_cbin, &our_mbin),
             &cut,
         );
         assert_eq!(
             d,
             Vec::<String>::new(),
-            "run {i}: results (idVolume {ids:?}, cutting plane {cut:?})"
+            "run {i}: results (idVolume {volumes:?}, cutting plane {cut:?})"
         );
         report.push(format!(
-            "run {i}: all {} output files equal to the original inputs' run (idVolume {ids:?}, \
+            "run {i}: all {} output files equal to the original inputs' run (idVolume {volumes:?}, \
              cutting plane {cut:?})",
             theirs.len()
         ));
         if i == 0 {
             // Says no: the room written 0, the fittings as before.
-            let fittings = parity::id_map(&r.config, &our_config, "encombrement");
-            let room_zero = tutorial3_mbin(&built, &fittings, |_| 0);
+            let fittings = &ids[i]["encombrement"];
+            let room_zero = tutorial3_mbin(&built, fittings, |_| 0);
             let (_, dz) = same_seed(
                 "t3-0-room0",
                 SolverKind::Spps,
-                (&original, &r.mesh_bytes, &r.tetra_bytes),
+                (&r.config, &r.mesh_bytes, &r.tetra_bytes),
                 (&our_config, &our_cbin, &room_zero),
                 &cut,
             );

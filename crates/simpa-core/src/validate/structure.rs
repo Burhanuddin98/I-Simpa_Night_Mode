@@ -184,6 +184,13 @@ fn band_counts(p: &Project, out: &mut Vec<Issue>) {
             what("scattering"),
             m.scattering.len(),
         );
+        if let Some(k) = m.reflection_law.band_count() {
+            count(
+                format!("/materials/{i}/reflection_law"),
+                what("reflection law"),
+                k,
+            );
+        }
         if let Some(t) = &m.transmission_loss_db {
             count(
                 format!("/materials/{i}/transmission_loss_db"),

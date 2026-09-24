@@ -12,9 +12,9 @@ use crate::schema::{
     AirAbsorption, AttenuationUnit, BandKind, BandSet, ComputationMethod, DiffusionLaw,
     Directivity, Environment, F64, Face, FittingShape, FittingZone, FittingZoneId, Geometry,
     GroupId, IntegrityError, Material, MaterialId, PointReceiver, PointReceiverId, Project,
-    ProjectId, ReflectionLaw, Rgb, SolverSettings, SoundMapQuantity, Source, SourceId, Spectrum,
-    SpectrumShape, SppsSettings, SurfaceGroup, SurfaceReceiver, SurfaceReceiverId,
-    SurfaceReceiverShape, TcrSettings, Vec3,
+    ProjectId, ReflectionLaw, ReflectionLaws, Rgb, SolverSettings, SoundMapQuantity, Source,
+    SourceId, Spectrum, SpectrumShape, SppsSettings, SurfaceGroup, SurfaceReceiver,
+    SurfaceReceiverId, SurfaceReceiverShape, TcrSettings, Vec3,
 };
 
 /// Why a `config.xml` could not be imported. [`ImportError::code`] is a stable reason code.
@@ -343,6 +343,7 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
                     shape: FittingShape::Box {
                         min: Vec3::ZERO,
                         max: Vec3::ZERO,
+                        destination: None,
                     },
                     absorption,
                     mean_free_path_m,
@@ -655,44 +656,27 @@ fn read_material(
             None => None,
         });
     }
-    let law = laws.first().copied().unwrap_or(0);
-    if laws.iter().any(|&l| l != law) {
-        return Err(ImportError::Unsupported {
-            what: format!("{what} loi"),
-            reason: format!("the reflection law differs between bands ({laws:?})"),
-        });
-    }
-    let reflection_law = u8::try_from(law)
-        .ok()
-        .and_then(ReflectionLaw::from_solver_code)
-        .ok_or_else(|| ImportError::Unsupported {
-            what: format!("{what} loi"),
-            reason: format!("{law} is not a reflection law (0 to 6)"),
-        })?;
-    // Upstream's GUI leaves the loss out of a band that absorbs nothing (e_data_row_materiau.h:
-    // 98-106, 131-134), and so does our writer, whatever the project holds there: such a band
-    // gets 0 dB. A band that absorbs and has no loss cannot be held.
-    let silent = |i: usize| absorption[i].get() as f32 <= 0.0;
-    let transmission_loss_db = if transmission.iter().all(Option::is_none) {
-        None
-    } else if transmission
+    // One law per band, as the solvers read it (`base_core_configuration.cpp:210-219`).
+    let laws = laws
+        .into_iter()
+        .map(|law| {
+            u8::try_from(law)
+                .ok()
+                .and_then(ReflectionLaw::from_solver_code)
+                .ok_or_else(|| ImportError::Unsupported {
+                    what: format!("{what} loi"),
+                    reason: format!("{law} is not a reflection law (0 to 6)"),
+                })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let reflection_law = ReflectionLaws::from_bands(laws);
+    // A band transmits exactly when it carries `affaiblissement` (`base_core_configuration.cpp:
+    // 210-219`); upstream's GUI leaves it out of a band whose switch is off
+    // (`e_data_row_materiau.h:98-106`).
+    let transmission_loss_db = transmission
         .iter()
-        .enumerate()
-        .all(|(i, t)| t.is_some() || silent(i))
-    {
-        Some(
-            transmission
-                .into_iter()
-                .map(|t| t.unwrap_or(F64::new(0.0)))
-                .collect(),
-        )
-    } else {
-        return Err(ImportError::Unsupported {
-            what: format!("{what} affaiblissement"),
-            reason: "only some bands have a transmission loss, and a band without one absorbs"
-                .to_string(),
-        });
-    };
+        .any(Option::is_some)
+        .then_some(transmission);
     Ok(Material {
         id: MaterialId(ids.uuid("material", index)),
         name: format!("Material {id}"),

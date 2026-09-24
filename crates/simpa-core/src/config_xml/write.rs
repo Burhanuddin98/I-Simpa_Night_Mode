@@ -4,13 +4,13 @@ use std::fmt;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::ids::{SolverIds, group_zone_ids};
+use super::ids::{DRAWN_ZONE_MATERIAL_ID, SolverIds, group_zone_ids, has_drawn_zones};
 use super::names;
 use super::num::{real_text, widen_f32};
-use crate::geometry::import::REFERENCE_SPECTRA;
+use crate::geometry::import::{REFERENCE_SPECTRA, default_material};
 use crate::schema::{
-    BandKind, BandSet, Directivity, FittingZone, IntegrityError, Material, Project, ReflectionLaw,
-    SolverKind, Source, Spectrum, SpectrumShape, SurfaceReceiverShape, VariantId,
+    BandKind, BandSet, Directivity, FittingZone, IntegrityError, Material, MaterialId, Project,
+    ReflectionLaw, SolverKind, Source, Spectrum, SpectrumShape, SurfaceReceiverShape, VariantId,
 };
 
 /// Why a `config.xml` could not be written. [`WriteError::code`] is a stable reason code.
@@ -398,6 +398,18 @@ pub fn write(
         declared.push((sid, m, &g.name));
         write_material(&mut x, project, sid, m)?;
     }
+    // The drawn zones' triangles of the scene mesh carry upstream's default material, id 0
+    // (`scene_mesh`), which upstream's GUI declares in every config.xml: declared here whenever
+    // they exist, as reference material 0, unless a surface group already declares id 0 (a
+    // project pinned to a solver mesh's ids can), whose declaration they then share.
+    if has_drawn_zones(project)
+        && !declared
+            .iter()
+            .any(|(id, _, _)| *id == DRAWN_ZONE_MATERIAL_ID)
+    {
+        let default = default_material(MaterialId(uuid::Uuid::nil()), project.bands.len());
+        write_material(&mut x, project, DRAWN_ZONE_MATERIAL_ID, &default)?;
+    }
     x.close("surface_absorption_enum");
 
     // The lists below are written last item first, as upstream's GUI writes them: it creates each
@@ -526,12 +538,14 @@ fn write_material(
     m: &Material,
 ) -> Result<(), WriteError> {
     let what = |f: &str| format!("material '{}' {f}", m.name);
-    if m.reflection_law == ReflectionLaw::SemiDiffuse {
+    if let Some(band) = m.reflection_law.first_band_with(ReflectionLaw::SemiDiffuse) {
         return Err(WriteError::Unsupported {
             what: what("reflection law"),
-            reason: "semi-diffuse (loi 6) has no case in SPPS, which reflects it specularly \
-                     (dotreflection.h:23-45); config_value_format allows loi 0 to 5"
-                .to_string(),
+            reason: format!(
+                "semi-diffuse (loi 6, at {} Hz) has no case in SPPS, which reflects it \
+                 specularly (dotreflection.h:23-45); config_value_format allows loi 0 to 5",
+                project.bands.frequencies_hz.get(band).copied().unwrap_or(0)
+            ),
         });
     }
     x.open(
@@ -541,8 +555,13 @@ fn write_material(
             ("side_material", flag(m.double_sided)),
         ],
     );
-    let loi = m.reflection_law.solver_code().to_string();
     for (i, f) in project.bands.frequencies_hz.iter().enumerate() {
+        let loi = m
+            .reflection_law
+            .at(i)
+            .expect("integrity: one law per band")
+            .solver_code()
+            .to_string();
         let mut attrs = vec![
             ("freq", f.to_string()),
             (
@@ -553,10 +572,12 @@ fn write_material(
                 "diffusion",
                 real(&what(&format!("{f} Hz scattering")), m.scattering[i].get())?,
             ),
-            ("loi", loi.clone()),
+            ("loi", loi),
         ];
-        if let Some(tl) = &m.transmission_loss_db
-            && let Some(loss) = transmission_loss_written(tl[i].get(), m.absorption[i].get())
+        // Only in a band that transmits: upstream's GUI leaves the attribute out of a band whose
+        // switch is off (`e_data_row_materiau.h:98-106`).
+        if let Some(tl) = m.transmission_loss_db.as_ref().and_then(|t| t[i])
+            && let Some(loss) = transmission_loss_written(tl.get(), m.absorption[i].get())
         {
             attrs.push((
                 "affaiblissement",

@@ -105,11 +105,13 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
      |---|---|---|
      | Tutorial 1 | `.poly`, `.var`, TetGen's `.1.*` and the `.mbin` byte-identical, `idVolume` included; `config.xml` and `.cbin` the original's but the ids, the stored receiver directions and the listed differences by design | TCR: 15 of 15 files identical. SPPS: 15 of 17, and the two `Advanced sound level.gap` differ in the last bits; with the run's own receiver directions, 17 of 17 |
      | Tutorial 2 | `.poly` and `.1.node` equal in every value; 307 and 1,036 lines differ in text at exact decimal ties (below); the other `.1.*` byte-identical | none: the `.proj` holds no run folder |
-     | Tutorial 3 | not meshable by us (below). Our TetGen on upstream's own `.poly` gives its `.1.*` byte for byte, and our builder its `.mbin`; `config.xml` and `.cbin` the original's but the ids | 3 runs: 24 of 24 files identical in each, with the fittings under our ids and the room as TetGen numbers it above them (decision 1). The refusal: the room written 0, as the builder wrote it until 2026-09-24, gives different results |
+     | Tutorial 3 | `simpa import-proj` reads it (2026-09-24: fitting zones, per-band laws and transmission, source groups); not meshable by us (below). Our TetGen on upstream's own `.poly` gives its `.1.*` byte for byte, and our builder its `.mbin`; `config.xml` and `.cbin` from the `.proj` the original's, `.cbin` byte for byte, once upstream's ids are read through the map the import records | 3 runs: 24 of 24 files identical in each, on our `.proj`'s config and `.cbin`, with the fittings under our ids and the room as TetGen numbers it above them (decision 1). The refusal: the room written 0, as the builder wrote it until 2026-09-24, gives different results |
 
    - **What does not match**, each measured:
-     1. **Tutorial 3 cannot go through our pipeline.** `simpa import-proj` refuses its fitting
-        zones, and `simpa mesh` refuses the scene its runs hold (`self_intersections`,
+     1. **Tutorial 3 cannot go through our mesher.** `simpa import-proj` reads it since
+        2026-09-24, and `simpa mesh` refuses the project: TetGen stops on the box standing on
+        the floor (`tetgen_self_intersection`, exit 4); the scene its runs hold, imported from a
+        run's `config.xml` and `.cbin`, is refused by the geometry check (`self_intersections`,
         `open_boundary`, `unresolved_topology`). Upstream's GUI took its `.poly` through
         `preprocess.exe` (the mesh settings' "preprocess", `projet_maillage.cpp:206-213`): its
         `.poly` has 57 vertices and 133 facets for the run's 100 faces. Our `.poly` of the same
@@ -158,8 +160,12 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
    `scene_faces + k`, and the `.mbin` builder writes them as -1: a plain tet-to-tet transition.
    Each zone gets one region seed at the box centre, with attribute = its solver id.
    - `Surfaces` zones use the scene's own faces and the zone's `inside_point`.
-   - **This departs from upstream**, which appends the box triangles to the `.cbin` as
-     material-0 faces with `idEn` set (`Objet3D_maillage.cpp:800-813`).
+   - **This departs from upstream**, which marks the box's triangles with their `.cbin` faces
+     (Part 5 of its `.poly`, through `preprocess.exe`). Since 2026-09-24 our `.cbin` carries
+     them as upstream's does, material-0 faces with `idEn` set after the room's
+     (`Objet3D_maillage.cpp:800-813`; `config_xml::scene_mesh`, tutorial 3 byte for byte), and
+     `config.xml` declares material 0 for them; the mesher's `.poly` markers still index the
+     room's faces only (`config_xml::room_mesh`), so no `.mbin` marker names a box face.
    - **Physical equivalence is unproven.** No gate runs a fitting zone through a solver before M8.
 6. **Internal facets are marked on both sides**, as upstream does (`Objet3D_maillage.cpp:369-381`).
    The `.mbin` invariant is therefore:

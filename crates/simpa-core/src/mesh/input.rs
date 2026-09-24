@@ -28,7 +28,9 @@ pub struct MeshInput {
     pub var: Option<Vec<u8>>,
     /// The markers the `.var` constrains, in file order.
     pub var_markers: Vec<u32>,
-    /// `mesh.cbin`: the scene the `.mbin` markers index.
+    /// `mesh.cbin`: the scene the `.mbin` markers index. For a project, the room's faces
+    /// ([`config_xml::room_mesh`]); a run's `mesh.cbin` ([`config_xml::scene_mesh`]) adds the
+    /// drawn box zones' triangles after them, which no marker names (decision 5).
     pub scene: cbin::Model,
     /// The ids the `.mbin` may carry: the seeded fitting ids, and the room's parts numbered by
     /// TetGen above them ([`VolumeIds::tetgen`]).
@@ -85,7 +87,7 @@ const BOX_TRIANGLES: [[usize; 3]; 12] = [
 ];
 
 /// Builds the mesher input for `project`:
-/// - vertices taken from [`config_xml::scene_mesh`] (narrowed to `f32`, then through upstream's
+/// - vertices taken from [`config_xml::room_mesh`] (narrowed to `f32`, then through upstream's
 ///   OpenGL round trip in the scene's [`GlFrame`]) and written back as `f64`, so the `.poly`
 ///   holds exactly the `.cbin`'s values, as upstream's `_SavePOLY` and `ToCBINFormat` write the
 ///   same `f32` vertices (`Objet3D_maillage.cpp:777, 941-942`);
@@ -101,8 +103,8 @@ const BOX_TRIANGLES: [[usize; 3]; 12] = [
 /// - the `.var` when `surface_receiver_max_area_m2` is set ([`var_bytes`]).
 pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
     let scene =
-        config_xml::scene_mesh(project).map_err(|e| InputError(format!("scene mesh: {e}")))?;
-    // The frame scene_mesh took the scene's vertices through.
+        config_xml::room_mesh(project).map_err(|e| InputError(format!("scene mesh: {e}")))?;
+    // The frame room_mesh took the scene's vertices through.
     let frame = GlFrame::of_project(project);
     let ids = SolverIds::assign(project).map_err(|e| InputError(format!("solver ids: {e}")))?;
     let settings = &project.solvers.meshing;
@@ -147,7 +149,7 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
         let id = ids.fitting_zone_id(z.id).expect("every zone has an id");
         let what = |s: &str| format!("fitting zone '{}' {s}", z.name);
         let seed = match &z.shape {
-            FittingShape::Box { min, max } => {
+            FittingShape::Box { min, max, .. } => {
                 let (lo, hi) = (narrow(*min, &what("min"))?, narrow(*max, &what("max"))?);
                 let (lo, hi) = match &frame {
                     Some(f) => (f.round_trip(lo), f.round_trip(hi)),

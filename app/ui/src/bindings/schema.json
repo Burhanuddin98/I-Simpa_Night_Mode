@@ -220,6 +220,14 @@
       ],
       "type": "object"
     },
+    "BoxBound": {
+      "description": "One bound of a box on one axis: see `FittingShape::Box::destination`.",
+      "enum": [
+        "min",
+        "max"
+      ],
+      "type": "string"
+    },
     "Camera": {
       "additionalProperties": false,
       "description": "A perspective camera looking from `eye` at `target`, Z up.",
@@ -718,8 +726,20 @@
       "oneOf": [
         {
           "additionalProperties": false,
-          "description": "An axis-aligned box.",
+          "description": "An axis-aligned box, upstream's rectangular fitting zone (element type 56,\n`e_scene_encombrements_encombrement_cuboide.h`). `min` and `max` are its bounds, for every\ngeometric use.",
           "properties": {
+            "destination": {
+              "description": "Which bound upstream's destination corner `hc` (\"Destination volume\") takes on each\naxis; its origin corner `ba` takes the other. Upstream stores the two corners as the\nuser typed them, not ordered (tutorial 3's box: `ba` (13, 4, 0), `hc` (18, 1, 1.2)),\nand seeds the box's TetGen region at `hc - (hc - ba) * 1e-4`\n(`e_scene_encombrements_encombrement_cuboide.h:333-336`), so this is what reproduces\nthat seed ([`FittingShape::box_corners`]). `None`: `ba` is `min` and `hc` is `max`,\nas for a box drawn here.",
+              "items": {
+                "$ref": "#/$defs/BoxBound"
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": [
+                "array",
+                "null"
+              ]
+            },
             "kind": {
               "const": "box",
               "type": "string"
@@ -764,7 +784,8 @@
           "required": [
             "kind",
             "min",
-            "max"
+            "max",
+            "destination"
           ],
           "type": "object"
         },
@@ -999,8 +1020,8 @@
           "type": "string"
         },
         "reflection_law": {
-          "$ref": "#/$defs/ReflectionLaw",
-          "description": "Written on every band as `bfreq@loi`."
+          "$ref": "#/$defs/ReflectionLaws",
+          "description": "`bfreq@loi`, one law for every band or one per band."
         },
         "scattering": {
           "description": "Scattering coefficient per band, 0 to 1: the share of reflections that are diffuse\n(`bfreq@diffusion`).",
@@ -1029,16 +1050,23 @@
           ]
         },
         "transmission_loss_db": {
-          "description": "Transmission loss per band in dB (`bfreq@affaiblissement`, tau = 10^(-R/10)). `None`\nmeans no transmission: the attribute is then left out, which is how the solver knows.",
+          "description": "Transmission loss per band in dB (`bfreq@affaiblissement`, tau = 10^(-R/10)). `None`\nmeans no transmission in any band; a `None` band does not transmit. Either way the\nattribute is left out of that band, which is how the solver knows\n(`base_core_configuration.cpp:210-219`), as upstream's GUI leaves it out of a band whose\n`transmission` switch is off (`e_data_row_materiau.h:98-106`): tutorial 3's\n`Open_door` transmits from 250 Hz to 4 kHz but not at 125 Hz.",
           "items": {
-            "description": "A float. Finite values are numbers; non-finite values are strings.",
-            "oneOf": [
+            "anyOf": [
               {
-                "type": "number"
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
               },
               {
-                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
-                "type": "string"
+                "type": "null"
               }
             ]
           },
@@ -1063,7 +1091,7 @@
     },
     "MaterialBands": {
       "additionalProperties": false,
-      "description": "A material's per-band arrays.",
+      "description": "A material's per-band values.",
       "properties": {
         "absorption": {
           "items": {
@@ -1079,6 +1107,10 @@
             ]
           },
           "type": "array"
+        },
+        "reflection_law": {
+          "$ref": "#/$defs/ReflectionLaws",
+          "description": "One law, which fits any band set, or one per band."
         },
         "scattering": {
           "items": {
@@ -1097,14 +1129,21 @@
         },
         "transmission_loss_db": {
           "items": {
-            "description": "A float. Finite values are numbers; non-finite values are strings.",
-            "oneOf": [
+            "anyOf": [
               {
-                "type": "number"
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
               },
               {
-                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
-                "type": "string"
+                "type": "null"
               }
             ]
           },
@@ -1117,6 +1156,7 @@
       "required": [
         "absorption",
         "scattering",
+        "reflection_law",
         "transmission_loss_db"
       ],
       "type": "object"
@@ -1152,7 +1192,7 @@
         },
         {
           "const": "transmission_loss",
-          "description": "Only on a material that has a transmission loss.",
+          "description": "Only in a band where the material transmits (its loss is not `None` there).",
           "type": "string"
         }
       ]
@@ -2261,6 +2301,22 @@
           "type": "string"
         }
       ]
+    },
+    "ReflectionLaws": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReflectionLaw",
+          "description": "The same law in every band."
+        },
+        {
+          "description": "One law per band; its length is the band count (`Project::check_integrity`).",
+          "items": {
+            "$ref": "#/$defs/ReflectionLaw"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "A material's reflection law: one law for every band, or one per band. The solvers read it per\nband (`type_surface/bfreq@loi`, `base_core_configuration.cpp:210-219`), and upstream's GUI\nkeeps one per band (the `loi` list of each row, `e_data_row_materiau.h:218`): tutorial 3's\nmaterial 100 is Lambert in the six octave bands and specular in the others.\n\nIn JSON: one law, `\"lambert\"`, or one per band in the band set's order,\n`[\"specular\", \"lambert\", ...]`. [`ReflectionLaws::from_bands`] gives the single spelling\nwhenever every band has the same law."
     },
     "SolverKind": {
       "enum": [

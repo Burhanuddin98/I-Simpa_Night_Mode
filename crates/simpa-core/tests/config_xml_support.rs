@@ -66,17 +66,20 @@ pub fn rich_cube() -> Project {
     let absorber = MaterialId::from_u128(id(11));
     let partition = MaterialId::from_u128(id(12));
     let unused = MaterialId::from_u128(id(13));
-    let mat = |mid, name: &str, a: f64, s: f64, law, tl: Option<f64>, double_sided| Material {
-        id: mid,
-        name: name.into(),
-        color: Rgb(10, 20, 30),
-        absorption: vec![F64::new(a); n],
-        scattering: vec![F64::new(s); n],
-        reflection_law: law,
-        transmission_loss_db: tl.map(|t| vec![F64::new(t); n]),
-        double_sided,
-        solver_id: None,
-    };
+    let mat =
+        |mid, name: &str, a: f64, s: f64, law: ReflectionLaw, tl: Option<f64>, double_sided| {
+            Material {
+                id: mid,
+                name: name.into(),
+                color: Rgb(10, 20, 30),
+                absorption: vec![F64::new(a); n],
+                scattering: vec![F64::new(s); n],
+                reflection_law: law.into(),
+                transmission_loss_db: tl.map(|t| vec![Some(F64::new(t)); n]),
+                double_sided,
+                solver_id: None,
+            }
+        };
     p.materials.push(mat(
         absorber,
         "Absorber",
@@ -202,6 +205,7 @@ pub fn rich_cube() -> Project {
         shape: FittingShape::Box {
             min: Vec3::new(3.6, 3.6, 0.4),
             max: Vec3::new(4.4, 4.4, 1.2),
+            destination: None,
         },
         absorption: vec![F64::new(0.2); n],
         mean_free_path_m: vec![F64::new(1.5); n],
