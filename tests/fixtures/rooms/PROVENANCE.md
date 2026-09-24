@@ -1,7 +1,11 @@
 # Provenance: room fixtures
 
 Upstream's two tutorial projects at upstream commit 929a5c8, imported by
-`simpa_core::geometry::import::import_proj`, then renamed and described. Nothing else is edited.
+`simpa_core::geometry::import::import_proj`, then renamed and described, and upstream's scene
+correction switched off (`solvers.meshing.preprocess` false where both `.proj` files ask for it):
+these rooms are the M5 and M6 gates' rooms, meshed without `preprocess.exe`
+(`docs/m5-m6-design.md`, decision 12). Nothing else is edited; `tools/gates/m4.ps1` (b)(c)
+applies the same edit to a fresh import and requires the rest to be equal.
 Regenerate on Grace with
 `cargo test -p simpa-core --test geometry_import_proj -- --ignored write_room_fixtures`;
 `room_fixtures_are_the_import_of_upstreams_tutorials` fails when these files drift from the
