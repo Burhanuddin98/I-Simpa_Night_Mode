@@ -12,6 +12,7 @@ import copy
 import json
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -191,6 +192,68 @@ class BandCheck(unittest.TestCase):
             self.assertEqual(mx.band_check(mx.Config(path)), {"bands": "pass"})
 
 
+class LocationCheck(unittest.TestCase):
+    def check(self, d: Path) -> dict:
+        cfg = mx.Config(d / "config.xml")
+        return mx.location_check(d, cfg, {"mesh_check": "pass"})
+
+    def test_the_source_outside_is_lost_and_the_others_are_found(self):
+        for case in ("spps_ok", "spps_srcvertex", "spps_srcface", "spps_gradient"):
+            self.assertEqual(self.check(RUNS / case), {"location": "pass"}, case)
+        r = self.check(RUNS / "spps_srcout")
+        self.assertEqual((r["location"], r["location_codes"]), ("fail", ["source_unlocatable"]))
+        self.assertEqual(r["unlocated"], ['source 1 "S1" at (12, 1.7, 2.1)'])
+        r = mx.location_check(RUNS / "spps_degenerate",
+                              mx.Config(RUNS / "spps_degenerate" / "config.xml"), {"mesh_check": "fail"})
+        self.assertEqual(r["location"], "not run: the mesh check failed")
+
+    def test_a_receiver_moved_out_is_lost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            for f in ("config.xml", "mesh.cbin", "tetramesh.mbin"):
+                shutil.copy(RUNS / "spps_ok" / f, d / f)
+            text = (d / "config.xml").read_text(encoding="utf-8")
+            moved = text.replace('lbl="R1" x="3.6"', 'lbl="R1" x="13.6"')
+            self.assertNotEqual(moved, text)
+            (d / "config.xml").write_text(moved, encoding="utf-8")
+            r = self.check(d)
+            self.assertEqual((r["location"], r["location_codes"]), ("fail", ["receiver_unlocatable"]))
+
+    def test_the_f32_test_loses_a_point_on_the_boxs_facet_and_finds_one_1_mm_off(self):
+        # The seeded box's tetrahedra 0 and 4, the two across the facet x/6 + y/10 = 1, with the
+        # corners and face orders the pinned TetGen gives them (tests/run_locate.rs).
+        nodes = [(0, 10, 0), (6, 0, 3), (6, 10, 3), (0, 10, 3), (0, 0, 3)]
+        tets = [((0, 1, 2, 3), [(1, 3, 2), (2, 3, 0), (0, 3, 1), (1, 2, 0)]),
+                ((4, 1, 0, 3), [(1, 3, 0), (0, 3, 4), (4, 3, 1), (1, 0, 4)])]
+        b = struct.pack("<II", len(tets), len(nodes))
+        b += b"".join(struct.pack("<3f", *n) for n in nodes)
+        for corners, faces in tets:
+            b += struct.pack("<5i", *corners, 0)
+            b += b"".join(struct.pack("<5i", *f, -1, -2) for f in faces)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "two.mbin"
+            path.write_bytes(b)
+            faces = mx.read_mbin(path)
+
+        def located(x, y, z):
+            p = [mx.to_float(v) for v in (x, y, z)]
+            return [k for k, t in enumerate(faces) if not any(mx.outside(a, n, p) for a, n in t)]
+        self.assertEqual(located("3", "5", "1.8"), [])
+        self.assertEqual(located("3.001", "5", "1.8"), [0])
+        self.assertEqual(located("2.999", "5", "1.8"), [1])
+        self.assertEqual(located("1.2", "8", "2.4"), [0, 1])
+        self.assertEqual(located("2.1", "6.5", "2.2"), [1])
+
+    def test_positions_are_read_as_tofloat_reads_them(self):
+        self.assertEqual(mx.to_float("1,8"), mx.r32(1.8))
+        self.assertEqual(mx.to_float("  -2.5e1x"), -25.0)
+        self.assertEqual(mx.to_float(""), 0.0)
+        self.assertEqual(mx.to_float("abc"), 0.0)
+        self.assertEqual(mx.to_float("0x1p3"), None)
+        self.assertNotEqual(mx.to_float("0.1"), 0.1)
+        self.assertEqual(mx.to_float("0.1"), struct.unpack("<f", struct.pack("<f", 0.1))[0])
+
+
 class Expectations(unittest.TestCase):
     def test_a_verdict_that_differs_from_the_expectation_is_reported(self):
         rows = mx.load_rows(CONTRACT)
@@ -271,7 +334,8 @@ class Expectations(unittest.TestCase):
             "exit_nonzero", "crash_access_violation", "crash_abort", "crash_other",
             "stats_band_mismatch", "particle_total_short", "particle_loss_excess",
             "expected_file_missing", "nonfinite_result", "stats_unreadable", "cancelled",
-            "mesh_invalid", "band_set_mismatch"} | set(mx.COUNT_ORDER)
+            "mesh_invalid", "band_set_mismatch", "source_unlocatable",
+            "receiver_unlocatable"} | set(mx.COUNT_ORDER)
         cases = sorted(p for p in RUNS.iterdir() if p.is_dir())
         self.assertEqual(len(cases), len(mx.EXPECT))
         for case in cases:

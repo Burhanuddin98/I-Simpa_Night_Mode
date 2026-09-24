@@ -11,7 +11,8 @@
     "mesh_check": "fail",
     "error": "mesh.cbin cannot be read",
     "codes": [],
-    "bands": "pass"
+    "bands": "pass",
+    "location": "not run: the mesh check failed"
   },
   "observed": {
     "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
