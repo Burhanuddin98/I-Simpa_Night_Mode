@@ -65,6 +65,11 @@ fn the_reference_tables_parse_to_94_attributes() {
         "recepteur_ponctuel@name",
         "volume@id",
         "volume@name",
+        // Seen in tutorial 3's configs (tests/parity_inputs.rs).
+        "type_surface@masse_volumique",
+        "encombrement@x",
+        "encombrement@y",
+        "encombrement@z",
     ];
     assert_eq!(ignored, expected);
     assert_eq!(elements, ["subdomains"]);
@@ -342,14 +347,16 @@ fn reals_are_exact_shortest_c_locale_decimals() {
                 }
             }
         }
-        // Spot values against the project, bit for bit.
+        // Spot values against the project, bit for bit. Sources are written last first, as
+        // upstream's GUI writes them; their levels are the writer's own (band_levels_written:
+        // upstream's f32 computation for white and pink on its 27 bands).
         let enabled: Vec<_> = p.sources.iter().filter(|s| s.enabled).collect();
-        for (k, s) in enabled.iter().enumerate() {
+        for (k, s) in enabled.iter().rev().enumerate() {
             let at = &view[&format!("sources/source[{k}]")].attrs;
             for (key, v) in ["x", "y", "z"].iter().zip(s.position.to_array()) {
                 assert_eq!(at[*key].parse::<f64>().unwrap().to_bits(), v.to_bits());
             }
-            let levels = s.power.band_levels_db(&p.bands).unwrap();
+            let levels = config_xml::band_levels_written(&s.power, &p.bands).unwrap();
             for (b, l) in levels.iter().enumerate() {
                 let t = &view[&format!("sources/source[{k}]/bfreq[{b}]")].attrs["db"];
                 assert_eq!(t.parse::<f64>().unwrap().to_bits(), l.to_bits());
@@ -454,7 +461,12 @@ fn strings_are_escaped_and_uncarriable_characters_refused() {
     p.surface_receivers[0].name = "map\nline".into();
     let xml = wr(&p, SolverKind::Spps, None);
     let view = solver_view(&xml);
-    assert_eq!(view["recepteursp/recepteur_ponctuel[0]"].attrs["lbl"], name);
+    // Lists are written last item first, as upstream's GUI writes them.
+    let last = p.point_receivers.len() - 1;
+    assert_eq!(
+        view[&format!("recepteursp/recepteur_ponctuel[{last}]")].attrs["lbl"],
+        name
+    );
     assert_eq!(
         view["recepteurss/recepteur_surfacique[0]"].attrs["name"],
         "map\nline"
@@ -884,12 +896,13 @@ fn directivity_files_are_staged_once_under_unique_names() {
         .filter(|i| i.key == "source")
         .filter_map(|i| i.attrs.get("directivity_file").map(String::as_str))
         .collect();
+    // In the file, sources come last first, as upstream's GUI writes them.
     assert_eq!(
         files,
         vec![
-            "speaker-test3.txt",
             "2_SPEAKER-TEST3.txt",
-            "2_SPEAKER-TEST3.txt"
+            "2_SPEAKER-TEST3.txt",
+            "speaker-test3.txt"
         ]
     );
     // A file with no name is refused, however many there are (SPPS crashes without one).

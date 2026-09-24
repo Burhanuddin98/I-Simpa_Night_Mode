@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::flags::to_string_g15;
 use super::verify::VolumeIds;
-use crate::config_xml::{self, SolverIds};
+use crate::config_xml::{self, GlFrame, SolverIds};
 use crate::formats::{cbin, poly};
 use crate::schema::{FittingShape, Project, SurfaceReceiverShape, Vec3};
 
@@ -84,17 +84,25 @@ const BOX_TRIANGLES: [[usize; 3]; 12] = [
 ];
 
 /// Builds the mesher input for `project`:
-/// - vertices narrowed to `f32` and written back as `f64`, so the `.poly` holds exactly the
-///   `.cbin`'s values ([`config_xml::scene_mesh`] narrows the same way);
+/// - vertices taken from [`config_xml::scene_mesh`] (narrowed to `f32`, then through upstream's
+///   OpenGL round trip in the scene's [`GlFrame`]) and written back as `f64`, so the `.poly`
+///   holds exactly the `.cbin`'s values, as upstream's `_SavePOLY` and `ToCBINFormat` write the
+///   same `f32` vertices (`Objet3D_maillage.cpp:777, 941-942`);
 /// - faces in project order, facet marker = face index = `.cbin` face index, `saveFaceIndex` on;
 /// - per enabled `Box` fitting zone, its 8 corners and 12 triangles in the facet list (Part 2,
-///   not upstream's Part 5 user list), markers `scene_faces + k`;
+///   not upstream's Part 5 user list), markers `scene_faces + k`. Each corner coordinate is
+///   narrowed and taken through the same round trip as the scene's vertices, as upstream takes a
+///   drawn box's corners (in, `e_scene_encombrements_encombrement_cuboide.h:180`; out,
+///   `Objet3D_maillage.cpp:984-990`). The round trip works coordinate by coordinate, so a box
+///   face flush with a wall stays exactly in that wall's plane;
 /// - per enabled fitting zone, one region: the box centre, or the zone's `inside_point`, narrowed
 ///   to `f32`, attribute = its solver id, no volume bound (-1);
 /// - the `.var` when `surface_receiver_max_area_m2` is set ([`var_bytes`]).
 pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
     let scene =
         config_xml::scene_mesh(project).map_err(|e| InputError(format!("scene mesh: {e}")))?;
+    // The frame scene_mesh took the scene's vertices through.
+    let frame = GlFrame::of_project(project);
     let ids = SolverIds::assign(project).map_err(|e| InputError(format!("solver ids: {e}")))?;
     let settings = &project.solvers.meshing;
     // The flags carry these as the f32 upstream holds (`flags::setting_g15`).
@@ -139,12 +147,15 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
         let what = |s: &str| format!("fitting zone '{}' {s}", z.name);
         let seed = match &z.shape {
             FittingShape::Box { min, max } => {
-                let lo = narrow(*min, &what("min"))?;
-                let hi = narrow(*max, &what("max"))?;
+                let (lo, hi) = (narrow(*min, &what("min"))?, narrow(*max, &what("max"))?);
+                let (lo, hi) = match &frame {
+                    Some(f) => (f.round_trip(lo), f.round_trip(hi)),
+                    None => (lo, hi),
+                };
                 if (0..3).any(|a| lo[a] >= hi[a]) {
                     return Err(InputError(format!(
                         "fitting zone '{}' (/fitting_zones/{i}) is an empty box: min {lo:?} is not \
-                         below max {hi:?} on every axis as 32-bit floats",
+                         below max {hi:?} on every axis as 32-bit floats, as the mesher writes them",
                         z.name
                     )));
                 }
@@ -168,7 +179,7 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
                     solver_id: id,
                     first_marker,
                 });
-                // The centre, from the narrowed corners, narrowed again.
+                // The centre, from the corners as written, narrowed again.
                 [0, 1, 2].map(|a| ((f64::from(lo[a]) + f64::from(hi[a])) / 2.0) as f32)
             }
             FittingShape::Surfaces { inside_point, .. } => {

@@ -44,13 +44,18 @@ For a project (`mesh_project`), per `docs/m5-m6-design.md` decisions 1-5:
   `Convertor::ToString` (`%.15g`, classic locale). The default settings give `-pq5 -A -n -Y`,
   both room fixtures give `-pq2 -A -n`, and q = 1.1 gives `-pq1.10000002384186`, as upstream's
   command line has it. A `-q` or `-a` value must be above 0 and finite as `f32`.
-- **Vertices** narrowed to `f32`, written back as `f64`: the `.poly` holds exactly the `.cbin`'s
-  values.
+- **Vertices** from the scene mesh (`config_xml::scene_mesh`): narrowed to `f32`, then taken
+  through upstream's OpenGL round trip in the scene's frame (`config_xml::GlFrame`), written back
+  as `f64`. The `.poly` holds exactly the `.cbin`'s values, as upstream's does
+  (`Objet3D_maillage.cpp:777, 941-942`); tutorial 1's box gives upstream's 2019 `.poly` byte for
+  byte (`tests/parity_inputs.rs`).
 - **Facets** in project order, facet marker = face index = `.cbin` face index.
 - **Box fitting zones:** 8 corners and 12 triangles each, in the facet list (not the Part 5 user
-  list), with markers `scene faces + k`. The `.mbin` writes those as -1.
-- **Regions:** one per enabled fitting zone, at the box centre or the zone's `inside_point`
-  narrowed to `f32`, with attribute = the zone's solver id and no volume bound. The room has none.
+  list), with markers `scene faces + k`. The `.mbin` writes those as -1. Each corner coordinate
+  takes the same round trip as the scene's vertices, as upstream's drawn boxes do; the round trip
+  works coordinate by coordinate, so a box face flush with a wall stays in that wall's plane.
+- **Regions:** one per enabled fitting zone, at the box centre (from its corners as written) or
+  the zone's `inside_point`, narrowed to `f32`, with attribute = the zone's solver id and no volume bound. The room has none.
 
 For a raw `.poly` (`mesh_poly`): its facets are the scene. Vertices are narrowed to `f32`, each
 facet's marker becomes its position (a note records any that changed), its regions are kept,
