@@ -109,9 +109,10 @@ pub struct ReceiverBand {
 
 /// A `.gap` lateral column that holds a NaN, at `step` (the first). SPPS computes the angle `φ`
 /// between a particle's direction and the receiver's orientation as `acos` of their normalised dot
-/// product in `f32`, unclamped (`lib_interface/Core/mathlib.h:176-180`;
-/// `spps/input_output/reportmanager.cpp:218-219`); a direction along the orientation can take the
-/// argument past ±1, and one such crossing makes that step's `E·cos²φ` and `E·|cos φ|` NaN.
+/// product in `f32`, unclamped (`lib_interface/Core/mathlib.h:176-180`, reached through
+/// `direction.angle(...)` at `spps/input_output/reportmanager.cpp:222`); a direction along the
+/// orientation can take the argument past ±1, and one such crossing makes that step's
+/// `E·cos²φ` and `E·|cos φ|` sums NaN (`reportmanager.cpp:226-227`).
 /// Seen once in ten tutorial 1 runs at 1,500,000 particles in energetic mode (`docs/results.md`).
 /// Only the lateral column is unusable: the energy the parameters read is written apart, and is
 /// checked equal to the `.recp`'s. So the column carries this instead of values, and the run is
@@ -324,13 +325,14 @@ impl SppsResults {
     }
 
     /// Whether SPPS's own statistics show that no energy arrives after the series' end in band
-    /// `freq_hz`: random mode with `trans_epsilon` above 0, and no particle remaining at the end
-    /// of the calculation. A particle is counted as remaining only when the time steps run out
+    /// `freq_hz`, but what unfinished paths would have brought: random mode with `trans_epsilon`
+    /// above 0, and at most [`REMAINING_UNFINISHED_SHARE`] of the band's particles remaining at the
+    /// end of the calculation. A particle is counted as remaining only when the time steps run out
     /// while it is alive (`spps/CalculationCore.cpp:49, 88-92`), and in random mode a particle's
-    /// energy never dwindles, it is absorbed whole (`CalculationCore.cpp:62-67, 288-300`), so with
-    /// none remaining the histogram holds every particle's whole path, except the unfinished paths
-    /// of lost particles, which [`SppsResults::lost_share`] bounds. Energetic mode drops a
-    /// particle once its energy falls below `10^-trans_epsilon` of its start
+    /// energy never dwindles, it is absorbed whole (`CalculationCore.cpp:62-67, 288-300`), so the
+    /// histogram holds every particle's whole path, except the unfinished paths of the lost and
+    /// the remaining ones, which [`SppsResults::lost_share`] bounds together. Energetic mode drops
+    /// a particle once its energy falls below `10^-trans_epsilon` of its start
     /// (`sppsNantes.cpp:75`; `CalculationCore.cpp:305`), so it is never complete here: `params`
     /// bounds its tail and its floor instead.
     pub fn band_complete(&self, freq_hz: i32) -> bool {
@@ -341,27 +343,43 @@ impl SppsResults {
                 .bands
                 .iter()
                 .find(|b| b.freq_hz == freq_hz)
-                .is_some_and(|b| b.remaining == 0)
+                .is_some_and(|b| {
+                    f64::from(b.remaining) <= REMAINING_UNFINISHED_SHARE * f64::from(b.total)
+                })
     }
 
-    /// The share of a receiver's energy after step `bin` that band `index`'s lost particles
-    /// (`partLoop` and `partLost`, `CalculationCore.cpp:102-107`) can have taken with them, or
-    /// `None` when none was lost. A lost particle stops mid-path; what it would still have brought
-    /// is, on average, what any particle alive at that time brings. The room table
+    /// The particles of band `freq_hz` whose paths stopped unfinished: lost (`partLoop`,
+    /// `partLost`), and, when the band is complete ([`SppsResults::band_complete`]), remaining
+    /// at the end.
+    fn unfinished(&self, b: &crate::run::stats::BandStats) -> u64 {
+        let remaining = if self.band_complete(b.freq_hz) {
+            u64::from(b.remaining)
+        } else {
+            0
+        };
+        b.lost() + remaining
+    }
+
+    /// The share of a receiver's energy after step `bin` that band `index`'s unfinished particles
+    /// can have taken with them, or `None` when there are none: those lost (`partLoop` and
+    /// `partLost`, `CalculationCore.cpp:102-107`) and, in a complete band, those remaining at the
+    /// end ([`SppsResults::band_complete`]). Such a particle stops mid-path; what it would still
+    /// have brought is, on average, what any particle alive at that time brings. The room table
     /// (`<cumul_filename>`) holds the energy of the particles alive at the end of each step times
     /// `ρc` (`reportmanager.cpp:155-166, 426-437`), and the `.gap` the sources' power times `ρc`,
     /// so their ratio at `bin` is the share of the emitted energy still alive then, `f`. With
-    /// `n` particles lost of `N` emitted, the share is `n / (N·f)` of the energy the receiver
-    /// gets from `bin` on (`docs/results.md`, "Lost particles").
+    /// `n` particles unfinished of `N` emitted, the share is `n / (N·f)` of the energy the
+    /// receiver gets from `bin` on (`docs/results.md`, "Lost particles").
     pub fn lost_share(&self, index: usize, freq_hz: i32, bin: usize) -> Option<f64> {
         let b = self.particles.bands.iter().find(|b| b.freq_hz == freq_hz)?;
-        if b.lost() == 0 {
+        let n = self.unfinished(b);
+        if n == 0 {
             return None;
         }
         let emitted = f64::from(self.particles_per_source) * self.sources.len() as f64;
-        // Nothing known alive: nothing bounds what the lost particles took.
+        // Nothing known alive: nothing bounds what the unfinished particles took.
         Some(match self.alive_share(index, bin) {
-            Some(alive) if alive > 0.0 && emitted > 0.0 => b.lost() as f64 / (emitted * alive),
+            Some(alive) if alive > 0.0 && emitted > 0.0 => n as f64 / (emitted * alive),
             _ => f64::MAX,
         })
     }
@@ -408,12 +426,24 @@ impl SppsResults {
     }
 }
 
+/// In random mode, the most particles that may remain alive at the end of a band's calculation,
+/// as a share of its particles, for the band still to be complete, the remaining ones bounded as
+/// unfinished paths ([`SppsResults::band_complete`], [`SppsResults::lost_share`]): one in a
+/// million. Measured (`docs/results.md`, "Complete series"): in the 6×10×3 room SPPS leaves about
+/// one particle in 10⁸ alive at the end of runs whose decay has fallen hundreds of decibels, which
+/// no absorption draw can explain (at α 0.4, surviving the 103 reflections of 1 s has a chance of
+/// 10⁻²³); refusing the band's every quantity for it was not honest. A run cut short, with many
+/// particles alive, stays incomplete, and its tail is bounded from the series.
+pub const REMAINING_UNFINISHED_SHARE: f64 = 1e-6;
+
 /// In energetic mode, the most a lost particle's energy is taken to be over the mean energy of the
-/// particles when it was lost. Measured on tutorial 1 in energetic mode (3 seeds, 6 octave bands,
-/// 150,000 particles with every trajectory saved): of the 24 particles SPPS counted as lost, the 17
-/// found in the trajectories carried 0.16 to 2.02 times the mean (`crates/simpa/tests/
-/// m8_evidence.rs`, `energetic_lost_particles_from_saved_trajectories`); the other 7 ended with
-/// less than 10⁻⁴ of their start energy. Five times the largest measured.
+/// particles when it was lost: **an empirical cap, not a bound.** Measured on tutorial 1 in
+/// energetic mode (3 seeds, 6 octave bands, 150,000 particles with every trajectory saved): of the
+/// 24 particles SPPS counted as lost, the 17 found in the trajectories carried 0.16 to 2.02 times
+/// the mean (`crates/simpa/tests/m8_evidence.rs`, `energetic_lost_particles_from_saved_
+/// trajectories`); the other 7 ended with less than 10⁻⁴ of their start energy, so their ratio is
+/// not known. Five times the largest measured. A late loss in a uniform, strongly absorbing room
+/// can exceed it (`docs/results.md`, "Lost particles", for what that can move).
 pub const ENERGETIC_LOST_ENERGY_RATIO: f64 = 10.0;
 
 const CONFIG: &str = crate::config_xml::names::CONFIG;
@@ -1157,6 +1187,100 @@ mod tests {
         }];
         let share = r.lost_share(0, 500, 1).unwrap();
         assert!((share - 3.0 / (1000.0 * 0.25)).abs() < 1e-15, "{share}");
+    }
+
+    #[test]
+    fn a_particle_in_a_million_left_alive_is_bounded_as_unfinished_not_refused() {
+        // 10 million particles, a quarter of the emitted energy alive at the end of step 1.
+        let big = |remaining: u32, lost: u32| {
+            let mut r = run(0, 5.0, 0, 0);
+            r.particles_per_source = 10_000_000;
+            let b = &mut r.particles.bands[0];
+            b.total = 10_000_000;
+            b.remaining = remaining;
+            b.lost_by_meshing_problems = lost;
+            b.absorbed_by_materials = 10_000_000 - remaining - lost;
+            r.sources = vec![SourcePoint {
+                name: "S".into(),
+                position_m: None,
+                emission_s: 0.0,
+                band_power_w: vec![1.0],
+                balloon: false,
+            }];
+            r.total_energy = vec![BandEnergy {
+                freq_hz: 500,
+                energy: vec![2.0, 0.5],
+            }];
+            r.point_receivers = vec![PointReceiver {
+                label: "R".into(),
+                folder: "Punctual receivers/R".into(),
+                position_m: None,
+                bands: vec![ReceiverBand {
+                    freq_hz: 500,
+                    energy: vec![1.0, 1.0],
+                    lateral_cos2: Ok(vec![0.0; 2]),
+                    lateral_abs_cos: Ok(vec![0.0; 2]),
+                    intensity: Default::default(),
+                    source_power_rho_c: 2.0,
+                    background_noise_db: 0.0,
+                }],
+                by_source: Vec::new(),
+                echograms: Vec::new(),
+            }];
+            r
+        };
+        // 3 remaining and 2 lost of 10 million: complete, the 5 unfinished bounded together.
+        let r = big(3, 2);
+        assert!(r.band_complete(500));
+        let share = r.lost_share(0, 500, 1).unwrap();
+        assert!(
+            (share - 5.0 / (10_000_000.0 * 0.25)).abs() < 1e-18,
+            "{share}"
+        );
+        // 10 remaining is one in a million: still complete; 11 is not, and the remaining ones are
+        // then left to the tail, the share counting the lost alone.
+        assert!(big(10, 0).band_complete(500));
+        let r = big(11, 2);
+        assert!(!r.band_complete(500));
+        assert_eq!(r.lost_share(0, 500, 1), Some(2.0 / (10_000_000.0 * 0.25)));
+        // Says no: energetic mode is never complete, whatever remains.
+        let mut e = big(0, 0);
+        e.computation_method = 1;
+        assert!(!e.band_complete(500));
+    }
+
+    #[test]
+    fn energetic_lost_particles_take_rho_n_over_n_of_the_energy_from_every_time_on() {
+        let with_source = |method: i32, lost: u32| {
+            let mut r = run(method, 5.0, 0, lost);
+            r.sources = vec![SourcePoint {
+                name: "S".into(),
+                position_m: None,
+                emission_s: 0.0,
+                band_power_w: vec![1.0],
+                balloon: false,
+            }];
+            r
+        };
+        // 3 lost of 1000 emitted, energetic: ρ·3/1000.
+        let share = with_source(1, 3).lost_share_following_decay(500).unwrap();
+        assert_eq!(share, ENERGETIC_LOST_ENERGY_RATIO * 3.0 / 1000.0);
+        // Two sources emit twice the particles.
+        let mut two = with_source(1, 3);
+        two.sources.push(two.sources[0].clone());
+        assert_eq!(
+            two.lost_share_following_decay(500),
+            Some(ENERGETIC_LOST_ENERGY_RATIO * 3.0 / 2000.0)
+        );
+        // Says no: random mode keeps its lump from the arrival; none lost gives none; a band the
+        // statistics do not list gives none; nothing emitted leaves nothing bounded.
+        assert_eq!(with_source(0, 3).lost_share_following_decay(500), None);
+        assert_eq!(with_source(1, 0).lost_share_following_decay(500), None);
+        assert_eq!(with_source(1, 3).lost_share_following_decay(1000), None);
+        assert_eq!(
+            run(1, 5.0, 0, 3).lost_share_following_decay(500),
+            Some(f64::MAX)
+        );
     }
 
     #[test]

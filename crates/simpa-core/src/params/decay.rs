@@ -12,15 +12,18 @@
 //! The model is exact for an exponential decay and for an impulse followed by one, wherever in
 //! its bin the arrival falls.
 //!
-//! **Three unknowns, bounded.** The energy after the series' end ([`Tail`]); the energy missing
+//! **Four unknowns, bounded.** The energy after the series' end ([`Tail`]); the energy missing
 //! from it because the solver dropped particles below a floor or lost them mid-path
-//! ([`EnergySeries::with_solver_floor`], [`EnergySeries::with_lost_share`]); and, when the
-//! arrival is not given, where in the onset bin it lies. Each quantity is computed with and
-//! without the tail, with the missing energy added too, and with the arrival at each end of the
-//! onset bin. When any of them moves it by more than its limit ([`limits`]), it is refused, as
-//! `truncated`, `missing_moves` or `unresolved`. No alternative value is ever reported as the
-//! quantity. A series its caller knows to be complete ([`EnergySeries::complete`]) has no tail:
-//! [`Tail::Complete`] adds nothing and refuses nothing.
+//! ([`EnergySeries::with_solver_floor`], [`EnergySeries::with_lost_share`]); when the arrival is
+//! not given, where in the onset bin it lies; and, for a solver whose reverberation begins with
+//! the first reflection ([`EnergySeries::with_early_reverberation_unresolved`]), where it begins.
+//! Each quantity is computed with and without the tail, with the missing energy added too, with the
+//! arrival at each end of the onset bin, and with the reverberation beginning at the arrival, at
+//! the first bin wholly after the direct sound and at that bin's end. When any of them moves it by
+//! more than its limit ([`limits`]), it is refused, as `truncated`, `missing_moves`, `unresolved`
+//! or `early_unresolved`. No alternative value is ever reported as the quantity; a value with two
+//! or three readings is reported midway between them. A series its caller knows to be complete
+//! ([`EnergySeries::complete`]) has no tail: [`Tail::Complete`] adds nothing and refuses nothing.
 
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -435,7 +438,8 @@ pub struct BandParameters {
     pub arrival: Arrival,
     /// What EDT, T20 and T30 are measured from: `arrival` when it fits the onset bin, or follows
     /// it within the direct sound's spread; otherwise [`Arrival::Detected`] (`docs/params.md`,
-    /// "Direct-arrival detection"). Decay times are never refused for the arrival.
+    /// "Direct-arrival detection"). Decay times are never refused `params_bad_arrival`; measured
+    /// as detected, they can be refused `unresolved`.
     pub decay_arrival: Arrival,
     pub tail: Result<Tail, ParamError>,
     pub spl_db: Result<f64, ParamError>,
@@ -536,10 +540,33 @@ struct Curve {
     tail: Option<(f64, f64)>,
 }
 
+/// Where the reverberation begins, when the series leaves it unresolved
+/// ([`EnergySeries::with_early_reverberation_unresolved`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Early {
+    /// At the arrival: the first bin wholly after the direct sound's decay continued back to it
+    /// (the module's model, and the only reading of a series that does not leave it unresolved).
+    Arrival,
+    /// At the start of the first bin wholly after the direct sound: everything before it is the
+    /// direct sound, and the curve stays at that bin's sum from the arrival.
+    FirstBin,
+    /// At the end of that bin: the curve stays at its sum through it too, its energy arriving at
+    /// its end, as a reverberation that builds up through the bin brings it late.
+    AfterFirstBin,
+}
+
 impl Curve {
     /// The curve of the backward sums `sums` from `start`, up to `end`, one past the last bin with
-    /// energy; with `tail`, `M` is added to every sum and the curve goes on past `end`.
-    fn new(sums: &[f64], dt: f64, start: Start, end: usize, tail: Option<(f64, f64)>) -> Curve {
+    /// energy; with `tail`, `M` is added to every sum and the curve goes on past `end`; the
+    /// reverberation beginning where `early` says.
+    fn new(
+        sums: &[f64],
+        dt: f64,
+        start: Start,
+        end: usize,
+        tail: Option<(f64, f64)>,
+        early: Early,
+    ) -> Curve {
         let m = tail.map_or(0.0, |t| t.0);
         // Past the end every sum is 0.
         let s = |k: usize| sums.get(k).copied().unwrap_or(0.0) + m;
@@ -561,7 +588,9 @@ impl Curve {
         let u1 = first as f64 * dt - t_a;
         if u1 > 0.0 {
             let next = s(first);
-            let continued = if first < end && next > 0.0 && s(first + 1) > 0.0 {
+            let continued = if early != Early::Arrival {
+                next
+            } else if first < end && next > 0.0 && s(first + 1) > 0.0 {
                 next * (next / s(first + 1)).powf(u1 / dt)
             } else {
                 f64::INFINITY
@@ -575,12 +604,19 @@ impl Curve {
             });
         }
         for k in first..end {
+            // After the first bin, that bin holds its energy at its end: the curve drops there, to
+            // the next sum.
+            let s1 = if early == Early::AfterFirstBin && k == first {
+                s(k)
+            } else {
+                s(k + 1)
+            };
             pieces.push(Piece {
                 u0: k as f64 * dt - t_a,
                 u1: (k + 1) as f64 * dt - t_a,
                 s0: s(k),
-                s1: s(k + 1),
-                shape: shape(s(k + 1)),
+                s1,
+                shape: shape(s1),
             });
         }
         Curve { top, pieces, tail }
@@ -682,6 +718,44 @@ struct View {
     with_tail: Option<Curve>,
     /// `None` when nothing is missing, or the missing energy has no finite bound.
     with_missing: Option<Curve>,
+    /// The same three with the reverberation beginning later ([`Early::FirstBin`],
+    /// [`Early::AfterFirstBin`]), when the series' early reverberation is unresolved
+    /// ([`EnergySeries::with_early_reverberation_unresolved`]); empty otherwise.
+    later: Vec<View>,
+}
+
+/// One quantity from one arrival: from the curve as modelled, and from the curves with the
+/// reverberation beginning later ([`View::later`]); a `plain` that is NaN where that curve gives no
+/// value.
+#[derive(Clone, Debug)]
+struct Pair {
+    cont: Eval,
+    later: Vec<Eval>,
+}
+
+impl View {
+    /// `f` on this view, and on each of its later ones.
+    fn pair(&self, f: impl Fn(&View) -> Eval) -> Pair {
+        Pair {
+            cont: f(self),
+            later: self.later.iter().map(&f).collect(),
+        }
+    }
+}
+
+impl Pair {
+    /// The lowest and highest reading, of `plain`, `tail` or `missing` (`pick`), over the
+    /// continued curve and the later ones: `None` when a reading has none.
+    fn span(&self, pick: impl Fn(&Eval) -> Option<f64>) -> Option<(f64, f64)> {
+        let mut lo = pick(&self.cont)?;
+        let mut hi = lo;
+        for e in &self.later {
+            let x = pick(e)?;
+            lo = lo.min(x);
+            hi = hi.max(x);
+        }
+        Some((lo, hi))
+    }
 }
 
 /// Energy missing from the series ([`EnergySeries::with_solver_floor`],
@@ -856,11 +930,24 @@ impl<'a> Analysis<'a> {
             (Some(m), Ok(Tail::Complete)) if m.energy.is_finite() => Some((m.energy, LUMP_RATE)),
             _ => None,
         };
-        let view = |start: Start| View {
+        let curves = |start: Start, early: Early| View {
             arrival_s: start.time_s,
-            plain: Curve::new(&sums, dt, start, end, None),
-            with_tail: added.map(|a| Curve::new(&sums, dt, start, end, a)),
-            with_missing: with_missing.map(|a| Curve::new(&sums, dt, start, end, Some(a))),
+            plain: Curve::new(&sums, dt, start, end, None, early),
+            with_tail: added.map(|a| Curve::new(&sums, dt, start, end, a, early)),
+            with_missing: with_missing.map(|a| Curve::new(&sums, dt, start, end, Some(a), early)),
+            later: Vec::new(),
+        };
+        // With the early reverberation unresolved, each start is read three ways.
+        let view = |start: Start| View {
+            later: if series.early_reverberation_unresolved() {
+                vec![
+                    curves(start, Early::FirstBin),
+                    curves(start, Early::AfterFirstBin),
+                ]
+            } else {
+                Vec::new()
+            },
+            ..curves(start, Early::Arrival)
         };
         let views = starts.into_iter().map(view).collect();
         let decay_views = decay_start_list.map(|s| s.into_iter().map(view).collect());
@@ -900,21 +987,55 @@ impl<'a> Analysis<'a> {
         self.tail.as_ref().map(|_| ()).map_err(Clone::clone)
     }
 
-    /// The reported value from one [`Eval`] per arrival: their mean, or a refusal. `truncated`
-    /// when the tail moves the mean by more than `limit`; `missing_moves` when the energy missing
-    /// from the series does; `unresolved` when an end of the onset bin lies further than `limit`
-    /// from it.
+    /// The reported value from one [`Pair`] per arrival: the mean over the arrivals of each one's
+    /// value, which is midway between its lowest and highest reading when the early reverberation
+    /// is unresolved; or a refusal. `truncated` when the tail moves the mean by more than `limit`;
+    /// `missing_moves` when the energy missing from the series does; `unresolved` when an end of
+    /// the onset bin lies further than `limit` from it; `early_unresolved` when an arrival's lowest
+    /// or highest reading does.
     ///
     /// `follows` is the most a lost share that follows the decay can move the value, in the
-    /// limit's unit ([`following`]); beyond the limit it is `missing_moves` too.
+    /// limit's unit ([`following`]). It is added to what the floor's missing energy moves it by,
+    /// and the two together are held to the limit: each is bounded apart, and both can be missing
+    /// at once.
     fn settle(
         &self,
         quantity: Quantity,
-        evals: &[Eval],
+        pairs: &[Pair],
         limit: f64,
         distance: fn(f64, f64) -> f64,
         follows: Option<f64>,
     ) -> Result<f64, ParamError> {
+        let early = |value: f64, continued: f64, span: Option<(f64, f64)>| {
+            not_evaluable(
+                quantity,
+                NotEvaluable::EarlyUnresolved {
+                    value,
+                    continued,
+                    low: span.map(|s| s.0),
+                    high: span.map(|s| s.1),
+                    limit,
+                },
+            )
+        };
+        let finite = |x: f64| x.is_finite().then_some(x);
+        let mid = |s: Option<(f64, f64)>| s.map(|(lo, hi)| 0.5 * (lo + hi));
+        let mut evals = Vec::with_capacity(pairs.len());
+        for p in pairs {
+            if p.later.is_empty() {
+                evals.push(p.cont);
+                continue;
+            }
+            let Some(span) = p.span(|e| finite(e.plain)) else {
+                return Err(early(p.cont.plain, p.cont.plain, None));
+            };
+            evals.push(Eval {
+                plain: 0.5 * (span.0 + span.1),
+                tail: mid(p.span(|e| e.tail)),
+                missing: mid(p.span(|e| e.missing)),
+            });
+        }
+        let relative = matches!(quantity, Quantity::Edt | Quantity::T20 | Quantity::T30);
         let n = evals.len() as f64;
         let value = evals.iter().map(|e| e.plain).sum::<f64>() / n;
         let with_tail = evals
@@ -941,37 +1062,36 @@ impl<'a> Analysis<'a> {
                 .map(|e| e.missing)
                 .sum::<Option<f64>>()
                 .map(|s| s / n);
-            match with_missing {
-                Some(w) if distance(value, w) <= limit => {}
+            // What the floor (and a lost share added as a lump) moves the value by, with the tail,
+            // and what a lost share that follows the decay can move it by on top: together.
+            let b = follows.unwrap_or(0.0);
+            let moved = with_missing.map(|w| distance(value, w) + b);
+            match moved {
+                Some(d) if d <= limit => {}
                 _ => {
+                    // The value moved by both, in the direction the floor moves it.
+                    let reported = with_missing.zip(moved).map(|(w, d)| {
+                        if b == 0.0 {
+                            return w;
+                        }
+                        let s = if w < value { -1.0 } else { 1.0 };
+                        if relative {
+                            value * (1.0 + s * d)
+                        } else {
+                            value + s * d
+                        }
+                    });
                     return Err(not_evaluable(
                         quantity,
                         NotEvaluable::MissingMoves {
                             floor_db: m.floor_db,
                             lost_share: m.lost_share,
                             value,
-                            with_missing,
+                            with_missing: reported,
                             limit,
                         },
                     ));
                 }
-            }
-            if let Some(b) = follows.filter(|b| b.is_nan() || *b > limit) {
-                let relative = matches!(quantity, Quantity::Edt | Quantity::T20 | Quantity::T30);
-                return Err(not_evaluable(
-                    quantity,
-                    NotEvaluable::MissingMoves {
-                        floor_db: m.floor_db,
-                        lost_share: m.lost_share,
-                        value,
-                        with_missing: Some(if relative {
-                            value * (1.0 + b)
-                        } else {
-                            value + b
-                        }),
-                        limit,
-                    },
-                ));
             }
         }
         let low = evals.iter().map(|e| e.plain).fold(f64::INFINITY, f64::min);
@@ -989,6 +1109,18 @@ impl<'a> Analysis<'a> {
                     limit,
                 },
             ));
+        }
+        // Each arrival's lowest and highest reading, against the value midway between them.
+        for (p, e) in pairs.iter().zip(&evals) {
+            if p.later.is_empty() {
+                continue;
+            }
+            let span = p.span(|e| finite(e.plain));
+            if let Some((lo, hi)) = span
+                && distance(e.plain, lo).max(distance(e.plain, hi)) > limit
+            {
+                return Err(early(e.plain, p.cont.plain, span));
+            }
         }
         Ok(value)
     }
@@ -1047,7 +1179,7 @@ impl<'a> Analysis<'a> {
                 ));
             }
         }
-        let mut evals = Vec::with_capacity(views.len());
+        let mut pairs = Vec::with_capacity(views.len());
         let mut span = f64::INFINITY;
         // The level range the fits cover, the smallest from any arrival.
         let mut covered_db = f64::INFINITY;
@@ -1056,25 +1188,37 @@ impl<'a> Analysis<'a> {
                 .and_then(|c| c.line(range, self.dt()).ok())
                 .map(|l| -60.0 / l.slope)
         };
+        // A flat early stretch whose curve gives no value: NaN, refused by `settle`.
+        let eval = |v: &View| Eval {
+            plain: v
+                .plain
+                .line(range, self.dt())
+                .map_or(f64::NAN, |l| -60.0 / l.slope),
+            tail: fit(&v.with_tail),
+            missing: fit(&v.with_missing),
+        };
         for v in views {
             let own = v
                 .plain
                 .line(range, self.dt())
                 .map_err(|why| not_evaluable(q, why))?;
-            evals.push(Eval {
-                plain: -60.0 / own.slope,
-                tail: fit(&v.with_tail),
-                missing: fit(&v.with_missing),
-            });
+            pairs.push(v.pair(eval));
             span = span.min(own.span);
             covered_db = covered_db.min(-own.slope * own.span);
         }
         let follows = self
             .following()
             .map(|s| following::decay_relative(s, covered_db));
-        let t = self.settle(q, &evals, limits::DECAY_RELATIVE, relative, follows)?;
-        // `settle` passed, so every arrival's fit with the tail exists.
-        let with_tail_s = evals.iter().map(|e| e.tail.unwrap()).sum::<f64>() / evals.len() as f64;
+        let t = self.settle(q, &pairs, limits::DECAY_RELATIVE, relative, follows)?;
+        // `settle` passed, so every arrival's fit with the tail exists, from every reading.
+        let with_tail_s = pairs
+            .iter()
+            .map(|p| {
+                let (lo, hi) = p.span(|e| e.tail).unwrap();
+                0.5 * (lo + hi)
+            })
+            .sum::<f64>()
+            / pairs.len() as f64;
         Ok(DecayFit {
             range,
             t_s: t,
@@ -1117,7 +1261,12 @@ impl<'a> Analysis<'a> {
             let (early, total) = Self::split(curve, te_s);
             10.0 * (early / (total - early)).log10()
         };
-        let mut evals = Vec::with_capacity(self.views.len());
+        let mut pairs = Vec::with_capacity(self.views.len());
+        let eval = |v: &View| Eval {
+            plain: c(&v.plain),
+            tail: v.with_tail.as_ref().map(c),
+            missing: v.with_missing.as_ref().map(c),
+        };
         for v in &self.views {
             if v.plain.at(te_s) <= 0.0 {
                 return Err(not_evaluable(
@@ -1127,11 +1276,7 @@ impl<'a> Analysis<'a> {
                     },
                 ));
             }
-            evals.push(Eval {
-                plain: c(&v.plain),
-                tail: v.with_tail.as_ref().map(c),
-                missing: v.with_missing.as_ref().map(c),
-            });
+            pairs.push(v.pair(eval));
         }
         self.tail_ok()?;
         let follows = self.following().map(|s| {
@@ -1140,7 +1285,7 @@ impl<'a> Analysis<'a> {
                 .map(|v| following::clarity_db(s, v.plain.top / v.plain.at(te_s)))
                 .fold(0.0, f64::max)
         });
-        self.settle(q, &evals, limits::CLARITY_DB, absolute, follows)
+        self.settle(q, &pairs, limits::CLARITY_DB, absolute, follows)
     }
 
     fn definition(&self, te_s: f64) -> Result<f64, ParamError> {
@@ -1152,46 +1297,58 @@ impl<'a> Analysis<'a> {
             let (early, total) = Self::split(curve, te_s);
             early / total
         };
-        let evals: Vec<_> = self
+        let pairs: Vec<Pair> = self
             .views
             .iter()
-            .map(|v| Eval {
-                plain: d(&v.plain),
-                tail: v.with_tail.as_ref().map(d),
-                missing: v.with_missing.as_ref().map(d),
+            .map(|v| {
+                v.pair(|v| Eval {
+                    plain: d(&v.plain),
+                    tail: v.with_tail.as_ref().map(d),
+                    missing: v.with_missing.as_ref().map(d),
+                })
             })
             .collect();
         let follows = self.following().map(|s| {
-            evals
+            pairs
                 .iter()
-                .map(|e| following::definition(s, e.plain))
+                .map(|p| following::definition(s, p.cont.plain))
                 .fold(0.0, f64::max)
         });
-        self.settle(q, &evals, limits::DEFINITION, absolute, follows)
+        self.settle(q, &pairs, limits::DEFINITION, absolute, follows)
     }
 
     fn centre_time_s(&self) -> Result<f64, ParamError> {
         self.arrival_ok()?;
         self.tail_ok()?;
         let ts = |curve: &Curve| curve.moment() / curve.top;
-        let evals: Vec<_> = self
+        let pairs: Vec<Pair> = self
             .views
             .iter()
-            .map(|v| Eval {
-                plain: ts(&v.plain),
-                tail: v.with_tail.as_ref().map(ts),
-                missing: v.with_missing.as_ref().map(ts),
+            .map(|v| {
+                v.pair(|v| Eval {
+                    plain: ts(&v.plain),
+                    tail: v.with_tail.as_ref().map(ts),
+                    missing: v.with_missing.as_ref().map(ts),
+                })
             })
             .collect();
-        let value = evals.iter().map(|e| e.plain).sum::<f64>() / evals.len() as f64;
+        // The limit is relative to the value `settle` reports: midway between the readings.
+        let value = pairs
+            .iter()
+            .map(|p| {
+                p.span(|e| Some(e.plain))
+                    .map_or(p.cont.plain, |s| 0.5 * (s.0 + s.1))
+            })
+            .sum::<f64>()
+            / pairs.len() as f64;
         let limit = limits::CENTRE_TIME_S.min(limits::CENTRE_TIME_RELATIVE * value);
         let follows = self.following().map(|s| {
-            evals
+            pairs
                 .iter()
-                .map(|e| following::centre_time_s(s, e.plain))
+                .map(|p| following::centre_time_s(s, p.cont.plain))
                 .fold(0.0, f64::max)
         });
-        self.settle(Quantity::CentreTime, &evals, limit, absolute, follows)
+        self.settle(Quantity::CentreTime, &pairs, limit, absolute, follows)
     }
 
     fn spl_db(&self) -> Result<f64, ParamError> {
@@ -1209,10 +1366,13 @@ impl<'a> Analysis<'a> {
         };
         self.settle(
             Quantity::Spl,
-            &[Eval {
-                plain: level(total),
-                tail: tail_energy.map(|t| level(total + t)),
-                missing,
+            &[Pair {
+                cont: Eval {
+                    plain: level(total),
+                    tail: tail_energy.map(|t| level(total + t)),
+                    missing,
+                },
+                later: Vec::new(),
             }],
             limits::SPL_DB,
             absolute,

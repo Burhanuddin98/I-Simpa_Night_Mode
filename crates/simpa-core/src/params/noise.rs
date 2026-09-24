@@ -96,6 +96,9 @@ pub struct Estimate {
 pub struct Parameters {
     /// The onset bin; `None` when the series itself is refused.
     pub onset: Option<Onset>,
+    /// What EDT, T20 and T30 were measured from (`decay::BandParameters::decay_arrival`); `None`
+    /// when the series itself is refused.
+    pub decay_arrival: Option<Arrival>,
     pub spl_db: Result<Estimate, ParamError>,
     pub edt_s: Result<Estimate, ParamError>,
     pub t20_s: Result<Estimate, ParamError>,
@@ -127,7 +130,10 @@ const QUANTITIES: [(Quantity, f64, bool); 8] = [
 /// The eight values of `decay` on one series, in [`QUANTITIES`]' order. A given arrival that does
 /// not fit the onset bin refuses C50, C80, D50 and Ts only (`params_bad_arrival`,
 /// [`decay::evaluate`]).
-fn values(series: &EnergySeries, arrival: Arrival) -> ([Result<f64, ParamError>; 8], Onset) {
+fn values(
+    series: &EnergySeries,
+    arrival: Arrival,
+) -> ([Result<f64, ParamError>; 8], Onset, Arrival) {
     let p = decay::evaluate(series, arrival);
     (
         [
@@ -141,6 +147,7 @@ fn values(series: &EnergySeries, arrival: Arrival) -> ([Result<f64, ParamError>;
             p.ts_s,
         ],
         p.onset,
+        p.decay_arrival,
     )
 }
 
@@ -158,6 +165,7 @@ pub fn evaluate(
             let r = || Err(e.clone());
             return Parameters {
                 onset: None,
+                decay_arrival: None,
                 spl_db: r(),
                 edt_s: r(),
                 t20_s: r(),
@@ -169,7 +177,7 @@ pub fn evaluate(
             };
         }
     };
-    let (base, onset) = values(series, arrival);
+    let (base, onset, decay_arrival) = values(series, arrival);
     // Each resample's eight values; `None` where the resample refuses the quantity.
     let mut samples: Vec<[Option<f64>; 8]> = Vec::new();
     if let NoiseModel::Crossings { mean_deposit } = model
@@ -183,8 +191,16 @@ pub fn evaluate(
             // particles were judged on the series itself; here only the value's spread is wanted,
             // so the resample is taken as it is: complete, nothing missing. (Judging the tail of
             // a resample again would refuse energetic mode for the ragged ends of the random-mode
-            // stand-ins, not for its own noise.)
-            samples.push(match EnergySeries::complete(series.dt(), drawn) {
+            // stand-ins, not for its own noise.) Its early reverberation is read as the series'
+            // is, so that the resamples give the value the series gives.
+            let resampled = EnergySeries::complete(series.dt(), drawn).map(|s| {
+                if series.early_reverberation_unresolved() {
+                    s.with_early_reverberation_unresolved()
+                } else {
+                    s
+                }
+            });
+            samples.push(match resampled {
                 Ok(s) => values(&s, arrival).0.map(|r| r.ok()),
                 Err(_) => [None; 8],
             });
@@ -210,6 +226,7 @@ pub fn evaluate(
     let mut next = || it.next().expect("eight quantities");
     Parameters {
         onset: Some(onset),
+        decay_arrival: Some(decay_arrival),
         spl_db: next(),
         edt_s: next(),
         t20_s: next(),

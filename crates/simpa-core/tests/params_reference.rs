@@ -49,7 +49,11 @@ const BANDS: [f64; 23] = [
 /// relative change from switching the constant to SPPS's physical one, the air term to ISO's
 /// exact midband value, and both.
 fn table(air: &Atmosphere) -> Vec<(f64, f64, f64, f64, f64)> {
-    let s = tutorial_surfaces();
+    table_of(VOLUME, &tutorial_surfaces(), air)
+}
+
+/// [`table`] for any room.
+fn table_of(volume: f64, s: &[Surface], air: &Atmosphere) -> Vec<(f64, f64, f64, f64, f64)> {
     let physical = RtConstant::Physical {
         speed_of_sound: f64::from(air::speed_of_sound(air.temperature_c) as f32),
     };
@@ -60,7 +64,7 @@ fn table(air: &Atmosphere) -> Vec<(f64, f64, f64, f64, f64)> {
             let exact = energy_attenuation_per_m(
                 air::attenuation_db_per_m(exact_midband_hz(f).unwrap(), air).unwrap(),
             );
-            let t = |m: f64, k: RtConstant| eyring_rt(VOLUME, &s, Some(m), k).unwrap();
+            let t = |m: f64, k: RtConstant| eyring_rt(volume, s, Some(m), k).unwrap();
             let tcr = t(nominal, RtConstant::Tcr);
             let rel = |x: f64| x / tcr - 1.0;
             (
@@ -113,6 +117,49 @@ fn what_the_constant_and_the_air_term_move_on_tutorial_1() {
     for (f, _, _, _, both) in &rows {
         assert!(both.abs() < 0.016, "{f}: {both}");
     }
+}
+
+#[test]
+fn what_the_air_term_moves_in_m8s_rooms() {
+    // M8's second table: its rooms with every surface at α and air on (20 °C, 50 %). The less the
+    // surfaces absorb, the larger air's share at 8 kHz, and the more its form moves T_Eyring
+    // (review: tutorial 1's 0.36 % is not M8's).
+    let sea = Atmosphere::at_reference_pressure(20.0, 50.0);
+    let mut worst_all = (0.0f64, "", 0.0, 0.0);
+    for (name, [a, b, c]) in [("6x10x3", [6.0, 10.0, 3.0]), ("5x4x3", [5.0, 4.0, 3.0])] {
+        let volume = a * b * c;
+        let area = 2.0 * (a * b + b * c + a * c);
+        for alpha in [0.05, 0.1, 0.2, 0.4] {
+            let s = [Surface {
+                area_m2: area,
+                absorption: alpha,
+            }];
+            let rows = table_of(volume, &s, &sea);
+            let (f, m) = rows
+                .iter()
+                .map(|r| (r.0, r.3))
+                .max_by(|x, y| x.1.abs().total_cmp(&y.1.abs()))
+                .unwrap();
+            println!(
+                "{name}, alpha {alpha}: the air term's form moves T_Eyring by at most {:+.3} % \
+                 ({f} Hz)",
+                100.0 * m
+            );
+            if m.abs() > worst_all.0.abs() {
+                worst_all = (m, name, alpha, f);
+            }
+        }
+    }
+    println!(
+        "worst: {:+.3} % ({} alpha {} at {} Hz)",
+        100.0 * worst_all.0,
+        worst_all.1,
+        worst_all.2,
+        worst_all.3
+    );
+    // Within a fifth of M8's 5 % budget everywhere, and larger than on tutorial 1.
+    assert!(worst_all.0.abs() < 0.01, "{worst_all:?}");
+    assert!(worst_all.0.abs() > 0.005, "{worst_all:?}");
 }
 
 #[test]

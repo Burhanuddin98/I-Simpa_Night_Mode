@@ -181,6 +181,22 @@ pub enum NotEvaluable {
         with_missing: Option<f64>,
         limit: f64,
     },
+    /// The series' early reverberation is not resolved
+    /// ([`EnergySeries::with_early_reverberation_unresolved`]), and where it begins moves the
+    /// value by more than `limit`: `continued` is the value with the reverberation beginning at
+    /// the arrival (the decay of the first bin wholly after the direct sound continued back to
+    /// it), and `low` and `high` the lowest and highest over that and the reverberation beginning
+    /// at the start or at the end of that bin (`None` when one of those curves gives no value).
+    EarlyUnresolved {
+        /// Midway between `low` and `high`. Not reported as the quantity.
+        value: f64,
+        continued: f64,
+        low: Option<f64>,
+        high: Option<f64>,
+        /// The largest distance allowed from `value` to either, in the quantity's unit (relative
+        /// for decay times).
+        limit: f64,
+    },
     /// The value's Monte-Carlo standard deviation, estimated from the receiver crossings behind
     /// each bin ([`noise`]), is above `limit`; or more than [`noise::REFUSED_RESAMPLES_ALLOWED`]
     /// of the resampled series refuse the quantity themselves.
@@ -295,6 +311,32 @@ impl fmt::Display for NotEvaluable {
                          cost added the curve cannot be fitted"
                     ),
                 }
+            }
+            NotEvaluable::EarlyUnresolved {
+                value,
+                continued,
+                low,
+                high,
+                limit,
+            } => {
+                write!(
+                    f,
+                    "early_unresolved: {continued} with the reverberation beginning at the \
+                     arrival; "
+                )?;
+                match (low, high) {
+                    (Some(l), Some(h)) => write!(
+                        f,
+                        "{l} to {h} with it beginning at the arrival, at the first bin wholly \
+                         after the direct sound or at that bin's end (midway {value})"
+                    )?,
+                    _ => write!(
+                        f,
+                        "with it beginning later, at the first bin wholly after the direct \
+                         sound or at that bin's end, the curve gives no value"
+                    )?,
+                }
+                write!(f, "; the limit is {limit}. Use a finer time step")
             }
             NotEvaluable::MonteCarloNoise {
                 value,
@@ -496,6 +538,9 @@ pub struct EnergySeries {
     /// lost particles would still have brought falls with the decay
     /// ([`EnergySeries::with_lost_share_following_decay`]).
     lost_follows_decay: bool,
+    /// How the reverberation ran before the first bin wholly after the direct sound is not known
+    /// ([`EnergySeries::with_early_reverberation_unresolved`]).
+    early_unresolved: bool,
 }
 
 impl EnergySeries {
@@ -529,7 +574,28 @@ impl EnergySeries {
             floor: None,
             lost_share: None,
             lost_follows_decay: false,
+            early_unresolved: false,
         })
+    }
+
+    /// The series of a solver whose reverberation begins with the first reflection and builds up,
+    /// not with the direct sound: SPPS. In the bins the direct sound reaches, the histogram cannot
+    /// tell it from reverberation that arrived with it, nor, in those bins and the first one after
+    /// them, when the reverberation began. [`decay`] then reads the curve three ways, the
+    /// reverberation beginning at the arrival (the first bin wholly after the direct sound's
+    /// decay continued back to it: the module's model, exact when the reverberation runs from the
+    /// arrival), at the start of that bin, and at its end; reports each quantity midway between the
+    /// lowest and highest reading; and refuses one they spread further than its limit from that,
+    /// `early_unresolved` (`docs/params.md`, "The curve between bin edges";
+    /// `tests/params_early.rs`).
+    pub fn with_early_reverberation_unresolved(mut self) -> Self {
+        self.early_unresolved = true;
+        self
+    }
+
+    /// Whether [`EnergySeries::with_early_reverberation_unresolved`] was set.
+    pub fn early_reverberation_unresolved(&self) -> bool {
+        self.early_unresolved
     }
 
     /// The series of a solver that lost some particles mid-path, whose unfinished paths can have
@@ -711,6 +777,12 @@ pub fn aggregate(bands: &[EnergySeries]) -> Result<EnergySeries, ParamError> {
         }) {
         Some(f) => summed.with_solver_floor(f.db, f.alive_share)?,
         None => summed,
+    };
+    // The early reverberation is unresolved when it is in any band.
+    let summed = if bands.iter().any(|b| b.early_unresolved) {
+        summed.with_early_reverberation_unresolved()
+    } else {
+        summed
     };
     // The largest lost share; it follows the decay only when every band's that has one does.
     let follows = bands

@@ -71,6 +71,33 @@ fn value_offset(g: &Gabe, col: usize, row: usize) -> usize {
     20 + g.columns[..col].iter().map(size).sum::<usize>() + 280 + 4 + 4 * row
 }
 
+/// Sets row `row` of integer column `col` of a GABE file to `value` (an Int column's header is
+/// 280 + 1 bytes, `docs/formats/gabe.md`).
+fn plant_int(path: &Path, col: usize, row: usize, value: i32) {
+    let g = gabe::read_file(path).unwrap();
+    let ColumnData::Int(v) = &g.columns[col].data else {
+        panic!("column {col} is not an integer column");
+    };
+    let size = |c: &gabe::Column| match &c.data {
+        ColumnData::Float { values, .. } => 280 + 4 + 4 * values.len(),
+        ColumnData::Int(v) => 280 + 1 + 4 * v.len(),
+        ColumnData::ShortString(v) => 280 + 1 + 50 * v.len(),
+    };
+    let at = 20 + g.columns[..col].iter().map(size).sum::<usize>() + 280 + 1 + 4 * row;
+    let mut bytes = std::fs::read(path).unwrap();
+    assert_eq!(
+        i32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()),
+        v[row]
+    );
+    bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    std::fs::write(path, bytes).unwrap();
+    // It reads back as planted.
+    let ColumnData::Int(w) = &gabe::read_file(path).unwrap().columns[col].data else {
+        unreachable!()
+    };
+    assert_eq!(w[row], value);
+}
+
 fn plant(path: &Path, col: usize, row: usize, value: f32) {
     let g = gabe::read_file(path).unwrap();
     let at = value_offset(&g, col, row);
@@ -339,6 +366,124 @@ fn the_two_source_run_reads_each_sources_echogram_and_refuses_their_sum() {
     // The band's model is Source 1's deposit, the larger.
     let m = &rep["spps"]["point_receivers"][0]["bands"][0]["noise_model"]["mean_deposit"];
     assert!((m.as_f64().unwrap() / d1 - 1.0).abs() < 1e-12, "{m}");
+}
+
+#[test]
+fn every_spps_band_is_measured_from_the_arrival_and_its_spread_with_its_early_reverberation_unresolved()
+ {
+    // `core::results` hands `params` the direct sound at the receiver's centre, spread over the
+    // time a particle takes to cross the ball, and marks SPPS's early reverberation unresolved
+    // (`report::known_arrival`, `report::series_of`). Says no: an impulse arrival (no spread), or
+    // a series left unmarked, fails here, although every value may still come out.
+    use simpa_core::params::decay::Arrival;
+    for name in [SPPS, ENERGETIC, SOURCES2] {
+        let r = load(name);
+        let s = r.spps().unwrap();
+        let half = s.receiver_crossing_s() / 2.0;
+        assert!(half > 0.0);
+        let rep = results::report(&r);
+        let sp = rep.spps.as_ref().unwrap();
+        for (p, raw) in sp.point_receivers.iter().zip(&s.point_receivers) {
+            for (bi, b) in p.bands.iter().enumerate() {
+                let contributing = raw.contributing(bi);
+                let t = if contributing.is_empty() {
+                    s.arrival_s(raw)
+                } else {
+                    s.arrival_from(raw, &contributing)
+                }
+                .unwrap();
+                assert_eq!(b.arrival, Arrival::spread(t, half), "{name} {}", p.label);
+                assert!(b.early_reverberation_unresolved, "{name} {}", p.label);
+                assert!(b.decay_arrival.is_some(), "{name} {}", p.label);
+            }
+            for e in &p.per_source {
+                let t = s.arrival_from(raw, &[e.source.as_str()]).unwrap();
+                for b in &e.bands {
+                    assert_eq!(b.arrival, Arrival::spread(t, half), "{name} {}", e.source);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn energetic_lost_particles_are_bounded_as_following_the_decay_through_the_report() {
+    use simpa_core::results::spps::ENERGETIC_LOST_ENERGY_RATIO;
+    // The committed energetic run lost 2 of 50,000 particles at 500 Hz and none at 1 kHz.
+    let r = load(ENERGETIC);
+    let s = r.spps().unwrap();
+    let rep = results::report(&r);
+    let sp = rep.spps.as_ref().unwrap();
+    for p in &sp.point_receivers {
+        for (b, st) in p.bands.iter().zip(&s.particles.bands) {
+            assert_eq!(b.freq_hz, st.freq_hz);
+            if st.lost() > 0 {
+                assert!(b.lost_follows_decay, "{} {}", p.label, b.freq_hz);
+                assert_eq!(
+                    b.lost_share,
+                    Some(ENERGETIC_LOST_ENERGY_RATIO * st.lost() as f64 / 50_000.0)
+                );
+            } else {
+                assert!(!b.lost_follows_decay && b.lost_share.is_none());
+            }
+        }
+    }
+    let seat = &sp.point_receivers[0];
+    assert_eq!(seat.label, "Seat");
+    assert!(seat.bands[0].parameters.spl_db.value().is_some());
+    // 200 lost at 500 Hz: a share of 10·200/50,000 = 0.04 following the decay moves every level by
+    // 10·lg(1.04) = 0.17 dB, beyond SPL's 0.1 dB, so SPL is refused there; as random mode's lump
+    // of 200/(50,000·f) from the arrival it would move SPL by about 0.02 dB and pass.
+    let run = copy_of(ENERGETIC, "energetic-lost-200");
+    // Column 1 is 500 Hz; row 4 is lost by meshing problems.
+    plant_int(&run.join("solve/SPPS particle statistics.gabe"), 1, 4, 200);
+    let r = results::load(&run).unwrap_or_else(|e| panic!("{e}"));
+    let s = r.spps().unwrap();
+    assert_eq!(s.particles.bands[0].lost(), 200);
+    let rep = results::report(&r);
+    let b = &rep.spps.as_ref().unwrap().point_receivers[0].bands[0];
+    assert!(b.lost_follows_decay);
+    assert_eq!(b.lost_share, Some(0.04));
+    let why = b.parameters.spl_db.refusal().expect("SPL refused");
+    assert!(
+        matches!(
+            why.error.not_evaluable(),
+            Some(simpa_core::params::NotEvaluable::MissingMoves { .. })
+        ),
+        "{}",
+        why.message
+    );
+    // The lump random mode would have used passes SPL: what the report would have said.
+    let bin = (s.arrival_s(&s.point_receivers[0]).unwrap() / s.time_step_s).floor() as usize;
+    let lump = s.lost_share(0, 500, bin).unwrap();
+    assert!(lump < 0.01, "{lump}");
+}
+
+#[test]
+fn random_mode_lost_particles_are_a_lump_from_the_arrival_through_the_report() {
+    // 20 lost at 500 Hz in a copy of the random-mode Seat run: the share is n/(N·f) of the energy
+    // from the arrival, as a lump, not following the decay.
+    let run = copy_of(SPPS, "random-lost-20");
+    plant_int(&run.join("solve/SPPS particle statistics.gabe"), 1, 4, 20);
+    let r = results::load(&run).unwrap_or_else(|e| panic!("{e}"));
+    let s = r.spps().unwrap();
+    let rep = results::report(&r);
+    for (p, raw) in rep
+        .spps
+        .as_ref()
+        .unwrap()
+        .point_receivers
+        .iter()
+        .zip(&s.point_receivers)
+    {
+        let bin = (s.arrival_s(raw).unwrap() / s.time_step_s).floor() as usize;
+        let b = &p.bands[0];
+        assert!(!b.lost_follows_decay);
+        assert_eq!(b.lost_share, s.lost_share(0, 500, bin));
+        let f = s.alive_share(0, bin).unwrap();
+        assert!((b.lost_share.unwrap() - 20.0 / (2000.0 * f)).abs() < 1e-12);
+        assert_eq!(p.bands[1].lost_share, None);
+    }
 }
 
 type Spoil = fn(&Path);

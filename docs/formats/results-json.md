@@ -43,8 +43,9 @@ are not for publication.`
   an absent value.
 - **`null` appears only at these keys:** `spps`, `tcr` (the other solver's), `mc_sd` (a value not
   from a Monte-Carlo histogram), `band_hz`, `field`, `air_m_per_metre`, `onset`, `position_m`,
-  `arrival_s`, `floor_db`, `lost_share`, `crossings`, and inside a refusal's typed `error`, `sd`,
-  `with_tail` and `with_missing` (`cli_results.rs`, `every_null_in_a_report_is_at_a_nullable_key`).
+  `arrival_s`, `decay_arrival`, `floor_db`, `lost_share`, `crossings`, and inside a refusal's typed
+  `error`, `sd`, `with_tail`, `with_missing`, `low` and `high` (`cli_results.rs`,
+  `every_null_in_a_report_is_at_a_nullable_key`).
 - Values read from the solvers' files are their `f32`, widened exactly. A reader that is not
   correctly rounded (serde_json's default is not) can come back one `f64` unit off; compare such
   values as `f32`. JavaScript's `JSON.parse` is correctly rounded.
@@ -62,7 +63,9 @@ are not for publication.`
   "results_version": 4,               // 2: mc_sd, noise, floor, lost-share and per-source fields;
                                       // 3: TCR receivers carry parameters and an aggregate;
                                       // 4: lost_follows_decay; an arrival outside the onset
-                                      //    bin refuses C50, C80, D50 and Ts only
+                                      //    bin refuses C50, C80, D50 and Ts only; bands carry
+                                      //    arrival, decay_arrival and
+                                      //    early_reverberation_unresolved
   "validated_by_bed": false,          // false until M8's bed passes: show nothing
   "run_folder": "<as given>",
   "solver": "spps" | "tcr",
@@ -98,10 +101,10 @@ A point receiver:
 | `label`, `folder` | the folder's name, which is exactly one `config.xml` label, and its path under `solve/` |
 | `position_m` | as SPPS stores it; `null` when not read |
 | `arrival_s` | the direct sound's arrival at the centre, which every onset-relative parameter is measured from, the direct sound spread over `±receiver_crossing_s/2` about it; `null` when not computed, and the parameters then detect it. When it lies outside a band's onset bin, C50, C80, D50 and Ts are refused `params_bad_arrival`; SPL, EDT, T20 and T30 are not |
-| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count no particle remaining when the steps ran out, so no tail after the series is bounded; lost particles do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that lost particles can have taken, or `null` when none was lost); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …}` in Pa², or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters` |
+| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that unfinished particles can have taken, or `null` when there are none); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …}` in Pa², or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters` |
 | `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `parameters`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
 | `by_source[]` | `source` and its `energy` per band, Pa² |
-| `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `noise_model`, `crossings`, `energy_pa2`, `total_pa2`, `onset`, `parameters`) and `aggregate`: the parameters of that source–receiver pair. Empty otherwise |
+| `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `arrival`, `decay_arrival`, `noise_model`, `crossings`, `energy_pa2`, `total_pa2`, `onset`, `parameters`) and `aggregate`: the parameters of that source–receiver pair. Empty otherwise |
 
 `parameters` holds `spl_db`, `edt_s`, `t20_s`, `t30_s`, `c50_db`, `c80_db`, `d50` and `ts_s`, each
 exactly one of:
@@ -118,9 +121,10 @@ exactly one of:
 `mc_sd` is the value's estimated Monte-Carlo standard deviation in its unit; every SPPS value
 carries one, and no value is reported whose standard deviation exceeds the run's `monte_carlo`
 limits. `code` is a row of `docs/solver-contract.md`, "Parameter refusals"; `error` is the typed
-refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `range_too_short`,
-`not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`, `monte_carlo_noise`,
-`noise_unknown`, `several_sources`, `no_time_series` for `params_not_evaluable` (`docs/params.md`).
+refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `early_unresolved`,
+`range_too_short`, `not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`,
+`monte_carlo_noise`, `noise_unknown`, `several_sources`, `no_time_series` for
+`params_not_evaluable` (`docs/params.md`).
 
 ### `tcr`
 

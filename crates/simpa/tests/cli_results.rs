@@ -122,7 +122,7 @@ fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
 
 /// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
 /// typed `error`.
-const NULLABLE: [&str; 15] = [
+const NULLABLE: [&str; 18] = [
     ".spps",
     ".tcr",
     ".mc_sd",
@@ -132,12 +132,15 @@ const NULLABLE: [&str; 15] = [
     ".onset",
     ".position_m",
     ".arrival_s",
+    ".decay_arrival",
     ".floor_db",
     ".lost_share",
     ".crossings",
     ".sd",
     ".with_tail",
     ".with_missing",
+    ".low",
+    ".high",
 ];
 
 #[test]

@@ -423,6 +423,73 @@ fn an_energetic_lost_share_that_follows_the_decay_is_bounded_by_it() {
 }
 
 #[test]
+fn the_floor_and_a_lost_share_that_follows_the_decay_are_bounded_together() {
+    // Energetic mode has both: the floor's dropped energy, bounded as a lump, and the lost
+    // particles' share, bounded as a scaling of the curve. Each alone within the limit is not
+    // enough: both can be missing at once, so what the two can move a value by is added.
+    // (Review finding: the follow-ups checked each against the full limit alone.)
+    let (t, dt) = (1.0, 0.01);
+    let tau = t / K60;
+    let v: Vec<f64> = (0..(90.0 * t / 60.0 / dt).round() as usize)
+        .map(|k| {
+            let (a, b) = (k as f64 * dt, (k + 1) as f64 * dt);
+            tau * ((-a / tau).exp() - (-b / tau).exp())
+        })
+        .collect();
+    let series = |alive: Option<f64>, share: Option<f64>| {
+        let mut s = EnergySeries::new(dt, v.clone()).unwrap();
+        if let Some(a) = alive {
+            s = s.with_solver_floor(-55.0, a).unwrap();
+        }
+        if let Some(x) = share {
+            s = s.with_lost_share_following_decay(x).unwrap();
+        }
+        evaluate(&s, AT_ZERO).t30
+    };
+    // Nothing missing: T30 is T.
+    assert!(within(series(None, None).unwrap().t_s, t, 1e-6));
+    // The edges: the floor's alive share, and the lost share, at which each alone moves T30 by
+    // exactly the limit. Accepted on one side, refused on the other.
+    let edge = |ok: &dyn Fn(f64) -> bool, mut lo: f64, mut hi: f64| {
+        // `ok(lo)` is false, `ok(hi)` true.
+        assert!(!ok(lo) && ok(hi));
+        for _ in 0..60 {
+            let mid = (lo * hi).sqrt();
+            if ok(mid) {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+        hi
+    };
+    let alive_edge = edge(&|a| series(Some(a), None).is_ok(), 1e-3, 1.0);
+    let share_edge = 1.0 / edge(&|inv| series(None, Some(1.0 / inv)).is_ok(), 1.0, 1e6);
+    println!("alone at the limit: alive share {alive_edge:.4}, lost share {share_edge:.3e}");
+    // Each at a little more than half the limit: each alone passes.
+    let (alive, share) = (alive_edge * 1.8, share_edge * 0.55);
+    assert!(
+        alive * 4.0 / 1.8 < 1.0,
+        "an alive share is at most 1: {alive}"
+    );
+    assert!(series(Some(alive), None).is_ok());
+    assert!(series(None, Some(share)).is_ok());
+    // Together they are refused, missing_moves, with T30 moved past the limit.
+    let e = series(Some(alive), Some(share)).unwrap_err();
+    match e.not_evaluable() {
+        Some(NotEvaluable::MissingMoves {
+            value,
+            with_missing: Some(w),
+            limit,
+            ..
+        }) => assert!((w / value - 1.0).abs() > *limit, "{e}"),
+        other => panic!("{other:?}"),
+    }
+    // Well inside the limit together, they pass.
+    assert!(series(Some(alive_edge * 4.0), Some(share_edge * 0.2)).is_ok());
+}
+
+#[test]
 fn an_aggregate_is_complete_only_when_every_band_is() {
     let a = EnergySeries::complete(0.01, vec![1.0, 0.5, 0.25]).unwrap();
     let b = EnergySeries::complete(0.01, vec![2.0, 1.0, 0.0]).unwrap();

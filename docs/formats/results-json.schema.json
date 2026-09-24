@@ -186,6 +186,48 @@
           }
         ]
       },
+      "Arrival": {
+        "description": "When the direct sound arrived, which every onset-relative quantity is measured from.",
+        "oneOf": [
+          {
+            "description": "Not given: somewhere in the onset bin. Each quantity is computed with the arrival at both\nends of the bin, and refused as `unresolved` when the two differ by more than its limit.",
+            "properties": {
+              "arrival": {
+                "const": "detected",
+                "type": "string"
+              }
+            },
+            "required": [
+              "arrival"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Given, such as the source–receiver distance over the speed of sound. For C50, C80, D50 and\nTs it must lie in the onset bin; otherwise those four are refused, `params_bad_arrival`.\nThe decay times are computed whatever the arrival ([`evaluate`]).",
+            "properties": {
+              "arrival": {
+                "const": "known",
+                "type": "string"
+              },
+              "half_width_s": {
+                "description": "The direct sound reaches the receiver over `[time_s − half_width_s, time_s +\nhalf_width_s]`, not at one instant: a ball of radius `R` crossed at `c` takes `2R/c`\n(`docs/params.md`, \"The direct sound's spread\"). 0 for an impulse.",
+                "format": "double",
+                "type": "number"
+              },
+              "time_s": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "arrival",
+              "time_s",
+              "half_width_s"
+            ],
+            "type": "object"
+          }
+        ]
+      },
       "BandEnergy": {
         "description": "One band's series of a whole-room table (`<cumul_filename>`).",
         "properties": {
@@ -656,6 +698,50 @@
             "required": [
               "why",
               "value",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The series' early reverberation is not resolved\n([`EnergySeries::with_early_reverberation_unresolved`]), and where it begins moves the\nvalue by more than `limit`: `continued` is the value with the reverberation beginning at\nthe arrival (the decay of the first bin wholly after the direct sound continued back to\nit), and `low` and `high` the lowest and highest over that and the reverberation beginning\nat the start or at the end of that bin (`None` when one of those curves gives no value).",
+            "properties": {
+              "continued": {
+                "format": "double",
+                "type": "number"
+              },
+              "high": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "limit": {
+                "description": "The largest distance allowed from `value` to either, in the quantity's unit (relative\nfor decay times).",
+                "format": "double",
+                "type": "number"
+              },
+              "low": {
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "value": {
+                "description": "Midway between `low` and `high`. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "early_unresolved",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "continued",
               "limit"
             ],
             "type": "object"
@@ -1244,13 +1330,17 @@
       "ReceiverBandReport": {
         "description": "One band of an SPPS point receiver.",
         "properties": {
+          "arrival": {
+            "$ref": "#/$defs/Arrival",
+            "description": "The arrival C50, C80, D50 and Ts are measured from: the direct sound at the receiver's\ncentre, `arrival_s`, spread over `±R/c` (`params::decay::Arrival::Known`), or `detected`."
+          },
           "background_noise_db": {
             "description": "The receiver's background noise, dB (the `.gap`).",
             "format": "double",
             "type": "number"
           },
           "complete": {
-            "description": "SPPS's statistics show that no particle was still alive when the steps ran out (random\nmode, `trans_epsilon` above 0, no particle remaining: `spps::SppsResults::band_complete`),\nso the series is given to `params` as complete and no tail after its end is bounded.\nOtherwise `params` bounds that tail. **Lost particles do not make a band incomplete:** the\nenergy their unfinished paths would have brought is bounded separately, `lost_share`.",
+            "description": "SPPS's statistics show that at most one particle in a million was still alive when the\nsteps ran out (random mode, `trans_epsilon` above 0: `spps::SppsResults::band_complete`),\nso the series is given to `params` as complete and no tail after its end is bounded.\nOtherwise `params` bounds that tail. **Lost particles, and those few left alive, do not\nmake a band incomplete:** the energy their unfinished paths would have brought is bounded\nseparately, `lost_share`.",
             "type": "boolean"
           },
           "contributing_sources": {
@@ -1267,6 +1357,21 @@
               "number",
               "null"
             ]
+          },
+          "decay_arrival": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Arrival"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What EDT, T20 and T30 are measured from (`params::decay::BandParameters::decay_arrival`):\n`arrival` when it fits the onset bin, or follows it within the direct sound's spread;\notherwise `detected`. `null` when the series is refused."
+          },
+          "early_reverberation_unresolved": {
+            "description": "Always true for SPPS, whose reverberation begins with the first reflection: how it ran\nbetween the arrival and the first bin wholly after the direct sound is not known, so each\nvalue is taken midway between that stretch continuing the decay and holding none, and\nrefused, `early_unresolved`, when the two differ by more than its limit\n(`params::EnergySeries::with_early_reverberation_unresolved`).",
+            "type": "boolean"
           },
           "energy_pa2": {
             "description": "The `.recp` column, Pa² per time step.",
@@ -1293,7 +1398,7 @@
             "type": "boolean"
           },
           "lost_share": {
-            "description": "The share of the energy from the arrival on that lost particles can have taken with them\n(`spps::SppsResults::lost_share`), or, when `lost_follows_decay`, of the energy from every\ntime on (`spps::SppsResults::lost_share_following_decay`); `params` bounds what it can\nmove. `null` when none was lost.",
+            "description": "The share of the energy from the arrival on that unfinished particles (lost, or in a\ncomplete band left alive at the end) can have taken with them\n(`spps::SppsResults::lost_share`), or, when `lost_follows_decay`, that lost particles can\nhave taken of the energy from every time on (`spps::SppsResults::lost_share_following_\ndecay`); `params` bounds what it can move. `null` when there are none.",
             "format": "double",
             "type": [
               "number",
@@ -1333,6 +1438,8 @@
           "freq_hz",
           "complete",
           "lost_follows_decay",
+          "early_reverberation_unresolved",
+          "arrival",
           "contributing_sources",
           "noise_model",
           "energy_pa2",
@@ -1376,12 +1483,27 @@
       "SourceBandReport": {
         "description": "One source's own echogram at a receiver, one band.",
         "properties": {
+          "arrival": {
+            "$ref": "#/$defs/Arrival",
+            "description": "As for the receiver's band, from this source's own arrival."
+          },
           "crossings": {
             "format": "double",
             "type": [
               "number",
               "null"
             ]
+          },
+          "decay_arrival": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Arrival"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "As for the receiver's band."
           },
           "energy_pa2": {
             "description": "The source's `.recp` column, Pa² per time step.",
@@ -1418,6 +1540,7 @@
         },
         "required": [
           "freq_hz",
+          "arrival",
           "noise_model",
           "energy_pa2",
           "total_pa2",

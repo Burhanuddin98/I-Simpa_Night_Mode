@@ -25,9 +25,12 @@ use crate::schema::SolverKind;
 
 /// The layout of [`Report`]; bumped when a field changes meaning. 2: values carry `mc_sd`, and
 /// the Monte-Carlo, floor and per-source fields were added. 3: TCR point receivers carry
-/// `parameters` per band and an `aggregate`, every value refused `no_time_series`. 4: SPPS bands
-/// carry `lost_follows_decay`, and in energetic mode `lost_share` bounds the energy from every
-/// time on; a given arrival outside the onset bin refuses C50, C80, D50 and Ts only.
+/// `parameters` per band and an `aggregate`, every value refused `no_time_series`. 4 (the M7
+/// follow-ups): SPPS bands carry `lost_follows_decay`, and in energetic mode `lost_share` bounds
+/// the energy from every time on; a given arrival outside the onset bin refuses C50, C80, D50 and
+/// Ts only; bands carry the `arrival` and `decay_arrival` they were measured from, with the direct
+/// sound's spread, and `early_reverberation_unresolved`: each value is midway between the early
+/// reverberation continued and absent, or refused `early_unresolved`.
 pub const REPORT_VERSION: u32 = 4;
 
 /// A quantity's value, or why it has none.
@@ -189,6 +192,17 @@ pub fn parameters(
     arrival: Arrival,
     model: &NoiseModel,
 ) -> (Parameters, Option<Onset>) {
+    let (p, onset, _) = evaluated(series, arrival, model);
+    (p, onset)
+}
+
+/// [`parameters`], with what the decay times were measured from
+/// (`params::decay::BandParameters::decay_arrival`).
+fn evaluated(
+    series: &Result<EnergySeries, ParamError>,
+    arrival: Arrival,
+    model: &NoiseModel,
+) -> (Parameters, Option<Onset>, Option<Arrival>) {
     let p = noise::evaluate(series, arrival, model);
     (
         Parameters {
@@ -202,6 +216,7 @@ pub fn parameters(
             ts_s: Evaluated::of_estimate(p.ts_s),
         },
         p.onset,
+        p.decay_arrival,
     )
 }
 
@@ -209,24 +224,39 @@ pub fn parameters(
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct ReceiverBandReport {
     pub freq_hz: i32,
-    /// SPPS's statistics show that no particle was still alive when the steps ran out (random
-    /// mode, `trans_epsilon` above 0, no particle remaining: `spps::SppsResults::band_complete`),
+    /// SPPS's statistics show that at most one particle in a million was still alive when the
+    /// steps ran out (random mode, `trans_epsilon` above 0: `spps::SppsResults::band_complete`),
     /// so the series is given to `params` as complete and no tail after its end is bounded.
-    /// Otherwise `params` bounds that tail. **Lost particles do not make a band incomplete:** the
-    /// energy their unfinished paths would have brought is bounded separately, `lost_share`.
+    /// Otherwise `params` bounds that tail. **Lost particles, and those few left alive, do not
+    /// make a band incomplete:** the energy their unfinished paths would have brought is bounded
+    /// separately, `lost_share`.
     pub complete: bool,
     /// The level below a particle's start at which SPPS drops it, dB, when that can cost the
     /// histogram energy (energetic mode: `-10·trans_epsilon`); `params` bounds what it can have
     /// dropped. `null` otherwise.
     pub floor_db: Option<f64>,
-    /// The share of the energy from the arrival on that lost particles can have taken with them
-    /// (`spps::SppsResults::lost_share`), or, when `lost_follows_decay`, of the energy from every
-    /// time on (`spps::SppsResults::lost_share_following_decay`); `params` bounds what it can
-    /// move. `null` when none was lost.
+    /// The share of the energy from the arrival on that unfinished particles (lost, or in a
+    /// complete band left alive at the end) can have taken with them
+    /// (`spps::SppsResults::lost_share`), or, when `lost_follows_decay`, that lost particles can
+    /// have taken of the energy from every time on (`spps::SppsResults::lost_share_following_
+    /// decay`); `params` bounds what it can move. `null` when there are none.
     pub lost_share: Option<f64>,
     /// Energetic mode: what the lost particles would still have brought falls with the decay, so
     /// `lost_share` bounds the energy from every time on, not a lump added at the end.
     pub lost_follows_decay: bool,
+    /// Always true for SPPS, whose reverberation begins with the first reflection: how it ran
+    /// between the arrival and the first bin wholly after the direct sound is not known, so each
+    /// value is taken midway between that stretch continuing the decay and holding none, and
+    /// refused, `early_unresolved`, when the two differ by more than its limit
+    /// (`params::EnergySeries::with_early_reverberation_unresolved`).
+    pub early_reverberation_unresolved: bool,
+    /// The arrival C50, C80, D50 and Ts are measured from: the direct sound at the receiver's
+    /// centre, `arrival_s`, spread over `±R/c` (`params::decay::Arrival::Known`), or `detected`.
+    pub arrival: Arrival,
+    /// What EDT, T20 and T30 are measured from (`params::decay::BandParameters::decay_arrival`):
+    /// `arrival` when it fits the onset bin, or follows it within the direct sound's spread;
+    /// otherwise `detected`. `null` when the series is refused.
+    pub decay_arrival: Option<Arrival>,
     /// The sources whose energy reaches the receiver in this band (their `.recps` total is above
     /// 0). With more than one, the seven onset-relative parameters are refused,
     /// `several_sources`.
@@ -266,6 +296,10 @@ pub struct AggregateReport {
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct SourceBandReport {
     pub freq_hz: i32,
+    /// As for the receiver's band, from this source's own arrival.
+    pub arrival: Arrival,
+    /// As for the receiver's band.
+    pub decay_arrival: Option<Arrival>,
     pub noise_model: NoiseModel,
     pub crossings: Option<f64>,
     /// The source's `.recp` column, Pa² per time step.
@@ -574,11 +608,13 @@ fn series_of(
     energy: &[f64],
     arrival: Arrival,
 ) -> Result<EnergySeries, ParamError> {
+    // SPPS's reverberation begins with the first reflection, not with the direct sound.
     let base = if s.band_complete(freq_hz) {
         EnergySeries::complete(s.time_step_s, energy.to_vec())
     } else {
         EnergySeries::new(s.time_step_s, energy.to_vec())
-    }?;
+    }?
+    .with_early_reverberation_unresolved();
     let bin = match arrival {
         Arrival::Known { time_s, .. } => (time_s / s.time_step_s).floor().max(0.0) as usize,
         Arrival::Detected => decay::onset(&base).index,
@@ -708,7 +744,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             known_arrival(s, s.arrival_from(r, &contributing))
         };
         let se = series_of(s, i, b.freq_hz, &b.energy, arrival);
-        let (mut parameters, onset) = parameters(&se, arrival, &model);
+        let (mut parameters, onset, decay_arrival) = evaluated(&se, arrival, &model);
         if contributing.len() > 1 {
             parameters.several_sources(&contributing);
         }
@@ -722,6 +758,12 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                 .as_ref()
                 .ok()
                 .is_some_and(EnergySeries::lost_follows_decay),
+            early_reverberation_unresolved: se
+                .as_ref()
+                .ok()
+                .is_some_and(EnergySeries::early_reverberation_unresolved),
+            arrival,
+            decay_arrival,
             contributing_sources: contributing.iter().map(|c| c.to_string()).collect(),
             crossings: crossings(&model, total_pa2),
             noise_model: model.clone(),
@@ -760,10 +802,12 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                 .zip(&series)
                 .zip(&models)
                 .map(|(((b, energy), se), model)| {
-                    let (parameters, onset) = parameters(se, arrival, model);
+                    let (parameters, onset, decay_arrival) = evaluated(se, arrival, model);
                     let total_pa2: f64 = energy.iter().sum();
                     SourceBandReport {
                         freq_hz: b.freq_hz,
+                        arrival,
+                        decay_arrival,
                         noise_model: model.clone(),
                         crossings: crossings(model, total_pa2),
                         energy_pa2: energy.clone(),
