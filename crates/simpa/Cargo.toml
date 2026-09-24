@@ -9,3 +9,7 @@ repository.workspace = true
 [dependencies]
 serde_json = "1.0.151"
 simpa-core = { path = "../simpa-core" }
+
+[dev-dependencies]
+# The parity bed reads upstream's config.xml through parity_support.rs, shared with simpa-core's tests.
+roxmltree = "0.21.1"

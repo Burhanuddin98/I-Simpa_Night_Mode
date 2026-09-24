@@ -360,10 +360,10 @@ fn lossy(l: &[(u64, u64, u64)]) -> Vec<(u64, u64, u64)> {
 /// facet, which the facet test above shows refused in TetGen's corner order: that is the input
 /// that makes this gate say no.
 ///
-/// The gate text asks for none lost by meshing. SPPS loses particles on upstream's own mesh with
-/// upstream's own inputs; the counts below are measured, identical to what SPPS gives on the
-/// original I-Simpa's tutorial-1 files with the same seed (`parity_tutorials.rs`), and the gate's
-/// wording is Burhan's and Michael's to settle.
+/// The gate text asks for none lost by meshing. SPPS loses one particle here, on upstream's own
+/// mesh; the parity bed (`parity_tutorials.rs`) shows the same statistics file from our tutorial-1
+/// inputs as from the original's, same seed. The counts below are measured and pinned, and the
+/// gate's wording is Burhan's and Michael's to settle.
 #[test]
 fn spps_runs_the_seeded_box_ok() {
     let root = scratch("run-spps-gate");
