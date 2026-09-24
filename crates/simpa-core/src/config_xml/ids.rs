@@ -186,7 +186,9 @@ pub(crate) fn group_zone_ids(
 /// Upstream appends every drawn element's triangles in the order of its element table
 /// (`ELEMENT_REF_TYPE_DRAWABLE`); with more than one box that order is not reproduced here
 /// (upstream's tutorials hold one). No `.mbin` marker names a box triangle: the mesher's markers
-/// index [`room_mesh`] (`docs/m5-m6-design.md`, decision 5). It does not depend on the variant.
+/// index [`room_mesh`] (`docs/m5-m6-design.md`, decision 5), and `mesh::verify` leaves these
+/// triangles out of its coverage check (`mesh::verify::drawn_zone_faces`). It does not depend on
+/// the variant.
 /// Write it with [`cbin::write_file`].
 pub fn scene_mesh(project: &Project) -> Result<cbin::Model, WriteError> {
     let mut model = room_mesh(project)?;

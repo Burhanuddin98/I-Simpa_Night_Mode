@@ -594,14 +594,24 @@ number, a missing band) are `invalid`, and a feature it does not read is `unsupp
 the importer's error kinds (`ImportError::code`). The reasons below have their own codes, which
 the CLI prints before the message and exits 2 with.
 
+The zone refusals, and two zones listing one face, apply to *enabled* zones only
+(`useforcalculation`): upstream seeds no region for a disabled zone, tags no face with it and
+draws none of its triangles (`..._model.h:173-194`, `..._cuboide.h:311, 329-340`,
+`appconfig.cpp:185`), so a disabled zone is imported as stored, with a note on what enabling it
+would need. Every list is read in upstream's load order, by `wxid` (`element.cpp:64-106, 159`),
+not in the file's.
+
 | Code | Refused when | What upstream does |
 |---|---|---|
 | `proj_fitting_type_unknown` | A child of `encombrements` whose element type (`eid`) is neither 54 (a scene-fitted zone) nor 56 (a rectangular one), or has none | Skips it silently (`e_scene_encombrements.h:56-73`) |
-| `proj_fitting_inside_point_unset` | A scene-fitted zone that lists faces and has no inside position (`volpos`), or (0, 0, 0) | Seeds its TetGen region at a point it derives from the zone's first face in its OpenGL frame (`Objet3D_maillage.cpp:1011-1031`), which is not reproduced |
-| `proj_fitting_box_empty` | A rectangular zone whose corners `ba` and `hc` share a coordinate | Builds no triangles for equal corners and flat ones for a shared coordinate, and still seeds a region at `hc` (`e_scene_encombrements_encombrement_cuboide.h:113-165, 333-336`) |
-| `proj_face_in_two_fitting_zones` | A face listed by two fitting zones | Gives it the last zone's id, silently (`appconfig.cpp:174-200`) |
+| `proj_fitting_inside_point_unset` | An enabled scene-fitted zone that lists faces and has no inside position (`volpos`), or (0, 0, 0) | Seeds its TetGen region at a point it derives from the zone's first face in its OpenGL frame (`Objet3D_maillage.cpp:1012-1031`), which is not reproduced |
+| `proj_fitting_face_group_missing` | An enabled scene-fitted zone without its face group (`gr`) | Writes the zone into `config.xml` but seeds no TetGen region for it (`e_scene_encombrements_encombrement_model.h:146-157, 178-191`), which a project cannot hold. Its GUI always creates the group (`:122`), so only an edited file lacks it |
+| `proj_fitting_box_empty` | An enabled rectangular zone whose corners `ba` and `hc` share a coordinate | Builds no triangles for equal corners and flat ones for a shared coordinate, and still seeds a region at `hc` (`e_scene_encombrements_encombrement_cuboide.h:113-165, 331-340`) |
+| `proj_face_in_two_fitting_zones` | A face listed by two enabled fitting zones | Gives it the last enabled zone's id, silently (`appconfig.cpp:174-200`) |
 | `proj_diffusion_law_out_of_range` | A fitting zone's diffusion law (`loi_diff`) outside 0 to 2, in a band upstream's loader keeps as stored | Writes it; SPPS has no case for it and leaves the direction unchanged (`coreTypes.h:108-113`; `CalculationCore.cpp:166-182`). A band upstream's loader resets to 0 (`e_gammeabsorption.cpp:43-59`) is imported as 0, with a note |
 | `proj_reflection_law_out_of_range` | A material's reflection law (`loi`) in some band that is none of upstream's seven, 0 to 6 | Writes it; SPPS reflects it specularly (`dotreflection.h:23-45`) (inferred) |
+| `proj_material_row_unreadable` | A material band row of a project older than 1.3.4 (`<bfreq absorb=..>`) whose `loi` holds no integer (missing, empty or no digit), or whose `absorb`, `diffusion` or `affaiblissement` is missing (`affaiblissement` excepted: then the band does not transmit) or not a number | For `loi`: `Convertor::ToInt` returns an uninitialised value (`sppsString.cpp:107-112`; `wxString::ToLong` leaves its output untouched when it reads no digit). For a number: `StringToFloat` logs "Cannot convert string" as an error and reads 0 (`e_data.h:212-252`). A `loi` with digits followed by more (`2.5`) reads as upstream reads it, 2 |
+| `proj_transmission_exceeds_absorption` | A material band that transmits with a loss `R` whose `10^(-R/10)` exceeds the band's absorption, or with absorption 0 | Writes the stored loss unchanged (`e_data_row_materiau.h:98-107`): it enforces the rule only when the user edits the band (`:109-205`; loading calls `Modified` with the row itself, which matches no case). This crate's writer enforces it at every write (`config_xml::transmission_loss_written`), so it would not write the stored value |
 | `proj_source_group_malformed` | A child of the source list, or of a source group, whose element type is neither 16 (a source) nor 15 (a group), or has none | Skips it silently (`e_scene_sources.h:73-87`) |
 | `proj_volumes_unsupported` | Any volume (`volumes/volume`, element type 86) | Seeds a TetGen region with its own volume bound for it (`e_scene_volumes_volume.h:168-188`); a project holds no volumes. Upstream's `Industrial.proj` is refused for its three |
 

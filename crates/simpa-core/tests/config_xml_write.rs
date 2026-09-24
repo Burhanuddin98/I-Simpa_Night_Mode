@@ -976,3 +976,61 @@ fn doc_kinds_cover_every_attribute_written() {
             .collect()
     );
 }
+
+/// A box zone's 12 triangles as upstream's `BuildModel` builds them
+/// (`e_scene_encombrements_encombrement_cuboide.h:113-173`), worked out by hand for corners
+/// `ba` (0, 0, 0) and `hc` (1, 2, 3) in the unit frame, where OpenGL `(x, y, z)` is world
+/// `(x, z, -y)` (`Mathlib.h:50-67`): `ba` is GL (0, 0, -0) and `hc` GL (1, 3, -2), so only `z`
+/// swaps, giving `BA` = GL (0, 0, -2) and `HC` = GL (1, 3, -0), and the other six corners from
+/// them (`:144-150`). Back in world coordinates: BA (0, 2, 0), BB (1, 2, 0), BC (1, -0, 0),
+/// BD (0, -0, 0), HA (0, 2, 3), HB (1, 2, 3), HC (1, -0, 3), HD (0, -0, 3); `-0` where GL `z` is
+/// `-0`. Then the triangles in `PushTriangle` order (`:157-172`), vertex order included: the
+/// winding is the solver's face normal. Compared bit for bit; the say-no is the first triangle
+/// with two vertices swapped.
+#[test]
+fn upstream_box_triangles_are_build_models_worked_by_hand() {
+    let (ba, bb, bc, bd) = (
+        [0.0f32, 2.0, 0.0],
+        [1.0, 2.0, 0.0],
+        [1.0, -0.0, 0.0],
+        [0.0, -0.0, 0.0],
+    );
+    let (ha, hb, hc, hd) = (
+        [0.0f32, 2.0, 3.0],
+        [1.0, 2.0, 3.0],
+        [1.0, -0.0, 3.0],
+        [0.0, -0.0, 3.0],
+    );
+    let expected = [
+        [bc, bd, ba],
+        [bc, ba, bb],
+        [ba, ha, hb],
+        [ba, hb, bb],
+        [ba, hd, ha],
+        [ba, bd, hd],
+        [bd, bc, hc],
+        [hd, bd, hc],
+        [bc, bb, hb],
+        [hc, bc, hb],
+        [hc, hb, ha],
+        [hd, hc, ha],
+    ];
+    let bits = |t: &[[[f32; 3]; 3]]| -> Vec<[[u32; 3]; 3]> {
+        t.iter()
+            .map(|tri| tri.map(|p| p.map(f32::to_bits)))
+            .collect()
+    };
+    let built =
+        simpa_core::config_xml::upstream_box_triangles(None, [0.0, 0.0, 0.0], [1.0, 2.0, 3.0]);
+    assert_eq!(bits(&built), bits(&expected));
+    // Say-no: one triangle wound the other way is a different list.
+    let mut flipped = expected;
+    flipped[0].swap(0, 1);
+    assert_ne!(bits(&built), bits(&flipped));
+    // `BuildModel` orders the corners itself (`:126-143`): from the other corner, the same list.
+    let other =
+        simpa_core::config_xml::upstream_box_triangles(None, [1.0, 2.0, 3.0], [0.0, 0.0, 0.0]);
+    assert_eq!(bits(&built), bits(&other));
+    // Equal corners build nothing (`:124-125`).
+    assert!(simpa_core::config_xml::upstream_box_triangles(None, [1.0; 3], [1.0; 3]).is_empty());
+}

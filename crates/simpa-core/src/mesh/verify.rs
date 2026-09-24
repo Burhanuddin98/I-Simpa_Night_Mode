@@ -107,9 +107,14 @@ pub struct VerifyReport {
     /// marker names, its plane and its edges both counting (`marker_geometry_mismatches`).
     pub marker_geometry_mismatches: usize,
     /// Scene faces no tetrahedron face carries (`uncovered_scene_faces`): the count, and the
-    /// first 20 face indices.
+    /// first 20 face indices. A drawn fitting zone's triangles are not counted
+    /// ([`VerifyReport::drawn_zone_faces`]).
     pub uncovered_scene_faces: usize,
     pub uncovered_scene_faces_first: Vec<u32>,
+    /// Scene faces that are drawn fitting zones' triangles ([`drawn_zone_faces`]), which no marker
+    /// has to name. Not an offence: a count of what the coverage check left out.
+    #[serde(default)]
+    pub drawn_zone_faces: usize,
     /// Tetrahedra whose `idVolume` is neither a fitting's nor a room part's, that is below
     /// [`VolumeIds::room`] and no fitting's (`unknown_volume_ids`).
     pub unknown_volume_ids: usize,
@@ -254,6 +259,8 @@ pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> V
         })
         .collect();
     let mut covered = vec![false; n_scene];
+    let drawn = drawn_zone_faces(scene, ids);
+    r.drawn_zone_faces = drawn.iter().filter(|d| **d).count();
     for (t, tet) in mesh.tetrahedra.iter().enumerate() {
         for (i, face) in tet.faces.iter().enumerate() {
             match usize::try_from(face.neighbor) {
@@ -315,7 +322,11 @@ pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> V
             }
         }
     }
-    for (s, _) in covered.iter().enumerate().filter(|(_, c)| !**c) {
+    for (s, _) in covered
+        .iter()
+        .enumerate()
+        .filter(|&(s, c)| !*c && !drawn[s])
+    {
         r.uncovered_scene_faces += 1;
         if r.uncovered_scene_faces_first.len() < UNCOVERED_LISTED {
             r.uncovered_scene_faces_first.push(s as u32);
@@ -329,6 +340,120 @@ pub fn verify_mesh(mesh: &mbin::Mesh, scene: &cbin::Model, ids: &VolumeIds) -> V
         .map(|(code, _)| code.to_string())
         .collect();
     r
+}
+
+/// How many triangles one drawn fitting zone gives the `.cbin`.
+pub const DRAWN_ZONE_TRIANGLES: usize = 12;
+
+/// Which scene faces are drawn fitting zones' triangles, which no `.mbin` marker has to name.
+///
+/// Upstream's GUI appends a rectangular fitting zone's 12 triangles to the `.cbin` after the
+/// room's faces, each with three vertices of its own, `idMat` 0, `idRs` -1 and `idEn` the zone's
+/// id (`CObjet3D::ToCBINFormat`, `Objet3D_maillage.cpp:783-816`), and `config_xml::scene_mesh`
+/// writes a run's `.cbin` the same way; this crate's mesher gives them no marker
+/// (`docs/m5-m6-design.md`, decision 5), so without this every run folder of a project with a box
+/// zone would fail `uncovered_scene_faces`.
+///
+/// A face is one when it lies in a run of [`DRAWN_ZONE_TRIANGLES`] faces at the end of the file
+/// (runs counted back from the last face, stopping at the first run that is not one) whose faces
+/// all have `idMat` 0, `idRs` -1 and the same `idEn`, one of `ids.fittings`, use 36 vertices that
+/// no other face uses, and make one axis-aligned box with a volume: every vertex a corner of the
+/// run's bounding box, each triangle three distinct corners of one side, each side two triangles
+/// that share its diagonal. Winding is not checked. Anything else is a scene face like any
+/// other, and uncovered when no marker names it.
+pub fn drawn_zone_faces(scene: &cbin::Model, ids: &VolumeIds) -> Vec<bool> {
+    let n = scene.faces.len();
+    let mut drawn = vec![false; n];
+    let mut uses = vec![0u32; scene.vertices.len()];
+    for f in &scene.faces {
+        for v in [f.a, f.b, f.c] {
+            if let Some(u) = uses.get_mut(v as usize) {
+                *u += 1;
+            }
+        }
+    }
+    let mut end = n;
+    while end >= DRAWN_ZONE_TRIANGLES {
+        let start = end - DRAWN_ZONE_TRIANGLES;
+        if !is_drawn_box(&scene.faces[start..end], scene, &uses, ids) {
+            break;
+        }
+        drawn[start..end].fill(true);
+        end = start;
+    }
+    drawn
+}
+
+/// One run of [`drawn_zone_faces`].
+fn is_drawn_box(faces: &[cbin::Face], scene: &cbin::Model, uses: &[u32], ids: &VolumeIds) -> bool {
+    let zone = faces[0].id_en;
+    if !ids.fittings.contains(&zone) {
+        return false;
+    }
+    let mut triangles: Vec<[[f32; 3]; 3]> = Vec::with_capacity(faces.len());
+    for f in faces {
+        if f.id_mat != crate::config_xml::DRAWN_ZONE_MATERIAL_ID || f.id_rs != -1 || f.id_en != zone
+        {
+            return false;
+        }
+        let mut t = [[0.0f32; 3]; 3];
+        for (k, v) in [f.a, f.b, f.c].into_iter().enumerate() {
+            if uses.get(v as usize) != Some(&1) {
+                return false;
+            }
+            let p = &scene.vertices[v as usize];
+            t[k] = [p.x, p.y, p.z];
+        }
+        triangles.push(t);
+    }
+    let mut lo = [f32::INFINITY; 3];
+    let mut hi = [f32::NEG_INFINITY; 3];
+    for p in triangles.iter().flatten() {
+        for k in 0..3 {
+            lo[k] = lo[k].min(p[k]);
+            hi[k] = hi[k].max(p[k]);
+        }
+    }
+    // False for a NaN bound as well.
+    if !(0..3).all(|k| lo[k] < hi[k]) {
+        return false;
+    }
+    // A corner as three bits, bit k set on the upper bound of axis k.
+    let corner = |p: &[f32; 3]| -> Option<u8> {
+        let mut c = 0u8;
+        for k in 0..3 {
+            if p[k] == hi[k] {
+                c |= 1 << k;
+            } else if p[k] != lo[k] {
+                return None;
+            }
+        }
+        Some(c)
+    };
+    // Per side (axis k, bound b, index 2k + b): its triangles' corner sets.
+    let mut sides: [Vec<[u8; 3]>; 6] = Default::default();
+    for t in &triangles {
+        let Some(c) = t.iter().map(corner).collect::<Option<Vec<u8>>>() else {
+            return false;
+        };
+        let c = [c[0], c[1], c[2]];
+        if c[0] == c[1] || c[1] == c[2] || c[0] == c[2] {
+            return false;
+        }
+        // Three distinct corners share the bit of at most one axis: that is their side.
+        let Some(k) = (0..3).find(|&k| c.iter().all(|&x| (x >> k) & 1 == (c[0] >> k) & 1)) else {
+            return false;
+        };
+        sides[2 * k + usize::from((c[0] >> k) & 1)].push(c);
+    }
+    sides.iter().all(|side| {
+        let [a, b] = side.as_slice() else {
+            return false;
+        };
+        let shared: Vec<u8> = a.iter().copied().filter(|x| b.contains(x)).collect();
+        // Two corners in common, opposite on the side: its diagonal.
+        shared.len() == 2 && (shared[0] ^ shared[1]).count_ones() == 2
+    })
 }
 
 /// The result of [`verify_dir`].

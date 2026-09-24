@@ -283,6 +283,27 @@ fn every_code_is_produced_and_documented_in_exactly_one_table() {
         per_doc("docs/solver-contract.md Part A"),
         simpa_core::validate::RULES.len() + simpa_core::validate::STRUCTURAL_CODES.len()
     );
+    // The `.proj` import's codes: `proj::codes::ALL` is every one its codes module makes, and each
+    // is documented in Part B ("Importing an upstream project").
+    let import_codes: Vec<&str> = found
+        .iter()
+        .filter(|(_, sites)| {
+            sites
+                .iter()
+                .any(|s| s.starts_with("geometry/import/proj.rs"))
+        })
+        .map(|(c, _)| c.as_str())
+        .collect();
+    let mut all = simpa_core::geometry::import::proj::codes::ALL.to_vec();
+    all.sort_unstable();
+    assert_eq!(import_codes, all);
+    for code in simpa_core::geometry::import::proj::codes::ALL {
+        let sites = &tables[*code];
+        assert!(
+            sites[0].starts_with("docs/solver-contract.md Part B"),
+            "{code}: {sites:?}"
+        );
+    }
 }
 
 #[test]
@@ -330,6 +351,22 @@ fn the_check_says_no_to_each_kind_of_drift() {
     has(
         check(&files, &twice, &manifest),
         "documented 2 times: mesh_invalid",
+    );
+
+    // An import code's row removed from Part B: undocumented, since `proj::codes` is walked too.
+    let import_row = "| `proj_fitting_type_unknown` |";
+    assert!(contract.contains(import_row));
+    let no_import_row: String = contract
+        .lines()
+        .filter(|l| !l.starts_with(import_row))
+        .collect::<Vec<_>>()
+        .join(
+            "
+",
+        );
+    has(
+        check(&files, &no_import_row, &manifest),
+        "undocumented: proj_fitting_type_unknown",
     );
 
     // A row whose first cell is not one backticked code: an error, not a skipped row.

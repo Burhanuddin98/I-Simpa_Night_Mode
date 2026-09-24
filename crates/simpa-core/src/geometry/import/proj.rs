@@ -27,40 +27,57 @@
 //!   a file written on Windows, 8 on Linux and macOS. The two layouts are told apart by the file's
 //!   length (`4 + 8n` against `8 + 8n`), so both are read.
 //!
+//! # The element tree
+//!
+//! `projet_config.xml` is read in upstream's load order, not the file's: every element's children
+//! are first re-ordered by `wxid` as upstream's element constructor re-orders them, quirks
+//! included ([`kids`], [`upstream_sort`]; `data_manager/element.cpp:64-106, 158-159`). The two
+//! differ in a file saved in the session that created its elements, such as a run's snapshot
+//! (tutorial 1's SPPS run lists `Receiver 2` before `Receiver 1`); every list read below (surface
+//! groups, receivers, fitting zones, sources and source groups, materials and their rows) is
+//! read in load order.
+//!
 //! # Surface groups
 //!
 //! Each face gets the material group (`Scene/donnees/sgroupes/gr`) whose `.finfo` lists it, the
 //! scene surface receiver (`recepteurss/recepteurs/gr`) whose `.finfo` lists it, if any, and the
-//! scene-fitted zone (`encombrements/encombrement`, element type 54) whose `.finfo` lists it, if
-//! any. Each distinct (material group, receiver, zone) triple becomes one [`SurfaceGroup`], ordered
-//! by material group, then receiver, then zone, carrying the material group's name, with
-//! ` / <receiver>` appended only when receivers split the material group and ` / <zone>` only when
-//! zones do. A scene receiver covers the groups whose faces it lists, and a scene-fitted zone is
-//! the [`FittingShape::Surfaces`] of the groups whose faces it lists. A face that no material group
-//! lists gets upstream's default material (reference material 0, `data_manager/appconfig.h:122`)
-//! in a group named `(no surface group)`, noted in the report. A face listed by two material
-//! groups, two receivers or two zones is refused: upstream would let the last one win, silently.
+//! scene-fitted zones (`encombrements/encombrement`, element type 54) whose `.finfo` lists it, if
+//! any. Each distinct (material group, receiver, zones) key becomes one [`SurfaceGroup`], ordered
+//! by material group, then receiver, then zones, carrying the material group's name, with
+//! ` / <receiver>` appended only when receivers split the material group and ` / <zone>` (zones
+//! joined by ` + `) only when zones do. A scene receiver covers the groups whose faces it lists,
+//! and a scene-fitted zone is the [`FittingShape::Surfaces`] of the groups whose faces it lists.
+//! A face that no material group lists gets upstream's default material (reference material 0,
+//! `data_manager/appconfig.h:122`) in a group named `(no surface group)`, noted in the report. A
+//! face listed by two material groups, two receivers or two *enabled* zones is refused: upstream
+//! would let the last one win, silently. Upstream tags faces for enabled zones only
+//! (`appconfig.cpp:185`), so a face may be listed by any number of disabled zones besides.
 //!
 //! # Fitting zones
 //!
-//! Read as upstream's GUI loads them (`tree_scene/e_scene_encombrements.h:56-73`), in file order,
+//! Read as upstream's GUI loads them (`tree_scene/e_scene_encombrements.h:56-73`), in load order,
 //! told apart by their element type `eid`: 54 is a scene-fitted zone
 //! (`e_scene_encombrements_encombrement_model.h`), 56 a rectangular one
 //! (`e_scene_encombrements_encombrement_cuboide.h`). Upstream skips any other child silently; this
 //! import refuses it ([`codes::FITTING_TYPE_UNKNOWN`]). Each keeps its name and
 //! `useforcalculation` (as `enabled`: a disabled zone is left out of `config.xml`, the `.cbin` and
-//! the `.poly`, `..._cuboide.h:311, 352`, `..._model.h:148`), and per band `alpha`, `lambda` and
-//! `loi_diff` from its `absorption` rows (see [`read_zone_bands`] for how upstream's loader resets
-//! the diffusion law).
+//! the `.poly`, `..._cuboide.h:311, 331, 352`, `..._model.h:148, 175`), and per band `alpha`,
+//! `lambda` and `loi_diff` from its `absorption` rows (see [`read_zone_bands`] for how upstream's
+//! loader resets the diffusion law).
 //! - **A scene-fitted zone** is the faces its own `gr/@facesFile` lists, and its region seed is
 //!   its `volpos`, as upstream seeds it (`Objet3D_maillage.cpp:1002-1036`). Upstream derives a
 //!   seed from the zone's first face when `volpos` is (0, 0, 0); that is not reproduced
-//!   ([`codes::FITTING_INSIDE_POINT_UNSET`]).
+//!   ([`codes::FITTING_INSIDE_POINT_UNSET`]). An enabled zone without its `gr` is written to
+//!   `config.xml` by upstream with no region at all ([`codes::FITTING_FACE_GROUP_MISSING`]).
 //! - **A rectangular zone** is a [`FittingShape::Box`] over its corners `ba` and `hc`, which
 //!   upstream keeps as typed, not ordered (tutorial 3: `ba` (13, 4, 0), `hc` (18, 1, 1.2)):
 //!   `min` and `max` are their bounds, and `destination` records which bound `hc` takes, which
-//!   upstream's region seed `hc - (hc - ba) * 1e-4` needs (`..._cuboide.h:333-336`). A box
-//!   with no volume is refused ([`codes::FITTING_BOX_EMPTY`]).
+//!   upstream's region seed `hc - (hc - ba) * 1e-4` needs (`..._cuboide.h:333-336`). An enabled
+//!   box with no volume is refused ([`codes::FITTING_BOX_EMPTY`]).
+//!
+//! These three refusals, and two zones listing one face, concern enabled zones only: upstream
+//! seeds, tags and draws nothing for a disabled zone, so it is kept as stored, with a note saying
+//! what enabling it would need.
 //!
 //! Volumes (`volumes/volume`, element type 86) are refused ([`codes::VOLUMES_UNSUPPORTED`]).
 //!
@@ -87,7 +104,9 @@
 //!   then each reference material a group uses, from upstream's reference database
 //!   (`REFERENCE_MATERIALS`). A group whose `idmat` is in neither is refused. A law outside
 //!   upstream's seven (`appconfig.cpp:110-117`) is refused
-//!   ([`codes::REFLECTION_LAW_OUT_OF_RANGE`]).
+//!   ([`codes::REFLECTION_LAW_OUT_OF_RANGE`]), as is a pre-1.3.4 band row with a value upstream
+//!   reports or leaves undefined ([`codes::MATERIAL_ROW_UNREADABLE`]) and a loss the writer would
+//!   not write as stored ([`codes::TRANSMISSION_EXCEEDS_ABSORPTION`]).
 //! - **Spectra** (source power, receiver background noise): upstream writes each band as the
 //!   chosen spectrum's band level plus the user's global level `Lw` (normalised so the reference
 //!   sums to `Lw`), minus the band's attenuation (`E_Property_Freq::LoadLwFromBdd`); the band
@@ -95,9 +114,9 @@
 //!   (tutorial 1's receivers store 0 dB per band and write -6.86 dB at 20 kHz). Reference
 //!   spectrum `White noise` with no attenuation becomes a white [`Spectrum`] at `Lw`, `Pink
 //!   noise` a pink one; anything else a custom one with those relative levels.
-//! - **Sources**, in file order through any nesting of source groups (a `sources` element of type
+//! - **Sources**, in load order through any nesting of source groups (a `sources` element of type
 //!   15 inside the list), as upstream's GUI loads them (`e_scene_sources.h:73-87`) and writes them,
-//!   a group's sources in place of the group (`e_scene_sources.h:190-201`); a child of any other
+//!   a group's sources in place of the group (`e_scene_sources.h:192-202`); a child of any other
 //!   type is refused ([`codes::SOURCE_GROUP_MALFORMED`]). **Point receivers.** Both with their
 //!   `<position>` children, directions, delays and enable flags; **cutting-plane receivers** from
 //!   `verta`, `vertb`, `vertc` and `resolution`.
@@ -163,16 +182,23 @@ pub mod codes {
     /// rectangular one (56), or has none. Upstream's GUI skips it silently
     /// (`e_scene_encombrements.h:56-73`).
     pub const FITTING_TYPE_UNKNOWN: &str = "proj_fitting_type_unknown";
-    /// A scene-fitted zone whose inside point `volpos` is missing or (0, 0, 0). Upstream then
-    /// derives a seed from the zone's first face (`Objet3D_maillage.cpp:1017-1030`), which this
-    /// import does not reproduce.
+    /// An enabled scene-fitted zone whose inside point `volpos` is missing or (0, 0, 0) while it
+    /// lists faces. Upstream then derives a seed from the zone's first face
+    /// (`Objet3D_maillage.cpp:1012-1031`), which this import does not reproduce.
     pub const FITTING_INSIDE_POINT_UNSET: &str = "proj_fitting_inside_point_unset";
-    /// A rectangular zone whose corners `ba` and `hc` share a coordinate: it has no volume.
-    /// Upstream builds no triangles for equal corners and flat ones for a shared coordinate
-    /// (`e_scene_encombrements_encombrement_cuboide.h:113-165`), and still seeds a region at `hc`.
+    /// An enabled scene-fitted zone without its face group (`gr`). Upstream writes the zone into
+    /// `config.xml` but seeds no region for it (`GetMaillageVolumeInfos` returns false,
+    /// `e_scene_encombrements_encombrement_model.h:146-157, 178-191`), which a project cannot
+    /// hold: this import would seed one at its inside point. Upstream's GUI always creates the
+    /// group (`..._model.h:122`), so only an edited file has none.
+    pub const FITTING_FACE_GROUP_MISSING: &str = "proj_fitting_face_group_missing";
+    /// An enabled rectangular zone whose corners `ba` and `hc` share a coordinate: it has no
+    /// volume. Upstream builds no triangles for equal corners and flat ones for a shared
+    /// coordinate (`e_scene_encombrements_encombrement_cuboide.h:113-165`), and still seeds a
+    /// region at `hc`.
     pub const FITTING_BOX_EMPTY: &str = "proj_fitting_box_empty";
-    /// A face listed by two fitting zones. Upstream would give it the last one's id, silently
-    /// (`appconfig.cpp:174-200`).
+    /// A face listed by two enabled fitting zones. Upstream would give it the last one's id,
+    /// silently (`appconfig.cpp:174-200`, which tags faces for enabled zones only, `:185`).
     pub const FACE_IN_TWO_FITTING_ZONES: &str = "proj_face_in_two_fitting_zones";
     /// A fitting zone's diffusion law (`loi_diff`) that SPPS has no case for (0 to 2,
     /// `coreTypes.h:108-113`), in a band upstream's loader keeps as stored.
@@ -180,6 +206,22 @@ pub mod codes {
     /// A material's reflection law (`loi`) in some band that is none of upstream's seven (0 to 6,
     /// `appconfig.cpp:110-117`).
     pub const REFLECTION_LAW_OUT_OF_RANGE: &str = "proj_reflection_law_out_of_range";
+    /// A material band row of a project older than 1.3.4 (`<bfreq absorb=..>`) with a value
+    /// upstream's loader does not read (`e_data_row_materiau.h:55-84`): no `loi`, or one that is
+    /// not an integer, which `Convertor::ToInt` returns uninitialised
+    /// (`manager/sppsString.cpp:107-112`; `wxString::ToLong` leaves its output untouched when it
+    /// reads no digit), or an `absorb`, `diffusion` or `affaiblissement` that is missing or not a
+    /// number, which upstream's GUI reports as an error and reads as 0 (`StringToFloat`,
+    /// `data_manager/e_data.h:212-252`). A missing `affaiblissement` is not one: it means the
+    /// band does not transmit.
+    pub const MATERIAL_ROW_UNREADABLE: &str = "proj_material_row_unreadable";
+    /// A material band that transmits with a loss that lets more energy through than the band
+    /// absorbs (`10^(-R/10)` above `alpha`), or with no absorption. Upstream's GUI prevents both
+    /// only when the user edits the band (`e_data_row_materiau.h:109-205`; loading calls
+    /// `Modified` with the row itself, which matches none of its cases) and writes a loaded
+    /// value unchanged (`:98-107`); this crate's writer applies the rule at every write
+    /// (`config_xml::transmission_loss_written`), so it would not write the stored value.
+    pub const TRANSMISSION_EXCEEDS_ABSORPTION: &str = "proj_transmission_exceeds_absorption";
     /// A child of the source list or of a source group that is neither a source (16) nor a
     /// source group (15), or has no element type. Upstream's GUI skips it silently
     /// (`e_scene_sources.h:73-87`).
@@ -187,6 +229,21 @@ pub mod codes {
     /// Volumes (`volumes/volume`): TetGen regions with their own seed and volume bound
     /// (`e_scene_volumes_volume.h:168-188`), which a project does not hold.
     pub const VOLUMES_UNSUPPORTED: &str = "proj_volumes_unsupported";
+
+    /// Every code above, in the order `docs/solver-contract.md` lists them.
+    pub const ALL: &[&str] = &[
+        FITTING_TYPE_UNKNOWN,
+        FITTING_INSIDE_POINT_UNSET,
+        FITTING_FACE_GROUP_MISSING,
+        FITTING_BOX_EMPTY,
+        FACE_IN_TWO_FITTING_ZONES,
+        DIFFUSION_LAW_OUT_OF_RANGE,
+        REFLECTION_LAW_OUT_OF_RANGE,
+        MATERIAL_ROW_UNREADABLE,
+        TRANSMISSION_EXCEEDS_ABSORPTION,
+        SOURCE_GROUP_MALFORMED,
+        VOLUMES_UNSUPPORTED,
+    ];
 }
 
 /// A `.proj` imported: the project, and what the import did.
@@ -360,8 +417,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     let project_el = child(scene, "projet")?;
 
     // The scene mesh.
-    let mesh_name = project_el
-        .children()
+    let mesh_name = element_kids(project_el)
         .filter(|c| c.has_tag_name("Configuration"))
         .find_map(|c| prop(c, "urlmodel"))
         .and_then(|p| p.attribute("textValue"))
@@ -392,7 +448,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     let mut face_group: Vec<Option<usize>> = vec![None; n_faces];
     let mut groups_in: Vec<(String, u32)> = Vec::new();
     let sgroupes = child(data, "sgroupes")?;
-    for gr in sgroupes.children().filter(|c| c.is_element()) {
+    for gr in element_kids(sgroupes) {
         if !gr.has_tag_name("gr") {
             return Err(ImportError::unsupported(
                 FMT_XML,
@@ -452,7 +508,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     let mut receivers: Vec<(Rs, Option<i64>)> = Vec::new();
     let mut face_receiver: Vec<Option<usize>> = vec![None; n_faces];
     if let Some(list) = opt_child(data, "recepteurss") {
-        for r in list.children().filter(|c| c.is_element()) {
+        for r in element_kids(list) {
             let name = r.attribute("name").unwrap_or("").to_string();
             let what = format!("surface receiver `{name}`");
             let props = opt_child(r, "prop");
@@ -463,7 +519,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
             match r.tag_name().name() {
                 "recepteurs" => {
                     let k = receivers.len();
-                    if let Some(gr) = r.children().find(|c| c.has_tag_name("gr")) {
+                    if let Some(gr) = element_kids(r).find(|c| c.has_tag_name("gr")) {
                         let list = finfo_faces(&archive, &folder, gr, &mesh, &group_start, &what)?;
                         let list = match list {
                             Some((faces, bytes)) => {
@@ -534,9 +590,11 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     let bands = BandSet::range(BandKind::ThirdOctave, 50, 20_000).expect("nominal range");
     let n = bands.len();
 
-    // Fitting zones, and the faces each scene-fitted zone lists.
+    // Fitting zones, and the zones (in load order) that list each face. A face may be listed by
+    // several scene-fitted zones as long as at most one of them is enabled: upstream tags a face
+    // for enabled zones only (`GetFaceLink`, `appconfig.cpp:174-200`, the test at `:185`).
     let mut zones: Vec<ZoneIn> = Vec::new();
-    let mut face_zone: Vec<Option<usize>> = vec![None; n_faces];
+    let mut face_zones: Vec<Vec<usize>> = vec![Vec::new(); n_faces];
     if let Some(list) = opt_child(data, "encombrements") {
         let files = ZoneFiles {
             archive: &archive,
@@ -544,24 +602,30 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
             mesh: &mesh,
             group_start: &group_start,
         };
-        for z in list.children().filter(|c| c.is_element()) {
+        for z in element_kids(list) {
             let k = zones.len();
             let zone = read_zone(z, &files, &bands, &mut digest_parts, &mut report.notes)?;
             if let ZoneKind::Model { faces, .. } = &zone.kind {
                 for &f in faces {
-                    if let Some(prev) = face_zone[f].replace(k)
-                        && prev != k
+                    let listed = &mut face_zones[f];
+                    if listed.contains(&k) {
+                        continue;
+                    }
+                    if let Some(&prev) = listed.iter().find(|&&p| zones[p].enabled)
+                        && zone.enabled
                     {
                         return Err(ImportError::refused(
                             FMT_PROJ,
                             codes::FACE_IN_TWO_FITTING_ZONES,
                             format!(
-                                "face {f} is in two fitting zones, `{}` and `{}`; upstream would \
-                                 give it the last one's id, silently (appconfig.cpp:174-200)",
+                                "face {f} is in two enabled fitting zones, `{}` and `{}`; \
+                                 upstream would give it the last one's id, silently \
+                                 (appconfig.cpp:174-200)",
                                 zones[prev].name, zone.name
                             ),
                         ));
                     }
+                    listed.push(k);
                 }
             }
             zones.push(zone);
@@ -569,7 +633,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     }
     // Volumes are not read.
     if let Some(list) = opt_child(data, "volumes")
-        && let Some(first) = list.children().find(|c| c.is_element())
+        && let Some(first) = element_kids(list).next()
     {
         return Err(ImportError::refused(
             FMT_XML,
@@ -592,7 +656,10 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     if let Some(bdd) = opt_child(project_el, "bdd")
         && let Some(mats) = opt_child(bdd, "materiaux")
     {
-        for m in mats.descendants().filter(|d| d.has_tag_name("materiau")) {
+        for m in preorder(mats)
+            .into_iter()
+            .filter(|d| d.has_tag_name("materiau"))
+        {
             let index = materials.len();
             let material = read_material(m, &bands, MaterialId(ids.uuid("material", index)))?;
             if materials.iter().any(|x| x.solver_id == material.solver_id) {
@@ -630,25 +697,27 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
         Ok(materials[index].id)
     };
 
-    // Surface groups: one per (material group, scene receiver, scene-fitted zone) triple.
+    // Surface groups: one per (material group, scene receiver, scene-fitted zones) key, the
+    // receiver stored plus one so that "none" (NONE + 1 wraps to 0) sorts first, as no zone (the
+    // empty list) does.
     const NONE: usize = usize::MAX;
-    let key_of = |f: usize| {
+    type Key = (usize, usize, Vec<usize>);
+    let key_of = |f: usize| -> Key {
         (
             face_group[f].unwrap_or(NONE),
-            face_receiver[f].unwrap_or(NONE),
-            face_zone[f].unwrap_or(NONE),
+            face_receiver[f].unwrap_or(NONE).wrapping_add(1),
+            face_zones[f].clone(),
         )
     };
-    // "None" sorts first: NONE + 1 wraps to 0.
-    let order = |&(g, r, z): &(usize, usize, usize)| (g, r.wrapping_add(1), z.wrapping_add(1));
-    let mut keys: Vec<(usize, usize, usize)> = (0..n_faces).map(key_of).collect();
-    keys.sort_unstable_by_key(order);
+    let mut keys: Vec<Key> = (0..n_faces).map(key_of).collect();
+    keys.sort_unstable();
     keys.dedup();
     let mut surface_groups: Vec<SurfaceGroup> = Vec::with_capacity(keys.len());
     let unassigned = face_group.iter().filter(|g| g.is_none()).count();
-    for (i, &(g, r, z)) in keys.iter().enumerate() {
-        let split_by_receiver = keys.iter().any(|k| k.0 == g && k.1 != r);
-        let split_by_zone = keys.iter().any(|k| k.0 == g && k.2 != z);
+    for (i, (g, r1, z)) in keys.iter().enumerate() {
+        let (g, r) = (*g, r1.wrapping_sub(1));
+        let split_by_receiver = keys.iter().any(|k| k.0 == g && k.1 != *r1);
+        let split_by_zone = keys.iter().any(|k| k.0 == g && k.2 != *z);
         let (base, material) = if g == NONE {
             (
                 "(no surface group)".to_string(),
@@ -664,8 +733,9 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
         if split_by_receiver && let Some((Rs::Scene { name: receiver, .. }, _)) = receivers.get(r) {
             name = format!("{name} / {receiver}");
         }
-        if split_by_zone && let Some(zone) = zones.get(z) {
-            name = format!("{name} / {}", zone.name);
+        if split_by_zone && !z.is_empty() {
+            let names: Vec<&str> = z.iter().map(|&k| zones[k].name.as_str()).collect();
+            name = format!("{name} / {}", names.join(" + "));
         }
         surface_groups.push(SurfaceGroup {
             id: GroupId(ids.uuid("surface group", i)),
@@ -681,7 +751,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     }
     let key_group = |f: usize| -> GroupId {
         let i = keys
-            .binary_search_by_key(&order(&key_of(f)), order)
+            .binary_search(&key_of(f))
             .expect("every face's key is listed");
         surface_groups[i].id
     };
@@ -722,7 +792,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
             })
             .collect(),
     };
-    let groups_where = |keep: &dyn Fn(&(usize, usize, usize)) -> bool| -> Vec<GroupId> {
+    let groups_where = |keep: &dyn Fn(&Key) -> bool| -> Vec<GroupId> {
         keys.iter()
             .zip(&surface_groups)
             .filter(|(key, _)| keep(key))
@@ -740,7 +810,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
                 name,
                 enabled,
                 shape: SurfaceReceiverShape::Scene {
-                    groups: groups_where(&|key| key.1 == k),
+                    groups: groups_where(&|key| key.1 == k.wrapping_add(1)),
                 },
             },
             Rs::Plane(shape, name, enabled) => SurfaceReceiver {
@@ -770,7 +840,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
         let id = FittingZoneId(ids.uuid("fitting zone", k));
         let shape = match z.kind {
             ZoneKind::Model { inside_point, .. } => FittingShape::Surfaces {
-                groups: groups_where(&|key| key.2 == k),
+                groups: groups_where(&|key| key.2.contains(&k)),
                 inside_point,
             },
             ZoneKind::Box { ba, hc } => box_shape(ba, hc),
@@ -814,7 +884,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     }
     let mut point_receivers = Vec::new();
     if let Some(list) = opt_child(data, "recepteursp") {
-        for r in list.children().filter(|c| c.is_element()) {
+        for r in element_kids(list) {
             if !r.has_tag_name("recepteurp") {
                 return Err(ImportError::unsupported(
                     FMT_XML,
@@ -845,8 +915,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     let solvers = read_solvers(core, &bands, &mut report.notes)?;
 
     // Name and description.
-    let info = project_el
-        .children()
+    let info = element_kids(project_el)
         .filter(|c| c.has_tag_name("Configuration"))
         .find(|c| prop(*c, "projectname").is_some());
     let text = |name: &str| {
@@ -912,18 +981,19 @@ fn element_id(node: Node<'_, '_>) -> Option<i64> {
 // ---------------------------------------------------------------------------------------------
 // Sources and source groups.
 
-/// Every source element of the source list `list`, in file order through any nesting of source
-/// groups, with the path of the groups it sits in (`Milling Machine`, or empty at the top level).
-/// Upstream's GUI loads a child of type 16 as a source and one of type 15 as a group, whose
-/// children it reads the same way (`e_scene_sources.h:73-87`); on writing, a group writes each of
-/// its sources in its place (`Element::SaveXMLCoreDoc`, `element.cpp:635-644`; the group's own
-/// `SaveXMLCoreDoc`, `e_scene_sources.h:190-201`), so the file order is the order upstream writes
-/// (newest first, as every list, `config_xml`). Any other child is refused, where upstream skips it
-/// silently: [`codes::SOURCE_GROUP_MALFORMED`]. Walked with an explicit stack, so no nesting depth
-/// can overflow the call stack.
+/// Every source element of the source list `list`, in upstream's load order ([`kids`]) through
+/// any nesting of source groups, with the path of the groups it sits in (`Milling Machine`, or
+/// empty at the top level). Upstream's GUI loads a child of type 16 as a source and one of type 15
+/// as a group, whose children it reads the same way (`e_scene_sources.h:73-87`, after its element
+/// constructor has sorted them, `element.cpp:159`); on writing, a group writes each of its sources
+/// in its place (`Element::SaveXMLCoreDoc`, `element.cpp:635-644`; the group's own
+/// `SaveXMLCoreDoc`, `e_scene_sources.h:192-202`), so this order, reversed as every list is
+/// (`config_xml`), is the order upstream writes. Any other child is refused, where upstream skips
+/// it silently: [`codes::SOURCE_GROUP_MALFORMED`]. Walked with an explicit stack, so no nesting
+/// depth can overflow the call stack.
 fn source_elements<'a, 'i>(list: Node<'a, 'i>) -> Result<Vec<(Node<'a, 'i>, String)>> {
     let mut out = Vec::new();
-    let children = |n: Node<'a, 'i>| n.children().filter(|c| c.is_element()).collect::<Vec<_>>();
+    let children = |n: Node<'a, 'i>| element_kids(n).collect::<Vec<_>>();
     let mut stack: Vec<(Node<'a, 'i>, String)> = children(list)
         .into_iter()
         .rev()
@@ -1070,8 +1140,13 @@ fn read_zone(
         }
     };
     let zone_bands = read_zone_bands(z, bands, &what, notes)?;
+    // What follows refuses only what upstream would act on: a disabled zone seeds no region
+    // (`GetMaillageVolumeInfos` gives false, `..._model.h:193`, `..._cuboide.h:331`,
+    // `drawable_element.cpp:250-253`), tags no face (`appconfig.cpp:185`) and draws no triangle
+    // (`..._cuboide.h:311`), so it is kept as stored, and a note says what enabling it would need.
+    let off = if enabled { "" } else { " (disabled)" };
     let kind = if is_model {
-        let faces = match z.children().find(|c| c.has_tag_name("gr")) {
+        let faces = match element_kids(z).find(|c| c.has_tag_name("gr")) {
             Some(gr) => match finfo_faces(
                 files.archive,
                 files.folder,
@@ -1086,45 +1161,69 @@ fn read_zone(
                 }
                 None => {
                     notes.push(format!(
-                        "{what}: its face list is not in the archive, so it lists no face (as \
-                         upstream reads it)"
+                        "{what}{off}: its face list is not in the archive, so it lists no face \
+                         (as upstream reads it)"
                     ));
                     Vec::new()
                 }
             },
+            // Upstream writes an enabled zone without its face group into config.xml but seeds
+            // no region for it (`..._model.h:146-157, 178-191`); a project cannot hold that.
+            None if enabled => {
+                return Err(ImportError::refused(
+                    FMT_XML,
+                    codes::FITTING_FACE_GROUP_MISSING,
+                    format!(
+                        "{what} has no face group (gr): upstream writes it into config.xml but \
+                         seeds no TetGen region for it (e_scene_encombrements_encombrement_model.h:\
+                         178-191), which a project cannot hold; this import would seed one at its \
+                         inside position"
+                    ),
+                ));
+            }
             None => {
-                notes.push(format!("{what} has no face list: it lists no face"));
+                notes.push(format!(
+                    "{what}{off} has no face group (gr): it lists no face, and enabled, upstream \
+                     would seed no region for it"
+                ));
                 Vec::new()
             }
         };
-        // Upstream's GUI gives a zone without `volpos` one at (0, 0, 0)
-        // (`..._model.h:104-108`), and replaces (0, 0, 0) by a point it derives from the zone's
-        // first face whenever the zone has one (`Objet3D_maillage.cpp:1011-1031`).
-        let has_volpos = z
-            .children()
+        // Upstream's GUI gives a zone without a position one named `volpos` at (0, 0, 0)
+        // (`..._model.h:108-112`), and seeds the region of a zone that lists faces at a point
+        // derived from its first face instead when `volpos` is (0, 0, 0)
+        // (`Objet3D_maillage.cpp:1012-1031`).
+        let has_volpos = element_kids(z)
             .any(|c| c.has_tag_name("position") && c.attribute("name") == Some("volpos"));
         let inside_point = if has_volpos {
             position(z, "volpos", &what)?
         } else {
             Vec3::ZERO
         };
+        let unset = if has_volpos {
+            "the inside position (0, 0, 0)"
+        } else {
+            "no inside position (volpos)"
+        };
         if inside_point.to_array() == [0.0; 3] && !faces.is_empty() {
-            return Err(ImportError::refused(
-                FMT_XML,
-                codes::FITTING_INSIDE_POINT_UNSET,
-                format!(
-                    "{what} has {}: upstream seeds its region at a point derived from its first \
-                     face in its OpenGL frame (Objet3D_maillage.cpp:1011-1031), which this \
-                     import does not reproduce; set the zone's inside position",
-                    if has_volpos {
-                        "the inside position (0, 0, 0)"
-                    } else {
-                        "no inside position (volpos)"
-                    }
-                ),
+            if enabled {
+                return Err(ImportError::refused(
+                    FMT_XML,
+                    codes::FITTING_INSIDE_POINT_UNSET,
+                    format!(
+                        "{what} has {unset}: upstream seeds its region at a point derived from \
+                         its first face in its OpenGL frame (Objet3D_maillage.cpp:1012-1031), \
+                         which this import does not reproduce; set the zone's inside position"
+                    ),
+                ));
+            }
+            notes.push(format!(
+                "{what}{off} has {unset}: enabled, upstream would seed its region at a point \
+                 derived from its first face (Objet3D_maillage.cpp:1012-1031) and this project at \
+                 (0, 0, 0); set its inside position before enabling it"
             ));
         }
-        if faces.is_empty() {
+        if faces.is_empty() && enabled {
             notes.push(format!(
                 "{what} lists no face: upstream still seeds a region at its inside position"
             ));
@@ -1138,15 +1237,24 @@ fn read_zone(
         let hc = position(z, "hc", &what)?;
         let (a, c) = (ba.to_array(), hc.to_array());
         if let Some(axis) = (0..3).find(|&k| a[k] == c[k]) {
-            return Err(ImportError::refused(
-                FMT_XML,
-                codes::FITTING_BOX_EMPTY,
-                format!(
-                    "{what}: its corners ba {a:?} and hc {c:?} share the {} coordinate, so it has \
-                     no volume; upstream would still seed a region at hc \
-                     (e_scene_encombrements_encombrement_cuboide.h:113-165, 333-336)",
-                    ["x", "y", "z"][axis]
-                ),
+            let flat = format!(
+                "{what}{off}: its corners ba {a:?} and hc {c:?} share the {} coordinate, so it \
+                 has no volume",
+                ["x", "y", "z"][axis]
+            );
+            if enabled {
+                return Err(ImportError::refused(
+                    FMT_XML,
+                    codes::FITTING_BOX_EMPTY,
+                    format!(
+                        "{flat}; upstream would still seed a region at hc \
+                         (e_scene_encombrements_encombrement_cuboide.h:113-165, 331-340)"
+                    ),
+                ));
+            }
+            notes.push(format!(
+                "{flat}; kept as stored, since upstream ignores a disabled zone, and refused \
+                 by the mesher if enabled"
             ));
         }
         ZoneKind::Box { ba, hc }
@@ -1216,9 +1324,8 @@ fn read_zone_bands(
     let mut missing: Vec<u32> = Vec::new();
     // Upstream writes, and resets the law of, the rows of element type ROW only
     // (`e_gammeabsorption.cpp:47, 79`).
-    let band_rows = rows
-        .children()
-        .filter(|c| c.has_tag_name("p") && element_type(*c) == Some(eid::ROW));
+    let band_rows =
+        element_kids(rows).filter(|c| c.has_tag_name("p") && element_type(*c) == Some(eid::ROW));
     for row in band_rows {
         let Some(freq) = row
             .attribute("name")
@@ -1303,7 +1410,7 @@ fn upstream_list_format(list: Node<'_, '_>) -> bool {
     }
     let mut ids: Vec<i64> = Vec::new();
     let mut labels: Vec<&str> = Vec::new();
-    for e in list.children().filter(|c| c.has_tag_name("enumeration")) {
+    for e in element_kids(list).filter(|c| c.has_tag_name("enumeration")) {
         let (Some(id), Some(value)) = (
             e.attribute("id").and_then(|v| v.trim().parse::<i64>().ok()),
             e.attribute("value"),
@@ -1603,10 +1710,138 @@ fn plain_file_name(name: &str) -> Result<&str> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The element tree.
+// The element tree, in upstream's load order.
+
+/// `node`'s children in the order upstream's GUI loads them, which is not always the file's.
+///
+/// Upstream builds every element of a project from its node, and the constructor first re-orders
+/// the node's children by their `wxid` (`SortChildrensByProperty(nodeElement, "wxid")`,
+/// `data_manager/element.cpp:158-159`), before any loader walks them (the source list's,
+/// `e_scene_sources.h:68-89`; the fitting zones', `e_scene_encombrements.h:56-73`; every other).
+/// The file's order differs in a file saved in the session that created its elements: upstream
+/// saves an element that has no node yet as a new node, which `wxXmlNode`'s parent constructor
+/// makes its parent's first child (`GenericSaveXmlDoc`, `element.cpp:610-613`). Tutorial 1's SPPS
+/// run keeps such a `projet_config.xml`: it lists `Receiver 2` (wxid 3669) before `Receiver 1`
+/// (3510), upstream loads `Receiver 1` first, and the run's `config.xml`, written from what it
+/// loaded, lists 3669 first, as this import and the writer do (`import_proj_with_config`).
+///
+/// The children are the nodes `wxXmlDocument` keeps with the flags upstream loads with (none,
+/// `data_manager/projet.cpp:1860`): whitespace-only text is dropped (spaces, tabs, line breaks);
+/// elements, other text and comments are kept, and only elements carry a `wxid`. Their order is
+/// [`upstream_sort`]'s. Children read by name (a property, a position) are the first of that name
+/// in this order.
+fn kids<'a, 'i>(node: Node<'a, 'i>) -> Vec<Node<'a, 'i>> {
+    let white = |t: &str| t.chars().all(|c| matches!(c, ' ' | '\t' | '\n' | '\r'));
+    let mut out: Vec<Node<'a, 'i>> = node
+        .children()
+        .filter(|c| {
+            c.is_element() || c.is_comment() || (c.is_text() && !white(c.text().unwrap_or("")))
+        })
+        .collect();
+    upstream_sort(&mut out, |n| n.attribute("wxid"));
+    out
+}
+
+/// The element children of `node`, in upstream's load order ([`kids`]).
+fn element_kids<'a, 'i>(node: Node<'a, 'i>) -> impl Iterator<Item = Node<'a, 'i>> {
+    kids(node).into_iter().filter(|c| c.is_element())
+}
+
+/// Every element below `node` (not `node` itself), depth first, each level in upstream's load
+/// order ([`kids`]). Walked with an explicit stack, so no depth can overflow the call stack.
+fn preorder<'a, 'i>(node: Node<'a, 'i>) -> Vec<Node<'a, 'i>> {
+    let mut out = Vec::new();
+    let mut stack: Vec<Node<'a, 'i>> = element_kids(node).collect();
+    stack.reverse();
+    while let Some(n) = stack.pop() {
+        out.push(n);
+        let mut below: Vec<Node<'a, 'i>> = element_kids(n).collect();
+        below.reverse();
+        stack.extend(below);
+    }
+    out
+}
+
+/// Upstream's `SortChildrensByProperty(node, "wxid")` (`data_manager/element.cpp:64-106`) on
+/// `nodes`, each node's `wxid` given by `wxid`, with its quirks:
+/// - A pass compares every node, in turn, with the id the **first** node had when the pass began,
+///   never with its neighbour's (after a swap, `nextid = currentid; currentid = nextid;` leaves
+///   `currentid` as it was, `:97-98`), and moves every node whose id is smaller one place towards
+///   the front. Passes repeat until one moves nothing. The first node then holds the smallest id,
+///   but the others need not be in order: `[2, 5, 4]` is left as it is.
+/// - Ids are read with `wxString::ToLong` ([`to_long`]) from one buffer. A node without a `wxid`
+///   leaves that buffer as it was (`wxXmlNode::GetAttribute` does not touch its output then), so
+///   it counts with the last id read, the previous pass's included.
+/// - Nothing is sorted when the first node's id does not read.
+///
+/// The loop ends. The first node always has an id that reads: a node without one, or with one
+/// that does not read, never compares below it. Each pass moves every node whose own id is below
+/// the first's one place forward, so one of them becomes first within `nodes.len()` passes, and
+/// the first id then falls, which it can do only finitely often.
+fn upstream_sort<T>(nodes: &mut [T], wxid: impl Fn(&T) -> Option<&str>) {
+    if nodes.is_empty() {
+        return;
+    }
+    let mut buffer = String::new();
+    loop {
+        let mut moved = false;
+        if let Some(v) = wxid(&nodes[0]) {
+            buffer = v.to_string();
+        }
+        if let Some(current) = to_long(&buffer) {
+            for i in 0..nodes.len() - 1 {
+                if let Some(v) = wxid(&nodes[i + 1]) {
+                    buffer = v.to_string();
+                }
+                if to_long(&buffer).is_some_and(|next| next < current) {
+                    nodes.swap(i, i + 1);
+                    moved = true;
+                }
+            }
+        }
+        if !moved {
+            return;
+        }
+    }
+}
+
+/// The integer `strtol` reads at the start of `s` in base 10, as upstream's `Convertor::ToInt`
+/// returns it (`manager/sppsString.cpp:107-112`: `wxString::ToLong` stores what it read even when
+/// more follows, `2.5` giving 2). `None` where it reads no digit or overflows a 32-bit `long`:
+/// `ToLong` then leaves `ToInt`'s variable uninitialised.
+fn strtol_prefix(s: &str) -> Option<i64> {
+    let t = s.trim_start_matches([' ', '\t', '\n', '\r', '\u{b}', '\u{c}']);
+    let sign = usize::from(matches!(t.as_bytes().first(), Some(b'-' | b'+')));
+    let digits = t[sign..].bytes().take_while(u8::is_ascii_digit).count();
+    if digits == 0 {
+        return None;
+    }
+    to_long(&t[..sign + digits])
+}
+
+/// `wxString::ToLong` in base 10, as a test: `Some` when the whole string reads as a C `long`.
+/// It reads with `strtol`, which skips leading white space and takes a sign, and it fails when no
+/// digit is read, on overflow (`long` is 32 bits in upstream's Windows build) and when anything
+/// follows the digits.
+fn to_long(s: &str) -> Option<i64> {
+    let t = s.trim_start_matches([' ', '\t', '\n', '\r', '\u{b}', '\u{c}']);
+    let (negative, digits) = match t.as_bytes().first() {
+        Some(b'-') => (true, &t[1..]),
+        Some(b'+') => (false, &t[1..]),
+        _ => (false, t),
+    };
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let magnitude: i64 = digits.parse().ok()?;
+    let v = if negative { -magnitude } else { magnitude };
+    (i64::from(i32::MIN)..=i64::from(i32::MAX))
+        .contains(&v)
+        .then_some(v)
+}
 
 fn opt_child<'a, 'i>(node: Node<'a, 'i>, name: &str) -> Option<Node<'a, 'i>> {
-    node.children().find(|c| c.has_tag_name(name))
+    element_kids(node).find(|c| c.has_tag_name(name))
 }
 
 fn child<'a, 'i>(node: Node<'a, 'i>, name: &str) -> Result<Node<'a, 'i>> {
@@ -1620,8 +1855,7 @@ fn child<'a, 'i>(node: Node<'a, 'i>, name: &str) -> Result<Node<'a, 'i>> {
 
 /// The property `<p name="...">` directly under `node`.
 fn prop<'a, 'i>(node: Node<'a, 'i>, name: &str) -> Option<Node<'a, 'i>> {
-    node.children()
-        .find(|c| c.has_tag_name("p") && c.attribute("name") == Some(name))
+    element_kids(node).find(|c| c.has_tag_name("p") && c.attribute("name") == Some(name))
 }
 
 /// A number as upstream's GUI writes it: C locale, or with a decimal comma in files written
@@ -1715,8 +1949,7 @@ fn opt_prop_text<'a>(node: Node<'a, '_>, name: &str) -> Option<&'a str> {
 
 /// `<position name="...">` with `x`, `y`, `z` properties.
 fn position(node: Node<'_, '_>, name: &str, what: &str) -> Result<Vec3> {
-    let pos = node
-        .children()
+    let pos = element_kids(node)
         .find(|c| c.has_tag_name("position") && c.attribute("name") == Some(name))
         .ok_or_else(|| ImportError::invalid(FMT_XML, format!("{what} has no position `{name}`")))?;
     let w = format!("{what} position `{name}`");
@@ -1753,7 +1986,7 @@ fn read_material(m: Node<'_, '_>, bands: &BandSet, id: MaterialId) -> Result<Mat
     let mut transmission = vec![None; n];
     // A band's row is `<p>` since 1.3.4 and `<bfreq>`, its values as attributes, before (Industrial,
     // 1.1.5); upstream's loader takes either by its element type (`e_data_row_materiau.h:55-84`).
-    let rows = m.children().filter(|c| {
+    let rows = element_kids(m).filter(|c| {
         c.has_tag_name("p")
             || (c.has_tag_name("bfreq") && element_type(*c) == Some(eid::ROW_MATERIAU))
     });
@@ -1769,19 +2002,57 @@ fn read_material(m: Node<'_, '_>, bands: &BandSet, id: MaterialId) -> Result<Mat
             .ok_or_else(|| ImportError::unsupported(FMT_XML, format!("{what}: band {freq} Hz")))?;
         let w = format!("{what} at {freq} Hz");
         if row.has_attribute("absorb") {
-            // Projects before 1.3.4: attributes on the row, transmission iff affaiblissement.
-            let attr = |a: &str| -> Result<Option<f64>> {
+            // Projects before 1.3.4: attributes on the row, read as upstream's loader reads them
+            // (`e_data_row_materiau.h:58-83`): the band transmits iff it has `affaiblissement`;
+            // the numbers go through `StringToFloat`, which reads a missing or unreadable one as
+            // 0 and reports an error (`e_data.h:212-252`); `loi` through `Convertor::ToInt`,
+            // which returns the digits `strtol` reads first, and an uninitialised value when it
+            // reads none (`sppsString.cpp:107-112`). What upstream reports or leaves undefined is
+            // refused ([`codes::MATERIAL_ROW_UNREADABLE`]).
+            let unreadable = |a: &str, why: String| {
+                ImportError::refused(
+                    FMT_XML,
+                    codes::MATERIAL_ROW_UNREADABLE,
+                    format!("{w}: `{a}` {why} (e_data_row_materiau.h:58-83)"),
+                )
+            };
+            let real = |a: &str| -> Result<Option<f64>> {
                 match row.attribute(a) {
                     None => Ok(None),
                     Some(t) => number(t).map(|v| Some(widen_f32(v as f32))).ok_or_else(|| {
-                        ImportError::invalid(FMT_XML, format!("{w}: `{a}` = `{t}`"))
+                        unreadable(
+                            a,
+                            format!(
+                                "= `{t}` is not a number: upstream's GUI reports \
+                                 \"Cannot convert string\" and reads 0 (e_data.h:247-250)"
+                            ),
+                        )
                     }),
                 }
             };
-            absorption[b] = attr("absorb")?;
-            scattering[b] = attr("diffusion")?;
-            law[b] = attr("loi")?.map(|v| v as i64);
-            transmission[b] = Some(attr("affaiblissement")?);
+            let needed = |a: &str| -> Result<f64> {
+                real(a)?.ok_or_else(|| {
+                    unreadable(
+                        a,
+                        "is missing: upstream's GUI reports \"Cannot convert string\" for the \
+                         empty text and reads 0 (e_data.h:247-250)"
+                            .to_string(),
+                    )
+                })
+            };
+            absorption[b] = Some(needed("absorb")?);
+            scattering[b] = Some(needed("diffusion")?);
+            let loi = row.attribute("loi").unwrap_or("");
+            law[b] = Some(strtol_prefix(loi).ok_or_else(|| {
+                unreadable(
+                    "loi",
+                    format!(
+                        "= `{loi}` holds no integer: upstream's Convertor::ToInt returns an \
+                         uninitialised value for it (sppsString.cpp:107-112)"
+                    ),
+                )
+            })?);
+            transmission[b] = Some(real("affaiblissement")?);
         } else {
             absorption[b] = Some(prop_real(row, "absorb", &w)?);
             scattering[b] = Some(prop_real(row, "diffusion", &w)?);
@@ -1833,6 +2104,29 @@ fn read_material(m: Node<'_, '_>, bands: &BandSet, id: MaterialId) -> Result<Mat
         .into_iter()
         .map(|t| t.flatten().map(F64::new))
         .collect();
+    // A loss this crate's writer would not write as stored: upstream writes a loaded value
+    // unchanged (`e_data_row_materiau.h:98-107`) and enforces tau <= alpha only when the user
+    // edits the band (`:109-205`); the writer enforces it at every write.
+    for (b, loss) in tl.iter().enumerate() {
+        let (Some(loss), Some(alpha)) = (loss, absorption[b]) else {
+            continue;
+        };
+        if crate::config_xml::transmission_loss_written(loss.get(), alpha) != Some(loss.get()) {
+            return Err(ImportError::refused(
+                FMT_XML,
+                codes::TRANSMISSION_EXCEEDS_ABSORPTION,
+                format!(
+                    "{what} at {} Hz transmits with a loss of {} dB against an absorption of \
+                     {alpha}: 10^(-R/10) is above the absorption, or the absorption is 0. \
+                     Upstream writes the stored loss as it is (e_data_row_materiau.h:98-107) \
+                     and prevents this only when the band is edited (:109-205); this crate's \
+                     writer would change it",
+                    bands.frequencies_hz[b],
+                    loss.get()
+                ),
+            ));
+        }
+    }
     let transmission_loss_db = tl.iter().any(Option::is_some).then_some(tl);
     let props = owner.and_then(|o| opt_child(o, "property"));
     let double_sided = match props {
@@ -1909,7 +2203,7 @@ fn read_spectrum(sp: Node<'_, '_>, bands: &BandSet, what: &str) -> Result<Spectr
             )
         })??
     };
-    let rows: Vec<Node> = sp.children().filter(|c| c.has_tag_name("p")).collect();
+    let rows: Vec<Node> = element_kids(sp).filter(|c| c.has_tag_name("p")).collect();
     let cumul = rows
         .iter()
         .find(|r| r.attribute("name") == Some("cumul"))
@@ -1957,8 +2251,8 @@ fn read_spectrum(sp: Node<'_, '_>, bands: &BandSet, what: &str) -> Result<Spectr
 /// element type `typespectre`. `None` if there is none; its band levels (`db`) otherwise.
 fn user_spectrum(sp: Node<'_, '_>, id: i64, ty: i64, bands: &BandSet) -> Option<Result<Vec<f64>>> {
     let root = sp.document().root_element();
-    let bdd = root.descendants().find(|d| d.has_tag_name("bdd"))?;
-    let el = bdd.descendants().find(|d| {
+    let bdd = preorder(root).into_iter().find(|d| d.has_tag_name("bdd"))?;
+    let el = preorder(bdd).into_iter().find(|d| {
         d.attribute("idspectre")
             .and_then(|v| v.trim().parse::<i64>().ok())
             == Some(id)
@@ -1968,7 +2262,7 @@ fn user_spectrum(sp: Node<'_, '_>, id: i64, ty: i64, bands: &BandSet) -> Option<
     })?;
     let what = format!("user spectrum {id}");
     let mut out = vec![None; bands.len()];
-    for r in el.children().filter(|c| c.has_tag_name("p")) {
+    for r in element_kids(el).filter(|c| c.has_tag_name("p")) {
         let Some(freq) = r
             .attribute("name")
             .and_then(|f| f.trim().parse::<u32>().ok())
@@ -1995,8 +2289,7 @@ fn read_source(s: Node<'_, '_>, bands: &BandSet, id: SourceId) -> Result<Source>
     let name = s.attribute("name").unwrap_or("").to_string();
     let what = format!("source `{name}`");
     let props = child(s, "prop")?;
-    let pos = s
-        .children()
+    let pos = element_kids(s)
         .find(|c| c.has_tag_name("position"))
         .and_then(|c| c.attribute("name"))
         .unwrap_or("pos_source")
@@ -2104,7 +2397,7 @@ fn read_environment(project_el: Node<'_, '_>, notes: &mut Vec<String>) -> Result
 fn band_switches(core: Node<'_, '_>, bands: &BandSet, what: &str) -> Result<Vec<bool>> {
     let conf = child(core, "core_conf_bfreq")?;
     let mut out = vec![None; bands.len()];
-    for p in conf.children().filter(|c| c.has_tag_name("p")) {
+    for p in element_kids(conf).filter(|c| c.has_tag_name("p")) {
         let Some(freq) = p
             .attribute("name")
             .and_then(|f| f.trim().parse::<u32>().ok())
@@ -2267,4 +2560,149 @@ fn read_solvers(
         notes.push("no TCR settings: upstream's defaults are used".to_string());
     }
     Ok(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// [`upstream_sort`] on ids given as text (`None`: no `wxid`), as the list comes out.
+    fn sorted(ids: &[Option<&str>]) -> Vec<Option<String>> {
+        let mut v: Vec<Option<&str>> = ids.to_vec();
+        upstream_sort(&mut v, |x| *x);
+        v.into_iter().map(|x| x.map(str::to_string)).collect()
+    }
+
+    fn some(ids: &[&str]) -> Vec<Option<String>> {
+        ids.iter().map(|s| Some(s.to_string())).collect()
+    }
+
+    #[test]
+    fn upstream_sort_orders_what_upstream_orders() {
+        // Tutorial 1's SPPS snapshot: receivers and surface groups saved newest first.
+        assert_eq!(
+            sorted(&[Some("3669"), Some("3510")]),
+            some(&["3510", "3669"])
+        );
+        assert_eq!(
+            sorted(&[Some("3147"), Some("3144"), Some("3141")]),
+            some(&["3141", "3144", "3147"])
+        );
+        // A list already ascending is left as it is.
+        assert_eq!(
+            sorted(&[Some("1463"), Some("1466"), Some("1469")]),
+            some(&["1463", "1466", "1469"])
+        );
+    }
+
+    #[test]
+    fn upstream_sort_keeps_its_quirks() {
+        // Once the first holds the smallest id, nothing else moves: not a full sort.
+        assert_eq!(
+            sorted(&[Some("2"), Some("5"), Some("4")]),
+            some(&["2", "5", "4"])
+        );
+        // Every pass compares with the first id, not the neighbour's: 5 and 4 never meet.
+        assert_eq!(
+            sorted(&[Some("3"), Some("1"), Some("5"), Some("4")]),
+            some(&["1", "3", "5", "4"])
+        );
+        // No sort when the first id does not read.
+        assert_eq!(
+            sorted(&[None, Some("5"), Some("1")]),
+            vec![None, Some("5".into()), Some("1".into())]
+        );
+        assert_eq!(
+            sorted(&[Some("x"), Some("5"), Some("1")]),
+            some(&["x", "5", "1"])
+        );
+        // A node without a wxid counts with the last id read: here 1, so it moves with it.
+        assert_eq!(
+            sorted(&[Some("5"), Some("1"), None]),
+            vec![Some("1".into()), None, Some("5".into())]
+        );
+        // One after a larger id counts with that one and stays.
+        assert_eq!(
+            sorted(&[Some("1"), Some("5"), None]),
+            vec![Some("1".into()), Some("5".into()), None]
+        );
+    }
+
+    #[test]
+    fn upstream_sort_ends_on_every_short_list() {
+        // Every list of up to 6 nodes with ids 0 to 5, missing or unreadable, in every order:
+        // the loop ends, and the first node holds the smallest readable id or the list is as it
+        // came (first id unreadable).
+        let values = ["0", "1", "2", "3", "4", "5"];
+        for n in 1..=6usize {
+            let choices = n + 2;
+            let total = choices.pow(n as u32);
+            for code in 0..total {
+                let mut c = code;
+                let ids: Vec<Option<&str>> = (0..n)
+                    .map(|_| {
+                        let k = c % choices;
+                        c /= choices;
+                        match k {
+                            k if k < n => Some(values[k]),
+                            k if k == n => None,
+                            _ => Some("x"),
+                        }
+                    })
+                    .collect();
+                let out = sorted(&ids);
+                let first = ids[0].and_then(to_long);
+                if first.is_none() {
+                    assert_eq!(
+                        out,
+                        ids.iter()
+                            .map(|x| x.map(str::to_string))
+                            .collect::<Vec<_>>()
+                    );
+                    continue;
+                }
+                let least = ids.iter().filter_map(|x| x.and_then(to_long)).min();
+                assert_eq!(
+                    out[0].as_deref().and_then(to_long),
+                    least,
+                    "{ids:?} -> {out:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn to_long_reads_as_wxstring_tolong() {
+        for (text, v) in [
+            ("3669", Some(3669)),
+            (" 12", Some(12)),
+            ("+7", Some(7)),
+            ("-2147483648", Some(-2_147_483_648)),
+            ("2147483647", Some(2_147_483_647)),
+            ("2147483648", None),
+            ("12 ", None),
+            ("1.5", None),
+            ("", None),
+            ("-", None),
+            ("0x10", None),
+        ] {
+            assert_eq!(to_long(text), v, "{text:?}");
+        }
+    }
+
+    #[test]
+    fn strtol_prefix_reads_as_convertor_toint() {
+        for (text, v) in [
+            ("2", Some(2)),
+            ("2.5", Some(2)),
+            (" 6", Some(6)),
+            ("-1", Some(-1)),
+            ("2abc", Some(2)),
+            ("", None),
+            ("abc", None),
+            ("99999999999", None),
+        ] {
+            assert_eq!(strtol_prefix(text), v, "{text:?}");
+        }
+    }
 }

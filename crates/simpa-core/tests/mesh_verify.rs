@@ -1337,3 +1337,172 @@ fn broken_hall_verifies_in_under_two_seconds() {
     );
     assert!(elapsed.as_secs_f64() < 2.0, "{elapsed:?} ({profile})");
 }
+
+// ---------------------------------------------------------------------------------------------
+// A drawn fitting zone's triangles in the `.cbin`.
+
+/// Upstream's tutorial-1 mesh and scene, the scene with a drawn box zone's 12 triangles appended
+/// as upstream's GUI and `config_xml::scene_mesh` append them (`Objet3D_maillage.cpp:783-816`):
+/// three vertices of their own each, `idMat` 0, `idRs` -1, `idEn` 2. No marker names them.
+fn tutorial1_with_a_drawn_box() -> (Mesh, Model) {
+    let (mesh, mut scene) = tutorial1();
+    let frame = simpa_core::config_xml::GlFrame::of_vertices(
+        scene.vertices.iter().map(|v| [v.x, v.y, v.z]),
+    );
+    let triangles = simpa_core::config_xml::upstream_box_triangles(
+        frame.as_ref(),
+        [1.0, 1.0, 0.5],
+        [2.0, 2.5, 1.5],
+    );
+    assert_eq!(triangles.len(), 12);
+    for t in triangles {
+        let base = scene.vertices.len() as u32;
+        for [x, y, z] in t {
+            scene.vertices.push(cbin::Vertex { x, y, z });
+        }
+        scene.faces.push(cbin::Face {
+            a: base,
+            b: base + 1,
+            c: base + 2,
+            id_mat: 0,
+            id_rs: -1,
+            id_en: 2,
+        });
+    }
+    (mesh, scene)
+}
+
+/// The ids of tutorial 1's mesh with the box declared: the room stays upstream's 1.
+fn with_box_zone() -> VolumeIds {
+    VolumeIds {
+        room: 1,
+        fittings: vec![2],
+    }
+}
+
+/// A drawn box zone's triangles need no marker; each thing that makes them one, undone, makes
+/// them 12 uncovered scene faces again, and a room face left without a marker is still uncovered.
+#[test]
+fn a_drawn_zones_triangles_need_no_marker_and_nothing_else_does() {
+    let (mesh, scene) = tutorial1_with_a_drawn_box();
+    let r = verify_mesh(&mesh, &scene, &with_box_zone());
+    println!("{}", summary("tutorial 1 with a drawn box", &r));
+    assert!(r.passed(), "{}", summary("drawn box", &r));
+    assert_eq!((r.scene_faces, r.drawn_zone_faces), (24, 12));
+
+    // Each partner: the scene edited, and the triangles are scene faces no marker names.
+    let uncovered_box = |label: &str, scene: &Model, ids: &VolumeIds| {
+        let r = verify_mesh(&mesh, scene, ids);
+        println!("{}", summary(label, &r));
+        assert_eq!(codes(&r), ["uncovered_scene_faces"], "{label}");
+        assert_eq!(r.drawn_zone_faces, 0, "{label}");
+        r.uncovered_scene_faces
+    };
+    // The zone not declared.
+    assert_eq!(
+        uncovered_box("no fitting declared", &scene, &upstream()),
+        12
+    );
+    let edited = |edit: &dyn Fn(&mut Model)| {
+        let mut s = scene.clone();
+        edit(&mut s);
+        s
+    };
+    let ids = with_box_zone();
+    for (label, s) in [
+        (
+            "one triangle with a material",
+            edited(&|s| s.faces[17].id_mat = 5),
+        ),
+        (
+            "one triangle on a receiver",
+            edited(&|s| s.faces[17].id_rs = 0),
+        ),
+        (
+            "one triangle of another zone",
+            edited(&|s| s.faces[17].id_en = 3),
+        ),
+        (
+            "one vertex off the box's corners",
+            edited(&|s| s.vertices[s.faces[17].a as usize].x += 0.25),
+        ),
+        (
+            "one vertex shared with the room",
+            edited(&|s| s.faces[17].a = s.faces[0].a),
+        ),
+        (
+            "the last triangle moved onto the first's side",
+            edited(&|s| {
+                let (from, to) = (s.faces[12], s.faces[23]);
+                for (f, t) in [(from.a, to.a), (from.b, to.b), (from.c, to.c)] {
+                    s.vertices[t as usize] = s.vertices[f as usize];
+                }
+            }),
+        ),
+    ] {
+        assert_eq!(uncovered_box(label, &s, &ids), 12, "{label}");
+    }
+    // The triangles in another order within the box are still the box.
+    let reordered = edited(&|s| s.faces.swap(12, 23));
+    assert!(verify_mesh(&mesh, &reordered, &ids).passed());
+    // A triangle left out: the last 12 faces now hold a room face, which is covered, and the 11
+    // triangles are not.
+    let eleven = edited(&|s| {
+        s.faces.pop();
+    });
+    assert_eq!(uncovered_box("11 triangles", &eleven, &ids), 11);
+    // A face after the box: the box is no longer at the end, and that face is uncovered too.
+    let after = edited(&|s| {
+        let f = s.faces[0];
+        s.faces.push(f);
+    });
+    let r = verify_mesh(&mesh, &after, &ids);
+    assert_eq!(codes(&r), ["uncovered_scene_faces"]);
+    assert_eq!((r.uncovered_scene_faces, r.drawn_zone_faces), (13, 0));
+    // A room face no marker names is uncovered with the box beside it.
+    let (mut unmarked, _) = tutorial1_with_a_drawn_box();
+    for t in &mut unmarked.tetrahedra {
+        for f in &mut t.faces {
+            if f.marker == 3 {
+                f.marker = 4;
+            }
+        }
+    }
+    let r = verify_mesh(&unmarked, &scene, &ids);
+    println!("{}", summary("room face 3 unmarked", &r));
+    assert!(
+        r.codes.contains(&"uncovered_scene_faces".to_string()),
+        "{:?}",
+        r.codes
+    );
+    assert_eq!(r.uncovered_scene_faces_first, [3]);
+    assert_eq!(r.drawn_zone_faces, 12);
+}
+
+/// Upstream's own run folders of tutorial 3 carry the box's 12 triangles as faces 88 to 99, and
+/// they are what `drawn_zone_faces` takes for a drawn zone, with the box's id declared.
+#[test]
+fn upstreams_tutorial3_scene_carries_its_box_as_a_drawn_zone() {
+    use simpa_core::geometry::import::zip::Archive;
+    let proj =
+        paths::upstream_file(r"src/isimpa/resources/doc/tutorial/tutorial 3/tutorial_3.proj");
+    let bytes = std::fs::read(&proj).unwrap();
+    let archive = Archive::parse(&bytes).unwrap();
+    let mut runs = 0;
+    for e in archive.entries() {
+        if !(e.name.contains("/report/") && e.name.ends_with("/mesh.cbin")) {
+            continue;
+        }
+        runs += 1;
+        let scene = cbin::read(&archive.read(&e.name).unwrap()).unwrap();
+        let ids = VolumeIds::tetgen(vec![1930, 2083]);
+        let drawn = simpa_core::mesh::verify::drawn_zone_faces(&scene, &ids);
+        let which: Vec<usize> = (0..drawn.len()).filter(|&i| drawn[i]).collect();
+        assert_eq!(which, (88..100).collect::<Vec<_>>(), "{}", e.name);
+        // Without the box's id declared, none.
+        let only_model = VolumeIds::tetgen(vec![1930]);
+        let drawn = simpa_core::mesh::verify::drawn_zone_faces(&scene, &only_model);
+        assert!(drawn.iter().all(|d| !d), "{}", e.name);
+    }
+    assert_eq!(runs, 3);
+}

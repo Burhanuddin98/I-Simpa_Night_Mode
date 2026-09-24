@@ -284,6 +284,88 @@ fn tutorial1_config_from_the_proj_is_upstreams_value_for_value() {
     }
 }
 
+/// Tutorial 1's run snapshots (the `projet_config.xml` upstream saved beside each run) list their
+/// point receivers and surface groups newest first, `Receiver 2` (wxid 3669) before `Receiver 1`
+/// (3510), because upstream's GUI saved them in the session that created their nodes
+/// (`element.cpp:610-613`). Upstream loads a project in `wxid` order
+/// (`SortChildrensByProperty`, `element.cpp:64-106, 159`), so each run's `config.xml`, written from
+/// what it loaded, lists 3669 first. Read in that load order, each snapshot gives the run's
+/// `config.xml` value for value (the ids, the stored directions and the differences by design
+/// aside), as the project file beside the runs does. The say-no: the same snapshot with the two
+/// receivers' `wxid`s swapped, which upstream would load in file order, gives the receivers in the
+/// other order.
+#[test]
+fn tutorial1_run_snapshots_are_read_in_upstreams_load_order() {
+    let t = tutorial(TUTORIAL1);
+    assert_eq!(t.runs.len(), 2);
+    for run in &t.runs {
+        let doc = roxmltree::Document::parse(&run.project_file).unwrap();
+        let names = |tag: &str, list: &str| -> Vec<String> {
+            doc.descendants()
+                .find(|n| n.has_tag_name(list))
+                .unwrap()
+                .children()
+                .filter(|c| c.has_tag_name(tag))
+                .map(|c| c.attribute("name").unwrap().to_string())
+                .collect()
+        };
+        assert_eq!(
+            names("recepteurp", "recepteursp"),
+            ["Receiver 2", "Receiver 1"]
+        );
+        assert_eq!(names("gr", "sgroupes"), ["Walls", "Floor", "Ceiling"]);
+
+        let imported = simpa_core::geometry::import::import_proj_with_config(
+            &t.bytes,
+            run.project_file.as_bytes(),
+        )
+        .unwrap();
+        let p = &imported.project;
+        let receivers: Vec<&str> = p.point_receivers.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(receivers, ["Receiver 1", "Receiver 2"], "{}", run.folder);
+        let groups: Vec<&str> = p.surface_groups.iter().map(|g| g.name.as_str()).collect();
+        assert_eq!(groups, ["Ceiling", "Floor", "Walls"], "{}", run.folder);
+        let wd = working_folder(&run.config);
+        let ours = write(p, run.solver, None, Path::new(&wd)).unwrap();
+        let got = solver_differences(&run.config, &ours);
+        let mut expected = by_design(run.solver);
+        expected.extend(tutorial1_ids());
+        expected.extend(tutorial1_directions());
+        assert_eq!(got, sorted(expected), "{}", run.folder);
+
+        // The say-no: the receivers' wxids swapped, so upstream's load order is the file's.
+        let swapped = run
+            .project_file
+            .replacen("wxid=\"3669\"", "wxid=\"X\"", 1)
+            .replacen("wxid=\"3510\"", "wxid=\"3669\"", 1)
+            .replacen("wxid=\"X\"", "wxid=\"3510\"", 1);
+        let imported =
+            simpa_core::geometry::import::import_proj_with_config(&t.bytes, swapped.as_bytes())
+                .unwrap();
+        let receivers: Vec<&str> = imported
+            .project
+            .point_receivers
+            .iter()
+            .map(|r| r.name.as_str())
+            .collect();
+        assert_eq!(receivers, ["Receiver 2", "Receiver 1"]);
+        let x = write(&imported.project, run.solver, None, Path::new(&wd)).unwrap();
+        let wrong = solver_differences(&run.config, &x);
+        println!(
+            "{}: in load order {} differences; in file order {}",
+            run.folder,
+            got.len(),
+            wrong.len()
+        );
+        assert!(
+            wrong
+                .iter()
+                .any(|d| d.starts_with("recepteursp/recepteur_ponctuel[0]@x: upstream 3, ours 1")),
+            "{wrong:#?}"
+        );
+    }
+}
+
 /// Tutorial 3's config and scene mesh, as each run's folder holds them, import unedited:
 /// material 100's reflection law, Lambert in 6 of its 27 bands and specular in the others, and the
 /// transmission materials 100 and 101 have in some bands only (101, "Open_door", not at 125 Hz),
@@ -680,6 +762,46 @@ fn tutorial3_scene_mesh_is_upstreams_vertex_for_vertex() {
             .count();
         println!("a frame one step off moves {moved} of 40 vertices");
         assert!(moved > 0);
+    }
+}
+
+/// Tutorial 3's box zone, imported from the `.proj` (its corners as stored, `ba` (13, 4, 0) and
+/// `hc` (18, 1, 1.2)), gives the `.cbin` upstream's GUI wrote in each run: faces 88 to 99, each
+/// triangle's three vertices bit for bit and in upstream's order (the winding the solver takes
+/// its normal from), `idMat` 0, `idRs` -1, and `idEn` the box's id, 2083 upstream's and 3 ours.
+/// The say-no: one triangle wound the other way.
+#[test]
+fn tutorial3_box_triangles_from_the_proj_are_upstreams_bit_for_bit() {
+    let t = tutorial(TUTORIAL3);
+    let project = import_proj(&t.bytes).unwrap().project;
+    let ours = scene_mesh(&project).unwrap();
+    assert_eq!(ours.faces.len(), 100);
+    let corners = |m: &cbin::Model, f: &cbin::Face| -> [[u32; 3]; 3] {
+        [f.a, f.b, f.c].map(|i| {
+            let v = m.vertices[i as usize];
+            [v.x.to_bits(), v.y.to_bits(), v.z.to_bits()]
+        })
+    };
+    let box_of = |m: &cbin::Model| -> Vec<([[u32; 3]; 3], u32, i32, i32)> {
+        m.faces[88..]
+            .iter()
+            .map(|f| (corners(m, f), f.id_mat, f.id_rs, f.id_en))
+            .collect()
+    };
+    let mine: Vec<_> = box_of(&ours)
+        .into_iter()
+        .map(|(c, mat, rs, en)| {
+            assert_eq!(en, 3, "our id of the box");
+            (c, mat, rs, 2083)
+        })
+        .collect();
+    for run in &t.runs {
+        assert_eq!(run.mesh.faces.len(), 100);
+        assert_eq!(box_of(&run.mesh), mine, "{}", run.folder);
+        // The say-no: the first triangle wound the other way.
+        let mut flipped = mine.clone();
+        flipped[0].0.swap(0, 1);
+        assert_ne!(box_of(&run.mesh), flipped);
     }
 }
 

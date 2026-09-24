@@ -125,6 +125,7 @@ pub use ids::{
 };
 pub use import::{ImportError, import_upstream, import_upstream_with_mesh};
 pub use num::widen_f32;
+pub(crate) use write::transmission_loss_written;
 pub use write::{
     StagedFile, WriteError, band_levels_written, directivity_files, resolve_variant,
     working_directory, write, write_file,

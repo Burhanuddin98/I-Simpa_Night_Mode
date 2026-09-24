@@ -732,27 +732,60 @@ fn every_upstream_project_imports_or_is_refused_by_name() {
     }
     let mut found = Vec::new();
     walk(&root, &mut found);
+    // Projects inside a zip of the tree (the atmospheric-absorption validation ships one).
+    let mut zipped = Vec::new();
+    fn zips(dir: &Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                zips(&p, out);
+            } else if p.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
+                out.push(p);
+            }
+        }
+    }
+    zips(&root, &mut zipped);
+    zipped.sort();
     let mut table = Vec::new();
+    let mut outcome_of =
+        |name: String, imported: Result<ProjImport, simpa_core::geometry::import::ImportError>| {
+            let outcome = match imported {
+                Ok(i) => format!(
+                    "ok: {} faces, {} zones, {} sources",
+                    i.project.geometry.faces.len(),
+                    i.project.fitting_zones.len(),
+                    i.project.sources.len()
+                ),
+                Err(e) => format!("refused: {} ({e})", e.code()),
+            };
+            println!("| {name} | {outcome} |");
+            table.push((name, outcome.split(':').next().unwrap().to_string()));
+        };
     for path in &found {
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
-        let outcome = match import_proj_file(path) {
-            Ok(i) => format!(
-                "ok: {} faces, {} zones, {} sources",
-                i.project.geometry.faces.len(),
-                i.project.fitting_zones.len(),
-                i.project.sources.len()
-            ),
-            Err(e) => format!("refused: {} ({e})", e.code()),
-        };
-        println!("| {name} | {outcome} |");
-        table.push((name, outcome.split(':').next().unwrap().to_string()));
+        outcome_of(name, import_proj_file(path));
+    }
+    for path in &zipped {
+        let bytes = std::fs::read(path).unwrap();
+        let archive = Archive::parse(&bytes).unwrap();
+        for e in archive.entries() {
+            if e.name.to_ascii_lowercase().ends_with(".proj") {
+                let inner = archive.read(&e.name).unwrap();
+                let name = format!(
+                    "{} in {}",
+                    e.name,
+                    path.file_name().unwrap().to_string_lossy()
+                );
+                outcome_of(name, import_proj(&inner));
+            }
+        }
     }
     let refused: Vec<&str> = table
         .iter()
         .filter(|(_, o)| o != "ok")
         .map(|(n, _)| n.as_str())
         .collect();
-    assert_eq!(table.len(), 10, "{table:?}");
+    assert_eq!(table.len(), 11, "{table:?}");
     assert_eq!(refused, ["Industrial.proj"], "{table:?}");
 }
 
@@ -855,6 +888,35 @@ fn each_refusal_names_its_reason() {
                 format!("{}{copy}{}", &xml[..b], &xml[b..])
             },
             codes::FACE_IN_TWO_FITTING_ZONES,
+        ),
+        (
+            "the enabled scene-fitted zone without its face group",
+            {
+                let a = xml
+                    .find("<gr label=\"Surfaces\" name=\"Surfaces\" eid=\"5\" wxid=\"1938\"")
+                    .unwrap();
+                let b = a + xml[a..].find("</gr>").unwrap() + "</gr>".len();
+                format!("{}{}", &xml[..a], &xml[b..])
+            },
+            codes::FITTING_FACE_GROUP_MISSING,
+        ),
+        (
+            "material 100 at 125 Hz transmitting more than it absorbs (5 dB against 0.11)",
+            edited_once(
+                &xml,
+                "value=\"10\" pr=\"1\" minValue=\"0\" wxid=\"2958\"",
+                "value=\"5\" pr=\"1\" minValue=\"0\" wxid=\"2958\"",
+            ),
+            codes::TRANSMISSION_EXCEEDS_ABSORPTION,
+        ),
+        (
+            "material 100 at 125 Hz transmitting with no absorption",
+            edited_once(
+                &xml,
+                "value=\"0.11\" pr=\"2\" minValue=\"0\" maxValue=\"1\" wxid=\"2955\"",
+                "value=\"0\" pr=\"2\" minValue=\"0\" maxValue=\"1\" wxid=\"2955\"",
+            ),
+            codes::TRANSMISSION_EXCEEDS_ABSORPTION,
         ),
         (
             "a volume",
@@ -1060,4 +1122,273 @@ fn scene_mesh_readers_agree_with_the_archive() {
         floor,
         vec![FaceRef { group: 0, face: 0 }, FaceRef { group: 0, face: 1 }]
     );
+}
+
+/// Tutorial 3's project with each edit applied in turn (`from`, `to`), imported.
+fn tutorial3_edited(xml: &str, edits: &[(&str, &str)]) -> Result<ProjImport, (String, String)> {
+    let x = edits
+        .iter()
+        .fold(xml.to_string(), |x, (from, to)| edited_once(&x, from, to));
+    import_tutorial3_as(&x)
+}
+
+/// What `config_xml` hands the SPPS solver for a project: its `config.xml` and `mesh.cbin`.
+fn solver_inputs(p: &Project) -> (String, Vec<u8>) {
+    let config =
+        simpa_core::config_xml::write(p, schema::SolverKind::Spps, None, Path::new("C:\\run\\"))
+            .unwrap();
+    let cbin = simpa_core::formats::cbin::write(&simpa_core::config_xml::scene_mesh(p).unwrap());
+    (config, cbin)
+}
+
+/// A disabled fitting zone is kept as stored: upstream seeds no region for it, tags no face with
+/// it and draws none of its triangles (`..._model.h:193`, `..._cuboide.h:311, 331`,
+/// `appconfig.cpp:185`), so what the enabled-only refusals refuse is imported, with a note, and
+/// the solver inputs are those of the project without it. The say-nos: the same edits with the
+/// zone enabled are refused by their codes.
+#[test]
+fn a_disabled_zone_is_kept_as_stored_and_changes_no_solver_input() {
+    let (_, xml) = tutorial3_parts();
+    let zone1_on = "value=\"1\" wxid=\"1937\"";
+    let zone1_off = "value=\"0\" wxid=\"1937\"";
+    let box_on = "value=\"1\" wxid=\"2094\"";
+    let box_off = "value=\"0\" wxid=\"2094\"";
+    let origin: Vec<(String, String)> = ["1932", "1933", "1934"]
+        .iter()
+        .map(|w| {
+            let at = xml.find(&format!("wxid=\"{w}\"")).unwrap();
+            let start = xml[..at].rfind("value=\"").unwrap();
+            (
+                xml[start..at + 11].to_string(),
+                format!("value=\"0\" pr=\"6\" wxid=\"{w}\""),
+            )
+        })
+        .collect();
+    let flat_box = (
+        "<p name=\"z\" eid=\"25\" label=\"z\" value=\"1.2\" pr=\"6\" wxid=\"2091\"/>",
+        "<p name=\"z\" eid=\"25\" label=\"z\" value=\"0\" pr=\"6\" wxid=\"2091\"/>",
+    );
+    let no_face_group = {
+        let a = xml
+            .find("<gr label=\"Surfaces\" name=\"Surfaces\" eid=\"5\" wxid=\"1938\"")
+            .unwrap();
+        let b = a + xml[a..].find("</gr>").unwrap() + "</gr>".len();
+        (xml[a..b].to_string(), String::new())
+    };
+    // The unedited project's zones disabled: the reference the edits are compared with.
+    let reference = tutorial3_edited(&xml, &[(zone1_on, zone1_off), (box_on, box_off)]).unwrap();
+    assert!(reference.project.fitting_zones.iter().all(|z| !z.enabled));
+    let reference_inputs = solver_inputs(&reference.project);
+
+    // Zone 1 disabled with its inside position at the origin.
+    let mut edits: Vec<(&str, &str)> = vec![(zone1_on, zone1_off), (box_on, box_off)];
+    edits.extend(origin.iter().map(|(a, b)| (a.as_str(), b.as_str())));
+    let i = tutorial3_edited(&xml, &edits).unwrap();
+    assert!(!i.project.fitting_zones[0].enabled);
+    let FittingShape::Surfaces {
+        inside_point,
+        groups,
+    } = &i.project.fitting_zones[0].shape
+    else {
+        panic!()
+    };
+    assert_eq!(inside_point.to_array(), [0.0; 3]);
+    assert_eq!(groups.len(), 1);
+    assert!(
+        i.report.notes.iter().any(|n| n.contains("Fitting zone 1")
+            && n.contains("set its inside position before enabling it")),
+        "{:?}",
+        i.report.notes
+    );
+    assert_eq!(solver_inputs(&i.project), reference_inputs);
+    // Enabled: refused.
+    let mut on: Vec<(&str, &str)> = vec![(box_on, box_off)];
+    on.extend(origin.iter().map(|(a, b)| (a.as_str(), b.as_str())));
+    assert_eq!(
+        tutorial3_edited(&xml, &on).map(|_| ()).unwrap_err().0,
+        codes::FITTING_INSIDE_POINT_UNSET
+    );
+
+    // The box disabled and flat.
+    let i = tutorial3_edited(&xml, &[(zone1_on, zone1_off), (box_on, box_off), flat_box]).unwrap();
+    let z = &i.project.fitting_zones[1];
+    assert!(!z.enabled);
+    let (ba, hc) = z.shape.box_corners().unwrap();
+    assert_eq!((ba.to_array()[2], hc.to_array()[2]), (0.0, 0.0));
+    assert!(
+        i.report
+            .notes
+            .iter()
+            .any(|n| n.contains("Fitting zone 2") && n.contains("no volume")),
+        "{:?}",
+        i.report.notes
+    );
+    assert_eq!(solver_inputs(&i.project), reference_inputs);
+    assert_eq!(
+        tutorial3_edited(&xml, &[(zone1_on, zone1_off), flat_box])
+            .map(|_| ())
+            .unwrap_err()
+            .0,
+        codes::FITTING_BOX_EMPTY
+    );
+
+    // Zone 1 disabled without its face group: no face.
+    let i = tutorial3_edited(
+        &xml,
+        &[
+            (zone1_on, zone1_off),
+            (box_on, box_off),
+            (&no_face_group.0, ""),
+        ],
+    )
+    .unwrap();
+    let FittingShape::Surfaces { groups, .. } = &i.project.fitting_zones[0].shape else {
+        panic!()
+    };
+    assert!(groups.is_empty());
+    assert!(
+        i.report
+            .notes
+            .iter()
+            .any(|n| n.contains("has no face group")),
+        "{:?}",
+        i.report.notes
+    );
+    assert_eq!(
+        tutorial3_edited(&xml, &[(box_on, box_off), (&no_face_group.0, "")])
+            .map(|_| ())
+            .unwrap_err()
+            .0,
+        codes::FITTING_FACE_GROUP_MISSING
+    );
+
+    // A second scene-fitted zone listing zone 1's faces: kept while one of the two is disabled,
+    // both then covering the `fitting` group; refused with both enabled.
+    // The copy goes last, so the box keeps its solver id.
+    let with_copy = |copy_on: bool, first_on: bool| {
+        let a = xml.find("<encombrement name=\"Fitting zone 1\"").unwrap();
+        let b = a + xml[a..].find("</encombrement>").unwrap() + "</encombrement>".len();
+        let end = xml.find("</encombrements>").unwrap();
+        let mut copy = xml[a..b].replacen(
+            "Fitting zone 1\" eid=\"54\" wxid=\"1930\"",
+            "Fitting zone 3\" eid=\"54\" wxid=\"9930\"",
+            1,
+        );
+        if !copy_on {
+            copy = copy.replacen(zone1_on, "value=\"0\" wxid=\"1937\"", 1);
+        }
+        let x = format!("{}{copy}{}", &xml[..end], &xml[end..]);
+        let x = if first_on {
+            x
+        } else {
+            x.replacen(zone1_on, zone1_off, 1)
+        };
+        import_tutorial3_as(&x)
+    };
+    let unedited = import_tutorial3_as(&xml).unwrap();
+    for (copy_on, first_on) in [(false, true), (true, false)] {
+        let i =
+            with_copy(copy_on, first_on).unwrap_or_else(|e| panic!("{copy_on} {first_on}: {e:?}"));
+        assert_eq!(i.project.fitting_zones.len(), 3);
+        let groups_of = |k: usize| match &i.project.fitting_zones[k].shape {
+            FittingShape::Surfaces { groups, .. } => groups.clone(),
+            other => panic!("{other:?}"),
+        };
+        assert_eq!(groups_of(0), groups_of(2));
+        assert_eq!(i.project.group(groups_of(0)[0]).unwrap().name, "fitting");
+        if first_on {
+            // The copy disabled: upstream's inputs, the unedited project's.
+            assert_eq!(solver_inputs(&i.project), solver_inputs(&unedited.project));
+        }
+    }
+    assert_eq!(
+        with_copy(true, true).map(|_| ()).unwrap_err().0,
+        codes::FACE_IN_TWO_FITTING_ZONES
+    );
+}
+
+/// Industrial's material rows are written as before 1.3.4 (`<bfreq absorb=..>`), and read as
+/// upstream's loader reads them (`e_data_row_materiau.h:58-83`): a `loi` of `2.5` is 2
+/// (`Convertor::ToInt` keeps what `strtol` read), a band without `affaiblissement` does not
+/// transmit. Refused by their code: what upstream reports as an error and reads as 0 (a missing
+/// or unreadable number), and a `loi` with no integer, which upstream leaves uninitialised.
+#[test]
+fn pre_1_3_4_material_rows_read_as_upstreams_loader_reads_them() {
+    let path = upstream(INDUSTRIAL);
+    let bytes = std::fs::read(&path).unwrap();
+    let xml = String::from_utf8(
+        Archive::parse(&bytes)
+            .unwrap()
+            .read("instance1/projet_config.xml")
+            .unwrap(),
+    )
+    .unwrap();
+    let a = xml.find("<volumes ").unwrap();
+    let b = xml.find("</volumes>").unwrap() + "</volumes>".len();
+    let xml = format!("{}{}", &xml[..a], &xml[b..]);
+    let row = "absorb=\"0,050000\" diffusion=\"0,700000\" affaiblissement=\"15,000000\" loi=\"2\" wxid=\"1772\"";
+    let import = |x: &str| {
+        import_proj_with_config(&bytes, x.as_bytes())
+            .map_err(|e| (e.code().to_string(), e.to_string()))
+    };
+    let base = import(&xml).unwrap();
+    // Row 1772 is material 100's (`trans_material`) at 20 kHz.
+    let material = |p: &Project| {
+        p.materials
+            .iter()
+            .find(|m| m.solver_id == Some(100))
+            .cloned()
+            .expect("material 100")
+    };
+    let m = material(&base.project);
+    let last = base.project.bands.len() - 1;
+    assert_eq!(
+        m.reflection_law.at(last),
+        Some(ReflectionLaw::from_solver_code(2).unwrap())
+    );
+
+    // `loi` = 2.5: 2, as upstream reads it.
+    let i = import(&edited_once(
+        &xml,
+        row,
+        &row.replace("loi=\"2\"", "loi=\"2.5\""),
+    ))
+    .unwrap();
+    assert_eq!(material(&i.project).reflection_law, m.reflection_law);
+    // No `affaiblissement`: that band does not transmit.
+    let i = import(&edited_once(
+        &xml,
+        row,
+        &row.replace(" affaiblissement=\"15,000000\"", ""),
+    ))
+    .unwrap();
+    let before = m.transmission_loss_db.as_ref().unwrap();
+    assert_eq!(before[last].map(|l| l.get()), Some(15.0));
+    let after = material(&i.project).transmission_loss_db.unwrap();
+    assert_eq!(after[last], None);
+    assert_eq!(after[..last], before[..last]);
+
+    for (what, to) in [
+        ("no loi", row.replace(" loi=\"2\"", "")),
+        ("an empty loi", row.replace("loi=\"2\"", "loi=\"\"")),
+        (
+            "a loi with no digit",
+            row.replace("loi=\"2\"", "loi=\"abc\""),
+        ),
+        ("no diffusion", row.replace(" diffusion=\"0,700000\"", "")),
+        (
+            "an absorption that is no number",
+            row.replace("absorb=\"0,050000\"", "absorb=\"x\""),
+        ),
+        (
+            "a loss that is no number",
+            row.replace("affaiblissement=\"15,000000\"", "affaiblissement=\"x\""),
+        ),
+    ] {
+        let (code, text) = import(&edited_once(&xml, row, &to))
+            .map(|_| ())
+            .unwrap_err();
+        println!("{what}: {code} ({text})");
+        assert_eq!(code, codes::MATERIAL_ROW_UNREADABLE, "{what}: {text}");
+    }
 }

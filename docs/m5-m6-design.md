@@ -166,6 +166,12 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
      (`Objet3D_maillage.cpp:800-813`; `config_xml::scene_mesh`, tutorial 3 byte for byte), and
      `config.xml` declares material 0 for them; the mesher's `.poly` markers still index the
      room's faces only (`config_xml::room_mesh`), so no `.mbin` marker names a box face.
+     `mesh::verify` therefore leaves a drawn zone's 12 triangles out of `uncovered_scene_faces`
+     (`drawn_zone_faces`, `docs/formats/mesh-manifest.md`), so a run folder of a box-zone project
+     passes `run-folder`'s pre-launch check, as it did before the `.cbin` carried them.
+     **Burhan's call, not recorded as a decision:** the `.cbin` carrying the triangles was
+     ordered by the tutorial-3 import piece's spec ("as upstream's does"); taking it back is
+     `scene_mesh` returning `room_mesh`, and the exemption then never applies.
    - **Physical equivalence is unproven.** No gate runs a fitting zone through a solver before M8.
 6. **Internal facets are marked on both sides**, as upstream does (`Objet3D_maillage.cpp:369-381`).
    The `.mbin` invariant is therefore:
@@ -366,7 +372,8 @@ Counts in the report:
 - `nonmutual_neighbors` and `asymmetric_internal_faces`
 - `marker_geometry_mismatches`: a marked face must lie on its scene face, within a tolerance
   scaled to f32 and the model size
-- `uncovered_scene_faces`, as a count plus the first 20
+- `uncovered_scene_faces`, as a count plus the first 20, a drawn zone's triangles excepted
+  (`drawn_zone_faces`, counted apart)
 - `unknown_volume_ids` (an id below `room` that is no fitting's), plus the volume per id
 
 `verify_dir` adds `tetgen_skipped_facets` (count and markers), `neigh_missing` and

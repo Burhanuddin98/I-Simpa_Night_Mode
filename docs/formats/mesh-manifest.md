@@ -171,8 +171,21 @@ items, and its code is spelled as its field. A mesh passes exactly when every co
 | `nonmutual_neighbors` | faces whose neighbour does not name them back across the same three nodes, and faces with no neighbour whose three nodes another face holds |
 | `asymmetric_internal_faces` | marked faces whose neighbour's shared face carries a different marker: internal facets are marked on both sides (decision 6) |
 | `marker_geometry_mismatches` | marked faces with a node farther than 16·2⁻²⁴·R from the scene face their marker names, R being the scene's largest \|coordinate\| |
-| `uncovered_scene_faces` | scene faces no tetrahedron face carries (the report lists the first 20) |
+| `uncovered_scene_faces` | scene faces no tetrahedron face carries (the report lists the first 20), a drawn zone's triangles excepted (below) |
 | `unknown_volume_ids` | tetrahedra whose `idVolume` is no declared fitting's and below the room's first id (TetGen's numbering; a room written 0 beside it, for one) |
+
+**A drawn zone's triangles need no marker.** Upstream's GUI appends each enabled rectangular
+fitting zone's 12 triangles to the `.cbin` after the room's faces (three vertices of their own
+each, `idMat` 0, `idRs` -1, `idEn` the zone's id, `Objet3D_maillage.cpp:783-816`), and so does
+the `.cbin` of every run folder this crate writes (`config_xml::scene_mesh`); this crate's mesher
+marks none of them (`docs/m5-m6-design.md`, decision 5). `verify_mesh` leaves them out of
+`uncovered_scene_faces` and counts them in the report's `drawn_zone_faces`. A face is one only in
+a run of 12 at the end of the `.cbin` (counted back from its last face) whose faces all carry
+`idMat` 0, `idRs` -1 and one `idEn` that is a declared fitting's (`--fittings`, or the config's
+`encombrement` ids in `run-folder`), use 36 vertices no other face uses, and make one axis-aligned
+box with a volume, each side two triangles sharing its diagonal (`mesh::verify::drawn_zone_faces`).
+Anything else is a scene face like any other: `mesh-verify` on such a run folder without the zone
+declared fails `uncovered_scene_faces`.
 
 `verify_dir` adds what only the folder shows. The mesher's `tetgen_skipped_facets`,
 `neigh_missing` and `tetgen_output_missing` (above) mean the same there, for TetGen output under
