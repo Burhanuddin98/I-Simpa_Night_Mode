@@ -371,7 +371,7 @@ streams, anchored patterns, classes PROGRESS/INFO/OK/WARN/FAIL). A test fails if
 the doc drift apart. The classifier holds the continuation-line state for
 `scene_mesh_unreadable` and `tetra_mesh_empty`.
 
-## Gate amendments (to be written into the plan when the gates pass)
+## Gate amendments (in force: the gates passed 2026-09-24, merged as `34d1d5f`; `docs/rebuild-plan.md` points here)
 
 - **M5(a):** the box is meshed with its own settings, plus these checks:
   - the `.var` is byte-identical to upstream's tutorial-1 `.var`

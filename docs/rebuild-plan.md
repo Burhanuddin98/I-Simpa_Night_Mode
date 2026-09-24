@@ -95,6 +95,11 @@ are in the raw JSON.
 | M12 | Concept B: Results. Only numbers with a passing bed are shown | M11, M7, M8 |
 | M13 | Windows installer (one NSIS build) | M12, M1 |
 
+**M5 and M6 are gated as amended** in `docs/m5-m6-design.md`, section "Gate amendments": receiver
+refinement checked by face area, raw `.poly` input, a cancel that must hit a running TetGen, M6(a)
+judged against upstream's own mesh of the box (Burhan, 2026-09-24 05:13), M6(c) against
+upstream's tutorial_2 mesh of the hall, and a separate parity gate (`tools/gates/parity.ps1`).
+
 **What the reorder buys:** only M12, the screen that shows acoustic numbers, waits for the
 physics bed. The shell, the IPC and WebGL risks, and the first three screens now run alongside
 M5-M8 instead of after them.
@@ -177,6 +182,21 @@ geometry is fine but the grouping is wrong. It is regenerated from `tutorial_2.p
     `.ele`, `.face`, `.neigh` and `.edge` equal the files upstream's GUI wrote in 2019, byte for
     byte but the trailer line; upstream's 1.6.0 is refused. Tutorial 2 differs in 1,036 `.node`
     lines printed at exact decimal ties, every value equal (`third_party/tetgen-1.5.0/PROVENANCE.md`)
+- **M5, M6 and the parity gate passed on 2026-09-24**, on a from-scratch solver build at `bd6e83f`
+  (merged into `rebuild` as `34d1d5f`; sentinel pass, two minor notes):
+  - **M1:** 62 of 62. **M5:** 37 of 37. **M6:** 37 of 37, none blocked. **Parity** (`tools/gates/parity.ps1`): 12 of 12.
+  - `cargo test -p simpa-core -p simpa`: 596 passed, 0 failed, 7 ignored, each with its reason. clippy and fmt clean.
+  - **Our meshes are upstream's, byte for byte:** tutorials 1 and 3 against the 2019 TetGen files,
+    the tutorial-1 `.mbin` against 2019 (sha256 `8a6b3943…`), and the corrected hall against
+    tutorial 2's own TetGen set (161,543 tets, `.mbin` sha256 `ec8aa038…`).
+  - **So particle loss equals upstream's in every band**, per 300,000 particles on the hall at seed 1:
+    215, 222, 181, 169, 159 and 184 lost to meshing at 125 Hz–4 kHz, the same counts as upstream's
+    own mesh. That is Night Mode's release blocker closed at parity with upstream, not below it.
+  - **Same seed:** tutorial 1, TCR 15 of 15 files and SPPS 17 of 17 with the run's own receiver
+    directions; tutorial 3, 24 of 24 files in each of 3 runs from upstream's own `.poly`.
+    Upstream's shipped 1.4.0 SPPS and TCR are bit-identical to ours on tutorial 1.
+  - **Not yet:** tutorial 3 from its `.proj` through our pipeline (fitting zones, `preprocess.exe`).
+    The M6(c) loss bound (floor + 4√floor) and the 1 % run limit stay PROPOSED, open decision 7.
 - **`.csbin` output is nondeterministic by construction.** The surface-receiver format dumps whole
   C structs, padding included. Two runs of the *same* executable differ in the last 2 bytes of
   every 8-byte record. `.csbin` must only ever be compared after decoding, never byte for byte.
