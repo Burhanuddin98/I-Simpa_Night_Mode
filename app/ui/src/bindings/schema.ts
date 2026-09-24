@@ -747,8 +747,9 @@ export interface Source {
    * A pinned element id: upstream's `source@id` for a source imported from a `.proj` (its
    * `wxid`, `docs/m5-m6-design.md`, decision 13). `None` for a source made here. The solvers
    * number sources by position and never read `source@id`
-   * (`base_core_configuration.cpp:153`), so `config.xml` does not carry it; the project keeps
-   * it so that an imported project keeps upstream's ids. At most [`SOLVER_INT_MAX`].
+   * (`base_core_configuration.cpp:153`); `config.xml` carries it when pinned, as upstream's
+   * GUI writes it, so that an imported project keeps upstream's ids. At most
+   * [`SOLVER_INT_MAX`], and unique among sources.
    */
   solver_id: number | null;
 }
@@ -875,7 +876,8 @@ export interface FittingZone {
    * above the largest). `None` lets export assign one (`config_xml`, "Solver ids"). A `.proj`
    * import pins upstream's element id (tutorial 3: 1930 and 2083, its room then 2084 to 2086;
    * decision 13). At least 1 (the solvers read `idVolume` 0 as no fitting), at most
-   * [`SOLVER_INT_MAX`], and unique among fitting zones.
+   * [`SOLVER_INT_MAX`], unique among fitting zones, and, when enabled, low enough that
+   * TetGen's room ids fit above it (`solver_id_mapping_invalid`).
    */
   solver_id: number | null;
 }
@@ -944,8 +946,10 @@ export interface MeshSettings {
    * `e_core_core_tetconf.h:108`): the `.poly` goes through upstream's `preprocess.exe` before
    * TetGen, with box fitting zones in its user facet list, as upstream's GUI does it
    * (`projet_maillage.cpp:206-213`). The geometry check then runs on what `preprocess.exe`
-   * wrote. Upstream's GUI default is on; this crate's default is off
-   * (`docs/m5-m6-design.md`, decision 12).
+   * wrote; when it gives up and saves nothing, the `.poly` as written is meshed, as upstream's
+   * GUI meshes it, and the check runs on that, the abort recorded in the mesh manifest.
+   * Upstream's GUI default is on; this crate's default is off (`docs/m5-m6-design.md`,
+   * decision 12).
    */
   preprocess: boolean;
   /**

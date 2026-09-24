@@ -349,6 +349,58 @@ fn a_preprocess_timeout_exits_4_and_leaves_nothing_running() {
     assert_eq!(bad.code, 2, "{bad:#?}");
 }
 
+/// A fitting zone pinned so high that TetGen's room ids above it would pass a C `int` is refused
+/// before meshing, by name, where it used to pass `simpa validate` and make `simpa mesh` panic
+/// (`attempt to add with overflow` in `VolumeIds::tetgen`, exit 101). The control: pinned at the
+/// limit, the scene's faces and the box's 12 triangles below `i32::MAX`, it meshes, the room one
+/// id above it. `mesh-verify --fittings 2147483647` reads such ids without panicking.
+#[test]
+fn a_fitting_pin_without_room_for_the_rooms_ids_is_refused() {
+    let dir = scratch("mesh-pin-headroom");
+    let mut p = simpa_core::schema::load(&fixture("rooms/tutorial1_box_fitting.simpa")).unwrap();
+    assert_eq!(p.fitting_zones.len(), 1);
+    let facets = p.geometry.faces.len() as u32 + 12;
+    let limit = i32::MAX as u32 - facets;
+    let pinned = |p: &mut simpa_core::schema::Project, id: u32, name: &str| {
+        p.fitting_zones[0].solver_id = Some(id);
+        let path = dir.join(name);
+        simpa_core::schema::save(p, &path).unwrap();
+        path
+    };
+    for (id, name) in [(i32::MAX as u32, "max.simpa"), (limit + 1, "over.simpa")] {
+        let project = pinned(&mut p, id, name);
+        let o = mesh(&project, &dir.join(format!("mesh-{id}")), &[]);
+        assert_eq!(o.code, 2, "pin {id}: {o:#?}");
+        assert!(
+            o.stderr.contains("solver_id_mapping_invalid")
+                && o.stderr.contains(&format!("pin it at most {limit}")),
+            "pin {id}: {}",
+            o.stderr
+        );
+        assert!(!o.stderr.contains("panicked"), "{}", o.stderr);
+        let v = simpa_run(&["validate".to_string(), project.display().to_string()]);
+        assert_eq!(v.code, 2, "validate, pin {id}: {v:#?}");
+    }
+    let project = pinned(&mut p, limit, "limit.simpa");
+    let out = dir.join("mesh-limit");
+    let o = mesh(&project, &out, &[]);
+    assert_eq!(o.code, 0, "pin {limit}: {o:#?}");
+    let ids: std::collections::BTreeSet<i32> =
+        simpa_core::formats::mbin::read_file(&out.join("tetramesh.mbin"))
+            .unwrap()
+            .tetrahedra
+            .iter()
+            .map(|t| t.id_volume)
+            .collect();
+    assert_eq!(
+        ids,
+        std::collections::BTreeSet::from([limit as i32, limit as i32 + 1])
+    );
+    let v = verify(&out, &["--fittings", "2147483647"]);
+    assert!(!v.stderr.contains("panicked"), "{v:#?}");
+    assert_ne!(v.code, 101, "{v:#?}");
+}
+
 /// `--parity` on a project whose mesh settings ask for no scene correction has nothing to keep:
 /// a note on stderr says so, and the mesh is the default one. Says no: with the correction asked
 /// for, no note, and the manifest is in parity mode; without `--parity`, no note.

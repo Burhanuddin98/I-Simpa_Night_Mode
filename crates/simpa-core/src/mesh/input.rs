@@ -8,7 +8,7 @@ use super::verify::VolumeIds;
 use crate::config_xml::{self, GlFrame, SolverIds};
 use crate::formats::{cbin, poly};
 use crate::mesh::verify::DRAWN_ZONE_TRIANGLES;
-use crate::schema::{FittingShape, Project, SurfaceReceiverShape, Vec3};
+use crate::schema::{FittingShape, Project, SOLVER_INT_MAX, SurfaceReceiverShape, Vec3};
 
 /// What a `.poly` marker at or above the scene's face count stands for: one triangle of a `Box`
 /// fitting zone (`docs/m5-m6-design.md`, decision 5).
@@ -80,6 +80,29 @@ impl std::fmt::Display for InputError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
+}
+
+/// Whether TetGen's room ids fit above `fittings`, the seeded region attributes of a `.poly` of
+/// `facets` facets. TetGen numbers each region no seed reaches from one above the largest seed,
+/// one per region, in a C `int` (`attr++`, `tetgen.cxx:22403-22436`). A region is bounded by at
+/// least four facets and a facet bounds at most two regions, so there are fewer regions than
+/// facets: the largest seed plus `facets` must fit, or the room's ids would wrap. A `.proj`
+/// import pins upstream's ids, which may be anything up to [`SOLVER_INT_MAX`], so this is
+/// checked, not assumed (the validator's `solver_id_mapping_invalid` says the same earlier).
+pub fn room_id_headroom(fittings: &[i32], facets: usize) -> Result<(), InputError> {
+    let Some(&largest) = fittings.iter().max() else {
+        return Ok(());
+    };
+    if i64::from(largest) + facets as i64 <= i64::from(SOLVER_INT_MAX) {
+        return Ok(());
+    }
+    Err(InputError(format!(
+        "fitting id {largest}: TetGen numbers the room's regions from one above the largest \
+         fitting id, one per region, and a .poly of {facets} facets can have up to {facets} of \
+         them, so their ids could pass {SOLVER_INT_MAX}, the largest C int; the fitting ids must \
+         be at most {} here",
+        i64::from(SOLVER_INT_MAX) - facets as i64
+    )))
 }
 
 fn narrow(v: Vec3, what: &str) -> Result<[f32; 3], InputError> {
@@ -184,6 +207,10 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
         tetgen_layout(project)?
     };
     let fittings: Vec<i32> = layout.fittings.iter().map(|f| f.solver_id).collect();
+    room_id_headroom(
+        &fittings,
+        layout.poly.model_faces.len() + layout.poly.user_defined_faces.len(),
+    )?;
     Ok(MeshInput {
         poly: layout.poly,
         var,
@@ -391,8 +418,8 @@ pub fn upstream_box_seed(ba: [f32; 3], hc: [f32; 3]) -> [f32; 3] {
 /// - Part 5, the user facet list: the box triangles, marker = their `.cbin` face index, each on
 ///   its own three nodes (`:968-1001`);
 /// - Part 4, the regions (`:1003-1037`): one per enabled zone, attribute = its solver id (where
-///   upstream writes its element id, `xmlIdElement`, `:1009`; storing upstream's ids is Burhan's
-///   open decision, so ours are compared through the recorded id map), refinement -1
+///   upstream writes its element id, `xmlIdElement`, `:1009`; a `.proj` import pins that id,
+///   `docs/m5-m6-design.md`, decision 13, so the attributes are upstream's), refinement -1
 ///   (`drawable_element.h:101`). A box is seeded at [`upstream_box_seed`] of its corners as
 ///   upstream holds them ([`FittingShape::box_corners`]); a `Surfaces` zone at its
 ///   `inside_point` (upstream's `volpos`, `e_scene_encombrements_encombrement_model.h:177`),
@@ -604,6 +631,7 @@ pub fn poly_input(model: &poly::Model) -> Result<MeshInput, InputError> {
     let mut fittings: Vec<i32> = model.model_regions.iter().map(|r| r.region_index).collect();
     fittings.sort_unstable();
     fittings.dedup();
+    room_id_headroom(&fittings, model.model_faces.len())?;
     let poly = poly::Model {
         save_face_index: true,
         user_defined_faces: Vec::new(),

@@ -255,22 +255,28 @@ coordinates without it.
 
 **What still differs, why, and what the solver sees.**
 
-1. **Ids.** Our `idRs` and `idEn` are assigned from project order (receivers from 0, fitting zones
-   from 2; `config_xml.rs`); upstream's are its GUI's element ids (3503; 1930, 2083). Those are
-   session state, not part of the project: upstream gives every element a new id from a global
-   counter each time it loads a project (`Element::Element` → `SetXmlId`, `element.cpp:134`), and
-   overwrites the id the file holds (`:143-144`); loading first closes the current project, which
-   restarts the counter at the number of live references (`LoadCurrentProject` → `CloseApp`,
-   `projet.cpp:1855, 625`; `instanceManager.cpp:60-67`), and the counter counts every element of
-   the tree, each property row and band included. The project has
-   nowhere to hold them. The solvers only match these ids with `config.xml`, which carries the
-   same ones, so every face gets the same receiver and fitting. The one place an id leaves the
-   solver is a surface receiver's `.csbin` output, which records it as `xmlIndex`
-   (`baseReportManager.cpp:40`): there 3503 reads 0. Measured above: the same-seed runs differ in
-   nothing else. Making them equal needs upstream's ids stored in the project (a field like
-   `Material::solver_id` on receivers and fitting zones, filled by both importers): a change to
-   the `.simpa` format and to the 2026-09-23 convention that solver ids are assigned at export,
-   so it is a decision, not a fix in this writer.
+1. **Ids.** Upstream's `idRs` and `idEn` are its GUI's element ids (3503; 1930, 2083). Those are
+   session state: upstream gives every element a new id from a global counter each time it loads
+   a project (`Element::Element` → `SetXmlId`, `element.cpp:134`), and overwrites the id the file
+   holds (`:143-144`); loading first closes the current project, which restarts the counter at
+   the number of live references (`LoadCurrentProject` → `CloseApp`, `projet.cpp:1855, 625`;
+   `instanceManager.cpp:60-67`), and the counter counts every element of the tree, each property
+   row and band included. Ours are each entity's solver id (`config_xml.rs`, "Solver ids"):
+   - **A project imported from a `.proj`** pins the ids the file holds (`solver_id`, from each
+     element's `wxid`; `docs/m5-m6-design.md`, decision 13), those of upstream's session that
+     last saved it. Tutorial 3's runs carry its `.proj`'s ids, so its `.cbin` is the runs' byte
+     for byte, idEn 2083 on the box's triangles (`parity_tutorials.rs`, `tutorial_3`). Tutorial
+     1's runs carry 3503, 3510 and 3669 where its `.proj` holds 1792, 1473 and 1632; read with a
+     run's saved project (`import_proj_with_config`) it writes the run's.
+   - **A project made here, or imported from a `config.xml`** (whose importer pins materials
+     only), numbers them from project order (receivers from 0, fitting zones from 2). The
+     solvers only match these ids with `config.xml`, which carries the same ones, so every face
+     gets the same receiver and fitting. Such an id leaves the solver in a surface receiver's
+     `.csbin` output, as `xmlIndex` (`baseReportManager.cpp:40`), where 3503 reads 0, and in
+     TCR's output names and labels (`rs<id>.gabe`, `rscut<id>.gabe`, and the point receivers'
+     columns of `rp.gabe`; `ctr/input_output/reportmanager.cpp:51, 84, 98`). Measured above,
+     with the ids read through the mapping each comparison names: the same-seed runs differ in
+     nothing else.
 2. **The vertex list of a `.proj` import.** The import welds equal vertices (tutorial 1: 8 for
    upstream's 36), by design (`geometry::import::proj`: without welding no edge would be shared,
    and the checks would see an open mesh); upstream's own 2019 `scene_mesh.poly` holds the same 8.

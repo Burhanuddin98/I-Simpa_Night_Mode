@@ -1974,4 +1974,32 @@ fn a_folders_regions_are_held_to_its_own_geometry() {
         verify_dir(&dir, &upstream()).unwrap().codes,
         ["regions_unchecked"]
     );
+    // Says no: the mesher's OK record, regions checked, of another .mbin (one hex digit off). The
+    // folder's hash check names it, and it proves nothing about this .mbin's regions.
+    let mut other = CUBE_MBIN_SHA256.to_string();
+    let last = if other.ends_with('0') { "1" } else { "0" };
+    other.replace_range(other.len() - 1.., last);
+    let dir = cube_folder("regions_other_mbin", Some(&proof(&other, true)));
+    open(&dir);
+    let r = verify_dir(&dir, &upstream()).unwrap();
+    assert!(!r.regions.proven_by_manifest, "{:?}", r.regions);
+    assert!(
+        r.codes.contains(&"regions_unchecked".to_string())
+            && r.codes.contains(&"manifest_mismatch".to_string()),
+        "{:?}",
+        r.codes
+    );
+    // Says no: a record that is not OK.
+    let dir = cube_folder(
+        "regions_not_ok",
+        Some(&proof(CUBE_MBIN_SHA256, true).replace("\"OK\"", "\"FAIL\"")),
+    );
+    open(&dir);
+    let r = verify_dir(&dir, &upstream()).unwrap();
+    assert!(!r.regions.proven_by_manifest, "{:?}", r.regions);
+    assert!(
+        r.codes.contains(&"regions_unchecked".to_string()),
+        "{:?}",
+        r.codes
+    );
 }

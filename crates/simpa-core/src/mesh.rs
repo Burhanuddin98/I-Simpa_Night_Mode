@@ -142,11 +142,15 @@ pub mod codes {
     pub const PREPROCESS_TIMEOUT: &str = "preprocess_timeout";
     /// Not a refusal: a recorded outcome (`preprocess.outcome` `aborted` in the manifest, and a
     /// run's warning). `preprocess.exe` gave up and saved nothing (`Mesh reparation has been
-    /// aborted`), could not read the file, or printed no statistics; the `.poly` as written is
-    /// then meshed, as upstream's GUI meshes it, and the geometry check on it is the gate.
+    /// aborted`), could not read the file, or printed no statistics, and left the `.poly` as it
+    /// was given; that `.poly` is then meshed, as upstream's GUI meshes it, and the geometry
+    /// check on it is the gate. If it changed the file all the same, that is
+    /// [`PREPROCESS_OUTPUT_INVALID`].
     pub const PREPROCESS_ABORTED: &str = "preprocess_aborted";
     /// What `preprocess.exe` saved does not read, cannot be accounted for facet by facet against
-    /// what it was given (`preprocess::account`), or holds user facets it never merged.
+    /// what it was given (`preprocess::account`), or holds user facets it never merged; or it
+    /// printed that it saved nothing (see [`PREPROCESS_ABORTED`]) and the `.poly` changed or went
+    /// all the same.
     pub const PREPROCESS_OUTPUT_INVALID: &str = "preprocess_output_invalid";
 }
 
@@ -859,8 +863,9 @@ fn move_seeds(
 enum Preprocessed {
     /// What `preprocess.exe` saved, accounted for, and the markers of the facets it deleted.
     Corrected(poly::Model, Vec<u32>),
-    /// It saved nothing: `scene_mesh.poly` is the `.poly` as written, and TetGen meshes that, as
-    /// upstream's GUI does. Recorded in `m.preprocess` and the messages, not a failure.
+    /// It saved nothing: `scene_mesh.poly` is still the `.poly` as written, byte for byte, and
+    /// TetGen meshes that, as upstream's GUI does. Recorded in `m.preprocess` and the messages,
+    /// not a failure.
     Aborted,
     /// A failure, whose codes are in the manifest.
     Failed,
@@ -870,8 +875,9 @@ enum Preprocessed {
 /// `poly_bytes`), keeps the input as `scene_mesh.input.poly`, reads what it saved, accounts for
 /// it facet by facet ([`preprocess::account`]), restores its user-facet markers unless in parity
 /// mode, and records all of it in `m.preprocess` with a one-line summary in the messages. When
-/// it saved nothing ([`Preprocessed::Aborted`]) the `.poly` as written is put back in
-/// `scene_mesh.poly`, if it is not still there, and the abort and its reason are recorded.
+/// it saved nothing ([`Preprocessed::Aborted`]) `scene_mesh.poly` is still the `.poly` as written,
+/// checked byte for byte, and the abort and its reason are recorded; a file it changed although
+/// it said it saved nothing is refused (`preprocess_output_invalid`).
 fn run_preprocess(
     input: &MeshInput,
     poly_bytes: &[u8],
@@ -1079,14 +1085,40 @@ fn run_preprocess_inner(
         } else {
             "printed no statistics, which it prints only when it saves"
         };
-        // The .poly as written is what TetGen reads next, as upstream's GUI meshes it: put it
-        // back if preprocess.exe left anything else in its place.
-        let now = std::fs::read(dir.join(POLY_FILE)).ok();
-        if now.as_deref() != Some(poly_bytes)
-            && let Err(e) = write_file(dir, POLY_FILE, poly_bytes)
-        {
-            fail(m, codes::INPUT_WRITE_FAILED, e);
-            return Inner::Failed;
+        // The .poly as written is what TetGen reads next, as upstream's GUI meshes it. A
+        // preprocess.exe that gives up saves nothing (`Preprocess.cpp:100-106`): a file changed
+        // or gone all the same is something it saved that cannot be accounted for, refused.
+        let now = std::fs::read(dir.join(POLY_FILE));
+        match &now {
+            Ok(b) if b.as_slice() == poly_bytes => {}
+            Ok(b) => {
+                report.output_sha256 = Some(sha256_hex(b));
+                fail(
+                    m,
+                    codes::PREPROCESS_OUTPUT_INVALID,
+                    format!(
+                        "preprocess.exe exited 0 and {why} (its last line: {last:?}), yet \
+                         {POLY_FILE} is not the file it was given ({} bytes, sha256 {}, against \
+                         {} bytes as written): it saved something that cannot be accounted for, \
+                         so nothing is meshed",
+                        b.len(),
+                        &sha256_hex(b)[..16],
+                        poly_bytes.len()
+                    ),
+                );
+                return Inner::Failed;
+            }
+            Err(e) => {
+                fail(
+                    m,
+                    codes::PREPROCESS_OUTPUT_INVALID,
+                    format!(
+                        "preprocess.exe exited 0 and {why} (its last line: {last:?}), yet \
+                         {POLY_FILE} cannot be read after it ({e}): nothing is meshed"
+                    ),
+                );
+                return Inner::Failed;
+            }
         }
         return Inner::Aborted(format!("exited 0 but {why} (its last line: {last:?})"));
     }

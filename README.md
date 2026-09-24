@@ -69,8 +69,9 @@ each with its own hue, brightness falling as its energy decays, over the surface
 
 *The material library with per-band absorption curves, and the environment panel, beside the same run.*
 
-> Both frames are the **corrected** Elmia Hall (`testdata/elmia_corrected.ply`).
-> The hall as upstream ships it does not currently produce a valid solve here &mdash; see
+> Both frames use `testdata/elmia_corrected.ply`: Elmia Hall as upstream's tutorial 2 project
+> stores it, extracted by `tools/extract_upstream_scene.py`. This build does not yet produce a
+> valid solve from the separate `elmia.ply` scene file &mdash; see
 > [docs/release-arc-plan.md](docs/release-arc-plan.md) item 12.
 
 ---

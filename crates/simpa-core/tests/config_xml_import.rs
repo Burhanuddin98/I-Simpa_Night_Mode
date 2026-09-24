@@ -376,7 +376,8 @@ fn the_scene_mesh_of_tutorial1_is_upstreams_with_our_receiver_id() {
 /// Write, import the result with its scene mesh, write again: the solver reads the same values
 /// from both configurations. (Surface-receiver ids are renumbered when a disabled receiver is
 /// dropped, and this importer keeps no pinned receiver or fitting id, so those ids are compared by
-/// rank and through the faces they label.)
+/// rank and through the faces they label, and a pinned source's `source@id`, which no solver
+/// reads, does not come back.)
 #[test]
 fn write_import_write_gives_the_solver_the_same_input() {
     let docs: BTreeMap<String, support::DocAttr> = doc_attrs()
@@ -436,14 +437,23 @@ fn write_import_write_gives_the_solver_the_same_input() {
                 v2.keys().collect::<Vec<_>>(),
                 "project {k}"
             );
+            // `source@id` is written from a pinned source only (decision 13), and this importer
+            // pins no source, so it comes back without one; the solvers never read it.
+            let is_source_id = |i: &support::Instance, a: &str| i.key == "source" && a == "id";
             for (path, i1) in &v1 {
                 let i2 = &v2[path];
                 assert_eq!(
-                    i1.attrs.keys().collect::<Vec<_>>(),
+                    i1.attrs
+                        .keys()
+                        .filter(|a| !is_source_id(i1, a))
+                        .collect::<Vec<_>>(),
                     i2.attrs.keys().collect::<Vec<_>>(),
                     "project {k} {path}"
                 );
                 for (a, t1) in &i1.attrs {
+                    if is_source_id(i1, a) {
+                        continue;
+                    }
                     if let Some(p) = ranked.iter().position(|p| i1.key.starts_with(p))
                         && a == "id"
                     {

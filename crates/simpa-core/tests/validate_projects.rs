@@ -303,6 +303,48 @@ fn projects_that_pass_integrity_get_no_structural_code() {
     }
 }
 
+/// An enabled fitting zone's pin must leave TetGen room for the room's ids above it: at most
+/// `SOLVER_INT_MAX` minus the `.poly`'s facets (the scene's faces and 12 per enabled box zone). A
+/// `.proj` import pins upstream's ids, which may be anything a C `int` holds. Says no: one above
+/// the limit, and `SOLVER_INT_MAX` itself, each `solver_id_mapping_invalid` and refused by the
+/// mesher's input too. At the limit, and on a disabled zone (which reaches no solver), it passes.
+#[test]
+fn a_fitting_pin_leaves_room_for_tetgens_room_ids() {
+    let mut p = schema::load(&repo("tests/fixtures/rooms/tutorial1_box_fitting.simpa")).unwrap();
+    assert_eq!(p.fitting_zones.len(), 1);
+    assert!(matches!(
+        p.fitting_zones[0].shape,
+        schema::FittingShape::Box { .. }
+    ));
+    let limit = SOLVER_INT_MAX - (p.geometry.faces.len() as u32 + 12);
+    let headroom = |p: &Project| -> Vec<Issue> {
+        validate::validate(p)
+            .into_iter()
+            .filter(|i| i.code == codes::SOLVER_ID_MAPPING_INVALID)
+            .collect()
+    };
+    p.fitting_zones[0].solver_id = Some(limit);
+    assert_eq!(headroom(&p), Vec::new());
+    assert!(simpa_core::mesh::project_input(&p).is_ok());
+    for id in [limit + 1, SOLVER_INT_MAX] {
+        p.fitting_zones[0].solver_id = Some(id);
+        let issues = headroom(&p);
+        assert_eq!(issues.len(), 1, "{id}: {issues:#?}");
+        assert_eq!(issues[0].path, "/fitting_zones/0/solver_id");
+        assert!(
+            issues[0]
+                .message
+                .contains(&format!("pin it at most {limit}")),
+            "{}",
+            issues[0].message
+        );
+        let e = simpa_core::mesh::project_input(&p).unwrap_err();
+        assert!(e.0.contains("TetGen numbers the room's regions"), "{e}");
+    }
+    p.fitting_zones[0].enabled = false;
+    assert_eq!(headroom(&p), Vec::new());
+}
+
 /// xorshift64*, for the perturbation test.
 struct Rng(u64);
 

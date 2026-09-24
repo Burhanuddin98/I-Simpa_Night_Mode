@@ -422,8 +422,9 @@ fn import_proj_cmd(args: &[&str]) -> ExitCode {
         }
         return print_summary(&imported.project, false);
     }
-    // The summary, and what the import recorded: upstream's element id of each entity it made
-    // (the explicit id map, `geometry::import::proj`, "Element ids"), and its notes.
+    // The summary, and what the import recorded: upstream's element id of each entity it made,
+    // which it also pins as that entity's `solver_id` (`geometry::import::proj`, "Element ids"),
+    // and its notes.
     let mut s = project_summary(&imported.project);
     s["upstream_ids"] = report
         .upstream_ids

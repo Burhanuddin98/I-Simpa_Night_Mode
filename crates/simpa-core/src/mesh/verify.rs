@@ -62,8 +62,18 @@ pub struct VolumeIds {
 impl VolumeIds {
     /// TetGen's numbering for regions seeded with `fittings`: the room starts one above the
     /// largest seed, or at 1 without one (`maxattr` starts at 0, `tetgen.cxx:22357, 22404`).
+    /// The ids come from files as well as projects (a run folder's `encombrement` ids,
+    /// `mesh-verify --fittings`), so a largest seed of `i32::MAX`, above which no room id fits,
+    /// saturates rather than overflows. The mesher refuses fitting ids without room for the
+    /// room's above them before TetGen runs (`mesh::input::room_id_headroom`).
     pub fn tetgen(fittings: Vec<i32>) -> Self {
-        let room = fittings.iter().copied().max().unwrap_or(0).max(0) + 1;
+        let room = fittings
+            .iter()
+            .copied()
+            .max()
+            .unwrap_or(0)
+            .max(0)
+            .saturating_add(1);
         VolumeIds { room, fittings }
     }
 

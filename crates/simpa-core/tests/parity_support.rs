@@ -368,8 +368,9 @@ pub fn drop_attr(xml: &str, element_start: &str, attr: &str) -> String {
     format!("{}{}", &xml[..a], &xml[b..])
 }
 
-/// What differs by design between a tutorial 3 run's config, its ids read through the id map, and
-/// ours from the `.proj` (`docs/formats/config_xml.md`, "Parity with upstream's GUI").
+/// What differs by design between a tutorial 3 run's config and ours from the `.proj` read with
+/// that run's saved project, whose ids are upstream's, pinned (decision 13), so no id differs
+/// (`docs/formats/config_xml.md`, "Parity with upstream's GUI").
 pub fn tutorial3_by_design() -> Vec<String> {
     let mut expected = vec![
         // The GUI's section of the project tree for volumes, which no solver looks up.

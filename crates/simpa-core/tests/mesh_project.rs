@@ -1263,7 +1263,8 @@ impl Mesher for HungPreprocess {
 /// real TetGen after it. `preprocess.exe` exits 0 whatever it did, so its lines and the file it
 /// saved are what the mesher reads. When it saves nothing (it gives up, cannot read the file, or
 /// prints no statistics), the `.poly` as written is meshed, as upstream's GUI meshes it, the abort
-/// recorded, and the geometry check on that `.poly` is the gate.
+/// recorded, and the geometry check on that `.poly` is the gate; when it says so and the file
+/// changed or went all the same, that is refused (`preprocess_output_invalid`).
 #[test]
 fn every_preprocess_failure_code_fires_on_its_input() {
     let mut p = load_room("tutorial1_box.simpa");
@@ -1368,18 +1369,53 @@ fn every_preprocess_failure_code_fires_on_its_input() {
     };
     let (dir, m) = go("pre-silent", Some(&silent));
     meshed_as_written(&dir, &m, "no statistics");
-    // It gives up after leaving something else in the file: the .poly as written is put back.
+    // Says no: it says it saved nothing, and the file changed all the same (a wall facet gone),
+    // or went. Upstream's preprocess.exe saves nothing when it gives up (Preprocess.cpp:100-106),
+    // so what it left cannot be accounted for: refused, TetGen never runs, and the changed file
+    // is recorded by its hash.
+    let changed_after = |dir: &Path, m: &MeshManifest, why: &str| {
+        failed(dir, m, &[codes::PREPROCESS_OUTPUT_INVALID]);
+        let report = m.preprocess.as_ref().unwrap();
+        assert_eq!(report.outcome, None, "{report:#?}");
+        assert!(
+            m.messages[0].contains(why) && m.messages[0].contains("cannot be accounted for"),
+            "{m:#?}"
+        );
+        let written = std::fs::read(dir.join("scene_mesh.input.poly")).unwrap();
+        let now = std::fs::read(dir.join("scene_mesh.poly")).unwrap();
+        assert!(now != written, "the changed file is left as it was found");
+        assert_eq!(
+            report.output_sha256.as_deref(),
+            Some(mesh::sha256_hex(&now).as_str())
+        );
+    };
+    let edit_facet_gone: fn(&Path) = |d| {
+        edit_poly(d, |m| {
+            m.model_faces.remove(3);
+        })
+    };
     let aborted_after_edit = FakePreprocess {
         lines: "Mesh reparation has been aborted. The algorithm enter into an infinite loop.\n",
         exit: 0,
-        edit: |d| {
-            edit_poly(d, |m| {
-                m.model_faces.remove(3);
-            })
-        },
+        edit: edit_facet_gone,
     };
     let (dir, m) = go("pre-aborted-edited", Some(&aborted_after_edit));
-    meshed_as_written(&dir, &m, "gave up");
+    changed_after(&dir, &m, "gave up");
+    let silent_after_edit = FakePreprocess {
+        lines: "",
+        exit: 0,
+        edit: edit_facet_gone,
+    };
+    let (dir, m) = go("pre-silent-edited", Some(&silent_after_edit));
+    changed_after(&dir, &m, "no statistics");
+    let silent_after_delete = FakePreprocess {
+        lines: "",
+        exit: 0,
+        edit: |d| std::fs::remove_file(d.join("scene_mesh.poly")).unwrap(),
+    };
+    let (dir, m) = go("pre-silent-deleted", Some(&silent_after_delete));
+    failed(&dir, &m, &[codes::PREPROCESS_OUTPUT_INVALID]);
+    assert!(m.messages[0].contains("cannot be read"), "{m:#?}");
     // Says no: it gives up on a .poly the geometry check refuses (a wall face gone, so the room
     // is open), and the check refuses it, before TetGen runs.
     let mut open_room = p.clone();
@@ -1512,6 +1548,68 @@ fn every_preprocess_failure_code_fires_on_its_input() {
             .deleted,
         [3]
     );
+}
+
+/// A box zone meshed after `preprocess.exe` gave up. The `.poly` as written holds the box's
+/// triangles in its user facet list (Part 5), which TetGen never reads, and the box's seed in its
+/// region list (Part 4), so TetGen gives the whole room the box's id: upstream's GUI meshes it so
+/// and goes on (`projet_maillage.cpp:212-213`). The region check refuses it by name
+/// (`fitting_region_misplaced`: the cell the box's id fills is not the box), and no `.mbin` is
+/// written. The control is the same project with the scene correction off, which meshes the box
+/// as its own region.
+#[test]
+fn a_box_zone_whose_triangles_tetgen_never_read_is_refused() {
+    let mut p = load_room("tutorial1_box_fitting.simpa");
+    let tetgen = tetgen();
+    let run = |p: &simpa_core::schema::Project, label: &str, pre: Option<&dyn Mesher>| {
+        let dir = scratch(label);
+        let tools = mesh::MeshTools {
+            tetgen: &tetgen,
+            preprocess: pre,
+            markers: mesh::Markers::Restored,
+            timeouts: mesh::Timeouts::default(),
+        };
+        let m = mesh::mesh_project_with(p, &dir, &tools, &CancelToken::new(), &mut |_: &Line| {})
+            .unwrap();
+        (dir, m)
+    };
+    // Control: the correction off, the box in the facet list: two regions, each its cell.
+    assert!(!p.solvers.meshing.preprocess);
+    let (dir, m) = run(&p, "box-zone-control", None);
+    assert!(m.is_ok(), "{m:#?}");
+    let volumes = volume_by_id(&mbin::read_file(&dir.join("tetramesh.mbin")).unwrap());
+    assert_eq!(volumes.len(), 2, "{volumes:?}");
+
+    p.solvers.meshing.preprocess = true;
+    let aborted = FakePreprocess {
+        lines: "Mesh reparation has been aborted. The algorithm enter into an infinite loop.\n",
+        exit: 0,
+        edit: |_| {},
+    };
+    let (dir, m) = run(&p, "box-zone-aborted", Some(&aborted));
+    let report = m.preprocess.as_ref().unwrap();
+    assert_eq!(report.outcome, Some(mesh::PreprocessOutcome::Aborted));
+    assert!(report.input.user_facets > 0, "{report:#?}");
+    assert_eq!(
+        m.codes,
+        [codes::MESH_INVALID, "fitting_region_misplaced"],
+        "{m:#?}"
+    );
+    assert_eq!(m.status, MeshStatus::Fail);
+    assert!(!dir.join("tetramesh.mbin").exists());
+    let v = m.verify.as_ref().unwrap();
+    let zone = v
+        .regions
+        .iter()
+        .find(|r| r.fitting.is_some())
+        .unwrap_or_else(|| panic!("{v:#?}"));
+    assert!(
+        zone.problems
+            .iter()
+            .any(|p| p.contains("the box's faces do not bound it")),
+        "{zone:#?}"
+    );
+    println!("box zone after an abort: {:?}", zone.problems);
 }
 
 /// TetGen still running at the mesher's limit is stopped, its process tree killed, and the mesh

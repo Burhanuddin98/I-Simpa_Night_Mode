@@ -40,9 +40,12 @@
 //! - **`workingdirectory`** is the run folder as an absolute path ending in the platform
 //!   separator ([`working_directory`]).
 //! - **No dead payload:** no `<surface_mesh>`, `<vertices>` or `<subdomains>`, and none of the
-//!   attributes `docs/formats/config_xml.md` lists as ignored by the solvers. Air absorption is
-//!   always explicit (`disable_absatmo_computation` and `absatmo`, the latter in 1/m whatever the
-//!   project's unit), and so is every per-receiver background-noise band and `trans_epsilon`.
+//!   attributes `docs/formats/config_xml.md` lists as ignored by the solvers but one: a source
+//!   that pins upstream's element id (a `.proj` import) gets it as `source@id`, as upstream's
+//!   GUI writes it, so that an imported project carries every id upstream's config does. Air
+//!   absorption is always explicit (`disable_absatmo_computation` and `absatmo`, the latter in
+//!   1/m whatever the project's unit), and so is every per-receiver background-noise band and
+//!   `trans_epsilon`.
 //!
 //! # Solver ids
 //!
@@ -50,11 +53,16 @@
 //! `config.xml`, the scene mesh (`.cbin`) and the tetrahedral mesh (`.mbin`) are assigned here, by
 //! [`SolverIds::assign`], from the project's own order and its pinned ids, so the same project
 //! always gets the same ids, whatever its variant. Upstream's GUI writes its own element ids
-//! (3503, 1930, ...); a project imported from a `.proj` keeps them as pins (each entity's
-//! `solver_id`, set from its `wxid`; `docs/m5-m6-design.md`, decision 13), so it writes the ids
-//! upstream wrote, and a project made here pins none and keeps the numbering below. The solvers
-//! match the ids between the three files and write a scene receiver's id into its `.csbin`
-//! output, and nothing else reads them:
+//! (3503, 1930, ...), the counters of the session that writes the file: it renumbers every
+//! element each time it loads a project (`element.cpp:134, 142-144, 231-244`). A project
+//! imported from a `.proj` keeps the ids the file holds as pins (each entity's `solver_id`, set
+//! from its `wxid`; `docs/m5-m6-design.md`, decision 13): the ids of upstream's session that last
+//! saved it, which are those of its runs only when that session also wrote them (tutorial 3's
+//! runs; tutorial 1's carry 3503, 3510 and 3669 where its `.proj` holds 1792, 1473 and 1632). A
+//! project made here pins none and keeps the numbering below. The solvers match the ids between
+//! the three files, write a scene receiver's id into its `.csbin` output and TCR's `rs<id>` and
+//! `rscut<id>` file names, and label TCR's point-receiver columns with a point receiver's; nothing
+//! else reads them:
 //!
 //! | Solver id | Written as | Assigned |
 //! |---|---|---|
@@ -63,9 +71,11 @@
 //! | fitting zone | `encombrement@id`, `.cbin` face `idEn`, `.mbin` `idVolume` | Its pinned `solver_id` (never 0); otherwise the same from [`FIRST_FITTING_ID`] (2) up: 2 plus its position in `fitting_zones`, disabled ones counted, when none is pinned |
 //! | point receiver | `recepteur_ponctuel@id` | Its pinned `solver_id`; otherwise the same from 0 up: its position in `point_receivers` when none is pinned |
 //!
-//! Sources carry no id in `config.xml`: the solvers number them by position and do not read
-//! `source@id`. An imported source keeps upstream's as its pinned `solver_id`, unwritten. Two
-//! entities of one kind pinned to one id cannot be written ([`WriteError::SolverIdClash`]).
+//! Sources get no solver id: the solvers number them by position and do not read `source@id`.
+//! An imported source keeps upstream's element id as its pinned `solver_id`, written as
+//! `source@id` as upstream writes it; a source made here pins none and gets no `id`. Two entities
+//! of one kind pinned to one id cannot be written ([`WriteError::SolverIdClash`]; for sources,
+//! [`Project::check_integrity`](crate::schema::Project::check_integrity)'s `duplicate_solver_id`).
 //!
 //! **Materials are declared per surface group, not per library entry.** Each surface group gets
 //! its own solver material id, and `config.xml` declares one `type_surface` per id, holding the

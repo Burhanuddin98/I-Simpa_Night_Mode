@@ -687,14 +687,23 @@ fn write_source(
 ) -> Result<(), WriteError> {
     let what = |f: &str| format!("source '{}' {f}", s.name);
     let [px, py, pz] = s.position.to_array();
-    let mut attrs = vec![
+    // Upstream's element id, when the source pins one (a `.proj` import, `docs/m5-m6-design.md`,
+    // decision 13), first as upstream's GUI writes it (`e_scene_sources_source.h:114`). The
+    // solvers never read it: they number sources by position (`base_core_configuration.cpp:153`).
+    // It is written so that an imported project's config.xml carries every id upstream's does;
+    // a source made here pins none, and none is written.
+    let mut attrs = Vec::new();
+    if let Some(id) = s.solver_id {
+        attrs.push(("id", id.to_string()));
+    }
+    attrs.extend([
         ("name", text(&what("name"), &s.name)?),
         ("x", real(&what("x"), px)?),
         ("y", real(&what("y"), py)?),
         ("z", real(&what("z"), pz)?),
         ("directivite", s.directivity.solver_code().to_string()),
         ("delay", real(&what("delay"), s.delay_s.get())?),
-    ];
+    ]);
     // u, v, w are read only for types 1 and 5 (base_core_configuration.cpp:135-139).
     if let Some(d) = s.directivity.direction() {
         let [u, v, w] = d.to_array();

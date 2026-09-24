@@ -124,8 +124,10 @@ impl SolverIds {
 /// The solver ids of one kind's list, in its order: an item's pinned id when it has one; otherwise
 /// the smallest id from `base` up that no pin of the list and no earlier item uses. Without pins
 /// that is `base` plus the item's position, the numbering of a project made here. Refused
-/// ([`WriteError::SolverIdClash`]): two items pinned to one id (a solver looks an id up and takes
-/// the first match, `base_core_configuration.cpp:374-391`, so the second would be hidden), a
+/// ([`WriteError::SolverIdClash`]): two items pinned to one id (for fittings and scene receivers
+/// a solver looks an id up and takes the first match, `base_core_configuration.cpp:374-391`,
+/// `coreinitialisation.cpp:48-56`, so the second would be hidden; a point receiver's id is only
+/// TCR's column label, `ctr/input_output/reportmanager.cpp:98`, so two would share one), a
 /// fitting zone pinned to 0 (the solvers' "no fitting", `coreinitialisation.cpp:151-176`), or a
 /// pin above [`SOLVER_INT_MAX`].
 fn assign_kind<'a, K: Copy>(

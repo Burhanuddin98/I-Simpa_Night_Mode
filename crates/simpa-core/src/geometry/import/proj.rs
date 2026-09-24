@@ -85,15 +85,23 @@
 //!
 //! Upstream writes its GUI's element ids into `config.xml` (`encombrement@id` 1930,
 //! `recepteur_ponctuel@id` 155, ...). The file holds them as each element's `wxid`: the ids of the
-//! session that saved it, which the runs saved beside it carry (upstream renumbers every element
-//! when it loads a project, `docs/formats/cbin.md`, "What still differs"). Imported projects keep
-//! them (Burhan, 2026-09-24 14:11; `docs/m5-m6-design.md`, decision 13): every source, point
-//! receiver, surface receiver or cutting plane and fitting zone is pinned to its `wxid`
-//! (`solver_id`), so export writes upstream's ids (`config_xml`, "Solver ids") and TetGen numbers
-//! the room's parts above upstream's fitting ids, as upstream's own meshes carry them (tutorial 3:
-//! fittings 1930 and 2083, the room 2084 to 2086). A `wxid` outside 0 to `SOLVER_INT_MAX` is
-//! invalid. [`ProjReport::upstream_ids`] still records each `wxid` beside the entity it became.
-//! Each source also keeps the source group it sat in (`Source::group`).
+//! session that last saved it. Upstream does not reuse them: it gives every element a new id from
+//! a global counter each time it loads a project (`Element::Element` → `SetXmlId`,
+//! `element.cpp:134, 231-244`, overwriting the node's `wxid`, `:142-144`; the counter restarts at
+//! project close, `projet.cpp:625`; `docs/formats/cbin.md`, "What still differs"). So a run
+//! carries the ids of the session that wrote it, which are the `.proj`'s only when that session
+//! also saved the file: tutorial 3's runs carry its `.proj`'s ids, tutorial 1's carry 3503, 3510
+//! and 3669 where its `.proj` holds 1792, 1473 and 1632. Imported projects keep the file's ids
+//! (Burhan, 2026-09-24 14:11; `docs/m5-m6-design.md`, decision 13): every source, point receiver,
+//! surface receiver or cutting plane and fitting zone is pinned to its `wxid` (`solver_id`), so
+//! export writes the ids the `.proj` holds (`config_xml`, "Solver ids"), not the ones upstream
+//! would give after reopening it, and TetGen numbers the room's parts above those fitting ids,
+//! as upstream's own meshes carry them (tutorial 3: fittings 1930 and 2083, the room 2084 to
+//! 2086). The ids reach labels and matching only: the solvers match them between `config.xml`,
+//! the `.cbin` and the `.mbin`, and write them into `.csbin` and TCR output names and labels. A
+//! `wxid` outside 0 to `SOLVER_INT_MAX` is invalid. [`ProjReport::upstream_ids`] still records
+//! each `wxid` beside the entity it became. Each source also keeps the source group it sat in
+//! (`Source::group`).
 //!
 //! # Everything else
 //!

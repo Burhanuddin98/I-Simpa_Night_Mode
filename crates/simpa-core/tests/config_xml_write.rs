@@ -228,19 +228,36 @@ fn every_writer_obligation_holds_for_both_solvers() {
     println!("obligations checked on {checked} element instances");
 }
 
-/// Every attribute that upstream's GUI writes and no solver reads stays out.
+/// Every attribute that upstream's GUI writes and no solver reads stays out, but `source@id` on a
+/// source that pins upstream's element id (decision 13), written as that pin, source by source,
+/// and on no other source. The generator pins every entity in one project of three.
 #[test]
 fn nothing_the_solvers_ignore_is_written() {
     let (ignored, elements) = doc_ignored();
     let mut projects = vec![rich_cube()];
     projects.extend((0..50).map(schema::generate));
+    let mut pinned_sources = 0;
     for p in &projects {
         for solver in SOLVERS {
             let Ok(xml) = write(p, solver, None, &workdir()) else {
                 continue;
             };
             let pairs = written_pairs(&xml);
+            // Written last first, enabled sources only.
+            let written: Vec<Option<String>> = source_ids(&xml);
+            let expected: Vec<Option<String>> = p
+                .sources
+                .iter()
+                .rev()
+                .filter(|s| s.enabled)
+                .map(|s| s.solver_id.map(|id| id.to_string()))
+                .collect();
+            assert_eq!(written, expected, "{solver:?}: source@id");
+            pinned_sources += expected.iter().flatten().count();
             for key in &ignored {
+                if key == "source@id" {
+                    continue;
+                }
                 let (e, a) = key.split_once('@').unwrap();
                 let hit = pairs.iter().any(|(pe, pa)| {
                     pe == e
@@ -254,6 +271,59 @@ fn nothing_the_solvers_ignore_is_written() {
             }
         }
     }
+    assert!(pinned_sources > 0, "no generated project pins a source");
+}
+
+/// Each `<source>`'s `id`, in the file's order.
+fn source_ids(xml: &str) -> Vec<Option<String>> {
+    roxmltree::Document::parse(xml)
+        .unwrap()
+        .descendants()
+        .filter(|n| n.has_tag_name("source"))
+        .map(|n| n.attribute("id").map(str::to_string))
+        .collect()
+}
+
+/// A source pinned to upstream's element id writes it as `source@id`, first, as upstream's GUI
+/// does (`e_scene_sources_source.h:114`), so an imported project's config carries every id
+/// upstream's does; a source made here pins none and writes none. Says no: the pin changed gives
+/// the changed id, and two sources pinned alike are refused before anything is written.
+#[test]
+fn a_pinned_source_writes_its_element_id() {
+    let mut p = rich_cube();
+    assert!(p.sources.iter().all(|s| s.solver_id.is_none()));
+    let enabled = p.sources.iter().filter(|s| s.enabled).count();
+    assert!(enabled >= 2, "rich_cube has {enabled} enabled sources");
+    for solver in SOLVERS {
+        assert_eq!(source_ids(&wr(&p, solver, None)), vec![None; enabled]);
+    }
+    for (i, s) in p.sources.iter_mut().enumerate() {
+        s.solver_id = Some(974 + 159 * i as u32);
+    }
+    let expected: Vec<Option<String>> = p
+        .sources
+        .iter()
+        .rev()
+        .filter(|s| s.enabled)
+        .map(|s| s.solver_id.map(|id| id.to_string()))
+        .collect();
+    for solver in SOLVERS {
+        let xml = wr(&p, solver, None);
+        assert_eq!(source_ids(&xml), expected, "{solver:?}");
+        assert!(xml.contains("<source id=\""), "{solver:?}: id first");
+    }
+    // Says no: one pin changed.
+    let mut other = p.clone();
+    other.sources[0].solver_id = Some(975);
+    let xml = wr(&other, SolverKind::Spps, None);
+    assert!(source_ids(&xml).contains(&Some("975".to_string())));
+    assert!(!source_ids(&xml).contains(&Some("974".to_string())));
+    // Says no: two sources pinned alike.
+    let mut twice = p.clone();
+    twice.sources[1].solver_id = twice.sources[0].solver_id;
+    let e = write(&twice, SolverKind::Spps, None, &workdir()).unwrap_err();
+    assert_eq!(e.code(), "integrity", "{e}");
+    assert!(e.to_string().contains("pin the solver id 974"), "{e}");
 }
 
 #[test]
@@ -321,7 +391,13 @@ fn reals_are_exact_shortest_c_locale_decimals() {
         let view = solver_view(&xml);
         for i in view.values() {
             for (a, text) in &i.attrs {
-                let d = &doc[&format!("{}@{a}", i.key)];
+                let key = format!("{}@{a}", i.key);
+                // A pinned source's element id, which no solver reads: an integer.
+                if key == "source@id" {
+                    assert!(text.parse::<u32>().is_ok(), "source@id {text:?}");
+                    continue;
+                }
+                let d = &doc[&key];
                 match d.kind {
                     Kind::Real => {
                         assert!(

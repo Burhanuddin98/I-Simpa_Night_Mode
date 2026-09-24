@@ -478,8 +478,15 @@ fn solver_ints(p: &Project, out: &mut Vec<Issue>) {
                     path,
                     if list == "sources" {
                         format!(
-                            "sources '{earlier}' and '{name}' both pin element id {id}: the id \
-                             reaches no solver, but it names one element, and two cannot share it"
+                            "sources '{earlier}' and '{name}' both pin element id {id}: the \
+                             solvers do not read it, but it names one element in config.xml, and \
+                             two cannot share it"
+                        )
+                    } else if list == "point_receivers" {
+                        format!(
+                            "point receivers '{earlier}' and '{name}' both pin solver id {id}: \
+                             TCR labels each receiver's column of rp.gabe with it, so the two \
+                             columns would carry one label"
                         )
                     } else {
                         format!(
@@ -530,4 +537,39 @@ fn solver_ints(p: &Project, out: &mut Vec<Issue>) {
             .collect(),
         out,
     );
+    room_id_headroom(p, out);
+}
+
+/// An enabled fitting zone's pin must leave TetGen room for the room's ids above it: TetGen
+/// numbers each region no seed reaches from one above the largest seed, one per region, in a C
+/// `int` (`tetgen.cxx:22403-22436`). A region is bounded by at least four facets and a facet
+/// bounds at most two, so there are fewer regions than the `.poly`'s facets: the scene's faces
+/// and each enabled box zone's 12 triangles. The mesher checks the same on the `.poly` it writes
+/// (`mesh::input::room_id_headroom`).
+fn room_id_headroom(p: &Project, out: &mut Vec<Issue>) {
+    let boxes = p
+        .fitting_zones
+        .iter()
+        .filter(|z| z.enabled && matches!(z.shape, FittingShape::Box { .. }))
+        .count();
+    let facets = (p.geometry.faces.len() + 12 * boxes) as u64;
+    let limit = u64::from(SOLVER_INT_MAX).saturating_sub(facets);
+    for (i, z) in p.fitting_zones.iter().enumerate() {
+        let Some(id) = z.solver_id else { continue };
+        // Above SOLVER_INT_MAX is solver_int_range already.
+        if !z.enabled || u64::from(id) <= limit || id > SOLVER_INT_MAX {
+            continue;
+        }
+        out.push(issue(
+            SOLVER_ID_MAPPING_INVALID,
+            format!("/fitting_zones/{i}/solver_id"),
+            format!(
+                "fitting zone '{}' pins solver id {id}: TetGen numbers the room's regions from one \
+                 above the largest fitting id, one per region, and this scene's {facets} facets \
+                 allow up to {facets} of them, so their ids could pass {SOLVER_INT_MAX}, the \
+                 largest C int the solvers read; pin it at most {limit}",
+                z.name
+            ),
+        ));
+    }
 }

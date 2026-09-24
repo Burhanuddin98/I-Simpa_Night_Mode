@@ -116,8 +116,9 @@ fn tutorial1_box(proj: &Path) -> Project {
 
 /// The project the corrected Elmia fixture holds: `tutorial_2.proj` imported, then named, with
 /// upstream's scene correction switched off, as for [`tutorial1_box`]. On this hall
-/// `preprocess.exe` gives up and saves nothing ("Mesh reparation has been aborted"), which the
-/// mesher refuses as `preprocess_aborted`.
+/// `preprocess.exe` gives up and saves nothing ("Mesh reparation has been aborted"); the mesher
+/// then meshes the `.poly` as written, as upstream's GUI does, and records the abort
+/// (`preprocess_aborted`, an outcome, not a refusal).
 fn elmia_corrected(proj: &Path) -> Project {
     let mut p = import_proj_file(proj).unwrap().project;
     assert!(

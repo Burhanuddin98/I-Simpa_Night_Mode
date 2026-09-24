@@ -600,8 +600,14 @@ fn tutorial_1() {
         simpa_core::schema::save(&imported.project, &run_project).unwrap();
         let (our_config, our_cbin) =
             export_config(&run_project, &dir.join(format!("export-{name}")), kind);
-        // Upstream's ids, with no map: every element's id the run's own.
-        for tag in ["recepteur_ponctuel", "recepteur_surfacique", "encombrement"] {
+        // Upstream's ids, with no map: every element's id the run's own, the source's included
+        // (which the solvers do not read, written as upstream writes it).
+        for tag in [
+            "recepteur_ponctuel",
+            "recepteur_surfacique",
+            "encombrement",
+            "source",
+        ] {
             let map = parity::id_map(&r.config, &our_config, tag);
             assert!(map.iter().all(|(a, b)| a == b), "{name}: {tag} ids {map:?}");
         }
@@ -835,15 +841,16 @@ const T3_POLY: (usize, &str) = (4_889, "74b8f831");
 const T3_MBIN: (usize, &str) = (338_528, "bc2f0904");
 
 /// Upstream's element id to our solver id, per `config.xml` element (`encombrement`,
-/// `recepteur_ponctuel`, `recepteur_surfacique_coupe`, ...): the explicit, recorded map through
-/// which upstream's files and ours are compared while a project does not keep upstream's ids
-/// (Burhan's open decision 1; `geometry::import::proj`, "Element ids").
+/// `recepteur_ponctuel`, `recepteur_surfacique_coupe`, ...), as a `.proj` import records it. Since
+/// imports pin upstream's ids (decision 13) it is the identity, which the bed asserts; nothing is
+/// compared through it.
 type IdMap = BTreeMap<&'static str, BTreeMap<i32, i32>>;
 
 /// The map a `.proj` import recorded (`ProjReport::upstream_ids`: upstream's id beside the entity
 /// it became), composed with the solver ids our export gives those entities
-/// (`SolverIds::assign`). Sources are left out: the solvers read no source id
-/// (`docs/formats/config_xml.md`). Panics unless each element's map is one-to-one.
+/// (`SolverIds::assign`). Sources are left out: they get no solver id, and their `source@id` is
+/// the pin itself (checked against upstream's config directly). Panics unless each element's map
+/// is one-to-one.
 fn recorded_ids(report: &ProjReport, project: &Project) -> IdMap {
     let solver = SolverIds::assign(project).unwrap();
     let mut out = IdMap::new();
@@ -1688,6 +1695,14 @@ fn tutorial_3() {
                 "run {i}: {element}"
             );
         }
+        // The six sources' ids too, which the solvers do not read, written as upstream writes
+        // them (1770 first, down to 974).
+        let sources = parity::id_map(&r.config, &our_config, "source");
+        assert_eq!(sources.len(), 6, "run {i}: {sources:?}");
+        assert!(
+            sources.iter().all(|(a, b)| a == b),
+            "run {i}: source ids {sources:?}"
+        );
         // config.xml, value by value, upstream's as it is: the ids equal with no map.
         let theirs = r.config.clone();
         let got = parity::solver_differences(&theirs, &our_config);
@@ -1759,6 +1774,9 @@ fn tutorial_3() {
             for x in &mut unpinned.surface_receivers {
                 x.solver_id = None;
             }
+            for x in &mut unpinned.sources {
+                x.solver_id = None;
+            }
             let unpinned_path = dir.join(format!("run{i}-unpinned.simpa"));
             simpa_core::schema::save(&unpinned, &unpinned_path).unwrap();
             let (unpinned_config, unpinned_cbin) = export_config(
@@ -1768,6 +1786,10 @@ fn tutorial_3() {
             );
             let unmapped = parity::solver_differences(&r.config, &unpinned_config);
             assert_eq!(unmapped.len(), got.len() + 8, "{unmapped:#?}");
+            assert!(
+                !unpinned_config.contains("<source id="),
+                "an unpinned source writes no id"
+            );
             assert!(byte_difference(&unpinned_cbin, &r.mesh_bytes).is_some());
             // Says no, the scene mesh: the room's faces alone, without the box's triangles.
             let room =

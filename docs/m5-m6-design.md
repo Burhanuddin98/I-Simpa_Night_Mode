@@ -269,9 +269,11 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
       saves nothing (`Mesh reparation has been aborted`, a file it could not read, or no
       statistics) upstream's GUI does not look and meshes the `.poly` it wrote
       (`projet_maillage.cpp:212-213`), and since 2026-09-24 so does the mesher, loudly: the
-      `.poly` as written is put back if anything else was left in its place and meshed; `mesh.json`
-      records `preprocess.outcome` `aborted`, its `aborted_reason`, and `files.poly` the input's
-      hash; `simpa mesh` prints a note on stderr whatever `--json` says; a run records
+      `.poly` as written, which such a run leaves as it was, byte for byte, is meshed (a file
+      changed or gone after it is `preprocess_output_invalid`, refused: upstream's program saves
+      nothing when it gives up, `Preprocess.cpp:100-106`, so a change is something it saved that
+      cannot be accounted for); `mesh.json` records `preprocess.outcome` `aborted`, its
+      `aborted_reason`, and `files.poly` the input's hash; `simpa mesh` prints a note on stderr whatever `--json` says; a run records
       `preprocess_aborted` as a warning. `preprocess_aborted` is now a recorded outcome, not a
       refusal (`docs/solver-contract.md`, "Preprocessing and the meshed volume"). The geometry
       check on that `.poly` is the gate before TetGen, as it is for what `preprocess.exe` saves:
@@ -346,7 +348,14 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
       (`solver_id_clash`). `Project::check_integrity` refuses a duplicate pin within a kind
       (`duplicate_solver_id`) and ops keep that; the validator reports a clash, and a fitting
       pinned to 0, as `solver_id_mapping_invalid`, which `simpa mesh` also refuses before
-      meshing (exit 2). Source pins reach no file: the solvers never read `source@id`.
+      meshing (exit 2). So is an enabled fitting zone pinned too high for TetGen's room ids above
+      it (at most `i32::MAX` minus the `.poly`'s facets; TetGen numbers them in a C `int`), which
+      the mesher's input refuses too (`input_invalid`); before that rule a fitting pinned to
+      `i32::MAX` passed `simpa validate` and made `simpa mesh` panic. A source's pin is written
+      as `source@id`, first, as upstream's GUI writes it (`e_scene_sources_source.h:114`), though
+      the solvers never read it: the one attribute of "Ignored by the solvers" the writer writes,
+      and only when pinned, so that an imported project's `config.xml` carries every id
+      upstream's does (tutorial 3's six, 974 to 1770).
     - **What follows.** TetGen's room regions follow from `maxattr + 1` as before: on tutorial 3,
       1930 and 2083 for the fittings and 2084 to 2086 for the room's parts. The mesh stamp
       (`validate::mesh_input_hash`, stamp version 2) now includes each enabled zone's solver id,
@@ -411,7 +420,9 @@ box welded to 8 corners, triangulated our way, markers after the room's (written
 (`rooms/tutorial1_box_fitting.simpa`, tutorial 3 as imported with the correction switched off,
 and the first four generated projects with one), each meshed both ways with the project's flags
 and `.var` (scratch test, not committed; transcript in
-`target/agents/fu-behaviour-scratch/item8.txt`):
+`target/agents/fu-fix-behaviour-scratch/item8-2.txt`, a rerun of
+`target/agents/fu-behaviour-scratch/item8.txt` with the region check against the geometry as
+written added):
 
 | Project | Decision 5 | Upstream's layout |
 |---|---|---|
@@ -423,19 +434,27 @@ and `.var` (scratch test, not committed; transcript in
 | tutorial 3, correction off | refused: our check, 22 self-intersecting pairs; TetGen 1.5.0 exit 3 | refused: our check, 20 pairs (the investigation's), 6 open edges, 2 unplaced components; TetGen 1.5.0 exit 3 |
 
 - **Every mesh the corpus produces would change**, in tetrahedra and nodes (the box faces'
-  diagonals differ), and in what SPPS meets at a zone's boundary: upstream's box faces are scene
-  faces, material 0 (the default material the `.cbin` gives them), where decision 5's are plain
-  tetrahedron-to-tetrahedron transitions. Which of the two the zone's physics wants is M8's
-  question (decision 5, "Physical equivalence is unproven").
-- **The checks do not stay strict as written.** `geometry::check` on the `.poly` as upstream
+  diagonals differ). In the `.mbin` upstream's box faces carry their `.cbin` markers (the scene
+  faces 12 to 23 of the box fixture, 56 tetrahedron faces), where decision 5's are plain
+  tetrahedron-to-tetrahedron faces, marker -1. To SPPS that is no difference for an interior
+  box, read in its source: it passes through a scene face that carries a fitting whenever a
+  tetrahedron lies behind it, as through a plain face (`CalculationCore.cpp:214-220`, with
+  `UTILISER_MAILLAGE_OPTIMISATION` defined at `sppsTypes.h:7`; the box faces' fitting is set
+  from the `.cbin`'s `idEn`, `coreinitialisation.cpp:437-446`). The difference is the mesh
+  itself; whether meshes that different give the same results is M8's question (decision 5,
+  "Physical equivalence is unproven").
+- **The checks would not stay strict as written.** `geometry::check` on the `.poly` as upstream
   writes it sees the 36 unwelded vertices as 12 loose triangles, internal sheets it tolerates,
   and reports one cell of the room's and the box's volume together (180 m³ for the box
   fixture), while TetGen merges coincident points and meshes the box as its own region: the
-  cells the check sees are not the ones TetGen meshes. The region check then refuses the mesh
-  (`region_volume_mismatch`, two regions in one cell), so no wrong mesh would pass, but only
-  because a later check disagrees with the gate. Welding the `.poly` before the check gives the
-  two cells TetGen meshes (179.0 and 1.0 m³), and our verification then passes every one of the
-  five meshes above; that is a change to what the check reads, not the file as written.
+  cells the check sees are not the ones TetGen meshes. Measured, each of the five meshes held
+  to the geometry as written: `region_volume_mismatch` and `fitting_region_misplaced` (two
+  regions in the one cell, and the box's cell not the box's volume). So no wrong mesh would
+  pass, but the gate before TetGen and the region check after it would disagree about the
+  same file, and every upstream-layout mesh of a box zone would be refused. Welding the `.poly`
+  before the check gives the two cells TetGen meshes (179.0 and 1.0 m³), and our verification
+  then passes every one of the five meshes; that is a change to what the check reads, not the
+  file as written.
 - **No upstream project meshes as upstream does because of it.** Tutorial 3, the one upstream
   project with a box zone, has the correction on; with it off, both layouts are refused and
   TetGen stops.
