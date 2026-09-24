@@ -48,3 +48,29 @@ the last on 18 Jan 2026, and no code commits since. The last stable release is v
   2. then M8's physics bed against analytic references
 - **Also:** compare the 1.3.4 and 1.4.0 solver binaries on identical inputs, and report any
   difference.
+
+## 05:13 on 09-24: M6(a), and tutorial 3
+
+**The question:** gate M6(a) wanted exactly 0 particles lost on the tutorial box. Our box mesh is
+byte-identical to upstream's own 2019 mesh, and both lose 1 particle in 10,000 at 2 kHz.
+
+**Burhan chose:**
+
+> No worse than upstream (Recommended)
+
+M6(a) now passes when our loss per band is no higher than on upstream's own mesh of the same
+room, with the same seed and config. This is how M6(c) already judges the hall.
+
+**The question:** tutorial 3's scene is refused by our geometry check and our `.proj` importer.
+Upstream runs `preprocess.exe`. Should we add upstream's preprocessing?
+
+**Burhan, verbatim:**
+
+> i think we should investigate tutorial 3
+
+He decided nothing on preprocessing yet: tutorial 3 is investigated first.
+
+**Also, Claude's own correction.** Decision 1, writing the room as idVolume 0, is to be reversed
+so that the room keeps TetGen's numbering, as upstream does. The assembly's parity bed found that
+decision 1 changes SPPS's results when fittings exist: 24 of 24 files differ on tutorial 3, and
+0 differ with TetGen's numbering. Burhan was told at 05:03 and did not object.
