@@ -27,7 +27,7 @@
     ]
   },
   "observed": {
-    "source": "spps.exe sha256 cacbbee25d70e6ff, run by runsolvers.ps1",
+    "source": "spps.exe sha256 22b55a0fcec17e6d, run by runsolvers.ps1",
     "exit_code": "0xC0000005",
     "status": "CRASH",
     "codes": [
