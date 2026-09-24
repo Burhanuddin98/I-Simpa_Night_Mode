@@ -26,7 +26,7 @@ use std::path::Path;
 use simpa_core::config_xml::{
     GlFrame, SolverKind, band_levels_written, import_upstream_with_mesh, scene_mesh, write,
 };
-use simpa_core::formats::cbin;
+use simpa_core::formats::{cbin, poly};
 use simpa_core::geometry::import::import_proj;
 use simpa_core::geometry::import::proj::read_scene_mesh;
 use simpa_core::geometry::import::zip::Archive;
@@ -40,6 +40,7 @@ const TUTORIAL2: &str = r"src/isimpa/resources/doc/tutorial/tutorial 2/tutorial_
 const TUTORIAL3: &str = r"src/isimpa/resources/doc/tutorial/tutorial 3/tutorial_3.proj";
 const INDUSTRIAL: &str = r"src/isimpa/resources/doc/tutorial/tutorial 3/Industrial.proj";
 const TUTORIAL1_SIMPA: &str = "tests/fixtures/projects/tutorial1.simpa";
+const TUTORIAL1_BOX: &str = "tests/fixtures/rooms/tutorial1_box.simpa";
 
 // ---------------------------------------------------------------------------------------------
 // Upstream's run folders
@@ -142,6 +143,42 @@ fn what_the_tutorials_hold() {
     );
 }
 
+/// Upstream's GUI writes each list newest element first. It keeps a list's elements in the order
+/// it created or loaded them, which is the order of their session ids (a project is loaded sorted
+/// by id, `element.cpp:159`; a new element is appended), and it writes each one with
+/// `new wxXmlNode(parent, ...)`, which puts the new node first among its parent's children. So in
+/// every stored run each list of two or more is in strictly descending id: sources, point
+/// receivers, surface receivers with cutting planes, fitting zones. The refusal: ascending id,
+/// the order of a writer that writes each list first to last, matches none of those lists.
+#[test]
+fn upstream_writes_every_list_newest_element_first() {
+    let mut lists = 0;
+    for rel in [TUTORIAL1, TUTORIAL3] {
+        for run in &tutorial(rel).runs {
+            let doc = roxmltree::Document::parse(&run.config).unwrap();
+            for parent in ["sources", "recepteursp", "recepteurss", "encombrement_enum"] {
+                let ids: Vec<i64> = doc
+                    .descendants()
+                    .filter(|n| n.has_tag_name(parent))
+                    .flat_map(|p| p.children().filter(|c| c.is_element()))
+                    .map(|n| n.attribute("id").unwrap().parse().unwrap())
+                    .collect();
+                if ids.len() < 2 {
+                    continue;
+                }
+                lists += 1;
+                let descending = ids.windows(2).all(|w| w[0] > w[1]);
+                let ascending = ids.windows(2).all(|w| w[0] < w[1]);
+                assert!(descending, "{} {parent}: {ids:?}", run.folder);
+                assert!(!ascending, "{} {parent}: {ids:?}", run.folder);
+            }
+        }
+    }
+    // Tutorial 1: its two point receivers, in each of 2 runs. Tutorial 3: 6 sources, 5 point
+    // receivers and 2 fitting zones, in each of 3 runs.
+    assert_eq!(lists, 2 + 3 * 3);
+}
+
 // ---------------------------------------------------------------------------------------------
 // config.xml: what the solvers read
 
@@ -236,15 +273,13 @@ fn by_design(solver: SolverKind) -> Vec<String> {
         "type_surface[id=0]: only upstream's".to_string(),
     ];
     match solver {
+        // Optional attributes upstream's GUI never writes, written at the solver's default (1).
         SolverKind::Spps => e.extend([
-            // Ours is empty when no source has a directivity file; the solver reads it only for
-            // one that has.
-            "simulation@directivities_directory: upstream 'loudspeakers\\', ours ''".to_string(),
-            // Optional attributes upstream leaves out, written at the solver's default (1).
             "simulation@save_receivers_intersection: only ours (1)".to_string(),
             "simulation@save_surface_intersection: only ours (1)".to_string(),
         ]),
-        // Upstream's TCR config lacks it, which prints `Xml Property ... doesn't exist !`.
+        // Upstream's TCR config lacks it: TCR prints `Xml Property ... doesn't exist !` and reads
+        // "", the value ours writes.
         SolverKind::Tcr => e.push("simulation@directivities_directory: only ours ()".to_string()),
     }
     e
@@ -312,6 +347,107 @@ fn attr_in<'a>(xml: &'a str, element_start: &str, attr: &str) -> &'a str {
     let a = at + xml[at..].find(&key).expect("attribute") + key.len();
     let b = a + xml[a..].find('"').unwrap();
     &xml[a..b]
+}
+
+/// `xml` without the attribute `attr` of the first element matching `element_start`.
+fn drop_attr(xml: &str, element_start: &str, attr: &str) -> String {
+    let at = xml.find(element_start).expect("element");
+    let key = format!(" {attr}=\"");
+    let a = at + xml[at..].find(&key).expect("attribute");
+    let b = a + key.len() + xml[a + key.len()..].find('"').unwrap() + 1;
+    format!("{}{}", &xml[..a], &xml[b..])
+}
+
+/// The comparison itself, on our tutorial-1 SPPS config against itself: one value of each kind the
+/// solver reads, changed in one place, gives exactly one line; so do an attribute and an element
+/// left out. Two changes the solver cannot see give none: a real printed the way upstream prints
+/// it (its `f32` at 15 significant digits, upstream's own text for that value), and a source's
+/// band entries in the other order (the solvers sort them, `cxml.cpp:130-156`).
+#[test]
+fn the_comparison_gives_one_line_per_value_the_solver_reads_differently() {
+    let t = tutorial(TUTORIAL1);
+    let project = import_proj(&t.bytes).unwrap().project;
+    let run = t
+        .runs
+        .iter()
+        .find(|r| r.solver == SolverKind::Spps)
+        .unwrap();
+    let wd = working_folder(&run.config);
+    let ours = write(&project, SolverKind::Spps, None, Path::new(&wd)).unwrap();
+    assert_eq!(solver_differences(&ours, &ours), Vec::<String>::new());
+    let against = |edited: &str| solver_differences(&ours, edited);
+
+    // An int.
+    let n = attr_in(&ours, "<simulation ", "nbparticules");
+    let m = (n.parse::<i64>().unwrap() + 1).to_string();
+    assert_eq!(
+        against(&edit_attr(&ours, "<simulation ", "nbparticules", &m)),
+        vec![format!("simulation@nbparticules: upstream {n}, ours {m}")]
+    );
+    // A real, one f32 step.
+    let h = attr_in(&ours, "<condition_atmospherique ", "humidite");
+    let up = next_float_text(h);
+    assert_eq!(
+        against(&edit_attr(
+            &ours,
+            "<condition_atmospherique ",
+            "humidite",
+            &up
+        )),
+        vec![format!(
+            "condition_atmospherique@humidite: upstream {}, ours {up}",
+            h.parse::<f64>().unwrap() as f32
+        )]
+    );
+    // A string.
+    assert_eq!(
+        against(&edit_attr(&ours, "<simulation ", "modelName", "Mesh.cbin")),
+        vec!["simulation@modelName: upstream 'mesh.cbin', ours 'Mesh.cbin'".to_string()]
+    );
+    // An attribute left out.
+    let seed = attr_in(&ours, "<simulation ", "random_seed");
+    assert_eq!(
+        against(&drop_attr(&ours, "<simulation ", "random_seed")),
+        vec![format!("simulation@random_seed: only upstream's ({seed})")]
+    );
+    // An element left out: the last point receiver, with its band entries (not listed again).
+    let a = ours.rfind("<recepteur_ponctuel ").unwrap();
+    let close = "</recepteur_ponctuel>";
+    let b = a + ours[a..].find(close).unwrap() + close.len();
+    let fewer = format!("{}{}", &ours[..a], &ours[b..]);
+    assert_eq!(
+        against(&fewer),
+        vec!["recepteursp/recepteur_ponctuel[1]: only upstream's".to_string()]
+    );
+
+    // No line: upstream's own text for the receiver radius, 15 significant digits of its f32.
+    let theirs = attr_in(&run.config, "<simulation ", "rayon_recepteurp");
+    let mine = attr_in(&ours, "<simulation ", "rayon_recepteurp");
+    assert_ne!(theirs, mine, "the two texts differ");
+    assert_eq!(
+        against(&edit_attr(
+            &ours,
+            "<simulation ",
+            "rayon_recepteurp",
+            theirs
+        )),
+        Vec::<String>::new()
+    );
+    // No line: the source's band entries last first.
+    let a = ours.find("<source ").unwrap();
+    let b = a + ours[a..].find("</source>").unwrap();
+    let mut lines: Vec<&str> = ours[a..b].lines().collect();
+    let bands: Vec<usize> = (0..lines.len())
+        .filter(|&i| lines[i].trim_start().starts_with("<bfreq "))
+        .collect();
+    assert_eq!(bands.len(), project.bands.len());
+    let reversed: Vec<&str> = bands.iter().rev().map(|&i| lines[i]).collect();
+    for (&i, l) in bands.iter().zip(reversed) {
+        lines[i] = l;
+    }
+    let swapped = format!("{}{}{}", &ours[..a], lines.join("\n"), &ours[b..]);
+    assert_ne!(swapped, ours);
+    assert_eq!(against(&swapped), Vec::<String>::new());
 }
 
 /// Tutorial 1, the `.proj` imported the way a user opens it, written for each of upstream's two
@@ -415,9 +551,7 @@ fn tutorial3_config_written_back_is_upstreams_value_for_value() {
             println!("  {d}");
         }
         let mut expected = vec![
-            // Read only for source types 1 and 5; every source here is omni.
             "other:subdomains: only upstream's".to_string(),
-            "simulation@directivities_directory: upstream 'loudspeakers\\', ours ''".to_string(),
             "simulation@save_receivers_intersection: only ours (1)".to_string(),
             "simulation@save_surface_intersection: only ours (1)".to_string(),
             // Ids by project order: receivers 155..791 are our 0..4, written last first; the
@@ -432,6 +566,7 @@ fn tutorial3_config_written_back_is_upstreams_value_for_value() {
                 4 - i
             ));
         }
+        // Read only for source types 1 and 5; every source here is omni.
         for i in 0..6 {
             for a in ["u", "v", "w"] {
                 expected.push(format!("sources/source[{i}]@{a}: only upstream's (1)"));
@@ -470,20 +605,8 @@ fn tutorial3_config_written_back_is_upstreams_value_for_value() {
 /// [`tutorial3_config_written_back_is_upstreams_value_for_value`]): material 100 gets reflection
 /// law 0 in every band, and material 101 a 0 dB loss at 125 Hz, like its other absorbing bands.
 fn importable(xml: &str) -> String {
-    let material = |xml: &str, id: &str| -> (usize, usize) {
-        let start = xml
-            .find(&format!("<type_surface id=\"{id}\""))
-            .expect("material");
-        (start, start + xml[start..].find("</type_surface>").unwrap())
-    };
-    let (a, b) = material(xml, "100");
-    let xml = format!(
-        "{}{}{}",
-        &xml[..a],
-        xml[a..b].replace("loi=\"2\"", "loi=\"0\""),
-        &xml[b..]
-    );
-    let (a, b) = material(&xml, "101");
+    let xml = one_law(xml);
+    let (a, b) = material_span(&xml, "101");
     let band = "<bfreq freq=\"125\" absorb=\"1\" diffusion=\"0\" loi=\"0\"/>";
     assert_eq!(xml[a..b].matches(band).count(), 1, "material 101 at 125 Hz");
     format!(
@@ -495,6 +618,22 @@ fn importable(xml: &str) -> String {
         ),
         &xml[b..]
     )
+}
+
+/// Tutorial 3's config with the first edit only: material 100 gets reflection law 0 in every band.
+fn one_law(xml: &str) -> String {
+    let (a, b) = material_span(xml, "100");
+    let changed = xml[a..b].replace("loi=\"2\"", "loi=\"0\"");
+    assert_ne!(changed, xml[a..b], "material 100 has law 2 somewhere");
+    format!("{}{changed}{}", &xml[..a], &xml[b..])
+}
+
+/// The byte range of `<type_surface id="{id}" ...>` up to its closing tag.
+fn material_span(xml: &str, id: &str) -> (usize, usize) {
+    let start = xml
+        .find(&format!("<type_surface id=\"{id}\""))
+        .expect("material");
+    (start, start + xml[start..].find("</type_surface>").unwrap())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -799,6 +938,44 @@ fn tutorial1_scene_mesh_from_its_config_is_upstreams_byte_for_byte() {
         assert_eq!(
             face_differences(&run.mesh, &flipped, &id_rs, &BTreeMap::new()).len(),
             1
+        );
+    }
+}
+
+/// The mesher's `.poly` takes its vertices from [`scene_mesh`], as upstream's `_SavePOLY` takes
+/// them through the same round trip (`Objet3D_maillage.cpp:942`). So the tutorial box's
+/// `scene_mesh.poly` and `.var`, from the room fixture and from `tutorial_1.proj` imported, are
+/// the files upstream's GUI wrote in 2019 (`tests/fixtures/upstream/tutorial1/tetgen/`), byte for
+/// byte. The refusal: the vertices only narrowed to `f32`, as before the round trip, give a
+/// different file (`0` where upstream's has `-0`).
+#[test]
+fn the_box_poly_from_the_scene_mesh_is_upstreams_byte_for_byte() {
+    let theirs = |name: &str| {
+        std::fs::read(support::repo_file(&format!(
+            "tests/fixtures/upstream/tutorial1/tetgen/{name}"
+        )))
+        .unwrap()
+    };
+    let (poly_2019, var_2019) = (theirs("scene_mesh.poly"), theirs("scene_mesh.var"));
+    let from_proj = import_proj(&tutorial(TUTORIAL1).bytes).unwrap().project;
+    for (what, project) in [
+        ("rooms/tutorial1_box.simpa", load_project(TUTORIAL1_BOX)),
+        ("tutorial_1.proj", from_proj),
+    ] {
+        let input = simpa_core::mesh::project_input(&project).unwrap();
+        assert!(poly::write(&input.poly) == poly_2019, "{what}: .poly");
+        assert!(input.var.as_deref() == Some(&var_2019[..]), "{what}: .var");
+        let mut plain = input.poly.clone();
+        for (v, p) in plain
+            .model_vertices
+            .iter_mut()
+            .zip(&project.geometry.vertices)
+        {
+            *v = p.to_array().map(|c| f64::from(c as f32));
+        }
+        assert!(
+            poly::write(&plain) != poly_2019,
+            "{what}: without the round trip"
         );
     }
 }

@@ -43,7 +43,7 @@ fn tutorial1_from_upstream() -> Project {
 
 /// Regenerates the fixture. Run it on purpose: `cargo test --test config_xml_import -- --ignored`.
 #[test]
-#[ignore]
+#[ignore = "rewrites tests/fixtures/projects/tutorial1.simpa; run it on purpose to regenerate it"]
 fn write_tutorial1_fixture() {
     schema::save(&tutorial1_from_upstream(), &repo_file(TUTORIAL1)).unwrap();
 }
@@ -277,12 +277,9 @@ fn the_solver_reads_the_same_values_as_from_upstreams_configs() {
                 "sources/source[0]@w: only upstream's".to_string(),
             ];
             e.extend((0..27).map(|i| format!("type_surface[id=0]/bfreq[{i}]: only upstream's")));
-            if solver == SolverKind::Spps {
-                e.push(
-                    "simulation@directivities_directory: upstream 'loudspeakers\\', ours ''".into(),
-                );
-            } else {
-                // Upstream's TCR config lacks it, which prints `Xml Property ... doesn't exist`.
+            // SPPS: both write upstream's `loudspeakers\`. Upstream's TCR config lacks it, which
+            // prints `Xml Property ... doesn't exist` and reads "", the value ours writes.
+            if solver == SolverKind::Tcr {
                 e.push("simulation@directivities_directory: only ours".into());
             }
             e.sort();

@@ -188,7 +188,9 @@ with a tolerance, `bin.h:60-62`.)
 **What ours writes.** `config_xml::scene_mesh`: the project's faces in project order, and its
 vertices narrowed to `f32` and then taken through the same round trip in the scene's frame
 (`config_xml::GlFrame`: upstream's `UnitizeVar`, computed with upstream's own `f32` and `f64`
-steps). A project imported from a `.proj` keeps the scene's face order.
+steps). A project imported from a `.proj` keeps the scene's face order. The mesher's `.poly`
+takes its vertices from it (`mesh::project_input`), as upstream's `_SavePOLY` takes them through
+the same round trip (`Objet3D_maillage.cpp:942`).
 
 **Measured** (`crates/simpa-core/tests/parity_inputs.rs`, against every run folder stored in
 upstream's tutorials at 929a5c8: tutorial 1's SPPS and TCR runs, tutorial 3's three SPPS runs;
@@ -200,11 +202,12 @@ tutorial 2 and `Industrial.proj` store none):
 | `tutorial_1.proj` imported (`simpa import-proj`) | All 12 faces equal corner for corner (`f32` bits, in face order a, b, c), every `idMat` equal, `idRs` 3503 is our 0. Our vertex list is the welded one: 8 vertices against upstream's 36 (one copy per face), holding exactly upstream's 8 distinct vertices |
 | tutorial 3 (its config, with the two edits of `config_xml.md`'s parity section, and its `.cbin`, imported) | All 76 vertices and 100 faces equal bit for bit, the drawn box's 12 faces included; `idEn` 2083 and 1930 are our 3 and 2 |
 | upstream's own `sceneMesh.bin` of tutorial 3, through `GlFrame` | The run's 40 scene vertices, bit for bit |
+| `tests/fixtures/rooms/tutorial1_box.simpa`, and `tutorial_1.proj` imported: the mesher's input | `scene_mesh.poly` and `scene_mesh.var` byte-identical to the ones upstream's GUI wrote in 2019 (`tests/fixtures/upstream/tutorial1/tetgen/`) |
 
 Each check has its refusal in the same test: without the round trip, 18 corners of tutorial 1
-differ (`+0` where upstream has `-0`); one vertex one `f32` step off is reported at every corner
-that names it; one face's `idMat` changed is reported; an id left unmapped is reported; a frame one
-`f32` step off in scale moves 4 of tutorial 3's 40 vertices.
+differ (`+0` where upstream has `-0`) and the box's `.poly` differs; one vertex one `f32` step off
+is reported at every corner that names it; one face's `idMat` changed is reported; an id left
+unmapped is reported; a frame one `f32` step off in scale moves 4 of tutorial 3's 40 vertices.
 
 **What still differs, why, and what the solver sees.**
 

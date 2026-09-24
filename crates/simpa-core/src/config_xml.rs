@@ -21,9 +21,14 @@
 //!   elements and attributes are written in a fixed order, and every spectrum in the band set's
 //!   ascending order.
 //! - **Lists last item first,** as upstream's GUI writes them: sources, point receivers, surface
-//!   receivers and fitting zones. The solvers number sources and receivers by their position in
-//!   the file, so this is part of their input (`docs/formats/config_xml.md`, "Parity with
-//!   upstream's GUI"). [`import_upstream`] reverses them back into project order.
+//!   receivers and fitting zones. It holds a list in the order its elements were loaded or
+//!   created and writes each one in front of the last, so its lists come out newest first. The
+//!   solvers number sources and receivers by their position in the file, so this is part of
+//!   their input (`docs/formats/config_xml.md`, "Parity with upstream's GUI").
+//!   [`import_upstream`] reverses them back into project order.
+//! - **`directivities_directory`** is upstream's [`names::DIRECTIVITY_DIR`] folder for every
+//!   SPPS run, as its GUI writes it; for TCR, whose config upstream writes without it, only when
+//!   a source has a directivity file, and `""` (the value TCR reads when it is absent) otherwise.
 //! - **Numbers as the C locale reads them.** A real is the shortest decimal that reads back to the
 //!   same `f64` bits (never more than C++'s `max_digits10`, 17 significant digits), with `.` as
 //!   the decimal point, no exponent and no grouping; `atof` then reads exactly that `f64`, and the
@@ -140,8 +145,9 @@ pub mod names {
     pub const POINT_RECEIVER_ADVANCED_FILE: &str = "Advanced sound level.gap";
     /// `simulation@cumul_filename`.
     pub const TOTAL_ENERGY_FILE: &str = "Total energy.recp";
-    /// `simulation@directivities_directory`, when a source uses a directivity file.
-    pub const DIRECTIVITY_DIR: &str = "directivities";
+    /// `simulation@directivities_directory`: upstream's `CONST_REPORT_DIRECTIVITIES_FOLDER_PATH`
+    /// (`appconfig.cpp:61`), written for every SPPS run and for a TCR run with a directivity file.
+    pub const DIRECTIVITY_DIR: &str = "loudspeakers";
     /// SPPS `simulation@stats_filename`.
     pub const SPPS_STATS_FILE: &str = "SPPS particle statistics.gabe";
     /// SPPS `simulation@particules_directory`.

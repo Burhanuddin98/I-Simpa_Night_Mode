@@ -207,7 +207,7 @@ to read `<wd>` as a mesh and exits 0; TCR exits 1 (inferred from
 | `simulation@tetrameshFileName` | string, file name | both | The `.mbin`. Unreadable: `Unable to read the tetrahedalization of the scene mesh file, calculation canceled.` SPPS exits 0, TCR exits 1 (VERIFIED S `tcr_nomesh`) | always | `base_core_configuration.cpp:91`; `coreinitialisation.cpp:450-458`; `sppsNantes.cpp:316-317`; `main_tc.cpp:78-79` |
 | `simulation@pasdetemps` | real, s | both | Time step. Step count = (int)ceil(duree/pasdetemps). Missing in SPPS: a message, then `0xC0000409` after 13 s (VERIFIED P2 `no_dt`). TCR adds `pasdetemps="1.00"` itself, but an attribute we write comes first and wins: TCR then sizes its surface-receiver arrays by it (VERIFIED P2 `tcr_dt`: same files and sizes, 0.7 s instead of 0.1 s) | SPPS | `base_core_configuration.cpp:92-94`; `ctr/core_configuration.cpp:15-16` |
 | `simulation@duree_simulation` | real, s | both | Simulated duration. Missing: 0 steps. TCR adds `"1.00"` as above | SPPS | `base_core_configuration.cpp:93-94`; `ctr/core_configuration.cpp:16` |
-| `simulation@directivities_directory` | string, folder prefix | both | The directivity file path is wd + this + `source@directivity_file`. Missing: a message and `""`. **Upstream's GUI writes it only for SPPS** (`e_core_sppscore.h:213-217`), so its own TCR config prints `Xml Property directivities_directory doesn't exist !` (VERIFIED P1) | always (`""` when no source uses a directivity file) | `base_core_configuration.cpp:96, 162-164` |
+| `simulation@directivities_directory` | string, folder prefix | both | The directivity file path is wd + this + `source@directivity_file`. Missing: a message and `""`. **Upstream's GUI writes it only for SPPS** (`e_core_sppscore.h:213-217`), so its own TCR config prints `Xml Property directivities_directory doesn't exist !` (VERIFIED P1) | always (SPPS `loudspeakers\`, as upstream's GUI writes it; TCR `""` when no source uses a directivity file) | `base_core_configuration.cpp:96, 162-164` |
 | `simulation@recepteurss_directory` | string, folder with a trailing separator | both | The folder for surface-receiver and cutting-plane files: `<f> Hz\` and `Global\` are appended. SPPS creates it and `Global\` even with no surface receivers (`sppsNantes.cpp:408-411`) | always | `base_core_configuration.cpp:78`; `sppsNantes.cpp:186-192, 408-413`; `TC_CalculationCore.cpp:302, 312, 321-323` |
 | `simulation@recepteurss_filename` | string, file name | both | The surface-receiver RSBIN file (`.csbin`), per band and in `Global\` | always | `base_core_configuration.cpp:79` |
 | `simulation@recepteurss_cut_filename` | string, file name | both, *optional* | The cutting-plane RSBIN file. Missing: `rs_cut.csbin`, with no message. Like the other *optional* attributes, it has a real default | always | `base_core_configuration.cpp:81-84` |
@@ -421,23 +421,38 @@ entries by their rank after the solvers' sort). An attribute neither in the refe
 in "Ignored by the solvers" fails the test, so nothing is skipped unseen. The scene mesh is
 compared in `docs/formats/cbin.md`, "Parity with upstream's GUI".
 
-**Three rules of the writer that come from this comparison** (2026-09-24):
+**Four rules of the writer that come from this comparison** (2026-09-24):
 
 1. **Lists are written last item first:** sources, point receivers, surface receivers and cutting
-   planes, fitting zones. Upstream's GUI creates each child with `new wxXmlNode(parent, ...)`,
+   planes, fitting zones. Upstream's GUI writes each child with `new wxXmlNode(parent, ...)`,
    which puts it first among its parent's children (`e_scene_sources_source.h:113`,
    `e_scene_recepteursp_recepteur.h:111`, `e_scene_recepteurss_recepteur.h:119`,
    `e_scene_recepteurss_recepteurcoupe.h:204`, `e_scene_encombrements_encombrement_model.h:150`,
-   `e_scene_encombrements_encombrement_cuboide.h:354`). Measured: tutorial 3's project lists its
-   receivers 155 to 791 and its sources 974 to 1770, and each of its configs lists them 791 to 155
-   and 1770 to 974, across both source groups. The order is solver input: sources and receivers
-   are numbered by their position in the file, a seeded SPPS run draws its particles source by
-   source in that order, and whether the `Global` surface-receiver file is written depends on the
-   first receiver (`baseReportManager.cpp:393, 432`). A project keeps the GUI's own order (the
-   `.proj` import reads the project file in order; `import_upstream` reverses the config's
-   lists), so writing it gives upstream's order. Band entries are still written ascending;
-   upstream's come descending for the same reason, and the solvers sort them
-   (`cxml.cpp:130-156`).
+   `e_scene_encombrements_encombrement_cuboide.h:354`), while it walks its elements in the order
+   it holds them: the order it loaded them in, sorted by their id in the project file
+   (`element.cpp:159`), with a new element appended (`element.cpp:850-852`). So each list comes
+   out newest element first. Measured (`upstream_writes_every_list_newest_element_first`): in
+   all five runs, each of the 11 lists of two or more is in strictly descending id, across
+   tutorial 3's two source groups too. The order is solver input: sources and receivers are
+   numbered by their position in the file, a seeded SPPS run draws its particles source by source
+   in that order, and whether the `Global` surface-receiver file is written depends on the first
+   receiver (`baseReportManager.cpp:393, 432`). A project holds the GUI's own order: the `.proj`
+   import reads the project file in document order, which ascends by id in all four of upstream's
+   tutorial projects, and `import_upstream` reverses the config's lists. Band entries are still
+   written ascending; upstream's come descending for the same reason, and the solvers sort them
+   (`cxml.cpp:130-133`).
+   - **Not reproduced:** when the GUI fills its tree it also sorts each level by label
+     (`element.cpp:516-519`), but that comparison reads freed memory: `WXSTRINGTOCHARPTR` is
+     `(const char*)wxstr.mb_str()` (`isimpa/UtfConverter.h:37`), a pointer into a temporary buffer that
+     is freed before `alphanum_comp` reads it (`element.cpp:568-577`). What order that sort
+     leaves is not defined. In all five runs the lists come out in load order, which is also
+     label order there, so the runs cannot tell the two apart.
+   - **Open, in the `.proj` import:** a project file saved again after a new element was added
+     lists that element first (the incremental save prepends a new node, `element.cpp:600-614`),
+     and upstream's load moves it back by id. That sort (`element.cpp:64-104`) compares every
+     node with the first node's id only, so it does not always finish sorted: `10, 30, 20` stays
+     as it is. Our import reads document order, which equals upstream's load order whenever the
+     document ascends by id. Each of upstream's four tutorial projects does.
 2. **White and pink noise on upstream's 27 bands are computed as upstream's GUI computes them:**
    in `f32`, from its reference levels rounded to 2 decimals (`config_xml::band_levels_written`;
    `E_Property_Freq::LoadLwFromBdd` and `SetGlobalLevel`, `generic_element/e_property_freq.cpp`).
@@ -449,47 +464,60 @@ compared in `docs/formats/cbin.md`, "Parity with upstream's GUI".
    particle hitting such a band is absorbed only when its draw is exactly 0, and then transmits
    if the band has a loss (`CalculationCore.cpp:288-292`); without the attribute it never does,
    as with upstream's input.
+4. **SPPS gets `directivities_directory="loudspeakers\"` in every run,** upstream's
+   `CONST_REPORT_DIRECTIVITIES_FOLDER_PATH` (`appconfig.cpp:61`, `e_core_sppscore.h:217`), and a
+   run's directivity files go in that folder. Until 2026-09-24 the writer wrote `""` when no
+   source had a file. SPPS reads and stores the value (`base_core_configuration.cpp:96`), though
+   it uses it only for a type-5 source. TCR keeps `""` when no source has a file: see below.
 
 **Measured** on the five runs, with our config written into upstream's own run folder so that
 `workingdirectory` is equal:
 
 | Our project | Values the solver reads differently |
 |---|---|
-| `tutorial_1.proj` imported, SPPS run | 17 lines, all of the kinds listed below: the ids, the stored directions, and the by-design lines |
-| `tutorial_1.proj` imported, TCR run | 15 lines, the same kinds |
-| tutorial 3's config and `.cbin` imported (with the two edits below) and written back, each run | 37 lines: the ids, the by-design lines, and the 7 band values of the two edits |
+| `tutorial_1.proj` imported, SPPS run | 16 lines: 3 ids, 6 stored directions and 7 by-design lines, all listed below |
+| `tutorial_1.proj` imported, TCR run | 15 lines: 3 ids, 6 stored directions and 6 by-design lines |
+| tutorial 3's config and `.cbin` imported (with the two edits below) and written back, each run | 36 lines: 8 ids, 21 by-design lines and the 7 band values of the two edits |
 | `tests/fixtures/projects/tutorial1.simpa` (tutorial 1's config and `.cbin` imported) | the ids and the by-design lines (`config_xml_import.rs`); and a same-seed run of ours beside upstream's own config gives every output file identical, the `.csbin` files once decoded with the receiver's id mapped (`config_xml_solver.rs`, `tutorial1_runs_clean_and_matches_upstreams_own_configuration`) |
 
-Each comparison has its refusal in the same test: one `f32` step on one band of one value, a
-changed temperature, a changed transmission loss and the receivers in the other order are each
-reported.
+Every expected line is listed in the test, so a new difference fails it and so does one that
+goes away. Each comparison has its refusal in the same test: one `f32` step on one band of one
+value, a changed temperature, a changed transmission loss and the receivers in the other order
+are each reported. The comparison itself has its own test
+(`the_comparison_gives_one_line_per_value_the_solver_reads_differently`): an int, a real one
+`f32` step off, a string, an attribute left out and an element left out each give exactly one
+line, while upstream's 15-digit text for a real and band entries in the other order give none.
 
 **What still differs, why, and what the solver does with it.**
 
 - **Ids.** `recepteur_ponctuel@id`, `recepteur_surfacique@id`, `recepteur_surfacique_coupe@id`
   and `encombrement@id` are ours, assigned from project order (`config_xml.rs`, "Solver ids"):
   tutorial 1's receivers 3669 and 3510 are our 1 and 0 and its scene receiver 3503 our 0;
-  tutorial 3's fitting zones 2083 and 1930 are our 3 and 2. The project has nowhere to hold the
-  GUI's element ids. A point receiver's id is only stored in GUI mode. A scene receiver's and a
-  fitting's are matched with the `.cbin` and `.mbin`, which carry ours, and a scene receiver's id
-  is also written into its `.csbin` output (`xmlIndex`).
+  tutorial 3's fitting zones 2083 and 1930 are our 3 and 2. Upstream's are its GUI's session
+  counters, renumbered at every load, and a project has nowhere to hold them. A point receiver's
+  id is only stored in GUI mode. A scene receiver's and a fitting's are matched with the `.cbin`
+  and `.mbin`, which carry ours, so every face gets the same receiver and fitting. A scene
+  receiver's id is also written into its `.csbin` output (`xmlIndex`), where 3503 reads 0.
 - **Point-receiver directions (tutorial 1).** Upstream's GUI computes a receiver's direction when
   its position changes, and holds it at full precision for the rest of that session, which is
   when these runs were written (`-0.436852067708969`). Its project file keeps 6 significant
   digits (`-0.436852`), and the direction is recomputed only on a move
   (`e_scene_recepteursp_recepteur.h:195-219`), so upstream itself writes the 6-digit value after
-  reopening the project (inferred). The import reads what the file holds. The two are up to 5e-7
-  apart in a unit vector, which SPPS uses only in its lateral-energy terms
+  reopening the project (inferred; the GUI was not run). The import reads what the file holds.
+  The two are up to 5e-7 apart in a unit vector, which SPPS uses only in its lateral-energy term
   (`spps/reportmanager.cpp:222`).
 - **Only upstream's:** `<subdomains>` (ignored); `source@u`, `@v` and `@w` on an omni source (read
-  only for types 1 and 5); `type_surface` 0, the GUI's default material, when no face uses it (the
-  solvers look material 0 up once, `coreinitialisation.cpp:410`, and use it only for a face with
-  `idMat` 0).
-- **`directivities_directory`:** upstream's SPPS config holds `loudspeakers\`, ours `""` when no
-  source has a directivity file; it is read only for a type-5 source. Upstream's TCR config lacks
-  it, and TCR prints `Xml Property directivities_directory doesn't exist !`.
+  only for types 1 and 5, `base_core_configuration.cpp:135-139`); `type_surface` 0, the GUI's
+  default material, when no face uses it (the solvers look material 0 up once,
+  `coreinitialisation.cpp:410`, and use it only for a face with `idMat` 0).
+- **`directivities_directory` in TCR:** upstream's TCR config lacks it, so TCR prints
+  `Xml Property directivities_directory doesn't exist !` and reads `""` (`cxml.cpp:108-118`).
+  Ours writes `""`, the same value, without that line, which the contract fails
+  (`xml_property_missing`). With a directivity file TCR gets `loudspeakers\`, where the file is;
+  upstream's TCR would look for it in the run folder itself.
 - **Only ours:** `save_surface_intersection` and `save_receivers_intersection`, at 1, the value
-  the solver takes when they are absent.
+  SPPS takes when they are absent (`spps/core_configuration.cpp:50-59`). Upstream's
+  GUI never writes them.
 - **Tutorial 3 needs two edits to become a project.** Its `.proj` is refused for its fitting zones
   (`geometry::import`), and its config imports only with these:
   - material 100 has reflection law 2 (Lambert) in 6 of 27 bands and 0 in the others; a project
@@ -501,9 +529,9 @@ reported.
 **Formatting only** (the solvers read the same values): upstream prints each real as its `f32`
 at 15 significant digits (`0.310000002384186`), ours as the shortest decimal of the project's
 value (`0.31`), and both read back to the same `f32`; band entries descending against ascending;
-the order of the root's elements and of attributes (the solvers look both up by name); the
-attributes in "Ignored by the solvers"; upstream's materials no face uses; indentation and line
-ends.
+the order of the materials (looked up by id, `base_core_configuration.cpp:376-379`); the order of
+the root's elements and of attributes (the solvers look both up by name); the attributes in
+"Ignored by the solvers"; indentation and line ends.
 
 ## Corrections to the contract survey
 

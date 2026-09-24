@@ -269,10 +269,14 @@ pub fn write(
         ("cumul_filename", names::TOTAL_ENERGY_FILE.to_string()),
         (
             "directivities_directory",
-            if staged.is_empty() {
-                String::new()
-            } else {
-                dir(names::DIRECTIVITY_DIR)
+            // SPPS: upstream's GUI writes its folder for every run, a directivity file or not
+            // (`e_core_sppscore.h:217`), and the solver stores it (`base_core_configuration.cpp:
+            // 96`). TCR: upstream's GUI writes none, so the solver reads "" after printing a line
+            // the contract fails (`xml_property_missing`); "" written gives it the same value.
+            // With a staged file TCR gets the folder too, so the file it loads is there.
+            match solver {
+                SolverKind::Tcr if staged.is_empty() => String::new(),
+                _ => dir(names::DIRECTIVITY_DIR),
             },
         ),
     ];
