@@ -5,7 +5,8 @@
 CLI: `simpa results <run-folder> [--json]` (`crates/simpa/src/results_cmd.rs`); its JSON is
 `docs/formats/results-json.md`. Tests: `crates/simpa-core/tests/results_load.rs`,
 `results_rooms.rs`, `params_complete.rs`, `params_floor.rs`, `params_noise.rs` and
-`crates/simpa/tests/cli_results.rs`. Gate: `tools/gates/m7.ps1`.
+`crates/simpa/tests/cli_results.rs`. Gate: `tools/gates/m7.ps1`. Evidence for M8, run on purpose:
+`crates/simpa/tests/m8_evidence.rs` ("What M8 needs", below).
 
 **No number read or computed here is shown to a user until M8's physics bed passes**
 (`docs/rebuild-plan.md`, M12). The JSON says so: `"validated_by_bed": false`.
@@ -32,7 +33,14 @@ of `docs/solver-contract.md`, Part B, "Result refusals", and nothing is read in 
    the run is caught here.
 6. Every file read below decodes, is laid out as the solver writes it and agrees with its sibling
    (`results_file_invalid`), and holds no NaN, infinity or negative energy
-   (`results_value_invalid`).
+   (`results_value_invalid`). One exception (M7 follow-up): a NaN in one of the `.gap`'s two
+   lateral columns makes that column unusable (`spps::LateralNaN`), not the run. SPPS computes the
+   angle there with an unclamped `acos` (`lib_interface/Core/mathlib.h:176-180`), which a particle
+   direction along the receiver's orientation takes past ±1 in `f32`; it happened in one of ten
+   tutorial 1 runs at 1,500,000 particles in energetic mode, and refused the whole run, T30
+   included, although no parameter reads those columns and the energy beside them is checked
+   equal to the `.recp`'s. A negative or infinite lateral value still refuses the run
+   (`results_load.rs`, `a_nan_in_a_gap_lateral_column_makes_that_column_unusable_not_the_run`).
 
 `simpa results` exits 6 for steps 1, 3, 4, 5 and 6: the plan's stable exit codes give 5 to a
 solver run that failed and 6 to result verification (`docs/rebuild-plan-raw-2026-09-23.json`,
@@ -137,8 +145,9 @@ bands summed bin by bin (`params::aggregate`). For a TCR receiver each of the ei
 `no_time_series` (above).
 
 **The arrival.** Every onset-relative parameter is measured from the direct sound's arrival at the
-receiver's centre, `params::decay::Arrival::Known`: the earliest over the sources of emission plus
-distance over `c`, where
+receiver's centre, `params::decay::Arrival::Known`, with the direct sound spread over the time a
+particle takes to cross the receiver ball, `±R/c` (`docs/params.md`, "The direct sound's
+spread"): the earliest over the sources of emission plus distance over `c`, where
 - positions are as SPPS stores them (`f32`, `run::locate::to_float`);
 - `c` is SPPS's `343.2·√((T + 273.15)/293.15)` stored as `f32`
   (`base_core_configuration.cpp:64`; `Celerite_du_son.cpp:46`);
@@ -150,24 +159,38 @@ and the arrival is left to `Arrival::Detected`.
 
 **Measured, and piece A's open question answered.** A particle deposits energy while it crosses the
 receiver sphere, so the direct sound is spread over `[(r − R)/c, (r + R)/c]`, `2R/c` long (the JSON
-gives it as `receiver_crossing_s`).
-- At upstream's defaults (`dt` = 10 ms, `R` = 0.31 m, `2R/c` = 1.8 ms) both ends usually fall in one
-  bin. On tutorial 1 the arrival `r/c` lies in the onset bin at both receivers in all 27 bands.
-  **"Usually" is about 92 % of receiver positions.** When `(r − R)/c` falls in the bin before the
-  one holding `r/c`, that bin holds the cap of the sphere the wavefront has crossed; once the cap
-  holds 1 % of the largest bin, it is the onset bin, `r/c` lies after it, and all seven
-  onset-relative parameters are refused, `params_bad_arrival` (M7 review). With `r/c` uniform in
-  its bin that happens for a stretch of `R/c` less the cap height at which the cap reaches 1 %
-  (`h/R` = 0.117, from `h²(3R − h)/(4R³)` = 0.01, if the direct sound fills the largest bin):
-  `(R − 0.117 R)/(c·dt)` = 8 % of positions. No number is wrong; M8 and M12 should expect the
-  refusal that often at the defaults.
+gives it as `receiver_crossing_s`). When `(r − R)/c` falls in the bin before the one holding `r/c`,
+that bin holds the cap of the sphere the wavefront has crossed; once the cap holds 1 % of the
+largest bin, it is the onset bin and `r/c` lies after it. Then C50, C80, D50 and Ts are refused,
+`params_bad_arrival`; **SPL, EDT, T20 and T30 are not** (M7 follow-up: the M7 review's version
+refused all seven onset-relative parameters, T30 included). The decay times are read from the
+arrival with the cap counted in the direct sound, which is exact on the synthetic series of
+`params_arrival.rs`.
+- **Measured over receiver positions** (`crates/simpa/tests/m8_evidence.rs`,
+  `arrival_outside_the_onset_bin_over_receiver_positions`, run on purpose): tutorial 1 at upstream's
+  defaults (150,000 particles, random mode, `R` = 0.31 m, seed 1), octave bands 125 Hz to 4 kHz, 200
+  receivers uniform over the box at least 0.5 m from the walls and 1 m from the source.
+  | `dt` | Receivers with `r/c` after the onset bin | Receiver-bands | Leading edge in the bin before |
+  |---|---|---|---|
+  | 10 ms (upstream's default) | **16 of 200, 8.0 %** | 96 of 1200 | 20 (10.0 %; `R/(c·dt)` = 9.0 %) |
+  | 1 ms | **162 of 200, 81.0 %** | 953 of 1200 | 179 (89.5 %; 90.3 %) |
+
+  None had `r/c` before the onset bin. At a receiver the refusal holds in every band (the direct
+  sound is the same in all of them). This replaces the M7 review's derived "about 8 %", which the
+  measurement confirms at 10 ms. Where refused, the decay times at 150,000 particles were refused
+  for their noise (and T30 for its range at 10 ms), never for the arrival.
+- **For M8:** at a step of 1 ms, C50, C80, D50 and Ts are refused at four receivers in five by this
+  rule alone. With the spread given, the same curve that gives the decay times gives them exactly
+  on the synthetic series; refusing them is Burhan's decision of 2026-09-24 (keep the strict
+  rule), not a limit of the model.
 - On the level box (`dt` = 0.2 ms, `R` = 0.5 m, `2R/c` = 2.9 ms), the first bin with energy is bin 21
   at 2 m, which is `(r − R)/c` = 4.37 ms; the onset bin (the first within 20 dB of the largest) is
-  bin 22; `r/c` = 5.83 ms is bin 29. So neither `r/c` nor `(r − R)/c` lies in the onset bin, and
-  every onset-relative parameter is refused, `params_bad_arrival`; SPL, which does not depend on
-  the arrival, is not. The same at 4 m: bins 50, 51 and 58. This is piece A's documented case of a
-  direct sound spread over several bins, which its model does not cover; M8 decides what a bed
-  uses there.
+  bin 22; `r/c` = 5.83 ms is bin 29. So `r/c` lies after the onset bin, and C50, C80, D50 and Ts
+  are refused, `params_bad_arrival`; SPL is not. The same at 4 m: bins 50, 51 and 58. The decay
+  times are read from the arrival over the spread (bins 22 to 36 are the direct sound); a free
+  field has nothing after it, so they are refused, `range_too_short` (T30 at 4 m
+  `range_not_reached`), never measured from the direct sound's own shape (a run of the level box,
+  seed 1, both receivers, 125 Hz and 4 kHz checked).
 
 **Complete series.** When SPPS's own statistics show that nothing arrives after a band's last
 bin, the series is given to `params` as complete (`EnergySeries::complete`, `tests/params_complete.rs`):
@@ -213,8 +236,32 @@ instead (`SppsResults::lost_share`):
   which `params` adds as missing energy and refuses whatever it moves beyond its limit
   (`EnergySeries::with_lost_share`; `docs/params.md`, "Missing energy").
 
-In energetic mode a particle lost late carries less than `f` of its start energy, so the bound is
-conservative there. The JSON gives the share per band (`lost_share`).
+The JSON gives the share per band (`lost_share`).
+
+**Energetic mode** (M7 follow-up). There every particle is kept until the floor, its energy falling
+with the room's, so a particle lost at `t` carries about the mean energy of the particles then,
+and what it would still have brought is its share of what they all bring after `t`: it falls with
+the decay. `n` lost of `N` emitted, each carrying at most `ρ` times the mean energy when it was
+lost, take at most `ρ·n/N` of the energy the receiver gets from every time on
+(`SppsResults::lost_share_following_decay`; `params::EnergySeries::with_lost_share_following_decay`,
+which holds every quantity to the most a scaling of the curve by `1 + ρ·n/N` can move it). The JSON
+says so with `lost_follows_decay`. **Measured**, because the random-mode bound refused T30 wholesale
+in energetic mode (`crates/simpa/tests/m8_evidence.rs`, run on purpose):
+- **what lost particles carried**, from every particle's saved trajectory (tutorial 1, energetic,
+  150,000 particles, all saved, 3 seeds, 6 octave bands): SPPS counted 24 lost; the 17 found in
+  the trajectories (stopped before the end with more than 10⁻⁴ of their start energy; no particle
+  the floor dropped ended above 4.6·10⁻⁵) were lost between 40 and 500 ms and carried **0.16 to
+  2.02 times the mean energy** of the particles then (median 0.88). `ρ` is taken as 10
+  (`ENERGETIC_LOST_ENERGY_RATIO`). The other 7 ended below 10⁻⁴ of their start energy;
+- **what that does to T30**: with each lost particle's own energy and loss time, what they would
+  still have brought moved T30 by **at most 4.4·10⁻⁶** (relative) in any receiver-band, where the
+  random-mode bound claimed up to **2.1 %** and refused it. What they would have brought from the
+  arrival on was 2 % of that bound's (median; 18 % at most);
+- at tutorial 1's 150,000 particles the random-mode bound refused T30 in 212 of 360
+  receiver-bands on its own, and at 1,500,000 in 308 of 324.
+
+Random mode keeps its bound: there a lost particle carries its whole start energy until it is
+absorbed, and its worth does not fall with the decay.
 
 ### Energetic mode: the solver's floor
 
@@ -226,6 +273,16 @@ the reviewer's model over α 0.05–0.9, ε 1–7). The committed run `results/e
 particles) has every particle dropped or absorbed by the end, 0 remaining, and still no band
 complete; its T30 is refused `missing_not_cleared` in 3 of 4 receiver-bands (the fourth is refused
 earlier, its tail not decaying).
+
+**The floor's bound is earned at upstream's default** (M7 follow-up, `m8_evidence.rs`,
+`energetic_floor_against_a_lower_floor`, run on purpose): tutorial 1 in energetic mode, 6
+receivers, octave bands 125 Hz to 4 kHz, 1,500,000 particles, seeds 1 to 10 at `trans_epsilon` 5
+and again at 9. T30 from the series alone is **0.31 % shorter on average at 5 than at 9, and up to
+0.74 % in a receiver-band** (5.4 standard errors): more than the 0.5 % limit. The floor's bound
+refuses T30 at 5 in all 36 receiver-bands of the seed checked, and in none at 9. So energetic mode
+needs a floor
+below upstream's default for T30; at 9 a run takes 300 s against 182 s at 5 (20 at a time on
+Grace).
 
 ### Monte-Carlo noise
 
@@ -255,6 +312,34 @@ at 1.6 kHz where TCR's Sabine time is 0.66 s.
 run): SPL, C50, C80 and D50 in almost every band, Ts in some; EDT refused for its noise (the
 random-mode bound, loose here); T20 and T30 refused `missing_moves`, mostly for 17 lost particles
 at 1 kHz whose bound, `1.8·10⁻⁴` of the energy, is conservative in energetic mode.
+
+**Energetic mode against real seeds** (M7 follow-up; `m8_evidence.rs`,
+`energetic_noise_against_ten_seeds`, run on purpose). Tutorial 1 in energetic mode at upstream's
+defaults, 6 receivers, octave bands 125 Hz to 4 kHz, seeds 1 to 10; per quantity, the spread of
+the values over the seeds against the root-mean-square of the estimates, pooled over the
+receiver-bands where every seed gives a value (each series evaluated as the bootstrap takes it,
+complete and nothing missing, so that the floor and lost particles do not hide the noise):
+
+| Quantity | 150,000 particles, 10 seeds | 1,500,000 particles, 9 seeds |
+|---|---|---|
+| SPL | 0.71 | 0.73 |
+| EDT | 0.37 | 0.36 |
+| T20 | 0.11 | 0.12 |
+| T30 | 0.07 | 0.07 |
+| C50 | 0.54 | 0.53 |
+| C80 | 0.40 | 0.41 |
+| D50 | 0.54 | 0.53 |
+| Ts | 0.46 | 0.48 |
+
+The estimate is the random-mode model, an upper bound in energetic mode (`docs/params.md`,
+"Monte-Carlo noise"), and the seeds say it is one: no quantity's pooled ratio is above 1, and the
+largest single receiver-band's is 1.06 at 150,000 and 1.20 at 1,500,000 (SPL), within what 10
+seeds leave uncertain (about 23 %). **It over-states the noise of T30 14 times and of T20 9
+times**, the same at both counts. Nothing is changed: the bound is sound, and the particle counts
+M8 needs under it are measured below ("What M8 needs"). A model that is not an upper bound but
+matches energetic mode would need the spread of the particles' energies at each time, which SPPS
+writes only when trajectories are saved; that is for Burhan to decide. Seed 7 at 1,500,000
+particles was refused: its `.gap` held a NaN (below, "What M8 needs").
 
 ### Several sources, and the echogram per source
 

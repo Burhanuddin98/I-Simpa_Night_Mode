@@ -123,13 +123,14 @@ fn the_spps_run_reads_typed_and_consistent() {
             assert_eq!(b.energy.len(), 100);
             assert!(b.energy.iter().sum::<f64>() > 0.0);
             // E·cos²φ ≤ E·|cos φ| ≤ E, step by step.
+            let (cos2, abs_cos) = (
+                b.lateral_cos2.as_ref().unwrap(),
+                b.lateral_abs_cos.as_ref().unwrap(),
+            );
             for k in 0..100 {
                 let tol = 1e-6 * b.energy[k] + 1e-30;
-                assert!(
-                    b.lateral_cos2[k] <= b.lateral_abs_cos[k] + tol,
-                    "{f} Hz step {k}"
-                );
-                assert!(b.lateral_abs_cos[k] <= b.energy[k] + tol, "{f} Hz step {k}");
+                assert!(cos2[k] <= abs_cos[k] + tol, "{f} Hz step {k}");
+                assert!(abs_cos[k] <= b.energy[k] + tol, "{f} Hz step {k}");
             }
             assert!(b.source_power_rho_c > 0.0);
             assert_eq!(
@@ -541,6 +542,32 @@ fn cases() -> Vec<(&'static str, &'static str, Spoil, &'static str)> {
             codes::VALUE_INVALID,
         ),
         (
+            SPPS,
+            "a negative value in a .gap lateral column",
+            |r| {
+                plant(
+                    &r.join("solve/Punctual receivers/Seat/Advanced sound level.gap"),
+                    6,
+                    12,
+                    -1.0,
+                )
+            },
+            codes::VALUE_INVALID,
+        ),
+        (
+            SPPS,
+            "an infinite value in a .gap lateral column",
+            |r| {
+                plant(
+                    &r.join("solve/Punctual receivers/Seat/Advanced sound level.gap"),
+                    7,
+                    12,
+                    f32::INFINITY,
+                )
+            },
+            codes::VALUE_INVALID,
+        ),
+        (
             TCR,
             "NaN in Seat's Global row, an energetic sum the verdict does not scan",
             |r| {
@@ -596,6 +623,47 @@ fn cases() -> Vec<(&'static str, &'static str, Spoil, &'static str)> {
             codes::FILE_INVALID,
         ),
     ]
+}
+
+#[test]
+fn a_nan_in_a_gap_lateral_column_makes_that_column_unusable_not_the_run() {
+    // SPPS's own NaN (`spps::LateralNaN`): an unclamped acos of a direction along the receiver's
+    // orientation. Planted in Seat's 500 Hz E·cos²φ column (+1 of the band's energy column 5).
+    let want = load(SPPS);
+    let run = copy_of(SPPS, "lateral-nan");
+    plant(
+        &run.join("solve/Punctual receivers/Seat/Advanced sound level.gap"),
+        6,
+        12,
+        f32::NAN,
+    );
+    let got = results::load(&run).unwrap_or_else(|r| panic!("{r}"));
+    let (s, w) = (got.spps().unwrap(), want.spps().unwrap());
+    let (seat, seat_want) = (
+        s.point_receiver("Seat").unwrap(),
+        w.point_receiver("Seat").unwrap(),
+    );
+    assert_eq!(
+        seat.bands[0].lateral_cos2,
+        Err(simpa_core::results::spps::LateralNaN { step: 12 })
+    );
+    // The other lateral column, the energies and every other band are read as before.
+    assert_eq!(
+        seat.bands[0].lateral_abs_cos,
+        seat_want.bands[0].lateral_abs_cos
+    );
+    assert_eq!(seat.bands[0].energy, seat_want.bands[0].energy);
+    assert_eq!(seat.bands[1], seat_want.bands[1]);
+    // Says no: a NaN in the .gap's energy column, which must equal the .recp's, still refuses
+    // the run; so do a negative and an infinite lateral value (`cases`).
+    let run = copy_of(SPPS, "gap-energy-nan");
+    plant(
+        &run.join("solve/Punctual receivers/Seat/Advanced sound level.gap"),
+        5,
+        12,
+        f32::NAN,
+    );
+    assert_eq!(results::load(&run).unwrap_err().code, codes::FILE_INVALID);
 }
 
 #[test]

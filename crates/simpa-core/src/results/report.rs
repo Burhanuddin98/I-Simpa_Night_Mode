@@ -25,8 +25,10 @@ use crate::schema::SolverKind;
 
 /// The layout of [`Report`]; bumped when a field changes meaning. 2: values carry `mc_sd`, and
 /// the Monte-Carlo, floor and per-source fields were added. 3: TCR point receivers carry
-/// `parameters` per band and an `aggregate`, every value refused `no_time_series`.
-pub const REPORT_VERSION: u32 = 3;
+/// `parameters` per band and an `aggregate`, every value refused `no_time_series`. 4: SPPS bands
+/// carry `lost_follows_decay`, and in energetic mode `lost_share` bounds the energy from every
+/// time on; a given arrival outside the onset bin refuses C50, C80, D50 and Ts only.
+pub const REPORT_VERSION: u32 = 4;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -218,9 +220,13 @@ pub struct ReceiverBandReport {
     /// dropped. `null` otherwise.
     pub floor_db: Option<f64>,
     /// The share of the energy from the arrival on that lost particles can have taken with them
-    /// (`spps::SppsResults::lost_share`); `params` bounds what it can move. `null` when none was
-    /// lost.
+    /// (`spps::SppsResults::lost_share`), or, when `lost_follows_decay`, of the energy from every
+    /// time on (`spps::SppsResults::lost_share_following_decay`); `params` bounds what it can
+    /// move. `null` when none was lost.
     pub lost_share: Option<f64>,
+    /// Energetic mode: what the lost particles would still have brought falls with the decay, so
+    /// `lost_share` bounds the energy from every time on, not a lump added at the end.
+    pub lost_follows_decay: bool,
     /// The sources whose energy reaches the receiver in this band (their `.recps` total is above
     /// 0). With more than one, the seven onset-relative parameters are refused,
     /// `several_sources`.
@@ -574,7 +580,7 @@ fn series_of(
         EnergySeries::new(s.time_step_s, energy.to_vec())
     }?;
     let bin = match arrival {
-        Arrival::Known { time_s } => (time_s / s.time_step_s).floor().max(0.0) as usize,
+        Arrival::Known { time_s, .. } => (time_s / s.time_step_s).floor().max(0.0) as usize,
         Arrival::Detected => decay::onset(&base).index,
     };
     let base = match s.floor_db() {
@@ -587,6 +593,10 @@ fn series_of(
         )?,
         None => base,
     };
+    // Energetic mode: what the lost particles would still have brought follows the decay.
+    if let Some(share) = s.lost_share_following_decay(freq_hz) {
+        return base.with_lost_share_following_decay(share);
+    }
     match s.lost_share(index, freq_hz, bin) {
         Some(share) => base.with_lost_share(share),
         None => Ok(base),
@@ -661,9 +671,18 @@ fn aggregate_report(
     }
 }
 
+/// The arrival `params` measures from: at the receiver's centre, `t`, with the direct sound spread
+/// over the time a particle takes to cross the receiver ball, `t ± R/c`
+/// ([`SppsResults::receiver_crossing_s`]); [`Arrival::Detected`] when `t` is not known.
+fn known_arrival(s: &SppsResults, t: Option<f64>) -> Arrival {
+    t.map_or(Arrival::Detected, |t| {
+        Arrival::spread(t, s.receiver_crossing_s() / 2.0)
+    })
+}
+
 fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> SppsReceiverReport {
     let arrival_s = s.arrival_s(r);
-    let arrival = arrival_s.map_or(Arrival::Detected, |t| Arrival::Known { time_s: t });
+    let arrival = known_arrival(s, arrival_s);
     let mut series: Vec<Result<EnergySeries, ParamError>> = Vec::with_capacity(r.bands.len());
     let mut models = Vec::with_capacity(r.bands.len());
     let mut all_contributing: Vec<&str> = Vec::new();
@@ -686,8 +705,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
         let arrival = if contributing.is_empty() {
             arrival
         } else {
-            s.arrival_from(r, &contributing)
-                .map_or(Arrival::Detected, |t| Arrival::Known { time_s: t })
+            known_arrival(s, s.arrival_from(r, &contributing))
         };
         let se = series_of(s, i, b.freq_hz, &b.energy, arrival);
         let (mut parameters, onset) = parameters(&se, arrival, &model);
@@ -700,6 +718,10 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             complete: s.band_complete(b.freq_hz),
             floor_db: s.floor_db(),
             lost_share: se.as_ref().ok().and_then(EnergySeries::lost_share),
+            lost_follows_decay: se
+                .as_ref()
+                .ok()
+                .is_some_and(EnergySeries::lost_follows_decay),
             contributing_sources: contributing.iter().map(|c| c.to_string()).collect(),
             crossings: crossings(&model, total_pa2),
             noise_model: model.clone(),
@@ -720,7 +742,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
         .map(|e| {
             let name = [e.source.as_str()];
             let arrival_s = s.arrival_from(r, &name);
-            let arrival = arrival_s.map_or(Arrival::Detected, |t| Arrival::Known { time_s: t });
+            let arrival = known_arrival(s, arrival_s);
             let series: Vec<Result<EnergySeries, ParamError>> = r
                 .bands
                 .iter()

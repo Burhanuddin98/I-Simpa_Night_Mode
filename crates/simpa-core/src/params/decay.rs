@@ -93,20 +93,54 @@ pub enum Arrival {
     /// Not given: somewhere in the onset bin. Each quantity is computed with the arrival at both
     /// ends of the bin, and refused as `unresolved` when the two differ by more than its limit.
     Detected,
-    /// Given, such as the source–receiver distance over the speed of sound. It must lie in the
-    /// onset bin; otherwise the call is refused, `params_bad_arrival`.
-    Known { time_s: f64 },
+    /// Given, such as the source–receiver distance over the speed of sound. For C50, C80, D50 and
+    /// Ts it must lie in the onset bin; otherwise those four are refused, `params_bad_arrival`.
+    /// The decay times are computed whatever the arrival ([`evaluate`]).
+    Known {
+        time_s: f64,
+        /// The direct sound reaches the receiver over `[time_s − half_width_s, time_s +
+        /// half_width_s]`, not at one instant: a ball of radius `R` crossed at `c` takes `2R/c`
+        /// (`docs/params.md`, "The direct sound's spread"). 0 for an impulse.
+        half_width_s: f64,
+    },
 }
 
 impl Arrival {
+    /// A direct sound that is an impulse at `time_s`.
+    pub const fn at(time_s: f64) -> Arrival {
+        Arrival::Known {
+            time_s,
+            half_width_s: 0.0,
+        }
+    }
+
+    /// A direct sound centred on `time_s` and spread over `half_width_s` either side of it, as a
+    /// receiver ball of radius `R` sees it at speed `c`: `half_width_s = R/c`.
+    pub const fn spread(time_s: f64, half_width_s: f64) -> Arrival {
+        Arrival::Known {
+            time_s,
+            half_width_s,
+        }
+    }
+
     /// A given time, checked against the onset bin `o` of `series`.
     fn check(self, series: &EnergySeries, o: Onset) -> Result<Arrival, ParamError> {
-        let Arrival::Known { time_s } = self else {
+        let Arrival::Known {
+            time_s,
+            half_width_s,
+        } = self
+        else {
             return Ok(self);
         };
         let bad = |detail: String| Err(ParamError::BadArrival { time_s, detail });
         if !time_s.is_finite() || time_s < 0.0 {
             return bad("not a finite time at or after 0 s".into());
+        }
+        if !half_width_s.is_finite() || half_width_s < 0.0 {
+            return bad(format!(
+                "the direct sound's half-width {half_width_s} s is not a finite time of at \
+                 least 0 s"
+            ));
         }
         // A time a rounding step before the bin's start is its start.
         if time_s < o.bin_start_s - 1e-9 * series.dt() {
@@ -126,7 +160,77 @@ impl Arrival {
         }
         Ok(Arrival::Known {
             time_s: time_s.max(o.bin_start_s),
+            half_width_s,
         })
+    }
+}
+
+/// Where one Schroeder curve starts, and which bins it reads as the histogram gives them.
+#[derive(Clone, Copy, Debug)]
+struct Start {
+    /// The arrival, s: `u = 0`.
+    time_s: f64,
+    /// The curve's top is the backward sum from this bin: the onset bin.
+    top_bin: usize,
+    /// The first bin wholly after the direct sound. From its start on the curve is the
+    /// histogram's own; before it, back to the arrival, the reverberation is its decay continued
+    /// back, and the rest is the direct sound, at `u = 0`.
+    exact_bin: usize,
+}
+
+impl Start {
+    /// From a given arrival `t` with the direct sound over `[t − h, t + h]`, the onset bin `k0`
+    /// being the first to hold energy within 20 dB of the largest. The top is the sum from the
+    /// onset bin, or from the bin the direct sound starts in when that is earlier: a spread
+    /// direct sound's leading edge is weak, and can fall more than 20 dB below the largest bin,
+    /// but it is the direct sound all the same. The first bin wholly after the direct sound is at
+    /// least the one after the arrival's.
+    fn known(t: f64, h: f64, k0: usize, dt: f64) -> Start {
+        let arrival_bin = (t / dt).floor() as usize;
+        let leading_bin = ((t - h) / dt).floor().max(0.0) as usize;
+        // A bin that starts a rounding step before the direct sound ends is after it.
+        let after = ((t + h) / dt - 1e-9).ceil().max(0.0) as usize;
+        Start {
+            time_s: t,
+            top_bin: k0.min(leading_bin),
+            exact_bin: after.max(arrival_bin + 1).max(k0 + 1),
+        }
+    }
+
+    /// The two ends of the onset bin `k0`, when the arrival is not given.
+    fn detected(o: Onset) -> [Start; 2] {
+        [o.bin_start_s, o.bin_end_s].map(|t| Start {
+            time_s: t,
+            top_bin: o.index,
+            exact_bin: o.index + 1,
+        })
+    }
+}
+
+/// What the decay times are measured from when a given arrival does not fit the onset bin
+/// (`docs/params.md`, "Direct-arrival detection"). They do not depend on where time starts, only
+/// on where in the histogram the direct sound is taken to be:
+/// - the arrival after the onset bin, with the onset bin reaching into the direct sound's spread
+///   (`(k₀+1)·dt > t − h`): the onset bin holds the leading part of the direct sound, which a
+///   receiver ball starts to catch `R/c` before its centre. The curve is read from the arrival,
+///   with everything from the onset bin up to it counted in the direct sound;
+/// - any other misfit (the arrival before the onset bin, so more than 20 dB below the largest
+///   bin; after it by more than the spread; not a time): as if no arrival were given, from the two
+///   ends of the onset bin ([`Arrival::Detected`]).
+fn decay_starts(arrival: Arrival, o: Onset, dt: f64) -> Vec<Start> {
+    match arrival {
+        Arrival::Known {
+            time_s,
+            half_width_s,
+        } if time_s.is_finite()
+            && half_width_s.is_finite()
+            && half_width_s >= 0.0
+            && time_s >= o.bin_end_s
+            && o.bin_end_s > time_s - half_width_s =>
+        {
+            vec![Start::known(time_s, half_width_s, o.index, dt)]
+        }
+        _ => Start::detected(o).to_vec(),
     }
 }
 
@@ -269,34 +373,38 @@ pub struct DecayFit {
     pub with_tail_s: f64,
 }
 
-/// A decay time of `series` (`docs/params.md`, "Decay times").
+/// A decay time of `series` (`docs/params.md`, "Decay times"). It is computed whatever the
+/// arrival: a given arrival that does not fit the onset bin changes only where the direct sound is
+/// taken to be ([`evaluate`]).
 pub fn decay_time(
     series: &EnergySeries,
     arrival: Arrival,
     range: DecayRange,
 ) -> Result<DecayFit, ParamError> {
-    Analysis::new(series, arrival)?.decay_time(range)
+    Analysis::new(series, arrival).decay_time(range)
 }
 
 /// C_te in dB, `te` in seconds (C50: 0.05, C80: 0.08). A `te` that is not a positive number is
-/// refused as `params_bad_time_step`.
+/// refused as `params_bad_time_step`; a given arrival outside the onset bin as
+/// `params_bad_arrival`.
 pub fn clarity_db(series: &EnergySeries, arrival: Arrival, te_s: f64) -> Result<f64, ParamError> {
-    Analysis::new(series, arrival)?.clarity_db(te_s)
+    Analysis::new(series, arrival).clarity_db(te_s)
 }
 
-/// D_te as a fraction, `te` in seconds (D50: 0.05).
+/// D_te as a fraction, `te` in seconds (D50: 0.05). Refused as [`clarity_db`] is.
 pub fn definition(series: &EnergySeries, arrival: Arrival, te_s: f64) -> Result<f64, ParamError> {
-    Analysis::new(series, arrival)?.definition(te_s)
+    Analysis::new(series, arrival).definition(te_s)
 }
 
-/// The centre time Ts from the arrival, s.
+/// The centre time Ts from the arrival, s. A given arrival outside the onset bin is refused,
+/// `params_bad_arrival`.
 pub fn centre_time_s(series: &EnergySeries, arrival: Arrival) -> Result<f64, ParamError> {
-    Analysis::new(series, arrival)?.centre_time_s()
+    Analysis::new(series, arrival).centre_time_s()
 }
 
 /// The sound pressure level of every bin summed, dB re 20 µPa. It does not depend on the arrival.
 pub fn spl_db(series: &EnergySeries) -> Result<f64, ParamError> {
-    Analysis::new(series, Arrival::Detected)?.spl_db()
+    Analysis::new(series, Arrival::Detected).spl_db()
 }
 
 /// `100·(T30/T20 − 1)`, and whether it marks a curved decay.
@@ -321,8 +429,14 @@ pub fn curvature(t20: &DecayFit, t30: &DecayFit) -> Curvature {
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct BandParameters {
     pub onset: Onset,
-    /// The arrival the onset-relative quantities are measured from.
+    /// The arrival C50, C80, D50 and Ts are measured from: the given one, or
+    /// [`Arrival::Detected`]. When a given arrival does not fit the onset bin those four are
+    /// refused, `params_bad_arrival`, and this is the arrival as given.
     pub arrival: Arrival,
+    /// What EDT, T20 and T30 are measured from: `arrival` when it fits the onset bin, or follows
+    /// it within the direct sound's spread; otherwise [`Arrival::Detected`] (`docs/params.md`,
+    /// "Direct-arrival detection"). Decay times are never refused for the arrival.
+    pub decay_arrival: Arrival,
     pub tail: Result<Tail, ParamError>,
     pub spl_db: Result<f64, ParamError>,
     pub edt: Result<DecayFit, ParamError>,
@@ -336,10 +450,16 @@ pub struct BandParameters {
     pub curvature: Result<Curvature, ParamError>,
 }
 
-/// Every parameter of one band's series. Refused as a whole only for a given arrival that does
-/// not fit the series (`params_bad_arrival`).
-pub fn evaluate(series: &EnergySeries, arrival: Arrival) -> Result<BandParameters, ParamError> {
-    let a = Analysis::new(series, arrival)?;
+/// Every parameter of one band's series.
+///
+/// **A given arrival that does not fit the onset bin** refuses C50, C80, D50 and Ts only,
+/// `params_bad_arrival`: they are measured from the arrival. SPL does not depend on it, and EDT,
+/// T20 and T30 do not depend on where time starts, only on where in the histogram the direct
+/// sound is taken to be: they are computed from the arrival when it follows the onset bin within
+/// the direct sound's spread, and otherwise as if no arrival were given (`BandParameters::
+/// decay_arrival`).
+pub fn evaluate(series: &EnergySeries, arrival: Arrival) -> BandParameters {
+    let a = Analysis::new(series, arrival);
     let t20 = a.decay_time(DecayRange::T20);
     let t30 = a.decay_time(DecayRange::T30);
     let curvature = match (&t20, &t30) {
@@ -349,9 +469,10 @@ pub fn evaluate(series: &EnergySeries, arrival: Arrival) -> Result<BandParameter
             other => other.clone(),
         }),
     };
-    Ok(BandParameters {
+    BandParameters {
         onset: a.onset,
         arrival: a.arrival,
+        decay_arrival: a.decay_arrival,
         tail: a.tail.clone(),
         spl_db: a.spl_db(),
         edt: a.decay_time(DecayRange::Edt),
@@ -362,7 +483,7 @@ pub fn evaluate(series: &EnergySeries, arrival: Arrival) -> Result<BandParameter
         d50: a.definition(0.05),
         ts_s: a.centre_time_s(),
         curvature,
-    })
+    }
 }
 
 /// How the curve runs between two neighbouring knots.
@@ -416,19 +537,12 @@ struct Curve {
 }
 
 impl Curve {
-    /// The curve of the backward sums `sums` with the arrival at `t_a` in onset bin `k0`, up to
-    /// `end`, one past the last bin with energy; with `tail`, `M` is added to every sum and the
-    /// curve goes on past `end`.
-    fn new(
-        sums: &[f64],
-        dt: f64,
-        k0: usize,
-        end: usize,
-        t_a: f64,
-        tail: Option<(f64, f64)>,
-    ) -> Curve {
+    /// The curve of the backward sums `sums` from `start`, up to `end`, one past the last bin with
+    /// energy; with `tail`, `M` is added to every sum and the curve goes on past `end`.
+    fn new(sums: &[f64], dt: f64, start: Start, end: usize, tail: Option<(f64, f64)>) -> Curve {
         let m = tail.map_or(0.0, |t| t.0);
-        let s = |k: usize| sums[k] + m;
+        // Past the end every sum is 0.
+        let s = |k: usize| sums.get(k).copied().unwrap_or(0.0) + m;
         let shape = |s1: f64| {
             if s1 > 0.0 {
                 Shape::LogLinear
@@ -436,27 +550,31 @@ impl Curve {
                 Shape::Linear
             }
         };
-        let top = s(k0);
-        let mut pieces = Vec::with_capacity(end.saturating_sub(k0));
-        // The rest of the onset bin after the arrival: the next bin's decay continued back to the
-        // arrival, at most the whole bin; the rest of the bin is the direct sound, at u = 0.
-        let u1 = (k0 + 1) as f64 * dt - t_a;
+        let t_a = start.time_s;
+        let top = s(start.top_bin);
+        let first = start.exact_bin;
+        let mut pieces = Vec::with_capacity(end.saturating_sub(first) + 1);
+        // From the arrival to the first bin wholly after the direct sound: that bin's decay
+        // continued back to the arrival, at most everything since the onset; the rest is the
+        // direct sound, at u = 0. With the direct sound an impulse inside the onset bin, `first`
+        // is the next bin and this is the rest of the onset bin.
+        let u1 = first as f64 * dt - t_a;
         if u1 > 0.0 {
-            let next = s(k0 + 1);
-            let continued = if k0 + 2 <= end && next > 0.0 && s(k0 + 2) > 0.0 {
-                next * ((next / s(k0 + 2)).powf(u1 / dt) - 1.0)
+            let next = s(first);
+            let continued = if first < end && next > 0.0 && s(first + 1) > 0.0 {
+                next * (next / s(first + 1)).powf(u1 / dt)
             } else {
                 f64::INFINITY
             };
             pieces.push(Piece {
                 u0: 0.0,
                 u1,
-                s0: next + continued.min(top - next),
+                s0: continued.min(top),
                 s1: next,
                 shape: shape(next),
             });
         }
-        for k in k0 + 1..end {
+        for k in first..end {
             pieces.push(Piece {
                 u0: k as f64 * dt - t_a,
                 u1: (k + 1) as f64 * dt - t_a,
@@ -574,8 +692,46 @@ struct Missing {
     lost_share: Option<f64>,
     /// The most energy the dropped and lost particles would still have brought to the receiver:
     /// `10^{floor/10} / alive_share · S(onset)` for the floor, `share · S(onset)` for the lost
-    /// particles.
+    /// particles, unless their share follows the decay.
     energy: f64,
+    /// The lost particles' share when it follows the decay
+    /// ([`EnergySeries::with_lost_share_following_decay`]): at most `share·S(u)` from every `u`.
+    following: Option<f64>,
+}
+
+/// The most a share `s` of missing energy that follows the decay can move each quantity: the
+/// true curve is `S(u)·(1 + a(u))` with `a(u)` anywhere in `[0, s]`, so every level moves by at
+/// most `Δ = 10·lg(1 + s)` dB (`docs/params.md`, "Missing energy").
+mod following {
+    /// Level change, dB.
+    pub fn level_db(s: f64) -> f64 {
+        10.0 * (1.0 + s).log10()
+    }
+
+    /// A decay time, relative, fitted over a range the curve covers `range_db` of: a least-squares
+    /// slope over a span `L` moves by at most `3Δ/L` for a level perturbation within `±Δ`, and the
+    /// range's ends, moving by `Δ` in level, by at most `6Δ/L` more; relative to a slope that
+    /// covers `range_db` over `L`, `9Δ/range_db`.
+    pub fn decay_relative(s: f64, range_db: f64) -> f64 {
+        9.0 * level_db(s) / range_db
+    }
+
+    /// C, dB, from the ratio `r = S(0)/S(te)`: `C = 10·lg(r − 1)`, and `r` scales by a factor in
+    /// `[1/(1+s), 1+s]`.
+    pub fn clarity_db(s: f64, r: f64) -> f64 {
+        let c = |r: f64| 10.0 * (r - 1.0).log10();
+        (c(r * (1.0 + s)) - c(r)).max(c(r) - c(r / (1.0 + s)))
+    }
+
+    /// D, a fraction: `D = 1 − S(te)/S(0)`, the ratio scaling as above: at most `s·(1 − D)`.
+    pub fn definition(s: f64, d: f64) -> f64 {
+        s * (1.0 - d)
+    }
+
+    /// Ts, s: `∫S du / S(0)` scales by a factor in `[1/(1+s), 1+s]`: at most `s·Ts`.
+    pub fn centre_time_s(s: f64, ts: f64) -> f64 {
+        s * ts
+    }
 }
 
 /// A decay so fast that energy added after the series' end sits at its end: a lump there.
@@ -585,12 +741,20 @@ const LUMP_RATE: f64 = 1e12;
 struct Analysis<'a> {
     series: &'a EnergySeries,
     onset: Onset,
+    /// As given, or checked against the onset bin when it fits it.
     arrival: Arrival,
+    /// A given arrival that does not fit the onset bin: C50, C80, D50 and Ts are refused with it.
+    arrival_error: Option<ParamError>,
+    /// What the decay times are measured from ([`decay_starts`]).
+    decay_arrival: Arrival,
     tail: Result<Tail, ParamError>,
     /// `Some` when energy is missing from the series.
     missing: Option<Missing>,
-    /// One per arrival: the given one, or the two ends of the onset bin.
+    /// For C50, C80, D50 and Ts: one per arrival, the given one or the two ends of the onset bin.
+    /// Empty when the given arrival does not fit.
     views: Vec<View>,
+    /// For EDT, T20 and T30, when they are measured from elsewhere than `views`.
+    decay_views: Option<Vec<View>>,
 }
 
 /// One quantity from one arrival: from the series, with the tail, and with the missing energy as
@@ -611,10 +775,13 @@ fn absolute(a: f64, b: f64) -> f64 {
 }
 
 impl<'a> Analysis<'a> {
-    fn new(series: &'a EnergySeries, arrival: Arrival) -> Result<Self, ParamError> {
+    fn new(series: &'a EnergySeries, given: Arrival) -> Self {
         let dt = series.dt();
         let onset = onset(series);
-        let arrival = arrival.check(series, onset)?;
+        let (arrival, arrival_error) = match given.check(series, onset) {
+            Ok(a) => (a, None),
+            Err(e) => (given, Some(e)),
+        };
         let tail = tail_after(series, onset);
         let sums = backward_sums(series.values());
         let end = energy_end(series.values());
@@ -628,25 +795,52 @@ impl<'a> Analysis<'a> {
             Ok(Tail::Complete) => Some(None),
             _ => None,
         };
-        let times = match arrival {
-            Arrival::Known { time_s } => vec![time_s],
-            Arrival::Detected => vec![onset.bin_start_s, onset.bin_end_s],
+        // Where the curves start: for C, D and Ts the given arrival, which must fit the onset bin,
+        // or the two ends of the onset bin; for the decay times the same when it fits, and
+        // otherwise `decay_starts`.
+        let starts = match (arrival, &arrival_error) {
+            (_, Some(_)) => Vec::new(),
+            (
+                Arrival::Known {
+                    time_s,
+                    half_width_s,
+                },
+                None,
+            ) => vec![Start::known(time_s, half_width_s, onset.index, dt)],
+            (Arrival::Detected, None) => Start::detected(onset).to_vec(),
+        };
+        let (decay_arrival, decay_start_list) = if arrival_error.is_some() {
+            let s = decay_starts(given, onset, dt);
+            let a = if s.len() == 1 {
+                given
+            } else {
+                Arrival::Detected
+            };
+            (a, Some(s))
+        } else {
+            (arrival, None)
         };
         // The floor's dropped energy: each particle is dropped with at most `10^{db/10}` of its
         // start energy, and what it would still have brought is, on average, what that much energy
         // brings from any particle alive then. From the arrival on the receiver gets `S(onset)`
         // from the `alive_share` of the emitted energy the room still held, so the dropped
         // particles, all together, would have brought at most `10^{db/10}/alive_share` of it.
-        // The lost particles' share is given whole.
+        // The lost particles' share is given whole: a lump of `share·S(onset)`, or, when it
+        // follows the decay, bounded apart (`following`).
         let s0 = sums[onset.index];
         let floor_energy = series
             .floor()
             .map(|f| 10f64.powf(f.db / 10.0) / f.alive_share * s0);
-        let lost_energy = series.lost_share().map(|share| share * s0);
-        let missing = (floor_energy.is_some() || lost_energy.is_some()).then(|| Missing {
+        let follows = series.lost_follows_decay();
+        let lost_energy = series
+            .lost_share()
+            .filter(|_| !follows)
+            .map(|share| share * s0);
+        let missing = (floor_energy.is_some() || series.lost_share().is_some()).then(|| Missing {
             floor_db: series.floor().map(|f| f.db),
             lost_share: series.lost_share(),
             energy: floor_energy.unwrap_or(0.0) + lost_energy.unwrap_or(0.0),
+            following: series.lost_share().filter(|_| follows),
         });
         // The curve with the missing energy: added to every sum, and after the end continued at
         // the tail's rate, or, for a complete series, a lump at its end, the latest it can be.
@@ -662,24 +856,38 @@ impl<'a> Analysis<'a> {
             (Some(m), Ok(Tail::Complete)) if m.energy.is_finite() => Some((m.energy, LUMP_RATE)),
             _ => None,
         };
-        let views = times
-            .into_iter()
-            .map(|t| View {
-                arrival_s: t,
-                plain: Curve::new(&sums, dt, onset.index, end, t, None),
-                with_tail: added.map(|a| Curve::new(&sums, dt, onset.index, end, t, a)),
-                with_missing: with_missing
-                    .map(|a| Curve::new(&sums, dt, onset.index, end, t, Some(a))),
-            })
-            .collect();
-        Ok(Analysis {
+        let view = |start: Start| View {
+            arrival_s: start.time_s,
+            plain: Curve::new(&sums, dt, start, end, None),
+            with_tail: added.map(|a| Curve::new(&sums, dt, start, end, a)),
+            with_missing: with_missing.map(|a| Curve::new(&sums, dt, start, end, Some(a))),
+        };
+        let views = starts.into_iter().map(view).collect();
+        let decay_views = decay_start_list.map(|s| s.into_iter().map(view).collect());
+        Analysis {
             series,
             onset,
             arrival,
+            arrival_error,
+            decay_arrival,
             tail,
             missing,
             views,
-        })
+            decay_views,
+        }
+    }
+
+    /// The curves the decay times are read from.
+    fn decay_views(&self) -> &[View] {
+        self.decay_views.as_deref().unwrap_or(&self.views)
+    }
+
+    /// Refuses an onset-relative quantity when the given arrival does not fit the onset bin.
+    fn arrival_ok(&self) -> Result<(), ParamError> {
+        match &self.arrival_error {
+            Some(e) => Err(e.clone()),
+            None => Ok(()),
+        }
     }
 
     fn dt(&self) -> f64 {
@@ -696,12 +904,16 @@ impl<'a> Analysis<'a> {
     /// when the tail moves the mean by more than `limit`; `missing_moves` when the energy missing
     /// from the series does; `unresolved` when an end of the onset bin lies further than `limit`
     /// from it.
+    ///
+    /// `follows` is the most a lost share that follows the decay can move the value, in the
+    /// limit's unit ([`following`]); beyond the limit it is `missing_moves` too.
     fn settle(
         &self,
         quantity: Quantity,
         evals: &[Eval],
         limit: f64,
         distance: fn(f64, f64) -> f64,
+        follows: Option<f64>,
     ) -> Result<f64, ParamError> {
         let n = evals.len() as f64;
         let value = evals.iter().map(|e| e.plain).sum::<f64>() / n;
@@ -744,6 +956,23 @@ impl<'a> Analysis<'a> {
                     ));
                 }
             }
+            if let Some(b) = follows.filter(|b| b.is_nan() || *b > limit) {
+                let relative = matches!(quantity, Quantity::Edt | Quantity::T20 | Quantity::T30);
+                return Err(not_evaluable(
+                    quantity,
+                    NotEvaluable::MissingMoves {
+                        floor_db: m.floor_db,
+                        lost_share: m.lost_share,
+                        value,
+                        with_missing: Some(if relative {
+                            value * (1.0 + b)
+                        } else {
+                            value + b
+                        }),
+                        limit,
+                    },
+                ));
+            }
         }
         let low = evals.iter().map(|e| e.plain).fold(f64::INFINITY, f64::min);
         let high = evals
@@ -767,8 +996,9 @@ impl<'a> Analysis<'a> {
     fn decay_time(&self, range: DecayRange) -> Result<DecayFit, ParamError> {
         let q = range.quantity();
         self.tail_ok()?;
-        // The level at the arrival is the same from every arrival.
-        let top = self.views[0].plain.top;
+        let views = self.decay_views();
+        // The level at the arrival is the same from every arrival: the sum from the onset bin.
+        let top = views[0].plain.top;
         let reached = match self.tail {
             // How far the decay had fallen when the series ended, the tail included.
             Ok(Tail::Bounded { energy: m, .. }) => Some(10.0 * (m / (top + m)).log10()),
@@ -817,14 +1047,16 @@ impl<'a> Analysis<'a> {
                 ));
             }
         }
-        let mut evals = Vec::with_capacity(self.views.len());
+        let mut evals = Vec::with_capacity(views.len());
         let mut span = f64::INFINITY;
+        // The level range the fits cover, the smallest from any arrival.
+        let mut covered_db = f64::INFINITY;
         let fit = |c: &Option<Curve>| {
             c.as_ref()
                 .and_then(|c| c.line(range, self.dt()).ok())
                 .map(|l| -60.0 / l.slope)
         };
-        for v in &self.views {
+        for v in views {
             let own = v
                 .plain
                 .line(range, self.dt())
@@ -835,8 +1067,12 @@ impl<'a> Analysis<'a> {
                 missing: fit(&v.with_missing),
             });
             span = span.min(own.span);
+            covered_db = covered_db.min(-own.slope * own.span);
         }
-        let t = self.settle(q, &evals, limits::DECAY_RELATIVE, relative)?;
+        let follows = self
+            .following()
+            .map(|s| following::decay_relative(s, covered_db));
+        let t = self.settle(q, &evals, limits::DECAY_RELATIVE, relative, follows)?;
         // `settle` passed, so every arrival's fit with the tail exists.
         let with_tail_s = evals.iter().map(|e| e.tail.unwrap()).sum::<f64>() / evals.len() as f64;
         Ok(DecayFit {
@@ -875,6 +1111,7 @@ impl<'a> Analysis<'a> {
 
     fn clarity_db(&self, te_s: f64) -> Result<f64, ParamError> {
         let q = Quantity::Clarity { te_s };
+        self.arrival_ok()?;
         self.check_window(q, te_s)?;
         let c = |curve: &Curve| {
             let (early, total) = Self::split(curve, te_s);
@@ -897,11 +1134,18 @@ impl<'a> Analysis<'a> {
             });
         }
         self.tail_ok()?;
-        self.settle(q, &evals, limits::CLARITY_DB, absolute)
+        let follows = self.following().map(|s| {
+            self.views
+                .iter()
+                .map(|v| following::clarity_db(s, v.plain.top / v.plain.at(te_s)))
+                .fold(0.0, f64::max)
+        });
+        self.settle(q, &evals, limits::CLARITY_DB, absolute, follows)
     }
 
     fn definition(&self, te_s: f64) -> Result<f64, ParamError> {
         let q = Quantity::Definition { te_s };
+        self.arrival_ok()?;
         self.check_window(q, te_s)?;
         self.tail_ok()?;
         let d = |curve: &Curve| {
@@ -917,10 +1161,17 @@ impl<'a> Analysis<'a> {
                 missing: v.with_missing.as_ref().map(d),
             })
             .collect();
-        self.settle(q, &evals, limits::DEFINITION, absolute)
+        let follows = self.following().map(|s| {
+            evals
+                .iter()
+                .map(|e| following::definition(s, e.plain))
+                .fold(0.0, f64::max)
+        });
+        self.settle(q, &evals, limits::DEFINITION, absolute, follows)
     }
 
     fn centre_time_s(&self) -> Result<f64, ParamError> {
+        self.arrival_ok()?;
         self.tail_ok()?;
         let ts = |curve: &Curve| curve.moment() / curve.top;
         let evals: Vec<_> = self
@@ -934,7 +1185,13 @@ impl<'a> Analysis<'a> {
             .collect();
         let value = evals.iter().map(|e| e.plain).sum::<f64>() / evals.len() as f64;
         let limit = limits::CENTRE_TIME_S.min(limits::CENTRE_TIME_RELATIVE * value);
-        self.settle(Quantity::CentreTime, &evals, limit, absolute)
+        let follows = self.following().map(|s| {
+            evals
+                .iter()
+                .map(|e| following::centre_time_s(s, e.plain))
+                .fold(0.0, f64::max)
+        });
+        self.settle(Quantity::CentreTime, &evals, limit, absolute, follows)
     }
 
     fn spl_db(&self) -> Result<f64, ParamError> {
@@ -959,7 +1216,13 @@ impl<'a> Analysis<'a> {
             }],
             limits::SPL_DB,
             absolute,
+            self.following().map(following::level_db),
         )
+    }
+
+    /// The lost share, when it follows the decay.
+    fn following(&self) -> Option<f64> {
+        self.missing.and_then(|m| m.following)
     }
 }
 
@@ -972,7 +1235,10 @@ mod tests {
         EnergySeries::new(dt, v).unwrap()
     }
 
-    const AT_ZERO: Arrival = Arrival::Known { time_s: 0.0 };
+    const AT_ZERO: Arrival = Arrival::Known {
+        time_s: 0.0,
+        half_width_s: 0.0,
+    };
 
     #[test]
     fn onset_is_the_first_bin_within_20_db_of_the_largest() {
@@ -991,14 +1257,18 @@ mod tests {
     }
 
     #[test]
-    fn a_given_arrival_must_lie_in_the_onset_bin() {
+    fn a_given_arrival_must_lie_in_the_onset_bin_for_c_d_and_ts_only() {
         // Onset bin 3, [30, 40) ms.
         let mut v = vec![0.0, 0.0, 0.0, 1.0];
         v.extend((1..400).map(|k| 0.1 * 0.98f64.powi(k)));
         let s = series(0.01, v);
-        let used = |t: f64| match evaluate(&s, Arrival::Known { time_s: t }).unwrap().arrival {
-            Arrival::Known { time_s } => time_s,
-            Arrival::Detected => panic!("the given time was dropped"),
+        let used = |t: f64| {
+            let p = evaluate(&s, Arrival::at(t));
+            assert_eq!(p.arrival, p.decay_arrival);
+            match p.arrival {
+                Arrival::Known { time_s, .. } => time_s,
+                Arrival::Detected => panic!("the given time was dropped"),
+            }
         };
         for t in [0.0345, 0.039_999] {
             assert_eq!(used(t), t);
@@ -1007,9 +1277,23 @@ mod tests {
         let start = onset(&s).bin_start_s;
         assert_eq!(used(start), start);
         assert_eq!(used(start - 1e-15), start);
-        for t in [0.04, 0.05, 0.029, 0.0, -0.01, f64::NAN, f64::INFINITY] {
-            let e = evaluate(&s, Arrival::Known { time_s: t }).unwrap_err();
-            assert_eq!(e.code(), codes::BAD_ARRIVAL, "{t}: {e}");
+        // Outside it, or not a time: C50, C80, D50 and Ts are refused; SPL and EDT are not, and
+        // with an impulse (no spread) the decay times are measured as if no arrival were given.
+        let half_nan = Arrival::spread(0.0345, f64::NAN);
+        let half_negative = Arrival::spread(0.0345, -1e-3);
+        let wrong = [0.04, 0.05, 0.029, 0.0, -0.01, f64::NAN, f64::INFINITY]
+            .map(Arrival::at)
+            .into_iter()
+            .chain([half_nan, half_negative]);
+        for a in wrong {
+            let p = evaluate(&s, a);
+            for r in [&p.c50_db, &p.c80_db, &p.d50, &p.ts_s] {
+                assert_eq!(r.as_ref().unwrap_err().code(), codes::BAD_ARRIVAL, "{a:?}");
+            }
+            assert!(p.spl_db.is_ok() && p.edt.is_ok(), "{a:?}: {p:?}");
+            // The arrival is kept as given (a NaN never equals itself, so compare the text).
+            assert_eq!(format!("{:?}", p.arrival), format!("{a:?}"));
+            assert_eq!(p.decay_arrival, Arrival::Detected, "{a:?}");
         }
     }
 
@@ -1072,7 +1356,7 @@ mod tests {
         let mut v: Vec<f64> = (0..400).map(|k| q.powi(k)).collect();
         v.extend([0.3; 100]);
         for arrival in [AT_ZERO, Arrival::Detected] {
-            let p = evaluate(&series(0.001, v.clone()), arrival).unwrap();
+            let p = evaluate(&series(0.001, v.clone()), arrival);
             assert_eq!(p.tail, Ok(Tail::Unbounded));
             for r in [&p.spl_db, &p.c50_db, &p.c80_db, &p.d50, &p.ts_s] {
                 match r.as_ref().unwrap_err().not_evaluable() {
@@ -1139,7 +1423,7 @@ mod tests {
         let v: Vec<f64> = (0..500)
             .map(|k| (-(k as f64) * 0.001 / tau).exp())
             .collect();
-        let p = evaluate(&series(0.001, v), AT_ZERO).unwrap();
+        let p = evaluate(&series(0.001, v), AT_ZERO);
         let json = serde_json::to_value(&p).unwrap();
         assert!(json["edt"]["Ok"]["t_s"].is_f64(), "{json}");
         assert_eq!(json["arrival"]["arrival"], "known");
@@ -1183,15 +1467,36 @@ mod tests {
         v.push(3.0 + continued);
         v.extend((0..60).map(|k| 0.5f64.powi(k)));
         let s = series(dt, v);
-        let a = Analysis::new(&s, Arrival::Known { time_s: 0.025 }).unwrap();
+        let a = Analysis::new(&s, Arrival::at(0.025));
         let c = &a.views[0].plain;
         let next = 2.0 - 0.5f64.powi(59);
         assert!((c.top - (3.0 + continued + next)).abs() < 1e-12);
         assert!((c.at(1e-12) - (continued + next)).abs() < 1e-9);
         // The decay after the impulse is the same slope throughout: EDT from it is exact.
         let t = -60.0 / (10.0 * 0.5f64.log10() / dt);
-        let edt = decay_time(&s, Arrival::Known { time_s: 0.025 }, DecayRange::Edt).unwrap();
+        let edt = decay_time(&s, Arrival::at(0.025), DecayRange::Edt).unwrap();
         assert!((edt.t_s / t - 1.0).abs() < 1e-9, "{} vs {t}", edt.t_s);
+    }
+
+    #[test]
+    fn a_direct_sound_spread_past_its_bin_is_taken_whole_as_the_impulse() {
+        // The same impulse of 3, now at 29.5 ms and spread over ±1 ms: 2/3 of it falls in bin 2,
+        // 1/3 in bin 3. Bin 3 then holds 1 of direct sound and 1 of decay, and bins 4 on fall by
+        // half. Given the spread, the curve from bin 4 on is the histogram's and before it the
+        // decay continued back: EDT is exact. Taken as an impulse (no spread), bin 3 reads as a
+        // decay twice as steep and EDT comes out short.
+        let dt = 0.01;
+        let decay_in = |a: f64, b: f64| 2.0 * (0.5f64.powf(a / dt) - 0.5f64.powf(b / dt));
+        let t_a = 0.0295;
+        let mut v = vec![0.0, 0.0, 2.0 + decay_in(0.0, 0.0005)];
+        v.push(1.0 + decay_in(0.0005, 0.0105));
+        v.extend((0..60).map(|k| decay_in(0.0105 + k as f64 * dt, 0.0205 + k as f64 * dt)));
+        let s = series(dt, v);
+        let t = -60.0 / (10.0 * 0.5f64.log10() / dt);
+        let spread = decay_time(&s, Arrival::spread(t_a, 0.001), DecayRange::Edt).unwrap();
+        assert!((spread.t_s / t - 1.0).abs() < 1e-9, "{} vs {t}", spread.t_s);
+        let impulse = decay_time(&s, Arrival::at(t_a), DecayRange::Edt).unwrap();
+        assert!(impulse.t_s / t - 1.0 < -0.05, "{} vs {t}", impulse.t_s);
     }
 
     #[test]

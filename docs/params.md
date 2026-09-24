@@ -5,7 +5,9 @@ later gates need: ISO 9613-1 air attenuation, Sabine and Eyring as TCR computes 
 18041 targets. Code: `crates/simpa-core/src/params.rs` and `params/`. Tests:
 `crates/simpa-core/tests/params_synthetic.rs` (gate (a)), `params_air.rs` (gate (b)),
 `params_room.rs` (Sabine, Eyring, gate (f)), `params_complete.rs` (complete series, lost
-particles), `params_floor.rs` (the solver's floor), `params_noise.rs` (Monte-Carlo noise).
+particles), `params_floor.rs` (the solver's floor), `params_noise.rs` (Monte-Carlo noise),
+`params_arrival.rs` (the direct sound's spread, an arrival outside the onset bin) and
+`params_reference.rs` (the reference M8 compares against).
 
 **No number computed here is shown to a user until M8's physics bed passes** (`docs/rebuild-plan.md`,
 M12). M7 builds the numbers; it does not publish them.
@@ -65,16 +67,34 @@ the receiver. It must never be shown as "the room's T30".
   parameter (EDT, T20, T30, C, D and Ts). SPL sums all of it.
 - **Where in the bin matters.** Every onset-relative parameter is measured from the **arrival**
   `t_a`, which the caller passes as an `Arrival`:
-  - `Arrival::Known { time_s }`: the time is given, such as the source–receiver distance over the
-    speed of sound. It must lie in the onset bin, or the call is refused as `params_bad_arrival`:
-    before the bin, the direct sound is more than 20 dB below the strongest arrival and its time
-    does not place the onset; after it, energy within 20 dB of the maximum came before the
-    direct sound could have. A time a rounding step (10⁻⁹ dt) before the bin is taken as its
-    start.
+  - `Arrival::Known { time_s, half_width_s }`: the time is given, such as the source–receiver
+    distance over the speed of sound, with the direct sound spread over `t_a ± half_width_s`
+    (a receiver ball of radius `R` crossed at `c`: `R/c`; 0 for an impulse, `Arrival::at`; see
+    "The direct sound's spread" below). For **C50, C80, D50 and Ts** it must lie in the onset
+    bin, or those four are refused as `params_bad_arrival`: before the bin, the direct sound is
+    more than 20 dB below the strongest arrival and its time does not place the onset; after it,
+    energy within 20 dB of the maximum came before the direct sound's centre. A time a rounding
+    step (10⁻⁹ dt) before the bin is taken as its start. A half-width that is not a finite time
+    of at least 0 is refused the same way.
+  - **SPL, EDT, T20 and T30 are never refused for the arrival** (M7 follow-up; they had been, T30
+    included, although decay times do not depend on where time starts). SPL does not use it.
+    The decay times depend only on where in the histogram the direct sound is taken to be, and
+    `BandParameters::decay_arrival` says what they were measured from: the given arrival when it
+    fits the onset bin, or when it follows the onset bin and the onset bin reaches into its
+    spread (`(k₀+1)·dt > t_a − half_width_s`: the onset bin holds the leading edge of the
+    direct sound, which a receiver ball starts to catch `R/c` before its centre); otherwise
+    (before the onset bin, after it by more than the spread, or not a time) as if no arrival were
+    given, `Arrival::Detected`.
   - `Arrival::Detected`: not given. Every onset-relative parameter is computed with the arrival
     at **both ends of the onset bin**. The value reported is the mean of the two; when either end
     lies further from it than the parameter's limit (the truncation table below), the parameter is
     refused as `params_not_evaluable` (`unresolved`), with both ends in the detail.
+- **Why the decay times do not fall back to `Detected` when the direct sound's leading edge is
+  the onset bin**, measured (`params_arrival.rs::decay_times_taken_as_if_no_arrival_were_given_miss_where_only_the_cap_is_in_the_onset_bin`):
+  the onset bin then holds only the ball's cap, and the direct sound lies smeared across the next
+  bin. From the two ends of the onset bin EDT came out up to 0.62 % off and was accepted in 3 of
+  the 18 cases tried (`dt` 10 and 1 ms, `T` 0.3 to 3 s, `D/R` 0.12 to 1); from the arrival and its
+  spread every one is exact.
 - **Why, measured.** The first version of this module took `t_a` as the start of the onset bin.
   For a direct sound as strong as the reverberant decay (`D/R = 1`) at `dt = 10 ms`, arriving 0.05
   to 0.95 of the way into its bin (`params_synthetic.rs::a_direct_sound_measured_from_the_start_of_its_bin_fails`):
@@ -92,9 +112,40 @@ the receiver. It must never be shown as "the room's T30".
   and Ts are all `unresolved`; at `dt = 1 ms`, C50 and C80 still are, and D50 and Ts come through
   only at `T = 3 s`; at `dt = 0.1 ms` and `T = 3 s` everything comes through within the gate's
   bounds. Where refused, the two ends bracket the closed form. **So a run's C and D need the
-  arrival: piece B should pass `r/c`.** For a receiver of radius `R`, energy can reach it at
-  `(r − R)/c`; which of the two lands in SPPS's onset bin is for piece B and M8 to establish, not
-  assumed here.
+  arrival: piece B passes `r/c`, with the spread `R/c`.** Which bin the leading edge `(r − R)/c`
+  lands in is measured in `docs/results.md`, "The arrival".
+
+### The direct sound's spread
+
+Added by the M7 follow-ups. SPPS adds a particle's energy times the length of its path inside the
+receiver ball to the time step in which it travelled that path
+(`spps/input_output/reportmanager.cpp:198-225`). The direct sound of a source `r` away therefore
+reaches the receiver over `[(r − R)/c, (r + R)/c]`, with the density of a plane front sweeping a
+ball, `R² − (ct − r)²`: 1.8 ms at upstream's `R` = 0.31 m.
+
+**What went wrong.** The curve took the direct sound as an impulse at `r/c` inside one bin. When
+its spread straddles a bin edge, the next bin holds part of it, which the curve read as decay.
+Measured on that direct sound plus an exponential from `r/c` (`params_arrival.rs`, 720 cases:
+`dt` 10 and 1 ms, `T` 0.3, 1 and 3 s, `D/R` 0.12, 1 and 3, `r/c` at 40 places in its bin), taken as
+an impulse: **EDT up to 26.3 % off and Ts up to 21.5 %, T20 2.0 %, T30 0.85 %, C50 0.016 dB, D50
+0.08 points**, all returned as numbers.
+
+**Now.** Given the spread, the curve is the histogram's own from the first bin wholly after the
+direct sound, `⌈(t_a + h)/dt⌉` (at least the bin after the arrival's); between the arrival and that
+bin it is that bin's decay continued back, and the rest, up to the top, is the direct sound at
+`u = 0`. The top is the sum from the onset bin, or from the bin the direct sound starts in,
+`⌊(t_a − h)/dt⌋`, when that is earlier: a spread direct sound's leading edge is weak and can fall
+below the 20 dB rule, but it is the direct sound all the same. With `h = 0` this is the model
+above, unchanged. On the same 720 cases every quantity is exact to 3·10⁻¹³, except EDT where the
+direct sound's step leaves under 2 bins of its 10 dB range (`D/R` = 3, 6 dB, at `T` = 0.3 s:
+`range_too_short`, 40 cases), and C50, C80, D50 and Ts where `r/c` lies after the onset bin
+(`params_bad_arrival`, 324 cases). Says no: the same series with `h = 0`, above.
+
+**What it assumes:** the reverberation continued back to the arrival as the first bin after the
+direct sound decays. Real reverberation starts at the first reflection, after the direct sound,
+so the model can put reverberant energy in the stretch the direct sound occupies; that stretch is
+early for C and D whichever way, and moves Ts by at most its own length times the share of
+reverberant energy in it. Not measured on real runs here: M8's bed is where it shows.
 - **Upstream differs.** `GetTimeDecay` (`projet_calculation.cpp:127-139`) takes the last time label
   before the energy first changes by 10⁻¹⁸ in absolute value (`refValue`, lines 321, 357, 393,
   424). That is an absolute threshold, not a relative one, on labels that are bin ends; and the
@@ -242,7 +293,20 @@ gets from the arrival on:
   `10^{floor/10} / alive_share · S(onset)`;
 - a lost particle would have brought what an average particle alive at the arrival brings, so `n`
   of `N` lost take at most `n / (N · alive_share)` of `S(onset)` (`core::results` computes it,
-  `docs/results.md`, "Lost particles").
+  `docs/results.md`, "Lost particles");
+- **or, when the lost share follows the decay** (`EnergySeries::with_lost_share_following_decay`,
+  M7 follow-up: SPPS in energetic mode, where a lost particle carries about the mean energy of the
+  particles when it was lost), at most `s·S(u)` of the energy from every time `u` on. The true
+  curve is then `S(u)·(1 + a(u))` with `a(u)` anywhere in `[0, s]`, so every level moves by at most
+  `Δ = 10·lg(1 + s)` dB, and each quantity is held to the most that can move it: a decay time
+  fitted over a range the curve covers `R` dB of, `9Δ/R` relative (a least-squares slope over a
+  span moves by at most `3Δ` over the span for a perturbation within `±Δ`, and the range's ends,
+  moving `Δ` in level, by at most `6Δ` more); C from `r = S(0)/S(te)`, the larger of
+  `10·lg((r(1+s) − 1)/(r − 1))` and `10·lg((r − 1)/(r/(1+s) − 1))`; D50 `s·(1 − D50)`; Ts `s·Ts`;
+  SPL `Δ`. Beyond its limit: `missing_moves`, with the value moved by that much
+  (`tests/params_complete.rs::an_energetic_lost_share_that_follows_the_decay_is_bounded_by_it`:
+  `10·4/150,000` lets every quantity through within its limit of the truth, whenever the particles
+  were lost; the same share as a lump refuses T30; a share of 3 % refuses T30 and C80).
 
 Every quantity is computed once more with that energy added to every backward sum and, after the
 end, continued at the tail's rate (a lump at the end for a complete series, the latest it can
@@ -518,6 +582,34 @@ Refused (`params_bad_room`):
 
 `A + 4mV = 0` is `params_no_absorption`: the reverberation time is infinite. `ᾱ = 1` gives an
 Eyring time of 0 s, a fully absorbing room.
+
+### The reference M8 compares against (for Burhan's decision)
+
+Added by the M7 follow-ups; nothing is decided here. `T_Eyring = K·V/(A + 4mV)` has two open
+choices, computed on tutorial 1's box (floor 60 m² at α 0.1, ceiling 60 m² at 0.3, walls 96 m² at
+0.2, 180 m³; 20 °C, 50 %, 101.325 kPa) in every third-octave band from 50 Hz to 8 kHz
+(`tests/params_reference.rs`):
+
+| Choice | What it is | Moves T_Eyring against TCR's |
+|---|---|---|
+| `K` = 0.163 (TCR) | TCR's rounded constant (`TC_CalculationCore.cpp:138`) | 0 |
+| `K` = `24·ln(10)/c` with SPPS's `c` | 0.16102 at SPPS's `c` = 343.2 m/s at 20 °C (`Celerite_du_son.cpp:46`): the decay a diffuse field has when its particles move at `c` | **−1.215 % in every band**, a quarter of M8's 5 % |
+| `m` at the nominal band frequency, upstream's form | what SPPS and TCR apply (`base_core_configuration.cpp:114`; `air::solver_air_absorption_per_m`) | 0 |
+| `m` at ISO 9613-1's exact midband frequency | the standard's table (`air::attenuation_db_per_m`) | **at most 0.36 %** (8 kHz, where air is a quarter of the absorption); under 0.1 % in every band below 8 kHz |
+
+Both together stay within 1.3 % of TCR's value in every band. At 80 kPa, where upstream's humidity
+lacks the pressure factor, the air term's form alone moves the 8 kHz band by 6.6 % (the same test,
+as the check's say-no).
+
+**Recommendation, not a decision.** For SPPS's T30: `K = 24·ln(10)/c` with SPPS's own `c`, and `m`
+as the solver applies it (nominal frequency, upstream's form). M8 asks whether SPPS's transport
+reproduces the diffuse-field decay of the room it was given; that room's air is the `m` the solver
+used, and its speed is the `c` the solver moved at. TCR's 0.163 would bias the reference 1.2 % long
+before any solver is judged. For TCR against the analytic value (M8's 0.5 % check), TCR's own
+0.163 and the solver's `m`, as gate M7(d) already does: that checks TCR computes what its formula
+says. Whether upstream's air term is right (the pressure factor, the nominal frequency) is gate
+M7(b)'s question and the second table's, and at sea level it moves T_Eyring by at most 0.36 % up
+to 8 kHz.
 
 ## DIN 18041 targets
 

@@ -31,7 +31,7 @@ use simpa_core::params::decay::{self, Arrival, P_REF_SQUARED, Tail, evaluate};
 use simpa_core::params::{self, EnergySeries, NotEvaluable, codes};
 
 const K60: f64 = 6.0 * LN_10;
-const AT_ZERO: Arrival = Arrival::Known { time_s: 0.0 };
+const AT_ZERO: Arrival = Arrival::at(0.0);
 
 /// Bin integrals of `exp(−t/τ)` over `depth_db` of decay, then, far below, one stray bin such as
 /// a last particle leaves in random mode: `stray_db` below the first bin, 5 bins later.
@@ -58,7 +58,7 @@ fn a_complete_series_with_a_ragged_end_is_refused_without_its_evidence() {
     let s = EnergySeries::new(0.01, ragged(1.0, 0.01, 70.0, 50.0)).unwrap();
     assert!(!s.is_complete());
     assert_eq!(decay::tail(&s).unwrap(), Tail::Unbounded);
-    let p = evaluate(&s, AT_ZERO).unwrap();
+    let p = evaluate(&s, AT_ZERO);
     for (name, r) in [
         ("spl", p.spl_db.clone()),
         ("c50", p.c50_db.clone()),
@@ -91,7 +91,7 @@ fn with_its_evidence_it_meets_every_bound_of_gate_a() {
         let s = EnergySeries::complete(dt, v).unwrap();
         assert!(s.is_complete());
         assert_eq!(decay::tail(&s).unwrap(), Tail::Complete);
-        let p = evaluate(&s, AT_ZERO).unwrap();
+        let p = evaluate(&s, AT_ZERO);
         // SPL is the sum, nothing added.
         let spl = p.spl_db.clone().unwrap();
         assert!(
@@ -134,11 +134,11 @@ fn the_evidence_claimed_for_a_series_cut_short_gives_a_wrong_c80() {
     let tau = t / K60;
     let c80 = 10.0 * ((0.08 / tau).exp() - 1.0).log10();
     let v = cut(t, dt, 20.0);
-    let lie = evaluate(&EnergySeries::complete(dt, v.clone()).unwrap(), AT_ZERO).unwrap();
+    let lie = evaluate(&EnergySeries::complete(dt, v.clone()).unwrap(), AT_ZERO);
     let got = lie.c80_db.clone().unwrap();
     assert!((got - c80).abs() > 0.01, "C80 {got} vs {c80}");
     // Without the claim the same series is refused, not given a number.
-    let honest = evaluate(&EnergySeries::new(dt, v).unwrap(), AT_ZERO).unwrap();
+    let honest = evaluate(&EnergySeries::new(dt, v).unwrap(), AT_ZERO);
     assert!(
         matches!(
             honest.c80_db.unwrap_err().not_evaluable(),
@@ -159,7 +159,7 @@ fn a_complete_series_is_fitted_only_down_to_its_last_bin() {
     let tau = t / K60;
     let mut v = cut(t, dt, 30.0);
     v.push(tau * (-(v.len() as f64) * dt / tau).exp());
-    let p = evaluate(&EnergySeries::complete(dt, v).unwrap(), AT_ZERO).unwrap();
+    let p = evaluate(&EnergySeries::complete(dt, v).unwrap(), AT_ZERO);
     let t20 = p.t20.clone().unwrap().t_s;
     assert!(within(t20, t, 0.005), "T20 {t20}");
     match p.t30.clone().unwrap_err().not_evaluable() {
@@ -211,15 +211,14 @@ fn lost_particles_move_no_accepted_value_beyond_its_limit() {
                 continue;
             }
             let (truth, lost) = with_lost(t, dt, n, n_total, t_lost);
-            let want = evaluate(&EnergySeries::complete(dt, truth).unwrap(), AT_ZERO).unwrap();
-            let plain =
-                evaluate(&EnergySeries::complete(dt, lost.clone()).unwrap(), AT_ZERO).unwrap();
+            let want = evaluate(&EnergySeries::complete(dt, truth).unwrap(), AT_ZERO);
+            let plain = evaluate(&EnergySeries::complete(dt, lost.clone()).unwrap(), AT_ZERO);
             let s = EnergySeries::complete(dt, lost)
                 .unwrap()
                 .with_lost_share(n / n_total)
                 .unwrap();
             assert!(s.is_complete(), "a lost share keeps the series complete");
-            let got = evaluate(&s, AT_ZERO).unwrap();
+            let got = evaluate(&s, AT_ZERO);
             let pairs = [
                 (
                     "T20",
@@ -309,7 +308,7 @@ fn lost_particles_move_no_accepted_value_beyond_its_limit() {
         .unwrap()
         .with_lost_share(1.0 / n_total)
         .unwrap();
-    assert!(evaluate(&s, AT_ZERO).unwrap().t30.is_ok());
+    assert!(evaluate(&s, AT_ZERO).t30.is_ok());
     // A share that is not a number of at least 0 is refused.
     for bad in [-1e-6, f64::NAN, f64::INFINITY] {
         assert_eq!(
@@ -321,6 +320,106 @@ fn lost_particles_move_no_accepted_value_beyond_its_limit() {
             codes::BAD_NOISE_INPUT
         );
     }
+}
+
+/// Energetic mode: every particle carries energy that falls with the room's, so `n` particles lost
+/// at `t_lost` with `ratio` times the mean energy then take `ratio·n/N` of the energy from
+/// `t_lost` on. Bin integrals of `e^{−t/τ}`, the arrival at 0: the truth and the series with the
+/// loss.
+fn energetic_lost(t: f64, dt: f64, share: f64, t_lost: f64) -> (Vec<f64>, Vec<f64>) {
+    let tau = t / K60;
+    let bins = (80.0 * t / 60.0 / dt).round() as usize;
+    let s = |u: f64| (-u / tau).exp();
+    let truth: Vec<f64> = (0..bins)
+        .map(|k| s(k as f64 * dt) - s((k + 1) as f64 * dt))
+        .collect();
+    let lost = truth
+        .iter()
+        .enumerate()
+        .map(|(k, v)| {
+            let (a, b) = (k as f64 * dt, (k + 1) as f64 * dt);
+            let gone = share * (s(a.max(t_lost)) - s(b.max(t_lost)));
+            v - gone
+        })
+        .collect();
+    (truth, lost)
+}
+
+#[test]
+fn an_energetic_lost_share_that_follows_the_decay_is_bounded_by_it() {
+    let (t, dt) = (1.0, 0.01);
+    let all = |p: &simpa_core::params::decay::BandParameters| {
+        [
+            p.spl_db.is_ok(),
+            p.edt.is_ok(),
+            p.t20.is_ok(),
+            p.t30.is_ok(),
+            p.c50_db.is_ok(),
+            p.c80_db.is_ok(),
+            p.d50.is_ok(),
+            p.ts_s.is_ok(),
+        ]
+    };
+    // The share core::results gives for tutorial 1 in energetic mode: 10 × 4/150,000, the most lost
+    // in a band there. Whenever the particles were lost, every quantity comes out, within its
+    // limit of the truth.
+    let share = 10.0 * 4.0 / 150_000.0;
+    for t_lost in [0.02, 0.2, 0.5] {
+        let (truth, lost) = energetic_lost(t, dt, share, t_lost);
+        let want = evaluate(&EnergySeries::complete(dt, truth).unwrap(), AT_ZERO);
+        let s = EnergySeries::complete(dt, lost.clone())
+            .unwrap()
+            .with_lost_share_following_decay(share)
+            .unwrap();
+        assert!(s.lost_follows_decay());
+        let got = evaluate(&s, AT_ZERO);
+        assert_eq!(all(&got), [true; 8], "t_lost {t_lost}: {got:?}");
+        let t30 = got.t30.as_ref().unwrap().t_s;
+        assert!(within(t30, want.t30.unwrap().t_s, 0.005), "t_lost {t_lost}");
+        let c80 = got.c80_db.clone().unwrap();
+        assert!((c80 - want.c80_db.clone().unwrap()).abs() <= 0.01);
+
+        // Says no: the same share as a lump added at the end, random mode's bound, refuses T30.
+        let lump = EnergySeries::complete(dt, lost)
+            .unwrap()
+            .with_lost_share(share)
+            .unwrap();
+        let e = evaluate(&lump, AT_ZERO).t30.unwrap_err();
+        assert!(
+            matches!(e.not_evaluable(), Some(NotEvaluable::MissingMoves { .. })),
+            "t_lost {t_lost}: {e}"
+        );
+    }
+    // Says no: a share that follows the decay but is large enough to move a decay time beyond
+    // 0.5 %, 3 %, refuses it and C80.
+    let (_, lost) = energetic_lost(t, dt, 0.03, 0.2);
+    let s = EnergySeries::complete(dt, lost)
+        .unwrap()
+        .with_lost_share_following_decay(0.03)
+        .unwrap();
+    let p = evaluate(&s, AT_ZERO);
+    for r in [p.t30.as_ref().map(|_| ()), p.c80_db.as_ref().map(|_| ())] {
+        assert!(
+            matches!(
+                r.unwrap_err().not_evaluable(),
+                Some(NotEvaluable::MissingMoves { .. })
+            ),
+            "{p:?}"
+        );
+    }
+    // An aggregate follows the decay only when every band's lost share does.
+    let a = EnergySeries::complete(dt, vec![1.0, 0.5, 0.25])
+        .unwrap()
+        .with_lost_share_following_decay(1e-4)
+        .unwrap();
+    let b = EnergySeries::complete(dt, vec![1.0, 0.5, 0.25])
+        .unwrap()
+        .with_lost_share(1e-5)
+        .unwrap();
+    let both = params::aggregate(&[a.clone(), a.clone()]).unwrap();
+    assert!(both.lost_follows_decay() && both.lost_share() == Some(1e-4));
+    let mixed = params::aggregate(&[a, b]).unwrap();
+    assert!(!mixed.lost_follows_decay() && mixed.lost_share() == Some(1e-4));
 }
 
 #[test]

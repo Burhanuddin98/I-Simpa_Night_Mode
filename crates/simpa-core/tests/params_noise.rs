@@ -95,12 +95,12 @@ fn series(v: Vec<f64>) -> Result<EnergySeries, ParamError> {
     EnergySeries::complete(DT, v)
 }
 
-const AT: Arrival = Arrival::Known { time_s: ARRIVAL };
+const AT: Arrival = Arrival::at(ARRIVAL);
 
 /// The eight values from the series alone, `None` where refused.
 fn plain(v: &[f64]) -> [Option<f64>; 8] {
     let s = series(v.to_vec()).unwrap();
-    let p = decay::evaluate(&s, AT).unwrap();
+    let p = decay::evaluate(&s, AT);
     [
         p.spl_db.ok(),
         p.edt.ok().map(|f| f.t_s),

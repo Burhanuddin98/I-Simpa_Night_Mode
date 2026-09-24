@@ -124,30 +124,24 @@ const QUANTITIES: [(Quantity, f64, bool); 8] = [
     (Quantity::CentreTime, limits::CENTRE_TIME_S, false),
 ];
 
-/// The eight values of `decay` on one series, in [`QUANTITIES`]' order. SPL does not depend on
-/// the arrival, so a given arrival that `decay` refuses (`params_bad_arrival`) refuses the other
-/// seven only.
+/// The eight values of `decay` on one series, in [`QUANTITIES`]' order. A given arrival that does
+/// not fit the onset bin refuses C50, C80, D50 and Ts only (`params_bad_arrival`,
+/// [`decay::evaluate`]).
 fn values(series: &EnergySeries, arrival: Arrival) -> ([Result<f64, ParamError>; 8], Onset) {
-    match decay::evaluate(series, arrival) {
-        Ok(p) => (
-            [
-                p.spl_db,
-                p.edt.map(|f| f.t_s),
-                p.t20.map(|f| f.t_s),
-                p.t30.map(|f| f.t_s),
-                p.c50_db,
-                p.c80_db,
-                p.d50,
-                p.ts_s,
-            ],
-            p.onset,
-        ),
-        Err(e) => {
-            let mut all: [Result<f64, ParamError>; 8] = std::array::from_fn(|_| Err(e.clone()));
-            all[0] = decay::spl_db(series);
-            (all, decay::onset(series))
-        }
-    }
+    let p = decay::evaluate(series, arrival);
+    (
+        [
+            p.spl_db,
+            p.edt.map(|f| f.t_s),
+            p.t20.map(|f| f.t_s),
+            p.t30.map(|f| f.t_s),
+            p.c50_db,
+            p.c80_db,
+            p.d50,
+            p.ts_s,
+        ],
+        p.onset,
+    )
 }
 
 /// The eight parameters of `series` from `arrival`, each with its noise under `model`, or its

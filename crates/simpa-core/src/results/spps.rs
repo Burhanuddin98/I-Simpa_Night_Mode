@@ -94,10 +94,10 @@ pub struct ReceiverBand {
     pub freq_hz: i32,
     /// The `.recp` column: Pa² per time step.
     pub energy: Vec<f64>,
-    /// The `.gap`'s `E·cos²φ` column (+1).
-    pub lateral_cos2: Vec<f64>,
-    /// The `.gap`'s `E·|cos φ|` column (+2).
-    pub lateral_abs_cos: Vec<f64>,
+    /// The `.gap`'s `E·cos²φ` column (+1), or where it holds a NaN ([`LateralNaN`]).
+    pub lateral_cos2: Result<Vec<f64>, LateralNaN>,
+    /// The `.gap`'s `E·|cos φ|` column (+2), or where it holds a NaN.
+    pub lateral_abs_cos: Result<Vec<f64>, LateralNaN>,
     /// The intensity vector per step, x, y and z (the `Sum` row left out).
     pub intensity: [Vec<f64>; 3],
     /// The `.gap`'s column 2: the sources' power in this band times `ρ·c`
@@ -105,6 +105,20 @@ pub struct ReceiverBand {
     pub source_power_rho_c: f64,
     /// The `.gap`'s column 4: the receiver's background noise in this band, dB.
     pub background_noise_db: f64,
+}
+
+/// A `.gap` lateral column that holds a NaN, at `step` (the first). SPPS computes the angle `φ`
+/// between a particle's direction and the receiver's orientation as `acos` of their normalised dot
+/// product in `f32`, unclamped (`lib_interface/Core/mathlib.h:176-180`;
+/// `spps/input_output/reportmanager.cpp:218-219`); a direction along the orientation can take the
+/// argument past ±1, and one such crossing makes that step's `E·cos²φ` and `E·|cos φ|` NaN.
+/// Seen once in ten tutorial 1 runs at 1,500,000 particles in energetic mode (`docs/results.md`).
+/// Only the lateral column is unusable: the energy the parameters read is written apart, and is
+/// checked equal to the `.recp`'s. So the column carries this instead of values, and the run is
+/// not refused for it; any other value that is not a finite energy of at least 0 still is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LateralNaN {
+    pub step: usize,
 }
 
 /// One source's total at a receiver, per band (`.recps`).
@@ -352,6 +366,30 @@ impl SppsResults {
         })
     }
 
+    /// In energetic mode, the share of the energy a receiver gets from any time on that band
+    /// `freq_hz`'s lost particles can have taken with them, or `None` when none was lost or the
+    /// mode is random. Energetic mode keeps every particle until the floor, its energy falling
+    /// with the room's, so a particle lost at `t` carries about the mean energy of the particles
+    /// then, and what it would still have brought is its share of what they all bring after `t`:
+    /// at most [`ENERGETIC_LOST_ENERGY_RATIO`]`·n/N` of the energy from every time on
+    /// (`params::EnergySeries::with_lost_share_following_decay`; `docs/results.md`, "Lost
+    /// particles").
+    pub fn lost_share_following_decay(&self, freq_hz: i32) -> Option<f64> {
+        if self.computation_method == 0 {
+            return None;
+        }
+        let b = self.particles.bands.iter().find(|b| b.freq_hz == freq_hz)?;
+        if b.lost() == 0 {
+            return None;
+        }
+        let emitted = f64::from(self.particles_per_source) * self.sources.len() as f64;
+        Some(if emitted > 0.0 {
+            ENERGETIC_LOST_ENERGY_RATIO * b.lost() as f64 / emitted
+        } else {
+            f64::MAX
+        })
+    }
+
     /// The share of the emitted energy of band `index` the room held at the end of step `bin`: the
     /// room table (`<cumul_filename>`, the energy of the particles alive times `ρc`,
     /// `reportmanager.cpp:155-166, 426-437`) over the `.gap`'s sources' power times `ρc`
@@ -369,6 +407,14 @@ impl SppsResults {
         (power > 0.0).then(|| room / power)
     }
 }
+
+/// In energetic mode, the most a lost particle's energy is taken to be over the mean energy of the
+/// particles when it was lost. Measured on tutorial 1 in energetic mode (3 seeds, 6 octave bands,
+/// 150,000 particles with every trajectory saved): of the 24 particles SPPS counted as lost, the 17
+/// found in the trajectories carried 0.16 to 2.02 times the mean (`crates/simpa/tests/
+/// m8_evidence.rs`, `energetic_lost_particles_from_saved_trajectories`); the other 7 ended with
+/// less than 10⁻⁴ of their start energy. Five times the largest measured.
+pub const ENERGETIC_LOST_ENERGY_RATIO: f64 = 10.0;
 
 const CONFIG: &str = crate::config_xml::names::CONFIG;
 const BY_SOURCE: &str = fixed::POINT_RECEIVER_BY_SOURCE;
@@ -489,8 +535,8 @@ fn band_table(
 struct Gap {
     source_power_rho_c: Vec<f64>,
     noise_db: Vec<f64>,
-    cos2: Vec<Vec<f64>>,
-    abs_cos: Vec<Vec<f64>>,
+    cos2: Vec<Result<Vec<f64>, LateralNaN>>,
+    abs_cos: Vec<Result<Vec<f64>, LateralNaN>>,
 }
 
 fn read_gap(
@@ -577,7 +623,12 @@ fn read_gap(
                     ),
                 ));
             }
-            out.push(energies(rel, &format!("{f} Hz lateral +{k}"), v)?);
+            // A NaN makes the column unusable, not the run (LateralNaN); anything else that is not
+            // a finite energy of at least 0 refuses the run.
+            out.push(match v.iter().position(|x| x.is_nan()) {
+                Some(step) => Err(LateralNaN { step }),
+                None => Ok(energies(rel, &format!("{f} Hz lateral +{k}"), v)?),
+            });
         }
     }
     Ok(gap)
@@ -1095,8 +1146,8 @@ mod tests {
             bands: vec![ReceiverBand {
                 freq_hz: 500,
                 energy: vec![1.0, 1.0],
-                lateral_cos2: vec![0.0; 2],
-                lateral_abs_cos: vec![0.0; 2],
+                lateral_cos2: Ok(vec![0.0; 2]),
+                lateral_abs_cos: Ok(vec![0.0; 2]),
                 intensity: Default::default(),
                 source_power_rho_c: 2.0,
                 background_noise_db: 0.0,

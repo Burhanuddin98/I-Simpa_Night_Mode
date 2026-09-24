@@ -645,7 +645,7 @@
                 "type": "string"
               },
               "with_missing": {
-                "description": "The value with the missing energy added; `None` when that curve cannot be fitted.",
+                "description": "The value with the missing energy added; `None` when that curve cannot be fitted.\nWhen the lost share follows the decay, the value moved by the most that share can\nmove it.",
                 "format": "double",
                 "type": [
                   "number",
@@ -1288,8 +1288,12 @@
             "format": "int32",
             "type": "integer"
           },
+          "lost_follows_decay": {
+            "description": "Energetic mode: what the lost particles would still have brought falls with the decay, so\n`lost_share` bounds the energy from every time on, not a lump added at the end.",
+            "type": "boolean"
+          },
           "lost_share": {
-            "description": "The share of the energy from the arrival on that lost particles can have taken with them\n(`spps::SppsResults::lost_share`); `params` bounds what it can move. `null` when none was\nlost.",
+            "description": "The share of the energy from the arrival on that lost particles can have taken with them\n(`spps::SppsResults::lost_share`), or, when `lost_follows_decay`, of the energy from every\ntime on (`spps::SppsResults::lost_share_following_decay`); `params` bounds what it can\nmove. `null` when none was lost.",
             "format": "double",
             "type": [
               "number",
@@ -1328,6 +1332,7 @@
         "required": [
           "freq_hz",
           "complete",
+          "lost_follows_decay",
           "contributing_sources",
           "noise_model",
           "energy_pa2",

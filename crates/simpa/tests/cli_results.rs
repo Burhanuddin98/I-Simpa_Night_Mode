@@ -1223,7 +1223,7 @@ fn tutorial1_parameters_beside_upstreams() {
     let dt = f64::from(0.01f32);
     let c = f64::from(simpa_core::results::spps::solver_speed_of_sound(20.0));
     let arrival_s = (2.0f64.powi(2) + 4.0f64.powi(2)).sqrt() / c;
-    let arrival = Arrival::Known { time_s: arrival_s };
+    let arrival = Arrival::at(arrival_s);
     let room = read("Total energy.recp");
     let mut on_2019 = Vec::new();
     for (i, col) in recp.columns[1..].iter().enumerate() {
