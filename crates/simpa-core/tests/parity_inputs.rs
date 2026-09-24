@@ -228,7 +228,8 @@ fn the_comparison_gives_one_line_per_value_the_solver_reads_differently() {
 
 /// Tutorial 1, the `.proj` imported the way a user opens it, written for each of upstream's two
 /// runs into upstream's own run folder: every value the solver reads is upstream's, apart from
-/// the ids and the stored directions (see [`tutorial1_ids`], [`tutorial1_directions`]).
+/// the ids (the `.proj`'s own, pinned; the runs carry the 2019 session's: see
+/// [`tutorial1_proj_ids`]) and the stored directions ([`tutorial1_directions`]).
 #[test]
 fn tutorial1_config_from_the_proj_is_upstreams_value_for_value() {
     let t = tutorial(TUTORIAL1);
@@ -248,7 +249,7 @@ fn tutorial1_config_from_the_proj_is_upstreams_value_for_value() {
             println!("  {d}");
         }
         let mut expected = by_design(run.solver);
-        expected.extend(tutorial1_ids());
+        expected.extend(tutorial1_proj_ids());
         expected.extend(tutorial1_directions());
         assert_eq!(got, sorted(expected.clone()), "{}", run.folder);
 
@@ -290,10 +291,10 @@ fn tutorial1_config_from_the_proj_is_upstreams_value_for_value() {
 /// (`element.cpp:610-613`). Upstream loads a project in `wxid` order
 /// (`SortChildrensByProperty`, `element.cpp:64-106, 159`), so each run's `config.xml`, written from
 /// what it loaded, lists 3669 first. Read in that load order, each snapshot gives the run's
-/// `config.xml` value for value (the ids, the stored directions and the differences by design
-/// aside), as the project file beside the runs does. The say-no: the same snapshot with the two
-/// receivers' `wxid`s swapped, which upstream would load in file order, gives the receivers in the
-/// other order.
+/// `config.xml` value for value (the stored directions and the differences by design aside), ids
+/// included: the import pins each entity to its `wxid` (decision 13), so our 3503, 3510 and 3669
+/// are upstream's with no map. The say-no: the same snapshot with the two receivers' `wxid`s
+/// swapped, which upstream would load in file order, gives the receivers in the other order.
 #[test]
 fn tutorial1_run_snapshots_are_read_in_upstreams_load_order() {
     let t = tutorial(TUTORIAL1);
@@ -329,9 +330,13 @@ fn tutorial1_run_snapshots_are_read_in_upstreams_load_order() {
         let ours = write(p, run.solver, None, Path::new(&wd)).unwrap();
         let got = solver_differences(&run.config, &ours);
         let mut expected = by_design(run.solver);
-        expected.extend(tutorial1_ids());
         expected.extend(tutorial1_directions());
         assert_eq!(got, sorted(expected), "{}", run.folder);
+        // The ids with no map: each element's id is the run's.
+        for tag in ["recepteur_ponctuel", "recepteur_surfacique"] {
+            let map = id_map(&run.config, &ours, tag);
+            assert!(map.iter().all(|(a, b)| a == b), "{tag}: {map:?}");
+        }
 
         // The say-no: the receivers' wxids swapped, so upstream's load order is the file's.
         let swapped = run
@@ -557,15 +562,23 @@ fn without_round_trip(model: &cbin::Model, project: &Project) -> cbin::Model {
     m
 }
 
-/// Tutorial 1, the `.proj` imported: our scene mesh gives the solver upstream's faces, corner for
-/// corner bit for bit, with upstream's materials. Our vertex list is the welded one (8 vertices
-/// against upstream's 36, one copy per face), holding exactly upstream's 8 distinct vertices.
+/// Tutorial 1, the `.proj` imported with each run's snapshot: our scene mesh gives the solver
+/// upstream's faces, corner for corner bit for bit, with upstream's materials and upstream's
+/// receiver id, 3503, pinned from its `wxid` (decision 13): no id map. Our vertex list is the
+/// welded one (8 vertices against upstream's 36, one copy per face), holding exactly upstream's
+/// 8 distinct vertices. Says no: the receiver pinned one id higher gives both floor faces'
+/// `idRs` as a difference.
 #[test]
 fn tutorial1_scene_mesh_from_the_proj_is_upstreams_corner_for_corner() {
     let t = tutorial(TUTORIAL1);
-    let project = import_proj(&t.bytes).unwrap().project;
-    let ours = scene_mesh(&project).unwrap();
     for run in &t.runs {
+        let project = simpa_core::geometry::import::import_proj_with_config(
+            &t.bytes,
+            run.project_file.as_bytes(),
+        )
+        .unwrap()
+        .project;
+        let ours = scene_mesh(&project).unwrap();
         let written = write(
             &project,
             run.solver,
@@ -574,7 +587,11 @@ fn tutorial1_scene_mesh_from_the_proj_is_upstreams_corner_for_corner() {
         )
         .unwrap();
         let id_rs = id_map(&run.config, &written, "recepteur_surfacique");
-        assert_eq!(id_rs, BTreeMap::from([(3503, 0)]));
+        assert_eq!(
+            id_rs,
+            BTreeMap::from([(3503, 3503)]),
+            "upstream's id, pinned"
+        );
         let none = BTreeMap::new();
         assert_eq!(
             face_differences(&run.mesh, &ours, &id_rs, &none),
@@ -613,8 +630,18 @@ fn tutorial1_scene_mesh_from_the_proj_is_upstreams_corner_for_corner() {
             face_differences(&run.mesh, &other, &id_rs, &none),
             vec!["face 3 idMat: upstream 22, ours 21".to_string()]
         );
-        // The receiver's id not mapped.
-        assert_eq!(face_differences(&run.mesh, &ours, &none, &none).len(), 2);
+        // Says no: the receiver pinned to another id.
+        let mut repinned = project.clone();
+        repinned.surface_receivers[0].solver_id = Some(3504);
+        let other = scene_mesh(&repinned).unwrap();
+        let got = face_differences(&run.mesh, &other, &id_rs, &none);
+        assert_eq!(
+            got,
+            [
+                "face 0 idRs: upstream 3503, ours 3504",
+                "face 1 idRs: upstream 3503, ours 3504"
+            ]
+        );
     }
 }
 
@@ -768,8 +795,9 @@ fn tutorial3_scene_mesh_is_upstreams_vertex_for_vertex() {
 /// Tutorial 3's box zone, imported from the `.proj` (its corners as stored, `ba` (13, 4, 0) and
 /// `hc` (18, 1, 1.2)), gives the `.cbin` upstream's GUI wrote in each run: faces 88 to 99, each
 /// triangle's three vertices bit for bit and in upstream's order (the winding the solver takes
-/// its normal from), `idMat` 0, `idRs` -1, and `idEn` the box's id, 2083 upstream's and 3 ours.
-/// The say-no: one triangle wound the other way.
+/// its normal from), `idMat` 0, `idRs` -1, and `idEn` the box's id, 2083, upstream's pinned from
+/// its `wxid` (decision 13): no id map. The say-no: one triangle wound the other way, and the box
+/// pinned to another id.
 #[test]
 fn tutorial3_box_triangles_from_the_proj_are_upstreams_bit_for_bit() {
     let t = tutorial(TUTORIAL3);
@@ -788,13 +816,16 @@ fn tutorial3_box_triangles_from_the_proj_are_upstreams_bit_for_bit() {
             .map(|f| (corners(m, f), f.id_mat, f.id_rs, f.id_en))
             .collect()
     };
-    let mine: Vec<_> = box_of(&ours)
-        .into_iter()
-        .map(|(c, mat, rs, en)| {
-            assert_eq!(en, 3, "our id of the box");
-            (c, mat, rs, 2083)
-        })
-        .collect();
+    let mine = box_of(&ours);
+    assert!(mine.iter().all(|b| b.3 == 2083), "the box's id, upstream's");
+    let mut repinned = project.clone();
+    let zone = repinned
+        .fitting_zones
+        .iter_mut()
+        .find(|z| z.solver_id == Some(2083))
+        .unwrap();
+    zone.solver_id = Some(2084);
+    let other = box_of(&scene_mesh(&repinned).unwrap());
     for run in &t.runs {
         assert_eq!(run.mesh.faces.len(), 100);
         assert_eq!(box_of(&run.mesh), mine, "{}", run.folder);
@@ -802,6 +833,8 @@ fn tutorial3_box_triangles_from_the_proj_are_upstreams_bit_for_bit() {
         let mut flipped = mine.clone();
         flipped[0].0.swap(0, 1);
         assert_ne!(box_of(&run.mesh), flipped);
+        // The say-no: the box pinned to 2084.
+        assert_ne!(box_of(&run.mesh), other);
     }
 }
 
@@ -884,6 +917,7 @@ fn a_box_zone_flush_with_a_wall_lies_in_the_walls_plane() {
         absorption: vec![F64::new(0.1); n],
         mean_free_path_m: vec![F64::new(2.0); n],
         diffusion_law: vec![DiffusionLaw::Uniform; n],
+        solver_id: None,
     });
     let input = simpa_core::mesh::project_input(&project).unwrap();
     let scene = project.geometry.vertices.len();
@@ -994,29 +1028,30 @@ fn output_differences(
     out
 }
 
-/// Tutorial 1, the `.proj` imported: our scene mesh welds upstream's 36 vertices into 8
-/// (`docs/formats/cbin.md`, "What still differs", 2). Upstream's own run configuration
-/// ([`repeatable`]) and tetrahedral mesh, run once with upstream's `mesh.cbin` and once with
-/// ours (its receiver id 0 written as upstream's 3503, which the configuration names), give the
+/// Tutorial 1, the `.proj` imported with each run's snapshot: our scene mesh welds upstream's 36
+/// vertices into 8 (`docs/formats/cbin.md`, "What still differs", 2). Upstream's own run
+/// configuration ([`repeatable`]) and tetrahedral mesh, run once with upstream's `mesh.cbin` and
+/// once with ours (its receiver id upstream's 3503, pinned from the snapshot's `wxid`), give the
 /// same output files byte for byte, in SPPS and in TCR: the solvers see the same triangles. The
 /// refusal: ours with one face's material changed (22 to 21, both declared) gives different
 /// output.
 #[test]
 fn the_welded_scene_mesh_gives_upstreams_output() {
     let t = tutorial(TUTORIAL1);
-    let project = import_proj(&t.bytes).unwrap().project;
-    let mut ours = scene_mesh(&project).unwrap();
-    assert_eq!(ours.vertices.len(), 8);
-    for f in &mut ours.faces {
-        if f.id_rs == 0 {
-            f.id_rs = 3503;
-        }
-    }
-    let mut other_material = ours.clone();
-    assert_eq!(other_material.faces[3].id_mat, 22);
-    other_material.faces[3].id_mat = 21;
     let none = BTreeMap::new();
     for run in &t.runs {
+        let project = simpa_core::geometry::import::import_proj_with_config(
+            &t.bytes,
+            run.project_file.as_bytes(),
+        )
+        .unwrap()
+        .project;
+        let ours = scene_mesh(&project).unwrap();
+        assert_eq!(ours.vertices.len(), 8);
+        assert!(ours.faces.iter().any(|f| f.id_rs == 3503), "upstream's id");
+        let mut other_material = ours.clone();
+        assert_eq!(other_material.faces[3].id_mat, 22);
+        other_material.faces[3].id_mat = 21;
         let kind = if run.solver == SolverKind::Spps {
             "spps"
         } else {

@@ -1,7 +1,11 @@
 # Provenance: room fixtures
 
 Upstream's two tutorial projects at upstream commit 929a5c8, imported by
-`simpa_core::geometry::import::import_proj`, then renamed and described. Nothing else is edited.
+`simpa_core::geometry::import::import_proj`, then renamed and described, and upstream's scene
+correction switched off (`solvers.meshing.preprocess` false where both `.proj` files ask for it):
+these rooms are the M5 and M6 gates' rooms, meshed without `preprocess.exe`
+(`docs/m5-m6-design.md`, decision 12). Nothing else is edited; `tools/gates/m4.ps1` (b)(c)
+applies the same edit to a fresh import and requires the rest to be equal.
 Regenerate on Grace with
 `cargo test -p simpa-core --test geometry_import_proj -- --ignored write_room_fixtures`;
 `room_fixtures_are_the_import_of_upstreams_tutorials` fails when these files drift from the
@@ -15,6 +19,15 @@ import.
 `elmia_corrected.simpa` replaces Night Mode's `testdata/elmia_corrected.ply`. The geometry is
 the same hall, but the groups here come from the `.proj`'s own `.finfo` face lists and `idmat`
 material ids. The PLY's centroid-guessed groups are wrong for 2,438 of its 7,860 faces.
+
+Since 2026-09-24 (`docs/m5-m6-design.md`, decision 13) the import pins every source, receiver
+and surface receiver to upstream's element id (`solver_id`, the `.proj`'s `wxid`: the box's
+surface receiver 1792, receivers 1473 and 1632, source 1799), and records each source's group;
+the three derived rooms and their hashes below were regenerated with them. Their hashes have
+changed with every key the `.simpa` format gained that day (`destination`, `preprocess`,
+`solver_id`, `group`). `tools/fixture-gen/test_fixture_gen.py` holds the files to the derivation
+(`test_the_committed_rooms_are_the_derivation`) and both tables' sha256 to the files they name
+(`test_the_provenance_tables_give_each_files_sha256`).
 
 What each file holds is asserted by `crates/simpa-core/tests/geometry_import_rooms.rs`, which
 needs nothing outside the repo:
@@ -38,16 +51,17 @@ give back the same bytes.
 
 | fixture | from | edits | for | sha256 |
 |---|---|---|---|---|
-| `tutorial1_box_seeded.simpa` | `tutorial1_box.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 150,000 → 10,000: M1's reference configuration | gate M6(a) | `960dd67769665c29` |
-| `tutorial1_box_fitting.simpa` | `tutorial1_box_seeded.simpa` | one fitting zone, below | gate M5(e) | `5dda008fe04be568` |
-| `elmia_loss_gate.simpa` | `elmia_corrected.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 1,000,000 → 100,000; `bands_computed` true for 125, 250, 500, 1000, 2000 and 4000 Hz only, in both solvers (SPPS already had exactly these; TCR had all 27) | gate M6(c) | `d1c4245a41fb30ed` |
+| `tutorial1_box_seeded.simpa` | `tutorial1_box.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 150,000 → 10,000: M1's reference configuration | gate M6(a) | `9786c83432c2be57` |
+| `tutorial1_box_fitting.simpa` | `tutorial1_box_seeded.simpa` | one fitting zone, below | gate M5(e) | `0fb1de7a635cb854` |
+| `elmia_loss_gate.simpa` | `elmia_corrected.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 1,000,000 → 100,000; `bands_computed` true for 125, 250, 500, 1000, 2000 and 4000 Hz only, in both solvers (SPPS already had exactly these; TCR had all 27) | gate M6(c) | `ae8e2ecbe83309f0` |
 
 The fitting zone: id `0c0be000-0000-4000-8000-00000000f177`, name `Fitting zone`, enabled, a
 box from (1, 1, 0.5) to (2, 2, 1.5) m (1 m³, dyadic corners, so the gate's 1e-9 volume check
 is exact) with no upstream corner order (`destination` null, a box drawn here; the key was added
-on 2026-09-24 with the `.proj` import of rectangular zones, which changed the file's hash from
-`fab25e56605b7008`), and in all 27 bands absorption 0.1, mean free path 1.0 m and diffusion law
-`uniform`. Those pass `fitting_parameters_invalid` (0 ≤ α ≤ 1, λ > 0). The zone clears the
+on 2026-09-24 with the `.proj` import of rectangular zones), and in all 27 bands absorption 0.1,
+mean free path 1.0 m and diffusion law
+`uniform`, and no pinned solver id (`solver_id` null: a zone drawn here, numbered 2 by export).
+Those pass `fitting_parameters_invalid` (0 ≤ α ≤ 1, λ > 0). The zone clears the
 source (3, 5, 1.8) and both receivers, (1, 1, 1.8) and (3, 7, 1.8).
 
 ## M7 rooms

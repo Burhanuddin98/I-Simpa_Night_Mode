@@ -59,18 +59,35 @@ Check "(b) import-proj tutorial_2: 3,926 vertices, 7,860 faces, 10 groups, area 
     Write-Host "      $($s.vertices) vertices, $($s.faces) faces, $(@($s.groups).Count) groups, area $($s.area_m2) m2"
     $script:lastExit -eq 0 -and $s.vertices -eq 3926 -and $s.faces -eq 7860 -and @($s.groups).Count -eq 10 -and (Near $s.area_m2 4001.8 0.1)
 }
-# Everything but the free-text name and description must equal the committed fixture.
-function Normalized($path) { $o = Get-Content $path -Raw | ConvertFrom-Json; $o.PSObject.Properties.Remove('name'); $o.PSObject.Properties.Remove('description'); $o | ConvertTo-Json -Depth 64 -Compress }
-Check "(b)(c) import-proj reproduces the committed room fixtures (all but name and description)" {
-    $boxOut = Join-Path $work 'tutorial1_box_again.simpa'
+# Everything but the free-text name and description must equal the committed fixture, and the
+# one setting its writer changes (geometry_import_proj.rs, write_room_fixtures): upstream's scene
+# correction, which both .proj files ask for, switched off, since the rooms are the M5 and M6
+# gates' rooms, meshed without preprocess.exe (docs/m5-m6-design.md, decision 12). With
+# -SwitchOff the file must ask for it, and it is switched off before the comparison.
+function Normalized($path, [switch]$SwitchOff) {
+    $o = Get-Content $path -Raw | ConvertFrom-Json
+    $o.PSObject.Properties.Remove('name'); $o.PSObject.Properties.Remove('description')
+    if ($SwitchOff) {
+        if ($o.solvers.meshing.preprocess -ne $true) { throw "$path does not ask for preprocess, as its .proj does" }
+        $o.solvers.meshing.preprocess = $false
+    }
+    $o | ConvertTo-Json -Depth 64 -Compress
+}
+$boxOut = Join-Path $work 'tutorial1_box_again.simpa'
+Check "(b)(c) import-proj reproduces the committed room fixtures (all but name, description and the scene correction switched off)" {
     & $simpa import-proj "$tut\tutorial 1\tutorial_1.proj" $boxOut | Out-Null
     $same = @()
     foreach ($pair in @(@($hall, 'elmia_corrected.simpa'), @($boxOut, 'tutorial1_box.simpa'))) {
-        $a = Normalized $pair[0]; $b = Normalized (Join-Path $repo ('tests\fixtures\rooms\' + $pair[1]))
+        $a = Normalized $pair[0] -SwitchOff; $b = Normalized (Join-Path $repo ('tests\fixtures\rooms\' + $pair[1]))
         Write-Host "      $($pair[1]): $(if ($a -eq $b) { 'identical' } else { 'DIFFERS' })"
         $same += ($a -eq $b)
     }
     -not ($same -contains $false)
+}
+Check "(b)(c) says NO: the import as the .proj asks, the scene correction left on, is not the fixture" {
+    $a = Normalized $boxOut; $b = Normalized (Join-Path $repo 'tests\fixtures\rooms\tutorial1_box.simpa')
+    Write-Host "      tutorial1_box.simpa, the correction left on: $(if ($a -eq $b) { 'identical' } else { 'DIFFERS' })"
+    $a -ne $b
 }
 Check "(b) corrected hall passes check: 11,790 edges all used twice, 0 self-intersections, volume > 0" {
     $r = SimpaJson @('check', $hall, '--json')

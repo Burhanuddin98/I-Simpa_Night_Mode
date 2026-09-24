@@ -282,9 +282,22 @@ pub fn by_design(solver: SolverKind) -> Vec<String> {
     e
 }
 
-/// Tutorial 1's ids: upstream numbers elements by its GUI's session counters, we by project
-/// order (config_xml's module docs). Receivers are written last first by both, so the first one
-/// written is our receiver 1.
+/// Tutorial 1's ids through its `.proj`'s own `projet_config.xml`: an import pins each entity to
+/// its `wxid` there (`docs/m5-m6-design.md`, decision 13), the ids of the session that last saved
+/// the project, while each run carries those of the 2019 session that wrote it (upstream numbers
+/// elements by its GUI's session counters and renumbers them on every load). A run's own
+/// snapshot, imported, gives the run's ids exactly.
+pub fn tutorial1_proj_ids() -> Vec<String> {
+    vec![
+        "recepteursp/recepteur_ponctuel[0]@id: upstream 3669, ours 1632".to_string(),
+        "recepteursp/recepteur_ponctuel[1]@id: upstream 3510, ours 1473".to_string(),
+        "recepteurss/recepteur_surfacique[0]@id: upstream 3503, ours 1792".to_string(),
+    ]
+}
+
+/// Tutorial 1's ids for a project that pins none (its `config.xml` imported): upstream numbers
+/// elements by its GUI's session counters, we by project order (config_xml's module docs).
+/// Receivers are written last first by both, so the first one written is our receiver 1.
 pub fn tutorial1_ids() -> Vec<String> {
     vec![
         "recepteursp/recepteur_ponctuel[0]@id: upstream 3669, ours 1".to_string(),
@@ -355,8 +368,9 @@ pub fn drop_attr(xml: &str, element_start: &str, attr: &str) -> String {
     format!("{}{}", &xml[..a], &xml[b..])
 }
 
-/// What differs by design between a tutorial 3 run's config, its ids read through the id map, and
-/// ours from the `.proj` (`docs/formats/config_xml.md`, "Parity with upstream's GUI").
+/// What differs by design between a tutorial 3 run's config and ours from the `.proj` read with
+/// that run's saved project, whose ids are upstream's, pinned (decision 13), so no id differs
+/// (`docs/formats/config_xml.md`, "Parity with upstream's GUI").
 pub fn tutorial3_by_design() -> Vec<String> {
     let mut expected = vec![
         // The GUI's section of the project tree for volumes, which no solver looks up.

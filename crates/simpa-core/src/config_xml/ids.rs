@@ -34,8 +34,12 @@ pub struct SolverIds {
 }
 
 impl SolverIds {
-    /// Assigns every solver id. The result depends only on the project's lists and their order,
-    /// and not on the variant, the enabled flags or the names. The project should pass
+    /// Assigns every solver id. The result depends only on the project's lists, their order and
+    /// their pinned ids, and not on the variant, the enabled flags or the names. A pinned id is
+    /// kept (a `.proj` import pins upstream's element ids, `docs/m5-m6-design.md`, decision 13);
+    /// the others are numbered around the pins ([`assign_kind`]), so a project with no pins gets
+    /// the ids it always had. Two items of one kind pinned to one id, a fitting zone pinned to 0,
+    /// or a pin above [`SOLVER_INT_MAX`] is [`WriteError::SolverIdClash`]. The project should pass
     /// [`Project::check_integrity`]; [`super::write()`] and [`scene_mesh`] check it first.
     pub fn assign(project: &Project) -> Result<SolverIds, WriteError> {
         let pinned_of = |g: GroupId| -> Option<u32> {
@@ -71,32 +75,32 @@ impl SolverIds {
             };
             group_materials.push((g.id, id));
         }
-        let index = |what: &'static str, i: usize, base: i32| -> Result<i32, WriteError> {
-            i32::try_from(i)
-                .ok()
-                .and_then(|i| i.checked_add(base))
-                .ok_or(WriteError::TooManyIds { what })
-        };
         Ok(SolverIds {
             group_materials,
-            surface_receivers: project
-                .surface_receivers
-                .iter()
-                .enumerate()
-                .map(|(i, r)| Ok((r.id, index("surface receivers", i, 0)?)))
-                .collect::<Result<_, WriteError>>()?,
-            fitting_zones: project
-                .fitting_zones
-                .iter()
-                .enumerate()
-                .map(|(i, z)| Ok((z.id, index("fitting zones", i, FIRST_FITTING_ID)?)))
-                .collect::<Result<_, WriteError>>()?,
-            point_receivers: project
-                .point_receivers
-                .iter()
-                .enumerate()
-                .map(|(i, r)| Ok((r.id, index("point receivers", i, 0)?)))
-                .collect::<Result<_, WriteError>>()?,
+            surface_receivers: assign_kind(
+                "surface receivers",
+                project
+                    .surface_receivers
+                    .iter()
+                    .map(|r| (r.id, r.solver_id, r.name.as_str())),
+                0,
+            )?,
+            fitting_zones: assign_kind(
+                "fitting zones",
+                project
+                    .fitting_zones
+                    .iter()
+                    .map(|z| (z.id, z.solver_id, z.name.as_str())),
+                FIRST_FITTING_ID as u32,
+            )?,
+            point_receivers: assign_kind(
+                "point receivers",
+                project
+                    .point_receivers
+                    .iter()
+                    .map(|r| (r.id, r.solver_id, r.name.as_str())),
+                0,
+            )?,
         })
     }
 
@@ -115,6 +119,63 @@ impl SolverIds {
     pub fn point_receiver_id(&self, id: PointReceiverId) -> Option<i32> {
         lookup(&self.point_receivers, id)
     }
+}
+
+/// The solver ids of one kind's list, in its order: an item's pinned id when it has one; otherwise
+/// the smallest id from `base` up that no pin of the list and no earlier item uses. Without pins
+/// that is `base` plus the item's position, the numbering of a project made here. Refused
+/// ([`WriteError::SolverIdClash`]): two items pinned to one id (for fittings and scene receivers
+/// a solver looks an id up and takes the first match, `base_core_configuration.cpp:374-391`,
+/// `coreinitialisation.cpp:48-56`, so the second would be hidden; a point receiver's id is only
+/// TCR's column label, `ctr/input_output/reportmanager.cpp:98`, so two would share one), a
+/// fitting zone pinned to 0 (the solvers' "no fitting", `coreinitialisation.cpp:151-176`), or a
+/// pin above [`SOLVER_INT_MAX`].
+fn assign_kind<'a, K: Copy>(
+    what: &'static str,
+    items: impl Iterator<Item = (K, Option<u32>, &'a str)>,
+    base: u32,
+) -> Result<Vec<(K, i32)>, WriteError> {
+    let items: Vec<(K, Option<u32>, &str)> = items.collect();
+    let mut pinned: HashMap<u32, &str> = HashMap::new();
+    for &(_, pin, name) in &items {
+        let Some(id) = pin else { continue };
+        let clash = |reason: String| WriteError::SolverIdClash {
+            what,
+            id,
+            reason: format!("'{name}' is pinned to it, {reason}"),
+        };
+        if id > SOLVER_INT_MAX {
+            return Err(clash(format!(
+                "above the largest id the solvers read, {SOLVER_INT_MAX}"
+            )));
+        }
+        if what == "fitting zones" && id == 0 {
+            return Err(clash(
+                "the id the solvers read as no fitting on a tetrahedron".to_string(),
+            ));
+        }
+        if let Some(first) = pinned.insert(id, name) {
+            return Err(clash(format!("and so is '{first}'")));
+        }
+    }
+    let mut next = base;
+    let mut out = Vec::with_capacity(items.len());
+    for (key, pin, _) in items {
+        let id = match pin {
+            Some(id) => id,
+            None => {
+                while pinned.contains_key(&next) {
+                    next = next.checked_add(1).ok_or(WriteError::TooManyIds { what })?;
+                }
+                let id = next;
+                next = next.checked_add(1).ok_or(WriteError::TooManyIds { what })?;
+                id
+            }
+        };
+        let id = i32::try_from(id).map_err(|_| WriteError::TooManyIds { what })?;
+        out.push((key, id));
+    }
+    Ok(out)
 }
 
 fn lookup<K: PartialEq, V: Copy>(pairs: &[(K, V)], key: K) -> Option<V> {

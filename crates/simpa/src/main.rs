@@ -21,12 +21,15 @@ const USAGE: &str = "usage:
   simpa repair <in> <out.simpa> [--weld-tolerance <m>] [--json]      exit 3 when refused
   simpa mesh <project.simpa | file.poly> --out <dir> [--json] [--tetgen <exe>]
              [--preprocess <exe>] [--parity] [--from-tetgen <dir> [--basename <b>]]
-             [--cancel-after-ms <n>]
+             [--cancel-after-ms <n>] [--tetgen-timeout-ms <n>] [--preprocess-timeout-ms <n>]
       TetGen's and preprocess.exe's lines on stderr; exit 0, 2, 3, 4, 130. A project whose mesh
-      settings ask for upstream's scene correction goes through preprocess.exe first; --parity
-      keeps preprocess.exe's facet markers byte for byte, as upstream's GUI meshes them, fails
-      the mesh when they do not verify, and writes the .mbin for byte comparison only.
-      --cancel-after-ms cancels preprocess.exe or TetGen that long after it starts.
+      settings ask for upstream's scene correction goes through preprocess.exe first; when it
+      saves nothing, the .poly as written is meshed, as upstream's GUI meshes it, and a note on
+      stderr says so. --parity keeps preprocess.exe's facet markers byte for byte, as upstream's
+      GUI meshes them, fails the mesh when they do not verify, and writes the .mbin for byte
+      comparison only; without the scene correction it has no effect, and a note says so.
+      --cancel-after-ms cancels preprocess.exe or TetGen that long after it starts; each is
+      stopped at its time limit (default 1 h for TetGen, 10 min for preprocess.exe).
   simpa mesh-verify <dir> [--json] [--room-id <n>] [--fittings <a,b,..>]   exit 4 when it fails
   simpa run <project.simpa> --solver spps|tcr [--variant <v>] [--mesh <dir>] [--runs <root>]
             [--loss-limit <f>] [--cancel-after-ms <n>] [--cancel-after-progress <p>]
@@ -424,8 +427,9 @@ fn import_proj_cmd(args: &[&str]) -> ExitCode {
         }
         return print_summary(&imported.project, false);
     }
-    // The summary, and what the import recorded: upstream's element id of each entity it made
-    // (the explicit id map, `geometry::import::proj`, "Element ids"), and its notes.
+    // The summary, and what the import recorded: upstream's element id of each entity it made,
+    // which it also pins as that entity's `solver_id` (`geometry::import::proj`, "Element ids"),
+    // and its notes.
     let mut s = project_summary(&imported.project);
     s["upstream_ids"] = report
         .upstream_ids

@@ -12037,7 +12037,9 @@
       "directivity": {
         "kind": "omni"
       },
-      "delay_s": 0.0
+      "delay_s": 0.0,
+      "group": null,
+      "solver_id": 1062
     },
     {
       "id": "20521ee3-0694-4142-9178-810601779c9d",
@@ -12053,7 +12055,9 @@
       "directivity": {
         "kind": "omni"
       },
-      "delay_s": 0.0
+      "delay_s": 0.0,
+      "group": null,
+      "solver_id": 1221
     },
     {
       "id": "8330ec03-22e9-419f-b2c2-70110a3e97bc",
@@ -12069,7 +12073,9 @@
       "directivity": {
         "kind": "omni"
       },
-      "delay_s": 0.0
+      "delay_s": 0.0,
+      "group": null,
+      "solver_id": 1380
     }
   ],
   "point_receivers": [
@@ -12083,7 +12089,8 @@
         "shape": {
           "kind": "white"
         }
-      }
+      },
+      "solver_id": 64
     },
     {
       "id": "aacb66cf-9931-445d-8fb2-232aa03ee109",
@@ -12095,7 +12102,8 @@
         "shape": {
           "kind": "white"
         }
-      }
+      },
+      "solver_id": 223
     },
     {
       "id": "898177c4-906a-493e-acd3-550985e9f0ac",
@@ -12107,7 +12115,8 @@
         "shape": {
           "kind": "white"
         }
-      }
+      },
+      "solver_id": 382
     },
     {
       "id": "683788b9-87a3-4e1f-8d1d-45148eb0ebcb",
@@ -12119,7 +12128,8 @@
         "shape": {
           "kind": "white"
         }
-      }
+      },
+      "solver_id": 541
     },
     {
       "id": "4f3e1306-c714-4af8-aa3f-77f3725bfb6e",
@@ -12131,7 +12141,8 @@
         "shape": {
           "kind": "white"
         }
-      }
+      },
+      "solver_id": 700
     },
     {
       "id": "2ef423fb-bd4d-4fd9-8b89-66fe7b22f68d",
@@ -12143,7 +12154,8 @@
         "shape": {
           "kind": "white"
         }
-      }
+      },
+      "solver_id": 859
     }
   ],
   "surface_receivers": [
@@ -12157,7 +12169,8 @@
         "b": [11.93, 5.73, 1.13],
         "c": [29.56, 5.79, 5.25],
         "resolution_m": 0.5
-      }
+      },
+      "solver_id": 1019
     },
     {
       "id": "2998cf44-5359-4fe3-b870-f8143f0df4f6",
@@ -12169,7 +12182,8 @@
         "b": [33.17, 8.58, 6.23],
         "c": [40.73, 8.58, 9.47],
         "resolution_m": 0.5
-      }
+      },
+      "solver_id": 1040
     }
   ],
   "fitting_zones": [],

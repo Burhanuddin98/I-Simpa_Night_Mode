@@ -12,15 +12,18 @@
 //! - **It never fails by its exit code.** `main` returns 0 whatever happened (`:112-121`). When a
 //!   repair loop runs out of its 100 passes it prints `Mesh reparation has been aborted` and saves
 //!   nothing; when it cannot read the file it prints `The mesh file cant be found !`. Both are
-//!   `preprocess_aborted`, and so is a saved file that still holds user facets (its coplanar
-//!   step ran out of passes, and TetGen never reads Part 5).
+//!   `preprocess_aborted`, a recorded outcome, not a refusal: the mesher then meshes the `.poly`
+//!   as written, as upstream's GUI does, and the geometry check on it is the gate. A saved file
+//!   that still holds user facets (its coplanar step ran out of passes, and TetGen never reads
+//!   Part 5) is `preprocess_output_invalid`.
 //! - **What it changed.** It prints only three counts. [`account`] compares the file before and
 //!   after, facet by facet: every facet it wrote must lie inside the facet it came from, and every
 //!   input facet is kept, split into pieces of the same total area, or deleted, the deletions
 //!   agreeing with its count.
-//! - **Its markers are wrong for user facets.** Its reader gives every Part 5 facet the first one's
-//!   marker (`poly.cpp:418-423`: the loop compares `parsedFaces`, never reset after Part 2, with
-//!   the Part 2 count), and split pieces inherit it (`computations.cpp:610`). [`account`] finds
+//! - **Its markers for user facets are not the facets they lie in** (measured on tutorial 3).
+//!   Its reader gives every Part 5 facet the first one's marker (`poly.cpp:418-423`: the loop
+//!   compares `parsedFaces`, never reset after Part 2, with the Part 2 count), and split pieces
+//!   inherit it (`computations.cpp:610`). [`account`] finds
 //!   each such facet's true marker, the user facet it lies inside; the mesher writes it back
 //!   ([`Markers::Restored`], the default) or keeps preprocess's bytes ([`Markers::Parity`]).
 
@@ -258,8 +261,8 @@ fn distance_into(t: &[[f64; 3]; 3], parent: &[[f64; 3]; 3]) -> f64 {
 /// - the output holds no user facet, and the input's regions unchanged;
 /// - each output facet lies inside the facet it came from: a facet marked as an input scene
 ///   facet (Part 2) inside that facet; a facet carrying a user facet's marker, which may be the
-///   wrong one (the reader defect), inside exactly one input user facet, whose marker is its true
-///   one;
+///   first user facet's (as its reader assigns them), inside exactly one input user facet, whose
+///   marker is its true one;
 /// - each input facet is deleted (nothing lies inside it), or kept, alone or split, its pieces'
 ///   total area its own within its perimeter times `tolerance`: the pieces lie within
 ///   `tolerance` of it, so they can leave uncovered, or cover twice, at most a strip that wide
@@ -501,6 +504,29 @@ pub struct PreprocessReport {
     pub markers_rewritten: bool,
     /// One line: what it changed.
     pub summary: String,
+    /// What TetGen was given: `corrected`, what `preprocess.exe` saved, accounted for; or
+    /// `aborted`, when it saved nothing (it gave up, could not read the file, or printed no
+    /// statistics) and the `.poly` as written, uncorrected, was meshed, as upstream's GUI meshes
+    /// it then (`projet_maillage.cpp:206-213`: the GUI does not look at the result). `None` when
+    /// the run failed (its codes say why). Read as `None` when absent.
+    #[serde(default)]
+    pub outcome: Option<PreprocessOutcome>,
+    /// Why it was `aborted`, in words, with its last line; `None` otherwise. Read as `None` when
+    /// absent.
+    #[serde(default)]
+    pub aborted_reason: Option<String>,
+}
+
+/// [`PreprocessReport::outcome`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PreprocessOutcome {
+    /// TetGen read what `preprocess.exe` saved, accounted for facet by facet.
+    Corrected,
+    /// `preprocess.exe` saved nothing; TetGen read the `.poly` as the mesher wrote it, which the
+    /// geometry check gates. The mesh folder's `scene_mesh.poly` is that file, byte for byte
+    /// `scene_mesh.input.poly`.
+    Aborted,
 }
 
 #[cfg(test)]

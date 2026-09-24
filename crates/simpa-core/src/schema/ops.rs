@@ -397,6 +397,20 @@ where
     Ok(())
 }
 
+/// The pinned solver ids `list` would hold with its item `i` replaced by one pinned to `new`.
+fn others<'a, T>(
+    list: &'a [T],
+    i: usize,
+    pin: impl Fn(&T) -> Option<u32> + 'a,
+    new: Option<u32>,
+) -> impl Iterator<Item = Option<u32>> + 'a {
+    list.iter()
+        .enumerate()
+        .filter(move |&(j, _)| j != i)
+        .map(move |(_, x)| pin(x))
+        .chain([new])
+}
+
 fn band_slot(values: &mut [F64], band: usize) -> Result<&mut F64> {
     let bands = values.len();
     values.get_mut(band).ok_or(OpError::Band { band, bands })
@@ -875,6 +889,13 @@ impl Op {
             Op::AddSource { index, source } => {
                 insertable(&p.sources, "source", index, source.id, |s| s.id)?;
                 integrity::check_source(&source, n)?;
+                integrity::unique_pins(
+                    "source",
+                    p.sources
+                        .iter()
+                        .map(|s| s.solver_id)
+                        .chain([source.solver_id]),
+                )?;
                 let id = source.id;
                 p.sources.insert(index, source);
                 Ok(Op::RemoveSource { id })
@@ -889,6 +910,10 @@ impl Op {
             Op::ReplaceSource { source } => {
                 let i = position(&p.sources, "source", source.id, |s| s.id)?;
                 integrity::check_source(&source, n)?;
+                integrity::unique_pins(
+                    "source",
+                    others(&p.sources, i, |s| s.solver_id, source.solver_id),
+                )?;
                 Ok(Op::ReplaceSource {
                     source: replace(&mut p.sources[i], source),
                 })
@@ -916,6 +941,13 @@ impl Op {
                     |r| r.id,
                 )?;
                 integrity::check_point_receiver(&receiver, n)?;
+                integrity::unique_pins(
+                    "point receiver",
+                    p.point_receivers
+                        .iter()
+                        .map(|r| r.solver_id)
+                        .chain([receiver.solver_id]),
+                )?;
                 let id = receiver.id;
                 p.point_receivers.insert(index, receiver);
                 Ok(Op::RemovePointReceiver { id })
@@ -930,6 +962,10 @@ impl Op {
             Op::ReplacePointReceiver { receiver } => {
                 let i = position(&p.point_receivers, "point receiver", receiver.id, |r| r.id)?;
                 integrity::check_point_receiver(&receiver, n)?;
+                integrity::unique_pins(
+                    "point receiver",
+                    others(&p.point_receivers, i, |r| r.solver_id, receiver.solver_id),
+                )?;
                 Ok(Op::ReplacePointReceiver {
                     receiver: replace(&mut p.point_receivers[i], receiver),
                 })
@@ -950,6 +986,13 @@ impl Op {
                     |r| r.id,
                 )?;
                 integrity::check_surface_receiver(&receiver, &|g| p.group(g).is_some())?;
+                integrity::unique_pins(
+                    "surface receiver",
+                    p.surface_receivers
+                        .iter()
+                        .map(|r| r.solver_id)
+                        .chain([receiver.solver_id]),
+                )?;
                 let id = receiver.id;
                 p.surface_receivers.insert(index, receiver);
                 Ok(Op::RemoveSurfaceReceiver { id })
@@ -966,6 +1009,10 @@ impl Op {
                     r.id
                 })?;
                 integrity::check_surface_receiver(&receiver, &|g| p.group(g).is_some())?;
+                integrity::unique_pins(
+                    "surface receiver",
+                    others(&p.surface_receivers, i, |r| r.solver_id, receiver.solver_id),
+                )?;
                 Ok(Op::ReplaceSurfaceReceiver {
                     receiver: replace(&mut p.surface_receivers[i], receiver),
                 })
@@ -973,6 +1020,13 @@ impl Op {
             Op::AddFittingZone { index, zone } => {
                 insertable(&p.fitting_zones, "fitting zone", index, zone.id, |z| z.id)?;
                 integrity::check_fitting_zone(&zone, n, &|g| p.group(g).is_some())?;
+                integrity::unique_pins(
+                    "fitting zone",
+                    p.fitting_zones
+                        .iter()
+                        .map(|z| z.solver_id)
+                        .chain([zone.solver_id]),
+                )?;
                 let id = zone.id;
                 p.fitting_zones.insert(index, zone);
                 Ok(Op::RemoveFittingZone { id })
@@ -987,6 +1041,10 @@ impl Op {
             Op::ReplaceFittingZone { zone } => {
                 let i = position(&p.fitting_zones, "fitting zone", zone.id, |z| z.id)?;
                 integrity::check_fitting_zone(&zone, n, &|g| p.group(g).is_some())?;
+                integrity::unique_pins(
+                    "fitting zone",
+                    others(&p.fitting_zones, i, |z| z.solver_id, zone.solver_id),
+                )?;
                 Ok(Op::ReplaceFittingZone {
                     zone: replace(&mut p.fitting_zones[i], zone),
                 })

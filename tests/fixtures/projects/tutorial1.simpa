@@ -143,7 +143,9 @@
       "directivity": {
         "kind": "omni"
       },
-      "delay_s": 0.0
+      "delay_s": 0.0,
+      "group": null,
+      "solver_id": null
     }
   ],
   "point_receivers": [
@@ -157,7 +159,8 @@
         "shape": {
           "kind": "white"
         }
-      }
+      },
+      "solver_id": null
     },
     {
       "id": "967292ee-c2d6-47d5-97ab-f162ed87cbe9",
@@ -169,7 +172,8 @@
         "shape": {
           "kind": "white"
         }
-      }
+      },
+      "solver_id": null
     }
   ],
   "surface_receivers": [
@@ -180,7 +184,8 @@
       "shape": {
         "kind": "scene",
         "groups": ["b7ef82d8-23d8-4ae7-80fc-f91fc3e0adeb"]
-      }
+      },
+      "solver_id": null
     }
   ],
   "fitting_zones": [],

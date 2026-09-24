@@ -41,8 +41,9 @@ pub enum IntegrityError {
     RepeatedGroup { what: String, group: GroupId },
     /// A variant's overrides are not strictly ascending by group id.
     OverrideOrder { variant: Uuid },
-    /// Two materials pin the same solver id.
-    DuplicateSolverId { solver_id: u32 },
+    /// Two entities of one kind (materials, point receivers, surface receivers and cutting
+    /// planes together, fitting zones, sources) pin the same solver id.
+    DuplicateSolverId { kind: &'static str, solver_id: u32 },
     /// An integer the solver reads as a C `int` is above [`SOLVER_INT_MAX`].
     SolverInt { what: String, value: u32 },
 }
@@ -94,8 +95,8 @@ impl fmt::Display for IntegrityError {
                 f,
                 "variant {variant}: overrides are not strictly ascending by group id"
             ),
-            IntegrityError::DuplicateSolverId { solver_id } => {
-                write!(f, "two materials pin the solver id {solver_id}")
+            IntegrityError::DuplicateSolverId { kind, solver_id } => {
+                write!(f, "two {kind}s pin the solver id {solver_id}")
             }
             IntegrityError::SolverInt { what, value } => write!(
                 f,
@@ -180,18 +181,25 @@ pub(crate) fn check_material(m: &Material, n: usize) -> Result {
 }
 
 pub(crate) fn check_source(s: &Source, n: usize) -> Result {
-    check_spectrum(|| format!("source '{}' power", s.name), &s.power, n)
+    check_spectrum(|| format!("source '{}' power", s.name), &s.power, n)?;
+    if let Some(id) = s.solver_id {
+        solver_int(|| format!("source '{}' solver_id", s.name), id)?;
+    }
+    Ok(())
 }
 
 pub(crate) fn check_point_receiver(r: &PointReceiver, n: usize) -> Result {
-    match &r.background_noise {
-        Some(noise) => check_spectrum(
+    if let Some(noise) = &r.background_noise {
+        check_spectrum(
             || format!("receiver '{}' background noise", r.name),
             noise,
             n,
-        ),
-        None => Ok(()),
+        )?;
     }
+    if let Some(id) = r.solver_id {
+        solver_int(|| format!("receiver '{}' solver_id", r.name), id)?;
+    }
+    Ok(())
 }
 
 /// Every group in `groups` exists and appears once.
@@ -223,6 +231,9 @@ pub(crate) fn check_surface_receiver(
     r: &SurfaceReceiver,
     exists: &dyn Fn(GroupId) -> bool,
 ) -> Result {
+    if let Some(id) = r.solver_id {
+        solver_int(|| format!("surface receiver '{}' solver_id", r.name), id)?;
+    }
     match &r.shape {
         SurfaceReceiverShape::Scene { groups } => {
             check_group_list(|| format!("surface receiver '{}'", r.name), groups, exists)
@@ -240,6 +251,9 @@ pub(crate) fn check_fitting_zone(
     band_count(|| what("absorption"), z.absorption.len(), n)?;
     band_count(|| what("mean free path"), z.mean_free_path_m.len(), n)?;
     band_count(|| what("diffusion law"), z.diffusion_law.len(), n)?;
+    if let Some(id) = z.solver_id {
+        solver_int(|| what("solver_id"), id)?;
+    }
     match &z.shape {
         FittingShape::Surfaces { groups, .. } => {
             check_group_list(|| format!("fitting zone '{}'", z.name), groups, exists)
@@ -329,15 +343,40 @@ pub(crate) fn check_solver_settings(s: &SolverSettings, n: usize) -> Result {
     )
 }
 
-/// Pinned solver ids are unique.
+/// Pinned material solver ids are unique.
 pub(crate) fn check_solver_ids<'a>(materials: impl Iterator<Item = &'a Material>) -> Result {
+    unique_pins("material", materials.map(|m| m.solver_id))
+}
+
+/// The pins among `pins` are unique: two entities of `kind` pinned to one id are
+/// [`IntegrityError::DuplicateSolverId`].
+pub(crate) fn unique_pins(kind: &'static str, pins: impl Iterator<Item = Option<u32>>) -> Result {
     let mut seen = HashSet::new();
-    for id in materials.filter_map(|m| m.solver_id) {
+    for id in pins.flatten() {
         if !seen.insert(id) {
-            return Err(IntegrityError::DuplicateSolverId { solver_id: id });
+            return Err(IntegrityError::DuplicateSolverId {
+                kind,
+                solver_id: id,
+            });
         }
     }
     Ok(())
+}
+
+/// Every kind's pinned solver ids are unique within the kind: the point receivers', the surface
+/// receivers' (cutting planes included: they share `idRs`'s numbering), the fitting zones' and
+/// the sources'. Ops that add or replace one of them check the list it will be in.
+pub(crate) fn check_entity_pins(p: &Project) -> Result {
+    unique_pins(
+        "point receiver",
+        p.point_receivers.iter().map(|r| r.solver_id),
+    )?;
+    unique_pins(
+        "surface receiver",
+        p.surface_receivers.iter().map(|r| r.solver_id),
+    )?;
+    unique_pins("fitting zone", p.fitting_zones.iter().map(|z| z.solver_id))?;
+    unique_pins("source", p.sources.iter().map(|s| s.solver_id))
 }
 
 impl Project {
@@ -346,9 +385,10 @@ impl Project {
     /// within each kind of entity; every reference (face to group, group to material, receivers,
     /// fitting zones and variants to groups and materials, the active variant) resolves; face
     /// vertex indices in range; variant overrides strictly ascending by group; group lists
-    /// without repeats; pinned material solver ids unique; every integer the solver reads as a
-    /// C `int` (pinned solver ids, SPPS particle counts and random seed) at most
-    /// [`SOLVER_INT_MAX`], since a larger one cannot be written to config.xml at all.
+    /// without repeats; pinned solver ids unique within each kind (materials, point receivers,
+    /// surface receivers, fitting zones, sources); every integer the solver reads as a C `int`
+    /// (pinned solver ids, SPPS particle counts and random seed) at most [`SOLVER_INT_MAX`], since
+    /// a larger one cannot be written to config.xml at all.
     ///
     /// Other value ranges, geometry and names are not checked here: that is `core::validate`.
     pub fn check_integrity(&self) -> Result {
@@ -399,6 +439,7 @@ impl Project {
         for z in &self.fitting_zones {
             check_fitting_zone(z, n, &group_exists)?;
         }
+        check_entity_pins(self)?;
         check_solver_settings(&self.solvers, n)?;
         for v in &self.variants {
             check_variant(v, &group_exists, &material_exists)?;

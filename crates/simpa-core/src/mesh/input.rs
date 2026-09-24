@@ -8,7 +8,7 @@ use super::verify::VolumeIds;
 use crate::config_xml::{self, GlFrame, SolverIds};
 use crate::formats::{cbin, poly};
 use crate::mesh::verify::DRAWN_ZONE_TRIANGLES;
-use crate::schema::{FittingShape, Project, SurfaceReceiverShape, Vec3};
+use crate::schema::{FittingShape, Project, SOLVER_INT_MAX, SurfaceReceiverShape, Vec3};
 
 /// What a `.poly` marker at or above the scene's face count stands for: one triangle of a `Box`
 /// fitting zone (`docs/m5-m6-design.md`, decision 5).
@@ -29,6 +29,11 @@ pub struct FittingRegion {
     pub seed: [f32; 3],
     /// A `Box` zone's centre, `(min + max) / 2`: a point strictly inside it, whatever its seed.
     pub box_centre: Option<[f64; 3]>,
+    /// A `Box` zone's volume from its bounds as written, m³: its cell must have it, or the box's
+    /// faces are not what bounds the cell its id is on (`mesh::verify`, "Regions"). Read as
+    /// `None` when absent.
+    #[serde(default)]
+    pub box_volume_m3: Option<f64>,
     /// A `Surfaces` zone's scene faces (`.cbin` indices, ascending): the faces of its groups.
     pub faces: Vec<u32>,
 }
@@ -75,6 +80,29 @@ impl std::fmt::Display for InputError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
+}
+
+/// Whether TetGen's room ids fit above `fittings`, the seeded region attributes of a `.poly` of
+/// `facets` facets. TetGen numbers each region no seed reaches from one above the largest seed,
+/// one per region, in a C `int` (`attr++`, `tetgen.cxx:22403-22436`). A region is bounded by at
+/// least four facets and a facet bounds at most two regions, so there are fewer regions than
+/// facets: the largest seed plus `facets` must fit, or the room's ids would wrap. A `.proj`
+/// import pins upstream's ids, which may be anything up to [`SOLVER_INT_MAX`], so this is
+/// checked, not assumed (the validator's `solver_id_mapping_invalid` says the same earlier).
+pub fn room_id_headroom(fittings: &[i32], facets: usize) -> Result<(), InputError> {
+    let Some(&largest) = fittings.iter().max() else {
+        return Ok(());
+    };
+    if i64::from(largest) + facets as i64 <= i64::from(SOLVER_INT_MAX) {
+        return Ok(());
+    }
+    Err(InputError(format!(
+        "fitting id {largest}: TetGen numbers the room's regions from one above the largest \
+         fitting id, one per region, and a .poly of {facets} facets can have up to {facets} of \
+         them, so their ids could pass {SOLVER_INT_MAX}, the largest C int; the fitting ids must \
+         be at most {} here",
+        i64::from(SOLVER_INT_MAX) - facets as i64
+    )))
 }
 
 fn narrow(v: Vec3, what: &str) -> Result<[f32; 3], InputError> {
@@ -179,6 +207,10 @@ pub fn project_input(project: &Project) -> Result<MeshInput, InputError> {
         tetgen_layout(project)?
     };
     let fittings: Vec<i32> = layout.fittings.iter().map(|f| f.solver_id).collect();
+    room_id_headroom(
+        &fittings,
+        layout.poly.model_faces.len() + layout.poly.user_defined_faces.len(),
+    )?;
     Ok(MeshInput {
         poly: layout.poly,
         var,
@@ -234,6 +266,13 @@ fn box_bounds(
         )));
     }
     Ok((lo, hi))
+}
+
+/// A box's volume from its `f32` bounds, m³.
+fn box_volume(lo: [f32; 3], hi: [f32; 3]) -> f64 {
+    (0..3)
+        .map(|a| f64::from(hi[a]) - f64::from(lo[a]))
+        .product()
 }
 
 /// The layout without preprocessing (decision 5): see [`project_input`].
@@ -305,7 +344,11 @@ fn tetgen_layout(project: &Project) -> Result<Layout, InputError> {
                 });
                 // The centre, from the corners as written, narrowed again.
                 let centre = [0, 1, 2].map(|a| (f64::from(lo[a]) + f64::from(hi[a])) / 2.0);
-                (centre.map(|c| c as f32), Some(centre), Vec::new())
+                (
+                    centre.map(|c| c as f32),
+                    Some((centre, box_volume(lo, hi))),
+                    Vec::new(),
+                )
             }
             FittingShape::Surfaces {
                 inside_point,
@@ -325,7 +368,8 @@ fn tetgen_layout(project: &Project) -> Result<Layout, InputError> {
             zone: z.name.clone(),
             solver_id: id,
             seed,
-            box_centre,
+            box_centre: box_centre.map(|b| b.0),
+            box_volume_m3: box_centre.map(|b| b.1),
             faces,
         });
     }
@@ -374,8 +418,8 @@ pub fn upstream_box_seed(ba: [f32; 3], hc: [f32; 3]) -> [f32; 3] {
 /// - Part 5, the user facet list: the box triangles, marker = their `.cbin` face index, each on
 ///   its own three nodes (`:968-1001`);
 /// - Part 4, the regions (`:1003-1037`): one per enabled zone, attribute = its solver id (where
-///   upstream writes its element id, `xmlIdElement`, `:1009`; storing upstream's ids is Burhan's
-///   open decision, so ours are compared through the recorded id map), refinement -1
+///   upstream writes its element id, `xmlIdElement`, `:1009`; a `.proj` import pins that id,
+///   `docs/m5-m6-design.md`, decision 13, so the attributes are upstream's), refinement -1
 ///   (`drawable_element.h:101`). A box is seeded at [`upstream_box_seed`] of its corners as
 ///   upstream holds them ([`FittingShape::box_corners`]); a `Surfaces` zone at its
 ///   `inside_point` (upstream's `volpos`, `e_scene_encombrements_encombrement_model.h:177`),
@@ -442,6 +486,7 @@ pub fn preprocess_layout(project: &Project) -> Result<Layout, InputError> {
                     box_centre: Some(
                         [0, 1, 2].map(|a| (f64::from(lo[a]) + f64::from(hi[a])) / 2.0),
                     ),
+                    box_volume_m3: Some(box_volume(lo, hi)),
                     faces: Vec::new(),
                 });
             }
@@ -453,6 +498,7 @@ pub fn preprocess_layout(project: &Project) -> Result<Layout, InputError> {
                 solver_id: id,
                 seed: narrow(*inside_point, &what("inside_point"))?,
                 box_centre: None,
+                box_volume_m3: None,
                 faces: zone_faces(project, groups),
             }),
         }
@@ -585,6 +631,7 @@ pub fn poly_input(model: &poly::Model) -> Result<MeshInput, InputError> {
     let mut fittings: Vec<i32> = model.model_regions.iter().map(|r| r.region_index).collect();
     fittings.sort_unstable();
     fittings.dedup();
+    room_id_headroom(&fittings, model.model_faces.len())?;
     let poly = poly::Model {
         save_face_index: true,
         user_defined_faces: Vec::new(),

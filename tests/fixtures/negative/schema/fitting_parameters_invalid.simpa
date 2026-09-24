@@ -72,7 +72,9 @@
       "directivity": {
         "kind": "omni"
       },
-      "delay_s": 0.0
+      "delay_s": 0.0,
+      "group": null,
+      "solver_id": null
     }
   ],
   "point_receivers": [
@@ -81,7 +83,8 @@
       "name": "Receiver 1",
       "position": [2.0, 3.75, 2.5],
       "orientation": [1.0, 0.0, 0.0],
-      "background_noise": null
+      "background_noise": null,
+      "solver_id": null
     }
   ],
   "surface_receivers": [],
@@ -98,7 +101,8 @@
       },
       "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
       "mean_free_path_m": [2.0, 2.0, 0.0, 2.0, 2.0, 2.0],
-      "diffusion_law": ["uniform", "uniform", "uniform", "uniform", "uniform", "uniform"]
+      "diffusion_law": ["uniform", "uniform", "uniform", "uniform", "uniform", "uniform"],
+      "solver_id": null
     }
   ],
   "environment": {
