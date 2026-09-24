@@ -193,6 +193,7 @@ any basename. Its own codes:
 | the survey's self-intersecting cube | `-pq5 -A -n -Y` | exit 3, `tetgen_self_intersection`: the stop names the edge [9, 10] (facet 12) against facet #9 (marker 8); `-d` names 8, 9 and 12 in the pairs [8, 12] and [9, 12]; no `_skipped.face`, no `.mbin` |
 | the box plus a baffle piercing wall face 9 | `-pq2 -A -n` + `.var` | exit 3, the stop names no pair (it stops in `Constrained Delaunay...`); `-d` names faces 9 (`Walls`) and 12 (`Baffle`), the pair [9, 12] |
 | the box plus two overlapping box zones | `-pq2 -A -n` + `.var` | exit 3, the stop names no pair; `-d` names 18 pairs over zone 1's markers 14, 15, 18-21 and zone 2's 24, 25, 28, 29, 34, 35, each named by its zone |
+| upstream's raw Elmia hall as a `.poly` (`elmia.ply`, 1,086 faces, self-intersecting; release `simpa mesh`) | `-pq5 -A -n -Y` | exit 3 after 0.25 s, `tetgen_self_intersection`: the stop names facets 553 and 581 (`Found two facets intersect each other.`); `-d` exits 0 and names 1,397 distinct pairs over 897 facets, its `.1.face` 897 rows |
 
 ## Measured with TetGen 1.6.0 (2026-09-23, Grace, debug build of the tests)
 

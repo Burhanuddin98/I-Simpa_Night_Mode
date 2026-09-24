@@ -14,7 +14,7 @@
 //! TetGen 1.5.0, the mesher since decision 3 (`docs/m5-m6-design.md`), speaks a third way:
 //! - **It stops at the first self-intersection it meets** with exit code 3 and the line
 //!   [`SELF_INTERSECTION_STOP`] (`terminatetetgen`, `tetgen.h:2265-2267`), and writes no
-//!   `_skipped.face`. Before the stop it usually names the pair ([`stop_pair`]):
+//!   `_skipped.face`. Before the stop it may name the pair ([`stop_pair`]):
 //!   `Found two facets intersect each other.` (or `two duplicated facets`, `two segments`,
 //!   `a segment and a subface`) followed by `  1st: [..] n` and `  2nd: [..] n`
 //!   (`tetgen.cxx:13571-13583, 19264-19273, 19603-19609`). A facet there is `[a, b, c]` with its

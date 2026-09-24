@@ -11,9 +11,9 @@
 //! TetGen's `scene_mesh.1.*` (or `scene_mesh_skipped.*`), `tetgen.stdout.txt` and
 //! `tetgen.stderr.txt`, `mesh.cbin`, `tetramesh.mbin` **only when meshing succeeded**, `mesh.json`
 //! always, and `diag/` after skipped facets or a self-intersection stop. Every file a mesh
-//! writes, and every file TetGen
-//! would read beside the `.poly` (`.var`, `.edge`, `.mtr`: `tetgen.cxx:2446-2449`), is deleted
-//! before meshing starts ([`delete_stale`]), so nothing from an earlier mesh is silently reused.
+//! writes, and every file TetGen would read beside the `.poly` (`.var`, `.edge`, `.mtr`:
+//! `tetgen.cxx:2446-2449`), is deleted before meshing starts ([`delete_stale`]), so nothing from
+//! an earlier mesh is silently reused.
 //!
 //! The outcome carries every reason code that applies ([`codes`]), and `status` is `OK` exactly
 //! when there is none. A `.mbin` is written only after [`verify::verify_mesh`] passes it.
@@ -243,8 +243,8 @@ fn prepare(dir: &Path, m: &mut MeshManifest) -> Result<bool, MeshError> {
 /// Stale files go first ([`delete_stale`]). A settings conflict or a project that cannot be
 /// expressed as TetGen input fails before TetGen runs. On skipped facets (TetGen 1.6.0) or a stop
 /// on a self-intersection (TetGen 1.5.0) a `tetgen -d` follow-up runs in `<out_dir>/diag/` and its
-/// findings go in the manifest. `on_line` sees TetGen's output
-/// as it arrives; `cancel` stops TetGen and leaves no `.mbin`.
+/// findings go in the manifest. `on_line` sees TetGen's output as it arrives; `cancel` stops
+/// TetGen and leaves no `.mbin`.
 ///
 /// `Err` only when the folder cannot be created, or `mesh.json` cannot be written into it; every
 /// other failure is in the manifest.
@@ -617,7 +617,8 @@ fn classify(
     found
 }
 
-/// `segment [9, 10] (facets 12)`, `facet [1, 4, 6] (facets 8)`: one element of a pair, in words.
+/// `segment [9, 10] (facet markers 12)`, `facet [1, 4, 6] (facet markers 8)`: one element of a
+/// pair, in words.
 fn describe(e: &Element) -> String {
     let points: Vec<String> = e.points.iter().map(i64::to_string).collect();
     let markers: Vec<String> = e.markers.iter().map(u32::to_string).collect();

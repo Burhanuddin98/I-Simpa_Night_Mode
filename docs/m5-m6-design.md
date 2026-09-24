@@ -66,7 +66,8 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
        (`mesh_project.rs::the_var_refines_the_receiver_faces`) beside its refusal: the same box
        without its `.var` gives 60 tetrahedra and a floor face of 13.43 m².
      - **Self-intersections stop TetGen.** 1.5.0 writes no `_skipped.face`; it exits 3 at the
-       first self-intersection, often naming the pair. The mesher reports
+       first self-intersection, sometimes naming the pair (on `tg_bad`; not on the box with a
+       piercing baffle, nor with two overlapping zones). The mesher reports
        `tetgen_self_intersection` with that pair and the findings of a `tetgen -d` follow-up
        (which 1.5.0 runs to exit 0, writing the intersecting triangles as a `.1.face`), mapped to
        scene faces, groups and box zones (`docs/formats/mesh-manifest.md`). A 1.6.0
@@ -123,8 +124,8 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
      10,000 particles, 500, 1000 and 2000 Hz):
      - **v1.4.0** (`929a5c8`, the pin): SPPS 17 of 17 and TCR 15 of 15 files identical to ours.
      - **v1.3.4** (2020-12-23, the last stable release): TCR identical but for the sign of 4 NaNs
-       in `Main results.gabe`. SPPS: the particle statistics and `Total energy.recp` identical, so
-       the same particles; 15 of 17 files differ. Point receivers' levels differ by at most
+       in `Main results.gabe`. SPPS: the particle statistics and `Total energy.recp` identical (the
+       same particle fates, inferred); 15 of 17 files differ. Point receivers' levels differ by at most
        1.9e-4 relative (`Sound level.recp`), per source by 4.1e-6. Surface receivers differ far
        more: single time-step records by up to 98 %, and each face's energy summed over time by
        up to 84 % (2 kHz). Why the surface receivers differ between the two releases is not

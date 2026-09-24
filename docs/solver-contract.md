@@ -567,7 +567,7 @@ the first one. What follows marks each difference.
 - **Failure signature, TetGen 1.5.0** (VERIFIED 2026-09-24 on `tests/fixtures/meshes/tg_bad`):
   exit 3; no `.1.*` file and no `_skipped.*`; stdout ends with `A self-intersection was
   detected. Program stopped.` and a hint to use `-d`, which 1.5.0 prints on every exit 3
-  (`tetgen.h:2265-2267`), and stderr is empty. Before that line it usually names the pair,
+  (`tetgen.h:2265-2267`), and stderr is empty. Before that line it may name the pair,
   `Found a segment and a subface intersect.` with `  1st: [9, 10] 1.` and `  2nd: [1,4,6] 9`: a
   facet by its points and its 1-based position in the `.poly`, a segment by its points. On other
   paths it names nothing (the box with a piercing baffle stops in `Constrained Delaunay...`).

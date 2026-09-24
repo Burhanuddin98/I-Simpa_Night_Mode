@@ -19,8 +19,8 @@ pub mod support;
 
 use support::{Value, doc_attrs, doc_ignored, parse_value, solver_view, upstream_file};
 
-/// Every file of a tutorial project whose name ends with `suffix` (`temp/scene_mesh.poly`), read
-/// from its zip; panics when there is not exactly one.
+/// The one file of a tutorial project whose name ends with `suffix` (`temp/scene_mesh.poly`),
+/// read from its zip; panics when there is not exactly one.
 pub fn entry(t: &Tutorial, suffix: &str) -> Vec<u8> {
     let archive = Archive::parse(&t.bytes).unwrap();
     let names: Vec<String> = archive
