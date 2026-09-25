@@ -20,8 +20,8 @@
 //!
 //! **What is tested where.** `free_paths` takes the room alone, at fixed settings: it is what
 //! `params::room::kuttruff_rt` takes, and the checks that bear on the reference use it. The
-//! transport's behaviour at other settings and starting points (a finer run for tighter known
-//! answers, the rays' start, the correlation of successive paths, a seed search) is studied
+//! transport's behaviour at other settings and starting points (an independent run at its own
+//! seed, the rays' start, the correlation of successive paths, a seed search) is studied
 //! through `free_path_study`, which exists in test builds only and gives a `FreePathStudy`, which
 //! no function of `params::room` takes. The two share every line of the transport:
 //! `free_paths` equals `free_path_study` at the same settings to the bit.
@@ -39,8 +39,9 @@ use simpa_core::params::lambert::{
 };
 use simpa_core::params::room::{RtConstant, Surface, kuttruff_rt};
 
-/// More rays than `STANDARD`, so that `γ²`'s standard error is about 0.0002.
-const FINE: FreePathSettings = FreePathSettings {
+/// A study at its own seed, apart from `STANDARD`'s: 8,388,608 paths, a quarter of `STANDARD`'s,
+/// precise enough for the effects studied below (`γ²`'s standard error about 0.0003).
+const STUDY: FreePathSettings = FreePathSettings {
     replicas: 16,
     rays_per_replica: 8192,
     burn_in_paths: 32,
@@ -139,7 +140,7 @@ fn the_box_integral_reproduces_bailey_borwein_crandalls_cube() {
 fn free_paths_have_the_mean_4v_over_s_and_the_exact_gamma2_of_the_cube_and_m8s_rooms() {
     for (name, size, exact) in rooms() {
         let room = Enclosure::shoebox(size).unwrap();
-        let p = study(&room, &FINE);
+        let p = study(&room, &STUDY);
         let mfp_off = p.mean_free_path_off_se();
         let g_off = (p.gamma2 - exact) / p.gamma2_se;
         println!(
@@ -161,7 +162,8 @@ fn free_paths_have_the_mean_4v_over_s_and_the_exact_gamma2_of_the_cube_and_m8s_r
         assert!(mfp_off.abs() < 3.0, "{name}: {mfp_off}");
         assert!(g_off.abs() < 3.0, "{name}: {g_off}");
         // What core::results uses, the room alone at the fixed settings, gives the same within its
-        // larger error, and is the transport studied here at those settings, to the bit.
+        // error (four times the study's paths), and is the transport studied here at those
+        // settings, to the bit.
         let s = free_paths(&room).unwrap();
         println!(
             "{name}: free_paths gamma^2 {:.5} ± {:.5} ({:+.2} SE)",
@@ -252,7 +254,7 @@ fn lambert_boxs_values_are_its_counting_and_the_exact_ones_are_the_diffuse_field
         let exact = box_gamma2(size);
         let room = Enclosure::shoebox(size).unwrap();
         let counted = free_path_study(&room, &as_lambert_box, Some(source)).unwrap();
-        let diffuse = study(&room, &FINE);
+        let diffuse = study(&room, &STUDY);
         println!(
             "{name}: lambert_box {reported}; this transport counted as lambert_box counted \
              {:.5} ± {:.5} (mean free path {:+.2} SE from 4V/S), as free_paths counts {:.5} ± \
@@ -305,7 +307,7 @@ fn the_first_paths_are_left_out_because_they_remember_the_start() {
                 room,
                 &FreePathSettings {
                     burn_in_paths,
-                    ..FINE
+                    ..STUDY
                 },
             );
             println!(
@@ -407,9 +409,13 @@ fn a_sphere_of_triangles_gives_one_eighth_whatever_its_faces_orientation() {
     // 20,480 faces: the polyhedron's γ² lies above 1/8 by its facets, measured to fall fourfold a
     // subdivision (+0.0172, +0.0044, +0.0011, +0.00025, +0.00004 from 80 to 20,480 faces).
     let tris = icosphere(5);
+    // 4,194,304 paths: an eighth of STANDARD's, for a debug build's time on 20,480 faces.
     let settings = FreePathSettings {
+        replicas: 16,
         rays_per_replica: 4096,
-        ..FreePathSettings::STANDARD
+        burn_in_paths: 32,
+        paths_per_ray: 64,
+        seed: FreePathSettings::STANDARD.seed,
     };
     let room = Enclosure::from_mesh(&tris, &fan(&tris)).unwrap();
     let p = study(&room, &settings);
@@ -589,7 +595,7 @@ fn a_room_that_is_not_convex_still_gives_4v_over_s() {
     let room = Enclosure::from_mesh(&tris, &tets).unwrap();
     assert!((room.area_m2() - 148.0).abs() < 1e-9);
     assert!((room.volume_m3() - 96.0).abs() < 1e-9);
-    let p = study(&room, &FINE);
+    let p = study(&room, &STUDY);
     println!(
         "L room: mean free path {:.5} ± {:.5} m against 4V/S {:.5} m; gamma^2 {:.4} ± {:.4}",
         p.mean_free_path_m,
@@ -599,7 +605,7 @@ fn a_room_that_is_not_convex_still_gives_4v_over_s() {
         p.gamma2_se
     );
     assert!(p.mean_free_path_off_se().abs() < 3.0);
-    // What core::results would give it: accepted, and γ² the finer run's within its error.
+    // What core::results would give it: accepted, and γ² the study's within their errors.
     let r = free_paths(&room).unwrap();
     println!(
         "L room, free_paths: gamma^2 {:.4} ± {:.4}",
@@ -794,11 +800,12 @@ fn gamma2_cannot_be_fitted_through_what_reaches_kuttruff() {
     }
     println!("a seed search at 2 x 1 rays of 3 paths: gamma^2 from {lo:.3} to {hi:.3}");
     assert!(lo < 0.2 && hi > 0.55, "{lo} {hi}");
-    // What reaches kuttruff_rt is free_paths, which takes the room alone. The only freedom left is
-    // how the same room is described: turned and moved, each description draws the transport's
-    // randomness afresh. Over 32 descriptions γ² stays within 4.5 standard errors of the exact
-    // value, and Kuttruff's time at α 0.4 within 0.15 %: a search can pick among the room's own
-    // statistical scatter and nothing more.
+    // What reaches kuttruff_rt is free_paths, which takes the room alone. What is left is how the
+    // room is described. Its surface, turned and moved, draws the transport's randomness afresh:
+    // over 16 descriptions γ² stays within 4.5 standard errors of the exact value, and Kuttruff's
+    // time at α 0.4 within 0.05 %, so a search over them picks among γ²'s own scatter. (Its
+    // tetrahedra, which give V, are the other part:
+    // `the_volume_is_held_to_the_mean_free_paths_error`.)
     let walls = |e: &Enclosure| {
         [Surface {
             area_m2: e.area_m2(),
@@ -811,9 +818,9 @@ fn gamma2_cannot_be_fitted_through_what_reaches_kuttruff() {
     let tris = box_triangles([6.0, 10.0, 3.0]);
     let tets = cells([0.0; 3], [6.0, 10.0, 3.0]);
     let (mut values, mut times) = (Vec::new(), Vec::new());
-    for i in 0..32 {
-        let angle = 0.173 * i as f64;
-        let shift = [0.37 * i as f64, -0.11 * i as f64, 0.013 * i as f64];
+    for i in 0..16 {
+        let angle = 0.346 * i as f64;
+        let shift = [0.74 * i as f64, -0.22 * i as f64, 0.026 * i as f64];
         let t: Vec<[V3; 3]> = tris
             .iter()
             .map(|f| f.map(|p| turned(p, angle, shift)))
@@ -838,16 +845,81 @@ fn gamma2_cannot_be_fitted_through_what_reaches_kuttruff() {
     };
     let t_mean = times.iter().sum::<f64>() / times.len() as f64;
     println!(
-        "32 descriptions of the room through free_paths: gamma^2 from {:.5} to {:.5}; Kuttruff at \
+        "16 descriptions of the room through free_paths: gamma^2 from {:.5} to {:.5}; Kuttruff at \
          alpha 0.4 spread {:.3} %",
         values.iter().cloned().fold(f64::INFINITY, f64::min),
         values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
         100.0 * spread(&times) / t_mean
     );
-    assert!(spread(&times) / t_mean < 0.0015, "{times:?}");
-    // The descriptions are real redraws, not one value 32 times.
+    assert!(spread(&times) / t_mean < 0.0005, "{times:?}");
+    // The descriptions are real redraws, not one value 16 times.
     let mut distinct = values.clone();
     distinct.sort_by(f64::total_cmp);
     distinct.dedup();
-    assert!(distinct.len() >= 30, "{values:?}");
+    assert!(distinct.len() >= 15, "{values:?}");
+}
+
+#[test]
+fn the_volume_is_held_to_the_mean_free_paths_error() {
+    // The tetrahedra give V, and Kuttruff's time is proportional to V, so a volume the
+    // mean-free-path check lets through moves the reference by as much. The check holds V to 6 of
+    // the mean free path's relative standard errors, now over the rays, so which volumes pass no
+    // longer turns on how 16 replicas' spread fell (the pre-M8 review, round 2: at the first
+    // settings a volume 0.4 % off was refused and one 0.5 % off accepted). In the 6×10×3 m room at
+    // the fixed settings that error is about 0.012 %: a volume 0.03 % off (2.5 of them) passes, and
+    // one 0.12 % off (10 of them) is refused, either way.
+    let size = [6.0, 10.0, 3.0];
+    let tris = box_triangles(size);
+    let honest = free_paths(&Enclosure::from_mesh(&tris, &cells([0.0; 3], size)).unwrap()).unwrap();
+    let rel = honest.mean_free_path_se_m() / honest.mean_free_path_m();
+    println!(
+        "6x10x3: mean free path {:.5} ± {:.5} m ({:.4} %)",
+        honest.mean_free_path_m(),
+        honest.mean_free_path_se_m(),
+        100.0 * rel
+    );
+    assert!(rel < 0.00015, "{rel}");
+    let k = RtConstant::Physical {
+        speed_of_sound: 343.2,
+    };
+    for (off, accepted) in [
+        (-0.0003, true),
+        (0.0003, true),
+        (-0.0012, false),
+        (0.0012, false),
+    ] {
+        // Too little: the tetrahedra of a lower box. Too much: a slab of the room counted twice.
+        let tets = if off < 0.0 {
+            cells([0.0; 3], [6.0, 10.0, 3.0 * (1.0 + off)])
+        } else {
+            let mut t = cells([0.0; 3], size);
+            t.extend(cells([0.0, 0.0, 1.0], [6.0, 10.0, 1.0 + 3.0 * off]));
+            t
+        };
+        let room = Enclosure::from_mesh(&tris, &tets).unwrap();
+        assert!((room.volume_m3() / 180.0 - 1.0 - off).abs() < 1e-9);
+        match free_paths(&room) {
+            Ok(p) => {
+                let walls = [Surface {
+                    area_m2: room.area_m2(),
+                    absorption: 0.4,
+                }];
+                let moved = kuttruff_rt(&p, &walls, None, k).unwrap()
+                    / kuttruff_rt(&honest, &walls, None, k).unwrap()
+                    - 1.0;
+                println!(
+                    "volume {:+.2} %: accepted, Kuttruff at alpha 0.4 {:+.3} %",
+                    100.0 * off,
+                    100.0 * moved
+                );
+                assert!(accepted, "volume {off}: {p:?}");
+            }
+            Err(e) => {
+                println!("volume {:+.2} %: refused, {e}", 100.0 * off);
+                assert!(!accepted, "volume {off}: {e}");
+                assert_eq!(e.code(), codes::TRANSPORT_REFUSED);
+                assert!(e.to_string().contains("4V/S"), "{e}");
+            }
+        }
+    }
 }

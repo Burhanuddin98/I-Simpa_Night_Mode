@@ -37,7 +37,7 @@ use crate::schema::SolverKind;
 /// its `aggregate` says it sums nothing; surface files carry `aggregate` and each receiver its `id`.
 /// Version 4 has not been merged yet, so these are 4 as well. 5 (pre-M8): an SPPS run carries
 /// `reference`, Kuttruff's corrected Eyring with `γ²` from the room's geometry and plain Eyring,
-/// labelled and not validated.
+/// labelled and not validated; and seeds (`monte_carlo.seed`, the transport's) are hex strings.
 pub const REPORT_VERSION: u32 = 5;
 
 /// A quantity's value, or why it has none.
@@ -505,7 +505,10 @@ pub struct MonteCarloReport {
     pub resamples: usize,
     /// Resamples that may refuse a quantity before its value is refused.
     pub refused_resamples_allowed: usize,
-    /// The bootstrap's seed.
+    /// The bootstrap's seed, as `0x` and 16 hex digits: as a JSON number above 2⁵³ it would not
+    /// survive a reader that parses numbers as doubles.
+    #[serde(serialize_with = "crate::params::serialize_seed")]
+    #[schemars(with = "String", pattern(crate::params::SEED_PATTERN))]
     pub seed: u64,
     /// The largest standard deviation a value may carry: EDT, T20 and T30 relative, C50 and C80
     /// in dB, D50 as a fraction, Ts in s, SPL in dB.

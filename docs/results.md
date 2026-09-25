@@ -687,6 +687,9 @@ report carries both references, labelled and not validated (`spps.reference`,
   same within 0.04 %, ±0.002 to 0.004 %. The core transport's own T30 against Eyring reproduces
   the "Transport" column within 0.07 %. The table's `γ²` values are its counting's: the core
   transport, counting as `lambert_box.rs` counted, gives 0.38812 and 0.35187.
+- **The reference as shipped** (`kuttruff_s`, with the transport's `γ²` at its fixed settings) is
+  within 0.6 % of the core transport's receivers and room energy in every cell: worst +0.595 % and
+  +0.593 % (5×4×3 m, α 0.4). Nothing here is validated; M8 has not run.
 
 ### Seed spread: what "≤ 2 %" asks for
 

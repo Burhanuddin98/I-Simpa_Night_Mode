@@ -112,7 +112,7 @@ are not for publication.`
 | `receiver_crossing_s` | `2R/c`: the direct sound is spread over this long at a receiver |
 | `celerity_gradient` | `alog` or `blin` is not 0: no straight-line arrival is computed |
 | `computation_method`, `particles_per_source`, `trans_epsilon`, `echogram_per_source` | `computation_method` (0 random, 1 energetic), `nbparticules`, `trans_epsilon` and `output_recp_bysource` as SPPS reads them |
-| `monte_carlo` | how every value's noise was judged: `resamples`, `refused_resamples_allowed`, `seed`, and the largest standard deviation allowed, `limit_decay_relative` (EDT, T20, T30), `limit_clarity_db`, `limit_definition`, `limit_centre_time_s`, `limit_spl_db` (`docs/params.md`, "Monte-Carlo noise") |
+| `monte_carlo` | how every value's noise was judged: `resamples`, `refused_resamples_allowed`, `seed` (a string, `0x` and 16 hex digits), and the largest standard deviation allowed, `limit_decay_relative` (EDT, T20, T30), `limit_clarity_db`, `limit_definition`, `limit_centre_time_s`, `limit_spl_db` (`docs/params.md`, "Monte-Carlo noise") |
 | `sources[]` | `name`, `position_m` (`null` when not read), `emission_s` (`ceil(delay/dt)·dt`), `band_power_w` (per computed band, W, as SPPS computes it), `balloon` (a directivity balloon: its values are refused, `noise_unknown`) |
 | `particles` | the statistics per band: absorbed by the atmosphere, the materials, the fittings; lost by loops and meshing; remaining; total |
 | `total_energy[]` | per band, the room's energy per step (`<cumul_filename>`) |
@@ -134,16 +134,19 @@ output. **Nothing in it is validated**, and `label` says so beside the numbers:
               "volume_m3": 180.0, "area_m2": 216.0,           // the .mbin's volume, the .cbin's area
               "speed_of_sound_m_s": 343.20001220703125,       // SPPS's c
               "constant_s_per_m": 0.16101993084580937,        // K = 24·ln 10/c
-              "free_paths": {"mean_free_path_m": 3.3311, "mean_free_path_se_m": 0.0029,
-                             "gamma2": 0.38903, "gamma2_se": 0.00090,
+              "free_paths": {"mean_free_path_m": 3.3340, "mean_free_path_se_m": 0.0004,
+                             "gamma2": 0.38883, "gamma2_se": 0.00014,
                              "four_v_over_s_m": 3.3333, "volume_m3": 180.0, "area_m2": 216.0,
-                             "paths": 1048576,
-                             "settings": {...}} | null,   // always the fixed STANDARD
+                             "paths": 33554432,
+                             "settings": {"replicas": 16, "rays_per_replica": 4096,
+                                          "burn_in_paths": 32, "paths_per_ray": 512,
+                                          "seed": "0x6c616d6265727431"}} | null,
+                                                              // always the fixed STANDARD
               "bands": [{"freq_hz": 500, "air_m_per_metre": 0.000628 | null,
                          "mean_absorption": 0.2,              // ᾱ = Σ Sᵢαᵢ / S
                          "lambert_walls": false,              // every face Lambert, scattering 1?
                          "eyring_s": {"value": 0.5957, "mc_sd": null},
-                         "kuttruff_s": {"value": 0.6225, "mc_sd": 0.0000647}}, ...]}
+                         "kuttruff_s": {"value": 0.6225, "mc_sd": 0.0000103}}, ...]}
                                                               // mc_sd: gamma^2's share only
 | {"status": "not_computed", "why": "..."}
 ```
@@ -164,7 +167,9 @@ output. **Nothing in it is validated**, and `label` says so beside the numbers:
   not `4V/S` within its error, or `γ²`'s standard error is above 0.002); every band's
   `kuttruff_s` then carries that refusal, `params_transport_refused`, and `eyring_s` is still
   given. `free_paths.settings` is always the transport's fixed `STANDARD`: nothing a caller
-  chooses reaches it.
+  chooses reaches it. Its `seed`, like `monte_carlo.seed`, is a string, `0x` and 16 hex digits:
+  as a JSON number above 2⁵³ it would be read as another seed by any reader that parses numbers
+  as doubles.
 - `not_computed` when the scene has fitting faces (as TCR's `analytic`), the speed of sound varies
   with height (`celerity_gradient`), or the inputs do not read.
 

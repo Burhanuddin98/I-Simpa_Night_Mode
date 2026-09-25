@@ -18,8 +18,13 @@
 //!   constructor and no fields a caller can set. So a `γ²` fitted to a solver's numbers cannot be
 //!   given to [`super::room::kuttruff_rt`], by construction, and neither can one fished for by
 //!   trying seeds or ray counts until the transport happens to give the wanted value. What is left
-//!   to a caller is the description of the room (its placement, its faces, its tetrahedra), which
-//!   draws the transport's randomness otherwise; [`GAMMA2_SE_LIMIT`] bounds what that can move.
+//!   to a caller is the description of the room, in two parts. Its surface (placement, faces)
+//!   draws the transport's randomness afresh, which moves `γ²` within its standard error (about
+//!   0.00013 in M8's rooms, Kuttruff's time 0.004 % at `ᾱ` 0.4). Its tetrahedra give the volume
+//!   `V`, to which Kuttruff's time is proportional; the mean-free-path check below holds `V` to 6
+//!   of the mean free path's relative standard errors, about ±0.07 % in M8's rooms, and the time
+//!   moves by as much. Neither fits `γ²` to a solver's output; `results::reference` takes both
+//!   from the run's own `.cbin` and `.mbin`.
 //!   It refuses its own result when the mean free path it measured is not Kosten's `4V/S` within
 //!   its statistical error ([`MEAN_FREE_PATH_TOLERANCE_SE`]): a room that is not closed, a volume
 //!   that is not the surface's, a face with the room on both its sides (it reflects on both, so
@@ -35,9 +40,9 @@
 //! feature, and give a `FreePathStudy`, which no function of `params::room` takes.
 //!
 //! Every result is deterministic: replica `r` of a run with seed `s` draws from its own SplitMix64
-//! stream, and replicas are combined in their order, whatever the threads did. The spread over the
-//! replicas is the statistical error; successive free paths of one ray are correlated, so the
-//! spread of independent replicas, not the count of paths, gives it.
+//! stream, and replicas are combined in their order, whatever the threads did. The statistical
+//! errors are over the rays, each ray's paths summed first: successive free paths of one ray are
+//! correlated, so the ray, not the path, is the independent unit (`PathStats`).
 //!
 //! **Known answers** (`tests/params_lambert.rs`; `docs/params.md`, "Kuttruff's reference"). In a
 //! closed room, Lambert reflection keeps a uniform, isotropic field, so the free paths between
@@ -51,11 +56,10 @@
 //! started every ray at the source and counted from the first reflection; measured with this
 //! transport, that reads `γ²` 0.0035 to 0.005 low and the mean free path 0.16 to 0.27 % long at
 //! 64 paths a ray, and, over the 482 paths a ray it counted at α 0.05, gives its 0.388 and 0.352
-//! (0.38812 and 0.35187, `tests/params_lambert.rs`); rays started in the narrow wing of an
-//! L-shaped room give a mean
-//! free path 0.3 % short after 16 reflections. So [`free_paths`] starts each ray at a point drawn
-//! evenly from the room's volume, and leaves out its first paths as well
-//! ([`FreePathSettings::burn_in_paths`]).
+//! (0.38812 ± 0.00015 and 0.35187 ± 0.00013, `tests/params_lambert.rs`); rays started in the
+//! narrow wing of an L-shaped room give a mean free path 0.3 % short after 16 reflections. So
+//! [`free_paths`] starts each ray at a point drawn evenly from the room's volume, and leaves out
+//! its first paths as well ([`FreePathSettings::burn_in_paths`]).
 //!
 //! **Successive free paths are not independent** in a room with flat walls: a long path tends to
 //! end where the next is long too. Kuttruff's formula takes them as independent
@@ -104,22 +108,23 @@ fn refused(detail: impl Into<String>) -> ParamError {
 }
 
 /// How far the measured mean free path may lie from `4V/S`, in its standard errors, before
-/// [`free_paths`] refuses its own result. With 16 replicas the standard error is itself known to
-/// about a fifth, so 6 leaves a correct transport a chance of about 10⁻⁴ of being refused, and
-/// since every run is deterministic, a given room is either always accepted or always refused.
+/// [`free_paths`] refuses its own result. The standard error is over tens of thousands of
+/// independent rays (`PathStats`) and known to a fraction of a per cent, so a correct transport is
+/// refused for its noise alone with a chance of about 2·10⁻⁹, and since every run is
+/// deterministic, a given room is either always accepted or always refused. At the fixed settings
+/// it holds the tetrahedra's volume to about ±0.07 % of the surface's in M8's rooms (the mean free
+/// path's relative standard error, 0.012 %, six times): `tests/params_lambert.rs`,
+/// `the_volume_is_held_to_the_mean_free_paths_error`.
 pub const MEAN_FREE_PATH_TOLERANCE_SE: f64 = 6.0;
 
 /// The largest standard error of `γ²` [`free_paths`] accepts; above it, it refuses its own
-/// result. At its fixed settings a box's is 0.0006 to 0.0009 (0.0009 for tutorial 1's box as
-/// TetGen meshed it), an L-shaped room's 0.0007 and a sphere's 0.0002 (`tests/params_lambert.rs`,
-/// `simpa results` on the committed fixture), so only a room whose free paths the fixed rays
-/// cannot pin down is refused. It bounds what redescribing the same room can do to `γ²`, the one
-/// freedom [`free_paths`] leaves a caller: every description is a fresh draw of the transport's
-/// randomness, and the largest of many draws lies a few standard errors from the room's value
-/// (32 descriptions of the 6×10×3 m room, turned and moved: −2.4 to +2.2 standard errors,
-/// Kuttruff's time at `ᾱ` 0.4 within 0.08 %). At `γ²` ± 0.002 Kuttruff's time moves by 0.06 %
-/// at `ᾱ` 0.4 and 0.2 % at 0.8 (`∂T/T` per unit `γ²` is
-/// `−ln(1 − ᾱ)/(2·(1 + (γ²/2)·ln(1 − ᾱ)))`, air aside).
+/// result: the fixed rays do not pin that room's free paths down. At its fixed settings a box's
+/// is 0.00012 to 0.00014, an L-shaped room's 0.0001 and a sphere's 0.00004
+/// (`tests/params_lambert.rs`), so no room tried comes near it; the settings the pre-M8 review
+/// fished with (a few rays) are refused for it. At `γ²` ± 0.002 Kuttruff's time would move by
+/// 0.06 % at `ᾱ` 0.4 and 0.2 % at 0.8 (`∂T/T` per unit `γ²` is
+/// `−ln(1 − ᾱ)/(2·(1 + (γ²/2)·ln(1 − ᾱ)))`, air aside). It bounds the statistical scatter
+/// only; how far the room's description can move the reference is in the [module docs](self).
 pub const GAMMA2_SE_LIMIT: f64 = 0.002;
 
 /// Barycentric slack of the ray–triangle test: a ray through a shared edge hits both faces, so no
@@ -618,7 +623,8 @@ impl Ray {
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct FreePathSettings {
     /// Independent replicas, each its own random stream, traced on as many threads as the
-    /// machine has. At least 2. The statistical errors are over the rays (`PathStats`).
+    /// machine has. At least 2. The statistical errors are over the rays, each ray's paths summed
+    /// first.
     pub replicas: u32,
     /// Rays per replica, each started at a point drawn evenly from the enclosure's volume, in an
     /// isotropic direction.
@@ -652,7 +658,10 @@ impl FreePathSettings {
     /// 0.83 in 6×10×3 m, at 64 or 512 paths a ray alike. So at least 21.7 M paths counted; the
     /// smallest power-of-two multiple of the first settings' 1,048,576 that reaches it is 32
     /// (`σ(γ²)` about 0.000124, `3σ(T)/T` 0.0105 %). The seed was kept, and the draw these
-    /// settings give is the reference whatever it is.
+    /// settings give is the reference whatever it is; they were committed on their own before any
+    /// run at this seed. The draw fell +2.3 standard errors from the exact `γ²` in that room, which
+    /// the target absorbs; over 16 other seeds that room's draws average −0.02 ± 0.19 standard
+    /// errors from it: chance, not bias.
     ///
     /// 512 paths a ray rather than 64 spends 6 % of the tracing on the 33 paths left out instead
     /// of 34 %: the same precision in three quarters of the time (0.55 s against 0.74 s for a
@@ -725,17 +734,17 @@ impl FreePathSettings {
     description = "The free paths between reflections of a diffuse (Lambert) ray transport in the \
                    room, computed from its geometry alone at fixed settings \
                    (params::lambert::free_paths): their mean and relative variance gamma^2, with \
-                   their standard errors over the transport's replicas, and the room's 4V/S, V \
+                   their standard errors over the transport's rays, and the room's 4V/S, V \
                    and S."
 )]
 pub struct FreePaths {
     /// The mean free path, m.
     mean_free_path_m: f64,
-    /// Its standard error over the replicas, m.
+    /// Its standard error over the rays, m.
     mean_free_path_se_m: f64,
     /// `γ²`, the free paths' relative variance `(⟨ℓ²⟩ − ⟨ℓ⟩²)/⟨ℓ⟩²`.
     gamma2: f64,
-    /// Its standard error over the replicas.
+    /// Its standard error over the rays (the delta method's).
     gamma2_se: f64,
     /// Kosten's `4V/S`, m, which the mean free path was checked against.
     four_v_over_s_m: f64,
@@ -755,7 +764,7 @@ impl FreePaths {
         self.mean_free_path_m
     }
 
-    /// Its standard error over the replicas, m.
+    /// Its standard error over the rays, m.
     pub fn mean_free_path_se_m(&self) -> f64 {
         self.mean_free_path_se_m
     }
@@ -765,7 +774,7 @@ impl FreePaths {
         self.gamma2
     }
 
-    /// Its standard error over the replicas.
+    /// Its standard error over the rays (the delta method's).
     pub fn gamma2_se(&self) -> f64 {
         self.gamma2_se
     }
@@ -1081,7 +1090,7 @@ fn free_paths_with(
 #[cfg(feature = "transport-study")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct FreePathStudy {
-    /// The mean free path and its standard error over the replicas, m.
+    /// The mean free path and its standard error over the rays, m.
     pub mean_free_path_m: f64,
     pub mean_free_path_se_m: f64,
     /// `γ²` and its standard error.
@@ -1401,6 +1410,30 @@ mod tests {
         let p = free_paths(&room).unwrap();
         assert_eq!(p.settings(), FreePathSettings::STANDARD);
         assert!(p.gamma2_se() < GAMMA2_SE_LIMIT / 2.0, "{p:?}");
+    }
+
+    /// A seed reaches JSON as `0x` and 16 hex digits, which give it back exactly, whatever its
+    /// size. The partner: the transport's seed as a JSON number, read as a double (as JavaScript
+    /// and many JSON libraries read numbers), is another seed.
+    #[test]
+    fn a_seed_survives_json_as_a_hex_string() {
+        let pattern = regex::Regex::new(crate::params::SEED_PATTERN).unwrap();
+        for seed in [FreePathSettings::STANDARD.seed, 0, 7, u64::MAX] {
+            let v = serde_json::to_value(FreePathSettings {
+                seed,
+                ..FreePathSettings::STANDARD
+            })
+            .unwrap();
+            let text = v["seed"].as_str().unwrap();
+            assert!(pattern.is_match(text), "{text}");
+            assert_eq!(u64::from_str_radix(&text[2..], 16).unwrap(), seed);
+        }
+        let v = serde_json::to_value(FreePathSettings::STANDARD).unwrap();
+        assert_eq!(v["seed"], "0x6c616d6265727431");
+        // Says no: as a number read as a double, the seed is not itself.
+        let seed = FreePathSettings::STANDARD.seed;
+        let as_double: f64 = serde_json::from_str(&seed.to_string()).unwrap();
+        assert_ne!(as_double as u64, seed);
     }
 
     /// Start points fill the room evenly: in the box's six tetrahedra, the share of points in the

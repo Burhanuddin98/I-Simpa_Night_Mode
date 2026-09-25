@@ -273,7 +273,7 @@ pub fn kuttruff_rt(
 ///
 /// **Only the statistical part.** It leaves out the formula's own error against a diffuse room
 /// ([module docs](self)), which no number of rays reduces: measured −0.41 % to +0.59 % in M8's
-/// cells, where this standard deviation is at most 0.02 %, and not measured in other rooms. It is
+/// cells, where this standard deviation is at most 0.004 %, and not measured in other rooms. It is
 /// not the reference's total uncertainty.
 pub fn kuttruff_rt_sd(
     free_paths: &FreePaths,

@@ -462,16 +462,15 @@
             "type": "integer"
           },
           "replicas": {
-            "description": "Independent replicas; their spread is the statistical error. At least 2.",
+            "description": "Independent replicas, each its own random stream, traced on as many threads as the\nmachine has. At least 2. The statistical errors are over the rays, each ray's paths summed\nfirst.",
             "format": "uint32",
             "minimum": 0,
             "type": "integer"
           },
           "seed": {
-            "description": "The seed of the replicas' random streams.",
-            "format": "uint64",
-            "minimum": 0,
-            "type": "integer"
+            "description": "The seed of the replicas' random streams. In JSON, `0x` and 16 hex digits: a number above\n2⁵³ would not survive a reader that parses numbers as doubles.",
+            "pattern": "^0x[0-9a-f]{16}$",
+            "type": "string"
           }
         },
         "required": [
@@ -484,7 +483,7 @@
         "type": "object"
       },
       "FreePaths": {
-        "description": "The free paths between reflections of a diffuse (Lambert) ray transport in the room, computed from its geometry alone at fixed settings (params::lambert::free_paths): their mean and relative variance gamma^2, with their standard errors over the transport's replicas, and the room's 4V/S, V and S.",
+        "description": "The free paths between reflections of a diffuse (Lambert) ray transport in the room, computed from its geometry alone at fixed settings (params::lambert::free_paths): their mean and relative variance gamma^2, with their standard errors over the transport's rays, and the room's 4V/S, V and S.",
         "properties": {
           "area_m2": {
             "description": "The room's surface area, m².",
@@ -502,7 +501,7 @@
             "type": "number"
           },
           "gamma2_se": {
-            "description": "Its standard error over the replicas.",
+            "description": "Its standard error over the rays (the delta method's).",
             "format": "double",
             "type": "number"
           },
@@ -512,7 +511,7 @@
             "type": "number"
           },
           "mean_free_path_se_m": {
-            "description": "Its standard error over the replicas, m.",
+            "description": "Its standard error over the rays, m.",
             "format": "double",
             "type": "number"
           },
@@ -603,10 +602,9 @@
             "type": "integer"
           },
           "seed": {
-            "description": "The bootstrap's seed.",
-            "format": "uint64",
-            "minimum": 0,
-            "type": "integer"
+            "description": "The bootstrap's seed, as `0x` and 16 hex digits: as a JSON number above 2⁵³ it would not\nsurvive a reader that parses numbers as doubles.",
+            "pattern": "^0x[0-9a-f]{16}$",
+            "type": "string"
           }
         },
         "required": [

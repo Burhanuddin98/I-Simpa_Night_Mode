@@ -849,10 +849,15 @@ time stepping, no random generator of its, no output of any run.
   six are built in). A ray runs straight to the nearest face (a bounding-volume hierarchy,
   Möller–Trumbore), is reflected there by Lambert's law, and starts again 10⁻¹⁰ of the room's size
   off the face.
-- **`free_paths`** gives the mean free path and `γ²`, each with its standard error over 16
-  independent replicas (successive paths of one ray are correlated, so the replicas', not the
-  paths' count, give the error). **It takes the room and nothing else**: its rays, paths and seed
-  are fixed (`FreePathSettings::STANDARD`). `FreePaths` has private fields, no other constructor
+- **`free_paths`** gives the mean free path and `γ²`, each with its standard error **over the
+  rays**: successive paths of one ray are correlated, so each ray's paths are summed first and the
+  ray is the independent unit; `γ²`'s error is the delta method's over them. Over 65,536 rays each
+  error is itself known to a fraction of a per cent. (Until the pre-M8 review's second round the
+  error was the spread of 16 replicas, known only to about a fifth; measured over 96 seeds, the
+  rays' error matches the seed-to-seed spread, 0.00070 against 0.00076 and 0.00081 against 0.00079
+  at the first settings, and in a sphere it is the closed form's `√(0.0422/n)`.) **It takes the
+  room and nothing else**: its rays, paths and seed are fixed (`FreePathSettings::STANDARD`).
+  `FreePaths` has private fields, no other constructor
   and no `Deserialize`, and `kuttruff_rt` takes only a `FreePaths`. So a `γ²` fitted to a solver
   cannot reach it, by construction, and neither can one fished for through the transport's
   settings. The pre-M8 review showed that the earlier API, which took settings, allowed this:
@@ -864,29 +869,38 @@ time stepping, no random generator of its, no output of any run.
   from compiling code only in what it tests: the settings call from the passing example by its
   second argument, and the literal from the same literal compiled inside the module by a unit
   test.
-- **What a caller can still vary is the room's description**: its placement, its faces, its
-  tetrahedra. Each draws the transport's randomness afresh, so a search over descriptions can pick
-  among the room's own statistical scatter and nothing more. Measured: 32 descriptions of the
-  6×10×3 m room (turned about the vertical and moved) gave `γ²` from 0.38734 to 0.39026, −2.4 to
-  +2.2 standard errors from the exact 0.38887, and Kuttruff's time at α 0.4 within 0.083 %
-  (`gamma2_cannot_be_fitted_through_what_reaches_kuttruff`; the same test repeats the review's
-  seed search through the test-only study, which reaches 0.009 to 2.1, so the search has power).
-  `free_paths` also refuses a `γ²` whose standard error is above 0.002 (`GAMMA2_SE_LIMIT`), which
-  bounds that scatter for any room: at 0.002, Kuttruff's time moves 0.06 % a standard error at
-  `ᾱ` 0.4 and 0.2 % at 0.8. The fixed settings give 0.0006 to 0.0009 in boxes (0.0009 on the
-  committed fixture, tutorial 1's box as TetGen meshed it), 0.0007 in the L-shaped room and
-  0.0002 in the sphere, so no room tried is refused for it; the settings the review fished with
-  are refused for it (a unit test, through the module's private entry).
+- **What a caller can still vary is the room's description, in two parts.** Neither fits `γ²` to a
+  solver, and `results::reference` takes both from the run's own `.cbin` and `.mbin`.
+  - *Its surface* (placement, faces): each description draws the transport's randomness afresh,
+    so a search over them picks among `γ²`'s own scatter. Measured: 16 descriptions of the
+    6×10×3 m room (turned about the vertical and moved) gave `γ²` from 0.38866 to 0.38904 (exact
+    0.38887), and Kuttruff's time at α 0.4 within 0.011 %
+    (`gamma2_cannot_be_fitted_through_what_reaches_kuttruff`; the same test repeats the review's
+    seed search through the test-only study, which reaches 0.009 to 2.1, so the search has
+    power).
+  - *Its tetrahedra*, which give `V`, to which Kuttruff's time is proportional: the
+    mean-free-path check holds `V` to 6 of the mean free path's relative standard errors, 0.012 %
+    in M8's rooms at the fixed settings, so to about ±0.07 %, and the time moves by as much.
+    Measured in the 6×10×3 m room: a volume 0.03 % off either way is accepted (Kuttruff at α 0.4
+    −0.033 % and +0.030 %), and 0.12 % off either way refused, 10.6 and 9.4 standard errors from
+    `4V/S` (`the_volume_is_held_to_the_mean_free_paths_error`). At the first settings, with the
+    replicas' error, the pre-M8 review found a volume 0.5 % off accepted and 0.4 % off refused; the
+    rays' error ended that lottery, and the fixed settings' rays narrowed the window.
+  `free_paths` also refuses a `γ²` whose standard error is above 0.002 (`GAMMA2_SE_LIMIT`): a room
+  whose free paths the fixed rays cannot pin down. The fixed settings give 0.00012 to 0.00014 in
+  boxes (0.00014 on the committed fixture, tutorial 1's box as TetGen meshed it), 0.0001 in the
+  L-shaped room and 0.00004 in the sphere, so no room tried comes near it; the settings the
+  review fished with are refused for it (a unit test, through the module's private entry).
 - **Studies of the transport** at other settings or from one start point exist in test builds
   only (`free_path_study`, the `transport-study` feature that only `simpa-core`'s own tests turn
   on) and give a `FreePathStudy`, which no function of `params::room` takes. `free_paths` equals
   the study at `STANDARD` to the bit.
 - **It checks itself**: it refuses (`params_transport_refused`) a mean free path further than 6
-  standard errors from `4V/S`, which a closed room with Lambert walls must give whatever its shape;
-  and a ray that leaves the room. Either means a surface that is not closed, tetrahedra that are
-  not the surface's volume, a face with the room on both sides (it reflects on both, so the field
-  sees its area twice), parts of a room that do not mix within the rays' paths, or reflection that
-  is not Lambert's.
+  standard errors from `4V/S` (about ±0.07 % in M8's rooms), which a closed room with Lambert
+  walls must give whatever its shape; and a ray that leaves the room. Either means a surface that
+  is not closed, tetrahedra that are not the surface's volume, a face with the room on both sides
+  (it reflects on both, so the field sees its area twice), parts of a room that do not mix within
+  the rays' paths, or reflection that is not Lambert's.
 - **Where rays start matters.** A field started at one point is not yet diffuse, and a ray's first
   reflections remember it. Measured with this transport when it started every ray at one point
   (the pre-M8 WIP, and `lambert_box.rs`'s way): counted from the first reflection, 64 paths a ray,
@@ -895,9 +909,9 @@ time stepping, no random generator of its, no output of any run.
   started in its narrow wing, the mean free path was 0.28 % short (10 standard errors) after 16
   paths left out. So rays now start at points drawn evenly from the tetrahedra (Rocchini and
   Cignoni's folding), and each ray's first 32 paths after its first are left out. Even so the
-  first reflection is weighted by path length: with none left out `γ²` reads 5 standard errors low
-  in the box, and in the L-shaped room the mean free path sits 5.8, 1.8 and 0.2 standard errors
-  from `4V/S` with 0, 16 and 64 left out.
+  first reflection is weighted by path length: with none left out `γ²` reads 4.3 standard errors
+  low in the box, and in the L-shaped room the mean free path sits 7.9, 1.5 and 0.2 standard
+  errors from `4V/S` with 0, 16 and 64 left out (8.4 M paths each, errors over the rays).
 - **Successive free paths are correlated** in a box, and not in a sphere (a study over 256 paths
   a ray, `successive_free_paths_are_correlated_in_a_box_and_independent_in_a_sphere`): the lag-1
   correlation is 0.0669 ± 0.0004 in the 6×10×3 m room and 0.0748 ± 0.0002 in the 5×4×3 m one,
@@ -905,9 +919,24 @@ time stepping, no random generator of its, no output of any run.
   and 0.440 ± 0.005 against `γ²` 0.389 and 0.353 (+24 % and +25 %). In a sphere of 5,120 faces,
   where each chord is `2R·cos θ` with a fresh `θ`: −0.0003 ± 0.0006, and 0.1266 ± 0.0012 against
   `γ²` 0.1253, the say-NO of the estimators. Kuttruff's formula takes `n`'s variance to be `γ²·n`.
-- **`FreePathSettings::STANDARD`**, what `free_paths` always uses: 16 × 1024 rays, 32 + 64 paths
-  each, 1,048,576 paths counted, a fixed seed. `γ²` to about ±0.0006 to ±0.0009, which moves
-  Kuttruff's T by about 0.02 % at α 0.4. About 0.1 s in a debug build for a box.
+- **`FreePathSettings::STANDARD`**, what `free_paths` always uses: 16 × 4096 rays, 1 + 32 + 512
+  paths each, 33,554,432 paths counted, a fixed seed. **Its precision was set by a stated target before
+  its draw was seen** (the pre-M8 review, second round, found the first settings, 16 × 1024 rays
+  of 64 paths, put the shipped reference 0.005 points above 0.6 % in one cell from `γ²`'s draw
+  alone; changing them until a draw fell below would have been fishing). The target: in every one
+  of M8's cells, three of the standard deviations Kuttruff's time inherits from `γ²` fit between
+  the formula's own error (at most +0.587 %) and 0.6 %, so `σ(γ²) ≤ 0.000154` in the 5×4×3 m
+  room. The cost was measured at another seed (`σ(γ²)·√paths` 0.72 there and 0.83 in 6×10×3 m,
+  at 64 or 512 paths a ray alike); the smallest power-of-two multiple of the first settings'
+  paths that meets it is 32. The settings were committed on their own (`64c1d5a`, "Pre-register
+  the transport's precision…") before any run at the reference's seed, the seed was kept, and
+  the draw was taken as it came: `γ²` 0.35269 ± 0.00012 in the 5×4×3 m room, +2.3 standard
+  errors from the exact value, which the target absorbs (the shipped time +0.593 % and +0.595 %,
+  below). Over 16 other seeds that room's draws average −0.02 ± 0.19 standard errors from the exact
+  value: no bias. `γ²` to about ±0.00012 to ±0.00014 in boxes, which moves Kuttruff's T by at most
+  0.004 % in M8's cells. 512 paths a ray rather than 64 spends 6 % of the tracing on the paths
+  left out instead of 34 %. About 0.55 s for a box in a release build (28 threads), about 2.3 s in
+  a debug build.
 - **`decay`** traces the energy of the room and of receiver balls (energy times path length inside
   the ball, per time bin, as SPPS's receivers collect it) from a point source, for M8's
   cross-check; air is applied per bin as `e^(−m·c·t)`.
@@ -925,21 +954,23 @@ closed form they give ("Advances in the theory of box integrals", Math. Comp. 79
 1839-1866, Table 6; read in the authors' copy): the quadrature equals it to 10⁻¹². For a sphere
 the chord is `2R·cos θ` with Lambert's `θ`, so `γ²` = 1/8 exactly.
 
-| Room | Exact `γ²` | Transport (8.4 M paths) | Mean free path against `4V/S` | `free_paths` (1 M paths) | `lambert_box.rs` | Transport counting as `lambert_box.rs` | Bies and Hansen's fit |
+| Room | Exact `γ²` | `free_paths` (33.5 M paths) | A study at its own seed (8.4 M paths) | Its mean free path against `4V/S` | `lambert_box.rs` | Transport counting as `lambert_box.rs` | Bies and Hansen's fit |
 |---|---|---|---|---|---|---|---|
-| cube | 0.344950 | 0.34493 ± 0.00027 | +0.6 SE | 0.34535 ± 0.00082 | | | 0.3383 |
-| 6×10×3 m | 0.388874 | 0.38885 ± 0.00024 | −1.3 SE | 0.38866 ± 0.00063 | 0.388 | 0.38812 ± 0.00009 | 0.3959 |
-| 5×4×3 m | 0.352401 | 0.35268 ± 0.00023 | −0.4 SE | 0.35311 ± 0.00062 | 0.352 | 0.35187 ± 0.00010 | 0.3560 |
-| sphere, 20,480 faces | 0.125 (+0.00004 for the facets) | 0.12492 ± 0.00008 | +0.8 SE | 0.12500 ± 0.00018 | | | |
-| L-shaped, 6×4 + 2×4, 3 m | none known | 0.3903 ± 0.0003 | +0.2 SE | 0.3899 ± 0.0007 | | | |
+| cube | 0.344950 | 0.34505 ± 0.00012 | 0.34493 ± 0.00024 | +0.6 SE | | | 0.3383 |
+| 6×10×3 m | 0.388874 | 0.38866 ± 0.00014 | 0.38885 ± 0.00028 | −1.1 SE | 0.388 | 0.38812 ± 0.00015 | 0.3959 |
+| 5×4×3 m | 0.352401 | 0.35269 ± 0.00012 | 0.35268 ± 0.00025 | −0.6 SE | 0.352 | 0.35187 ± 0.00013 | 0.3560 |
+| sphere, 20,480 faces | 0.125 (+0.00004 for the facets) | 0.12504 ± 0.00004 | 0.12492 ± 0.00010 (4.2 M paths) | +0.7 SE | | | |
+| L-shaped, 6×4 + 2×4, 3 m | none known | 0.3904 ± 0.0001 | 0.3903 ± 0.0003 | +0.2 SE | | | |
 
 - **`lambert_box.rs`'s values are its counting's.** It started every ray at the source and
   counted every path from the first reflection until the ray's time ran out, 482 paths a ray at
   α 0.05, and stated no uncertainty. Counting the same way (a study from the source, none left
-  out, 482 paths), this transport gives 0.38812 ± 0.00009 and 0.35187 ± 0.00010: lambert_box's
-  0.388 and 0.352 to their rounding. The exact values lie 8 and 5 standard errors above those,
-  and 0.38887 is outside 0.388's rounding: the difference is the rays' memory of their start
-  (above), not the transport. Run as `free_paths` runs, the same transport gives the exact values
+  out, 482 paths), this transport gives 0.38812 ± 0.00015 and 0.35187 ± 0.00013: lambert_box's
+  0.388 and 0.352 to their rounding. The exact values lie 5.0 and 4.1 standard errors above those
+  (the errors over the rays; the pre-M8 review's own delta method gave the same 0.00015 and
+  0.00013, where the replicas' spread had read 0.00009 and 0.00010 and made it 8 and 5), and
+  0.38887 is outside 0.388's rounding: the difference is the rays' memory of their start (above),
+  not the transport. Run as `free_paths` runs, the same transport gives the exact values
   (`lambert_boxs_values_are_its_counting_and_the_exact_ones_are_the_diffuse_fields`).
 - **Bies and Hansen's fit** for rectangular rooms, `γ = √(0.0179·(L + W)/H − 0.0001·(L − W)/H −
   0.0011·((L − W)/H)² + 0.3025)`, H the height (as Strutt quotes it), lies within 0.007 of the exact
@@ -954,8 +985,8 @@ the chord is `2R·cos θ` with Lambert's `θ`, so `γ²` = 1/8 exactly.
   errors, refused; tetrahedra 1 % short of the room or 1 % over it: refused; one floor triangle
   removed, or the tetrahedra moved below the floor: rays leave, refused; the L-shaped room with
   only its narrow wing's tetrahedra: refused; an 80-face sphere: `γ²` 0.017 off 1/8; the
-  review's fishing settings: refused for `γ²`'s standard error; `lambert_box.rs`'s counting: 5
-  and 8 standard errors below the exact value.
+  review's fishing settings: refused for `γ²`'s standard error; `lambert_box.rs`'s counting: 5.0
+  and 4.1 standard errors below the exact value; a volume 0.12 % off either way: refused.
 
 ### Kuttruff against the transport in M8's cells (`tests/params_kuttruff.rs`)
 
@@ -966,10 +997,14 @@ three receivers in each of 16 replicas, the error that of the 16 means: what M8 
 T30 with. "Room energy" is the T30 of the room's total energy, over the same replicas, several
 times less noisy. **The formula is measured with each box's exact `γ²`** (integral geometry,
 above), so that the comparison carries the transport's noise only; the reference as shipped
-(`free_paths`' `γ²`) is compared with the formula separately. Measured at 4 M to 34 M rays a cell
-in a release build (`kuttruff_against_the_transport_at_high_counts`, ignored with its reason and
-run on purpose, 293 s; it asserts the bare 0.6 % at the point estimate on both, the errors below
-0.03 % and 0.006 %, and that plain Eyring and the formula with its `½` dropped miss):
+(`free_paths`' `γ²`) is held to the same 0.6 % and compared with the formula separately. Measured
+at 4 M to 34 M rays a cell in a release build (`kuttruff_against_the_transport_at_high_counts`,
+ignored with its reason and run on purpose, about 300 s). It asserts: the errors below 0.03 % and
+0.006 %; the receivers and the room energy one decay within their paired noise; the formula
+within the bare 0.6 % of both at the point estimate, and of the room energy also at one-sided
+95 %; the reference as shipped within the bare 0.6 % of both; plain Eyring and the formula with
+its `½` dropped missing; and that its T30s are the ones committed in the test (`HIGH`, which the
+suite uses, below), to 10⁻⁹ s:
 
 | Room | α | Receivers against Eyring | Kuttruff against the receivers | Room energy against Eyring | Kuttruff against the room energy |
 |---|---|---|---|---|---|
@@ -984,10 +1019,20 @@ run on purpose, 293 s; it asserts the bare 0.6 % at the point estimate on both, 
 
 - **Kuttruff's formula is within 0.6 % of the transport in every cell**, at the point estimate on
   both. On the room energy also at one-sided 95 % confidence (point + 1.645 SE, worst 0.589 %); on
-  the receivers the worst cell's bound is 0.607 %. The 5×4×3 m room at α 0.4 is 0.013 points
-  inside: at that absorption the second-order formula is at its limit. An independent numpy
-  transport in the pre-M8 review gave that cell's room energy +0.591 ± 0.006 %. The 0.6 % was read
-  off `lambert_box.rs`'s Kuttruff column for these same cells, so it is not a held-out bound.
+  the receivers the worst cell's bound is 0.607 %. **The two are one decay in M8's cells**: the
+  receivers' T30 minus the room energy's, over the replicas' paired differences, is within 1.4
+  standard errors in every cell (−0.032 % to +0.017 %; in the worst cell −0.002 ± 0.015 %), and
+  4.9 to 31 standard errors in the elongated room below, the check's partner. So in M8's cells the
+  room energy measures the same T30 six times more precisely, and the one-sided 95 % statement is
+  its 0.589 %; the receivers' 0.607 % is their own noise, ±0.012 %, about a value the room energy
+  puts at 0.585 ± 0.002 %. The 5×4×3 m room at α 0.4 is 0.013 points inside: at that absorption
+  the second-order formula is at its limit. Independent numpy transports in the two pre-M8 reviews
+  gave that cell's room energy +0.591 ± 0.006 % and +0.581 ± 0.009 %.
+- **The 0.6 % is not a held-out bound, and nothing supports it beyond M8's two boxes.** It was read
+  off `lambert_box.rs`'s Kuttruff column for these same cells. The formula has no fitted
+  parameter, but the limit was chosen on the data it is checked against, and the one room held
+  out, 20×4×3 m (below), is outside it from α 0.2. It is a check that this code computes
+  Kuttruff's formula with the room's `γ²` in M8's rooms, not an accuracy of the formula.
 - **Why the pattern**: low at small α, high at 0.4. Successive free paths are correlated (lag 1
   0.067 and 0.075, above), so `n`'s variance is about a quarter above `γ²·n`. The formula, fed `γ²`,
   underestimates the spread and so the time: with the measured effective variance (over 256 paths)
@@ -995,26 +1040,33 @@ run on purpose, 293 s; it asserts the bare 0.6 % at the point estimate on both, 
   they miss by. As α grows the second-order truncation adds the other way. The two partly cancel
   in these rooms. (Using the effective variance would be another formula than the one decided;
   not done.)
-- **The reference as shipped** carries `free_paths`' `γ²` (0.38866 ± 0.00063 and 0.35311 ± 0.00062,
-  −0.3 and +1.1 standard errors from the exact values). It agrees with the formula within the
-  `mc_sd` it reports in every cell (the suite asserts 3 of them). In the worst cell that draw adds
-  +0.020 % (`mc_sd` 0.017 %): the shipped time is +0.605 % of the room energy and +0.607 % of the
-  receivers, 0.6 % plus a third of its reported deviation. Halving that share would take 4 times
-  the fixed rays, and quartering it 16 times (about 1.6 s instead of 0.1 s for a box in a debug
-  build); the fixed settings were not changed to land the draw, which would be the fishing this
-  piece closes. Open, for Burhan.
+- **The reference as shipped** carries `free_paths`' `γ²` (0.38866 ± 0.00014 and 0.35269 ± 0.00012,
+  −1.5 and +2.3 standard errors from the exact values), and **is within the bare 0.6 % in every
+  cell on both**: worst +0.595 % of the receivers and +0.593 % of the room energy (5×4×3 m,
+  α 0.4), where the draw adds +0.008 % (`mc_sd` 0.0035 %). It agrees with the formula within 3 of
+  the `mc_sd` it reports in every cell. At the first fixed settings, 32 times fewer paths, the same
+  cell was +0.607 % and +0.605 %; the settings changed by the precision target stated under
+  "`γ²` from the geometry" and committed before their draw, not by where a draw fell.
 - The receivers' excess over Eyring reproduces `lambert_box.rs`'s (+1.20, +2.44, +4.96, +10.78 %;
   +1.11, +2.20, +4.47, +9.25 %) within 0.07 %, and so SPPS's (`docs/results.md`, "T30 against
   Eyring"). The room energy is within 0.04 % of the receivers in every M8 cell.
 - **The gate in the test suite** (`kuttruff_reproduces_the_transports_t30_in_m8s_cells`, 0.26 M to
-  2.1 M rays a cell in a debug build, about 55 s) holds every cell to `|T_K/T − 1| ≤ 0.6 % + 3·SE`,
-  the formula with the exact `γ²`: on the receivers with their relative SE below 0.12 %, so
-  within at most 0.96 % (measured up to 0.10 %, the 6×10×3 m room at α 0.4), and on the room
-  energy with its SE below 0.02 %, so within at most 0.66 % (measured: the worst cell +0.584 ±
-  0.009 %). It holds the shipped reference to the formula within 3 of its `mc_sd`. Its partners,
-  on the room energy: plain Eyring misses all 8 cells (−1.1 % to −9.7 %), and the formula with its
-  `½` dropped, through the code (`Fault::KuttruffFullVariance`), misses all 8 (+0.72 % to
-  +12.7 %).
+  2.1 M rays a cell in a debug build) **asserts the bare 0.6 %**. A debug build cannot trace
+  enough rays to judge a cell 0.013 points inside 0.6 % by its own transport, so the high-count
+  T30s are committed in the test (`HIGH`), and in every cell: (a) the suite's own transport
+  reproduces them within 4 of their combined standard errors (4 for sixteen comparisons; with
+  its errors below 0.12 % on the receivers and 0.02 % on the room energy, so a change of the
+  transport of 0.08 % in the room energy fails; measured −2.0 to +2.1 standard errors on the
+  receivers and −0.8 to +1.3 on the room energy); (b) the formula with the exact `γ²` is within
+  the bare 0.6 % of both committed T30s; (c) the shipped reference is too, and is the formula
+  within 3 of its `mc_sd`; (d) the fixed settings meet their precision target, `3·mc_sd` within
+  the formula's margin to 0.6 % (worst: 5×4×3 m at α 0.4, 0.0105 % against a margin of
+  0.0132 %). Its partners: plain Eyring misses (b) in all 8 cells (−1.1 % to −9.7 % of the room
+  energy); the formula with its `½` dropped, through the code (`Fault::KuttruffFullVariance`,
+  with `free_paths`' `γ²`), misses (b) and (c) in all 8 (+0.73 % to +12.7 %); the transport
+  reflecting evenly over the hemisphere, through the code (`Fault::LambertUniformReflection`),
+  misses (a) in the worst cell by 525 standard errors; and the first fixed settings miss (d)
+  there (`3·mc_sd` 0.060 % against a margin of 0.013 %).
 - **An elongated room, for information** (20×4×3 m, `γ²` exact 0.40791; the same test, printed
   only; M8 does not use it): the formula against the room energy −0.22, −0.40, −0.62 and −0.89 %
   at α 0.05 to 0.4, **outside 0.6 % from α 0.2**; against the receivers −0.12, +0.02, +0.04 and
@@ -1040,14 +1092,24 @@ air; TCR's per-face rule for fittings, `TC_CalculationCore.cpp:11-17`, is not em
 with fitting faces is `not_computed`); a celerity gradient is `not_computed` too. `lambert_walls` is false where any face
 is not Lambert with scattering 1 in the band: then neither time describes the run's field. The text
 output prints the same beside "NOT VALIDATED". On the committed fixtures (tutorial 1's box,
-specular walls) `γ²` reads the exact 0.3889 within its error.
+specular walls) `γ²` reads 0.38883 ± 0.00014, the exact 0.38887 within its error.
+
+**How a band's scattering is read.** `lambert_walls` reads each material's `diffusion` as SPPS
+reads it (`atof`, through `run::locate::to_float`): a text that is not a number reads 0, specular,
+so that band is not Lambert and neither time describes its field; a value that reads as NaN or
+infinite, or a band with no `loi`, makes the reference `not_computed`
+(`results::reference`'s tests). A project of this program never gets that far: its scattering is
+a number when written, and the `config.xml` importer refuses a `diffusion` that is not one
+(`config_xml::import`, through `num::solver_real`).
 
 **Open, for M8 and later**: the bed itself (Kuttruff at 5 %, the transport's T30 as the tight
 cross-check, `dt` 1 ms); Michael's ratification of the gate text; M12's use of `lambert_walls`;
 rooms whose parts barely exchange sound (coupled volumes), and faces with the room on both sides
 (thin reflectors), which the mean-free-path check refuses rather than describe; the formula's
 error in rooms of other shapes (−0.89 % already in a 20×4×3 m box at α 0.4), which `mc_sd` does
-not carry; and whether the fixed settings should trace more rays (above).
+not carry; and whether Burhan keeps the precision target that set the fixed settings (32 times the
+first settings' paths, about 0.55 s a box in a release build), or states 3c for the formula alone
+and takes the cheaper settings back.
 
 ## DIN 18041 targets
 
