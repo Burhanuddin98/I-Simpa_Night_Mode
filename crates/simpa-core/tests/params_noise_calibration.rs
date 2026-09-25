@@ -4,7 +4,7 @@
 //! runs, `crates/simpa/tests/noise_calibration.rs`, run on purpose).
 //!
 //! Each check says no:
-//! - the code's factors, margins and `1/âˆšN` flags are the ones the rules derive from the receipt's
+//! - the code's factors, margins and `1/√N` flags are the ones the rules derive from the receipt's
 //!   calibration cells; a factor moved through the code (the fault seam), a cell's estimates
 //!   scattering more, or a pair read at the wrong count, and they no longer are;
 //! - on every validation cell and quantity the calibrated prediction is at or above the seeds'
@@ -39,7 +39,7 @@ fn method(name: &str) -> Method {
 
 const METHODS: [&str; 2] = ["random", "energetic"];
 
-/// Every quantity whose code factor, margin or `1/âˆšN` flag differs from what rules 2, 5b and 4
+/// Every quantity whose code factor, margin or `1/√N` flag differs from what rules 2, 5b and 4
 /// derive from the receipt, with both.
 fn rule_mismatches(r: &Value) -> Vec<String> {
     let mut out = Vec::new();
@@ -51,8 +51,7 @@ fn rule_mismatches(r: &Value) -> Vec<String> {
                 "{name} {q}: {} calibration cells",
                 cal.len()
             );
-            let (factor, by) = calibration::factor(&cal, q)
-                .unwrap_or_else(|| panic!("{name} {q}: no calibration cell gives it"));
+            let (factor, by) = calibration::shipped_factor(r, name, q);
             let (margin, scattered) = calibration::margin(&cal, q).unwrap();
             let (confirmed, differ) = calibration::root_n_confirmed(r, name, q);
             let code = (
@@ -82,6 +81,13 @@ fn rule_mismatches(r: &Value) -> Vec<String> {
 fn the_codes_factors_margins_and_scaling_flags_are_the_rules_on_the_receipt() {
     let r = receipt();
     assert_eq!(rule_mismatches(&r), Vec::<String>::new());
+    // Energetic T20 and T30 ship at M7's bound: round 2's factors failed a round-2 room.
+    for q in ["t20_s", "t30_s"] {
+        let (k, why) = calibration::shipped_factor(&r, "energetic", q);
+        println!("energetic {q}: {k}, {why}");
+        assert_eq!(k, 1.0, "{why}");
+        assert!(why.contains("W-E4"), "{why}");
+    }
     // Says no through the code: every factor moved by 10 %.
     let m = faults::with(Fault::NoiseCalibrationScaled { by: 1.1 }, || {
         rule_mismatches(&r)
@@ -91,6 +97,18 @@ fn the_codes_factors_margins_and_scaling_flags_are_the_rules_on_the_receipt() {
         16,
         "{m:?}"
     );
+    // Says no through the input: with W-E4's T30 spread a third of what it was, round 2's T30
+    // factor passes its validation and would ship; the code's 1 no longer matches.
+    let mut r4 = receipt();
+    for row in cell_mut(&mut r4, "W-E4")["quantities"]["t30_s"]
+        .as_array_mut()
+        .unwrap()
+    {
+        let o = row["observed_sd"].as_f64().unwrap();
+        row["observed_sd"] = (o / 3.0).into();
+    }
+    let m = rule_mismatches(&r4);
+    assert_eq!(m, vec!["energetic t30_s factor 0.31 vs 1".to_string()]);
     // Says no through the input: one calibration cell's T30 estimates scattering 0.2 more moves
     // random mode's T30 margin.
     let mut r2 = receipt();
@@ -169,16 +187,24 @@ fn every_validation_cell_is_at_or_below_its_calibrated_prediction() {
     let (fails, checked) = validation_failures(&r, code_factor);
     println!("checked: {checked:?}");
     assert_eq!(fails, Vec::<String>::new());
-    // No cell passes for having nothing to check: SPL and a decay time are in each.
-    assert_eq!(checked.len(), 18);
+    // No cell passes for having nothing to check: two quantities at least are in each. The 25
+    // are round 1's and round 2's validation cells, and the energetic calibration cells, which
+    // check energetic T20 and T30 at M7's bound.
+    assert_eq!(checked.len(), 25);
     assert!(checked.iter().all(|(_, k)| *k >= 2), "{checked:?}");
     // Says no through the code: a model twice as optimistic fails the validation, in every
-    // validation cell.
+    // validation cell of both rounds.
     let (fails, _) = faults::with(Fault::NoiseCalibrationScaled { by: 0.5 }, || {
         validation_failures(&r, code_factor)
     });
     println!("factors halved: {} failures", fails.len());
-    for (id, _) in &checked {
+    let held_out: Vec<&String> = checked
+        .iter()
+        .map(|(id, _)| id)
+        .filter(|id| !id.starts_with("C-"))
+        .collect();
+    assert_eq!(held_out.len(), 18);
+    for id in held_out {
         assert!(
             fails.iter().any(|f| f.starts_with(&format!("{id} "))),
             "{id} passes at half: {fails:#?}"
@@ -186,20 +212,12 @@ fn every_validation_cell_is_at_or_below_its_calibrated_prediction() {
     }
 }
 
-#[test]
-fn round_ones_energetic_t20_and_t30_fail_where_they_failed() {
-    // Round 1 set energetic T20 and T30 at 0.26 and 0.15 from its seven calibration cells; its
-    // validation caught them in V-E6. The same check on round 1's cells and factors says so again.
-    let r = receipt();
-    let round1 = |m: Method, i: usize| match (m, i) {
-        (Method::Energetic, 2) => 0.26,
-        (Method::Energetic, 3) => 0.15,
-        _ => noise::calibration::factor(m, i),
-    };
+/// The energetic T20 and T30 checks of `roles`' cells that fail with factors `t20` and `t30`.
+fn energetic_decay_failures(r: &Value, roles: &[&str], t20: f64, t30: f64) -> Vec<String> {
     let mut fails = Vec::new();
-    for c in calibration::cells_in(&r, "energetic", &["validation"]) {
-        for (i, q) in [(2, "t20_s"), (3, "t30_s")] {
-            if let Some((false, p)) = calibration::validates(c, q, round1(Method::Energetic, i)) {
+    for c in calibration::cells_in(r, "energetic", roles) {
+        for (q, k) in [("t20_s", t20), ("t30_s", t30)] {
+            if let Some((false, p)) = calibration::validates(c, q, k) {
                 fails.push(format!(
                     "{} {q}: {:.3} [{:.3}]",
                     c["cell"]["id"].as_str().unwrap(),
@@ -209,16 +227,39 @@ fn round_ones_energetic_t20_and_t30_fail_where_they_failed() {
             }
         }
     }
-    println!("{fails:?}");
-    assert_eq!(fails.len(), 2, "{fails:?}");
-    assert!(fails.iter().all(|f| f.starts_with("V-E6 ")), "{fails:?}");
+    fails
+}
+
+#[test]
+fn both_rounds_energetic_t20_and_t30_fail_where_they_failed() {
+    // Round 1 set energetic T20 and T30 at 0.26 and 0.15 from its seven calibration cells, and its
+    // validation caught them in V-E6; round 2 set them at 0.43 and 0.31 from all thirteen, and its
+    // validation caught them in W-E4. The same check on the same cells says so again, and M7's
+    // bound, which ships, holds on every energetic cell.
+    let r = receipt();
+    let f1 = energetic_decay_failures(&r, &["validation"], 0.26, 0.15);
+    println!("round 1: {f1:?}");
+    assert_eq!(f1.len(), 2, "{f1:?}");
+    assert!(f1.iter().all(|f| f.starts_with("V-E6 ")), "{f1:?}");
+    let f2 = energetic_decay_failures(&r, &["validation2"], 0.43, 0.31);
+    println!("round 2: {f2:?}");
+    assert_eq!(f2.len(), 2, "{f2:?}");
+    assert!(f2.iter().all(|f| f.starts_with("W-E4 ")), "{f2:?}");
+    let all = ["calibration", "validation", "validation2"];
+    assert_eq!(
+        energetic_decay_failures(&r, &all, 1.0, 1.0),
+        Vec::<String>::new()
+    );
+    // Says no: half M7's bound fails W-E4's T30.
+    let half = energetic_decay_failures(&r, &all, 0.5, 0.5);
+    assert!(half.iter().any(|f| f.starts_with("W-E4 t30_s")), "{half:?}");
 }
 
 #[test]
 fn a_quantity_noisier_than_its_prediction_fails_its_check() {
     // Says no through the input: in one validation cell of each method, one quantity's observed
     // spread raised to 1.5 times its calibrated prediction in every receiver-band.
-    for (name, id, q) in [("random", "V-R1", "t30_s"), ("energetic", "W-E1", "t30_s")] {
+    for (name, id, q) in [("random", "V-R1", "t30_s"), ("energetic", "W-E1", "c80_db")] {
         let mut r = receipt();
         let qi = calibration::QUANTITIES
             .iter()

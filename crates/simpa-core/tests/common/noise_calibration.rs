@@ -44,13 +44,41 @@ pub fn calibration_roles(method: &str, quantity: &str) -> &'static [&'static str
 }
 
 /// The roles of the cells that validate a method's quantity: round 1's validation cells and round
-/// 2's, which validate every quantity; for energetic T20 and T30 round 2's alone.
+/// 2's, which validate every quantity. For energetic T20 and T30, whose round-2 factor failed its
+/// validation too and which fall back to factor 1 (R2-4), every energetic cell: no cell set that
+/// factor.
 pub fn validation_roles(method: &str, quantity: &str) -> &'static [&'static str] {
     if round_two(method, quantity) {
-        &["validation2"]
+        &["calibration", "validation", "validation2"]
     } else {
         &["validation", "validation2"]
     }
+}
+
+/// Rules 2 and R2-4 for a method's quantity: the factor rule 2 gives on its calibration cells;
+/// for energetic T20 and T30, 1 (M7's bound) when that factor fails any of round 2's validation
+/// cells. With the cell that set the factor, or the round-2 cell and pooled ratio that failed it.
+pub fn shipped_factor(receipt: &Value, method: &str, quantity: &str) -> (f64, String) {
+    let cal = cells_in(receipt, method, calibration_roles(method, quantity));
+    let (k, by) = factor(&cal, quantity)
+        .unwrap_or_else(|| panic!("{method} {quantity}: no calibration cell gives it"));
+    if !round_two(method, quantity) {
+        return (k, by);
+    }
+    for c in cells_in(receipt, method, &["validation2"]) {
+        if let Some((false, p)) = validates(c, quantity, k) {
+            return (
+                1.0,
+                format!(
+                    "M7's bound: round 2's {k} failed {} ({:.3}, lower bound {:.3})",
+                    c["cell"]["id"].as_str().unwrap(),
+                    p.ratio,
+                    p.lower
+                ),
+            );
+        }
+    }
+    (k, by)
 }
 
 /// Energetic T20 and T30: re-calibrated in round 2.

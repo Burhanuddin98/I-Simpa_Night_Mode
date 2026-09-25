@@ -58,6 +58,7 @@ pub const CHORD_FACTOR: f64 = 9.0 / 8.0;
 pub const SEED: u64 = 0x4d37_5eed_0000_0001;
 /// Above this many expected crossings a bin is drawn from a normal of the same mean and variance.
 const NORMAL_ABOVE: f64 = 30.0;
+
 /// The most noise a reported value may carry, as a standard deviation: half the difference limen
 /// commonly quoted from ISO 3382-1 Annex A, so that twice it, about a 95 % interval, stays within
 /// one limen. T20, T30 and C50 have no limen of their own there; they take EDT's and C80's.
@@ -82,8 +83,10 @@ pub mod limits {
 /// to two digits; the pre-registered rule, which the suite re-derives from the committed receipt
 /// (`tests/params_noise_calibration.rs`). Round 1 calibrated on seven cells per method and
 /// validated on six more; its energetic T20 and T30 failed that validation in a 20 m corridor
-/// whose absorption is on its floor, and round 2 re-calibrated those two on all thirteen energetic
-/// cells, validated on six new rooms (`PREREGISTER.txt`, "ROUND 2").
+/// whose absorption is on its floor. Round 2 re-calibrated those two on all thirteen energetic
+/// cells and failed again, on six new rooms, in the same corridor with its surfaces scattering
+/// 0.3 (T30 2.0 times the calibrated prediction): so energetic T20 and T30 keep M7's bound,
+/// factor 1 (`PREREGISTER.txt`, "ROUND 2", R2-4).
 pub mod calibration {
     use super::Method;
 
@@ -93,10 +96,13 @@ pub mod calibration {
     /// Ts), tutorial 1's materials (T30 at 150,000 particles, C50) and the Lambert box (D50).
     pub const RANDOM: [f64; 8] = [1.3, 1.4, 1.4, 1.6, 1.2, 1.2, 1.2, 1.4];
     /// Energetic mode: the model bounds each deposit by a particle's start energy, and SPPS's
-    /// spread is 0.03 to 0.84 times it; set by the dead-floor room (SPL, EDT), whose particles'
-    /// energies spread apart the most, the Lambert box at 600,000 particles (C50, C80, D50, Ts),
-    /// and, in round 2, the dead-floor corridor (T20, T30).
-    pub const ENERGETIC: [f64; 8] = [0.91, 0.59, 0.43, 0.31, 0.85, 0.78, 0.85, 0.62];
+    /// spread was 0.03 to 0.84 times it in every energetic cell; set by the dead-floor room (SPL,
+    /// EDT), whose particles' energies spread apart the most, and the Lambert box at 600,000
+    /// particles (C50, C80, D50, Ts). T20 and T30 stay at 1, M7's bound: how far the particles'
+    /// energies spread apart late in the decay depends on the room more than one factor can
+    /// follow (0.03 to 0.62 of the bound over the nineteen energetic cells), and both rounds'
+    /// factors failed a held-out room.
+    pub const ENERGETIC: [f64; 8] = [0.91, 0.59, 1.0, 1.0, 0.85, 0.78, 0.85, 0.62];
 
     /// The factor for quantity `i` ([`super::QUANTITY_NAMES`]) under `method`. A test build can
     /// scale every factor through a fault seam (`crate::faults::Fault::NoiseCalibrationScaled`),

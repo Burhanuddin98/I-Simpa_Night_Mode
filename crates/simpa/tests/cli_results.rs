@@ -318,23 +318,51 @@ const EIGHT: [&str; 8] = [
 
 #[test]
 fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() {
-    let rep = json(&results(&fixture(SEATS_SPPS), true));
-    let mut values = 0;
-    for r in rep["spps"]["point_receivers"].as_array().unwrap() {
-        let bands = r["bands"].as_array().unwrap();
-        assert_eq!(bands.len(), 2);
-        for b in bands.iter().chain([&r["aggregate"]]) {
-            for n in EIGHT {
-                let p = &b["parameters"][n];
-                let ok = p["value"].is_f64() || p["not_evaluable"]["code"].is_string();
-                assert!(ok, "{} {n}: {p}", r["label"]);
-                values += usize::from(p["value"].is_f64());
-                // No SPPS receiver is refused for having no series.
-                assert_ne!(p["not_evaluable"]["error"]["why"]["why"], "no_time_series");
+    // The Seat run's 2,000 particles are too few for any value since the noise model was
+    // calibrated against SPPS's own seeds (pre-M8): every refusal for noise then names the count
+    // that would bring its value within its limit. The energetic run's 50,000 give values.
+    for (run, n) in [(SEATS_SPPS, 2_000u64), (ENERGETIC_SPPS, 50_000)] {
+        let rep = json(&results(&fixture(run), true));
+        let (mut values, mut noise) = (0, 0);
+        for r in rep["spps"]["point_receivers"].as_array().unwrap() {
+            let bands = r["bands"].as_array().unwrap();
+            assert_eq!(bands.len(), 2);
+            for b in bands.iter().chain([&r["aggregate"]]) {
+                for q in EIGHT {
+                    let p = &b["parameters"][q];
+                    let ok = p["value"].is_f64() || p["not_evaluable"]["code"].is_string();
+                    assert!(ok, "{run} {} {q}: {p}", r["label"]);
+                    values += usize::from(p["value"].is_f64());
+                    let why = &p["not_evaluable"]["error"]["why"];
+                    // No SPPS receiver is refused for having no series.
+                    assert_ne!(why["why"], "no_time_series");
+                    if why["why"] == "monte_carlo_noise"
+                        && why["sd"].as_f64() > why["limit"].as_f64()
+                    {
+                        noise += 1;
+                        let c = &why["particle_count"];
+                        // Random-mode T30 and energetic EDT name none: their fall as 1/√N was not
+                        // confirmed (`params::noise::calibration::root_n_confirmed`).
+                        let unconfirmed = (run == SEATS_SPPS && q == "t30_s")
+                            || (run == ENERGETIC_SPPS && q == "edt_s");
+                        if unconfirmed {
+                            assert_eq!(c["count"], "scaling_not_confirmed", "{run} {q}: {why}");
+                        } else {
+                            assert_eq!(c["count"], "named", "{run} {q}: {why}");
+                            assert!(c["particles"].as_u64().unwrap() > n, "{run} {q}: {why}");
+                        }
+                    }
+                }
             }
         }
+        println!("{run}: {values} values, {noise} refused for noise above the limit");
+        if run == SEATS_SPPS {
+            assert_eq!(values, 0, "{run}");
+            assert!(noise > 20, "{run}: {noise}");
+        } else {
+            assert!(values > 0, "{run}: the SPPS run has values");
+        }
     }
-    assert!(values > 0, "the SPPS run has values");
 }
 
 #[test]
@@ -2310,9 +2338,16 @@ fn seed_spread(particles: u32) {
             ratios[ratios.len() - 1]
         );
     }
+    // Since the pre-M8 calibration `mc_sd` never claims less noise than the seeds show: the
+    // pooled ratio is at most 1 within two of its standard errors, and not so far below it that
+    // the estimate means nothing.
     for (q, ratios, pooled, _) in &summary {
         if !ratios.is_empty() {
-            assert!((0.67..=1.5).contains(pooled), "{q}: pooled ratio {pooled}");
+            let se = pooled / (2.0 * ((n - 1) * ratios.len()) as f64).sqrt();
+            assert!(
+                pooled - 2.0 * se <= 1.0 && *pooled >= 0.4,
+                "{q}: pooled ratio {pooled} ± {se}"
+            );
         }
     }
 }

@@ -91,7 +91,11 @@ are not for publication.`
                                       //    early_reverberation_unresolved; bands and
                                       //    aggregates carry curvature and decay_curve; TCR
                                       //    receivers' global; surfaces' aggregate and
-                                      //    receivers' id; 5 (pre-M8): spps.reference
+                                      //    receivers' id; 5 (pre-M8): spps.reference;
+                                      //    noise calibrated per computation method
+                                      //    (monte_carlo.method and .calibration,
+                                      //    noise_model.method and .particles), and a
+                                      //    refusal for noise carries particle_count
   "validated_by_bed": false,          // false until M8's bed passes: show nothing
   "run_folder": "<as given>",
   "solver": "spps" | "tcr",
@@ -112,7 +116,7 @@ are not for publication.`
 | `receiver_crossing_s` | `2R/c`: the direct sound is spread over this long at a receiver |
 | `celerity_gradient` | `alog` or `blin` is not 0: no straight-line arrival is computed |
 | `computation_method`, `particles_per_source`, `trans_epsilon`, `echogram_per_source` | `computation_method` (0 random, 1 energetic), `nbparticules`, `trans_epsilon` and `output_recp_bysource` as SPPS reads them |
-| `monte_carlo` | how every value's noise was judged: `resamples`, `refused_resamples_allowed`, `seed` (a string, `0x` and 16 hex digits), and the largest standard deviation allowed, `limit_decay_relative` (EDT, T20, T30), `limit_clarity_db`, `limit_definition`, `limit_centre_time_s`, `limit_spl_db` (`docs/params.md`, "Monte-Carlo noise") |
+| `monte_carlo` | how every value's noise was judged: `resamples`, `refused_resamples_allowed`, `seed` (a string, `0x` and 16 hex digits), the largest standard deviation allowed, `limit_decay_relative` (EDT, T20, T30), `limit_clarity_db`, `limit_definition`, `limit_centre_time_s`, `limit_spl_db`; `method` (`"random"` or `"energetic"`, the run's computation method, which picks the calibration); and `calibration`, per quantity by its name (`spl_db` … `ts_s`): `factor` (the bootstrap's standard deviation is multiplied by it, calibrated against SPPS's own seed-to-seed spread), `margin` (a refusal names the particle count at which the calibrated standard deviation would be the limit over it) and `root_n_confirmed` (false: the spread's fall as `1/√N` was not confirmed for the quantity in this method, and a refusal names no count) (`docs/params.md`, "Monte-Carlo noise"; `docs/investigations/2026-09-25-noise-calibration/`) |
 | `sources[]` | `name`, `position_m` (`null` when not read), `emission_s` (`ceil(delay/dt)·dt`), `band_power_w` (per computed band, W, as SPPS computes it), `balloon` (a directivity balloon: its values are refused, `noise_unknown`) |
 | `particles` | the statistics per band: absorbed by the atmosphere, the materials, the fittings; lost by loops and meshing; remaining; total |
 | `total_energy[]` | per band, the room's energy per step (`<cumul_filename>`) |
@@ -180,7 +184,7 @@ A point receiver:
 | `label`, `folder` | the folder's name, which is exactly one `config.xml` label, and its path under `solve/` |
 | `position_m` | as SPPS stores it; `null` when not read |
 | `arrival_s` | the direct sound's arrival at the centre, which every onset-relative parameter is measured from, the direct sound spread over `±receiver_crossing_s/2` about it; `null` when not computed, and the parameters then detect it. When it lies outside a band's onset bin, C50, C80, D50 and Ts are refused `params_bad_arrival`; SPL, EDT, T20 and T30 are not |
-| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that unfinished particles can have taken, or `null` when there are none); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …}` in Pa², or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters`; `curvature` and `decay_curve` (below) |
+| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that unfinished particles can have taken, or `null` when there are none); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …, "method": "random" | "energetic", "particles": …}`, the mean deposit in Pa² and the particles per source, or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters`; `curvature` and `decay_curve` (below) |
 | `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `parameters`, `curvature`, `decay_curve`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
 | `by_source[]` | `source` and its `energy` per band, Pa² |
 | `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `arrival`, `decay_arrival`, `noise_model`, `crossings`, `energy_pa2`, `total_pa2`, `onset`, `parameters`, `curvature`, `decay_curve`) and `aggregate`: the parameters of that source–receiver pair. Empty otherwise |
@@ -191,15 +195,26 @@ exactly one of:
 ```
 {"value": 64.3876, "mc_sd": 0.041}
 {"not_evaluable": {"code": "params_not_evaluable",
-                   "message": "params_not_evaluable: T30: monte_carlo_noise: ...",
-                   "error": {"kind": "not_evaluable", "quantity": {"quantity": "t30"},
+                   "message": "params_not_evaluable: T20: monte_carlo_noise: ...",
+                   "error": {"kind": "not_evaluable", "quantity": {"quantity": "t20"},
                              "why": {"why": "monte_carlo_noise", "value": 0.83, "sd": 0.099,
-                                     "limit": 0.025, "resamples": 200, "refused_resamples": 107}}}}
+                                     "limit": 0.025, "resamples": 200, "refused_resamples": 3,
+                                     "particle_count": {"count": "named", "factor": 22.1,
+                                                        "margin": 1.4,
+                                                        "particles": 3400000}}}}}
 ```
 
-`mc_sd` is the value's estimated Monte-Carlo standard deviation in its unit; every SPPS value
-carries one, and no value is reported whose standard deviation exceeds the run's `monte_carlo`
-limits. `code` is a row of `docs/solver-contract.md`, "Parameter refusals"; `error` is the typed
+`mc_sd` is the value's estimated Monte-Carlo standard deviation in its unit, calibrated against
+SPPS's own seed-to-seed spread (`monte_carlo.calibration`); every SPPS value carries one, and no
+value is reported whose standard deviation exceeds the run's `monte_carlo` limits. A refusal for
+`monte_carlo_noise` carries `particle_count`, the particles per source that would bring the value
+within its limit, or why none is named: `{"count": "named", "factor", "margin", "particles"}`
+(`factor` times the run's particles, `(margin·sd/limit)²`, and that many per source rounded up to
+two significant digits); `{"count": "within_limit"}` (the standard deviation is within the limit
+and the value is refused because too many of its resamples refuse it, which more particles need
+not cure); `{"count": "scaling_not_confirmed"}` (the spread's fall as `1/√N` was not confirmed for
+the quantity in this computation method); `{"count": "no_standard_deviation"}`. The text output
+shows a named count as `NE(noise:<count>)`, and `NE(noise)` when none is named. `code` is a row of `docs/solver-contract.md`, "Parameter refusals"; `error` is the typed
 refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `early_unresolved`,
 `range_too_short`, `not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`,
 `monte_carlo_noise`, `noise_unknown`, `several_sources`, `no_time_series` for

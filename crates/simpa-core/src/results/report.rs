@@ -37,7 +37,10 @@ use crate::schema::SolverKind;
 /// its `aggregate` says it sums nothing; surface files carry `aggregate` and each receiver its `id`.
 /// Version 4 has not been merged yet, so these are 4 as well. 5 (pre-M8): an SPPS run carries
 /// `reference`, Kuttruff's corrected Eyring with `γ²` from the room's geometry and plain Eyring,
-/// labelled and not validated; and seeds (`monte_carlo.seed`, the transport's) are hex strings.
+/// labelled and not validated; seeds (`monte_carlo.seed`, the transport's) are hex strings; and
+/// every `mc_sd` is calibrated against SPPS's own seed-to-seed spread per computation method
+/// (`monte_carlo.method` and `.calibration`, `noise_model.method` and `.particles`), and a
+/// refusal for noise carries `particle_count`.
 pub const REPORT_VERSION: u32 = 5;
 
 /// A quantity's value, or why it has none.
@@ -892,13 +895,10 @@ fn series_of(
     }
 }
 
-/// The receiver crossings behind the series `energy` under `model`: its total over the mean
-/// deposit.
-fn crossings(model: &NoiseModel, energy: &[f64]) -> Option<f64> {
+/// The receiver crossings behind `total` under `model`.
+fn crossings(model: &NoiseModel, total: f64) -> Option<f64> {
     match model {
-        NoiseModel::Crossings { mean_deposit, .. } => {
-            Some(energy.iter().sum::<f64>() / mean_deposit)
-        }
+        NoiseModel::Crossings { mean_deposit, .. } => Some(total / mean_deposit),
         NoiseModel::Unknown { .. } => None,
     }
 }
@@ -1034,7 +1034,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             arrival,
             decay_arrival: e.decay_arrival,
             contributing_sources: contributing.iter().map(|c| c.to_string()).collect(),
-            crossings: crossings(&model, &b.energy),
+            crossings: crossings(&model, total_pa2),
             noise_model: model.clone(),
             energy_pa2: b.energy.clone(),
             total_pa2,
@@ -1080,7 +1080,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                         arrival,
                         decay_arrival: e.decay_arrival,
                         noise_model: model.clone(),
-                        crossings: crossings(model, energy),
+                        crossings: crossings(model, total_pa2),
                         energy_pa2: energy.clone(),
                         total_pa2,
                         onset: e.onset,
@@ -1124,11 +1124,7 @@ fn spps_report(bands_hz: &[i32], s: &SppsResults) -> SppsReport {
         particles_per_source: s.particles_per_source,
         trans_epsilon: s.trans_epsilon,
         echogram_per_source: s.echogram_per_source,
-        monte_carlo: MonteCarloReport::current(if s.computation_method == 0 {
-            noise::Method::Random
-        } else {
-            noise::Method::Energetic
-        }),
+        monte_carlo: MonteCarloReport::current(s.noise_method()),
         sources: s.sources.clone(),
         particles: s.particles.clone(),
         total_energy: s.total_energy.clone(),

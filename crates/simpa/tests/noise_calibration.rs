@@ -19,7 +19,8 @@
 //! - `tutorial1_at_upstreams_default`: tutorial 1 as shipped (27 third-octave bands, both
 //!   receivers, 150,000 particles, random mode, and again in energetic mode), seeds 1 to 10: how
 //!   many T30, EDT, C80 and D50 values come through. `$SIMPA_T1_FROM` reads an earlier run's
-//!   folder again with this build's `simpa results`.
+//!   folder again with this build's `simpa results`, keeping each report as `$SIMPA_T1_REPORT`
+//!   (default `report.json`) beside the run.
 
 mod support;
 
@@ -31,14 +32,15 @@ use serde_json::{Value, json};
 use simpa_core::params::EnergySeries;
 use simpa_core::params::decay::{self, Arrival};
 use simpa_core::params::noise::{self, NoiseModel};
-
-#[path = "../../simpa-core/tests/common/noise_calibration.rs"]
-mod calibration;
 use simpa_core::schema::{
     self, BandKind, BandSet, ComputationMethod, MaterialId, PointReceiverId, Project,
     ReflectionLaw, Vec3,
 };
 use support::*;
+
+/// The rules, shared with the suite's check of the committed receipt.
+#[path = "../../simpa-core/tests/common/noise_calibration.rs"]
+mod calibration;
 
 // --- the cells ---------------------------------------------------------------------------------
 
@@ -873,6 +875,10 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
                 "mean": m,
                 "observed_sd": observed,
                 "predicted_scatter": scatter,
+                // Each seed's value, and the model's standard deviation for its series before
+                // calibration (relative for the decay times): every run's result, seed 1 first.
+                "seed_values": got,
+                "seed_model_sd": sds[0],
                 "predicted_sd": STRUCTURES.iter().zip(&sds)
                     .filter(|(_, s)| s.len() == n)
                     .map(|(st, s)| (
@@ -884,7 +890,19 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
         }
         quantities.insert(q.to_string(), Value::Array(rows));
     }
-    let receipt = json!({"cell": c.config(), "quantities": quantities});
+    let mut config = c.config();
+    // Each seed's wall time, s, from the runs' `wall.json` when it is there.
+    let wall = std::fs::read_to_string(from.join("wall.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .and_then(|w| {
+            w.as_array()?
+                .iter()
+                .find(|x| x["id"] == c.id)
+                .map(|x| x["wall_s"].clone())
+        });
+    config["wall_s"] = wall.unwrap_or(Value::Null);
+    let receipt = json!({"cell": config, "quantities": quantities});
     for q in calibration::QUANTITIES {
         let mut sc: Vec<f64> = receipt["quantities"][q]
             .as_array()

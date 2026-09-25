@@ -375,12 +375,8 @@ impl SppsResults {
                 }
             }
         }
-        let method = if self.computation_method == 0 {
-            Method::Random
-        } else {
-            Method::Energetic
-        };
-        match largest.map(|d| NoiseModel::crossings(d, method, Some(self.particles_per_source))) {
+        let (method, n) = (self.noise_method(), Some(self.particles_per_source));
+        match largest.map(|d| NoiseModel::crossings(d, method, n)) {
             Some(Ok(m)) => m,
             Some(Err(e)) => NoiseModel::Unknown {
                 detail: e.to_string(),
@@ -388,6 +384,16 @@ impl SppsResults {
             None => NoiseModel::Unknown {
                 detail: "no source emits in the band".into(),
             },
+        }
+    }
+
+    /// The computation method as the noise model knows it (`computation_method` 0 random, any
+    /// other energetic, as SPPS reads it), which picks its calibration.
+    pub fn noise_method(&self) -> Method {
+        if self.computation_method == 0 {
+            Method::Random
+        } else {
+            Method::Energetic
         }
     }
 

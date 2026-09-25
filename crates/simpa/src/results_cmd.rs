@@ -268,3 +268,70 @@ fn text(rep: &Report) -> String {
     }
     s
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use simpa_core::params::{NotEvaluable, ParamError, ParticleCount, Quantity};
+
+    fn noise(count: ParticleCount) -> Evaluated {
+        let e = ParamError::NotEvaluable {
+            quantity: Quantity::T20,
+            why: NotEvaluable::MonteCarloNoise {
+                value: 0.8,
+                sd: Some(0.05),
+                limit: 0.025,
+                resamples: 200,
+                refused_resamples: 0,
+                particle_count: count,
+            },
+        };
+        // The text output reads a refusal as the report holds it.
+        Evaluated::NotEvaluable {
+            not_evaluable: report::Refused {
+                code: e.code().to_string(),
+                message: e.to_string(),
+                error: e,
+            },
+        }
+    }
+
+    #[test]
+    fn a_refusal_for_noise_shows_the_count_it_names() {
+        let named = |particles| ParticleCount::Named {
+            factor: 16.0,
+            margin: 1.4,
+            particles,
+        };
+        assert_eq!(
+            cell(&noise(named(Some(2_400_000))), 2, 1.0),
+            "NE(noise:2.4M)"
+        );
+        assert_eq!(cell(&noise(named(Some(150_000))), 2, 1.0), "NE(noise:150k)");
+        // Says no: without a count, none is shown, whatever the reason.
+        for c in [
+            named(None),
+            ParticleCount::WithinLimit,
+            ParticleCount::ScalingNotConfirmed,
+            ParticleCount::NoStandardDeviation,
+        ] {
+            assert_eq!(cell(&noise(c), 2, 1.0), "NE(noise)");
+        }
+    }
+
+    #[test]
+    fn a_count_is_shortened_but_never_shown_smaller_than_it_is() {
+        for (n, want) in [
+            (999, "999"),
+            (150_000, "150k"),
+            (160_000, "160k"),
+            (1_300_000, "1.3M"),
+            (1_250_000, "1.3M"),
+            (12_000_000, "12M"),
+            (12_500_000, "13M"),
+            (2_100_000_000, "2.1G"),
+        ] {
+            assert_eq!(particles(n), want, "{n}");
+        }
+    }
+}

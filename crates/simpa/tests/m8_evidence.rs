@@ -246,6 +246,9 @@ fn with_receivers(p: &mut Project, at: &[[f64; 3]]) {
                 PointReceiverId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0001_0000 + i as u128);
             r.name = format!("R{i:03}");
             r.position = Vec3::new(x[0], x[1], x[2]);
+            // Tutorial 1's receivers pin upstream's solver ids since the M7 follow-ups; copies of
+            // one would share its pin, which the run refuses (`solver_id_mapping_invalid`).
+            r.solver_id = None;
             r
         })
         .collect();
