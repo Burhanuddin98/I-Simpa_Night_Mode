@@ -599,7 +599,11 @@ pub const REMAINING_UNFINISHED_SHARE: f64 = 1e-6;
 /// 24 particles SPPS counted as lost, the 17 found in the trajectories carried 0.16 to 2.02 times
 /// the mean (`crates/simpa/tests/m8_evidence.rs`, `energetic_lost_particles_from_saved_
 /// trajectories`); the other 7 ended with less than 10⁻⁴ of their start energy, so their ratio is
-/// not known. Five times the largest measured. A late loss in a uniform, strongly absorbing room
+/// not known: 10 is five times the largest measured there. In an M8 cell (5×4×3 m, α 0.4,
+/// energetic, `trans_epsilon` 9, 300,000 particles, 3 seeds) the 44 of 76 lost that ended well
+/// above the floor carried 0.04 to 4.4 times the mean, so 10 is about 2.3 times the largest
+/// measured there, and for the other 32 the ratio is not known (`docs/results.md`, "Lost particles
+/// in an M8 cell"). No check can say no to it: a late loss in a uniform, strongly absorbing room
 /// can exceed it (`docs/results.md`, "Lost particles", for what that can move).
 pub const ENERGETIC_LOST_ENERGY_RATIO: f64 = 10.0;
 

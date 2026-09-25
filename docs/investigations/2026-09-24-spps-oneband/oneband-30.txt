@@ -1,0 +1,7 @@
+fresh: 30 runs, 2 distinct outcomes
+    29 x exit 0, 1000 Hz stats ('2000', '0', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 0.0
+     1 x exit 0, 1000 Hz stats ('41', '1959', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 2613587237753544.5
+same: 30 runs, 1 distinct outcomes
+    30 x exit 0, 1000 Hz stats ('2000', '0', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 0.0
+control: 30 runs, 1 distinct outcomes
+    30 x exit 0, 1000 Hz stats ('41', '1959', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 11.74405427813341

@@ -31,8 +31,10 @@ use crate::schema::SolverKind;
 /// follow-ups): SPPS bands carry `lost_follows_decay`, and in energetic mode `lost_share` bounds
 /// the energy from every time on; a given arrival outside the onset bin refuses C50, C80, D50 and
 /// Ts only; bands carry the `arrival` and `decay_arrival` they were measured from, with the direct
-/// sound's spread, and `early_reverberation_unresolved`: each value is midway between the early
-/// reverberation continued and absent, or refused `early_unresolved`; bands and aggregates carry
+/// sound's spread, and `early_reverberation_unresolved`: each value is midway between the lowest
+/// and highest of three readings of the early reverberation (continued back to the arrival, or
+/// beginning at the start or at the end of the first bin wholly after the direct sound), or
+/// refused `early_unresolved`; bands and aggregates carry
 /// `curvature` and `decay_curve`; a TCR receiver's `Global` row is the labelled object `global`, and
 /// its `aggregate` says it sums nothing; surface files carry `aggregate` and each receiver its `id`.
 /// Version 4 has not been merged yet, so these are 4 as well. 5 (pre-M8): an SPPS run carries
@@ -313,9 +315,12 @@ pub struct ReceiverBandReport {
     pub lost_follows_decay: bool,
     /// Always true for SPPS, whose reverberation begins with the first reflection: how it ran
     /// between the arrival and the first bin wholly after the direct sound is not known, so each
-    /// value is taken midway between that stretch continuing the decay and holding none, and
-    /// refused, `early_unresolved`, when the two differ by more than its limit
-    /// (`params::EnergySeries::with_early_reverberation_unresolved`).
+    /// value is read three ways, with the reverberation beginning at the arrival (the decay of
+    /// that bin continued back), at that bin's start and at its end, is taken midway between the
+    /// lowest and highest of the three, and is refused, `early_unresolved`, when either lies
+    /// further than its limit from that midpoint
+    /// (`params::EnergySeries::with_early_reverberation_unresolved`). `decay_curve` shows the
+    /// first reading only.
     pub early_reverberation_unresolved: bool,
     /// The arrival C50, C80, D50 and Ts are measured from: the direct sound at the receiver's
     /// centre, `arrival_s`, spread over `±R/c` (`params::decay::Arrival::Known`), or `detected`.
@@ -665,7 +670,8 @@ pub struct ReferenceBandReport {
     /// `γ²`, not its total uncertainty: it leaves out the formula's own error against a diffuse
     /// room (−0.41 % to +0.59 % in M8's cells, `docs/params.md`, "Kuttruff's reference"; not
     /// measured in other rooms). Refused with the transport's own refusal when the transport
-    /// refused.
+    /// refused, and `params_reference_not_applicable` where `lambert_walls` is false: it is
+    /// computed only where it describes the band.
     pub kuttruff_s: Evaluated,
 }
 
@@ -686,7 +692,9 @@ pub enum ReferenceReport {
         constant_s_per_m: f64,
         /// The diffuse transport's free paths in the room: the mean free path, `γ²`, their
         /// standard errors, `4V/S`, and the transport's settings. `null` when the transport
-        /// refused; every band's `kuttruff_s` then carries its refusal.
+        /// refused, every band's `kuttruff_s` then carrying its refusal; and when no computed band
+        /// has Lambert walls, so that it was not run, every `kuttruff_s` then refused
+        /// `params_reference_not_applicable`.
         free_paths: Option<FreePaths>,
         bands: Vec<ReferenceBandReport>,
     },

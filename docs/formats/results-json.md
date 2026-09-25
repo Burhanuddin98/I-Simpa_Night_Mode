@@ -155,13 +155,16 @@ output. **Nothing in it is validated**, and `label` says so beside the numbers:
                              "settings": {"replicas": 16, "rays_per_replica": 4096,
                                           "burn_in_paths": 32, "paths_per_ray": 512,
                                           "seed": "0x6c616d6265727431"}} | null,
-                                                              // always the fixed STANDARD
+                                                              // always the fixed STANDARD; null
+                                                              //   when no band has Lambert walls
               "bands": [{"freq_hz": 500, "air_m_per_metre": 0.000628 | null,
                          "mean_absorption": 0.2,              // ᾱ = Σ Sᵢαᵢ / S
-                         "lambert_walls": false,              // every face Lambert, scattering 1?
+                         "lambert_walls": true,               // every face Lambert, scattering 1?
                          "eyring_s": {"value": 0.5957, "mc_sd": null},
                          "kuttruff_s": {"value": 0.6225, "mc_sd": 0.0000103}}, ...]}
-                                                              // mc_sd: gamma^2's share only
+                                                              // mc_sd: gamma^2's share only; a
+                                                              //   refusal where lambert_walls is
+                                                              //   false
 | {"status": "not_computed", "why": "..."}
 ```
 
@@ -176,11 +179,13 @@ output. **Nothing in it is validated**, and `label` says so beside the numbers:
   the solver's own air term `m` (`null` with air absorption off).
 - **Both describe a diffuse field.** `lambert_walls` says whether every face reflects by Lambert's
   law with scattering 1 in the band, the only walls the transport's `γ²` describes; with specular
-  or partly specular walls neither time describes the run's field.
+  or partly specular walls neither time describes the run's field, and `kuttruff_s` is refused
+  `params_reference_not_applicable` there (pre-M8: the transport is not run for such bands, and
+  not at all when no computed band has Lambert walls; `eyring_s` is given whatever the walls).
 - `free_paths` is `null` when the transport refused (a ray left the room, its mean free path is
-  not `4V/S` within its error, or `γ²`'s standard error is above 0.002); every band's
-  `kuttruff_s` then carries that refusal, `params_transport_refused`, and `eyring_s` is still
-  given. `free_paths.settings` is always the transport's fixed `STANDARD`: nothing a caller
+  not `4V/S` within its error, or `γ²`'s standard error is above 0.002), every band with Lambert
+  walls then carrying that refusal in `kuttruff_s`, `params_transport_refused`; and when no
+  computed band has Lambert walls, so that it was not run. `eyring_s` is still given. `free_paths.settings` is always the transport's fixed `STANDARD`: nothing a caller
   chooses reaches it. Its `seed`, like `monte_carlo.seed`, is a string, `0x` and 16 hex digits:
   as a JSON number above 2⁵³ it would be read as another seed by any reader that parses numbers
   as doubles.
@@ -272,6 +277,11 @@ come from the code that gives the numbers, not from a second implementation.
   also at `u = 0` when the direct sound steps the curve down, is the level just after it. The last
   is the start of the last bin with energy (the curve then falls to nothing inside one bin, which
   the fits leave out). How the knots are thinned: `docs/params.md`, "The decay curve, for display".
+  **Before `histogram_from_s` the curve is one of three readings**, the reverberation continued
+  back to the arrival, while each value is midway between the lowest and highest of the three
+  (`early_reverberation_unresolved`, always `true` for SPPS). A line drawn on these points from
+  0 to −10 dB gives an EDT that can differ from `parameters.edt_s` by up to EDT's limit, 0.5 %;
+  T20 and T30 start below that stretch.
 - `decay_curve` is `null` when the series is refused, when several sources contribute to the band
   (the seven onset-relative values are refused `several_sources`, and so is `curvature`), and for
   TCR, which writes no series (its `curvature` is refused `no_time_series`).

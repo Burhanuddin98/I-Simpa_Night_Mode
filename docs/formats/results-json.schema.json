@@ -1524,6 +1524,23 @@
               "detail"
             ],
             "type": "object"
+          },
+          {
+            "description": "Kuttruff's reference does not describe this band: not every face reflects by Lambert's\nlaw with scattering 1 in it (`results::reference`); or no computed band has such walls, so\nthe transport was not run.",
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "reference_not_applicable",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "detail"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -2005,7 +2022,7 @@
             "description": "The Schroeder curve EDT, T20 and T30 were fitted to, thinned for display\n(`params::decay::DecayCurve`); `null` when the series is refused, or when several sources\ncontribute (the decay of their sum is no source–receiver pair's)."
           },
           "early_reverberation_unresolved": {
-            "description": "Always true for SPPS, whose reverberation begins with the first reflection: how it ran\nbetween the arrival and the first bin wholly after the direct sound is not known, so each\nvalue is taken midway between that stretch continuing the decay and holding none, and\nrefused, `early_unresolved`, when the two differ by more than its limit\n(`params::EnergySeries::with_early_reverberation_unresolved`).",
+            "description": "Always true for SPPS, whose reverberation begins with the first reflection: how it ran\nbetween the arrival and the first bin wholly after the direct sound is not known, so each\nvalue is read three ways, with the reverberation beginning at the arrival (the decay of\nthat bin continued back), at that bin's start and at its end, is taken midway between the\nlowest and highest of the three, and is refused, `early_unresolved`, when either lies\nfurther than its limit from that midpoint\n(`params::EnergySeries::with_early_reverberation_unresolved`). `decay_curve` shows the\nfirst reading only.",
             "type": "boolean"
           },
           "energy_pa2": {
@@ -2107,7 +2124,7 @@
           },
           "kuttruff_s": {
             "$ref": "#/$defs/Evaluated",
-            "description": "Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:\n**M8's reference**. `mc_sd` is only the standard deviation it inherits from the transport's\n`γ²`, not its total uncertainty: it leaves out the formula's own error against a diffuse\nroom (−0.41 % to +0.59 % in M8's cells, `docs/params.md`, \"Kuttruff's reference\"; not\nmeasured in other rooms). Refused with the transport's own refusal when the transport\nrefused."
+            "description": "Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:\n**M8's reference**. `mc_sd` is only the standard deviation it inherits from the transport's\n`γ²`, not its total uncertainty: it leaves out the formula's own error against a diffuse\nroom (−0.41 % to +0.59 % in M8's cells, `docs/params.md`, \"Kuttruff's reference\"; not\nmeasured in other rooms). Refused with the transport's own refusal when the transport\nrefused, and `params_reference_not_applicable` where `lambert_walls` is false: it is\ncomputed only where it describes the band."
           },
           "lambert_walls": {
             "description": "Every face reflects by Lambert's law with scattering 1 in this band: the only walls the\ntransport's `γ²` describes. When false, neither time describes the run's field.",
@@ -2163,7 +2180,7 @@
                     "type": "null"
                   }
                 ],
-                "description": "The diffuse transport's free paths in the room: the mean free path, `γ²`, their\nstandard errors, `4V/S`, and the transport's settings. `null` when the transport\nrefused; every band's `kuttruff_s` then carries its refusal."
+                "description": "The diffuse transport's free paths in the room: the mean free path, `γ²`, their\nstandard errors, `4V/S`, and the transport's settings. `null` when the transport\nrefused, every band's `kuttruff_s` then carrying its refusal; and when no computed band\nhas Lambert walls, so that it was not run, every `kuttruff_s` then refused\n`params_reference_not_applicable`."
               },
               "label": {
                 "description": "Always [`crate::results::reference::REFERENCE_LABEL`].",

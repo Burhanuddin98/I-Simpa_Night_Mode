@@ -723,10 +723,13 @@ fn a_failed_run_is_refused_with_exit_5_and_its_reasons() {
 fn a_cancelled_run_is_refused_with_exit_5() {
     solver_exe("spps.exe");
     let root = scratch("results-cancelled");
-    // The Seat box at 1,000,000 particles, which SPPS takes many seconds over: the cancel, 150 ms
-    // in, always lands on a running solver. At the fixture's 2,000 particles, with other SPPS
-    // runs loading the machine, SPPS could finish before a 1 ms timer thread ran, and the run
-    // came back OK (exit 0) instead of cancelled.
+    // The Seat box at 1,000,000 particles, cancelled at SPPS's first progress line at or above
+    // 1 %: the cancel is set off by the solver's own output, so it lands on a running solver with
+    // 99 % of its particles to go, whatever else loads the machine. A timer did not: at the
+    // fixture's 2,000 particles SPPS could finish before a 1 ms timer thread ran, with other SPPS
+    // runs of the same test binary alongside, and the run came back OK (exit 0; the pre-M8
+    // piece B verifier, round 1). A timer 150 ms in on 1,000,000 particles only made that
+    // unlikely.
     let mut p = schema::load(&fixture(SEATS)).unwrap();
     p.solvers.spps.particles_per_source = 1_000_000;
     let project = root.join("seats_long.simpa");
@@ -738,13 +741,16 @@ fn a_cancelled_run_is_refused_with_exit_5() {
         "spps".into(),
         "--runs".into(),
         root.join("runs").display().to_string(),
-        "--cancel-after-ms".into(),
-        "150".into(),
+        "--cancel-after-progress".into(),
+        "1".into(),
         "--json".into(),
     ]);
     assert_eq!(o.code, 130, "{o:#?}");
     let m = json(&o);
     assert_eq!(m["verdict"]["status"], "CANCELLED");
+    // Cancelled while SPPS ran, not before it started.
+    assert_eq!(m["stage"], "solve", "{m:#}");
+    assert!(m["outcome"].is_object(), "{m:#}");
     let r = results(&run_dir(&m), true);
     assert_eq!(r.code, 5, "{r:#?}");
     assert_eq!(refused_code(&r), "results_run_cancelled");
@@ -887,18 +893,11 @@ fn an_spps_report_carries_its_rooms_reference_labelled_and_not_validated() {
     // SPPS's own c, as SPPS stores it (f32), and K = 24·ln 10/c.
     assert_eq!(c, f64::from(343.2f32));
     assert!((k - 24.0 * std::f64::consts::LN_10 / c).abs() < 1e-15);
-    // The transport's free paths: 4V/S and the box's exact γ² (tests/params_lambert.rs), each
-    // within 3 standard errors.
-    let fp = &r["free_paths"];
-    let (mfp, mfp_se, g, g_se) = (
-        f(&fp["mean_free_path_m"]),
-        f(&fp["mean_free_path_se_m"]),
-        f(&fp["gamma2"]),
-        f(&fp["gamma2_se"]),
-    );
-    assert!((f(&fp["four_v_over_s_m"]) - 4.0 * v / s).abs() < 1e-9);
-    assert!((mfp - 4.0 * v / s).abs() < 3.0 * mfp_se, "{fp}");
-    assert!((g - 0.388_874).abs() < 3.0 * g_se, "{fp}");
+    // The box's walls are specular in both bands: the transport's γ² describes neither, so it is
+    // not run (`free_paths` null) and Kuttruff's time is refused where it does not apply. Plain
+    // Eyring is given. (Kuttruff's time through the report: the Lambert room,
+    // `a_lambert_rooms_report_carries_kuttruffs_time`.)
+    assert!(r["free_paths"].is_null(), "{r}");
     let bands = r["bands"].as_array().unwrap();
     assert_eq!(bands.len(), 2);
     for b in bands {
@@ -906,19 +905,16 @@ fn an_spps_report_carries_its_rooms_reference_labelled_and_not_validated() {
         let m = b["air_m_per_metre"].as_f64().unwrap_or(0.0);
         let ln = (1.0 - abar).ln();
         let eyring = k * v / (4.0 * m * v - s * ln);
-        let kuttruff = k * v / (4.0 * m * v - s * ln * (1.0 + 0.5 * g * ln));
         assert!(
             (f(&b["eyring_s"]["value"]) / eyring - 1.0).abs() < 1e-9,
             "{b}"
         );
         assert!(b["eyring_s"]["mc_sd"].is_null());
-        assert!(
-            (f(&b["kuttruff_s"]["value"]) / kuttruff - 1.0).abs() < 1e-9,
+        assert_eq!(b["lambert_walls"], false, "{b}");
+        assert_eq!(
+            b["kuttruff_s"]["not_evaluable"]["code"], "params_reference_not_applicable",
             "{b}"
         );
-        assert!(f(&b["kuttruff_s"]["mc_sd"]) > 0.0);
-        // The box's walls are specular: the band says the reference does not describe them.
-        assert_eq!(b["lambert_walls"], false, "{b}");
     }
     // The text says what it is beside it.
     let t = results(&fixture(SEATS_SPPS), false);
@@ -1110,6 +1106,152 @@ fn every_report_and_refusal_validates_against_the_committed_schema() {
     let mut bad = r6.clone();
     bad["exit_code"] = "6".into();
     assert!(!refusal.is_valid(&bad));
+}
+
+/// The Seat box with Lambert walls at α 0.4 in energetic mode, `trans_epsilon` 9, 150,000
+/// particles, 0.6 s in 1 ms steps, run with SPPS (about 6 s): its `results --json` report.
+fn lambert_box_report(label: &str) -> Value {
+    let root = scratch(label);
+    let text = std::fs::read_to_string(fixture(SEATS)).unwrap();
+    let mut v: Value = serde_json::from_str(&text).unwrap();
+    let spps = &mut v["solvers"]["spps"];
+    spps["particles_per_source"] = 150_000.into();
+    spps["duration_s"] = 0.6.into();
+    spps["time_step_s"] = 0.001.into();
+    spps["method"] = "energetic".into();
+    spps["extinction_exponent"] = 9.0.into();
+    spps["air_absorption"] = false.into();
+    spps["save_surface_intersections"] = false.into();
+    spps["save_receiver_intersections"] = false.into();
+    for m in v["materials"].as_array_mut().unwrap() {
+        m["absorption"] = serde_json::json!([0.4, 0.4]);
+        m["scattering"] = serde_json::json!([1.0, 1.0]);
+        m["reflection_law"] = "lambert".into();
+    }
+    v["surface_receivers"] = serde_json::json!([]);
+    let project = root.join("lambert_box.simpa");
+    std::fs::write(&project, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+    let run = run_ok(&project, "spps", &root.join("runs"), &[]);
+    let o = results(&run, true);
+    assert_eq!(o.code, 0, "{o:#?}");
+    json(&o)
+}
+
+/// Kuttruff's reference through the report, where it applies (pre-M8: it is computed only for
+/// bands whose walls are all Lambert with scattering 1). The Lambert box of
+/// [`lambert_box_report`]: `free_paths` gives `4V/S` and the box's exact `γ²`, 0.388874
+/// (`tests/params_lambert.rs`), each within 3 standard errors, and every band's `kuttruff_s` is
+/// Kuttruff's formula with that `γ²` and SPPS's `K` to 10⁻⁹, with a positive `mc_sd`, above plain
+/// Eyring's. Says no: the committed Seat run, with specular walls, refuses it
+/// (`an_spps_report_carries_its_rooms_reference_labelled_and_not_validated`).
+#[test]
+fn a_lambert_rooms_report_carries_kuttruffs_time() {
+    let rep = lambert_box_report("results-reference-lambert");
+    let r = &rep["spps"]["reference"];
+    assert_eq!(r["status"], "computed", "{r}");
+    let f = |v: &Value| v.as_f64().unwrap_or_else(|| panic!("{v}"));
+    let (v, s, k) = (
+        f(&r["volume_m3"]),
+        f(&r["area_m2"]),
+        f(&r["constant_s_per_m"]),
+    );
+    let fp = &r["free_paths"];
+    let (mfp, mfp_se, g, g_se) = (
+        f(&fp["mean_free_path_m"]),
+        f(&fp["mean_free_path_se_m"]),
+        f(&fp["gamma2"]),
+        f(&fp["gamma2_se"]),
+    );
+    assert!((f(&fp["four_v_over_s_m"]) - 4.0 * v / s).abs() < 1e-9);
+    assert!((mfp - 4.0 * v / s).abs() < 3.0 * mfp_se, "{fp}");
+    assert!((g - 0.388_874).abs() < 3.0 * g_se, "{fp}");
+    let bands = r["bands"].as_array().unwrap();
+    assert_eq!(bands.len(), 2);
+    for b in bands {
+        assert_eq!(b["lambert_walls"], true, "{b}");
+        let abar = f(&b["mean_absorption"]);
+        let m = b["air_m_per_metre"].as_f64().unwrap_or(0.0);
+        let ln = (1.0 - abar).ln();
+        let eyring = k * v / (4.0 * m * v - s * ln);
+        let kuttruff = k * v / (4.0 * m * v - s * ln * (1.0 + 0.5 * g * ln));
+        assert!(
+            (f(&b["kuttruff_s"]["value"]) / kuttruff - 1.0).abs() < 1e-9,
+            "{b}"
+        );
+        assert!(f(&b["kuttruff_s"]["mc_sd"]) > 0.0);
+        assert!(f(&b["kuttruff_s"]["value"]) > eyring, "{b}");
+    }
+}
+
+/// The committed runs refuse every T20, T30 and curvature, so the validator above never sees one
+/// as a value (the M7 follow-ups' critic). The Lambert box of [`lambert_box_report`] gives them (a
+/// uniform Lambert room, whose energetic decay times are calibrated,
+/// `docs/investigations/2026-09-25-noise-calibration/`). Its report must carry T20, T30 and
+/// `curvature.percent` as values and `curvature.curved` as a boolean, and validate against the
+/// committed schema. Says no: the same report with a T30 value a string, a curvature percent a
+/// string, or the `curved` flag a number, fails.
+#[test]
+fn decay_times_and_curvature_given_as_values_validate_against_the_schema() {
+    let rep = lambert_box_report("results-values");
+
+    // Where the values are: every receiver-band's T20 and T30 and its curvature percent, here.
+    let mut given = (0, 0, 0);
+    for r in rep["spps"]["point_receivers"].as_array().unwrap() {
+        for b in r["bands"].as_array().unwrap() {
+            let p = &b["parameters"];
+            given.0 += usize::from(p["t20_s"]["value"].is_f64());
+            given.1 += usize::from(p["t30_s"]["value"].is_f64());
+            if b["curvature"]["percent"]["value"].is_f64() {
+                given.2 += 1;
+                assert!(b["curvature"]["curved"].is_boolean(), "{}", b["curvature"]);
+            }
+        }
+    }
+    println!(
+        "of 4 receiver-bands: T20 given {}, T30 {}, curvature {}",
+        given.0, given.1, given.2
+    );
+    assert!(
+        given.0 > 0 && given.1 > 0 && given.2 > 0,
+        "{given:?}: {rep:#}"
+    );
+
+    let (report, _) = committed_validators();
+    let errors = schema_errors(&report, &rep);
+    assert!(errors.is_empty(), "{errors:#?}");
+    // Says no, at the values themselves.
+    let at = |rep: &Value| -> (usize, usize) {
+        let receivers = rep["spps"]["point_receivers"].as_array().unwrap();
+        for (i, r) in receivers.iter().enumerate() {
+            for (j, b) in r["bands"].as_array().unwrap().iter().enumerate() {
+                if b["parameters"]["t30_s"]["value"].is_f64()
+                    && b["curvature"]["percent"]["value"].is_f64()
+                {
+                    return (i, j);
+                }
+            }
+        }
+        panic!("no band with a T30 and a curvature value");
+    };
+    let (i, j) = at(&rep);
+    type Edit = fn(&mut Value);
+    let wrong: [(&str, Edit); 3] = [
+        ("a T30 value a string", |b| {
+            b["parameters"]["t30_s"]["value"] = "0.29".into()
+        }),
+        ("a curvature percent a string", |b| {
+            b["curvature"]["percent"]["value"] = "0.2".into()
+        }),
+        ("the curved flag a number", |b| {
+            b["curvature"]["curved"] = 0.into()
+        }),
+    ];
+    for (what, edit) in wrong {
+        let mut bad = rep.clone();
+        edit(&mut bad["spps"]["point_receivers"][i]["bands"][j]);
+        assert_ne!(bad, rep, "{what}: the edit changed nothing");
+        assert!(!schema_errors(&report, &bad).is_empty(), "{what}");
+    }
 }
 
 // --- gate (c): level calibration -----------------------------------------------------------------

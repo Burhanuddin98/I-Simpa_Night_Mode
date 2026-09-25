@@ -1,0 +1,61 @@
+﻿
+running 1 test
+test energetic_floor_against_a_lower_floor has been running for over 60 seconds
+[   181 s] eps 5 seed 7: 181.0 s
+[   181 s] eps 5 seed 6: 180.9 s
+[   182 s] eps 5 seed 5: 181.5 s
+[   182 s] eps 5 seed 3: 181.8 s
+[   182 s] eps 5 seed 1: 181.9 s
+[   182 s] eps 5 seed 4: 181.9 s
+[   183 s] eps 5 seed 9: 182.2 s
+[   183 s] eps 5 seed 8: 182.9 s
+[   183 s] eps 5 seed 2: 182.9 s
+[   185 s] eps 5 seed 10: 184.0 s
+[   299 s] eps 9 seed 6: 299.2 s
+[   300 s] eps 9 seed 7: 299.7 s
+[   300 s] eps 9 seed 10: 299.7 s
+[   300 s] eps 9 seed 8: 300.4 s
+[   300 s] eps 9 seed 1: 300.3 s
+[   301 s] eps 9 seed 5: 300.6 s
+[   301 s] eps 9 seed 9: 300.5 s
+[   301 s] eps 9 seed 3: 300.8 s
+[   301 s] eps 9 seed 4: 301.0 s
+[   302 s] eps 9 seed 2: 301.6 s
+1500000 particles: T30 at trans_epsilon 5 over T30 at 9, 36 receiver-bands: mean -0.313 %, largest 0.736 %, largest in standard errors 5.4
+trans_epsilon 5: spl_db : {"value": 36}
+trans_epsilon 5: edt_s  : {"value": 36}
+trans_epsilon 5: t20_s  : {"monte_carlo_noise": 23, "value": 13}
+trans_epsilon 5: t30_s  : {"missing_moves": 36}
+trans_epsilon 5: c50_db : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 5: c80_db : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 5: d50    : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 5: ts_s   : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 5: missing energy: t20 with both: value: 36
+trans_epsilon 5: missing energy: t20 with floor: value: 36
+trans_epsilon 5: missing energy: t20 with lost: value: 36
+trans_epsilon 5: missing energy: t20 with neither: value: 36
+trans_epsilon 5: missing energy: t30 with both: missing_moves: 36
+trans_epsilon 5: missing energy: t30 with floor: missing_moves: 36
+trans_epsilon 5: missing energy: t30 with lost: missing_moves: 36
+trans_epsilon 5: missing energy: t30 with neither: value: 36
+trans_epsilon 9: spl_db : {"value": 36}
+trans_epsilon 9: edt_s  : {"value": 36}
+trans_epsilon 9: t20_s  : {"monte_carlo_noise": 26, "value": 10}
+trans_epsilon 9: t30_s  : {"missing_moves": 36}
+trans_epsilon 9: c50_db : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 9: c80_db : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 9: d50    : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 9: ts_s   : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 9: missing energy: t20 with both: value: 36
+trans_epsilon 9: missing energy: t20 with floor: value: 36
+trans_epsilon 9: missing energy: t20 with lost: value: 36
+trans_epsilon 9: missing energy: t20 with neither: value: 36
+trans_epsilon 9: missing energy: t30 with both: missing_moves: 36
+trans_epsilon 9: missing energy: t30 with floor: value: 36
+trans_epsilon 9: missing energy: t30 with lost: missing_moves: 36
+trans_epsilon 9: missing energy: t30 with neither: value: 36
+wall time: eps 5 182 s, eps 9 300 s per run
+test energetic_floor_against_a_lower_floor ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 301.79s
+

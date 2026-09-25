@@ -1,0 +1,52 @@
+﻿
+running 1 test
+test m8_cells has been running for over 60 seconds
+[    75 s] 4 5x4x3 alpha 0.4 Random 8000000 1 s dt 0.01 eps 5 seed 3: 74.6 s
+[    77 s] 4 5x4x3 alpha 0.4 Random 8000000 1 s dt 0.01 eps 5 seed 2: 76.5 s
+[    78 s] 4 5x4x3 alpha 0.4 Random 8000000 1 s dt 0.01 eps 5 seed 1: 78.0 s
+[   140 s] 1 6x10x3 alpha 0.2 Random 8000000 2 s dt 0.01 eps 5 seed 1: 139.8 s
+[   142 s] 3 5x4x3 alpha 0.2 Random 8000000 1.5 s dt 0.01 eps 5 seed 1: 141.5 s
+[   143 s] 1 6x10x3 alpha 0.2 Random 8000000 2 s dt 0.01 eps 5 seed 3: 142.8 s
+[   145 s] 1 6x10x3 alpha 0.2 Random 8000000 2 s dt 0.01 eps 5 seed 2: 144.7 s
+[   146 s] 3 5x4x3 alpha 0.2 Random 8000000 1.5 s dt 0.01 eps 5 seed 3: 145.6 s
+[   146 s] 3 5x4x3 alpha 0.2 Random 8000000 1.5 s dt 0.01 eps 5 seed 2: 145.7 s
+[   197 s] 0 6x10x3 alpha 0.1 Random 6000000 3 s dt 0.01 eps 5 seed 3: 197.0 s
+[   198 s] 0 6x10x3 alpha 0.1 Random 6000000 3 s dt 0.01 eps 5 seed 1: 197.9 s
+[   200 s] 0 6x10x3 alpha 0.1 Random 6000000 3 s dt 0.01 eps 5 seed 2: 199.3 s
+[   330 s] 8 5x4x3 alpha 0.2 Energetic 1500000 0.8 s dt 0.01 eps 7 seed 3: 329.3 s
+[   331 s] 8 5x4x3 alpha 0.2 Energetic 1500000 0.8 s dt 0.01 eps 7 seed 1: 330.2 s
+[   331 s] 8 5x4x3 alpha 0.2 Energetic 1500000 0.8 s dt 0.01 eps 7 seed 2: 331.0 s
+[   335 s] 2 6x10x3 alpha 0.4 Random 48000000 1 s dt 0.01 eps 5 seed 1: 334.5 s
+[   337 s] 2 6x10x3 alpha 0.4 Random 48000000 1 s dt 0.01 eps 5 seed 3: 336.3 s
+[   338 s] 2 6x10x3 alpha 0.4 Random 48000000 1 s dt 0.01 eps 5 seed 2: 337.4 s
+[   404 s] 7 5x4x3 alpha 0.4 Energetic 3500000 0.4 s dt 0.01 eps 9 seed 1: 403.7 s
+[   404 s] 7 5x4x3 alpha 0.4 Energetic 3500000 0.4 s dt 0.01 eps 9 seed 2: 404.1 s
+[   407 s] 7 5x4x3 alpha 0.4 Energetic 3500000 0.4 s dt 0.01 eps 9 seed 3: 406.3 s
+[   905 s] 5 6x10x3 alpha 0.2 Energetic 4500000 1 s dt 0.01 eps 9 seed 1: 904.7 s
+[   906 s] 5 6x10x3 alpha 0.2 Energetic 4500000 1 s dt 0.01 eps 9 seed 2: 905.3 s
+[   908 s] 5 6x10x3 alpha 0.2 Energetic 4500000 1 s dt 0.01 eps 9 seed 3: 908.0 s
+[  1101 s] 6 6x10x3 alpha 0.4 Energetic 13000000 0.5 s dt 0.01 eps 9 seed 2: 1101.0 s
+[  1102 s] 6 6x10x3 alpha 0.4 Energetic 13000000 0.5 s dt 0.01 eps 9 seed 3: 1101.3 s
+[  1104 s] 6 6x10x3 alpha 0.4 Energetic 13000000 0.5 s dt 0.01 eps 9 seed 1: 1103.3 s
+CELL 6x10x3 alpha 0.1 Random N 6000000 3 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds where all give it (18): median 2.47 %, worst 5.90 %; wall 197-199 s per run; refused {}
+  from the series alone: T30 in 54 of 54 receiver-band-seeds; spread over the seeds per receiver-band median 1.86 %, worst 5.90 %; of the cell's mean T30 0.20 %; estimated sd median 1.18 %, largest 1.60 %; mean T30 1.3049 s against Eyring (K = 24 ln10/343.2) 1.2736 s: +2.46 %
+CELL 6x10x3 alpha 0.2 Random N 8000000 2 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds where all give it (18): median 2.31 %, worst 4.49 %; wall 140-145 s per run; refused {}
+  from the series alone: T30 in 54 of 54 receiver-band-seeds; spread over the seeds per receiver-band median 2.26 %, worst 4.49 %; of the cell's mean T30 0.11 %; estimated sd median 1.53 %, largest 2.11 %; mean T30 0.6290 s against Eyring (K = 24 ln10/343.2) 0.6013 s: +4.60 %
+CELL 6x10x3 alpha 0.4 Random N 48000000 1 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 15, EDT 15, C80 15, D50 15; T30 spread (max-min)/mean over 3 seeds where all give it (15): median 1.83 %, worst 4.49 %; wall 335-337 s per run; refused {"c80_db truncated": 3, "d50 truncated": 3, "edt_s truncated": 3, "t30_s truncated": 3}
+  from the series alone: T30 in 54 of 54 receiver-band-seeds; spread over the seeds per receiver-band median 1.70 %, worst 4.49 %; of the cell's mean T30 0.72 %; estimated sd median 0.98 %, largest 1.23 %; mean T30 0.2908 s against Eyring (K = 24 ln10/343.2) 0.2627 s: +10.72 %
+CELL 5x4x3 alpha 0.2 Random N 8000000 1.5 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds where all give it (18): median 1.78 %, worst 3.43 %; wall 141-146 s per run; refused {}
+  from the series alone: T30 in 54 of 54 receiver-band-seeds; spread over the seeds per receiver-band median 1.55 %, worst 3.43 %; of the cell's mean T30 0.52 %; estimated sd median 0.92 %, largest 1.09 %; mean T30 0.4822 s against Eyring (K = 24 ln10/343.2) 0.4606 s: +4.68 %
+CELL 5x4x3 alpha 0.4 Random N 8000000 1 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds where all give it (18): median 2.15 %, worst 4.83 %; wall 75-78 s per run; refused {}
+  from the series alone: T30 in 54 of 54 receiver-band-seeds; spread over the seeds per receiver-band median 1.95 %, worst 4.83 %; of the cell's mean T30 0.56 %; estimated sd median 1.47 %, largest 2.02 %; mean T30 0.2198 s against Eyring (K = 24 ln10/343.2) 0.2012 s: +9.25 %
+CELL 6x10x3 alpha 0.2 Energetic N 4500000 1 s dt 0.01 eps 9: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds where all give it (18): median 0.12 %, worst 0.26 %; wall 905-908 s per run; refused {}
+  from the series alone: T30 in 54 of 54 receiver-band-seeds; spread over the seeds per receiver-band median 0.11 %, worst 0.26 %; of the cell's mean T30 0.02 %; estimated sd median 2.11 %, largest 2.39 %; mean T30 0.6312 s against Eyring (K = 24 ln10/343.2) 0.6013 s: +4.96 %
+CELL 6x10x3 alpha 0.4 Energetic N 13000000 0.5 s dt 0.01 eps 9: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds where all give it (18): median 0.10 %, worst 0.19 %; wall 1101-1103 s per run; refused {}
+  from the series alone: T30 in 54 of 54 receiver-band-seeds; spread over the seeds per receiver-band median 0.08 %, worst 0.19 %; of the cell's mean T30 0.04 %; estimated sd median 1.93 %, largest 2.34 %; mean T30 0.2909 s against Eyring (K = 24 ln10/343.2) 0.2627 s: +10.74 %
+CELL 5x4x3 alpha 0.4 Energetic N 3500000 0.4 s dt 0.01 eps 9: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds where all give it (18): median 0.12 %, worst 0.29 %; wall 404-406 s per run; refused {}
+  from the series alone: T30 in 54 of 54 receiver-band-seeds; spread over the seeds per receiver-band median 0.10 %, worst 0.29 %; of the cell's mean T30 0.01 %; estimated sd median 2.15 %, largest 2.46 %; mean T30 0.2198 s against Eyring (K = 24 ln10/343.2) 0.2012 s: +9.24 %
+CELL 5x4x3 alpha 0.2 Energetic N 1500000 0.8 s dt 0.01 eps 7: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds where all give it (18): median 0.10 %, worst 0.16 %; wall 329-331 s per run; refused {}
+  from the series alone: T30 in 54 of 54 receiver-band-seeds; spread over the seeds per receiver-band median 0.10 %, worst 0.16 %; of the cell's mean T30 0.02 %; estimated sd median 2.19 %, largest 2.35 %; mean T30 0.4810 s against Eyring (K = 24 ln10/343.2) 0.4606 s: +4.43 %
+test m8_cells ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 1103.69s
+

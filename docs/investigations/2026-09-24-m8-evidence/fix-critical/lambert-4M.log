@@ -1,0 +1,58 @@
+   Compiling simpa-core v0.1.0 (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m7-params\crates\simpa-core)
+    Finished `release` profile [optimized] target(s) in 0.79s
+     Running tests\lambert_box.rs (target\release\deps\lambert_box-afcf0752cb89cce2.exe)
+
+running 1 test
+BOX 6x10x3 alpha 0.05: 4000000 rays, 4.7 s; free path 3.3344 m against 4V/S 3.3333 m, gamma^2 0.3883; Eyring 2.6160 s; room energy T 2.6476 s (+1.21 %); renewal 2.6418 s (+0.99 %); Kuttruff with this gamma^2 2.6423 s (+1.01 %)
+   R0 (4.47 m): EDT at 0.2 ms 2.6523 ± 0.0017 s (8 of 8); at 10 ms continued back 2.6522 ± 0.0017 s (-0.00 %), as SPPS's is read 2.6522 ± 0.0017 s (-0.00 %) in 8 of 8
+   R1 (2.00 m): EDT at 0.2 ms 2.6484 ± 0.0018 s (8 of 8); at 10 ms continued back 2.6476 ± 0.0018 s (-0.03 %), as SPPS's is read 2.6464 ± 0.0018 s (-0.07 %) in 8 of 8
+   R2 (4.08 m): EDT at 0.2 ms 2.6463 ± 0.0029 s (8 of 8); at 10 ms continued back 2.6459 ± 0.0029 s (-0.02 %), as SPPS's is read 2.6466 ± 0.0029 s (+0.01 %) in 8 of 8
+   T30 at dt 0.01: 2.6474 ± 0.0004 s (+1.20 % against Eyring, 24 receiver-replicas)
+   T30 at dt 0.0002: 2.6474 ± 0.0004 s (+1.20 % against Eyring, 24 receiver-replicas)
+BOX 6x10x3 alpha 0.1: 4000000 rays, 2.3 s; free path 3.3353 m against 4V/S 3.3333 m, gamma^2 0.3877; Eyring 1.2736 s; room energy T 1.3045 s (+2.43 %); renewal 1.2992 s (+2.01 %); Kuttruff with this gamma^2 1.3001 s (+2.09 %)
+   R0 (4.47 m): EDT at 0.2 ms 1.3082 ± 0.0019 s (8 of 8); at 10 ms continued back 1.3081 ± 0.0019 s (-0.01 %), as SPPS's is read 1.3084 ± 0.0019 s (+0.01 %) in 8 of 8
+   R1 (2.00 m): EDT at 0.2 ms 1.3044 ± 0.0013 s (8 of 8); at 10 ms continued back 1.3029 ± 0.0012 s (-0.12 %), as SPPS's is read 1.3006 ± 0.0012 s (-0.30 %) in 8 of 8
+   R2 (4.08 m): EDT at 0.2 ms 1.3068 ± 0.0024 s (8 of 8); at 10 ms continued back 1.3059 ± 0.0024 s (-0.07 %), as SPPS's is read 1.3076 ± 0.0024 s (+0.06 %) in 8 of 8
+   T30 at dt 0.01: 1.3046 ± 0.0003 s (+2.44 % against Eyring, 24 receiver-replicas)
+   T30 at dt 0.0002: 1.3047 ± 0.0003 s (+2.44 % against Eyring, 24 receiver-replicas)
+BOX 6x10x3 alpha 0.2: 4000000 rays, 1.1 s; free path 3.3374 m against 4V/S 3.3333 m, gamma^2 0.3865; Eyring 0.6013 s; room energy T 0.6312 s (+4.97 %); renewal 0.6272 s (+4.30 %); Kuttruff with this gamma^2 0.6284 s (+4.51 %)
+   R0 (4.47 m): EDT at 0.2 ms 0.6332 ± 0.0008 s (8 of 8); at 10 ms continued back 0.6331 ± 0.0007 s (-0.02 %), as SPPS's is read refused in 8 of 8
+   R1 (2.00 m): EDT at 0.2 ms 0.6290 ± 0.0012 s (8 of 8); at 10 ms continued back 0.6259 ± 0.0012 s (-0.49 %), as SPPS's is read refused in 8 of 8
+   R2 (4.08 m): EDT at 0.2 ms 0.6350 ± 0.0008 s (8 of 8); at 10 ms continued back 0.6334 ± 0.0009 s (-0.25 %), as SPPS's is read refused in 8 of 8
+   T30 at dt 0.01: 0.6312 ± 0.0002 s (+4.96 % against Eyring, 24 receiver-replicas)
+   T30 at dt 0.0002: 0.6312 ± 0.0002 s (+4.97 % against Eyring, 24 receiver-replicas)
+BOX 6x10x3 alpha 0.4: 4000000 rays, 0.5 s; free path 3.3429 m against 4V/S 3.3333 m, gamma^2 0.3835; Eyring 0.2627 s; room energy T 0.2909 s (+10.76 %); renewal 0.2881 s (+9.69 %); Kuttruff with this gamma^2 0.2912 s (+10.86 %)
+   R0 (4.47 m): EDT at 0.2 ms 0.2936 ± 0.0007 s (8 of 8); at 10 ms continued back 0.2939 ± 0.0008 s (+0.12 %), as SPPS's is read refused in 8 of 8
+   R1 (2.00 m): EDT at 0.2 ms 0.2944 ± 0.0008 s (8 of 8); at 10 ms continued back 0.2893 ± 0.0009 s (-1.75 %), as SPPS's is read refused in 8 of 8
+   R2 (4.08 m): EDT at 0.2 ms 0.2945 ± 0.0010 s (8 of 8); at 10 ms continued back 0.2915 ± 0.0010 s (-1.02 %), as SPPS's is read refused in 8 of 8
+   T30 at dt 0.01: 0.2910 ± 0.0002 s (+10.78 % against Eyring, 24 receiver-replicas)
+   T30 at dt 0.0002: 0.2910 ± 0.0002 s (+10.78 % against Eyring, 24 receiver-replicas)
+test a_lambert_box_from_scratch_against_eyring has been running for over 60 seconds
+BOX 5x4x3 alpha 0.05: 4000000 rays, 3.6 s; free path 2.5535 m against 4V/S 2.5532 m, gamma^2 0.3522; Eyring 2.0037 s; room energy T 2.0257 s (+1.10 %); renewal 2.0223 s (+0.93 %); Kuttruff with this gamma^2 2.0220 s (+0.91 %)
+   R0 (1.88 m): EDT at 0.2 ms 2.0278 ± 0.0015 s (8 of 8); at 10 ms continued back 2.0265 ± 0.0015 s (-0.06 %), as SPPS's is read 2.0250 ± 0.0015 s (-0.14 %) in 8 of 8
+   R1 (1.86 m): EDT at 0.2 ms 2.0244 ± 0.0012 s (8 of 8); at 10 ms continued back 2.0232 ± 0.0012 s (-0.06 %), as SPPS's is read 2.0217 ± 0.0012 s (-0.13 %) in 8 of 8
+   R2 (1.87 m): EDT at 0.2 ms 2.0261 ± 0.0009 s (8 of 8); at 10 ms continued back 2.0247 ± 0.0009 s (-0.07 %), as SPPS's is read 2.0232 ± 0.0009 s (-0.14 %) in 8 of 8
+   T30 at dt 0.01: 2.0259 ± 0.0002 s (+1.11 % against Eyring, 24 receiver-replicas)
+   T30 at dt 0.0002: 2.0259 ± 0.0002 s (+1.11 % against Eyring, 24 receiver-replicas)
+BOX 5x4x3 alpha 0.1: 4000000 rays, 1.7 s; free path 2.5539 m against 4V/S 2.5532 m, gamma^2 0.3519; Eyring 0.9755 s; room energy T 0.9969 s (+2.20 %); renewal 0.9942 s (+1.92 %); Kuttruff with this gamma^2 0.9939 s (+1.89 %)
+   R0 (1.88 m): EDT at 0.2 ms 0.9965 ± 0.0009 s (8 of 8); at 10 ms continued back 0.9940 ± 0.0009 s (-0.26 %), as SPPS's is read refused in 8 of 8
+   R1 (1.86 m): EDT at 0.2 ms 0.9974 ± 0.0007 s (8 of 8); at 10 ms continued back 0.9949 ± 0.0006 s (-0.25 %), as SPPS's is read refused in 8 of 8
+   R2 (1.87 m): EDT at 0.2 ms 0.9978 ± 0.0009 s (8 of 8); at 10 ms continued back 0.9949 ± 0.0009 s (-0.28 %), as SPPS's is read refused in 8 of 8
+   T30 at dt 0.01: 0.9969 ± 0.0001 s (+2.20 % against Eyring, 24 receiver-replicas)
+   T30 at dt 0.0002: 0.9970 ± 0.0001 s (+2.20 % against Eyring, 24 receiver-replicas)
+BOX 5x4x3 alpha 0.2: 4000000 rays, 0.8 s; free path 2.5546 m against 4V/S 2.5532 m, gamma^2 0.3514; Eyring 0.4606 s; room energy T 0.4810 s (+4.44 %); renewal 0.4781 s (+3.80 %); Kuttruff with this gamma^2 0.4794 s (+4.08 %)
+   R0 (1.88 m): EDT at 0.2 ms 0.4819 ± 0.0005 s (8 of 8); at 10 ms continued back 0.4767 ± 0.0006 s (-1.08 %), as SPPS's is read refused in 8 of 8
+   R1 (1.86 m): EDT at 0.2 ms 0.4817 ± 0.0006 s (8 of 8); at 10 ms continued back 0.4769 ± 0.0006 s (-1.01 %), as SPPS's is read refused in 8 of 8
+   R2 (1.87 m): EDT at 0.2 ms 0.4822 ± 0.0006 s (8 of 8); at 10 ms continued back 0.4767 ± 0.0006 s (-1.15 %), as SPPS's is read refused in 8 of 8
+   T30 at dt 0.01: 0.4812 ± 0.0001 s (+4.47 % against Eyring, 24 receiver-replicas)
+   T30 at dt 0.0002: 0.4812 ± 0.0001 s (+4.47 % against Eyring, 24 receiver-replicas)
+BOX 5x4x3 alpha 0.4: 4000000 rays, 0.4 s; free path 2.5564 m against 4V/S 2.5532 m, gamma^2 0.3503; Eyring 0.2012 s; room energy T 0.2198 s (+9.24 %); renewal 0.2181 s (+8.38 %); Kuttruff with this gamma^2 0.2210 s (+9.83 %)
+   R0 (1.88 m): EDT at 0.2 ms 0.2217 ± 0.0004 s (8 of 8); at 10 ms continued back 0.2116 ± 0.0003 s (-4.53 %), as SPPS's is read refused in 8 of 8
+   R1 (1.86 m): EDT at 0.2 ms 0.2212 ± 0.0003 s (8 of 8); at 10 ms continued back 0.2114 ± 0.0003 s (-4.47 %), as SPPS's is read refused in 8 of 8
+   R2 (1.87 m): EDT at 0.2 ms 0.2222 ± 0.0003 s (8 of 8); at 10 ms continued back 0.2117 ± 0.0002 s (-4.75 %), as SPPS's is read refused in 8 of 8
+   T30 at dt 0.01: 0.2198 ± 0.0001 s (+9.25 % against Eyring, 24 receiver-replicas)
+   T30 at dt 0.0002: 0.2199 ± 0.0001 s (+9.27 % against Eyring, 24 receiver-replicas)
+test a_lambert_box_from_scratch_against_eyring ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 81.99s
+

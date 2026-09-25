@@ -56,7 +56,7 @@ Beyond it:
   0, no FAIL line, 2,000 particles per band, no loss. SPPS reads the 1000 Hz band's power
   past the end of the source's one-entry spectrum (`base_core_configuration.cpp:141`,
   `sppsNantes.cpp:73`), whatever the heap holds there. In most runs the band's particles
-  are all absorbed by the atmosphere at the first step; in 7 of 230 runs measured
+  are all absorbed by the atmosphere at the first step; in 7 of 260 runs measured
   (2026-09-24) they ran on a positive power, 41 absorbed by the atmosphere and 1,959 by
   materials. `expected.json` records the first; `mkexpected.py` judges the second as the
   first and says so in a NOTE (`UNREPRODUCIBLE`), and any other outcome is a disagreement.

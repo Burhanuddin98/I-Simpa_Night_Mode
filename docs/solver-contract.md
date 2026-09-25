@@ -442,6 +442,7 @@ order, and its status is OK exactly when it lists none.
 |---|---|---|---|
 | `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry, or, for a project meshed through upstream's scene correction, what `preprocess.exe` made of it (the mesher's gate before TetGen, "Preprocessing and the meshed volume" below); its own codes and counts are in the detail. The mesher gives the same code, and `simpa mesh` exits 3 with it. Exit class 3 |
 | `mesh_missing` | FAIL | before launch | `run --mesh <dir>`: the folder has no readable `mesh.json`, a manifest that is not `OK`, or no `tetramesh.mbin`; or the run's own mesh folder cannot be used. Exit class 4 |
+| `mesh_parity` | FAIL | before launch | `run --mesh <dir>`: the folder's `mesh.json` records a mesh made in parity mode (`"parity": true`, `simpa mesh --parity`), whatever its `status` says. Such a `.mbin` keeps the facet markers `preprocess.exe` gave, for byte comparison with original I-Simpa's files, and a run on it is never OK (Burhan, 2026-09-24, decision 2). Listed after `mesh_missing` when the manifest is not `OK` either. Exit class 4 |
 | `export_failed` | FAIL | before launch | `run`: the run folder's inputs cannot be written. `config_xml`'s writer refuses the project or the variant (its code, such as `variant_not_found`, is in the detail), or a mesh or directivity file cannot be copied. Exit class 2 |
 | `source_unlocatable` | FAIL | before launch | SPPS only, `run` and `run-folder`: a source that SPPS's own `f32` test puts in no tetrahedron of the `.mbin` (`coreinitialisation.cpp:71-95`, emulated by `run::locate`), such as a source exactly on an internal facet where the product rounds positive from both sides. SPPS would crash with `0xC0000005` before any particle runs (`sppsInitialisation.cpp:20`). The detail names each source, its number in the project's order (`config.xml` lists them newest first, so the file's last is number 1), its name and its position as SPPS stores it. Exit class 5, the solver is not launched. VERIFIED against `spps.exe` on 233 points on and near the seeded box's internal facets (`tests/run_locate.rs`) |
 | `receiver_unlocatable` | FAIL | before launch | SPPS only, as `source_unlocatable`, for a point receiver (`coreinitialisation.cpp:178-212`). SPPS runs to the end, but the receiver collects energy only from where its never-written `indexTetra` leads (`coreTypes.h:425`; `sppsInitialisation.cpp:82-90`). VERIFIED on the box refined to 0.5 m³: 0 at 1000 Hz on the facet, a level 1 mm away (`tests/run_locate.rs`). Exit class 5 |
@@ -481,9 +482,9 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   |---|---|---|
   | geometry | `geometry_refused` | 3 |
   | validate | each Part A error's code; Part A warnings are recorded as the verdict's warnings | 2 |
-  | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `manifest_mismatch` or Part A's `mesh_out_of_date`. The mesher's `geometry_refused` ends the run at stage geometry, exit class 3: with upstream's scene correction on, the geometry stage leaves the check to the mesher, on what `preprocess.exe` saves | 4 |
+  | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `mesh_parity`, `manifest_mismatch` or Part A's `mesh_out_of_date`. The mesher's `geometry_refused` ends the run at stage geometry, exit class 3: with upstream's scene correction on, the geometry stage leaves the check to the mesher, on what `preprocess.exe` saves | 4 |
   | export | `export_failed`, or `validate_export`'s error codes | 2 |
-  | pre_launch (SPPS only) | `source_unlocatable`, `receiver_unlocatable` | 5 |
+  | pre_launch (SPPS, or any run with `--mesh <dir>`) | with `--mesh <dir>`, the mesh held to the geometry as `run-folder` holds it (below), whatever the folder's `mesh.json` says: the `.mbin` against the run's own `.cbin`, the regions against the mesh folder's `.poly` (else the `.cbin`), and no `mesh.json` taken as proof of them: `mesh_invalid` followed by the verifier's codes, and `regions_unchecked`. A `mesh.json` edited by hand to say `OK` does not make a mesh `mesh::verify` refuses runnable. Then, SPPS only, `source_unlocatable`, `receiver_unlocatable` | 5 |
   | solve | the verdict above | 0, 5 or 130 |
 
 - **`run-folder`** copies the folder into `solve/` without its `expected.json`, replaces
@@ -504,7 +505,7 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
     or the reason is Part A's `band_set_mismatch`. No signal after the run catches a short
     spectrum: VERIFIED fixture `runs/spps_oneband`, exit 0 with every file written, and the
     band read past the spectrum's end does not give the same statistics from run to run
-    (measured: 7 of 230 runs differ, `docs/upstream-findings.md`, 4).
+    (measured: 7 of 260 runs differ, `docs/upstream-findings.md`, 4).
   - **the sources and point receivers (SPPS, once the mesh check passed).** Each must be in a
     tetrahedron by SPPS's own test, or the reason is `source_unlocatable` or
     `receiver_unlocatable`. This refuses fixture `runs/spps_srcout`, which SPPS crashes on.
@@ -698,7 +699,8 @@ and still have a parameter refused.
 | `params_no_absorption` | the absorption area plus `4·m·V` is zero, so the reverberation time would be infinite | none |
 | `params_din_out_of_range` | a DIN 18041 volume outside its group's range: A1 30–1000 m³, A2 50–5000 m³, A3 30–5000 m³, A4 30–500 m³, A5 200–30 000 m³ (`docs/params.md`, "DIN 18041 targets") | the group, the volume and the range |
 | `params_bad_noise_input` | a solver floor that is not a finite number, a share of energy alive or lost that is not a finite number in its domain, or a Monte-Carlo mean deposit that is not a finite positive number (`docs/params.md`, "Missing energy", "Monte-Carlo noise") | the field and value |
-| `params_transport_refused` | the diffuse ray transport that gives Kuttruff's `γ²` (`params::lambert`) cannot run with its inputs (no faces or tetrahedra, a coordinate that is not finite, no area or volume; in a test build's study, too few replicas, rays or paths), a ray left the room, its mean free path is not `4V/S` within its statistical error, or `γ²`'s standard error is above its limit, 0.002 (`docs/params.md`, "Kuttruff's reference"). In `simpa results`, every band's `kuttruff_s` carries it | what failed, with the numbers |
+| `params_transport_refused` | the diffuse ray transport that gives Kuttruff's `γ²` (`params::lambert`) cannot run with its inputs (no faces or tetrahedra, a coordinate that is not finite, no area or volume; in a test build's study, too few replicas, rays or paths), a ray left the room, its mean free path is not `4V/S` within its statistical error, or `γ²`'s standard error is above its limit, 0.002 (`docs/params.md`, "Kuttruff's reference"). In `simpa results`, every band's `kuttruff_s` with Lambert walls carries it | what failed, with the numbers |
+| `params_reference_not_applicable` | `simpa results`: Kuttruff's reference is not computed for a band whose faces do not all reflect by Lambert's law with scattering 1 (`lambert_walls` false), the only walls the transport's `γ²` describes; when no computed band has such walls the transport is not run either, and `free_paths` is `null` (`docs/params.md`, "In `simpa results --json`") | the band, or that the transport was not run |
 
 ### Result refusals
 

@@ -268,8 +268,11 @@ arrival with the cap counted in the direct sound, which is exact on the syntheti
   reverberation was bounded, below; EDT at 10 ms can now also be refused `early_unresolved`).
 - **For M8:** at a step of 1 ms, C50, C80, D50 and Ts are refused at four receivers in five by this
   rule alone. With the spread given, the same curve that gives the decay times gives them exactly
-  on the synthetic series; refusing them is Burhan's decision of 2026-09-24 (keep the strict
-  rule), not a limit of the model.
+  on the synthetic series; refusing them is a choice, not a limit of the model. **Whose choice:**
+  the rule is kept by the M8 design decision 7 of 2026-09-25 00:20 (Jarvis, on Burhan's "what
+  would be best for the people using this"; his to override). It is not Burhan's decision 4 of
+  2026-09-24, which set the numeric limits (1/10 of a difference limen), as the first version of
+  this text said.
 - On the level box (`dt` = 0.2 ms, `R` = 0.5 m, `2R/c` = 2.9 ms), the first bin with energy is bin 21
   at 2 m, which is `(r − R)/c` = 4.37 ms; the onset bin (the first within 20 dB of the largest) is
   bin 22; `r/c` = 5.83 ms is bin 29. So `r/c` lies after the onset bin, and C50, C80, D50 and Ts
@@ -352,8 +355,8 @@ what the floor moves it by: `docs/params.md`, "Missing energy"). The JSON says s
 its 2 lost of 50,000 at 500 Hz give `10·2/50,000`, and 200 planted give 0.04, which refuses SPL by
 the 0.17 dB it can move every level, where random mode's lump would have passed it).
 **`ρ` is an empirical cap, not a bound.** Measured, because the random-mode bound refused T30
-wholesale in energetic mode (`crates/simpa/tests/m8_evidence.rs`, run on purpose; logs kept in the
-scratch folder):
+wholesale in energetic mode (`crates/simpa/tests/m8_evidence.rs`, run on purpose; the logs are
+committed in `docs/investigations/2026-09-24-m8-evidence/`, the 2.5 GB of trajectories are not):
 - **what lost particles carried**, from every particle's saved trajectory (tutorial 1, energetic,
   150,000 particles, all saved, 3 seeds, 6 octave bands): SPPS counted 24 lost; the 17 found in
   the trajectories (stopped before the end with more than 10⁻⁴ of their start energy; no particle
@@ -364,7 +367,9 @@ scratch folder):
 - **in an M8 cell** (second review: the 5×4×3 m room at α 0.4, energetic, `trans_epsilon` 9,
   300,000 particles all saved, 3 seeds): of 76 lost, the 44 that stopped with more than 10⁻⁵ of
   their start energy carried **0.04 to 4.4 times** the mean (median 1.0); the rest are censored
-  the same way. `ρ` is taken as 10 (`ENERGETIC_LOST_ENERGY_RATIO`), twice the largest measured;
+  the same way. `ρ` is taken as 10 (`ENERGETIC_LOST_ENERGY_RATIO`), about 2.3 times the largest
+  measured (five times tutorial 1's). It is an empirical cap, not a bound: no check can say no to
+  it, and the censored particles' ratios are not known;
 - **what that does to T30**: with each found particle's own energy and loss time, and what it would
   still have brought **modelled** as following the decay (a trajectory stops where the particle
   was lost, so its future is not measured), T30 moved by at most 4.4·10⁻⁶ (tutorial 1) and
@@ -752,8 +757,9 @@ code with SPPS: straight rays in the box, Lambert (cosine) reflection, the energ
 
 **Since (pre-M8, after Burhan's decision of 23:14).** The transport is core code
 (`params::lambert`), and Kuttruff's formula with its `γ²` (`params::room::kuttruff_rt`); every SPPS
-report carries both references, labelled and not validated (`spps.reference`,
-`docs/formats/results-json.md`). Two corrections to the table above, measured
+report carries plain Eyring and, in each band whose walls are all Lambert with scattering 1,
+Kuttruff's time, labelled and not validated (`spps.reference`, `docs/formats/results-json.md`;
+elsewhere Kuttruff's time is refused `params_reference_not_applicable`). Two corrections to the table above, measured
 (`docs/params.md`, "Kuttruff's reference"):
 - **`γ²`'s exact values** are 0.388874 and 0.352401, from integral geometry (the table's 0.388 and
   0.352 agree to their third decimal, and its lower values at higher α came from counting paths
@@ -862,7 +868,7 @@ trajectory saved, 3 seeds (`energetic_lost_particles_from_saved_trajectories` wi
 `$SIMPA_LOST_CELL`): SPPS counted 76 lost; the 44 that stopped with more than 10⁻⁵ of their start
 energy, ten thousand times the floor, carried **0.04 to 4.4 times the mean** (median 1.0). The rest
 ended within 10⁴ of the floor, where particles the floor dropped (up to 13 times above it at five
-reflections a step) cannot be told from them. `ρ` = 10 is twice the largest measured.
+reflections a step) cannot be told from them. `ρ` = 10 is about 2.3 times the largest measured.
 
 ### For Burhan's decisions
 
@@ -877,8 +883,8 @@ reflections a step) cannot be told from them. `ρ` = 10 is twice the largest mea
   for T20), validated on held-out rooms; rooms with concentrated absorption or specular walls keep
   a factor near 1 (`docs/investigations/2026-09-25-noise-calibration/`, "Open").
 - **EDT**: at 10 ms it comes out only where the early decay is slow against the step; at 1 ms C50,
-  C80, D50 and Ts are refused `params_bad_arrival` at most receivers (the strict rule of
-  2026-09-24).
+  C80, D50 and Ts are refused `params_bad_arrival` at most receivers (the onset-bin rule, kept by
+  the M8 design decision 7 of 2026-09-25 00:20).
 - **`trans_epsilon`**: 7 or more for energetic cells (5 biases T30, "Energetic mode: the solver's
   floor").
 

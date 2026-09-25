@@ -1,0 +1,11 @@
+fresh: 0 runs, 0 distinct outcomes
+same: 0 runs, 0 distinct outcomes
+control: 0 runs, 0 distinct outcomes
+same folder, 200 runs, 7 distinct outcomes
+   194 x exit 0, 1000 Hz stats ('2000', '0', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 0.0
+     1 x exit 0, 1000 Hz stats ('41', '1959', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 0.0001246875240094389
+     1 x exit 0, 1000 Hz stats ('41', '1959', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 2622101.6398790055
+     1 x exit 0, 1000 Hz stats ('41', '1959', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 3.864834222126957e+25
+     1 x exit 0, 1000 Hz stats ('41', '1959', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 4.8467712576307005e+34
+     1 x exit 0, 1000 Hz stats ('41', '1959', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 1.1970767465882242e-34
+     1 x exit 0, 1000 Hz stats ('41', '1959', '0', '0', '0', '0', '2000'), Total energy 1000 Hz summed 9736439.77288176

@@ -2335,29 +2335,100 @@ fn tutorial_3_loops_parity_against_default() {
     moved.point_receivers[0].position.x = simpa_core::schema::F64::from(0.001);
     let moved_path = dir.join("receiver-moved.simpa");
     simpa_core::schema::save(&moved, &moved_path).unwrap();
-    let o = simpa_run(&[
-        "run".to_string(),
-        moved_path.display().to_string(),
-        "--solver".into(),
-        "spps".into(),
-        "--mesh".into(),
-        t3.parity_dir.display().to_string(),
-        "--runs".into(),
-        runs.display().to_string(),
-        "--solver-exe".into(),
-        solver_exe("spps.exe").display().to_string(),
-        "--json".into(),
-    ]);
-    let rm = json(&o);
+    let run_mesh = |mesh_dir: &Path| {
+        let o = simpa_run(&[
+            "run".to_string(),
+            moved_path.display().to_string(),
+            "--solver".into(),
+            "spps".into(),
+            "--mesh".into(),
+            mesh_dir.display().to_string(),
+            "--runs".into(),
+            runs.display().to_string(),
+            "--solver-exe".into(),
+            solver_exe("spps.exe").display().to_string(),
+            "--json".into(),
+        ]);
+        let m = json(&o);
+        assert!(
+            !support::run_dir(&m).join("solver.stdout.txt").exists(),
+            "the solver was launched: {m:#}"
+        );
+        (o.code, m)
+    };
+    let (code, rm) = run_mesh(&t3.parity_dir);
     assert_eq!(
-        (o.code, rm["stage"].as_str(), support::codes(&rm)),
-        (4, Some("mesh"), vec!["mesh_missing".to_string()]),
+        (code, rm["stage"].as_str(), support::codes(&rm)),
+        (
+            4,
+            Some("mesh"),
+            vec!["mesh_missing".to_string(), "mesh_parity".to_string()]
+        ),
         "{rm:#}"
     );
     report.push(format!(
-        "parity mesh, simpa run --mesh: exit {}, stage mesh, FAIL: {}",
-        o.code,
+        "parity mesh, simpa run --mesh: exit {code}, stage mesh, FAIL: {}",
         support::codes(&rm).join(", ")
+    ));
+    // Its mesh.json edited by hand, in a copy of the folder: the status to OK, then the parity
+    // flag to false and the stamp to the project's too. Neither makes the parity mesh runnable
+    // (the tutorial-3 follow-ups' critic): the flag alone refuses it, and without the flag the
+    // mesh is held to the geometry before launch, as run-folder holds it.
+    let edited = dir.join("parity-mesh-edited");
+    std::fs::create_dir_all(&edited).unwrap();
+    for f in [
+        "mesh.json",
+        "tetramesh.mbin",
+        "scene_mesh.poly",
+        "mesh.cbin",
+    ] {
+        std::fs::copy(t3.parity_dir.join(f), edited.join(f)).unwrap();
+    }
+    let edit = |f: &dyn Fn(&mut Value)| {
+        let p = edited.join("mesh.json");
+        let mut v: Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+        f(&mut v);
+        std::fs::write(&p, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+    };
+    edit(&|v| {
+        v["status"] = "OK".into();
+        v["codes"] = serde_json::json!([]);
+    });
+    let (code, em) = run_mesh(&edited);
+    assert_eq!(
+        (code, em["stage"].as_str(), support::codes(&em)),
+        (4, Some("mesh"), vec!["mesh_parity".to_string()]),
+        "{em:#}"
+    );
+    report.push(format!(
+        "parity mesh, mesh.json edited to OK, simpa run --mesh: exit {code}, stage mesh, FAIL: {}",
+        support::codes(&em).join(", ")
+    ));
+    // As a hand edit would, it also claims the project's own mesh stamp: the parity mesh was made
+    // from the imported project, whose stamp is not the stored run's, and the stamp check would
+    // refuse it first (`mesh_out_of_date`) before anything is held to the geometry.
+    let stamp = simpa_core::validate::mesh_input_hash(&moved);
+    edit(&|v| {
+        v["parity"] = false.into();
+        v["mesh_input_hash"] = stamp.clone().into();
+    });
+    let (code, em) = run_mesh(&edited);
+    assert_eq!(
+        (code, em["stage"].as_str(), support::codes(&em)),
+        (
+            5,
+            Some("pre_launch"),
+            vec![
+                "mesh_invalid".to_string(),
+                "marker_geometry_mismatches".to_string()
+            ]
+        ),
+        "{em:#}"
+    );
+    report.push(format!(
+        "parity mesh, mesh.json edited to OK and parity false, simpa run --mesh: exit {code}, \
+         stage pre_launch, FAIL: {}",
+        support::codes(&em).join(", ")
     ));
 
     // The default mesh without its .poly: no cells to hold the regions to.
@@ -2634,6 +2705,21 @@ fn tutorial_3_receiver_levels_default_against_parity() {
     }
     // The seeds differ: otherwise the spread says nothing.
     assert!(default.windows(2).all(|w| w[0] != w[1]));
+    // Every seed loses as seed 1 does (`tutorial_3_loops_parity_against_default`): the parity mesh
+    // about a fifth of its particle records to loops, the default mesh almost none. The
+    // tutorial-3 follow-ups' critic found seeds 2 and 3 printed and cited
+    // (`docs/upstream-findings.md`, 20.10 % and 20.08 %) but never asserted.
+    for ((mesh, seed), _, b) in &levels {
+        let loops = f64::from(b.lost_by_infinite_loops) / f64::from(b.total);
+        match *mesh {
+            "parity" => assert!(
+                (0.195..0.21).contains(&loops),
+                "parity mesh, seed {seed}: {}",
+                loss_line(b)
+            ),
+            _ => assert!(loops < 1e-4, "default mesh, seed {seed}: {}", loss_line(b)),
+        }
+    }
     let found = level_differences(&default, &parity);
     for d in &found {
         report.push(format!(

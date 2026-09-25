@@ -1518,3 +1518,41 @@ fn pre_1_3_4_material_rows_read_as_upstreams_loader_reads_them() {
         assert_eq!(code, codes::MATERIAL_ROW_UNREADABLE, "{what}: {text}");
     }
 }
+
+/// An element id (`wxid`) is pinned as the entity's solver id only when a solver can read it as a
+/// C `int`: 0 to `SOLVER_INT_MAX` (`proj.rs`, `fn pin`). Tutorial 3's box zone, `wxid` 2083, given
+/// -1 and 2^31, is refused `invalid`, naming the zone and the id; the tutorial-3 follow-ups'
+/// critic found no test feeding the importer one. Says no: at `SOLVER_INT_MAX` it imports, pinned
+/// to it (the validator then judges whether TetGen's room ids still fit above it).
+#[test]
+fn an_element_id_no_solver_reads_is_refused_on_import() {
+    let (_, xml) = tutorial3_parts();
+    let box_zone = "<encombrement name=\"Fitting zone 2\" eid=\"56\" wxid=\"2083\"";
+    for bad in ["-1", "2147483648"] {
+        let edited = edited_once(
+            &xml,
+            box_zone,
+            &box_zone.replace("wxid=\"2083\"", &format!("wxid=\"{bad}\"")),
+        );
+        let (code, text) = import_tutorial3_as(&edited).map(|_| ()).unwrap_err();
+        assert_eq!(code, "invalid", "{bad}: {text}");
+        assert!(
+            text.contains("fitting zone `Fitting zone 2`")
+                && text.contains(&format!("element id {bad}"))
+                && text.contains("which no solver reads as an id"),
+            "{bad}: {text}"
+        );
+    }
+    let edited = edited_once(
+        &xml,
+        box_zone,
+        &box_zone.replace("wxid=\"2083\"", "wxid=\"2147483647\""),
+    );
+    let p = import_tutorial3_as(&edited).unwrap().project;
+    let zone = p
+        .fitting_zones
+        .iter()
+        .find(|z| z.name == "Fitting zone 2")
+        .unwrap();
+    assert_eq!(zone.solver_id, Some(simpa_core::schema::SOLVER_INT_MAX));
+}

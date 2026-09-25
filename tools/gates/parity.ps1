@@ -280,22 +280,71 @@ Check "(2) says NO: the tutorial_3 end-to-end reading passes the lines of a pass
     Write-Host "      the lines as printed: $good; changed and still read as passing: [$($passed -join '; ')] of $($cases.Count)"
     $good -and $passed.Count -eq 0
 }
-Check "(2) bed: tutorial_2 meshes as the .proj asks: preprocess.exe gives up, the .poly as written is meshed and the abort said" {
-    $t2 = [regex]::Match($script:bed.Text, '(?m)^  simpa mesh on the \.proj as it is: OK; preprocess\.exe gives up after (\d+) splits and saves nothing, .*?; stderr: (simpa: note: preprocess\.exe .*)$')
-    Write-Host "      $(if ($t2.Success) { "$($t2.Groups[1].Value) splits; $($t2.Groups[2].Value.Substring(0, [math]::Min(120, $t2.Groups[2].Value.Length)))" } else { 'no line' })"
+# Tutorial 2 from its .proj: preprocess.exe gives up, and the .poly as written is meshed, said on
+# stderr, from the bed's line.
+function Test-T2Proj([string]$t, [switch]$Quiet) {
+    $t2 = [regex]::Match($t, '(?m)^  simpa mesh on the \.proj as it is: OK; preprocess\.exe gives up after (\d+) splits and saves nothing, .*?; stderr: (simpa: note: preprocess\.exe .*)$')
+    if (-not $Quiet) { Write-Host "      $(if ($t2.Success) { "$($t2.Groups[1].Value) splits; $($t2.Groups[2].Value.Substring(0, [math]::Min(120, $t2.Groups[2].Value.Length)))" } else { 'no line' })" }
     $t2.Success -and [int]$t2.Groups[1].Value -gt 0
 }
-Check "(2) says NO: tutorial_3 printed its refusals (preprocessing off, TetGen 1.6.0's wrong room, a changed region line, a changed pin, two zones pinned alike)" {
-    $t = $script:bed.Text
+Check "(2) bed: tutorial_2 meshes as the .proj asks: preprocess.exe gives up, the .poly as written is meshed and the abort said" {
+    Test-T2Proj $script:bed.Text
+}
+$t2Lines = @'
+  simpa mesh on the .proj as it is: OK; preprocess.exe gives up after 104 splits and saves nothing, and the .poly as written is meshed, as upstream's GUI meshes it; stderr: simpa: note: preprocess.exe exited 0 but gave up (a repair loop ran out of its 100 passes) and saved nothing (its last line: "Mesh reparation has been aborted. The algorithm enter into an infinite loop. Try to stick coplanar faces or destroy manually."); the mesher went on with the .poly as written, uncorrected, as upstream's GUI does, the geometry check on it the gate before TetGen (mesh.json: preprocess.outcome "aborted")
+'@
+Check "(2) says NO: the tutorial_2 reading passes the line of a passing bed and refuses it refused, with no split, or with no note on stderr" {
+    $cases = [ordered]@{
+        'the mesh refused' = $t2Lines -replace 'as it is: OK;', 'as it is: FAIL;'
+        'no split' = $t2Lines -replace 'gives up after 104 splits', 'gives up after 0 splits'
+        'no note on stderr' = $t2Lines -replace '; stderr: simpa: note: .*$', '; stderr: '
+        'the line gone' = ''
+    }
+    $good = Test-T2Proj $t2Lines -Quiet
+    $passed = @($cases.GetEnumerator() | Where-Object { $_.Value -eq $t2Lines -or (Test-T2Proj $_.Value -Quiet) } | ForEach-Object { $_.Key })
+    Write-Host "      the line as printed: $good; changed and still read as passing: [$($passed -join '; ')] of $($cases.Count)"
+    $good -and $passed.Count -eq 0
+}
+# Tutorial 3's refusals, from the bed's lines: preprocessing off, TetGen 1.6.0's wrong room, a
+# changed region line, a changed pin, two zones pinned alike.
+function Test-T3Refusals([string]$t, [switch]$Quiet) {
     $off = [regex]::Match($t, '(?m)^  says no, preprocess off: exit 4, .*?tetgen_self_intersection.*?the same (\d+) pairs TetGen 1\.5\.0''s -d names')
     $wrong = [regex]::Match($t, '(?m)^  says no, TetGen 1\.6\.0 on the raw scene: .*?of ([0-9.]+) m\S* against the room''s ([0-9.]+) m\S*.*?fails the region volume check: .*?region_volume_mismatch.*?unmeshed_cells')
     $misplaced = [regex]::IsMatch($t, '(?m)^  says no, TetGen 1\.6\.0 in parity mode: .*fitting_region_misplaced')
     $region = [regex]::Match($t, '(?m)^  says no, upstream''s \.poly with zone 1''s seed 1 cm up: another \.mbin, (\d+) tetrahedra with another idVolume')
     $pin = [regex]::IsMatch($t, '(?m)^  says no, zone 1 pinned to 1931: the parity \.poly .*first difference.*; the \.mbin .*first difference')
     $clash = [regex]::IsMatch($t, '(?m)^  says no, both zones pinned to 1930: simpa mesh exits 2, .*solver_id_mapping_invalid')
-    Write-Host "      preprocess off: $(if ($off.Success) { "$($off.Groups[1].Value) pairs, ours = TetGen's" } else { 'no line' }); TetGen 1.6.0: $(if ($wrong.Success) { "$($wrong.Groups[1].Value) m3 of $($wrong.Groups[2].Value) m3, refused by the volume check" } else { 'no line' }); 1.6.0 in parity mode names zone 1 misplaced: $misplaced; region line: $(if ($region.Success) { "$($region.Groups[1].Value) tetrahedra relabelled" } else { 'no line' })"
-    Write-Host "      zone 1 pinned to 1931 gives other bytes: $pin; two zones pinned to 1930 refused before meshing: $clash"
+    if (-not $Quiet) {
+        Write-Host "      preprocess off: $(if ($off.Success) { "$($off.Groups[1].Value) pairs, ours = TetGen's" } else { 'no line' }); TetGen 1.6.0: $(if ($wrong.Success) { "$($wrong.Groups[1].Value) m3 of $($wrong.Groups[2].Value) m3, refused by the volume check" } else { 'no line' }); 1.6.0 in parity mode names zone 1 misplaced: $misplaced; region line: $(if ($region.Success) { "$($region.Groups[1].Value) tetrahedra relabelled" } else { 'no line' })"
+        Write-Host "      zone 1 pinned to 1931 gives other bytes: $pin; two zones pinned to 1930 refused before meshing: $clash"
+    }
     $off.Success -and $wrong.Success -and $misplaced -and $region.Success -and [int]$region.Groups[1].Value -gt 0 -and $pin -and $clash
+}
+Check "(2) says NO: tutorial_3 printed its refusals (preprocessing off, TetGen 1.6.0's wrong room, a changed region line, a changed pin, two zones pinned alike)" {
+    Test-T3Refusals $script:bed.Text
+}
+$t3RefusalLines = @'
+  says no, zone 1 pinned to 1931: the parity .poly 4889 bytes against the original's 4889; first difference at byte 4773: ours Some(49), the original's Some(48); the .mbin 338528 bytes against the original's 338528; first difference at byte 11344: ours Some(139), the original's Some(138)
+  says no, both zones pinned to 1930: simpa mesh exits 2, error solver_id_mapping_invalid at /fitting_zones/1/solver_id: fitting zones 'Fitting zone 1' and 'Fitting zone 2' both pin solver id 1930: the solver takes the first with an id, so the second would be hidden
+  says no, preprocess off: exit 4, tetgen_exit_nonzero, tetgen_self_intersection, tetgen_output_missing, neigh_missing; our check on the .poly refuses it with self_intersections, the same 22 pairs TetGen 1.5.0's -d names, {(53, 88)}
+  says no, TetGen 1.6.0 on the raw scene: exit 4 (tetgen_exit_nonzero, tetgen_skipped_facets, neigh_missing); its partial mesh, 170 tetrahedra of 1220.9 m3 against the room's 978.3 m3 (idVolume {0: 1220.9391225179033}), fails the region volume check: misordered_faces, unmarked_boundary_faces, nonmutual_neighbors, uncovered_scene_faces, unknown_volume_ids, region_volume_mismatch, unmeshed_cells, fitting_region_misplaced (region_volume_mismatch 1, unmeshed_cells 4); our default mesh passes it
+  says no, TetGen 1.6.0 in parity mode: mesh_invalid, marker_geometry_mismatches, uncovered_scene_faces, fitting_region_misplaced; ["zone 'Fitting zone 1' is cell 4, and its id is on cell 3"]
+  says no, upstream's .poly with zone 1's seed 1 cm up: another .mbin, 2303 tetrahedra with another idVolume (dump line 839)
+'@
+Check "(2) says NO: the tutorial_3 refusals reading passes the lines of a passing bed and refuses each refusal missing, the pin giving the same bytes, or the pin clash not refused" {
+    $cases = [ordered]@{
+        'preprocess off not refused' = $t3RefusalLines -replace 'says no, preprocess off: exit 4, tetgen_exit_nonzero, tetgen_self_intersection', 'says no, preprocess off: exit 0, OK'
+        'TetGen 1.6.0 not refused' = $t3RefusalLines -replace '(?m)fails the region volume check: .*$', 'passes the region volume check'
+        '1.6.0 in parity mode without its zone misplaced' = $t3RefusalLines -replace ', fitting_region_misplaced; \[', '; ['
+        'the region line changing nothing' = $t3RefusalLines -replace 'another \.mbin, 2303 tetrahedra', 'another .mbin, 0 tetrahedra'
+        'the pin giving the same bytes' = $t3RefusalLines -replace '(?m)^  says no, zone 1 pinned to 1931: .*$', '  says no, zone 1 pinned to 1931: the parity .poly 4889 bytes against the original''s 4889, identical'
+        'the pin clash meshed' = $t3RefusalLines -replace 'simpa mesh exits 2, error solver_id_mapping_invalid', 'simpa mesh exits 0, OK'
+        'the pin clash line gone' = $t3RefusalLines -replace '(?m)^  says no, both zones pinned to 1930: .*\r?\n', ''
+    }
+    $good = Test-T3Refusals $t3RefusalLines -Quiet
+    $passed = @($cases.GetEnumerator() | Where-Object { $_.Value -eq $t3RefusalLines -or (Test-T3Refusals $_.Value -Quiet) } | ForEach-Object { $_.Key })
+    Write-Host "      the lines as printed: $good; changed and still read as passing: [$($passed -join '; ')] of $($cases.Count)"
+    $good -and $passed.Count -eq 0
 }
 Check "(2) bed: tutorial_3_same_seed_runs printed its 3 runs equal and the room written 0 refused" {
     $eq = [regex]::Matches($script:bed.Text, '(?m)^  run \d: all \d+ output files equal to the original inputs'' run').Count
@@ -367,29 +416,47 @@ function Test-T3Runs([string]$t, [switch]$Quiet) {
     $direct = [regex]::Match($t, '(?m)^  parity mesh, spps\.exe run directly: (\d+) of (\d+) particle records lost to loops .*?; judged by the run verdict \(limit 1 %\): FAIL, ([a-z_, ]+) \(')
     $default = [regex]::Match($t, '(?m)^  default mesh, simpa run-folder: exit 0, OK; (\d+) of (\d+) particle records lost to loops')
     $folder = [regex]::IsMatch($t, '(?m)^  parity mesh, simpa run-folder: exit 5, stage pre_launch, FAIL: mesh_invalid, marker_geometry_mismatches\r?$')
-    $mesh = [regex]::IsMatch($t, '(?m)^  parity mesh, simpa run --mesh: exit 4, stage mesh, FAIL: mesh_missing\r?$')
+    $mesh = [regex]::IsMatch($t, '(?m)^  parity mesh, simpa run --mesh: exit 4, stage mesh, FAIL: mesh_missing, mesh_parity\r?$')
+    # Its mesh.json edited by hand: to OK, then to OK with parity false. Neither runs it.
+    $editedOk = [regex]::IsMatch($t, '(?m)^  parity mesh, mesh\.json edited to OK, simpa run --mesh: exit 4, stage mesh, FAIL: mesh_parity\r?$')
+    $editedFlag = [regex]::IsMatch($t, '(?m)^  parity mesh, mesh\.json edited to OK and parity false, simpa run --mesh: exit 5, stage pre_launch, FAIL: mesh_invalid, marker_geometry_mismatches\r?$')
     $levels = [regex]::Match($t, '(?m)^  largest mean difference ([0-9.]+) dB, bound 0\.2 dB; resolved at (\d+) of (\d+) receivers')
+    # Seeds 2 and 3 of the levels test lose as seed 1 does (docs/upstream-findings.md cites them).
+    $seedLoops = @(foreach ($s in 2, 3) {
+        foreach ($m in 'parity', 'default') {
+            $x = [regex]::Match($t, "(?m)^  $m mesh, seed ${s}: (\d+) of (\d+) particle records lost to loops")
+            if ($x.Success) { [double]$x.Groups[1].Value / [double]$x.Groups[2].Value } else { [double]::NaN }
+        }
+    })
+    $seedsOk = $seedLoops[0] -gt 0.1 -and $seedLoops[2] -gt 0.1 -and $seedLoops[1] -lt 1e-4 -and $seedLoops[3] -lt 1e-4
     $louder = [regex]::IsMatch($t, '(?m)^  says no, the default mesh''s levels 1 dB up: every receiver beyond the bound')
     $pr = if ($direct.Success) { [double]$direct.Groups[1].Value / [double]$direct.Groups[2].Value } else { 0 }
     $dr = if ($default.Success) { [double]$default.Groups[1].Value / [double]$default.Groups[2].Value } else { 1 }
     $codes = if ($direct.Success) { @($direct.Groups[3].Value -split ', ') } else { @() }
     if (-not $Quiet) {
-        Write-Host ("      loops: parity mesh {0}, default mesh {1}; run-folder refuses the parity mesh before launch: {2}; run --mesh refuses it: {3}" -f $(if ($direct.Success) { '{0:P4}' -f $pr } else { 'no line' }), $(if ($default.Success) { '{0:P6}' -f $dr } else { 'no line' }), $folder, $mesh)
+        Write-Host ("      loops: parity mesh {0}, default mesh {1}; run-folder refuses the parity mesh before launch: {2}; run --mesh refuses it: {3}, with its mesh.json edited to OK: {4}, and to OK with parity false: {5}" -f $(if ($direct.Success) { '{0:P4}' -f $pr } else { 'no line' }), $(if ($default.Success) { '{0:P6}' -f $dr } else { 'no line' }), $folder, $mesh, $editedOk, $editedFlag)
         Write-Host "      the run verdict on the parity run: [$($codes -join ', ')]; levels: $(if ($levels.Success) { "largest $($levels.Groups[1].Value) dB, resolved at $($levels.Groups[2].Value) of $($levels.Groups[3].Value)" } else { 'no line' }); the 1 dB say-no printed: $louder"
+        Write-Host ("      loops, seeds 2 and 3: parity mesh {0:P4} and {1:P4}, default mesh {2:P6} and {3:P6}" -f $seedLoops[0], $seedLoops[2], $seedLoops[1], $seedLoops[3])
     }
-    $direct.Success -and $pr -gt 0.1 -and $default.Success -and $dr -lt 1e-4 -and $folder -and $mesh -and ($codes -contains 'particle_loss_excess') -and
+    $direct.Success -and $pr -gt 0.1 -and $default.Success -and $dr -lt 1e-4 -and $seedsOk -and $folder -and $mesh -and $editedOk -and $editedFlag -and ($codes -contains 'particle_loss_excess') -and
         $levels.Success -and [double]$levels.Groups[1].Value -le 0.2 -and [int]$levels.Groups[3].Value -eq 5 -and $louder
 }
-Check "(5) tutorial 3: the parity mesh loses more than 10 % to loops and the default mesh under 0.01 %; the run manager refuses the parity mesh before launch; the run verdict fails its run with particle_loss_excess; receiver levels within 0.2 dB" {
+Check "(5) tutorial 3: the parity mesh loses more than 10 % to loops and the default mesh under 0.01 %; the run manager refuses the parity mesh before launch, its mesh.json edited by hand or not; the run verdict fails its run with particle_loss_excess; receiver levels within 0.2 dB" {
     $ok = ($script:t3runs.Results['tutorial_3_loops_parity_against_default'] -eq 'ok') -and ($script:t3runs.Results['tutorial_3_receiver_levels_default_against_parity'] -eq 'ok')
     Write-Host "      tutorial_3_loops_parity_against_default ... $($script:t3runs.Results['tutorial_3_loops_parity_against_default']); tutorial_3_receiver_levels_default_against_parity ... $($script:t3runs.Results['tutorial_3_receiver_levels_default_against_parity'])"
     (Test-T3Runs $script:t3runs.Text) -and $ok
 }
 $t3RunLines = @'
   parity mesh, simpa run-folder: exit 5, stage pre_launch, FAIL: mesh_invalid, marker_geometry_mismatches
-  parity mesh, simpa run --mesh: exit 4, stage mesh, FAIL: mesh_missing
+  parity mesh, simpa run --mesh: exit 4, stage mesh, FAIL: mesh_missing, mesh_parity
+  parity mesh, mesh.json edited to OK, simpa run --mesh: exit 4, stage mesh, FAIL: mesh_parity
+  parity mesh, mesh.json edited to OK and parity false, simpa run --mesh: exit 5, stage pre_launch, FAIL: mesh_invalid, marker_geometry_mismatches
   default mesh, simpa run-folder: exit 0, OK; 2 of 2922796 particle records lost to loops (0.0001 %), 59 to meshing
   parity mesh, spps.exe run directly: 533967 of 2653740 particle records lost to loops (20.1213 %), 49 to meshing; judged by the run verdict (limit 1 %): FAIL, particle_loss_reported, particle_loss_excess (Warning 534016 particles has been in error on 2653740 particles.; 1 band(s) lost more than 1 % of their particles to loops and meshing)
+  default mesh, seed 2: 2 of 2929258 particle records lost to loops (0.0001 %), 48 to meshing; levels Receiver 1 -44.669 dB
+  parity mesh, seed 2: 533165 of 2652107 particle records lost to loops (20.1034 %), 39 to meshing; levels Receiver 1 -45.013 dB
+  default mesh, seed 3: 3 of 2921137 particle records lost to loops (0.0001 %), 70 to meshing; levels Receiver 1 -44.661 dB
+  parity mesh, seed 3: 536026 of 2669421 particle records lost to loops (20.0802 %), 44 to meshing; levels Receiver 1 -44.772 dB
   largest mean difference 0.119 dB, bound 0.2 dB; resolved at 1 of 5 receivers
   says no, the default mesh's levels 1 dB up: every receiver beyond the bound (smallest 0.930 dB)
 '@
@@ -398,9 +465,15 @@ Check "(5) says NO: the tutorial 3 reading passes the lines of a passing run and
         'parity loops at 10 %' = $t3RunLines -replace '533967 of 2653740', '265374 of 2653740'
         'default loops at 0.01 %' = $t3RunLines -replace '2 of 2922796', '293 of 2922796'
         'run-folder launches the parity mesh' = $t3RunLines -replace 'run-folder: exit 5, stage pre_launch, FAIL: mesh_invalid, marker_geometry_mismatches', 'run-folder: exit 0, stage solve, OK: '
-        'run --mesh takes it' = $t3RunLines -replace 'run --mesh: exit 4, stage mesh, FAIL: mesh_missing', 'run --mesh: exit 0, stage solve, OK: '
+        'run --mesh takes it' = $t3RunLines -replace 'simpa run --mesh: exit 4, stage mesh, FAIL: mesh_missing, mesh_parity', 'simpa run --mesh: exit 0, stage solve, OK: '
+        'run --mesh without mesh_parity' = $t3RunLines -replace 'FAIL: mesh_missing, mesh_parity', 'FAIL: mesh_missing'
+        'run --mesh takes it edited to OK' = $t3RunLines -replace 'edited to OK, simpa run --mesh: exit 4, stage mesh, FAIL: mesh_parity', 'edited to OK, simpa run --mesh: exit 0, stage solve, OK: '
+        'run --mesh takes it edited to OK and parity false' = $t3RunLines -replace 'parity false, simpa run --mesh: exit 5, stage pre_launch, FAIL: mesh_invalid, marker_geometry_mismatches', 'parity false, simpa run --mesh: exit 0, stage solve, OK: '
         'the verdict without particle_loss_excess' = $t3RunLines -replace 'FAIL, particle_loss_reported, particle_loss_excess \(', 'FAIL, particle_loss_reported ('
         'levels 0.21 dB apart' = $t3RunLines -replace 'largest mean difference 0\.119 dB', 'largest mean difference 0.21 dB'
+        'parity seed 3 loops at 10 %' = $t3RunLines -replace '536026 of 2669421', '266942 of 2669421'
+        'default seed 2 loops at 0.01 %' = $t3RunLines -replace '2 of 2929258', '293 of 2929258'
+        'the seed 2 lines gone' = $t3RunLines -replace '(?m)^  (parity|default) mesh, seed 2: .*\r?\n', ''
         'the level say-no gone' = $t3RunLines -replace '(?m)^  says no, the default mesh.*\r?\n?', ''
     }
     $good = Test-T3Runs $t3RunLines -Quiet

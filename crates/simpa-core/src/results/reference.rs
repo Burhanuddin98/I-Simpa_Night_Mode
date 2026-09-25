@@ -12,7 +12,11 @@
 //! **Nothing here is validated**: M8's bed has not run (`Report::validated_by_bed`). Both formulas
 //! describe a diffuse field: each band says whether every face of the room reflects by Lambert's
 //! law with scattering 1 in it (`lambert_walls`), the only case in which the transport's `γ²`
-//! describes the run's walls.
+//! describes the run's walls. **Kuttruff's time is computed only in such bands**, and the
+//! transport only when at least one computed band has such walls; elsewhere `kuttruff_s` is
+//! refused `params_reference_not_applicable`. The transport costs seconds in a large room (the
+//! corrected Elmia hall: measured in `docs/params.md`, "In `simpa results --json`"), for a number
+//! that describes no band of a room with specular or partly scattering walls.
 
 use roxmltree::Document;
 
@@ -50,7 +54,8 @@ pub struct ReferenceBand {
     pub eyring_s: Result<f64, ParamError>,
     /// Kuttruff's time and the standard deviation it inherits from `γ²`'s standard error
     /// (`params::room::kuttruff_rt`, `kuttruff_rt_sd`), with SPPS's `K`; refused with the
-    /// transport's own refusal when the transport refused.
+    /// transport's own refusal when the transport refused, and `params_reference_not_applicable`
+    /// when `lambert_walls` is false.
     pub kuttruff_s: Result<(f64, f64), ParamError>,
 }
 
@@ -66,7 +71,8 @@ pub enum Reference {
         speed_of_sound_m_s: f64,
         /// `K = 24·ln 10/c`, s/m.
         constant_s_per_m: f64,
-        /// The transport's free paths in the room, or its refusal.
+        /// The transport's free paths in the room, or its refusal; `params_reference_not_applicable`
+        /// when no computed band has Lambert walls, and the transport was not run.
         free_paths: Result<FreePaths, ParamError>,
         bands: Vec<ReferenceBand>,
     },
@@ -104,13 +110,26 @@ fn inner(solve: &Path, exp: &Expectation, c: f64) -> Result<Reference, String> {
     if !(area_m2.is_finite() && area_m2 > 0.0) {
         return Err(format!("the scene's faces have an area of {area_m2} m²"));
     }
-    let paths =
-        Enclosure::from_mesh(&room.triangles, &room.tetrahedra).and_then(|e| free_paths(&e));
+    let lambert: Vec<bool> = room
+        .bands
+        .iter()
+        .map(|b| lambert_walls(&room.faces, &laws, b.index))
+        .collect();
+    // The transport, seconds in a large room, runs only where its γ² describes a band.
+    let paths = if lambert.iter().any(|&l| l) {
+        Enclosure::from_mesh(&room.triangles, &room.tetrahedra).and_then(|e| free_paths(&e))
+    } else {
+        Err(ParamError::ReferenceNotApplicable {
+            detail: "no computed band has every face reflecting by Lambert's law with scattering \
+                     1, the only walls the transport's gamma^2 describes: the transport was not \
+                     run"
+            .into(),
+        })
+    };
     let mut bands = Vec::with_capacity(room.bands.len());
-    for band in &room.bands {
+    for (band, &lambert_walls) in room.bands.iter().zip(&lambert) {
         let surfaces = band_surfaces(&room.faces, &room.materials, band.index)?;
         let air = band.air_m_per_metre.clone()?;
-        let lambert_walls = lambert_walls(&room.faces, &laws, band.index);
         let sa: f64 = surfaces.iter().map(|x| x.area_m2 * x.absorption).sum();
         let uniform_absorption = surfaces
             .first()
@@ -123,7 +142,18 @@ fn inner(solve: &Path, exp: &Expectation, c: f64) -> Result<Reference, String> {
             lambert_walls,
             uniform_absorption,
             eyring_s: room::eyring_rt(room.volume_m3, &surfaces, air, constant),
-            kuttruff_s: kuttruff(&paths, &surfaces, air, constant),
+            kuttruff_s: if lambert_walls {
+                kuttruff(&paths, &surfaces, air, constant)
+            } else {
+                Err(ParamError::ReferenceNotApplicable {
+                    detail: format!(
+                        "at {} Hz not every face reflects by Lambert's law with scattering 1, the \
+                         only walls the transport's gamma^2 describes: Kuttruff's time describes \
+                         no field of this band",
+                        band.freq_hz
+                    ),
+                })
+            },
         });
     }
     Ok(Reference::Computed {
@@ -279,18 +309,23 @@ mod tests {
             panic!("the seats box has a reference");
         };
         assert!((volume_m3 - 180.0).abs() < 1e-6 && (area_m2 - 216.0).abs() < 1e-6);
-        // The box's exact γ², 0.388874 (tests/params_lambert.rs), from the run's own mesh.
-        let p = free_paths.unwrap();
-        assert!(
-            (p.gamma2() - 0.388_874).abs() < 3.0 * p.gamma2_se(),
-            "{p:?}"
+        // Its walls are specular (diffusion 0, loi 0) in both bands: neither time describes its
+        // field, so the transport is not run and Kuttruff's time is refused; plain Eyring is still
+        // given. (With Lambert walls the transport gives this box's exact γ² from the run's own
+        // mesh: `tests/results_load.rs`.)
+        assert_eq!(
+            free_paths.unwrap_err().code(),
+            crate::params::codes::REFERENCE_NOT_APPLICABLE
         );
         assert_eq!(bands.len(), 2);
         for b in &bands {
-            // Its walls are specular (diffusion 0, loi 0): neither time describes its field.
             assert!(!b.lambert_walls);
             assert!((b.mean_absorption - 0.2).abs() < 1e-6);
-            assert!(b.kuttruff_s.as_ref().unwrap().0 > *b.eyring_s.as_ref().unwrap());
+            assert!(b.eyring_s.is_ok());
+            assert_eq!(
+                b.kuttruff_s.as_ref().unwrap_err().code(),
+                crate::params::codes::REFERENCE_NOT_APPLICABLE
+            );
         }
         // Rays curve when the speed of sound varies with height: no reference.
         match reference(&solve, &exp, 343.2, true) {

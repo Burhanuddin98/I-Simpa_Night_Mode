@@ -116,21 +116,23 @@ index, the power is read past the end of a heap array: whatever the heap holds t
 arrays are sized the same way (`base_core_configuration.cpp:202`; not measured).
 
 **Measured** on the fixture `tests/fixtures/runs/spps_oneband` (the source lists 1000 Hz only;
-500 and 1000 Hz computed; seed 1; our `spps.exe`), scratch
-`target/agents/fu-receipts-scratch/oneband.py`, transcripts `oneband-30.txt` and
-`oneband-same-200.txt`:
+500 and 1000 Hz computed; seed 1; our `spps.exe`), `oneband.py` and `oneband_same.py`, transcripts
+`oneband-30.txt` and `oneband-same-200.txt`, all in `docs/investigations/2026-09-24-spps-oneband/`:
 
 | Runs | 1000 Hz: 2,000 absorbed by the atmosphere at the first step | 1000 Hz: 41 by the atmosphere, 1,959 by materials |
 |---|---|---|
 | 30, each in a fresh folder | 29 | 1 |
-| 200, in one folder | 194 | 6 |
+| 30, in one folder | 30 | 0 |
+| 200 more, in that folder | 194 | 6 |
 | 30 with the spectrum complete (a 500 Hz entry added) | 0 | 30 |
 
 - In the second outcome the band's energy summed over time (`Total energy.recp`) differs in every
   run, from 1.2e-34 to 4.8e34 (the complete spectrum gives 11.74 in every run). So the power read
   is garbage: zero or too small to stay above its own epsilon in most runs, a positive power in 7
-  of 230, and then the particles have the fates a real power gives them.
-- The folder does not matter (6 of 200 in one folder). [inferred] Windows' heap places an
+  of 260, and then the particles have the fates a real power gives them. (The first write-up
+  counted 7 of 230: it left out the 30-run batch in the reused folder, which gave no second
+  outcome; the tutorial-3 follow-ups' critic.)
+- The folder does not matter (0 of 30 and then 6 of 200 in one folder). [inferred] Windows' heap places an
   allocation in a slot it chooses at random, so the bytes past the array change from run to run.
 - **Not the thread timing.** A seeded run has one thread: a nonzero `random_seed` switches SPPS's
   per-band threads off (`spps/data_manager/core_configuration.cpp:44-47`). [source reading, not

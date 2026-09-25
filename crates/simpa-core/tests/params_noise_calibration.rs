@@ -1218,3 +1218,78 @@ fn both_rounds_energetic_t20_and_t30_fail_where_they_failed() {
     let half = energetic_decay_failures(&r, &all, 0.5, 0.5);
     assert!(half.iter().any(|f| f.starts_with("W-E4 t30_s")), "{half:?}");
 }
+
+/// What `docs/params.md` ("Monte-Carlo noise") gives as tutorial 1's reverberation times, each
+/// with its source: Sabine's 0.67 s and Eyring's 0.60 s from the room (`params::room`, with SPPS's
+/// `K`), and SPPS's own converged T30 in that specular box from the receipt, the mean over six
+/// receivers of each one's mean over ten seeds: C-R6 (random, 1.5 M, `dt` 1 ms) 0.98 s at 125 Hz to
+/// 0.79 s at 4 kHz, V4-R2 (random, 6 M) and V4-E14 (energetic, 1.2 M) 0.95 s to 0.78 s. Says no:
+/// Sabine's 0.67 s is not SPPS's time, which lies above it by more than 15 % in every band of
+/// every cell, so the first version's "the room's time is 0.67 s" fails.
+#[test]
+fn tutorial_ones_t30_is_spps_converged_not_sabines() {
+    use simpa_core::params::room::{RtConstant, Surface, eyring_rt, sabine_rt};
+    let k = RtConstant::Physical {
+        speed_of_sound: 343.2,
+    };
+    let walls = [Surface {
+        area_m2: 216.0,
+        absorption: 0.2,
+    }];
+    let sabine = sabine_rt(180.0, &walls, None, k).unwrap();
+    let eyring = eyring_rt(180.0, &walls, None, k).unwrap();
+    assert!((sabine - 0.6709).abs() < 1e-4, "{sabine}");
+    assert!((eyring - 0.6013).abs() < 1e-4, "{eyring}");
+
+    let r = receipt();
+    let t30 = |id: &str| -> Vec<(i64, f64)> {
+        let c = r["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["cell"]["id"] == id)
+            .unwrap_or_else(|| panic!("{id}"));
+        assert!(
+            c["cell"]["walls"]
+                .as_str()
+                .unwrap()
+                .starts_with("tutorial 1's materials"),
+            "{id}"
+        );
+        // Tutorial 1's walls are specular.
+        assert!(
+            c["bands"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|b| b["lambert"] == false)
+        );
+        let mut by: std::collections::BTreeMap<i64, Vec<f64>> = Default::default();
+        for row in c["quantities"]["t30_s"].as_array().unwrap() {
+            by.entry(row["freq_hz"].as_i64().unwrap())
+                .or_default()
+                .push(row["mean"].as_f64().unwrap());
+        }
+        by.into_iter()
+            .map(|(f, v)| {
+                assert_eq!(v.len(), 6, "{id} {f} Hz: six receivers");
+                (f, v.iter().sum::<f64>() / 6.0)
+            })
+            .collect()
+    };
+    let near = |got: f64, want: f64| (got - want).abs() <= 0.005;
+    for (id, low, high) in [
+        ("C-R6", 0.98, 0.79),
+        ("V4-R2", 0.95, 0.78),
+        ("V4-E14", 0.95, 0.78),
+    ] {
+        let bands = t30(id);
+        println!("{id}: T30 per band {bands:?}; Sabine {sabine:.4} s, Eyring {eyring:.4} s");
+        assert_eq!(bands.len(), 6, "{id}");
+        assert!(near(bands[0].1, low), "{id} at 125 Hz: {}", bands[0].1);
+        assert!(near(bands[5].1, high), "{id} at 4 kHz: {}", bands[5].1);
+        for (f, t) in &bands {
+            assert!(*t > 1.15 * sabine, "{id} at {f} Hz: {t} is Sabine's time");
+        }
+    }
+}

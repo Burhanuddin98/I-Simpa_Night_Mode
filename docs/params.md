@@ -180,8 +180,9 @@ direct sound's step leaves under 2 bins of its 10 dB range (`D/R` = 3, 6 dB, at 
 
 **What it assumes:** the reverberation continued back to the arrival as the first bin after the
 direct sound decays. The second review found this wrong for real runs, and it was: see "The early
-reverberation" below. (The earlier text here said M8's bed would show it; it cannot, since M8
-compares T30 with an analytic value and EDT is not gated.)
+reverberation" below. (The earlier text here said M8's bed could not show it, EDT not being
+gated. Since the M8 design decision 2 of 2026-09-25 00:20, M8 gates EDT at `dt` 1 ms, with T30, so
+its bed tests this reading too.)
 - **Upstream differs.** `GetTimeDecay` (`projet_calculation.cpp:127-139`) takes the last time label
   before the energy first changes by 10⁻¹⁸ in absolute value (`refValue`, lines 321, 357, 393,
   424). That is an absolute threshold, not a relative one, on labels that are bin ends; and the
@@ -278,8 +279,9 @@ extrapolation. Instead each parameter carries a bound:
    - **A series known to be complete** (`EnergySeries::complete`; `Tail::Complete`) has no tail:
      nothing is estimated, added or refused for it. Its caller must hold evidence that no energy
      arrives after the last bin; `core::results` claims it only for SPPS in random mode when the
-     run's statistics count no particle remaining at the end (`docs/results.md`, "Complete
-     series"). A decay time still needs the curve to reach the bottom of its range before the
+     run's statistics count at most one particle in a million remaining at the end
+     (`results::spps::REMAINING_UNFINISHED_SHARE`), those few bounded with the lost ones as
+     unfinished paths (`docs/results.md`, "Complete series"). A decay time still needs the curve to reach the bottom of its range before the
      last bin with energy, inside which the curve has no shape: otherwise `range_not_reached`,
      with the level at the start of that bin. Added by M7 piece B, with its tests in
      `tests/params_complete.rs`: without it, random-mode runs were refused wholesale for a tail
@@ -418,8 +420,16 @@ most is not covered.
 ## Monte-Carlo noise
 
 Added after the M7 review. A complete random-mode series is exact for its particles, not for the
-room: at tutorial 1's 150,000 particles T30 came out at 0.8 to 2.4 s where the room's time is
-0.67 s, and was reported as a number. `params::noise` estimates each value's Monte-Carlo standard
+room: at tutorial 1's 150,000 particles T30 came out at 0.8 to 2.4 s, and was reported as a
+number. What that is to be read against, each value with its source: **Sabine's formula** gives
+0.67 s (`V` 180 m³, `S` 216 m², α 0.2 on every face, `K` 0.161, no air), and Eyring's 0.60 s;
+neither is the room's time, since tutorial 1's walls are specular and its decay is not a diffuse
+field's. **SPPS's own T30, converged**, in that box with its materials and air, mean over six
+receivers of each one's mean over ten seeds (`docs/investigations/2026-09-25-noise-calibration/
+calibration.json`): 0.98 s at 125 Hz to 0.79 s at 4 kHz in cell C-R6 (random, 1.5 M particles, `dt`
+1 ms), 0.95 s to 0.78 s in V4-R2 (random, 6 M) and in V4-E14 (energetic, 1.2 M)
+(`params_noise_calibration.rs`, `tutorial_ones_t30_is_spps_converged_not_sabines`). The first
+version of this text called 0.67 s "the room's time"; it is Sabine's. `params::noise` estimates each value's Monte-Carlo standard
 deviation, calibrates it against SPPS's own seed-to-seed spread, and refuses the value when it is
 too large, or when the run lies outside what the calibration measured. Calibrated pre-M8 (Burhan,
 2026-09-24 17:45: "never below the observed noise", and a refusal names the particles it needs),
@@ -633,8 +643,12 @@ are measured from, the level in dB re the curve at `u = 0`, which includes the d
 - **Before the first bin wholly after the direct sound** (`histogram_from_s`) the curve is the
   model's reading, the decay of that bin continued back to the arrival; from there on every knot is
   the histogram's own backward sum. When the early reverberation is unresolved, the values are
-  read two more ways over that stretch ("The early reverberation"); the curve shown is this
-  reading. With the arrival detected, it is read from the start of the onset bin.
+  read two more ways over that stretch ("The early reverberation"), and **the value reported is
+  midway between the lowest and highest of the three readings, while the curve shown is this one
+  reading**: a line drawn on the curve from 0 to −10 dB then gives an EDT that is not the one
+  displayed, off by up to EDT's limit, 0.5 % (the M7 follow-ups' critic). SPPS's histograms are
+  marked so in every run tried, since the direct sound lies inside a bin. M12 must say which of
+  the two a chart shows. With the arrival detected, it is read from the start of the onset bin.
 - **Tested** (`decay.rs`, `the_decay_curve_is_the_fitted_curve_thinned_within_its_tolerance`): the
   step is the direct sound's, the line's slope gives EDT to 10⁻³, every knot of a double-slope decay
   lies within 0.01 dB of the thinned line and the knee is kept; says no: a kept point moved by
@@ -698,8 +712,9 @@ holds no stored table):
   `EPSILON`, `(decimal)0.000001` (`lib_interface/Core/mathlib.h:56`), as its threshold; upstream's
   commit `f50c36febd` (2020-12-04, "about issue #7 set epsilon value as low as possible in order to
   not skip first sound wave") replaced it with `pow(10, -180.0f/10.0f)`, 10⁻¹⁸, the pinned
-  commit's. The file at `e9da8b3f12`, the last change before (fetched from GitHub,
-  `target/agents/m7fu-coverage-scratch/projet_calculation_e9da8b3f12.cpp`, sha256 `0f2529aa…`),
+  commit's. The file at `e9da8b3f12`, the last change before (fetched from GitHub; committed as
+  `docs/investigations/2026-09-24-m8-evidence/gui-2019/projet_calculation_e9da8b3f12.cpp`,
+  sha256 `0f2529aa…`),
   differs from `929a5c8`'s in that threshold and in translation macros only. At 10⁻⁶ Pa², an
   absolute level, no bin of the 50 to 125 Hz bands (levels 36 to 40 dB) ever differs that much from
   the first: `t₀` becomes the last label, and C, D and Ts come out 0/0, the stored NaN. The pinned
@@ -858,8 +873,9 @@ upstream's humidity lacks the pressure factor, the air term's form alone moves t
 **A third choice the M8 cells showed: Eyring itself** (second review, `docs/results.md`, "What M8
 needs"). Eyring's formula takes every free path to be the mean, `4V/S`. With Lambert reflection
 the free paths spread about it, relative variance `γ²`, and the decay is slower than Eyring's the
-more the surfaces absorb (Kuttruff's correction `A = −S·ln(1 − α)·(1 + (γ²/2)·ln(1 − α))`, as
-commonly stated; not read here). A transport written from scratch for these tests (`tests/
+more the surfaces absorb (Kuttruff's correction `A = −S·ln(1 − α)·(1 + (γ²/2)·ln(1 − α))`; when
+this was written it was taken as commonly stated, unread; it has since been read as Stephenson
+gives it citing Kuttruff, "Kuttruff's reference", below). A transport written from scratch for these tests (`tests/
 lambert_box.rs`: straight rays, Lambert reflection, `(1 − α)` per reflection, SPPS's receiver
 balls; nothing of SPPS) measures `γ²` = 0.388 in the 6×10×3 m box and 0.352 in the 5×4×3 m one,
 the mean free path equal to `4V/S` within 0.3 %, and T30 above Eyring by +1.2, +2.4, +5.0 and
@@ -869,7 +885,10 @@ gives the same within 0.3 %. So a 5 % tolerance against Eyring fails the α 0.4 
 the transport's T (−0.5 % at α 0.2 in the 6×10×3 m room, +0.6 % at α 0.4 in the 5×4×3 m one). The
 options, for Burhan: Eyring and a tolerance or α set that allows for it; Kuttruff with a `γ²`
 computed apart from SPPS for each room (within 0.6 % here); or the independent transport itself as
-the reference (within its own noise, 0.02 % at 4,000,000 rays).
+the reference (within its own noise, 0.02 % at 4,000,000 rays). **Decided by Burhan on 2026-09-24
+23:14:** Kuttruff's with `γ²` computed from the geometry by the transport, never fitted to SPPS,
+5 %, with the transport as the tight cross-check and plain Eyring reported only; Michael ratifies
+the gate text ("Kuttruff's reference", below).
 
 **Recommendation, not a decision.** For SPPS's T30: `K = 24·ln(10)/c` with SPPS's own `c`, and `m`
 as the solver applies it (nominal frequency, upstream's form). M8 asks whether SPPS's transport
@@ -879,8 +898,8 @@ before any solver is judged. For TCR against the analytic value (M8's 0.5 % chec
 0.163 and the solver's `m`, as gate M7(d) already does: that checks TCR computes what its formula
 says. Whether upstream's air term is right (the pressure factor, the nominal frequency) is gate
 M7(b)'s question and the second table's, and at sea level it moves T_Eyring by at most 0.36 % up
-to 8 kHz on tutorial 1 and 0.83 % in M8's rooms. On the third choice this document recommends
-nothing: the numbers are above.
+to 8 kHz on tutorial 1 and 0.83 % in M8's rooms. On the third choice this document recommended
+nothing: the numbers are above, and Burhan's decision after them.
 
 ## Kuttruff's reference
 
@@ -1179,22 +1198,40 @@ both are an analytic reference for a diffuse field and not validated. The room i
 `analytic` reads it (the `.cbin` faces, the `.mbin`'s tetrahedra, `config.xml`'s materials and
 air; TCR's per-face rule for fittings, `TC_CalculationCore.cpp:11-17`, is not emulated, so a scene
 with fitting faces is `not_computed`); a celerity gradient is `not_computed` too. `lambert_walls` is false where any face
-is not Lambert with scattering 1 in the band: then neither time describes the run's field. The text
-output prints the same beside "NOT VALIDATED". On the committed fixtures (tutorial 1's box,
-specular walls) `γ²` reads 0.38883 ± 0.00014, the exact 0.38887 within its error.
+is not Lambert with scattering 1 in the band: then neither time describes the run's field, and
+**Kuttruff's time is not computed there**, refused `params_reference_not_applicable`; the
+transport is run only when at least one computed band has Lambert walls, `free_paths` `null`
+otherwise. `eyring_s` is given whatever the walls. The text output prints the same beside "NOT
+VALIDATED". The committed fixtures have specular walls, so none carries `γ²`; the Seat run's
+inputs with Lambert walls at 500 Hz give 0.38883 ± 0.00014, the exact 0.38887 within its error,
+a Kuttruff time at 500 Hz and the refusal at 1000 Hz (`results_load.rs`,
+`the_reference_is_computed_only_for_bands_with_lambert_walls`).
+
+**What it costs** (pre-M8, `docs/investigations/2026-09-25-reference-cost/`): computed for every
+band, the transport added about 5 s to `simpa results` on the corrected Elmia hall (release build,
+Grace: 6.2 to 6.3 s against 0.8 to 1.1 s for the committed room's own 1,000,000-particle run; 5.9
+to 6.0 s against 0.7 to 0.8 s for M6's loss-gate run), for a `γ²` (0.555) describing none of its
+bands, which scatter 0.15 to 0.3 or reflect specularly. Hence the rule above. Where the reference
+applies (the Seat box with Lambert walls) a call takes 1.0 to 1.2 s either way.
 
 **How a band's scattering is read.** `lambert_walls` reads each material's `diffusion` as SPPS
 reads it (`atof`, through `run::locate::to_float`): a text that is not a number reads 0, specular,
 so that band is not Lambert and neither time describes its field; a value that reads as NaN or
 infinite, or a band with no `loi`, makes the reference `not_computed`
-(`results::reference`'s tests). A project of this program never gets that far: its scattering is
-a number when written, and the `config.xml` importer refuses a `diffusion` that is not one
-(`config_xml::import`, through `num::solver_real`).
+(`results::reference`'s tests, `lambert_walls_need_every_face_lambert_with_scattering_1_in_the_band`).
+So where a band's scattering is not a number, `lambert_walls` is false and the Kuttruff reference
+does not apply to that band. A project of this program never gets that far: its scattering is a
+number when written, and the `config.xml` importer refuses a `diffusion` that is not one,
+`invalid_value` (`config_xml::import`, through `num::solver_real`;
+`config_xml_import.rs`, `a_scattering_that_is_not_a_number_is_refused_on_import`, whose partner
+reads the solvers' comma decimal `0,5` as 0.5). Only a run folder given as it is can carry one.
 
 **Open, for M8 and later**: the bed itself (Kuttruff at 5 %, the transport's T30 as the tight
 cross-check, `dt` 1 ms); Michael's ratification of the gate text; M12's use of `lambert_walls`;
 rooms whose parts barely exchange sound (coupled volumes), and faces with the room on both sides
-(thin reflectors), which the mean-free-path check refuses rather than describe; the formula's
+(thin reflectors), which the mean-free-path check refuses rather than describe (the corrected
+Elmia hall, with hanging reflectors, was not refused: `γ²` 0.55499 ± 0.00024; whether its
+reflectors are such faces was not checked, and no band of it has Lambert walls); the formula's
 error in rooms of other shapes (−0.89 % already in a 20×4×3 m box at α 0.4), which `mc_sd` does
 not carry; and whether Burhan keeps the precision target that set the fixed settings (32 times the
 first settings' paths, about 0.55 s a box in a release build), or states 3c for the formula alone
@@ -1258,6 +1295,10 @@ and one of:
 - `truncated`, with the value and the value with the tail added (no second value when the tail is
   unbounded, or when the curve with the tail spends too little time in the range to fit);
 - `unresolved`, with the values from both ends of the onset bin;
+- `early_unresolved`, with the value read with the reverberation beginning at the arrival, the
+  lowest and highest of the three readings of the early reverberation (beginning at the arrival,
+  at the first bin wholly after the direct sound, or at that bin's end; either missing when that
+  curve gives no value), their midpoint and the limit ("The early reverberation", above);
 - `range_too_short`, with the time spent in the range and the time needed;
 - `not_decaying`;
 - `empty_window`;

@@ -647,6 +647,52 @@ fn a_complete_directivity_file_and_the_current_mesh_pass() {
     assert_ne!(mesh_input_hash(&raised_corner()), mesh_input_hash(&cube()));
 }
 
+/// Stamp version 2 hashes each enabled fitting zone's solver id: TetGen gives the zone's
+/// tetrahedra that id as their `idVolume`, so a mesh built under another pin is another mesh and
+/// must be `mesh_out_of_date` (the tutorial-3 follow-ups' critic found no test of it: with the id
+/// dropped from the hash again every test still passed). Says no both ways: a pin moved, or
+/// taken away so that export assigns the id, changes the stamp; the same pin written again, or a
+/// pin on a disabled zone, which no mesh carries, does not.
+#[test]
+fn a_fitting_zones_solver_id_is_part_of_the_mesh_stamp() {
+    let mut p = simpa_core::schema::load(&repo("tests/fixtures/rooms/tutorial1_box_fitting.simpa"))
+        .unwrap();
+    assert!(p.fitting_zones[0].enabled);
+    p.fitting_zones[0].solver_id = Some(5);
+    let stamp = mesh_input_hash(&p);
+    let with = |edit: &dyn Fn(&mut simpa_core::schema::Project)| {
+        let mut q = p.clone();
+        edit(&mut q);
+        mesh_input_hash(&q)
+    };
+    assert_eq!(with(&|q| q.fitting_zones[0].solver_id = Some(5)), stamp);
+    assert_ne!(with(&|q| q.fitting_zones[0].solver_id = Some(6)), stamp);
+    // Unpinned, export assigns an id; it changes the stamp exactly when it is not 5.
+    let assigned = with(&|q| q.fitting_zones[0].solver_id = None);
+    let assigned_id = {
+        let mut q = p.clone();
+        q.fitting_zones[0].solver_id = None;
+        simpa_core::config_xml::SolverIds::assign(&q)
+            .unwrap()
+            .fitting_zone_id(q.fitting_zones[0].id)
+    };
+    assert!(assigned_id.is_some());
+    assert_eq!(
+        assigned == stamp,
+        assigned_id == Some(5),
+        "assigned {assigned_id:?}"
+    );
+    // A disabled zone: no region, so its pin is not hashed.
+    let disabled = |id: Option<u32>| {
+        with(&move |q| {
+            q.fitting_zones[0].enabled = false;
+            q.fitting_zones[0].solver_id = id;
+        })
+    };
+    assert_eq!(disabled(Some(7)), disabled(Some(8)));
+    assert_ne!(disabled(Some(7)), stamp);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Export fixtures
 

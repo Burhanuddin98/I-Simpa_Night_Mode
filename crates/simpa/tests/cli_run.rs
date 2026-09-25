@@ -564,6 +564,231 @@ fn a_mesh_folder_is_reused_and_refused_when_stale_or_cancelled() {
     assert!(!run_dir(&m).join("solver.stdout.txt").exists());
 }
 
+/// `mesh.json` in `dir` with `edit` applied, written back as the mesher writes it.
+fn edit_mesh_json(dir: &Path, edit: impl FnOnce(&mut Value)) {
+    let path = dir.join("mesh.json");
+    let mut v: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    edit(&mut v);
+    std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap() + "\n").unwrap();
+}
+
+/// `simpa mesh <project> --out <dir> --json [extra]`.
+fn mesh_into(project: &Path, dir: &Path, extra: &[&str]) -> Out {
+    let mut args = vec![
+        "mesh".to_string(),
+        project.display().to_string(),
+        "--out".into(),
+        dir.display().to_string(),
+        "--json".into(),
+    ];
+    args.extend(extra.iter().map(|s| s.to_string()));
+    simpa_run(&args)
+}
+
+/// A refusal before launch: the exit code, stage and codes, and no solver started.
+fn refused_before_launch(o: &Out, exit: i32, stage: &str, want: &[&str]) {
+    assert_eq!(o.code, exit, "{o:#?}");
+    let m = json(o);
+    assert_eq!(m["stage"], stage, "{m:#}");
+    assert_eq!(m["verdict"]["status"], "FAIL", "{m:#}");
+    assert_eq!(codes(&m), want, "{m:#}");
+    assert_eq!(m["outcome"], Value::Null);
+    assert!(!run_dir(&m).join("solver.stdout.txt").exists());
+}
+
+/// Burhan's decision 2 of 2026-09-24: a run on a parity-mode mesh is never OK. `run --mesh` reads
+/// its `mesh.json`, which is not signed, so a hand-edited one must not make such a mesh runnable
+/// (the tutorial-3 follow-ups' critic). The box with a fitting zone, meshed through
+/// `preprocess.exe` in parity mode, keeps the marker `preprocess.exe` gives the zone's facets and
+/// fails `mesh::verify`:
+/// - as written (status FAIL, parity true): exit 4, `mesh_missing` and `mesh_parity`;
+/// - its status edited to OK: exit 4, `mesh_parity`;
+/// - its status edited to OK and its parity to false: the mesh is held to the geometry before
+///   launch, as `run-folder` holds a folder's: exit 5, `mesh_invalid` and the verifier's codes.
+///
+/// Says no, each check lets a good mesh through: the same project meshed by default runs OK from
+/// its folder; the box without a fitting zone, meshed in parity mode, is OK with the right
+/// markers, refused for its parity alone, and runs once that flag is edited away (the check
+/// before launch finds nothing wrong with it). And no `mesh.json` stands in for the regions: a
+/// mesh folder whose `.poly` gives no cells is refused before launch, where `run-folder` would
+/// take the manifest's word (`run_manager.rs`).
+#[test]
+fn a_parity_mesh_is_never_run_whatever_its_mesh_json_says() {
+    let root = scratch("run-parity-mesh");
+    let with_preprocess = |rel: &str, name: &str| {
+        let text = std::fs::read_to_string(fixture(rel)).unwrap();
+        assert_eq!(text.matches("\"preprocess\": false").count(), 1, "{rel}");
+        let path = root.join(name);
+        std::fs::write(
+            &path,
+            text.replace("\"preprocess\": false", "\"preprocess\": true"),
+        )
+        .unwrap();
+        path
+    };
+    let fitting = with_preprocess("rooms/tutorial1_box_fitting.simpa", "fitting.simpa");
+    let tcr = |project: &Path, dir: &Path| {
+        run(
+            project,
+            "tcr",
+            &root.join("runs"),
+            &["--mesh", &dir.display().to_string()],
+        )
+    };
+
+    let parity = root.join("fitting-parity");
+    let pm = mesh_into(&fitting, &parity, &["--parity"]);
+    assert_eq!(pm.code, 4, "{pm:#?}");
+    let pm = json(&pm);
+    assert_eq!(
+        (pm["status"].as_str(), &pm["parity"]),
+        (Some("FAIL"), &Value::Bool(true))
+    );
+    assert!(strings_of(&pm["codes"]).contains(&"marker_geometry_mismatches".to_string()));
+    assert!(
+        parity.join("tetramesh.mbin").is_file(),
+        "parity mode writes its .mbin"
+    );
+    refused_before_launch(
+        &tcr(&fitting, &parity),
+        4,
+        "mesh",
+        &["mesh_missing", "mesh_parity"],
+    );
+
+    edit_mesh_json(&parity, |v| {
+        v["status"] = "OK".into();
+        v["codes"] = serde_json::json!([]);
+    });
+    refused_before_launch(&tcr(&fitting, &parity), 4, "mesh", &["mesh_parity"]);
+
+    edit_mesh_json(&parity, |v| v["parity"] = false.into());
+    let o = tcr(&fitting, &parity);
+    let m = json(&o);
+    let found = codes(&m);
+    assert_eq!(found[0], "mesh_invalid", "{m:#}");
+    assert!(
+        found.contains(&"marker_geometry_mismatches".to_string()),
+        "{m:#}"
+    );
+    let found: Vec<&str> = found.iter().map(String::as_str).collect();
+    refused_before_launch(&o, 5, "pre_launch", &found);
+
+    // Says no: the default mesh of the same project runs from its folder.
+    let default = root.join("fitting-default");
+    let dm = mesh_into(&fitting, &default, &[]);
+    assert_eq!(dm.code, 0, "{dm:#?}");
+    let o = tcr(&fitting, &default);
+    assert_eq!(o.code, 0, "{o:#?}");
+    assert_eq!(json(&o)["verdict"]["status"], "OK");
+
+    // Says no: the box without a fitting zone in parity mode is OK, with the right markers.
+    let plain = with_preprocess(BOX, "box.simpa");
+    let box_parity = root.join("box-parity");
+    let bm = mesh_into(&plain, &box_parity, &["--parity"]);
+    assert_eq!(bm.code, 0, "{bm:#?}");
+    let bm = json(&bm);
+    assert_eq!(
+        (bm["status"].as_str(), &bm["parity"]),
+        (Some("OK"), &Value::Bool(true))
+    );
+    refused_before_launch(&tcr(&plain, &box_parity), 4, "mesh", &["mesh_parity"]);
+    edit_mesh_json(&box_parity, |v| v["parity"] = false.into());
+    let o = tcr(&plain, &box_parity);
+    assert_eq!(o.code, 0, "{o:#?}");
+    assert_eq!(json(&o)["verdict"]["status"], "OK");
+
+    // No mesh.json stands in for the regions: the box's default mesh with an open .poly in its
+    // folder holds its regions to no cells, and is refused before launch although its manifest
+    // is the mesher's record of this .mbin with its regions checked.
+    let box_default = root.join("box-open-poly");
+    let o = mesh_into(&plain, &box_default, &[]);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let poly_path = box_default.join("scene_mesh.poly");
+    let mut model = simpa_core::formats::poly::read_file(&poly_path).unwrap();
+    model.model_faces.pop();
+    simpa_core::formats::poly::write_file(&model, &poly_path).unwrap();
+    refused_before_launch(
+        &tcr(&plain, &box_default),
+        5,
+        "pre_launch",
+        &["mesh_invalid", "regions_unchecked"],
+    );
+}
+
+/// When `preprocess.exe` gives up, `run` meshes the `.poly` as written, as upstream's GUI does,
+/// and records `preprocess_aborted` as a warning in `run.json` (the tutorial-3 follow-ups'
+/// decision (d); `docs/solver-contract.md`, "Reason codes"). The tutorial-3 follow-ups' critic
+/// found no test that runs a project whose `preprocess.exe` gives up, so the warning could stop
+/// being recorded unseen. Here `preprocess.exe` is played by a batch file that prints the line
+/// upstream's prints when it gives up and saves nothing, exit 0 (`Preprocess.cpp:100-106`).
+/// Says no: the real `preprocess.exe`, which corrects the box, gives no warning.
+#[test]
+fn a_run_whose_preprocess_gives_up_records_the_warning() {
+    let root = scratch("run-preprocess-aborted");
+    let text = std::fs::read_to_string(fixture(BOX)).unwrap();
+    assert_eq!(text.matches("\"preprocess\": false").count(), 1);
+    let project = root.join("box_preprocess.simpa");
+    std::fs::write(
+        &project,
+        text.replace("\"preprocess\": false", "\"preprocess\": true"),
+    )
+    .unwrap();
+    let fake = root.join("gives_up.bat");
+    std::fs::write(
+        &fake,
+        "@echo off\r\necho Mesh reparation has been aborted. The algorithm enter into an \
+         infinite loop. Try to stick coplanar faces or destroy manually.\r\nexit /b 0\r\n",
+    )
+    .unwrap();
+    let warnings = |m: &Value| -> Vec<String> {
+        m["verdict"]["warnings"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(|w| w["code"].as_str().unwrap().to_string())
+            .collect()
+    };
+
+    let o = run(
+        &project,
+        "tcr",
+        &root,
+        &["--preprocess", &fake.display().to_string()],
+    );
+    assert_eq!(o.code, 0, "{o:#?}");
+    let m = json(&o);
+    assert_eq!(m["verdict"]["status"], "OK", "{m:#}");
+    assert_eq!(warnings(&m), ["preprocess_aborted"], "{m:#}");
+    let mm: Value =
+        serde_json::from_str(&std::fs::read_to_string(run_dir(&m).join("mesh/mesh.json")).unwrap())
+            .unwrap();
+    assert_eq!(mm["preprocess"]["outcome"], "aborted", "{mm:#}");
+    assert_eq!(
+        mm["geometry"]["checked"],
+        "written, preprocess.exe having given up"
+    );
+
+    // Says no: the real preprocess.exe corrects the box, and no warning is recorded.
+    solver_exe("preprocess.exe");
+    let o = run(&project, "tcr", &root, &[]);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let m = json(&o);
+    assert_eq!(warnings(&m), Vec::<String>::new(), "{m:#}");
+    let mm: Value =
+        serde_json::from_str(&std::fs::read_to_string(run_dir(&m).join("mesh/mesh.json")).unwrap())
+            .unwrap();
+    assert_eq!(mm["preprocess"]["outcome"], "corrected", "{mm:#}");
+}
+
+fn strings_of(v: &Value) -> Vec<String> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .map(|c| c.as_str().unwrap().to_string())
+        .collect()
+}
+
 /// Particles per source of [`long_box`]: enough that SPPS, left alone, runs for many seconds
 /// (measured on Grace, debug `simpa`: 17.1 s and 65/65 files, against 0.5 s for the box's
 /// 10,000), so a solver that was not killed shows as one that finished or still runs, never as

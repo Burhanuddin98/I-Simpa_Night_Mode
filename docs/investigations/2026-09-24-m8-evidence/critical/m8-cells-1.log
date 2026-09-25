@@ -1,0 +1,61 @@
+﻿
+running 1 test
+[    11 s] 3 6x10x3 alpha 0.4 Random 1500000 1 s dt 0.01 eps 5 seed 1: 11.2 s
+[    11 s] 3 6x10x3 alpha 0.4 Random 1500000 1 s dt 0.01 eps 5 seed 3: 11.2 s
+[    11 s] 3 6x10x3 alpha 0.4 Random 1500000 1 s dt 0.01 eps 5 seed 2: 11.2 s
+[    12 s] 7 5x4x3 alpha 0.4 Random 1500000 1 s dt 0.01 eps 5 seed 3: 11.4 s
+[    12 s] 7 5x4x3 alpha 0.4 Random 1500000 1 s dt 0.01 eps 5 seed 2: 11.4 s
+[    12 s] 7 5x4x3 alpha 0.4 Random 1500000 1 s dt 0.01 eps 5 seed 1: 11.6 s
+[    23 s] 2 6x10x3 alpha 0.2 Random 1500000 2 s dt 0.01 eps 5 seed 2: 23.1 s
+[    23 s] 2 6x10x3 alpha 0.2 Random 1500000 2 s dt 0.01 eps 5 seed 3: 23.1 s
+[    23 s] 2 6x10x3 alpha 0.2 Random 1500000 2 s dt 0.01 eps 5 seed 1: 23.2 s
+[    23 s] 6 5x4x3 alpha 0.2 Random 1500000 1.5 s dt 0.01 eps 5 seed 2: 23.4 s
+[    23 s] 6 5x4x3 alpha 0.2 Random 1500000 1.5 s dt 0.01 eps 5 seed 1: 23.4 s
+[    24 s] 6 5x4x3 alpha 0.2 Random 1500000 1.5 s dt 0.01 eps 5 seed 3: 23.5 s
+[    47 s] 1 6x10x3 alpha 0.1 Random 1500000 3 s dt 0.01 eps 5 seed 3: 47.0 s
+[    47 s] 1 6x10x3 alpha 0.1 Random 1500000 3 s dt 0.01 eps 5 seed 1: 47.2 s
+[    48 s] 5 5x4x3 alpha 0.1 Random 1500000 2 s dt 0.01 eps 5 seed 1: 47.6 s
+[    48 s] 5 5x4x3 alpha 0.1 Random 1500000 2 s dt 0.01 eps 5 seed 2: 47.7 s
+[    48 s] 5 5x4x3 alpha 0.1 Random 1500000 2 s dt 0.01 eps 5 seed 3: 47.7 s
+[    48 s] 1 6x10x3 alpha 0.1 Random 1500000 3 s dt 0.01 eps 5 seed 2: 47.9 s
+test m8_cells has been running for over 60 seconds
+[    97 s] 0 6x10x3 alpha 0.05 Random 1500000 4 s dt 0.01 eps 5 seed 2: 96.5 s
+[    97 s] 0 6x10x3 alpha 0.05 Random 1500000 4 s dt 0.01 eps 5 seed 3: 96.8 s
+[    98 s] 0 6x10x3 alpha 0.05 Random 1500000 4 s dt 0.01 eps 5 seed 1: 97.7 s
+[    98 s] 4 5x4x3 alpha 0.05 Random 1500000 3 s dt 0.01 eps 5 seed 1: 98.2 s
+[    99 s] 4 5x4x3 alpha 0.05 Random 1500000 3 s dt 0.01 eps 5 seed 3: 98.5 s
+[    99 s] 4 5x4x3 alpha 0.05 Random 1500000 3 s dt 0.01 eps 5 seed 2: 98.7 s
+[   190 s] 9 6x10x3 alpha 0.4 Energetic 1500000 0.5 s dt 0.01 eps 9 seed 1: 178.8 s
+[   191 s] 9 6x10x3 alpha 0.4 Energetic 1500000 0.5 s dt 0.01 eps 9 seed 2: 179.6 s
+[   194 s] 9 6x10x3 alpha 0.4 Energetic 1500000 0.5 s dt 0.01 eps 9 seed 3: 182.1 s
+[   203 s] 11 5x4x3 alpha 0.4 Energetic 1500000 0.4 s dt 0.01 eps 9 seed 2: 179.0 s
+[   204 s] 11 5x4x3 alpha 0.4 Energetic 1500000 0.4 s dt 0.01 eps 9 seed 1: 180.3 s
+[   204 s] 11 5x4x3 alpha 0.4 Energetic 1500000 0.4 s dt 0.01 eps 9 seed 3: 180.2 s
+[   330 s] 12 6x10x3 alpha 0.2 Energetic 1500000 1 s dt 0.01 eps 7 seed 2: 282.1 s
+[   330 s] 12 6x10x3 alpha 0.2 Energetic 1500000 1 s dt 0.01 eps 7 seed 1: 283.3 s
+[   331 s] 12 6x10x3 alpha 0.2 Energetic 1500000 1 s dt 0.01 eps 7 seed 3: 283.7 s
+[   367 s] 8 6x10x3 alpha 0.2 Energetic 1500000 1 s dt 0.01 eps 9 seed 3: 355.8 s
+[   368 s] 8 6x10x3 alpha 0.2 Energetic 1500000 1 s dt 0.01 eps 9 seed 1: 356.5 s
+[   369 s] 8 6x10x3 alpha 0.2 Energetic 1500000 1 s dt 0.01 eps 9 seed 2: 357.3 s
+[   378 s] 10 5x4x3 alpha 0.2 Energetic 1500000 0.8 s dt 0.01 eps 9 seed 1: 354.3 s
+[   378 s] 10 5x4x3 alpha 0.2 Energetic 1500000 0.8 s dt 0.01 eps 9 seed 2: 354.4 s
+[   379 s] 10 5x4x3 alpha 0.2 Energetic 1500000 0.8 s dt 0.01 eps 9 seed 3: 355.2 s
+CELL 6x10x3 alpha 0.05 Random N 1500000 4 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median 2.22 %, worst 7.97 %; wall 96-98 s per run; refused {}
+CELL 6x10x3 alpha 0.1 Random N 1500000 3 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 5, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median 2.47 %, worst 6.39 %; wall 47-48 s per run; refused {"t30_s monte_carlo_noise": 20}
+CELL 6x10x3 alpha 0.2 Random N 1500000 2 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 0, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median NaN %, worst 0.00 %; wall 23-23 s per run; refused {"t30_s monte_carlo_noise": 51}
+CELL 6x10x3 alpha 0.4 Random N 1500000 1 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 0, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median NaN %, worst 0.00 %; wall 11-11 s per run; refused {"t30_s monte_carlo_noise": 54}
+CELL 5x4x3 alpha 0.05 Random N 1500000 3 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median 1.85 %, worst 4.45 %; wall 98-99 s per run; refused {}
+CELL 5x4x3 alpha 0.1 Random N 1500000 2 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median 2.75 %, worst 5.71 %; wall 48-48 s per run; refused {}
+CELL 5x4x3 alpha 0.2 Random N 1500000 1.5 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 9, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median 3.38 %, worst 8.61 %; wall 23-23 s per run; refused {"t30_s monte_carlo_noise": 9}
+CELL 5x4x3 alpha 0.4 Random N 1500000 1 s dt 0.01 eps 5: receiver-bands 18; through in every seed: T30 0, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median NaN %, worst 0.00 %; wall 11-12 s per run; refused {"t30_s monte_carlo_noise": 50}
+CELL 6x10x3 alpha 0.2 Energetic N 1500000 1 s dt 0.01 eps 9: receiver-bands 18; through in every seed: T30 0, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median NaN %, worst 0.00 %; wall 356-357 s per run; refused {"t30_s monte_carlo_noise": 54}
+CELL 6x10x3 alpha 0.4 Energetic N 1500000 0.5 s dt 0.01 eps 9: receiver-bands 18; through in every seed: T30 0, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median NaN %, worst 0.00 %; wall 179-182 s per run; refused {"t30_s monte_carlo_noise": 54}
+REFUSED 10 5x4x3 alpha 0.2 Energetic 1500000 0.8 s dt 0.01 eps 9 seed 2: {"code":"results_value_invalid","detail":"Punctual receivers/R000/Advanced sound level.gap: 2000 Hz lateral +1 value 48 is NaN, not a finite energy of at least 0","reasons":[]}
+REFUSED 10 5x4x3 alpha 0.2 Energetic 1500000 0.8 s dt 0.01 eps 9 seed 3: {"code":"results_value_invalid","detail":"Punctual receivers/R001/Advanced sound level.gap: 125 Hz lateral +1 value 8 is NaN, not a finite energy of at least 0","reasons":[]}
+CELL 5x4x3 alpha 0.2 Energetic N 1500000 0.8 s dt 0.01 eps 9: receiver-bands 18; through in every seed: T30 18, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 1 seeds: median 0.00 %, worst 0.00 %; wall 354-354 s per run; refused {}
+CELL 5x4x3 alpha 0.4 Energetic N 1500000 0.4 s dt 0.01 eps 9: receiver-bands 18; through in every seed: T30 0, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median NaN %, worst 0.00 %; wall 179-180 s per run; refused {"t30_s monte_carlo_noise": 54}
+CELL 6x10x3 alpha 0.2 Energetic N 1500000 1 s dt 0.01 eps 7: receiver-bands 18; through in every seed: T30 0, EDT 18, C80 18, D50 18; T30 spread (max-min)/mean over 3 seeds: median NaN %, worst 0.00 %; wall 282-284 s per run; refused {"t30_s monte_carlo_noise": 54}
+test m8_cells ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 378.60s
+

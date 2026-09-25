@@ -152,7 +152,9 @@ pub struct GateCell {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct GeometryGate {
     /// `preprocessed` (the `.poly` `preprocess.exe` saved, markers as TetGen reads them),
-    /// `written` (the mesher's `.poly`), `external` (`mesh_from_tetgen`'s `<base>.poly`) or
+    /// `written` (the mesher's `.poly`), `written, preprocess.exe having given up` (the mesher's
+    /// `.poly`, meshed because `preprocess.exe` saved nothing), `external`
+    /// (`mesh_from_tetgen`'s `<base>.poly`) or
     /// `project` (`mesh_from_tetgen` with no `<base>.poly`: the project's own, as the mesher
     /// writes it without upstream's scene correction).
     pub checked: String,

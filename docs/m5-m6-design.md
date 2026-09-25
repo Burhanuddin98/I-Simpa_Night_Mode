@@ -190,7 +190,12 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
 7. **Staleness.** The key is `validate::mesh_input_hash` (FNV-1a-128, `validate.rs:405`), the
    existing stamp. The mesh manifest records it.
    - `run` with an existing mesh refuses with `mesh_out_of_date` when the stamp differs, and
-     with `mesh_missing` when the folder has no `tetramesh.mbin` or no OK manifest.
+     with `mesh_missing` when the folder has no `tetramesh.mbin` or no OK manifest. Since the
+     pre-M8 piece it also refuses a manifest that records parity mode (`mesh_parity`, whatever
+     its status), and, since `mesh.json` is not signed, holds the `.mbin` to the geometry again
+     before launch as `run-folder` does (the run's `.cbin`, the mesh folder's `.poly`, no manifest
+     taken as proof of the regions): `mesh_invalid` and the verifier's codes, exit 5
+     (`docs/solver-contract.md`, "The run manager").
    - sha256 values (the `sha2` crate) are provenance: `.cbin`, `.mbin` and `tetgen.exe`.
      `run` checks the `.mbin`'s sha256 against the manifest to catch a partial or foreign file.
      The `.cbin` sha256 is recorded only, because `run` re-exports the `.cbin` with the
@@ -335,15 +340,23 @@ milestones M5 and M6, with the amendments below. The terrain maps behind these d
       - **The run manager refuses the parity mesh before launch:** `simpa run-folder` on it (with
         the `.poly` its TetGen read) exits 5 at the pre-launch stage with `mesh_invalid` and
         `marker_geometry_mismatches`; `simpa run --mesh` on the parity mesh folder exits 4 at the
-        mesh stage with `mesh_missing`, its manifest not being OK (the project with Receiver 1 moved
-        1 mm off the wall, which the validator otherwise refuses first).
+        mesh stage with `mesh_missing` and `mesh_parity`: its manifest is not OK, and it records
+        parity mode (the project with Receiver 1 moved 1 mm off the wall, which the validator
+        otherwise refuses first). Its `mesh.json` edited by hand to say OK, it is still refused,
+        `mesh_parity`; edited to say OK and not parity, it is refused before launch as `run-folder`
+        refuses it, `mesh_invalid` and `marker_geometry_mismatches` (the pre-M8 piece: `run --mesh`
+        holds the mesh to the geometry again whatever its `mesh.json` says).
       - **The default mesh**, the same folder but for the mesh, run by `simpa run-folder`: OK, 2 of
         2,922,796 lost to loops (0.00007 %; the test requires under 0.01 %) and 59 to meshing.
       - Without the `.poly` its TetGen read, the default mesh's folder is refused before launch too,
         `mesh_invalid` and `regions_unchecked`: its `.cbin`'s box stands on the floor, which the
         geometry check refuses, so the folder holds no cells to hold its regions to (decision 15).
-        Upstream's own run folders are refused the same way, which is open (the tutorial-3
-        follow-ups: whether `run-folder` should accept such a folder, and on what proof).
+        That was measured on our default mesh without its `.poly`, not on an upstream stored run
+        folder. Upstream's stored run folders of tutorial 3 hold the parity mesh (their `.mbin` is
+        what parity mode rebuilds byte for byte), which `run-folder` refuses for its markers first,
+        as the parity row above shows; whether it would also add `regions_unchecked` there was not
+        run. Whether `run-folder` should accept such a folder, and on what proof, is open (the
+        tutorial-3 follow-ups' critic: a `mesh.json` is not signed).
       - Seeds 2 and 3 on each mesh, the shipped 1.3.4 and 1.4.0 `spps.exe` on the parity mesh, and
         the receiver levels of the two meshes are in `docs/upstream-findings.md`: every build loses
         about 20.1 % on the parity mesh, and the receiver levels differ by at most 0.12 dB.
@@ -449,10 +462,9 @@ box welded to 8 corners, triangulated our way, markers after the room's (written
 `.mbin`), seeded at its centre. Measured on every corpus project with an enabled box zone
 (`rooms/tutorial1_box_fitting.simpa`, tutorial 3 as imported with the correction switched off,
 and the first four generated projects with one), each meshed both ways with the project's flags
-and `.var` (scratch test, not committed; transcript in
-`target/agents/fu-fix-behaviour-scratch/item8-2.txt`, a rerun of
-`target/agents/fu-behaviour-scratch/item8.txt` with the region check against the geometry as
-written added):
+and `.var` (a scratch test, not in the suite; its source and transcript are committed in
+`docs/investigations/2026-09-24-decision5-layout/`, `item8-2.txt`, a rerun of `item8.txt` with the
+region check against the geometry as written added):
 
 | Project | Decision 5 | Upstream's layout |
 |---|---|---|

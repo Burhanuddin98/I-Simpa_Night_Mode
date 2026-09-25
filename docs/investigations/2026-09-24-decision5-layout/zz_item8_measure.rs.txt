@@ -1,0 +1,216 @@
+//! TEMPORARY measurement for item 8 (not committed): upstream's `_SavePOLY` layout with the scene
+//! correction off (`separateUserDefinedModel` false: the box zones' BuildModel triangles in the
+//! facet list, Part 2, 36 unwelded vertices, markers their `.cbin` faces, seeded near `hc`)
+//! against decision 5's layout (welded, our triangulation, markers after the room's, centre
+//! seed), on every corpus project with an enabled box zone. Same flags, same `.var`.
+
+#[path = "mesh_support.rs"]
+mod support;
+
+use simpa_core::formats::{mbin, poly};
+use simpa_core::geometry::check;
+use simpa_core::mesh::{self, Mesher, TetgenMesher, verify};
+use simpa_core::process::{CancelToken, Line};
+use simpa_core::schema::{self, Face, Geometry, GroupId, Project, Vec3};
+
+fn geometry_of(vertices: &[[f64; 3]], facets: &[[u32; 3]]) -> Geometry {
+    let group = GroupId::from_u128(0);
+    Geometry {
+        vertices: vertices.iter().map(|&v| Vec3::from(v)).collect(),
+        faces: facets.iter().map(|&vertices| Face { vertices, group }).collect(),
+    }
+}
+
+/// The model's nodes welded where equal, and its facets through the weld.
+fn welded(model: &poly::Model) -> (Vec<[f64; 3]>, Vec<[u32; 3]>) {
+    let mut vertices: Vec<[f64; 3]> = Vec::new();
+    let mut remap = Vec::new();
+    let mut seen = std::collections::HashMap::new();
+    for v in &model.model_vertices {
+        let key = v.map(|c| (c + 0.0).to_bits());
+        let next = vertices.len() as u32;
+        let k = *seen.entry(key).or_insert(next);
+        if k == next {
+            vertices.push(*v);
+        }
+        remap.push(k);
+    }
+    let facets = model.model_faces.iter().map(|f| f.vertices.map(|v| remap[v as usize])).collect();
+    (vertices, facets)
+}
+
+fn verdict(r: &check::CheckReport) -> String {
+    if r.is_ok() {
+        format!(
+            "ok, {} cells {:?}",
+            r.cells.len(),
+            r.cells.iter().map(|c| (c.volume_m3 * 1e3).round() / 1e3).collect::<Vec<_>>()
+        )
+    } else {
+        format!(
+            "refused: {}",
+            r.reasons.iter().map(|x| format!("{} ({})", x.code.as_str(), x.count)).collect::<Vec<_>>().join(", ")
+        )
+    }
+}
+
+fn stats(m: &mbin::Mesh, box_markers: std::ops::Range<i32>) -> String {
+    let mut vol: std::collections::BTreeMap<i32, f64> = Default::default();
+    let mut box_faces = 0usize;
+    let mut minus = 0usize;
+    for t in &m.tetrahedra {
+        let p = t.vertices.map(|i| m.nodes[i as usize].map(f64::from));
+        let d = p[3];
+        let s3 = |a: [f64; 3], b: [f64; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+        let (a, b, c) = (s3(p[0], d), s3(p[1], d), s3(p[2], d));
+        let v = (a[0] * (b[1] * c[2] - b[2] * c[1]) - a[1] * (b[0] * c[2] - b[2] * c[0])
+            + a[2] * (b[0] * c[1] - b[1] * c[0]))
+            .abs()
+            / 6.0;
+        *vol.entry(t.id_volume).or_default() += v;
+        for f in &t.faces {
+            if box_markers.contains(&f.marker) {
+                box_faces += 1;
+            }
+            if f.marker == -1 && f.neighbor >= 0 {
+                minus += 1;
+            }
+        }
+    }
+    let vol: Vec<(i32, f64)> = vol.into_iter().map(|(k, v)| (k, (v * 1e4).round() / 1e4)).collect();
+    format!(
+        "{} tetrahedra, {} nodes, volumes {vol:?}, tet faces carrying a box triangle's .cbin marker {box_faces}",
+        m.tetrahedra.len(),
+        m.nodes.len()
+    )
+}
+
+fn measure(label: &str, p: &Project) {
+    let tetgen = TetgenMesher::new(support::tetgen_exe());
+    let mut ours = p.clone();
+    ours.solvers.meshing.preprocess = false;
+    let rooms = ours.geometry.faces.len() as i32;
+    let boxes = ours.fitting_zones.iter().filter(|z| z.enabled && matches!(z.shape, schema::FittingShape::Box { .. })).count() as i32;
+    let box_markers = rooms..rooms + 12 * boxes;
+    // Decision 5: the mesher as it is.
+    let d5 = support::scratch(&format!("item8-{label}-d5"));
+    let m5 = mesh::mesh_project(&ours, &d5, &tetgen, &CancelToken::new(), &mut |_: &Line| {}).unwrap();
+    let input = mesh::project_input(&ours).unwrap();
+    let d5_facets: Vec<[u32; 3]> = input.poly.model_faces.iter().map(|f| f.vertices).collect();
+    let d5_mesh = if d5.join("tetramesh.mbin").is_file() {
+        stats(&mbin::read_file(&d5.join("tetramesh.mbin")).unwrap(), box_markers.clone())
+    } else {
+        "no .mbin".to_string()
+    };
+    println!(
+        "{label}: decision 5: .poly {} nodes, {} facets; check {}; mesh {:?} {:?}: {d5_mesh}",
+        input.poly.model_vertices.len(),
+        input.poly.model_faces.len(),
+        verdict(&check::check(&geometry_of(&input.poly.model_vertices, &d5_facets))),
+        m5.status,
+        m5.codes
+    );
+
+    // Upstream's layout without the scene correction: preprocess_layout's user facets in Part 2.
+    let layout = mesh::preprocess_layout(&ours).unwrap();
+    let mut up = layout.poly.clone();
+    up.model_faces.extend(up.user_defined_faces.drain(..));
+    let facets: Vec<[u32; 3]> = up.model_faces.iter().map(|f| f.vertices).collect();
+    let raw_check = check::check(&geometry_of(&up.model_vertices, &facets));
+    let (wv, wf) = welded(&up);
+    let welded_check = check::check(&geometry_of(&wv, &wf));
+    println!(
+        "{label}: upstream layout: .poly {} nodes, {} facets, regions {:?}; check as written {}; welded {}",
+        up.model_vertices.len(),
+        up.model_faces.len(),
+        up.model_regions.iter().map(|r| (r.region_index, r.dot_in_region)).collect::<Vec<_>>(),
+        verdict(&raw_check),
+        verdict(&welded_check)
+    );
+    let dir = support::scratch(&format!("item8-{label}-up"));
+    poly::write_file(&up, &dir.join("scene_mesh.poly")).unwrap();
+    if let Some(var) = &input.var {
+        std::fs::write(dir.join("scene_mesh.var"), var).unwrap();
+    }
+    let mut argv = mesh::tetgen_flags(&ours.solvers.meshing);
+    argv.push("scene_mesh.poly".to_string());
+    let o = tetgen.run(&dir, &argv, &CancelToken::new(), &mut |_: &Line| {}).unwrap();
+    if o.exit_code != Some(0) {
+        println!("{label}: upstream layout: TetGen exit {:?}", o.exit_code);
+        return;
+    }
+    let out = mesh::TetgenOutput::read(&mesh::OutputPaths::new(&dir, "scene_mesh")).unwrap();
+    let scene = layout.scene.clone();
+    let unitize = mesh::Unitize::of_scene(&simpa_core::config_xml::room_mesh(&ours).unwrap()).unwrap();
+    let (m, _) = mesh::build_mbin(&out, scene.faces.len(), &unitize).unwrap();
+    // Our verification of that mesh, held to the welded geometry (the only one with the box as a
+    // cell), with the fittings as upstream seeds them.
+    let markers: Vec<u32> = up.model_faces.iter().map(|f| f.face_index).collect();
+    let reference = verify::Reference {
+        vertices: &wv,
+        facets: &wf,
+        markers: &markers,
+        check: &welded_check,
+        fittings: &layout.fittings,
+    };
+    let ids = verify::VolumeIds::tetgen(layout.fittings.iter().map(|f| f.solver_id).collect());
+    let r = verify::verify_mesh_with(
+        &m,
+        &scene,
+        &ids,
+        &verify::Expectations { unmeshed_faces: None, reference: Some(reference) },
+    );
+    println!(
+        "{label}: upstream layout through TetGen, same flags and .var: {}; our verify held to the welded geometry: {:?}",
+        stats(&m, box_markers),
+        r.codes
+    );
+    // The same mesh held to the geometry as written (unwelded), the one the gate would check.
+    let raw_facets: Vec<[u32; 3]> = up.model_faces.iter().map(|f| f.vertices).collect();
+    let raw_ref = verify::Reference {
+        vertices: &up.model_vertices,
+        facets: &raw_facets,
+        markers: &markers,
+        check: &raw_check,
+        fittings: &layout.fittings,
+    };
+    let r2 = verify::verify_mesh_with(
+        &m,
+        &scene,
+        &ids,
+        &verify::Expectations { unmeshed_faces: None, reference: Some(raw_ref) },
+    );
+    let problems: Vec<String> = r2
+        .regions
+        .iter()
+        .flat_map(|x| x.problems.iter().map(move |p| format!("region {}: {p}", x.id)))
+        .collect();
+    println!(
+        "{label}: upstream layout, the same mesh held to the geometry as written ({} cells): our verify: {:?}; {:?}",
+        raw_check.cells.len(),
+        r2.codes,
+        problems
+    );
+}
+
+#[test]
+#[ignore]
+fn item8() {
+    let fx = |rel: &str| schema::load(&support::fixture(rel)).unwrap();
+    measure("box_fitting", &fx("rooms/tutorial1_box_fitting.simpa"));
+    let t3 = simpa_core::geometry::import::import_proj_file(
+        &std::path::PathBuf::from(std::env::var("SIMPA_UPSTREAM").unwrap())
+            .join("src/isimpa/resources/doc/tutorial/tutorial 3/tutorial_3.proj"),
+    )
+    .unwrap()
+    .project;
+    measure("tutorial3", &t3);
+    let mut n = 0;
+    for seed in 0..60u64 {
+        let p = schema::generate(seed);
+        if p.fitting_zones.iter().any(|z| z.enabled) && n < 4 {
+            measure(&format!("gen{seed}"), &p);
+            n += 1;
+        }
+    }
+}

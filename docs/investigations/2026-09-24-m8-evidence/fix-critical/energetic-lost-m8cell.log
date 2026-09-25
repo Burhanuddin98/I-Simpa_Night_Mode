@@ -1,0 +1,14 @@
+﻿
+running 1 test
+[    39 s] energetic 300000 saved, seed 3: 37.8 s
+[    39 s] energetic 300000 saved, seed 2: 38.1 s
+[    39 s] energetic 300000 saved, seed 1: 38.2 s
+3 runs x 6 bands: lost particles found in the trajectories 63693, counted by SPPS 76
+a lost particle's energy over the mean energy of the particles when it was lost: min 0.000, median 0.352, 90 % 2.729, max 1026.037
+when lost, s: min 0.010, median 0.270, max 0.380
+what they would have brought from the arrival on, over the bound's: median 5.50e-4, max inf
+T30 moved, worst receiver-band: by the measured missing energy 3.09e-6, by the bound 1.52e-2 (limit 5e-3)
+test energetic_lost_particles_from_saved_trajectories ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 42.34s
+

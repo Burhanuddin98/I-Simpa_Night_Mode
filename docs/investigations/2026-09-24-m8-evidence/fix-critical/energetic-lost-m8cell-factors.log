@@ -1,0 +1,48 @@
+== factor 10
+
+running 1 test
+3 runs x 6 bands: lost particles found in the trajectories 63693, counted by SPPS 76
+a lost particle's energy over the mean energy of the particles when it was lost: min 0.000, median 0.352, 90 % 2.729, max 1026.037
+when lost, s: min 0.010, median 0.270, max 0.380
+what they would have brought from the arrival on, over the bound's: median 5.50e-4, max inf
+T30 moved, worst receiver-band: by the lost particles with their measured energies and loss times, what each would still have brought modelled as following the decay (not measured) 3.09e-6; by random mode's lump bound 1.52e-2 (limit 5e-3)
+test energetic_lost_particles_from_saved_trajectories ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 4.93s
+
+== factor 100
+
+running 1 test
+3 runs x 6 bands: lost particles found in the trajectories 938, counted by SPPS 76
+a lost particle's energy over the mean energy of the particles when it was lost: min 0.000, median 0.413, 90 % 2.741, max 68.874
+when lost, s: min 0.010, median 0.230, max 0.320
+what they would have brought from the arrival on, over the bound's: median 5.45e-4, max inf
+T30 moved, worst receiver-band: by the lost particles with their measured energies and loss times, what each would still have brought modelled as following the decay (not measured) 3.03e-6; by random mode's lump bound 1.52e-2 (limit 5e-3)
+test energetic_lost_particles_from_saved_trajectories ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 4.76s
+
+== factor 1000
+
+running 1 test
+3 runs x 6 bands: lost particles found in the trajectories 106, counted by SPPS 76
+a lost particle's energy over the mean energy of the particles when it was lost: min 0.010, median 0.483, 90 % 2.501, max 39.248
+when lost, s: min 0.010, median 0.180, max 0.280
+what they would have brought from the arrival on, over the bound's: median 5.44e-4, max inf
+T30 moved, worst receiver-band: by the lost particles with their measured energies and loss times, what each would still have brought modelled as following the decay (not measured) 3.02e-6; by random mode's lump bound 1.52e-2 (limit 5e-3)
+test energetic_lost_particles_from_saved_trajectories ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 4.75s
+
+== factor 10000
+
+running 1 test
+3 runs x 6 bands: lost particles found in the trajectories 44, counted by SPPS 76
+a lost particle's energy over the mean energy of the particles when it was lost: min 0.042, median 1.020, 90 % 2.832, max 4.371
+when lost, s: min 0.010, median 0.100, max 0.190
+what they would have brought from the arrival on, over the bound's: median 4.82e-3, max 1.38e-1
+T30 moved, worst receiver-band: by the lost particles with their measured energies and loss times, what each would still have brought modelled as following the decay (not measured) 3.02e-6; by random mode's lump bound 1.52e-2 (limit 5e-3)
+test energetic_lost_particles_from_saved_trajectories ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 4.79s
+

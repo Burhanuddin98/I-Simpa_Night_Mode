@@ -430,3 +430,48 @@ fn parity_without_the_scene_correction_says_it_has_no_effect() {
     assert!(!on.stderr.contains(note), "{}", on.stderr);
     assert_eq!(json(&on)["parity"], true);
 }
+
+/// `--parity` where no `preprocess.exe` runs at all: on a raw `.poly`, and with `--from-tetgen`.
+/// Each prints its own note on stderr and meshes as without the flag (the tutorial-3 follow-ups'
+/// critic found only the project case above tested). Says no: without `--parity`, no note.
+#[test]
+fn parity_with_a_raw_poly_or_from_tetgen_says_it_has_no_effect() {
+    let box_ = fixture("rooms/tutorial1_box.simpa");
+    let dir = scratch("mesh-parity-notes");
+    let meshed = dir.join("box");
+    let o = mesh(&box_, &meshed, &[]);
+    assert_eq!(o.code, 0, "{o:#?}");
+
+    let poly_note = "simpa: note: --parity has no effect on a raw .poly";
+    let poly = dir.join("box.poly");
+    std::fs::copy(meshed.join("scene_mesh.poly"), &poly).unwrap();
+    let with = mesh(&poly, &dir.join("poly-parity"), &["--parity"]);
+    assert_eq!(with.code, 0, "{with:#?}");
+    assert!(with.stderr.contains(poly_note), "{}", with.stderr);
+    assert_eq!(json(&with)["parity"], false);
+    let without = mesh(&poly, &dir.join("poly-plain"), &[]);
+    assert_eq!(without.code, 0, "{without:#?}");
+    assert!(!without.stderr.contains("--parity"), "{}", without.stderr);
+    assert_eq!(
+        json(&with)["files"]["mbin"],
+        json(&without)["files"]["mbin"]
+    );
+
+    let tg_note = "simpa: note: --parity has no effect with --from-tetgen";
+    let tg = meshed.display().to_string();
+    let with = mesh(
+        &box_,
+        &dir.join("tg-parity"),
+        &["--from-tetgen", &tg, "--parity"],
+    );
+    assert_eq!(with.code, 0, "{with:#?}");
+    assert!(with.stderr.contains(tg_note), "{}", with.stderr);
+    assert_eq!(json(&with)["parity"], false);
+    let without = mesh(&box_, &dir.join("tg-plain"), &["--from-tetgen", &tg]);
+    assert_eq!(without.code, 0, "{without:#?}");
+    assert!(!without.stderr.contains("--parity"), "{}", without.stderr);
+    assert_eq!(
+        json(&with)["files"]["mbin"],
+        json(&without)["files"]["mbin"]
+    );
+}

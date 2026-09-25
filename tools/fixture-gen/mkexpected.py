@@ -90,7 +90,7 @@ EXPECT = {
         receipt="Source spectrum with 1 of 2 bands. Run anyway, no Part B signal fires: exit 0, no "
         "FAIL line, totals 2000 per band, no loss. SPPS reads the 1000 Hz power past the end of the "
         "source's one-entry spectrum (base_core_configuration.cpp:141, sppsNantes.cpp:73): in most "
-        "runs the band loses every particle to the atmosphere at the first step, in some (7 of 230 "
+        "runs the band loses every particle to the atmosphere at the first step, in some (7 of 260 "
         "measured) its particles run on whatever power the heap held (UNREPRODUCIBLE, "
         "mkexpected.py). So run-folder's config-only band check refuses it before launch with "
         "band_set_mismatch (m5-m6-design.md decision 11; SC:55, VERIFIED S run_oneband; "
@@ -555,9 +555,10 @@ STATS_ROWS = {
 # zero (or a power too small to stay above its own epsilon) every particle dies at the first step,
 # absorbed by the atmosphere; where it is a positive power, the particles have the fates of a real
 # one, which the same case with its spectrum complete gives in every run. Measured 2026-09-24 with
-# spps.exe code sha256 550485c695292501, seed 1 (docs/upstream-findings.md): 7 of 230 runs gave the
-# second outcome (1 of 30 in fresh folders, 6 of 200 in one reused folder, the 1000 Hz energy
-# summed over time from 1.2e-34 to 4.8e34), and 2 of 15 in an earlier count; 30 of 30 runs with the
+# spps.exe code sha256 550485c695292501, seed 1 (docs/upstream-findings.md): 7 of 260 runs gave the
+# second outcome (1 of 30 in fresh folders; 0 of 30, then 6 of 200, in one reused folder; the
+# 1000 Hz energy summed over time from 1.2e-34 to 4.8e34; receipts in
+# docs/investigations/2026-09-24-spps-oneband/), and 2 of 15 in an earlier count; 30 of 30 runs with the
 # spectrum complete gave the second outcome's statistics. No verdict of `run-folder` depends on it:
 # its band check refuses the case before launch.
 #
@@ -574,7 +575,7 @@ UNREPRODUCIBLE = {
             {"absorbed_atmosphere": 41, "absorbed_materials": 1959, "absorbed_fittings": 0,
              "lost_loops": 0, "lost_meshing": 0, "remaining": 0, "total": 2000},
         ],
-        "measured": "the second in 7 of 230 runs of spps.exe 550485c695292501, 2026-09-24",
+        "measured": "the second in 7 of 260 runs of spps.exe 550485c695292501, 2026-09-24",
     },
 }
 
@@ -1224,7 +1225,7 @@ def readme(runs: dict, rows: list[Row]) -> str:
         "  0, no FAIL line, 2,000 particles per band, no loss. SPPS reads the 1000 Hz band's power",
         "  past the end of the source's one-entry spectrum (`base_core_configuration.cpp:141`,",
         "  `sppsNantes.cpp:73`), whatever the heap holds there. In most runs the band's particles",
-        "  are all absorbed by the atmosphere at the first step; in 7 of 230 runs measured",
+        "  are all absorbed by the atmosphere at the first step; in 7 of 260 runs measured",
         "  (2026-09-24) they ran on a positive power, 41 absorbed by the atmosphere and 1,959 by",
         "  materials. `expected.json` records the first; `mkexpected.py` judges the second as the",
         "  first and says so in a NOTE (`UNREPRODUCIBLE`), and any other outcome is a disagreement.",

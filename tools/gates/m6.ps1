@@ -23,6 +23,8 @@
 # (d) Every negative case in tests/fixtures/runs through run-folder (the stub solver for stub_*):
 #     exit 5, status FAIL or CRASH, the expected reason codes; reported as 'N/N'. The 11 cases the
 #     gate names must be among them. Cases expected OK are positives, reported apart.
+#     Also under (d): tools/fixture-gen/test_fixture_gen.py passes, at least 57 tests, read from its
+#     transcript (the fixtures' named tolerance and the rooms' PROVENANCE tables live there).
 # (e) Every row of docs/solver-contract.md's classification table is hit by some fixture's solver
 #     output through run-folder, and the stub whose final stderr line has no newline has that line
 #     captured.
@@ -391,6 +393,40 @@ Check "(d) says NO: the expectation check reports each way a verdict can miss ex
     $namedOk = ($absent -join ',') -eq 'spps_no_such_case,spps_ok'
     Write-Host "      the met case: $(if ($ok) { 'no complaint' } else { 'COMPLAINED' }); $caught of $($cases.Count) misses caught; named-case lookup with a name that is no fixture and the positive spps_ok added reports [$($absent -join ', ')]"
     $ok -and $caught -eq $cases.Count -and $namedOk
+}
+
+# --- (d) the fixtures' generator ------------------------------------------------------------------
+# tools/fixture-gen/test_fixture_gen.py holds the fixtures' named tolerance (spps_oneband's
+# UNREPRODUCIBLE outcome) and keeps the rooms' PROVENANCE sha256 tables in step with the rooms;
+# no gate ran it before (the tutorial-3 follow-ups' critic), so it could stop running unseen.
+# Its transcript is read, never its exit code alone: the unittest summary must say OK with at
+# least $fixtureGenTests tests run.
+$fixtureGenTests = 57
+function Test-FixtureGen([string]$t) {
+    $ran = [regex]::Match($t, '(?m)^Ran (\d+) tests? in ')
+    $ok = [regex]::IsMatch($t, '(?m)^OK(\s|$)')
+    $ran.Success -and [int]$ran.Groups[1].Value -ge $fixtureGenTests -and $ok -and -not [regex]::IsMatch($t, '(?m)^FAILED')
+}
+Check "(d) the fixtures' generator tests (tools/fixture-gen/test_fixture_gen.py) pass, at least $fixtureGenTests of them" {
+    $py = Get-Command python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $py) { throw 'python is not on PATH: the fixture generator tests need it' }
+    Push-Location (Join-Path $repo 'tools\fixture-gen')
+    try { $x = @(cmd /c "`"$($py.Source)`" -m unittest test_fixture_gen 2>&1" | ForEach-Object { "$_" }); $code = $LASTEXITCODE } finally { Pop-Location }
+    $t = $x -join "`n"
+    $x | Select-Object -Last 4 | ForEach-Object { Write-Host "      | $_" }
+    $code -eq 0 -and (Test-FixtureGen $t)
+}
+Check "(d) says NO: the generator tests' reading refuses a failure, an error, and fewer tests than $fixtureGenTests" {
+    $good = "....`n----------------------------------------------------------------------`nRan 57 tests in 21.8s`n`nOK"
+    $cases = [ordered]@{
+        'a failure' = $good -replace 'OK$', 'FAILED (failures=1)'
+        'an error' = $good -replace 'OK$', 'FAILED (errors=2)'
+        'fewer tests' = $good -replace 'Ran 57 tests', 'Ran 12 tests'
+        'no summary' = ''
+    }
+    $passed = @($cases.GetEnumerator() | Where-Object { Test-FixtureGen $_.Value } | ForEach-Object { $_.Key })
+    Write-Host "      the good transcript: $(Test-FixtureGen $good); read as passing when changed: [$($passed -join '; ')] of $($cases.Count)"
+    (Test-FixtureGen $good) -and $passed.Count -eq 0
 }
 
 # --- (e) classifier coverage ------------------------------------------------------------------------

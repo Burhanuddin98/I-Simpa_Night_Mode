@@ -92,7 +92,7 @@ are in the raw JSON.
 | M10 | Concept B: Geometry, Materials, Sources & receivers | M9, M4 |
 | M7 | Result readers and our own acoustic parameters, checked on synthetic decays | M6, M9 |
 | M11 | Concept B: Simulate, Console, Runs | M10, M6 |
-| M8 | Physics test bed: T30, SPL level, EDT, C80 and D50 against analytic references | M7 |
+| M8 | Physics test bed at `dt` 1 ms: T30 against Kuttruff's corrected Eyring with `γ²` from the room's geometry (5 %) and the independent transport as the tight cross-check, and EDT (decisions of 2026-09-24 23:14 and 2026-09-25 00:20, Michael to ratify); SPL's diffuse field, C80 and D50 reported, not gated, until their references are chosen | M7 |
 | M12 | Concept B: Results. Only numbers with a passing bed are shown | M11, M7, M8 |
 | M13 | Windows installer (one NSIS build) | M12, M1 |
 
@@ -112,10 +112,16 @@ M5-M8 instead of after them.
    against its own constant, and the gap is recorded as an upstream convention. The gate "no NaN
    in any output" becomes "no NaN in any value we display", because TCR's Global row is NaN by
    design.
-2. **Eyring is only exact in a diffuse field.** The bed now uses a near-cubic room and a
-   low-absorption range where it holds, and reports the Kuttruff correction alongside. A bed
-   failure blocks only M12, and it is treated as a finding to investigate. Tolerance stays an
-   open decision (proposed ±5 %).
+2. **Eyring is only exact in a diffuse field.** The first answer here was a near-cubic room and a
+   low-absorption range where Eyring holds, with the Kuttruff correction reported alongside.
+   **Measured since, it does not hold:** with Lambert walls SPPS, and an independent transport
+   written for it, decay slower than Eyring by +1.1 to +1.2 % at α 0.05, +4.5 to +5.0 % at 0.2
+   and +9.3 to +10.8 % at 0.4 (`docs/results.md`, "What M8 needs"), the Lambert box's physics, not
+   the solver's. So Burhan decided on 2026-09-24 23:14 that M8 compares T30 against Kuttruff's
+   corrected Eyring with `γ²` computed from the room's geometry by that transport
+   (`params::lambert`), never fitted to SPPS, at ±5 %, with the transport as a tight cross-check
+   and plain Eyring reported only; the gate text changes, so Michael ratifies. A bed failure
+   blocks only M12, and it is treated as a finding to investigate.
 3. **The GUI had been queued behind the bed.** Reordered, as above.
 4. **CI could not run gates that need Grace.** Gates are split in two:
    - **CI-portable:** committed fixtures, no `B:\` paths, no GPU.
@@ -132,11 +138,13 @@ M5-M8 instead of after them.
    - **The map selector and the difference-from-baseline map** are in M12.
    - **Deferred to after M12, each with its own gate:** the material library with Odeon and CATT
      import, receiver grids, source groups and intensity vectors.
-8. **The bed covered only T30,** so the Results screen would have hidden everything else. M8 now
-   also covers:
-   - **SPL:** direct-field calibration plus the diffuse field.
-   - **EDT.**
-   - **C80 and D50,** against Barron's revised theory.
+8. **The bed covered only T30,** so the Results screen would have hidden everything else. The
+   answer then was to have M8 cover SPL (direct field and diffuse field), EDT, and C80 and D50
+   against Barron's revised theory. **Decided since** (the M8 design decisions of 2026-09-25
+   00:20, decision 2): M8 gates T30 and EDT at `dt` 1 ms. SPL's direct field is M7's gate (c).
+   SPL's diffuse field, C80 and D50 are reported, not gated, until a reference is chosen: Barron's
+   revised theory has no code here. At 1 ms C50, C80, D50 and Ts are refused at most receivers by
+   the onset-bin rule (`docs/results.md`, "The arrival").
 
    STI comes later.
 9. **Nothing enforced keeping the commercial option open.** `cargo-deny` now denies GPL, AGPL and
@@ -232,7 +240,8 @@ geometry is fine but the grouping is wrong. It is regenerated from `tutorial_2.p
     tutorial 3; receiver levels of the two meshes; `spps_oneband`'s non-reproducibility named in
     its fixture generator; the gate readings that could not fail given their own refusals.
     637 tests passed, 0 failed, 10 ignored, each with its reason; parity 23 of 23 (5.2 min);
-    `tools/fixture-gen/test_fixture_gen.py` 57 of 57.
+    `tools/fixture-gen/test_fixture_gen.py` 57 of 57, run by hand then; the M6 gate runs it since
+    the pre-M8 piece.
 - **Upstream findings**, measured, internal only and not for publication before arc item 4:
   `docs/upstream-findings.md`.
 - **M7 passed 30 of 30 checks at its merge into `rebuild`, `e942813`** (M6 37 of 37, parity 12 of

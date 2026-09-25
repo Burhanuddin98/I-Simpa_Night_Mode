@@ -60,9 +60,13 @@ pub mod codes {
     pub const BAD_NOISE_INPUT: &str = "params_bad_noise_input";
     /// The diffuse ray transport (`params::lambert`) cannot run, or refuses its own result.
     pub const TRANSPORT_REFUSED: &str = "params_transport_refused";
+    /// Kuttruff's reference is not computed for a band whose faces do not all reflect by
+    /// Lambert's law with scattering 1, the only walls the transport's `γ²` describes; and the
+    /// transport is not run when no computed band has such walls.
+    pub const REFERENCE_NOT_APPLICABLE: &str = "params_reference_not_applicable";
 
     /// Every code, in the order of the documentation table.
-    pub const ALL: [&str; 13] = [
+    pub const ALL: [&str; 14] = [
         BAD_TIME_STEP,
         SERIES_TOO_SHORT,
         BAD_ENERGY,
@@ -76,6 +80,7 @@ pub mod codes {
         DIN_OUT_OF_RANGE,
         BAD_NOISE_INPUT,
         TRANSPORT_REFUSED,
+        REFERENCE_NOT_APPLICABLE,
     ];
 }
 
@@ -583,6 +588,12 @@ pub enum ParamError {
     TransportRefused {
         detail: String,
     },
+    /// Kuttruff's reference does not describe this band: not every face reflects by Lambert's
+    /// law with scattering 1 in it (`results::reference`); or no computed band has such walls, so
+    /// the transport was not run.
+    ReferenceNotApplicable {
+        detail: String,
+    },
 }
 
 impl ParamError {
@@ -602,6 +613,7 @@ impl ParamError {
             ParamError::DinOutOfRange { .. } => codes::DIN_OUT_OF_RANGE,
             ParamError::BadNoiseInput { .. } => codes::BAD_NOISE_INPUT,
             ParamError::TransportRefused { .. } => codes::TRANSPORT_REFUSED,
+            ParamError::ReferenceNotApplicable { .. } => codes::REFERENCE_NOT_APPLICABLE,
         }
     }
 
@@ -653,6 +665,7 @@ impl fmt::Display for ParamError {
             } => write!(f, "{group} at {volume_m3} m³: {detail}"),
             ParamError::BadNoiseInput { field, value } => write!(f, "{field} = {value}"),
             ParamError::TransportRefused { detail } => write!(f, "{detail}"),
+            ParamError::ReferenceNotApplicable { detail } => write!(f, "{detail}"),
         }
     }
 }
@@ -850,8 +863,10 @@ impl EnergySeries {
     /// A series whose caller knows that no energy arrives after its last bin, refused as
     /// [`EnergySeries::new`]. Its tail is [`decay::Tail::Complete`]: nothing is estimated, added
     /// or refused for the energy after the end (`docs/params.md`, "Truncation"). `core::results`
-    /// claims it for SPPS in random mode when the run's statistics count no particle remaining at
-    /// the end of the calculation; the claim changes numbers, so it needs such evidence.
+    /// claims it for SPPS in random mode when the run's statistics count at most one particle in a
+    /// million remaining at the end of the calculation (`results::spps::REMAINING_UNFINISHED_SHARE`;
+    /// those few are bounded with the lost ones, as unfinished paths); the claim changes numbers,
+    /// so it needs such evidence.
     pub fn complete(dt: f64, values: Vec<f64>) -> Result<Self, ParamError> {
         let mut s = Self::new(dt, values)?;
         s.complete = true;
@@ -1072,6 +1087,7 @@ mod tests {
                 value: f64::NAN,
             },
             ParamError::TransportRefused { detail: "x".into() },
+            ParamError::ReferenceNotApplicable { detail: "x".into() },
         ];
         let got: Vec<&str> = errors.iter().map(ParamError::code).collect();
         assert_eq!(got, codes::ALL);
