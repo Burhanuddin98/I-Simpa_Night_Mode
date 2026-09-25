@@ -95,6 +95,7 @@ are in the raw JSON.
 | M8 | Physics test bed at `dt` 1 ms: T30 against Kuttruff's corrected Eyring with `γ²` from the room's geometry (5 %) and the independent transport as the tight cross-check, and EDT (decisions of 2026-09-24 23:14 and 2026-09-25 00:20, Michael to ratify); SPL's diffuse field, C80 and D50 reported, not gated, until their references are chosen | M7 |
 | M12 | Concept B: Results. Only numbers with a passing bed are shown | M11, M7, M8 |
 | M13 | Windows installer (one NSIS build) | M12, M1 |
+| M14 | v1.1: every item in `docs/v1.1-backlog.md` closed, or dropped by Burhan in his own words. The backlog is the only place a deferral lives (Burhan's filter, 2026-09-25) | M13 |
 
 **M5 and M6 are gated as amended** in `docs/m5-m6-design.md`, section "Gate amendments": receiver
 refinement checked by face area, raw `.poly` input, a cancel that must hit a running TetGen, M6(a)

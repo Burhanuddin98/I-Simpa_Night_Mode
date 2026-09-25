@@ -19,6 +19,10 @@
 
 ## Picking this up
 
+**Deferred work lives in `docs/v1.1-backlog.md` and nowhere else.** v1 takes only what stops a wrong
+number reaching a user, or a feature Burhan asked for. Anything else goes to that file in the same session,
+with its receipt and a "done when" test. Milestone M14 closes it.
+
 Live handoff: `session-logs/HANDOFF-2026-09-08.md`. Read it before the arc plan — it names
 what is proven, what is retracted, and the traps already paid for.
 
