@@ -20,8 +20,8 @@
 //!
 //! Each test says no:
 //! - the same ragged series without the evidence is refused, every quantity;
-//! - the evidence claimed for a series that is in truth cut short gives a C80 more than 0.01 dB
-//!   off, where the honest series is refused: the claim changes numbers, so it is only made on the
+//! - the evidence claimed for a series that is in truth cut short gives a C80 off by more than
+//!   the code's C80 limit (`decay::limits::CLARITY_DB`), where the honest series is refused: the claim changes numbers, so it is only made on the
 //!   solver's own statistics;
 //! - a complete series whose last bin starts at −30 dB gives T20, and refuses T30.
 
@@ -136,7 +136,10 @@ fn the_evidence_claimed_for_a_series_cut_short_gives_a_wrong_c80() {
     let v = cut(t, dt, 20.0);
     let lie = evaluate(&EnergySeries::complete(dt, v.clone()).unwrap(), AT_ZERO);
     let got = lie.c80_db.clone().unwrap();
-    assert!((got - c80).abs() > 0.01, "C80 {got} vs {c80}");
+    assert!(
+        (got - c80).abs() > decay::limits::CLARITY_DB,
+        "C80 {got} vs {c80}"
+    );
     // Without the claim the same series is refused, not given a number.
     let honest = evaluate(&EnergySeries::new(dt, v).unwrap(), AT_ZERO);
     assert!(
@@ -241,7 +244,7 @@ fn lost_particles_move_no_accepted_value_beyond_its_limit() {
                     want.c80_db.clone(),
                     plain.c80_db.clone(),
                     got.c80_db.clone(),
-                    0.01,
+                    decay::limits::CLARITY_DB,
                     false,
                 ),
                 (
@@ -249,7 +252,7 @@ fn lost_particles_move_no_accepted_value_beyond_its_limit() {
                     want.d50.clone(),
                     plain.d50.clone(),
                     got.d50.clone(),
-                    0.001,
+                    decay::limits::DEFINITION,
                     false,
                 ),
                 (

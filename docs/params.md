@@ -852,14 +852,14 @@ Refused (`params_bad_room`):
 `A + 4mV = 0` is `params_no_absorption`: the reverberation time is infinite. `ᾱ = 1` gives an
 Eyring time of 0 s, a fully absorbing room.
 
-### The reference M8 compares against (for Burhan's decision)
+### The reference M8 compares against (decided)
 
 **Decided since** (Burhan, 2026-09-24 23:14): Kuttruff's corrected Eyring with `γ²` from the
 geometry, 5 %, with the transport as a cross-check and plain Eyring reported only; Michael to
 ratify. It is core code now: "Kuttruff's reference", below. What follows is the M7 follow-ups'
 evidence as they wrote it.
 
-Added by the M7 follow-ups; nothing is decided here. `T_Eyring = K·V/(A + 4mV)` has two open
+Added by the M7 follow-ups, before the decisions were taken. `T_Eyring = K·V/(A + 4mV)` has two open
 choices, computed on tutorial 1's box (floor 60 m² at α 0.1, ceiling 60 m² at 0.3, walls 96 m² at
 0.2, 180 m³; 20 °C, 50 %, 101.325 kPa) in every third-octave band from 50 Hz to 8 kHz
 (`tests/params_reference.rs`):
@@ -895,7 +895,9 @@ the reference (within its own noise, 0.02 % at 4,000,000 rays). **Decided by Bur
 5 %, with the transport as the tight cross-check and plain Eyring reported only; Michael ratifies
 the gate text ("Kuttruff's reference", below).
 
-**Recommendation, not a decision.** For SPPS's T30: `K = 24·ln(10)/c` with SPPS's own `c`, and `m`
+**Decided as recommended here.** `K`: 2026-09-24 17:45, decision 2. `m` as the solver applies
+it, and TCR keeping 0.163: 2026-09-25 00:20, decisions 4 and 5. The recommendation as it was
+written: for SPPS's T30, `K = 24·ln(10)/c` with SPPS's own `c`, and `m`
 as the solver applies it (nominal frequency, upstream's form). M8 asks whether SPPS's transport
 reproduces the diffuse-field decay of the room it was given; that room's air is the `m` the solver
 used, and its speed is the `c` the solver moved at. TCR's 0.163 would bias the reference 1.2 % long

@@ -592,9 +592,10 @@ are per run with 19 to 27 runs at once on Grace's 28 threads.
 **What these tables do not show** (the M7 follow-ups' critic): every row is at `dt` 10 ms, where
 EDT is refused `early_unresolved` at every count in the 5×4×3 m room from α 0.1 and in the
 6×10×3 m room from α 0.2. No configuration measured gives T30, EDT, C80 and D50 together there.
-At 1 ms, M8's step (Burhan, 23:14), only the EDT probe was run ("EDT and the time step": two
-energetic cells at 1.5 M), and which of M8's own receivers lose C50, C80, D50 and Ts to
-`params_bad_arrival` at 1 ms was not counted (the 81 % above is tutorial 1's 200 random
+At 1 ms, M8's step (Burhan, 23:14), the EDT probe was run ("EDT and the time step": two energetic
+cells at 1.5 M). The pre-M8 noise calibration ran 16 cells in M8's two boxes at 1 ms, 10 seeds
+each, in both modes (`docs/investigations/2026-09-25-noise-calibration/calibration.json`). Which
+of M8's own receivers lose C50, C80, D50 and Ts to `params_bad_arrival` at 1 ms was not counted (the 81 % above is tutorial 1's 200 random
 positions). The second table, air on, covers 2 of the 8 room-α cells per method, the two with the
 smallest excess over Eyring; nothing was run with air at α 0.2 or 0.4, and the Kuttruff reference
 with `4mV` is checked against the independent transport alone (`docs/params.md`, "Kuttruff's
@@ -870,23 +871,33 @@ energy, ten thousand times the floor, carried **0.04 to 4.4 times the mean** (me
 ended within 10⁴ of the floor, where particles the floor dropped (up to 13 times above it at five
 reflections a step) cannot be told from them. `ρ` = 10 is about 2.3 times the largest measured.
 
-### For Burhan's decisions
+### The decisions this section asked for
 
-- **The reference** (above; `docs/params.md`): Eyring and a tolerance or α set that allows for the
-  Lambert box's slower decay, or Kuttruff with a `γ²` computed apart from SPPS, or the independent
-  transport. SPPS matches the transport to 0.04 % (energetic).
-- **Seed spread**: per receiver-band needs the counts above (12 to 252 M in random mode for a 95 %
-  chance in every receiver-band); on the cell's mean it is met from 1.5 M.
-- **Energetic mode's noise model** over-stated T30's noise 30 to 40 times with M7's structure;
-  it alone set the energetic counts (1.5 to 13 M, 5 to 57 minutes a run under load). Round 3 of
-  the pre-M8 calibration gives M8's uniform Lambert rooms their own factor (0.052 for T30, 0.098
-  for T20), validated on held-out rooms; rooms with concentrated absorption or specular walls keep
-  a factor near 1 (`docs/investigations/2026-09-25-noise-calibration/`, "Open").
-- **EDT**: at 10 ms it comes out only where the early decay is slow against the step; at 1 ms C50,
-  C80, D50 and Ts are refused `params_bad_arrival` at most receivers (the onset-bin rule, kept by
-  the M8 design decision 7 of 2026-09-25 00:20).
-- **`trans_epsilon`**: 7 or more for energetic cells (5 biases T30, "Energetic mode: the solver's
-  floor").
+Once open, now decided:
+- **The reference** (Burhan, 2026-09-24 23:14): Kuttruff's corrected Eyring with `γ²` computed from
+  the geometry, 5 %, with the independent transport as the tight cross-check and plain Eyring
+  reported only. Michael ratifies the gate text (`docs/params.md`, "Kuttruff's reference"). SPPS
+  matches the transport to 0.04 % (energetic).
+- **Seed spread** (M8 design decision 1 of 2026-09-25 00:20): gated on the cell's mean, which is met
+  from 1.5 M. Per-receiver σ is reported and users see per-receiver `mc_sd`. Per receiver-band would
+  need the counts above (12 to 252 M in random mode for a 95 % chance in every receiver-band).
+- **Energetic mode's noise model**: M7's structure over-stated T30's noise 30 to 40 times, and it
+  alone set the energetic counts (1.5 to 13 M, 5 to 57 minutes a run under load). The pre-M8
+  calibration replaced it. The structure that ships, and its limits, are in
+  `docs/investigations/2026-09-25-noise-calibration/` (round 4).
+- **`trans_epsilon`** (M8 design decision 6 of 00:20): bed files set 7 or more for energetic cells.
+  The default 5 biases T30 ("Energetic mode: the solver's floor").
+
+Still open:
+- **EDT.** M8 gates EDT at `dt` 1 ms (decision 2 of 00:20). At 10 ms it comes out only where the
+  early decay is slow against the step. At 1 ms, C50, C80, D50 and Ts are refused
+  `params_bad_arrival` at most receivers: the onset-bin rule, kept by decision 7 of 00:20.
+  - The early check shipped here lets some wrong EDT and Ts values through at steps above 2 ms.
+    This is finding 1 of `target/agents/t30-edt-diagnosis/resolution.md`: EDT is wrong in 43 to 64
+    of 240 to 360 values at 5 to 8 ms.
+  - Its proposed replacement, W1G (the follow-up spec on `rebuild`), failed its adversarial hunt on
+    2026-09-25 (`target/agents/z3-hunt/z3-verdict.md`).
+  - The early check is being redesigned before M8.
 
 ### Runs refused for a NaN
 
