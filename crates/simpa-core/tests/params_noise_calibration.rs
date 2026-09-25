@@ -69,7 +69,7 @@ fn walls(s: Split) -> Walls {
     match s {
         Split::UniformLambert => Walls::UniformLambert,
         Split::Lambert => Walls::Lambert,
-        Split::All | Split::Other => Walls::Other,
+        Split::All | Split::Other | Split::NotUniformLambert => Walls::Other,
     }
 }
 
@@ -91,6 +91,61 @@ fn fell_back(name: &str, q: &str, s: Split) -> bool {
     name == "energetic" && q == "t20_s" && s == Split::Lambert
 }
 
+/// What round 3 shipped (`50695f6`) for energetic T20 and T30 in the bands round 4 gives the
+/// roughness structure (Lambert with unequal absorption, and not Lambert), which the code no
+/// longer holds: `(quantity index, split, k, κ, fewest particles, largest n, margin)`, each flag of
+/// `1/√N` on.
+const R3_REPLACED: [(usize, Split, f64, f64, f64, f64, f64); 4] = [
+    (2, Split::Lambert, 1.0, 0.0, 150_000.0, 0.0319601939142, 1.3),
+    (
+        3,
+        Split::Lambert,
+        0.73,
+        2.0,
+        150_000.0,
+        0.0319601939142,
+        1.3,
+    ),
+    (2, Split::Other, 1.0, 0.0, 15_000.0, 0.81943475966, 1.2),
+    (3, Split::Other, 1.0, 0.0, 150_000.0, 0.81943475966, 1.3),
+];
+
+/// Round 3's numbers for a method, quantity and split: the code's, or what round 3 shipped where
+/// round 4 replaced it ([`R3_REPLACED`]).
+fn r3_numbers(m: Method, i: usize, s: Split) -> Numbers {
+    if m == Method::Energetic
+        && let Some(&(_, _, k, kappa, min_particles, max_n, _)) =
+            R3_REPLACED.iter().find(|x| x.0 == i && x.1 == s)
+    {
+        return Numbers {
+            k,
+            kappa,
+            min_particles,
+            max_n,
+        };
+    }
+    code_numbers(m, i, s)
+}
+
+/// Round 3's entry, as [`r3_numbers`], with its margin and `1/√N` flag.
+fn r3_entry(m: Method, i: usize, s: Split) -> noise::calibration::Entry {
+    let e = noise::calibration::entry(m, i, walls(s));
+    match R3_REPLACED.iter().find(|x| x.0 == i && x.1 == s) {
+        Some(&(_, _, factor, kappa, min_particles, max_n, margin)) if m == Method::Energetic => {
+            noise::calibration::Entry {
+                factor,
+                kappa,
+                min_particles: min_particles as u32,
+                max_crossings_per_particle: max_n,
+                margin,
+                root_n_confirmed: true,
+                structure: noise::Structure::Constant,
+            }
+        }
+        _ => e,
+    }
+}
+
 /// Every method, quantity and split whose code numbers differ from what round 3's rules derive
 /// from the receipt, with both.
 fn round3_mismatches(r: &Value) -> Vec<String> {
@@ -110,8 +165,9 @@ fn round3_mismatches(r: &Value) -> Vec<String> {
             out.push(format!("{name} variable {var:?} vs {:?}", code_var(m)));
         }
         for (i, q) in calibration::QUANTITIES.iter().enumerate() {
-            // R3-6 over every pair of the receipt: the validation pairs can only withdraw.
-            let (confirmed, _, unsafe_) = calibration::root_n3_confirmed(r, name, q, &all);
+            // R3-6 over every pair of the receipt, round 4's included: a pair can only withdraw.
+            let (confirmed, _, unsafe_) =
+                calibration::root_n_confirmed_over(r, name, q, &all, &calibration::PAIRS4);
             for &s in calibration::splits(name, q) {
                 let fit = calibration::fit(&cal, q, var, s)
                     .unwrap_or_else(|| panic!("{name} {q} {s:?}: no fit"));
@@ -123,7 +179,7 @@ fn round3_mismatches(r: &Value) -> Vec<String> {
                 } else {
                     (fit.k, fit.kappa)
                 };
-                let e = noise::calibration::entry(m, i, walls(s));
+                let e = r3_entry(m, i, s);
                 let tag = format!("{name} {q} {}", calibration::split_name(s));
                 println!(
                     "{tag}: k {k} kappa {kappa} (by {}), N >= {}, n <= {}, margin {margin}, \
@@ -179,14 +235,15 @@ fn round3_mismatches(r: &Value) -> Vec<String> {
 fn the_codes_round_three_numbers_are_the_rules_on_the_receipt() {
     let r = receipt();
     assert_eq!(round3_mismatches(&r), Vec::<String>::new());
-    // Says no through the code: every factor moved by 10 %: 8 random, 8 energetic, and energetic
-    // T20 and T30's two other kinds of wall.
+    // Says no through the code: every factor the code still holds from round 3 moved by 10 %: 8
+    // random, and 8 energetic with T20 and T30 in uniform Lambert bands (their other bands are
+    // round 4's now, `R3_REPLACED`).
     let m = faults::with(Fault::NoiseCalibrationScaled { by: 1.1 }, || {
         round3_mismatches(&r)
     });
     assert_eq!(
         m.iter().filter(|x| x.contains(" factor ")).count(),
-        20,
+        16,
         "{m:?}"
     );
     // Says no through the input: C3-R3's T30 spread 1.5 times what it was moves random T30's
@@ -261,7 +318,7 @@ fn validation3(r: &Value, numbers: impl Fn(Method, usize, Split) -> Numbers) -> 
 #[test]
 fn every_round_three_validation_cell_is_at_or_below_its_prediction() {
     let r = receipt();
-    let v = validation3(&r, code_numbers);
+    let v = validation3(&r, r3_numbers);
     println!(
         "checked {} (cell, quantity) pairs; {} rows outside the domain",
         v.checked.len(),
@@ -305,7 +362,7 @@ fn every_round_three_validation_cell_is_at_or_below_its_prediction() {
     );
     // Says no through the code: a model twice as optimistic fails in every V3 cell.
     let halved = faults::with(Fault::NoiseCalibrationScaled { by: 0.5 }, || {
-        validation3(&r, code_numbers)
+        validation3(&r, r3_numbers)
     });
     for c in &cells {
         assert!(
@@ -330,7 +387,7 @@ fn a_round_three_quantity_noisier_than_its_prediction_fails_its_check_alone() {
             .iter()
             .position(|x| *x == q)
             .unwrap();
-        let x = code_numbers(m, qi, s);
+        let x = r3_numbers(m, qi, s);
         let var = code_var(m);
         let rows = calibration::rows3(
             r["cells"]
@@ -353,7 +410,7 @@ fn a_round_three_quantity_noisier_than_its_prediction_fails_its_check_alone() {
             assert_eq!(row["freq_hz"].as_i64().unwrap(), r3.freq_hz);
             row["observed_sd"] = (1.5 * x.k * r3.predicted_var(x.kappa).sqrt()).into();
         }
-        let v = validation3(&r, code_numbers);
+        let v = validation3(&r, r3_numbers);
         println!("{name}: {:?}", v.fails);
         assert_eq!(v.fails.len(), 1, "{name}: {:?}", v.fails);
         assert!(
@@ -371,7 +428,7 @@ fn without_the_correction_for_repeated_crossings_a_large_receiver_cell_fails() {
     let r = receipt();
     let v = validation3(&r, |m, i, s| Numbers {
         kappa: 0.0,
-        ..code_numbers(m, i, s)
+        ..r3_numbers(m, i, s)
     });
     let cal = {
         // The calibration cells too: round 3's factors were fitted with the correction.
@@ -383,7 +440,7 @@ fn without_the_correction_for_repeated_crossings_a_large_receiver_cell_fails() {
                     for &s in calibration::splits(name, q) {
                         let x = Numbers {
                             kappa: 0.0,
-                            ..code_numbers(m, i, s)
+                            ..r3_numbers(m, i, s)
                         };
                         let max_a = noise::calibration::UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION;
                         if let (Some((false, _)), _, _) =
@@ -413,7 +470,7 @@ fn energetic_t20_in_lambert_rooms_fails_v3_e8_at_its_fitted_factor() {
     // (floor 0.9, the rest 0.02, 1 ms steps); the factor 1 the code ships passes it.
     let r = receipt();
     let fitted = |m: Method, i: usize, s: Split| {
-        let x = code_numbers(m, i, s);
+        let x = r3_numbers(m, i, s);
         if m == Method::Energetic && i == 2 && s == Split::Lambert {
             Numbers { k: 0.52, ..x }
         } else {
@@ -470,6 +527,397 @@ fn the_receipt_is_the_pre_registered_design() {
             assert_eq!(n, 36, "{id} {q}");
         }
     }
+}
+
+// --- round 4 -------------------------------------------------------------------------------------
+
+/// The V4 cells in which round 4's validation checks something (R4-4).
+const ROUND4_CELLS_CHECKED: usize = 24;
+/// Round 4's coverage shortfalls (R4-4): method, quantity and split with fewer than two V4 cells of
+/// six rows inside the domain, reported and not made up.
+const ROUND4_SHORTFALL: [&str; 0] = [];
+/// A V4 cell whose energetic T30 is judged under the roughness structure with six rows or more.
+const ROUND4_ROUGH_CELL: &str = "V4-E5";
+
+/// The code's numbers for a method, quantity and round-4 split, with the receipt's key of the
+/// structure the code draws that quantity's resamples with.
+fn code4(m: Method, i: usize, s: Split) -> (Numbers, &'static str) {
+    let e = noise::calibration::entry(m, i, walls(s));
+    let key = match e.structure {
+        noise::Structure::Constant => calibration::CONSTANT_SD,
+        noise::Structure::Roughness => calibration::ROUGH_SD,
+    };
+    (code_numbers(m, i, s), key)
+}
+
+/// Every cell id of the receipt.
+fn ids(r: &Value) -> Vec<&str> {
+    r["cells"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["cell"]["id"].as_str().unwrap())
+        .collect()
+}
+
+/// Every number of energetic T20 and T30 in bands not uniform Lambert that differs from what rules
+/// R4-1 and R4-2 derive from the receipt's cells of rounds 1 to 3 (both kinds of such band take
+/// the same entry, under the roughness structure), and every `1/√N` flag of the code that differs
+/// from R3-6 over every pair of the receipt, round 4's included (F9), with both.
+fn round4_mismatches(r: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    let all = ids(r);
+    let cal = calibration::calibration4_cells(r, "energetic");
+    let s = Split::NotUniformLambert;
+    let key = calibration::ROUGH_SD;
+    let close = |a: f64, b: f64| (a - b).abs() <= 1e-12 * a.abs().max(b.abs());
+    for (i, q) in [(2, "t20_s"), (3, "t30_s")] {
+        let fit = calibration::fit_with(&cal, q, Var::N1Cv2, s, &calibration::kappas4(), key)
+            .unwrap_or_else(|| panic!("{q}: no fit"));
+        let dom = calibration::domain_with(&cal, q, Var::N1Cv2, s, key).unwrap();
+        let (margin, _) = calibration::margin_with(&cal, q, s, key).unwrap();
+        let (confirmed, _, _) =
+            calibration::root_n_confirmed_over(r, "energetic", q, &all, &calibration::PAIRS4);
+        println!(
+            "energetic {q} not uniform Lambert: k {} kappa {} (by {}), N >= {}, n <= {}, margin \
+             {margin}, 1/sqrt(N) {confirmed}",
+            fit.k, fit.kappa, fit.by, dom.min_particles, dom.max_n
+        );
+        for w in [Walls::Other, Walls::Lambert] {
+            let e = noise::calibration::entry(Method::Energetic, i, w);
+            let tag = format!("energetic {q} {w:?}");
+            if e.structure != noise::Structure::Roughness {
+                out.push(format!("{tag} structure {:?}", e.structure));
+            }
+            if !close(fit.k, e.factor) {
+                out.push(format!("{tag} factor {} vs {}", fit.k, e.factor));
+            }
+            if !close(fit.kappa, e.kappa) {
+                out.push(format!("{tag} kappa {} vs {}", fit.kappa, e.kappa));
+            }
+            if dom.min_particles != f64::from(e.min_particles) {
+                out.push(format!(
+                    "{tag} min_particles {} vs {}",
+                    dom.min_particles, e.min_particles
+                ));
+            }
+            if !close(dom.max_n, e.max_crossings_per_particle) {
+                out.push(format!(
+                    "{tag} max_n {} vs {}",
+                    dom.max_n, e.max_crossings_per_particle
+                ));
+            }
+            if !close(margin, e.margin) {
+                out.push(format!("{tag} margin {margin} vs {}", e.margin));
+            }
+            if confirmed != e.root_n_confirmed {
+                out.push(format!(
+                    "{tag} 1/sqrt(N) {confirmed} vs {}",
+                    e.root_n_confirmed
+                ));
+            }
+        }
+    }
+    for name in METHODS {
+        let m = method(name);
+        for (i, q) in calibration::QUANTITIES.iter().enumerate() {
+            let (confirmed, _, _) =
+                calibration::root_n_confirmed_over(r, name, q, &all, &calibration::PAIRS4);
+            for w in [Walls::Other, Walls::Lambert, Walls::UniformLambert] {
+                let e = noise::calibration::entry(m, i, w);
+                if confirmed != e.root_n_confirmed {
+                    out.push(format!(
+                        "{name} {q} {w:?} 1/sqrt(N) {confirmed} vs {}",
+                        e.root_n_confirmed
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn the_codes_round_four_numbers_are_the_rules_on_the_receipt() {
+    let r = receipt();
+    assert_eq!(round4_mismatches(&r), Vec::<String>::new());
+    // Says no through the code: the factors moved by 10 % move both kinds of band of both
+    // quantities.
+    let m = faults::with(Fault::NoiseCalibrationScaled { by: 1.1 }, || {
+        round4_mismatches(&r)
+    });
+    assert_eq!(
+        m.iter().filter(|x| x.contains(" factor ")).count(),
+        4,
+        "{m:?}"
+    );
+    // Says no through the input: the cell that sets energetic T30's factor read with its spread
+    // 1.5 times what it was moves it.
+    let cal = calibration::calibration4_cells(&r, "energetic");
+    let by = calibration::fit_with(
+        &cal,
+        "t30_s",
+        Var::N1Cv2,
+        Split::NotUniformLambert,
+        &calibration::kappas4(),
+        calibration::ROUGH_SD,
+    )
+    .unwrap()
+    .by;
+    let mut r2 = receipt();
+    for row in cell_mut(&mut r2, &by)["quantities"]["t30_s"]
+        .as_array_mut()
+        .unwrap()
+    {
+        let o = row["observed_sd"].as_f64().unwrap();
+        row["observed_sd"] = (1.5 * o).into();
+    }
+    let m = round4_mismatches(&r2);
+    assert!(
+        m.iter()
+            .any(|x| x.starts_with("energetic t30_s Other factor")),
+        "{m:?}"
+    );
+}
+
+fn validation4(
+    r: &Value,
+    numbers: impl Fn(Method, usize, Split) -> (Numbers, &'static str),
+) -> Validation {
+    let mut v = Validation {
+        fails: Vec::new(),
+        checked: Vec::new(),
+        outside: 0,
+    };
+    for name in METHODS {
+        let m = method(name);
+        let var = code_var(m);
+        for c in calibration::validation4_cells(r, name) {
+            let id = c["cell"]["id"].as_str().unwrap().to_string();
+            for (i, q) in calibration::QUANTITIES.iter().enumerate() {
+                for (s, _) in calibration::splits4(name, q) {
+                    let (x, key) = numbers(m, i, s);
+                    let max_a = noise::calibration::UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION;
+                    let (p, inside, all) = calibration::validates4(c, q, var, s, x, max_a, key);
+                    v.outside += all - inside;
+                    let Some((ok, p)) = p else { continue };
+                    let what = format!("{q} {}", calibration::split_name(s));
+                    v.checked.push((id.clone(), what.clone(), inside));
+                    if !ok {
+                        v.fails.push(format!(
+                            "{id} {what}: {:.3} [{:.3}, {:.3}]",
+                            p.ratio, p.lower, p.upper
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    v
+}
+
+#[test]
+fn every_round_four_validation_cell_is_at_or_below_its_prediction() {
+    let r = receipt();
+    let v = validation4(&r, code4);
+    println!(
+        "checked {} (cell, quantity) pairs; {} rows outside the domain",
+        v.checked.len(),
+        v.outside
+    );
+    assert_eq!(v.fails, Vec::<String>::new());
+    let mut cells: Vec<&str> = v.checked.iter().map(|(c, _, _)| c.as_str()).collect();
+    cells.dedup();
+    assert_eq!(cells.len(), ROUND4_CELLS_CHECKED, "{cells:?}");
+    // Coverage (R4-4): every method, quantity and split in at least two V4 cells with six rows
+    // inside the domain, but for those listed, reported and not made up.
+    let mut short = Vec::new();
+    for name in METHODS {
+        for q in calibration::QUANTITIES {
+            for (s, _) in calibration::splits4(name, q) {
+                let what = format!("{q} {}", calibration::split_name(s));
+                let n = v
+                    .checked
+                    .iter()
+                    .filter(|(c, w, k)| {
+                        *w == what
+                            && *k >= 6
+                            && c.starts_with(if name == "random" { "V4-R" } else { "V4-E" })
+                    })
+                    .count();
+                if n < 2 {
+                    short.push(format!("{name} {what}: {n}"));
+                }
+            }
+        }
+    }
+    assert_eq!(short, ROUND4_SHORTFALL.to_vec());
+    // The uniform-Lambert entries are checked above a mean absorption of 0.2, in rooms other than
+    // 5 x 4 x 3 and 6 x 10 x 3 m (R4-4): V4-E1 to V4-E4, six rows each.
+    for id in ["V4-E1", "V4-E2", "V4-E3", "V4-E4"] {
+        for q in ["t20_s", "t30_s"] {
+            let what = format!("{q} uniform_lambert");
+            assert!(
+                v.checked
+                    .iter()
+                    .any(|(c, w, k)| c == id && *w == what && *k >= 6),
+                "{id} {what}"
+            );
+        }
+    }
+    // Says no through the code: a model twice as optimistic fails in every V4 cell.
+    let halved = faults::with(Fault::NoiseCalibrationScaled { by: 0.5 }, || {
+        validation4(&r, code4)
+    });
+    for c in &cells {
+        assert!(
+            halved.fails.iter().any(|f| f.starts_with(&format!("{c} "))),
+            "{c} passes at half: {:#?}",
+            halved.fails
+        );
+    }
+}
+
+#[test]
+fn a_round_four_quantity_noisier_than_its_prediction_fails_its_check_alone() {
+    // Says no through the input: in one V4 cell, one quantity's observed spread raised to 1.5
+    // times its calibrated prediction in every receiver-band: energetic T30 under the roughness
+    // structure, and under the uniform-Lambert entries at a mean absorption of 0.4.
+    for (id, q, s) in [
+        (ROUND4_ROUGH_CELL, "t30_s", Split::NotUniformLambert),
+        ("V4-E1", "t30_s", Split::UniformLambert),
+    ] {
+        let mut r = receipt();
+        let m = Method::Energetic;
+        let qi = calibration::QUANTITIES
+            .iter()
+            .position(|x| *x == q)
+            .unwrap();
+        let (x, key) = code4(m, qi, s);
+        let cell = r["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["cell"]["id"] == id)
+            .unwrap()
+            .clone();
+        let rows = calibration::rows_with(&cell, q, code_var(m), s, f64::INFINITY, key);
+        assert!(rows.len() >= 6, "{id} {q}: {} rows", rows.len());
+        for row in cell_mut(&mut r, id)["quantities"][q]
+            .as_array_mut()
+            .unwrap()
+        {
+            if let Some(r3) = rows.iter().find(|x| {
+                x.receiver == row["receiver"].as_u64().unwrap()
+                    && x.freq_hz == row["freq_hz"].as_i64().unwrap()
+            }) {
+                row["observed_sd"] = (1.5 * x.k * r3.predicted_var(x.kappa).sqrt()).into();
+            }
+        }
+        let v = validation4(&r, code4);
+        println!("{id} {q}: {:?}", v.fails);
+        assert_eq!(v.fails.len(), 1, "{id}: {:?}", v.fails);
+        assert!(
+            v.fails[0].starts_with(&format!("{id} {q}")),
+            "{:?}",
+            v.fails
+        );
+    }
+}
+
+/// R4-5 on the receipt: per pair, quantity and kind of count (`n` from the standard deviation,
+/// `r` from the resamples), the lower count's refusals whose named count the higher count reaches
+/// and the mean share of the higher count's seeds that give the value there. `swap` reads the
+/// higher count's judgements from the lower count's cell (the say-NO).
+fn named_counts(r: &Value, swap: bool) -> Vec<(String, usize, f64)> {
+    let find = |id: &str| {
+        r["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["cell"]["id"] == id)
+    };
+    let mut out = Vec::new();
+    for (a, b) in calibration::PAIRS4 {
+        let (Some(ca), Some(cb)) = (find(a), find(b)) else {
+            continue;
+        };
+        let high = cb["cell"]["particles_per_source"].as_u64().unwrap();
+        let seeds = calibration::seeds(ca);
+        for q in calibration::QUANTITIES {
+            let lo: Vec<&str> = ca["judged"][q]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_str().unwrap())
+                .collect();
+            let hi_cell = if swap { ca } else { cb };
+            let hi: Vec<&str> = hi_cell["judged"][q]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_str().unwrap())
+                .collect();
+            for kind in ['n', 'r'] {
+                let (mut within, mut pass) = (0usize, 0.0);
+                for (k, code) in lo.iter().enumerate() {
+                    let Some(n) = code.strip_prefix(kind).and_then(|n| n.parse::<u64>().ok())
+                    else {
+                        continue;
+                    };
+                    if n > high {
+                        continue;
+                    }
+                    within += 1;
+                    let rb = k / seeds;
+                    let given = hi[rb * seeds..(rb + 1) * seeds]
+                        .iter()
+                        .filter(|c| **c == "g")
+                        .count();
+                    pass += given as f64 / seeds as f64;
+                }
+                if within > 0 {
+                    out.push((format!("{a}/{b} {q} {kind}"), within, pass / within as f64));
+                }
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn a_named_count_brings_the_value_through_at_the_higher_count() {
+    // R4-5: on every pair with at least 10 refusals whose named count the higher count reaches,
+    // at least 80 % of the higher count's seeds give the value, for counts named from the
+    // standard deviation and from the resamples alike.
+    let r = receipt();
+    let got = named_counts(&r, false);
+    for (what, within, share) in &got {
+        println!(
+            "{what}: {within} within reach, {:.1} % given there",
+            100.0 * share
+        );
+    }
+    let low: Vec<&(String, usize, f64)> = got
+        .iter()
+        .filter(|(_, within, share)| *within >= 10 && *share < 0.8)
+        .collect();
+    assert!(low.is_empty(), "{low:?}");
+    // Every kind of count is exercised: counts from the resamples within reach on a pair.
+    assert!(
+        got.iter().any(|(w, n, _)| w.ends_with(" r") && *n >= 10),
+        "{got:?}"
+    );
+    // Says no through the input: the higher count's judgements read from the lower count, where
+    // those values were refused, fail the target.
+    let swapped = named_counts(&r, true);
+    assert!(
+        swapped
+            .iter()
+            .filter(|(_, within, _)| *within >= 10)
+            .all(|(_, _, share)| *share < 0.8),
+        "{swapped:?}"
+    );
 }
 
 // --- rounds 1 and 2, as history --------------------------------------------------------------

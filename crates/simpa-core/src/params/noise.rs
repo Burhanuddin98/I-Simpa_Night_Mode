@@ -190,11 +190,9 @@ pub mod calibration {
     const RANDOM_MAX_N: f64 = 2.1641858528999998;
     /// The largest `n` of energetic mode's calibration rows (C3-E1, the same room and receivers).
     const ENERGETIC_MAX_N: f64 = 2.12938788744;
-    /// The largest `n` of the energetic Lambert rows with unequal absorption (all at receivers of
-    /// 0.31 m).
-    const ENERGETIC_LAMBERT_MAX_N: f64 = 0.0319601939142;
-    /// The largest `n` of the energetic rows not Lambert throughout (C3-E4, specular, 0.9 m).
-    const ENERGETIC_OTHER_MAX_N: f64 = 0.81943475966;
+    /// The largest `n` of the energetic rows not uniform Lambert, under the roughness structure
+    /// (V3-E4: a 5 × 4 × 3 m specular room at α 0.05 with receivers of 0.7 m).
+    const ENERGETIC_ROUGH_MAX_N: f64 = 1.3673826359;
 
     /// Random mode (round 3, 22 calibration cells): every factor carries a correction for a
     /// particle's crossings of one receiver at several times, largest for the decay times; the
@@ -209,32 +207,47 @@ pub mod calibration {
         e(1.2, 1.25, 5_000, RANDOM_MAX_N, 1.2, true),
         e(1.4, 3.0, 50_000, RANDOM_MAX_N, 1.1, true),
     ];
-    /// Energetic mode (round 3, 29 calibration cells); its T20 and T30 here are those of bands
-    /// not every face of which reflects by Lambert's law with scattering 1
-    /// ([`super::Walls::Other`]): M7's structure, factor 1, as rounds 1 and 2 left them. SPL is
-    /// above 1 since the direct field alone (every surface absorbing 1) and a specular room with
-    /// 0.9 m receivers are among the cells.
+    /// [`e`] under the roughness structure (round 4).
+    #[allow(clippy::too_many_arguments)]
+    const fn rough(
+        factor: f64,
+        kappa: f64,
+        min_particles: u32,
+        max_crossings_per_particle: f64,
+        margin: f64,
+        root_n_confirmed: bool,
+    ) -> Entry {
+        Entry {
+            structure: super::Structure::Roughness,
+            ..e(
+                factor,
+                kappa,
+                min_particles,
+                max_crossings_per_particle,
+                margin,
+                root_n_confirmed,
+            )
+        }
+    }
+
+    /// Energetic mode (round 3, 29 calibration cells; SPL is above 1 since the direct field alone,
+    /// every surface absorbing 1, and a specular room with 0.9 m receivers are among the cells).
+    /// Its T20 and T30 here are those of every band not uniform Lambert
+    /// ([`super::Walls::Other`] and [`super::Walls::Lambert`]), under the roughness structure
+    /// (round 4, R4-1 on the 39 energetic cells of rounds 1 to 3): the energy each crossing brings
+    /// late in a decay is read from the series' own roughness, so a specular room's T30 is
+    /// overstated 2.4 times (tutorial 1's materials, 150,000 particles) where M7's structure
+    /// overstated it 14 times. The correction for a particle's repeated crossings is larger than
+    /// the other quantities' (κ 5.25 and 4.75), set by a room with receivers of 1.2 m.
     pub const ENERGETIC: [Entry; 8] = [
         e(1.1, 0.0, 5_000, ENERGETIC_MAX_N, 1.1, true),
         e(0.86, 0.0, 50_000, ENERGETIC_MAX_N, 1.2, true),
-        e(1.0, 0.0, 15_000, ENERGETIC_OTHER_MAX_N, 1.2, true),
-        e(1.0, 0.0, 150_000, ENERGETIC_OTHER_MAX_N, 1.3, true),
+        rough(1.2, 5.25, 15_000, ENERGETIC_ROUGH_MAX_N, 1.5, true),
+        rough(1.3, 4.75, 150_000, ENERGETIC_ROUGH_MAX_N, 1.6, true),
         e(0.96, 0.25, 5_000, ENERGETIC_MAX_N, 1.1, true),
         e(0.86, 0.5, 5_000, ENERGETIC_MAX_N, 1.1, true),
         e(0.96, 0.25, 5_000, ENERGETIC_MAX_N, 1.1, true),
         e(0.84, 0.5, 50_000, ENERGETIC_MAX_N, 1.1, true),
-    ];
-    /// Energetic T20 and T30 in bands whose every face reflects by Lambert's law with
-    /// scattering 1 and not every face has the same absorption ([`super::Walls::Lambert`]): the
-    /// particles' energies spread apart as in specular rooms when the absorption is concentrated
-    /// (0.63 of M7's structure for T30 with the floor at 0.9 and the rest at 0.02). Measured with
-    /// receivers of 0.31 m only, so their domain stops at few crossings per particle. T20's
-    /// fitted 0.52 failed its validation (a 6 × 10 × 3 m room, floor 0.9, the rest 0.02, 1 ms
-    /// steps: 1.12 times the prediction, lower bound 1.04), so by F1 it takes the other bands'
-    /// factor 1 and kappa 0, in its own domain.
-    pub const ENERGETIC_LAMBERT: [Entry; 2] = [
-        e(1.0, 0.0, 150_000, ENERGETIC_LAMBERT_MAX_N, 1.3, true),
-        e(0.73, 2.0, 150_000, ENERGETIC_LAMBERT_MAX_N, 1.3, true),
     ];
     /// Energetic T20 and T30 in bands whose every face reflects by Lambert's law with
     /// scattering 1 and has the same absorption, at most
@@ -248,7 +261,7 @@ pub mod calibration {
     ];
     /// The largest mean absorption the uniform-Lambert entries were calibrated at (0.4, as SPPS
     /// reads it in `f32`): the particles' energies spread apart faster the more each reflection
-    /// absorbs, so a uniform-Lambert band above it takes the Lambert entries.
+    /// absorbs, so a uniform-Lambert band above it takes the other bands' entries.
     pub const UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION: f64 = 0.4000000059604645;
 
     /// The variable `method`'s correction and domain take.
@@ -275,7 +288,6 @@ pub mod calibration {
         let mut e = match (method, i, walls) {
             (Method::Random, _, _) => RANDOM[i],
             (Method::Energetic, 2 | 3, Walls::UniformLambert) => ENERGETIC_UNIFORM_LAMBERT[i - 2],
-            (Method::Energetic, 2 | 3, Walls::Lambert) => ENERGETIC_LAMBERT[i - 2],
             (Method::Energetic, _, _) => ENERGETIC[i],
         };
         if let Some(crate::faults::Fault::NoiseCalibrationScaled { by }) = crate::faults::active() {
@@ -380,7 +392,9 @@ impl RunNoise {
         if !self.lambert_walls {
             Walls::Other
         } else if self.uniform_absorption
-            && self.mean_absorption <= calibration::UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION
+            && (self.mean_absorption <= calibration::UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION
+                || crate::faults::active()
+                    == Some(crate::faults::Fault::UniformLambertBoundIgnored))
         {
             Walls::UniformLambert
         } else {
@@ -726,12 +740,15 @@ fn resamples_with(
     samples
 }
 
+/// Each resample's eight values, `None` where it refuses the quantity.
+type Samples = Vec<[Option<f64>; 8]>;
+
 /// The model's resamples of one series, drawn once per structure and particle multiple asked for.
 struct Resampler<'a> {
     series: &'a EnergySeries,
     arrival: Arrival,
     model: &'a NoiseModel,
-    drawn: Vec<((Structure, u32), Vec<[Option<f64>; 8]>)>,
+    drawn: Vec<((Structure, u32), Samples)>,
 }
 
 impl<'a> Resampler<'a> {

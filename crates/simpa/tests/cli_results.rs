@@ -398,6 +398,97 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
     }
 }
 
+/// `Var L / (E L)²` of the particles' lifetimes from the share alive at the end of each step,
+/// written here (not `params::noise::lifetime_cv2`): `E L = ∫S`, `E L² = ∫2t·S`, by trapezoids
+/// from `(0, 1)`.
+fn own_lifetime_cv2(alive: &[f64], dt: f64) -> f64 {
+    let (mut t_prev, mut s_prev) = (0.0, 1.0);
+    let (mut m1, mut m2) = (0.0, 0.0);
+    for (k, &s) in alive.iter().enumerate() {
+        let t = dt * (k + 1) as f64;
+        m1 += 0.5 * dt * (s_prev + s);
+        m2 += 0.5 * dt * (2.0 * t_prev * s_prev + 2.0 * t * s);
+        (t_prev, s_prev) = (t, s);
+    }
+    (m2 / (m1 * m1) - 1.0).max(0.0)
+}
+
+/// Every band of an SPPS report whose noise inputs are not the run's own: its lifetime spread
+/// against the one read here from the report's room table over the sources' power, and its
+/// crossings per particle against its series' total over the least deposit and the particles,
+/// times that spread (the calibration's variable, `n1·cv2`, in both methods). With every band's
+/// lifetime spread.
+fn noise_input_mismatches(rep: &Value) -> (Vec<String>, Vec<f64>) {
+    let s = &rep["spps"];
+    let dt = s["time_step_s"].as_f64().unwrap();
+    let particles = s["particles_per_source"].as_f64().unwrap();
+    let floats = |v: &Value| -> Vec<f64> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_f64().unwrap())
+            .collect()
+    };
+    let (mut out, mut spreads) = (Vec::new(), Vec::new());
+    for r in s["point_receivers"].as_array().unwrap() {
+        for (bi, b) in r["bands"].as_array().unwrap().iter().enumerate() {
+            let tag = format!("{} {} Hz", r["label"], b["freq_hz"]);
+            let run = &b["noise_model"]["run"];
+            let power = s["point_receivers"][0]["bands"][bi]["source_power_rho_c"]
+                .as_f64()
+                .unwrap();
+            let alive: Vec<f64> = floats(&s["total_energy"][bi]["energy"])
+                .iter()
+                .map(|e| e / power)
+                .collect();
+            let own = own_lifetime_cv2(&alive, dt);
+            spreads.push(own);
+            let cv2 = run["lifetime_cv2"].as_f64().unwrap();
+            if (cv2 - own).abs() > 1e-9 * own.max(1.0) {
+                out.push(format!("{tag}: lifetime_cv2 {cv2} against {own}"));
+            }
+            let least = run["least_deposit"].as_f64().unwrap();
+            let bands = run["bands"].as_f64().unwrap();
+            let n1 = floats(&b["energy_pa2"]).iter().sum::<f64>() / (least * particles * bands);
+            let n = b["crossings_per_particle"].as_f64().unwrap();
+            if (n - n1 * own).abs() > 1e-9 * (n1 * own).max(1e-9) {
+                out.push(format!(
+                    "{tag}: crossings_per_particle {n} against {}",
+                    n1 * own
+                ));
+            }
+        }
+    }
+    (out, spreads)
+}
+
+#[test]
+fn the_noise_inputs_of_every_band_are_the_runs_own() {
+    // The review of 50695f6 (major): the lifetime spread and the crossings per particle choose
+    // the correction for repeated crossings and the domain's refusal, and nothing held the ones a
+    // report uses to the run. Every band of every committed SPPS run, each read here from the
+    // report's own room table and series; the spread of a box's decay is about 1, that of one
+    // exponential.
+    for name in [SEATS_SPPS, ENERGETIC_SPPS, SOURCES2_SPPS, OUTPUTS_SPPS] {
+        let rep = report_in_process(&fixture(name), None);
+        let (bad, spreads) = noise_input_mismatches(&rep);
+        assert_eq!(bad, Vec::<String>::new(), "{name}");
+        assert!(!spreads.is_empty(), "{name}");
+        for v in &spreads {
+            assert!((0.8..=1.6).contains(v), "{name}: lifetime spread {v}");
+        }
+    }
+    // Says no through the code: the room table read over half the sources' power (the review's
+    // mutation of `SppsResults::lifetime_cv2`) moves every band's spread and crossings.
+    let rep = report_in_process(
+        &fixture(ENERGETIC_SPPS),
+        Some(Fault::AliveShareScaled { by: 2.0 }),
+    );
+    let (bad, _) = noise_input_mismatches(&rep);
+    let bands = rep["spps"]["point_receivers"].as_array().unwrap().len() * 2;
+    assert_eq!(bad.len(), 2 * bands, "{bad:?}");
+}
+
 #[test]
 fn a_tcr_receiver_has_all_eight_parameters_each_refused_for_having_no_series() {
     // Spec item 4: per receiver and band, each value or its NOT_EVALUABLE reason. TCR writes

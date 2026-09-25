@@ -27,6 +27,11 @@
 //!   checks against the transport (`docs/params.md`, "Kuttruff's reference").
 //! - [`Fault::NoiseCalibrationScaled`]: `params::noise`'s calibration factors scaled, the say-NO
 //!   of the calibration's validation (`docs/params.md`, "Monte-Carlo noise").
+//! - [`Fault::AliveShareScaled`], [`Fault::UniformAbsorptionForced`] and
+//!   [`Fault::UniformLambertBoundIgnored`]: the inputs that pick and size a band's noise
+//!   calibration (the review of `50695f6`): the particles' lifetime spread read from a room table
+//!   scaled, every band read as having one absorption, and the uniform-Lambert entries taken above
+//!   their largest calibrated absorption.
 
 /// One fault, set by [`with`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -51,6 +56,14 @@ pub enum Fault {
     /// Every calibration factor of `params::noise` multiplied by `by`: 0.5 is a model twice as
     /// optimistic as the calibration found, the say-NO of its validation.
     NoiseCalibrationScaled { by: f64 },
+    /// `results::spps`'s share of the emitted energy alive at each step, from which the particles'
+    /// lifetime spread is read, multiplied by `by` (2 is the room table read over half the
+    /// sources' power).
+    AliveShareScaled { by: f64 },
+    /// `results::reference` reads every band as having one absorption on every face.
+    UniformAbsorptionForced,
+    /// `params::noise::RunNoise::walls` takes the uniform-Lambert entries at any mean absorption.
+    UniformLambertBoundIgnored,
 }
 
 #[cfg(feature = "fault-injection")]

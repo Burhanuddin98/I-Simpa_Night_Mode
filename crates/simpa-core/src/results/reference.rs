@@ -114,7 +114,8 @@ fn inner(solve: &Path, exp: &Expectation, c: f64) -> Result<Reference, String> {
         let sa: f64 = surfaces.iter().map(|x| x.area_m2 * x.absorption).sum();
         let uniform_absorption = surfaces
             .first()
-            .is_some_and(|f| surfaces.iter().all(|x| x.absorption == f.absorption));
+            .is_some_and(|f| surfaces.iter().all(|x| x.absorption == f.absorption))
+            || crate::faults::active() == Some(crate::faults::Fault::UniformAbsorptionForced);
         bands.push(ReferenceBand {
             freq_hz: band.freq_hz,
             air_m_per_metre: air,

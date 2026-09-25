@@ -220,11 +220,17 @@ value is reported whose standard deviation exceeds the run's `monte_carlo` limit
 `monte_carlo_noise` carries `particle_count`, the particles per source that would bring the value
 within its limit, or why none is named: `{"count": "named", "factor", "margin", "particles"}`
 (`factor` times the run's particles, `(margin·sd/limit)²`, and that many per source rounded up to
-two significant digits); `{"count": "within_limit"}` (the standard deviation is within the limit
-and the value is refused because too many of its resamples refuse it, which more particles need
-not cure); `{"count": "scaling_not_confirmed"}` (the spread's fall as `1/√N` was not confirmed for
-the quantity in this computation method); `{"count": "no_standard_deviation"}`. The text output
-shows a named count as `NE(noise:<count>)`, and `NE(noise)` when none is named. A run outside the
+two significant digits), when the standard deviation is above the limit and at most 10 of the 200
+resamples refuse the value; `{"count": "resampled", "multiple", "margin", "particles"}` when more
+of its resamples refuse it (round 4, R4-3: `multiple` the first of 2, 4, 8, 16, 32 and 64 times the
+run's particles at which the model's own resamples of the series, every deposit over the
+multiple, refuse it at most 5 times and its calibrated standard deviation times `margin` is within
+the limit, and `particles` that many per source); `{"count": "beyond_resampled", "multiple": 64}`
+(its resamples still refuse it, or its noise is still above the limit, at 64 times the particles:
+no count, and more particles may not help); `{"count": "scaling_not_confirmed"}` (the spread's
+fall as `1/√N` was not confirmed for the quantity in this computation method);
+`{"count": "no_standard_deviation"}`. The text output shows a named count, of either kind, as
+`NE(noise:<count>)`, and `NE(noise)` when none is named. A run outside the
 domain its quantity's calibration was measured on is refused `noise_uncalibrated`, with `value`,
 `particles`, `crossings_per_particle`, `min_particles`, `max_crossings_per_particle`, and either
 `particles_at_least` (too few particles: run that many per source) or

@@ -376,6 +376,9 @@ pub enum Split {
     UniformLambert,
     Lambert,
     Other,
+    /// Round 4: every band not uniform Lambert (Lambert with unequal absorption, or not Lambert),
+    /// energetic T20 and T30 under the roughness structure.
+    NotUniformLambert,
 }
 
 pub fn split_name(s: Split) -> &'static str {
@@ -384,6 +387,7 @@ pub fn split_name(s: Split) -> &'static str {
         Split::UniformLambert => "uniform_lambert",
         Split::Lambert => "lambert",
         Split::Other => "other",
+        Split::NotUniformLambert => "not_uniform_lambert",
     }
 }
 
@@ -404,6 +408,7 @@ pub fn in_split(split: Split, lambert: bool, uniform: bool) -> bool {
         Split::UniformLambert => lambert && uniform,
         Split::Lambert => lambert && !uniform,
         Split::Other => !lambert,
+        Split::NotUniformLambert => !(lambert && uniform),
     }
 }
 
@@ -470,6 +475,19 @@ pub fn band_of<'a>(cell: &'a Value, row: &Value) -> &'a Value {
 
 /// A cell's rows of `quantity` in `split`, with `var`, whose largest `n` is at most `n_max`.
 pub fn rows3(cell: &Value, quantity: &str, var: Var, split: Split, n_max: f64) -> Vec<Row3> {
+    rows_with(cell, quantity, var, split, n_max, CONSTANT_SD)
+}
+
+/// [`rows3`] with each seed's model standard deviation read from `sd_key` (round 4: the
+/// roughness structure's, [`ROUGH_SD`]); a row where any seed has none under it is left out.
+pub fn rows_with(
+    cell: &Value,
+    quantity: &str,
+    var: Var,
+    split: Split,
+    n_max: f64,
+    sd_key: &str,
+) -> Vec<Row3> {
     cell["quantities"][quantity]
         .as_array()
         .map(|a| {
@@ -481,6 +499,11 @@ pub fn rows3(cell: &Value, quantity: &str, var: Var, split: Split, n_max: f64) -
                     if !in_split(split, lambert, uniform) {
                         return None;
                     }
+                    let seed_sd: Vec<f64> = r[sd_key]
+                        .as_array()?
+                        .iter()
+                        .map(Value::as_f64)
+                        .collect::<Option<Vec<f64>>>()?;
                     let n1 = floats(&b["seed_n1"]);
                     let cv2 = floats(&b["seed_cv2"]);
                     let seed_n = match var {
@@ -491,7 +514,7 @@ pub fn rows3(cell: &Value, quantity: &str, var: Var, split: Split, n_max: f64) -
                         receiver: r["receiver"].as_u64().unwrap(),
                         freq_hz: r["freq_hz"].as_i64().unwrap(),
                         observed: r["observed_sd"].as_f64().unwrap(),
-                        seed_sd: floats(&r["seed_model_sd"]),
+                        seed_sd,
                         seed_n,
                         seed_values: floats(&r["seed_values"]),
                         lambert,
@@ -904,6 +927,327 @@ pub fn root_n3_confirmed(
     };
     let (mut read, mut unsafe_) = (Vec::new(), Vec::new());
     for (a, b) in PAIRS3 {
+        if !ids.contains(&a) || !ids.contains(&b) {
+            continue;
+        }
+        let (Some(ca), Some(cb)) = (find(a), find(b)) else {
+            continue;
+        };
+        if ca["cell"]["method"] != method {
+            continue;
+        }
+        if let Some((_, _, z)) = root_n3(ca, cb, quantity) {
+            let line = format!("{a}/{b} {z:+.2}");
+            if z > 2.0 {
+                unsafe_.push(line.clone());
+            }
+            read.push(line);
+        }
+    }
+    (unsafe_.is_empty(), read, unsafe_)
+}
+
+// --- Round 4 (`PREREGISTER.txt`, "ROUND 4") -----------------------------------------------------
+//
+// Energetic T20 and T30 in bands not uniform Lambert take the roughness structure (each bin's
+// deposit from the series' own roughness), with its own `k` and `κ`; every other method, quantity
+// and split keeps round 3's. Calibrated on every cell of rounds 1 to 3, validated on the V4 cells.
+
+/// The receipt's key for each seed's model standard deviation under M7's constant structure.
+pub const CONSTANT_SD: &str = "seed_model_sd";
+/// ... and under round 4's roughness structure (energetic mode; `null` where it gave none).
+pub const ROUGH_SD: &str = "seed_model_sd_roughness";
+/// One seed's model standard deviation's scatter over the seeds, constant structure (rule 5b).
+pub const CONSTANT_SCATTER: &str = "predicted_scatter";
+/// ... and roughness structure (R4-2).
+pub const ROUGH_SCATTER: &str = "predicted_scatter_roughness";
+
+/// R4-1's grid for `κ`: 0 to 6 in steps of 0.25.
+pub fn kappas4() -> Vec<f64> {
+    (0..=24).map(|i| f64::from(i) * 0.25).collect()
+}
+
+/// Round 4's calibration cells of a method: every cell of rounds 1 to 3.
+pub fn calibration4_cells<'a>(receipt: &'a Value, method: &str) -> Vec<&'a Value> {
+    cells_in(
+        receipt,
+        method,
+        &[
+            "calibration",
+            "validation",
+            "validation2",
+            "calibration3",
+            "validation3",
+        ],
+    )
+}
+
+/// Round 4's validation cells of a method.
+pub fn validation4_cells<'a>(receipt: &'a Value, method: &str) -> Vec<&'a Value> {
+    cells_in(receipt, method, &["validation4"])
+}
+
+/// The splits a method's quantity is judged by in round 4, each with the receipt's key of its
+/// structure's standard deviations: energetic T20 and T30 in uniform Lambert bands (constant, round
+/// 3's numbers) and in every other band (roughness); every other quantity one split (constant).
+pub fn splits4(method: &str, quantity: &str) -> Vec<(Split, &'static str)> {
+    if round_two(method, quantity) {
+        vec![
+            (Split::UniformLambert, CONSTANT_SD),
+            (Split::NotUniformLambert, ROUGH_SD),
+        ]
+    } else {
+        vec![(Split::All, CONSTANT_SD)]
+    }
+}
+
+/// The scatter key that goes with a standard deviation key.
+pub fn scatter_key(sd_key: &str) -> &'static str {
+    if sd_key == ROUGH_SD {
+        ROUGH_SCATTER
+    } else {
+        CONSTANT_SCATTER
+    }
+}
+
+/// A1 with `sd_key`: the fewest particles of a calibration cell with at least [`DOMAIN_ROWS`] rows
+/// of the quantity in the split.
+pub fn min_particles_with(
+    cells: &[&Value],
+    quantity: &str,
+    split: Split,
+    sd_key: &str,
+) -> Option<f64> {
+    cells
+        .iter()
+        .filter(|c| {
+            rows_with(c, quantity, Var::N1, split, f64::INFINITY, sd_key).len() >= DOMAIN_ROWS
+        })
+        .map(|c| c["cell"]["particles_per_source"].as_f64().unwrap())
+        .reduce(f64::min)
+}
+
+/// A1 with `sd_key`: the calibration cells with at least the domain's fewest particles.
+pub fn domain_cells_with<'a>(
+    cells: &[&'a Value],
+    quantity: &str,
+    split: Split,
+    sd_key: &str,
+) -> Vec<&'a Value> {
+    let Some(least) = min_particles_with(cells, quantity, split, sd_key) else {
+        return Vec::new();
+    };
+    cells
+        .iter()
+        .copied()
+        .filter(|c| c["cell"]["particles_per_source"].as_f64().unwrap() >= least)
+        .collect()
+}
+
+/// R4-1: R3-1 with A1 on the rows of `sd_key`, `κ` from `kappas`: the `κ` whose fit overstates
+/// least (the smaller on a tie).
+pub fn fit_with(
+    cells: &[&Value],
+    quantity: &str,
+    var: Var,
+    split: Split,
+    kappas: &[f64],
+    sd_key: &str,
+) -> Option<Fit> {
+    let cells = domain_cells_with(cells, quantity, split, sd_key);
+    let mut best: Option<Fit> = None;
+    for &kappa in kappas {
+        let mut top: Option<(f64, String)> = None;
+        let mut ratios = Vec::new();
+        for c in &cells {
+            let rows = rows_with(c, quantity, var, split, f64::INFINITY, sd_key);
+            let Some(p) = pooled3(&rows, 1.0, kappa, seeds(c)) else {
+                continue;
+            };
+            ratios.push(p.ratio);
+            if top.as_ref().is_none_or(|(u, _)| p.upper > *u) {
+                top = Some((p.upper, c["cell"]["id"].as_str().unwrap().to_string()));
+            }
+        }
+        let Some((upper, by)) = top else {
+            continue;
+        };
+        let k = round_up_two_digits(upper);
+        let logs: Vec<f64> = ratios.iter().map(|r| (k / r).ln()).collect();
+        let f = Fit {
+            k,
+            kappa,
+            by,
+            overstates: (logs.iter().sum::<f64>() / logs.len() as f64).exp(),
+            cells: ratios.len(),
+            logs,
+        };
+        if best.as_ref().is_none_or(|b| f.overstates < b.overstates) {
+            best = Some(f);
+        }
+    }
+    best
+}
+
+/// R4-2: the domain on the rows of `sd_key`.
+pub fn domain_with(
+    cells: &[&Value],
+    quantity: &str,
+    var: Var,
+    split: Split,
+    sd_key: &str,
+) -> Option<Domain> {
+    let min_particles = min_particles_with(cells, quantity, split, sd_key)?;
+    let (mut max_n, mut max_a) = (0.0f64, 0.0f64);
+    for c in domain_cells_with(cells, quantity, split, sd_key) {
+        for r in rows_with(c, quantity, var, split, f64::INFINITY, sd_key) {
+            max_n = max_n.max(r.n_max());
+            max_a = max_a.max(r.mean_absorption);
+        }
+    }
+    Some(Domain {
+        min_particles,
+        max_n,
+        max_mean_absorption: max_a,
+    })
+}
+
+/// R4-2: rule 5b on the scatter of `sd_key`'s structure, over the rows of the split that give it.
+pub fn margin_with(
+    cells: &[&Value],
+    quantity: &str,
+    split: Split,
+    sd_key: &str,
+) -> Option<(f64, String)> {
+    let key = scatter_key(sd_key);
+    let mut best: Option<(f64, String)> = None;
+    for c in cells {
+        let mut sc: Vec<f64> = c["quantities"][quantity]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter(|r| {
+                        let b = band_of(c, r);
+                        in_split(
+                            split,
+                            b["lambert"].as_bool().unwrap(),
+                            b["uniform"].as_bool().unwrap(),
+                        )
+                    })
+                    .filter_map(|r| r[key].as_f64())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if sc.is_empty() {
+            continue;
+        }
+        sc.sort_by(f64::total_cmp);
+        let median = sc[sc.len() / 2];
+        if best.as_ref().is_none_or(|(b, _)| median > *b) {
+            best = Some((median, c["cell"]["id"].as_str().unwrap().to_string()));
+        }
+    }
+    best.map(|(s, id)| (round_up_two_digits(1.0 + 1.28 * s).max(1.1), id))
+}
+
+/// The rows of `cell`'s `quantity` a round-4 split judges, under `sd_key`: the split's own, with a
+/// uniform Lambert band above `uniform_max_a` judged with the other bands (R4-4).
+pub fn rows_in_use4(
+    cell: &Value,
+    quantity: &str,
+    var: Var,
+    split: Split,
+    uniform_max_a: f64,
+    n_max: f64,
+    sd_key: &str,
+) -> Vec<Row3> {
+    let mut rows = rows_with(cell, quantity, var, split, n_max, sd_key);
+    match split {
+        Split::UniformLambert => rows.retain(|r| r.mean_absorption <= uniform_max_a),
+        Split::NotUniformLambert => rows.extend(
+            rows_with(cell, quantity, var, Split::UniformLambert, n_max, sd_key)
+                .into_iter()
+                .filter(|r| r.mean_absorption > uniform_max_a),
+        ),
+        _ => {}
+    }
+    rows
+}
+
+/// R4-4 on one cell: as [`validates3`], on round 4's splits and structures.
+pub fn validates4(
+    cell: &Value,
+    quantity: &str,
+    var: Var,
+    split: Split,
+    x: Numbers,
+    uniform_max_a: f64,
+    sd_key: &str,
+) -> (Option<(bool, Pooled)>, usize, usize) {
+    let all = rows_in_use4(
+        cell,
+        quantity,
+        var,
+        split,
+        uniform_max_a,
+        f64::INFINITY,
+        sd_key,
+    )
+    .len();
+    let particles = cell["cell"]["particles_per_source"].as_f64().unwrap();
+    if particles < x.min_particles {
+        return (None, 0, all);
+    }
+    let inside = rows_in_use4(cell, quantity, var, split, uniform_max_a, x.max_n, sd_key);
+    let p = pooled3(&inside, x.k, x.kappa, seeds(cell)).map(|p| (p.lower <= 1.0, p));
+    (p, inside.len(), all)
+}
+
+/// Round 4's pairs: round 3's and those it added (R3-6, R4-5), the lower count first.
+pub const PAIRS4: [(&str, &str); 23] = [
+    ("C-R1", "C-R2"),
+    ("C-R3", "C-R4"),
+    ("C-R5", "V-R4"),
+    ("C-E1", "C-E2"),
+    ("C-E3", "C-E4"),
+    ("C-E5", "V-E4"),
+    ("C3-R5", "V3-R8"),
+    ("C3-R6", "C-R5"),
+    ("C3-R9", "V3-R9"),
+    ("C3-E5", "V3-E5"),
+    ("C3-E6", "C-E5"),
+    ("C3-E10", "V3-E9"),
+    ("V4-E13", "V4-E14"),
+    ("W-E3", "V4-E15"),
+    ("V-E2", "V4-E16"),
+    ("V3-E5", "V4-E17"),
+    ("V3-E6", "V4-E18"),
+    ("C-R1", "V4-R1"),
+    ("C-R5", "V4-R2"),
+    ("V3-R8", "V4-R3"),
+    ("C3-R9", "V4-R4"),
+    ("C-R7", "V4-R5"),
+    ("V3-R5", "V4-R6"),
+];
+
+/// R3-6 over `pairs`: a method and quantity are confirmed unless a pair of it whose cells are both
+/// among `ids` gives `z` above 2; with the pairs read and those that fail.
+pub fn root_n_confirmed_over(
+    receipt: &Value,
+    method: &str,
+    quantity: &str,
+    ids: &[&str],
+    pairs: &[(&str, &str)],
+) -> (bool, Vec<String>, Vec<String>) {
+    let find = |id: &str| {
+        receipt["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["cell"]["id"] == id)
+    };
+    let (mut read, mut unsafe_) = (Vec::new(), Vec::new());
+    for &(a, b) in pairs {
         if !ids.contains(&a) || !ids.contains(&b) {
             continue;
         }

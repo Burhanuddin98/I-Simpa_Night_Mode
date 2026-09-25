@@ -426,12 +426,16 @@ impl SppsResults {
         if !(power.is_finite() && power > 0.0) {
             return None;
         }
+        let scale = match crate::faults::active() {
+            Some(crate::faults::Fault::AliveShareScaled { by }) => by,
+            _ => 1.0,
+        };
         let alive: Vec<f64> = self
             .total_energy
             .get(index)?
             .energy
             .iter()
-            .map(|e| e / power)
+            .map(|e| e / power * scale)
             .collect();
         crate::params::noise::lifetime_cv2(&alive, self.time_step_s)
     }
