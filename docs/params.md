@@ -847,8 +847,11 @@ time stepping, no random generator of its, no output of any run.
   independent replicas (successive paths of one ray are correlated, so the replicas', not the
   paths' count, give the error). **It takes the geometry and its own settings and nothing else.**
   `FreePaths` has private fields, no other constructor and no `Deserialize`, and `kuttruff_rt`
-  takes only a `FreePaths`: a `γ²` fitted to a solver cannot reach it, by construction (a doctest
-  that builds one by hand must fail to compile with `E0451`, private fields).
+  takes only a `FreePaths`: a `γ²` fitted to a solver cannot reach it, by construction. A doctest
+  that builds one by hand must fail to compile; stable rustdoc does not check its error code (a
+  doctest failing with another error passed as `E0451`, tried), so the example is the bare
+  literal, and a unit test compiles the same literal inside the module: the example can fail
+  only for the fields' privacy.
 - **It checks itself**: it refuses (`params_transport_refused`) a mean free path further than 6
   standard errors from `4V/S`, which a closed room with Lambert walls must give whatever its shape;
   and a ray that leaves the room. Either means a surface that is not closed, tetrahedra that are

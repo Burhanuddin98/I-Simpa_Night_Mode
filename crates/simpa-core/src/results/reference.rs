@@ -223,16 +223,29 @@ mod tests {
         assert!(!lambert_walls(&faces(&[1, 3]), &laws, 1));
         assert!(!lambert_walls(&faces(&[1, 4]), &laws, 0));
         assert!(!lambert_walls(&faces(&[1]), &laws, 2));
-        // A band whose law or scattering does not read refuses the reference.
-        let broken = CONFIG.replace(
-            r#"diffusion="0.5" loi="2"/>
-    </type_surface>"#,
-            r#"diffusion="x" loi="2"/>
-    </type_surface>"#,
-        );
-        assert!(reflection_laws(&Document::parse(&broken).unwrap()).is_err());
-        let no_law = CONFIG.replacen(r#" loi="2""#, "", 1);
-        assert!(reflection_laws(&Document::parse(&no_law).unwrap()).is_err());
+        // A scattering is read as SPPS reads it (`atof`): "x" is 0, specular, so not Lambert. One
+        // that reads as NaN, or a band with no law, refuses the reference.
+        let laws_of = |attrs: &str| {
+            reflection_laws(
+                &Document::parse(&format!(
+                    r#"<configuration><surface_absorption_enum><type_surface id="1"><bfreq freq="500" absorb="0.2" {attrs}/></type_surface></surface_absorption_enum></configuration>"#
+                ))
+                .unwrap(),
+            )
+        };
+        let one = [(1.0, 1)];
+        assert!(lambert_walls(
+            &one,
+            &laws_of(r#"diffusion="1" loi="2""#).unwrap(),
+            0
+        ));
+        assert!(!lambert_walls(
+            &one,
+            &laws_of(r#"diffusion="x" loi="2""#).unwrap(),
+            0
+        ));
+        assert!(laws_of(r#"diffusion="nan" loi="2""#).is_err());
+        assert!(laws_of(r#"diffusion="1""#).is_err());
     }
 
     /// The committed SPPS fixture of tutorial 1's 6×10×3 m box (`tests/fixtures/results/`).

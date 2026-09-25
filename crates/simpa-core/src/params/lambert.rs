@@ -41,7 +41,8 @@
 //! within its statistical error. **Where rays start matters**: a field begun at one point is not
 //! yet diffuse, and a ray's first reflections remember it. The M7 follow-ups' `lambert_box.rs`
 //! started every ray at the source and counted from the first reflection; measured with this
-//! transport, that reads `γ²` about 0.005 low and the mean free path 0.2 % long at 64 paths a ray,
+//! transport, that reads `γ²` 0.0035 to 0.005 low and the mean free path 0.16 to 0.27 % long at
+//! 64 paths a ray,
 //! and rays started in the narrow wing of an L-shaped room give a mean free path 0.3 % short after
 //! 16 reflections. So [`free_paths`] starts each ray at a point drawn evenly from the room's
 //! volume, and leaves out its first paths as well ([`FreePathSettings::burn_in_paths`]).
@@ -631,14 +632,12 @@ impl FreePathSettings {
 /// assert!(t > 0.0);
 /// ```
 ///
-/// The same with a `γ²` set by hand does not compile, for the reason that matters: the fields
-/// are private (`E0451`), not a mistake elsewhere in the example:
+/// A `γ²` set by hand does not compile outside this module:
 ///
-/// ```compile_fail,E0451
+/// ```compile_fail
 /// use simpa_core::params::lambert::{FreePathSettings, FreePaths};
-/// use simpa_core::params::room::{kuttruff_rt, RtConstant, Surface};
 ///
-/// let paths = FreePaths {
+/// let fitted = FreePaths {
 ///     mean_free_path_m: 2.553,
 ///     mean_free_path_se_m: 0.0,
 ///     gamma2: 0.4,
@@ -649,9 +648,12 @@ impl FreePathSettings {
 ///     paths: 1,
 ///     settings: FreePathSettings::STANDARD,
 /// };
-/// let walls = [Surface { area_m2: 94.0, absorption: 0.2 }];
-/// let t = kuttruff_rt(&paths, &walls, None, RtConstant::Physical { speed_of_sound: 343.2 }).unwrap();
 /// ```
+///
+/// Stable rustdoc does not check a `compile_fail` example's error code, so the example holds
+/// nothing but the literal, and the module's own test `the_hand_made_literal_is_well_formed`
+/// compiles the same literal inside the module: the example fails for the fields' privacy alone.
+/// Made public, the fields would let it compile, and the doctest would fail.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[schemars(
     description = "The free paths between reflections of a diffuse (Lambert) ray transport in the \
@@ -1061,6 +1063,25 @@ pub fn decay(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The literal of [`FreePaths`]' `compile_fail` example, character for character: it compiles
+    /// here, inside the module, so the example fails outside it only because the fields are
+    /// private.
+    #[test]
+    fn the_hand_made_literal_is_well_formed() {
+        let fitted = FreePaths {
+            mean_free_path_m: 2.553,
+            mean_free_path_se_m: 0.0,
+            gamma2: 0.4,
+            gamma2_se: 0.0,
+            four_v_over_s_m: 2.553,
+            volume_m3: 60.0,
+            area_m2: 94.0,
+            paths: 1,
+            settings: FreePathSettings::STANDARD,
+        };
+        assert_eq!(fitted.gamma2(), 0.4);
+    }
 
     /// Start points fill the room evenly: in the box's six tetrahedra, the share of points in the
     /// lowest third of each axis is a third, and the mean is the centre. The second input is the

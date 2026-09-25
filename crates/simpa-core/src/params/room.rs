@@ -25,8 +25,8 @@
 //!   `e^(−m·c·t)` whatever its reflections, so its decay rate adds to the walls' exactly. The form
 //!   Arup's Strutt help quotes from Bies and Hansen, *Engineering Noise Control*, 4th ed.,
 //!   eq. 7.64 (the help page read, the book not), folds `4·m·V/S` into `ᾱ` inside both
-//!   logarithms instead; the transport tells the two apart ([`crate::faults::Fault::
-//!   KuttruffAirInsideMean`], `tests/params_kuttruff.rs`).
+//!   logarithms instead; the transport tells the two apart
+//!   ([`crate::faults::Fault::KuttruffAirInsideMean`], `tests/params_kuttruff.rs`).
 //! - **Where it comes from**: the energy after time `t` is `⟨(1 − ᾱ)^n⟩` over the number `n` of
 //!   reflections, whose mean is `c·t·S/(4V)` and, for independent free paths, whose variance is
 //!   `γ²` times it; the formula keeps the first two cumulants of `n`. It is an approximation,
