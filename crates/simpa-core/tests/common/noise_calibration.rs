@@ -368,10 +368,12 @@ pub fn var_name(v: Var) -> &'static str {
 }
 
 /// Which receiver-bands a factor covers: all, or for energetic T20 and T30 those whose every face
-/// is Lambert with scattering 1 and the others (R3-4).
+/// is Lambert with scattering 1 and has the same absorption (A2), those whose every face is
+/// Lambert with unequal absorption, and the others (R3-4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Split {
     All,
+    UniformLambert,
     Lambert,
     Other,
 }
@@ -379,6 +381,7 @@ pub enum Split {
 pub fn split_name(s: Split) -> &'static str {
     match s {
         Split::All => "all",
+        Split::UniformLambert => "uniform_lambert",
         Split::Lambert => "lambert",
         Split::Other => "other",
     }
@@ -387,9 +390,20 @@ pub fn split_name(s: Split) -> &'static str {
 /// The splits of a method's quantity.
 pub fn splits(method: &str, quantity: &str) -> &'static [Split] {
     if round_two(method, quantity) {
-        &[Split::Lambert, Split::Other]
+        &[Split::UniformLambert, Split::Lambert, Split::Other]
     } else {
         &[Split::All]
+    }
+}
+
+/// Whether a row of Lambert and uniform flags belongs to a split (for calibration: a uniform
+/// Lambert row is the uniform split's whatever its absorption).
+pub fn in_split(split: Split, lambert: bool, uniform: bool) -> bool {
+    match split {
+        Split::All => true,
+        Split::UniformLambert => lambert && uniform,
+        Split::Lambert => lambert && !uniform,
+        Split::Other => !lambert,
     }
 }
 
@@ -411,6 +425,10 @@ pub struct Row3 {
     pub seed_n: Vec<f64>,
     pub seed_values: Vec<f64>,
     pub lambert: bool,
+    /// Every face has the same absorption in the band (A2).
+    pub uniform: bool,
+    /// The band's mean absorption over the faces, `ᾱ` (the report's reference).
+    pub mean_absorption: f64,
 }
 
 impl Row3 {
@@ -446,11 +464,9 @@ pub fn rows3(cell: &Value, quantity: &str, var: Var, split: Split, n_max: f64) -
             a.iter()
                 .filter_map(|r| {
                     let lambert = r["lambert"].as_bool().unwrap();
-                    match split {
-                        Split::All => {}
-                        Split::Lambert if lambert => {}
-                        Split::Other if !lambert => {}
-                        _ => return None,
+                    let uniform = r["uniform"].as_bool().unwrap();
+                    if !in_split(split, lambert, uniform) {
+                        return None;
                     }
                     let n1 = floats(&r["seed_n1"]);
                     let cv2 = floats(&r["seed_cv2"]);
@@ -466,6 +482,8 @@ pub fn rows3(cell: &Value, quantity: &str, var: Var, split: Split, n_max: f64) -
                         seed_n,
                         seed_values: floats(&r["seed_values"]),
                         lambert,
+                        uniform,
+                        mean_absorption: r["mean_absorption"].as_f64().unwrap(),
                     };
                     (row.n_max() <= n_max).then_some(row)
                 })
@@ -621,14 +639,16 @@ pub fn fit_at(
     })
 }
 
-/// R3-1: the `κ` of [`KAPPAS`] whose fit overstates least (the geometric mean), the smaller on a
-/// tie; for a fixed factor, the smallest `κ` that keeps it (`None` when none does).
+/// R3-1 with A1: over the calibration cells inside the domain's particle bound
+/// ([`domain_cells`]), the `κ` of [`KAPPAS`] whose fit overstates least (the geometric mean), the
+/// smaller on a tie; for a fixed factor, the smallest `κ` that keeps it (`None` when none does).
 pub fn fit(cells: &[&Value], quantity: &str, var: Var, split: Split) -> Option<Fit> {
     let method = cells.first()?["cell"]["method"].as_str().unwrap();
     let fixed = fixed_factor(method, quantity, split);
+    let cells = domain_cells(cells, quantity, split);
     let mut best: Option<Fit> = None;
     for kappa in KAPPAS {
-        let Some(f) = fit_at(cells, quantity, var, split, kappa, fixed) else {
+        let Some(f) = fit_at(&cells, quantity, var, split, kappa, fixed) else {
             continue;
         };
         if fixed.is_some() {
@@ -665,23 +685,56 @@ pub fn choose_var(receipt: &Value, method: &str) -> (Var, Vec<(Var, f64)>) {
     (best, out)
 }
 
-/// R3-5: the domain of a quantity's (and split's) calibration: the fewest particles of a
-/// calibration cell with a row of it, and the largest `n` of any seed of those rows.
-pub fn domain(cells: &[&Value], quantity: &str, var: Var, split: Split) -> Option<(f64, f64)> {
-    let mut least: Option<f64> = None;
-    let mut most = 0.0f64;
-    for c in cells {
-        let rows = rows3(c, quantity, var, split, f64::INFINITY);
-        if rows.is_empty() {
-            continue;
-        }
-        let n = c["cell"]["particles_per_source"].as_f64().unwrap();
-        least = Some(least.map_or(n, |l| l.min(n)));
-        for r in &rows {
-            most = most.max(r.n_max());
+/// A1: the fewest particles of a calibration cell with at least [`DOMAIN_ROWS`] rows of the
+/// quantity in the split. `None` when no cell has that many.
+pub fn min_particles(cells: &[&Value], quantity: &str, split: Split) -> Option<f64> {
+    cells
+        .iter()
+        .filter(|c| rows3(c, quantity, Var::N1, split, f64::INFINITY).len() >= DOMAIN_ROWS)
+        .map(|c| c["cell"]["particles_per_source"].as_f64().unwrap())
+        .reduce(f64::min)
+}
+
+/// A1: rows a cell needs to set the domain's particle bound: one band's six receivers.
+pub const DOMAIN_ROWS: usize = 6;
+
+/// A1: the calibration cells with at least the domain's fewest particles.
+pub fn domain_cells<'a>(cells: &[&'a Value], quantity: &str, split: Split) -> Vec<&'a Value> {
+    let Some(least) = min_particles(cells, quantity, split) else {
+        return Vec::new();
+    };
+    cells
+        .iter()
+        .copied()
+        .filter(|c| c["cell"]["particles_per_source"].as_f64().unwrap() >= least)
+        .collect()
+}
+
+/// R3-5 with A1 and A2: the domain of a quantity's (and split's) calibration.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Domain {
+    /// The fewest particles of a calibration cell with at least six rows of it.
+    pub min_particles: f64,
+    /// The largest `n` of any seed of the rows of the calibration cells with at least that many.
+    pub max_n: f64,
+    /// The largest mean absorption of those rows (the uniform-Lambert split's bound, A2).
+    pub max_mean_absorption: f64,
+}
+
+pub fn domain(cells: &[&Value], quantity: &str, var: Var, split: Split) -> Option<Domain> {
+    let min_particles = min_particles(cells, quantity, split)?;
+    let (mut max_n, mut max_a) = (0.0f64, 0.0f64);
+    for c in domain_cells(cells, quantity, split) {
+        for r in rows3(c, quantity, var, split, f64::INFINITY) {
+            max_n = max_n.max(r.n_max());
+            max_a = max_a.max(r.mean_absorption);
         }
     }
-    least.map(|l| (l, most))
+    Some(Domain {
+        min_particles,
+        max_n,
+        max_mean_absorption: max_a,
+    })
 }
 
 /// Rule 5b over round 3's calibration cells, for a quantity and split.
@@ -692,10 +745,12 @@ pub fn margin3(cells: &[&Value], quantity: &str, split: Split) -> Option<(f64, S
             .as_array()
             .map(|a| {
                 a.iter()
-                    .filter(|r| match split {
-                        Split::All => true,
-                        Split::Lambert => r["lambert"] == true,
-                        Split::Other => r["lambert"] == false,
+                    .filter(|r| {
+                        in_split(
+                            split,
+                            r["lambert"].as_bool().unwrap(),
+                            r["uniform"].as_bool().unwrap(),
+                        )
                     })
                     .map(|r| r["predicted_scatter"].as_f64().unwrap())
                     .collect()
@@ -711,6 +766,61 @@ pub fn margin3(cells: &[&Value], quantity: &str, split: Split) -> Option<(f64, S
         }
     }
     best.map(|(s, id)| (round_up_two_digits(1.0 + 1.28 * s).max(1.1), id))
+}
+
+/// One method, quantity and split's round-3 numbers, as the code holds them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Numbers {
+    pub k: f64,
+    pub kappa: f64,
+    pub min_particles: f64,
+    pub max_n: f64,
+}
+
+/// The rows of `cell`'s `quantity` a split judges in use: the split's own, except that a uniform
+/// Lambert band above the uniform split's largest mean absorption (`uniform_max_a`) is judged by
+/// the Lambert split (A2).
+pub fn rows_in_use(
+    cell: &Value,
+    quantity: &str,
+    var: Var,
+    split: Split,
+    uniform_max_a: f64,
+    n_max: f64,
+) -> Vec<Row3> {
+    let mut rows = rows3(cell, quantity, var, split, n_max);
+    match split {
+        Split::UniformLambert => rows.retain(|r| r.mean_absorption <= uniform_max_a),
+        Split::Lambert => rows.extend(
+            rows3(cell, quantity, var, Split::UniformLambert, n_max)
+                .into_iter()
+                .filter(|r| r.mean_absorption > uniform_max_a),
+        ),
+        _ => {}
+    }
+    rows
+}
+
+/// R3-8 on one cell: the pooled ratio of the seeds' spread to `k·√(1 + κ·n)·sd` over its rows of
+/// `quantity` judged by `split` inside the domain, and whether its lower bound is at most 1;
+/// `None` when no row is inside (or the cell has fewer particles than the domain's least). With
+/// the rows inside and the cell's rows the split judges in all.
+pub fn validates3(
+    cell: &Value,
+    quantity: &str,
+    var: Var,
+    split: Split,
+    x: Numbers,
+    uniform_max_a: f64,
+) -> (Option<(bool, Pooled)>, usize, usize) {
+    let all = rows_in_use(cell, quantity, var, split, uniform_max_a, f64::INFINITY).len();
+    let particles = cell["cell"]["particles_per_source"].as_f64().unwrap();
+    if particles < x.min_particles {
+        return (None, 0, all);
+    }
+    let inside = rows_in_use(cell, quantity, var, split, uniform_max_a, x.max_n);
+    let p = pooled3(&inside, x.k, x.kappa, seeds(cell)).map(|p| (p.lower <= 1.0, p));
+    (p, inside.len(), all)
 }
 
 /// The pairs of cells that differ only in their particle count, round 3's added to rounds 1 and

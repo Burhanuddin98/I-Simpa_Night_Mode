@@ -255,3 +255,29 @@ F3. Any other failure: the quantity ships with k raised to cover the failing cel
     marked not validated in the JSON and the README, for Burhan's decision.
 F4. If no kappa keeps k = 1 for energetic T20 and T30 outside Lambert bands: their domain is
     rounds 1 and 2's (n at most the largest there), with kappa 0.
+
+ROUND 3 ADDENDUM, 2026-09-25 08:30, after round 3's calibration cells were read
+(SIMPA_NOISE_ROLES=calibration,validation,validation2,calibration3) and BEFORE any V3 cell was
+read. Two consequences of the rules as written, both disclosed as deviations in the README:
+(i) random T20's k came out 3.0, set by ONE receiver-band of C3-R6 (15,000 particles, 9 degrees of
+freedom): the only receiver-band where every seed gave a T20 at that count, its spread 1.8 times
+the bootstrap's, significant on its own (p about 0.001). One thin cell at a count where the
+quantity hardly ever comes through sets the factor for every count (round 1's random T30 1.6 came
+the same way, from one receiver-band of C-R5); (ii) energetic T20 and T30 in Lambert bands came out
+0.52 and 0.74, set by C3-E8 (Lambert, floor 0.9, the rest 0.02) and C3-E9 (Lambert dead walls):
+with the absorption concentrated, Lambert walls spread the particles' energies apart as specular
+ones do, while the ten cells whose every face has the same absorption read 0.027 to 0.047 of M7's
+structure (T30), large receivers and 50,000 particles included. Amended, fixed now:
+A1 (replaces R3-5's particle bound and restricts R3-1): a method, quantity and split's domain
+    starts at the fewest particles of a calibration cell with at least 6 rows of it (one band's
+    six receivers); R3-1's fit and R3-5's largest n run over the calibration cells with at least
+    that many particles. A cell with fewer rows below it only says the quantity rarely comes
+    through there; its values are refused there (noise_uncalibrated), not fitted.
+A2 (adds to R3-4): energetic T20 and T30 take a third split, "uniform Lambert": bands whose every
+    face is Lambert with scattering 1 AND has the same absorption, calibrated on those rows alone;
+    its domain adds the largest mean absorption of its calibration rows (the particles' energies
+    spread apart faster the more each reflection absorbs), and a uniform-Lambert band above it
+    takes the Lambert split's entry. "Lambert" becomes Lambert with unequal absorption. F1 applies
+    to each: a uniform-Lambert failure falls back to the Lambert split's entry, a Lambert failure
+    to the other split's.
+Every other rule stands. The V3 cells for the uniform-Lambert split are V3-E1, V3-E5 and V3-E9.

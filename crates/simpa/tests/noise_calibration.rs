@@ -29,9 +29,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::{Value, json};
-use simpa_core::params::EnergySeries;
 use simpa_core::params::decay::{self, Arrival};
 use simpa_core::params::noise::{self, NoiseModel};
+use simpa_core::params::{EnergySeries, NotEvaluable, ParticleCount};
 use simpa_core::schema::{
     self, BandKind, BandSet, ComputationMethod, MaterialId, PointReceiverId, Project,
     ReflectionLaw, Vec3,
@@ -178,6 +178,23 @@ enum Walls {
 }
 
 impl Walls {
+    /// Every face has the same absorption in every band (A2): tutorial 1's materials do not.
+    fn uniform(self) -> bool {
+        match self {
+            Walls::Lambert(_) | Walls::Specular(_) => true,
+            Walls::Mixed {
+                floor,
+                ceiling,
+                walls,
+                ..
+            } => floor == ceiling && ceiling == walls,
+            Walls::Tutorial
+            | Walls::DeadFloor
+            | Walls::DeadCeiling
+            | Walls::DeadFloorScattering(_) => false,
+        }
+    }
+
     fn label(self) -> String {
         match self {
             Walls::Lambert(a) => format!("Lambert a{a}"),
@@ -792,6 +809,8 @@ struct Band {
     /// Every face reflects by Lambert's law with scattering 1 in the band (the report's
     /// `reference`; false when it was not computed).
     lambert: bool,
+    /// The band's mean absorption over the faces (the report's `reference`).
+    mean_absorption: f64,
 }
 
 /// Every receiver-band of a report, receivers then bands.
@@ -822,9 +841,13 @@ fn bands_of(rep: &Value) -> Vec<Band> {
             let energy = floats(&b["energy_pa2"]);
             let mean_deposit = b["noise_model"]["mean_deposit"].as_f64().unwrap();
             let alive: Vec<f64> = room.iter().map(|e| e / power).collect();
-            let lambert = reference["status"] == "computed"
-                && reference["bands"][bi]["freq_hz"] == b["freq_hz"]
-                && reference["bands"][bi]["lambert_walls"] == true;
+            assert_eq!(
+                reference["status"], "computed",
+                "the cells' references are computed"
+            );
+            assert_eq!(reference["bands"][bi]["freq_hz"], b["freq_hz"]);
+            let lambert = reference["bands"][bi]["lambert_walls"] == true;
+            let mean_absorption = reference["bands"][bi]["mean_absorption"].as_f64().unwrap();
             out.push(Band {
                 dt,
                 n1: noise::crossings_per_particle(
@@ -834,6 +857,7 @@ fn bands_of(rep: &Value) -> Vec<Band> {
                 ),
                 cv2: noise::lifetime_cv2(&alive, dt).expect("the room table gives a lifetime"),
                 lambert,
+                mean_absorption,
                 energy,
                 arrival: Arrival::spread(t_a, half),
                 mean_deposit,
@@ -958,6 +982,9 @@ struct RunNumbers {
     n1: Vec<f64>,
     cv2: Vec<f64>,
     lambert: Vec<bool>,
+    mean_absorption: Vec<f64>,
+    /// Every face of the cell has the same absorption (its walls; set by `cell_receipt`).
+    uniform: bool,
 }
 
 fn numbers(rep: &Value, structures: &[Structure]) -> RunNumbers {
@@ -993,6 +1020,8 @@ fn numbers(rep: &Value, structures: &[Structure]) -> RunNumbers {
         n1: bands.iter().map(|b| b.n1).collect(),
         cv2: bands.iter().map(|b| b.cv2).collect(),
         lambert: bands.iter().map(|b| b.lambert).collect(),
+        mean_absorption: bands.iter().map(|b| b.mean_absorption).collect(),
+        uniform: false,
     }
 }
 
@@ -1052,13 +1081,16 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
     }
     let t0 = std::time::Instant::now();
     // Every run's numbers, in parallel.
-    let runs: Vec<RunNumbers> = std::thread::scope(|scope| {
+    let mut runs: Vec<RunNumbers> = std::thread::scope(|scope| {
         let hs: Vec<_> = reports
             .iter()
             .map(|r| scope.spawn(|| numbers(r, &STRUCTURES)))
             .collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect()
     });
+    for r in &mut runs {
+        r.uniform = c.walls.uniform();
+    }
     let n = runs.len();
     let rbs = runs[0].values.len();
     println!(
@@ -1124,6 +1156,9 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
                 "seed_n1": runs.iter().map(|r| r.n1[rb]).collect::<Vec<_>>(),
                 "seed_cv2": runs.iter().map(|r| r.cv2[rb]).collect::<Vec<_>>(),
                 "lambert": runs[0].lambert[rb],
+                // A2: every face of the same absorption (the cell's walls), and the mean.
+                "uniform": c.walls.uniform(),
+                "mean_absorption": runs[0].mean_absorption[rb],
             }));
         }
         quantities.insert(q.to_string(), Value::Array(rows));
@@ -1182,44 +1217,66 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
     (receipt, runs)
 }
 
-/// The eight limits, in [`calibration::QUANTITIES`]' order (relative for the decay times).
-const LIMITS: [f64; 8] = [
-    noise::limits::SPL_DB,
-    noise::limits::DECAY_RELATIVE,
-    noise::limits::DECAY_RELATIVE,
-    noise::limits::DECAY_RELATIVE,
-    noise::limits::CLARITY_DB,
-    noise::limits::CLARITY_DB,
-    noise::limits::DEFINITION,
-    noise::limits::CENTRE_TIME_S,
-];
-
-/// How `params::noise::evaluate` judges quantity `qi` of receiver-band `rb` of one run, from the
-/// run's numbers: `Ok(())` when it gives the value, `Err(count)` when it refuses it for its noise
-/// with the particle count it names (if any); `None` when the series gives no value.
+/// How `params::noise::evaluate` judges quantity `qi` of receiver-band `rb` of one run, by the
+/// code a report uses (`params::noise::judge_one`, with the run's own crossings per particle,
+/// lifetime spread and Lambert flag): `Ok(())` when it gives the value, `Err(count)` when it
+/// refuses it for its noise or its domain with the particle count it names (if any); `None` when
+/// the series gives no value.
 fn judged(
     run: &RunNumbers,
     rb: usize,
     qi: usize,
-    method: noise::Method,
+    method: ComputationMethod,
     particles: u32,
 ) -> Option<Result<(), Option<u64>>> {
-    run.values[rb][qi]?;
-    let refused = run.refused[rb][qi];
-    let Some(sd) = run.sd[0][rb][qi] else {
-        return Some(Err(None));
+    let value = run.values[rb][qi]?;
+    let m = match method {
+        Random => noise::Method::Random,
+        Energetic => noise::Method::Energetic,
     };
-    let m = noise::calibration::factor(method, qi) * sd;
-    if refused <= noise::REFUSED_RESAMPLES_ALLOWED && m <= LIMITS[qi] {
-        return Some(Ok(()));
-    }
-    if m <= LIMITS[qi] || !noise::calibration::root_n_confirmed(method, qi) {
-        return Some(Err(None));
-    }
-    let factor = (noise::calibration::margin(method, qi) * m / LIMITS[qi]).powi(2);
-    Some(Err(Some(noise::round_up_two_digits(
-        factor * f64::from(particles),
-    ))))
+    let model = NoiseModel::of_run(
+        1.0,
+        m,
+        noise::RunNoise {
+            particles,
+            least_deposit: 1.0,
+            lifetime_cv2: run.cv2[rb],
+            lambert_walls: run.lambert[rb],
+            uniform_absorption: run.uniform,
+            mean_absorption: run.mean_absorption[rb],
+            bands: 1,
+        },
+    )
+    .unwrap();
+    let n = noise::calibration::multi_crossing(m, run.n1[rb], run.cv2[rb]);
+    // The harness keeps the decay times' standard deviations relative; the code takes them in
+    // the quantity's unit.
+    let raw = run.sd[0][rb][qi].map(|s| {
+        if noise::relative(qi) {
+            s * value.abs()
+        } else {
+            s
+        }
+    });
+    Some(
+        match noise::judge_one(&model, qi, value, raw, run.refused[rb][qi], Some(n)) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(match e.not_evaluable() {
+                Some(NotEvaluable::MonteCarloNoise {
+                    particle_count:
+                        ParticleCount::Named {
+                            particles: Some(n), ..
+                        },
+                    ..
+                }) => Some(*n),
+                Some(NotEvaluable::NoiseUncalibrated {
+                    particles_at_least: Some(n),
+                    ..
+                }) => Some(u64::from(*n)),
+                _ => None,
+            }),
+        },
+    )
 }
 
 #[test]
@@ -1306,19 +1363,20 @@ fn noise_calibration() {
             println!("{line}\n    geometric-mean overstatement {gm:.3}");
         }
     }
-    // Rule 3 on each quantity's validation cells, with the code's factors.
+    // Rule 3 on each quantity's validation cells, with rounds 1 and 2's factors as their rules
+    // give them (history: round 3's numbers replace them in the code).
     for method in ["random", "energetic"] {
-        let m = method_of(method);
-        println!("\n{method} mode, validation with the code's factors:");
+        println!("\n{method} mode, validation with rounds 1 and 2's factors:");
         for c in calibration::cells_in(&all, method, &["validation", "validation2"]) {
             let mut line = format!("  {}", c["cell"]["id"].as_str().unwrap());
-            for (qi, q) in calibration::QUANTITIES.iter().enumerate() {
+            for q in calibration::QUANTITIES {
                 let role = c["cell"]["role"].as_str().unwrap();
                 if !calibration::validation_roles(method, q).contains(&role) {
                     line += &format!("\n    {q:<7} (calibrates it)");
                     continue;
                 }
-                match calibration::validates(c, q, noise::calibration::factor(m, qi)) {
+                let k = calibration::shipped_factor(&all, method, q).0;
+                match calibration::validates(c, q, k) {
                     Some((ok, p)) => {
                         line += &format!(
                             "\n    {q:<7} {:.3} [{:.3}, {:.3}] {}",
@@ -1373,62 +1431,7 @@ fn noise_calibration() {
             line.join("; ")
         );
     }
-    // Rule 6: the named counts, on the pairs. Each seed of the lower count refused for its noise
-    // with a named count at most the higher count: the share of the higher count's seeds that
-    // give that receiver-band's value.
-    for (a, b) in calibration::PAIRS {
-        let (Some(ia), Some(ib)) = (
-            cells.iter().position(|c| c.id == a),
-            cells.iter().position(|c| c.id == b),
-        ) else {
-            continue;
-        };
-        let (ca, cb) = (&cells[ia], &cells[ib]);
-        let method = if ca.method == Random {
-            noise::Method::Random
-        } else {
-            noise::Method::Energetic
-        };
-        println!(
-            "\nnamed counts, {a} ({}) against {b} ({}):",
-            ca.particles, cb.particles
-        );
-        for (qi, q) in calibration::QUANTITIES.iter().enumerate() {
-            let (mut refusals, mut named, mut within, mut pass) = (0, 0, 0, 0.0);
-            let rbs = runs[ia][0].values.len();
-            for rb in 0..rbs {
-                let hi: Vec<Option<Result<(), Option<u64>>>> = runs[ib]
-                    .iter()
-                    .map(|r| judged(r, rb, qi, method, cb.particles))
-                    .collect();
-                for run in &runs[ia] {
-                    let Some(Err(count)) = judged(run, rb, qi, method, ca.particles) else {
-                        continue;
-                    };
-                    refusals += 1;
-                    let Some(n) = count else { continue };
-                    named += 1;
-                    if n > u64::from(cb.particles) {
-                        continue;
-                    }
-                    within += 1;
-                    let given = hi.iter().filter(|h| matches!(h, Some(Ok(())))).count();
-                    pass += given as f64 / hi.len() as f64;
-                }
-            }
-            if refusals > 0 {
-                println!(
-                    "    {q:<7} {refusals} refused for noise at {a}, {named} name a count, \
-                     {within} at most {b}'s; of those, {:.1} % of {b}'s seeds give the value",
-                    if within > 0 {
-                        100.0 * pass / within as f64
-                    } else {
-                        f64::NAN
-                    }
-                );
-            }
-        }
-    }
+    // Rule 6's named counts are read with round 3's model on every pair (R3-9), below.
     // Round 3 (PREREGISTER.txt, "ROUND 3"), when its calibration cells are read: R3-2's variable,
     // R3-1's factor and correction, R3-5's domain, rule 5b's margin and R3-6's 1/√N over the
     // pairs read, per method, quantity and split.
@@ -1465,34 +1468,169 @@ fn noise_calibration() {
                             ),
                             None => "NO FIT".into(),
                         },
-                        dom.map_or("-".into(), |(n, x)| format!(
-                            "N >= {n}, {} <= {x:.6}",
-                            calibration::var_name(var)
+                        dom.map_or("-".into(), |d| format!(
+                            "N >= {}, {} <= {:.6}, mean absorption <= {}",
+                            d.min_particles,
+                            calibration::var_name(var),
+                            d.max_n,
+                            d.max_mean_absorption
                         )),
                         margin.map_or("-".into(), |(m, by)| format!("{m} (by {by})")),
                         if confirmed { "confirmed" } else { "NOT" },
                     );
-                    // Every calibration cell's pooled ratio against the fit.
+                    // Every calibration cell's pooled ratio against the fit (those below the
+                    // domain's particle bound, A1, marked).
                     if let Some(f) = &fit {
+                        let least = dom.map_or(0.0, |d| d.min_particles);
                         for c in &cal {
+                            let below = c["cell"]["particles_per_source"].as_f64().unwrap() < least;
                             let rows = calibration::rows3(c, q, var, s, f64::INFINITY);
                             if let Some(p) =
                                 calibration::pooled3(&rows, f.k, f.kappa, calibration::seeds(c))
                             {
                                 println!(
                                     "      {:<6} {:>2} rows, n up to {:.4}: {:.3} [{:.3}, {:.3}] \
-                                     dof {:.1}",
+                                     dof {:.1}{}",
                                     c["cell"]["id"].as_str().unwrap(),
                                     rows.len(),
                                     rows.iter().map(|r| r.n_max()).fold(0.0, f64::max),
                                     p.ratio,
                                     p.lower,
                                     p.upper,
-                                    p.dof
+                                    p.dof,
+                                    if below { " (below the domain)" } else { "" }
                                 );
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+    // Round 3's validation (R3-8), with the numbers committed in `params::noise::calibration`,
+    // and the named counts on every pair read (R3-9), judged by the code a report uses.
+    if roles.contains(&Role::Validation3) {
+        for method in ["random", "energetic"] {
+            let m = method_of(method);
+            let var = match noise::calibration::variable(m) {
+                noise::calibration::Variable::CrossingsPerParticle => calibration::Var::N1,
+                noise::calibration::Variable::CrossingsTimesLifetimeSpread => {
+                    calibration::Var::N1Cv2
+                }
+            };
+            println!("\nROUND 3 VALIDATION, {method} mode, with the code's numbers:");
+            for c in calibration::validation3_cells(&all, method) {
+                let id = c["cell"]["id"].as_str().unwrap();
+                let particles = c["cell"]["particles_per_source"].as_f64().unwrap();
+                let mut line = format!("  {id} (N {particles})");
+                for (qi, q) in calibration::QUANTITIES.iter().enumerate() {
+                    for &s in calibration::splits(method, q) {
+                        let walls = match s {
+                            calibration::Split::UniformLambert => noise::Walls::UniformLambert,
+                            calibration::Split::Lambert => noise::Walls::Lambert,
+                            _ => noise::Walls::Other,
+                        };
+                        let e = noise::calibration::entry(m, qi, walls);
+                        let max_a = noise::calibration::UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION;
+                        let all_rows = calibration::rows_in_use(c, q, var, s, max_a, f64::INFINITY);
+                        if all_rows.is_empty() {
+                            continue;
+                        }
+                        let inside = if particles < f64::from(e.min_particles) {
+                            Vec::new()
+                        } else {
+                            calibration::rows_in_use(
+                                c,
+                                q,
+                                var,
+                                s,
+                                max_a,
+                                e.max_crossings_per_particle,
+                            )
+                        };
+                        let name = format!("{q} {}", calibration::split_name(s));
+                        match calibration::pooled3(
+                            &inside,
+                            e.factor,
+                            e.kappa,
+                            calibration::seeds(c),
+                        ) {
+                            Some(p) => {
+                                line += &format!(
+                                    "\n    {name:<17} {:>2} of {:>2} rows inside: {:.3} [{:.3}, \
+                                     {:.3}] dof {:.1} {}",
+                                    inside.len(),
+                                    all_rows.len(),
+                                    p.ratio,
+                                    p.lower,
+                                    p.upper,
+                                    p.dof,
+                                    if p.lower <= 1.0 { "ok" } else { "FAIL" }
+                                )
+                            }
+                            None => {
+                                line += &format!(
+                                    "\n    {name:<17}  0 of {:>2} rows inside the domain",
+                                    all_rows.len()
+                                )
+                            }
+                        }
+                    }
+                }
+                println!("{line}");
+            }
+            let ids: Vec<&str> = cells.iter().map(|c| c.id).collect();
+            for q in calibration::QUANTITIES {
+                let (ok, read, unsafe_) = calibration::root_n3_confirmed(&all, method, q, &ids);
+                println!("  1/sqrt(N) {q:<7}: {ok} over {read:?}; unsafe {unsafe_:?}");
+            }
+        }
+        for (a, b) in calibration::PAIRS3 {
+            let (Some(ia), Some(ib)) = (
+                cells.iter().position(|c| c.id == a),
+                cells.iter().position(|c| c.id == b),
+            ) else {
+                continue;
+            };
+            let (ca, cb) = (&cells[ia], &cells[ib]);
+            println!(
+                "\nnamed counts (round 3), {a} ({}) against {b} ({}):",
+                ca.particles, cb.particles
+            );
+            for qi in 0..8 {
+                let (mut refusals, mut named, mut within, mut pass) = (0, 0, 0, 0.0);
+                let rbs = runs[ia][0].values.len();
+                for rb in 0..rbs {
+                    let hi: Vec<Option<Result<(), Option<u64>>>> = runs[ib]
+                        .iter()
+                        .map(|r| judged(r, rb, qi, ca.method, cb.particles))
+                        .collect();
+                    for run in &runs[ia] {
+                        let Some(Err(count)) = judged(run, rb, qi, ca.method, ca.particles) else {
+                            continue;
+                        };
+                        refusals += 1;
+                        let Some(n) = count else { continue };
+                        named += 1;
+                        if n > u64::from(cb.particles) {
+                            continue;
+                        }
+                        within += 1;
+                        let given = hi.iter().filter(|h| matches!(h, Some(Ok(())))).count();
+                        pass += given as f64 / hi.len() as f64;
+                    }
+                }
+                if refusals > 0 {
+                    println!(
+                        "    {:<7} {refusals} refused at {a}, {named} name a count, {within} at \
+                         most {b}'s; of those, {:.1} % of {b}'s seeds give the value",
+                        calibration::QUANTITIES[qi],
+                        if within > 0 {
+                            100.0 * pass / within as f64
+                        } else {
+                            f64::NAN
+                        }
+                    );
                 }
             }
         }
