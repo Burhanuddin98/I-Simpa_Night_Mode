@@ -7,11 +7,26 @@
 //!
 //! The caller chooses the surfaces: TCR leaves out fitting faces whose material's first band has
 //! `τ ≠ 1` (`isTransparent`, lines 11-17).
+//!
+//! **Kuttruff's correction** (M8's reference, Burhan, 2026-09-24 23:14; `docs/params.md`,
+//! "Kuttruff's reference"): Eyring's formula takes every free path to be the mean, `4V/S`. Free
+//! paths that spread about it, with relative variance `γ²`, make the decay slower:
+//!
+//! `A = −S·ln(1 − ᾱ)·[1 + (γ²/2)·ln(1 − ᾱ)]`, `T = K·V / (4·m·V + A)`.
+//!
+//! H. Kuttruff, *Room Acoustics* (the book's chapter on reverberation, as commonly stated; the book
+//! was not opened here), and in the form `α'' = α'·(1 − γ²·α'/2)`, `α' = −ln(1 − α)`, U. M.
+//! Stephenson, ICA 2016, paper 556, eq. (21), citing it (read). It is the second-order cumulant of
+//! `⟨(1 − α)^n⟩` over the number `n` of reflections in time `t`, whose variance is `γ²` times its
+//! mean `c·t/(4V/S)`. The air term is added as in Eyring's: air attenuates every path by
+//! `e^(−m·c·t)` whatever its reflections, so it adds `4·m·V` exactly. `γ²` comes only from
+//! [`super::lambert::FreePaths`], which only the transport makes, from the geometry.
 
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use super::ParamError;
+use super::lambert::FreePaths;
 
 /// TCR's constant, `0.163` s/m (`TC_CalculationCore.cpp:138, 140`).
 pub const TCR_CONSTANT: f64 = 0.163;
@@ -145,4 +160,78 @@ pub fn eyring_rt(
         air_m_per_metre,
         constant,
     )
+}
+
+/// `ln(1 − ᾱ)` of `surfaces` and their total area, refused as [`kuttruff_rt`] refuses them.
+fn kuttruff_inputs(free_paths: &FreePaths, surfaces: &[Surface]) -> Result<(f64, f64), ParamError> {
+    let (s, sa) = sums(surfaces)?;
+    let enclosure = free_paths.area_m2();
+    if (s - enclosure).abs() > 1e-6 * enclosure {
+        return Err(bad(
+            &format!(
+                "total_area_m2 (the enclosure the free paths were traced in has {enclosure} m²)"
+            ),
+            s,
+        ));
+    }
+    let ln = (-sa / s).ln_1p();
+    if !ln.is_finite() {
+        return Err(bad("mean_absorption (Kuttruff's correction has no value at 1)", sa / s));
+    }
+    Ok((s, ln))
+}
+
+/// `1 + (γ²/2)·ln(1 − ᾱ)`, refused when it is not positive: the second-order correction then
+/// gives no absorption area.
+fn kuttruff_factor(gamma2: f64, ln: f64) -> Result<f64, ParamError> {
+    let factor = 1.0 + 0.5 * gamma2 * ln;
+    if factor > 0.0 {
+        Ok(factor)
+    } else {
+        Err(bad("kuttruff_factor", factor))
+    }
+}
+
+/// Kuttruff's equivalent absorption area `−S·ln(1 − ᾱ)·[1 + (γ²/2)·ln(1 − ᾱ)]`, m² ([module
+/// docs](self)), with `γ²` from `free_paths`. Refused (`params_bad_room`) as Eyring's is, and for
+/// surfaces whose total area is not the enclosure's the free paths were traced in (within 10⁻⁶),
+/// an `ᾱ` of 1, or a correction factor that is not positive.
+pub fn kuttruff_absorption_area(
+    free_paths: &FreePaths,
+    surfaces: &[Surface],
+) -> Result<f64, ParamError> {
+    let (s, ln) = kuttruff_inputs(free_paths, surfaces)?;
+    Ok(-s * ln * kuttruff_factor(free_paths.gamma2(), ln)?)
+}
+
+/// Kuttruff's reverberation time `K·V / (4·m·V + A)`, s, with `A` from
+/// [`kuttruff_absorption_area`] and `V` the enclosure's the free paths were traced in. Refused as
+/// [`reverberation_time`] and [`kuttruff_absorption_area`] refuse.
+pub fn kuttruff_rt(
+    free_paths: &FreePaths,
+    surfaces: &[Surface],
+    air_m_per_metre: Option<f64>,
+    constant: RtConstant,
+) -> Result<f64, ParamError> {
+    reverberation_time(
+        free_paths.volume_m3(),
+        kuttruff_absorption_area(free_paths, surfaces)?,
+        air_m_per_metre,
+        constant,
+    )
+}
+
+/// The standard deviation [`kuttruff_rt`] inherits from `γ²`'s standard error, s:
+/// `|∂T/∂γ²|·σ(γ²)`, with `∂T/∂γ² = T·S·ln²(1 − ᾱ)/(2·(4·m·V + A))`. Refused as [`kuttruff_rt`].
+pub fn kuttruff_rt_sd(
+    free_paths: &FreePaths,
+    surfaces: &[Surface],
+    air_m_per_metre: Option<f64>,
+    constant: RtConstant,
+) -> Result<f64, ParamError> {
+    let t = kuttruff_rt(free_paths, surfaces, air_m_per_metre, constant)?;
+    let (s, ln) = kuttruff_inputs(free_paths, surfaces)?;
+    let a = kuttruff_absorption_area(free_paths, surfaces)?;
+    let air = 4.0 * air_m_per_metre.unwrap_or(0.0) * free_paths.volume_m3();
+    Ok(t * s * ln * ln / (2.0 * (air + a)) * free_paths.gamma2_se())
 }

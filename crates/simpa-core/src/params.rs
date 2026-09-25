@@ -9,7 +9,10 @@
 //! - [`noise`]: the Monte-Carlo noise of each of those values, estimated from the number of
 //!   receiver crossings behind every bin, and the refusal of a value whose noise is too large.
 //! - [`air`]: ISO 9613-1 attenuation, and the value SPPS and TCR actually use.
-//! - [`room`]: Sabine and Eyring as TCR computes them.
+//! - [`room`]: Sabine and Eyring as TCR computes them, and Kuttruff's correction of Eyring with the
+//!   free paths' relative variance `γ²`.
+//! - [`lambert`]: a diffuse (Lambert) ray transport written from scratch: the mean free path and
+//!   `γ²` of a room from its geometry alone, and its decay, for M8's reference and cross-check.
 //! - [`din18041`]: the group-A target reverberation times.
 //!
 //! Everything is a pure function. A value that cannot be computed honestly is a typed
@@ -24,6 +27,7 @@ use serde::Serialize;
 pub mod air;
 pub mod decay;
 pub mod din18041;
+pub mod lambert;
 pub mod noise;
 pub mod room;
 
@@ -54,9 +58,11 @@ pub mod codes {
     pub const DIN_OUT_OF_RANGE: &str = "params_din_out_of_range";
     /// A solver floor, or a Monte-Carlo deposit, that is not a finite number in its domain.
     pub const BAD_NOISE_INPUT: &str = "params_bad_noise_input";
+    /// The diffuse ray transport (`params::lambert`) cannot run, or refuses its own result.
+    pub const TRANSPORT_REFUSED: &str = "params_transport_refused";
 
     /// Every code, in the order of the documentation table.
-    pub const ALL: [&str; 12] = [
+    pub const ALL: [&str; 13] = [
         BAD_TIME_STEP,
         SERIES_TOO_SHORT,
         BAD_ENERGY,
@@ -69,6 +75,7 @@ pub mod codes {
         NO_ABSORPTION,
         DIN_OUT_OF_RANGE,
         BAD_NOISE_INPUT,
+        TRANSPORT_REFUSED,
     ];
 }
 
@@ -430,6 +437,11 @@ pub enum ParamError {
         field: String,
         value: f64,
     },
+    /// The diffuse ray transport (`params::lambert`) cannot run with its inputs, a ray left the
+    /// enclosure, or its mean free path is not `4V/S` within its statistical error.
+    TransportRefused {
+        detail: String,
+    },
 }
 
 impl ParamError {
@@ -448,6 +460,7 @@ impl ParamError {
             ParamError::NoAbsorption => codes::NO_ABSORPTION,
             ParamError::DinOutOfRange { .. } => codes::DIN_OUT_OF_RANGE,
             ParamError::BadNoiseInput { .. } => codes::BAD_NOISE_INPUT,
+            ParamError::TransportRefused { .. } => codes::TRANSPORT_REFUSED,
         }
     }
 
@@ -498,6 +511,7 @@ impl fmt::Display for ParamError {
                 detail,
             } => write!(f, "{group} at {volume_m3} m³: {detail}"),
             ParamError::BadNoiseInput { field, value } => write!(f, "{field} = {value}"),
+            ParamError::TransportRefused { detail } => write!(f, "{detail}"),
         }
     }
 }
@@ -905,6 +919,7 @@ mod tests {
                 field: "floor_db".into(),
                 value: f64::NAN,
             },
+            ParamError::TransportRefused { detail: "x".into() },
         ];
         let got: Vec<&str> = errors.iter().map(ParamError::code).collect();
         assert_eq!(got, codes::ALL);

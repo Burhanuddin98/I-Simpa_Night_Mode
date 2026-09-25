@@ -18,6 +18,9 @@
 //! - [`Fault::AirTermDropped`] and [`Fault::AirIsoExactMidband`]: the air term `results::tcr`'s
 //!   analytic references add as `4·m·V`, dropped, or taken from ISO 9613-1 at the exact midband
 //!   frequency instead of the solver's value at the nominal one.
+//! - [`Fault::LambertUniformReflection`]: `params::lambert`'s transport reflecting uniformly over
+//!   the hemisphere instead of by Lambert's cosine law, the say-NO of its mean-free-path check.
+//!   The transport reads it on the calling thread and hands it to its replicas' threads.
 
 /// One fault, set by [`with`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -31,6 +34,9 @@ pub enum Fault {
     /// The same with `m` from ISO 9613-1's own equations at the exact midband frequency
     /// (`params::air::attenuation_db_per_m`), not the solver's value at the nominal one.
     AirIsoExactMidband,
+    /// `params::lambert`'s transport draws each reflected direction uniformly over the hemisphere
+    /// (`cos θ` uniform) instead of by Lambert's law (`cos θ = √u`).
+    LambertUniformReflection,
 }
 
 #[cfg(feature = "fault-injection")]
