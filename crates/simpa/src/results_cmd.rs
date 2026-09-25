@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
-use simpa_core::results::report::{self, Evaluated, RefusalReport, Report};
+use simpa_core::results::report::{self, Evaluated, ReferenceReport, RefusalReport, Report};
 use simpa_core::results::{self};
 
 use crate::fail;
@@ -151,6 +151,48 @@ fn text(rep: &Report) -> String {
                     cell(&p.d50, 1, 100.0),
                     cell(&p.ts_s, 1, 1000.0),
                 );
+            }
+        }
+        match &sp.reference {
+            ReferenceReport::Computed {
+                volume_m3,
+                area_m2,
+                free_paths,
+                bands,
+                ..
+            } => {
+                let paths = free_paths.as_ref().map_or("refused".to_string(), |p| {
+                    format!(
+                        "gamma^2 {:.4} ± {:.4}, mean free path {:.3} m (4V/S {:.3} m)",
+                        p.gamma2(),
+                        p.gamma2_se(),
+                        p.mean_free_path_m(),
+                        p.four_v_over_s_m()
+                    )
+                });
+                let _ = writeln!(
+                    s,
+                    "\nreference, analytic, diffuse field, NOT VALIDATED: V {volume_m3:.2} m3, S \
+                     {area_m2:.2} m2, {paths}"
+                );
+                let _ = writeln!(
+                    s,
+                    "{:>8} {:>11} {:>11} {:>14}",
+                    "band", "Kuttruff s", "Eyring s", "Lambert walls"
+                );
+                for b in bands {
+                    let _ = writeln!(
+                        s,
+                        "{:>8} {:>11} {:>11} {:>14}",
+                        format!("{} Hz", b.freq_hz),
+                        cell(&b.kuttruff_s, 3, 1.0),
+                        cell(&b.eyring_s, 3, 1.0),
+                        if b.lambert_walls { "yes" } else { "no" }
+                    );
+                }
+            }
+            ReferenceReport::NotComputed { why } => {
+                let _ = writeln!(s, "\nreference: not computed: {why}");
             }
         }
     }

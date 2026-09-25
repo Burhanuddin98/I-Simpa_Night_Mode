@@ -7,8 +7,10 @@ later gates need: ISO 9613-1 air attenuation, Sabine and Eyring as TCR computes 
 `params_room.rs` (Sabine, Eyring, gate (f)), `params_complete.rs` (complete series, lost
 particles), `params_floor.rs` (the solver's floor), `params_noise.rs` (Monte-Carlo noise),
 `params_arrival.rs` (the direct sound's spread, an arrival outside the onset bin),
-`params_reference.rs` (the reference M8 compares against) and `params_upstream_gui.rs` (upstream's
-GUI reproduced on tutorial 1, and the steps from its method to ours).
+`params_reference.rs` (the reference M8 compares against), `params_upstream_gui.rs` (upstream's
+GUI reproduced on tutorial 1, and the steps from its method to ours), and, pre-M8,
+`params_lambert.rs` (the diffuse transport and `γ²`) and `params_kuttruff.rs` (Kuttruff's
+reference).
 
 **No number computed here is shown to a user until M8's physics bed passes** (`docs/rebuild-plan.md`,
 M12). M7 builds the numbers; it does not publish them.
@@ -24,6 +26,12 @@ M12). M7 builds the numbers; it does not publish them.
 | Upstream's GUI | How it computes every parameter: `src/isimpa/data_manager/projet_calculation.cpp`, `tree_rapport/e_report_gabe_recp.cpp` | Yes, at `929a5c8` (`B:\repos\I-Simpa-upstream`) |
 | Upstream's solvers | What the energy values mean, and TCR's Sabine and Eyring | Yes, same commit |
 | Night Mode `main:project/result_parser.cpp` | Nothing. Read only for its +26 dB bug (below) | Yes |
+| H. Kuttruff, *Room Acoustics* | The `γ²` correction of Eyring's formula ("Kuttruff's reference") | **No.** Taken as U. M. Stephenson gives it citing the book (next row) |
+| U. M. Stephenson, ICA 2016, paper ICA2016-556 | Kuttruff's `α'' = α'·(1 − γ²·α'/2)` and `γ²`'s definition, eq. (21) | **Yes**, the congress proceedings' PDF (`ica2016.org.ar/ica2016proceedings/ica2016/ICA2016-0556.pdf`, sha256 `ad19678e…`); and its longer version, "Different assumptions - different reverberation formulae" (`arauacustica.com/files/publicaciones/pdf_esp_69.pdf`, sha256 `e9a70206…`), section 6.3, for "γ² … in the order of 0.4…0.6" |
+| D. H. Bailey, J. M. Borwein, R. E. Crandall, "Advances in the theory of box integrals", Math. Comp. 79 (2010) 1839-1866 | The closed form of `Δ₃(−2)`, Table 6, and its integral, eq. (69): the cube's exact `γ²` | **Yes**, the authors' copy (`davidhbailey.com/dhbpapers/BoxII.pdf`, sha256 `37cfe469…`), Table 6 rendered and read |
+| L. A. Santaló, *Integral Geometry and Geometric Probability* (1976) | The chord power integrals behind `⟨ℓ²⟩`: twice the integral of `r⁻²` over pairs of points in the room, over `π·S` | **No.** The relation was derived here from the Blaschke–Petkantschin formula and Cauchy's; the test checks it on the cube against Bailey, Borwein and Crandall |
+| Bies and Hansen, *Engineering Noise Control*, 4th ed., eq. 7.64 | A fit of `γ` for rectangular rooms, and the air term folded into `ᾱ` | **No.** As quoted by Arup's Strutt help (`strutt.arup.com/help/Building_Acoustics/RTInsert.htm`), which was read |
+| R. Neubauer, B. Kostek, "Prediction of the Reverberation Time in Rectangular Rooms with Non-Uniformly Distributed Sound Absorption" | That "Kuttruff's correction" also names his correction for unevenly spread absorption, eq. (15)-(18), which is not the one used | **Yes** (`sound.eti.pg.gda.pl/papers/prediction_of_reverberation_time.pdf`, sha256 `5aef45a3…`) |
 
 **The receipts** are in `target/investigate/m7-standards-sources/` of the main checkout
 (`B:\repos\I-Simpa_Night_Mode`), copied there on 2026-09-24 from the M7 agents' scratch folders and
@@ -40,6 +48,10 @@ are not committed: the standards' PDFs are copyrighted.
   (sha256 `42eefdc4…`), on Nocke's Bild 2 extracted from the article (`laerm_bild2.png`, stored
   flipped; `laerm_bild2_upright.png`), its text pages (`laerm_p1..6.txt`), and renders of ISO's
   preview pages 7 and 8 (`iso_pdf7_*.png`, `iso_pdf8_*.png`).
+- Pre-M8, in the main checkout's `target/agents/pm8-reference-scratch/sources/`: Stephenson's two
+  papers, Bailey, Borwein and Crandall's paper with its Table 6 rendered (`boxII_table6_p34.png`),
+  Neubauer and Kostek's paper, and `iur_quadrature.py` (numpy and mpmath: the closed form to 30
+  digits, the box quadrature at 100 to 800 nodes, and the exact `γ²` of other proportions).
 
 ## The input: one band's energy histogram
 
@@ -733,6 +745,11 @@ Eyring time of 0 s, a fully absorbing room.
 
 ### The reference M8 compares against (for Burhan's decision)
 
+**Decided since** (Burhan, 2026-09-24 23:14): Kuttruff's corrected Eyring with `γ²` from the
+geometry, 5 %, with the transport as a cross-check and plain Eyring reported only; Michael to
+ratify. It is core code now: "Kuttruff's reference", below. What follows is the M7 follow-ups'
+evidence as they wrote it.
+
 Added by the M7 follow-ups; nothing is decided here. `T_Eyring = K·V/(A + 4mV)` has two open
 choices, computed on tutorial 1's box (floor 60 m² at α 0.1, ceiling 60 m² at 0.3, walls 96 m² at
 0.2, 180 m³; 20 °C, 50 %, 101.325 kPa) in every third-octave band from 50 Hz to 8 kHz
@@ -775,6 +792,178 @@ says. Whether upstream's air term is right (the pressure factor, the nominal fre
 M7(b)'s question and the second table's, and at sea level it moves T_Eyring by at most 0.36 % up
 to 8 kHz on tutorial 1 and 0.83 % in M8's rooms. On the third choice this document recommends
 nothing: the numbers are above.
+
+## Kuttruff's reference
+
+**Decided** (Burhan, 2026-09-24 23:14, his choice verbatim: "Kuttruff + cross-check
+(Recommended)"): M8 gates SPPS's T30 against Kuttruff's corrected Eyring with `γ²` computed from
+the room's geometry, never fitted to SPPS, at 5 %; the independent diffuse transport is the
+cross-check; plain Eyring is reported only. It changes the plan's M8 gate text, so **Michael
+ratifies** it (BuSha note). This section is the pre-M8 piece that makes it core code:
+`params::room::kuttruff_rt`, `params::lambert` (the transport) and `results::reference`.
+**Nothing here is validated**, and no number of it reaches a user before M8 passes.
+
+### The formula, and where it comes from
+
+```
+A_K = −S·ln(1 − ᾱ)·[1 + (γ²/2)·ln(1 − ᾱ)],   ᾱ = Σ Sᵢ·αᵢ / S
+T   = K·V / (4·m·V + A_K),                   K = 24·ln 10 / c
+```
+
+- **The wall term** is Kuttruff's, as U. M. Stephenson gives it citing H. Kuttruff, *Room
+  Acoustics* (Elsevier, Barking; he names no edition): `α'' = α'·(1 − γ²·α'/2)`, `α' = −ln(1 − α)`,
+  `γ² = (⟨ℓ²⟩ − ⟨ℓ⟩²)/⟨ℓ⟩²`, the relative variance of the free path lengths ("A rigorous definition
+  of the term 'diffuse sound field' and a discussion of different reverberation formulae", ICA 2016,
+  paper ICA2016-556, eq. (21); read, from the congress proceedings, sha256 `ad19678e…`). Substituting
+  `α'` gives the factor above. **Kuttruff's book itself was not opened.**
+- **The air term** is not in Stephenson's eq. (21). It is added outside the wall term, as TCR adds
+  it to Eyring's (`TC_CalculationCore.cpp:138`): air multiplies every path's energy by `e^(−m·c·t)`
+  whatever its reflections, so its decay rate adds to the walls' exactly. The other form in print,
+  Bies and Hansen's (*Engineering Noise Control*, 4th ed., eq. 7.64, as Arup's Strutt help quotes
+  it; the page read, the book not), folds `4·m·V/S` into `ᾱ` inside both logarithms. The transport
+  tells them apart (below).
+- **What it is**: the energy after time `t` is `⟨(1 − ᾱ)^n⟩` over the number `n` of reflections,
+  whose mean is `c·t·S/(4V)` and, for independent free paths, whose variance is `γ²` times it; the
+  formula keeps the first two cumulants of `n`. It is an approximation, worse as `ᾱ` grows.
+- **Not the other "Kuttruff formula".** Kuttruff also corrected Eyring for absorption spread
+  unevenly over the walls (the reflection-coefficient term `Δ`; R. Neubauer and B. Kostek, eq.
+  (15)-(18), read). That one is not used here: M8's cells absorb evenly.
+- **Refused** (`params_bad_room`) as Eyring's is, and for surfaces whose total area is not the
+  room's the free paths were traced in (within 10⁻⁶: `γ²` of another room cannot be used), for
+  `ᾱ` = 1, and where `1 + γ²·ln(1 − ᾱ)` is not positive (`ᾱ` above about 0.92 at `γ²` 0.4): past
+  that, the second-order correction would give a longer time for more absorption.
+
+### `γ²` from the geometry: `params::lambert`
+
+A diffuse ray transport, written from scratch and promoted from the M7 follow-ups' evidence test
+`tests/lambert_box.rs` (which stays, as it was run). Nothing of SPPS is used: no mesh walking, no
+time stepping, no random generator of its, no output of any run.
+- **The room** is a closed surface of triangles (any shape; faces need not be oriented: a ray is
+  reflected to the side it came from) and tetrahedra that fill it (`Enclosure::from_mesh`; a box's
+  six are built in). A ray runs straight to the nearest face (a bounding-volume hierarchy,
+  Möller–Trumbore), is reflected there by Lambert's law, and starts again 10⁻¹⁰ of the room's size
+  off the face.
+- **`free_paths`** gives the mean free path and `γ²`, each with its standard error over 16
+  independent replicas (successive paths of one ray are correlated, so the replicas', not the
+  paths' count, give the error). **It takes the geometry and its own settings and nothing else.**
+  `FreePaths` has private fields, no other constructor and no `Deserialize`, and `kuttruff_rt`
+  takes only a `FreePaths`: a `γ²` fitted to a solver cannot reach it, by construction (a doctest
+  that builds one by hand must fail to compile with `E0451`, private fields).
+- **It checks itself**: it refuses (`params_transport_refused`) a mean free path further than 6
+  standard errors from `4V/S`, which a closed room with Lambert walls must give whatever its shape;
+  and a ray that leaves the room. Either means a surface that is not closed, tetrahedra that are
+  not the surface's volume, a face with the room on both sides (it reflects on both, so the field
+  sees its area twice), parts of a room that do not mix within the rays' paths, or reflection that
+  is not Lambert's.
+- **Where rays start matters.** A field started at one point is not yet diffuse, and a ray's first
+  reflections remember it. Measured with this transport when it started every ray at one point
+  (the pre-M8 WIP, and `lambert_box.rs`'s way): counted from the first reflection, 64 paths a ray,
+  `γ²` read 0.3840 ± 0.0008 in the 6×10×3 m room and 0.3489 ± 0.0007 in the 5×4×3 m one (exact:
+  0.3889 and 0.3524), the mean free path 0.16 % and 0.27 % long; in an L-shaped room with the rays
+  started in its narrow wing, the mean free path was 0.28 % short (10 standard errors) after 16
+  paths left out. So rays now start at points drawn evenly from the tetrahedra (Rocchini and
+  Cignoni's folding), and each ray's first 32 paths after its first are left out. Even so the
+  first reflection is weighted by path length: with none left out `γ²` reads 5 standard errors low
+  in the box, and in the L-shaped room the mean free path sits 5.8, 1.8 and 0.2 standard errors
+  from `4V/S` with 0, 16 and 64 left out.
+- **`FreePathSettings::STANDARD`**, what `simpa results` uses: 16 × 1024 rays, 32 + 64 paths each,
+  1,048,576 paths counted, a fixed seed. `γ²` to about ±0.0006, which moves Kuttruff's T by about
+  0.02 % at α 0.4. About 0.1 s in a debug build for a box.
+- **`decay`** traces the energy of the room and of receiver balls (energy times path length inside
+  the ball, per time bin, as SPPS's receivers collect it) from a point source, for M8's
+  cross-check; air is applied per bin as `e^(−m·c·t)`.
+
+### Known answers (`tests/params_lambert.rs`)
+
+**The exact `γ²`.** Lambert reflection keeps a uniform, isotropic field, so in a **convex** room the
+free paths are the chords of lines uniform and isotropic in space, whose mean square is
+`⟨ℓ²⟩ = (2/(π·S))·∫∫ |x − y|⁻² dx dy` over pairs of points in the room: derived here from the
+Blaschke–Petkantschin formula (`dx dy = |t₁ − t₂|² dt₁ dt₂ dG` for two points on a line `G`) and
+Cauchy's `∫ dG = π·S/2` over the lines meeting the room. For a box the six-dimensional integral
+folds into three smooth two-dimensional ones, one per far face, integrated by Gauss–Legendre; for
+the unit cube it is D. H. Bailey, J. M. Borwein and R. E. Crandall's box integral `Δ₃(−2)`, whose
+closed form they give ("Advances in the theory of box integrals", Math. Comp. 79 (2010)
+1839-1866, Table 6; read in the authors' copy): the quadrature equals it to 10⁻¹². For a sphere
+the chord is `2R·cos θ` with Lambert's `θ`, so `γ²` = 1/8 exactly.
+
+| Room | Exact `γ²` | Transport (8.4 M paths) | Mean free path against `4V/S` | `lambert_box.rs` | Bies and Hansen's fit |
+|---|---|---|---|---|---|
+| cube | 0.344950 | 0.34493 ± 0.00027 | +0.6 SE | | 0.3383 |
+| 6×10×3 m | 0.388874 | 0.38885 ± 0.00024 | −1.3 SE | 0.388 | 0.3959 |
+| 5×4×3 m | 0.352401 | 0.35268 ± 0.00023 | −0.4 SE | 0.352 | 0.3560 |
+| sphere, 20,480 faces | 0.125 (+0.00004 for the facets) | 0.12492 ± 0.00008 | +0.8 SE | | |
+| L-shaped, 6×4 + 2×4, 3 m | none known | 0.3903 ± 0.0003 | +0.2 SE | | |
+
+- **`lambert_box.rs`'s values** agree with the exact ones within one unit of their third decimal;
+  0.388 lies outside the exact 0.38887's rounding by its counting (the rays' starting point, above).
+- **Bies and Hansen's fit** for rectangular rooms, `γ = √(0.0179·(L + W)/H − 0.0001·(L − W)/H −
+  0.0011·((L − W)/H)² + 0.3025)`, H the height (as Strutt quotes it), lies within 0.007 of the exact
+  values; the page states no accuracy for it. Stephenson's "for typical proportions from 1:1:1 to
+  1:10:10, the variance γ² is in the order of 0.4…0.6 (as found by numerical experiments)" (the
+  longer version of his paper, section 6.3) compares with exact values from 0.345 (1:1:1) to 0.653
+  (1:10:10): the same order.
+- The sphere's facets add to its `γ²` a quarter as much with each subdivision (+0.0172, +0.0044,
+  +0.0011, +0.00025, +0.00004 from 80 to 20,480 faces, measured).
+- **Say-NO partners**: reflection uniform over the hemisphere, through the code
+  (`Fault::LambertUniformReflection`): mean free path 2.97 m against 3.33 m, 115 to 175 standard
+  errors, refused; tetrahedra 1 % short of the room or 1 % over it: refused; one floor triangle
+  removed, or the tetrahedra moved below the floor: rays leave, refused; the L-shaped room with
+  only its narrow wing's tetrahedra: refused; an 80-face sphere: `γ²` 0.017 off 1/8.
+
+### Kuttruff against the transport in M8's cells (`tests/params_kuttruff.rs`)
+
+M8's cells: the two rooms at α 0.05, 0.1, 0.2 and 0.4 on every wall, Lambert reflection, air off,
+M8's source and three receivers (radius 0.31 m), `dt` 1 ms, `c` 343.2 m/s. "Transport" is the T30
+of its receivers' energy, read through `params` from the arrival, the mean of the three receivers
+in each of 16 replicas; the error is that of the 16 means. Measured at 4 M to 34 M rays a cell in a
+release build (`kuttruff_against_the_transport_at_high_counts`, ignored with its reason and run on
+purpose; `γ²` from 16 × 16384 rays):
+
+| Room | α | Transport against Eyring | Kuttruff against the transport | The room's energy against Eyring |
+|---|---|---|---|---|
+| 6×10×3 | 0.05 | +1.211 % | −0.201 ± 0.016 % | +1.204 % |
+| 6×10×3 | 0.1 | +2.443 % | −0.342 ± 0.019 % | +2.425 % |
+| 6×10×3 | 0.2 | +4.971 % | −0.413 ± 0.017 % | +4.967 % |
+| 6×10×3 | 0.4 | +10.718 % | +0.283 ± 0.024 % | +10.754 % |
+| 5×4×3 | 0.05 | +1.092 % | −0.178 ± 0.010 % | +1.101 % |
+| 5×4×3 | 0.1 | +2.198 % | −0.300 ± 0.012 % | +2.204 % |
+| 5×4×3 | 0.2 | +4.461 % | −0.353 ± 0.012 % | +4.444 % |
+| 5×4×3 | 0.4 | +9.250 % | **+0.586 ± 0.012 %** | +9.252 % |
+
+- **Kuttruff is within 0.6 % of the transport in every cell**, the 5×4×3 m room at α 0.4 by 1.2
+  standard errors: at that absorption the second-order formula is at its limit. The transport's own
+  excess over Eyring reproduces `lambert_box.rs`'s (+1.20, +2.44, +4.96, +10.78 %; +1.11, +2.20,
+  +4.47, +9.25 %) within 0.07 %, and so SPPS's (`docs/results.md`, "T30 against Eyring").
+- **The gate in the test suite** (`kuttruff_reproduces_the_transports_t30_in_m8s_cells`, 0.26 M to
+  2.1 M rays a cell in a debug build, about 85 s) holds every cell to `|T_K/T − 1| ≤ 0.6 % + 3·SE`,
+  the relative SE below 0.2 %. It measured the 5×4×3 m room at α 0.4 at +0.597 ± 0.055 %: it passes
+  within its noise, not by a margin. Its partners: plain Eyring misses all 8 cells (−1.2 % to
+  −9.8 %); the formula with its `½` dropped, through the code (`Fault::KuttruffFullVariance`),
+  misses 6 of 8 (+0.7 % and +0.8 % at α 0.05 fall inside the noise allowance).
+- **The air term** (`the_air_term_is_added_outside_as_the_transport_decays`): M8's second-table
+  cells at 8 kHz, 20 °C, 50 %, with the solver's `m` = 0.02425 /m (air 1.6 and 0.6 times the walls'
+  absorption): Kuttruff + `4mV` −0.03 % (6×10×3, α 0.05) and −0.18 % (5×4×3, α 0.1) of the
+  transport with the same air; the air folded into `ᾱ` (`Fault::KuttruffAirInsideMean`) −3.54 %
+  and −3.57 %, which the test requires to miss.
+
+### In `simpa results --json`
+
+Every SPPS report carries `spps.reference` (`results::reference`; `docs/formats/results-json.md`):
+the room's volume and area, SPPS's `c` and `K`, the transport's `free_paths`, and per computed band
+`air_m_per_metre`, `mean_absorption`, `lambert_walls`, **`kuttruff_s` (M8's reference, with the
+`mc_sd` it inherits from `γ²`) and `eyring_s` (plain, reported only)**, under a `label` that says
+both are an analytic reference for a diffuse field and not validated. The room is read as TCR's
+`analytic` reads it (the `.cbin` faces, the `.mbin`'s tetrahedra, `config.xml`'s materials and
+air; TCR's per-face rule for fittings, `TC_CalculationCore.cpp:11-17`, is not emulated, so a scene
+with fitting faces is `not_computed`); a celerity gradient is `not_computed` too. `lambert_walls` is false where any face
+is not Lambert with scattering 1 in the band: then neither time describes the run's field. The text
+output prints the same beside "NOT VALIDATED". On the committed fixtures (tutorial 1's box,
+specular walls) `γ²` reads the exact 0.3889 within its error.
+
+**Open, for M8 and later**: the bed itself (Kuttruff at 5 %, the transport's T30 as the tight
+cross-check, `dt` 1 ms); Michael's ratification of the gate text; M12's use of `lambert_walls`;
+rooms whose parts barely exchange sound (coupled volumes), and faces with the room on both sides
+(thin reflectors), which the mean-free-path check refuses rather than describe.
 
 ## DIN 18041 targets
 
@@ -849,6 +1038,11 @@ and one of:
 
 `params_bad_noise_input` refuses a floor, a share alive or lost, or a mean deposit that is not a
 finite number in its domain.
+
+`params_transport_refused` refuses the diffuse transport's own result: inputs it cannot run with,
+a ray that left the room, or a mean free path that is not `4V/S` within its error ("Kuttruff's
+reference"). `params_bad_room` also refuses Kuttruff's inputs: surfaces of another room than the
+free paths', `ᾱ` = 1, and `1 + γ²·ln(1 − ᾱ)` not positive.
 
 The citations of upstream's lines in `params::air` and `params::room` are checked against the
 source at `929a5c8` by `params_air.rs` and `params_room.rs`, so a citation that drifts fails a test.

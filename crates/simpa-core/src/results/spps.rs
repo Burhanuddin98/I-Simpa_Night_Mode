@@ -31,6 +31,7 @@ use roxmltree::Document;
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use super::reference::{Reference, reference};
 use super::{Refusal, SurfaceFile, band_of, file_invalid, key, read_surfaces, value_invalid};
 use crate::formats::gabe::{self, Gabe};
 use crate::formats::pbin;
@@ -275,6 +276,10 @@ pub struct SppsResults {
     pub particles: ParticleStats,
     pub surfaces: Vec<SurfaceFile>,
     pub particle_files: Vec<ParticleFileSummary>,
+    /// The analytic reference on the run's inputs ([`super::reference`]): Kuttruff's corrected
+    /// Eyring with `γ²` from the room's geometry, and plain Eyring. Not validated. Boxed: it is
+    /// the largest field, and `SolverResults` holds this or a TCR run's.
+    pub reference: Box<Reference>,
 }
 
 impl SppsResults {
@@ -1151,6 +1156,7 @@ pub(crate) fn read(
         particles,
         surfaces,
         particle_files,
+        reference: Box::new(reference(solve, exp, f64::from(c), gradient)),
     })
 }
 
@@ -1200,6 +1206,9 @@ mod tests {
             },
             surfaces: Vec::new(),
             particle_files: Vec::new(),
+            reference: Box::new(Reference::NotComputed {
+                why: "a unit test's run".into(),
+            }),
         }
     }
 

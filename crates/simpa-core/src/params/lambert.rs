@@ -3,11 +3,13 @@
 //! the geometry, never fitted to SPPS, and the independent transport as a cross-check).
 //!
 //! Promoted from the M7 follow-ups' evidence test `tests/lambert_box.rs`, and extended from a box
-//! to any closed surface of triangles. **Nothing of SPPS is used**: no tetrahedral mesh, no time
+//! to any closed surface of triangles. **Nothing of SPPS is used**: no mesh walking, no time
 //! stepping, no random generator of its, and no output of any run. A ray moves in a straight line
 //! at `c` to the nearest face; there its energy is multiplied by `1 − α` of the face and it is
 //! reflected by Lambert's law: a new direction on the side it came from, drawn with a density
-//! proportional to the cosine from the face's normal.
+//! proportional to the cosine from the face's normal. The room's volume is given as tetrahedra
+//! that fill it; they say only where [`free_paths`]' rays may start (anywhere in the room,
+//! evenly), and rays move against the surface alone.
 //!
 //! Two things are computed:
 //! - [`free_paths`]: the mean free path between reflections and its relative variance `γ²`
@@ -17,7 +19,9 @@
 //!   [`super::room::kuttruff_rt`], by construction. It refuses its own result when the mean free
 //!   path it measured is not Kosten's `4V/S` within its statistical error
 //!   ([`MEAN_FREE_PATH_TOLERANCE_SE`]): a room that is not closed, a volume that is not the
-//!   surface's, or a transport that does not reflect by Lambert's law.
+//!   surface's, a face with the room on both its sides (it reflects on both, so the field sees
+//!   its area twice), parts of a room that exchange too little sound to mix within the rays'
+//!   paths, or a transport that does not reflect by Lambert's law.
 //! - [`decay`]: the energy of the room, and of receiver balls as SPPS's receivers collect it (the
 //!   energy times the length of the path inside the ball, per time bin), from a point source in a
 //!   room of given absorption and air, for M8's cross-check against SPPS.
@@ -26,6 +30,21 @@
 //! stream, and replicas are combined in their order, whatever the threads did. The spread over the
 //! replicas is the statistical error; successive free paths of one ray are correlated, so the
 //! spread of independent replicas, not the count of paths, gives it.
+//!
+//! **Known answers** (`tests/params_lambert.rs`; `docs/params.md`, "Kuttruff's reference"). In a
+//! closed room, Lambert reflection keeps a uniform, isotropic field, so the free paths between
+//! reflections have the mean `4V/S` in any room. In a convex room they are the chords of lines
+//! that are uniform and isotropic in space, whose mean square integral geometry gives as
+//! `⟨ℓ²⟩ = (2/(π·S))·∫∫ |x − y|⁻² dx dy` over pairs of points in the room: `γ²` = 1/8 for a
+//! sphere, 0.344950 for a cube (from Bailey, Borwein and Crandall's closed form of that integral),
+//! 0.388874 for M8's 6×10×3 m room and 0.352401 for its 5×4×3 m one. The transport reproduces each
+//! within its statistical error. **Where rays start matters**: a field begun at one point is not
+//! yet diffuse, and a ray's first reflections remember it. The M7 follow-ups' `lambert_box.rs`
+//! started every ray at the source and counted from the first reflection; measured with this
+//! transport, that reads `γ²` about 0.005 low and the mean free path 0.2 % long at 64 paths a ray,
+//! and rays started in the narrow wing of an L-shaped room give a mean free path 0.3 % short after
+//! 16 reflections. So [`free_paths`] starts each ray at a point drawn evenly from the room's
+//! volume, and leaves out its first paths as well ([`FreePathSettings::burn_in_paths`]).
 
 use std::f64::consts::PI;
 
@@ -108,26 +127,58 @@ struct Node {
 
 const LEAF_SIZE: usize = 4;
 
-/// A closed room: a surface of triangles, its volume, and a point inside it where rays start.
+/// A closed room: a surface of triangles, and tetrahedra that fill its volume.
 ///
-/// Built from geometry only ([`Enclosure::shoebox`], [`Enclosure::from_triangles`]). The surface
-/// need not be convex, and its faces need not be oriented: a ray is reflected to the side it came
-/// from. It must be closed: a ray that leaves it refuses the transport.
+/// Built from geometry only ([`Enclosure::shoebox`], [`Enclosure::from_mesh`]). The surface need
+/// not be convex, and its faces need not be oriented: a ray is reflected to the side it came from.
+/// It must be closed: a ray that leaves it refuses the transport. The tetrahedra give the volume
+/// and where [`free_paths`]' rays start; a volume that is not the surface's fails its
+/// mean-free-path check.
 #[derive(Clone, Debug)]
 pub struct Enclosure {
     faces: Vec<Face>,
     nodes: Vec<Node>,
     order: Vec<u32>,
+    /// The tetrahedra, and the running sum of their volumes, m³.
+    cells: Vec<[V3; 4]>,
+    cumulative_m3: Vec<f64>,
     volume_m3: f64,
     area_m2: f64,
-    interior_m: V3,
     /// The diagonal of the bounding box, m.
     size_m: f64,
 }
 
+/// A tetrahedron's volume, m³.
+fn tet_volume(t: &[V3; 4]) -> f64 {
+    dot(sub(t[1], t[0]), cross(sub(t[2], t[0]), sub(t[3], t[0]))).abs() / 6.0
+}
+
+/// The six tetrahedra of the box `[0, x] × [0, y] × [0, z]` around its diagonal (Kuhn's
+/// triangulation): one per order of the three axes.
+fn box_cells([x, y, z]: V3) -> Vec<[V3; 4]> {
+    let e = [[x, 0.0, 0.0], [0.0, y, 0.0], [0.0, 0.0, z]];
+    [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ]
+    .iter()
+    .map(|&[i, j, k]| {
+        let a = [0.0; 3];
+        let b = add_scaled(a, e[i], 1.0);
+        let c = add_scaled(b, e[j], 1.0);
+        let d = add_scaled(c, e[k], 1.0);
+        [a, b, c, d]
+    })
+    .collect()
+}
+
 impl Enclosure {
     /// A box `[0, x] × [0, y] × [0, z]`, each side as two triangles in the order −x, +x, −y, +y,
-    /// −z, +z; rays start at its centre. Refused, `params_transport_refused`, when a side is not a
+    /// −z, +z, filled by six tetrahedra. Refused, `params_transport_refused`, when a side is not a
     /// positive finite length.
     pub fn shoebox(size_m: [f64; 3]) -> Result<Enclosure, ParamError> {
         if size_m.iter().any(|s| !s.is_finite() || *s <= 0.0) {
@@ -158,18 +209,17 @@ impl Enclosure {
             triangles.push([a, b, c]);
             triangles.push([a, c, d]);
         }
-        Enclosure::from_triangles(&triangles, x * y * z, [x / 2.0, y / 2.0, z / 2.0])
+        Enclosure::from_mesh(&triangles, &box_cells(size_m))
     }
 
-    /// A room bounded by `triangles`, of `volume_m3`, with rays starting at `interior_m`, which
-    /// must lie inside it. Refused, `params_transport_refused`, for no triangles, a coordinate
-    /// that is not finite, no area, a volume that is not a positive number, or an interior point
-    /// that is not finite. A surface that is not closed, or a point that is not inside it, is
-    /// found by the transport itself: its rays leave.
-    pub fn from_triangles(
+    /// A room bounded by `triangles` and filled by `tetrahedra`. Refused,
+    /// `params_transport_refused`, for no triangles or no tetrahedra, a coordinate that is not
+    /// finite, no area, or no volume. A surface that is not closed, or tetrahedra that reach
+    /// outside it, are found by the transport itself: its rays leave; tetrahedra that do not fill
+    /// it, by its mean-free-path check.
+    pub fn from_mesh(
         triangles: &[[V3; 3]],
-        volume_m3: f64,
-        interior_m: V3,
+        tetrahedra: &[[V3; 4]],
     ) -> Result<Enclosure, ParamError> {
         if triangles.is_empty() {
             return Err(refused("the enclosure has no faces"));
@@ -183,14 +233,27 @@ impl Enclosure {
                 "face {i} has a coordinate that is not finite: {t:?}"
             )));
         }
-        if !volume_m3.is_finite() || volume_m3 <= 0.0 {
+        if tetrahedra.is_empty() {
+            return Err(refused("the enclosure has no tetrahedra to fill it"));
+        }
+        if let Some((i, t)) = tetrahedra
+            .iter()
+            .enumerate()
+            .find(|(_, t)| t.iter().flatten().any(|c| !c.is_finite()))
+        {
             return Err(refused(format!(
-                "the volume {volume_m3} m³ is not a positive number"
+                "tetrahedron {i} has a coordinate that is not finite: {t:?}"
             )));
         }
-        if interior_m.iter().any(|c| !c.is_finite()) {
+        let mut cumulative_m3 = Vec::with_capacity(tetrahedra.len());
+        let mut volume_m3 = 0.0;
+        for t in tetrahedra {
+            volume_m3 += tet_volume(t);
+            cumulative_m3.push(volume_m3);
+        }
+        if !(volume_m3 > 0.0 && volume_m3.is_finite()) {
             return Err(refused(format!(
-                "the interior point {interior_m:?} is not finite"
+                "the tetrahedra's volume is {volume_m3} m³, not a positive number"
             )));
         }
         let faces: Vec<Face> = triangles
@@ -234,14 +297,15 @@ impl Enclosure {
             faces,
             nodes,
             order,
+            cells: tetrahedra.to_vec(),
+            cumulative_m3,
             volume_m3,
             area_m2,
-            interior_m,
             size_m,
         })
     }
 
-    /// The volume it was given, m³.
+    /// The tetrahedra's volume, m³.
     pub fn volume_m3(&self) -> f64 {
         self.volume_m3
     }
@@ -251,9 +315,27 @@ impl Enclosure {
         self.area_m2
     }
 
-    /// Where rays start.
-    pub fn interior_m(&self) -> V3 {
-        self.interior_m
+    /// A point drawn evenly from the tetrahedra: one by its share of the volume, then a point in
+    /// it by C. Rocchini and P. Cignoni's folding of the unit cube ("Generating random points in a
+    /// tetrahedron", J. Graphics Tools 5(4), 2000).
+    fn start_point(&self, rng: &mut Rng) -> V3 {
+        let u = rng.uniform() * self.volume_m3;
+        let i = self
+            .cumulative_m3
+            .partition_point(|&c| c <= u)
+            .min(self.cells.len() - 1);
+        let [p0, p1, p2, p3] = self.cells[i];
+        let (mut s, mut t, mut v) = (rng.uniform(), rng.uniform(), rng.uniform());
+        if s + t > 1.0 {
+            (s, t) = (1.0 - s, 1.0 - t);
+        }
+        if t + v > 1.0 {
+            (t, v) = (1.0 - v, 1.0 - s - t);
+        } else if s + t + v > 1.0 {
+            (s, v) = (1.0 - t - v, s + t + v - 1.0);
+        }
+        let a = 1.0 - s - t - v;
+        [0, 1, 2].map(|k| a * p0[k] + s * p1[k] + t * p2[k] + v * p3[k])
     }
 
     /// The number of faces.
@@ -380,14 +462,18 @@ fn centroid(f: &Face) -> V3 {
 }
 
 /// Whether the ray `o + t·d` (`inv` = `1/d` componentwise) meets the node's box for some
-/// `0 ≤ t < limit`.
+/// `0 ≤ t < limit`. Conservative: a box it might meet is kept, which costs time and never a hit.
 fn slab(n: &Node, o: V3, inv: V3, limit: f64) -> bool {
     let (mut t0, mut t1) = (0.0f64, limit);
     for k in 0..3 {
         let a = (n.lo[k] - o[k]) * inv[k];
         let b = (n.hi[k] - o[k]) * inv[k];
-        // A component of 0 gives ±inf (or NaN when the origin is on the slab's face): f64::min and
-        // max return the other operand for NaN, which keeps the slab open, as it is.
+        // A direction component of 0 gives ±inf, and 0·inf = NaN when the origin lies on the
+        // slab's plane. The ray is then parallel to the slab and on its edge: keep the slab open
+        // on this axis rather than let one NaN operand of min or max close it.
+        if a.is_nan() || b.is_nan() {
+            continue;
+        }
         t0 = t0.max(a.min(b));
         t1 = t1.min(a.max(b));
     }
@@ -468,8 +554,15 @@ impl Ray {
         e.nearest(self.p, self.d, self.face).ok_or_else(|| {
             refused(format!(
                 "a ray left the enclosure after {reflections} reflections, from {:?} towards \
-                 {:?}: the surface is not closed there, or the start {:?} is not inside it",
-                self.p, self.d, e.interior_m
+                 {:?}, last reflected by face {}: the surface is not closed there, or the ray \
+                 started outside it",
+                self.p,
+                self.d,
+                if self.face == u32::MAX {
+                    "none".to_string()
+                } else {
+                    self.face.to_string()
+                }
             ))
         })
     }
@@ -495,22 +588,26 @@ impl Ray {
 pub struct FreePathSettings {
     /// Independent replicas; their spread is the statistical error. At least 2.
     pub replicas: u32,
-    /// Rays per replica, each started at the enclosure's interior point in an isotropic direction.
+    /// Rays per replica, each started at a point drawn evenly from the enclosure's volume, in an
+    /// isotropic direction.
     pub rays_per_replica: u32,
-    /// Free paths of each ray left out before counting, the first from the start point among
-    /// them, while the ray forgets where it started.
+    /// Free paths of each ray left out after its first (from its start to a face, never
+    /// counted), while the ray forgets where it started.
     pub burn_in_paths: u32,
     /// Free paths counted per ray after the burn-in.
     pub paths_per_ray: u32,
+    /// The seed of the replicas' random streams.
     pub seed: u64,
 }
 
 impl FreePathSettings {
-    /// What `core::results` uses: 16 × 1024 rays of 16 + 64 paths, 1,048,576 paths counted.
+    /// What `core::results` uses: 16 × 1024 rays of 1 + 32 + 64 paths, 1,048,576 paths counted.
+    /// 32 left out: in an L-shaped room the mean free path sits 1.8 standard errors from 4V/S with
+    /// 16 left out and 0.2 with 64 (`tests/params_lambert.rs`).
     pub const STANDARD: FreePathSettings = FreePathSettings {
         replicas: 16,
         rays_per_replica: 1024,
-        burn_in_paths: 16,
+        burn_in_paths: 32,
         paths_per_ray: 64,
         seed: 0x6c61_6d62_6572_7431,
     };
@@ -534,9 +631,10 @@ impl FreePathSettings {
 /// assert!(t > 0.0);
 /// ```
 ///
-/// The same with a `γ²` set by hand does not compile:
+/// The same with a `γ²` set by hand does not compile, for the reason that matters: the fields
+/// are private (`E0451`), not a mistake elsewhere in the example:
 ///
-/// ```compile_fail
+/// ```compile_fail,E0451
 /// use simpa_core::params::lambert::{FreePathSettings, FreePaths};
 /// use simpa_core::params::room::{kuttruff_rt, RtConstant, Surface};
 ///
@@ -555,15 +653,30 @@ impl FreePathSettings {
 /// let t = kuttruff_rt(&paths, &walls, None, RtConstant::Physical { speed_of_sound: 343.2 }).unwrap();
 /// ```
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[schemars(
+    description = "The free paths between reflections of a diffuse (Lambert) ray transport in the \
+                   room, computed from its geometry alone (params::lambert::free_paths): their \
+                   mean and relative variance gamma^2, with their standard errors over the \
+                   transport's replicas, and the room's 4V/S, V and S."
+)]
 pub struct FreePaths {
+    /// The mean free path, m.
     mean_free_path_m: f64,
+    /// Its standard error over the replicas, m.
     mean_free_path_se_m: f64,
+    /// `γ²`, the free paths' relative variance `(⟨ℓ²⟩ − ⟨ℓ⟩²)/⟨ℓ⟩²`.
     gamma2: f64,
+    /// Its standard error over the replicas.
     gamma2_se: f64,
+    /// Kosten's `4V/S`, m, which the mean free path was checked against.
     four_v_over_s_m: f64,
+    /// The room's volume (its tetrahedra's), m³.
     volume_m3: f64,
+    /// The room's surface area, m².
     area_m2: f64,
+    /// The free paths counted.
     paths: u64,
+    /// The transport's settings.
     settings: FreePathSettings,
 }
 
@@ -689,7 +802,8 @@ pub fn free_paths(
         let (mut n, mut s1, mut s2) = (0u64, 0.0f64, 0.0f64);
         let mut reflections = 0u64;
         for _ in 0..s.rays_per_replica {
-            let mut ray = Ray::from_source(enclosure.interior_m, &mut rng);
+            let start = enclosure.start_point(&mut rng);
+            let mut ray = Ray::from_source(start, &mut rng);
             // Path 0 runs from the start point; paths 1 to burn_in are left out too.
             for k in 0..=u64::from(s.burn_in_paths) + u64::from(s.paths_per_ray) {
                 let (run, face) = ray.run(enclosure, reflections)?;
@@ -725,7 +839,8 @@ pub fn free_paths(
             "the mean free path is {mean} ± {mean_error} m, and 4V/S is {four_v_over_s_m} m: {:.1} \
              standard errors apart, more than {MEAN_FREE_PATH_TOLERANCE_SE}. Diffuse reflection \
              in a closed room of this volume gives 4V/S; the surface is not closed, the volume is \
-             not the surface's, or the reflection is not Lambert's",
+             not the surface's, a face has the room on both its sides, the room's parts do not \
+             mix within the rays' paths, or the reflection is not Lambert's",
             off / mean_error.max(f64::MIN_POSITIVE)
         )));
     }
@@ -941,4 +1056,57 @@ pub fn decay(
         time_step_s: s.time_step_s,
         replicas,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Start points fill the room evenly: in the box's six tetrahedra, the share of points in the
+    /// lowest third of each axis is a third, and the mean is the centre. The second input is the
+    /// partner for the choice of tetrahedron: two cells of volumes 1 to 27, where a choice by
+    /// count instead of volume would put half the points in the small one, not 1/28.
+    #[test]
+    fn start_points_fill_the_room_evenly() {
+        let size = [6.0, 10.0, 3.0];
+        let e = Enclosure::shoebox(size).unwrap();
+        assert_eq!(e.cells.len(), 6);
+        assert!((e.volume_m3 - 180.0).abs() < 1e-9);
+        let mut rng = Rng::new(11);
+        let n = 200_000;
+        let (mut mean, mut low) = ([0.0; 3], [0usize; 3]);
+        for _ in 0..n {
+            let p = e.start_point(&mut rng);
+            for k in 0..3 {
+                assert!((0.0..=size[k]).contains(&p[k]), "{p:?}");
+                mean[k] += p[k] / n as f64;
+                if p[k] < size[k] / 3.0 {
+                    low[k] += 1;
+                }
+            }
+        }
+        // Binomial standard error of a third over 200,000: 0.0011; of the mean, size/√(12·n).
+        for k in 0..3 {
+            let share = low[k] as f64 / n as f64;
+            assert!((share - 1.0 / 3.0).abs() < 0.005, "axis {k}: {share}");
+            let se = size[k] / (12.0 * n as f64).sqrt();
+            assert!(
+                (mean[k] - size[k] / 2.0).abs() < 4.0 * se,
+                "axis {k}: {}",
+                mean[k]
+            );
+        }
+        // Says no: one tetrahedron of unequal cells chosen evenly by count, not by volume, puts
+        // too many points in the small one.
+        let cells = [
+            [[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            [[0.0; 3], [3.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, -3.0]],
+        ];
+        let (v0, v1) = (tet_volume(&cells[0]), tet_volume(&cells[1]));
+        assert!((v1 / v0 - 27.0).abs() < 1e-9);
+        let tris = [[[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]];
+        let e = Enclosure::from_mesh(&tris, &cells).unwrap();
+        let above = (0..n).filter(|_| e.start_point(&mut rng)[2] > 0.0).count() as f64 / n as f64;
+        assert!((above - 1.0 / 28.0).abs() < 0.003, "{above}");
+    }
 }

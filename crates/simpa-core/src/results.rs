@@ -34,6 +34,7 @@ use crate::run::manifest::{self, MANIFEST_VERSION, RunManifest};
 use crate::run::verdict::{self, Outputs, Reason, Status};
 use crate::schema::SolverKind;
 
+pub mod reference;
 pub mod report;
 pub mod spps;
 pub mod tcr;

@@ -108,7 +108,7 @@ pub enum Analytic {
 /// `bfreq` children by `freq` read as an integer (`OrderChildsByProperty`, `cxml.cpp:130-146`)
 /// and maps them to the sorted `freq_enum` by position (`base_core_configuration.cpp:201-221`),
 /// so the order they are written in does not matter.
-fn materials(doc: &Document) -> Result<Vec<(u32, Vec<f64>)>, String> {
+pub(crate) fn materials(doc: &Document) -> Result<Vec<(u32, Vec<f64>)>, String> {
     let root = doc.root_element();
     let Some(list) = expect::child(root, "surface_absorption_enum") else {
         return Err("config.xml has no surface_absorption_enum".into());
@@ -136,7 +136,7 @@ fn materials(doc: &Document) -> Result<Vec<(u32, Vec<f64>)>, String> {
 
 /// The surfaces of band `index` (among all of config.xml's bands, ascending): each face's area
 /// with its material's absorption at that position.
-fn band_surfaces(
+pub(crate) fn band_surfaces(
     faces: &[(f64, u32)],
     mats: &[(u32, Vec<f64>)],
     index: usize,
@@ -166,67 +166,127 @@ pub fn analytic(solve: &Path, exp: &Expectation) -> Analytic {
 }
 
 fn analytic_inner(solve: &Path, exp: &Expectation) -> Result<Analytic, String> {
-    let scene_rel = key(&exp.names.model_name);
-    let scene =
-        cbin::read_file(&solve.join(&scene_rel)).map_err(|e| format!("{scene_rel}: {e}"))?;
-    if scene.faces.iter().any(|f| f.id_en >= 0) {
-        return Err(
-            "the scene has fitting faces (idEn), which TCR leaves out or keeps per face by its \
-             material's transmission (TC_CalculationCore.cpp:11-17); that rule is not emulated"
-                .into(),
-        );
+    let room = RoomInputs::read(solve, exp)?;
+    let mut bands = Vec::new();
+    for band in &room.bands {
+        let surfaces = band_surfaces(&room.faces, &room.materials, band.index)?;
+        let air_m_per_metre = band.air_m_per_metre.clone()?;
+        let volume_m3 = room.volume_m3;
+        bands.push(AnalyticBand {
+            freq_hz: band.freq_hz,
+            air_m_per_metre,
+            sabine_s: room::sabine_rt(volume_m3, &surfaces, air_m_per_metre, RtConstant::Tcr),
+            eyring_s: room::eyring_rt(volume_m3, &surfaces, air_m_per_metre, RtConstant::Tcr),
+        });
     }
-    let mesh_rel = key(&exp.names.tetramesh_file_name);
-    let mesh = mbin::read_file(&solve.join(&mesh_rel)).map_err(|e| format!("{mesh_rel}: {e}"))?;
-    let node = |i: i32| -> Result<[f64; 3], String> {
-        let n = usize::try_from(i)
-            .ok()
-            .and_then(|i| mesh.nodes.get(i))
-            .ok_or_else(|| format!("{mesh_rel}: node {i} out of range"))?;
-        Ok(n.map(f64::from))
-    };
-    let mut volume_m3 = 0.0;
-    for t in &mesh.tetrahedra {
-        let [a, b, c, d] = [
-            node(t.vertices[0])?,
-            node(t.vertices[1])?,
-            node(t.vertices[2])?,
-            node(t.vertices[3])?,
-        ];
-        let (u, v, w) = (sub(a, d), sub(b, d), sub(c, d));
-        volume_m3 += dot(u, cross(v, w)).abs() / 6.0;
-    }
-    let text = std::fs::read(solve.join(crate::config_xml::names::CONFIG))
-        .map_err(|e| format!("config.xml: {e}"))?;
-    let text = text.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&text);
-    let text = std::str::from_utf8(text).map_err(|e| format!("config.xml: {e}"))?;
-    let doc = Document::parse(text).map_err(|e| format!("config.xml: {e}"))?;
-    let mats = materials(&doc)?;
-    let root = doc.root_element();
-    let sim = expect::child(root, "simulation");
-    let atmo = expect::child(root, "condition_atmospherique");
-    let attr = |n: Option<roxmltree::Node>, name: &str| -> String {
-        n.and_then(|n| n.attribute(name)).unwrap_or("").to_string()
-    };
-    let real = |n: Option<roxmltree::Node>, name: &str| -> Result<f64, String> {
-        let t = attr(n, name);
-        locate::to_float(&t)
-            .filter(|v| v.is_finite())
-            .map(f64::from)
-            .ok_or_else(|| format!("config.xml: {name} {t:?} is not a number"))
-    };
-    let air_on = expect::atoi(&attr(sim, "abs_atmo_calc")) != 0;
-    let user_air = expect::atoi(&attr(atmo, "disable_absatmo_computation")) == 1;
-    let atmosphere = Atmosphere {
-        temperature_c: real(atmo, "temperature")?,
-        relative_humidity_percent: real(atmo, "humidite")?,
-        pressure_pa: real(atmo, "pression")?,
-    };
+    Ok(Analytic::Computed {
+        volume_m3: room.volume_m3,
+        area_m2: room.faces.iter().map(|f| f.0).sum(),
+        bands,
+    })
+}
 
-    let face_areas: Vec<f64> = scene
-        .faces
-        .iter()
-        .map(|f| {
+/// One computed band of [`RoomInputs`].
+#[derive(Clone, Debug)]
+pub(crate) struct RoomBand {
+    /// Its position among all of config.xml's bands, ascending: the index of its absorption.
+    pub index: usize,
+    pub freq_hz: i32,
+    /// The energy attenuation `m` the solver applies, 1/m: `None` with `abs_atmo_calc` off, the
+    /// user's `absatmo` when the computation is disabled, else the solver's value at the nominal
+    /// frequency ([`solver_air`]); why not, when it cannot be read.
+    pub air_m_per_metre: Result<Option<f64>, String>,
+}
+
+/// The room as a run's own inputs give it, the way TCR takes it (`TC_CalculationCore.cpp:87-141,
+/// 199-209`): every `.cbin` face with its material, the `.mbin`'s volume, the materials' absorption
+/// per band and the air term from `config.xml`. [`analytic`] and `results::reference` read it.
+#[derive(Clone, Debug)]
+pub(crate) struct RoomInputs {
+    /// The `.cbin`'s faces, in its order, as triangles in metres.
+    pub triangles: Vec<[[f64; 3]; 3]>,
+    /// Each face's area, m², and material id, in the same order.
+    pub faces: Vec<(f64, u32)>,
+    /// The `.mbin`'s volume, the sum of its tetrahedra's, m³.
+    pub volume_m3: f64,
+    /// The `.mbin`'s tetrahedra, in metres: they fill the meshed room.
+    pub tetrahedra: Vec<[[f64; 3]; 4]>,
+    /// [`materials`]: each material's absorption per band, in frequency order.
+    pub materials: Vec<(u32, Vec<f64>)>,
+    /// The computed bands, ascending.
+    pub bands: Vec<RoomBand>,
+    /// `config.xml`'s text, for what else a caller reads from it.
+    pub config: String,
+}
+
+impl RoomInputs {
+    /// Refused, with why, for a scene with fitting faces (whose rule TCR applies per face and
+    /// this does not emulate), a file that does not read, or an index out of range.
+    pub(crate) fn read(solve: &Path, exp: &Expectation) -> Result<RoomInputs, String> {
+        let scene_rel = key(&exp.names.model_name);
+        let scene =
+            cbin::read_file(&solve.join(&scene_rel)).map_err(|e| format!("{scene_rel}: {e}"))?;
+        if scene.faces.iter().any(|f| f.id_en >= 0) {
+            return Err(
+                "the scene has fitting faces (idEn), which TCR leaves out or keeps per face by \
+                 its material's transmission (TC_CalculationCore.cpp:11-17); that rule is not \
+                 emulated"
+                    .into(),
+            );
+        }
+        let mesh_rel = key(&exp.names.tetramesh_file_name);
+        let mesh =
+            mbin::read_file(&solve.join(&mesh_rel)).map_err(|e| format!("{mesh_rel}: {e}"))?;
+        let node = |i: i32| -> Result<[f64; 3], String> {
+            let n = usize::try_from(i)
+                .ok()
+                .and_then(|i| mesh.nodes.get(i))
+                .ok_or_else(|| format!("{mesh_rel}: node {i} out of range"))?;
+            Ok(n.map(f64::from))
+        };
+        let mut volume_m3 = 0.0;
+        let mut tetrahedra = Vec::with_capacity(mesh.tetrahedra.len());
+        for t in &mesh.tetrahedra {
+            let [a, b, c, d] = [
+                node(t.vertices[0])?,
+                node(t.vertices[1])?,
+                node(t.vertices[2])?,
+                node(t.vertices[3])?,
+            ];
+            let (u, v, w) = (sub(a, d), sub(b, d), sub(c, d));
+            volume_m3 += dot(u, cross(v, w)).abs() / 6.0;
+            tetrahedra.push([a, b, c, d]);
+        }
+        let text = std::fs::read(solve.join(crate::config_xml::names::CONFIG))
+            .map_err(|e| format!("config.xml: {e}"))?;
+        let text = text.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&text);
+        let text = std::str::from_utf8(text).map_err(|e| format!("config.xml: {e}"))?;
+        let doc = Document::parse(text).map_err(|e| format!("config.xml: {e}"))?;
+        let materials = materials(&doc)?;
+        let root = doc.root_element();
+        let sim = expect::child(root, "simulation");
+        let atmo = expect::child(root, "condition_atmospherique");
+        let attr = |n: Option<roxmltree::Node>, name: &str| -> String {
+            n.and_then(|n| n.attribute(name)).unwrap_or("").to_string()
+        };
+        let real = |n: Option<roxmltree::Node>, name: &str| -> Result<f64, String> {
+            let t = attr(n, name);
+            locate::to_float(&t)
+                .filter(|v| v.is_finite())
+                .map(f64::from)
+                .ok_or_else(|| format!("config.xml: {name} {t:?} is not a number"))
+        };
+        let air_on = expect::atoi(&attr(sim, "abs_atmo_calc")) != 0;
+        let user_air = expect::atoi(&attr(atmo, "disable_absatmo_computation")) == 1;
+        let atmosphere = Atmosphere {
+            temperature_c: real(atmo, "temperature")?,
+            relative_humidity_percent: real(atmo, "humidite")?,
+            pressure_pa: real(atmo, "pression")?,
+        };
+
+        let mut triangles = Vec::with_capacity(scene.faces.len());
+        let mut faces = Vec::with_capacity(scene.faces.len());
+        for f in &scene.faces {
             let p = |i: u32| {
                 scene
                     .vertices
@@ -236,43 +296,45 @@ fn analytic_inner(solve: &Path, exp: &Expectation) -> Result<Analytic, String> {
             };
             let (a, b, c) = (p(f.a)?, p(f.b)?, p(f.c)?);
             let n = cross(sub(b, a), sub(c, a));
-            Ok(0.5 * dot(n, n).sqrt())
-        })
-        .collect::<Result<_, String>>()?;
-    let faces: Vec<(f64, u32)> = face_areas
-        .iter()
-        .zip(&scene.faces)
-        .map(|(&a, f)| (a, f.id_mat))
-        .collect();
-    let mut bands = Vec::new();
-    for (index, band) in exp.bands.iter().enumerate() {
-        if !band.requested {
-            continue;
+            triangles.push([a, b, c]);
+            faces.push((0.5 * dot(n, n).sqrt(), f.id_mat));
         }
-        let surfaces = band_surfaces(&faces, &mats, index)?;
-        let air_m_per_metre = if !air_on {
-            None
-        } else if user_air {
-            Some(real(atmo, "absatmo")?)
-        } else {
-            Some(solver_air(f64::from(band.freq_hz), &atmosphere).map_err(|e| e.to_string())?)
-        };
-        let air_m_per_metre = match crate::faults::active() {
-            Some(crate::faults::Fault::AirTermDropped) => None,
-            _ => air_m_per_metre,
-        };
-        bands.push(AnalyticBand {
-            freq_hz: band.freq_hz,
-            air_m_per_metre,
-            sabine_s: room::sabine_rt(volume_m3, &surfaces, air_m_per_metre, RtConstant::Tcr),
-            eyring_s: room::eyring_rt(volume_m3, &surfaces, air_m_per_metre, RtConstant::Tcr),
-        });
+        let bands = exp
+            .bands
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.requested)
+            .map(|(index, band)| {
+                let air = if !air_on {
+                    Ok(None)
+                } else if user_air {
+                    real(atmo, "absatmo").map(Some)
+                } else {
+                    solver_air(f64::from(band.freq_hz), &atmosphere)
+                        .map(Some)
+                        .map_err(|e| e.to_string())
+                };
+                let air = match crate::faults::active() {
+                    Some(crate::faults::Fault::AirTermDropped) => air.map(|_| None),
+                    _ => air,
+                };
+                RoomBand {
+                    index,
+                    freq_hz: band.freq_hz,
+                    air_m_per_metre: air,
+                }
+            })
+            .collect();
+        Ok(RoomInputs {
+            triangles,
+            faces,
+            volume_m3,
+            tetrahedra,
+            materials,
+            bands,
+            config: text.to_string(),
+        })
     }
-    Ok(Analytic::Computed {
-        volume_m3,
-        area_m2: face_areas.iter().sum(),
-        bands,
-    })
 }
 
 /// The air term TCR adds for a band at nominal frequency `nominal_hz`: the solver's `m`

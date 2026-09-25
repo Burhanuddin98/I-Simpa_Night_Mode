@@ -126,9 +126,10 @@ fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
 
 /// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
 /// typed `error`.
-const NULLABLE: [&str; 21] = [
+const NULLABLE: [&str; 22] = [
     ".spps",
     ".tcr",
+    ".free_paths",
     ".mc_sd",
     ".band_hz",
     ".aggregate",
@@ -691,6 +692,81 @@ fn results_that_do_not_verify_are_refused_with_exit_6() {
         assert_eq!(json(&o)["exit_code"], 6);
         println!("{label}: {}", o.stderr.trim());
     }
+}
+
+// --- the analytic reference (pre-M8) -------------------------------------------------------------
+
+/// Pre-M8 (Burhan, 2026-09-24 23:14; `docs/params.md`, "Kuttruff's reference"): an SPPS report
+/// carries the reference M8 and M12 need, labelled and not validated. Every number is checked
+/// against its formula from the report's own fields, and γ² against the box's exact value.
+#[test]
+fn an_spps_report_carries_its_rooms_reference_labelled_and_not_validated() {
+    let o = results(&fixture(SEATS_SPPS), true);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let rep = json(&o);
+    assert_eq!(rep["validated_by_bed"], false);
+    let r = &rep["spps"]["reference"];
+    assert_eq!(r["status"], "computed", "{r}");
+    let label = r["label"].as_str().unwrap();
+    assert!(
+        label.contains("not validated") && label.contains("kuttruff_s"),
+        "{label}"
+    );
+    let f = |v: &Value| v.as_f64().unwrap();
+    let (v, s, c, k) = (
+        f(&r["volume_m3"]),
+        f(&r["area_m2"]),
+        f(&r["speed_of_sound_m_s"]),
+        f(&r["constant_s_per_m"]),
+    );
+    assert!((v - 180.0).abs() < 1e-6 && (s - 216.0).abs() < 1e-6, "{r}");
+    // SPPS's own c, as SPPS stores it (f32), and K = 24·ln 10/c.
+    assert_eq!(c, f64::from(343.2f32));
+    assert!((k - 24.0 * std::f64::consts::LN_10 / c).abs() < 1e-15);
+    // The transport's free paths: 4V/S and the box's exact γ² (tests/params_lambert.rs), each
+    // within 3 standard errors.
+    let fp = &r["free_paths"];
+    let (mfp, mfp_se, g, g_se) = (
+        f(&fp["mean_free_path_m"]),
+        f(&fp["mean_free_path_se_m"]),
+        f(&fp["gamma2"]),
+        f(&fp["gamma2_se"]),
+    );
+    assert!((f(&fp["four_v_over_s_m"]) - 4.0 * v / s).abs() < 1e-9);
+    assert!((mfp - 4.0 * v / s).abs() < 3.0 * mfp_se, "{fp}");
+    assert!((g - 0.388_874).abs() < 3.0 * g_se, "{fp}");
+    let bands = r["bands"].as_array().unwrap();
+    assert_eq!(bands.len(), 2);
+    for b in bands {
+        let abar = f(&b["mean_absorption"]);
+        let m = b["air_m_per_metre"].as_f64().unwrap_or(0.0);
+        let ln = (1.0 - abar).ln();
+        let eyring = k * v / (4.0 * m * v - s * ln);
+        let kuttruff = k * v / (4.0 * m * v - s * ln * (1.0 + 0.5 * g * ln));
+        assert!(
+            (f(&b["eyring_s"]["value"]) / eyring - 1.0).abs() < 1e-9,
+            "{b}"
+        );
+        assert!(b["eyring_s"]["mc_sd"].is_null());
+        assert!(
+            (f(&b["kuttruff_s"]["value"]) / kuttruff - 1.0).abs() < 1e-9,
+            "{b}"
+        );
+        assert!(f(&b["kuttruff_s"]["mc_sd"]) > 0.0);
+        // The box's walls are specular: the band says the reference does not describe them.
+        assert_eq!(b["lambert_walls"], false, "{b}");
+    }
+    // The text says what it is beside it.
+    let t = results(&fixture(SEATS_SPPS), false);
+    assert!(
+        t.stdout
+            .contains("reference, analytic, diffuse field, NOT VALIDATED"),
+        "{}",
+        t.stdout
+    );
+    // A TCR report has its own analytic block and no SPPS reference.
+    let tcr = json(&results(&fixture(SEATS_TCR), true));
+    assert!(tcr["spps"].is_null() && tcr["tcr"]["analytic"]["status"] == "computed");
 }
 
 // --- the schema ----------------------------------------------------------------------------------

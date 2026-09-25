@@ -440,6 +440,111 @@
         ],
         "description": "A quantity's value, or why it has none."
       },
+      "FreePathSettings": {
+        "description": "The settings of [`free_paths`]: the transport's own, nothing of any solver.",
+        "properties": {
+          "burn_in_paths": {
+            "description": "Free paths of each ray left out after its first (from its start to a face, never\ncounted), while the ray forgets where it started.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "paths_per_ray": {
+            "description": "Free paths counted per ray after the burn-in.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "rays_per_replica": {
+            "description": "Rays per replica, each started at a point drawn evenly from the enclosure's volume, in an\nisotropic direction.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "replicas": {
+            "description": "Independent replicas; their spread is the statistical error. At least 2.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "seed": {
+            "description": "The seed of the replicas' random streams.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "replicas",
+          "rays_per_replica",
+          "burn_in_paths",
+          "paths_per_ray",
+          "seed"
+        ],
+        "type": "object"
+      },
+      "FreePaths": {
+        "description": "The free paths between reflections of a diffuse (Lambert) ray transport in the room, computed from its geometry alone (params::lambert::free_paths): their mean and relative variance gamma^2, with their standard errors over the transport's replicas, and the room's 4V/S, V and S.",
+        "properties": {
+          "area_m2": {
+            "description": "The room's surface area, m².",
+            "format": "double",
+            "type": "number"
+          },
+          "four_v_over_s_m": {
+            "description": "Kosten's `4V/S`, m, which the mean free path was checked against.",
+            "format": "double",
+            "type": "number"
+          },
+          "gamma2": {
+            "description": "`γ²`, the free paths' relative variance `(⟨ℓ²⟩ − ⟨ℓ⟩²)/⟨ℓ⟩²`.",
+            "format": "double",
+            "type": "number"
+          },
+          "gamma2_se": {
+            "description": "Its standard error over the replicas.",
+            "format": "double",
+            "type": "number"
+          },
+          "mean_free_path_m": {
+            "description": "The mean free path, m.",
+            "format": "double",
+            "type": "number"
+          },
+          "mean_free_path_se_m": {
+            "description": "Its standard error over the replicas, m.",
+            "format": "double",
+            "type": "number"
+          },
+          "paths": {
+            "description": "The free paths counted.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "settings": {
+            "$ref": "#/$defs/FreePathSettings",
+            "description": "The transport's settings."
+          },
+          "volume_m3": {
+            "description": "The room's volume (its tetrahedra's), m³.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "mean_free_path_m",
+          "mean_free_path_se_m",
+          "gamma2",
+          "gamma2_se",
+          "four_v_over_s_m",
+          "volume_m3",
+          "area_m2",
+          "paths",
+          "settings"
+        ],
+        "type": "object"
+      },
       "MainBand": {
         "description": "One band row of `Main results.gabe`.",
         "properties": {
@@ -1206,6 +1311,23 @@
               "value"
             ],
             "type": "object"
+          },
+          {
+            "description": "The diffuse ray transport (`params::lambert`) cannot run with its inputs, a ray left the\nenclosure, or its mean free path is not `4V/S` within its statistical error.",
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "transport_refused",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "detail"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -1558,6 +1680,128 @@
         ],
         "type": "object"
       },
+      "ReferenceBandReport": {
+        "description": "One band of [`ReferenceReport`].",
+        "properties": {
+          "air_m_per_metre": {
+            "description": "The energy attenuation the solver applies, added as `4·m·V`, 1/m; `null` with air\nabsorption off.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "eyring_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Plain Eyring, `K·V/(4·m·V − S·ln(1 − ᾱ))`, s, with SPPS's `K`: **reported only**."
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "kuttruff_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:\n**M8's reference**. `mc_sd` is the standard deviation it inherits from the transport's\n`γ²`. Refused with the transport's own refusal when the transport refused."
+          },
+          "lambert_walls": {
+            "description": "Every face reflects by Lambert's law with scattering 1 in this band: the only walls the\ntransport's `γ²` describes. When false, neither time describes the run's field.",
+            "type": "boolean"
+          },
+          "mean_absorption": {
+            "description": "`ᾱ = Σ Sᵢ·αᵢ / S` over the room's faces.",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "mean_absorption",
+          "lambert_walls",
+          "eyring_s",
+          "kuttruff_s"
+        ],
+        "type": "object"
+      },
+      "ReferenceReport": {
+        "description": "The analytic reference of an SPPS run, or why there is none (`results::reference`).",
+        "oneOf": [
+          {
+            "properties": {
+              "area_m2": {
+                "description": "The `.cbin` faces' total area, m².",
+                "format": "double",
+                "type": "number"
+              },
+              "bands": {
+                "items": {
+                  "$ref": "#/$defs/ReferenceBandReport"
+                },
+                "type": "array"
+              },
+              "constant_s_per_m": {
+                "description": "`K = 24·ln 10/c`, s/m.",
+                "format": "double",
+                "type": "number"
+              },
+              "free_paths": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/FreePaths"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The diffuse transport's free paths in the room: the mean free path, `γ²`, their\nstandard errors, `4V/S`, and the transport's settings. `null` when the transport\nrefused; every band's `kuttruff_s` then carries its refusal."
+              },
+              "label": {
+                "description": "Always [`crate::results::reference::REFERENCE_LABEL`].",
+                "type": "string"
+              },
+              "speed_of_sound_m_s": {
+                "description": "SPPS's speed of sound, m/s.",
+                "format": "double",
+                "type": "number"
+              },
+              "status": {
+                "const": "computed",
+                "type": "string"
+              },
+              "volume_m3": {
+                "description": "The `.mbin`'s volume, m³.",
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "status",
+              "label",
+              "volume_m3",
+              "area_m2",
+              "speed_of_sound_m_s",
+              "constant_s_per_m",
+              "bands"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "not_computed",
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "why"
+            ],
+            "type": "object"
+          }
+        ]
+      },
       "Refused": {
         "description": "A `core::params` refusal.",
         "properties": {
@@ -1891,6 +2135,10 @@
             "format": "double",
             "type": "number"
           },
+          "reference": {
+            "$ref": "#/$defs/ReferenceReport",
+            "description": "The analytic reference on the run's own inputs (`results::reference`): Kuttruff's\ncorrected Eyring with `γ²` from the room's geometry, M8's reference, and plain Eyring,\nreported only. **Not validated.**"
+          },
           "sources": {
             "items": {
               "$ref": "#/$defs/SourcePoint"
@@ -1947,7 +2195,8 @@
           "total_energy",
           "point_receivers",
           "surfaces",
-          "particle_files"
+          "particle_files",
+          "reference"
         ],
         "type": "object"
       },

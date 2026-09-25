@@ -672,6 +672,20 @@ code with SPPS: straight rays in the box, Lambert (cosine) reflection, the energ
   `γ²` depends on the room (0.388 and 0.352 here), so it would need computing for each room, apart
   from SPPS. The options are Burhan's (`docs/params.md`, "The reference M8 compares against").
 
+**Since (pre-M8, after Burhan's decision of 23:14).** The transport is core code
+(`params::lambert`), and Kuttruff's formula with its `γ²` (`params::room::kuttruff_rt`); every SPPS
+report carries both references, labelled and not validated (`spps.reference`,
+`docs/formats/results-json.md`). Two corrections to the table above, measured
+(`docs/params.md`, "Kuttruff's reference"):
+- **`γ²`'s exact values** are 0.388874 and 0.352401, from integral geometry (the table's 0.388 and
+  0.352 agree to their third decimal, and its lower values at higher α came from counting paths
+  from the first reflection of rays started at the source: shorter runs, more of the ray's memory
+  of where it started).
+- **Kuttruff with the exact `γ²`**, against the core transport's receivers at 4 M to 34 M rays a
+  cell: −0.20, −0.34, −0.41, +0.28 % (6×10×3 m) and −0.18, −0.30, −0.35, +0.59 % (5×4×3 m) at α
+  0.05, 0.1, 0.2 and 0.4, each ±0.01 to 0.02 %. The core transport's own T30 against Eyring
+  reproduces the "Transport" column within 0.07 %.
+
 ### Seed spread: what "≤ 2 %" asks for
 
 The range of three seeds is a poor statistic: for normal noise its mean is 1.69 σ and its 95 %

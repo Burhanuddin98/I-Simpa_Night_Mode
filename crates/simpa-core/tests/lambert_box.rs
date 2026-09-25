@@ -1,6 +1,10 @@
 //! A from-scratch Monte Carlo of M8's rooms, sharing no code with SPPS (M7 follow-ups, second
 //! review; `docs/results.md`, "What M8 needs"). Evidence, not a gate: it is ignored and run on
-//! purpose,
+//! purpose, and kept as it was run. **Promoted since** (pre-M8) to core code, `params::lambert`,
+//! for any closed room, with known-answer checks (`tests/params_lambert.rs`,
+//! `tests/params_kuttruff.rs`). Its `γ²` counts every path from a ray's first reflection, the rays
+//! started at the source, which reads low by the ray's memory of where it started: 0.388 where the
+//! exact value is 0.38887 (`docs/params.md`, "Kuttruff's reference"). Run it with
 //!
 //! `cargo test --release -p simpa-core --test lambert_box -- --ignored --nocapture`
 //!

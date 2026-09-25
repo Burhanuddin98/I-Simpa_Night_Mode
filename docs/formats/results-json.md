@@ -59,8 +59,9 @@ are not for publication.`
 - **`null` appears only at these keys:** `spps`, `tcr` (the other solver's), `mc_sd` (a value not
   from a Monte-Carlo histogram), `band_hz` and `aggregate` (a surface file's: the first for the
   `Global` file, the second for a band's), `curved`, `decay_curve`, `field`, `air_m_per_metre`,
-  `onset`, `position_m`, `arrival_s`, `decay_arrival`, `floor_db`, `lost_share`, `crossings`, and
-  inside a refusal's typed `error`, `sd`, `with_tail`, `with_missing`, `low` and `high`
+  `onset`, `position_m`, `arrival_s`, `decay_arrival`, `floor_db`, `lost_share`, `crossings`,
+  `free_paths` (the reference's, when the transport refused), and inside a refusal's typed
+  `error`, `sd`, `with_tail`, `with_missing`, `low` and `high`
   (`cli_results.rs`, `every_null_in_a_report_is_at_a_nullable_key`).
 - Values read from the solvers' files are their `f32`, widened exactly. A reader that is not
   correctly rounded (serde_json's default is not) can come back one `f64` unit off; compare such
@@ -82,7 +83,7 @@ are not for publication.`
 
 ```
 {
-  "results_version": 4,               // 2: mc_sd, noise, floor, lost-share and per-source fields;
+  "results_version": 5,               // 2: mc_sd, noise, floor, lost-share and per-source fields;
                                       // 3: TCR receivers carry parameters and an aggregate;
                                       // 4: lost_follows_decay; an arrival outside the onset
                                       //    bin refuses C50, C80, D50 and Ts only; bands carry
@@ -90,7 +91,7 @@ are not for publication.`
                                       //    early_reverberation_unresolved; bands and
                                       //    aggregates carry curvature and decay_curve; TCR
                                       //    receivers' global; surfaces' aggregate and
-                                      //    receivers' id (4 is not merged yet)
+                                      //    receivers' id; 5 (pre-M8): spps.reference
   "validated_by_bed": false,          // false until M8's bed passes: show nothing
   "run_folder": "<as given>",
   "solver": "spps" | "tcr",
@@ -118,6 +119,46 @@ are not for publication.`
 | `point_receivers[]` | below, in the order of their folder names |
 | `surfaces[]` | each surface-receiver and cutting-plane file, summarised: `path`, `field` (`null`), `band_hz` (`null` for `Global`), `aggregate` (the `Global` file's label, `null` for a band's), `cutting_plane` (the cutting planes' file, `rs_cut.csbin`, not the scene receivers' `Sound level.csbin`: kept apart by name, each holding only receivers of its kind, `docs/results.md`), `record_type`, `time_steps`, `time_step_s`, and per receiver its `id` (its `config.xml` id), `name`, `faces`, `records` and `value_sum`. The values stay in the `.csbin` |
 | `particle_files[]` | when particles were saved: `path`, `freq_hz`, `particles` (those written: of the `nbparticules_rendu` per source, the ones that recorded a step) and `recorded_steps` (their step records together). Each file is checked against its run (`docs/results.md`, "Saved particles") |
+| `reference` | the analytic reference on the run's own inputs, below. **Not validated** |
+
+#### `reference`
+
+M8's and M12's reference for the run's reverberation times (pre-M8; Burhan, 2026-09-24 23:14;
+`docs/params.md`, "Kuttruff's reference"), computed from the run's inputs alone (the `.cbin`
+faces and materials, the `.mbin`'s tetrahedra, `config.xml`'s air and SPPS's `c`), never from its
+output. **Nothing in it is validated**, and `label` says so beside the numbers:
+
+```
+"reference": {"status": "computed",
+              "label": "analytic reference for a diffuse field, not validated (M8's bed has not run): ...",
+              "volume_m3": 180.0, "area_m2": 216.0,           // the .mbin's volume, the .cbin's area
+              "speed_of_sound_m_s": 343.20001220703125,       // SPPS's c
+              "constant_s_per_m": 0.16101993084580937,        // K = 24·ln 10/c
+              "free_paths": {"mean_free_path_m": 3.3352, "mean_free_path_se_m": 0.0025,
+                             "gamma2": 0.38883, "gamma2_se": 0.00066,
+                             "four_v_over_s_m": 3.3333, "volume_m3": 180.0, "area_m2": 216.0,
+                             "paths": 1048576, "settings": {...}} | null,
+              "bands": [{"freq_hz": 500, "air_m_per_metre": 0.000628 | null,
+                         "mean_absorption": 0.2,              // ᾱ = Σ Sᵢαᵢ / S
+                         "lambert_walls": false,              // every face Lambert, scattering 1?
+                         "eyring_s": {"value": 0.5957, "mc_sd": null},
+                         "kuttruff_s": {"value": 0.6225, "mc_sd": 0.0000476}}, ...]}
+| {"status": "not_computed", "why": "..."}
+```
+
+- **`kuttruff_s` is M8's reference**: Kuttruff's corrected Eyring,
+  `K·V/(4·m·V − S·ln(1 − ᾱ)·[1 + (γ²/2)·ln(1 − ᾱ)])`, with `γ²` from `free_paths`, which a diffuse
+  ray transport computed from the room's geometry alone. Its `mc_sd` is the standard deviation it
+  inherits from `γ²`'s standard error. **`eyring_s` is plain Eyring, reported only.** Both use
+  SPPS's `c` in `K` and the solver's own air term `m` (`null` with air absorption off).
+- **Both describe a diffuse field.** `lambert_walls` says whether every face reflects by Lambert's
+  law with scattering 1 in the band, the only walls the transport's `γ²` describes; with specular
+  or partly specular walls neither time describes the run's field.
+- `free_paths` is `null` when the transport refused (a ray left the room, or its mean free path is
+  not `4V/S` within its error); every band's `kuttruff_s` then carries that refusal,
+  `params_transport_refused`, and `eyring_s` is still given.
+- `not_computed` when the scene has fitting faces (as TCR's `analytic`), the speed of sound varies
+  with height (`celerity_gradient`), or the inputs do not read.
 
 A point receiver:
 
@@ -213,7 +254,7 @@ series. They are shown as TCR's own, `total_sabine_db` and `total_eyring_db`.
 
 ```
 {
-  "results_version": 4,
+  "results_version": 5,
   "run_folder": "<as given>",
   "refused": {
     "code": "results_run_failed",

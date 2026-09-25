@@ -21,6 +21,10 @@
 //! - [`Fault::LambertUniformReflection`]: `params::lambert`'s transport reflecting uniformly over
 //!   the hemisphere instead of by Lambert's cosine law, the say-NO of its mean-free-path check.
 //!   The transport reads it on the calling thread and hands it to its replicas' threads.
+//! - [`Fault::KuttruffFullVariance`] and [`Fault::KuttruffAirInsideMean`]: `params::room`'s
+//!   Kuttruff time with the correction's `½` dropped, or with the air term folded into `ᾱ` (the
+//!   form a secondary source quotes) instead of added as `4·m·V`: the say-NOs of its known-answer
+//!   checks against the transport (`docs/params.md`, "Kuttruff's reference").
 
 /// One fault, set by [`with`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -37,6 +41,11 @@ pub enum Fault {
     /// `params::lambert`'s transport draws each reflected direction uniformly over the hemisphere
     /// (`cos θ` uniform) instead of by Lambert's law (`cos θ = √u`).
     LambertUniformReflection,
+    /// `params::room`'s Kuttruff factor `1 + γ²·ln(1 − ᾱ)` instead of `1 + (γ²/2)·ln(1 − ᾱ)`.
+    KuttruffFullVariance,
+    /// `params::room`'s Kuttruff time `K·V/A'` with `ᾱ' = ᾱ + 4·m·V/S` inside both logarithms,
+    /// instead of `K·V/(4·m·V + A)`.
+    KuttruffAirInsideMean,
 }
 
 #[cfg(feature = "fault-injection")]

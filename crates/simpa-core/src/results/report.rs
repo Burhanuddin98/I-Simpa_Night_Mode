@@ -11,12 +11,14 @@
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use super::reference::{REFERENCE_LABEL, Reference};
 use super::spps::{
     BandEnergy, ParticleFileSummary, PointReceiver, SourcePoint, SourceTotals, SppsResults,
 };
 use super::tcr::{self, MainBand, TcrResults};
 use super::{Refusal, RunResults, SolverResults, SurfaceFile, value_invalid};
 use crate::params::decay::{self, Arrival, Onset};
+use crate::params::lambert::FreePaths;
 use crate::params::noise::{self, NoiseModel};
 use crate::params::{self, EnergySeries, NotEvaluable, ParamError, Quantity};
 use crate::run::stats::ParticleStats;
@@ -33,8 +35,10 @@ use crate::schema::SolverKind;
 /// reverberation continued and absent, or refused `early_unresolved`; bands and aggregates carry
 /// `curvature` and `decay_curve`; a TCR receiver's `Global` row is the labelled object `global`, and
 /// its `aggregate` says it sums nothing; surface files carry `aggregate` and each receiver its `id`.
-/// Version 4 has not been merged yet, so these are 4 as well.
-pub const REPORT_VERSION: u32 = 4;
+/// Version 4 has not been merged yet, so these are 4 as well. 5 (pre-M8): an SPPS run carries
+/// `reference`, Kuttruff's corrected Eyring with `γ²` from the room's geometry and plain Eyring,
+/// labelled and not validated.
+pub const REPORT_VERSION: u32 = 5;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -555,6 +559,96 @@ pub struct SppsReport {
     pub point_receivers: Vec<SppsReceiverReport>,
     pub surfaces: Vec<SurfaceSummary>,
     pub particle_files: Vec<ParticleFileSummary>,
+    /// The analytic reference on the run's own inputs (`results::reference`): Kuttruff's
+    /// corrected Eyring with `γ²` from the room's geometry, M8's reference, and plain Eyring,
+    /// reported only. **Not validated.**
+    pub reference: ReferenceReport,
+}
+
+/// One band of [`ReferenceReport`].
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct ReferenceBandReport {
+    pub freq_hz: i32,
+    /// The energy attenuation the solver applies, added as `4·m·V`, 1/m; `null` with air
+    /// absorption off.
+    pub air_m_per_metre: Option<f64>,
+    /// `ᾱ = Σ Sᵢ·αᵢ / S` over the room's faces.
+    pub mean_absorption: f64,
+    /// Every face reflects by Lambert's law with scattering 1 in this band: the only walls the
+    /// transport's `γ²` describes. When false, neither time describes the run's field.
+    pub lambert_walls: bool,
+    /// Plain Eyring, `K·V/(4·m·V − S·ln(1 − ᾱ))`, s, with SPPS's `K`: **reported only**.
+    pub eyring_s: Evaluated,
+    /// Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:
+    /// **M8's reference**. `mc_sd` is the standard deviation it inherits from the transport's
+    /// `γ²`. Refused with the transport's own refusal when the transport refused.
+    pub kuttruff_s: Evaluated,
+}
+
+/// The analytic reference of an SPPS run, or why there is none (`results::reference`).
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case", tag = "status")]
+pub enum ReferenceReport {
+    Computed {
+        /// Always [`crate::results::reference::REFERENCE_LABEL`].
+        label: String,
+        /// The `.mbin`'s volume, m³.
+        volume_m3: f64,
+        /// The `.cbin` faces' total area, m².
+        area_m2: f64,
+        /// SPPS's speed of sound, m/s.
+        speed_of_sound_m_s: f64,
+        /// `K = 24·ln 10/c`, s/m.
+        constant_s_per_m: f64,
+        /// The diffuse transport's free paths in the room: the mean free path, `γ²`, their
+        /// standard errors, `4V/S`, and the transport's settings. `null` when the transport
+        /// refused; every band's `kuttruff_s` then carries its refusal.
+        free_paths: Option<FreePaths>,
+        bands: Vec<ReferenceBandReport>,
+    },
+    NotComputed {
+        why: String,
+    },
+}
+
+impl ReferenceReport {
+    fn of(r: &Reference) -> Self {
+        match r {
+            Reference::Computed {
+                volume_m3,
+                area_m2,
+                speed_of_sound_m_s,
+                constant_s_per_m,
+                free_paths,
+                bands,
+            } => ReferenceReport::Computed {
+                label: REFERENCE_LABEL.into(),
+                volume_m3: *volume_m3,
+                area_m2: *area_m2,
+                speed_of_sound_m_s: *speed_of_sound_m_s,
+                constant_s_per_m: *constant_s_per_m,
+                free_paths: free_paths.as_ref().ok().cloned(),
+                bands: bands
+                    .iter()
+                    .map(|b| ReferenceBandReport {
+                        freq_hz: b.freq_hz,
+                        air_m_per_metre: b.air_m_per_metre,
+                        mean_absorption: b.mean_absorption,
+                        lambert_walls: b.lambert_walls,
+                        eyring_s: Evaluated::of(b.eyring_s.clone()),
+                        kuttruff_s: match &b.kuttruff_s {
+                            Ok((value, sd)) => Evaluated::Value {
+                                value: *value,
+                                mc_sd: Some(*sd),
+                            },
+                            Err(e) => Evaluated::refused(e.clone()),
+                        },
+                    })
+                    .collect(),
+            },
+            Reference::NotComputed { why } => ReferenceReport::NotComputed { why: why.clone() },
+        }
+    }
 }
 
 /// TCR's `Global` row: the energetic sum of the band levels, **an aggregate**.
@@ -987,6 +1081,7 @@ fn spps_report(bands_hz: &[i32], s: &SppsResults) -> SppsReport {
             .collect(),
         surfaces: s.surfaces.iter().map(SurfaceSummary::of).collect(),
         particle_files: s.particle_files.clone(),
+        reference: ReferenceReport::of(&s.reference),
     }
 }
 
@@ -1493,5 +1588,67 @@ mod tests {
                 r.message
             );
         }
+    }
+
+    #[test]
+    fn a_refused_transport_leaves_free_paths_null_and_refuses_kuttruff_only() {
+        use crate::results::reference::ReferenceBand;
+        let refusal = ParamError::TransportRefused {
+            detail: "a ray left the enclosure".into(),
+        };
+        let r = Reference::Computed {
+            volume_m3: 180.0,
+            area_m2: 216.0,
+            speed_of_sound_m_s: 343.2,
+            constant_s_per_m: 0.161,
+            free_paths: Err(refusal.clone()),
+            bands: vec![ReferenceBand {
+                freq_hz: 500,
+                air_m_per_metre: None,
+                mean_absorption: 0.2,
+                lambert_walls: true,
+                eyring_s: Ok(0.6),
+                kuttruff_s: Err(refusal),
+            }],
+        };
+        let ReferenceReport::Computed {
+            label,
+            free_paths,
+            bands,
+            ..
+        } = ReferenceReport::of(&r)
+        else {
+            panic!("computed");
+        };
+        assert_eq!(label, REFERENCE_LABEL);
+        assert!(free_paths.is_none());
+        assert_eq!(bands[0].eyring_s.value(), Some(0.6));
+        assert_eq!(
+            bands[0].kuttruff_s.refusal().unwrap().code,
+            crate::params::codes::TRANSPORT_REFUSED
+        );
+        // A value carries the standard deviation it inherits from γ².
+        let Reference::Computed { mut bands, .. } = r else {
+            unreachable!()
+        };
+        bands[0].kuttruff_s = Ok((0.62, 5e-5));
+        let r = Reference::Computed {
+            volume_m3: 180.0,
+            area_m2: 216.0,
+            speed_of_sound_m_s: 343.2,
+            constant_s_per_m: 0.161,
+            free_paths: Err(ParamError::NoAbsorption),
+            bands,
+        };
+        let ReferenceReport::Computed { bands, .. } = ReferenceReport::of(&r) else {
+            panic!("computed");
+        };
+        assert_eq!(
+            bands[0].kuttruff_s,
+            Evaluated::Value {
+                value: 0.62,
+                mc_sd: Some(5e-5)
+            }
+        );
     }
 }
