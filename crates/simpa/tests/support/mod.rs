@@ -6,10 +6,12 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[path = "../../../simpa-core/tests/common/paths.rs"]
 pub mod paths;
+/// `simpa-core`'s scratch folders (`crates/simpa-core/tests/common/scratch.rs`).
+#[path = "../../../simpa-core/tests/common/scratch.rs"]
+pub mod scratch_files;
 
 #[allow(unused_imports)]
 pub use paths::{fixture, solver_exe};
@@ -24,22 +26,10 @@ pub fn stub() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_simpa-stub-solver"))
 }
 
-/// A fresh, empty folder for one test under cargo's test scratch space. Never reused.
+/// A fresh, empty folder for one test under `target/tmp/cli/`, never reused: removed when the
+/// test passes, kept (and named in its output) when it fails (`scratch_files`).
 pub fn scratch(label: &str) -> PathBuf {
-    static N: AtomicUsize = AtomicUsize::new(0);
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("cli")
-        .join(format!(
-            "{label}-{}-{}-{stamp}",
-            std::process::id(),
-            N.fetch_add(1, Ordering::SeqCst)
-        ));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    scratch_files::fresh("cli", label)
 }
 
 /// What one CLI call did.

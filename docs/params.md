@@ -5,10 +5,13 @@ later gates need: ISO 9613-1 air attenuation, Sabine and Eyring as TCR computes 
 18041 targets. Code: `crates/simpa-core/src/params.rs` and `params/`. Tests:
 `crates/simpa-core/tests/params_synthetic.rs` (gate (a)), `params_air.rs` (gate (b)),
 `params_room.rs` (Sabine, Eyring, gate (f)), `params_complete.rs` (complete series, lost
-particles), `params_floor.rs` (the solver's floor), `params_noise.rs` (Monte-Carlo noise),
+particles), `params_floor.rs` (the solver's floor), `params_noise.rs` (Monte-Carlo noise) and
+`params_noise_calibration.rs` (its calibration against SPPS's own seeds),
 `params_arrival.rs` (the direct sound's spread, an arrival outside the onset bin),
-`params_reference.rs` (the reference M8 compares against) and `params_upstream_gui.rs` (upstream's
-GUI reproduced on tutorial 1, and the steps from its method to ours).
+`params_reference.rs` (the reference M8 compares against), `params_upstream_gui.rs` (upstream's
+GUI reproduced on tutorial 1, and the steps from its method to ours), and, pre-M8,
+`params_lambert.rs` (the diffuse transport and `γ²`) and `params_kuttruff.rs` (Kuttruff's
+reference).
 
 **No number computed here is shown to a user until M8's physics bed passes** (`docs/rebuild-plan.md`,
 M12). M7 builds the numbers; it does not publish them.
@@ -24,6 +27,12 @@ M12). M7 builds the numbers; it does not publish them.
 | Upstream's GUI | How it computes every parameter: `src/isimpa/data_manager/projet_calculation.cpp`, `tree_rapport/e_report_gabe_recp.cpp` | Yes, at `929a5c8` (`B:\repos\I-Simpa-upstream`) |
 | Upstream's solvers | What the energy values mean, and TCR's Sabine and Eyring | Yes, same commit |
 | Night Mode `main:project/result_parser.cpp` | Nothing. Read only for its +26 dB bug (below) | Yes |
+| H. Kuttruff, *Room Acoustics* | The `γ²` correction of Eyring's formula ("Kuttruff's reference") | **No.** Taken as U. M. Stephenson gives it citing the book (next row) |
+| U. M. Stephenson, ICA 2016, paper ICA2016-556 | Kuttruff's `α'' = α'·(1 − γ²·α'/2)` and `γ²`'s definition, eq. (21) | **Yes**, the congress proceedings' PDF (`ica2016.org.ar/ica2016proceedings/ica2016/ICA2016-0556.pdf`, sha256 `ad19678e…`); and its longer version, "Different assumptions - different reverberation formulae" (`arauacustica.com/files/publicaciones/pdf_esp_69.pdf`, sha256 `e9a70206…`), section 6.3, for "γ² … in the order of 0.4…0.6" |
+| D. H. Bailey, J. M. Borwein, R. E. Crandall, "Advances in the theory of box integrals", Math. Comp. 79 (2010) 1839-1866 | The closed form of `Δ₃(−2)`, Table 6, and its integral, eq. (69): the cube's exact `γ²` | **Yes**, the authors' copy (`davidhbailey.com/dhbpapers/BoxII.pdf`, sha256 `37cfe469…`), Table 6 rendered and read |
+| L. A. Santaló, *Integral Geometry and Geometric Probability* (1976) | The chord power integrals behind `⟨ℓ²⟩`: twice the integral of `r⁻²` over pairs of points in the room, over `π·S` | **No.** The relation was derived here from the Blaschke–Petkantschin formula and Cauchy's; the test checks it on the cube against Bailey, Borwein and Crandall |
+| Bies and Hansen, *Engineering Noise Control*, 4th ed., eq. 7.64 | A fit of `γ` for rectangular rooms, and the air term folded into `ᾱ` | **No.** As quoted by Arup's Strutt help (`strutt.arup.com/help/Building_Acoustics/RTInsert.htm`), which was read |
+| R. Neubauer, B. Kostek, "Prediction of the Reverberation Time in Rectangular Rooms with Non-Uniformly Distributed Sound Absorption" | That "Kuttruff's correction" also names his correction for unevenly spread absorption, eq. (15)-(18), which is not the one used | **Yes** (`sound.eti.pg.gda.pl/papers/prediction_of_reverberation_time.pdf`, sha256 `5aef45a3…`) |
 
 **The receipts** are in `target/investigate/m7-standards-sources/` of the main checkout
 (`B:\repos\I-Simpa_Night_Mode`), copied there on 2026-09-24 from the M7 agents' scratch folders and
@@ -40,6 +49,10 @@ are not committed: the standards' PDFs are copyrighted.
   (sha256 `42eefdc4…`), on Nocke's Bild 2 extracted from the article (`laerm_bild2.png`, stored
   flipped; `laerm_bild2_upright.png`), its text pages (`laerm_p1..6.txt`), and renders of ISO's
   preview pages 7 and 8 (`iso_pdf7_*.png`, `iso_pdf8_*.png`).
+- Pre-M8, in the main checkout's `target/agents/pm8-reference-scratch/sources/`: Stephenson's two
+  papers, Bailey, Borwein and Crandall's paper with its Table 6 rendered (`boxII_table6_p34.png`),
+  Neubauer and Kostek's paper, and `iur_quadrature.py` (numpy and mpmath: the closed form to 30
+  digits, the box quadrature at 100 to 800 nodes, and the exact `γ²` of other proportions).
 
 ## The input: one band's energy histogram
 
@@ -167,8 +180,9 @@ direct sound's step leaves under 2 bins of its 10 dB range (`D/R` = 3, 6 dB, at 
 
 **What it assumes:** the reverberation continued back to the arrival as the first bin after the
 direct sound decays. The second review found this wrong for real runs, and it was: see "The early
-reverberation" below. (The earlier text here said M8's bed would show it; it cannot, since M8
-compares T30 with an analytic value and EDT is not gated.)
+reverberation" below. (The earlier text here said M8's bed could not show it, EDT not being
+gated. Since the M8 design decision 2 of 2026-09-25 00:20, M8 gates EDT at `dt` 1 ms, with T30, so
+its bed tests this reading too.)
 - **Upstream differs.** `GetTimeDecay` (`projet_calculation.cpp:127-139`) takes the last time label
   before the energy first changes by 10⁻¹⁸ in absolute value (`refValue`, lines 321, 357, 393,
   424). That is an absolute threshold, not a relative one, on labels that are bin ends; and the
@@ -265,8 +279,9 @@ extrapolation. Instead each parameter carries a bound:
    - **A series known to be complete** (`EnergySeries::complete`; `Tail::Complete`) has no tail:
      nothing is estimated, added or refused for it. Its caller must hold evidence that no energy
      arrives after the last bin; `core::results` claims it only for SPPS in random mode when the
-     run's statistics count no particle remaining at the end (`docs/results.md`, "Complete
-     series"). A decay time still needs the curve to reach the bottom of its range before the
+     run's statistics count at most one particle in a million remaining at the end
+     (`results::spps::REMAINING_UNFINISHED_SHARE`), those few bounded with the lost ones as
+     unfinished paths (`docs/results.md`, "Complete series"). A decay time still needs the curve to reach the bottom of its range before the
      last bin with energy, inside which the curve has no shape: otherwise `range_not_reached`,
      with the level at the start of that bin. Added by M7 piece B, with its tests in
      `tests/params_complete.rs`: without it, random-mode runs were refused wholesale for a tail
@@ -280,29 +295,34 @@ extrapolation. Instead each parameter carries a bound:
    refuses everything that depends on it. **The second number is never reported as the value.**
 
    The same limits bound what `Arrival::Detected` leaves open (`unresolved`, above), and what the
-   energy missing from a series can move ("Missing energy", below). Each is the tighter of 1/10 of
-   a difference limen and gate (a)'s bound. **The limens:** ISO 3382-1:2009 Table A.1, as commonly
-   reproduced (not read here), gives them for G (1 dB), EDT (5 %), C80 (1 dB), D50 (0.05) and Ts
-   (10 ms) only. T20 and T30 have none there; they take EDT's 5 %, and C50 takes C80's 1 dB. Those
-   two are extensions, not the standard's:
+   energy missing from a series can move ("Missing energy", below). Each is 1/10 of a difference
+   limen. **The limens:** ISO 3382-1:2009 Table A.1, as commonly reproduced (not read here), gives
+   them for G (1 dB), EDT (5 %), C80 (1 dB), D50 (0.05) and Ts (10 ms) only. T20 and T30 have none
+   there; they take EDT's 5 %, and C50 takes C80's 1 dB. Those two are extensions, not the
+   standard's:
 
-   | Quantity | Limit | 1/10 limen | Gate (a) |
+   | Quantity | Limit | 1/10 limen | Gate (a), on exact decays |
    |---|---|---|---|
    | EDT | 0.5 % relative | 0.5 % (of EDT's 5 %) | 0.5 % |
    | T20, T30 | 0.5 % relative | 0.5 % (of EDT's 5 %, extended) | 0.5 % |
-   | C80 | 0.01 dB | 0.1 dB (of 1 dB) | 0.01 dB |
-   | C50 | 0.01 dB | 0.1 dB (of C80's 1 dB, extended) | none named; held as C80 |
-   | D50 | 0.001 (0.1 points) | 0.005 (of 0.05) | 0.1 points |
+   | C80 | 0.1 dB | 0.1 dB (of 1 dB) | 0.01 dB |
+   | C50 | 0.1 dB | 0.1 dB (of C80's 1 dB, extended) | none named; held as C80 |
+   | D50 | 0.005 (0.5 points) | 0.005 (of 0.05) | 0.1 points |
    | Ts | 1 ms or 0.5 % of Ts, the tighter | 1 ms (of 10 ms) | none named; the test holds Ts to 0.5 % |
    | SPL | 0.1 dB | 0.1 dB (of the 1 dB given for G) | none (gate (c) is ±0.5 dB) |
 
-   The first version used 1/10 of the limen alone, 0.1 dB for C and 0.5 points for D50, so a
-   truncated series could return a C80 0.1 dB off as a number while gate (a) asks for 0.01 dB.
-
    **Confirmed by Burhan, 2026-09-24 14:11:** the strict rule, 1/10 of the limen (0.5 % for decay
-   times, 0.1 dB for clarity), to be revisited after M8. The C and D limits above are tighter still
-   (gate (a)'s bound, from the review fix), so they refuse more than the rule he confirmed. Whether
-   C and D keep the tighter bound is his to decide at the M8 review.
+   times, 0.1 dB for clarity), to be revisited after M8. **C and D aligned to it on 2026-09-25**
+   (the M8 design decision 3 of 00:20, on Burhan's "what would be best for the people using
+   this"): from the M7 review until then, C was held to gate (a)'s 0.01 dB and D50 to its 0.1
+   points, ten and five times stricter than the rule he confirmed. Gate (a) is a test of exact
+   decays, which no unknown moves, and it still holds them to its bounds with the arrival given
+   (`params_synthetic.rs`). What the alignment costs: a value refused before because an unknown
+   could move it by more than 0.01 dB (C) or 0.1 points (D50) now comes through, known only to
+   within the rule's 0.1 dB or 0.5 points. On gate (a)'s decays with the arrival detected, 40 C, D
+   and Ts values now come through at 1 ms where 10 did, 16 of them outside gate (a)'s bound and
+   inside their limit (`an_arrival_not_given_leaves_c_d_and_ts_unresolved`); what it changes on
+   SPPS runs is measured in `docs/results.md`, "What M8 needs".
 
 3. **The depth reached.** A decay time needs the curve to reach the bottom of its range. The depth
    is read from the curve **with** the tail added: that is how far the decay had fallen when the
@@ -400,9 +420,26 @@ most is not covered.
 ## Monte-Carlo noise
 
 Added after the M7 review. A complete random-mode series is exact for its particles, not for the
-room: at tutorial 1's 150,000 particles T30 came out at 0.8 to 2.4 s where the room's time is
-0.67 s, and was reported as a number. `params::noise` estimates each value's Monte-Carlo standard
-deviation and refuses the value when it is too large.
+room: at tutorial 1's 150,000 particles T30 came out at 0.8 to 2.4 s, and was reported as a
+number. What that is to be read against, each value with its source: **Sabine's formula** gives
+0.67 s (`V` 180 m³, `S` 216 m², α 0.2 on every face, `K` 0.161, no air), and Eyring's 0.60 s;
+neither is the room's time, since tutorial 1's walls are specular and its decay is not a diffuse
+field's. **SPPS's own T30** in that box with its materials and air is about 1.0 s at low
+frequency. Mean over six receivers of each one's mean over ten seeds
+(`docs/investigations/2026-09-25-noise-calibration/calibration.json`): 0.98 s at 125 Hz to 0.79 s
+at 4 kHz in cell C-R6 (random, 1.5 M particles, `dt` 1 ms), 0.95 s to 0.78 s in V4-R2 (random,
+6 M, `dt` 10 ms) and in V4-E14 (energetic, 1.2 M, `dt` 10 ms) (`params_noise_calibration.rs`,
+`tutorial_ones_t30_is_spps_own_not_sabines`). None of the three is a converged value: at 125 Hz
+C-R6 lies 2.6 % above the other two, 2.5 of its own standard errors (0.98 ± 0.01 s; its ten seeds
+spread 4 to 8 % at each receiver, 0.93 to 1.19 s at the first), which leaves open whether the
+difference is noise or its 1 ms step; V4-R2 gives 0.955 ± 0.005 s and V4-E14 0.9545 ± 0.0005 s.
+The first version of this text called 0.67 s "the room's time"; it is Sabine's. `params::noise`
+estimates each value's Monte-Carlo standard deviation, calibrates it against SPPS's own
+seed-to-seed spread, and refuses the value when it is too large, or when the run lies outside what
+the calibration measured. Calibrated pre-M8 (Burhan,
+2026-09-24 17:45: "never below the observed noise", and a refusal names the particles it needs),
+in four pre-registered rounds; every number is in
+`docs/investigations/2026-09-25-noise-calibration/`.
 
 - **The model.** SPPS adds, for every particle crossing a receiver sphere of radius `R`, its
   energy times its chord through the sphere (`spps/input_output/reportmanager.cpp:223-224`),
@@ -410,19 +447,89 @@ deviation and refuses the value when it is too large.
   its start energy `W/N` (`sppsNantes.cpp:73`) until it is absorbed whole, so one crossing adds
   `W/N · ℓ · ρc/V`. A uniform beam crossing a sphere gives chords of density `ℓ/(2R²)` on
   `[0, 2R]`: mean `4R/3`, `E[ℓ²]/E[ℓ]² = 9/8`. The mean deposit is `d̄ = W·ρc/(N·πR²)`; a bin
-  holding `E` holds about `E/d̄` crossings; crossings are Poisson, so its variance is
-  `(9/8)·d̄·E`.
-- **Energetic mode.** A particle's energy only falls from `W/N`, so the same `d̄` bounds each
-  deposit and the variance from above. The energetic estimator is the random one averaged over the
-  absorption draws, so its variance is at most random mode's: the bound is sound, and loose.
-- **The estimate.** A parametric bootstrap: 200 series drawn from the model around the series,
-  each bin a compound Poisson sum of `E/d̄` expected crossings with chord deposits (a normal draw
-  of the same mean and variance above 30), each evaluated as it is (complete, nothing missing:
-  the tail, the floor and lost particles are judged once, on the series); the standard deviation
-  over them is the value's. The seed is fixed, so a series gives the same estimate every time.
-- **The refusal:** `monte_carlo_noise`, when the standard deviation is above the limit or more
-  than 10 of the 200 resamples refuse the quantity themselves. The limit is half the limen: twice
-  the standard deviation, about a 95 % interval, stays within one limen.
+  holding `E` holds about `E/d̄` crossings; counted as independent Poisson crossings, its variance
+  is `(9/8)·d̄·E`. In energetic mode a particle's energy only falls from `W/N`, so the same `d̄`
+  bounds each deposit from above. **Neither bounds the variance**: one particle crosses a receiver
+  at several times, and its crossings share its lifetime (random mode) or its energy (energetic
+  mode), so SPPS's spread can exceed the structure in either mode; only the calibration says by
+  how much, and only where it was measured. (A deposit scaled step by step by the particles' mean
+  energy, from the room table, was measured as energetic mode's other structure; calibrated, it
+  overstated more, and is not used.)
+- **The roughness structure** (round 4, `noise::Structure::Roughness`): for energetic T20 and T30
+  outside uniform Lambert rooms, each bin's deposit is read from the series itself
+  (`noise::roughness_deposits`). Late in an energetic decay a crossing brings far less than `d̄`,
+  by how much depending on how far the particles' energies have spread apart; SPPS does not write
+  that spread, but it shows as the series' roughness. Over blocks of at least one receiver
+  crossing (`2R/c`, since SPPS splits a crossing over the steps it spans), each block's departure
+  from its neighbours' geometric mean, `r = B_j/√(B_{j−1}·B_{j+1}) − 1`, over the blocks within six
+  of it, gives its relative variance `mean(r²)/1.5` and so a deposit `mean(r²)/1.5·B_j/(9/8)`, at
+  most `d̄`. The roughness also holds the true curve's fine structure (specular echoes), so it
+  reads high where that is strong: on tutorial 1 at 150,000 particles T30 is overstated 2.4 times,
+  against 14 times under M7's structure, and at 1,500,000 5.6 times.
+- **The estimate.** A parametric bootstrap (`noise::bootstrap`): 200 series drawn from the model
+  around the series, each bin a compound Poisson sum of `E/d̄` expected crossings with chord
+  deposits (a normal draw of the same mean and variance above 30), each evaluated as it is
+  (complete, nothing missing: the tail, the floor and lost particles are judged once, on the
+  series); the standard deviation over them is the model's. The seed is fixed, so a series gives
+  the same estimate every time.
+- **The calibration** (`noise::calibration`, round 3, and round 4 for energetic T20 and T30
+  outside uniform Lambert rooms): the model's standard deviation times
+  `k·√(1 + κ·n)`, per computation method and quantity. `n` is the run's own crossings of the
+  receiver per particle, `n1 = Σ E/(d̄_least·N)` (`noise::crossings_per_particle`), times the
+  spread of the particles' lifetimes, `Var L/(E L)²` from the band's room table
+  (`noise::lifetime_cv2`; 1 for an exponential decay, more for a double slope): the correction for a
+  particle's crossings of one receiver at several times, which grow with the receiver's size
+  (`n ∝ R²`) and a room's reverberance. `k` is the largest one-sided 95 % upper bound over the
+  calibration cells of the ratio of SPPS's seed-to-seed spread to `√(1 + κ·n)` times the model
+  (ten seeds a cell, on effective degrees of freedom), `κ` the one of 0 to 3 (0 to 6 in round 4)
+  that overstates least. Energetic T20 and T30 take theirs by kind of band: every face Lambert with
+  scattering 1 and the same absorption, up to a mean absorption of 0.2 ("uniform Lambert"; 0.4 in
+  round 3, lowered by F6), under M7's structure; every other band under the roughness structure. Pre-registered;
+  round 3 calibrated on 51 cells and validated on 19 no rule saw, round 4 calibrated on all 70 and
+  validated on 24 new ones (`docs/investigations/2026-09-25-noise-calibration/`):
+
+  | Method | SPL | EDT | T20 | T30 | C50 | C80 | D50 | Ts |
+  |---|---|---|---|---|---|---|---|---|
+  | random: k (κ) | 1.2 (1.75) | 1.3 (2) | 1.5 (2.75) | 1.6 (3) | 1.2 (1.25) | 1.4 (1) | 1.2 (1.25) | 1.4 (3) |
+  | energetic: k (κ) | 1.1 (0) | 0.86 (0) | uniform Lambert 0.098 (0), up to ᾱ 0.2; other bands 1.4 (5.25), roughness | uniform Lambert 0.052 (0), up to ᾱ 0.2; other bands 1.3 (4.75), roughness | 0.96 (0.25) | 0.86 (0.5) | 0.96 (0.25) | 0.84 (0.5) |
+
+  - **Random mode**: the correction is large. With receivers of 0.9 m in a 60 m³ room at α 0.05
+    (up to 2.2 crossings per particle), the seeds' spread was 1.7 (SPL) to 2.6 (T30) times the
+    bootstrap's; with SPPS's default 0.31 m it is 1.0 to 1.4 times, highest with specular walls
+    and the absorption on one surface.
+  - **Energetic mode**: in uniform Lambert rooms every particle meets the same absorption at every
+    reflection, so their energies spread apart only as their reflection counts do, and T30's
+    spread is 0.026 to 0.048 of M7's structure (13 cells): factor 0.052. Elsewhere (specular,
+    partly scattering, or Lambert with the absorption concentrated) the particles' energies spread
+    apart far more, from 0.048 to 0.63 of M7's structure for T30 with nothing in the run's
+    configuration to tell which, so round 3 kept factor 1 there; round 4's roughness structure
+    reads it from the series (geometric-mean overstatement 2.0 for T30, 1.8 for T20 over 23 and 24
+    calibration cells). Its correction for repeated crossings is large (κ 4.75 and 5.25), set by a
+    room with receivers of 1.2 m. The uniform-Lambert factors failed two held-out long rooms at
+    ᾱ 0.4 (T30 2.88 times the prediction in a 30 × 4 × 3 m corridor), so they hold only up to ᾱ
+    0.2 (F6), and above it the roughness decides; there T20's fitted 1.2 claimed less noise than a
+    5 × 4 × 3 m box at 0.4 showed, so it ships 1.4. SPL is above 1 because the direct field alone
+    is among the cells: with every particle stopped at its first surface, energetic mode runs
+    random mode's transport.
+  - Checked in the suite on the committed receipt (`tests/params_noise_calibration.rs`): every
+    number of the code is what the rules give; every validation cell passes; halved factors (a
+    model twice too optimistic, through a fault seam) fail in every validation cell; a quantity's
+    spread raised above its prediction fails its check alone; without the correction the cells
+    with large receivers fail.
+- **The domain.** A calibration holds where it was measured. Each quantity (and kind of band) has
+  the fewest particles per source and the most crossings per particle its calibration saw with at
+  least one band's six receivers: random SPL, C50, C80 and D50 from 5,000 particles, the decay
+  times and Ts from 50,000; energetic likewise, with T20 outside uniform Lambert rooms from 15,000
+  and T30 there from 150,000; `n` up to 2.16 (random) and 2.13 (energetic), and 1.37 for energetic
+  T20 and T30 outside uniform Lambert rooms (and uniform ones above ᾱ 0.2). **A value outside is
+  refused, `noise_uncalibrated`**, with the particles to run to reach the domain
+  (`particles_at_least`), or, since more particles do not lower `n`, the most the receiver radius
+  may be as a multiple of the run's (`receiver_radius_scale_at_most`, `√(max/n)`). What the code
+  cannot check is stated beside every report's calibration (`monte_carlo.measured_on`): box rooms
+  of 60 to 1,000 m³; no transmission, no fitting zones, no coupled volumes; steps of 1 and 10 ms.
+- **The refusal:** `monte_carlo_noise`, when the calibrated standard deviation is above the limit
+  or more than 10 of the 200 resamples refuse the quantity themselves. The limit is half the
+  limen: twice the standard deviation, about a 95 % interval, stays within one limen.
 
   | Quantity | Largest standard deviation |
   |---|---|
@@ -433,46 +540,55 @@ deviation and refuses the value when it is too large.
   | SPL | 0.5 dB |
 
   M8's bed asks more of three seeds (a spread of at most 2 %); this limit is what one run may
-  show, not the bed's.
-- **Several sources:** the largest of their mean deposits, an upper bound. **A directivity
-  balloon** scales each particle's energy by its direction, so `d̄` is not known: every value is
-  refused, `noise_unknown`.
-- **Checked** (`tests/params_noise.rs`), against 60 independent runs of the model with its own
-  generator: at 40,000 and 400,000 crossings the estimate is the spread of the runs within a
-  factor 0.85 to 1.25 for all eight quantities. At 4,000 crossings, tutorial 1's count at
-  150,000 particles, 5 of 10 runs give a T30 more than 5 % off from the series alone, and every
-  one is refused.
-- **Checked against real SPPS runs** (M7 review; `crates/simpa/tests/cli_results.rs`,
-  `noise_estimate_against_the_spread_of_twenty_seeds` and `level_box_over_ten_seeds`, run on
-  purpose). Tutorial 1, seeds 1 to 20, octave bands 125 Hz to 4 kHz, both receivers (12
-  receiver-bands); in each, the standard deviation of the values over the seeds against the
-  root-mean-square of the estimates, pooled over the receiver-bands where every seed gives a value:
-
-  | Quantity | 150,000 particles | 1,500,000 particles |
-  |---|---|---|
-  | SPL | 1.05 | 1.04 |
-  | EDT | 0.98 | 1.16 |
-  | T20 | 0.97 | 1.15 |
-  | T30 | no receiver-band with a value in every seed | 1.03 |
-  | C50 | 1.02 | 1.06 |
-  | C80 | 0.95 | 1.09 |
-  | D50 | 1.02 | 1.06 |
-  | Ts | 1.05 | 1.21 |
-
-  The level box over seeds 1 to 10 gives 1.12 for SPL. With 20 seeds a pooled ratio is uncertain
-  by about 5 %, so at 150,000 particles the estimate matches. **At 1,500,000 it runs 15–21 % low
-  for EDT, T20 and Ts**, about 3 standard errors: the spread falls more slowly than `1/√N`. Read
-  as a component that does not fall with `N`, it is 0.5 % for EDT and 1.4 % for T20. At the
-  limit the refusal acts on, 2.5 %, that makes the true standard deviation of an accepted EDT at
-  most 1.02 times the limit and of a T20 1.15 times; the other quantities 1.00 to 1.003 times. Not
-  explained. The candidate left is correlation between bins through a particle's shared path,
-  which the model leaves out. (The earlier text named SPPS's generator as a second candidate,
-  taking it for `rand()/RAND_MAX`; it is not: `spps/sppsTypes.h:6` defines
-  `__USE_BOOST_RANDOM_GENERATOR__`, so `GetRandValue` is Boost's `lagged_fibonacci607` through
-  `uniform_real` (`spps/sppsTypes.cpp:12-27`), returned as `f32` (second review).) M8's seed
-  spread is the evidence that settles it.
-- **What it assumes:** crossings independent between bins. A particle crossing twice is counted
-  twice; at tutorial 1's counts (0.03 crossings per particle) that correlation is about 3 %.
+  show, not the bed's. The resamples carry the model's structure, not its calibration: in
+  energetic mode, where M7's structure is 20 to 38 times T30's real noise in uniform Lambert rooms,
+  more than 10 resamples can refuse T30 (α 0.2 to 0.4 below about a million particles) although
+  its calibrated noise is within the limit; the value is then refused naming the count at which
+  the resamples clear (below).
+- **The particle count a refusal names** (`particle_count`): SPPS's spread falls as `1/√N` or
+  faster on every one of twelve pairs of cells that differ only in `N` (5,000 against 50,000 up to
+  150,000 against 15,000,000; no pair showed it falling slower by more than two standard errors,
+  the one direction in which a count named from it would be too low), so the count at which the
+  calibrated standard deviation is the limit over a margin is `N·(margin·sd/limit)²`, rounded up
+  to two significant digits. The margin covers the scatter of one run's own estimate: about 5 %
+  for most quantities, but up to about 40 % for random-mode T20 and T30 (median over a cell's
+  receiver-bands), so margins of 1.5 there; 1.2 for random EDT, C50, C80 and D50 and energetic EDT;
+  1.2 or 1.3 for energetic T20 and T30; 1.1 elsewhere. On the pairs, the
+  refusals whose named count the higher count reached gave their value there in 98.2 % to 100 % of
+  its seeds (round 3). **A value its resamples refuse** (more than 10 of 200) names the first of 2,
+  4, 8, 16, 32 and 64 times the run's particles at which the model's own resamples of the series,
+  every deposit over that multiple, refuse it at most 5 times and its calibrated standard
+  deviation times the margin is within the limit (round 4, R4-3; `particle_count`
+  `{"count": "resampled"}`); when none does, no count is named (`beyond_resampled`: more particles
+  may not help). On the pairs these counts gave the value at the higher count in 97 to 100 % of its
+  seeds for T30, but for energetic C50, C80, D50 and Ts in 64.7 % (a receiver whose arrival sits at
+  a 1 ms bin's edge keeps refusing them), so those name none (`resampled_not_confirmed`, F8).
+  **Every count is named from M7's structure**, whose deposits fall exactly as `1/N`: for the
+  roughness structure, which also holds the curve's fine structure and does not fall as `1/N`, that
+  is an upper bound (counts named from the roughness itself gave the value in only 36 to 44 % of
+  the higher count's seeds).
+- **Several sources:** the largest of their mean deposits, an upper bound, and crossings per
+  particle counted at the smallest, at least each source's own. **A directivity balloon** scales
+  each particle's energy by its direction, so `d̄` is not known: every value is refused,
+  `noise_unknown`.
+- **Checked against the model's own runs** (`tests/params_noise.rs`, its own generator): the
+  bootstrap's estimate is the spread of 60 independent runs within a factor 1.4 at 40,000 and
+  400,000 crossings; the spread falls as `1/√N` from 10,000 to 160,000 crossings (400 runs each,
+  within three standard errors); at 4,000 crossings, tutorial 1's count at 150,000 particles, 5 of
+  10 runs give a T30 more than 5 % off from the series alone, and every one is refused. At 4,000
+  crossings the estimate of T30's spread runs 11 % low on average and scatters 35 % from run to
+  run (`the_bootstrap_against_the_true_spread_at_low_counts`, run on purpose); the calibration's
+  cells at low counts carry that, and below the domain the value is refused.
+- **Selection by the refusal.** A seed whose decay reads long also has the larger spread of its
+  own, so where some seeds of a receiver-band are refused for their noise and others pass, the
+  passing mean sits low: random T30 −0.82 % ± 0.13 %, T20 −0.47 %, EDT −0.27 %, energetic T30
+  −1.23 % and T20 −0.75 % over the receipt's cells (round 4's model). A mean over the values that came through is not a mean over runs; M8 must not take one
+  (`docs/results.md`, "What M8 needs").
+- **The M7 review's check** (`crates/simpa/tests/cli_results.rs`,
+  `noise_estimate_against_the_spread_of_twenty_seeds`, run on purpose; tutorial 1, seeds 1 to 20):
+  the uncalibrated model matched the spread at 150,000 particles (pooled 0.95 to 1.05) and ran
+  15 to 21 % low at 1,500,000 for EDT, T20 and Ts. The calibration measured the same thing over
+  70 cells, and the factors now cover it.
 
 ## Decay times: EDT, T20 and T30
 
@@ -532,8 +648,12 @@ are measured from, the level in dB re the curve at `u = 0`, which includes the d
 - **Before the first bin wholly after the direct sound** (`histogram_from_s`) the curve is the
   model's reading, the decay of that bin continued back to the arrival; from there on every knot is
   the histogram's own backward sum. When the early reverberation is unresolved, the values are
-  read two more ways over that stretch ("The early reverberation"); the curve shown is this
-  reading. With the arrival detected, it is read from the start of the onset bin.
+  read two more ways over that stretch ("The early reverberation"), and **the value reported is
+  midway between the lowest and highest of the three readings, while the curve shown is this one
+  reading**: a line drawn on the curve from 0 to −10 dB then gives an EDT that is not the one
+  displayed, off by up to EDT's limit, 0.5 % (the M7 follow-ups' critic). SPPS's histograms are
+  marked so in every run tried, since the direct sound lies inside a bin. M12 must say which of
+  the two a chart shows. With the arrival detected, it is read from the start of the onset bin.
 - **Tested** (`decay.rs`, `the_decay_curve_is_the_fitted_curve_thinned_within_its_tolerance`): the
   step is the direct sound's, the line's slope gives EDT to 10⁻³, every knot of a double-slope decay
   lies within 0.01 dB of the thinned line and the knee is kept; says no: a kept point moved by
@@ -597,8 +717,9 @@ holds no stored table):
   `EPSILON`, `(decimal)0.000001` (`lib_interface/Core/mathlib.h:56`), as its threshold; upstream's
   commit `f50c36febd` (2020-12-04, "about issue #7 set epsilon value as low as possible in order to
   not skip first sound wave") replaced it with `pow(10, -180.0f/10.0f)`, 10⁻¹⁸, the pinned
-  commit's. The file at `e9da8b3f12`, the last change before (fetched from GitHub,
-  `target/agents/m7fu-coverage-scratch/projet_calculation_e9da8b3f12.cpp`, sha256 `0f2529aa…`),
+  commit's. The file at `e9da8b3f12`, the last change before (fetched from GitHub; committed as
+  `docs/investigations/2026-09-24-m8-evidence/gui-2019/projet_calculation_e9da8b3f12.cpp`,
+  sha256 `0f2529aa…`),
   differs from `929a5c8`'s in that threshold and in translation macros only. At 10⁻⁶ Pa², an
   absolute level, no bin of the 50 to 125 Hz bands (levels 36 to 40 dB) ever differs that much from
   the first: `t₀` becomes the last label, and C, D and Ts come out 0/0, the stored NaN. The pinned
@@ -731,9 +852,14 @@ Refused (`params_bad_room`):
 `A + 4mV = 0` is `params_no_absorption`: the reverberation time is infinite. `ᾱ = 1` gives an
 Eyring time of 0 s, a fully absorbing room.
 
-### The reference M8 compares against (for Burhan's decision)
+### The reference M8 compares against (decided)
 
-Added by the M7 follow-ups; nothing is decided here. `T_Eyring = K·V/(A + 4mV)` has two open
+**Decided since** (Burhan, 2026-09-24 23:14): Kuttruff's corrected Eyring with `γ²` from the
+geometry, 5 %, with the transport as a cross-check and plain Eyring reported only; Michael to
+ratify. It is core code now: "Kuttruff's reference", below. What follows is the M7 follow-ups'
+evidence as they wrote it.
+
+Added by the M7 follow-ups, before the decisions were taken. `T_Eyring = K·V/(A + 4mV)` has two open
 choices, computed on tutorial 1's box (floor 60 m² at α 0.1, ceiling 60 m² at 0.3, walls 96 m² at
 0.2, 180 m³; 20 °C, 50 %, 101.325 kPa) in every third-octave band from 50 Hz to 8 kHz
 (`tests/params_reference.rs`):
@@ -752,8 +878,9 @@ upstream's humidity lacks the pressure factor, the air term's form alone moves t
 **A third choice the M8 cells showed: Eyring itself** (second review, `docs/results.md`, "What M8
 needs"). Eyring's formula takes every free path to be the mean, `4V/S`. With Lambert reflection
 the free paths spread about it, relative variance `γ²`, and the decay is slower than Eyring's the
-more the surfaces absorb (Kuttruff's correction `A = −S·ln(1 − α)·(1 + (γ²/2)·ln(1 − α))`, as
-commonly stated; not read here). A transport written from scratch for these tests (`tests/
+more the surfaces absorb (Kuttruff's correction `A = −S·ln(1 − α)·(1 + (γ²/2)·ln(1 − α))`; when
+this was written it was taken as commonly stated, unread; it has since been read as Stephenson
+gives it citing Kuttruff, "Kuttruff's reference", below). A transport written from scratch for these tests (`tests/
 lambert_box.rs`: straight rays, Lambert reflection, `(1 − α)` per reflection, SPPS's receiver
 balls; nothing of SPPS) measures `γ²` = 0.388 in the 6×10×3 m box and 0.352 in the 5×4×3 m one,
 the mean free path equal to `4V/S` within 0.3 %, and T30 above Eyring by +1.2, +2.4, +5.0 and
@@ -763,9 +890,14 @@ gives the same within 0.3 %. So a 5 % tolerance against Eyring fails the α 0.4 
 the transport's T (−0.5 % at α 0.2 in the 6×10×3 m room, +0.6 % at α 0.4 in the 5×4×3 m one). The
 options, for Burhan: Eyring and a tolerance or α set that allows for it; Kuttruff with a `γ²`
 computed apart from SPPS for each room (within 0.6 % here); or the independent transport itself as
-the reference (within its own noise, 0.02 % at 4,000,000 rays).
+the reference (within its own noise, 0.02 % at 4,000,000 rays). **Decided by Burhan on 2026-09-24
+23:14:** Kuttruff's with `γ²` computed from the geometry by the transport, never fitted to SPPS,
+5 %, with the transport as the tight cross-check and plain Eyring reported only; Michael ratifies
+the gate text ("Kuttruff's reference", below).
 
-**Recommendation, not a decision.** For SPPS's T30: `K = 24·ln(10)/c` with SPPS's own `c`, and `m`
+**Decided as recommended here.** `K`: 2026-09-24 17:45, decision 2. `m` as the solver applies
+it, and TCR keeping 0.163: 2026-09-25 00:20, decisions 4 and 5. The recommendation as it was
+written: for SPPS's T30, `K = 24·ln(10)/c` with SPPS's own `c`, and `m`
 as the solver applies it (nominal frequency, upstream's form). M8 asks whether SPPS's transport
 reproduces the diffuse-field decay of the room it was given; that room's air is the `m` the solver
 used, and its speed is the `c` the solver moved at. TCR's 0.163 would bias the reference 1.2 % long
@@ -773,8 +905,344 @@ before any solver is judged. For TCR against the analytic value (M8's 0.5 % chec
 0.163 and the solver's `m`, as gate M7(d) already does: that checks TCR computes what its formula
 says. Whether upstream's air term is right (the pressure factor, the nominal frequency) is gate
 M7(b)'s question and the second table's, and at sea level it moves T_Eyring by at most 0.36 % up
-to 8 kHz on tutorial 1 and 0.83 % in M8's rooms. On the third choice this document recommends
-nothing: the numbers are above.
+to 8 kHz on tutorial 1 and 0.83 % in M8's rooms. On the third choice this document recommended
+nothing: the numbers are above, and Burhan's decision after them.
+
+## Kuttruff's reference
+
+**Decided** (Burhan, 2026-09-24 23:14, his choice verbatim: "Kuttruff + cross-check
+(Recommended)"): M8 gates SPPS's T30 against Kuttruff's corrected Eyring with `γ²` computed from
+the room's geometry, never fitted to SPPS, at 5 %; the independent diffuse transport is the
+cross-check; plain Eyring is reported only. It changes the plan's M8 gate text, so **Michael
+ratifies** it (BuSha note). This section is the pre-M8 piece that makes it core code:
+`params::room::kuttruff_rt`, `params::lambert` (the transport) and `results::reference`.
+**Nothing here is validated**, and no number of it reaches a user before M8 passes.
+
+### The formula, and where it comes from
+
+```
+A_K = −S·ln(1 − ᾱ)·[1 + (γ²/2)·ln(1 − ᾱ)],   ᾱ = Σ Sᵢ·αᵢ / S
+T   = K·V / (4·m·V + A_K),                   K = 24·ln 10 / c
+```
+
+- **The wall term** is Kuttruff's, as U. M. Stephenson gives it citing H. Kuttruff, *Room
+  Acoustics* (Elsevier, Barking; he names no edition): `α'' = α'·(1 − γ²·α'/2)`, `α' = −ln(1 − α)`,
+  `γ² = (⟨ℓ²⟩ − ⟨ℓ⟩²)/⟨ℓ⟩²`, the relative variance of the free path lengths ("A rigorous definition
+  of the term 'diffuse sound field' and a discussion of different reverberation formulae", ICA 2016,
+  paper ICA2016-556, eq. (21); read, from the congress proceedings, sha256 `ad19678e…`). Substituting
+  `α'` gives the factor above. **Kuttruff's book itself was not opened.**
+- **The air term** is not in Stephenson's eq. (21). It is added outside the wall term, as TCR adds
+  it to Eyring's (`TC_CalculationCore.cpp:138`): air multiplies every path's energy by `e^(−m·c·t)`
+  whatever its reflections, so its decay rate adds to the walls' exactly. The other form in print,
+  Bies and Hansen's (*Engineering Noise Control*, 4th ed., eq. 7.64, as Arup's Strutt help quotes
+  it; the page read, the book not), folds `4·m·V/S` into `ᾱ` inside both logarithms. The transport
+  tells them apart (below).
+- **What it is**: the energy after time `t` is `⟨(1 − ᾱ)^n⟩` over the number `n` of reflections,
+  whose mean is `c·t·S/(4V)` and, for independent free paths, whose variance is `γ²` times it; the
+  formula keeps the first two cumulants of `n`. Two approximations, both measured below: the free
+  paths in a room with flat walls are **not independent** (a long path tends to end where the next
+  is long too), so `n`'s variance is about a quarter larger than `γ²·n` in M8's boxes and the
+  formula reads low at small `ᾱ`; and the second-order truncation reads high as `ᾱ` grows. In M8's
+  cells the two partly cancel.
+- **Not the other "Kuttruff formula".** Kuttruff also corrected Eyring for absorption spread
+  unevenly over the walls (the reflection-coefficient term `Δ`; R. Neubauer and B. Kostek, eq.
+  (15)-(18), read). That one is not used here: M8's cells absorb evenly.
+- **Refused** (`params_bad_room`) as Eyring's is, and for surfaces whose total area is not the
+  room's the free paths were traced in (within 10⁻⁶: `γ²` of another room cannot be used), for
+  `ᾱ` = 1, and where `1 + γ²·ln(1 − ᾱ)` is not positive (`ᾱ` above about 0.92 at `γ²` 0.4): past
+  that, the second-order correction would give a longer time for more absorption. `V` and `γ²`
+  both come from the traced room (`FreePaths`); the surfaces give only `ᾱ`, so they cannot bring
+  another room's volume or shape.
+
+### `γ²` from the geometry: `params::lambert`
+
+A diffuse ray transport, written from scratch and promoted from the M7 follow-ups' evidence test
+`tests/lambert_box.rs` (which stays, as it was run). Nothing of SPPS is used: no mesh walking, no
+time stepping, no random generator of its, no output of any run.
+- **The room** is a closed surface of triangles (any shape; faces need not be oriented: a ray is
+  reflected to the side it came from) and tetrahedra that fill it (`Enclosure::from_mesh`; a box's
+  six are built in). A ray runs straight to the nearest face (a bounding-volume hierarchy,
+  Möller–Trumbore), is reflected there by Lambert's law, and starts again 10⁻¹⁰ of the room's size
+  off the face.
+- **`free_paths`** gives the mean free path and `γ²`, each with its standard error **over the
+  rays**: successive paths of one ray are correlated, so each ray's paths are summed first and the
+  ray is the independent unit; `γ²`'s error is the delta method's over them. Over 65,536 rays each
+  error is itself known to a fraction of a per cent. (Until the pre-M8 review's second round the
+  error was the spread of 16 replicas, known only to about a fifth; measured over 96 seeds, the
+  rays' error matches the seed-to-seed spread, 0.00070 against 0.00076 and 0.00081 against 0.00079
+  at the first settings, and in a sphere it is the closed form's `√(0.0422/n)`.) **It takes the
+  room and nothing else**: its rays, paths and seed are fixed (`FreePathSettings::STANDARD`).
+  `FreePaths` has private fields, no other constructor
+  and no `Deserialize`, and `kuttruff_rt` takes only a `FreePaths`. So a `γ²` fitted to a solver
+  cannot reach it, by construction, and neither can one fished for through the transport's
+  settings. The pre-M8 review showed that the earlier API, which took settings, allowed this:
+  searching over seeds at tiny ray counts gave any `γ²` from 0.10 to 0.60 for the 6×10×3 m room
+  (exact 0.389), and Kuttruff's time moved by up to 7.5 %, past M8's 5 %. Three doctests hold the
+  construction: the room alone compiles; the same call with settings does not; a `FreePaths`
+  built by hand does not. Stable rustdoc does not check a `compile_fail` example's error code (a
+  doctest failing with another error passed as `E0451`, tried), so each failing example differs
+  from compiling code only in what it tests: the settings call from the passing example by its
+  second argument, and the literal from the same literal compiled inside the module by a unit
+  test.
+- **What a caller can still vary is the room's description, in two parts.** Neither fits `γ²` to a
+  solver, and `results::reference` takes both from the run's own `.cbin` and `.mbin`.
+  - *Its surface* (placement, faces): each description draws the transport's randomness afresh,
+    so a search over them picks among `γ²`'s own scatter. Measured: 16 descriptions of the
+    6×10×3 m room (turned about the vertical and moved) gave `γ²` from 0.38866 to 0.38904 (exact
+    0.38887), and Kuttruff's time at α 0.4 within 0.011 %
+    (`gamma2_cannot_be_fitted_through_what_reaches_kuttruff`; the same test repeats the review's
+    seed search through the test-only study, which reaches 0.009 to 2.1, so the search has
+    power).
+  - *Its tetrahedra*, which give `V`, to which Kuttruff's time is proportional: the
+    mean-free-path check holds `V` to 6 of the mean free path's relative standard errors, 0.012 %
+    in M8's rooms at the fixed settings, so to about ±0.07 %, and the time moves by as much.
+    Measured in the 6×10×3 m room: a volume 0.03 % off either way is accepted (Kuttruff at α 0.4
+    −0.033 % and +0.030 %), and 0.12 % off either way refused, 10.6 and 9.4 standard errors from
+    `4V/S` (`the_volume_is_held_to_the_mean_free_paths_error`). At the first settings, with the
+    replicas' error, the pre-M8 review found a volume 0.5 % off accepted and 0.4 % off refused; the
+    rays' error ended that lottery, and the fixed settings' rays narrowed the window.
+  `free_paths` also refuses a `γ²` whose standard error is above 0.002 (`GAMMA2_SE_LIMIT`): a room
+  whose free paths the fixed rays cannot pin down. The fixed settings give 0.00012 to 0.00014 in
+  boxes (0.00014 on the committed fixture, tutorial 1's box as TetGen meshed it), 0.0001 in the
+  L-shaped room and 0.00004 in the sphere, so no room tried comes near it; the settings the
+  review fished with are refused for it (a unit test, through the module's private entry).
+- **Studies of the transport** at other settings or from one start point exist in test builds
+  only (`free_path_study`, the `transport-study` feature that only `simpa-core`'s own tests turn
+  on) and give a `FreePathStudy`, which no function of `params::room` takes. `free_paths` equals
+  the study at `STANDARD` to the bit.
+- **It checks itself**: it refuses (`params_transport_refused`) a mean free path further than 6
+  standard errors from `4V/S` (about ±0.07 % in M8's rooms), which a closed room with Lambert
+  walls must give whatever its shape; and a ray that leaves the room. Either means a surface that
+  is not closed, tetrahedra that are not the surface's volume, a face with the room on both sides
+  (it reflects on both, so the field sees its area twice), parts of a room that do not mix within
+  the rays' paths, or reflection that is not Lambert's.
+- **Where rays start matters.** A field started at one point is not yet diffuse, and a ray's first
+  reflections remember it. Measured with this transport when it started every ray at one point
+  (the pre-M8 WIP, and `lambert_box.rs`'s way): counted from the first reflection, 64 paths a ray,
+  `γ²` read 0.3840 ± 0.0008 in the 6×10×3 m room and 0.3489 ± 0.0007 in the 5×4×3 m one (exact:
+  0.3889 and 0.3524), the mean free path 0.16 % and 0.27 % long; in an L-shaped room with the rays
+  started in its narrow wing, the mean free path was 0.28 % short (10 standard errors) after 16
+  paths left out. So rays now start at points drawn evenly from the tetrahedra (Rocchini and
+  Cignoni's folding), and each ray's first 32 paths after its first are left out. Even so the
+  first reflection is weighted by path length: with none left out `γ²` reads 4.3 standard errors
+  low in the box, and in the L-shaped room the mean free path sits 7.9, 1.5 and 0.2 standard
+  errors from `4V/S` with 0, 16 and 64 left out (8.4 M paths each, errors over the rays).
+- **Successive free paths are correlated** in a box, and not in a sphere (a study over 256 paths
+  a ray, `successive_free_paths_are_correlated_in_a_box_and_independent_in_a_sphere`): the lag-1
+  correlation is 0.0669 ± 0.0004 in the 6×10×3 m room and 0.0748 ± 0.0002 in the 5×4×3 m one,
+  and the variance of a ray's length over its 256 paths, divided by `256·⟨ℓ⟩²`, is 0.480 ± 0.007
+  and 0.440 ± 0.005 against `γ²` 0.389 and 0.353 (+24 % and +25 %). In a sphere of 5,120 faces,
+  where each chord is `2R·cos θ` with a fresh `θ`: −0.0003 ± 0.0006, and 0.1266 ± 0.0012 against
+  `γ²` 0.1253, the say-NO of the estimators. Kuttruff's formula takes `n`'s variance to be `γ²·n`.
+- **`FreePathSettings::STANDARD`**, what `free_paths` always uses: 16 × 4096 rays, 1 + 32 + 512
+  paths each, 33,554,432 paths counted, a fixed seed. **Its precision was set by a stated target before
+  its draw was seen** (the pre-M8 review, second round, found the first settings, 16 × 1024 rays
+  of 64 paths, put the shipped reference 0.005 points above 0.6 % in one cell from `γ²`'s draw
+  alone; changing them until a draw fell below would have been fishing). The target: in every one
+  of M8's cells, three of the standard deviations Kuttruff's time inherits from `γ²` fit between
+  the formula's own error (at most +0.587 %) and 0.6 %, so `σ(γ²) ≤ 0.000154` in the 5×4×3 m
+  room. The cost was measured at another seed (`σ(γ²)·√paths` 0.72 there and 0.83 in 6×10×3 m,
+  at 64 or 512 paths a ray alike); the smallest power-of-two multiple of the first settings'
+  paths that meets it is 32. The settings were committed on their own (`64c1d5a`, "Pre-register
+  the transport's precision…") before any run at the reference's seed, the seed was kept, and
+  the draw was taken as it came: `γ²` 0.35269 ± 0.00012 in the 5×4×3 m room, +2.3 standard
+  errors from the exact value, which the target absorbs (the shipped time +0.593 % and +0.595 %,
+  below). Over 16 other seeds that room's draws average −0.02 ± 0.19 standard errors from the exact
+  value: no bias. `γ²` to about ±0.00012 to ±0.00014 in boxes, which moves Kuttruff's T by at most
+  0.004 % in M8's cells. 512 paths a ray rather than 64 spends 6 % of the tracing on the paths
+  left out instead of 34 %. About 0.55 s for a box in a release build (28 threads), about 2.3 s in
+  a debug build.
+- **`decay`** traces the energy of the room and of receiver balls (energy times path length inside
+  the ball, per time bin, as SPPS's receivers collect it) from a point source, for M8's
+  cross-check; air is applied per bin as `e^(−m·c·t)`.
+
+### Known answers (`tests/params_lambert.rs`)
+
+**The exact `γ²`.** Lambert reflection keeps a uniform, isotropic field, so in a **convex** room the
+free paths are the chords of lines uniform and isotropic in space, whose mean square is
+`⟨ℓ²⟩ = (2/(π·S))·∫∫ |x − y|⁻² dx dy` over pairs of points in the room: derived here from the
+Blaschke–Petkantschin formula (`dx dy = |t₁ − t₂|² dt₁ dt₂ dG` for two points on a line `G`) and
+Cauchy's `∫ dG = π·S/2` over the lines meeting the room. For a box the six-dimensional integral
+folds into three smooth two-dimensional ones, one per far face, integrated by Gauss–Legendre; for
+the unit cube it is D. H. Bailey, J. M. Borwein and R. E. Crandall's box integral `Δ₃(−2)`, whose
+closed form they give ("Advances in the theory of box integrals", Math. Comp. 79 (2010)
+1839-1866, Table 6; read in the authors' copy): the quadrature equals it to 10⁻¹². For a sphere
+the chord is `2R·cos θ` with Lambert's `θ`, so `γ²` = 1/8 exactly.
+
+| Room | Exact `γ²` | `free_paths` (33.5 M paths) | A study at its own seed (8.4 M paths) | Its mean free path against `4V/S` | `lambert_box.rs` | Transport counting as `lambert_box.rs` | Bies and Hansen's fit |
+|---|---|---|---|---|---|---|---|
+| cube | 0.344950 | 0.34505 ± 0.00012 | 0.34493 ± 0.00024 | +0.6 SE | | | 0.3383 |
+| 6×10×3 m | 0.388874 | 0.38866 ± 0.00014 | 0.38885 ± 0.00028 | −1.1 SE | 0.388 | 0.38812 ± 0.00015 | 0.3959 |
+| 5×4×3 m | 0.352401 | 0.35269 ± 0.00012 | 0.35268 ± 0.00025 | −0.6 SE | 0.352 | 0.35187 ± 0.00013 | 0.3560 |
+| sphere, 20,480 faces | 0.125 (+0.00004 for the facets) | 0.12504 ± 0.00004 | 0.12492 ± 0.00010 (4.2 M paths) | +0.7 SE | | | |
+| L-shaped, 6×4 + 2×4, 3 m | none known | 0.3904 ± 0.0001 | 0.3903 ± 0.0003 | +0.2 SE | | | |
+
+- **`lambert_box.rs`'s values are its counting's.** It started every ray at the source and
+  counted every path from the first reflection until the ray's time ran out, 482 paths a ray at
+  α 0.05, and stated no uncertainty. Counting the same way (a study from the source, none left
+  out, 482 paths), this transport gives 0.38812 ± 0.00015 and 0.35187 ± 0.00013: lambert_box's
+  0.388 and 0.352 to their rounding. The exact values lie 5.0 and 4.1 standard errors above those
+  (the errors over the rays; the pre-M8 review's own delta method gave the same 0.00015 and
+  0.00013, where the replicas' spread had read 0.00009 and 0.00010 and made it 8 and 5), and
+  0.38887 is outside 0.388's rounding: the difference is the rays' memory of their start (above),
+  not the transport. Run as `free_paths` runs, the same transport gives the exact values
+  (`lambert_boxs_values_are_its_counting_and_the_exact_ones_are_the_diffuse_fields`).
+- **Bies and Hansen's fit** for rectangular rooms, `γ = √(0.0179·(L + W)/H − 0.0001·(L − W)/H −
+  0.0011·((L − W)/H)² + 0.3025)`, H the height (as Strutt quotes it), lies within 0.007 of the exact
+  values; the page states no accuracy for it. Stephenson's "for typical proportions from 1:1:1 to
+  1:10:10, the variance γ² is in the order of 0.4…0.6 (as found by numerical experiments)" (the
+  longer version of his paper, section 6.3) compares with exact values from 0.345 (1:1:1) to 0.653
+  (1:10:10): the same order.
+- The sphere's facets add to its `γ²` a quarter as much with each subdivision (+0.0172, +0.0044,
+  +0.0011, +0.00025, +0.00004 from 80 to 20,480 faces, measured).
+- **Say-NO partners**: reflection uniform over the hemisphere, through the code
+  (`Fault::LambertUniformReflection`): mean free path 2.97 m against 3.33 m, 115 to 175 standard
+  errors, refused; tetrahedra 1 % short of the room or 1 % over it: refused; one floor triangle
+  removed, or the tetrahedra moved below the floor: rays leave, refused; the L-shaped room with
+  only its narrow wing's tetrahedra: refused; an 80-face sphere: `γ²` 0.017 off 1/8; the
+  review's fishing settings: refused for `γ²`'s standard error; `lambert_box.rs`'s counting: 5.0
+  and 4.1 standard errors below the exact value; a volume 0.12 % off either way: refused.
+
+### Kuttruff against the transport in M8's cells (`tests/params_kuttruff.rs`)
+
+M8's cells: the two rooms at α 0.05, 0.1, 0.2 and 0.4 on every wall, Lambert reflection, air off,
+M8's source and three receivers (radius 0.31 m), `dt` 1 ms, `c` 343.2 m/s. "Receivers" is the T30
+of the transport's receivers' energy, read through `params` from the arrival, the mean of the
+three receivers in each of 16 replicas, the error that of the 16 means: what M8 compares SPPS's
+T30 with. "Room energy" is the T30 of the room's total energy, over the same replicas, several
+times less noisy. **The formula is measured with each box's exact `γ²`** (integral geometry,
+above), so that the comparison carries the transport's noise only; the reference as shipped
+(`free_paths`' `γ²`) is held to the same 0.6 % and compared with the formula separately. Measured
+at 4 M to 34 M rays a cell in a release build (`kuttruff_against_the_transport_at_high_counts`,
+ignored with its reason and run on purpose, about 300 s). It asserts: the errors below 0.03 % and
+0.006 %; the receivers and the room energy one decay within their paired noise; the formula
+within the bare 0.6 % of both at the point estimate, and of the room energy also at one-sided
+95 %; the reference as shipped within the bare 0.6 % of both; plain Eyring and the formula with
+its `½` dropped missing; and that its T30s are the ones committed in the test (`HIGH`, which the
+suite uses, below), to 10⁻⁹ s:
+
+| Room | α | Receivers against Eyring | Kuttruff against the receivers | Room energy against Eyring | Kuttruff against the room energy |
+|---|---|---|---|---|---|
+| 6×10×3 | 0.05 | +1.211 % | −0.201 ± 0.016 % | +1.204 % | −0.194 ± 0.002 % |
+| 6×10×3 | 0.1 | +2.443 % | −0.343 ± 0.019 % | +2.425 % | −0.326 ± 0.003 % |
+| 6×10×3 | 0.2 | +4.971 % | −0.415 ± 0.017 % | +4.967 % | −0.411 ± 0.004 % |
+| 6×10×3 | 0.4 | +10.718 % | +0.279 ± 0.024 % | +10.754 % | +0.247 ± 0.004 % |
+| 5×4×3 | 0.05 | +1.092 % | −0.178 ± 0.010 % | +1.101 % | −0.187 ± 0.003 % |
+| 5×4×3 | 0.1 | +2.198 % | −0.300 ± 0.012 % | +2.204 % | −0.305 ± 0.003 % |
+| 5×4×3 | 0.2 | +4.461 % | −0.352 ± 0.012 % | +4.444 % | −0.336 ± 0.003 % |
+| 5×4×3 | 0.4 | +9.250 % | **+0.587 ± 0.012 %** | +9.252 % | **+0.585 ± 0.002 %** |
+
+- **Kuttruff's formula is within 0.6 % of the transport in every cell**, at the point estimate on
+  both. On the room energy also at one-sided 95 % confidence (point + 1.645 SE, worst 0.589 %); on
+  the receivers the worst cell's bound is 0.607 %. **The two are one decay in M8's cells**: the
+  receivers' T30 minus the room energy's, over the replicas' paired differences, is within 1.4
+  standard errors in every cell (−0.032 % to +0.017 %; in the worst cell −0.002 ± 0.015 %), and
+  4.9 to 31 standard errors in the elongated room below, the check's partner. So in M8's cells the
+  room energy measures the same T30 six times more precisely, and the one-sided 95 % statement is
+  its 0.589 %; the receivers' 0.607 % is their own noise, ±0.012 %, about a value the room energy
+  puts at 0.585 ± 0.002 %. The 5×4×3 m room at α 0.4 is 0.013 points inside: at that absorption
+  the second-order formula is at its limit. Independent numpy transports in the two pre-M8 reviews
+  gave that cell's room energy +0.591 ± 0.006 % and +0.581 ± 0.009 %.
+- **The 0.6 % is not a held-out bound, and nothing supports it beyond M8's two boxes.** It was read
+  off `lambert_box.rs`'s Kuttruff column for these same cells. The formula has no fitted
+  parameter, but the limit was chosen on the data it is checked against, and the one room held
+  out, 20×4×3 m (below), is outside it from α 0.2. It is a check that this code computes
+  Kuttruff's formula with the room's `γ²` in M8's rooms, not an accuracy of the formula.
+- **Why the pattern**: low at small α, high at 0.4. Successive free paths are correlated (lag 1
+  0.067 and 0.075, above), so `n`'s variance is about a quarter above `γ²·n`. The formula, fed `γ²`,
+  underestimates the spread and so the time: with the measured effective variance (over 256 paths)
+  in place of `γ²` the α 0.05 cells would read about 0.23 % longer, close to the 0.18 to 0.20 %
+  they miss by. As α grows the second-order truncation adds the other way. The two partly cancel
+  in these rooms. (Using the effective variance would be another formula than the one decided;
+  not done.)
+- **The reference as shipped** carries `free_paths`' `γ²` (0.38866 ± 0.00014 and 0.35269 ± 0.00012,
+  −1.5 and +2.3 standard errors from the exact values), and **is within the bare 0.6 % in every
+  cell on both**: worst +0.595 % of the receivers and +0.593 % of the room energy (5×4×3 m,
+  α 0.4), where the draw adds +0.008 % (`mc_sd` 0.0035 %). It agrees with the formula within 3 of
+  the `mc_sd` it reports in every cell. At the first fixed settings, 32 times fewer paths, the same
+  cell was +0.607 % and +0.605 %; the settings changed by the precision target stated under
+  "`γ²` from the geometry" and committed before their draw, not by where a draw fell.
+- The receivers' excess over Eyring reproduces `lambert_box.rs`'s (+1.20, +2.44, +4.96, +10.78 %;
+  +1.11, +2.20, +4.47, +9.25 %) within 0.07 %, and so SPPS's (`docs/results.md`, "T30 against
+  Eyring"). The room energy is within 0.04 % of the receivers in every M8 cell.
+- **The gate in the test suite** (`kuttruff_reproduces_the_transports_t30_in_m8s_cells`, 0.26 M to
+  2.1 M rays a cell in a debug build) **asserts the bare 0.6 %**. A debug build cannot trace
+  enough rays to judge a cell 0.013 points inside 0.6 % by its own transport, so the high-count
+  T30s are committed in the test (`HIGH`), and in every cell: (a) the suite's own transport
+  reproduces them within 4 of their combined standard errors (4 for sixteen comparisons; with
+  its errors below 0.12 % on the receivers and 0.02 % on the room energy, so a change of the
+  transport of 0.08 % in the room energy fails; measured −2.0 to +2.1 standard errors on the
+  receivers and −0.8 to +1.3 on the room energy); (b) the formula with the exact `γ²` is within
+  the bare 0.6 % of both committed T30s; (c) the shipped reference is too, and is the formula
+  within 3 of its `mc_sd`; (d) the fixed settings meet their precision target, `3·mc_sd` within
+  the formula's margin to 0.6 % (worst: 5×4×3 m at α 0.4, 0.0105 % against a margin of
+  0.0132 %). Its partners: plain Eyring misses (b) in all 8 cells (−1.1 % to −9.7 % of the room
+  energy); the formula with its `½` dropped, through the code (`Fault::KuttruffFullVariance`,
+  with `free_paths`' `γ²`), misses (b) and (c) in all 8 (+0.73 % to +12.7 %); the transport
+  reflecting evenly over the hemisphere, through the code (`Fault::LambertUniformReflection`),
+  misses (a) in the worst cell by 525 standard errors; and the first fixed settings miss (d)
+  there (`3·mc_sd` 0.060 % against a margin of 0.013 %).
+- **An elongated room, for information** (20×4×3 m, `γ²` exact 0.40791; the same test, printed
+  only; M8 does not use it): the formula against the room energy −0.22, −0.40, −0.62 and −0.89 %
+  at α 0.05 to 0.4, **outside 0.6 % from α 0.2**; against the receivers −0.12, +0.02, +0.04 and
+  −0.10 %. There the receivers' T30 and the room energy's differ by up to 0.8 % (+11.74 % and
+  +12.63 % against Eyring at α 0.4): the field decays unevenly along the room. Neither 0.6 % nor
+  the receivers' closeness carries over to other shapes; M12's rooms need their own evidence.
+- **The air term** (`the_air_term_is_added_outside_as_the_transport_decays`): M8's second-table
+  cells at 8 kHz, 20 °C, 50 %, with the solver's `m` = 0.02425 /m (air 1.6 and 0.6 times the walls'
+  absorption): Kuttruff + `4mV` −0.03 % (6×10×3, α 0.05) and −0.18 % (5×4×3, α 0.1) of the
+  transport with the same air; the air folded into `ᾱ` (`Fault::KuttruffAirInsideMean`) −3.54 %
+  and −3.57 %, which the test requires to miss.
+
+### In `simpa results --json`
+
+Every SPPS report carries `spps.reference` (`results::reference`; `docs/formats/results-json.md`):
+the room's volume and area, SPPS's `c` and `K`, the transport's `free_paths`, and per computed band
+`air_m_per_metre`, `mean_absorption`, `lambert_walls`, **`kuttruff_s` (M8's reference, with the
+`mc_sd` it inherits from `γ²`: only that, not the formula's own error above, which no ray count
+reduces) and `eyring_s` (plain, reported only)**, under a `label` that says
+both are an analytic reference for a diffuse field and not validated. The room is read as TCR's
+`analytic` reads it (the `.cbin` faces, the `.mbin`'s tetrahedra, `config.xml`'s materials and
+air; TCR's per-face rule for fittings, `TC_CalculationCore.cpp:11-17`, is not emulated, so a scene
+with fitting faces is `not_computed`); a celerity gradient is `not_computed` too. `lambert_walls` is false where any face
+is not Lambert with scattering 1 in the band: then neither time describes the run's field, and
+**Kuttruff's time is not computed there**, refused `params_reference_not_applicable`; the
+transport is run only when at least one computed band has Lambert walls, `free_paths` `null`
+otherwise. `eyring_s` is given whatever the walls. The text output prints the same beside "NOT
+VALIDATED". The committed fixtures have specular walls, so none carries `γ²`; the Seat run's
+inputs with Lambert walls at 500 Hz give 0.38883 ± 0.00014, the exact 0.38887 within its error,
+a Kuttruff time at 500 Hz and the refusal at 1000 Hz (`results_load.rs`,
+`the_reference_is_computed_only_for_bands_with_lambert_walls`).
+
+**What it costs** (pre-M8, `docs/investigations/2026-09-25-reference-cost/`): computed for every
+band, the transport added about 5 s to `simpa results` on the corrected Elmia hall (release build,
+Grace: 6.2 to 6.3 s against 0.8 to 1.1 s for the committed room's own 1,000,000-particle run; 5.9
+to 6.0 s against 0.7 to 0.8 s for M6's loss-gate run), for a `γ²` (0.555) describing none of its
+bands, which scatter 0.15 to 0.3 or reflect specularly. Hence the rule above. Where the reference
+applies (the Seat box with Lambert walls) a call takes 1.0 to 1.2 s either way.
+
+**How a band's scattering is read.** `lambert_walls` reads each material's `diffusion` as SPPS
+reads it (`atof`, through `run::locate::to_float`): a text that is not a number reads 0, specular,
+so that band is not Lambert and neither time describes its field; a value that reads as NaN or
+infinite, or a band with no `loi`, makes the reference `not_computed`
+(`results::reference`'s tests, `lambert_walls_need_every_face_lambert_with_scattering_1_in_the_band`).
+So where a band's scattering is not a number, `lambert_walls` is false and the Kuttruff reference
+does not apply to that band. A project of this program never gets that far: its scattering is a
+number when written, and the `config.xml` importer refuses a `diffusion` that is not one,
+`invalid_value` (`config_xml::import`, through `num::solver_real`;
+`config_xml_import.rs`, `a_scattering_that_is_not_a_number_is_refused_on_import`, whose partner
+reads the solvers' comma decimal `0,5` as 0.5). Only a run folder given as it is can carry one.
+
+**Open, for M8 and later**: the bed itself (Kuttruff at 5 %, the transport's T30 as the tight
+cross-check, `dt` 1 ms); Michael's ratification of the gate text; M12's use of `lambert_walls`;
+rooms whose parts barely exchange sound (coupled volumes), and faces with the room on both sides
+(thin reflectors), which the mean-free-path check refuses rather than describe (the corrected
+Elmia hall, with hanging reflectors, was not refused: `γ²` 0.55499 ± 0.00024; whether its
+reflectors are such faces was not checked, and no band of it has Lambert walls); the formula's
+error in rooms of other shapes (−0.89 % already in a 20×4×3 m box at α 0.4), which `mc_sd` does
+not carry; and whether Burhan keeps the precision target that set the fixed settings (32 times the
+first settings' paths, about 0.55 s a box in a release build), or states 3c for the formula alone
+and takes the cheaper settings back.
 
 ## DIN 18041 targets
 
@@ -834,21 +1302,33 @@ and one of:
 - `truncated`, with the value and the value with the tail added (no second value when the tail is
   unbounded, or when the curve with the tail spends too little time in the range to fit);
 - `unresolved`, with the values from both ends of the onset bin;
+- `early_unresolved`, with the value read with the reverberation beginning at the arrival, the
+  lowest and highest of the three readings of the early reverberation (beginning at the arrival,
+  at the first bin wholly after the direct sound, or at that bin's end; either missing when that
+  curve gives no value), their midpoint and the limit ("The early reverberation", above);
 - `range_too_short`, with the time spent in the range and the time needed;
 - `not_decaying`;
 - `empty_window`;
 - `missing_not_cleared` and `missing_moves`, with the floor and the lost share, and the depth
   reached or the value with the missing energy added ("Missing energy");
-- `monte_carlo_noise`, with the value, its standard deviation, the limit and the resamples that
-  refused it; `noise_unknown`, with why ("Monte-Carlo noise");
+- `monte_carlo_noise`, with the value, its calibrated standard deviation, the limit, the resamples
+  that refused it and the particle count that would bring it within the limit, or why none is
+  named; `noise_unknown`, with why; `noise_uncalibrated`, with the run's particles and crossings
+  per particle, the domain its quantity's calibration was measured on, and the particles to run
+  or how far to shrink the receiver radius ("Monte-Carlo noise");
 - `several_sources`, with the sources: made by `core::results`, not by `params`
   (`docs/results.md`, "Several sources");
 - `no_time_series`, with where the solver's own values are: made by `core::results` for every
   parameter of a TCR receiver, which has steady-state levels and no series
   (`docs/formats/results-json.md`, "`tcr`").
 
-`params_bad_noise_input` refuses a floor, a share alive or lost, or a mean deposit that is not a
-finite number in its domain.
+`params_bad_noise_input` refuses a floor, a share alive or lost, a mean or least deposit, a
+lifetime spread, a particle count or a band count that is not a finite number in its domain.
+
+`params_transport_refused` refuses the diffuse transport's own result: inputs it cannot run with,
+a ray that left the room, or a mean free path that is not `4V/S` within its error ("Kuttruff's
+reference"). `params_bad_room` also refuses Kuttruff's inputs: surfaces of another room than the
+free paths', `ᾱ` = 1, and `1 + γ²·ln(1 − ᾱ)` not positive.
 
 The citations of upstream's lines in `params::air` and `params::room` are checked against the
 source at `929a5c8` by `params_air.rs` and `params_room.rs`, so a citation that drifts fails a test.

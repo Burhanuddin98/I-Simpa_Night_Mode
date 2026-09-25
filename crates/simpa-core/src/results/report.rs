@@ -11,12 +11,14 @@
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use super::reference::{REFERENCE_LABEL, Reference};
 use super::spps::{
     BandEnergy, ParticleFileSummary, PointReceiver, SourcePoint, SourceTotals, SppsResults,
 };
 use super::tcr::{self, MainBand, TcrResults};
 use super::{Refusal, RunResults, SolverResults, SurfaceFile, value_invalid};
 use crate::params::decay::{self, Arrival, Onset};
+use crate::params::lambert::FreePaths;
 use crate::params::noise::{self, NoiseModel};
 use crate::params::{self, EnergySeries, NotEvaluable, ParamError, Quantity};
 use crate::run::stats::ParticleStats;
@@ -29,12 +31,19 @@ use crate::schema::SolverKind;
 /// follow-ups): SPPS bands carry `lost_follows_decay`, and in energetic mode `lost_share` bounds
 /// the energy from every time on; a given arrival outside the onset bin refuses C50, C80, D50 and
 /// Ts only; bands carry the `arrival` and `decay_arrival` they were measured from, with the direct
-/// sound's spread, and `early_reverberation_unresolved`: each value is midway between the early
-/// reverberation continued and absent, or refused `early_unresolved`; bands and aggregates carry
+/// sound's spread, and `early_reverberation_unresolved`: each value is midway between the lowest
+/// and highest of three readings of the early reverberation (continued back to the arrival, or
+/// beginning at the start or at the end of the first bin wholly after the direct sound), or
+/// refused `early_unresolved`; bands and aggregates carry
 /// `curvature` and `decay_curve`; a TCR receiver's `Global` row is the labelled object `global`, and
 /// its `aggregate` says it sums nothing; surface files carry `aggregate` and each receiver its `id`.
-/// Version 4 has not been merged yet, so these are 4 as well.
-pub const REPORT_VERSION: u32 = 4;
+/// Version 4 has not been merged yet, so these are 4 as well. 5 (pre-M8): an SPPS run carries
+/// `reference`, Kuttruff's corrected Eyring with `γ²` from the room's geometry and plain Eyring,
+/// labelled and not validated; seeds (`monte_carlo.seed`, the transport's) are hex strings; and
+/// every `mc_sd` is calibrated against SPPS's own seed-to-seed spread per computation method
+/// (`monte_carlo.method` and `.calibration`, `noise_model.method` and `.particles`), and a
+/// refusal for noise carries `particle_count`.
+pub const REPORT_VERSION: u32 = 5;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -230,6 +239,7 @@ impl CurvatureReport {
 /// decay times were measured from, and the Schroeder curve they were fitted to.
 struct Evaluation {
     parameters: Parameters,
+    crossings_per_particle: Option<f64>,
     curvature: CurvatureReport,
     onset: Option<Onset>,
     decay_arrival: Option<Arrival>,
@@ -272,6 +282,7 @@ fn evaluated(
             ts_s: Evaluated::of_estimate(p.ts_s),
         },
         curvature: CurvatureReport::of(p.curvature_percent),
+        crossings_per_particle: p.crossings_per_particle,
         onset: p.onset,
         decay_arrival: p.decay_arrival,
         decay_curve: series.as_ref().ok().map(|s| decay::decay_curve(s, arrival)),
@@ -304,9 +315,12 @@ pub struct ReceiverBandReport {
     pub lost_follows_decay: bool,
     /// Always true for SPPS, whose reverberation begins with the first reflection: how it ran
     /// between the arrival and the first bin wholly after the direct sound is not known, so each
-    /// value is taken midway between that stretch continuing the decay and holding none, and
-    /// refused, `early_unresolved`, when the two differ by more than its limit
-    /// (`params::EnergySeries::with_early_reverberation_unresolved`).
+    /// value is read three ways, with the reverberation beginning at the arrival (the decay of
+    /// that bin continued back), at that bin's start and at its end, is taken midway between the
+    /// lowest and highest of the three, and is refused, `early_unresolved`, when either lies
+    /// further than its limit from that midpoint
+    /// (`params::EnergySeries::with_early_reverberation_unresolved`). `decay_curve` shows the
+    /// first reading only.
     pub early_reverberation_unresolved: bool,
     /// The arrival C50, C80, D50 and Ts are measured from: the direct sound at the receiver's
     /// centre, `arrival_s`, spread over `±R/c` (`params::decay::Arrival::Known`), or `detected`.
@@ -324,6 +338,11 @@ pub struct ReceiverBandReport {
     /// The receiver crossings behind the series, estimated as its total over the mean deposit;
     /// `null` when the noise has no model.
     pub crossings: Option<f64>,
+    /// `n`: the crossings of the receiver per particle as the noise calibration measures them
+    /// (`monte_carlo.crossings_variable`), which its correction and domain take
+    /// (`params::noise::NoiseModel::multi_crossing`); `null` when the noise has no model or the
+    /// series is refused.
+    pub crossings_per_particle: Option<f64>,
     /// The `.recp` column, Pa² per time step.
     pub energy_pa2: Vec<f64>,
     /// Their sum.
@@ -362,6 +381,9 @@ pub struct AggregateReport {
     pub aggregate: String,
     /// The bands summed: those whose series `params` accepts. Empty for TCR.
     pub bands_hz: Vec<i32>,
+    /// As for a band: the aggregate's own (its bands' particles together, counted at the least
+    /// deposit of any band, with the largest lifetime spread of any); `null` for TCR.
+    pub crossings_per_particle: Option<f64>,
     pub parameters: Parameters,
     /// As for a band.
     pub curvature: CurvatureReport,
@@ -379,6 +401,8 @@ pub struct SourceBandReport {
     pub decay_arrival: Option<Arrival>,
     pub noise_model: NoiseModel,
     pub crossings: Option<f64>,
+    /// As for the receiver's band.
+    pub crossings_per_particle: Option<f64>,
     /// The source's `.recp` column, Pa² per time step.
     pub energy_pa2: Vec<f64>,
     pub total_pa2: f64,
@@ -501,7 +525,10 @@ pub struct MonteCarloReport {
     pub resamples: usize,
     /// Resamples that may refuse a quantity before its value is refused.
     pub refused_resamples_allowed: usize,
-    /// The bootstrap's seed.
+    /// The bootstrap's seed, as `0x` and 16 hex digits: as a JSON number above 2⁵³ it would not
+    /// survive a reader that parses numbers as doubles.
+    #[serde(serialize_with = "crate::params::serialize_seed")]
+    #[schemars(with = "String", pattern(crate::params::SEED_PATTERN))]
     pub seed: u64,
     /// The largest standard deviation a value may carry: EDT, T20 and T30 relative, C50 and C80
     /// in dB, D50 as a fraction, Ts in s, SPL in dB.
@@ -510,10 +537,47 @@ pub struct MonteCarloReport {
     pub limit_definition: f64,
     pub limit_centre_time_s: f64,
     pub limit_spl_db: f64,
+    /// The run's computation method, which picks the calibration.
+    pub method: noise::Method,
+    /// What `n`, the crossings of a receiver per particle each band's `crossings_per_particle`
+    /// gives, is for this method (`params::noise::calibration::variable`).
+    pub crossings_variable: noise::calibration::Variable,
+    /// What the calibration was measured on beyond what the code checks (particles and crossings
+    /// per particle, in `calibration`): [`noise::calibration::MEASURED_ON`].
+    pub measured_on: String,
+    /// Energetic T20 and T30: a band whose every face is Lambert with scattering 1 and has the
+    /// same absorption takes `uniform_lambert_walls` up to this mean absorption, and the other
+    /// bands' entry above it.
+    pub uniform_lambert_max_mean_absorption: f64,
+    /// Per quantity, by name, for this computation method (`params::noise::calibration`;
+    /// `docs/investigations/2026-09-25-noise-calibration/`): each value's standard deviation is
+    /// the bootstrap's times `factor·√(1 + kappa·n)`, and a value is given only with at least
+    /// `min_particles` particles per source and `n` at most `max_crossings_per_particle`.
+    pub calibration: std::collections::BTreeMap<String, QuantityCalibration>,
+}
+
+/// How one quantity's noise is calibrated, where the calibration holds, and how a refusal names a
+/// particle count (`params::noise::calibration::Entry`).
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct QuantityCalibration {
+    /// For bands not every face of which reflects by Lambert's law with scattering 1 (and for
+    /// every band, when the two below are `null`), with the structure its resamples are drawn
+    /// with (`structure`: `constant`, or since round 4 `roughness` for energetic T20 and T30).
+    #[serde(flatten)]
+    pub entry: noise::calibration::Entry,
+    /// Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law
+    /// with scattering 1 and not every face has the same absorption (or the absorption is above
+    /// `uniform_lambert_max_mean_absorption`), the same as `entry` since round 4; `null`
+    /// otherwise.
+    pub lambert_walls: Option<noise::calibration::Entry>,
+    /// Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law
+    /// with scattering 1 and has the same absorption, at most
+    /// `uniform_lambert_max_mean_absorption`; `null` otherwise.
+    pub uniform_lambert_walls: Option<noise::calibration::Entry>,
 }
 
 impl MonteCarloReport {
-    fn current() -> Self {
+    fn current(method: noise::Method) -> Self {
         use noise::limits;
         MonteCarloReport {
             resamples: noise::RESAMPLES,
@@ -524,6 +588,30 @@ impl MonteCarloReport {
             limit_definition: limits::DEFINITION,
             limit_centre_time_s: limits::CENTRE_TIME_S,
             limit_spl_db: limits::SPL_DB,
+            method,
+            crossings_variable: noise::calibration::variable(method),
+            measured_on: noise::calibration::MEASURED_ON.into(),
+            uniform_lambert_max_mean_absorption:
+                noise::calibration::UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION,
+            calibration: noise::QUANTITY_NAMES
+                .iter()
+                .enumerate()
+                .map(|(i, q)| {
+                    use noise::Walls;
+                    let entry = noise::calibration::entry(method, i, Walls::Other);
+                    let lambert = noise::calibration::entry(method, i, Walls::Lambert);
+                    let uniform = noise::calibration::entry(method, i, Walls::UniformLambert);
+                    let split = method == noise::Method::Energetic && (i == 2 || i == 3);
+                    (
+                        q.to_string(),
+                        QuantityCalibration {
+                            entry,
+                            lambert_walls: split.then_some(lambert),
+                            uniform_lambert_walls: split.then_some(uniform),
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -555,6 +643,106 @@ pub struct SppsReport {
     pub point_receivers: Vec<SppsReceiverReport>,
     pub surfaces: Vec<SurfaceSummary>,
     pub particle_files: Vec<ParticleFileSummary>,
+    /// The analytic reference on the run's own inputs (`results::reference`): Kuttruff's
+    /// corrected Eyring with `γ²` from the room's geometry, M8's reference, and plain Eyring,
+    /// reported only. **Not validated.**
+    pub reference: ReferenceReport,
+}
+
+/// One band of [`ReferenceReport`].
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct ReferenceBandReport {
+    pub freq_hz: i32,
+    /// The energy attenuation the solver applies, added as `4·m·V`, 1/m; `null` with air
+    /// absorption off.
+    pub air_m_per_metre: Option<f64>,
+    /// `ᾱ = Σ Sᵢ·αᵢ / S` over the room's faces.
+    pub mean_absorption: f64,
+    /// Every face reflects by Lambert's law with scattering 1 in this band: the only walls the
+    /// transport's `γ²` describes. When false, neither time describes the run's field.
+    pub lambert_walls: bool,
+    /// Every face has the same absorption in this band.
+    pub uniform_absorption: bool,
+    /// Plain Eyring, `K·V/(4·m·V − S·ln(1 − ᾱ))`, s, with SPPS's `K`: **reported only**.
+    pub eyring_s: Evaluated,
+    /// Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:
+    /// **M8's reference**. `mc_sd` is only the standard deviation it inherits from the transport's
+    /// `γ²`, not its total uncertainty: it leaves out the formula's own error against a diffuse
+    /// room (−0.41 % to +0.59 % in M8's cells, `docs/params.md`, "Kuttruff's reference"; not
+    /// measured in other rooms). Refused with the transport's own refusal when the transport
+    /// refused, and `params_reference_not_applicable` where `lambert_walls` is false: it is
+    /// computed only where it describes the band.
+    pub kuttruff_s: Evaluated,
+}
+
+/// The analytic reference of an SPPS run, or why there is none (`results::reference`).
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case", tag = "status")]
+pub enum ReferenceReport {
+    Computed {
+        /// Always [`crate::results::reference::REFERENCE_LABEL`].
+        label: String,
+        /// The `.mbin`'s volume, m³.
+        volume_m3: f64,
+        /// The `.cbin` faces' total area, m².
+        area_m2: f64,
+        /// SPPS's speed of sound, m/s.
+        speed_of_sound_m_s: f64,
+        /// `K = 24·ln 10/c`, s/m.
+        constant_s_per_m: f64,
+        /// The diffuse transport's free paths in the room: the mean free path, `γ²`, their
+        /// standard errors, `4V/S`, and the transport's settings. `null` when the transport
+        /// refused, every band with Lambert walls then carrying that refusal in `kuttruff_s`
+        /// (the others refused `params_reference_not_applicable`, as always); and when no computed
+        /// band has Lambert walls, so that it was not run, every `kuttruff_s` then refused
+        /// `params_reference_not_applicable`.
+        free_paths: Option<FreePaths>,
+        bands: Vec<ReferenceBandReport>,
+    },
+    NotComputed {
+        why: String,
+    },
+}
+
+impl ReferenceReport {
+    fn of(r: &Reference) -> Self {
+        match r {
+            Reference::Computed {
+                volume_m3,
+                area_m2,
+                speed_of_sound_m_s,
+                constant_s_per_m,
+                free_paths,
+                bands,
+            } => ReferenceReport::Computed {
+                label: REFERENCE_LABEL.into(),
+                volume_m3: *volume_m3,
+                area_m2: *area_m2,
+                speed_of_sound_m_s: *speed_of_sound_m_s,
+                constant_s_per_m: *constant_s_per_m,
+                free_paths: free_paths.as_ref().ok().cloned(),
+                bands: bands
+                    .iter()
+                    .map(|b| ReferenceBandReport {
+                        freq_hz: b.freq_hz,
+                        air_m_per_metre: b.air_m_per_metre,
+                        mean_absorption: b.mean_absorption,
+                        lambert_walls: b.lambert_walls,
+                        uniform_absorption: b.uniform_absorption,
+                        eyring_s: Evaluated::of(b.eyring_s.clone()),
+                        kuttruff_s: match &b.kuttruff_s {
+                            Ok((value, sd)) => Evaluated::Value {
+                                value: *value,
+                                mc_sd: Some(*sd),
+                            },
+                            Err(e) => Evaluated::refused(e.clone()),
+                        },
+                    })
+                    .collect(),
+            },
+            Reference::NotComputed { why } => ReferenceReport::NotComputed { why: why.clone() },
+        }
+    }
 }
 
 /// TCR's `Global` row: the energetic sum of the band levels, **an aggregate**.
@@ -675,6 +863,7 @@ impl TcrReceiverReport {
             aggregate: AggregateReport {
                 aggregate: AGGREGATE_NO_SERIES.into(),
                 bands_hz: Vec::new(),
+                crossings_per_particle: None,
                 parameters,
                 curvature,
                 decay_curve: None,
@@ -761,18 +950,43 @@ fn series_of(
 /// The receiver crossings behind `total` under `model`.
 fn crossings(model: &NoiseModel, total: f64) -> Option<f64> {
     match model {
-        NoiseModel::Crossings { mean_deposit } => Some(total / mean_deposit),
+        NoiseModel::Crossings { mean_deposit, .. } => Some(total / mean_deposit),
         NoiseModel::Unknown { .. } => None,
     }
 }
 
-/// The aggregate's noise model: crossings of the largest band deposit, unknown when any band's is.
+/// The aggregate's noise model: crossings of the largest band deposit, under the bands' method
+/// and particle count; its run the bands' together (the least deposit of any band, the largest
+/// lifetime spread, Lambert only when every band is, and the bands counted, each with its own
+/// particles); unknown when any band's is, or a band's model is no run's while another's is.
 fn aggregate_model(models: &[&NoiseModel]) -> NoiseModel {
-    let mut largest: Option<f64> = None;
+    let mut largest: Option<(f64, noise::Method, Option<u32>)> = None;
+    let mut run: Option<noise::RunNoise> = None;
+    let mut runless = false;
     for m in models {
         match m {
-            NoiseModel::Crossings { mean_deposit } => {
-                largest = Some(largest.map_or(*mean_deposit, |l: f64| l.max(*mean_deposit)));
+            NoiseModel::Crossings {
+                mean_deposit,
+                method,
+                particles,
+                run: r,
+            } => {
+                if largest.is_none_or(|(l, _, _)| *mean_deposit > l) {
+                    largest = Some((*mean_deposit, *method, *particles));
+                }
+                match (r, &mut run) {
+                    (None, _) => runless = true,
+                    (Some(r), None) => run = Some(r.clone()),
+                    (Some(r), Some(a)) => {
+                        a.least_deposit = a.least_deposit.min(r.least_deposit);
+                        a.lifetime_cv2 = a.lifetime_cv2.max(r.lifetime_cv2);
+                        a.lambert_walls &= r.lambert_walls;
+                        a.uniform_absorption &= r.uniform_absorption;
+                        a.mean_absorption = a.mean_absorption.max(r.mean_absorption);
+                        a.particles = a.particles.min(r.particles);
+                        a.bands += r.bands;
+                    }
+                }
             }
             NoiseModel::Unknown { detail } => {
                 return NoiseModel::Unknown {
@@ -781,10 +995,25 @@ fn aggregate_model(models: &[&NoiseModel]) -> NoiseModel {
             }
         }
     }
-    match largest {
-        Some(d) => NoiseModel::Crossings { mean_deposit: d },
-        None => NoiseModel::Unknown {
+    let Some((mean_deposit, method, particles)) = largest else {
+        return NoiseModel::Unknown {
             detail: "no band to aggregate".into(),
+        };
+    };
+    match (run, runless) {
+        (Some(_), true) => NoiseModel::Unknown {
+            detail: "the bands' noise models are not all from the run".into(),
+        },
+        (Some(run), false) => {
+            NoiseModel::of_run(mean_deposit, method, run).unwrap_or_else(|e| NoiseModel::Unknown {
+                detail: e.to_string(),
+            })
+        }
+        (None, _) => NoiseModel::Crossings {
+            mean_deposit,
+            method,
+            particles,
+            run: None,
         },
     }
 }
@@ -822,6 +1051,7 @@ fn aggregate_report(
     AggregateReport {
         aggregate: AGGREGATE_BANDS_SUMMED.into(),
         bands_hz: valid,
+        crossings_per_particle: e.crossings_per_particle,
         parameters: e.parameters,
         curvature: e.curvature,
         decay_curve: e.decay_curve,
@@ -887,6 +1117,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             decay_arrival: e.decay_arrival,
             contributing_sources: contributing.iter().map(|c| c.to_string()).collect(),
             crossings: crossings(&model, total_pa2),
+            crossings_per_particle: e.crossings_per_particle,
             noise_model: model.clone(),
             energy_pa2: b.energy.clone(),
             total_pa2,
@@ -933,6 +1164,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                         decay_arrival: e.decay_arrival,
                         noise_model: model.clone(),
                         crossings: crossings(model, total_pa2),
+                        crossings_per_particle: e.crossings_per_particle,
                         energy_pa2: energy.clone(),
                         total_pa2,
                         onset: e.onset,
@@ -976,7 +1208,7 @@ fn spps_report(bands_hz: &[i32], s: &SppsResults) -> SppsReport {
         particles_per_source: s.particles_per_source,
         trans_epsilon: s.trans_epsilon,
         echogram_per_source: s.echogram_per_source,
-        monte_carlo: MonteCarloReport::current(),
+        monte_carlo: MonteCarloReport::current(s.noise_method()),
         sources: s.sources.clone(),
         particles: s.particles.clone(),
         total_energy: s.total_energy.clone(),
@@ -987,6 +1219,7 @@ fn spps_report(bands_hz: &[i32], s: &SppsResults) -> SppsReport {
             .collect(),
         surfaces: s.surfaces.iter().map(SurfaceSummary::of).collect(),
         particle_files: s.particle_files.clone(),
+        reference: ReferenceReport::of(&s.reference),
     }
 }
 
@@ -1456,7 +1689,7 @@ mod tests {
         );
         // Several sources withhold the curve with the curvature.
         let s = EnergySeries::new(0.01, (0..100).map(|k| 0.9f64.powi(k)).collect()).unwrap();
-        let model = NoiseModel::crossings(1e-6).unwrap();
+        let model = NoiseModel::crossings(1e-6, noise::Method::Random, None).unwrap();
         let mut e = evaluated(&Ok(s), Arrival::at(0.0), &model);
         assert!(e.decay_curve.is_some());
         e.several_sources(&["A", "B"]);
@@ -1493,5 +1726,68 @@ mod tests {
                 r.message
             );
         }
+    }
+
+    #[test]
+    fn a_refused_transport_leaves_free_paths_null_and_refuses_kuttruff_only() {
+        use crate::results::reference::ReferenceBand;
+        let refusal = ParamError::TransportRefused {
+            detail: "a ray left the enclosure".into(),
+        };
+        let r = Reference::Computed {
+            volume_m3: 180.0,
+            area_m2: 216.0,
+            speed_of_sound_m_s: 343.2,
+            constant_s_per_m: 0.161,
+            free_paths: Err(refusal.clone()),
+            bands: vec![ReferenceBand {
+                freq_hz: 500,
+                air_m_per_metre: None,
+                mean_absorption: 0.2,
+                lambert_walls: true,
+                uniform_absorption: true,
+                eyring_s: Ok(0.6),
+                kuttruff_s: Err(refusal),
+            }],
+        };
+        let ReferenceReport::Computed {
+            label,
+            free_paths,
+            bands,
+            ..
+        } = ReferenceReport::of(&r)
+        else {
+            panic!("computed");
+        };
+        assert_eq!(label, REFERENCE_LABEL);
+        assert!(free_paths.is_none());
+        assert_eq!(bands[0].eyring_s.value(), Some(0.6));
+        assert_eq!(
+            bands[0].kuttruff_s.refusal().unwrap().code,
+            crate::params::codes::TRANSPORT_REFUSED
+        );
+        // A value carries the standard deviation it inherits from γ².
+        let Reference::Computed { mut bands, .. } = r else {
+            unreachable!()
+        };
+        bands[0].kuttruff_s = Ok((0.62, 5e-5));
+        let r = Reference::Computed {
+            volume_m3: 180.0,
+            area_m2: 216.0,
+            speed_of_sound_m_s: 343.2,
+            constant_s_per_m: 0.161,
+            free_paths: Err(ParamError::NoAbsorption),
+            bands,
+        };
+        let ReferenceReport::Computed { bands, .. } = ReferenceReport::of(&r) else {
+            panic!("computed");
+        };
+        assert_eq!(
+            bands[0].kuttruff_s,
+            Evaluated::Value {
+                value: 0.62,
+                mc_sd: Some(5e-5)
+            }
+        );
     }
 }

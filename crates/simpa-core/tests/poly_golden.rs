@@ -548,8 +548,16 @@ fn truncated_files_are_truncated() {
     );
 }
 
+/// `name` in the calling test's own folder under `target/tmp/poly_golden/`, made on first use:
+/// removed when the test passes, kept when it fails (`common/scratch.rs`).
 fn tmp(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_TARGET_TMPDIR")).join(name)
+    thread_local! {
+        static DIR: std::cell::OnceCell<PathBuf> = const { std::cell::OnceCell::new() };
+    }
+    DIR.with(|d| {
+        d.get_or_init(|| common::scratch::fresh("poly_golden", "files"))
+            .join(name)
+    })
 }
 
 #[test]

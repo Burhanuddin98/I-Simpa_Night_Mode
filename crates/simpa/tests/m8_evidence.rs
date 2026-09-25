@@ -4,8 +4,9 @@
 //!
 //! `cargo test --release -p simpa --test m8_evidence -- --ignored --nocapture <name>`
 //!
-//! The run folders go under `$SIMPA_EVIDENCE_ROOT` when it is set, else under cargo's test scratch
-//! space. `$SIMPA_EVIDENCE_JOBS` (default 8) is how many solver runs go at once: a seeded SPPS run
+//! The run folders go under `$SIMPA_EVIDENCE_ROOT` when it is set, and stay there; else under
+//! cargo's test scratch space, removed when the test passes (`support::scratch`, as every test
+//! folder is since the 2026-09-25 disk emergency). `$SIMPA_EVIDENCE_JOBS` (default 8) is how many solver runs go at once: a seeded SPPS run
 //! is single-threaded.
 //!
 //! - `arrival_outside_the_onset_bin_over_receiver_positions`: tutorial 1 at upstream's defaults,
@@ -246,6 +247,9 @@ fn with_receivers(p: &mut Project, at: &[[f64; 3]]) {
                 PointReceiverId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0001_0000 + i as u128);
             r.name = format!("R{i:03}");
             r.position = Vec3::new(x[0], x[1], x[2]);
+            // Tutorial 1's receivers pin upstream's solver ids since the M7 follow-ups; copies of
+            // one would share its pin, which the run refuses (`solver_id_mapping_invalid`).
+            r.solver_id = None;
             r
         })
         .collect();
@@ -392,7 +396,7 @@ fn plain_estimates(band: &Value, arrival: Arrival) -> Eight {
     let p = noise::evaluate(
         &EnergySeries::complete(dt, e),
         arrival,
-        &NoiseModel::crossings(d).unwrap(),
+        &NoiseModel::crossings(d, noise::Method::Random, None).unwrap(),
     );
     let one = |r: &Result<noise::Estimate, simpa_core::params::ParamError>| match r {
         Ok(x) => Some((x.value, x.sd)),

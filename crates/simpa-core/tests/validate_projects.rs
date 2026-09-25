@@ -696,3 +696,114 @@ fn transmission_and_diffusion_warnings_do_not_block() {
         issues[1].message
     );
 }
+
+/// The pins of the kinds other than materials (`validate::structure`, the `pins` rule; decision 13:
+/// a `.proj` import pins upstream's element ids), each fault on its own, at the validator (the
+/// tutorial-3 follow-ups' critic found only a clash of two fitting zones exercised, through the
+/// CLI): two point receivers pinned alike (TCR would label their two `rp.gabe` columns alike),
+/// two surface receivers alike (a scene receiver and a cutting plane among them), two sources
+/// alike, a fitting zone pinned to 0, and a pin above `SOLVER_INT_MAX` on each kind. Says no: the
+/// fixtures as they are, with distinct pins, give no issue.
+#[test]
+fn every_kinds_pins_are_checked_by_the_validator() {
+    let room = |name: &str| {
+        schema::load(&repo(&format!("tests/fixtures/rooms/{name}.simpa")))
+            .unwrap_or_else(|e| panic!("{name}: {e}"))
+    };
+    let pin_issues = |p: &Project| -> Vec<(&'static str, String, String)> {
+        validate::validate(p)
+            .into_iter()
+            .filter(|i| {
+                i.code == codes::SOLVER_ID_MAPPING_INVALID || i.code == codes::SOLVER_INT_RANGE
+            })
+            .map(|i| (i.code, i.path, i.message))
+            .collect()
+    };
+    for name in ["outputs_box", "sources2_box", "tutorial1_box_fitting"] {
+        assert_eq!(pin_issues(&room(name)), Vec::new(), "{name}");
+    }
+    let one = |p: &Project, code: &str, path: &str, words: &str| {
+        let got = pin_issues(p);
+        assert_eq!(got.len(), 1, "{got:#?}");
+        assert_eq!((got[0].0, got[0].1.as_str()), (code, path), "{got:#?}");
+        assert!(got[0].2.contains(words), "{}", got[0].2);
+    };
+
+    // Two point receivers pinned alike: the second is refused.
+    let mut p = room("outputs_box");
+    p.point_receivers[1].solver_id = p.point_receivers[0].solver_id;
+    one(
+        &p,
+        codes::SOLVER_ID_MAPPING_INVALID,
+        "/point_receivers/1/solver_id",
+        "rp.gabe",
+    );
+    // A scene receiver and a cutting plane pinned alike.
+    let mut p = room("outputs_box");
+    assert!(matches!(
+        p.surface_receivers[1].shape,
+        SurfaceReceiverShape::CuttingPlane { .. }
+    ));
+    p.surface_receivers[1].solver_id = p.surface_receivers[0].solver_id;
+    one(
+        &p,
+        codes::SOLVER_ID_MAPPING_INVALID,
+        "/surface_receivers/1/solver_id",
+        "both pin solver id",
+    );
+    // Two sources pinned alike.
+    let mut p = room("sources2_box");
+    p.sources[1].solver_id = p.sources[0].solver_id;
+    one(
+        &p,
+        codes::SOLVER_ID_MAPPING_INVALID,
+        "/sources/1/solver_id",
+        "element id",
+    );
+    // A fitting zone pinned to 0: the solvers read idVolume 0 as no fitting.
+    let mut p = room("tutorial1_box_fitting");
+    p.fitting_zones[0].solver_id = Some(0);
+    one(
+        &p,
+        codes::SOLVER_ID_MAPPING_INVALID,
+        "/fitting_zones/0/solver_id",
+        "pins solver id 0",
+    );
+    // A pin above the C int, on each kind that is not a material (the fitting zone's also runs
+    // out of room for TetGen's ids: two issues there).
+    let big = Some(SOLVER_INT_MAX + 1);
+    let mut p = room("outputs_box");
+    p.point_receivers[0].solver_id = big;
+    one(
+        &p,
+        codes::SOLVER_INT_RANGE,
+        "/point_receivers/0/solver_id",
+        "C int",
+    );
+    let mut p = room("outputs_box");
+    p.surface_receivers[1].solver_id = big;
+    one(
+        &p,
+        codes::SOLVER_INT_RANGE,
+        "/surface_receivers/1/solver_id",
+        "C int",
+    );
+    let mut p = room("sources2_box");
+    p.sources[1].solver_id = big;
+    one(&p, codes::SOLVER_INT_RANGE, "/sources/1/solver_id", "C int");
+    let mut p = room("tutorial1_box_fitting");
+    p.fitting_zones[0].solver_id = big;
+    let got = pin_issues(&p);
+    assert!(
+        got.iter()
+            .any(|(c, path, _)| *c == codes::SOLVER_INT_RANGE
+                && path == "/fitting_zones/0/solver_id"),
+        "{got:#?}"
+    );
+    // Says no, at the edges: SOLVER_INT_MAX itself fits a point receiver, and two distinct pins
+    // do not clash.
+    let mut p = room("outputs_box");
+    p.point_receivers[0].solver_id = Some(SOLVER_INT_MAX);
+    p.surface_receivers[1].solver_id = Some(7);
+    assert_eq!(pin_issues(&p), Vec::new());
+}

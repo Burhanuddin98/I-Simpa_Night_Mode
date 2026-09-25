@@ -18,6 +18,8 @@ use simpa_core::schema::{self, Project};
 
 #[path = "common/paths.rs"]
 mod paths;
+#[path = "common/scratch.rs"]
+pub mod scratch;
 #[allow(unused_imports)]
 pub use paths::{repo_file, repo_root, solver_exe, upstream_file};
 
@@ -30,7 +32,8 @@ pub fn load_project(rel: &str) -> Project {
     schema::load(&repo_file(rel)).unwrap_or_else(|e| panic!("{rel}: {e}"))
 }
 
-/// A new, empty folder under `target/test-runs/config_xml/`. Never reused and never deleted.
+/// A new, empty folder under `target/test-runs/config_xml/`, never reused: removed when the test
+/// passes, kept for inspection when it fails (`common/scratch.rs`).
 pub fn fresh_run_dir(label: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -39,6 +42,7 @@ pub fn fresh_run_dir(label: &str) -> PathBuf {
     let dir = repo_root()
         .join("target/test-runs/config_xml")
         .join(format!("{label}-{nanos}-{}", std::process::id()));
+    scratch::own(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }

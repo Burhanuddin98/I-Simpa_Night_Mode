@@ -1,0 +1,38 @@
+﻿
+running 1 test
+[     0 s] 1 6x10x3 alpha 0.05 Random N 1000 1 s dt 0.01 eps 5 air TCR: 0.1 s
+[     0 s] 0 6x10x3 alpha 0.05 Random N 1000 1 s dt 0.01 eps 5 TCR: 0.1 s
+[     0 s] 2 6x10x3 alpha 0.1 Random N 1000 1 s dt 0.01 eps 5 TCR: 0.2 s
+[     0 s] 3 6x10x3 alpha 0.1 Random N 1000 1 s dt 0.01 eps 5 air TCR: 0.2 s
+[     0 s] 4 6x10x3 alpha 0.2 Random N 1000 1 s dt 0.01 eps 5 TCR: 0.1 s
+[     0 s] 5 6x10x3 alpha 0.2 Random N 1000 1 s dt 0.01 eps 5 air TCR: 0.1 s
+[     0 s] 6 6x10x3 alpha 0.4 Random N 1000 1 s dt 0.01 eps 5 TCR: 0.1 s
+[     0 s] 7 6x10x3 alpha 0.4 Random N 1000 1 s dt 0.01 eps 5 air TCR: 0.1 s
+[     0 s] 8 5x4x3 alpha 0.05 Random N 1000 1 s dt 0.01 eps 5 TCR: 0.1 s
+[     0 s] 9 5x4x3 alpha 0.05 Random N 1000 1 s dt 0.01 eps 5 air TCR: 0.1 s
+[     1 s] 11 5x4x3 alpha 0.1 Random N 1000 1 s dt 0.01 eps 5 air TCR: 0.1 s
+[     1 s] 10 5x4x3 alpha 0.1 Random N 1000 1 s dt 0.01 eps 5 TCR: 0.2 s
+[     1 s] 12 5x4x3 alpha 0.2 Random N 1000 1 s dt 0.01 eps 5 TCR: 0.1 s
+[     1 s] 13 5x4x3 alpha 0.2 Random N 1000 1 s dt 0.01 eps 5 air TCR: 0.1 s
+[     1 s] 14 5x4x3 alpha 0.4 Random N 1000 1 s dt 0.01 eps 5 TCR: 0.1 s
+[     1 s] 15 5x4x3 alpha 0.4 Random N 1000 1 s dt 0.01 eps 5 air TCR: 0.1 s
+TCR 6x10x3 alpha 0.05 Random N 1000 1 s dt 0.01 eps 5: Eyring against the analytic value (K 0.163, the solver's m) at most 3.06e-7 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 2.6482 s (+1.23 %); 250 Hz 2.6482 s (+1.23 %); 500 Hz 2.6482 s (+1.23 %); 1000 Hz 2.6482 s (+1.23 %); 2000 Hz 2.6482 s (+1.23 %); 4000 Hz 2.6482 s (+1.23 %)
+TCR 6x10x3 alpha 0.05 Random N 1000 1 s dt 0.01 eps 5 air: Eyring against the analytic value (K 0.163, the solver's m) at most 3.30e-7 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 2.6309 s (+1.23 %); 250 Hz 2.5973 s (+1.23 %); 500 Hz 2.5443 s (+1.23 %); 1000 Hz 2.4754 s (+1.23 %); 2000 Hz 2.3068 s (+1.23 %); 4000 Hz 1.8339 s (+1.23 %); 8000 Hz 1.0280 s (+1.23 %)
+TCR 6x10x3 alpha 0.1 Random N 1000 1 s dt 0.01 eps 5: Eyring against the analytic value (K 0.163, the solver's m) at most 3.52e-7 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 1.2892 s (+1.23 %); 250 Hz 1.2892 s (+1.23 %); 500 Hz 1.2892 s (+1.23 %); 1000 Hz 1.2892 s (+1.23 %); 2000 Hz 1.2892 s (+1.23 %); 4000 Hz 1.2892 s (+1.23 %)
+TCR 6x10x3 alpha 0.1 Random N 1000 1 s dt 0.01 eps 5 air: Eyring against the analytic value (K 0.163, the solver's m) at most 4.02e-7 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 1.2851 s (+1.23 %); 250 Hz 1.2770 s (+1.23 %); 500 Hz 1.2641 s (+1.23 %); 1000 Hz 1.2468 s (+1.23 %); 2000 Hz 1.2026 s (+1.23 %); 4000 Hz 1.0601 s (+1.23 %); 8000 Hz 0.7295 s (+1.23 %)
+TCR 6x10x3 alpha 0.2 Random N 1000 1 s dt 0.01 eps 5: Eyring against the analytic value (K 0.163, the solver's m) at most 6.66e-8 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.6087 s (+1.23 %); 250 Hz 0.6087 s (+1.23 %); 500 Hz 0.6087 s (+1.23 %); 1000 Hz 0.6087 s (+1.23 %); 2000 Hz 0.6087 s (+1.23 %); 4000 Hz 0.6087 s (+1.23 %)
+TCR 6x10x3 alpha 0.2 Random N 1000 1 s dt 0.01 eps 5 air: Eyring against the analytic value (K 0.163, the solver's m) at most 1.09e-7 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.6078 s (+1.23 %); 250 Hz 0.6060 s (+1.23 %); 500 Hz 0.6031 s (+1.23 %); 1000 Hz 0.5991 s (+1.23 %); 2000 Hz 0.5887 s (+1.23 %); 4000 Hz 0.5523 s (+1.23 %); 8000 Hz 0.4468 s (+1.23 %)
+TCR 6x10x3 alpha 0.4 Random N 1000 1 s dt 0.01 eps 5: Eyring against the analytic value (K 0.163, the solver's m) at most 4.60e-8 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.2659 s (+1.23 %); 250 Hz 0.2659 s (+1.23 %); 500 Hz 0.2659 s (+1.23 %); 1000 Hz 0.2659 s (+1.23 %); 2000 Hz 0.2659 s (+1.23 %); 4000 Hz 0.2659 s (+1.23 %)
+TCR 6x10x3 alpha 0.4 Random N 1000 1 s dt 0.01 eps 5 air: Eyring against the analytic value (K 0.163, the solver's m) at most 5.61e-8 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.2657 s (+1.23 %); 250 Hz 0.2654 s (+1.23 %); 500 Hz 0.2648 s (+1.23 %); 1000 Hz 0.2641 s (+1.23 %); 2000 Hz 0.2620 s (+1.23 %); 4000 Hz 0.2546 s (+1.23 %); 8000 Hz 0.2296 s (+1.23 %)
+TCR 5x4x3 alpha 0.05 Random N 1000 1 s dt 0.01 eps 5: Eyring against the analytic value (K 0.163, the solver's m) at most 4.16e-7 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 2.0284 s (+1.23 %); 250 Hz 2.0284 s (+1.23 %); 500 Hz 2.0284 s (+1.23 %); 1000 Hz 2.0284 s (+1.23 %); 2000 Hz 2.0284 s (+1.23 %); 4000 Hz 2.0284 s (+1.23 %)
+TCR 5x4x3 alpha 0.05 Random N 1000 1 s dt 0.01 eps 5 air: Eyring against the analytic value (K 0.163, the solver's m) at most 4.10e-7 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 2.0182 s (+1.23 %); 250 Hz 1.9984 s (+1.23 %); 500 Hz 1.9669 s (+1.23 %); 1000 Hz 1.9254 s (+1.23 %); 2000 Hz 1.8219 s (+1.23 %); 4000 Hz 1.5136 s (+1.23 %); 8000 Hz 0.9190 s (+1.23 %)
+TCR 5x4x3 alpha 0.1 Random N 1000 1 s dt 0.01 eps 5: Eyring against the analytic value (K 0.163, the solver's m) at most 4.41e-7 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.9875 s (+1.23 %); 250 Hz 0.9875 s (+1.23 %); 500 Hz 0.9875 s (+1.23 %); 1000 Hz 0.9875 s (+1.23 %); 2000 Hz 0.9875 s (+1.23 %); 4000 Hz 0.9875 s (+1.23 %)
+TCR 5x4x3 alpha 0.1 Random N 1000 1 s dt 0.01 eps 5 air: Eyring against the analytic value (K 0.163, the solver's m) at most 4.28e-7 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.9851 s (+1.23 %); 250 Hz 0.9803 s (+1.23 %); 500 Hz 0.9727 s (+1.23 %); 1000 Hz 0.9624 s (+1.23 %); 2000 Hz 0.9358 s (+1.23 %); 4000 Hz 0.8472 s (+1.23 %); 8000 Hz 0.6220 s (+1.23 %)
+TCR 5x4x3 alpha 0.2 Random N 1000 1 s dt 0.01 eps 5: Eyring against the analytic value (K 0.163, the solver's m) at most 7.75e-8 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.4663 s (+1.23 %); 250 Hz 0.4663 s (+1.23 %); 500 Hz 0.4663 s (+1.23 %); 1000 Hz 0.4663 s (+1.23 %); 2000 Hz 0.4663 s (+1.23 %); 4000 Hz 0.4663 s (+1.23 %)
+TCR 5x4x3 alpha 0.2 Random N 1000 1 s dt 0.01 eps 5 air: Eyring against the analytic value (K 0.163, the solver's m) at most 6.80e-8 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.4657 s (+1.23 %); 250 Hz 0.4647 s (+1.23 %); 500 Hz 0.4629 s (+1.23 %); 1000 Hz 0.4606 s (+1.23 %); 2000 Hz 0.4544 s (+1.23 %); 4000 Hz 0.4324 s (+1.23 %); 8000 Hz 0.3650 s (+1.23 %)
+TCR 5x4x3 alpha 0.4 Random N 1000 1 s dt 0.01 eps 5: Eyring against the analytic value (K 0.163, the solver's m) at most 4.12e-8 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.2037 s (+1.23 %); 250 Hz 0.2037 s (+1.23 %); 500 Hz 0.2037 s (+1.23 %); 1000 Hz 0.2037 s (+1.23 %); 2000 Hz 0.2037 s (+1.23 %); 4000 Hz 0.2037 s (+1.23 %)
+TCR 5x4x3 alpha 0.4 Random N 1000 1 s dt 0.01 eps 5 air: Eyring against the analytic value (K 0.163, the solver's m) at most 6.04e-8 relative; against Eyring with K = 24 ln10/343.2: 125 Hz 0.2036 s (+1.23 %); 250 Hz 0.2034 s (+1.23 %); 500 Hz 0.2030 s (+1.23 %); 1000 Hz 0.2026 s (+1.23 %); 2000 Hz 0.2014 s (+1.23 %); 4000 Hz 0.1969 s (+1.23 %); 8000 Hz 0.1817 s (+1.23 %)
+test m8_tcr_cells ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.69s
+

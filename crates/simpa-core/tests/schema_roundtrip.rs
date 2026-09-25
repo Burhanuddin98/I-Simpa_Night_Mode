@@ -7,6 +7,10 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+#[allow(dead_code)]
+#[path = "common/scratch.rs"]
+mod scratch;
+
 use serde_json::{Value, json};
 use simpa_core::formats::cbin;
 use simpa_core::schema::*;
@@ -140,8 +144,7 @@ fn generated_projects_round_trip_byte_identical_and_bit_exact() {
 
 #[test]
 fn save_and_load_files_byte_identical() {
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("schema_roundtrip");
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch::fresh("schema_roundtrip", "files");
     let path = dir.join(format!("generated.{FILE_EXTENSION}"));
     for seed in 0..CASES {
         let p = generate(seed);
@@ -174,8 +177,7 @@ fn save_waits_out_a_file_held_open_by_another_process() {
             .unwrap()
     };
 
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("schema_roundtrip");
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch::fresh("schema_roundtrip", "files");
     let path = dir.join("held.simpa");
     let (old, new) = (generate(1), generate(2));
     save(&old, &path).unwrap();
@@ -1147,8 +1149,7 @@ fn load_errors_are_typed() {
     let text = to_json(&generate(1));
     assert_eq!(code(from_json(&text.replacen("\n}", ",\n}", 1))), "syntax");
 
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("schema_roundtrip");
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch::fresh("schema_roundtrip", "files");
     assert_eq!(code(load(&dir.join("does-not-exist.simpa"))), "not_found");
     let bad = dir.join("latin1.simpa");
     std::fs::write(&bad, b"{\"name\": \"caf\xe9\"}").unwrap();

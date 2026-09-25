@@ -1,0 +1,40 @@
+﻿
+running 1 test
+1500000 particles: T30 at trans_epsilon 5 over T30 at 9, 36 receiver-bands: mean -0.338 % ± 0.025 %; largest -0.562 % in one receiver-band, 4.2 of its standard errors; the largest in standard errors, in any receiver-band, 5.7; beyond 0.5 % in 6
+trans_epsilon 5: spl_db : {"value": 36}
+trans_epsilon 5: edt_s  : {"early_unresolved": 36}
+trans_epsilon 5: t20_s  : {"monte_carlo_noise": 23, "value": 13}
+trans_epsilon 5: t30_s  : {"missing_moves": 36}
+trans_epsilon 5: c50_db : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 5: c80_db : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 5: d50    : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 5: ts_s   : {"early_unresolved": 24, "params_bad_arrival": 12}
+trans_epsilon 5: missing energy: t20 with both: value: 36
+trans_epsilon 5: missing energy: t20 with floor: value: 36
+trans_epsilon 5: missing energy: t20 with lost: value: 36
+trans_epsilon 5: missing energy: t20 with neither: value: 36
+trans_epsilon 5: missing energy: t30 with both: missing_moves: 36
+trans_epsilon 5: missing energy: t30 with floor: missing_moves: 36
+trans_epsilon 5: missing energy: t30 with lost: missing_moves: 36
+trans_epsilon 5: missing energy: t30 with neither: value: 36
+trans_epsilon 9: spl_db : {"value": 36}
+trans_epsilon 9: edt_s  : {"early_unresolved": 36}
+trans_epsilon 9: t20_s  : {"monte_carlo_noise": 26, "value": 10}
+trans_epsilon 9: t30_s  : {"monte_carlo_noise": 36}
+trans_epsilon 9: c50_db : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 9: c80_db : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 9: d50    : {"params_bad_arrival": 12, "value": 24}
+trans_epsilon 9: ts_s   : {"early_unresolved": 24, "params_bad_arrival": 12}
+trans_epsilon 9: missing energy: t20 with both: value: 36
+trans_epsilon 9: missing energy: t20 with floor: value: 36
+trans_epsilon 9: missing energy: t20 with lost: value: 36
+trans_epsilon 9: missing energy: t20 with neither: value: 36
+trans_epsilon 9: missing energy: t30 with both: missing_moves: 36
+trans_epsilon 9: missing energy: t30 with floor: value: 36
+trans_epsilon 9: missing energy: t30 with lost: missing_moves: 36
+trans_epsilon 9: missing energy: t30 with neither: value: 36
+wall time: eps 5 NaN s, eps 9 NaN s per run
+test energetic_floor_against_a_lower_floor ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 5.38s
+

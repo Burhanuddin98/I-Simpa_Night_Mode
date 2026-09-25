@@ -1,8 +1,9 @@
 //! M3 gate (c), the solver as oracle: configurations written by `core::config_xml` are run by
 //! our M1 builds of SPPS and TCR (`$SIMPA_SOLVERS_DIR`, else `target/solvers/bin`), each in a
 //! fresh folder under `target/test-runs/config_xml/`, with the folder as the working directory
-//! and `config.xml` as the argument. The folders are kept for inspection, with `_stdout.txt` and
-//! `_stderr.txt`.
+//! and `config.xml` as the argument. A failing test keeps its folders for inspection, with
+//! `_stdout.txt` and `_stderr.txt`, and names them; a passing one removes them
+//! (`common/scratch.rs`; `$SIMPA_KEEP_SCRATCH=1` keeps them all).
 //!
 //! These tests need the solver build, so they are Grace-local, not CI-portable.
 

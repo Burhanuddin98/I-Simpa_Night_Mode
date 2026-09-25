@@ -1,0 +1,6 @@
+random    edt_s : corr(value, its own model sd) +0.01 over 8340 seed values; 87 receiver-bands partly refused, passing mean -0.27 % +- 0.14 % against all seeds'
+random    t20_s : corr(value, its own model sd) +0.09 over 10860 seed values; 192 receiver-bands partly refused, passing mean -0.47 % +- 0.05 % against all seeds'
+random    t30_s : corr(value, its own model sd) +0.20 over 9630 seed values; 60 receiver-bands partly refused, passing mean -0.82 % +- 0.13 % against all seeds'
+energetic edt_s : corr(value, its own model sd) -0.00 over 11040 seed values; 43 receiver-bands partly refused, passing mean -0.03 % +- 0.17 % against all seeds'
+energetic t20_s : corr(value, its own model sd) +0.09 over 19270 seed values; 236 receiver-bands partly refused, passing mean -0.75 % +- 0.10 % against all seeds'
+energetic t30_s : corr(value, its own model sd) +0.17 over 18040 seed values; 190 receiver-bands partly refused, passing mean -1.23 % +- 0.13 % against all seeds'

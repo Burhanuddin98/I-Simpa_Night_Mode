@@ -10,7 +10,6 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use simpa_core::config_xml;
 use simpa_core::formats::cbin;
@@ -21,6 +20,8 @@ use simpa_core::schema::SolverKind;
 
 #[path = "common/paths.rs"]
 mod paths;
+#[path = "common/scratch.rs"]
+pub mod scratch;
 #[allow(unused_imports)]
 pub use paths::{fixture, repo_root, solver_exe};
 
@@ -35,17 +36,10 @@ pub fn exe_for(solver: SolverKind) -> PathBuf {
     })
 }
 
-/// A new, empty folder under the test target's scratch folder. Never reused.
+/// A new, empty folder under `target/tmp/run_tests/`, never reused: removed when the test passes,
+/// kept when it fails (`common/scratch.rs`).
 pub fn fresh_dir(label: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("run_tests")
-        .join(format!("{label}-{nanos}-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    scratch::fresh("run_tests", label)
 }
 
 pub fn kind(solver: SolverKind) -> &'static str {

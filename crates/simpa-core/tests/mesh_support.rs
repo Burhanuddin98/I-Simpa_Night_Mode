@@ -4,36 +4,28 @@
 //! - [`tetgen_exe`] finds the M1 build of `tetgen.exe` through `common/paths.rs`:
 //!   `$SIMPA_SOLVERS_DIR`, or `<repo>/target/solvers/bin`. It panics when neither has one: these
 //!   tests never skip.
-//! - [`scratch`] gives each test a fresh folder under cargo's test scratch space.
+//! - [`scratch`] gives each test a fresh folder under `target/tmp/mesh/`, removed when the test
+//!   passes and kept when it fails (`common/scratch.rs`).
 //! - [`invariants`] checks a `.mbin` against `docs/m5-m6-design.md` decision 6 on its own, so the
 //!   mesher's tests do not lean on `mesh::verify`, which is built separately.
 #![allow(dead_code)]
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use simpa_core::formats::mbin;
 use simpa_core::schema::{self, Project};
 
 #[path = "common/paths.rs"]
 mod paths;
+#[path = "common/scratch.rs"]
+pub mod scratch_files;
 #[allow(unused_imports)]
 pub use paths::{fixture, repo_root, solvers_dir, tetgen_exe, upstream_file};
 
-static N: AtomicUsize = AtomicUsize::new(0);
-
-/// A fresh, empty folder for one test. Nothing is removed afterwards: `target/` is build output.
+/// A fresh, empty folder for one test under `target/tmp/mesh/`, never reused: removed when the
+/// test passes, kept when it fails.
 pub fn scratch(label: &str) -> PathBuf {
-    let n = N.fetch_add(1, Ordering::SeqCst);
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join("mesh")
-        .join(format!("{label}-{}-{n}-{stamp}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    scratch_files::fresh("mesh", label)
 }
 
 pub fn load_room(name: &str) -> Project {

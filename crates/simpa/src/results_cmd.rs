@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
-use simpa_core::results::report::{self, Evaluated, RefusalReport, Report};
+use simpa_core::results::report::{self, Evaluated, ReferenceReport, RefusalReport, Report};
 use simpa_core::results::{self};
 
 use crate::fail;
@@ -81,17 +81,64 @@ pub fn results_cmd(args: &[&str]) -> ExitCode {
     }
 }
 
-/// A value to its precision, or `NE(<why>)` for a refusal.
+/// A value to its precision, or `NE(<why>)` for a refusal; for a refusal for its Monte-Carlo
+/// noise, `NE(noise:<count>)` with the particles per source that would bring it within its limit
+/// ([`particles`]), or `NE(noise)` when none can be named; for a run outside the noise model's
+/// calibration, `NE(uncal:<count>)` with the particles per source that reach it, or
+/// `NE(uncal:R<=<s>x)` with the most the receiver radius may be as a multiple of the run's.
 fn cell(e: &Evaluated, digits: usize, scale: f64) -> String {
     match e {
         Evaluated::Value { value, .. } => format!("{:.*}", digits, value * scale),
         Evaluated::NotEvaluable { not_evaluable: r } => {
-            let why = serde_json::to_value(&r.error)
-                .ok()
-                .and_then(|v| v["why"]["why"].as_str().map(str::to_string))
+            let error = serde_json::to_value(&r.error).unwrap_or_default();
+            let why = error["why"]["why"]
+                .as_str()
+                .map(str::to_string)
                 .unwrap_or_else(|| r.code.trim_start_matches("params_").to_string());
+            if why == "monte_carlo_noise" {
+                return match error["why"]["particle_count"]["particles"].as_u64() {
+                    Some(n) => format!("NE(noise:{})", particles(n)),
+                    None => "NE(noise)".into(),
+                };
+            }
+            if why == "noise_uncalibrated" {
+                let w = &error["why"];
+                return match (
+                    w["particles_at_least"].as_u64(),
+                    w["receiver_radius_scale_at_most"].as_f64(),
+                ) {
+                    (Some(n), _) => format!("NE(uncal:{})", particles(n)),
+                    // At most: never shown larger than it is.
+                    (None, Some(s)) => format!("NE(uncal:R<={:.2}x)", (s * 100.0).floor() / 100.0),
+                    (None, None) => "NE(uncal)".into(),
+                };
+            }
             format!("NE({why})")
         }
+    }
+}
+
+/// A particle count in few characters: `150k`, `2.4M`, `1.3G`.
+fn particles(n: u64) -> String {
+    let n = n as f64;
+    let (v, unit) = if n >= 1e9 {
+        (n / 1e9, "G")
+    } else if n >= 1e6 {
+        (n / 1e6, "M")
+    } else if n >= 1e3 {
+        (n / 1e3, "k")
+    } else {
+        (n, "")
+    };
+    // Two significant digits, as the count is rounded; never shown smaller than it is.
+    let digits = if v >= 10.0 { 0 } else { 1 };
+    let shown = format!("{v:.digits$}");
+    let back: f64 = shown.parse().unwrap_or(v);
+    if back + 1e-9 < v {
+        let step = if digits == 0 { 1.0 } else { 0.1 };
+        format!("{:.digits$}{unit}", back + step)
+    } else {
+        format!("{shown}{unit}")
     }
 }
 
@@ -114,6 +161,14 @@ fn text(rep: &Report) -> String {
         rep.bands_hz
     );
     if let Some(sp) = &rep.spps {
+        let _ = writeln!(
+            s,
+            "NE(<why>): not evaluable, and why. NE(noise:<count>): refused for its Monte-Carlo \
+             noise; <count> particles per source would bring it within its limit (NE(noise): \
+             no count is named, the JSON says why). NE(uncal:<count>) or NE(uncal:R<=<s>x): \
+             the run is outside what the noise model was calibrated on; run <count> particles \
+             per source, or make the receiver radius at most <s> times this run's."
+        );
         for r in &sp.point_receivers {
             let arrival = r
                 .arrival_s
@@ -153,6 +208,48 @@ fn text(rep: &Report) -> String {
                 );
             }
         }
+        match &sp.reference {
+            ReferenceReport::Computed {
+                volume_m3,
+                area_m2,
+                free_paths,
+                bands,
+                ..
+            } => {
+                let paths = free_paths.as_ref().map_or("refused".to_string(), |p| {
+                    format!(
+                        "gamma^2 {:.4} ± {:.4}, mean free path {:.3} m (4V/S {:.3} m)",
+                        p.gamma2(),
+                        p.gamma2_se(),
+                        p.mean_free_path_m(),
+                        p.four_v_over_s_m()
+                    )
+                });
+                let _ = writeln!(
+                    s,
+                    "\nreference, analytic, diffuse field, NOT VALIDATED: V {volume_m3:.2} m3, S \
+                     {area_m2:.2} m2, {paths}"
+                );
+                let _ = writeln!(
+                    s,
+                    "{:>8} {:>11} {:>11} {:>14}",
+                    "band", "Kuttruff s", "Eyring s", "Lambert walls"
+                );
+                for b in bands {
+                    let _ = writeln!(
+                        s,
+                        "{:>8} {:>11} {:>11} {:>14}",
+                        format!("{} Hz", b.freq_hz),
+                        cell(&b.kuttruff_s, 3, 1.0),
+                        cell(&b.eyring_s, 3, 1.0),
+                        if b.lambert_walls { "yes" } else { "no" }
+                    );
+                }
+            }
+            ReferenceReport::NotComputed { why } => {
+                let _ = writeln!(s, "\nreference: not computed: {why}");
+            }
+        }
     }
     if let Some(t) = &rep.tcr {
         let _ = writeln!(
@@ -186,4 +283,116 @@ fn text(rep: &Report) -> String {
         }
     }
     s
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use simpa_core::params::{NotEvaluable, ParamError, ParticleCount, Quantity};
+
+    fn noise(count: ParticleCount) -> Evaluated {
+        let e = ParamError::NotEvaluable {
+            quantity: Quantity::T20,
+            why: NotEvaluable::MonteCarloNoise {
+                value: 0.8,
+                sd: Some(0.05),
+                limit: 0.025,
+                resamples: 200,
+                refused_resamples: 0,
+                particle_count: count,
+            },
+        };
+        // The text output reads a refusal as the report holds it.
+        Evaluated::NotEvaluable {
+            not_evaluable: report::Refused {
+                code: e.code().to_string(),
+                message: e.to_string(),
+                error: e,
+            },
+        }
+    }
+
+    #[test]
+    fn a_refusal_for_noise_shows_the_count_it_names() {
+        let named = |particles| ParticleCount::Named {
+            factor: 16.0,
+            margin: 1.4,
+            particles,
+        };
+        assert_eq!(
+            cell(&noise(named(Some(2_400_000))), 2, 1.0),
+            "NE(noise:2.4M)"
+        );
+        assert_eq!(cell(&noise(named(Some(150_000))), 2, 1.0), "NE(noise:150k)");
+        // A refusal by its resamples names the multiple at which they clear (R4-3).
+        let resampled = |particles| ParticleCount::Resampled {
+            multiple: 16,
+            margin: 1.3,
+            particles,
+        };
+        assert_eq!(
+            cell(&noise(resampled(Some(2_400_000))), 2, 1.0),
+            "NE(noise:2.4M)"
+        );
+        // Says no: without a count, none is shown, whatever the reason.
+        for c in [
+            named(None),
+            resampled(None),
+            ParticleCount::BeyondResampled { multiple: 64 },
+            ParticleCount::ResampledNotConfirmed,
+            ParticleCount::ScalingNotConfirmed,
+            ParticleCount::NoStandardDeviation,
+        ] {
+            assert_eq!(cell(&noise(c), 2, 1.0), "NE(noise)");
+        }
+    }
+
+    #[test]
+    fn a_run_outside_the_calibration_shows_what_would_bring_it_inside() {
+        let refusal = |at_least, scale| {
+            let e = ParamError::NotEvaluable {
+                quantity: Quantity::T30,
+                why: NotEvaluable::NoiseUncalibrated {
+                    value: 0.8,
+                    particles: 2_000,
+                    crossings_per_particle: 3.0,
+                    min_particles: 50_000,
+                    max_crossings_per_particle: 2.16,
+                    particles_at_least: at_least,
+                    receiver_radius_scale_at_most: scale,
+                },
+            };
+            Evaluated::NotEvaluable {
+                not_evaluable: report::Refused {
+                    code: e.code().to_string(),
+                    message: e.to_string(),
+                    error: e,
+                },
+            }
+        };
+        assert_eq!(cell(&refusal(Some(50_000), None), 2, 1.0), "NE(uncal:50k)");
+        // At most: 0.8485 is shown 0.84, never 0.85.
+        assert_eq!(
+            cell(&refusal(None, Some((2.16f64 / 3.0).sqrt())), 2, 1.0),
+            "NE(uncal:R<=0.84x)"
+        );
+        // Says no: with neither, nothing is claimed.
+        assert_eq!(cell(&refusal(None, None), 2, 1.0), "NE(uncal)");
+    }
+
+    #[test]
+    fn a_count_is_shortened_but_never_shown_smaller_than_it_is() {
+        for (n, want) in [
+            (999, "999"),
+            (150_000, "150k"),
+            (160_000, "160k"),
+            (1_300_000, "1.3M"),
+            (1_250_000, "1.3M"),
+            (12_000_000, "12M"),
+            (12_500_000, "13M"),
+            (2_100_000_000, "2.1G"),
+        ] {
+            assert_eq!(particles(n), want, "{n}");
+        }
+    }
 }

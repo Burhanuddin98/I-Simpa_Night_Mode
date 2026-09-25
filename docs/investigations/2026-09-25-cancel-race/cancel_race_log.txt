@@ -1,0 +1,23 @@
+simpa: B:/repos/I-Simpa_Night_Mode/.claude/worktrees/t3-proj/target/debug/simpa.exe
+started: 2026-09-25T20:08:48
+--- 2,000 particles, --cancel-after-ms D (the first design) ---
+uncancelled                  exit   0  OK        stage solve      solver     218 ms  files 15/15  simpa    621 ms
+timer 1 ms                   exit 130  CANCELLED stage solve      solver       2 ms  files 0/15  simpa    359 ms
+timer 1 ms                   exit 130  CANCELLED stage solve      solver       2 ms  files 0/15  simpa    401 ms
+timer 1 ms                   exit 130  CANCELLED stage solve      solver       3 ms  files 0/15  simpa    368 ms
+timer 50 ms                  exit 130  CANCELLED stage solve      solver       3 ms  files 0/15  simpa    370 ms
+timer 100 ms                 exit 130  CANCELLED stage solve      solver      59 ms  files 0/15  simpa    426 ms
+timer 150 ms                 exit 130  CANCELLED stage solve      solver     169 ms  files 0/15  simpa    591 ms
+timer 200 ms                 exit 130  CANCELLED stage solve      solver     211 ms  files 2/15  simpa    570 ms
+timer 300 ms                 exit   0  OK        stage solve      solver     192 ms  files 15/15  simpa    560 ms
+timer 400 ms                 exit   0  OK        stage solve      solver     218 ms  files 15/15  simpa    595 ms
+timer 600 ms                 exit   0  OK        stage solve      solver     214 ms  files 15/15  simpa    607 ms
+timer 1000 ms                exit   0  OK        stage solve      solver     202 ms  files 15/15  simpa    598 ms
+--- 1,000,000 particles ---
+progress 1 %                 exit 130  CANCELLED stage solve      solver     128 ms  files 0/15  simpa    499 ms
+progress 1 %                 exit 130  CANCELLED stage solve      solver     143 ms  files 0/15  simpa    510 ms
+progress 1 %                 exit 130  CANCELLED stage solve      solver     131 ms  files 0/15  simpa    535 ms
+timer 150 ms                 exit 130  CANCELLED stage solve      solver      87 ms  files 0/15  simpa    462 ms
+timer 5000 ms                exit 130  CANCELLED stage solve      solver    4937 ms  files 1/15  simpa  5,280 ms
+timer 10000 ms               exit   0  OK        stage solve      solver    6033 ms  files 15/15  simpa  6,418 ms
+finished: 2026-09-25T20:09:09

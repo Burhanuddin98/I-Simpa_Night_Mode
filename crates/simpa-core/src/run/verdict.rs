@@ -62,6 +62,10 @@ pub mod codes {
     /// `run --mesh <dir>`: the folder has no `OK` mesh manifest or no `tetramesh.mbin`, or an
     /// in-run mesh folder could not be used at all.
     pub const MESH_MISSING: &str = "mesh_missing";
+    /// `run --mesh <dir>`: the folder's `mesh.json` records a mesh made in parity mode, whose
+    /// `.mbin` keeps `preprocess.exe`'s facet markers for byte comparison with original
+    /// I-Simpa's and is never run (Burhan, 2026-09-24, decision 2), whatever its status says.
+    pub const MESH_PARITY: &str = "mesh_parity";
     /// The run folder's inputs could not be written: `config_xml`'s writer refused the project
     /// or variant (its code is in the detail), or a file could not be staged.
     pub const EXPORT_FAILED: &str = "export_failed";
@@ -94,9 +98,10 @@ pub mod codes {
 
     /// Every code above, in the order a verdict lists them: the run manager's refusals before
     /// launch, then the four signals.
-    pub const ALL: [&str; 21] = [
+    pub const ALL: [&str; 22] = [
         GEOMETRY_REFUSED,
         MESH_MISSING,
+        MESH_PARITY,
         EXPORT_FAILED,
         SOURCE_UNLOCATABLE,
         RECEIVER_UNLOCATABLE,

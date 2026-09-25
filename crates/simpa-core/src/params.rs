@@ -9,7 +9,10 @@
 //! - [`noise`]: the Monte-Carlo noise of each of those values, estimated from the number of
 //!   receiver crossings behind every bin, and the refusal of a value whose noise is too large.
 //! - [`air`]: ISO 9613-1 attenuation, and the value SPPS and TCR actually use.
-//! - [`room`]: Sabine and Eyring as TCR computes them.
+//! - [`room`]: Sabine and Eyring as TCR computes them, and Kuttruff's correction of Eyring with the
+//!   free paths' relative variance `γ²`.
+//! - [`lambert`]: a diffuse (Lambert) ray transport written from scratch: the mean free path and
+//!   `γ²` of a room from its geometry alone, and its decay, for M8's reference and cross-check.
 //! - [`din18041`]: the group-A target reverberation times.
 //!
 //! Everything is a pure function. A value that cannot be computed honestly is a typed
@@ -24,6 +27,7 @@ use serde::Serialize;
 pub mod air;
 pub mod decay;
 pub mod din18041;
+pub mod lambert;
 pub mod noise;
 pub mod room;
 
@@ -54,9 +58,15 @@ pub mod codes {
     pub const DIN_OUT_OF_RANGE: &str = "params_din_out_of_range";
     /// A solver floor, or a Monte-Carlo deposit, that is not a finite number in its domain.
     pub const BAD_NOISE_INPUT: &str = "params_bad_noise_input";
+    /// The diffuse ray transport (`params::lambert`) cannot run, or refuses its own result.
+    pub const TRANSPORT_REFUSED: &str = "params_transport_refused";
+    /// Kuttruff's reference is not computed for a band whose faces do not all reflect by
+    /// Lambert's law with scattering 1, the only walls the transport's `γ²` describes; and the
+    /// transport is not run when no computed band has such walls.
+    pub const REFERENCE_NOT_APPLICABLE: &str = "params_reference_not_applicable";
 
     /// Every code, in the order of the documentation table.
-    pub const ALL: [&str; 12] = [
+    pub const ALL: [&str; 14] = [
         BAD_TIME_STEP,
         SERIES_TOO_SHORT,
         BAD_ENERGY,
@@ -69,6 +79,8 @@ pub mod codes {
         NO_ABSORPTION,
         DIN_OUT_OF_RANGE,
         BAD_NOISE_INPUT,
+        TRANSPORT_REFUSED,
+        REFERENCE_NOT_APPLICABLE,
     ];
 }
 
@@ -115,6 +127,45 @@ fn ms(s: f64) -> String {
     } else {
         format!("{v}")
     }
+}
+
+/// The particle count a refusal for Monte-Carlo noise names, or why it names none.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case", tag = "count")]
+pub enum ParticleCount {
+    /// `factor` times the run's particles would bring the calibrated standard deviation to the
+    /// limit over `margin`, from its fall as `1/√N`: `(margin·sd/limit)²`
+    /// ([`noise::calibration::margin`]). `particles` is that many per source, rounded up to two
+    /// significant digits, when the run's count is known.
+    Named {
+        factor: f64,
+        margin: f64,
+        particles: Option<u64>,
+    },
+    /// More than [`noise::REFUSED_RESAMPLES_ALLOWED`] resamples refuse the value (rule R4-3):
+    /// `multiple` times the run's particles, the smallest of [`noise::RESAMPLED_MULTIPLES`] at which
+    /// the model's own resamples of the series, every deposit over `multiple`, refuse it at most
+    /// [`noise::RESAMPLED_REFUSALS_NAMED`] times and its calibrated standard deviation times
+    /// `margin` is within the limit. `particles` is that many per source, when the run's count is
+    /// known.
+    Resampled {
+        multiple: u32,
+        margin: f64,
+        particles: Option<u64>,
+    },
+    /// More than [`noise::REFUSED_RESAMPLES_ALLOWED`] resamples refuse the value, and they still
+    /// do, or its standard deviation is still above the limit, at `multiple` times the run's
+    /// particles, the largest tried (R4-3): no count is named, and more particles may not help.
+    BeyondResampled { multiple: u32 },
+    /// More than [`noise::REFUSED_RESAMPLES_ALLOWED`] resamples refuse the value, and for this
+    /// quantity in this computation method the counts its resamples named were not borne out at
+    /// a higher count (round 4, F8): no count is named.
+    ResampledNotConfirmed,
+    /// The fall of the seeds' spread as `1/√N` was not confirmed for this quantity in the run's
+    /// computation method ([`noise::calibration::root_n_confirmed`]), so no count is named.
+    ScalingNotConfirmed,
+    /// Fewer than two resamples give a value: there is no standard deviation to scale.
+    NoStandardDeviation,
 }
 
 /// Why a quantity cannot be read from a valid series.
@@ -198,23 +249,50 @@ pub enum NotEvaluable {
         limit: f64,
     },
     /// The value's Monte-Carlo standard deviation, estimated from the receiver crossings behind
-    /// each bin ([`noise`]), is above `limit`; or more than [`noise::REFUSED_RESAMPLES_ALLOWED`]
-    /// of the resampled series refuse the quantity themselves.
+    /// each bin and calibrated against SPPS's own seed-to-seed spread ([`noise`]), is above
+    /// `limit`; or more than [`noise::REFUSED_RESAMPLES_ALLOWED`] of the resampled series refuse
+    /// the quantity themselves.
     MonteCarloNoise {
         /// The value from the series. Not reported as the quantity.
         value: f64,
-        /// `None` when fewer than two resampled series give a value.
+        /// Calibrated, in the quantity's unit. `None` when fewer than two resampled series give
+        /// a value.
         sd: Option<f64>,
         /// In the quantity's unit (relative for decay times).
         limit: f64,
         resamples: usize,
         refused_resamples: usize,
+        /// The particle count that would bring the value within its limit, or why none is named.
+        particle_count: ParticleCount,
     },
     /// The series' Monte-Carlo noise cannot be estimated, so nothing bounds it.
     NoiseUnknown {
         /// The value from the series. Not reported as the quantity.
         value: f64,
         detail: String,
+    },
+    /// The run lies outside what the noise model's calibration measured for this quantity
+    /// ([`noise::calibration`]): fewer particles per source than its fewest, or more crossings of
+    /// a receiver per particle than its most. The model's standard deviation is not known to
+    /// bound the noise there, so the value is refused whatever it reads.
+    NoiseUncalibrated {
+        /// The value from the series. Not reported as the quantity.
+        value: f64,
+        /// The run's particles per source.
+        particles: u32,
+        /// The run's crossings of the receiver per particle, as the calibration measures them
+        /// ([`noise::calibration::variable`]).
+        crossings_per_particle: f64,
+        /// The fewest particles per source the calibration measured this quantity at.
+        min_particles: u32,
+        /// The most crossings per particle it measured this quantity at.
+        max_crossings_per_particle: f64,
+        /// When the run has too few particles: `min_particles`, the count to run at least.
+        particles_at_least: Option<u32>,
+        /// When the run has too many crossings per particle: the most the receiver radius may be,
+        /// as a multiple of the run's (crossings per particle grow as its square):
+        /// `√(max_crossings_per_particle / crossings_per_particle)`.
+        receiver_radius_scale_at_most: Option<f64>,
     },
     /// More than one source contributes to the series. ISO 3382-1 defines the onset-relative
     /// quantities per source–receiver pair, and a sum of several sources' responses is not one.
@@ -344,23 +422,97 @@ impl fmt::Display for NotEvaluable {
                 limit,
                 resamples,
                 refused_resamples,
+                particle_count,
             } => {
                 write!(f, "monte_carlo_noise: {value} from the series, ")?;
                 match sd {
-                    Some(sd) => write!(f, "standard deviation {sd} over {resamples} resamples")?,
+                    Some(sd) => write!(
+                        f,
+                        "standard deviation {sd} (calibrated) over {resamples} resamples"
+                    )?,
                     None => write!(f, "no standard deviation from {resamples} resamples")?,
                 }
                 write!(
                     f,
-                    ", {refused_resamples} of which refuse it; the limit is {limit}. Run more \
-                     particles"
-                )
+                    ", {refused_resamples} of which refuse it; the limit is {limit}."
+                )?;
+                match particle_count {
+                    ParticleCount::Named {
+                        particles: Some(n), ..
+                    } => write!(
+                        f,
+                        " Run at least {n} particles per source to bring it within its limit"
+                    ),
+                    ParticleCount::Named { factor, .. } => write!(
+                        f,
+                        " Run at least {factor:.3} times the particles to bring it within its limit"
+                    ),
+                    ParticleCount::Resampled {
+                        particles: Some(n), ..
+                    } => write!(
+                        f,
+                        " Run at least {n} particles per source: there its resamples would refuse \
+                         it seldom enough and its noise would be within its limit"
+                    ),
+                    ParticleCount::Resampled { multiple, .. } => write!(
+                        f,
+                        " Run at least {multiple} times the particles: there its resamples would \
+                         refuse it seldom enough and its noise would be within its limit"
+                    ),
+                    ParticleCount::BeyondResampled { multiple } => write!(
+                        f,
+                        " No particle count is named: at {multiple} times the particles its \
+                         resamples would still refuse it, or its noise would still be above its \
+                         limit, so more particles may not help"
+                    ),
+                    ParticleCount::ResampledNotConfirmed => write!(
+                        f,
+                        " No particle count is named: for this quantity the counts its resamples                          named were not borne out at a higher count"
+                    ),
+                    ParticleCount::ScalingNotConfirmed => write!(
+                        f,
+                        " No particle count is named: the calibration did not confirm that this \
+                         quantity's spread falls as 1/√N in this computation method"
+                    ),
+                    ParticleCount::NoStandardDeviation => write!(
+                        f,
+                        " With no standard deviation, no particle count can be named"
+                    ),
+                }
             }
             NotEvaluable::NoiseUnknown { value, detail } => write!(
                 f,
                 "noise_unknown: {value} from the series, but its Monte-Carlo noise cannot be \
                  estimated: {detail}"
             ),
+            NotEvaluable::NoiseUncalibrated {
+                value,
+                particles,
+                crossings_per_particle,
+                min_particles,
+                max_crossings_per_particle,
+                particles_at_least,
+                receiver_radius_scale_at_most,
+            } => {
+                write!(
+                    f,
+                    "noise_uncalibrated: {value} from the series, but the noise model was \
+                     calibrated for this quantity at {min_particles} particles per source or \
+                     more and {max_crossings_per_particle} crossings of a receiver per particle \
+                     or fewer; this run has {particles} and {crossings_per_particle}."
+                )?;
+                if let Some(n) = particles_at_least {
+                    write!(f, " Run at least {n} particles per source.")?;
+                }
+                if let Some(s) = receiver_radius_scale_at_most {
+                    write!(
+                        f,
+                        " Make the receiver radius at most {s:.3} times this run's: crossings per \
+                         particle grow as its square, and more particles do not lower them."
+                    )?;
+                }
+                Ok(())
+            }
             NotEvaluable::SeveralSources { sources } => write!(
                 f,
                 "several_sources: {sources:?} all contribute; the quantity is defined per source \
@@ -430,6 +582,18 @@ pub enum ParamError {
         field: String,
         value: f64,
     },
+    /// The diffuse ray transport (`params::lambert`) cannot run with its inputs, a ray left the
+    /// enclosure, its mean free path is not `4V/S` within its statistical error, or `γ²`'s
+    /// standard error is above its limit.
+    TransportRefused {
+        detail: String,
+    },
+    /// Kuttruff's reference does not describe this band: not every face reflects by Lambert's
+    /// law with scattering 1 in it (`results::reference`); or no computed band has such walls, so
+    /// the transport was not run.
+    ReferenceNotApplicable {
+        detail: String,
+    },
 }
 
 impl ParamError {
@@ -448,6 +612,8 @@ impl ParamError {
             ParamError::NoAbsorption => codes::NO_ABSORPTION,
             ParamError::DinOutOfRange { .. } => codes::DIN_OUT_OF_RANGE,
             ParamError::BadNoiseInput { .. } => codes::BAD_NOISE_INPUT,
+            ParamError::TransportRefused { .. } => codes::TRANSPORT_REFUSED,
+            ParamError::ReferenceNotApplicable { .. } => codes::REFERENCE_NOT_APPLICABLE,
         }
     }
 
@@ -498,6 +664,8 @@ impl fmt::Display for ParamError {
                 detail,
             } => write!(f, "{group} at {volume_m3} m³: {detail}"),
             ParamError::BadNoiseInput { field, value } => write!(f, "{field} = {value}"),
+            ParamError::TransportRefused { detail } => write!(f, "{detail}"),
+            ParamError::ReferenceNotApplicable { detail } => write!(f, "{detail}"),
         }
     }
 }
@@ -506,6 +674,17 @@ impl std::error::Error for ParamError {}
 
 pub(crate) fn not_evaluable(quantity: Quantity, why: NotEvaluable) -> ParamError {
     ParamError::NotEvaluable { quantity, why }
+}
+
+/// The JSON pattern of a seed as [`serialize_seed`] writes it.
+pub(crate) const SEED_PATTERN: &str = "^0x[0-9a-f]{16}$";
+
+/// Writes a 64-bit seed as the string `0x` and 16 lowercase hex digits. A JSON number above 2⁵³
+/// is read as a different value by every reader that parses numbers as doubles (JavaScript, and
+/// many JSON libraries): the transport's seed, `0x6c61_6d62_6572_7431`, would be read as
+/// 7809643498213372928, not 7809643498213372977 (pre-M8 review).
+pub(crate) fn serialize_seed<S: serde::Serializer>(seed: &u64, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str(&format!("{seed:#018x}"))
 }
 
 /// A solver's floor: it drops each particle once its energy falls `-db` dB below its start
@@ -684,8 +863,10 @@ impl EnergySeries {
     /// A series whose caller knows that no energy arrives after its last bin, refused as
     /// [`EnergySeries::new`]. Its tail is [`decay::Tail::Complete`]: nothing is estimated, added
     /// or refused for the energy after the end (`docs/params.md`, "Truncation"). `core::results`
-    /// claims it for SPPS in random mode when the run's statistics count no particle remaining at
-    /// the end of the calculation; the claim changes numbers, so it needs such evidence.
+    /// claims it for SPPS in random mode when the run's statistics count at most one particle in a
+    /// million remaining at the end of the calculation (`results::spps::REMAINING_UNFINISHED_SHARE`;
+    /// those few are bounded with the lost ones, as unfinished paths); the claim changes numbers,
+    /// so it needs such evidence.
     pub fn complete(dt: f64, values: Vec<f64>) -> Result<Self, ParamError> {
         let mut s = Self::new(dt, values)?;
         s.complete = true;
@@ -905,6 +1086,8 @@ mod tests {
                 field: "floor_db".into(),
                 value: f64::NAN,
             },
+            ParamError::TransportRefused { detail: "x".into() },
+            ParamError::ReferenceNotApplicable { detail: "x".into() },
         ];
         let got: Vec<&str> = errors.iter().map(ParamError::code).collect();
         assert_eq!(got, codes::ALL);

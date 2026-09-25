@@ -576,3 +576,37 @@ fn import_errors_are_typed() {
     let p = import_upstream(&spps.replace("temperature=\"20\"", "temperature=\"20,5\"")).unwrap();
     assert_eq!(p.environment.temperature_c.get(), 20.5);
 }
+
+/// A material's scattering (`diffusion`) that is not a number is refused on import, naming the
+/// attribute, where SPPS itself would read it with `atof` as 0, specular, and go on
+/// (`coreString.cpp:89-105`). So a project of this program never carries one; a run folder given
+/// as it is can, and there `results::reference` reads it as SPPS does, 0, so the band is not
+/// Lambert and the Kuttruff reference does not describe it (`docs/params.md`, "How a band's
+/// scattering is read"; `results::reference`'s tests). Says no: the solvers' comma decimal, `0,5`,
+/// imports as 0.5, as they read it.
+#[test]
+fn a_scattering_that_is_not_a_number_is_refused_on_import() {
+    let spps = read_text(UPSTREAM_SPPS);
+    let band = r#"<bfreq freq="20000" absorb="0.300000011920929" diffusion="0" loi="0"/>"#;
+    assert!(spps.contains(band));
+    let with = |diffusion: &str| {
+        spps.replacen(
+            band,
+            &band.replace("diffusion=\"0\"", &format!("diffusion=\"{diffusion}\"")),
+            1,
+        )
+    };
+    for bad in ["x", "", "nan", "1e99"] {
+        let e = import_upstream(&with(bad)).unwrap_err();
+        assert_eq!(e.code(), "invalid_value", "{bad:?}: {e}");
+        assert!(e.to_string().contains("diffusion"), "{bad:?}: {e}");
+    }
+    let p = import_upstream(&with("0,5")).unwrap();
+    let m = p
+        .materials
+        .iter()
+        .find(|m| m.solver_id == Some(21))
+        .unwrap();
+    // The 20 kHz band is the last of the project's bands.
+    assert_eq!(m.scattering.last().unwrap().get(), 0.5);
+}

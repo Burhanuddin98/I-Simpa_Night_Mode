@@ -1,0 +1,294 @@
+ROUND 3 VALIDATION, random mode, with the code's numbers:
+  V3-R1 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.898 [0.832, 0.976] dof 211.8 ok
+    edt_s all         36 of 36 rows inside: 0.822 [0.766, 0.888] dof 249.9 ok
+    t20_s all         36 of 36 rows inside: 0.794 [0.724, 0.880] dof 141.4 ok
+    t30_s all         36 of 36 rows inside: 0.648 [0.600, 0.706] dof 206.7 ok
+    c50_db all        30 of 30 rows inside: 0.794 [0.738, 0.860] dof 232.0 ok
+    c80_db all        30 of 30 rows inside: 0.754 [0.704, 0.812] dof 270.0 ok
+    d50 all           30 of 30 rows inside: 0.758 [0.705, 0.822] dof 230.0 ok
+    ts_s all          30 of 30 rows inside: 0.753 [0.691, 0.828] dof 165.9 ok
+  V3-R2 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.711 [0.646, 0.793] dof 128.3 ok
+    edt_s all         36 of 36 rows inside: 0.712 [0.643, 0.800] dof 114.9 ok
+    t20_s all         36 of 36 rows inside: 0.649 [0.584, 0.733] dof 104.7 ok
+    t30_s all         36 of 36 rows inside: 0.609 [0.550, 0.684] dof 115.8 ok
+    c50_db all        36 of 36 rows inside: 0.641 [0.599, 0.690] dof 268.7 ok
+    c80_db all        36 of 36 rows inside: 0.596 [0.553, 0.648] dof 217.0 ok
+    d50 all           36 of 36 rows inside: 0.641 [0.599, 0.690] dof 268.9 ok
+    ts_s all          36 of 36 rows inside: 0.618 [0.556, 0.698] dof 104.3 ok
+  V3-R3 (N 30000)
+    spl_db all        36 of 36 rows inside: 0.874 [0.818, 0.939] dof 286.3 ok
+    edt_s all          0 of 36 rows inside the domain
+    t20_s all          0 of 36 rows inside the domain
+    t30_s all          0 of 35 rows inside the domain
+    c50_db all        18 of 18 rows inside: 0.821 [0.753, 0.906] dof 158.9 ok
+    c80_db all        18 of 18 rows inside: 0.733 [0.645, 0.853] dof 70.2 ok
+    d50 all           18 of 18 rows inside: 0.820 [0.752, 0.904] dof 159.2 ok
+    ts_s all           0 of 18 rows inside the domain
+  V3-R4 (N 8000)
+    spl_db all        36 of 36 rows inside: 0.824 [0.764, 0.895] dof 217.9 ok
+    c50_db all        24 of 24 rows inside: 0.800 [0.728, 0.891] dof 133.4 ok
+    c80_db all        24 of 24 rows inside: 0.725 [0.670, 0.790] dof 201.9 ok
+    d50 all           24 of 24 rows inside: 0.799 [0.726, 0.889] dof 133.1 ok
+  V3-R5 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.869 [0.817, 0.930] dof 321.7 ok
+  V3-R6 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.792 [0.744, 0.847] dof 324.0 ok
+    edt_s all         36 of 36 rows inside: 0.750 [0.704, 0.803] dof 317.9 ok
+    t20_s all         36 of 36 rows inside: 0.566 [0.532, 0.605] dof 324.0 ok
+    t30_s all         10 of 10 rows inside: 0.958 [0.815, 1.170] dof 42.2 ok
+    c50_db all        15 of 15 rows inside: 0.889 [0.809, 0.989] dof 135.0 ok
+    c80_db all        15 of 15 rows inside: 0.640 [0.582, 0.712] dof 135.0 ok
+    d50 all           15 of 15 rows inside: 0.903 [0.822, 1.004] dof 135.0 ok
+    ts_s all          15 of 15 rows inside: 0.680 [0.618, 0.756] dof 135.0 ok
+  V3-R7 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.848 [0.787, 0.920] dof 222.6 ok
+    edt_s all         36 of 36 rows inside: 0.854 [0.795, 0.924] dof 240.6 ok
+    t20_s all         36 of 36 rows inside: 0.827 [0.763, 0.902] dof 194.3 ok
+    t30_s all         36 of 36 rows inside: 0.717 [0.666, 0.777] dof 228.3 ok
+    c50_db all        24 of 24 rows inside: 0.768 [0.707, 0.842] dof 177.8 ok
+    c80_db all        24 of 24 rows inside: 0.728 [0.665, 0.807] dof 145.3 ok
+    d50 all           24 of 24 rows inside: 0.770 [0.709, 0.844] dof 177.8 ok
+    ts_s all          24 of 24 rows inside: 0.895 [0.826, 0.978] dof 191.6 ok
+  V3-R8 (N 50000)
+    spl_db all        36 of 36 rows inside: 0.876 [0.823, 0.937] dof 324.0 ok
+    t20_s all         36 of 36 rows inside: 0.570 [0.532, 0.615] dof 261.1 ok
+    c50_db all        36 of 36 rows inside: 0.815 [0.765, 0.874] dof 302.0 ok
+    c80_db all        36 of 36 rows inside: 0.701 [0.657, 0.752] dof 298.6 ok
+    d50 all           36 of 36 rows inside: 0.816 [0.765, 0.874] dof 300.8 ok
+  V3-R9 (N 500000)
+    spl_db all        36 of 36 rows inside: 0.686 [0.632, 0.751] dof 181.7 ok
+    edt_s all         36 of 36 rows inside: 0.768 [0.696, 0.857] dof 124.9 ok
+    t20_s all         36 of 36 rows inside: 0.599 [0.542, 0.669] dof 123.4 ok
+    t30_s all         36 of 36 rows inside: 0.555 [0.504, 0.618] dof 130.5 ok
+    c50_db all        36 of 36 rows inside: 0.679 [0.634, 0.732] dof 262.8 ok
+    c80_db all        36 of 36 rows inside: 0.650 [0.607, 0.701] dof 262.1 ok
+    d50 all           36 of 36 rows inside: 0.679 [0.633, 0.731] dof 262.7 ok
+    ts_s all          36 of 36 rows inside: 0.645 [0.573, 0.741] dof 82.7 ok
+  1/sqrt(N) spl_db : true over ["C-R1/C-R2 -1.62", "C-R3/C-R4 +0.89", "C-R5/V-R4 +0.17", "C3-R5/V3-R8 +1.77", "C3-R6/C-R5 +0.17", "C3-R9/V3-R9 -1.92"]; unsafe []
+  1/sqrt(N) edt_s  : true over ["C-R1/C-R2 -0.85", "C-R3/C-R4 +0.09", "C3-R9/V3-R9 +0.58"]; unsafe []
+  1/sqrt(N) t20_s  : true over ["C-R1/C-R2 -0.01", "C-R3/C-R4 -0.02", "C-R5/V-R4 -0.39", "C3-R6/C-R5 -0.41", "C3-R9/V3-R9 +0.36"]; unsafe []
+  1/sqrt(N) t30_s  : true over ["C-R1/C-R2 -1.89", "C-R3/C-R4 +0.00", "C-R5/V-R4 +1.24", "C3-R9/V3-R9 -1.04"]; unsafe []
+  1/sqrt(N) c50_db : true over ["C-R1/C-R2 -0.03", "C-R5/V-R4 +0.87", "C3-R5/V3-R8 -0.11", "C3-R6/C-R5 -1.10", "C3-R9/V3-R9 +0.04"]; unsafe []
+  1/sqrt(N) c80_db : true over ["C-R1/C-R2 -0.58", "C-R5/V-R4 +0.64", "C3-R5/V3-R8 -0.45", "C3-R6/C-R5 +0.03", "C3-R9/V3-R9 -0.39"]; unsafe []
+  1/sqrt(N) d50    : true over ["C-R1/C-R2 -0.04", "C-R5/V-R4 +0.95", "C3-R5/V3-R8 -0.05", "C3-R6/C-R5 -0.94", "C3-R9/V3-R9 +0.02"]; unsafe []
+  1/sqrt(N) ts_s   : true over ["C-R1/C-R2 -1.32", "C3-R9/V3-R9 +0.25"]; unsafe []
+
+ROUND 3 VALIDATION, energetic mode, with the code's numbers:
+  V3-E1 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.776 [0.725, 0.835] dof 273.8 ok
+    edt_s all         36 of 36 rows inside: 0.559 [0.524, 0.600] dof 294.3 ok
+    t20_s uniform_lambert 36 of 36 rows inside: 0.935 [0.859, 1.028] dof 168.6 ok
+    t30_s uniform_lambert 36 of 36 rows inside: 0.679 [0.612, 0.763] dof 112.9 ok
+    c50_db all        30 of 30 rows inside: 0.981 [0.916, 1.056] dof 268.6 ok
+    c80_db all        30 of 30 rows inside: 1.056 [0.967, 1.165] dof 157.1 ok
+    d50 all           30 of 30 rows inside: 0.963 [0.899, 1.037] dof 268.6 ok
+    ts_s all          30 of 30 rows inside: 0.636 [0.586, 0.697] dof 179.9 ok
+  V3-E2 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.660 [0.618, 0.708] dof 293.3 ok
+    t20_s lambert     36 of 36 rows inside: 0.120 [0.110, 0.131] dof 186.3 ok
+    t30_s lambert     24 of 24 rows inside: 0.128 [0.113, 0.148] dof 73.5 ok
+    c50_db all        36 of 36 rows inside: 0.644 [0.604, 0.691] dof 303.8 ok
+    c80_db all        36 of 36 rows inside: 0.509 [0.479, 0.545] dof 324.0 ok
+    d50 all           36 of 36 rows inside: 0.652 [0.611, 0.698] dof 303.4 ok
+    ts_s all           3 of  3 rows inside: 0.615 [0.505, 0.795] dof 27.0 ok
+  V3-E3 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.794 [0.746, 0.849] dof 322.3 ok
+    edt_s all         36 of 36 rows inside: 0.585 [0.550, 0.626] dof 324.0 ok
+    t20_s lambert      0 of 36 rows inside the domain
+    t30_s lambert      0 of 36 rows inside the domain
+    c50_db all        18 of 18 rows inside: 1.011 [0.924, 1.118] dof 150.2 ok
+    c80_db all        18 of 18 rows inside: 1.015 [0.925, 1.126] dof 140.8 ok
+    d50 all           18 of 18 rows inside: 1.012 [0.925, 1.119] dof 150.1 ok
+    ts_s all          18 of 18 rows inside: 0.793 [0.722, 0.881] dof 138.7 ok
+  V3-E4 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.763 [0.715, 0.817] dof 308.8 ok
+    edt_s all         36 of 36 rows inside: 0.495 [0.459, 0.536] dof 224.2 ok
+    t20_s other        0 of 36 rows inside the domain
+    t30_s other        0 of 36 rows inside the domain
+    c50_db all        36 of 36 rows inside: 0.753 [0.704, 0.811] dof 269.7 ok
+    c80_db all        36 of 36 rows inside: 0.721 [0.676, 0.773] dof 304.5 ok
+    d50 all           36 of 36 rows inside: 0.753 [0.704, 0.811] dof 269.7 ok
+    ts_s all          36 of 36 rows inside: 0.523 [0.492, 0.559] dof 324.0 ok
+  V3-E5 (N 50000)
+    spl_db all        36 of 36 rows inside: 0.690 [0.649, 0.738] dof 322.7 ok
+    t20_s uniform_lambert 36 of 36 rows inside: 0.821 [0.767, 0.885] dof 262.6 ok
+    t30_s uniform_lambert 36 of 36 rows inside: 0.666 [0.626, 0.713] dof 324.0 ok
+    c50_db all        36 of 36 rows inside: 0.516 [0.483, 0.553] dof 301.0 ok
+    c80_db all        36 of 36 rows inside: 0.381 [0.358, 0.407] dof 324.0 ok
+    d50 all           36 of 36 rows inside: 0.517 [0.484, 0.554] dof 301.2 ok
+  V3-E6 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.953 [0.893, 1.023] dof 293.0 ok
+  V3-E7 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.700 [0.658, 0.749] dof 324.0 ok
+    t20_s lambert     36 of 36 rows inside: 0.282 [0.264, 0.302] dof 293.8 ok
+    t30_s lambert     36 of 36 rows inside: 0.384 [0.347, 0.430] dof 116.8 ok
+    c50_db all        24 of 24 rows inside: 0.510 [0.473, 0.555] dof 210.9 ok
+    c80_db all        24 of 24 rows inside: 0.372 [0.345, 0.404] dof 216.0 ok
+    d50 all           24 of 24 rows inside: 0.508 [0.471, 0.552] dof 216.0 ok
+  V3-E8 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.847 [0.796, 0.906] dof 324.0 ok
+    edt_s all         36 of 36 rows inside: 0.891 [0.837, 0.952] dof 324.0 ok
+    t20_s lambert     36 of 36 rows inside: 0.582 [0.541, 0.630] dof 233.8 ok
+    t30_s lambert     36 of 36 rows inside: 0.693 [0.633, 0.766] dof 151.7 ok
+    c50_db all        15 of 15 rows inside: 0.818 [0.744, 0.910] dof 135.0 ok
+    c80_db all        15 of 15 rows inside: 0.853 [0.766, 0.966] dof 101.6 ok
+    d50 all           15 of 15 rows inside: 0.822 [0.748, 0.914] dof 135.0 ok
+    ts_s all          15 of 15 rows inside: 0.909 [0.825, 1.013] dof 129.5 ok
+  V3-E9 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.673 [0.632, 0.721] dof 315.6 ok
+    edt_s all         36 of 36 rows inside: 0.421 [0.391, 0.457] dof 219.2 ok
+    t20_s uniform_lambert 36 of 36 rows inside: 0.846 [0.787, 0.915] dof 240.4 ok
+    t30_s uniform_lambert 36 of 36 rows inside: 0.567 [0.522, 0.622] dof 178.0 ok
+    c50_db all        36 of 36 rows inside: 0.859 [0.806, 0.922] dof 298.2 ok
+    c80_db all        36 of 36 rows inside: 0.755 [0.706, 0.814] dof 267.2 ok
+    d50 all           36 of 36 rows inside: 0.859 [0.805, 0.922] dof 298.3 ok
+    ts_s all          36 of 36 rows inside: 0.535 [0.497, 0.580] dof 230.3 ok
+  V3-E10 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.684 [0.640, 0.735] dof 280.3 ok
+    edt_s all          6 of  6 rows inside: 0.665 [0.552, 0.841] dof 31.5 ok
+    t20_s other       36 of 36 rows inside: 0.533 [0.499, 0.573] dof 279.4 ok
+    t30_s other       36 of 36 rows inside: 0.517 [0.481, 0.561] dof 229.7 ok
+    c50_db all        30 of 30 rows inside: 0.718 [0.664, 0.783] dof 201.9 ok
+    c80_db all        30 of 30 rows inside: 0.705 [0.654, 0.765] dof 219.2 ok
+    d50 all           30 of 30 rows inside: 0.713 [0.659, 0.777] dof 202.2 ok
+    ts_s all           6 of  6 rows inside: 0.765 [0.662, 0.910] dof 54.0 ok
+  1/sqrt(N) spl_db : true over ["C-E1/C-E2 +0.34", "C-E3/C-E4 -0.99", "C-E5/V-E4 +0.42", "C3-E5/V3-E5 +0.70", "C3-E6/C-E5 -0.60", "C3-E10/V3-E9 -0.37"]; unsafe []
+  1/sqrt(N) edt_s  : true over ["C-E1/C-E2 +0.31", "C-E3/C-E4 -2.18", "C3-E10/V3-E9 -0.40"]; unsafe []
+  1/sqrt(N) t20_s  : true over ["C-E1/C-E2 -0.87", "C-E3/C-E4 -1.17", "C-E5/V-E4 +1.78", "C3-E5/V3-E5 +0.15", "C3-E6/C-E5 -1.06", "C3-E10/V3-E9 -0.34"]; unsafe []
+  1/sqrt(N) t30_s  : true over ["C-E1/C-E2 -0.17", "C-E3/C-E4 -0.51", "C-E5/V-E4 +1.07", "C3-E10/V3-E9 +0.37"]; unsafe []
+  1/sqrt(N) c50_db : true over ["C-E1/C-E2 +0.49", "C-E5/V-E4 -0.44", "C3-E5/V3-E5 -0.53", "C3-E6/C-E5 -0.76", "C3-E10/V3-E9 +0.54"]; unsafe []
+  1/sqrt(N) c80_db : true over ["C-E1/C-E2 +1.00", "C-E5/V-E4 -0.27", "C3-E5/V3-E5 +1.27", "C3-E6/C-E5 -0.60", "C3-E10/V3-E9 -0.59"]; unsafe []
+  1/sqrt(N) d50    : true over ["C-E1/C-E2 +0.51", "C-E5/V-E4 -0.45", "C3-E5/V3-E5 -0.57", "C3-E6/C-E5 -0.72", "C3-E10/V3-E9 +0.53"]; unsafe []
+  1/sqrt(N) ts_s   : true over ["C-E1/C-E2 +1.25", "C3-E10/V3-E9 -0.00"]; unsafe []
+
+named counts (round 3), C-R1 (150000) against C-R2 (1500000):
+    edt_s   10 refused for noise at C-R1, 10 name a count, 10 at most C-R2's; of those, 100.0 % of C-R2's seeds give the value; 0 outside the domain at C-R1
+    t20_s   360 refused for noise at C-R1, 360 name a count, 11 at most C-R2's; of those, 98.2 % of C-R2's seeds give the value; 0 outside the domain at C-R1
+    t30_s   358 refused for noise at C-R1, 358 name a count, 0 at most C-R2's; of those, NaN % of C-R2's seeds give the value; 0 outside the domain at C-R1
+
+named counts (round 3), C-R3 (150000) against C-R4 (15000000):
+    edt_s   357 refused for noise at C-R3, 357 name a count, 357 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value; 0 outside the domain at C-R3
+    t20_s   360 refused for noise at C-R3, 360 name a count, 358 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value; 0 outside the domain at C-R3
+    t30_s   358 refused for noise at C-R3, 358 name a count, 265 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value; 0 outside the domain at C-R3
+
+named counts (round 3), C-R5 (150000) against V-R4 (600000):
+    t20_s   360 refused for noise at C-R5, 360 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value; 0 outside the domain at C-R5
+    t30_s   212 refused for noise at C-R5, 212 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value; 0 outside the domain at C-R5
+
+named counts (round 3), C-E1 (150000) against C-E2 (600000):
+
+named counts (round 3), C-E3 (150000) against C-E4 (2400000):
+    t30_s   303 refused for noise at C-E3, 0 name a count, 0 at most C-E4's; of those, NaN % of C-E4's seeds give the value; 0 outside the domain at C-E3
+
+named counts (round 3), C-E5 (150000) against V-E4 (1500000):
+    t20_s   360 refused for noise at C-E5, 360 name a count, 1 at most V-E4's; of those, 100.0 % of V-E4's seeds give the value; 0 outside the domain at C-E5
+    t30_s   360 refused for noise at C-E5, 360 name a count, 0 at most V-E4's; of those, NaN % of V-E4's seeds give the value; 0 outside the domain at C-E5
+
+named counts (round 3), C3-R5 (5000) against V3-R8 (50000):
+    t20_s   0 refused for noise at C3-R5, 0 name a count, 0 at most V3-R8's; of those, NaN % of V3-R8's seeds give the value; 158 outside the domain at C3-R5
+    t30_s   0 refused for noise at C3-R5, 0 name a count, 0 at most V3-R8's; of those, NaN % of V3-R8's seeds give the value; 7 outside the domain at C3-R5
+    c50_db  360 refused for noise at C3-R5, 360 name a count, 360 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value; 0 outside the domain at C3-R5
+    c80_db  360 refused for noise at C3-R5, 360 name a count, 206 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value; 0 outside the domain at C3-R5
+    d50     359 refused for noise at C3-R5, 359 name a count, 359 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value; 0 outside the domain at C3-R5
+
+named counts (round 3), C3-R6 (15000) against C-R5 (150000):
+    t20_s   0 refused for noise at C3-R6, 0 name a count, 0 at most C-R5's; of those, NaN % of C-R5's seeds give the value; 203 outside the domain at C3-R6
+    t30_s   0 refused for noise at C3-R6, 0 name a count, 0 at most C-R5's; of those, NaN % of C-R5's seeds give the value; 4 outside the domain at C3-R6
+    c50_db  239 refused for noise at C3-R6, 239 name a count, 239 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value; 0 outside the domain at C3-R6
+    c80_db  240 refused for noise at C3-R6, 240 name a count, 239 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value; 0 outside the domain at C3-R6
+    d50     237 refused for noise at C3-R6, 237 name a count, 237 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value; 0 outside the domain at C3-R6
+    ts_s    0 refused for noise at C3-R6, 0 name a count, 0 at most C-R5's; of those, NaN % of C-R5's seeds give the value; 3 outside the domain at C3-R6
+
+named counts (round 3), C3-R9 (50000) against V3-R9 (500000):
+    t20_s   360 refused for noise at C3-R9, 360 name a count, 290 at most V3-R9's; of those, 100.0 % of V3-R9's seeds give the value; 0 outside the domain at C3-R9
+    t30_s   360 refused for noise at C3-R9, 360 name a count, 0 at most V3-R9's; of those, NaN % of V3-R9's seeds give the value; 0 outside the domain at C3-R9
+
+named counts (round 3), C3-E5 (5000) against V3-E5 (50000):
+    t20_s   360 refused for noise at C3-E5, 2 name a count, 2 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value; 0 outside the domain at C3-E5
+    t30_s   0 refused for noise at C3-E5, 0 name a count, 0 at most V3-E5's; of those, NaN % of V3-E5's seeds give the value; 360 outside the domain at C3-E5
+    c50_db  359 refused for noise at C3-E5, 359 name a count, 359 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value; 0 outside the domain at C3-E5
+    c80_db  360 refused for noise at C3-E5, 360 name a count, 360 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value; 0 outside the domain at C3-E5
+    d50     79 refused for noise at C3-E5, 79 name a count, 79 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value; 0 outside the domain at C3-E5
+
+named counts (round 3), C3-E6 (15000) against C-E5 (150000):
+    t20_s   360 refused for noise at C3-E6, 360 name a count, 0 at most C-E5's; of those, NaN % of C-E5's seeds give the value; 0 outside the domain at C3-E6
+    t30_s   0 refused for noise at C3-E6, 0 name a count, 0 at most C-E5's; of those, NaN % of C-E5's seeds give the value; 360 outside the domain at C3-E6
+    c50_db  147 refused for noise at C3-E6, 147 name a count, 147 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value; 0 outside the domain at C3-E6
+    c80_db  232 refused for noise at C3-E6, 232 name a count, 232 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value; 0 outside the domain at C3-E6
+    d50     105 refused for noise at C3-E6, 105 name a count, 105 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value; 0 outside the domain at C3-E6
+
+named counts (round 3), C3-E10 (50000) against V3-E9 (300000):
+
+values through the shipped model (receiver-band seeds whose series gives one):
+  C-R1   spl_db 360/360 edt_s 350/360 {"noise": 10} t20_s 0/360 {"noise": 360} t30_s 0/358 {"noise": 358} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  C-R2   spl_db 360/360 edt_s 360/360 t20_s 353/360 {"noise": 7} t30_s 1/360 {"noise": 359} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  C-R3   spl_db 360/360 edt_s 3/360 {"noise": 357} t20_s 0/360 {"noise": 360} t30_s 0/358 {"noise": 358}
+  C-R4   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360
+  C-R5   spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/212 {"noise": 212} c50_db 240/240 c80_db 240/240 d50 240/240
+  C-R6   spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 120/180 {"resamples": 60} c80_db 120/180 {"resamples": 60} d50 120/180 {"resamples": 60} ts_s 120/180 {"resamples": 60}
+  C-R7   spl_db 360/360 edt_s 34/360 {"noise": 326} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  V-R1   spl_db 360/360 edt_s 1/69 {"noise": 68} t20_s 0/360 {"noise": 360} t30_s 0/262 {"noise": 262} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 96/119 {"resamples": 23}
+  V-R2   spl_db 360/360 edt_s 170/360 {"noise": 190} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 120/180 {"resamples": 60} c80_db 3/180 {"noise": 166, "resamples": 11} d50 120/180 {"resamples": 60} ts_s 120/180 {"resamples": 60}
+  V-R3   spl_db 360/360 edt_s 360/360 t20_s 135/360 {"noise": 225} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V-R4   spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240
+  V-R5   spl_db 360/360 t20_s 360/360 t30_s 164/360 {"noise": 196} c50_db 360/360 c80_db 360/360 d50 360/360
+  V-R6   spl_db 360/360 edt_s 347/360 {"noise": 13} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360}
+  C-E1   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  C-E2   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  C-E3   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 57/360 {"resamples": 303}
+  C-E4   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360
+  C-E5   spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240
+  C-E6   spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 120/179 {"resamples": 59} c80_db 120/179 {"resamples": 59} d50 120/179 {"resamples": 59} ts_s 120/179 {"resamples": 59}
+  C-E7   spl_db 360/360 edt_s 359/360 {"noise": 1} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  V-E1   spl_db 360/360 edt_s 11/68 {"noise": 55, "resamples": 2} t20_s 360/360 t30_s 163/360 {"resamples": 197} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 77/112 {"resamples": 35}
+  V-E2   spl_db 360/360 edt_s 2/360 {"noise": 358} t20_s 360/360 t30_s 0/360 {"resamples": 360} c50_db 108/174 {"noise": 1, "resamples": 65} c80_db 0/174 {"noise": 174} d50 109/174 {"resamples": 65} ts_s 109/174 {"resamples": 65}
+  V-E3   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V-E4   spl_db 360/360 t20_s 139/360 {"noise": 221} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240
+  V-E5   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 0/360 {"noise": 360}
+  V-E6   spl_db 360/360 edt_s 0/187 {"noise": 183, "resamples": 4} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 180/180
+  W-E1   spl_db 360/360 edt_s 0/180 {"noise": 180} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 202/245 {"noise": 13, "resamples": 30}
+  W-E2   spl_db 360/360 edt_s 0/195 {"noise": 183, "resamples": 12} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 180/180
+  W-E3   spl_db 360/360 edt_s 0/360 {"noise": 360} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 269/300 {"noise": 31}
+  W-E4   spl_db 360/360 edt_s 0/50 {"noise": 44, "resamples": 6} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 33/58 {"resamples": 25}
+  W-E5   spl_db 360/360 edt_s 24/360 {"noise": 336} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 300/300
+  W-E6   spl_db 360/360 edt_s 350/360 {"noise": 10} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360}
+  C3-R1  spl_db 360/360 edt_s 360/360 t20_s 226/360 {"noise": 134} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  C3-R2  spl_db 360/360 edt_s 360/360 t20_s 1/360 {"noise": 359} t30_s 0/360 {"noise": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  C3-R3  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  C3-R4  spl_db 360/360 edt_s 360/360 t20_s 44/360 {"noise": 316} t30_s 0/360 {"noise": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  C3-R5  spl_db 360/360 t20_s 0/158 {"few": 158} t30_s 0/7 {"few": 7} c50_db 0/360 {"noise": 360} c80_db 0/360 {"noise": 360} d50 1/360 {"noise": 359}
+  C3-R6  spl_db 360/360 t20_s 0/203 {"few": 203} t30_s 0/4 {"few": 4} c50_db 1/240 {"noise": 239} c80_db 0/240 {"noise": 240} d50 3/240 {"noise": 237} ts_s 0/3 {"few": 3}
+  C3-R7  spl_db 360/360
+  C3-R8  spl_db 360/360 t20_s 0/279 {"noise": 279} t30_s 0/83 {"noise": 83} c50_db 0/360 {"noise": 360} c80_db 0/349 {"noise": 349} d50 360/360
+  C3-R9  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-R1  spl_db 360/360 edt_s 360/360 t20_s 346/360 {"noise": 14} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 300/300
+  V3-R2  spl_db 360/360 edt_s 360/360 t20_s 358/360 {"noise": 2} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-R3  spl_db 360/360 edt_s 0/360 {"few": 360} t20_s 0/360 {"few": 360} t30_s 0/359 {"few": 359} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 0/180 {"few": 180}
+  V3-R4  spl_db 360/360 edt_s 0/1 {"few": 1} t20_s 0/69 {"few": 69} t30_s 0/2 {"few": 2} c50_db 0/240 {"noise": 240} c80_db 0/240 {"noise": 240} d50 0/240 {"noise": 240} ts_s 0/3 {"few": 3}
+  V3-R5  spl_db 240/360 {"noise": 120}
+  V3-R6  spl_db 360/360 edt_s 0/360 {"noise": 360} t20_s 0/360 {"noise": 360} t30_s 0/243 {"noise": 243} c50_db 41/177 {"noise": 84, "resamples": 52} c80_db 0/177 {"noise": 177} d50 106/177 {"resamples": 71} ts_s 106/177 {"resamples": 71}
+  V3-R7  spl_db 360/360 edt_s 301/360 {"noise": 59} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  V3-R8  spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/145 {"noise": 145} c50_db 360/360 c80_db 360/360 d50 360/360
+  V3-R9  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 12/360 {"noise": 348} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  C3-E1  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  C3-E2  spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240
+  C3-E3  spl_db 360/360 edt_s 1/55 {"noise": 53, "resamples": 1} t20_s 0/360 {"crossings": 1, "noise": 359} t30_s 0/360 {"crossings": 1, "noise": 357, "resamples": 2} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 38/77 {"resamples": 39}
+  C3-E4  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 0/360 {"noise": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  C3-E5  spl_db 360/360 t20_s 0/360 {"noise": 2, "resamples": 358} t30_s 0/360 {"few": 360} c50_db 1/360 {"noise": 359} c80_db 0/360 {"noise": 360} d50 281/360 {"noise": 79}
+  C3-E6  spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"few": 360} c50_db 93/240 {"noise": 147} c80_db 8/240 {"noise": 232} d50 135/240 {"noise": 105}
+  C3-E7  spl_db 360/360
+  C3-E8  spl_db 360/360 edt_s 0/90 {"noise": 90} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 358, "resamples": 2} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 60/60
+  C3-E9  spl_db 360/360 t20_s 0/355 {"noise": 355} t30_s 0/359 {"noise": 359} c50_db 0/360 {"noise": 360} c80_db 0/360 {"noise": 360} d50 360/360
+  C3-E10 spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-E1  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 300/300
+  V3-E2  spl_db 360/360 edt_s 0/72 {"noise": 72} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 354, "resamples": 6} c50_db 301/360 {"noise": 59} c80_db 300/360 {"noise": 60} d50 289/360 {"noise": 71} ts_s 15/106 {"resamples": 91}
+  V3-E3  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"crossings": 360} t30_s 0/360 {"crossings": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  V3-E4  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"crossings": 360} t30_s 0/360 {"crossings": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-E5  spl_db 360/360 t20_s 360/360 t30_s 0/360 {"resamples": 360} c50_db 360/360 c80_db 360/360 d50 360/360
+  V3-E6  spl_db 243/360 {"noise": 117}
+  V3-E7  spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 184/240 {"noise": 56} c80_db 0/240 {"noise": 240} d50 240/240
+  V3-E8  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 120/177 {"resamples": 57} c80_db 120/177 {"resamples": 57} d50 120/177 {"resamples": 57} ts_s 120/177 {"resamples": 57}
+  V3-E9  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-E10 spl_db 360/360 edt_s 30/60 {"resamples": 30} t20_s 73/360 {"noise": 287} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 59/60 {"resamples": 1}

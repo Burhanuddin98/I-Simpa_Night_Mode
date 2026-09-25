@@ -58,9 +58,9 @@
 #[path = "mesh_support.rs"]
 mod support;
 
+use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 use simpa_core::formats::{cbin, mbin, tetgen};
 use simpa_core::geometry::import::zip::Archive;
@@ -82,15 +82,21 @@ const UPSTREAM_SHA256: &str = "8a6b3943dd47126bb875d0c92979a7b1f8c54d7a7f277c8d5
 const TETS: usize = 2257;
 const NODES: usize = 732;
 
-/// The tutorial's TetGen output built by `mesh_from_tetgen` against the tutorial's project, once:
-/// the output folder and its manifest.
+/// The tutorial's TetGen output built by `mesh_from_tetgen` against the tutorial's project, once
+/// per test that reads it: the output folder, in the test's own scratch folder (removed when that
+/// test passes, `common/scratch.rs`), and its manifest.
 fn built() -> &'static (PathBuf, MeshManifest) {
-    static BUILT: OnceLock<(PathBuf, MeshManifest)> = OnceLock::new();
-    BUILT.get_or_init(|| {
-        let out = scratch("mbin-parity");
-        let p = load_room("tutorial1_box.simpa");
-        let m = mesh_from_tetgen(&p, &fixture(TETGEN_DIR), None, &out).unwrap();
-        (out, m)
+    thread_local! {
+        static BUILT: OnceCell<&'static (PathBuf, MeshManifest)> = const { OnceCell::new() };
+    }
+    BUILT.with(|b| {
+        *b.get_or_init(|| {
+            let out = scratch("mbin-parity");
+            let p = load_room("tutorial1_box.simpa");
+            let m = mesh_from_tetgen(&p, &fixture(TETGEN_DIR), None, &out).unwrap();
+            // A few hundred bytes per test that asks, for a `'static` the tests can hold.
+            Box::leak(Box::new((out, m)))
+        })
     })
 }
 

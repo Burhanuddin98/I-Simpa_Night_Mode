@@ -18,6 +18,20 @@
 //! - [`Fault::AirTermDropped`] and [`Fault::AirIsoExactMidband`]: the air term `results::tcr`'s
 //!   analytic references add as `4·m·V`, dropped, or taken from ISO 9613-1 at the exact midband
 //!   frequency instead of the solver's value at the nominal one.
+//! - [`Fault::LambertUniformReflection`]: `params::lambert`'s transport reflecting uniformly over
+//!   the hemisphere instead of by Lambert's cosine law, the say-NO of its mean-free-path check.
+//!   The transport reads it on the calling thread and hands it to its replicas' threads.
+//! - [`Fault::KuttruffFullVariance`] and [`Fault::KuttruffAirInsideMean`]: `params::room`'s
+//!   Kuttruff time with the correction's `½` dropped, or with the air term folded into `ᾱ` (the
+//!   form a secondary source quotes) instead of added as `4·m·V`: the say-NOs of its known-answer
+//!   checks against the transport (`docs/params.md`, "Kuttruff's reference").
+//! - [`Fault::NoiseCalibrationScaled`]: `params::noise`'s calibration factors scaled, the say-NO
+//!   of the calibration's validation (`docs/params.md`, "Monte-Carlo noise").
+//! - [`Fault::AliveShareScaled`], [`Fault::UniformAbsorptionForced`] and
+//!   [`Fault::UniformLambertBoundIgnored`]: the inputs that pick and size a band's noise
+//!   calibration (the review of `50695f6`): the particles' lifetime spread read from a room table
+//!   scaled, every band read as having one absorption, and the uniform-Lambert entries taken above
+//!   their largest calibrated absorption.
 
 /// One fault, set by [`with`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -31,6 +45,25 @@ pub enum Fault {
     /// The same with `m` from ISO 9613-1's own equations at the exact midband frequency
     /// (`params::air::attenuation_db_per_m`), not the solver's value at the nominal one.
     AirIsoExactMidband,
+    /// `params::lambert`'s transport draws each reflected direction uniformly over the hemisphere
+    /// (`cos θ` uniform) instead of by Lambert's law (`cos θ = √u`).
+    LambertUniformReflection,
+    /// `params::room`'s Kuttruff factor `1 + γ²·ln(1 − ᾱ)` instead of `1 + (γ²/2)·ln(1 − ᾱ)`.
+    KuttruffFullVariance,
+    /// `params::room`'s Kuttruff time `K·V/A'` with `ᾱ' = ᾱ + 4·m·V/S` inside both logarithms,
+    /// instead of `K·V/(4·m·V + A)`.
+    KuttruffAirInsideMean,
+    /// Every calibration factor of `params::noise` multiplied by `by`: 0.5 is a model twice as
+    /// optimistic as the calibration found, the say-NO of its validation.
+    NoiseCalibrationScaled { by: f64 },
+    /// `results::spps`'s share of the emitted energy alive at each step, from which the particles'
+    /// lifetime spread is read, multiplied by `by` (2 is the room table read over half the
+    /// sources' power).
+    AliveShareScaled { by: f64 },
+    /// `results::reference` reads every band as having one absorption on every face.
+    UniformAbsorptionForced,
+    /// `params::noise::RunNoise::walls` takes the uniform-Lambert entries at any mean absorption.
+    UniformLambertBoundIgnored,
 }
 
 #[cfg(feature = "fault-injection")]

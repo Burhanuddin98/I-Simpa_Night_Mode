@@ -188,5 +188,7 @@ mod tests {
             st.report(r#"{"ok": true}"#).unwrap_err().code,
             "SELFTEST_ALREADY_REPORTED"
         );
+        // Removed when the test passes; a failure above keeps it for a look.
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

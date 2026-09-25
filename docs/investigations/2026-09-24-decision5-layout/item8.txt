@@ -1,0 +1,46 @@
+﻿   Compiling simpa-core v0.1.0 (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\t3-proj\crates\simpa-core)
+warning: variable `minus` is assigned to, but never used
+  --> crates\simpa-core\tests\zz_item8_measure.rs:60:9
+   |
+60 |     let mut minus = 0usize;
+   |         ^^^^^^^^^
+   |
+   = note: consider using `_minus` instead
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `minus` is never read
+  --> crates\simpa-core\tests\zz_item8_measure.rs:76:17
+   |
+76 |                 minus += 1;
+   |                 ^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+   = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: `simpa-core` (test "zz_item8_measure") generated 2 warnings
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.75s
+     Running tests\zz_item8_measure.rs (target\debug\deps\zz_item8_measure-ed5b4c3a18cd0eac.exe)
+
+running 1 test
+box_fitting: decision 5: .poly 16 nodes, 24 facets; check ok, 2 cells [179.0, 1.0]; mesh Ok []: 2358 tetrahedra, 756 nodes, volumes [(2, 1.0), (3, 179.0)], tet faces carrying a box triangle's .cbin marker 0
+box_fitting: upstream layout: .poly 44 nodes, 24 facets, regions [(2, [1.9999, 1.9999, 1.4999])]; check as written ok, 1 cells [180.0]; welded ok, 2 cells [179.0, 1.0]
+box_fitting: upstream layout through TetGen, same flags and .var: 2404 tetrahedra, 763 nodes, volumes [(2, 1.0), (3, 179.0)], tet faces carrying a box triangle's .cbin marker 56; our verify: []
+tutorial3: decision 5: .poly 48 nodes, 100 facets; check refused: self_intersections (22), unresolved_topology (1); mesh Fail ["tetgen_exit_nonzero", "tetgen_self_intersection", "tetgen_output_missing", "neigh_missing"]: no .mbin
+tutorial3: upstream layout: .poly 76 nodes, 100 facets, regions [(1930, [3.61878, 2.66291, 1.0]), (2083, [17.9995, 1.0003, 1.19988])]; check as written refused: self_intersections (20), open_boundary (6), unresolved_topology (2); welded refused: self_intersections (20), unresolved_topology (1)
+tutorial3: upstream layout: TetGen exit Some(3)
+gen0: decision 5: .poly 16 nodes, 24 facets; check ok, 2 cells [2133.113, 9.525]; mesh Ok []: 54 tetrahedra, 18 nodes, volumes [(2083, 9.5252), (2084, 2133.1127)], tet faces carrying a box triangle's .cbin marker 0
+gen0: upstream layout: .poly 44 nodes, 24 facets, regions [(2083, [4.613503, 2.1950667, 5.7197065])]; check as written ok, 1 cells [2142.638]; welded ok, 2 cells [2133.113, 9.525]
+gen0: upstream layout through TetGen, same flags and .var: 48 tetrahedra, 17 nodes, volumes [(2083, 9.5252), (2084, 2133.1127)], tet faces carrying a box triangle's .cbin marker 24; our verify: []
+gen5: decision 5: .poly 20 nodes, 32 facets; check ok, 2 cells [4278.46, 22.226]; mesh Ok []: 1485 tetrahedra, 386 nodes, volumes [(2, 22.226), (3, 4278.4597)], tet faces carrying a box triangle's .cbin marker 0
+gen5: upstream layout: .poly 48 nodes, 32 facets, regions [(2, [-35.537155, 21.716824, -4.5359364])]; check as written ok, 1 cells [4300.686]; welded ok, 2 cells [4278.46, 22.226]
+gen5: upstream layout through TetGen, same flags and .var: 1591 tetrahedra, 400 nodes, volumes [(2, 22.226), (3, 4278.4597)], tet faces carrying a box triangle's .cbin marker 188; our verify: []
+gen7: decision 5: .poly 26 nodes, 44 facets; check ok, 2 cells [3519.94, 9.191]; mesh Ok []: 928 tetrahedra, 301 nodes, volumes [(2, 9.1909), (3, 3519.9402)], tet faces carrying a box triangle's .cbin marker 0
+gen7: upstream layout: .poly 54 nodes, 44 facets, regions [(2, [4.7586155, 3.6372762, 4.705553])]; check as written ok, 1 cells [3529.131]; welded ok, 2 cells [3519.94, 9.191]
+gen7: upstream layout through TetGen, same flags and .var: 1008 tetrahedra, 313 nodes, volumes [(2, 9.1909), (3, 3519.9402)], tet faces carrying a box triangle's .cbin marker 108; our verify: []
+gen12: decision 5: .poly 20 nodes, 32 facets; check ok, 2 cells [715.556, 2.018]; mesh Ok []: 993 tetrahedra, 274 nodes, volumes [(2083, 2.0179), (2084, 715.5563)], tet faces carrying a box triangle's .cbin marker 0
+gen12: upstream layout: .poly 48 nodes, 32 facets, regions [(2083, [-8.258468, -28.930628, -28.140528])]; check as written ok, 1 cells [717.574]; welded ok, 2 cells [715.556, 2.018]
+gen12: upstream layout through TetGen, same flags and .var: 1160 tetrahedra, 308 nodes, volumes [(2083, 2.0179), (2084, 715.5563)], tet faces carrying a box triangle's .cbin marker 356; our verify: []
+test item8 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.87s
+

@@ -55,16 +55,14 @@ fn tutorial1() -> (Mesh, Model) {
     )
 }
 
-/// A fresh, empty scratch folder for one test.
+#[allow(dead_code)]
+#[path = "common/scratch.rs"]
+mod scratch_files;
+
+/// A fresh, empty scratch folder for one test under `target/tmp/mesh_verify/`, never reused:
+/// removed when the test passes, kept when it fails (`common/scratch.rs`).
 fn scratch(name: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("mesh_verify")
-        .join(name);
-    if dir.exists() {
-        std::fs::remove_dir_all(&dir).unwrap();
-    }
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    scratch_files::fresh("mesh_verify", name)
 }
 
 fn copy(from: &Path, to_dir: &Path, name: &str) {

@@ -1,0 +1,661 @@
+CELL C-R1 6x10x3 Lambert a0.1 Random N 150000 3 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.072
+  edt_s   one seed's model sd over the seeds: median scatter 0.063, largest 0.122
+  t20_s   one seed's model sd over the seeds: median scatter 0.147, largest 0.284
+  t30_s   one seed's model sd over the seeds: median scatter 0.282, largest 0.622
+  c50_db  one seed's model sd over the seeds: median scatter 0.053, largest 0.071
+  c80_db  one seed's model sd over the seeds: median scatter 0.044, largest 0.075
+  d50     one seed's model sd over the seeds: median scatter 0.053, largest 0.071
+  ts_s    one seed's model sd over the seeds: median scatter 0.050, largest 0.077
+  spl_db  36 of 36:  constant 1.119 [1.051, 1.196]
+  edt_s   36 of 36:  constant 1.084 [1.019, 1.159]
+  t20_s   36 of 36:  constant 1.050 [0.986, 1.123]
+  t30_s   35 of 36:  constant 1.177 [1.105, 1.260]
+  c50_db  24 of 36:  constant 1.052 [0.975, 1.143]
+  c80_db  24 of 36:  constant 1.038 [0.962, 1.128]
+  d50     24 of 36:  constant 1.052 [0.975, 1.143]
+  ts_s    24 of 36:  constant 1.111 [1.030, 1.208]
+
+CELL C-R2 6x10x3 Lambert a0.1 Random N 1500000 3 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.041, largest 0.061
+  edt_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.068
+  t20_s   one seed's model sd over the seeds: median scatter 0.078, largest 0.133
+  t30_s   one seed's model sd over the seeds: median scatter 0.154, largest 0.297
+  c50_db  one seed's model sd over the seeds: median scatter 0.044, largest 0.059
+  c80_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.071
+  d50     one seed's model sd over the seeds: median scatter 0.044, largest 0.059
+  ts_s    one seed's model sd over the seeds: median scatter 0.047, largest 0.072
+  spl_db  36 of 36:  constant 1.018 [0.956, 1.088]
+  edt_s   36 of 36:  constant 1.040 [0.978, 1.113]
+  t20_s   36 of 36:  constant 1.091 [1.025, 1.167]
+  t30_s   36 of 36:  constant 0.987 [0.927, 1.055]
+  c50_db  24 of 36:  constant 1.048 [0.971, 1.138]
+  c80_db  24 of 36:  constant 0.994 [0.922, 1.080]
+  d50     24 of 36:  constant 1.047 [0.970, 1.137]
+  ts_s    24 of 36:  constant 1.037 [0.961, 1.127]
+
+CELL C-R3 5x4x3 Lambert a0.4 Random N 150000 1 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.080
+  edt_s   one seed's model sd over the seeds: median scatter 0.064, largest 0.088
+  t20_s   one seed's model sd over the seeds: median scatter 0.206, largest 0.412
+  t30_s   one seed's model sd over the seeds: median scatter 0.322, largest 0.870
+  spl_db  36 of 36:  constant 0.975 [0.916, 1.043]
+  edt_s   36 of 36:  constant 1.030 [0.968, 1.102]
+  t20_s   36 of 36:  constant 0.932 [0.876, 0.997]
+  t30_s   34 of 36:  constant 1.112 [1.043, 1.192]
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL C-R4 5x4x3 Lambert a0.4 Random N 15000000 1 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.071
+  edt_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.069
+  t20_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.078
+  t30_s   one seed's model sd over the seeds: median scatter 0.085, largest 0.128
+  spl_db  36 of 36:  constant 1.044 [0.981, 1.116]
+  edt_s   36 of 36:  constant 1.049 [0.986, 1.122]
+  t20_s   36 of 36:  constant 1.021 [0.960, 1.092]
+  t30_s   36 of 36:  constant 1.089 [1.023, 1.164]
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL C-R5 6x10x3 tutorial 1's materials, air on Random N 150000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.077
+  t20_s   one seed's model sd over the seeds: median scatter 0.271, largest 0.501
+  t30_s   one seed's model sd over the seeds: median scatter 0.360, largest 0.360
+  c50_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.064
+  c80_db  one seed's model sd over the seeds: median scatter 0.057, largest 0.090
+  d50     one seed's model sd over the seeds: median scatter 0.049, largest 0.063
+  spl_db  36 of 36:  constant 1.054 [0.990, 1.127]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.997 [0.936, 1.066]
+  t30_s    1 of 36:  constant 0.948 [0.692, 1.562]
+  c50_db  24 of 36:  constant 0.997 [0.924, 1.083]
+  c80_db  24 of 36:  constant 1.012 [0.938, 1.099]
+  d50     24 of 36:  constant 0.999 [0.926, 1.085]
+  ts_s     0 of 36:
+
+CELL C-R6 6x10x3 tutorial 1's materials, air on Random N 1500000 2 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 2 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.076
+  edt_s   one seed's model sd over the seeds: median scatter 0.054, largest 0.078
+  t20_s   one seed's model sd over the seeds: median scatter 0.106, largest 0.176
+  t30_s   one seed's model sd over the seeds: median scatter 0.275, largest 0.522
+  c50_db  one seed's model sd over the seeds: median scatter 0.043, largest 0.075
+  c80_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.069
+  d50     one seed's model sd over the seeds: median scatter 0.042, largest 0.077
+  ts_s    one seed's model sd over the seeds: median scatter 0.045, largest 0.073
+  spl_db  36 of 36:  constant 1.079 [1.014, 1.154]
+  edt_s   36 of 36:  constant 0.971 [0.912, 1.039]
+  t20_s   36 of 36:  constant 1.038 [0.975, 1.110]
+  t30_s   36 of 36:  constant 1.282 [1.204, 1.371]
+  c50_db  18 of 36:  constant 1.042 [0.955, 1.148]
+  c80_db  18 of 36:  constant 1.009 [0.925, 1.111]
+  d50     18 of 36:  constant 1.034 [0.948, 1.139]
+  ts_s    18 of 36:  constant 0.967 [0.886, 1.065]
+
+CELL C-R7 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Random N 500000 3 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.080
+  edt_s   one seed's model sd over the seeds: median scatter 0.063, largest 0.090
+  t20_s   one seed's model sd over the seeds: median scatter 0.162, largest 0.250
+  t30_s   one seed's model sd over the seeds: median scatter 0.360, largest 0.588
+  c50_db  one seed's model sd over the seeds: median scatter 0.042, largest 0.071
+  c80_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.072
+  d50     one seed's model sd over the seeds: median scatter 0.042, largest 0.072
+  ts_s    one seed's model sd over the seeds: median scatter 0.054, largest 0.100
+  spl_db  36 of 36:  constant 1.165 [1.095, 1.246]
+  edt_s   36 of 36:  constant 1.222 [1.148, 1.307]
+  t20_s   36 of 36:  constant 1.283 [1.206, 1.372]
+  t30_s   36 of 36:  constant 1.432 [1.345, 1.531]
+  c50_db  24 of 36:  constant 1.020 [0.945, 1.108]
+  c80_db  24 of 36:  constant 1.073 [0.995, 1.166]
+  d50     24 of 36:  constant 1.019 [0.945, 1.107]
+  ts_s    24 of 36:  constant 1.287 [1.194, 1.399]
+
+CELL V-R1 20x4x3 Lambert a0.2 Random N 500000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.071
+  edt_s   one seed's model sd over the seeds: median scatter 0.101, largest 0.146
+  t20_s   one seed's model sd over the seeds: median scatter 0.177, largest 0.377
+  t30_s   one seed's model sd over the seeds: median scatter 0.301, largest 0.438
+  c50_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.074
+  c80_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.070
+  d50     one seed's model sd over the seeds: median scatter 0.051, largest 0.076
+  ts_s    one seed's model sd over the seeds: median scatter 0.069, largest 0.101
+  spl_db  36 of 36:  constant 1.056 [0.993, 1.130]
+  edt_s    6 of 36:  constant 0.856 [0.740, 1.018]
+  t20_s   36 of 36:  constant 0.949 [0.892, 1.015]
+  t30_s   20 of 36:  constant 1.131 [1.041, 1.239]
+  c50_db  30 of 36:  constant 1.012 [0.945, 1.089]
+  c80_db  30 of 36:  constant 0.971 [0.907, 1.045]
+  d50     30 of 36:  constant 1.006 [0.940, 1.083]
+  ts_s    11 of 36:  constant 0.973 [0.873, 1.103]
+
+CELL V-R2 6x10x3 Lambert a0.4 Random N 600000 1 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.087
+  edt_s   one seed's model sd over the seeds: median scatter 0.064, largest 0.083
+  t20_s   one seed's model sd over the seeds: median scatter 0.161, largest 0.375
+  t30_s   one seed's model sd over the seeds: median scatter 0.328, largest 0.770
+  c50_db  one seed's model sd over the seeds: median scatter 0.041, largest 0.060
+  c80_db  one seed's model sd over the seeds: median scatter 0.069, largest 0.092
+  d50     one seed's model sd over the seeds: median scatter 0.043, largest 0.081
+  ts_s    one seed's model sd over the seeds: median scatter 0.053, largest 0.075
+  spl_db  36 of 36:  constant 1.040 [0.977, 1.112]
+  edt_s   36 of 36:  constant 1.047 [0.984, 1.120]
+  t20_s   36 of 36:  constant 0.970 [0.911, 1.037]
+  t30_s   36 of 36:  constant 1.014 [0.953, 1.085]
+  c50_db  18 of 36:  constant 0.941 [0.863, 1.037]
+  c80_db  18 of 36:  constant 0.980 [0.898, 1.079]
+  d50     18 of 36:  constant 0.946 [0.867, 1.042]
+  ts_s    18 of 36:  constant 1.029 [0.943, 1.133]
+
+CELL V-R3 5x4x3 Lambert a0.05 Random N 300000 3 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.076
+  edt_s   one seed's model sd over the seeds: median scatter 0.046, largest 0.083
+  t20_s   one seed's model sd over the seeds: median scatter 0.063, largest 0.088
+  t30_s   one seed's model sd over the seeds: median scatter 0.182, largest 0.319
+  c50_db  one seed's model sd over the seeds: median scatter 0.053, largest 0.070
+  c80_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.073
+  d50     one seed's model sd over the seeds: median scatter 0.052, largest 0.070
+  ts_s    one seed's model sd over the seeds: median scatter 0.048, largest 0.075
+  spl_db  36 of 36:  constant 1.120 [1.052, 1.198]
+  edt_s   36 of 36:  constant 1.197 [1.124, 1.280]
+  t20_s   36 of 36:  constant 1.206 [1.133, 1.289]
+  t30_s   36 of 36:  constant 1.101 [1.034, 1.177]
+  c50_db  36 of 36:  constant 0.999 [0.939, 1.068]
+  c80_db  36 of 36:  constant 1.013 [0.952, 1.084]
+  d50     36 of 36:  constant 0.998 [0.938, 1.068]
+  ts_s    36 of 36:  constant 1.223 [1.149, 1.307]
+
+CELL V-R4 6x10x3 tutorial 1's materials, air on Random N 600000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.071
+  t20_s   one seed's model sd over the seeds: median scatter 0.147, largest 0.245
+  t30_s   one seed's model sd over the seeds: median scatter 0.331, largest 0.828
+  c50_db  one seed's model sd over the seeds: median scatter 0.054, largest 0.078
+  c80_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.075
+  d50     one seed's model sd over the seeds: median scatter 0.053, largest 0.076
+  spl_db  36 of 36:  constant 1.069 [1.005, 1.143]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 1.078 [1.013, 1.153]
+  t30_s   36 of 36:  constant 1.079 [1.014, 1.154]
+  c50_db  24 of 36:  constant 1.062 [0.985, 1.154]
+  c80_db  24 of 36:  constant 1.076 [0.997, 1.169]
+  d50     24 of 36:  constant 1.068 [0.991, 1.161]
+  ts_s     0 of 36:
+
+CELL V-R5 5x4x3 specular a0.2 Random N 5000000 1.5 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.076
+  t20_s   one seed's model sd over the seeds: median scatter 0.055, largest 0.091
+  t30_s   one seed's model sd over the seeds: median scatter 0.119, largest 0.216
+  c50_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.068
+  c80_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.084
+  d50     one seed's model sd over the seeds: median scatter 0.046, largest 0.066
+  spl_db  36 of 36:  constant 1.019 [0.958, 1.090]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 1.161 [1.091, 1.242]
+  t30_s   36 of 36:  constant 1.250 [1.175, 1.337]
+  c50_db  36 of 36:  constant 1.029 [0.966, 1.100]
+  c80_db  36 of 36:  constant 1.105 [1.038, 1.181]
+  d50     36 of 36:  constant 1.027 [0.965, 1.099]
+  ts_s     0 of 36:
+
+CELL V-R6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Random N 1500000 3 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 8 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.072
+  edt_s   one seed's model sd over the seeds: median scatter 0.073, largest 0.122
+  t20_s   one seed's model sd over the seeds: median scatter 0.135, largest 0.196
+  t30_s   one seed's model sd over the seeds: median scatter 0.147, largest 0.253
+  spl_db  36 of 36:  constant 0.992 [0.932, 1.061]
+  edt_s   36 of 36:  constant 1.237 [1.162, 1.323]
+  t20_s   36 of 36:  constant 1.180 [1.109, 1.262]
+  t30_s   36 of 36:  constant 1.229 [1.155, 1.315]
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL C-E1 6x10x3 Lambert a0.1 Energetic N 150000 2.5 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.070
+  edt_s   one seed's model sd over the seeds: median scatter 0.049, largest 0.077
+  t20_s   one seed's model sd over the seeds: median scatter 0.046, largest 0.071
+  t30_s   one seed's model sd over the seeds: median scatter 0.061, largest 0.090
+  c50_db  one seed's model sd over the seeds: median scatter 0.055, largest 0.072
+  c80_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.075
+  d50     one seed's model sd over the seeds: median scatter 0.055, largest 0.070
+  ts_s    one seed's model sd over the seeds: median scatter 0.047, largest 0.071
+  spl_db  36 of 36:  constant 0.757 [0.711, 0.810]  mean_energy 1.057 [0.993, 1.130]
+  edt_s   36 of 36:  constant 0.356 [0.334, 0.381]  mean_energy 1.002 [0.941, 1.072]
+  t20_s   36 of 36:  constant 0.077 [0.072, 0.082]  mean_energy 1.166 [1.095, 1.246]
+  t30_s   36 of 36:  constant 0.027 [0.025, 0.029]  mean_energy 1.223 [1.149, 1.308]
+  c50_db  24 of 36:  constant 0.735 [0.681, 0.798]  mean_energy 0.963 [0.893, 1.047]
+  c80_db  24 of 36:  constant 0.662 [0.614, 0.719]  mean_energy 1.024 [0.950, 1.113]
+  d50     24 of 36:  constant 0.735 [0.681, 0.798]  mean_energy 0.963 [0.893, 1.046]
+  ts_s    24 of 36:  constant 0.505 [0.468, 0.548]  mean_energy 1.024 [0.950, 1.113]
+
+CELL C-E2 6x10x3 Lambert a0.1 Energetic N 600000 2.5 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.042, largest 0.059
+  edt_s   one seed's model sd over the seeds: median scatter 0.048, largest 0.070
+  t20_s   one seed's model sd over the seeds: median scatter 0.043, largest 0.057
+  t30_s   one seed's model sd over the seeds: median scatter 0.045, largest 0.067
+  c50_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.067
+  c80_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.084
+  d50     one seed's model sd over the seeds: median scatter 0.047, largest 0.067
+  ts_s    one seed's model sd over the seeds: median scatter 0.042, largest 0.076
+  spl_db  36 of 36:  constant 0.771 [0.724, 0.824]  mean_energy 1.047 [0.984, 1.120]
+  edt_s   36 of 36:  constant 0.371 [0.349, 0.397]  mean_energy 1.082 [1.016, 1.157]
+  t20_s   36 of 36:  constant 0.073 [0.068, 0.078]  mean_energy 1.145 [1.076, 1.225]
+  t30_s   36 of 36:  constant 0.027 [0.026, 0.029]  mean_energy 1.261 [1.185, 1.349]
+  c50_db  24 of 36:  constant 0.779 [0.722, 0.846]  mean_energy 1.014 [0.940, 1.102]
+  c80_db  24 of 36:  constant 0.716 [0.664, 0.778]  mean_energy 1.102 [1.021, 1.197]
+  d50     24 of 36:  constant 0.779 [0.722, 0.846]  mean_energy 1.014 [0.940, 1.102]
+  ts_s    24 of 36:  constant 0.570 [0.528, 0.619]  mean_energy 1.113 [1.032, 1.209]
+
+CELL C-E3 5x4x3 Lambert a0.4 Energetic N 150000 0.5 s dt 0.001 eps 9 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.071
+  edt_s   one seed's model sd over the seeds: median scatter 0.052, largest 0.081
+  t20_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.087
+  t30_s   one seed's model sd over the seeds: median scatter 0.078, largest 0.131
+  spl_db  36 of 36:  constant 0.783 [0.736, 0.838]  mean_energy 1.085 [1.019, 1.160]
+  edt_s   36 of 36:  constant 0.408 [0.383, 0.436]  mean_energy 1.181 [1.110, 1.263]
+  t20_s   36 of 36:  constant 0.091 [0.085, 0.097]  mean_energy 1.409 [1.324, 1.507]
+  t30_s   36 of 36:  constant 0.034 [0.032, 0.037]  mean_energy 1.501 [1.411, 1.606]
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL C-E4 5x4x3 Lambert a0.4 Energetic N 2400000 0.5 s dt 0.001 eps 9 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.069
+  edt_s   one seed's model sd over the seeds: median scatter 0.049, largest 0.070
+  t20_s   one seed's model sd over the seeds: median scatter 0.038, largest 0.060
+  t30_s   one seed's model sd over the seeds: median scatter 0.048, largest 0.061
+  spl_db  36 of 36:  constant 0.742 [0.697, 0.794]  mean_energy 1.020 [0.959, 1.091]
+  edt_s   36 of 36:  constant 0.362 [0.341, 0.388]  mean_energy 1.029 [0.967, 1.101]
+  t20_s   36 of 36:  constant 0.087 [0.082, 0.093]  mean_energy 1.319 [1.239, 1.411]
+  t30_s   36 of 36:  constant 0.033 [0.031, 0.035]  mean_energy 1.422 [1.336, 1.521]
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL C-E5 6x10x3 tutorial 1's materials, air on Energetic N 150000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.044, largest 0.070
+  t20_s   one seed's model sd over the seeds: median scatter 0.054, largest 0.095
+  t30_s   one seed's model sd over the seeds: median scatter 0.103, largest 0.183
+  c50_db  one seed's model sd over the seeds: median scatter 0.044, largest 0.063
+  c80_db  one seed's model sd over the seeds: median scatter 0.039, largest 0.073
+  d50     one seed's model sd over the seeds: median scatter 0.042, largest 0.061
+  spl_db  36 of 36:  constant 0.710 [0.667, 0.759]  mean_energy 1.013 [0.951, 1.083]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.110 [0.104, 0.118]  mean_energy 2.328 [2.188, 2.490]
+  t30_s   36 of 36:  constant 0.069 [0.065, 0.074]  mean_energy 4.238 [3.983, 4.533]
+  c50_db  24 of 36:  constant 0.540 [0.500, 0.586]  mean_energy 0.998 [0.925, 1.084]
+  c80_db  24 of 36:  constant 0.404 [0.375, 0.439]  mean_energy 1.045 [0.969, 1.135]
+  d50     24 of 36:  constant 0.542 [0.503, 0.589]  mean_energy 1.001 [0.928, 1.088]
+  ts_s     0 of 36:
+
+CELL C-E6 6x10x3 tutorial 1's materials, air on Energetic N 600000 2 s dt 0.001 eps 7 (10 seeds, 36 receiver-bands; read in 5 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.072
+  edt_s   one seed's model sd over the seeds: median scatter 0.045, largest 0.091
+  t20_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.091
+  t30_s   one seed's model sd over the seeds: median scatter 0.062, largest 0.094
+  c50_db  one seed's model sd over the seeds: median scatter 0.056, largest 0.073
+  c80_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.084
+  d50     one seed's model sd over the seeds: median scatter 0.056, largest 0.071
+  ts_s    one seed's model sd over the seeds: median scatter 0.044, largest 0.072
+  spl_db  36 of 36:  constant 0.702 [0.660, 0.751]  mean_energy 1.057 [0.993, 1.130]
+  edt_s   36 of 36:  constant 0.349 [0.328, 0.374]  mean_energy 1.142 [1.073, 1.222]
+  t20_s   36 of 36:  constant 0.124 [0.116, 0.133]  mean_energy 2.593 [2.436, 2.773]
+  t30_s   36 of 36:  constant 0.065 [0.061, 0.070]  mean_energy 4.569 [4.294, 4.887]
+  c50_db  17 of 36:  constant 0.544 [0.498, 0.601]  mean_energy 1.050 [0.960, 1.160]
+  c80_db  17 of 36:  constant 0.418 [0.382, 0.461]  mean_energy 1.109 [1.014, 1.225]
+  d50     17 of 36:  constant 0.542 [0.496, 0.598]  mean_energy 1.045 [0.956, 1.154]
+  ts_s    17 of 36:  constant 0.446 [0.408, 0.493]  mean_energy 1.012 [0.925, 1.117]
+
+CELL C-E7 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.072
+  edt_s   one seed's model sd over the seeds: median scatter 0.055, largest 0.086
+  t20_s   one seed's model sd over the seeds: median scatter 0.058, largest 0.098
+  t30_s   one seed's model sd over the seeds: median scatter 0.066, largest 0.098
+  c50_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.079
+  c80_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.078
+  d50     one seed's model sd over the seeds: median scatter 0.052, largest 0.079
+  ts_s    one seed's model sd over the seeds: median scatter 0.042, largest 0.079
+  spl_db  36 of 36:  constant 0.844 [0.793, 0.903]  mean_energy 1.350 [1.268, 1.443]
+  edt_s   36 of 36:  constant 0.549 [0.515, 0.587]  mean_energy 2.799 [2.630, 2.993]
+  t20_s   36 of 36:  constant 0.242 [0.227, 0.258]  mean_energy 8.800 [8.269, 9.411]
+  t30_s   36 of 36:  constant 0.136 [0.128, 0.146]  mean_energy 14.689 [13.802, 15.709]
+  c50_db  24 of 36:  constant 0.728 [0.675, 0.791]  mean_energy 1.196 [1.109, 1.300]
+  c80_db  24 of 36:  constant 0.697 [0.646, 0.757]  mean_energy 1.398 [1.296, 1.519]
+  d50     24 of 36:  constant 0.727 [0.674, 0.790]  mean_energy 1.197 [1.110, 1.300]
+  ts_s    24 of 36:  constant 0.540 [0.501, 0.587]  mean_energy 1.642 [1.522, 1.784]
+
+CELL V-E1 20x4x3 Lambert a0.2 Energetic N 300000 1.5 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.091
+  edt_s   one seed's model sd over the seeds: median scatter 0.043, largest 0.054
+  t20_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.078
+  t30_s   one seed's model sd over the seeds: median scatter 0.082, largest 0.404
+  c50_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.068
+  c80_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.072
+  d50     one seed's model sd over the seeds: median scatter 0.046, largest 0.069
+  ts_s    one seed's model sd over the seeds: median scatter 0.041, largest 0.070
+  spl_db  36 of 36:  constant 0.605 [0.568, 0.647]  mean_energy 1.165 [1.094, 1.246]
+  edt_s    5 of 36:  constant 0.239 [0.204, 0.290]  mean_energy 1.070 [0.914, 1.297]
+  t20_s   36 of 36:  constant 0.059 [0.056, 0.063]  mean_energy 1.242 [1.167, 1.328]
+  t30_s   36 of 36:  constant 0.031 [0.029, 0.033]  mean_energy 1.453 [1.365, 1.554]
+  c50_db  30 of 36:  constant 0.553 [0.517, 0.595]  mean_energy 1.155 [1.079, 1.244]
+  c80_db  30 of 36:  constant 0.413 [0.386, 0.445]  mean_energy 1.238 [1.157, 1.333]
+  d50     30 of 36:  constant 0.556 [0.520, 0.599]  mean_energy 1.183 [1.105, 1.273]
+  ts_s     8 of 36:  constant 0.485 [0.427, 0.563]  mean_energy 1.286 [1.133, 1.493]
+
+CELL V-E2 6x10x3 Lambert a0.4 Energetic N 150000 0.6 s dt 0.001 eps 9 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.080
+  edt_s   one seed's model sd over the seeds: median scatter 0.058, largest 0.099
+  t20_s   one seed's model sd over the seeds: median scatter 0.057, largest 0.103
+  t30_s   one seed's model sd over the seeds: median scatter 0.220, largest 0.415
+  c50_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.080
+  c80_db  one seed's model sd over the seeds: median scatter 0.058, largest 0.077
+  d50     one seed's model sd over the seeds: median scatter 0.050, largest 0.081
+  ts_s    one seed's model sd over the seeds: median scatter 0.050, largest 0.075
+  spl_db  36 of 36:  constant 0.696 [0.654, 0.744]  mean_energy 1.082 [1.017, 1.157]
+  edt_s   36 of 36:  constant 0.326 [0.307, 0.349]  mean_energy 1.037 [0.974, 1.109]
+  t20_s   36 of 36:  constant 0.084 [0.079, 0.090]  mean_energy 1.422 [1.336, 1.521]
+  t30_s   36 of 36:  constant 0.048 [0.045, 0.051]  mean_energy 1.699 [1.597, 1.817]
+  c50_db  15 of 36:  constant 0.291 [0.265, 0.324]  mean_energy 1.133 [1.031, 1.260]
+  c80_db  15 of 36:  constant 0.142 [0.129, 0.158]  mean_energy 1.153 [1.049, 1.282]
+  d50     15 of 36:  constant 0.292 [0.266, 0.325]  mean_energy 1.146 [1.043, 1.274]
+  ts_s    15 of 36:  constant 0.494 [0.449, 0.549]  mean_energy 1.094 [0.995, 1.217]
+
+CELL V-E3 5x4x3 Lambert a0.05 Energetic N 150000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.076
+  edt_s   one seed's model sd over the seeds: median scatter 0.051, largest 0.065
+  t20_s   one seed's model sd over the seeds: median scatter 0.041, largest 0.063
+  t30_s   one seed's model sd over the seeds: median scatter 0.047, largest 0.067
+  c50_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.070
+  c80_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.064
+  d50     one seed's model sd over the seeds: median scatter 0.048, largest 0.072
+  ts_s    one seed's model sd over the seeds: median scatter 0.047, largest 0.066
+  spl_db  36 of 36:  constant 0.718 [0.675, 0.768]  mean_energy 1.022 [0.960, 1.093]
+  edt_s   36 of 36:  constant 0.380 [0.357, 0.406]  mean_energy 1.117 [1.049, 1.194]
+  t20_s   36 of 36:  constant 0.072 [0.068, 0.077]  mean_energy 1.111 [1.044, 1.188]
+  t30_s   36 of 36:  constant 0.026 [0.025, 0.028]  mean_energy 1.171 [1.100, 1.252]
+  c50_db  36 of 36:  constant 0.838 [0.788, 0.896]  mean_energy 1.028 [0.966, 1.100]
+  c80_db  36 of 36:  constant 0.778 [0.731, 0.832]  mean_energy 1.082 [1.017, 1.157]
+  d50     36 of 36:  constant 0.839 [0.788, 0.897]  mean_energy 1.029 [0.967, 1.100]
+  ts_s    36 of 36:  constant 0.525 [0.493, 0.561]  mean_energy 1.079 [1.014, 1.154]
+
+CELL V-E4 6x10x3 tutorial 1's materials, air on Energetic N 1500000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.078
+  t20_s   one seed's model sd over the seeds: median scatter 0.042, largest 0.061
+  t30_s   one seed's model sd over the seeds: median scatter 0.052, largest 0.089
+  c50_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.071
+  c80_db  one seed's model sd over the seeds: median scatter 0.042, largest 0.075
+  d50     one seed's model sd over the seeds: median scatter 0.049, largest 0.070
+  spl_db  36 of 36:  constant 0.726 [0.682, 0.776]  mean_energy 1.035 [0.973, 1.107]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.121 [0.113, 0.129]  mean_energy 2.552 [2.398, 2.730]
+  t30_s   36 of 36:  constant 0.067 [0.063, 0.072]  mean_energy 4.509 [4.237, 4.822]
+  c50_db  24 of 36:  constant 0.528 [0.490, 0.574]  mean_energy 0.969 [0.899, 1.053]
+  c80_db  24 of 36:  constant 0.405 [0.375, 0.440]  mean_energy 1.033 [0.957, 1.122]
+  d50     24 of 36:  constant 0.529 [0.491, 0.575]  mean_energy 0.972 [0.901, 1.056]
+  ts_s     0 of 36:
+
+CELL V-E5 5x4x3 specular a0.2 Energetic N 600000 1.5 s dt 0.001 eps 7 (10 seeds, 36 receiver-bands; read in 3 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.075
+  edt_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.075
+  t20_s   one seed's model sd over the seeds: median scatter 0.049, largest 0.067
+  t30_s   one seed's model sd over the seeds: median scatter 0.057, largest 0.083
+  spl_db  36 of 36:  constant 0.666 [0.626, 0.712]  mean_energy 0.961 [0.903, 1.028]
+  edt_s   36 of 36:  constant 0.328 [0.308, 0.351]  mean_energy 0.981 [0.922, 1.050]
+  t20_s   36 of 36:  constant 0.094 [0.088, 0.100]  mean_energy 1.555 [1.461, 1.663]
+  t30_s   36 of 36:  constant 0.048 [0.045, 0.051]  mean_energy 2.510 [2.358, 2.684]
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL V-E6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.084
+  edt_s   one seed's model sd over the seeds: median scatter 0.056, largest 0.086
+  t20_s   one seed's model sd over the seeds: median scatter 0.080, largest 0.122
+  t30_s   one seed's model sd over the seeds: median scatter 0.078, largest 0.113
+  c50_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.071
+  c80_db  one seed's model sd over the seeds: median scatter 0.043, largest 0.066
+  d50     one seed's model sd over the seeds: median scatter 0.046, largest 0.071
+  ts_s    one seed's model sd over the seeds: median scatter 0.052, largest 0.065
+  spl_db  36 of 36:  constant 0.742 [0.697, 0.793]  mean_energy 1.313 [1.233, 1.404]
+  edt_s   18 of 36:  constant 0.559 [0.513, 0.616]  mean_energy 3.655 [3.351, 4.025]
+  t20_s   36 of 36:  constant 0.394 [0.370, 0.421]  mean_energy 14.332 [13.466, 15.327]
+  t30_s   36 of 36:  constant 0.285 [0.268, 0.305]  mean_energy 27.114 [25.477, 28.997]
+  c50_db  30 of 36:  constant 0.731 [0.683, 0.786]  mean_energy 1.433 [1.339, 1.543]
+  c80_db  30 of 36:  constant 0.715 [0.668, 0.770]  mean_energy 1.605 [1.499, 1.728]
+  d50     30 of 36:  constant 0.731 [0.683, 0.787]  mean_energy 1.449 [1.354, 1.560]
+  ts_s    18 of 36:  constant 0.588 [0.539, 0.647]  mean_energy 2.378 [2.180, 2.618]
+
+random mode, 7 calibration cells:
+  constant   
+    spl_db  k 1.3 (upper bound 1.245706, set by C-R7); overstates 1.12 to 1.33
+    edt_s   k 1.4 (upper bound 1.306590, set by C-R7); overstates 1.15 to 1.44
+    t20_s   k 1.4 (upper bound 1.372412, set by C-R7); overstates 1.09 to 1.50
+    t30_s   k 1.6 (upper bound 1.562221, set by C-R5); overstates 1.12 to 1.69
+    c50_db  k 1.2 (upper bound 1.147527, set by C-R6); overstates 1.14 to 1.20
+    c80_db  k 1.2 (upper bound 1.166055, set by C-R7); overstates 1.12 to 1.21
+    d50     k 1.2 (upper bound 1.142588, set by C-R1); overstates 1.14 to 1.20
+    ts_s    k 1.4 (upper bound 1.398683, set by C-R7); overstates 1.09 to 1.45
+    geometric-mean overstatement 1.263
+
+energetic mode, 7 calibration cells:
+  constant   
+    spl_db  k 0.91 (upper bound 0.902590, set by C-E7); overstates 1.08 to 1.30
+    edt_s   k 0.59 (upper bound 0.586709, set by C-E7); overstates 1.08 to 1.69
+    t20_s   k 0.26 (upper bound 0.258497, set by C-E7); overstates 1.08 to 3.57
+    t30_s   k 0.15 (upper bound 0.145739, set by C-E7); overstates 1.10 to 5.56
+    c50_db  k 0.85 (upper bound 0.845994, set by C-E2); overstates 1.09 to 1.57
+    c80_db  k 0.78 (upper bound 0.778439, set by C-E2); overstates 1.09 to 1.93
+    d50     k 0.85 (upper bound 0.846343, set by C-E2); overstates 1.09 to 1.57
+    ts_s    k 0.62 (upper bound 0.618909, set by C-E2); overstates 1.09 to 1.39
+    geometric-mean overstatement 1.653
+  mean_energy
+    spl_db  k 1.5 (upper bound 1.443296, set by C-E7); overstates 1.11 to 1.48
+    edt_s   k 3 (upper bound 2.993131, set by C-E7); overstates 1.07 to 2.99
+    t20_s   k 9.5 (upper bound 9.410802, set by C-E7); overstates 1.08 to 8.30
+    t30_s   k 16 (upper bound 15.708933, set by C-E7); overstates 1.09 to 13.08
+    c50_db  k 1.3 (upper bound 1.299910, set by C-E7); overstates 1.09 to 1.35
+    c80_db  k 1.6 (upper bound 1.518707, set by C-E7); overstates 1.14 to 1.56
+    d50     k 1.4 (upper bound 1.300469, set by C-E7); overstates 1.17 to 1.45
+    ts_s    k 1.8 (upper bound 1.783942, set by C-E7); overstates 1.10 to 1.78
+    geometric-mean overstatement 2.231
+
+random mode, margins: spl_db 1.1 (C-R7), edt_s 1.1 (C-R3), t20_s 1.4 (C-R5), t30_s 1.5 (C-R7), c50_db 1.1 (C-R1), c80_db 1.1 (C-R5), d50 1.1 (C-R1), ts_s 1.1 (C-R7)
+
+energetic mode, margins: spl_db 1.1 (C-E3), edt_s 1.1 (C-E7), t20_s 1.1 (C-E7), t30_s 1.2 (C-E5), c50_db 1.1 (C-E6), c80_db 1.1 (C-E6), d50 1.1 (C-E6), ts_s 1.1 (C-E1)
+
+random mode, validation with the code's factors:
+  V-R1
+    spl_db  0.813 [0.764, 0.869] ok
+    edt_s   0.611 [0.529, 0.727] ok
+    t20_s   0.678 [0.637, 0.725] ok
+    t30_s   0.707 [0.651, 0.774] ok
+    c50_db  0.843 [0.788, 0.908] ok
+    c80_db  0.809 [0.756, 0.871] ok
+    d50     0.838 [0.783, 0.902] ok
+    ts_s    0.695 [0.623, 0.788] ok
+  V-R2
+    spl_db  0.800 [0.752, 0.855] ok
+    edt_s   0.748 [0.703, 0.800] ok
+    t20_s   0.693 [0.651, 0.741] ok
+    t30_s   0.634 [0.596, 0.678] ok
+    c50_db  0.785 [0.719, 0.864] ok
+    c80_db  0.817 [0.749, 0.899] ok
+    d50     0.788 [0.723, 0.868] ok
+    ts_s    0.735 [0.674, 0.809] ok
+  V-R3
+    spl_db  0.862 [0.810, 0.921] ok
+    edt_s   0.855 [0.803, 0.914] ok
+    t20_s   0.861 [0.809, 0.921] ok
+    t30_s   0.688 [0.647, 0.736] ok
+    c50_db  0.832 [0.782, 0.890] ok
+    c80_db  0.845 [0.794, 0.903] ok
+    d50     0.832 [0.782, 0.890] ok
+    ts_s    0.873 [0.821, 0.934] ok
+  V-R4
+    spl_db  0.823 [0.773, 0.880] ok
+    edt_s   -
+    t20_s   0.770 [0.723, 0.823] ok
+    t30_s   0.674 [0.634, 0.721] ok
+    c50_db  0.885 [0.821, 0.962] ok
+    c80_db  0.896 [0.831, 0.974] ok
+    d50     0.890 [0.825, 0.967] ok
+    ts_s    -
+  V-R5
+    spl_db  0.784 [0.737, 0.838] ok
+    edt_s   -
+    t20_s   0.829 [0.779, 0.887] ok
+    t30_s   0.781 [0.734, 0.836] ok
+    c50_db  0.857 [0.805, 0.917] ok
+    c80_db  0.921 [0.865, 0.984] ok
+    d50     0.856 [0.805, 0.916] ok
+    ts_s    -
+  V-R6
+    spl_db  0.763 [0.717, 0.816] ok
+    edt_s   0.883 [0.830, 0.945] ok
+    t20_s   0.843 [0.792, 0.901] ok
+    t30_s   0.768 [0.722, 0.822] ok
+    c50_db  -
+    c80_db  -
+    d50     -
+    ts_s    -
+
+energetic mode, validation with the code's factors:
+  V-E1
+    spl_db  0.664 [0.624, 0.711] ok
+    edt_s   0.406 [0.346, 0.492] ok
+    t20_s   0.228 [0.214, 0.244] ok
+    t30_s   0.208 [0.196, 0.223] ok
+    c50_db  0.650 [0.608, 0.700] ok
+    c80_db  0.530 [0.495, 0.571] ok
+    d50     0.654 [0.611, 0.704] ok
+    ts_s    0.783 [0.689, 0.908] ok
+  V-E2
+    spl_db  0.765 [0.719, 0.818] ok
+    edt_s   0.553 [0.520, 0.592] ok
+    t20_s   0.323 [0.303, 0.345] ok
+    t30_s   0.318 [0.299, 0.340] ok
+    c50_db  0.342 [0.312, 0.381] ok
+    c80_db  0.182 [0.166, 0.203] ok
+    d50     0.344 [0.313, 0.383] ok
+    ts_s    0.796 [0.724, 0.886] ok
+  V-E3
+    spl_db  0.789 [0.741, 0.844] ok
+    edt_s   0.644 [0.605, 0.688] ok
+    t20_s   0.277 [0.260, 0.296] ok
+    t30_s   0.176 [0.166, 0.189] ok
+    c50_db  0.986 [0.927, 1.055] ok
+    c80_db  0.997 [0.937, 1.066] ok
+    d50     0.987 [0.927, 1.055] ok
+    ts_s    0.846 [0.795, 0.905] ok
+  V-E4
+    spl_db  0.798 [0.749, 0.853] ok
+    edt_s   -
+    t20_s   0.464 [0.436, 0.496] ok
+    t30_s   0.447 [0.420, 0.478] ok
+    c50_db  0.621 [0.576, 0.675] ok
+    c80_db  0.519 [0.481, 0.563] ok
+    d50     0.623 [0.577, 0.676] ok
+    ts_s    -
+  V-E5
+    spl_db  0.732 [0.688, 0.783] ok
+    edt_s   0.556 [0.523, 0.595] ok
+    t20_s   0.361 [0.339, 0.386] ok
+    t30_s   0.318 [0.299, 0.341] ok
+    c50_db  -
+    c80_db  -
+    d50     -
+    ts_s    -
+  V-E6
+    spl_db  0.815 [0.766, 0.872] ok
+    edt_s   0.948 [0.869, 1.044] ok
+    t20_s   1.514 [1.423, 1.619] FAIL
+    t30_s   1.902 [1.787, 2.034] FAIL
+    c50_db  0.859 [0.803, 0.925] ok
+    c80_db  0.917 [0.857, 0.987] ok
+    d50     0.860 [0.804, 0.926] ok
+    ts_s    0.948 [0.869, 1.044] ok
+
+1/sqrt(N), C-R1 against C-R2:
+    spl_db  22.1547 vs 20.1592 (-1.7 se) ok
+    edt_s   6.8186 vs 6.4487 (-1.0 se) ok
+    t20_s   17.9902 vs 17.9767 (-0.0 se) ok
+    t30_s   33.6116 vs 29.7798 (-2.1 se) DIFFER
+    c50_db  41.1918 vs 41.1005 (-0.0 se) ok
+    c80_db  40.8922 vs 39.2432 (-0.6 se) ok
+    d50     2.3167 vs 2.3098 (-0.0 se) ok
+    ts_s    0.4870 vs 0.4448 (-1.3 se) ok
+
+1/sqrt(N), C-R3 against C-R4:
+    spl_db  27.0090 vs 28.3881 (+0.9 se) ok
+    edt_s   9.2655 vs 9.3128 (+0.1 se) ok
+    t20_s   22.1606 vs 22.1352 (-0.0 se) ok
+    t30_s   43.5899 vs 43.5986 (+0.0 se) ok
+
+1/sqrt(N), C-R5 against V-R4:
+    spl_db  31.3015 vs 31.6325 (+0.2 se) ok
+    t20_s   34.1099 vs 33.3459 (-0.4 se) ok
+    t30_s   46.2334 vs 70.9615 (+1.2 se) ok
+    c50_db  62.7920 vs 66.6822 (+0.9 se) ok
+    c80_db  80.7297 vs 84.5293 (+0.7 se) ok
+    d50     3.0346 vs 3.2417 (+1.0 se) ok
+
+1/sqrt(N), C-E1 against C-E2:
+    spl_db  14.8553 vs 15.1358 (+0.3 se) ok
+    edt_s   2.2863 vs 2.3301 (+0.3 se) ok
+    t20_s   1.2495 vs 1.1905 (-0.9 se) ok
+    t30_s   0.8184 vs 0.8103 (-0.2 se) ok
+    c50_db  29.5402 vs 30.5754 (+0.5 se) ok
+    c80_db  26.7491 vs 28.6708 (+1.0 se) ok
+    d50     1.6615 vs 1.7210 (+0.5 se) ok
+    ts_s    0.2244 vs 0.2464 (+1.4 se) ok
+
+1/sqrt(N), C-E3 against C-E4:
+    spl_db  21.5279 vs 20.1825 (-1.2 se) ok
+    edt_s   3.6936 vs 3.2136 (-2.5 se) DIFFER
+    t20_s   2.0687 vs 1.9178 (-1.4 se) ok
+    t30_s   1.3838 vs 1.3416 (-0.6 se) ok
+
+1/sqrt(N), C-E5 against V-E4:
+    spl_db  20.9594 vs 21.4988 (+0.5 se) ok
+    t20_s   3.4151 vs 3.7865 (+1.9 se) ok
+    t30_s   3.8972 vs 4.2030 (+1.4 se) ok
+    c50_db  34.3550 vs 33.2595 (-0.5 se) ok
+    c80_db  32.3039 vs 31.6208 (-0.3 se) ok
+    d50     1.6672 vs 1.6124 (-0.5 se) ok
+random mode, 1/sqrt(N) over the pairs read: spl_db confirmed; edt_s confirmed; t20_s confirmed; t30_s NOT ["C-R1/C-R2: 33.6116 vs 29.7798 (-2.1 se)"]; c50_db confirmed; c80_db confirmed; d50 confirmed; ts_s confirmed
+energetic mode, 1/sqrt(N) over the pairs read: spl_db confirmed; edt_s NOT ["C-E3/C-E4: 3.6936 vs 3.2136 (-2.5 se)"]; t20_s confirmed; t30_s confirmed; c50_db confirmed; c80_db confirmed; d50 confirmed; ts_s confirmed
+
+named counts, C-R1 (150000) against C-R2 (1500000):
+    edt_s   28 refused for noise at C-R1, 28 name a count, 28 at most C-R2's; of those, 100.0 % of C-R2's seeds give the value
+    t20_s   360 refused for noise at C-R1, 360 name a count, 137 at most C-R2's; of those, 100.0 % of C-R2's seeds give the value
+    t30_s   358 refused for noise at C-R1, 0 name a count, 0 at most C-R2's; of those, NaN % of C-R2's seeds give the value
+
+named counts, C-R3 (150000) against C-R4 (15000000):
+    edt_s   360 refused for noise at C-R3, 360 name a count, 360 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value
+    t20_s   360 refused for noise at C-R3, 360 name a count, 359 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value
+    t30_s   358 refused for noise at C-R3, 0 name a count, 0 at most C-R4's; of those, NaN % of C-R4's seeds give the value
+
+named counts, C-R5 (150000) against V-R4 (600000):
+    t20_s   360 refused for noise at C-R5, 360 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value
+    t30_s   212 refused for noise at C-R5, 0 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value
+
+named counts, C-E1 (150000) against C-E2 (600000):
+
+named counts, C-E3 (150000) against C-E4 (2400000):
+    t30_s   303 refused for noise at C-E3, 0 name a count, 0 at most C-E4's; of those, NaN % of C-E4's seeds give the value
+
+named counts, C-E5 (150000) against V-E4 (1500000):
+    t20_s   1 refused for noise at C-E5, 1 name a count, 1 at most V-E4's; of those, 100.0 % of V-E4's seeds give the value
+    t30_s   360 refused for noise at C-E5, 32 name a count, 32 at most V-E4's; of those, 100.0 % of V-E4's seeds give the value
+written B:/repos/I-Simpa_Night_Mode/.claude/worktrees/t3-proj/docs/investigations/2026-09-25-noise-calibration/calibration.json
+test noise_calibration ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 32.59s
+

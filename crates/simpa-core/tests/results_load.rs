@@ -12,7 +12,6 @@
 mod common;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::Value;
 use simpa_core::formats::gabe::{self, ColumnData, Gabe};
@@ -41,17 +40,10 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// A fresh copy of a fixture run folder.
+/// A fresh copy of a fixture run folder under `target/tmp/results-load/`: removed when the test
+/// passes, kept when it fails (`common/scratch.rs`).
 fn copy_of(name: &str, label: &str) -> PathBuf {
-    static N: AtomicUsize = AtomicUsize::new(0);
-    let to = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "results-load/{label}-{}-{}",
-        std::process::id(),
-        N.fetch_add(1, Ordering::SeqCst)
-    ));
-    if to.exists() {
-        panic!("{} exists", to.display());
-    }
+    let to = common::scratch::fresh("results-load", label);
     copy_dir(&common::fixture(name), &to);
     to
 }
@@ -806,6 +798,78 @@ fn cases() -> Vec<(&'static str, &'static str, Spoil, &'static str)> {
             |r| patch(&r.join(PBIN_500), 28 + 8 + 12, &f32::NAN.to_le_bytes()),
             codes::VALUE_INVALID,
         ),
+        // The rest of `check_particles`' checks, each with its spoiled copy (the M7 follow-ups'
+        // critic found them claimed by the contract and untested).
+        (
+            OUTPUTS,
+            "a negative energy in a .pbin",
+            |r| patch(&r.join(PBIN_500), 28 + 8 + 12, &(-1.0f32).to_le_bytes()),
+            codes::VALUE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a non-finite position in a .pbin",
+            // The first step record's x.
+            |r| patch(&r.join(PBIN_500), 28 + 8, &f32::INFINITY.to_le_bytes()),
+            codes::VALUE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a .pbin whose step count is not the run's",
+            // nbTimeStepMax, the file header's sixth field.
+            |r| {
+                let p = r.join(PBIN_500);
+                let b = std::fs::read(&p).unwrap();
+                let n = u32::from_le_bytes(b[20..24].try_into().unwrap());
+                patch(&p, 20, &(n + 1).to_le_bytes());
+            },
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a .pbin particle with no step",
+            // The first particle's step count set to 0 and its step records taken out, so the
+            // file still reads.
+            |r| {
+                let p = r.join(PBIN_500);
+                let b = std::fs::read(&p).unwrap();
+                let n = u32::from_le_bytes(b[28..32].try_into().unwrap()) as usize;
+                assert!(n > 0);
+                let mut out = b[..28].to_vec();
+                out.extend_from_slice(&0u32.to_le_bytes());
+                out.extend_from_slice(&b[32..36]);
+                out.extend_from_slice(&b[36 + 16 * n..]);
+                std::fs::write(&p, out).unwrap();
+                assert!(simpa_core::formats::pbin::read_file(&p).is_ok());
+            },
+            codes::FILE_INVALID,
+        ),
+        (
+            OUTPUTS,
+            "a .pbin holding more particles than nbparticules_rendu per source",
+            // The first particle's record appended until the file holds 11, one more than the 10
+            // asked for, and nbParticles to match.
+            |r| {
+                let p = r.join(PBIN_500);
+                let mut b = std::fs::read(&p).unwrap();
+                let count = u32::from_le_bytes(b[0..4].try_into().unwrap());
+                let n = u32::from_le_bytes(b[28..32].try_into().unwrap()) as usize;
+                let first = b[28..36 + 16 * n].to_vec();
+                for _ in count..11 {
+                    b.extend_from_slice(&first);
+                }
+                b[0..4].copy_from_slice(&11u32.to_le_bytes());
+                std::fs::write(&p, &b).unwrap();
+                assert_eq!(
+                    simpa_core::formats::pbin::read_file(&p)
+                        .unwrap()
+                        .particles
+                        .len(),
+                    11
+                );
+            },
+            codes::FILE_INVALID,
+        ),
         (
             OUTPUTS,
             "the cutting plane's and the surface receiver's 500 Hz files swapped",
@@ -1041,4 +1105,99 @@ fn the_contract_table_lists_every_code_in_order_with_its_exit() {
         };
         assert_eq!(exit, &r.exit_code().to_string(), "{code}");
     }
+}
+
+/// Kuttruff's reference, and the transport behind its `γ²`, only where it applies (pre-M8: the
+/// transport cost the corrected Elmia hall's `simpa results` seconds for bands whose walls it
+/// does not describe; `docs/params.md`, "In `simpa results --json`"). On a copy of the committed
+/// Seat run's inputs with every material Lambert with scattering 1 at 500 Hz only (`diffusion` 1,
+/// `loi` 2; the reference reads the room from `solve/` alone): the transport runs and gives the
+/// box's exact `γ²`, 0.388874 (`tests/params_lambert.rs`), within 3 standard errors, and Kuttruff's
+/// time is given at 500 Hz and refused `params_reference_not_applicable` at 1000 Hz. Says no:
+/// Lambert in both bands gives both; in neither (the committed run) the transport is not run.
+#[test]
+fn the_reference_is_computed_only_for_bands_with_lambert_walls() {
+    use simpa_core::params::codes::REFERENCE_NOT_APPLICABLE;
+    use simpa_core::results::reference::{Reference, reference};
+    use simpa_core::run::Expectation;
+    use simpa_core::schema::SolverKind;
+    let with_lambert = |bands: &[&str]| -> Reference {
+        let run = copy_of(SPPS, "reference-lambert");
+        let solve = run.join("solve");
+        let path = solve.join("config.xml");
+        let mut text = std::fs::read_to_string(&path).unwrap();
+        for f in bands {
+            let n = text
+                .matches(&format!("<bfreq freq=\"{f}\" absorb="))
+                .count();
+            assert_eq!(n, 3, "three materials at {f} Hz");
+            text = text
+                .split('\n')
+                .map(|l| {
+                    if l.contains(&format!("<bfreq freq=\"{f}\" absorb=")) {
+                        l.replace("diffusion=\"0\" loi=\"0\"", "diffusion=\"1\" loi=\"2\"")
+                    } else {
+                        l.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+        }
+        std::fs::write(&path, text).unwrap();
+        let exp = Expectation::read(&solve, SolverKind::Spps).unwrap();
+        reference(&solve, &exp, 343.2, false)
+    };
+    let parts = |r: Reference| match r {
+        Reference::Computed {
+            free_paths, bands, ..
+        } => (free_paths, bands),
+        Reference::NotComputed { why } => panic!("{why}"),
+    };
+
+    let (paths, bands) = parts(with_lambert(&["500"]));
+    let p = paths.unwrap();
+    println!(
+        "Lambert at 500 Hz: gamma^2 {:.5} ± {:.5}",
+        p.gamma2(),
+        p.gamma2_se()
+    );
+    assert!(
+        (p.gamma2() - 0.388_874).abs() < 3.0 * p.gamma2_se(),
+        "{p:?}"
+    );
+    let codes_of = |bands: &[simpa_core::results::reference::ReferenceBand]| -> Vec<(i32, bool, Option<&str>)> {
+        bands
+            .iter()
+            .map(|b| {
+                (
+                    b.freq_hz,
+                    b.lambert_walls,
+                    b.kuttruff_s.as_ref().err().map(|e| e.code()),
+                )
+            })
+            .collect()
+    };
+    assert_eq!(
+        codes_of(&bands),
+        [
+            (500, true, None),
+            (1000, false, Some(REFERENCE_NOT_APPLICABLE))
+        ]
+    );
+    // Kuttruff's time lies above plain Eyring's, as it must with γ² above 0.
+    let k500 = bands[0].kuttruff_s.as_ref().unwrap().0;
+    assert!(k500 > *bands[0].eyring_s.as_ref().unwrap());
+
+    let (paths, bands) = parts(with_lambert(&["500", "1000"]));
+    assert!(paths.is_ok());
+    assert_eq!(codes_of(&bands), [(500, true, None), (1000, true, None)]);
+    let (paths, bands) = parts(with_lambert(&[]));
+    assert_eq!(paths.unwrap_err().code(), REFERENCE_NOT_APPLICABLE);
+    assert_eq!(
+        codes_of(&bands),
+        [
+            (500, false, Some(REFERENCE_NOT_APPLICABLE)),
+            (1000, false, Some(REFERENCE_NOT_APPLICABLE))
+        ]
+    );
 }

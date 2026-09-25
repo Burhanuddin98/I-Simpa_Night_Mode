@@ -13,7 +13,7 @@ decision 7). It is our own format: no upstream program reads or writes it.
 
 | File | Written | Notes |
 |---|---|---|
-| `scene_mesh.poly` | always, before TetGen | the scene as a TetGen PLC (`docs/formats/poly.md`); see "What TetGen is given". With upstream's scene correction, what `preprocess.exe` saved, markers restored outside parity mode |
+| `scene_mesh.poly` | always, before TetGen; by `mesh_from_tetgen` into an output folder other than the TetGen folder | the scene as a TetGen PLC (`docs/formats/poly.md`); see "What TetGen is given". With upstream's scene correction, what `preprocess.exe` saved, markers restored outside parity mode. From `mesh_from_tetgen`: the `.poly` the regions were held to, `<base>.poly`'s own bytes or the project's own `.poly`, so that `run --mesh`, which holds a reused folder's regions to its `.poly` and takes no `mesh.json` as proof, finds the same cells |
 | `scene_mesh.input.poly` | with upstream's scene correction | the `.poly` as the mesher wrote it, before `preprocess.exe` rewrote it |
 | `preprocess.stdout.txt`, `preprocess.stderr.txt` | with upstream's scene correction, line by line | |
 | `scene_mesh.var` | when `surface_receiver_max_area_m2` is set | `docs/formats/var.md` |
@@ -22,7 +22,7 @@ decision 7). It is our own format: no upstream program reads or writes it.
 | `scene_mesh_skipped.{node,face}` | by TetGen 1.6.0, on self-intersecting facets | then no `.1.neigh`. TetGen 1.5.0, the mesher since decision 3, never writes them: it stops instead |
 | `tetgen.stdout.txt`, `tetgen.stderr.txt` | always, line by line as TetGen writes | |
 | `diag/` | after skipped facets or a self-intersection stop | the `tetgen -d` follow-up: its own `scene_mesh.poly`, logs and TetGen files (1.5.0 writes `scene_mesh.1.node` and a `scene_mesh.1.face` of the intersecting triangles) |
-| `tetramesh.mbin` | **only when meshing succeeded**, and in parity mode whether it verifies or not | `docs/formats/mbin.md`. A parity mesh's `mesh.json` is `FAIL` when it does not verify: its `.mbin` is for byte comparison, and `run --mesh` refuses the folder |
+| `tetramesh.mbin` | **only when meshing succeeded**, and in parity mode whether it verifies or not | `docs/formats/mbin.md`. A parity mesh's `mesh.json` is `FAIL` when it does not verify: its `.mbin` is for byte comparison, and `run --mesh` refuses the folder whatever its `mesh.json` says (`mesh_parity`; with the manifest edited, `mesh.json` is not signed, the `.mbin` is held to the geometry again before launch, `docs/solver-contract.md`, "The run manager") |
 | `mesh.json` | always, last | this page. The one exception: the folder cannot be created, or `mesh.json` cannot be written into it, and the call returns an error instead |
 
 TetGen runs with the mesh folder as its working folder and the relative argument
@@ -35,7 +35,8 @@ loads `<name>.edge`, `<name>.var` and `<name>.mtr` from beside the `.poly` whene
 without case. Other files are left alone. A file that will not be deleted (read-only, or held
 open) is `stale_delete_failed`, and nothing is meshed over it. `mesh_from_tetgen` deletes only
 `mesh.cbin`, `tetramesh.mbin` and `mesh.json` from its output folder, which may be the folder
-holding the TetGen files it reads.
+holding the TetGen files it reads; into another folder, `scene_mesh.poly` too, which it then
+writes.
 
 ## What TetGen is given
 
@@ -125,8 +126,8 @@ with `read_manifest`, which uses the crate's correctly rounded JSON reader
 | `diagnosis` | object or null | the `tetgen -d` follow-up, below. Null when no facet was skipped and TetGen did not stop on a self-intersection, when the run was cancelled, or when `diag/` could not be set up (a message then says why) |
 | `verify` | object or null | `mesh::verify::verify_mesh_with`'s report on the `.mbin` built, whether it passed or not |
 | `preprocess` | object or null | `preprocess.exe`'s run, when the settings asked for it: `call` (as `tetgen`), `markers` (`restored` or `parity`), `printed` (`status`, `aborted`, `not_found`, `vertices_merged`, `faces_destroyed`, `faces_split`, `split_lines`, as it printed them), `input_sha256` and `output_sha256` (also recorded when it said it saved nothing and the file changed all the same, `preprocess_output_invalid`), `input` and `output` (`vertices`, `facets`, `user_facets`, `regions`), `accounting` (below), `deleted_facets` (mapped to the scene as `skipped_facets`), `tolerance_m`, `markers_rewritten`, `summary`, the line also printed among the messages, `outcome` (`corrected`: TetGen read what it saved; `aborted`: it saved nothing, and the `.poly` as written went on to the geometry check and TetGen, as upstream's GUI meshes it; null when the run failed) and `aborted_reason` (why, with its last line). Read as null when absent |
-| `geometry` | object or null | `geometry::check` on the `.poly` TetGen read: `checked` (`preprocessed`, `written`, `external`, or `project`: for `external` with no `<base>.poly` beside TetGen's output, the project's own `.poly` as the mesher writes it without upstream's scene correction, which stands in for it; the region check is never skipped), `vertices`, `facets`, `verdict` (`ok` or `refused`), `reasons` (`code`, `count`, `facets`: positions in the facet list, the first 20, `markers`, `message`), `pairs` (each self-intersecting pair as markers), `cells` (`id`, `depth`, `volume_m3`) and `enclosed_volume_m3`. With upstream's scene correction a refusal is the gate before TetGen; without it, TetGen judges first, and a mesh it makes of a refused `.poly` is `geometry_refused`. Read as null when absent |
-| `parity` | boolean | parity mode: `preprocess.exe`'s markers kept, the `.mbin` written whether it verifies or not. Read as false when absent |
+| `geometry` | object or null | `geometry::check` on the `.poly` TetGen read: `checked` (`preprocessed`, `written`, `written, preprocess.exe having given up` (the `.poly` as the mesher wrote it, meshed because `preprocess.exe` saved nothing; `preprocess.outcome` is `aborted`), `external`, or `project`: for `external` with no `<base>.poly` beside TetGen's output, the project's own `.poly` as the mesher writes it without upstream's scene correction, which stands in for it; the region check is never skipped), `vertices`, `facets`, `verdict` (`ok` or `refused`), `reasons` (`code`, `count`, `facets`: positions in the facet list, the first 20, `markers`, `message`), `pairs` (each self-intersecting pair as markers), `cells` (`id`, `depth`, `volume_m3`) and `enclosed_volume_m3`. With upstream's scene correction a refusal is the gate before TetGen; without it, TetGen judges first, and a mesh it makes of a refused `.poly` is `geometry_refused`. Read as null when absent |
+| `parity` | boolean | parity mode: `preprocess.exe`'s markers kept, the `.mbin` written whether it verifies or not. Read as false when absent. `run --mesh` refuses a folder whose manifest says `true`, `mesh_parity`, even when its status is `OK` (the box without a fitting zone meshes `OK` in parity mode) |
 | `seeds_moved` | array | per fitting zone whose seed lay on a facet and was moved into its cell: `zone`, `solver_id`, `from`, `to`, `on_facets`, `cell` |
 | `elapsed_ms` | number | wall time of the whole call |
 

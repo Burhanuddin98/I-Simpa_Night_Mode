@@ -8,8 +8,10 @@
 //! [`super::clock`]) and writing
 //! `run.json` ([`RunManifest`]) into it however the run ends:
 //! - [`run_project`]: a project file. Its geometry is checked (refused: exit class 3), the project
-//!   is validated (2), a mesh is built into `<run>/mesh/` or an existing one is checked (4), the
-//!   run folder's inputs are exported and checked by `validate_export` (2), SPPS's sources and
+//!   is validated (2), a mesh is built into `<run>/mesh/` or an existing one is checked (4; a
+//!   parity-mode mesh is refused whatever its `mesh.json` says), the run folder's inputs are
+//!   exported and checked by `validate_export` (2), an existing mesh is held to the geometry
+//!   again as [`run_folder`] holds a folder's ([`reused_mesh_check`], 5), SPPS's sources and
 //!   point receivers are located as SPPS locates them ([`locate`], 5), and the solver runs.
 //! - [`run_folder`]: a folder as it is, `tests/fixtures/runs/<case>` for instance, with no project
 //!   validator: [`pre_launch`] checks its mesh and its bands instead, then, for SPPS on a mesh
@@ -134,8 +136,8 @@ impl TryFrom<u8> for ExitClass {
     }
 }
 
-/// The stages of a run, in order. `run_project` reaches `pre_launch` with SPPS only; `run_folder`
-/// has only `pre_launch` and `solve`.
+/// The stages of a run, in order. `run_project` reaches `pre_launch` with SPPS, or with a mesh
+/// folder given (`MeshChoice::Reuse`); `run_folder` has only `pre_launch` and `solve`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
@@ -743,10 +745,31 @@ pub fn run_project(
         return rec.cancelled(Stage::Export);
     }
 
-    // SPPS: every source and point receiver must be in a tetrahedron by SPPS's own test, or the
-    // run would crash or read a receiver as silence. Exit class 5, as for `run_folder`.
-    if opts.solver == SolverKind::Spps {
+    // A mesh folder given with `--mesh` is held to the geometry again, as `run_folder` holds a
+    // folder's (`pre_launch`), whatever its `mesh.json` says: that file is not signed, and one
+    // edited by hand must not make a mesh runnable that `mesh::verify` refuses (a parity mesh
+    // above all, Burhan's decision 2 of 2026-09-24). The `.mbin` the solver will read is checked
+    // against the `.cbin` it will read, the regions against the mesh folder's own `.poly`, and no
+    // `mesh.json` stands in for them. The run's own mesh was verified by the mesher just now.
+    // Exit class 5; then, for SPPS, the sources and point receivers must be in a tetrahedron by
+    // SPPS's own test, or the run would crash or read a receiver as silence.
+    let reused = match mesh {
+        MeshChoice::Reuse(d) => Some(d),
+        MeshChoice::Build { .. } => None,
+    };
+    if reused.is_some() || opts.solver == SolverKind::Spps {
         on_event(&RunEvent::Stage(Stage::PreLaunch));
+    }
+    if let Some(d) = reused {
+        let checked = reused_mesh_check(&rec.solve, d);
+        if !checked.reasons.is_empty() {
+            return rec.refuse(Stage::PreLaunch, false, checked.reasons);
+        }
+        if cancel.is_cancelled() {
+            return rec.cancelled(Stage::PreLaunch);
+        }
+    }
+    if opts.solver == SolverKind::Spps {
         let reasons = locate::check_folder(&rec.solve);
         if !reasons.is_empty() {
             return rec.refuse(Stage::PreLaunch, false, reasons);
@@ -812,30 +835,50 @@ fn exe_ref(exe: &Path) -> Result<FileRef, RunError> {
 /// (`validate::mesh_input_hash`), and returns what the run records of it. Refused:
 /// - `mesh_missing`: no readable `mesh.json`, a manifest that is not `OK`, or no
 ///   `tetramesh.mbin`;
+/// - `mesh_parity`: the manifest records parity mode (`parity: true`), whatever its status: a
+///   parity mesh is for byte comparison with upstream's and is never run;
 /// - `manifest_mismatch`: the manifest's `files.mbin` is not the `.mbin`'s sha256 (a partial or
 ///   foreign file);
 /// - `mesh_out_of_date`: the manifest's `mesh_input_hash` is not the project's.
+///
+/// What this reads is only the manifest's word. `run_project` then holds the `.mbin` to the
+/// geometry before launch, as `run_folder` does, trusting none of it ([`reused_mesh_check`]).
 pub fn check_mesh_dir(dir: &Path, expected_hash: &str) -> Result<MeshRef, Vec<Reason>> {
     let manifest_path = dir.join(mesh::MANIFEST_FILE);
-    let missing = |why: String| vec![Reason::new(codes::MESH_MISSING, why)];
+    let missing = |why: String| Reason::new(codes::MESH_MISSING, why);
     let m = mesh::read_manifest(dir).map_err(|e| {
-        missing(format!(
+        vec![missing(format!(
             "{}: {e}; mesh the project into this folder first",
             manifest_path.display()
-        ))
+        ))]
     })?;
+    let mut refused = Vec::new();
     if !m.is_ok() {
-        return Err(missing(format!(
+        refused.push(missing(format!(
             "{} has status {:?} ({}): only an OK mesh comes with a usable .mbin",
             manifest_path.display(),
             m.status,
             m.codes.join(", ")
         )));
     }
+    if m.parity {
+        refused.push(Reason::new(
+            codes::MESH_PARITY,
+            format!(
+                "{} records a mesh made in parity mode (simpa mesh --parity): its .mbin keeps \
+                 the facet markers preprocess.exe gave, for comparison with original I-Simpa's \
+                 files, and is never run; mesh the project without --parity",
+                manifest_path.display()
+            ),
+        ));
+    }
+    if !refused.is_empty() {
+        return Err(refused);
+    }
     let mbin_path = dir.join(names::TETRA_MESH);
     let sha = match sha256_file(&mbin_path) {
         Ok(s) => s,
-        Err(e) => return Err(missing(format!("{}: {e}", mbin_path.display()))),
+        Err(e) => return Err(vec![missing(format!("{}: {e}", mbin_path.display()))]),
     };
     let mut reasons = Vec::new();
     if !m
@@ -1030,36 +1073,93 @@ pub struct PreLaunch {
 /// A `config.xml` that does not parse is `config_attribute_missing`, and nothing else is checked.
 pub fn pre_launch(solve: &Path) -> PreLaunch {
     let mut out = PreLaunch::default();
-    let config = solve.join(names::CONFIG);
-    let text = match fs::read(&config) {
-        Ok(b) => {
-            String::from_utf8_lossy(b.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&b)).into_owned()
-        }
-        Err(e) => {
-            out.reasons.push(Reason::new(
-                codes::CONFIG_ATTRIBUTE_MISSING,
-                format!("{}: {e}", config.display()),
-            ));
+    let text = match config_text(solve) {
+        Ok(t) => t,
+        Err(r) => {
+            out.reasons.push(r);
             return out;
         }
     };
-    let doc = match Document::parse(&text) {
+    let doc = match parse_config(solve, &text) {
         Ok(d) => d,
-        Err(e) => {
-            out.reasons.push(Reason::new(
-                codes::CONFIG_ATTRIBUTE_MISSING,
-                format!("{} is not well-formed XML: {e}", config.display()),
-            ));
+        Err(r) => {
+            out.reasons.push(r);
             return out;
         }
     };
-    mesh_check(solve, &doc, &mut out);
+    let from = RegionsFrom {
+        poly_dir: solve,
+        proof: Some(solve.join(mesh::MANIFEST_FILE)),
+    };
+    mesh_check(solve, &doc, &from, &mut out);
     out.reasons.extend(band_check(&doc));
     out
 }
 
-/// `pre_launch`'s mesh check.
-fn mesh_check(solve: &Path, doc: &Document, out: &mut PreLaunch) {
+/// `run --mesh`'s check before launch, on the run's working folder `solve`: [`pre_launch`]'s mesh
+/// check, with the regions held to the `.poly` of the reused mesh folder `mesh_dir` (else the
+/// `.cbin` in `solve`), and no `mesh.json` taken as proof of them. The bands are the validator's
+/// in `run_project`.
+pub fn reused_mesh_check(solve: &Path, mesh_dir: &Path) -> PreLaunch {
+    let mut out = PreLaunch::default();
+    let text = match config_text(solve) {
+        Ok(t) => t,
+        Err(r) => {
+            out.reasons.push(r);
+            return out;
+        }
+    };
+    match parse_config(solve, &text) {
+        Ok(doc) => {
+            let from = RegionsFrom {
+                poly_dir: mesh_dir,
+                proof: None,
+            };
+            mesh_check(solve, &doc, &from, &mut out);
+        }
+        Err(r) => out.reasons.push(r),
+    }
+    out
+}
+
+/// `solve`'s `config.xml` as text, a BOM dropped; unreadable, `config_attribute_missing`.
+fn config_text(solve: &Path) -> Result<String, Reason> {
+    let config = solve.join(names::CONFIG);
+    fs::read(&config)
+        .map(|b| {
+            String::from_utf8_lossy(b.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&b)).into_owned()
+        })
+        .map_err(|e| {
+            Reason::new(
+                codes::CONFIG_ATTRIBUTE_MISSING,
+                format!("{}: {e}", config.display()),
+            )
+        })
+}
+
+/// `text`, `solve`'s `config.xml`, parsed; not well-formed, `config_attribute_missing`.
+fn parse_config<'t>(solve: &Path, text: &'t str) -> Result<Document<'t>, Reason> {
+    Document::parse(text).map_err(|e| {
+        Reason::new(
+            codes::CONFIG_ATTRIBUTE_MISSING,
+            format!(
+                "{} is not well-formed XML: {e}",
+                solve.join(names::CONFIG).display()
+            ),
+        )
+    })
+}
+
+/// Where `mesh_check` holds a folder's regions: the `.poly` in `poly_dir` (else the checked
+/// folder's `.cbin`), and the `mesh.json` accepted as proof that the mesher held them when that
+/// geometry gives no cells (`None`: none is).
+struct RegionsFrom<'a> {
+    poly_dir: &'a Path,
+    proof: Option<PathBuf>,
+}
+
+/// `pre_launch`'s mesh check, and `run --mesh`'s ([`reused_mesh_check`]).
+fn mesh_check(solve: &Path, doc: &Document, from: &RegionsFrom, out: &mut PreLaunch) {
     let invalid = |why: String| Reason::new(mesh::codes::MESH_INVALID, why);
     let root = doc.root_element();
     let sim = expect::child(root, "simulation");
@@ -1120,7 +1220,7 @@ fn mesh_check(solve: &Path, doc: &Document, out: &mut PreLaunch) {
     // The regions are held to the cells of the geometry the folder holds, its `.poly` or else its
     // `.cbin` (decision 15); a folder whose geometry gives none is refused unless its mesh.json
     // is the mesher's record of this `.mbin` with its regions checked.
-    let poly = match verify::folder_poly(solve, None) {
+    let poly = match verify::folder_poly(from.poly_dir, None) {
         Ok(p) => p,
         Err(e) => {
             return out
@@ -1136,9 +1236,11 @@ fn mesh_check(solve: &Path, doc: &Document, out: &mut PreLaunch) {
             .map(|(n, m)| (n.as_str(), m.as_ref().map_err(String::as_str))),
         cbin_name,
     );
-    let proven = verify::read_manifest_json(&solve.join(mesh::MANIFEST_FILE))
-        .ok()
-        .is_some_and(|m| verify::manifest_proves_regions(&m, &sha256_bytes(&bytes)));
+    let proven = from.proof.as_ref().is_some_and(|p| {
+        verify::read_manifest_json(p)
+            .ok()
+            .is_some_and(|m| verify::manifest_proves_regions(&m, &sha256_bytes(&bytes)))
+    });
     let unchecked = !report.regions_checked && !proven;
     if !report.passed() || unchecked {
         let counts = serde_json::to_value(&report).unwrap_or_default();
@@ -1152,9 +1254,13 @@ fn mesh_check(solve: &Path, doc: &Document, out: &mut PreLaunch) {
         }
         if unchecked {
             why.push(format!(
-                "its regions are held to no cells: {}, and no mesh.json proves that the mesher \
-                 checked them",
-                regions.unchecked.as_deref().unwrap_or("no geometry")
+                "its regions are held to no cells: {}, and {}",
+                regions.unchecked.as_deref().unwrap_or("no geometry"),
+                if from.proof.is_some() {
+                    "no mesh.json proves that the mesher checked them"
+                } else {
+                    "a reused mesh folder's mesh.json is taken as no proof that they were checked"
+                }
             ));
         }
         out.reasons.push(invalid(format!(

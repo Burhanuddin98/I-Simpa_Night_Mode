@@ -36,7 +36,7 @@ pub use expect::{Band, ExpectError, Expectation, OutputNames, SppsSettings};
 pub use manager::{
     CancelAfterLaunch, CancelTimer, ExeNotFound, ExeSearch, ExitClass, MeshChoice, PreLaunch,
     RunError, RunEvent, RunOptions, RunReport, Stage, check_mesh_dir, create_run_folder,
-    pre_launch, run_folder, run_project,
+    pre_launch, reused_mesh_check, run_folder, run_project,
 };
 pub use manifest::{FileCounts, FileRef, MeshRef, RunManifest, RunSource};
 pub use stats::{BandStats, ParticleStats, StatsError};

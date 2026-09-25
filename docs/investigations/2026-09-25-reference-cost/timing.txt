@@ -1,0 +1,16 @@
+simpa-cdlimits exit 0 wall 6.33 s
+simpa-lambertonly exit 0 wall 1.1 s
+simpa-cdlimits exit 0 wall 6.34 s
+simpa-lambertonly exit 0 wall 1.03 s
+simpa-cdlimits exit 0 wall 6.17 s
+simpa-lambertonly exit 0 wall 0.78 s
+simpa-cdlimits computed gamma2 0.55499 0.00024 [(125, False, 1.7044796452203568), (250, False, 1.8890394105220718), (500, False, 2.011812805537655), (1000, False, 1.9896158889881606), (2000, False, 1.9610316460761597), (4000, False, 1.706587209578091)]
+simpa-lambertonly computed gamma2 None None [(125, False, ['not_evaluable']), (250, False, ['not_evaluable']), (500, False, ['not_evaluable']), (1000, False, ['not_evaluable']), (2000, False, ['not_evaluable']), (4000, False, ['not_evaluable'])]
+20260925-004507-966-spps simpa-cdlimits exit 0 wall 5.92 s
+20260925-004507-966-spps simpa-lambertonly exit 0 wall 0.73 s
+20260925-004507-966-spps simpa-cdlimits exit 0 wall 6.03 s
+20260925-004507-966-spps simpa-lambertonly exit 0 wall 0.78 s
+20260925-172458-528-spps simpa-cdlimits exit 0 wall 1.03 s
+20260925-172458-528-spps simpa-lambertonly exit 0 wall 1.2 s
+20260925-172458-528-spps simpa-cdlimits exit 0 wall 1.02 s
+20260925-172458-528-spps simpa-lambertonly exit 0 wall 1.12 s

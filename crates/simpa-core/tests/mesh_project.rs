@@ -5,10 +5,10 @@
 #[path = "mesh_support.rs"]
 mod support;
 
+use std::cell::OnceCell;
 use std::collections::BTreeSet;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 use simpa_core::formats::{cbin, mbin, poly};
 use simpa_core::mesh::{
@@ -34,13 +34,20 @@ fn has(m: &MeshManifest, code: &str) -> bool {
     m.codes.iter().any(|c| c == code)
 }
 
-/// The box meshed once with its own settings, shared by the tests that only read it.
+/// The box meshed with its own settings, once per test that reads it: in the test's own scratch
+/// folder, removed when that test passes. It was once shared by every test of the binary, in a
+/// folder no single test owned, which is why nothing removed it (`common/scratch.rs`).
 fn box_mesh() -> &'static (PathBuf, MeshManifest) {
-    static BOX: OnceLock<(PathBuf, MeshManifest)> = OnceLock::new();
-    BOX.get_or_init(|| {
-        let dir = scratch("box");
-        let m = run(&load_room("tutorial1_box.simpa"), &dir);
-        (dir, m)
+    thread_local! {
+        static BOX: OnceCell<&'static (PathBuf, MeshManifest)> = const { OnceCell::new() };
+    }
+    BOX.with(|b| {
+        *b.get_or_init(|| {
+            let dir = scratch("box");
+            let m = run(&load_room("tutorial1_box.simpa"), &dir);
+            // A few hundred bytes per test that asks, for a `'static` the tests can hold.
+            Box::leak(Box::new((dir, m)))
+        })
     })
 }
 
@@ -448,6 +455,73 @@ fn a_mesh_rebuilt_from_its_tetgen_output_is_identical() {
         std::fs::read(two.join("out/tetramesh.mbin")).unwrap(),
         original
     );
+}
+
+/// `mesh_from_tetgen` into another folder than the TetGen output's writes the `.poly` it held the
+/// regions to as `scene_mesh.poly`, so that `run --mesh`, which holds a reused folder's regions
+/// to its `.poly` and takes no `mesh.json` as proof, finds the same cells (the review of piece C:
+/// without it, tutorial 3's `--from-tetgen` folder was refused where its source ran). Checked:
+/// `<base>.poly`'s own bytes when the TetGen folder holds it, the project's `.poly` when not, a
+/// stale `scene_mesh.poly` in the output folder replaced, and nothing written into the TetGen
+/// folder itself. Says no: the manifest records the written file's sha256, which a missing or
+/// stale file does not have.
+#[test]
+fn a_separate_output_folder_gets_the_poly_its_regions_were_held_to() {
+    let (a, m) = box_mesh();
+    assert!(m.is_ok(), "{m:#?}");
+    let p = load_room("tutorial1_box.simpa");
+    let meshed_poly = std::fs::read(a.join("scene_mesh.poly")).unwrap();
+    let tetgen_set = |to: &Path, base: &str| {
+        for ext in ["node", "ele", "face", "neigh"] {
+            std::fs::copy(
+                a.join(format!("scene_mesh.1.{ext}")),
+                to.join(format!("{base}.1.{ext}")),
+            )
+            .unwrap();
+        }
+    };
+
+    // The TetGen folder holds its .poly, with a comment line added so that its bytes are its own.
+    let src = scratch("poly-external");
+    tetgen_set(&src, "model");
+    let mut own = b"# written by hand\n".to_vec();
+    own.extend_from_slice(&meshed_poly);
+    std::fs::write(src.join("model.poly"), &own).unwrap();
+    let out = src.join("out");
+    std::fs::create_dir_all(&out).unwrap();
+    std::fs::write(out.join("scene_mesh.poly"), b"stale").unwrap();
+    let e = mesh_from_tetgen(&p, &src, None, &out).unwrap();
+    assert!(e.is_ok(), "{e:#?}");
+    assert_eq!(e.geometry.as_ref().unwrap().checked, "external");
+    let written = std::fs::read(out.join("scene_mesh.poly")).unwrap();
+    assert_eq!(written, own, "not model.poly's bytes");
+    assert_eq!(
+        e.files.poly.as_deref(),
+        Some(simpa_core::mesh::sha256_hex(&own).as_str())
+    );
+
+    // No .poly beside the output: the project's own, as mesh_project writes it for the box.
+    let bare = scratch("poly-project");
+    tetgen_set(&bare, "scene_mesh");
+    let out = bare.join("out");
+    let e = mesh_from_tetgen(&p, &bare, None, &out).unwrap();
+    assert!(e.is_ok(), "{e:#?}");
+    assert_eq!(e.geometry.as_ref().unwrap().checked, "project");
+    assert_eq!(
+        std::fs::read(out.join("scene_mesh.poly")).unwrap(),
+        meshed_poly
+    );
+    assert_eq!(e.files.poly, m.files.poly);
+
+    // Into the TetGen folder itself: nothing written beside TetGen's files, its .poly untouched.
+    let e = mesh_from_tetgen(&p, &bare, None, &bare).unwrap();
+    assert!(e.is_ok(), "{e:#?}");
+    assert!(!bare.join("scene_mesh.poly").exists());
+    assert_eq!(e.files.poly, None);
+    let e = mesh_from_tetgen(&p, &src, None, &src).unwrap();
+    assert!(e.is_ok(), "{e:#?}");
+    assert_eq!(std::fs::read(src.join("model.poly")).unwrap(), own);
+    assert!(!src.join("scene_mesh.poly").exists());
 }
 
 /// A mesher that runs nothing: it calls `act` on the folder and returns `outcome`.

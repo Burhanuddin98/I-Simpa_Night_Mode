@@ -215,7 +215,7 @@ class Unreproducible(unittest.TestCase):
         recorded = json.loads((RUNS / "spps_oneband" / fc.EXPECTED_JSON).read_text(encoding="utf-8"))
         self.assertEqual(recorded["observed"]["post_run"]["stats"][self.T["band"]], self.T["outcomes"][0])
         self.assertEqual(len(self.T["outcomes"]), 2)
-        self.assertIn("7 of 230", self.T["measured"])
+        self.assertIn("7 of 260", self.T["measured"])
 
     def test_the_unreproducible_band_takes_its_listed_outcomes_only(self):
         first, second = self.T["outcomes"]
@@ -723,7 +723,7 @@ class EndToEnd(unittest.TestCase):
         by the manifest check and, past it, by the STALE check.
 
         spps_oneband's 1000 Hz statistics are not the same on every run of one spps.exe: that is
-        mkexpected.UNREPRODUCIBLE's named tolerance, with its cause and measured rate (7 of 230
+        mkexpected.UNREPRODUCIBLE's named tolerance, with its cause and measured rate (7 of 260
         runs), not a loosening here (test_the_unreproducible_band_takes_its_listed_outcomes_only)."""
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)

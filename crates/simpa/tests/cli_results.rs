@@ -12,7 +12,7 @@
 //!   within ±0.5 dB of `Lw − 20·lg r − 11`. Says no: Night Mode's `.gap` level (energy over
 //!   1e-12, `main:project/result_parser.cpp:486`) and a 1 dB offset each way miss it in every
 //!   band. Tighter (M7 review): the same SPL against the exact free field within its Monte-Carlo
-//!   noise, which the SPL 0.1 dB either way, or with `ρc` = 400, misses.
+//!   noise, which the SPL 0.15 dB either way, or with `ρc` = 400, misses.
 //! - **Gate M7(d):** tutorial 1's box through TCR: per band, TCR's Sabine and Eyring times equal
 //!   `core::params`' within 0.5 %, computed both from the project and from the run's own inputs,
 //!   and no value TCR wrote for display is NaN or infinite. Says no: the walls' α 5 % higher
@@ -126,9 +126,15 @@ fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
 
 /// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
 /// typed `error`.
-const NULLABLE: [&str; 21] = [
+const NULLABLE: [&str; 27] = [
+    ".crossings_per_particle",
+    ".lambert_walls",
+    ".uniform_lambert_walls",
+    ".particles_at_least",
+    ".receiver_radius_scale_at_most",
     ".spps",
     ".tcr",
+    ".free_paths",
     ".mc_sd",
     ".band_hz",
     ".aggregate",
@@ -317,23 +323,174 @@ const EIGHT: [&str; 8] = [
 
 #[test]
 fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() {
-    let rep = json(&results(&fixture(SEATS_SPPS), true));
-    let mut values = 0;
-    for r in rep["spps"]["point_receivers"].as_array().unwrap() {
-        let bands = r["bands"].as_array().unwrap();
-        assert_eq!(bands.len(), 2);
-        for b in bands.iter().chain([&r["aggregate"]]) {
-            for n in EIGHT {
-                let p = &b["parameters"][n];
-                let ok = p["value"].is_f64() || p["not_evaluable"]["code"].is_string();
-                assert!(ok, "{} {n}: {p}", r["label"]);
-                values += usize::from(p["value"].is_f64());
-                // No SPPS receiver is refused for having no series.
-                assert_ne!(p["not_evaluable"]["error"]["why"]["why"], "no_time_series");
+    use simpa_core::params::noise::{Method, Walls, calibration};
+    // Round 3 of the noise calibration (pre-M8): the Seat run's 2,000 particles are below every
+    // quantity's calibrated domain (5,000 particles for SPL, C50, C80 and D50, 50,000 for the
+    // decay times and Ts), so every value is refused, `noise_uncalibrated`, naming the particles
+    // that reach the domain. The energetic run's 50,000 give values.
+    for (run, n, method, name) in [
+        (SEATS_SPPS, 2_000u64, Method::Random, "random"),
+        (ENERGETIC_SPPS, 50_000, Method::Energetic, "energetic"),
+    ] {
+        let rep = json(&results(&fixture(run), true));
+        // The run's computation method picks its calibration: a report that took every run for
+        // random mode (the pre-M8 review's mutation) reads so here, and its factors with it.
+        let mc = &rep["spps"]["monte_carlo"];
+        assert_eq!(mc["method"], name, "{run}");
+        for (i, q) in EIGHT.iter().enumerate() {
+            let e = calibration::entry(method, i, Walls::Other);
+            assert_eq!(
+                mc["calibration"][q]["factor"].as_f64(),
+                Some(e.factor),
+                "{run} {q}"
+            );
+            assert_eq!(
+                mc["calibration"][q]["kappa"].as_f64(),
+                Some(e.kappa),
+                "{run} {q}"
+            );
+        }
+        let (mut values, mut noise, mut outside) = (0, 0, 0);
+        for r in rep["spps"]["point_receivers"].as_array().unwrap() {
+            let bands = r["bands"].as_array().unwrap();
+            assert_eq!(bands.len(), 2);
+            for b in bands {
+                assert_eq!(b["noise_model"]["method"], name, "{run}");
+                assert!(b["crossings_per_particle"].is_f64(), "{run}: {b}");
+            }
+            for b in bands.iter().chain([&r["aggregate"]]) {
+                for q in EIGHT {
+                    let p = &b["parameters"][q];
+                    let ok = p["value"].is_f64() || p["not_evaluable"]["code"].is_string();
+                    assert!(ok, "{run} {} {q}: {p}", r["label"]);
+                    values += usize::from(p["value"].is_f64());
+                    let why = &p["not_evaluable"]["error"]["why"];
+                    // No SPPS receiver is refused for having no series.
+                    assert_ne!(why["why"], "no_time_series");
+                    if why["why"] == "monte_carlo_noise"
+                        && why["sd"].as_f64() > why["limit"].as_f64()
+                    {
+                        noise += 1;
+                        // Every 1/sqrt(N) flag is on: every refusal for noise above its limit
+                        // names a count, from its standard deviation or its resamples (R4-3).
+                        let c = &why["particle_count"];
+                        assert!(
+                            c["count"] == "named" || c["count"] == "resampled",
+                            "{run} {q}: {why}"
+                        );
+                        assert!(c["particles"].as_u64().unwrap() > n, "{run} {q}: {why}");
+                    }
+                    if why["why"] == "noise_uncalibrated" {
+                        outside += 1;
+                        let least = why["particles_at_least"].as_u64();
+                        assert_eq!(least, why["min_particles"].as_u64(), "{run} {q}: {why}");
+                        assert!(least.unwrap() > n, "{run} {q}: {why}");
+                    }
+                }
+            }
+        }
+        println!(
+            "{run}: {values} values, {noise} refused for noise above the limit, {outside} \
+             outside the calibration"
+        );
+        if run == SEATS_SPPS {
+            assert_eq!(values, 0, "{run}");
+            assert!(outside > 20, "{run}: {outside}");
+        } else {
+            assert!(values > 0, "{run}: the SPPS run has values");
+        }
+    }
+}
+
+/// `Var L / (E L)²` of the particles' lifetimes from the share alive at the end of each step,
+/// written here (not `params::noise::lifetime_cv2`): `E L = ∫S`, `E L² = ∫2t·S`, by trapezoids
+/// from `(0, 1)`.
+fn own_lifetime_cv2(alive: &[f64], dt: f64) -> f64 {
+    let (mut t_prev, mut s_prev) = (0.0, 1.0);
+    let (mut m1, mut m2) = (0.0, 0.0);
+    for (k, &s) in alive.iter().enumerate() {
+        let t = dt * (k + 1) as f64;
+        m1 += 0.5 * dt * (s_prev + s);
+        m2 += 0.5 * dt * (2.0 * t_prev * s_prev + 2.0 * t * s);
+        (t_prev, s_prev) = (t, s);
+    }
+    (m2 / (m1 * m1) - 1.0).max(0.0)
+}
+
+/// Every band of an SPPS report whose noise inputs are not the run's own: its lifetime spread
+/// against the one read here from the report's room table over the sources' power, and its
+/// crossings per particle against its series' total over the least deposit and the particles,
+/// times that spread (the calibration's variable, `n1·cv2`, in both methods). With every band's
+/// lifetime spread.
+fn noise_input_mismatches(rep: &Value) -> (Vec<String>, Vec<f64>) {
+    let s = &rep["spps"];
+    let dt = s["time_step_s"].as_f64().unwrap();
+    let particles = s["particles_per_source"].as_f64().unwrap();
+    let floats = |v: &Value| -> Vec<f64> {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_f64().unwrap())
+            .collect()
+    };
+    let (mut out, mut spreads) = (Vec::new(), Vec::new());
+    for r in s["point_receivers"].as_array().unwrap() {
+        for (bi, b) in r["bands"].as_array().unwrap().iter().enumerate() {
+            let tag = format!("{} {} Hz", r["label"], b["freq_hz"]);
+            let run = &b["noise_model"]["run"];
+            let power = s["point_receivers"][0]["bands"][bi]["source_power_rho_c"]
+                .as_f64()
+                .unwrap();
+            let alive: Vec<f64> = floats(&s["total_energy"][bi]["energy"])
+                .iter()
+                .map(|e| e / power)
+                .collect();
+            let own = own_lifetime_cv2(&alive, dt);
+            spreads.push(own);
+            let cv2 = run["lifetime_cv2"].as_f64().unwrap();
+            if (cv2 - own).abs() > 1e-9 * own.max(1.0) {
+                out.push(format!("{tag}: lifetime_cv2 {cv2} against {own}"));
+            }
+            let least = run["least_deposit"].as_f64().unwrap();
+            let bands = run["bands"].as_f64().unwrap();
+            let n1 = floats(&b["energy_pa2"]).iter().sum::<f64>() / (least * particles * bands);
+            let n = b["crossings_per_particle"].as_f64().unwrap();
+            if (n - n1 * own).abs() > 1e-9 * (n1 * own).max(1e-9) {
+                out.push(format!(
+                    "{tag}: crossings_per_particle {n} against {}",
+                    n1 * own
+                ));
             }
         }
     }
-    assert!(values > 0, "the SPPS run has values");
+    (out, spreads)
+}
+
+#[test]
+fn the_noise_inputs_of_every_band_are_the_runs_own() {
+    // The review of 50695f6 (major): the lifetime spread and the crossings per particle choose
+    // the correction for repeated crossings and the domain's refusal, and nothing held the ones a
+    // report uses to the run. Every band of every committed SPPS run, each read here from the
+    // report's own room table and series; the spread of a box's decay is about 1, that of one
+    // exponential.
+    for name in [SEATS_SPPS, ENERGETIC_SPPS, SOURCES2_SPPS, OUTPUTS_SPPS] {
+        let rep = report_in_process(&fixture(name), None);
+        let (bad, spreads) = noise_input_mismatches(&rep);
+        assert_eq!(bad, Vec::<String>::new(), "{name}");
+        assert!(!spreads.is_empty(), "{name}");
+        for v in &spreads {
+            assert!((0.8..=1.6).contains(v), "{name}: lifetime spread {v}");
+        }
+    }
+    // Says no through the code: the room table read over half the sources' power (the review's
+    // mutation of `SppsResults::lifetime_cv2`) moves every band's spread and crossings.
+    let rep = report_in_process(
+        &fixture(ENERGETIC_SPPS),
+        Some(Fault::AliveShareScaled { by: 2.0 }),
+    );
+    let (bad, _) = noise_input_mismatches(&rep);
+    let bands = rep["spps"]["point_receivers"].as_array().unwrap().len() * 2;
+    assert_eq!(bad.len(), 2 * bands, "{bad:?}");
 }
 
 #[test]
@@ -566,20 +723,37 @@ fn a_failed_run_is_refused_with_exit_5_and_its_reasons() {
 fn a_cancelled_run_is_refused_with_exit_5() {
     solver_exe("spps.exe");
     let root = scratch("results-cancelled");
+    // The Seat box at 1,000,000 particles, cancelled at SPPS's first progress line at or above
+    // 1 %: the cancel is set off by the solver's own output, so it lands on a running solver with
+    // 99 % of its particles to go, whatever else loads the machine. A timer did not: at the
+    // fixture's 2,000 particles SPPS could finish before a 1 ms timer thread ran, with other SPPS
+    // runs of the same test binary alongside, and the run came back OK (exit 0; the pre-M8
+    // piece B verifier, round 1). A timer 150 ms in on 1,000,000 particles only made that
+    // unlikely. Measured by making the cancel late on purpose
+    // (`docs/investigations/2026-09-25-cancel-race/`): at 2,000 particles SPPS runs 0.2 s and a
+    // cancel 0.3 s late gives exit 0, the verifier's failure; here SPPS runs 6.0 s and is stopped
+    // 0.13 s in, so the cancel would have to be 5.9 s late to miss.
+    let mut p = schema::load(&fixture(SEATS)).unwrap();
+    p.solvers.spps.particles_per_source = 1_000_000;
+    let project = root.join("seats_long.simpa");
+    schema::save(&p, &project).unwrap();
     let o = simpa_run(&[
         "run".to_string(),
-        fixture(SEATS).display().to_string(),
+        project.display().to_string(),
         "--solver".into(),
         "spps".into(),
         "--runs".into(),
-        root.display().to_string(),
-        "--cancel-after-ms".into(),
+        root.join("runs").display().to_string(),
+        "--cancel-after-progress".into(),
         "1".into(),
         "--json".into(),
     ]);
     assert_eq!(o.code, 130, "{o:#?}");
     let m = json(&o);
     assert_eq!(m["verdict"]["status"], "CANCELLED");
+    // Cancelled while SPPS ran, not before it started.
+    assert_eq!(m["stage"], "solve", "{m:#}");
+    assert!(m["outcome"].is_object(), "{m:#}");
     let r = results(&run_dir(&m), true);
     assert_eq!(r.code, 5, "{r:#?}");
     assert_eq!(refused_code(&r), "results_run_cancelled");
@@ -691,6 +865,71 @@ fn results_that_do_not_verify_are_refused_with_exit_6() {
         assert_eq!(json(&o)["exit_code"], 6);
         println!("{label}: {}", o.stderr.trim());
     }
+}
+
+// --- the analytic reference (pre-M8) -------------------------------------------------------------
+
+/// Pre-M8 (Burhan, 2026-09-24 23:14; `docs/params.md`, "Kuttruff's reference"): an SPPS report
+/// carries the reference M8 and M12 need, labelled and not validated. Every number is checked
+/// against its formula from the report's own fields, and γ² against the box's exact value.
+#[test]
+fn an_spps_report_carries_its_rooms_reference_labelled_and_not_validated() {
+    let o = results(&fixture(SEATS_SPPS), true);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let rep = json(&o);
+    assert_eq!(rep["validated_by_bed"], false);
+    let r = &rep["spps"]["reference"];
+    assert_eq!(r["status"], "computed", "{r}");
+    let label = r["label"].as_str().unwrap();
+    assert!(
+        label.contains("not validated") && label.contains("kuttruff_s"),
+        "{label}"
+    );
+    let f = |v: &Value| v.as_f64().unwrap();
+    let (v, s, c, k) = (
+        f(&r["volume_m3"]),
+        f(&r["area_m2"]),
+        f(&r["speed_of_sound_m_s"]),
+        f(&r["constant_s_per_m"]),
+    );
+    assert!((v - 180.0).abs() < 1e-6 && (s - 216.0).abs() < 1e-6, "{r}");
+    // SPPS's own c, as SPPS stores it (f32), and K = 24·ln 10/c.
+    assert_eq!(c, f64::from(343.2f32));
+    assert!((k - 24.0 * std::f64::consts::LN_10 / c).abs() < 1e-15);
+    // The box's walls are specular in both bands: the transport's γ² describes neither, so it is
+    // not run (`free_paths` null) and Kuttruff's time is refused where it does not apply. Plain
+    // Eyring is given. (Kuttruff's time through the report: the Lambert room,
+    // `a_lambert_rooms_report_carries_kuttruffs_time`.)
+    assert!(r["free_paths"].is_null(), "{r}");
+    let bands = r["bands"].as_array().unwrap();
+    assert_eq!(bands.len(), 2);
+    for b in bands {
+        let abar = f(&b["mean_absorption"]);
+        let m = b["air_m_per_metre"].as_f64().unwrap_or(0.0);
+        let ln = (1.0 - abar).ln();
+        let eyring = k * v / (4.0 * m * v - s * ln);
+        assert!(
+            (f(&b["eyring_s"]["value"]) / eyring - 1.0).abs() < 1e-9,
+            "{b}"
+        );
+        assert!(b["eyring_s"]["mc_sd"].is_null());
+        assert_eq!(b["lambert_walls"], false, "{b}");
+        assert_eq!(
+            b["kuttruff_s"]["not_evaluable"]["code"], "params_reference_not_applicable",
+            "{b}"
+        );
+    }
+    // The text says what it is beside it.
+    let t = results(&fixture(SEATS_SPPS), false);
+    assert!(
+        t.stdout
+            .contains("reference, analytic, diffuse field, NOT VALIDATED"),
+        "{}",
+        t.stdout
+    );
+    // A TCR report has its own analytic block and no SPPS reference.
+    let tcr = json(&results(&fixture(SEATS_TCR), true));
+    assert!(tcr["spps"].is_null() && tcr["tcr"]["analytic"]["status"] == "computed");
 }
 
 // --- the schema ----------------------------------------------------------------------------------
@@ -870,6 +1109,152 @@ fn every_report_and_refusal_validates_against_the_committed_schema() {
     let mut bad = r6.clone();
     bad["exit_code"] = "6".into();
     assert!(!refusal.is_valid(&bad));
+}
+
+/// The Seat box with Lambert walls at α 0.4 in energetic mode, `trans_epsilon` 9, 150,000
+/// particles, 0.6 s in 1 ms steps, run with SPPS (about 6 s): its `results --json` report.
+fn lambert_box_report(label: &str) -> Value {
+    let root = scratch(label);
+    let text = std::fs::read_to_string(fixture(SEATS)).unwrap();
+    let mut v: Value = serde_json::from_str(&text).unwrap();
+    let spps = &mut v["solvers"]["spps"];
+    spps["particles_per_source"] = 150_000.into();
+    spps["duration_s"] = 0.6.into();
+    spps["time_step_s"] = 0.001.into();
+    spps["method"] = "energetic".into();
+    spps["extinction_exponent"] = 9.0.into();
+    spps["air_absorption"] = false.into();
+    spps["save_surface_intersections"] = false.into();
+    spps["save_receiver_intersections"] = false.into();
+    for m in v["materials"].as_array_mut().unwrap() {
+        m["absorption"] = serde_json::json!([0.4, 0.4]);
+        m["scattering"] = serde_json::json!([1.0, 1.0]);
+        m["reflection_law"] = "lambert".into();
+    }
+    v["surface_receivers"] = serde_json::json!([]);
+    let project = root.join("lambert_box.simpa");
+    std::fs::write(&project, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+    let run = run_ok(&project, "spps", &root.join("runs"), &[]);
+    let o = results(&run, true);
+    assert_eq!(o.code, 0, "{o:#?}");
+    json(&o)
+}
+
+/// Kuttruff's reference through the report, where it applies (pre-M8: it is computed only for
+/// bands whose walls are all Lambert with scattering 1). The Lambert box of
+/// [`lambert_box_report`]: `free_paths` gives `4V/S` and the box's exact `γ²`, 0.388874
+/// (`tests/params_lambert.rs`), each within 3 standard errors, and every band's `kuttruff_s` is
+/// Kuttruff's formula with that `γ²` and SPPS's `K` to 10⁻⁹, with a positive `mc_sd`, above plain
+/// Eyring's. Says no: the committed Seat run, with specular walls, refuses it
+/// (`an_spps_report_carries_its_rooms_reference_labelled_and_not_validated`).
+#[test]
+fn a_lambert_rooms_report_carries_kuttruffs_time() {
+    let rep = lambert_box_report("results-reference-lambert");
+    let r = &rep["spps"]["reference"];
+    assert_eq!(r["status"], "computed", "{r}");
+    let f = |v: &Value| v.as_f64().unwrap_or_else(|| panic!("{v}"));
+    let (v, s, k) = (
+        f(&r["volume_m3"]),
+        f(&r["area_m2"]),
+        f(&r["constant_s_per_m"]),
+    );
+    let fp = &r["free_paths"];
+    let (mfp, mfp_se, g, g_se) = (
+        f(&fp["mean_free_path_m"]),
+        f(&fp["mean_free_path_se_m"]),
+        f(&fp["gamma2"]),
+        f(&fp["gamma2_se"]),
+    );
+    assert!((f(&fp["four_v_over_s_m"]) - 4.0 * v / s).abs() < 1e-9);
+    assert!((mfp - 4.0 * v / s).abs() < 3.0 * mfp_se, "{fp}");
+    assert!((g - 0.388_874).abs() < 3.0 * g_se, "{fp}");
+    let bands = r["bands"].as_array().unwrap();
+    assert_eq!(bands.len(), 2);
+    for b in bands {
+        assert_eq!(b["lambert_walls"], true, "{b}");
+        let abar = f(&b["mean_absorption"]);
+        let m = b["air_m_per_metre"].as_f64().unwrap_or(0.0);
+        let ln = (1.0 - abar).ln();
+        let eyring = k * v / (4.0 * m * v - s * ln);
+        let kuttruff = k * v / (4.0 * m * v - s * ln * (1.0 + 0.5 * g * ln));
+        assert!(
+            (f(&b["kuttruff_s"]["value"]) / kuttruff - 1.0).abs() < 1e-9,
+            "{b}"
+        );
+        assert!(f(&b["kuttruff_s"]["mc_sd"]) > 0.0);
+        assert!(f(&b["kuttruff_s"]["value"]) > eyring, "{b}");
+    }
+}
+
+/// The committed runs refuse every T20, T30 and curvature, so the validator above never sees one
+/// as a value (the M7 follow-ups' critic). The Lambert box of [`lambert_box_report`] gives them (a
+/// uniform Lambert room, whose energetic decay times are calibrated,
+/// `docs/investigations/2026-09-25-noise-calibration/`). Its report must carry T20, T30 and
+/// `curvature.percent` as values and `curvature.curved` as a boolean, and validate against the
+/// committed schema. Says no: the same report with a T30 value a string, a curvature percent a
+/// string, or the `curved` flag a number, fails.
+#[test]
+fn decay_times_and_curvature_given_as_values_validate_against_the_schema() {
+    let rep = lambert_box_report("results-values");
+
+    // Where the values are: every receiver-band's T20 and T30 and its curvature percent, here.
+    let mut given = (0, 0, 0);
+    for r in rep["spps"]["point_receivers"].as_array().unwrap() {
+        for b in r["bands"].as_array().unwrap() {
+            let p = &b["parameters"];
+            given.0 += usize::from(p["t20_s"]["value"].is_f64());
+            given.1 += usize::from(p["t30_s"]["value"].is_f64());
+            if b["curvature"]["percent"]["value"].is_f64() {
+                given.2 += 1;
+                assert!(b["curvature"]["curved"].is_boolean(), "{}", b["curvature"]);
+            }
+        }
+    }
+    println!(
+        "of 4 receiver-bands: T20 given {}, T30 {}, curvature {}",
+        given.0, given.1, given.2
+    );
+    assert!(
+        given.0 > 0 && given.1 > 0 && given.2 > 0,
+        "{given:?}: {rep:#}"
+    );
+
+    let (report, _) = committed_validators();
+    let errors = schema_errors(&report, &rep);
+    assert!(errors.is_empty(), "{errors:#?}");
+    // Says no, at the values themselves.
+    let at = |rep: &Value| -> (usize, usize) {
+        let receivers = rep["spps"]["point_receivers"].as_array().unwrap();
+        for (i, r) in receivers.iter().enumerate() {
+            for (j, b) in r["bands"].as_array().unwrap().iter().enumerate() {
+                if b["parameters"]["t30_s"]["value"].is_f64()
+                    && b["curvature"]["percent"]["value"].is_f64()
+                {
+                    return (i, j);
+                }
+            }
+        }
+        panic!("no band with a T30 and a curvature value");
+    };
+    let (i, j) = at(&rep);
+    type Edit = fn(&mut Value);
+    let wrong: [(&str, Edit); 3] = [
+        ("a T30 value a string", |b| {
+            b["parameters"]["t30_s"]["value"] = "0.29".into()
+        }),
+        ("a curvature percent a string", |b| {
+            b["curvature"]["percent"]["value"] = "0.2".into()
+        }),
+        ("the curved flag a number", |b| {
+            b["curvature"]["curved"] = 0.into()
+        }),
+    ];
+    for (what, edit) in wrong {
+        let mut bad = rep.clone();
+        edit(&mut bad["spps"]["point_receivers"][i]["bands"][j]);
+        assert_ne!(bad, rep, "{what}: the edit changed nothing");
+        assert!(!schema_errors(&report, &bad).is_empty(), "{what}");
+    }
 }
 
 // --- gate (c): level calibration -----------------------------------------------------------------
@@ -1145,11 +1530,15 @@ fn gate_c_level_calibration_and_the_offsets_it_catches() {
         assert!((shift - moved).abs() < 1e-3, "{name}: {shift}");
         assert_eq!(caught, rows.len(), "{name}");
     }
-    // The exact free field through the same seam: p0² moved 0.1 dB either way, and the reference
+    // The exact free field through the same seam: p0² moved 0.15 dB either way, and the reference
     // as it would read with rho c = 400 instead of SPPS's (-0.141 dB), each miss it.
     for (name, pa2) in [
-        ("p0^2 0.1 dB low", P_REF_SQUARED / db(0.1)),
-        ("p0^2 0.1 dB high", P_REF_SQUARED * db(0.1)),
+        // 0.15 dB, not 0.1 (pre-M8 review): the check's window is set by the calibrated
+        // `mc_sd`, and seed 1 sits 0.028 dB high, so 0.1 dB high was caught by 0.0004 dB with
+        // round 2's SPL factor and by 0.006 dB with round 3's. The window itself is printed
+        // above ("catches an offset above ... or below ...") and asserted within 0.1 dB.
+        ("p0^2 0.15 dB low", P_REF_SQUARED / db(0.15)),
+        ("p0^2 0.15 dB high", P_REF_SQUARED * db(0.15)),
         ("rho c 400", P_REF_SQUARED * rho_c / 400.0),
     ] {
         let (m, _, ok) = exact_check(&at(pa2), radius, rho_c, 0.0);
@@ -1892,6 +2281,8 @@ fn tutorial1_parameters_beside_upstreams() {
         };
         let model = NoiseModel::crossings(
             f64::from(power_rho_c[i]) / (150_000.0 * std::f64::consts::PI * radius * radius),
+            simpa_core::params::noise::Method::Random,
+            Some(150_000),
         )
         .unwrap();
         let (p, _) = report::parameters(&s, arrival, &model);
@@ -2232,9 +2623,16 @@ fn seed_spread(particles: u32) {
             ratios[ratios.len() - 1]
         );
     }
+    // Since the pre-M8 calibration `mc_sd` never claims less noise than the seeds show: the
+    // pooled ratio is at most 1 within two of its standard errors, and not so far below it that
+    // the estimate means nothing.
     for (q, ratios, pooled, _) in &summary {
         if !ratios.is_empty() {
-            assert!((0.67..=1.5).contains(pooled), "{q}: pooled ratio {pooled}");
+            let se = pooled / (2.0 * ((n - 1) * ratios.len()) as f64).sqrt();
+            assert!(
+                pooled - 2.0 * se <= 1.0 && *pooled >= 0.4,
+                "{q}: pooled ratio {pooled} ± {se}"
+            );
         }
     }
 }

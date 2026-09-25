@@ -1,0 +1,16 @@
+﻿    Finished `release` profile [optimized] target(s) in 0.14s
+     Running tests\m8_evidence.rs (target\release\deps\m8_evidence-324cfbca8b75df81.exe)
+
+running 1 test
+[    14 s] energetic 150000 saved, seed 2: 12.9 s
+[    14 s] energetic 150000 saved, seed 3: 12.9 s
+[    14 s] energetic 150000 saved, seed 1: 12.9 s
+3 runs x 6 bands: lost particles found in the trajectories 357888, counted by SPPS 24
+a lost particle's energy over the mean energy of the particles when it was lost: min 0.010, median 0.039, 90 % 0.518, max 5189.294
+when lost, s: min 0.040, median 0.430, max 1.410
+what they would have brought from the arrival on, over the bound's: median 2.23e-5, max 4.25e-5
+T30 moved, worst receiver-band: by the measured missing energy 1.72e-3, by the bound inf (limit 5e-3)
+test energetic_lost_particles_from_saved_trajectories ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 16.12s
+

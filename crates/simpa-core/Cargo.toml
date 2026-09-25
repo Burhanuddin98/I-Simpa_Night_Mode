@@ -30,8 +30,12 @@ windows-sys = { version = "0.61.2", features = [
 # Test builds only: lets a test put a fault into the code paths the M7 gates hold
 # (src/faults.rs), so each gate's say-NO runs the fault through the code. No normal build has it.
 fault-injection = []
+# Test builds only: studies of params::lambert's transport at settings and starting points of
+# the test's choosing (free_path_study), whose results no function of params::room takes. Normal
+# builds reach the transport's free paths only through free_paths, which takes the room alone.
+transport-study = []
 
 [dev-dependencies]
 proptest = "1"
-# This crate's own tests build it with the fault seams (src/faults.rs).
-simpa-core = { path = ".", features = ["fault-injection"] }
+# This crate's own tests build it with the fault seams (src/faults.rs) and the transport studies.
+simpa-core = { path = ".", features = ["fault-injection", "transport-study"] }

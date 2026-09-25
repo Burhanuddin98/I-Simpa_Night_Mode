@@ -31,10 +31,11 @@ use roxmltree::Document;
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use super::reference::{Reference, reference};
 use super::{Refusal, SurfaceFile, band_of, file_invalid, key, read_surfaces, value_invalid};
 use crate::formats::gabe::{self, Gabe};
 use crate::formats::pbin;
-use crate::params::noise::NoiseModel;
+use crate::params::noise::{Method, NoiseModel, RunNoise};
 use crate::run::expect::{self, Expectation, fixed};
 use crate::run::locate;
 use crate::run::stats::ParticleStats;
@@ -275,6 +276,10 @@ pub struct SppsResults {
     pub particles: ParticleStats,
     pub surfaces: Vec<SurfaceFile>,
     pub particle_files: Vec<ParticleFileSummary>,
+    /// The analytic reference on the run's inputs ([`super::reference`]): Kuttruff's corrected
+    /// Eyring with `γ²` from the room's geometry, and plain Eyring. Not validated. Boxed: it is
+    /// the largest field, and `SolverResults` holds this or a TCR run's.
+    pub reference: Box<Reference>,
 }
 
 impl SppsResults {
@@ -341,10 +346,16 @@ impl SppsResults {
     }
 
     /// The noise model of a series of band `index` made by the sources named `names`: crossings
-    /// of the largest of their mean deposits; or [`NoiseModel::Unknown`] when one of them is a
-    /// directivity balloon, whose particles carry unequal energies, or a deposit is not known.
+    /// of the largest of their mean deposits, under the run's computation method (which picks the
+    /// calibration) and particle count (from which a refusal names the count it needs), with what
+    /// the calibration's correction and domain need ([`RunNoise`]: the least of the deposits, the
+    /// spread of the particles' lifetimes from the band's room table, whether every face is
+    /// Lambert with scattering 1 in the band); or [`NoiseModel::Unknown`] when one of the sources
+    /// is a directivity balloon, whose particles carry unequal energies, a deposit is not known,
+    /// or the room table gives no lifetime.
     pub fn noise_model(&self, index: usize, names: &[&str]) -> NoiseModel {
         let mut largest: Option<f64> = None;
+        let mut least: Option<f64> = None;
         for (i, s) in self.sources.iter().enumerate() {
             if !names.contains(&s.name.as_str()) {
                 continue;
@@ -360,7 +371,10 @@ impl SppsResults {
                 };
             }
             match self.mean_deposit(i, index) {
-                Some(d) => largest = Some(largest.map_or(d, |l: f64| l.max(d))),
+                Some(d) => {
+                    largest = Some(largest.map_or(d, |l: f64| l.max(d)));
+                    least = Some(least.map_or(d, |l: f64| l.min(d)));
+                }
                 None => {
                     return NoiseModel::Unknown {
                         detail: format!("source {:?}'s mean deposit is not known", s.name),
@@ -368,14 +382,91 @@ impl SppsResults {
                 }
             }
         }
-        match largest.map(NoiseModel::crossings) {
-            Some(Ok(m)) => m,
-            Some(Err(e)) => NoiseModel::Unknown {
-                detail: e.to_string(),
-            },
-            None => NoiseModel::Unknown {
+        let (Some(largest), Some(least)) = (largest, least) else {
+            return NoiseModel::Unknown {
                 detail: "no source emits in the band".into(),
-            },
+            };
+        };
+        let Some(lifetime_cv2) = self.lifetime_cv2(index) else {
+            return NoiseModel::Unknown {
+                detail: "the room table does not give the particles' lifetimes in the band, which \
+                         the calibration's correction for repeated crossings needs"
+                    .into(),
+            };
+        };
+        let (lambert_walls, uniform_absorption, mean_absorption) = self.walls(index);
+        let run = RunNoise {
+            particles: self.particles_per_source,
+            least_deposit: least,
+            lifetime_cv2,
+            lambert_walls,
+            uniform_absorption,
+            mean_absorption,
+            bands: 1,
+            receiver_crossing_s: self.receiver_crossing_s(),
+        };
+        NoiseModel::of_run(largest, self.noise_method(), run).unwrap_or_else(|e| {
+            NoiseModel::Unknown {
+                detail: e.to_string(),
+            }
+        })
+    }
+
+    /// The spread of the particles' lifetimes in band `index`, `Var L/(E L)²`
+    /// (`params::noise::lifetime_cv2`), from the room table over the sources' power (both times
+    /// `ρc`, the `.gap`'s column 2 of the first receiver). `None` without a receiver, a room table
+    /// for the band, or a positive power.
+    pub fn lifetime_cv2(&self, index: usize) -> Option<f64> {
+        let power = self
+            .point_receivers
+            .first()?
+            .bands
+            .get(index)?
+            .source_power_rho_c;
+        if !(power.is_finite() && power > 0.0) {
+            return None;
+        }
+        let scale = match crate::faults::active() {
+            Some(crate::faults::Fault::AliveShareScaled { by }) => by,
+            _ => 1.0,
+        };
+        let alive: Vec<f64> = self
+            .total_energy
+            .get(index)?
+            .energy
+            .iter()
+            .map(|e| e / power * scale)
+            .collect();
+        crate::params::noise::lifetime_cv2(&alive, self.time_step_s)
+    }
+
+    /// Band `index`'s faces as the run's reference read them (the band of the same frequency):
+    /// whether every one reflects by Lambert's law with scattering 1, whether every one has the
+    /// same absorption, and their mean absorption. `(false, false, 1.0)` when the reference was
+    /// not computed or has no such band: nothing is known of the faces.
+    pub fn walls(&self, index: usize) -> (bool, bool, f64) {
+        let unknown = (false, false, 1.0);
+        let Some(freq) = self.total_energy.get(index).map(|b| b.freq_hz) else {
+            return unknown;
+        };
+        match self.reference.as_ref() {
+            Reference::Computed { bands, .. } => bands
+                .iter()
+                .find(|b| b.freq_hz == freq)
+                .map_or(unknown, |b| {
+                    (b.lambert_walls, b.uniform_absorption, b.mean_absorption)
+                }),
+            Reference::NotComputed { .. } => unknown,
+        }
+    }
+
+    /// The computation method as the noise model knows it (`computation_method` 0 random, any
+    /// other energetic, as SPPS reads it), which picks its calibration.
+    pub fn noise_method(&self) -> Method {
+        if self.computation_method == 0 {
+            Method::Random
+        } else {
+            Method::Energetic
         }
     }
 
@@ -508,7 +599,11 @@ pub const REMAINING_UNFINISHED_SHARE: f64 = 1e-6;
 /// 24 particles SPPS counted as lost, the 17 found in the trajectories carried 0.16 to 2.02 times
 /// the mean (`crates/simpa/tests/m8_evidence.rs`, `energetic_lost_particles_from_saved_
 /// trajectories`); the other 7 ended with less than 10⁻⁴ of their start energy, so their ratio is
-/// not known. Five times the largest measured. A late loss in a uniform, strongly absorbing room
+/// not known: 10 is five times the largest measured there. In an M8 cell (5×4×3 m, α 0.4,
+/// energetic, `trans_epsilon` 9, 300,000 particles, 3 seeds) the 44 of 76 lost that ended well
+/// above the floor carried 0.04 to 4.4 times the mean, so 10 is about 2.3 times the largest
+/// measured there, and for the other 32 the ratio is not known (`docs/results.md`, "Lost particles
+/// in an M8 cell"). No check can say no to it: a late loss in a uniform, strongly absorbing room
 /// can exceed it (`docs/results.md`, "Lost particles", for what that can move).
 pub const ENERGETIC_LOST_ENERGY_RATIO: f64 = 10.0;
 
@@ -1151,6 +1246,7 @@ pub(crate) fn read(
         particles,
         surfaces,
         particle_files,
+        reference: Box::new(reference(solve, exp, f64::from(c), gradient)),
     })
 }
 
@@ -1200,6 +1296,9 @@ mod tests {
             },
             surfaces: Vec::new(),
             particle_files: Vec::new(),
+            reference: Box::new(Reference::NotComputed {
+                why: "a unit test's run".into(),
+            }),
         }
     }
 

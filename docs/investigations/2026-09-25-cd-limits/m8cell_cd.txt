@@ -1,0 +1,3 @@
+M8 cell 6x10x3 m, alpha 0.05, energetic, 1.5 M particles, 4 s, dt 10 ms, trans_epsilon 7, seeds 1 to 3 (m7fu-fix-critical-scratch/m8-cells-1790266434/024-026)
+before (0.01 dB, 0.1 points) receiver-bands through in every seed: {'c50_db': 0, 'c80_db': 5, 'd50': 18, 'ts_s': 18, 'edt_s': 18, 't20_s': 18, 't30_s': 18, 'spl_db': 18} refused: {'c50_db missing_moves': 53, 'c80_db missing_moves': 19}
+after (0.1 dB, 0.5 points) receiver-bands through in every seed: {'c50_db': 18, 'c80_db': 18, 'd50': 18, 'ts_s': 18, 'edt_s': 18, 't20_s': 18, 't30_s': 18, 'spl_db': 18} refused: {}

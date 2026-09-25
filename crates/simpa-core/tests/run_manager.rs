@@ -422,6 +422,29 @@ fn a_mesh_folder_is_checked_against_the_project_and_its_mbin() {
     assert!(m.is_ok(), "{m:#?}");
     let ok = check_mesh_dir(&dir, &hash).unwrap();
     assert_eq!(Some(ok.mbin_sha256.clone()), m.files.mbin);
+    // A manifest that records parity mode is refused whatever its status (Burhan's decision 2 of
+    // 2026-09-24), after mesh_missing when it is not OK either. The manifest is edited by hand,
+    // as nothing stops a user from doing.
+    let json_path = dir.join("mesh.json");
+    let original = std::fs::read_to_string(&json_path).unwrap();
+    let edited = |parity: bool, status: &str| {
+        let mut v: serde_json::Value = serde_json::from_str(&original).unwrap();
+        v["parity"] = parity.into();
+        v["status"] = status.into();
+        std::fs::write(&json_path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+        let got = check_mesh_dir(&dir, &hash)
+            .map(|_| Vec::new())
+            .unwrap_or_else(|r| r.into_iter().map(|r| r.code).collect::<Vec<_>>());
+        std::fs::write(&json_path, &original).unwrap();
+        got
+    };
+    assert_eq!(edited(true, "OK"), [codes::MESH_PARITY]);
+    assert_eq!(
+        edited(true, "FAIL"),
+        [codes::MESH_MISSING, codes::MESH_PARITY]
+    );
+    assert_eq!(edited(false, "FAIL"), [codes::MESH_MISSING]);
+    assert_eq!(edited(false, "OK"), Vec::<String>::new());
     // Another project stamp: out of date.
     let other = "0".repeat(32);
     let r = check_mesh_dir(&dir, &other).unwrap_err();

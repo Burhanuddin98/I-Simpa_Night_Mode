@@ -9,17 +9,18 @@
 #[allow(dead_code)]
 #[path = "common/paths.rs"]
 mod paths;
+#[allow(dead_code)]
+#[path = "common/scratch.rs"]
+mod scratch;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// A copy of `from` made by a `solvers/pe-fingerprint.ps1` function (`Copy-PeRestamped`,
-/// `Copy-PeFlippedText`), at `<tmp>/solver_fingerprint/<label>/<file name>`.
+/// `Copy-PeFlippedText`), at `<tmp>/solver_fingerprint/<label>-<unique>/<file name>`: removed
+/// when the test passes, kept when it fails (`common/scratch.rs`).
 fn ps_copy(from: &Path, label: &str, function: &str, extra: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("solver_fingerprint")
-        .join(label);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch::fresh("solver_fingerprint", label);
     let to = dir.join(from.file_name().unwrap());
     let quote = |p: &Path| format!("'{}'", p.display().to_string().replace('\'', "''"));
     let out = Command::new("powershell")
