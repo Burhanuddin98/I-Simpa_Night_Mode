@@ -1,0 +1,10 @@
+ship    : EDT false 5245 / accepted 38359 / N 66468, worst 11587.79x L | TS false 4345 / accepted 42501 / N 67919, worst 20.91x L
+w1d     : EDT false 18 / accepted 12639 / N 66468, worst 6.18x L | TS false 10 / accepted 16654 / N 67919, worst 3.10x L
+W1G     : EDT false 0 / accepted 9487 / N 66468, worst 0.87x L | TS false 0 / accepted 12002 / N 67919, worst 0.84x L
+W2G     : EDT false 0 / accepted 7920 / N 66468, worst 0.87x L | TS false 0 / accepted 10396 / N 67919, worst 0.84x L
+W1G-G3  : EDT false 4 / accepted 9803 / N 66468, worst 3.64x L | TS false 0 / accepted 12002 / N 67919, worst 0.84x L
+W1G-G3b : EDT false 0 / accepted 9487 / N 66468, worst 0.87x L | TS false 0 / accepted 12002 / N 67919, worst 0.84x L
+W1G-G12 : EDT false 2 / accepted 12282 / N 66468, worst 1.30x L | TS false 10 / accepted 16657 / N 67919, worst 3.10x L
+series-steps: real 26664, synthetic 16480, pos200 noise-free 7000, image source 19260, total 69404
+W1G EDT accepted 9487: above 0.5x L 87, above 0.75x L 6, median 0.051x L
+W1G TS accepted 12002: above 0.5x L 103, above 0.75x L 4, median 0.044x L

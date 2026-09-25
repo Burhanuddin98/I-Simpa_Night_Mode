@@ -1,0 +1,49 @@
+hall8x12x4 a0.1 EDT 16000 Hz 2.0 ms Rb 0.1: ideal truth 0.325764
+   ship     ACCEPTS 0.3240744  err 1.04x L     <== FALSE ACCEPT
+   w1d      ACCEPTS 0.3243469  err 0.87x L  
+   W1G      refuses 0.3243469  err 0.87x L  receiver_too_small
+   W2G      refuses 0.3243551  err 0.86x L  receiver_too_small
+   W1G-G12  ACCEPTS 0.3243469  err 0.87x L  
+   features {'lvl_direct': -0.18130017723045017, 'lvl_wend': -0.5900756276384329, 'xmax': 0.0, 'u1': 0.00033005563449595154, 'ur': 0.0005274066226777022, 'w_last': 15, 'first': 14}
+hall8x12x4 a0.1 TS 16000 Hz 2.0 ms Rb 0.1: ideal truth 0.025546
+   ship     ACCEPTS 0.0257072  err 1.26x L     <== FALSE ACCEPT
+   w1d      ACCEPTS 0.0256891  err 1.12x L     <== FALSE ACCEPT
+   W1G      refuses None  err -  receiver_too_small
+   W2G      refuses None  err -  receiver_too_small
+   W1G-G12  ACCEPTS 0.0256891  err 1.12x L     <== FALSE ACCEPT
+   features {'lvl_direct': -0.18153085427890944, 'lvl_wend': -0.5860489854952772, 'xmax': 0.0, 'u1': 0.00030487102816046524, 'ur': 0.00031400197883669004, 'w_last': 15, 'first': 14}
+hall15x20x6 a0.15 EDT 16000 Hz 1.0 ms Rb 0.1: ideal truth 0.312403
+   ship     ACCEPTS 0.3138606  err 0.93x L  
+   w1d      ACCEPTS 0.3136349  err 0.79x L  
+   W1G      refuses 0.3136349  err 0.79x L  receiver_too_small
+   W2G      refuses 0.3136399  err 0.79x L  receiver_too_small
+   W1G-G12  ACCEPTS 0.3136349  err 0.79x L  
+   features {'lvl_direct': -0.21624023167443368, 'lvl_wend': -0.8526262864982214, 'xmax': 0.0, 'u1': 0.0010606021448942987, 'ur': 0.002495850151149663, 'w_last': 54, 'first': 52}
+T1 room EDT 16000 Hz 1.0 ms Rb 0.05: ideal truth 0.208698
+   ship     ACCEPTS 0.2095429  err 0.81x L  
+   w1d      ACCEPTS 0.2095928  err 0.86x L  
+   W1G      refuses 0.2095928  err 0.86x L  receiver_too_small
+   W2G      refuses 0.2095976  err 0.86x L  receiver_too_small
+   W1G-G12  ACCEPTS 0.2095928  err 0.86x L  
+   features {'lvl_direct': -0.16287395788975448, 'lvl_wend': -0.61567206425498, 'xmax': 0.0, 'u1': 0.00020358594419583528, 'ur': 0.000588730913221959, 'w_last': 27, 'first': 26}
+hall15x20x6 a0.15 EDT 16000 Hz 1.0 ms Rb 0.05: ideal truth 0.223507
+   ship     ACCEPTS 0.2245718  err 0.95x L  
+   w1d      ACCEPTS 0.2246276  err 1.00x L     <== FALSE ACCEPT
+   W1G      refuses 0.2246276  err 1.00x L  receiver_too_small
+   W2G      refuses 0.2246314  err 1.01x L  receiver_too_small
+   W1G-G12  ACCEPTS 0.2246276  err 1.00x L     <== FALSE ACCEPT
+   features {'lvl_direct': -0.15358248331406676, 'lvl_wend': -0.40282878077060147, 'xmax': 0.0, 'u1': 0.0005467023076833194, 'ur': 0.0007454326204745371, 'w_last': 62, 'first': 61}
+hall15x20x6 a0.15 EDT 16000 Hz 1.0 ms Rb 0.05: ideal truth 0.386179
+   ship     ACCEPTS 0.3844926  err 0.87x L  
+   w1d      ACCEPTS 0.3843722  err 0.94x L  
+   W1G      refuses 0.3843722  err 0.94x L  receiver_too_small
+   W2G      refuses 0.3843788  err 0.93x L  receiver_too_small
+   W1G-G12  ACCEPTS 0.3843722  err 0.94x L  
+   features {'lvl_direct': -0.37316159783860436, 'lvl_wend': -0.7036230851031332, 'xmax': 0.0, 'u1': 0.0001867022659872014, 'ur': 0.0008594520699983996, 'w_last': 42, 'first': 41}
+hall15x20x6 a0.15 TS 4000 Hz 5.0 ms Rb 0.31: ideal truth 0.0840245
+   ship     ACCEPTS 0.0844886  err 1.10x L     <== FALSE ACCEPT
+   w1d      ACCEPTS 0.0843712  err 0.83x L  
+   W1G      refuses None  err -  step_too_coarse
+   W2G      refuses None  err -  step_too_coarse
+   W1G-G12  ACCEPTS 0.0843712  err 0.83x L  
+   features {'lvl_direct': -0.8848868833996938, 'lvl_wend': -1.4528111448114758, 'xmax': 0.0, 'u1': 0.0021420265398646617, 'ur': 0.002238009979196204, 'w_last': 4, 'first': 3}

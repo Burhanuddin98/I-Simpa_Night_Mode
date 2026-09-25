@@ -1,0 +1,13 @@
+W1G at the 1 ms step, twelve real 1 ms datasets: edt accepted 5154, edt direct_dominates 6, ts accepted 5160
+  POS200: edt accepted 1194, edt direct_dominates 6, ts accepted 1200
+  C-R3: edt accepted 360, ts accepted 360
+  C-R4: edt accepted 360, ts accepted 360
+  C-R6: edt accepted 360, ts accepted 360
+  V-R2: edt accepted 360, ts accepted 360
+  V-R6: edt accepted 360, ts accepted 360
+  C-E3: edt accepted 360, ts accepted 360
+  C-E4: edt accepted 360, ts accepted 360
+  C-E6: edt accepted 360, ts accepted 360
+  V-E2: edt accepted 360, ts accepted 360
+  V-E5: edt accepted 360, ts accepted 360
+  W-E6: edt accepted 360, ts accepted 360

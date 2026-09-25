@@ -1,0 +1,24 @@
+Composite early check, written 2026-09-25 18:58 BEFORE it was run on any data.
+The guards were chosen from the three skeptics' findings, so the skeptics' attack sets are
+in-sample for the guards. Out-of-sample evidence must come from new data (R2, R5, a fresh skeptic).
+
+W1G (candidate of record):
+  Readings (EDT, Ts): the w1d bracket (bracket/rule.py: lump bounded by first-reflection geometry,
+  window = first-reflection bin + 1 extra bin, exact in-bin staircases, log-linear after), with
+   - dsym air factor exp(-m (2R + c dt)) (m: the band's ISO 9613-1 energy attenuation, Np/m)
+     instead of the fixed 0.95;
+   - EDT split readings exact at u_bar: the bin holding u_bar drops at u_bar in the reading that
+     minimises the slope functional, and at the end chosen by the midpoint rule in the other.
+  Guards (refuse unless all hold):
+   G1 f32(dt) <= f32(0.002)                          step_too_coarse      EDT, Ts
+   G2 f32(R)  >= f32(0.31)                           receiver_too_small   EDT, Ts
+   G3 10 lg(S_first / S_top) >= -3 dB                direct_dominates     EDT only
+   G3b 10 lg(S_{w_last+1} / S_top) > -10 dB          window_past_range    EDT only
+   G4 decay start falls back to Detected             arrival_misfit       EDT, Ts
+   G6 any reading non-finite, a fit of flat pieces only, or no energy after the direct sound
+                                                     early_unresolved     EDT, Ts
+  Value: midpoint of the lowest and highest reading; refused when the half-spread exceeds the
+  limit (EDT 0.5 %, Ts min(1 ms, 0.5 % Ts)).
+Variants reported beside it, not chosen after the fact without saying so:
+  W2G   the same with 2 extra window bins.
+  W1G-noG3, W1G-noG3b, W1G-noG1G2: one guard removed at a time, to show what each buys.
