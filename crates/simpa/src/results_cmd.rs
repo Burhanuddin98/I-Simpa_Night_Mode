@@ -81,17 +81,50 @@ pub fn results_cmd(args: &[&str]) -> ExitCode {
     }
 }
 
-/// A value to its precision, or `NE(<why>)` for a refusal.
+/// A value to its precision, or `NE(<why>)` for a refusal; for a refusal for its Monte-Carlo
+/// noise, `NE(noise:<count>)` with the particles per source that would bring it within its limit
+/// ([`particles`]), or `NE(noise)` when none can be named.
 fn cell(e: &Evaluated, digits: usize, scale: f64) -> String {
     match e {
         Evaluated::Value { value, .. } => format!("{:.*}", digits, value * scale),
         Evaluated::NotEvaluable { not_evaluable: r } => {
-            let why = serde_json::to_value(&r.error)
-                .ok()
-                .and_then(|v| v["why"]["why"].as_str().map(str::to_string))
+            let error = serde_json::to_value(&r.error).unwrap_or_default();
+            let why = error["why"]["why"]
+                .as_str()
+                .map(str::to_string)
                 .unwrap_or_else(|| r.code.trim_start_matches("params_").to_string());
+            if why == "monte_carlo_noise" {
+                return match error["why"]["particle_count"]["particles"].as_u64() {
+                    Some(n) => format!("NE(noise:{})", particles(n)),
+                    None => "NE(noise)".into(),
+                };
+            }
             format!("NE({why})")
         }
+    }
+}
+
+/// A particle count in few characters: `150k`, `2.4M`, `1.3G`.
+fn particles(n: u64) -> String {
+    let n = n as f64;
+    let (v, unit) = if n >= 1e9 {
+        (n / 1e9, "G")
+    } else if n >= 1e6 {
+        (n / 1e6, "M")
+    } else if n >= 1e3 {
+        (n / 1e3, "k")
+    } else {
+        (n, "")
+    };
+    // Two significant digits, as the count is rounded; never shown smaller than it is.
+    let digits = if v >= 10.0 { 0 } else { 1 };
+    let shown = format!("{v:.digits$}");
+    let back: f64 = shown.parse().unwrap_or(v);
+    if back + 1e-9 < v {
+        let step = if digits == 0 { 1.0 } else { 0.1 };
+        format!("{:.digits$}{unit}", back + step)
+    } else {
+        format!("{shown}{unit}")
     }
 }
 
@@ -114,6 +147,12 @@ fn text(rep: &Report) -> String {
         rep.bands_hz
     );
     if let Some(sp) = &rep.spps {
+        let _ = writeln!(
+            s,
+            "NE(<why>): not evaluable, and why. NE(noise:<count>): refused for its Monte-Carlo \
+             noise; <count> particles per source would bring it within its limit (NE(noise): \
+             no count is named, the JSON says why)."
+        );
         for r in &sp.point_receivers {
             let arrival = r
                 .arrival_s

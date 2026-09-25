@@ -35,7 +35,7 @@ use super::reference::{Reference, reference};
 use super::{Refusal, SurfaceFile, band_of, file_invalid, key, read_surfaces, value_invalid};
 use crate::formats::gabe::{self, Gabe};
 use crate::formats::pbin;
-use crate::params::noise::NoiseModel;
+use crate::params::noise::{Method, NoiseModel};
 use crate::run::expect::{self, Expectation, fixed};
 use crate::run::locate;
 use crate::run::stats::ParticleStats;
@@ -346,8 +346,10 @@ impl SppsResults {
     }
 
     /// The noise model of a series of band `index` made by the sources named `names`: crossings
-    /// of the largest of their mean deposits; or [`NoiseModel::Unknown`] when one of them is a
-    /// directivity balloon, whose particles carry unequal energies, or a deposit is not known.
+    /// of the largest of their mean deposits, under the run's computation method (which picks the
+    /// calibration) and particle count (from which a refusal names the count it needs); or
+    /// [`NoiseModel::Unknown`] when one of the sources is a directivity balloon, whose particles
+    /// carry unequal energies, or a deposit is not known.
     pub fn noise_model(&self, index: usize, names: &[&str]) -> NoiseModel {
         let mut largest: Option<f64> = None;
         for (i, s) in self.sources.iter().enumerate() {
@@ -373,7 +375,12 @@ impl SppsResults {
                 }
             }
         }
-        match largest.map(NoiseModel::crossings) {
+        let method = if self.computation_method == 0 {
+            Method::Random
+        } else {
+            Method::Energetic
+        };
+        match largest.map(|d| NoiseModel::crossings(d, method, Some(self.particles_per_source))) {
             Some(Ok(m)) => m,
             Some(Err(e)) => NoiseModel::Unknown {
                 detail: e.to_string(),

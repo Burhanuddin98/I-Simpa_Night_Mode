@@ -124,6 +124,29 @@ fn ms(s: f64) -> String {
     }
 }
 
+/// The particle count a refusal for Monte-Carlo noise names, or why it names none.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case", tag = "count")]
+pub enum ParticleCount {
+    /// `factor` times the run's particles would bring the calibrated standard deviation to the
+    /// limit over `margin`, from its fall as `1/√N`: `(margin·sd/limit)²`
+    /// ([`noise::calibration::margin`]). `particles` is that many per source, rounded up to two
+    /// significant digits, when the run's count is known.
+    Named {
+        factor: f64,
+        margin: f64,
+        particles: Option<u64>,
+    },
+    /// The standard deviation is within the limit: the value is refused because too many of its
+    /// resamples refuse it themselves, which more particles need not cure.
+    WithinLimit,
+    /// The fall of the seeds' spread as `1/√N` was not confirmed for this quantity in the run's
+    /// computation method ([`noise::calibration::root_n_confirmed`]), so no count is named.
+    ScalingNotConfirmed,
+    /// Fewer than two resamples give a value: there is no standard deviation to scale.
+    NoStandardDeviation,
+}
+
 /// Why a quantity cannot be read from a valid series.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case", tag = "why")]
@@ -205,17 +228,21 @@ pub enum NotEvaluable {
         limit: f64,
     },
     /// The value's Monte-Carlo standard deviation, estimated from the receiver crossings behind
-    /// each bin ([`noise`]), is above `limit`; or more than [`noise::REFUSED_RESAMPLES_ALLOWED`]
-    /// of the resampled series refuse the quantity themselves.
+    /// each bin and calibrated against SPPS's own seed-to-seed spread ([`noise`]), is above
+    /// `limit`; or more than [`noise::REFUSED_RESAMPLES_ALLOWED`] of the resampled series refuse
+    /// the quantity themselves.
     MonteCarloNoise {
         /// The value from the series. Not reported as the quantity.
         value: f64,
-        /// `None` when fewer than two resampled series give a value.
+        /// Calibrated, in the quantity's unit. `None` when fewer than two resampled series give
+        /// a value.
         sd: Option<f64>,
         /// In the quantity's unit (relative for decay times).
         limit: f64,
         resamples: usize,
         refused_resamples: usize,
+        /// The particle count that would bring the value within its limit, or why none is named.
+        particle_count: ParticleCount,
     },
     /// The series' Monte-Carlo noise cannot be estimated, so nothing bounds it.
     NoiseUnknown {
@@ -351,17 +378,46 @@ impl fmt::Display for NotEvaluable {
                 limit,
                 resamples,
                 refused_resamples,
+                particle_count,
             } => {
                 write!(f, "monte_carlo_noise: {value} from the series, ")?;
                 match sd {
-                    Some(sd) => write!(f, "standard deviation {sd} over {resamples} resamples")?,
+                    Some(sd) => write!(
+                        f,
+                        "standard deviation {sd} (calibrated) over {resamples} resamples"
+                    )?,
                     None => write!(f, "no standard deviation from {resamples} resamples")?,
                 }
                 write!(
                     f,
-                    ", {refused_resamples} of which refuse it; the limit is {limit}. Run more \
-                     particles"
-                )
+                    ", {refused_resamples} of which refuse it; the limit is {limit}."
+                )?;
+                match particle_count {
+                    ParticleCount::Named {
+                        particles: Some(n), ..
+                    } => write!(
+                        f,
+                        " Run at least {n} particles per source to bring it within its limit"
+                    ),
+                    ParticleCount::Named { factor, .. } => write!(
+                        f,
+                        " Run at least {factor:.3} times the particles to bring it within its limit"
+                    ),
+                    ParticleCount::WithinLimit => write!(
+                        f,
+                        " Its standard deviation is within the limit, so no particle count is \
+                         named: more particles need not help"
+                    ),
+                    ParticleCount::ScalingNotConfirmed => write!(
+                        f,
+                        " No particle count is named: the calibration did not confirm that this \
+                         quantity's spread falls as 1/√N in this computation method"
+                    ),
+                    ParticleCount::NoStandardDeviation => write!(
+                        f,
+                        " With no standard deviation, no particle count can be named"
+                    ),
+                }
             }
             NotEvaluable::NoiseUnknown { value, detail } => write!(
                 f,

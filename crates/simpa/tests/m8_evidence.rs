@@ -392,7 +392,7 @@ fn plain_estimates(band: &Value, arrival: Arrival) -> Eight {
     let p = noise::evaluate(
         &EnergySeries::complete(dt, e),
         arrival,
-        &NoiseModel::crossings(d).unwrap(),
+        &NoiseModel::crossings(d, noise::Method::Random, None).unwrap(),
     );
     let one = |r: &Result<noise::Estimate, simpa_core::params::ParamError>| match r {
         Ok(x) => Some((x.value, x.sd)),

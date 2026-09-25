@@ -1,6 +1,7 @@
 //! Monte-Carlo noise: how far each value of [`decay`] would move between two runs that differ only
-//! in their random numbers, estimated from the receiver crossings behind every bin; and the
-//! refusal of a value whose noise is too large (`docs/params.md`, "Monte-Carlo noise").
+//! in their random numbers, estimated from the receiver crossings behind every bin and calibrated
+//! against SPPS's own seed-to-seed spread; and the refusal of a value whose noise is too large
+//! (`docs/params.md`, "Monte-Carlo noise").
 //!
 //! **The model.** SPPS adds, for every particle that crosses a receiver sphere of radius `R`, the
 //! particle's energy times its chord through the sphere (`spps/input_output/reportmanager.cpp:
@@ -11,26 +12,41 @@
 //! `E[ℓ²]/E[ℓ]² = 9/8` ([`CHORD_FACTOR`]). So the mean deposit of one crossing is
 //! `d̄ = W·ρc/(N·πR²)`, a bin holding `E` holds about `E/d̄` crossings, and, crossings being
 //! Poisson, its variance is `(9/8)·d̄·E`. In energetic mode a particle's energy only ever falls
-//! below `W/N` (`CalculationCore.cpp:57, 141, 259, 284`), so the same `d̄` bounds each deposit and
-//! the variance from above: the model is exact in random mode and conservative in energetic mode.
+//! below `W/N` (`CalculationCore.cpp:57, 141, 259, 284`), so the same `d̄` bounds each deposit:
+//! the structure is exact in random mode and conservative in energetic mode, where the calibration
+//! brings it down to what SPPS shows. (A deposit scaled step by step by the particles' mean energy,
+//! from the room table, was the other structure measured for energetic mode; calibrated, it
+//! overstated the seeds' spread more, because the particles' energies spread apart as they are
+//! absorbed: `docs/investigations/2026-09-25-noise-calibration/`.)
 //!
-//! **The estimate.** A parametric bootstrap: [`RESAMPLES`] series are drawn from the model around
-//! the series, each bin a compound Poisson sum of `E/d̄` expected crossings with chord-distributed
-//! deposits (a normal draw of the same mean and variance when more than 30 are expected); every
-//! quantity is evaluated on each, taken as it is (complete, nothing missing: the tail, the floor
-//! and the lost particles are judged once, on the series itself); the standard deviation over
-//! them is the value's estimated noise. A fixed seed ([`SEED`]) makes it repeatable.
+//! **The estimate.** A parametric bootstrap ([`bootstrap`]): [`RESAMPLES`] series are drawn from
+//! the model around the series, each bin a compound Poisson sum of `E/d̄` expected crossings with
+//! chord-distributed deposits (a normal draw of the same mean and variance when more than 30 are
+//! expected); every quantity is evaluated on each, taken as it is (complete, nothing missing: the
+//! tail, the floor and the lost particles are judged once, on the series itself); the standard
+//! deviation over them is the model's. A fixed seed ([`SEED`]) makes it repeatable.
 //!
-//! **The refusal.** A value whose standard deviation is above its limit ([`limits`]), or that more
-//! than [`REFUSED_RESAMPLES_ALLOWED`] of the resamples refuse themselves, is refused as
-//! `monte_carlo_noise`, with both numbers. A value whose noise has no model ([`NoiseModel::Unknown`])
-//! is refused as `noise_unknown`. No value is ever reported with noise nothing bounds.
+//! **The calibration** ([`calibration`]). The model leaves out what SPPS does beyond it (a
+//! particle's crossings at several times, and in energetic mode the spread of the particles'
+//! energies), so each quantity's standard deviation is multiplied by a factor per computation
+//! method, measured on real SPPS runs over ten seeds per cell and validated on cells held out of
+//! the measurement (`docs/investigations/2026-09-25-noise-calibration/`). The factor is the largest
+//! one-sided 95 % upper bound of the ratio of the seeds' spread to the model over the calibration
+//! cells, so the calibrated value never claims less noise than SPPS showed there.
+//!
+//! **The refusal.** A value whose calibrated standard deviation is above its limit ([`limits`]),
+//! or that more than [`REFUSED_RESAMPLES_ALLOWED`] of the resamples refuse themselves, is refused
+//! as `monte_carlo_noise`, with both numbers and, when the standard deviation is the reason, the
+//! particle count that would bring it within its limit from its fall as `1/√N` (measured,
+//! `docs/investigations/2026-09-25-noise-calibration/`). A value whose noise has no model
+//! ([`NoiseModel::Unknown`]) is refused as `noise_unknown`. No value is ever reported with noise
+//! nothing bounds.
 
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use super::decay::{self, Arrival, Onset};
-use super::{EnergySeries, NotEvaluable, ParamError, Quantity, not_evaluable};
+use super::{EnergySeries, NotEvaluable, ParamError, ParticleCount, Quantity, not_evaluable};
 
 /// Resampled series per estimate.
 pub const RESAMPLES: usize = 200;
@@ -42,7 +58,6 @@ pub const CHORD_FACTOR: f64 = 9.0 / 8.0;
 pub const SEED: u64 = 0x4d37_5eed_0000_0001;
 /// Above this many expected crossings a bin is drawn from a normal of the same mean and variance.
 const NORMAL_ABOVE: f64 = 30.0;
-
 /// The most noise a reported value may carry, as a standard deviation: half the difference limen
 /// commonly quoted from ISO 3382-1 Annex A, so that twice it, about a 95 % interval, stays within
 /// one limen. T20, T30 and C50 have no limen of their own there; they take EDT's and C80's.
@@ -59,28 +74,131 @@ pub mod limits {
     pub const SPL_DB: f64 = 0.5;
 }
 
+/// The model's calibration against SPPS's own seed-to-seed spread
+/// (`docs/investigations/2026-09-25-noise-calibration/`): per computation method, the factor each
+/// quantity's bootstrap standard deviation is multiplied by, in [`QUANTITY_NAMES`]' order (SPL,
+/// EDT, T20, T30, C50, C80, D50, Ts). Each is the largest one-sided 95 % upper bound, over the
+/// seven calibration cells of its method (ten seeds each), of the ratio of the seeds' spread to
+/// the model, rounded up to two digits; the pre-registered rule, which the suite re-derives from
+/// the committed receipt (`tests/params_noise_calibration.rs`).
+pub mod calibration {
+    use super::Method;
+
+    /// Random mode: the model is exact in structure, and SPPS's spread is up to 1.43 times it
+    /// (T30 in a room whose absorption is on its floor alone, specular: a particle's crossings at
+    /// several times), so every factor is above 1. Set by the dead-floor cell (SPL, EDT, T20, C80,
+    /// Ts), tutorial 1's materials (T30 at 150,000 particles, C50) and the Lambert box (D50).
+    pub const RANDOM: [f64; 8] = [1.3, 1.4, 1.4, 1.6, 1.2, 1.2, 1.2, 1.4];
+    /// Energetic mode: the model bounds each deposit by a particle's start energy, and SPPS's
+    /// spread is 0.03 to 0.84 times it; set by the dead-floor cell (SPL, EDT, T20, T30), whose
+    /// particles' energies spread apart the most, and the Lambert box at 600,000 particles (C50,
+    /// C80, D50, Ts).
+    pub const ENERGETIC: [f64; 8] = [0.91, 0.59, 0.26, 0.15, 0.85, 0.78, 0.85, 0.62];
+
+    /// The factor for quantity `i` ([`super::QUANTITY_NAMES`]) under `method`. A test build can
+    /// scale every factor through a fault seam (`crate::faults::Fault::NoiseCalibrationScaled`),
+    /// the say-NO of the validation.
+    pub fn factor(method: Method, i: usize) -> f64 {
+        let k = match method {
+            Method::Random => RANDOM[i],
+            Method::Energetic => ENERGETIC[i],
+        };
+        match crate::faults::active() {
+            Some(crate::faults::Fault::NoiseCalibrationScaled { by }) => k * by,
+            _ => k,
+        }
+    }
+
+    /// A refusal names the particle count at which the calibrated standard deviation would be the
+    /// limit over this margin. One run's estimate scatters from seed to seed, by about 5 % for
+    /// most quantities but by up to 36 % (median over a cell's receiver-bands) for random-mode T20
+    /// and T30, so a count named from one run can fall short; the margin is `1 + 1.28·s`, `s` the
+    /// largest such median scatter over the calibration cells, rounded up to two digits and never
+    /// below 1.1: about a 90 % chance that the estimate the count was named from was not too low
+    /// (pre-registered before the validation, rule 5b).
+    pub const RANDOM_MARGIN: [f64; 8] = [1.1, 1.1, 1.4, 1.5, 1.1, 1.1, 1.1, 1.1];
+    /// Energetic mode's margins, by the same rule.
+    pub const ENERGETIC_MARGIN: [f64; 8] = [1.1, 1.1, 1.1, 1.2, 1.1, 1.1, 1.1, 1.1];
+
+    /// The margin for quantity `i` under `method`.
+    pub fn margin(method: Method, i: usize) -> f64 {
+        match method {
+            Method::Random => RANDOM_MARGIN[i],
+            Method::Energetic => ENERGETIC_MARGIN[i],
+        }
+    }
+
+    /// Whether the seeds' spread of quantity `i` fell as `1/√N` between every pair of cells that
+    /// differ only in their particle count, within two joint standard errors (rule 4). Where it
+    /// did not, a refusal names no count: the count would rest on a scaling the data did not
+    /// confirm.
+    pub const RANDOM_ROOT_N: [bool; 8] = [true, true, true, false, true, true, true, true];
+    /// Energetic mode's.
+    pub const ENERGETIC_ROOT_N: [bool; 8] = [true, false, true, true, true, true, true, true];
+
+    /// Whether a refusal of quantity `i` under `method` names a particle count.
+    pub fn root_n_confirmed(method: Method, i: usize) -> bool {
+        match method {
+            Method::Random => RANDOM_ROOT_N[i],
+            Method::Energetic => ENERGETIC_ROOT_N[i],
+        }
+    }
+}
+
+/// The eight quantities' names in the JSON, in the order of [`Parameters`] and of
+/// [`calibration`]'s factors.
+pub const QUANTITY_NAMES: [&str; 8] = [
+    "spl_db", "edt_s", "t20_s", "t30_s", "c50_db", "c80_db", "d50", "ts_s",
+];
+
+/// SPPS's computation method (`computation_method`): how a crossing's deposit is modelled, and
+/// which of [`calibration`]'s factors apply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Method {
+    /// Code 0: a particle keeps its start energy until it is absorbed whole.
+    Random,
+    /// Code 1: a particle's energy falls at every reflection.
+    Energetic,
+}
+
 /// What a series' noise is estimated from.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case", tag = "model")]
 pub enum NoiseModel {
-    /// Receiver crossings, each adding `mean_deposit` on average, in the series' unit; with
-    /// several sources, the largest of theirs.
-    Crossings { mean_deposit: f64 },
+    /// Receiver crossings, each adding `mean_deposit` on average, in the series' unit (with
+    /// several sources, the largest of theirs).
+    Crossings {
+        mean_deposit: f64,
+        /// Which calibration applies.
+        method: Method,
+        /// Particles per source (`nbparticules`), from which a refusal names the count that
+        /// would bring its value within its limit; `null` when not known.
+        particles: Option<u32>,
+    },
     /// Nothing bounds the noise; every value is refused, `noise_unknown`.
     Unknown { detail: String },
 }
 
 impl NoiseModel {
-    /// Crossings of mean deposit `mean_deposit`, refused, `params_bad_noise_input`, when it is not
-    /// a finite positive number.
-    pub fn crossings(mean_deposit: f64) -> Result<Self, ParamError> {
+    /// Crossings of mean deposit `mean_deposit` under `method`, `particles` per source when known;
+    /// refused, `params_bad_noise_input`, when the deposit is not a finite positive number.
+    pub fn crossings(
+        mean_deposit: f64,
+        method: Method,
+        particles: Option<u32>,
+    ) -> Result<Self, ParamError> {
         if !mean_deposit.is_finite() || mean_deposit <= 0.0 {
             return Err(ParamError::BadNoiseInput {
                 field: "mean_deposit".into(),
                 value: mean_deposit,
             });
         }
-        Ok(NoiseModel::Crossings { mean_deposit })
+        Ok(NoiseModel::Crossings {
+            mean_deposit,
+            method,
+            particles,
+        })
     }
 }
 
@@ -109,8 +227,9 @@ pub struct Parameters {
     pub d50: Result<Estimate, ParamError>,
     pub ts_s: Result<Estimate, ParamError>,
     /// `100·(T30/T20 − 1)`, %, from the reported T20 and T30, its standard deviation over the
-    /// resamples that give both; refused, with T30's refusal or else T20's, when either is
-    /// ([`decay::curvature`]). No limit of its own: its noise follows from theirs.
+    /// resamples that give both, calibrated with the larger of T20's and T30's factors; refused,
+    /// with T30's refusal or else T20's, when either is ([`decay::curvature`]). No limit of its
+    /// own: its noise follows from theirs.
     pub curvature_percent: Result<Estimate, ParamError>,
 }
 
@@ -130,6 +249,11 @@ const QUANTITIES: [(Quantity, f64, bool); 8] = [
     ),
     (Quantity::CentreTime, limits::CENTRE_TIME_S, false),
 ];
+
+/// Whether quantity `i` ([`QUANTITY_NAMES`]) has a relative standard deviation (the decay times).
+pub fn relative(i: usize) -> bool {
+    QUANTITIES[i].2
+}
 
 /// The eight values of `decay` on one series, in [`QUANTITIES`]' order. A given arrival that does
 /// not fit the onset bin refuses C50, C80, D50 and Ts only (`params_bad_arrival`,
@@ -155,9 +279,57 @@ fn values(
     )
 }
 
-/// The eight parameters of `series` from `arrival`, each with its noise under `model`, or its
-/// refusal ([module docs](self)). A series `decay` refuses outright (all zero, for instance)
-/// refuses all eight with that error.
+/// The model's own resamples of `series`: each one's eight values, `None` where the resample
+/// refuses the quantity. Empty for an unknown model.
+fn resamples(series: &EnergySeries, arrival: Arrival, model: &NoiseModel) -> Vec<[Option<f64>; 8]> {
+    let mut samples = Vec::new();
+    if let NoiseModel::Unknown { .. } = model {
+        return samples;
+    }
+    let mut rng = Rng::new(SEED);
+    samples.reserve(RESAMPLES);
+    for _ in 0..RESAMPLES {
+        let drawn = resample(series.values(), model, &mut rng);
+        // A resample is a stand-in for another run's series. The tail, the floor and the lost
+        // particles were judged on the series itself; here only the value's spread is wanted, so
+        // the resample is taken as it is: complete, nothing missing. (Judging the tail of a
+        // resample again would refuse energetic mode for the ragged ends of the random-mode
+        // stand-ins, not for its own noise.) Its early reverberation is read as the series' is,
+        // so that the resamples give the value the series gives.
+        let resampled = EnergySeries::complete(series.dt(), drawn).map(|s| {
+            if series.early_reverberation_unresolved() {
+                s.with_early_reverberation_unresolved()
+            } else {
+                s
+            }
+        });
+        samples.push(match resampled {
+            Ok(s) => values(&s, arrival).0.map(|r| r.ok()),
+            Err(_) => [None; 8],
+        });
+    }
+    samples
+}
+
+/// The model's standard deviation of each of the eight quantities, before calibration, in their
+/// unit (not relative), with how many resamples refused each: what [`evaluate`] calibrates and
+/// judges. `None` where fewer than two resamples give a value, and for every quantity of an
+/// unknown model.
+pub fn bootstrap(
+    series: &EnergySeries,
+    arrival: Arrival,
+    model: &NoiseModel,
+) -> [(Option<f64>, usize); 8] {
+    let samples = resamples(series, arrival, model);
+    std::array::from_fn(|i| {
+        let got: Vec<f64> = samples.iter().filter_map(|s| s[i]).collect();
+        (standard_deviation(&got), RESAMPLES - got.len())
+    })
+}
+
+/// The eight parameters of `series` from `arrival`, each with its calibrated noise under `model`,
+/// or its refusal ([module docs](self)). A series `decay` refuses outright (all zero, for
+/// instance) refuses all eight with that error.
 pub fn evaluate(
     series: &Result<EnergySeries, ParamError>,
     arrival: Arrival,
@@ -183,34 +355,11 @@ pub fn evaluate(
         }
     };
     let (base, onset, decay_arrival) = values(series, arrival);
-    // Each resample's eight values; `None` where the resample refuses the quantity.
-    let mut samples: Vec<[Option<f64>; 8]> = Vec::new();
-    if let NoiseModel::Crossings { mean_deposit } = model
-        && base.iter().any(Result::is_ok)
-    {
-        let mut rng = Rng::new(SEED);
-        samples.reserve(RESAMPLES);
-        for _ in 0..RESAMPLES {
-            let drawn = resample(series.values(), *mean_deposit, &mut rng);
-            // A resample is a stand-in for another run's series. The tail, the floor and the lost
-            // particles were judged on the series itself; here only the value's spread is wanted,
-            // so the resample is taken as it is: complete, nothing missing. (Judging the tail of
-            // a resample again would refuse energetic mode for the ragged ends of the random-mode
-            // stand-ins, not for its own noise.) Its early reverberation is read as the series'
-            // is, so that the resamples give the value the series gives.
-            let resampled = EnergySeries::complete(series.dt(), drawn).map(|s| {
-                if series.early_reverberation_unresolved() {
-                    s.with_early_reverberation_unresolved()
-                } else {
-                    s
-                }
-            });
-            samples.push(match resampled {
-                Ok(s) => values(&s, arrival).0.map(|r| r.ok()),
-                Err(_) => [None; 8],
-            });
-        }
-    }
+    let samples = if base.iter().any(Result::is_ok) {
+        resamples(series, arrival, model)
+    } else {
+        Vec::new()
+    };
     let mut out: Vec<Result<Estimate, ParamError>> = Vec::with_capacity(8);
     for (i, (b, (quantity, limit, relative))) in base.into_iter().zip(QUANTITIES).enumerate() {
         out.push(b.and_then(|value| match model {
@@ -221,9 +370,23 @@ pub fn evaluate(
                     detail: detail.clone(),
                 },
             )),
-            NoiseModel::Crossings { .. } => {
+            NoiseModel::Crossings {
+                method, particles, ..
+            } => {
                 let got: Vec<f64> = samples.iter().filter_map(|s| s[i]).collect();
-                judge(quantity, value, &got, limit, relative)
+                judge(
+                    quantity,
+                    value,
+                    &got,
+                    Judged {
+                        limit,
+                        relative,
+                        factor: calibration::factor(*method, i),
+                        margin: calibration::root_n_confirmed(*method, i)
+                            .then(|| calibration::margin(*method, i)),
+                        particles: *particles,
+                    },
+                )
             }
         }));
     }
@@ -241,11 +404,19 @@ pub fn evaluate(
                 .filter_map(|s| Some(percent(s[2]?, s[3]?)))
                 .collect();
             let value = percent(t20.value, t30.value);
+            let factor = match model {
+                NoiseModel::Crossings { method, .. } => {
+                    calibration::factor(*method, 2).max(calibration::factor(*method, 3))
+                }
+                NoiseModel::Unknown { .. } => 1.0,
+            };
             // Both passed their own judgement, so at least 180 resamples give both. Were there
-            // fewer than two, the two spreads added as if independent would stand in.
-            let sd = standard_deviation(&got).unwrap_or_else(|| {
-                100.0 * (t30.value / t20.value) * (t30.sd / t30.value).hypot(t20.sd / t20.value)
-            });
+            // fewer than two, the two (calibrated) spreads added as if independent would stand
+            // in.
+            let sd = standard_deviation(&got).map_or_else(
+                || 100.0 * (t30.value / t20.value) * (t30.sd / t30.value).hypot(t20.sd / t20.value),
+                |s| s * factor,
+            );
             Ok(Estimate { value, sd })
         }
     };
@@ -266,32 +437,64 @@ pub fn evaluate(
     }
 }
 
-/// A value against the values its resamples gave (`got`, one per resample that did not refuse).
-fn judge(
-    quantity: Quantity,
-    value: f64,
-    got: &[f64],
+/// How one quantity is judged: its limit (relative for the decay times), the calibration factor,
+/// the margin a named particle count takes (`None`: no count is named, its `1/√N` fall not
+/// confirmed), and the run's particles per source when known.
+struct Judged {
     limit: f64,
     relative: bool,
-) -> Result<Estimate, ParamError> {
+    factor: f64,
+    margin: Option<f64>,
+    particles: Option<u32>,
+}
+
+/// A value against the values its resamples gave (`got`, one per resample that did not refuse).
+fn judge(quantity: Quantity, value: f64, got: &[f64], j: Judged) -> Result<Estimate, ParamError> {
     let refused = RESAMPLES - got.len();
-    let sd = standard_deviation(got);
-    let measure = sd.map(|s| if relative { s / value.abs() } else { s });
+    let sd = standard_deviation(got).map(|s| s * j.factor);
+    let measure = sd.map(|s| if j.relative { s / value.abs() } else { s });
     match (sd, measure) {
-        (Some(sd), Some(m)) if refused <= REFUSED_RESAMPLES_ALLOWED && m <= limit => {
+        (Some(sd), Some(m)) if refused <= REFUSED_RESAMPLES_ALLOWED && m <= j.limit => {
             Ok(Estimate { value, sd })
         }
-        _ => Err(not_evaluable(
-            quantity,
-            NotEvaluable::MonteCarloNoise {
-                value,
-                sd,
-                limit,
-                resamples: RESAMPLES,
-                refused_resamples: refused,
-            },
-        )),
+        _ => {
+            let particle_count = match (measure, j.margin) {
+                (None, _) => ParticleCount::NoStandardDeviation,
+                (Some(m), _) if m <= j.limit => ParticleCount::WithinLimit,
+                (Some(_), None) => ParticleCount::ScalingNotConfirmed,
+                (Some(m), Some(margin)) => {
+                    let factor = (margin * m / j.limit).powi(2);
+                    ParticleCount::Named {
+                        factor,
+                        margin,
+                        particles: j
+                            .particles
+                            .map(|n| round_up_two_digits(factor * f64::from(n))),
+                    }
+                }
+            };
+            Err(not_evaluable(
+                quantity,
+                NotEvaluable::MonteCarloNoise {
+                    value,
+                    sd,
+                    limit: j.limit,
+                    resamples: RESAMPLES,
+                    refused_resamples: refused,
+                    particle_count,
+                },
+            ))
+        }
     }
+}
+
+/// `x` rounded up to two significant digits: 1,234,567 to 1,300,000.
+pub fn round_up_two_digits(x: f64) -> u64 {
+    if !x.is_finite() || x <= 0.0 {
+        return 0;
+    }
+    let step = 10f64.powi((x.log10().floor() as i32 - 1).max(0));
+    ((x / step).ceil() * step).min(u64::MAX as f64) as u64
 }
 
 /// The sample standard deviation (`n − 1`); `None` for fewer than two values.
@@ -304,24 +507,29 @@ pub fn standard_deviation(v: &[f64]) -> Option<f64> {
     Some((v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt())
 }
 
-/// One series drawn from the model around `values`: bin by bin, a compound Poisson sum of
-/// `E/d̄` expected crossings, each depositing `d̄·(3/2)·√u` (a chord over its mean), or above
-/// [`NORMAL_ABOVE`] a normal draw of mean `E` and variance `(9/8)·d̄·E`, held at 0.
-pub fn resample(values: &[f64], mean_deposit: f64, rng: &mut Rng) -> Vec<f64> {
+/// One series drawn from `model` around `values`: bin by bin, a compound Poisson sum of `E/d̄`
+/// expected crossings of mean deposit `d̄`, each depositing `d̄·(3/2)·√u` (a chord over its mean),
+/// or above [`NORMAL_ABOVE`] a normal draw of mean `E` and variance `(9/8)·d̄·E`, held at 0. An
+/// unknown model returns the series unchanged.
+pub fn resample(values: &[f64], model: &NoiseModel, rng: &mut Rng) -> Vec<f64> {
+    let NoiseModel::Crossings {
+        mean_deposit: d, ..
+    } = *model
+    else {
+        return values.to_vec();
+    };
     values
         .iter()
         .map(|&e| {
             if e <= 0.0 {
                 return 0.0;
             }
-            let lambda = e / mean_deposit;
+            let lambda = e / d;
             if lambda > NORMAL_ABOVE {
-                (e + (CHORD_FACTOR * mean_deposit * e).sqrt() * rng.normal()).max(0.0)
+                (e + (CHORD_FACTOR * d * e).sqrt() * rng.normal()).max(0.0)
             } else {
                 let n = rng.poisson(lambda);
-                (0..n)
-                    .map(|_| mean_deposit * 1.5 * rng.uniform().sqrt())
-                    .sum()
+                (0..n).map(|_| d * 1.5 * rng.uniform().sqrt()).sum()
             }
         })
         .collect()
@@ -373,6 +581,10 @@ impl Rng {
 mod tests {
     use super::*;
 
+    fn random(d: f64) -> NoiseModel {
+        NoiseModel::crossings(d, Method::Random, None).unwrap()
+    }
+
     #[test]
     fn the_generators_have_their_moments() {
         let mut r = Rng::new(7);
@@ -398,7 +610,9 @@ mod tests {
         let d = 2.0;
         let mut r = Rng::new(11);
         for e in [10.0, 1000.0] {
-            let draws: Vec<f64> = (0..100_000).map(|_| resample(&[e], d, &mut r)[0]).collect();
+            let draws: Vec<f64> = (0..100_000)
+                .map(|_| resample(&[e], &random(d), &mut r)[0])
+                .collect();
             let mean = draws.iter().sum::<f64>() / draws.len() as f64;
             let var = standard_deviation(&draws).unwrap().powi(2);
             assert!((mean / e - 1.0).abs() < 0.01, "{e}: mean {mean}");
@@ -406,17 +620,29 @@ mod tests {
             assert!((var / want - 1.0).abs() < 0.03, "{e}: var {var} vs {want}");
         }
         // An empty bin stays empty.
-        assert_eq!(resample(&[0.0], d, &mut r), [0.0]);
+        assert_eq!(resample(&[0.0], &random(d), &mut r), [0.0]);
     }
 
     #[test]
     fn a_deposit_that_is_not_a_positive_number_is_refused() {
         for d in [0.0, -1.0, f64::NAN, f64::INFINITY] {
             assert_eq!(
-                NoiseModel::crossings(d).unwrap_err().code(),
+                NoiseModel::crossings(d, Method::Random, None)
+                    .unwrap_err()
+                    .code(),
                 super::super::codes::BAD_NOISE_INPUT
             );
         }
-        assert!(NoiseModel::crossings(1e-9).is_ok());
+        assert!(NoiseModel::crossings(1e-9, Method::Energetic, Some(5)).is_ok());
+    }
+
+    #[test]
+    fn two_significant_digits_round_up() {
+        assert_eq!(round_up_two_digits(1_234_567.0), 1_300_000);
+        assert_eq!(round_up_two_digits(1_200_000.0), 1_200_000);
+        assert_eq!(round_up_two_digits(150_001.0), 160_000);
+        assert_eq!(round_up_two_digits(99.2), 100);
+        assert_eq!(round_up_two_digits(7.1), 8);
+        assert_eq!(round_up_two_digits(0.0), 0);
     }
 }

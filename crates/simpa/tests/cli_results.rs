@@ -1968,6 +1968,8 @@ fn tutorial1_parameters_beside_upstreams() {
         };
         let model = NoiseModel::crossings(
             f64::from(power_rho_c[i]) / (150_000.0 * std::f64::consts::PI * radius * radius),
+            simpa_core::params::noise::Method::Random,
+            Some(150_000),
         )
         .unwrap();
         let (p, _) = report::parameters(&s, arrival, &model);

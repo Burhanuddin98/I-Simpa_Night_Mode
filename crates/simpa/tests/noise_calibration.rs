@@ -29,7 +29,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde_json::{Value, json};
 use simpa_core::params::EnergySeries;
 use simpa_core::params::decay::{self, Arrival};
-use simpa_core::params::noise;
+use simpa_core::params::noise::{self, NoiseModel};
+
+#[path = "../../simpa-core/tests/common/noise_calibration.rs"]
+mod calibration;
 use simpa_core::schema::{
     self, BandKind, BandSet, ComputationMethod, MaterialId, PointReceiverId, Project,
     ReflectionLaw, Vec3,
@@ -191,6 +194,7 @@ const SEEDS: std::ops::RangeInclusive<u32> = 1..=10;
 use ComputationMethod::{Energetic, Random};
 use Role::{Calibration as C, Validation as V};
 
+#[allow(clippy::too_many_arguments)]
 const fn cell(
     id: &'static str,
     role: Role,
@@ -215,295 +219,36 @@ const fn cell(
     }
 }
 
-/// The cells, pre-registered before any was run (`PREREGISTER-noise.txt` in the investigation's
+#[rustfmt::skip]
+/// The cells, pre-registered before any was run (`PREREGISTER.txt` in the investigation's
 /// folder). Random mode's `trans_epsilon` is SPPS's default 5; it drops nothing there.
 const CELLS: [Cell; 26] = [
-    cell(
-        "C-R1",
-        C,
-        Room::Tutorial,
-        Walls::Lambert(0.1),
-        Random,
-        150_000,
-        3.0,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "C-R2",
-        C,
-        Room::Tutorial,
-        Walls::Lambert(0.1),
-        Random,
-        1_500_000,
-        3.0,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "C-R3",
-        C,
-        Room::Small,
-        Walls::Lambert(0.4),
-        Random,
-        150_000,
-        1.0,
-        0.001,
-        5.0,
-    ),
-    cell(
-        "C-R4",
-        C,
-        Room::Small,
-        Walls::Lambert(0.4),
-        Random,
-        15_000_000,
-        1.0,
-        0.001,
-        5.0,
-    ),
-    cell(
-        "C-R5",
-        C,
-        Room::Tutorial,
-        Walls::Tutorial,
-        Random,
-        150_000,
-        2.0,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "C-R6",
-        C,
-        Room::Tutorial,
-        Walls::Tutorial,
-        Random,
-        1_500_000,
-        2.0,
-        0.001,
-        5.0,
-    ),
-    cell(
-        "C-R7",
-        C,
-        Room::Tutorial,
-        Walls::DeadFloor,
-        Random,
-        500_000,
-        3.0,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "V-R1",
-        V,
-        Room::Long,
-        Walls::Lambert(0.2),
-        Random,
-        500_000,
-        2.0,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "V-R2",
-        V,
-        Room::Tutorial,
-        Walls::Lambert(0.4),
-        Random,
-        600_000,
-        1.0,
-        0.001,
-        5.0,
-    ),
-    cell(
-        "V-R3",
-        V,
-        Room::Small,
-        Walls::Lambert(0.05),
-        Random,
-        300_000,
-        3.0,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "V-R4",
-        V,
-        Room::Tutorial,
-        Walls::Tutorial,
-        Random,
-        600_000,
-        2.0,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "V-R5",
-        V,
-        Room::Small,
-        Walls::Specular(0.2),
-        Random,
-        5_000_000,
-        1.5,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "V-R6",
-        V,
-        Room::Long,
-        Walls::DeadFloor,
-        Random,
-        1_500_000,
-        3.0,
-        0.001,
-        5.0,
-    ),
-    cell(
-        "C-E1",
-        C,
-        Room::Tutorial,
-        Walls::Lambert(0.1),
-        Energetic,
-        150_000,
-        2.5,
-        0.01,
-        7.0,
-    ),
-    cell(
-        "C-E2",
-        C,
-        Room::Tutorial,
-        Walls::Lambert(0.1),
-        Energetic,
-        600_000,
-        2.5,
-        0.01,
-        7.0,
-    ),
-    cell(
-        "C-E3",
-        C,
-        Room::Small,
-        Walls::Lambert(0.4),
-        Energetic,
-        150_000,
-        0.5,
-        0.001,
-        9.0,
-    ),
-    cell(
-        "C-E4",
-        C,
-        Room::Small,
-        Walls::Lambert(0.4),
-        Energetic,
-        2_400_000,
-        0.5,
-        0.001,
-        9.0,
-    ),
-    cell(
-        "C-E5",
-        C,
-        Room::Tutorial,
-        Walls::Tutorial,
-        Energetic,
-        150_000,
-        2.0,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "C-E6",
-        C,
-        Room::Tutorial,
-        Walls::Tutorial,
-        Energetic,
-        600_000,
-        2.0,
-        0.001,
-        7.0,
-    ),
-    cell(
-        "C-E7",
-        C,
-        Room::Tutorial,
-        Walls::DeadFloor,
-        Energetic,
-        300_000,
-        3.0,
-        0.01,
-        7.0,
-    ),
-    cell(
-        "V-E1",
-        V,
-        Room::Long,
-        Walls::Lambert(0.2),
-        Energetic,
-        300_000,
-        1.5,
-        0.01,
-        7.0,
-    ),
-    cell(
-        "V-E2",
-        V,
-        Room::Tutorial,
-        Walls::Lambert(0.4),
-        Energetic,
-        150_000,
-        0.6,
-        0.001,
-        9.0,
-    ),
-    cell(
-        "V-E3",
-        V,
-        Room::Small,
-        Walls::Lambert(0.05),
-        Energetic,
-        150_000,
-        3.0,
-        0.01,
-        7.0,
-    ),
-    cell(
-        "V-E4",
-        V,
-        Room::Tutorial,
-        Walls::Tutorial,
-        Energetic,
-        1_500_000,
-        2.0,
-        0.01,
-        5.0,
-    ),
-    cell(
-        "V-E5",
-        V,
-        Room::Small,
-        Walls::Specular(0.2),
-        Energetic,
-        600_000,
-        1.5,
-        0.001,
-        7.0,
-    ),
-    cell(
-        "V-E6",
-        V,
-        Room::Long,
-        Walls::DeadFloor,
-        Energetic,
-        300_000,
-        3.0,
-        0.01,
-        7.0,
-    ),
+    cell("C-R1", C, Room::Tutorial, Walls::Lambert(0.1), Random, 150_000, 3.0, 0.01, 5.0),
+    cell("C-R2", C, Room::Tutorial, Walls::Lambert(0.1), Random, 1_500_000, 3.0, 0.01, 5.0),
+    cell("C-R3", C, Room::Small, Walls::Lambert(0.4), Random, 150_000, 1.0, 0.001, 5.0),
+    cell("C-R4", C, Room::Small, Walls::Lambert(0.4), Random, 15_000_000, 1.0, 0.001, 5.0),
+    cell("C-R5", C, Room::Tutorial, Walls::Tutorial, Random, 150_000, 2.0, 0.01, 5.0),
+    cell("C-R6", C, Room::Tutorial, Walls::Tutorial, Random, 1_500_000, 2.0, 0.001, 5.0),
+    cell("C-R7", C, Room::Tutorial, Walls::DeadFloor, Random, 500_000, 3.0, 0.01, 5.0),
+    cell("V-R1", V, Room::Long, Walls::Lambert(0.2), Random, 500_000, 2.0, 0.01, 5.0),
+    cell("V-R2", V, Room::Tutorial, Walls::Lambert(0.4), Random, 600_000, 1.0, 0.001, 5.0),
+    cell("V-R3", V, Room::Small, Walls::Lambert(0.05), Random, 300_000, 3.0, 0.01, 5.0),
+    cell("V-R4", V, Room::Tutorial, Walls::Tutorial, Random, 600_000, 2.0, 0.01, 5.0),
+    cell("V-R5", V, Room::Small, Walls::Specular(0.2), Random, 5_000_000, 1.5, 0.01, 5.0),
+    cell("V-R6", V, Room::Long, Walls::DeadFloor, Random, 1_500_000, 3.0, 0.001, 5.0),
+    cell("C-E1", C, Room::Tutorial, Walls::Lambert(0.1), Energetic, 150_000, 2.5, 0.01, 7.0),
+    cell("C-E2", C, Room::Tutorial, Walls::Lambert(0.1), Energetic, 600_000, 2.5, 0.01, 7.0),
+    cell("C-E3", C, Room::Small, Walls::Lambert(0.4), Energetic, 150_000, 0.5, 0.001, 9.0),
+    cell("C-E4", C, Room::Small, Walls::Lambert(0.4), Energetic, 2_400_000, 0.5, 0.001, 9.0),
+    cell("C-E5", C, Room::Tutorial, Walls::Tutorial, Energetic, 150_000, 2.0, 0.01, 5.0),
+    cell("C-E6", C, Room::Tutorial, Walls::Tutorial, Energetic, 600_000, 2.0, 0.001, 7.0),
+    cell("C-E7", C, Room::Tutorial, Walls::DeadFloor, Energetic, 300_000, 3.0, 0.01, 7.0),
+    cell("V-E1", V, Room::Long, Walls::Lambert(0.2), Energetic, 300_000, 1.5, 0.01, 7.0),
+    cell("V-E2", V, Room::Tutorial, Walls::Lambert(0.4), Energetic, 150_000, 0.6, 0.001, 9.0),
+    cell("V-E3", V, Room::Small, Walls::Lambert(0.05), Energetic, 150_000, 3.0, 0.01, 7.0),
+    cell("V-E4", V, Room::Tutorial, Walls::Tutorial, Energetic, 1_500_000, 2.0, 0.01, 5.0),
+    cell("V-E5", V, Room::Small, Walls::Specular(0.2), Energetic, 600_000, 1.5, 0.001, 7.0),
+    cell("V-E6", V, Room::Long, Walls::DeadFloor, Energetic, 300_000, 3.0, 0.01, 7.0),
 ];
 
 /// Tutorial 1's box (`rooms/tutorial1_box.simpa`) on the octave bands 125 Hz to 4 kHz, without its
@@ -765,19 +510,6 @@ fn noise_calibration_runs() {
 
 // --- the analysis ------------------------------------------------------------------------------
 
-/// The eight quantities in `params::noise`'s order, their JSON names and whether their standard
-/// deviation is relative.
-const EIGHT: [(&str, bool); 8] = [
-    ("spl_db", false),
-    ("edt_s", true),
-    ("t20_s", true),
-    ("t30_s", true),
-    ("c50_db", false),
-    ("c80_db", false),
-    ("d50", false),
-    ("ts_s", false),
-];
-
 /// One receiver-band of one run, as the analysis needs it.
 struct Band {
     dt: f64,
@@ -842,155 +574,125 @@ fn values(s: &EnergySeries, arrival: Arrival) -> [Option<f64>; 8] {
     ]
 }
 
-/// The candidate structures of the model.
+/// The candidate structures of the model (rule 1).
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Structure {
-    /// M7's: every crossing deposits `d̄` on average (`params::noise` as it stood).
+    /// M7's: every crossing deposits `d̄` on average; `params::noise` as the code has it.
     Constant,
     /// A crossing in step `k` deposits `d̄` times the particles' mean energy then over their start
-    /// energy, read from the room table at the start of the step.
+    /// energy, read from the room table at the start of the step (1 in step 0): the candidate the
+    /// calibration measured and rejected for energetic mode. Not in the code; computed here.
     MeanEnergy,
 }
 
 const STRUCTURES: [Structure; 2] = [Structure::Constant, Structure::MeanEnergy];
 
-/// The per-bin mean deposit under `st`.
-fn deposits(b: &Band, st: Structure) -> Vec<f64> {
-    match st {
-        Structure::Constant => vec![b.mean_deposit; b.energy.len()],
-        Structure::MeanEnergy => (0..b.energy.len())
-            .map(|k| {
-                let f = if k == 0 {
-                    1.0
-                } else {
-                    b.alive.get(k - 1).copied().unwrap_or(1.0)
-                };
-                b.mean_deposit * f.clamp(f64::MIN_POSITIVE, 1.0)
-            })
-            .collect(),
-    }
-}
-
-/// `params::noise`'s bootstrap with a per-bin mean deposit: each quantity's standard deviation
-/// over the resamples that give it (relative to the series' value for the decay times), `None`
-/// where fewer than two do or the series gives no value.
-fn bootstrap(s: &EnergySeries, arrival: Arrival, dep: &[f64]) -> [Option<f64>; 8] {
-    let base = values(s, arrival);
-    let mut rng = noise::Rng::new(noise::SEED);
-    let mut got: Vec<Vec<f64>> = vec![Vec::new(); 8];
-    for _ in 0..noise::RESAMPLES {
-        let drawn: Vec<f64> = s
-            .values()
-            .iter()
-            .zip(dep)
-            .map(|(&e, &d)| {
-                if e <= 0.0 {
-                    return 0.0;
-                }
-                let lambda = e / d;
-                if lambda > 30.0 {
-                    (e + (noise::CHORD_FACTOR * d * e).sqrt() * rng.normal()).max(0.0)
-                } else {
-                    let n = rng.poisson(lambda);
-                    (0..n).map(|_| d * 1.5 * rng.uniform().sqrt()).sum()
-                }
-            })
-            .collect();
-        if let Some(r) = plain_series(s.dt(), drawn) {
-            for (i, v) in values(&r, arrival).into_iter().enumerate() {
-                if let Some(v) = v {
-                    got[i].push(v);
+/// `params::noise::bootstrap` for [`Structure::Constant`], or the same bootstrap with a per-bin
+/// deposit for [`Structure::MeanEnergy`]: each quantity's model standard deviation before
+/// calibration, relative to the series' value for the decay times; `None` where fewer than two
+/// resamples or the series give a value.
+fn bootstrap(
+    s: &EnergySeries,
+    b: &Band,
+    method: noise::Method,
+    particles: u32,
+    st: Structure,
+    refused: &mut [usize; 8],
+) -> [Option<f64>; 8] {
+    let base = values(s, b.arrival);
+    let sd: [Option<f64>; 8] = match st {
+        Structure::Constant => {
+            let m = NoiseModel::crossings(b.mean_deposit, method, Some(particles)).unwrap();
+            let raw = noise::bootstrap(s, b.arrival, &m);
+            *refused = raw.map(|(_, r)| r);
+            raw.map(|(sd, _)| sd)
+        }
+        Structure::MeanEnergy => {
+            let dep: Vec<f64> = (0..b.energy.len())
+                .map(|k| {
+                    let f = if k == 0 {
+                        1.0
+                    } else {
+                        b.alive.get(k - 1).copied().unwrap_or(1.0)
+                    };
+                    b.mean_deposit * f.clamp(f64::MIN_POSITIVE, 1.0)
+                })
+                .collect();
+            let mut rng = noise::Rng::new(noise::SEED);
+            let mut got: Vec<Vec<f64>> = vec![Vec::new(); 8];
+            for _ in 0..noise::RESAMPLES {
+                let drawn: Vec<f64> = s
+                    .values()
+                    .iter()
+                    .zip(&dep)
+                    .map(|(&e, &d)| {
+                        if e <= 0.0 {
+                            return 0.0;
+                        }
+                        let lambda = e / d;
+                        if lambda > 30.0 {
+                            (e + (noise::CHORD_FACTOR * d * e).sqrt() * rng.normal()).max(0.0)
+                        } else {
+                            let n = rng.poisson(lambda);
+                            (0..n).map(|_| d * 1.5 * rng.uniform().sqrt()).sum()
+                        }
+                    })
+                    .collect();
+                if let Some(r) = plain_series(s.dt(), drawn) {
+                    for (i, v) in values(&r, b.arrival).into_iter().enumerate() {
+                        if let Some(v) = v {
+                            got[i].push(v);
+                        }
+                    }
                 }
             }
+            std::array::from_fn(|i| noise::standard_deviation(&got[i]))
         }
-    }
-    let mut out = [None; 8];
-    for i in 0..8 {
-        if let (Some(v), Some(sd)) = (base[i], noise::standard_deviation(&got[i])) {
-            out[i] = Some(if EIGHT[i].1 { sd / v.abs() } else { sd });
-        }
-    }
-    out
+    };
+    std::array::from_fn(|i| {
+        let (v, sd) = (base[i]?, sd[i]?);
+        Some(if noise::relative(i) { sd / v.abs() } else { sd })
+    })
 }
 
-/// One run's receiver-bands: each quantity's value, and its standard deviation under each
-/// structure.
+/// One run's receiver-bands: each quantity's value, its standard deviation under each
+/// structure, and how many of the constant structure's resamples refused it.
 struct RunNumbers {
     values: Vec<[Option<f64>; 8]>,
     sd: Vec<Vec<[Option<f64>; 8]>>,
+    refused: Vec<[usize; 8]>,
 }
 
 fn numbers(rep: &Value, structures: &[Structure]) -> RunNumbers {
     let bands = bands_of(rep);
+    let method = if rep["spps"]["computation_method"] == 0 {
+        noise::Method::Random
+    } else {
+        noise::Method::Energetic
+    };
+    let particles = rep["spps"]["particles_per_source"].as_u64().unwrap() as u32;
     let mut values_out = Vec::new();
     let mut sd = vec![Vec::new(); structures.len()];
+    let mut refused_out = Vec::new();
     for b in &bands {
         let s = plain_series(b.dt, b.energy.clone());
         values_out.push(s.as_ref().map_or([None; 8], |s| values(s, b.arrival)));
+        let mut refused = [noise::RESAMPLES; 8];
         for (si, st) in structures.iter().enumerate() {
-            sd[si].push(
-                s.as_ref()
-                    .map_or([None; 8], |s| bootstrap(s, b.arrival, &deposits(b, *st))),
-            );
+            // The mean-energy candidate is energetic mode's only: in random mode a particle keeps
+            // its start energy.
+            let skip = *st == Structure::MeanEnergy && method == noise::Method::Random;
+            sd[si].push(match (&s, skip) {
+                (Some(s), false) => bootstrap(s, b, method, particles, *st, &mut refused),
+                _ => [None; 8],
+            });
         }
+        refused_out.push(refused);
     }
     RunNumbers {
         values: values_out,
         sd,
-    }
-}
-
-/// The inverse of the chi-square distribution's CDF at `p` with `dof` degrees of freedom
-/// (Wilson–Hilferty, good to about 0.1 % above 30 degrees of freedom).
-fn chi2_quantile(dof: f64, p: f64) -> f64 {
-    let z = normal_quantile(p);
-    let a = 2.0 / (9.0 * dof);
-    dof * (1.0 - a + z * a.sqrt()).powi(3)
-}
-
-/// The standard normal quantile (Acklam's rational approximation, 1e-9 relative).
-fn normal_quantile(p: f64) -> f64 {
-    const A: [f64; 6] = [
-        -3.969_683_028_665_376e1,
-        2.209_460_984_245_205e2,
-        -2.759_285_104_469_687e2,
-        1.383_577_518_672_69e2,
-        -3.066_479_806_614_716e1,
-        2.506_628_277_459_239,
-    ];
-    const B: [f64; 5] = [
-        -5.447_609_879_822_406e1,
-        1.615_858_368_580_409e2,
-        -1.556_989_798_598_866e2,
-        6.680_131_188_771_972e1,
-        -1.328_068_155_288_572e1,
-    ];
-    const C: [f64; 6] = [
-        -7.784_894_002_430_293e-3,
-        -3.223_964_580_411_365e-1,
-        -2.400_758_277_161_838,
-        -2.549_732_539_343_734,
-        4.374_664_141_464_968,
-        2.938_163_982_698_783,
-    ];
-    const D: [f64; 4] = [
-        7.784_695_709_041_462e-3,
-        3.224_671_290_700_398e-1,
-        2.445_134_137_142_996,
-        3.754_408_661_907_416,
-    ];
-    let pl = 0.024_25;
-    if p < pl {
-        let q = (-2.0 * p.ln()).sqrt();
-        (((((C[0] * q + C[1]) * q + C[2]) * q + C[3]) * q + C[4]) * q + C[5])
-            / ((((D[0] * q + D[1]) * q + D[2]) * q + D[3]) * q + 1.0)
-    } else if p <= 1.0 - pl {
-        let q = p - 0.5;
-        let r = q * q;
-        (((((A[0] * r + A[1]) * r + A[2]) * r + A[3]) * r + A[4]) * r + A[5]) * q
-            / (((((B[0] * r + B[1]) * r + B[2]) * r + B[3]) * r + B[4]) * r + 1.0)
-    } else {
-        -normal_quantile(1.0 - p)
+        refused: refused_out,
     }
 }
 
@@ -1014,6 +716,178 @@ fn roles() -> Vec<Role> {
         .collect()
 }
 
+/// The structure's name in the receipt.
+fn structure_name(st: Structure) -> &'static str {
+    match st {
+        Structure::Constant => "constant",
+        Structure::MeanEnergy => "mean_energy",
+    }
+}
+
+/// One cell's receipt: its configuration and, per quantity, a row per receiver-band where every
+/// seed gives a value (`calibration::rows` reads it).
+fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
+    let reports: Vec<Value> = SEEDS
+        .map(|seed| {
+            let p = from
+                .join(c.id)
+                .join(format!("seed{seed:02}"))
+                .join("report.json");
+            serde_json::from_str(
+                &std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display())),
+            )
+            .unwrap()
+        })
+        .collect();
+    for (i, r) in reports.iter().enumerate() {
+        assert!(
+            r.get("refused").is_none(),
+            "{} seed {}: refused",
+            c.id,
+            i + 1
+        );
+    }
+    let t0 = std::time::Instant::now();
+    // Every run's numbers, in parallel.
+    let runs: Vec<RunNumbers> = std::thread::scope(|scope| {
+        let hs: Vec<_> = reports
+            .iter()
+            .map(|r| scope.spawn(|| numbers(r, &STRUCTURES)))
+            .collect();
+        hs.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let n = runs.len();
+    let rbs = runs[0].values.len();
+    println!(
+        "\nCELL {} ({n} seeds, {rbs} receiver-bands; read in {:.0} s)",
+        c.label(),
+        t0.elapsed().as_secs_f64()
+    );
+    let first = &reports[0]["spps"]["point_receivers"];
+    let per = rbs / first.as_array().unwrap().len();
+    let mut quantities = serde_json::Map::new();
+    for (qi, q) in calibration::QUANTITIES.iter().enumerate() {
+        let mut rows = Vec::new();
+        for rb in 0..rbs {
+            let got: Vec<f64> = runs.iter().filter_map(|r| r.values[rb][qi]).collect();
+            let sds: Vec<Vec<f64>> = (0..STRUCTURES.len())
+                .map(|si| runs.iter().filter_map(|r| r.sd[si][rb][qi]).collect())
+                .collect();
+            // Every seed gives the value and the code's structure its standard deviation; the
+            // other candidate is kept where it gives one in every seed too.
+            if got.len() < n || sds[0].len() < n {
+                continue;
+            }
+            let (m, sd) = mean_sd(&got);
+            let observed = if noise::relative(qi) {
+                sd / m.abs()
+            } else {
+                sd
+            };
+            // How far one seed's model standard deviation strays from the others' (relative
+            // standard deviation over the seeds): what a single run's named count rests on.
+            let scatter = {
+                let (pm, psd) = mean_sd(&sds[0]);
+                psd / pm
+            };
+            rows.push(json!({
+                "receiver": rb / per,
+                "freq_hz": first[rb / per]["bands"][rb % per]["freq_hz"],
+                "mean": m,
+                "observed_sd": observed,
+                "predicted_scatter": scatter,
+                "predicted_sd": STRUCTURES.iter().zip(&sds)
+                    .filter(|(_, s)| s.len() == n)
+                    .map(|(st, s)| (
+                        structure_name(*st).to_string(),
+                        json!((s.iter().map(|x| x * x).sum::<f64>() / n as f64).sqrt()),
+                    ))
+                    .collect::<serde_json::Map<_, _>>(),
+            }));
+        }
+        quantities.insert(q.to_string(), Value::Array(rows));
+    }
+    let receipt = json!({"cell": c.config(), "quantities": quantities});
+    for q in calibration::QUANTITIES {
+        let mut sc: Vec<f64> = receipt["quantities"][q]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["predicted_scatter"].as_f64().unwrap())
+            .collect();
+        if sc.is_empty() {
+            continue;
+        }
+        sc.sort_by(f64::total_cmp);
+        println!(
+            "  {q:<7} one seed's model sd over the seeds: median scatter {:.3}, largest {:.3}",
+            sc[sc.len() / 2],
+            sc[sc.len() - 1]
+        );
+    }
+    for q in calibration::QUANTITIES {
+        let mut line = format!(
+            "  {q:<7} {:>2} of {rbs}:",
+            receipt["quantities"][q].as_array().unwrap().len()
+        );
+        for st in STRUCTURES {
+            if let Some(p) =
+                calibration::pooled(&calibration::rows(&receipt, q, structure_name(st)), 1.0, n)
+            {
+                line += &format!(
+                    "  {} {:.3} [{:.3}, {:.3}]",
+                    structure_name(st),
+                    p.ratio,
+                    p.lower,
+                    p.upper
+                );
+            }
+        }
+        println!("{line}");
+    }
+    (receipt, runs)
+}
+
+/// The eight limits, in [`calibration::QUANTITIES`]' order (relative for the decay times).
+const LIMITS: [f64; 8] = [
+    noise::limits::SPL_DB,
+    noise::limits::DECAY_RELATIVE,
+    noise::limits::DECAY_RELATIVE,
+    noise::limits::DECAY_RELATIVE,
+    noise::limits::CLARITY_DB,
+    noise::limits::CLARITY_DB,
+    noise::limits::DEFINITION,
+    noise::limits::CENTRE_TIME_S,
+];
+
+/// How `params::noise::evaluate` judges quantity `qi` of receiver-band `rb` of one run, from the
+/// run's numbers: `Ok(())` when it gives the value, `Err(count)` when it refuses it for its noise
+/// with the particle count it names (if any); `None` when the series gives no value.
+fn judged(
+    run: &RunNumbers,
+    rb: usize,
+    qi: usize,
+    method: noise::Method,
+    particles: u32,
+) -> Option<Result<(), Option<u64>>> {
+    run.values[rb][qi]?;
+    let refused = run.refused[rb][qi];
+    let Some(sd) = run.sd[0][rb][qi] else {
+        return Some(Err(None));
+    };
+    let m = noise::calibration::factor(method, qi) * sd;
+    if refused <= noise::REFUSED_RESAMPLES_ALLOWED && m <= LIMITS[qi] {
+        return Some(Ok(()));
+    }
+    if m <= LIMITS[qi] || !noise::calibration::root_n_confirmed(method, qi) {
+        return Some(Err(None));
+    }
+    let factor = (noise::calibration::margin(method, qi) * m / LIMITS[qi]).powi(2);
+    Some(Err(Some(noise::round_up_two_digits(
+        factor * f64::from(particles),
+    ))))
+}
+
 #[test]
 #[ignore = "evidence for the noise model, not a gate: reads the calibration runs; run on purpose \
             with SIMPA_NOISE_FROM"]
@@ -1024,106 +898,208 @@ fn noise_calibration() {
         .into_iter()
         .filter(|c| roles.contains(&c.role))
         .collect();
-    let mut out_cells = Vec::new();
-    for c in &cells {
-        let reports: Vec<Value> = SEEDS
-            .map(|seed| {
-                let p = from
-                    .join(c.id)
-                    .join(format!("seed{seed:02}"))
-                    .join("report.json");
-                serde_json::from_str(
-                    &std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display())),
-                )
-                .unwrap()
-            })
-            .collect();
-        for (i, r) in reports.iter().enumerate() {
-            assert!(
-                r.get("refused").is_none(),
-                "{} seed {}: refused",
-                c.id,
-                i + 1
-            );
+    let (receipts, runs): (Vec<Value>, Vec<Vec<RunNumbers>>) =
+        cells.iter().map(|c| cell_receipt(c, &from)).unzip();
+    let of = |role: &str, method: &str| -> Vec<&Value> {
+        receipts
+            .iter()
+            .filter(|r| r["cell"]["role"] == role && r["cell"]["method"] == method)
+            .collect()
+    };
+    // Rules 1 and 2 on the calibration cells: per method and structure, each quantity's factor and
+    // how much the calibrated model overstates the seeds' spread, cell by cell.
+    for method in ["random", "energetic"] {
+        let cal = of("calibration", method);
+        if cal.is_empty() {
+            continue;
         }
-        let t0 = std::time::Instant::now();
-        // Every run's numbers, in parallel.
-        let runs: Vec<RunNumbers> = std::thread::scope(|scope| {
-            let hs: Vec<_> = reports
-                .iter()
-                .map(|r| scope.spawn(|| numbers(r, &STRUCTURES)))
-                .collect();
-            hs.into_iter().map(|h| h.join().unwrap()).collect()
-        });
-        let n = runs.len();
-        let rbs = runs[0].values.len();
-        println!(
-            "\nCELL {} ({} seeds, {rbs} receiver-bands; analysed in {:.0} s)",
-            c.label(),
-            n,
-            t0.elapsed().as_secs_f64()
-        );
-        let first = &reports[0]["spps"]["point_receivers"];
-        let mut quantities = serde_json::Map::new();
-        for (qi, (q, relative)) in EIGHT.iter().enumerate() {
-            let mut rows = Vec::new();
-            let mut sums = vec![(0.0f64, 0.0f64); STRUCTURES.len()];
-            let mut short = 0;
-            for rb in 0..rbs {
-                let got: Vec<f64> = runs.iter().filter_map(|r| r.values[rb][qi]).collect();
-                let sds: Vec<Vec<f64>> = (0..STRUCTURES.len())
-                    .map(|si| runs.iter().filter_map(|r| r.sd[si][rb][qi]).collect())
-                    .collect();
-                if got.len() < n || sds.iter().any(|s| s.len() < n) {
-                    short += 1;
+        println!("\n{method} mode, {} calibration cells:", cal.len());
+        for st in STRUCTURES {
+            let name = structure_name(st);
+            let mut logs = Vec::new();
+            let mut line = format!("  {name:<11}");
+            for q in calibration::QUANTITIES {
+                let mut best: Option<(f64, &str)> = None;
+                let mut ratios = Vec::new();
+                for c in &cal {
+                    let Some(p) = calibration::pooled(
+                        &calibration::rows(c, q, name),
+                        1.0,
+                        calibration::seeds(c),
+                    ) else {
+                        continue;
+                    };
+                    ratios.push(p.ratio);
+                    if best.is_none_or(|(b, _)| p.upper > b) {
+                        best = Some((p.upper, c["cell"]["id"].as_str().unwrap()));
+                    }
+                }
+                let Some((upper, id)) = best else {
+                    line += &format!(" {q} -;");
                     continue;
-                }
-                let (m, sd) = mean_sd(&got);
-                let observed = if *relative { sd / m.abs() } else { sd };
-                let predicted: Vec<f64> = sds
-                    .iter()
-                    .map(|s| (s.iter().map(|x| x * x).sum::<f64>() / n as f64).sqrt())
-                    .collect();
-                for (si, p) in predicted.iter().enumerate() {
-                    sums[si].0 += observed * observed;
-                    sums[si].1 += p * p;
-                }
-                let receivers = first.as_array().unwrap().len();
-                let per = rbs / receivers;
-                rows.push(json!({
-                    "receiver": rb / per,
-                    "freq_hz": first[rb / per]["bands"][rb % per]["freq_hz"],
-                    "mean": m,
-                    "observed_sd": observed,
-                    "predicted_sd": STRUCTURES.iter().zip(&predicted)
-                        .map(|(s, p)| (format!("{s:?}"), json!(p)))
-                        .collect::<serde_json::Map<_, _>>(),
-                }));
-            }
-            let dof = (rows.len() * (n - 1)) as f64;
-            let mut line = format!("  {q:<7} {:>2} rb ({short} short):", rows.len());
-            for (si, st) in STRUCTURES.iter().enumerate() {
-                if rows.is_empty() {
-                    break;
-                }
-                let ratio = (sums[si].0 / sums[si].1).sqrt();
-                let ucb = ratio * (dof / chi2_quantile(dof, 0.05)).sqrt();
-                let lcb = ratio * (dof / chi2_quantile(dof, 0.95)).sqrt();
+                };
+                let k = calibration::round_up_two_digits(upper);
+                logs.extend(ratios.iter().map(|r| (k / r).ln()));
                 line += &format!(
-                    " {st:?} ratio {ratio:.3} [{lcb:.3}, {ucb:.3}] obs rms {:.4}{}",
-                    (sums[si].0 / rows.len() as f64).sqrt(),
-                    if *relative { " rel" } else { "" }
+                    "\n    {q:<7} k {k} (upper bound {upper:.6}, set by {id}); overstates {:.2} to {:.2}",
+                    k / ratios.iter().copied().fold(0.0, f64::max),
+                    k / ratios.iter().copied().fold(f64::INFINITY, f64::min)
                 );
             }
-            println!("{line}");
-            quantities.insert(q.to_string(), json!(rows));
+            if logs.is_empty() {
+                continue;
+            }
+            let gm = (logs.iter().sum::<f64>() / logs.len() as f64).exp();
+            println!("{line}\n    geometric-mean overstatement {gm:.3}");
         }
-        out_cells.push(json!({"cell": c.config(), "quantities": quantities}));
+    }
+    // Rule 5b: the named count's margins, from the calibration cells.
+    for method in ["random", "energetic"] {
+        let cal = of("calibration", method);
+        if cal.is_empty() {
+            continue;
+        }
+        let line: Vec<String> = calibration::QUANTITIES
+            .iter()
+            .filter_map(|q| calibration::margin(&cal, q).map(|(m, id)| format!("{q} {m} ({id})")))
+            .collect();
+        println!("\n{method} mode, margins: {}", line.join(", "));
+    }
+    // Rule 3 on the validation cells, with the code's factors.
+    for method in ["random", "energetic"] {
+        let val = of("validation", method);
+        if val.is_empty() {
+            continue;
+        }
+        let m = if method == "random" {
+            noise::Method::Random
+        } else {
+            noise::Method::Energetic
+        };
+        println!("\n{method} mode, validation with the code's factors:");
+        for c in &val {
+            let mut line = format!("  {}", c["cell"]["id"].as_str().unwrap());
+            for (qi, q) in calibration::QUANTITIES.iter().enumerate() {
+                match calibration::validates(c, q, noise::calibration::factor(m, qi)) {
+                    Some((ok, p)) => {
+                        line += &format!(
+                            "\n    {q:<7} {:.3} [{:.3}, {:.3}] {}",
+                            p.ratio,
+                            p.lower,
+                            p.upper,
+                            if ok { "ok" } else { "FAIL" }
+                        )
+                    }
+                    None => line += &format!("\n    {q:<7} -"),
+                }
+            }
+            println!("{line}");
+        }
+    }
+    // Rule 4: cells that differ only in N.
+    let all = json!({"cells": receipts});
+    for (a, b) in calibration::PAIRS {
+        let find = |id: &str| receipts.iter().find(|r| r["cell"]["id"] == id);
+        let (Some(ra), Some(rb)) = (find(a), find(b)) else {
+            continue;
+        };
+        println!("\n1/sqrt(N), {a} against {b}:");
+        for q in calibration::QUANTITIES {
+            if let Some((x, y, ok)) = calibration::root_n(ra, rb, q) {
+                println!(
+                    "    {q:<7} {:.4} vs {:.4} ({:+.1} se) {}",
+                    x.0,
+                    y.0,
+                    (y.0 - x.0) / x.1.hypot(y.1),
+                    if ok { "ok" } else { "DIFFER" }
+                );
+            }
+        }
+    }
+    for method in ["random", "energetic"] {
+        let line: Vec<String> = calibration::QUANTITIES
+            .iter()
+            .map(|q| {
+                let (ok, differ) = calibration::root_n_confirmed(&all, method, q);
+                format!(
+                    "{q} {}",
+                    if ok {
+                        "confirmed".into()
+                    } else {
+                        format!("NOT {differ:?}")
+                    }
+                )
+            })
+            .collect();
+        println!(
+            "{method} mode, 1/sqrt(N) over the pairs read: {}",
+            line.join("; ")
+        );
+    }
+    // Rule 6: the named counts, on the pairs. Each seed of the lower count refused for its noise
+    // with a named count at most the higher count: the share of the higher count's seeds that
+    // give that receiver-band's value.
+    for (a, b) in calibration::PAIRS {
+        let (Some(ia), Some(ib)) = (
+            cells.iter().position(|c| c.id == a),
+            cells.iter().position(|c| c.id == b),
+        ) else {
+            continue;
+        };
+        let (ca, cb) = (&cells[ia], &cells[ib]);
+        let method = if ca.method == Random {
+            noise::Method::Random
+        } else {
+            noise::Method::Energetic
+        };
+        println!(
+            "\nnamed counts, {a} ({}) against {b} ({}):",
+            ca.particles, cb.particles
+        );
+        for (qi, q) in calibration::QUANTITIES.iter().enumerate() {
+            let (mut refusals, mut named, mut within, mut pass) = (0, 0, 0, 0.0);
+            let rbs = runs[ia][0].values.len();
+            for rb in 0..rbs {
+                let hi: Vec<Option<Result<(), Option<u64>>>> = runs[ib]
+                    .iter()
+                    .map(|r| judged(r, rb, qi, method, cb.particles))
+                    .collect();
+                for run in &runs[ia] {
+                    let Some(Err(count)) = judged(run, rb, qi, method, ca.particles) else {
+                        continue;
+                    };
+                    refusals += 1;
+                    let Some(n) = count else { continue };
+                    named += 1;
+                    if n > u64::from(cb.particles) {
+                        continue;
+                    }
+                    within += 1;
+                    let given = hi.iter().filter(|h| matches!(h, Some(Ok(())))).count();
+                    pass += given as f64 / hi.len() as f64;
+                }
+            }
+            if refusals > 0 {
+                println!(
+                    "    {q:<7} {refusals} refused for noise at {a}, {named} name a count, \
+                     {within} at most {b}'s; of those, {:.1} % of {b}'s seeds give the value",
+                    if within > 0 {
+                        100.0 * pass / within as f64
+                    } else {
+                        f64::NAN
+                    }
+                );
+            }
+        }
     }
     if let Ok(out) = std::env::var("SIMPA_NOISE_OUT") {
         std::fs::write(
             &out,
-            serde_json::to_string(&json!({"cells": out_cells})).unwrap(),
+            serde_json::to_string_pretty(&json!({
+                "preregistration": "PREREGISTER.txt",
+                "cells": receipts,
+            }))
+            .unwrap(),
         )
         .unwrap();
         println!("written {out}");

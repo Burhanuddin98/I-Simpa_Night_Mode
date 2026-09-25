@@ -517,10 +517,29 @@ pub struct MonteCarloReport {
     pub limit_definition: f64,
     pub limit_centre_time_s: f64,
     pub limit_spl_db: f64,
+    /// The run's computation method, which picks the calibration.
+    pub method: noise::Method,
+    /// Per quantity, by name, for this computation method (`params::noise::calibration`;
+    /// `docs/investigations/2026-09-25-noise-calibration/`).
+    pub calibration: std::collections::BTreeMap<String, QuantityCalibration>,
+}
+
+/// How one quantity's noise is calibrated and how a refusal names a particle count.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct QuantityCalibration {
+    /// The factor the bootstrap's standard deviation is multiplied by: the largest one-sided 95 %
+    /// upper bound of SPPS's seed-to-seed spread over the model on the calibration cells.
+    pub factor: f64,
+    /// A refusal names the particle count at which the calibrated standard deviation would be the
+    /// limit over this margin (`params::noise::calibration::margin`).
+    pub margin: f64,
+    /// Whether the spread's fall as `1/√N` was confirmed for the quantity in this method; when
+    /// not, a refusal names no count (`scaling_not_confirmed`).
+    pub root_n_confirmed: bool,
 }
 
 impl MonteCarloReport {
-    fn current() -> Self {
+    fn current(method: noise::Method) -> Self {
         use noise::limits;
         MonteCarloReport {
             resamples: noise::RESAMPLES,
@@ -531,6 +550,21 @@ impl MonteCarloReport {
             limit_definition: limits::DEFINITION,
             limit_centre_time_s: limits::CENTRE_TIME_S,
             limit_spl_db: limits::SPL_DB,
+            method,
+            calibration: noise::QUANTITY_NAMES
+                .iter()
+                .enumerate()
+                .map(|(i, q)| {
+                    (
+                        q.to_string(),
+                        QuantityCalibration {
+                            factor: noise::calibration::factor(method, i),
+                            margin: noise::calibration::margin(method, i),
+                            root_n_confirmed: noise::calibration::root_n_confirmed(method, i),
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -858,21 +892,31 @@ fn series_of(
     }
 }
 
-/// The receiver crossings behind `total` under `model`.
-fn crossings(model: &NoiseModel, total: f64) -> Option<f64> {
+/// The receiver crossings behind the series `energy` under `model`: its total over the mean
+/// deposit.
+fn crossings(model: &NoiseModel, energy: &[f64]) -> Option<f64> {
     match model {
-        NoiseModel::Crossings { mean_deposit } => Some(total / mean_deposit),
+        NoiseModel::Crossings { mean_deposit, .. } => {
+            Some(energy.iter().sum::<f64>() / mean_deposit)
+        }
         NoiseModel::Unknown { .. } => None,
     }
 }
 
-/// The aggregate's noise model: crossings of the largest band deposit, unknown when any band's is.
+/// The aggregate's noise model: crossings of the largest band deposit, under the bands' method
+/// and particle count; unknown when any band's is.
 fn aggregate_model(models: &[&NoiseModel]) -> NoiseModel {
-    let mut largest: Option<f64> = None;
+    let mut largest: Option<(f64, noise::Method, Option<u32>)> = None;
     for m in models {
         match m {
-            NoiseModel::Crossings { mean_deposit } => {
-                largest = Some(largest.map_or(*mean_deposit, |l: f64| l.max(*mean_deposit)));
+            NoiseModel::Crossings {
+                mean_deposit,
+                method,
+                particles,
+            } => {
+                if largest.is_none_or(|(l, _, _)| *mean_deposit > l) {
+                    largest = Some((*mean_deposit, *method, *particles));
+                }
             }
             NoiseModel::Unknown { detail } => {
                 return NoiseModel::Unknown {
@@ -882,7 +926,11 @@ fn aggregate_model(models: &[&NoiseModel]) -> NoiseModel {
         }
     }
     match largest {
-        Some(d) => NoiseModel::Crossings { mean_deposit: d },
+        Some((mean_deposit, method, particles)) => NoiseModel::Crossings {
+            mean_deposit,
+            method,
+            particles,
+        },
         None => NoiseModel::Unknown {
             detail: "no band to aggregate".into(),
         },
@@ -986,7 +1034,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             arrival,
             decay_arrival: e.decay_arrival,
             contributing_sources: contributing.iter().map(|c| c.to_string()).collect(),
-            crossings: crossings(&model, total_pa2),
+            crossings: crossings(&model, &b.energy),
             noise_model: model.clone(),
             energy_pa2: b.energy.clone(),
             total_pa2,
@@ -1032,7 +1080,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                         arrival,
                         decay_arrival: e.decay_arrival,
                         noise_model: model.clone(),
-                        crossings: crossings(model, total_pa2),
+                        crossings: crossings(model, energy),
                         energy_pa2: energy.clone(),
                         total_pa2,
                         onset: e.onset,
@@ -1076,7 +1124,11 @@ fn spps_report(bands_hz: &[i32], s: &SppsResults) -> SppsReport {
         particles_per_source: s.particles_per_source,
         trans_epsilon: s.trans_epsilon,
         echogram_per_source: s.echogram_per_source,
-        monte_carlo: MonteCarloReport::current(),
+        monte_carlo: MonteCarloReport::current(if s.computation_method == 0 {
+            noise::Method::Random
+        } else {
+            noise::Method::Energetic
+        }),
         sources: s.sources.clone(),
         particles: s.particles.clone(),
         total_energy: s.total_energy.clone(),
@@ -1557,7 +1609,7 @@ mod tests {
         );
         // Several sources withhold the curve with the curvature.
         let s = EnergySeries::new(0.01, (0..100).map(|k| 0.9f64.powi(k)).collect()).unwrap();
-        let model = NoiseModel::crossings(1e-6).unwrap();
+        let model = NoiseModel::crossings(1e-6, noise::Method::Random, None).unwrap();
         let mut e = evaluated(&Ok(s), Arrival::at(0.0), &model);
         assert!(e.decay_curve.is_some());
         e.several_sources(&["A", "B"]);

@@ -25,6 +25,8 @@
 //!   Kuttruff time with the correction's `½` dropped, or with the air term folded into `ᾱ` (the
 //!   form a secondary source quotes) instead of added as `4·m·V`: the say-NOs of its known-answer
 //!   checks against the transport (`docs/params.md`, "Kuttruff's reference").
+//! - [`Fault::NoiseCalibrationScaled`]: `params::noise`'s calibration factors scaled, the say-NO
+//!   of the calibration's validation (`docs/params.md`, "Monte-Carlo noise").
 
 /// One fault, set by [`with`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -46,6 +48,9 @@ pub enum Fault {
     /// `params::room`'s Kuttruff time `K·V/A'` with `ᾱ' = ᾱ + 4·m·V/S` inside both logarithms,
     /// instead of `K·V/(4·m·V + A)`.
     KuttruffAirInsideMean,
+    /// Every calibration factor of `params::noise` multiplied by `by`: 0.5 is a model twice as
+    /// optimistic as the calibration found, the say-NO of its validation.
+    NoiseCalibrationScaled { by: f64 },
 }
 
 #[cfg(feature = "fault-injection")]

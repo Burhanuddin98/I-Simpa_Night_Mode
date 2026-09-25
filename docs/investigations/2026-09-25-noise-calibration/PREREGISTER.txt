@@ -71,3 +71,30 @@ RULES, fixed now
    validation; one quantity's observed noise raised above its prediction fails that quantity's check.
 6. Refusal limits are unchanged (Burhan's decisions): EDT, T20, T30 2.5 % relative; C50, C80 0.5 dB;
    D50 0.025; Ts 5 ms; SPL 0.5 dB.
+
+ADDENDUM, 2026-09-25 06:13, after the calibration cells were read and BEFORE any validation cell
+was read (the analysis ran with SIMPA_NOISE_ROLES=calibration only).
+
+Read so far: rule 1 chose the constant structure for energetic mode (geometric-mean overstatement
+1.653 against 2.231 for the mean-energy candidate); no further candidate is added. Rule 2 gave the
+factors now in params::noise::calibration. Rule 4 on the calibration pairs: random T30 (C-R1/C-R2,
+-2.1 se) and energetic EDT (C-E3/C-E4, -2.5 se) differ; every other comparison agrees.
+
+What was not foreseen: one run's model standard deviation scatters from seed to seed by about 5 %
+for most quantities (median over receiver-bands) but by 15 to 36 % for random-mode T20 and T30
+(10 % for energetic T30), in SPPS as in the synthetic model (params_noise.rs). A count named from
+one run inherits that scatter. So, fixed now, on the calibration cells only:
+
+5b. The named count's margin per method and quantity: 1 + 1.28 x s, s the largest over the
+    calibration cells of the median over their receiver-bands of one seed's scatter (the relative
+    standard deviation over the seeds of the model's standard deviation), rounded up to two
+    significant digits, and never below 1.1: about a 90 % chance that one run's estimate is not
+    so low that the named count falls short. The count is N x (margin x calibrated sd / limit)^2,
+    rounded up to two significant digits.
+4b. Rule 4 stands as written: a method and quantity for which any pair differs by more than two
+    joint standard errors names no count. The validation pairs (C-R5/V-R4, C-E5/V-E4) are read
+    with the validation cells and can only add to the list.
+6.  The named counts are tested on the pairs, once, with the validation: of the receiver-band
+    seeds refused for noise at the lower count whose named count is at most the higher count, the
+    share whose value the higher count's seeds give (each seed at the higher count judged on its
+    own) is reported per method and quantity. Target: at least 80 %; reported, not tuned.
