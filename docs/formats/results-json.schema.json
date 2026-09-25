@@ -441,7 +441,7 @@
         "description": "A quantity's value, or why it has none."
       },
       "FreePathSettings": {
-        "description": "The settings of [`free_paths`]: the transport's own, nothing of any solver.",
+        "description": "The settings the transport traced with: its own, nothing of any solver. [`free_paths`] always\nuses [`FreePathSettings::STANDARD`] and takes no settings from its caller; others are for\nstudies of the transport in test builds.",
         "properties": {
           "burn_in_paths": {
             "description": "Free paths of each ray left out after its first (from its start to a face, never\ncounted), while the ray forgets where it started.",
@@ -450,7 +450,7 @@
             "type": "integer"
           },
           "paths_per_ray": {
-            "description": "Free paths counted per ray after the burn-in.",
+            "description": "Free paths counted per ray after the burn-in. At least 2.",
             "format": "uint32",
             "minimum": 0,
             "type": "integer"
@@ -484,7 +484,7 @@
         "type": "object"
       },
       "FreePaths": {
-        "description": "The free paths between reflections of a diffuse (Lambert) ray transport in the room, computed from its geometry alone (params::lambert::free_paths): their mean and relative variance gamma^2, with their standard errors over the transport's replicas, and the room's 4V/S, V and S.",
+        "description": "The free paths between reflections of a diffuse (Lambert) ray transport in the room, computed from its geometry alone at fixed settings (params::lambert::free_paths): their mean and relative variance gamma^2, with their standard errors over the transport's replicas, and the room's 4V/S, V and S.",
         "properties": {
           "area_m2": {
             "description": "The room's surface area, m².",
@@ -1313,7 +1313,7 @@
             "type": "object"
           },
           {
-            "description": "The diffuse ray transport (`params::lambert`) cannot run with its inputs, a ray left the\nenclosure, or its mean free path is not `4V/S` within its statistical error.",
+            "description": "The diffuse ray transport (`params::lambert`) cannot run with its inputs, a ray left the\nenclosure, its mean free path is not `4V/S` within its statistical error, or `γ²`'s\nstandard error is above its limit.",
             "properties": {
               "detail": {
                 "type": "string"
@@ -1701,7 +1701,7 @@
           },
           "kuttruff_s": {
             "$ref": "#/$defs/Evaluated",
-            "description": "Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:\n**M8's reference**. `mc_sd` is the standard deviation it inherits from the transport's\n`γ²`. Refused with the transport's own refusal when the transport refused."
+            "description": "Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:\n**M8's reference**. `mc_sd` is only the standard deviation it inherits from the transport's\n`γ²`, not its total uncertainty: it leaves out the formula's own error against a diffuse\nroom (−0.41 % to +0.59 % in M8's cells, `docs/params.md`, \"Kuttruff's reference\"; not\nmeasured in other rooms). Refused with the transport's own refusal when the transport\nrefused."
           },
           "lambert_walls": {
             "description": "Every face reflects by Lambert's law with scattering 1 in this band: the only walls the\ntransport's `γ²` describes. When false, neither time describes the run's field.",

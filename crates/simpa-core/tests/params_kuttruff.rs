@@ -7,19 +7,25 @@
 //! collect (radius 0.31 m, SPPS's), read through `params` from the arrival, at M8's source and
 //! three receivers per room and `dt` 1 ms, averaged over the three receivers in each of 16
 //! replicas; the standard error is that of the 16 replica means. It is what M8 compares SPPS's
-//! T30 with. The room's total energy decays almost alike (printed): at 4 M to 34 M rays a cell
-//! (`kuttruff_against_the_transport_at_high_counts`), within 0.04 % of the receivers in every
-//! cell, and Kuttruff +0.59 % of both at α 0.4 in the 5×4×3 m room, its worst (`docs/params.md`).
+//! T30 with. And the T30 of the room's total energy, which in M8's rooms decays alike (within
+//! 0.04 % of the receivers in every cell at high counts) and is several times less noisy for the
+//! same rays; in the elongated room of the evidence run it does not (up to 0.8 % apart).
+//!
+//! **Two questions, kept apart.** Kuttruff's *formula* against the transport is measured with the
+//! box's exact `γ²` (`lambert_exact`), so that only the transport's noise is in the comparison.
+//! The *reference as shipped*, `kuttruff_rt` with `free_paths`' `γ²`, is then required to be that
+//! formula within the standard deviation it reports (`kuttruff_rt_sd`).
+
+mod lambert_exact;
 
 use std::f64::consts::LN_10;
 
+use lambert_exact::box_gamma2;
 use simpa_core::faults::{self, Fault};
 use simpa_core::params::air::{Atmosphere, solver_air_absorption_per_m};
 use simpa_core::params::codes;
 use simpa_core::params::decay::Arrival;
-use simpa_core::params::lambert::{
-    DecaySettings, Enclosure, FreePathSettings, FreePaths, decay, free_paths,
-};
+use simpa_core::params::lambert::{DecaySettings, Enclosure, decay, free_paths};
 use simpa_core::params::room::{
     RtConstant, Surface, eyring_rt, kuttruff_absorption_area, kuttruff_rt, kuttruff_rt_sd,
 };
@@ -29,7 +35,7 @@ const C: f64 = 343.2;
 const K: RtConstant = RtConstant::Physical { speed_of_sound: C };
 const RADIUS: f64 = 0.31;
 
-/// One of M8's rooms with its source and three receivers (`crates/simpa/tests/m8_evidence.rs`).
+/// One room with its source and three receivers.
 struct Room {
     name: &'static str,
     size: [f64; 3],
@@ -37,6 +43,7 @@ struct Room {
     receivers: [[f64; 3]; 3],
 }
 
+/// M8's rooms (`crates/simpa/tests/m8_evidence.rs`).
 const ROOMS: [Room; 2] = [
     Room {
         name: "6x10x3",
@@ -60,15 +67,27 @@ fn walls(e: &Enclosure, alpha: f64) -> [Surface; 1] {
     }]
 }
 
-/// The transport's T30 in one cell: `(mean, standard error)` of the replicas' receiver means, s,
-/// and the room energy's T30, s.
-fn transport_t30(
-    room: &Room,
-    e: &Enclosure,
-    alpha: f64,
-    air: Option<f64>,
-    rays: u32,
-) -> (f64, f64, f64) {
+/// Kuttruff's formula `K·V/(4·m·V − S·ln(1 − α)·[1 + (γ²/2)·ln(1 − α)])` with a given `γ²`, for
+/// the exact `γ²` of a box. `kuttruff_rt` is this formula to 10⁻¹²
+/// (`kuttruff_is_its_closed_form_and_refuses_what_it_does_not_describe`).
+fn kuttruff_formula(e: &Enclosure, alpha: f64, gamma2: f64, air: Option<f64>) -> f64 {
+    let (v, s) = (e.volume_m3(), e.area_m2());
+    let ln = (1.0 - alpha).ln();
+    K.value() * v / (4.0 * air.unwrap_or(0.0) * v - s * ln * (1.0 + 0.5 * gamma2 * ln))
+}
+
+/// The transport's T30s in one cell, s.
+struct Transport {
+    /// The receivers': the mean over replicas of the three receivers' mean, and its standard
+    /// error.
+    t: f64,
+    se: f64,
+    /// The room energy's, and its standard error over the replicas.
+    room: f64,
+    room_se: f64,
+}
+
+fn transport_t30(room: &Room, e: &Enclosure, alpha: f64, air: Option<f64>, rays: u32) -> Transport {
     let t_eyring = eyring_rt(e.volume_m3(), &walls(e, alpha), air, K).unwrap();
     let d = decay(
         e,
@@ -79,7 +98,7 @@ fn transport_t30(
             receiver_radius_m: RADIUS,
             speed_of_sound_m_s: C,
             time_step_s: 0.001,
-            // 76 dB of Eyring's decay, 68 of the slowest (α 0.4, +11 %).
+            // 84 dB of Eyring's decay, 76 of the slowest (α 0.4, +11 %).
             duration_s: 1.4 * t_eyring,
             air_m_per_metre: air,
             replicas: 16,
@@ -107,13 +126,19 @@ fn transport_t30(
         .collect();
     let m = means.iter().sum::<f64>() / 16.0;
     let var = means.iter().map(|x| (x - m).powi(2)).sum::<f64>() / 15.0;
-    (m, (var / 16.0).sqrt(), d.room_t30().unwrap().mean)
+    let room_t30 = d.room_t30().unwrap();
+    Transport {
+        t: m,
+        se: (var / 16.0).sqrt(),
+        room: room_t30.mean,
+        room_se: room_t30.se,
+    }
 }
 
 #[test]
 fn kuttruff_is_its_closed_form_and_refuses_what_it_does_not_describe() {
     let e = Enclosure::shoebox([6.0, 10.0, 3.0]).unwrap();
-    let p = free_paths(&e, &FreePathSettings::STANDARD).unwrap();
+    let p = free_paths(&e).unwrap();
     let (v, s, g) = (e.volume_m3(), e.area_m2(), p.gamma2());
     let k = 24.0 * LN_10 / C;
     for alpha in [0.05, 0.2, 0.4, 0.9] {
@@ -122,6 +147,10 @@ fn kuttruff_is_its_closed_form_and_refuses_what_it_does_not_describe() {
         let w = walls(&e, alpha);
         assert!((kuttruff_absorption_area(&p, &w).unwrap() - a).abs() < 1e-10 * a);
         assert!((kuttruff_rt(&p, &w, None, K).unwrap() - k * v / a).abs() < 1e-12);
+        assert!(
+            (kuttruff_rt(&p, &w, None, K).unwrap() - kuttruff_formula(&e, alpha, g, None)).abs()
+                < 1e-12
+        );
         // The air term is added outside the wall term.
         let m = 0.01;
         assert!(
@@ -202,52 +231,71 @@ fn kuttruff_is_its_closed_form_and_refuses_what_it_does_not_describe() {
     );
 }
 
-/// `|T_K/T − 1| ≤ 0.6 % + 3·SE`, with `T`'s relative standard error `rel_se`.
+/// `|T_K/T − 1| ≤ 0.6 % + 3·SE`, with the comparison's relative standard error `rel_se`.
 fn within(t_k: f64, t: f64, rel_se: f64) -> bool {
     (t_k / t - 1.0).abs() <= 0.006 + 3.0 * rel_se
 }
 
 #[test]
 fn kuttruff_reproduces_the_transports_t30_in_m8s_cells() {
+    // At the gate's counts (0.26 M to 2.1 M rays a cell, a debug build) the receivers' T30 carries
+    // up to about 0.1 % of noise and the room energy's under 0.02 %: the formula is held to 0.6 %
+    // plus three of each, so to at most 0.96 % on the receivers and 0.66 % on the room energy.
+    // The bare 0.6 % at the point estimate needs the ignored high-count run below
+    // (`kuttruff_against_the_transport_at_high_counts`), which asserts it.
     let mut rows = Vec::new();
     let (mut eyring_fails, mut fault_fails) = (0, 0);
     for room in &ROOMS {
         let e = Enclosure::shoebox(room.size).unwrap();
-        let p: FreePaths = free_paths(&e, &FreePathSettings::STANDARD).unwrap();
+        let p = free_paths(&e).unwrap();
+        let exact = box_gamma2(room.size);
         for alpha in [0.05, 0.1, 0.2, 0.4] {
             // More rays where the decay is short and noisier, about the same work in every cell.
             let rays = (16384.0 * alpha / 0.05) as u32;
-            let (t, se, t_room) = transport_t30(room, &e, alpha, None, rays);
+            let tr = transport_t30(room, &e, alpha, None, rays);
             let w = walls(&e, alpha);
+            let t_x = kuttruff_formula(&e, alpha, exact, None);
             let t_k = kuttruff_rt(&p, &w, None, K).unwrap();
+            let sd_k = kuttruff_rt_sd(&p, &w, None, K).unwrap();
             let t_e = eyring_rt(e.volume_m3(), &w, None, K).unwrap();
             let t_fault = faults::with(Fault::KuttruffFullVariance, || {
                 kuttruff_rt(&p, &w, None, K).unwrap()
             });
-            let rel = se / t;
+            let (rel, rel_room) = (tr.se / tr.t, tr.room_se / tr.room);
             rows.push(format!(
-                "{} α {alpha}: transport {t:.5} ± {se:.5} s ({:+.2} % vs Eyring; room energy \
-                 {:+.2} %); Kuttruff {:+.3} % of it; Eyring {:+.2} %; Kuttruff without the ½ \
-                 {:+.2} %",
+                "{} α {alpha}: transport {:.5} ± {:.5} s ({:+.2} % vs Eyring), room energy \
+                 {:.5} ± {:.5} s; Kuttruff (exact γ²) {:+.3} % of the receivers, {:+.3} % of the \
+                 room energy; as shipped {:+.4} % ± {:.4} of the exact-γ² value; Eyring {:+.2} %; \
+                 Kuttruff without the ½ {:+.2} % of the room energy",
                 room.name,
-                100.0 * (t / t_e - 1.0),
-                100.0 * (t_room / t_e - 1.0),
-                100.0 * (t_k / t - 1.0),
-                100.0 * (t_e / t - 1.0),
-                100.0 * (t_fault / t - 1.0),
+                tr.t,
+                tr.se,
+                100.0 * (tr.t / t_e - 1.0),
+                tr.room,
+                tr.room_se,
+                100.0 * (t_x / tr.t - 1.0),
+                100.0 * (t_x / tr.room - 1.0),
+                100.0 * (t_k / t_x - 1.0),
+                100.0 * sd_k / t_x,
+                100.0 * (t_e / tr.room - 1.0),
+                100.0 * (t_fault / tr.room - 1.0),
             ));
-            // The error is small enough for the bound to mean something.
-            assert!(rel < 0.002, "{}", rows.last().unwrap());
-            assert!(within(t_k, t, rel), "{}", rows.last().unwrap());
-            eyring_fails += usize::from(!within(t_e, t, rel));
-            fault_fails += usize::from(!within(t_fault, t, rel));
+            let row = rows.last().unwrap();
+            println!("{row}");
+            // The errors are small enough for the bounds to mean something.
+            assert!(rel < 0.0012 && rel_room < 0.0002, "{row}");
+            assert!(within(t_x, tr.t, rel), "{row}");
+            assert!(within(t_x, tr.room, rel_room), "{row}");
+            // The reference as shipped is the formula within the deviation it reports.
+            assert!((t_k - t_x).abs() <= 3.0 * sd_k, "{row}");
+            eyring_fails += usize::from(!within(t_e, tr.room, rel_room));
+            fault_fails += usize::from(!within(t_fault, tr.room, rel_room.hypot(sd_k / t_k)));
         }
     }
-    println!("{}", rows.join("\n"));
-    // Says no: plain Eyring misses in every cell, and Kuttruff's own formula with its ½ dropped
-    // (a fault through the code) misses in most.
+    // Says no: plain Eyring misses in every cell, and Kuttruff's own formula with its ½ dropped (a
+    // fault through the code) too.
     assert_eq!(eyring_fails, 8, "{}", rows.join("\n"));
-    assert!(fault_fails >= 6, "{fault_fails}: {}", rows.join("\n"));
+    assert_eq!(fault_fails, 8, "{}", rows.join("\n"));
 }
 
 #[test]
@@ -262,8 +310,8 @@ fn the_air_term_is_added_outside_as_the_transport_decays() {
     let m = solver_air_absorption_per_m(8000.0, &atmosphere).unwrap();
     for (room, alpha) in [(&ROOMS[0], 0.05), (&ROOMS[1], 0.1)] {
         let e = Enclosure::shoebox(room.size).unwrap();
-        let p = free_paths(&e, &FreePathSettings::STANDARD).unwrap();
-        let (t, se, _) = transport_t30(room, &e, alpha, Some(m), 131_072);
+        let p = free_paths(&e).unwrap();
+        let tr = transport_t30(room, &e, alpha, Some(m), 131_072);
         let w = walls(&e, alpha);
         let t_k = kuttruff_rt(&p, &w, Some(m), K).unwrap();
         let t_inside = faults::with(Fault::KuttruffAirInsideMean, || {
@@ -271,56 +319,112 @@ fn the_air_term_is_added_outside_as_the_transport_decays() {
         });
         let t_no_air = kuttruff_rt(&p, &w, None, K).unwrap();
         println!(
-            "{} α {alpha}, 8 kHz (m {m:.5} /m, 4mV/A {:.2}): transport {t:.5} ± {se:.5} s; \
-             Kuttruff + 4mV {:+.3} %; air folded into ᾱ {:+.2} %; no air {:+.1} %",
+            "{} α {alpha}, 8 kHz (m {m:.5} /m, 4mV/A {:.2}): transport {:.5} ± {:.5} s; room \
+             energy {:.5} ± {:.5} s; Kuttruff + 4mV {:+.3} % of the receivers; air folded into ᾱ \
+             {:+.2} %; no air {:+.1} %",
             room.name,
             4.0 * m * e.volume_m3() / kuttruff_absorption_area(&p, &w).unwrap(),
-            100.0 * (t_k / t - 1.0),
-            100.0 * (t_inside / t - 1.0),
-            100.0 * (t_no_air / t - 1.0),
+            tr.t,
+            tr.se,
+            tr.room,
+            tr.room_se,
+            100.0 * (t_k / tr.t - 1.0),
+            100.0 * (t_inside / tr.t - 1.0),
+            100.0 * (t_no_air / tr.t - 1.0),
         );
-        let rel = se / t;
+        let rel = tr.se / tr.t;
         assert!(rel < 0.002);
-        assert!(within(t_k, t, rel), "{}", room.name);
+        assert!(within(t_k, tr.t, rel), "{}", room.name);
         // Says no: the other form, through the code, misses.
-        assert!(!within(t_inside, t, rel), "{}", room.name);
+        assert!(!within(t_inside, tr.t, rel), "{}", room.name);
     }
 }
 
+/// A room longer than M8's, for information only: how far Kuttruff's formula is from the
+/// transport where the room is elongated (the M12 question; M8's gate does not use it).
+const LONG_ROOM: Room = Room {
+    name: "20x4x3",
+    size: [20.0, 4.0, 3.0],
+    source: [5.0, 2.1, 1.6],
+    receivers: [[2.0, 1.0, 1.2], [11.0, 3.0, 1.8], [17.0, 2.0, 1.0]],
+};
+
 #[test]
-#[ignore = "evidence for M8, not a gate: M8's cells at 16 times the gate's rays, about two minutes \
-            in a release build; run on purpose with --release"]
+#[ignore = "evidence for M8, not a gate: M8's cells and an elongated room at 16 times the gate's \
+            rays, about five minutes in a release build; run on purpose with --release"]
 fn kuttruff_against_the_transport_at_high_counts() {
-    for room in &ROOMS {
+    // At 4 M to 34 M rays a cell, the bare 0.6 % in every one of M8's cells, on the receivers and
+    // on the room energy, at the point estimate, with the formula fed the exact γ² (no noise of
+    // its own); the one-sided 95 % bound (point + 1.645 SE) is printed beside it. Then the
+    // elongated room, printed only.
+    let mut worst: f64 = 0.0;
+    for (room, gated) in [(&ROOMS[0], true), (&ROOMS[1], true), (&LONG_ROOM, false)] {
         let e = Enclosure::shoebox(room.size).unwrap();
-        let p = free_paths(
-            &e,
-            &FreePathSettings {
-                rays_per_replica: 16384,
-                ..FreePathSettings::STANDARD
-            },
-        )
-        .unwrap();
+        let p = free_paths(&e).unwrap();
+        let exact = box_gamma2(room.size);
+        println!(
+            "{}: exact gamma^2 {exact:.5}; free_paths {:.5} ± {:.5}",
+            room.name,
+            p.gamma2(),
+            p.gamma2_se()
+        );
         for alpha in [0.05, 0.1, 0.2, 0.4] {
             let rays = (16.0 * 16384.0 * alpha / 0.05) as u32;
-            let (t, se, t_room) = transport_t30(room, &e, alpha, None, rays);
+            let tr = transport_t30(room, &e, alpha, None, rays);
             let w = walls(&e, alpha);
+            let t_x = kuttruff_formula(&e, alpha, exact, None);
             let t_k = kuttruff_rt(&p, &w, None, K).unwrap();
             let t_e = eyring_rt(e.volume_m3(), &w, None, K).unwrap();
+            let (d, d_room) = (t_x / tr.t - 1.0, t_x / tr.room - 1.0);
+            let (rel, rel_room) = (tr.se / tr.t, tr.room_se / tr.room);
             println!(
-                "{} α {alpha}: {} rays, gamma^2 {:.5} ± {:.5}; transport T30 {t:.5} ± {se:.5} s \
-                 ({:+.3} % vs Eyring), room energy T30 {:+.3} %; Kuttruff {:+.3} % ± {:.3} of \
-                 the transport, {:+.3} % of the room energy",
+                "{} α {alpha}: {} rays; transport T30 {:.5} ± {:.5} s ({:+.3} % vs Eyring), room \
+                 energy {:.5} ± {:.5} s ({:+.3} %); Kuttruff (exact γ²) {:+.3} ± {:.3} % of the \
+                 receivers (95 % bound {:.3} %), {:+.3} ± {:.4} % of the room energy (95 % bound \
+                 {:.3} %); as shipped (free_paths' γ²) {:+.3} % of the receivers, {:+.3} % of the \
+                 room energy",
                 room.name,
                 16 * rays,
-                p.gamma2(),
-                p.gamma2_se(),
-                100.0 * (t / t_e - 1.0),
-                100.0 * (t_room / t_e - 1.0),
-                100.0 * (t_k / t - 1.0),
-                100.0 * se / t,
-                100.0 * (t_k / t_room - 1.0),
+                tr.t,
+                tr.se,
+                100.0 * (tr.t / t_e - 1.0),
+                tr.room,
+                tr.room_se,
+                100.0 * (tr.room / t_e - 1.0),
+                100.0 * d,
+                100.0 * rel,
+                100.0 * (d.abs() + 1.645 * rel),
+                100.0 * d_room,
+                100.0 * rel_room,
+                100.0 * (d_room.abs() + 1.645 * rel_room),
+                100.0 * (t_k / tr.t - 1.0),
+                100.0 * (t_k / tr.room - 1.0),
             );
+            if gated {
+                // Precise enough that the bare bound means something, and met at the point.
+                assert!(
+                    rel < 0.0003 && rel_room < 0.00006,
+                    "{} α {alpha}",
+                    room.name
+                );
+                assert!(d.abs() <= 0.006, "{} α {alpha}: {d}", room.name);
+                assert!(d_room.abs() <= 0.006, "{} α {alpha}: {d_room}", room.name);
+                // Says no: plain Eyring, and the formula with its ½ dropped (through the code),
+                // miss by more than their noise.
+                let t_fault = faults::with(Fault::KuttruffFullVariance, || {
+                    kuttruff_rt(&p, &w, None, K).unwrap()
+                });
+                let sd_k = kuttruff_rt_sd(&p, &w, None, K).unwrap();
+                for (what, t) in [("Eyring", t_e), ("the ½ dropped", t_fault)] {
+                    assert!(
+                        (t / tr.room - 1.0).abs() > 0.006 + 3.0 * rel_room.hypot(sd_k / t_k),
+                        "{} α {alpha}: {what}",
+                        room.name
+                    );
+                }
+                worst = worst.max(d.abs()).max(d_room.abs());
+            }
         }
     }
+    println!("worst of M8's cells: {:.3} %", 100.0 * worst);
 }

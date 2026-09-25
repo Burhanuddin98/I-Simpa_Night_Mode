@@ -18,7 +18,7 @@ use roxmltree::Document;
 
 use super::tcr::{RoomInputs, band_surfaces};
 use crate::params::ParamError;
-use crate::params::lambert::{Enclosure, FreePathSettings, FreePaths, free_paths};
+use crate::params::lambert::{Enclosure, FreePaths, free_paths};
 use crate::params::room::{self, RtConstant, Surface};
 use crate::run::expect::{self, Expectation};
 use crate::run::locate;
@@ -101,8 +101,8 @@ fn inner(solve: &Path, exp: &Expectation, c: f64) -> Result<Reference, String> {
     if !(area_m2.is_finite() && area_m2 > 0.0) {
         return Err(format!("the scene's faces have an area of {area_m2} m²"));
     }
-    let paths = Enclosure::from_mesh(&room.triangles, &room.tetrahedra)
-        .and_then(|e| free_paths(&e, &FreePathSettings::STANDARD));
+    let paths =
+        Enclosure::from_mesh(&room.triangles, &room.tetrahedra).and_then(|e| free_paths(&e));
     let mut bands = Vec::with_capacity(room.bands.len());
     for band in &room.bands {
         let surfaces = band_surfaces(&room.faces, &room.materials, band.index)?;

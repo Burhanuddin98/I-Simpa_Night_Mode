@@ -580,8 +580,11 @@ pub struct ReferenceBandReport {
     /// Plain Eyring, `K·V/(4·m·V − S·ln(1 − ᾱ))`, s, with SPPS's `K`: **reported only**.
     pub eyring_s: Evaluated,
     /// Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:
-    /// **M8's reference**. `mc_sd` is the standard deviation it inherits from the transport's
-    /// `γ²`. Refused with the transport's own refusal when the transport refused.
+    /// **M8's reference**. `mc_sd` is only the standard deviation it inherits from the transport's
+    /// `γ²`, not its total uncertainty: it leaves out the formula's own error against a diffuse
+    /// room (−0.41 % to +0.59 % in M8's cells, `docs/params.md`, "Kuttruff's reference"; not
+    /// measured in other rooms). Refused with the transport's own refusal when the transport
+    /// refused.
     pub kuttruff_s: Evaluated,
 }
 

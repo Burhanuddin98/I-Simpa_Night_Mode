@@ -682,9 +682,11 @@ report carries both references, labelled and not validated (`spps.reference`,
   from the first reflection of rays started at the source: shorter runs, more of the ray's memory
   of where it started).
 - **Kuttruff with the exact `γ²`**, against the core transport's receivers at 4 M to 34 M rays a
-  cell: −0.20, −0.34, −0.41, +0.28 % (6×10×3 m) and −0.18, −0.30, −0.35, +0.59 % (5×4×3 m) at α
-  0.05, 0.1, 0.2 and 0.4, each ±0.01 to 0.02 %. The core transport's own T30 against Eyring
-  reproduces the "Transport" column within 0.07 %.
+  cell: −0.201, −0.343, −0.415, +0.279 % (6×10×3 m) and −0.178, −0.300, −0.352, +0.587 %
+  (5×4×3 m) at α 0.05, 0.1, 0.2 and 0.4, each ±0.01 to 0.02 %; against the room's energy the
+  same within 0.04 %, ±0.002 to 0.004 %. The core transport's own T30 against Eyring reproduces
+  the "Transport" column within 0.07 %. The table's `γ²` values are its counting's: the core
+  transport, counting as `lambert_box.rs` counted, gives 0.38812 and 0.35187.
 
 ### Seed spread: what "≤ 2 %" asks for
 

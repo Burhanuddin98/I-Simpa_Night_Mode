@@ -438,7 +438,8 @@ pub enum ParamError {
         value: f64,
     },
     /// The diffuse ray transport (`params::lambert`) cannot run with its inputs, a ray left the
-    /// enclosure, or its mean free path is not `4V/S` within its statistical error.
+    /// enclosure, its mean free path is not `4V/S` within its statistical error, or `γ²`'s
+    /// standard error is above its limit.
     TransportRefused {
         detail: String,
     },

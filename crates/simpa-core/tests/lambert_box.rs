@@ -4,7 +4,9 @@
 //! for any closed room, with known-answer checks (`tests/params_lambert.rs`,
 //! `tests/params_kuttruff.rs`). Its `γ²` counts every path from a ray's first reflection, the rays
 //! started at the source, which reads low by the ray's memory of where it started: 0.388 where the
-//! exact value is 0.38887 (`docs/params.md`, "Kuttruff's reference"). Run it with
+//! exact value is 0.38887 (`docs/params.md`, "Kuttruff's reference"). The core transport, counting
+//! as this file counts, gives its 0.388 and 0.352 (0.38812 and 0.35187; `tests/params_lambert.rs`,
+//! `lambert_boxs_values_are_its_counting_and_the_exact_ones_are_the_diffuse_fields`). Run it with
 //!
 //! `cargo test --release -p simpa-core --test lambert_box -- --ignored --nocapture`
 //!

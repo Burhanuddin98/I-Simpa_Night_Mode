@@ -13,18 +13,26 @@
 //!
 //! Two things are computed:
 //! - [`free_paths`]: the mean free path between reflections and its relative variance `γ²`
-//!   (Kuttruff's; `γ² = (E[ℓ²] − E[ℓ]²)/E[ℓ]²`). **It takes the geometry and the transport's own
-//!   settings and nothing else**, and [`FreePaths`] has no public constructor and no fields a
-//!   caller can set: a `γ²` fitted to a solver's numbers cannot be given to
-//!   [`super::room::kuttruff_rt`], by construction. It refuses its own result when the mean free
-//!   path it measured is not Kosten's `4V/S` within its statistical error
-//!   ([`MEAN_FREE_PATH_TOLERANCE_SE`]): a room that is not closed, a volume that is not the
-//!   surface's, a face with the room on both its sides (it reflects on both, so the field sees
-//!   its area twice), parts of a room that exchange too little sound to mix within the rays'
-//!   paths, or a transport that does not reflect by Lambert's law.
+//!   (Kuttruff's; `γ² = (E[ℓ²] − E[ℓ]²)/E[ℓ]²`). **It takes the room and nothing else**: its rays,
+//!   paths and seed are fixed ([`FreePathSettings::STANDARD`]), and [`FreePaths`] has no public
+//!   constructor and no fields a caller can set. So a `γ²` fitted to a solver's numbers cannot be
+//!   given to [`super::room::kuttruff_rt`], by construction, and neither can one fished for by
+//!   trying seeds or ray counts until the transport happens to give the wanted value. What is left
+//!   to a caller is the description of the room (its placement, its faces, its tetrahedra), which
+//!   draws the transport's randomness otherwise; [`GAMMA2_SE_LIMIT`] bounds what that can move.
+//!   It refuses its own result when the mean free path it measured is not Kosten's `4V/S` within
+//!   its statistical error ([`MEAN_FREE_PATH_TOLERANCE_SE`]): a room that is not closed, a volume
+//!   that is not the surface's, a face with the room on both its sides (it reflects on both, so
+//!   the field sees its area twice), parts of a room that exchange too little sound to mix within
+//!   the rays' paths, or a transport that does not reflect by Lambert's law; and when `γ²`'s
+//!   standard error is above [`GAMMA2_SE_LIMIT`].
 //! - [`decay`]: the energy of the room, and of receiver balls as SPPS's receivers collect it (the
 //!   energy times the length of the path inside the ball, per time bin), from a point source in a
 //!   room of given absorption and air, for M8's cross-check against SPPS.
+//!
+//! **Studies of the transport** (`free_path_study`, other settings and starting points, and the
+//! correlation of successive paths) exist in test builds only, behind the `transport-study`
+//! feature, and give a `FreePathStudy`, which no function of `params::room` takes.
 //!
 //! Every result is deterministic: replica `r` of a run with seed `s` draws from its own SplitMix64
 //! stream, and replicas are combined in their order, whatever the threads did. The spread over the
@@ -42,10 +50,17 @@
 //! yet diffuse, and a ray's first reflections remember it. The M7 follow-ups' `lambert_box.rs`
 //! started every ray at the source and counted from the first reflection; measured with this
 //! transport, that reads `γ²` 0.0035 to 0.005 low and the mean free path 0.16 to 0.27 % long at
-//! 64 paths a ray,
-//! and rays started in the narrow wing of an L-shaped room give a mean free path 0.3 % short after
-//! 16 reflections. So [`free_paths`] starts each ray at a point drawn evenly from the room's
-//! volume, and leaves out its first paths as well ([`FreePathSettings::burn_in_paths`]).
+//! 64 paths a ray, and, over the 482 paths a ray it counted at α 0.05, gives its 0.388 and 0.352
+//! (0.38812 and 0.35187, `tests/params_lambert.rs`); rays started in the narrow wing of an
+//! L-shaped room give a mean
+//! free path 0.3 % short after 16 reflections. So [`free_paths`] starts each ray at a point drawn
+//! evenly from the room's volume, and leaves out its first paths as well
+//! ([`FreePathSettings::burn_in_paths`]).
+//!
+//! **Successive free paths are not independent** in a room with flat walls: a long path tends to
+//! end where the next is long too. Kuttruff's formula takes them as independent
+//! ([`super::room`]); how far that matters is measured in `docs/params.md`, "Kuttruff's
+//! reference". In a sphere they are independent (each chord is `2R·cos θ` with a fresh `θ`).
 
 use std::f64::consts::PI;
 
@@ -93,6 +108,19 @@ fn refused(detail: impl Into<String>) -> ParamError {
 /// about a fifth, so 6 leaves a correct transport a chance of about 10⁻⁴ of being refused, and
 /// since every run is deterministic, a given room is either always accepted or always refused.
 pub const MEAN_FREE_PATH_TOLERANCE_SE: f64 = 6.0;
+
+/// The largest standard error of `γ²` [`free_paths`] accepts; above it, it refuses its own
+/// result. At its fixed settings a box's is 0.0006 to 0.0009 (0.0009 for tutorial 1's box as
+/// TetGen meshed it), an L-shaped room's 0.0007 and a sphere's 0.0002 (`tests/params_lambert.rs`,
+/// `simpa results` on the committed fixture), so only a room whose free paths the fixed rays
+/// cannot pin down is refused. It bounds what redescribing the same room can do to `γ²`, the one
+/// freedom [`free_paths`] leaves a caller: every description is a fresh draw of the transport's
+/// randomness, and the largest of many draws lies a few standard errors from the room's value
+/// (32 descriptions of the 6×10×3 m room, turned and moved: −2.4 to +2.2 standard errors,
+/// Kuttruff's time at `ᾱ` 0.4 within 0.08 %). At `γ²` ± 0.002 Kuttruff's time moves by 0.06 %
+/// at `ᾱ` 0.4 and 0.2 % at 0.8 (`∂T/T` per unit `γ²` is
+/// `−ln(1 − ᾱ)/(2·(1 + (γ²/2)·ln(1 − ᾱ)))`, air aside).
+pub const GAMMA2_SE_LIMIT: f64 = 0.002;
 
 /// Barycentric slack of the ray–triangle test: a ray through a shared edge hits both faces, so no
 /// ray slips between two faces of a closed surface.
@@ -512,8 +540,8 @@ fn isotropic(rng: &mut Rng) -> V3 {
 }
 
 /// A direction on the side of `n` (a unit normal), by Lambert's law: `cos θ = √u`, the density
-/// `cos θ·sin θ/π` per steradian. With `uniform` (a test fault only) `cos θ = u`: uniform over the
-/// hemisphere, which is not Lambert's law.
+/// `cos θ/π` per steradian (`cos θ·sin θ/π` per `dθ·dψ`). With `uniform` (a test fault only)
+/// `cos θ = u`: uniform over the hemisphere, which is not Lambert's law.
 fn lambert(n: V3, rng: &mut Rng, uniform: bool) -> V3 {
     let u = rng.uniform();
     let cos_t = if uniform { u } else { u.sqrt() };
@@ -584,7 +612,9 @@ impl Ray {
     }
 }
 
-/// The settings of [`free_paths`]: the transport's own, nothing of any solver.
+/// The settings the transport traced with: its own, nothing of any solver. [`free_paths`] always
+/// uses [`FreePathSettings::STANDARD`] and takes no settings from its caller; others are for
+/// studies of the transport in test builds.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct FreePathSettings {
     /// Independent replicas; their spread is the statistical error. At least 2.
@@ -595,16 +625,17 @@ pub struct FreePathSettings {
     /// Free paths of each ray left out after its first (from its start to a face, never
     /// counted), while the ray forgets where it started.
     pub burn_in_paths: u32,
-    /// Free paths counted per ray after the burn-in.
+    /// Free paths counted per ray after the burn-in. At least 2.
     pub paths_per_ray: u32,
     /// The seed of the replicas' random streams.
     pub seed: u64,
 }
 
 impl FreePathSettings {
-    /// What `core::results` uses: 16 × 1024 rays of 1 + 32 + 64 paths, 1,048,576 paths counted.
-    /// 32 left out: in an L-shaped room the mean free path sits 1.8 standard errors from 4V/S with
-    /// 16 left out and 0.2 with 64 (`tests/params_lambert.rs`).
+    /// What [`free_paths`], and so `core::results`, uses: 16 × 1024 rays of 1 + 32 + 64 paths,
+    /// 1,048,576 paths counted, and a fixed seed. 32 left out: in an L-shaped room the mean free
+    /// path sits 1.8 standard errors from 4V/S with 16 left out and 0.2 with 64
+    /// (`tests/params_lambert.rs`).
     pub const STANDARD: FreePathSettings = FreePathSettings {
         replicas: 16,
         rays_per_replica: 1024,
@@ -617,19 +648,31 @@ impl FreePathSettings {
 /// The free paths between reflections of a diffuse (Lambert) transport in one enclosure: their
 /// mean and relative variance `γ²`, with their statistical errors, and the enclosure's `V` and `S`.
 ///
-/// **Made only by [`free_paths`]**, from an [`Enclosure`] and [`FreePathSettings`]. Its fields
-/// are private and it has no other constructor, so no `γ²` fitted to a solver's output can reach
-/// [`super::room::kuttruff_rt`]:
+/// **Made only by [`free_paths`]**, from an [`Enclosure`] alone, at its fixed settings. Its fields
+/// are private and it has no other constructor, so no `γ²` fitted to a solver's output, and none
+/// fished for through the transport's seed or counts, can reach [`super::room::kuttruff_rt`]:
 ///
 /// ```
 /// use simpa_core::params::lambert::{free_paths, Enclosure, FreePathSettings};
 /// use simpa_core::params::room::{kuttruff_rt, RtConstant, Surface};
 ///
 /// let room = Enclosure::shoebox([5.0, 4.0, 3.0]).unwrap();
-/// let paths = free_paths(&room, &FreePathSettings { rays_per_replica: 64, ..FreePathSettings::STANDARD }).unwrap();
+/// let paths = free_paths(&room).unwrap();
+/// assert_eq!(paths.settings(), FreePathSettings::STANDARD);
 /// let walls = [Surface { area_m2: room.area_m2(), absorption: 0.2 }];
 /// let t = kuttruff_rt(&paths, &walls, None, RtConstant::Physical { speed_of_sound: 343.2 }).unwrap();
 /// assert!(t > 0.0);
+/// ```
+///
+/// A caller cannot choose the transport's settings: [`free_paths`] takes the room alone, and the
+/// same call with settings, which the example above compiles in every other part, does not
+/// compile:
+///
+/// ```compile_fail
+/// use simpa_core::params::lambert::{free_paths, Enclosure, FreePathSettings};
+///
+/// let room = Enclosure::shoebox([5.0, 4.0, 3.0]).unwrap();
+/// let paths = free_paths(&room, &FreePathSettings::STANDARD).unwrap();
 /// ```
 ///
 /// A `γ²` set by hand does not compile outside this module:
@@ -657,9 +700,10 @@ impl FreePathSettings {
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 #[schemars(
     description = "The free paths between reflections of a diffuse (Lambert) ray transport in the \
-                   room, computed from its geometry alone (params::lambert::free_paths): their \
-                   mean and relative variance gamma^2, with their standard errors over the \
-                   transport's replicas, and the room's 4V/S, V and S."
+                   room, computed from its geometry alone at fixed settings \
+                   (params::lambert::free_paths): their mean and relative variance gamma^2, with \
+                   their standard errors over the transport's replicas, and the room's 4V/S, V \
+                   and S."
 )]
 pub struct FreePaths {
     /// The mean free path, m.
@@ -784,56 +828,162 @@ fn mean_se(v: &[f64]) -> (f64, f64) {
     (m, (var / n).sqrt())
 }
 
-/// The free paths of a diffuse (Lambert) transport in `enclosure` ([`FreePaths`]). Refused,
-/// `params_transport_refused`, for settings with fewer than 2 replicas or no ray or no path, a ray
-/// that leaves the enclosure, or a mean free path further from `4V/S` than
-/// [`MEAN_FREE_PATH_TOLERANCE_SE`] standard errors.
-pub fn free_paths(
-    enclosure: &Enclosure,
-    settings: &FreePathSettings,
-) -> Result<FreePaths, ParamError> {
-    let s = *settings;
-    if s.replicas < 2 || s.rays_per_replica == 0 || s.paths_per_ray == 0 {
+/// One replica's sums over its counted free paths.
+#[derive(Clone, Copy, Debug, Default)]
+struct PathSums {
+    /// Paths counted, `Σ ℓ` and `Σ ℓ²`.
+    n: u64,
+    s1: f64,
+    s2: f64,
+    /// Pairs of successive counted paths of one ray, and `Σ ℓₖ·ℓₖ₊₁` over them.
+    pairs: u64,
+    s11: f64,
+    /// Rays, and the sum over them of each ray's counted length and of its square.
+    rays: u64,
+    r1: f64,
+    r2: f64,
+}
+
+/// What the replicas' sums give: each value pooled over the replicas, with the standard error of
+/// the replicas' own values. The correlation and the effective `γ²` are read by studies only.
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(not(feature = "transport-study"), allow(dead_code))]
+struct PathStats {
+    paths: u64,
+    mean: f64,
+    mean_se: f64,
+    gamma2: f64,
+    gamma2_se: f64,
+    lag1: f64,
+    lag1_se: f64,
+    effective_gamma2: f64,
+    effective_gamma2_se: f64,
+}
+
+impl PathSums {
+    /// `(mean, γ², lag-1 correlation, effective γ²)` of these sums.
+    fn values(&self) -> [f64; 4] {
+        let m = self.s1 / self.n as f64;
+        let second = self.s2 / self.n as f64;
+        let gamma2 = second / (m * m) - 1.0;
+        let var = second - m * m;
+        let lag1 = (self.s11 / self.pairs as f64 - m * m) / var;
+        let per_ray = self.n as f64 / self.rays as f64;
+        let ray_mean = self.r1 / self.rays as f64;
+        let ray_var = self.r2 / self.rays as f64 - ray_mean * ray_mean;
+        [m, gamma2, lag1, ray_var / (per_ray * m * m)]
+    }
+
+    fn add(&mut self, o: &PathSums) {
+        self.n += o.n;
+        self.s1 += o.s1;
+        self.s2 += o.s2;
+        self.pairs += o.pairs;
+        self.s11 += o.s11;
+        self.rays += o.rays;
+        self.r1 += o.r1;
+        self.r2 += o.r2;
+    }
+}
+
+fn path_stats(sums: &[PathSums]) -> PathStats {
+    let mut all = PathSums::default();
+    let mut per: [Vec<f64>; 4] = Default::default();
+    for s in sums {
+        all.add(s);
+        for (k, v) in s.values().into_iter().enumerate() {
+            per[k].push(v);
+        }
+    }
+    let [mean, gamma2, lag1, effective_gamma2] = all.values();
+    let se = |k: usize| mean_se(&per[k]).1;
+    PathStats {
+        paths: all.n,
+        mean,
+        mean_se: se(0),
+        gamma2,
+        gamma2_se: se(1),
+        lag1,
+        lag1_se: se(2),
+        effective_gamma2,
+        effective_gamma2_se: se(3),
+    }
+}
+
+/// Refuses settings the transport cannot give an error with: fewer than 2 replicas, no ray, or
+/// fewer than 2 paths a ray.
+fn check_settings(s: &FreePathSettings) -> Result<(), ParamError> {
+    if s.replicas < 2 || s.rays_per_replica == 0 || s.paths_per_ray < 2 {
         return Err(refused(format!(
-            "the free-path settings need at least 2 replicas, a ray and a path: {s:?}"
+            "the free-path settings need at least 2 replicas, a ray and 2 paths a ray: {s:?}"
         )));
     }
+    Ok(())
+}
+
+/// Traces `settings`' rays in `enclosure`, each from `start_m` or, when `None`, from a point drawn
+/// evenly from its volume, and sums each replica's counted paths. Refused when a ray leaves.
+fn trace(
+    enclosure: &Enclosure,
+    settings: &FreePathSettings,
+    start_m: Option<V3>,
+) -> Result<Vec<PathSums>, ParamError> {
+    let s = *settings;
     let uniform = uniform_fault();
-    let sums = per_replica(s.replicas, |r| {
+    per_replica(s.replicas, |r| {
         let mut rng = Rng::new(replica_seed(s.seed, r));
-        let (mut n, mut s1, mut s2) = (0u64, 0.0f64, 0.0f64);
+        let mut sums = PathSums::default();
         let mut reflections = 0u64;
         for _ in 0..s.rays_per_replica {
-            let start = enclosure.start_point(&mut rng);
+            let start = match start_m {
+                Some(p) => p,
+                None => enclosure.start_point(&mut rng),
+            };
             let mut ray = Ray::from_source(start, &mut rng);
+            let (mut length, mut previous) = (0.0f64, None::<f64>);
             // Path 0 runs from the start point; paths 1 to burn_in are left out too.
             for k in 0..=u64::from(s.burn_in_paths) + u64::from(s.paths_per_ray) {
                 let (run, face) = ray.run(enclosure, reflections)?;
                 if k > u64::from(s.burn_in_paths) {
-                    n += 1;
-                    s1 += run;
-                    s2 += run * run;
+                    sums.n += 1;
+                    sums.s1 += run;
+                    sums.s2 += run * run;
+                    if let Some(p) = previous {
+                        sums.pairs += 1;
+                        sums.s11 += p * run;
+                    }
+                    previous = Some(run);
+                    length += run;
                 }
                 ray.reflect(enclosure, run, face, &mut rng, uniform);
                 reflections += 1;
             }
+            sums.rays += 1;
+            sums.r1 += length;
+            sums.r2 += length * length;
         }
-        Ok((n, s1, s2))
-    })?;
-    let (mut n, mut s1, mut s2) = (0u64, 0.0, 0.0);
-    let (mut means, mut gammas) = (Vec::new(), Vec::new());
-    for &(rn, r1, r2) in &sums {
-        n += rn;
-        s1 += r1;
-        s2 += r2;
-        let m = r1 / rn as f64;
-        means.push(m);
-        gammas.push((r2 / rn as f64) / (m * m) - 1.0);
-    }
-    let mean = s1 / n as f64;
-    let gamma2 = (s2 / n as f64) / (mean * mean) - 1.0;
-    let (_, mean_error) = mean_se(&means);
-    let (_, gamma2_se) = mean_se(&gammas);
+        Ok(sums)
+    })
+}
+
+/// The free paths of a diffuse (Lambert) transport in `enclosure` ([`FreePaths`]), traced at
+/// [`FreePathSettings::STANDARD`]: **the room is its only input**. Refused,
+/// `params_transport_refused`, for a ray that leaves the enclosure, a mean free path further from
+/// `4V/S` than [`MEAN_FREE_PATH_TOLERANCE_SE`] standard errors, or a `γ²` whose standard error is
+/// above [`GAMMA2_SE_LIMIT`].
+pub fn free_paths(enclosure: &Enclosure) -> Result<FreePaths, ParamError> {
+    free_paths_with(enclosure, &FreePathSettings::STANDARD)
+}
+
+/// [`free_paths`] at `settings`. Private: this module's tests use it for the say-NO of
+/// [`GAMMA2_SE_LIMIT`]; nothing outside can choose the settings.
+fn free_paths_with(
+    enclosure: &Enclosure,
+    settings: &FreePathSettings,
+) -> Result<FreePaths, ParamError> {
+    check_settings(settings)?;
+    let st = path_stats(&trace(enclosure, settings, None)?);
+    let (mean, mean_error) = (st.mean, st.mean_se);
     let four_v_over_s_m = enclosure.four_v_over_s_m();
     let off = (mean - four_v_over_s_m).abs();
     if off > MEAN_FREE_PATH_TOLERANCE_SE * mean_error + 1e-9 * four_v_over_s_m {
@@ -846,16 +996,95 @@ pub fn free_paths(
             off / mean_error.max(f64::MIN_POSITIVE)
         )));
     }
+    if st.gamma2_se.is_nan() || st.gamma2_se > GAMMA2_SE_LIMIT {
+        return Err(refused(format!(
+            "gamma^2 is {} ± {}, a standard error above the limit {GAMMA2_SE_LIMIT}: the \
+             transport's fixed rays do not pin this room's free paths down",
+            st.gamma2, st.gamma2_se
+        )));
+    }
     Ok(FreePaths {
         mean_free_path_m: mean,
         mean_free_path_se_m: mean_error,
-        gamma2,
-        gamma2_se,
+        gamma2: st.gamma2,
+        gamma2_se: st.gamma2_se,
         four_v_over_s_m,
         volume_m3: enclosure.volume_m3,
         area_m2: enclosure.area_m2,
-        paths: n,
-        settings: s,
+        paths: st.paths,
+        settings: *settings,
+    })
+}
+
+/// A study of the transport's free paths at any settings and starting point: evidence and tests
+/// only (the `transport-study` feature, which only test builds turn on). **Not a [`FreePaths`]**:
+/// no function of `params::room` takes it, so nothing studied here can become a reference.
+#[cfg(feature = "transport-study")]
+#[derive(Clone, Debug, PartialEq)]
+pub struct FreePathStudy {
+    /// The mean free path and its standard error over the replicas, m.
+    pub mean_free_path_m: f64,
+    pub mean_free_path_se_m: f64,
+    /// `γ²` and its standard error.
+    pub gamma2: f64,
+    pub gamma2_se: f64,
+    /// The correlation of successive counted paths of one ray, `(⟨ℓₖ·ℓₖ₊₁⟩ − ⟨ℓ⟩²)/var(ℓ)`, and its
+    /// standard error.
+    pub lag1_correlation: f64,
+    pub lag1_correlation_se: f64,
+    /// The variance of a ray's counted length over `K = paths_per_ray` paths, divided by
+    /// `K·⟨ℓ⟩²`, and its standard error: `γ²` for independent paths, larger when successive
+    /// paths are positively correlated.
+    pub effective_gamma2: f64,
+    pub effective_gamma2_se: f64,
+    /// Kosten's `4V/S`, m.
+    pub four_v_over_s_m: f64,
+    /// The paths counted.
+    pub paths: u64,
+    pub settings: FreePathSettings,
+    /// Where every ray started, or `None`: evenly in the volume.
+    pub start_m: Option<V3>,
+}
+
+#[cfg(feature = "transport-study")]
+impl FreePathStudy {
+    /// How far the mean free path lies from `4V/S`, in its standard errors (signed).
+    pub fn mean_free_path_off_se(&self) -> f64 {
+        (self.mean_free_path_m - self.four_v_over_s_m) / self.mean_free_path_se_m
+    }
+}
+
+/// The transport's free paths in `enclosure` at `settings`, every ray started at `start_m`, or
+/// evenly in the volume when `None`. Test builds only (`transport-study`). It does not check the
+/// mean free path against `4V/S` ([`FreePathStudy::mean_free_path_off_se`] says how far it is).
+/// Refused, `params_transport_refused`, for fewer than 2 replicas, no ray or fewer than 2 paths a
+/// ray, a start point that is not finite, or a ray that leaves the enclosure.
+#[cfg(feature = "transport-study")]
+pub fn free_path_study(
+    enclosure: &Enclosure,
+    settings: &FreePathSettings,
+    start_m: Option<V3>,
+) -> Result<FreePathStudy, ParamError> {
+    check_settings(settings)?;
+    if let Some(p) = start_m
+        && p.iter().any(|c| !c.is_finite())
+    {
+        return Err(refused(format!("the start point {p:?} is not finite")));
+    }
+    let st = path_stats(&trace(enclosure, settings, start_m)?);
+    Ok(FreePathStudy {
+        mean_free_path_m: st.mean,
+        mean_free_path_se_m: st.mean_se,
+        gamma2: st.gamma2,
+        gamma2_se: st.gamma2_se,
+        lag1_correlation: st.lag1,
+        lag1_correlation_se: st.lag1_se,
+        effective_gamma2: st.effective_gamma2,
+        effective_gamma2_se: st.effective_gamma2_se,
+        four_v_over_s_m: enclosure.four_v_over_s_m(),
+        paths: st.paths,
+        settings: *settings,
+        start_m,
     })
 }
 
@@ -1081,6 +1310,38 @@ mod tests {
             settings: FreePathSettings::STANDARD,
         };
         assert_eq!(fitted.gamma2(), 0.4);
+    }
+
+    /// The say-NO of [`GAMMA2_SE_LIMIT`], through the private [`free_paths_with`]: the settings a
+    /// search over seeds used to fish for `γ²` in the pre-M8 review (2 replicas of 1 ray and 3
+    /// paths, which gave 0.599 at seed 1265 and 0.101 at seed 84; 16 × 16 rays of 32 + 8 paths,
+    /// 0.450 at seed 903), each accepted by the mean-free-path check before this limit, are
+    /// refused for their standard error. The fixed settings are accepted, well inside it.
+    #[test]
+    fn a_gamma2_too_loose_to_describe_the_room_is_refused() {
+        let room = Enclosure::shoebox([6.0, 10.0, 3.0]).unwrap();
+        let tiny = FreePathSettings {
+            replicas: 2,
+            rays_per_replica: 1,
+            burn_in_paths: 0,
+            paths_per_ray: 3,
+            seed: 0,
+        };
+        let small = FreePathSettings {
+            replicas: 16,
+            rays_per_replica: 16,
+            burn_in_paths: 32,
+            paths_per_ray: 8,
+            seed: 0,
+        };
+        for (settings, seed) in [(tiny, 1265), (tiny, 84), (small, 903)] {
+            let e = free_paths_with(&room, &FreePathSettings { seed, ..settings }).unwrap_err();
+            assert_eq!(e.code(), crate::params::codes::TRANSPORT_REFUSED, "{e}");
+            assert!(e.to_string().contains("above the limit"), "{seed}: {e}");
+        }
+        let p = free_paths(&room).unwrap();
+        assert_eq!(p.settings(), FreePathSettings::STANDARD);
+        assert!(p.gamma2_se() < GAMMA2_SE_LIMIT / 2.0, "{p:?}");
     }
 
     /// Start points fill the room evenly: in the box's six tetrahedra, the share of points in the

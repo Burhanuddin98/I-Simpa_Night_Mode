@@ -29,10 +29,16 @@
 //!   ([`crate::faults::Fault::KuttruffAirInsideMean`], `tests/params_kuttruff.rs`).
 //! - **Where it comes from**: the energy after time `t` is `⟨(1 − ᾱ)^n⟩` over the number `n` of
 //!   reflections, whose mean is `c·t·S/(4V)` and, for independent free paths, whose variance is
-//!   `γ²` times it; the formula keeps the first two cumulants of `n`. It is an approximation,
-//!   worse as `ᾱ` grows (measured against the transport: `docs/params.md`).
+//!   `γ²` times it; the formula keeps the first two cumulants of `n`. Two approximations, measured
+//!   against the transport in M8's rooms (`docs/params.md`, "Kuttruff's reference"): successive
+//!   free paths in a room with flat walls are positively correlated (lag 1 0.067 and 0.075 in M8's
+//!   boxes, 0 in a sphere), so `n`'s variance is about a quarter larger than `γ²·n` and the
+//!   formula reads low where `ᾱ` is small (−0.2 to −0.4 %); and the second-order truncation reads
+//!   high as `ᾱ` grows (+0.3 and +0.6 % at 0.4). In M8's cells the two partly cancel, within
+//!   0.6 %; in other room shapes neither is bounded by that.
 //! - **`γ²` comes only from [`super::lambert::FreePaths`]**, which only the transport makes, from
-//!   the geometry: no function here takes `γ²` as a number.
+//!   the room alone at fixed settings: no function here takes `γ²` as a number. `V` comes from the
+//!   same `FreePaths`; the surfaces give only `ᾱ`, and must add up to the traced room's area.
 
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -264,6 +270,11 @@ pub fn kuttruff_rt(
 
 /// The standard deviation [`kuttruff_rt`] inherits from `γ²`'s standard error, s:
 /// `|∂T/∂γ²|·σ(γ²)`, with `∂T/∂γ² = T·S·ln²(1 − ᾱ)/(2·(4·m·V + A))`. Refused as [`kuttruff_rt`].
+///
+/// **Only the statistical part.** It leaves out the formula's own error against a diffuse room
+/// ([module docs](self)), which no number of rays reduces: measured −0.41 % to +0.59 % in M8's
+/// cells, where this standard deviation is at most 0.02 %, and not measured in other rooms. It is
+/// not the reference's total uncertainty.
 pub fn kuttruff_rt_sd(
     free_paths: &FreePaths,
     surfaces: &[Surface],

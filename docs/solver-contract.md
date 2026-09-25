@@ -698,7 +698,7 @@ and still have a parameter refused.
 | `params_no_absorption` | the absorption area plus `4·m·V` is zero, so the reverberation time would be infinite | none |
 | `params_din_out_of_range` | a DIN 18041 volume outside its group's range: A1 30–1000 m³, A2 50–5000 m³, A3 30–5000 m³, A4 30–500 m³, A5 200–30 000 m³ (`docs/params.md`, "DIN 18041 targets") | the group, the volume and the range |
 | `params_bad_noise_input` | a solver floor that is not a finite number, a share of energy alive or lost that is not a finite number in its domain, or a Monte-Carlo mean deposit that is not a finite positive number (`docs/params.md`, "Missing energy", "Monte-Carlo noise") | the field and value |
-| `params_transport_refused` | the diffuse ray transport that gives Kuttruff's `γ²` (`params::lambert`) cannot run with its inputs (no faces or tetrahedra, a coordinate that is not finite, no area or volume, too few replicas, rays or paths), a ray left the room, or its mean free path is not `4V/S` within its statistical error (`docs/params.md`, "Kuttruff's reference"). In `simpa results`, every band's `kuttruff_s` carries it | what failed, with the numbers |
+| `params_transport_refused` | the diffuse ray transport that gives Kuttruff's `γ²` (`params::lambert`) cannot run with its inputs (no faces or tetrahedra, a coordinate that is not finite, no area or volume; in a test build's study, too few replicas, rays or paths), a ray left the room, its mean free path is not `4V/S` within its statistical error, or `γ²`'s standard error is above its limit, 0.002 (`docs/params.md`, "Kuttruff's reference"). In `simpa results`, every band's `kuttruff_s` carries it | what failed, with the numbers |
 
 ### Result refusals
 
