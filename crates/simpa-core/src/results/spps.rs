@@ -403,6 +403,7 @@ impl SppsResults {
             uniform_absorption,
             mean_absorption,
             bands: 1,
+            receiver_crossing_s: self.receiver_crossing_s(),
         };
         NoiseModel::of_run(largest, self.noise_method(), run).unwrap_or_else(|e| {
             NoiseModel::Unknown {

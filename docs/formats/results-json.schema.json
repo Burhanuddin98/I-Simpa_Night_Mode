@@ -442,6 +442,10 @@
           "root_n_confirmed": {
             "description": "Whether a refusal names a count: the seeds' spread did not fall slower than `1/√N` on\nany pair of cells that differ only in `N` (rule R3-6, one-sided).",
             "type": "boolean"
+          },
+          "structure": {
+            "$ref": "#/$defs/Structure",
+            "description": "How the resamples the factor applies to are drawn ([`super::Structure`])."
           }
         },
         "required": [
@@ -450,7 +454,8 @@
           "min_particles",
           "max_crossings_per_particle",
           "margin",
-          "root_n_confirmed"
+          "root_n_confirmed",
+          "structure"
         ],
         "type": "object"
       },
@@ -1600,15 +1605,53 @@
             "type": "object"
           },
           {
-            "description": "The standard deviation is within the limit: the value is refused because too many of its\nresamples refuse it themselves, which more particles need not cure.",
+            "description": "More than [`noise::REFUSED_RESAMPLES_ALLOWED`] resamples refuse the value (rule R4-3):\n`multiple` times the run's particles, the smallest of [`noise::RESAMPLED_MULTIPLES`] at which\nthe model's own resamples of the series, every deposit over `multiple`, refuse it at most\n[`noise::RESAMPLED_REFUSALS_NAMED`] times and its calibrated standard deviation times\n`margin` is within the limit. `particles` is that many per source, when the run's count is\nknown.",
             "properties": {
               "count": {
-                "const": "within_limit",
+                "const": "resampled",
                 "type": "string"
+              },
+              "margin": {
+                "format": "double",
+                "type": "number"
+              },
+              "multiple": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "particles": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
               }
             },
             "required": [
-              "count"
+              "count",
+              "multiple",
+              "margin"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "More than [`noise::REFUSED_RESAMPLES_ALLOWED`] resamples refuse the value, and they still\ndo, or its standard deviation is still above the limit, at `multiple` times the run's\nparticles, the largest tried (R4-3): no count is named, and more particles may not help.",
+            "properties": {
+              "count": {
+                "const": "beyond_resampled",
+                "type": "string"
+              },
+              "multiple": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "count",
+              "multiple"
             ],
             "type": "object"
           },
@@ -1846,6 +1889,10 @@
             "description": "Whether a refusal names a count: the seeds' spread did not fall slower than `1/√N` on\nany pair of cells that differ only in `N` (rule R3-6, one-sided).",
             "type": "boolean"
           },
+          "structure": {
+            "$ref": "#/$defs/Structure",
+            "description": "How the resamples the factor applies to are drawn ([`super::Structure`])."
+          },
           "uniform_lambert_walls": {
             "anyOf": [
               {
@@ -1864,7 +1911,8 @@
           "min_particles",
           "max_crossings_per_particle",
           "margin",
-          "root_n_confirmed"
+          "root_n_confirmed",
+          "structure"
         ],
         "type": "object"
       },
@@ -2199,6 +2247,11 @@
             "minimum": 0,
             "type": "integer"
           },
+          "receiver_crossing_s": {
+            "description": "How long a particle takes to cross the receiver sphere, `2R/c`, s: the roughness\nstructure's blocks are at least this long ([`roughness_block`]).",
+            "format": "double",
+            "type": "number"
+          },
           "uniform_absorption": {
             "description": "Every face has the same absorption in the band (in every band of an aggregate); false\nwhen the run's reference was not computed.",
             "type": "boolean"
@@ -2211,7 +2264,8 @@
           "lambert_walls",
           "uniform_absorption",
           "mean_absorption",
-          "bands"
+          "bands",
+          "receiver_crossing_s"
         ],
         "type": "object"
       },
@@ -2607,6 +2661,21 @@
           "CANCELLED"
         ],
         "type": "string"
+      },
+      "Structure": {
+        "description": "How a series' resamples are drawn, per quantity ([`calibration::Entry::structure`]).",
+        "oneOf": [
+          {
+            "const": "constant",
+            "description": "M7's: every crossing deposits `d̄` on average, in every bin.",
+            "type": "string"
+          },
+          {
+            "const": "roughness",
+            "description": "The run's own roughness (round 4): each bin's deposit read from how far the series' blocks\nstray from their neighbours' geometric mean ([`roughness_deposits`]), at most `d̄`. In\nenergetic mode a particle's energy falls at every reflection, so late in a decay a\ncrossing deposits far less than `d̄`, by how much depending on how far the particles'\nenergies have spread apart, which SPPS does not write but the series' own roughness shows.",
+            "type": "string"
+          }
+        ]
       },
       "SurfaceReceiverSummary": {
         "description": "One receiver of a surface file.",

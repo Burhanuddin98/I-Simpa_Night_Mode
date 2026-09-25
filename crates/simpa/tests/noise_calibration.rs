@@ -35,9 +35,9 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::{Value, json};
+use simpa_core::params::EnergySeries;
 use simpa_core::params::decay::{self, Arrival};
 use simpa_core::params::noise::{self, NoiseModel};
-use simpa_core::params::{EnergySeries, NotEvaluable, ParticleCount};
 use simpa_core::schema::{
     self, BandKind, BandSet, ComputationMethod, MaterialId, PointReceiverId, Project,
     ReflectionLaw, Vec3,
@@ -201,6 +201,19 @@ impl Walls {
         }
     }
 
+    /// Every face reflects by Lambert's law with scattering 1 (the report's `lambert_walls`).
+    fn lambert(self) -> bool {
+        match self {
+            Walls::Lambert(_) => true,
+            Walls::Mixed { scattering, .. } => scattering == 1.0,
+            Walls::Specular(_)
+            | Walls::Tutorial
+            | Walls::DeadFloor
+            | Walls::DeadCeiling
+            | Walls::DeadFloorScattering(_) => false,
+        }
+    }
+
     fn label(self) -> String {
         match self {
             Walls::Lambert(a) => format!("Lambert a{a}"),
@@ -241,6 +254,9 @@ enum Role {
     Calibration3,
     /// Round 3's validation cells, held out of every round's factors.
     Validation3,
+    /// Round 4's cells (`PREREGISTER.txt`, "ROUND 4"): held out of every factor; each validates
+    /// and some are the higher count of a pair.
+    Validation4,
 }
 
 /// One cell: a room and its walls, SPPS in `method` with `particles` per source, `duration` s in
@@ -285,6 +301,7 @@ impl Cell {
                 Role::Validation2 => "validation2",
                 Role::Calibration3 => "calibration3",
                 Role::Validation3 => "validation3",
+                Role::Validation4 => "validation4",
             },
             "room": self.room.name(),
             "walls": self.walls.label(),
@@ -332,6 +349,7 @@ const SEEDS: std::ops::RangeInclusive<u32> = 1..=10;
 use ComputationMethod::{Energetic, Random};
 use Role::{
     Calibration as C, Calibration3 as C3, Validation as V, Validation2 as W, Validation3 as V3,
+    Validation4 as V4,
 };
 
 /// SPPS's default receiver radius, every cell's in rounds 1 and 2.
@@ -400,12 +418,16 @@ const LAMBERT_DEAD_CEILING: Walls = mixed(0.05, 0.6, 0.05, 1.0);
 const LAMBERT_EXTREME_FLOOR: Walls = mixed(0.9, 0.02, 0.02, 1.0);
 /// Dead walls: the four walls 0.8, floor and ceiling 0.1, Lambert. The direct sound dominates.
 const DEAD_WALLS: Walls = mixed(0.1, 0.1, 0.8, 1.0);
+/// Round 4: the four walls 0.3, floor and ceiling 0.05, Lambert.
+const LAMBERT_LIVE_FLOORS: Walls = mixed(0.05, 0.05, 0.3, 1.0);
+/// Round 4: the ceiling 0.9, floor and walls 0.02, Lambert.
+const LAMBERT_EXTREME_CEILING: Walls = mixed(0.02, 0.9, 0.02, 1.0);
 
 #[rustfmt::skip]
 /// The cells, pre-registered before any was run (`PREREGISTER.txt` in the investigation's
 /// folder; round 3's under "ROUND 3"). Random mode's `trans_epsilon` is SPPS's default 5; it
 /// drops nothing there.
-const CELLS: [Cell; 70] = [
+const CELLS: [Cell; 94] = [
     cell("C-R1", C, Room::Tutorial, Walls::Lambert(0.1), Random, 150_000, 3.0, 0.01, 5.0),
     cell("C-R2", C, Room::Tutorial, Walls::Lambert(0.1), Random, 1_500_000, 3.0, 0.01, 5.0),
     cell("C-R3", C, Room::Small, Walls::Lambert(0.4), Random, 150_000, 1.0, 0.001, 5.0),
@@ -481,6 +503,33 @@ const CELLS: [Cell; 70] = [
     cell_r("V3-E8", V3, Room::Tutorial, LAMBERT_EXTREME_FLOOR, Energetic, 300_000, 2.0, 0.001, 7.0, R0),
     cell_r("V3-E9", V3, Room::Small, Walls::Lambert(0.05), Energetic, 300_000, 3.0, 0.01, 7.0, 0.6),
     cell_r("V3-E10", V3, Room::Long, Walls::DeadFloorScattering(0.3), Energetic, 300_000, 3.0, 0.01, 7.0, 0.6),
+    // Round 4 (PREREGISTER.txt, "ROUND 4"): every cell held out. Uniform Lambert rooms at a mean
+    // absorption of 0.3 to 0.4 in rooms other than 5 x 4 x 3 and 6 x 10 x 3 m; rooms whose walls
+    // are not uniform Lambert, for the roughness structure; and the higher counts of new pairs.
+    cell_r("V4-E1", V4, Room::Long, Walls::Lambert(0.4), Energetic, 300_000, 0.6, 0.001, 9.0, R0),
+    cell_r("V4-E2", V4, Room::Cube, Walls::Lambert(0.3), Energetic, 150_000, 1.5, 0.01, 9.0, R0),
+    cell_r("V4-E3", V4, Room::Hall, Walls::Lambert(0.35), Energetic, 300_000, 1.0, 0.01, 9.0, R0),
+    cell_r("V4-E4", V4, Room::Corridor, Walls::Lambert(0.4), Energetic, 150_000, 0.8, 0.01, 9.0, R0),
+    cell_r("V4-E5", V4, Room::Small, Walls::Specular(0.1), Energetic, 300_000, 2.0, 0.01, 7.0, R0),
+    cell_r("V4-E6", V4, Room::Hall, Walls::DeadCeiling, Energetic, 300_000, 3.0, 0.01, 7.0, R0),
+    cell_r("V4-E7", V4, Room::Cube, LAMBERT_LIVE_FLOORS, Energetic, 150_000, 3.0, 0.01, 7.0, R0),
+    cell_r("V4-E8", V4, Room::Corridor, Walls::DeadFloorScattering(0.5), Energetic, 300_000, 3.0, 0.01, 7.0, R0),
+    cell_r("V4-E9", V4, Room::Tutorial, Walls::DeadFloor, Energetic, 600_000, 3.0, 0.001, 7.0, R0),
+    cell_r("V4-E10", V4, Room::Hall, Walls::Tutorial, Energetic, 300_000, 3.0, 0.01, 7.0, R0),
+    cell_r("V4-E11", V4, Room::Small, LAMBERT_EXTREME_CEILING, Energetic, 300_000, 2.0, 0.001, 7.0, R0),
+    cell_r("V4-E12", V4, Room::Tutorial, Walls::Specular(0.1), Energetic, 300_000, 3.0, 0.01, 7.0, 0.6),
+    cell_r("V4-E13", V4, Room::Tutorial, Walls::Tutorial, Energetic, 150_000, 2.0, 0.01, 7.0, R0),
+    cell_r("V4-E14", V4, Room::Tutorial, Walls::Tutorial, Energetic, 1_200_000, 2.0, 0.01, 7.0, R0),
+    cell_r("V4-E15", V4, Room::Hall, Walls::DeadFloor, Energetic, 2_400_000, 3.0, 0.01, 7.0, R0),
+    cell_r("V4-E16", V4, Room::Tutorial, Walls::Lambert(0.4), Energetic, 2_400_000, 0.6, 0.001, 9.0, R0),
+    cell_r("V4-E17", V4, Room::Small, Walls::Lambert(0.2), Energetic, 800_000, 1.5, 0.01, 7.0, R0),
+    cell_r("V4-E18", V4, Room::Long, Walls::Lambert(1.0), Energetic, 1_200_000, 0.08, 0.001, 7.0, 0.5),
+    cell_r("V4-R1", V4, Room::Tutorial, Walls::Lambert(0.1), Random, 6_000_000, 3.0, 0.01, 5.0, R0),
+    cell_r("V4-R2", V4, Room::Tutorial, Walls::Tutorial, Random, 6_000_000, 2.0, 0.01, 5.0, R0),
+    cell_r("V4-R3", V4, Room::Small, Walls::Lambert(0.2), Random, 800_000, 1.5, 0.01, 5.0, R0),
+    cell_r("V4-R4", V4, Room::Small, Walls::Lambert(0.05), Random, 2_000_000, 3.0, 0.01, 5.0, 0.6),
+    cell_r("V4-R5", V4, Room::Tutorial, Walls::DeadFloor, Random, 4_000_000, 3.0, 0.01, 5.0, R0),
+    cell_r("V4-R6", V4, Room::Long, Walls::Lambert(1.0), Random, 1_200_000, 0.08, 0.001, 5.0, 0.5),
 ];
 
 /// Tutorial 1's box (`rooms/tutorial1_box.simpa`) on the octave bands 125 Hz to 4 kHz, without its
@@ -798,7 +847,11 @@ fn noise_calibration_runs() {
 
 // --- the analysis ------------------------------------------------------------------------------
 
-/// One receiver-band of one run, as the analysis needs it.
+/// One receiver-band of one run, as the analysis needs it. Everything the noise model's
+/// calibration and domain read is taken from the report, as `simpa results` computed it (round 4,
+/// review of `50695f6`: the harness had taken the uniform flag from the cell and recomputed `n`
+/// with the code it was checking), and checked against the harness's own computation and the
+/// cell's configuration.
 struct Band {
     dt: f64,
     energy: Vec<f64>,
@@ -807,29 +860,83 @@ struct Band {
     /// The share of the emitted energy alive at the end of each step (the room table over the
     /// sources' power, both times `ρc`).
     alive: Vec<f64>,
-    /// Crossings per particle, `params::noise::crossings_per_particle` (one source: its deposit is
-    /// the least).
+    /// Crossings per particle: the report's `crossings_per_particle` over its lifetime spread.
     n1: f64,
-    /// The spread of the particles' lifetimes, `params::noise::lifetime_cv2` of `alive`.
+    /// The spread of the particles' lifetimes: the report's `noise_model.run.lifetime_cv2`.
     cv2: f64,
     /// Every face reflects by Lambert's law with scattering 1 in the band (the report's
-    /// `reference`; false when it was not computed).
+    /// `reference`).
     lambert: bool,
+    /// Every face has the same absorption in the band (the report's `reference`).
+    uniform: bool,
     /// The band's mean absorption over the faces (the report's `reference`).
     mean_absorption: f64,
+    /// The band's noise model, rebuilt from the report's `noise_model`.
+    model: NoiseModel,
+    /// How the report judged each of the eight quantities.
+    judged: [Option<Judged>; 8],
 }
 
-/// Every receiver-band of a report, receivers then bands.
-fn bands_of(rep: &Value) -> Vec<Band> {
+/// `Var L / (E L)²` of the lifetimes, from the share alive at the end of each step, written again
+/// here (not `params::noise::lifetime_cv2`): `E L = ∫S`, `E L² = ∫2t·S`, by trapezoids from
+/// `(0, 1)`.
+fn own_lifetime_cv2(alive: &[f64], dt: f64) -> f64 {
+    let mut t_prev = 0.0;
+    let mut s_prev = 1.0;
+    let (mut m1, mut m2) = (0.0, 0.0);
+    for (k, &s) in alive.iter().enumerate() {
+        let t = dt * (k + 1) as f64;
+        m1 += 0.5 * dt * (s_prev + s);
+        m2 += 0.5 * dt * (2.0 * t_prev * s_prev + 2.0 * t * s);
+        t_prev = t;
+        s_prev = s;
+    }
+    (m2 / (m1 * m1) - 1.0).max(0.0)
+}
+
+/// How the report judged a quantity: `None` when it gives no value from the series for a reason
+/// that is not its noise (the harness then counts it as the series' refusal).
+fn judged_of(p: &Value) -> Option<Judged> {
+    if p["value"].is_f64() {
+        return Some(Judged::Given);
+    }
+    let why = &p["not_evaluable"]["error"]["why"];
+    match why["why"].as_str()? {
+        "monte_carlo_noise" => {
+            let c = &why["particle_count"];
+            Some(match (c["count"].as_str(), c["particles"].as_u64()) {
+                (Some("named"), Some(n)) => Judged::Named(n),
+                (Some("resampled"), Some(n)) => Judged::Resampled(n),
+                (Some("beyond_resampled"), _) => Judged::BeyondResampled,
+                _ => Judged::NoCount,
+            })
+        }
+        "noise_uncalibrated" => Some(match why["particles_at_least"].as_u64() {
+            Some(n) => Judged::FewParticles(n),
+            None => Judged::ManyCrossings,
+        }),
+        _ => None,
+    }
+}
+
+/// Every receiver-band of a report, receivers then bands. `cell`: the cell whose run it is, whose
+/// configuration the report's reading of the walls must match.
+fn bands_of(rep: &Value, cell: &Cell) -> Vec<Band> {
     let s = &rep["spps"];
     let dt = s["time_step_s"].as_f64().unwrap();
-    let half = s["receiver_crossing_s"].as_f64().unwrap() / 2.0;
+    let crossing = s["receiver_crossing_s"].as_f64().unwrap();
+    let half = crossing / 2.0;
     let particles = s["particles_per_source"].as_f64().unwrap();
     assert_eq!(
         s["sources"].as_array().unwrap().len(),
         1,
         "one source a cell"
     );
+    let method = if s["computation_method"] == 0 {
+        noise::Method::Random
+    } else {
+        noise::Method::Energetic
+    };
     let floats = |v: &Value| -> Vec<f64> {
         v.as_array()
             .unwrap()
@@ -845,29 +952,84 @@ fn bands_of(rep: &Value) -> Vec<Band> {
             let power = b["source_power_rho_c"].as_f64().unwrap();
             let room = floats(&s["total_energy"][bi]["energy"]);
             let energy = floats(&b["energy_pa2"]);
-            let mean_deposit = b["noise_model"]["mean_deposit"].as_f64().unwrap();
+            let nm = &b["noise_model"];
+            let mean_deposit = nm["mean_deposit"].as_f64().unwrap();
             let alive: Vec<f64> = room.iter().map(|e| e / power).collect();
             assert_eq!(
                 reference["status"], "computed",
                 "the cells' references are computed"
             );
-            assert_eq!(reference["bands"][bi]["freq_hz"], b["freq_hz"]);
-            let lambert = reference["bands"][bi]["lambert_walls"] == true;
-            let mean_absorption = reference["bands"][bi]["mean_absorption"].as_f64().unwrap();
+            let rb = &reference["bands"][bi];
+            assert_eq!(rb["freq_hz"], b["freq_hz"]);
+            let lambert = rb["lambert_walls"] == true;
+            let uniform = rb["uniform_absorption"] == true;
+            let mean_absorption = rb["mean_absorption"].as_f64().unwrap();
+            // The report's reading of the walls against the cell's configuration.
+            assert_eq!(lambert, cell.walls.lambert(), "{}: lambert_walls", cell.id);
+            assert_eq!(
+                uniform,
+                cell.walls.uniform(),
+                "{}: uniform_absorption",
+                cell.id
+            );
+            // What the calibration's correction and domain read, as the report computed them,
+            // against the harness's own computation.
+            let run = &nm["run"];
+            let cv2 = run["lifetime_cv2"].as_f64().unwrap();
+            let own_cv2 = own_lifetime_cv2(&alive, dt);
+            assert!(
+                (cv2 - own_cv2).abs() <= 1e-9 * own_cv2.max(1.0),
+                "{}: lifetime_cv2 {cv2} against {own_cv2}",
+                cell.id
+            );
+            let least = run["least_deposit"].as_f64().unwrap();
+            assert_eq!(least, mean_deposit, "{}: one source", cell.id);
+            assert_eq!(run["particles"].as_f64(), Some(particles), "{}", cell.id);
+            let n = b["crossings_per_particle"].as_f64().unwrap();
+            let own_n1 = energy.iter().sum::<f64>() / (least * particles);
+            assert!(
+                (n - own_n1 * own_cv2).abs() <= 1e-9 * (own_n1 * own_cv2).max(1e-6),
+                "{}: crossings_per_particle {n} against {}",
+                cell.id,
+                own_n1 * own_cv2
+            );
+            assert_eq!(run["lambert_walls"].as_bool(), Some(lambert), "{}", cell.id);
+            assert_eq!(
+                run["uniform_absorption"].as_bool(),
+                Some(uniform),
+                "{}",
+                cell.id
+            );
+            let model = NoiseModel::of_run(
+                mean_deposit,
+                method,
+                noise::RunNoise {
+                    particles: particles as u32,
+                    least_deposit: least,
+                    lifetime_cv2: cv2,
+                    lambert_walls: lambert,
+                    uniform_absorption: uniform,
+                    mean_absorption: run["mean_absorption"].as_f64().unwrap(),
+                    bands: 1,
+                    receiver_crossing_s: crossing,
+                },
+            )
+            .unwrap();
+            let judged =
+                std::array::from_fn(|i| judged_of(&b["parameters"][noise::QUANTITY_NAMES[i]]));
             out.push(Band {
                 dt,
-                n1: noise::crossings_per_particle(
-                    energy.iter().sum::<f64>(),
-                    mean_deposit,
-                    particles,
-                ),
-                cv2: noise::lifetime_cv2(&alive, dt).expect("the room table gives a lifetime"),
+                n1: own_n1,
+                cv2,
                 lambert,
+                uniform,
                 mean_absorption,
                 energy,
                 arrival: Arrival::spread(t_a, half),
                 mean_deposit,
                 alive,
+                model,
+                judged,
             });
         }
     }
@@ -897,7 +1059,7 @@ fn values(s: &EnergySeries, arrival: Arrival) -> [Option<f64>; 8] {
     ]
 }
 
-/// The candidate structures of the model (rule 1).
+/// The candidate structures of the model (rule 1 and round 4).
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Structure {
     /// M7's: every crossing deposits `d̄` on average; `params::noise` as the code has it.
@@ -906,28 +1068,39 @@ enum Structure {
     /// energy, read from the room table at the start of the step (1 in step 0): the candidate the
     /// calibration measured and rejected for energetic mode. Not in the code; computed here.
     MeanEnergy,
+    /// Round 4's: each bin's deposit from the series' own roughness, at most `d̄`
+    /// (`params::noise::Structure::Roughness`), energetic mode only.
+    Roughness,
 }
 
-const STRUCTURES: [Structure; 2] = [Structure::Constant, Structure::MeanEnergy];
+const STRUCTURES: [Structure; 3] = [
+    Structure::Constant,
+    Structure::MeanEnergy,
+    Structure::Roughness,
+];
 
-/// `params::noise::bootstrap` for [`Structure::Constant`], or the same bootstrap with a per-bin
-/// deposit for [`Structure::MeanEnergy`]: each quantity's model standard deviation before
-/// calibration, relative to the series' value for the decay times; `None` where fewer than two
-/// resamples or the series give a value.
+/// Each quantity's model standard deviation before calibration under structure `st`, relative to
+/// the series' value for the decay times; `None` where fewer than two resamples or the series
+/// give a value. The constant and roughness structures are the code's (`params::noise::
+/// bootstrap_with`, on the band's model); the mean-energy candidate is computed here.
 fn bootstrap(
     s: &EnergySeries,
     b: &Band,
-    method: noise::Method,
-    particles: u32,
     st: Structure,
     refused: &mut [usize; 8],
 ) -> [Option<f64>; 8] {
     let base = values(s, b.arrival);
     let sd: [Option<f64>; 8] = match st {
-        Structure::Constant => {
-            let m = NoiseModel::crossings(b.mean_deposit, method, Some(particles)).unwrap();
-            let raw = noise::bootstrap(s, b.arrival, &m);
-            *refused = raw.map(|(_, r)| r);
+        Structure::Constant | Structure::Roughness => {
+            let code = if st == Structure::Constant {
+                noise::Structure::Constant
+            } else {
+                noise::Structure::Roughness
+            };
+            let raw = noise::bootstrap_with(s, b.arrival, &b.model, code, 1);
+            if st == Structure::Constant {
+                *refused = raw.map(|(_, r)| r);
+            }
             raw.map(|(sd, _)| sd)
         }
         Structure::MeanEnergy => {
@@ -944,23 +1117,7 @@ fn bootstrap(
             let mut rng = noise::Rng::new(noise::SEED);
             let mut got: Vec<Vec<f64>> = vec![Vec::new(); 8];
             for _ in 0..noise::RESAMPLES {
-                let drawn: Vec<f64> = s
-                    .values()
-                    .iter()
-                    .zip(&dep)
-                    .map(|(&e, &d)| {
-                        if e <= 0.0 {
-                            return 0.0;
-                        }
-                        let lambda = e / d;
-                        if lambda > 30.0 {
-                            (e + (noise::CHORD_FACTOR * d * e).sqrt() * rng.normal()).max(0.0)
-                        } else {
-                            let n = rng.poisson(lambda);
-                            (0..n).map(|_| d * 1.5 * rng.uniform().sqrt()).sum()
-                        }
-                    })
-                    .collect();
+                let drawn = noise::resample_with(s.values(), &dep, &mut rng);
                 if let Some(r) = plain_series(s.dt(), drawn) {
                     for (i, v) in values(&r, b.arrival).into_iter().enumerate() {
                         if let Some(v) = v {
@@ -979,55 +1136,52 @@ fn bootstrap(
 }
 
 /// One run's receiver-bands: each quantity's value, its standard deviation under each
-/// structure, how many of the constant structure's resamples refused it, and the band's
-/// crossings per particle, lifetime spread and Lambert flag (round 3).
+/// structure, how many of the constant structure's resamples refused it, the band's crossings per
+/// particle, lifetime spread, Lambert and uniform flags and mean absorption (as the report read
+/// them), and how the report judged each quantity.
 struct RunNumbers {
     values: Vec<[Option<f64>; 8]>,
     sd: Vec<Vec<[Option<f64>; 8]>>,
-    refused: Vec<[usize; 8]>,
     n1: Vec<f64>,
     cv2: Vec<f64>,
     lambert: Vec<bool>,
+    uniform: Vec<bool>,
     mean_absorption: Vec<f64>,
-    /// Every face of the cell has the same absorption (its walls; set by `cell_receipt`).
-    uniform: bool,
+    judged: Vec<[Option<Judged>; 8]>,
 }
 
-fn numbers(rep: &Value, structures: &[Structure]) -> RunNumbers {
-    let bands = bands_of(rep);
+fn numbers(rep: &Value, cell: &Cell, structures: &[Structure]) -> RunNumbers {
+    let bands = bands_of(rep, cell);
     let method = if rep["spps"]["computation_method"] == 0 {
         noise::Method::Random
     } else {
         noise::Method::Energetic
     };
-    let particles = rep["spps"]["particles_per_source"].as_u64().unwrap() as u32;
     let mut values_out = Vec::new();
     let mut sd = vec![Vec::new(); structures.len()];
-    let mut refused_out = Vec::new();
     for b in &bands {
         let s = plain_series(b.dt, b.energy.clone());
         values_out.push(s.as_ref().map_or([None; 8], |s| values(s, b.arrival)));
         let mut refused = [noise::RESAMPLES; 8];
         for (si, st) in structures.iter().enumerate() {
-            // The mean-energy candidate is energetic mode's only: in random mode a particle keeps
-            // its start energy.
-            let skip = *st == Structure::MeanEnergy && method == noise::Method::Random;
+            // The mean-energy and roughness structures are energetic mode's only: in random mode a
+            // particle keeps its start energy.
+            let skip = *st != Structure::Constant && method == noise::Method::Random;
             sd[si].push(match (&s, skip) {
-                (Some(s), false) => bootstrap(s, b, method, particles, *st, &mut refused),
+                (Some(s), false) => bootstrap(s, b, *st, &mut refused),
                 _ => [None; 8],
             });
         }
-        refused_out.push(refused);
     }
     RunNumbers {
         values: values_out,
         sd,
-        refused: refused_out,
         n1: bands.iter().map(|b| b.n1).collect(),
         cv2: bands.iter().map(|b| b.cv2).collect(),
         lambert: bands.iter().map(|b| b.lambert).collect(),
+        uniform: bands.iter().map(|b| b.uniform).collect(),
         mean_absorption: bands.iter().map(|b| b.mean_absorption).collect(),
-        uniform: false,
+        judged: bands.iter().map(|b| b.judged).collect(),
     }
 }
 
@@ -1049,6 +1203,7 @@ fn roles() -> Vec<Role> {
             "validation2" => Role::Validation2,
             "calibration3" => Role::Calibration3,
             "validation3" => Role::Validation3,
+            "validation4" => Role::Validation4,
             other => panic!("role {other:?}"),
         })
         .collect()
@@ -1059,12 +1214,77 @@ fn structure_name(st: Structure) -> &'static str {
     match st {
         Structure::Constant => "constant",
         Structure::MeanEnergy => "mean_energy",
+        Structure::Roughness => "roughness",
     }
+}
+
+/// With `$SIMPA_NOISE_REREAD` set to a folder, every run of `cells` found under `from` is read
+/// again with this build's `simpa results`, `jobs()` at a time, into
+/// `<folder>/<cell>/seed<NN>/report.json` (an existing report there is kept), and the analysis reads
+/// those: the reports then carry what this build computes (round 4). Returns the folders to read
+/// the reports from, in the order of `from`.
+fn reread(cells: &[Cell], from: &[PathBuf]) -> Vec<PathBuf> {
+    let Some(out) = std::env::var_os("SIMPA_NOISE_REREAD").filter(|s| !s.is_empty()) else {
+        return from.to_vec();
+    };
+    let out = PathBuf::from(out);
+    let mut todo: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for c in cells {
+        let Some(dir) = from.iter().find(|f| f.join(c.id).is_dir()) else {
+            panic!("{}: in none of {from:?}", c.id);
+        };
+        for seed in SEEDS {
+            let folder = format!("seed{seed:02}");
+            let to = out.join(c.id).join(&folder).join("report.json");
+            if to.exists() {
+                continue;
+            }
+            let runs = dir.join(c.id).join(&folder).join("runs");
+            let run = std::fs::read_dir(&runs)
+                .unwrap_or_else(|e| panic!("{}: {e}", runs.display()))
+                .next()
+                .unwrap()
+                .unwrap()
+                .path();
+            todo.push((run, to));
+        }
+    }
+    let next = AtomicUsize::new(0);
+    let clock = std::time::Instant::now();
+    std::thread::scope(|scope| {
+        for _ in 0..jobs().min(todo.len()) {
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, Ordering::SeqCst);
+                    let Some((run, to)) = todo.get(i) else {
+                        break;
+                    };
+                    let r = simpa_run(&[
+                        "results".to_string(),
+                        run.display().to_string(),
+                        "--json".into(),
+                    ]);
+                    assert!(r.code == 0 || r.code == 6, "{}: {r:#?}", run.display());
+                    std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+                    std::fs::write(to, &r.stdout).unwrap();
+                    if i % 50 == 0 {
+                        println!(
+                            "[{:>5.0} s] read again {} of {}",
+                            clock.elapsed().as_secs_f64(),
+                            i + 1,
+                            todo.len()
+                        );
+                    }
+                }
+            });
+        }
+    });
+    vec![out]
 }
 
 /// One cell's receipt: its configuration and, per quantity, a row per receiver-band where every
 /// seed gives a value (`calibration::rows` reads it).
-fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
+fn cell_receipt(c: &Cell, from: &Path, runs_dir: &Path) -> (Value, Vec<RunNumbers>) {
     let reports: Vec<Value> = SEEDS
         .map(|seed| {
             let p = from
@@ -1087,16 +1307,13 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
     }
     let t0 = std::time::Instant::now();
     // Every run's numbers, in parallel.
-    let mut runs: Vec<RunNumbers> = std::thread::scope(|scope| {
+    let runs: Vec<RunNumbers> = std::thread::scope(|scope| {
         let hs: Vec<_> = reports
             .iter()
-            .map(|r| scope.spawn(|| numbers(r, &STRUCTURES)))
+            .map(|r| scope.spawn(|| numbers(r, c, &STRUCTURES)))
             .collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect()
     });
-    for r in &mut runs {
-        r.uniform = c.walls.uniform();
-    }
     let n = runs.len();
     let rbs = runs[0].values.len();
     println!(
@@ -1140,6 +1357,17 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
                 let (pm, psd) = mean_sd(&sds[0]);
                 psd / pm
             };
+            // Round 4's roughness structure (energetic mode): each seed's standard deviation, or
+            // null where its resamples gave none, and its scatter over the seeds.
+            let rough_si = STRUCTURES
+                .iter()
+                .position(|s| *s == Structure::Roughness)
+                .unwrap();
+            let rough: Vec<Option<f64>> = runs.iter().map(|r| r.sd[rough_si][rb][qi]).collect();
+            let rough_scatter = (sds[rough_si].len() == n).then(|| {
+                let (pm, psd) = mean_sd(&sds[rough_si]);
+                psd / pm
+            });
             rows.push(json!({
                 "receiver": rb / per,
                 "freq_hz": first[rb / per]["bands"][rb % per]["freq_hz"],
@@ -1150,6 +1378,8 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
                 // calibration (relative for the decay times): every run's result, seed 1 first.
                 "seed_values": got,
                 "seed_model_sd": sds[0],
+                "seed_model_sd_roughness": rough,
+                "predicted_scatter_roughness": rough_scatter,
                 "predicted_sd": STRUCTURES.iter().zip(&sds)
                     .filter(|(_, s)| s.len() == n)
                     .map(|(st, s)| (
@@ -1164,7 +1394,7 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
     }
     let mut config = c.config();
     // Each seed's wall time, s, from the runs' `wall.json` when it is there.
-    let wall = std::fs::read_to_string(from.join("wall.json"))
+    let wall = std::fs::read_to_string(runs_dir.join("wall.json"))
         .ok()
         .and_then(|t| serde_json::from_str::<Value>(&t).ok())
         .and_then(|w| {
@@ -1176,7 +1406,8 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
     config["wall_s"] = wall.unwrap_or(Value::Null);
     // Round 3, once per receiver-band: each seed's crossings per particle and lifetime spread,
     // whether every face is Lambert with scattering 1 in the band, whether every face has the
-    // same absorption (the cell's walls, A2), and the mean absorption.
+    // same absorption (A2), and the mean absorption; since round 4 all as the report read them,
+    // checked against the cell's configuration (`bands_of`).
     let bands: Vec<Value> = (0..rbs)
         .map(|rb| {
             json!({
@@ -1185,7 +1416,7 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
                 "seed_n1": runs.iter().map(|r| r.n1[rb]).collect::<Vec<_>>(),
                 "seed_cv2": runs.iter().map(|r| r.cv2[rb]).collect::<Vec<_>>(),
                 "lambert": runs[0].lambert[rb],
-                "uniform": c.walls.uniform(),
+                "uniform": runs[0].uniform[rb],
                 "mean_absorption": runs[0].mean_absorption[rb],
             })
         })
@@ -1236,15 +1467,20 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
     (receipt, runs)
 }
 
-/// How `params::noise::evaluate` judged a value (R3-9 and the per-cell counts).
+/// How the report judged a value (R3-9, R4-3 and the per-cell counts): `simpa results` of this
+/// build on the run (`$SIMPA_NOISE_REREAD`).
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Judged {
     /// Given.
     Given,
-    /// Refused for its noise, naming this many particles per source.
+    /// Refused for its noise, naming this many particles per source from its standard deviation.
     Named(u64),
-    /// Refused for its noise: the standard deviation within the limit, too many resamples refusing.
-    WithinLimit,
+    /// Refused because too many of its resamples refuse it, naming this many particles per source,
+    /// where they would not (R4-3).
+    Resampled(u64),
+    /// Refused because too many of its resamples refuse it, and they still would at the largest
+    /// multiple tried.
+    BeyondResampled,
     /// Refused for its noise with no count named for another reason.
     NoCount,
     /// Outside the calibration's domain: too few particles (run at least this many) ...
@@ -1253,68 +1489,10 @@ enum Judged {
     ManyCrossings,
 }
 
-/// How `params::noise::evaluate` judges quantity `qi` of receiver-band `rb` of one run, by the
-/// code a report uses (`params::noise::judge_one`, with the run's own crossings per particle,
-/// lifetime spread, Lambert and uniform flags and mean absorption); `None` when the series gives
-/// no value.
-fn judged(
-    run: &RunNumbers,
-    rb: usize,
-    qi: usize,
-    method: ComputationMethod,
-    particles: u32,
-) -> Option<Judged> {
-    let value = run.values[rb][qi]?;
-    let m = match method {
-        Random => noise::Method::Random,
-        Energetic => noise::Method::Energetic,
-    };
-    let model = NoiseModel::of_run(
-        1.0,
-        m,
-        noise::RunNoise {
-            particles,
-            least_deposit: 1.0,
-            lifetime_cv2: run.cv2[rb],
-            lambert_walls: run.lambert[rb],
-            uniform_absorption: run.uniform,
-            mean_absorption: run.mean_absorption[rb],
-            bands: 1,
-        },
-    )
-    .unwrap();
-    let n = noise::calibration::multi_crossing(m, run.n1[rb], run.cv2[rb]);
-    // The harness keeps the decay times' standard deviations relative; the code takes them in
-    // the quantity's unit.
-    let raw = run.sd[0][rb][qi].map(|s| {
-        if noise::relative(qi) {
-            s * value.abs()
-        } else {
-            s
-        }
-    });
-    Some(
-        match noise::judge_one(&model, qi, value, raw, run.refused[rb][qi], Some(n)) {
-            Ok(_) => Judged::Given,
-            Err(e) => match e.not_evaluable() {
-                Some(NotEvaluable::MonteCarloNoise { particle_count, .. }) => {
-                    match particle_count {
-                        ParticleCount::Named {
-                            particles: Some(n), ..
-                        } => Judged::Named(*n),
-                        ParticleCount::WithinLimit => Judged::WithinLimit,
-                        _ => Judged::NoCount,
-                    }
-                }
-                Some(NotEvaluable::NoiseUncalibrated {
-                    particles_at_least: Some(n),
-                    ..
-                }) => Judged::FewParticles(u64::from(*n)),
-                Some(NotEvaluable::NoiseUncalibrated { .. }) => Judged::ManyCrossings,
-                other => panic!("judge_one refused {other:?}"),
-            },
-        },
-    )
+/// How the report judged quantity `qi` of receiver-band `rb` of one run; `None` when it refused
+/// the value for a reason other than its noise.
+fn judged(run: &RunNumbers, rb: usize, qi: usize) -> Option<Judged> {
+    run.judged[rb][qi]
 }
 
 #[test]
@@ -1334,6 +1512,7 @@ fn noise_calibration() {
         .into_iter()
         .filter(|c| roles.contains(&c.role))
         .collect();
+    let read_from = reread(&cells, &from);
     let (receipts, runs): (Vec<Value>, Vec<Vec<RunNumbers>>) = cells
         .iter()
         .map(|c| {
@@ -1341,7 +1520,11 @@ fn noise_calibration() {
                 .iter()
                 .find(|f| f.join(c.id).is_dir())
                 .unwrap_or_else(|| panic!("{}: in none of {from:?}", c.id));
-            cell_receipt(c, dir)
+            let reports = read_from
+                .iter()
+                .find(|f| f.join(c.id).is_dir())
+                .unwrap_or_else(|| panic!("{}: in none of {read_from:?}", c.id));
+            cell_receipt(c, reports, dir)
         })
         .unzip();
     let all = json!({ "cells": receipts });
@@ -1640,12 +1823,10 @@ fn noise_calibration() {
                     (0, 0, 0, 0.0, 0);
                 let rbs = runs[ia][0].values.len();
                 for rb in 0..rbs {
-                    let hi: Vec<Option<Judged>> = runs[ib]
-                        .iter()
-                        .map(|r| judged(r, rb, qi, ca.method, cb.particles))
-                        .collect();
+                    let hi: Vec<Option<Judged>> =
+                        runs[ib].iter().map(|r| judged(r, rb, qi)).collect();
                     for run in &runs[ia] {
-                        let n = match judged(run, rb, qi, ca.method, ca.particles) {
+                        let n = match judged(run, rb, qi) {
                             None | Some(Judged::Given) => continue,
                             Some(Judged::FewParticles(_) | Judged::ManyCrossings) => {
                                 outside += 1;
@@ -1694,7 +1875,7 @@ fn noise_calibration() {
                 let mut why: std::collections::BTreeMap<&str, usize> = Default::default();
                 for run in &runs[ci] {
                     for rb in 0..run.values.len() {
-                        let Some(j) = judged(run, rb, qi, c.method, c.particles) else {
+                        let Some(j) = judged(run, rb, qi) else {
                             continue;
                         };
                         total += 1;
@@ -1704,7 +1885,7 @@ fn noise_calibration() {
                                 continue;
                             }
                             Judged::Named(_) | Judged::NoCount => "noise",
-                            Judged::WithinLimit => "resamples",
+                            Judged::Resampled(_) | Judged::BeyondResampled => "resamples",
                             Judged::FewParticles(_) => "few",
                             Judged::ManyCrossings => "crossings",
                         };

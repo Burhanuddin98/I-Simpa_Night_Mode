@@ -324,10 +324,21 @@ mod tests {
             "NE(noise:2.4M)"
         );
         assert_eq!(cell(&noise(named(Some(150_000))), 2, 1.0), "NE(noise:150k)");
+        // A refusal by its resamples names the multiple at which they clear (R4-3).
+        let resampled = |particles| ParticleCount::Resampled {
+            multiple: 16,
+            margin: 1.3,
+            particles,
+        };
+        assert_eq!(
+            cell(&noise(resampled(Some(2_400_000))), 2, 1.0),
+            "NE(noise:2.4M)"
+        );
         // Says no: without a count, none is shown, whatever the reason.
         for c in [
             named(None),
-            ParticleCount::WithinLimit,
+            resampled(None),
+            ParticleCount::BeyondResampled { multiple: 64 },
             ParticleCount::ScalingNotConfirmed,
             ParticleCount::NoStandardDeviation,
         ] {

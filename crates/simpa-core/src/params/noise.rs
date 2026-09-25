@@ -65,6 +65,18 @@ use super::{EnergySeries, NotEvaluable, ParamError, ParticleCount, Quantity, not
 pub const RESAMPLES: usize = 200;
 /// Resamples that may refuse a quantity before the value is refused: 5 %.
 pub const REFUSED_RESAMPLES_ALLOWED: usize = RESAMPLES / 20;
+/// The multiples of the run's particles a value refused for its resamples is tried at (rule R4-3):
+/// the model's resamples of the series with every deposit over the multiple, which is what the
+/// model says a run of that many more particles looks like.
+pub const RESAMPLED_MULTIPLES: [u32; 6] = [2, 4, 8, 16, 32, 64];
+/// At a multiple of [`RESAMPLED_MULTIPLES`], the resamples may refuse the value at most this many
+/// times for the multiple to be named: half of [`REFUSED_RESAMPLES_ALLOWED`], since a new run's own
+/// resamples refuse it at a rate that scatters from run to run (R4-3).
+pub const RESAMPLED_REFUSALS_NAMED: usize = REFUSED_RESAMPLES_ALLOWED / 2;
+/// Blocks on either side of a block whose roughness [`roughness_deposits`] reads (R4 structure).
+pub const ROUGHNESS_HALF_WINDOW: usize = 6;
+/// The fewest block ratios a block's roughness is read from; with fewer it keeps `d̄`.
+pub const ROUGHNESS_MIN_RATIOS: usize = 5;
 /// `E[ℓ²]/E[ℓ]²` for the chords of a sphere crossed by a uniform beam.
 pub const CHORD_FACTOR: f64 = 9.0 / 8.0;
 /// The bootstrap's seed: the same series gives the same estimate.
@@ -135,6 +147,8 @@ pub mod calibration {
         /// Whether a refusal names a count: the seeds' spread did not fall slower than `1/√N` on
         /// any pair of cells that differ only in `N` (rule R3-6, one-sided).
         pub root_n_confirmed: bool,
+        /// How the resamples the factor applies to are drawn ([`super::Structure`]).
+        pub structure: super::Structure,
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -153,6 +167,7 @@ pub mod calibration {
             max_crossings_per_particle,
             margin,
             root_n_confirmed,
+            structure: super::Structure::Constant,
         }
     }
 
@@ -303,6 +318,20 @@ pub enum Method {
     Energetic,
 }
 
+/// How a series' resamples are drawn, per quantity ([`calibration::Entry::structure`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Structure {
+    /// M7's: every crossing deposits `d̄` on average, in every bin.
+    Constant,
+    /// The run's own roughness (round 4): each bin's deposit read from how far the series' blocks
+    /// stray from their neighbours' geometric mean ([`roughness_deposits`]), at most `d̄`. In
+    /// energetic mode a particle's energy falls at every reflection, so late in a decay a
+    /// crossing deposits far less than `d̄`, by how much depending on how far the particles'
+    /// energies have spread apart, which SPPS does not write but the series' own roughness shows.
+    Roughness,
+}
+
 /// A band's faces, as energetic T20 and T30's calibration tells them apart (round 3, A2): how far
 /// the particles' energies spread apart late in a decay depends on whether every face scatters
 /// diffusely and absorbs alike.
@@ -340,6 +369,9 @@ pub struct RunNoise {
     pub mean_absorption: f64,
     /// The bands summed into the series: 1 for a band. Each band has its own particles.
     pub bands: u32,
+    /// How long a particle takes to cross the receiver sphere, `2R/c`, s: the roughness
+    /// structure's blocks are at least this long ([`roughness_block`]).
+    pub receiver_crossing_s: f64,
 }
 
 impl RunNoise {
@@ -431,6 +463,9 @@ impl NoiseModel {
         if run.bands == 0 {
             return bad("bands", 0.0);
         }
+        if !run.receiver_crossing_s.is_finite() || run.receiver_crossing_s <= 0.0 {
+            return bad("receiver_crossing_s", run.receiver_crossing_s);
+        }
         match NoiseModel::crossings(mean_deposit, method, Some(run.particles))? {
             NoiseModel::Crossings {
                 mean_deposit,
@@ -466,6 +501,116 @@ impl NoiseModel {
         );
         Some(calibration::multi_crossing(*method, n1, run.lifetime_cv2))
     }
+
+    /// The band's faces as the calibration reads them: the run's ([`RunNoise::walls`]), or
+    /// [`Walls::Other`] for a series that is no run's.
+    pub fn walls(&self) -> Walls {
+        match self {
+            NoiseModel::Crossings { run: Some(r), .. } => r.walls(),
+            _ => Walls::Other,
+        }
+    }
+
+    /// Quantity `i`'s structure under this model ([`calibration::Entry::structure`]); `None` for
+    /// an unknown model.
+    pub fn structure(&self, i: usize) -> Option<Structure> {
+        match self {
+            NoiseModel::Crossings { method, .. } => {
+                Some(calibration::entry(*method, i, self.walls()).structure)
+            }
+            NoiseModel::Unknown { .. } => None,
+        }
+    }
+
+    /// Each bin's mean deposit under structure `st` for `series`, over `multiple` (the deposits of a
+    /// run of `multiple` times the particles); `None` for an unknown model. The roughness
+    /// structure's blocks span the run's receiver crossing ([`roughness_block`]; one bin for a
+    /// series that is no run's).
+    pub fn deposits(
+        &self,
+        series: &EnergySeries,
+        st: Structure,
+        multiple: u32,
+    ) -> Option<Vec<f64>> {
+        let NoiseModel::Crossings {
+            mean_deposit, run, ..
+        } = self
+        else {
+            return None;
+        };
+        let m = f64::from(multiple.max(1));
+        let v = series.values();
+        Some(match st {
+            Structure::Constant => vec![mean_deposit / m; v.len()],
+            Structure::Roughness => {
+                let block = run
+                    .as_ref()
+                    .map_or(1, |r| roughness_block(r.receiver_crossing_s, series.dt()));
+                roughness_deposits(v, *mean_deposit, block)
+                    .into_iter()
+                    .map(|d| d / m)
+                    .collect()
+            }
+        })
+    }
+}
+
+/// Bins per block of [`roughness_deposits`]: at least the time a particle takes to cross the
+/// receiver, `2R/c` (`crossing_s`), since SPPS splits one crossing over the steps it spans
+/// (`reportmanager.cpp:207-226`) and a crossing split between two blocks would make them move
+/// together. One bin when either is not a positive number.
+pub fn roughness_block(crossing_s: f64, dt: f64) -> usize {
+    if !(crossing_s.is_finite() && crossing_s > 0.0 && dt.is_finite() && dt > 0.0) {
+        return 1;
+    }
+    ((crossing_s / dt - 1e-9).ceil() as usize).max(1)
+}
+
+/// The roughness structure's deposit for each bin of `values` (round 4, `PREREGISTER.txt`): the
+/// series summed over blocks of `block` bins, `B_j`; each block's departure from its neighbours'
+/// geometric mean, `r_j = B_j/√(B_{j−1}·B_{j+1}) − 1` where all three hold energy; over the `r` within
+/// [`ROUGHNESS_HALF_WINDOW`] blocks of block `j` (at least [`ROUGHNESS_MIN_RATIOS`] of them), the
+/// block's relative variance `mean(r²)/1.5` (its own variance and a quarter of each neighbour's),
+/// and so the deposit that gives it, `mean(r²)/1.5 · B_j / (9/8)`, at most `mean_deposit`. Every bin
+/// of the block takes it; the bins of a block without enough ratios, and those past the last whole
+/// block, keep `mean_deposit`. A smooth part of the decay reads as little noise, a ragged one as
+/// much, and none reads as more than M7's `d̄`.
+pub fn roughness_deposits(values: &[f64], mean_deposit: f64, block: usize) -> Vec<f64> {
+    let block = block.max(1);
+    let blocks = values.len() / block;
+    let sums: Vec<f64> = (0..blocks)
+        .map(|j| values[j * block..(j + 1) * block].iter().sum())
+        .collect();
+    let ratio = |j: usize| -> Option<f64> {
+        if j == 0 || j + 1 >= blocks {
+            return None;
+        }
+        let (a, b, c) = (sums[j - 1], sums[j], sums[j + 1]);
+        (a > 0.0 && b > 0.0 && c > 0.0).then(|| b / (a * c).sqrt() - 1.0)
+    };
+    let r: Vec<Option<f64>> = (0..blocks).map(ratio).collect();
+    let mut out = vec![mean_deposit; values.len()];
+    for j in 0..blocks {
+        if sums[j] <= 0.0 {
+            continue;
+        }
+        let lo = j.saturating_sub(ROUGHNESS_HALF_WINDOW);
+        let hi = (j + ROUGHNESS_HALF_WINDOW).min(blocks - 1);
+        let (mut sum2, mut count) = (0.0, 0usize);
+        for x in r[lo..=hi].iter().flatten() {
+            sum2 += x * x;
+            count += 1;
+        }
+        if count < ROUGHNESS_MIN_RATIOS {
+            continue;
+        }
+        let relative_variance = sum2 / count as f64 / 1.5;
+        let d = (relative_variance * sums[j] / CHORD_FACTOR).min(mean_deposit);
+        if d.is_finite() && d >= 0.0 {
+            out[j * block..(j + 1) * block].fill(d);
+        }
+    }
+    out
 }
 
 /// A value and its estimated Monte-Carlo standard deviation, both in the quantity's unit.
@@ -549,17 +694,17 @@ fn values(
     )
 }
 
-/// The model's own resamples of `series`: each one's eight values, `None` where the resample
-/// refuses the quantity. Empty for an unknown model.
-fn resamples(series: &EnergySeries, arrival: Arrival, model: &NoiseModel) -> Vec<[Option<f64>; 8]> {
-    let mut samples = Vec::new();
-    if let NoiseModel::Unknown { .. } = model {
-        return samples;
-    }
+/// Resamples of `series` drawn with each bin's mean deposit `deposits`: each one's eight values,
+/// `None` where the resample refuses the quantity.
+fn resamples_with(
+    series: &EnergySeries,
+    arrival: Arrival,
+    deposits: &[f64],
+) -> Vec<[Option<f64>; 8]> {
     let mut rng = Rng::new(SEED);
-    samples.reserve(RESAMPLES);
+    let mut samples = Vec::with_capacity(RESAMPLES);
     for _ in 0..RESAMPLES {
-        let drawn = resample(series.values(), model, &mut rng);
+        let drawn = resample_with(series.values(), deposits, &mut rng);
         // A resample is a stand-in for another run's series. The tail, the floor and the lost
         // particles were judged on the series itself; here only the value's spread is wanted, so
         // the resample is taken as it is: complete, nothing missing. (Judging the tail of a
@@ -581,8 +726,59 @@ fn resamples(series: &EnergySeries, arrival: Arrival, model: &NoiseModel) -> Vec
     samples
 }
 
+/// The model's resamples of one series, drawn once per structure and particle multiple asked for.
+struct Resampler<'a> {
+    series: &'a EnergySeries,
+    arrival: Arrival,
+    model: &'a NoiseModel,
+    drawn: Vec<((Structure, u32), Vec<[Option<f64>; 8]>)>,
+}
+
+impl<'a> Resampler<'a> {
+    fn new(series: &'a EnergySeries, arrival: Arrival, model: &'a NoiseModel) -> Self {
+        Resampler {
+            series,
+            arrival,
+            model,
+            drawn: Vec::new(),
+        }
+    }
+
+    /// The resamples under structure `st` at `multiple` times the run's particles; empty for an
+    /// unknown model.
+    fn get(&mut self, st: Structure, multiple: u32) -> &[[Option<f64>; 8]] {
+        let key = (st, multiple);
+        let at = match self.drawn.iter().position(|(k, _)| *k == key) {
+            Some(i) => i,
+            None => {
+                let samples = self
+                    .model
+                    .deposits(self.series, st, multiple)
+                    .map(|d| resamples_with(self.series, self.arrival, &d))
+                    .unwrap_or_default();
+                self.drawn.push((key, samples));
+                self.drawn.len() - 1
+            }
+        };
+        &self.drawn[at].1
+    }
+
+    /// Quantity `i`'s standard deviation over the resamples of structure `st` at `multiple`, before
+    /// calibration and in its unit, with how many refused it.
+    fn spread(&mut self, st: Structure, multiple: u32, i: usize) -> (Option<f64>, usize) {
+        let got: Vec<f64> = self.get(st, multiple).iter().filter_map(|s| s[i]).collect();
+        let refused = if got.is_empty() && self.model.structure(i).is_none() {
+            RESAMPLES
+        } else {
+            RESAMPLES - got.len()
+        };
+        (standard_deviation(&got), refused)
+    }
+}
+
 /// The model's standard deviation of each of the eight quantities, before calibration, in their
-/// unit (not relative), with how many resamples refused each: what [`evaluate`] calibrates and
+/// unit (not relative), with how many resamples refused each, each quantity under the structure
+/// the code draws its resamples with ([`NoiseModel::structure`]): what [`evaluate`] calibrates and
 /// judges. `None` where fewer than two resamples give a value, and for every quantity of an
 /// unknown model.
 pub fn bootstrap(
@@ -590,11 +786,28 @@ pub fn bootstrap(
     arrival: Arrival,
     model: &NoiseModel,
 ) -> [(Option<f64>, usize); 8] {
-    let samples = resamples(series, arrival, model);
-    std::array::from_fn(|i| {
-        let got: Vec<f64> = samples.iter().filter_map(|s| s[i]).collect();
-        (standard_deviation(&got), RESAMPLES - got.len())
+    let mut r = Resampler::new(series, arrival, model);
+    std::array::from_fn(|i| match model.structure(i) {
+        Some(st) => r.spread(st, 1, i),
+        None => (None, RESAMPLES),
     })
+}
+
+/// [`bootstrap`] with every quantity under structure `st` and at `multiple` times the run's
+/// particles: what the calibration's evidence compares the structures by, and the resamples
+/// [`RESAMPLED_MULTIPLES`] try. `None` everywhere for an unknown model.
+pub fn bootstrap_with(
+    series: &EnergySeries,
+    arrival: Arrival,
+    model: &NoiseModel,
+    st: Structure,
+    multiple: u32,
+) -> [(Option<f64>, usize); 8] {
+    if let NoiseModel::Unknown { .. } = model {
+        return [(None, RESAMPLES); 8];
+    }
+    let mut r = Resampler::new(series, arrival, model);
+    std::array::from_fn(|i| r.spread(st, multiple, i))
 }
 
 /// The eight parameters of `series` from `arrival`, each with its calibrated noise under `model`,
@@ -626,27 +839,20 @@ pub fn evaluate(
         }
     };
     let (base, onset, decay_arrival) = values(series, arrival);
-    let samples = if base.iter().any(Result::is_ok) {
-        resamples(series, arrival, model)
-    } else {
-        Vec::new()
-    };
+    let mut resampler = Resampler::new(series, arrival, model);
     let n = model.multi_crossing(series);
     let mut out: Vec<Result<Estimate, ParamError>> = Vec::with_capacity(8);
     for (i, b) in base.into_iter().enumerate() {
         out.push(b.and_then(|value| {
-            let got: Vec<f64> = samples.iter().filter_map(|s| s[i]).collect();
-            judge_one(
-                model,
-                i,
-                value,
-                standard_deviation(&got),
-                RESAMPLES - got.len(),
-                n,
-            )
+            let st = model.structure(i).unwrap_or(Structure::Constant);
+            let (raw, refused) = resampler.spread(st, 1, i);
+            judge_one(model, i, value, raw, refused, n, &mut |m| {
+                resampler.spread(st, m, i)
+            })
         }));
     }
-    // The curvature of the reported T20 and T30, with its spread over the resamples giving both.
+    // The curvature of the reported T20 and T30, with its spread over the resamples giving both
+    // (T30's structure's: energetic T20 and T30 share theirs).
     let curvature_percent = match (&out[2], &out[3]) {
         // T30's refusal first, then T20's.
         (_, Err(e)) | (Err(e), _) => Err(match e {
@@ -655,7 +861,9 @@ pub fn evaluate(
         }),
         (Ok(t20), Ok(t30)) => {
             let percent = |t20: f64, t30: f64| 100.0 * (t30 / t20 - 1.0);
-            let got: Vec<f64> = samples
+            let st = model.structure(3).unwrap_or(Structure::Constant);
+            let got: Vec<f64> = resampler
+                .get(st, 1)
                 .iter()
                 .filter_map(|s| Some(percent(s[2]?, s[3]?)))
                 .collect();
@@ -695,19 +903,20 @@ pub fn evaluate(
 /// series whose multi-crossing variable is `n` (`None`: no run's, taken as 0):
 /// `factor · √(1 + kappa·n)` of its [`calibration::entry`]. `None` for an unknown model.
 pub fn calibrated_factor(model: &NoiseModel, i: usize, n: Option<f64>) -> Option<f64> {
-    let NoiseModel::Crossings { method, run, .. } = model else {
+    let NoiseModel::Crossings { method, .. } = model else {
         return None;
     };
-    let walls = run.as_ref().map_or(Walls::Other, RunNoise::walls);
-    let e = calibration::entry(*method, i, walls);
+    let e = calibration::entry(*method, i, model.walls());
     Some(e.factor * (1.0 + e.kappa * n.unwrap_or(0.0)).sqrt())
 }
 
 /// How [`evaluate`] judges quantity `i` ([`QUANTITY_NAMES`]) of value `value` under `model`, from
-/// the bootstrap's standard deviation before calibration (`raw_sd`, in the quantity's unit), the
-/// resamples that refused the quantity and the series' multi-crossing variable `n`
-/// ([`NoiseModel::multi_crossing`]): the value with its calibrated standard deviation, or its
-/// refusal. Public so that the calibration's evidence judges exactly as a report does.
+/// the bootstrap's standard deviation before calibration (`raw_sd`, in the quantity's unit, under
+/// the quantity's structure), the resamples that refused the quantity and the series' multi-crossing
+/// variable `n` ([`NoiseModel::multi_crossing`]): the value with its calibrated standard deviation,
+/// or its refusal. `resampled(m)` gives the same two numbers from the resamples at `m` times the
+/// run's particles ([`bootstrap_with`]); it is asked only for a value its resamples refuse (R4-3).
+/// Public so that the calibration's evidence judges exactly as a report does.
 pub fn judge_one(
     model: &NoiseModel,
     i: usize,
@@ -715,6 +924,7 @@ pub fn judge_one(
     raw_sd: Option<f64>,
     refused: usize,
     n: Option<f64>,
+    resampled: &mut dyn FnMut(u32) -> (Option<f64>, usize),
 ) -> Result<Estimate, ParamError> {
     let (quantity, limit, relative) = QUANTITIES[i];
     let (method, particles, run) = match model {
@@ -734,11 +944,7 @@ pub fn judge_one(
             ..
         } => (*method, *particles, run),
     };
-    let e = calibration::entry(
-        method,
-        i,
-        run.as_ref().map_or(Walls::Other, RunNoise::walls),
-    );
+    let e = calibration::entry(method, i, model.walls());
     // The domain: a run's value outside what its quantity was calibrated on is refused whatever
     // its noise reads (rule R3-5). A run's model always has its `n`.
     if let Some(run) = run {
@@ -774,6 +980,7 @@ pub fn judge_one(
             margin: e.root_n_confirmed.then_some(e.margin),
             particles,
         },
+        resampled,
     )
 }
 
@@ -789,49 +996,75 @@ struct Judged {
 }
 
 /// A value against its bootstrap standard deviation before calibration (`raw_sd`) and the number
-/// of resamples that refused it.
+/// of resamples that refused it; `resampled(m)` as for [`judge_one`].
 fn judge(
     quantity: Quantity,
     value: f64,
     raw_sd: Option<f64>,
     refused: usize,
     j: Judged,
+    resampled: &mut dyn FnMut(u32) -> (Option<f64>, usize),
 ) -> Result<Estimate, ParamError> {
-    let sd = raw_sd.map(|s| s * j.factor);
-    let measure = sd.map(|s| if j.relative { s / value.abs() } else { s });
-    match (sd, measure) {
-        (Some(sd), Some(m)) if refused <= REFUSED_RESAMPLES_ALLOWED && m <= j.limit => {
-            Ok(Estimate { value, sd })
-        }
-        _ => {
-            let particle_count = match (measure, j.margin) {
-                (None, _) => ParticleCount::NoStandardDeviation,
-                (Some(m), _) if m <= j.limit => ParticleCount::WithinLimit,
-                (Some(_), None) => ParticleCount::ScalingNotConfirmed,
-                (Some(m), Some(margin)) => {
-                    let factor = (margin * m / j.limit).powi(2);
-                    ParticleCount::Named {
-                        factor,
-                        margin,
-                        particles: j
-                            .particles
-                            .map(|n| round_up_two_digits(factor * f64::from(n))),
-                    }
-                }
-            };
-            Err(not_evaluable(
-                quantity,
-                NotEvaluable::MonteCarloNoise {
-                    value,
-                    sd,
-                    limit: j.limit,
-                    resamples: RESAMPLES,
-                    refused_resamples: refused,
-                    particle_count,
-                },
-            ))
-        }
+    let calibrate = |raw: Option<f64>| {
+        let sd = raw.map(|s| s * j.factor);
+        let measure = sd.map(|s| if j.relative { s / value.abs() } else { s });
+        (sd, measure)
+    };
+    let (sd, measure) = calibrate(raw_sd);
+    let too_many = refused > REFUSED_RESAMPLES_ALLOWED;
+    if let (Some(sd), Some(m)) = (sd, measure)
+        && !too_many
+        && m <= j.limit
+    {
+        return Ok(Estimate { value, sd });
     }
+    let particle_count = match (measure, j.margin) {
+        (_, None) if too_many => ParticleCount::ScalingNotConfirmed,
+        (None, None) => ParticleCount::NoStandardDeviation,
+        (Some(_), None) => ParticleCount::ScalingNotConfirmed,
+        // Too many resamples refuse it (R4-3): the smallest multiple of the run's particles at
+        // which the model's own resamples refuse it at most half as often as allowed and its
+        // calibrated standard deviation, times the margin, is within the limit.
+        (_, Some(margin)) if too_many => {
+            let found = RESAMPLED_MULTIPLES.iter().copied().find(|&k| {
+                let (raw, refused_k) = resampled(k);
+                let (_, m) = calibrate(raw);
+                refused_k <= RESAMPLED_REFUSALS_NAMED && m.is_some_and(|m| margin * m <= j.limit)
+            });
+            match found {
+                Some(k) => ParticleCount::Resampled {
+                    multiple: k,
+                    margin,
+                    particles: j.particles.map(|n| u64::from(n) * u64::from(k)),
+                },
+                None => ParticleCount::BeyondResampled {
+                    multiple: *RESAMPLED_MULTIPLES.last().expect("multiples"),
+                },
+            }
+        }
+        (None, Some(_)) => ParticleCount::NoStandardDeviation,
+        (Some(m), Some(margin)) => {
+            let factor = (margin * m / j.limit).powi(2);
+            ParticleCount::Named {
+                factor,
+                margin,
+                particles: j
+                    .particles
+                    .map(|n| round_up_two_digits(factor * f64::from(n))),
+            }
+        }
+    };
+    Err(not_evaluable(
+        quantity,
+        NotEvaluable::MonteCarloNoise {
+            value,
+            sd,
+            limit: j.limit,
+            resamples: RESAMPLES,
+            refused_resamples: refused,
+            particle_count,
+        },
+    ))
 }
 
 /// The squared coefficient of variation of a particle's lifetime, `Var L / (E L)²`, from the share
@@ -883,10 +1116,10 @@ pub fn standard_deviation(v: &[f64]) -> Option<f64> {
     Some((v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt())
 }
 
-/// One series drawn from `model` around `values`: bin by bin, a compound Poisson sum of `E/d̄`
-/// expected crossings of mean deposit `d̄`, each depositing `d̄·(3/2)·√u` (a chord over its mean),
-/// or above [`NORMAL_ABOVE`] a normal draw of mean `E` and variance `(9/8)·d̄·E`, held at 0. An
-/// unknown model returns the series unchanged.
+/// One series drawn from `model` around `values` under the constant structure: bin by bin, a
+/// compound Poisson sum of `E/d̄` expected crossings of mean deposit `d̄`, each depositing
+/// `d̄·(3/2)·√u` (a chord over its mean), or above [`NORMAL_ABOVE`] a normal draw of mean `E` and
+/// variance `(9/8)·d̄·E`, held at 0. An unknown model returns the series unchanged.
 pub fn resample(values: &[f64], model: &NoiseModel, rng: &mut Rng) -> Vec<f64> {
     let NoiseModel::Crossings {
         mean_deposit: d, ..
@@ -894,11 +1127,22 @@ pub fn resample(values: &[f64], model: &NoiseModel, rng: &mut Rng) -> Vec<f64> {
     else {
         return values.to_vec();
     };
+    resample_with(values, &vec![d; values.len()], rng)
+}
+
+/// [`resample`] with each bin's own mean deposit, `deposits[k]` for bin `k` (the same draws as
+/// [`resample`] where every deposit is `d̄`). A bin whose deposit is 0 (a stretch the roughness
+/// reads as smooth) keeps its value.
+pub fn resample_with(values: &[f64], deposits: &[f64], rng: &mut Rng) -> Vec<f64> {
     values
         .iter()
-        .map(|&e| {
+        .zip(deposits)
+        .map(|(&e, &d)| {
             if e <= 0.0 {
                 return 0.0;
+            }
+            if d <= 0.0 {
+                return e;
             }
             let lambda = e / d;
             if lambda > NORMAL_ABOVE {
@@ -959,6 +1203,146 @@ mod tests {
 
     fn random(d: f64) -> NoiseModel {
         NoiseModel::crossings(d, Method::Random, None).unwrap()
+    }
+
+    /// A resampling that must never be asked for: the value's resamples do not refuse it.
+    fn never(_: u32) -> (Option<f64>, usize) {
+        panic!("the resamples at a multiple were asked for")
+    }
+
+    /// A decaying series of bins drawn with deposit `d` per crossing (compound Poisson, chords as
+    /// the model's), `per_bin` crossings expected in the first bin, falling by `q` a bin.
+    fn drawn_series(d: f64, per_bin: f64, q: f64, bins: usize, seed: u64) -> Vec<f64> {
+        let mut rng = Rng::new(seed);
+        let expected: Vec<f64> = (0..bins).map(|k| d * per_bin * q.powi(k as i32)).collect();
+        resample_with(&expected, &vec![d; bins], &mut rng)
+    }
+
+    #[test]
+    fn the_roughness_reads_the_deposit_a_series_was_drawn_with() {
+        // 400 bins falling 0.075 dB a bin, from 20,000 crossings a bin to 20, drawn with deposit
+        // `d`: below the cap, the roughness reads about `d`.
+        let mean = |v: &[f64]| v[20..380].iter().sum::<f64>() / 360.0;
+        for (d, cap) in [(1.0, 50.0), (0.02, 1.0), (4.0, 50.0)] {
+            let v = drawn_series(d, 20_000.0, 10f64.powf(-0.0075), 400, 11);
+            let got = roughness_deposits(&v, cap, 1);
+            assert!(got.iter().all(|x| *x <= cap), "{d} {cap}");
+            let m = mean(&got);
+            assert!((m / d - 1.0).abs() < 0.12, "drawn {d}, cap {cap}: read {m}");
+        }
+        // At the cap, as early in a decay where every crossing still carries nearly its start
+        // energy: never above it, and below it by the part of the scatter the cap cuts.
+        let v = drawn_series(1.0, 20_000.0, 10f64.powf(-0.0075), 400, 11);
+        let got = roughness_deposits(&v, 1.0, 1);
+        assert!(got.iter().all(|x| *x <= 1.0));
+        let m = mean(&got);
+        assert!((0.6..1.0).contains(&m), "{m}");
+        // Says no: a series without noise reads 0.
+        let smooth: Vec<f64> = (0..400).map(|k| 1e4 * 0.99f64.powi(k)).collect();
+        assert!(
+            roughness_deposits(&smooth, 1.0, 1)[10..390]
+                .iter()
+                .all(|x| *x < 1e-9)
+        );
+        // Too few ratios, an empty neighbour or a bin past the last whole block: the cap.
+        assert_eq!(
+            roughness_deposits(&[5.0, 6.0, 5.0], 2.0, 1),
+            [2.0, 2.0, 2.0]
+        );
+        let mut holes = smooth.clone();
+        for k in (0..400).step_by(2) {
+            holes[k] = 0.0;
+        }
+        assert!(roughness_deposits(&holes, 3.0, 1).iter().all(|x| *x == 3.0));
+        assert_eq!(roughness_deposits(&smooth, 1.0, 7)[399], 1.0);
+    }
+
+    #[test]
+    fn blocks_read_more_of_a_crossing_split_over_two_bins() {
+        // Each crossing split evenly over two neighbouring bins, as SPPS splits one that spans two
+        // steps: the bins move together, and bin by bin the series reads as smoother than it is.
+        // Over blocks of two bins, fewer of the split crossings straddle a boundary, so more of
+        // the deposit is read (the calibration's factor covers what still escapes).
+        let d = 1.0;
+        let whole = drawn_series(d, 10_000.0, 10f64.powf(-0.00375), 801, 21);
+        let mut split = vec![0.0; 800];
+        for k in 0..800 {
+            split[k] += whole[k] / 2.0;
+            split[(k + 1).min(799)] += whole[k] / 2.0;
+        }
+        let mean = |v: &[f64]| v[40..760].iter().sum::<f64>() / 720.0;
+        let by_bin = mean(&roughness_deposits(&split, 50.0, 1));
+        let by_block = mean(&roughness_deposits(&split, 50.0, 2));
+        println!("split crossings: {by_bin} by bin, {by_block} by blocks of two");
+        assert!(by_bin < 0.3 * d, "{by_bin}");
+        assert!(by_block > 1.5 * by_bin && by_block < d, "{by_block}");
+        assert_eq!(roughness_block(0.0018, 0.001), 2);
+        assert_eq!(roughness_block(0.0018, 0.01), 1);
+        assert_eq!(roughness_block(0.0052, 0.001), 6);
+        assert_eq!(roughness_block(f64::NAN, 0.001), 1);
+    }
+
+    #[test]
+    fn a_value_its_resamples_refuse_names_the_first_multiple_that_clears_them() {
+        let j = |margin| Judged {
+            limit: limits::DECAY_RELATIVE,
+            relative: true,
+            factor: 1.0,
+            margin,
+            particles: Some(150_000),
+        };
+        // 30 of 200 resamples refuse it, its sd within the limit. At 2× they still refuse 12, at 4×
+        // 5 (at most half the allowance) with the sd 0.02·1.3 over the limit, at 8× 3 and 0.014.
+        let at = |m: u32| match m {
+            2 => (Some(0.02), 12),
+            4 => (Some(0.02), 5),
+            8 => (Some(0.014), 3),
+            _ => (Some(0.01), 0),
+        };
+        let mut asked = Vec::new();
+        let e = judge(Quantity::T30, 1.0, Some(0.02), 30, j(Some(1.3)), &mut |m| {
+            asked.push(m);
+            at(m)
+        })
+        .unwrap_err();
+        match e.not_evaluable() {
+            Some(NotEvaluable::MonteCarloNoise {
+                particle_count:
+                    ParticleCount::Resampled {
+                        multiple: 8,
+                        particles: Some(1_200_000),
+                        ..
+                    },
+                refused_resamples: 30,
+                ..
+            }) => {}
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(asked, [2, 4, 8]);
+        assert!(
+            e.to_string().contains("1200000 particles per source"),
+            "{e}"
+        );
+        // Says no: when no multiple clears them, none is named.
+        let e = judge(
+            Quantity::T30,
+            1.0,
+            Some(0.02),
+            30,
+            j(Some(1.3)),
+            &mut |_| (Some(0.02), 40),
+        )
+        .unwrap_err();
+        match e.not_evaluable() {
+            Some(NotEvaluable::MonteCarloNoise {
+                particle_count: ParticleCount::BeyondResampled { multiple: 64 },
+                ..
+            }) => {}
+            other => panic!("{other:?}"),
+        }
+        assert!(e.to_string().contains("more particles may not help"), "{e}");
+        // At most the allowance: judged by its standard deviation alone, the multiples never asked.
+        assert!(judge(Quantity::T30, 1.0, Some(0.02), 10, j(Some(1.3)), &mut never).is_ok());
     }
 
     #[test]
@@ -1051,6 +1435,7 @@ mod tests {
             uniform_absorption: false,
             mean_absorption: 0.1,
             bands: 2,
+            receiver_crossing_s: 0.0018,
         };
         let m = NoiseModel::of_run(4.0, Method::Random, run).unwrap();
         let s = EnergySeries::complete(0.01, vec![10.0, 5.0, 5.0]).unwrap();
@@ -1073,6 +1458,7 @@ mod tests {
             uniform_absorption: true,
             mean_absorption: 0.1,
             bands: 1,
+            receiver_crossing_s: 0.0018,
         };
         assert!(NoiseModel::of_run(1.0, Method::Energetic, ok.clone()).is_ok());
         for bad in [
@@ -1124,6 +1510,7 @@ mod tests {
                 uniform_absorption: walls == Walls::UniformLambert,
                 mean_absorption: 0.1f64.min(calibration::UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION),
                 bands: 1,
+                receiver_crossing_s: 0.0018,
             },
         )
         .unwrap()
@@ -1141,7 +1528,7 @@ mod tests {
                     let inside_n = e.max_crossings_per_particle / 2.0;
                     let n_particles = e.min_particles.max(1);
                     let m = run_model(method, n_particles, lambert);
-                    let got = judge_one(&m, i, value, raw, 0, Some(inside_n)).unwrap();
+                    let got = judge_one(&m, i, value, raw, 0, Some(inside_n), &mut never).unwrap();
                     let want = 1e-6 * e.factor * (1.0 + e.kappa * inside_n).sqrt();
                     assert!(
                         (got.sd - want).abs() <= 1e-12 * want,
@@ -1150,7 +1537,8 @@ mod tests {
                     // Says no: more crossings per particle than the calibration measured.
                     let many = 2.0 * e.max_crossings_per_particle.max(1e-3);
                     if e.max_crossings_per_particle < f64::MAX / 4.0 {
-                        let r = judge_one(&m, i, value, raw, 0, Some(many)).unwrap_err();
+                        let r =
+                            judge_one(&m, i, value, raw, 0, Some(many), &mut never).unwrap_err();
                         match r.not_evaluable() {
                             Some(NotEvaluable::NoiseUncalibrated {
                                 particles_at_least: None,
@@ -1163,7 +1551,8 @@ mod tests {
                     // Says no: fewer particles than the calibration measured.
                     if e.min_particles > 1 {
                         let few = run_model(method, e.min_particles - 1, lambert);
-                        let r = judge_one(&few, i, value, raw, 0, Some(inside_n)).unwrap_err();
+                        let r = judge_one(&few, i, value, raw, 0, Some(inside_n), &mut never)
+                            .unwrap_err();
                         match r.not_evaluable() {
                             Some(NotEvaluable::NoiseUncalibrated {
                                 particles_at_least: Some(n),
@@ -1173,7 +1562,7 @@ mod tests {
                         }
                     }
                     // A run's model without its n is refused, never judged as if n were 0.
-                    assert!(judge_one(&m, i, value, raw, 0, None).is_err());
+                    assert!(judge_one(&m, i, value, raw, 0, None, &mut never).is_err());
                 }
             }
         }
@@ -1195,6 +1584,7 @@ mod tests {
                     margin,
                     particles: Some(150_000),
                 },
+                &mut never,
             )
             .unwrap_err()
         };

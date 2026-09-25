@@ -281,3 +281,140 @@ A2 (adds to R3-4): energetic T20 and T30 take a third split, "uniform Lambert": 
     to each: a uniform-Lambert failure falls back to the Lambert split's entry, a Lambert failure
     to the other split's.
 Every other rule stands. The V3 cells for the uniform-Lambert split are V3-E1, V3-E5 and V3-E9.
+
+ROUND 4, 2026-09-25 10:25, after the review of the shipped round 3 (50695f6) and BEFORE any round-4
+cell is run and before the roughness structure below is read with the project's decay code on any
+cell. Every cell of rounds 1 to 3 has been read; they become round 4's calibration cells. Nothing
+below is fitted to a round-4 cell.
+
+WHY (the review of 50695f6): (a) energetic T20 and T30 outside uniform Lambert rooms keep M7's
+structure (factor 1; Lambert with concentrated absorption T30 0.73), 14 times the seeds' spread
+for T30 on tutorial 1 and 8 to 9 times for T20; (b) a value refused because more than 10 of its 200
+resamples refuse it names no count, and its message says more particles need not help, although
+C-E3 (150k) gives 57 of 360 energetic T30 values and C-E4 (2.4M, the same room) all 360; (c) named
+counts were never checked at the higher count for energetic T30, EDT, Ts and SPL, and random T30 on
+one pair only; (d) the uniform-Lambert split (0.052, 0.098) has no held-out cell above a mean
+absorption of 0.2 although its domain runs to 0.4, and energetic T20 and T30 outside Lambert walls
+one held-out cell.
+
+EXPLORATION, disclosed (on cells of rounds 1 to 3 only, with a Python stand-in for T20 and T30:
+Schroeder from the arrival bin, a straight line over -5 to -25 and -35 dB; NOT the project's decay
+code; scripts in the main checkout's target/agents/pm8-fix-noise-scratch/explore_*.py): (i) with
+each bin's deposit set to the variance over the ten seeds of that bin (an oracle no single run
+has), the seeds' spread of T20 and T30 over the bootstrap reads 0.9 to 1.2 at 10 ms and receivers
+of 0.31 m (C-E1, C-E5, C3-E8, W-E4, V3-E10), 1.4 to 1.8 at 1 ms (C-E3, V-E5) and in the dead-floor
+rooms (C-E7, V-E6), and 2.1 to 3.1 with receivers of 0.7 and 0.9 m (V3-E4, C3-E4): the energy's
+spread between particles, bin by bin, is what M7's constant deposit misses; (ii) a run's own
+roughness (the structure below) reads 0.30 to 2.3 of the seeds' spread depending on the room and
+on the block, against 0.027 to 0.54 for M7's structure; blocks of at least one receiver crossing
+remove the 1 ms cells' shortfall (a crossing split over two steps makes neighbouring bins move
+together). Tutorial 1 (C-E5) reads 0.35 (T30) and 0.48 (T20): the roughness also holds the true
+curve's fine structure (specular echoes), so it overstates there.
+
+THE STRUCTURE (fixed now; params::noise::roughness_deposits, Structure::Roughness): for energetic
+T20 and T30 (and the curvature) in bands NOT uniform Lambert at a mean absorption up to 0.4 (round
+3's other and Lambert splits together), each bin's mean deposit is read from the series itself:
+b = max(1, ceil(2R/c / dt)) bins per block (1 at 10 ms, 2 at 1 ms with R 0.31 m); block sums B_j;
+r_j = B_j / sqrt(B_{j-1} * B_{j+1}) - 1 where all three are above 0; for a block with B_j > 0 and at
+least 5 of the r within 6 blocks of it: d_j = min(d_bar, mean(r^2) / 1.5 * B_j / (9/8)); every bin of
+the block takes d_j; other bins keep d_bar (M7's deposit). The resamples are M7's compound Poisson
+draws with those deposits. The standard deviation is then k * sqrt(1 + kappa * n) * sd as in
+round 3, n = n1 * cv2 (round 3's energetic variable). Every other quantity, energetic T20 and T30
+in uniform Lambert bands up to 0.4 (0.098, 0.052) and all of random mode keep round 3's
+structure and numbers.
+
+RULES:
+R4-1. Energetic T20 and T30 under the roughness structure, each one (k, kappa) for the rows of
+      every energetic cell of rounds 1 to 3 whose band is not uniform Lambert (Lambert with unequal
+      absorption, or not Lambert): R3-1 with A1 (the domain starts at the fewest particles of a
+      cell with at least 6 such rows; the fit and the largest n run over the cells at or above it),
+      kappa from 0, 0.25, ..., 6 (the roughness reads the energy's spread bin by bin, not a
+      particle's repeated crossings, so the correction can be larger than round 3's grid allows),
+      R3-3's effective degrees of freedom, a row taken only where every seed's roughness
+      bootstrap gives a standard deviation.
+R4-2. The domain as R3-5 with A1 on those rows; the margin by rule 5b on the roughness structure's
+      own scatter over the seeds (predicted_scatter_roughness); 1/sqrt(N) as R3-6 (the observed
+      spreads do not depend on the structure).
+R4-3. A value refused because more than 10 of its 200 resamples refuse it names a count: the
+      smallest multiple m of 2, 4, 8, 16, 32, 64 of the run's particles at which the model's own
+      resamples of the series, every bin's deposit over m (the quantity's structure), refuse it at
+      most 5 times (half the allowance, since a new run's own resamples refuse at a rate that
+      scatters) and its calibrated standard deviation times the margin is within the limit; m * N
+      particles per source. None: "beyond_resampled", no count, "more particles may not help".
+      A value refused for its standard deviation alone, its resamples within the allowance, names
+      N * (margin * sd / limit)^2 as before.
+R4-4. Validation, once, after every number above is committed in params::noise: on every V4 cell,
+      method, quantity and split (energetic T20 and T30: uniform Lambert up to 0.4, constant
+      structure; the rest, roughness structure; every other quantity one split), over its rows
+      inside the domain, the one-sided 95 % lower bound (R3-3) of the pooled ratio of the seeds'
+      spread to k * sqrt(1 + kappa * n) * sd must be at most 1. Coverage: every method, quantity
+      and split should have at least two V4 cells with six rows inside the domain; a shortfall is
+      reported, not made up. The uniform-Lambert split must have V4 cells at a mean absorption of
+      0.3 to 0.4 in rooms other than 5x4x3 and 6x10x3 (V4-E1 to V4-E4).
+R4-5. The named counts on every pair (R3-9 with R4-3's), read from the reports of this build's
+      simpa results on every run (every value judged by the shipped code, not by the harness):
+      of the lower count's refusals for noise whose named count the higher count reaches, the
+      share of the higher count's seeds that give the value, per method, quantity and kind of
+      count (from the standard deviation, from the resamples). Target at least 80 % on every pair
+      with at least 10 such refusals.
+R4-6. Production inputs, checked in the analysis on every run: each report's crossings_per_particle
+      and lifetime_cv2 against the harness's own computation from the report's series and room
+      table (to 1e-9), and its reference's lambert_walls and uniform_absorption against the cell's
+      configuration; a mismatch stops the analysis.
+R4-7. Say-NO partners in the suite on the committed receipt: the roughness factors made 2 times
+      too optimistic fail the validation; a V4 quantity's observed spread raised above its
+      prediction fails its check; the pairs' named counts cleared by the resamples are counted.
+
+IF THE VALIDATION FAILS (fixed now; reported, never re-fitted on a V4 cell):
+F5. Energetic T20 or T30 under the roughness structure fails a V4 cell: that quantity returns to
+    round 3's entries (constant structure; other walls factor 1, Lambert T30 0.73 with kappa 2, T20
+    factor 1) in every band not uniform Lambert.
+F6. The uniform-Lambert entries fail a V4 cell at a mean absorption of 0.3 to 0.4: their bound
+    falls to 0.2 (round 3's largest held-out absorption that passed), and the bands above take the
+    other bands' entries.
+F7. Any other quantity fails a V4 cell: F3 (k raised to cover the failing cell's upper bound,
+    marked not validated in the README, for Burhan's decision).
+F8. R4-3's counts fall below 80 % on a pair with at least 10 counted refusals: that method and
+    quantity name no count from the resamples (beyond_resampled is then said of every such
+    refusal: no count).
+F9. A new pair gives z above 2 (R3-6) for a quantity: its refusals name no count, as R3-6.
+
+CELLS (crates/simpa/tests/noise_calibration.rs, CELLS, ids V4-; seeds 1 to 10; octave bands 125 Hz
+to 4 kHz; six receivers as in rounds 1 to 3; "Lambert live floors": walls 0.3, floor and ceiling
+0.05, scattering 1; "Lambert extreme ceiling": ceiling 0.9, floor and walls 0.02, scattering 1):
+Energetic mode:
+ V4-E1  20x4x3    Lambert a0.4             300k 0.6 s  dt 1 ms  eps 9 R 0.31
+ V4-E2  10x10x10  Lambert a0.3             150k 1.5 s  dt 10 ms eps 9 R 0.31
+ V4-E3  20x8x6    Lambert a0.35            300k 1 s    dt 10 ms eps 9 R 0.31
+ V4-E4  30x4x3    Lambert a0.4             150k 0.8 s  dt 10 ms eps 9 R 0.31
+ V4-E5  5x4x3     specular a0.1            300k 2 s    dt 10 ms eps 7 R 0.31
+ V4-E6  20x8x6    dead ceiling, specular   300k 3 s    dt 10 ms eps 7 R 0.31
+ V4-E7  10x10x10  Lambert live floors      150k 3 s    dt 10 ms eps 7 R 0.31
+ V4-E8  30x4x3    dead floor, scattering 0.5 300k 3 s  dt 10 ms eps 7 R 0.31
+ V4-E9  6x10x3    dead floor, specular     600k 3 s    dt 1 ms  eps 7 R 0.31
+ V4-E10 20x8x6    tutorial 1's materials   300k 3 s    dt 10 ms eps 7 R 0.31
+ V4-E11 5x4x3     Lambert extreme ceiling  300k 2 s    dt 1 ms  eps 7 R 0.31
+ V4-E12 6x10x3    specular a0.1            300k 3 s    dt 10 ms eps 7 R 0.6
+ V4-E13 6x10x3    tutorial 1's materials   150k 2 s    dt 10 ms eps 7 R 0.31
+ V4-E14 6x10x3    tutorial 1's materials   1.2M 2 s    dt 10 ms eps 7 R 0.31
+ V4-E15 20x8x6    dead floor, specular     2.4M 3 s    dt 10 ms eps 7 R 0.31
+ V4-E16 6x10x3    Lambert a0.4             2.4M 0.6 s  dt 1 ms  eps 9 R 0.31
+ V4-E17 5x4x3     Lambert a0.2             800k 1.5 s  dt 10 ms eps 7 R 0.31
+ V4-E18 20x4x3    every surface a1         1.2M 0.08 s dt 1 ms  eps 7 R 0.5
+Random mode (trans_epsilon 5):
+ V4-R1  6x10x3    Lambert a0.1             6M   3 s    dt 10 ms R 0.31
+ V4-R2  6x10x3    tutorial 1's materials   6M   2 s    dt 10 ms R 0.31
+ V4-R3  5x4x3     Lambert a0.2             800k 1.5 s  dt 10 ms R 0.31
+ V4-R4  5x4x3     Lambert a0.05            2M   3 s    dt 10 ms R 0.6
+ V4-R5  6x10x3    dead floor, specular     4M   3 s    dt 10 ms R 0.31
+ V4-R6  20x4x3    every surface a1         1.2M 0.08 s dt 1 ms  R 0.5
+PAIRS added (R3-6, R4-5; lower count first; each pair differs in N alone): V4-E13/V4-E14,
+W-E3/V4-E15, V-E2/V4-E16, V3-E5/V4-E17, V3-E6/V4-E18, C-R1/V4-R1, C-R5/V4-R2, V3-R8/V4-R3,
+C3-R9/V4-R4, C-R7/V4-R5, V3-R5/V4-R6. They reach the counts round 3 never reached: energetic T30
+from the resamples (V-E2, V3-E5) and from the roughness (V4-E13, W-E3), energetic EDT and Ts (W-E3),
+energetic and random SPL (V3-E6, V3-R5), random T30 (C-R1, C-R5, V3-R8, C3-R9) and random EDT
+(C-R7).
+
+THE ANALYSIS reads every run of rounds 1 to 4 again with this build's simpa results
+(SIMPA_NOISE_REREAD), so that the receipt's crossings, lifetime spreads, walls and judgements are
+the shipped code's (R4-6).

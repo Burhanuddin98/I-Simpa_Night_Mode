@@ -472,8 +472,8 @@ fn the_particle_count_a_refusal_names_brings_the_value_within_its_limit() {
         noise::Method::Random,
         3
     ));
-    // A value refused for its resamples alone, its standard deviation within the limit, names
-    // no count: more particles need not cure what refuses the resamples.
+    // A value its resamples refuse names the multiple at which they would not (R4-3, `params::
+    // noise`'s unit tests), or says that none tried clears them.
     let e = ParamError::NotEvaluable {
         quantity: simpa_core::params::Quantity::T30,
         why: NotEvaluable::MonteCarloNoise {
@@ -482,10 +482,10 @@ fn the_particle_count_a_refusal_names_brings_the_value_within_its_limit() {
             limit: 0.025,
             resamples: 200,
             refused_resamples: 50,
-            particle_count: ParticleCount::WithinLimit,
+            particle_count: ParticleCount::BeyondResampled { multiple: 64 },
         },
     };
-    assert!(e.to_string().contains("no particle count is named"), "{e}");
+    assert!(e.to_string().contains("No particle count is named"), "{e}");
 }
 
 /// Each quantity's spread over `runs` independent runs of `total` crossings (relative for the

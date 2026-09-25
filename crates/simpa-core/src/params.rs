@@ -137,9 +137,21 @@ pub enum ParticleCount {
         margin: f64,
         particles: Option<u64>,
     },
-    /// The standard deviation is within the limit: the value is refused because too many of its
-    /// resamples refuse it themselves, which more particles need not cure.
-    WithinLimit,
+    /// More than [`noise::REFUSED_RESAMPLES_ALLOWED`] resamples refuse the value (rule R4-3):
+    /// `multiple` times the run's particles, the smallest of [`noise::RESAMPLED_MULTIPLES`] at which
+    /// the model's own resamples of the series, every deposit over `multiple`, refuse it at most
+    /// [`noise::RESAMPLED_REFUSALS_NAMED`] times and its calibrated standard deviation times
+    /// `margin` is within the limit. `particles` is that many per source, when the run's count is
+    /// known.
+    Resampled {
+        multiple: u32,
+        margin: f64,
+        particles: Option<u64>,
+    },
+    /// More than [`noise::REFUSED_RESAMPLES_ALLOWED`] resamples refuse the value, and they still
+    /// do, or its standard deviation is still above the limit, at `multiple` times the run's
+    /// particles, the largest tried (R4-3): no count is named, and more particles may not help.
+    BeyondResampled { multiple: u32 },
     /// The fall of the seeds' spread as `1/√N` was not confirmed for this quantity in the run's
     /// computation method ([`noise::calibration::root_n_confirmed`]), so no count is named.
     ScalingNotConfirmed,
@@ -426,10 +438,23 @@ impl fmt::Display for NotEvaluable {
                         f,
                         " Run at least {factor:.3} times the particles to bring it within its limit"
                     ),
-                    ParticleCount::WithinLimit => write!(
+                    ParticleCount::Resampled {
+                        particles: Some(n), ..
+                    } => write!(
                         f,
-                        " Its standard deviation is within the limit, so no particle count is \
-                         named: more particles need not help"
+                        " Run at least {n} particles per source: there its resamples would refuse \
+                         it seldom enough and its noise would be within its limit"
+                    ),
+                    ParticleCount::Resampled { multiple, .. } => write!(
+                        f,
+                        " Run at least {multiple} times the particles: there its resamples would \
+                         refuse it seldom enough and its noise would be within its limit"
+                    ),
+                    ParticleCount::BeyondResampled { multiple } => write!(
+                        f,
+                        " No particle count is named: at {multiple} times the particles its \
+                         resamples would still refuse it, or its noise would still be above its \
+                         limit, so more particles may not help"
                     ),
                     ParticleCount::ScalingNotConfirmed => write!(
                         f,
