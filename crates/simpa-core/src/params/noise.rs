@@ -497,6 +497,36 @@ fn judge(quantity: Quantity, value: f64, got: &[f64], j: Judged) -> Result<Estim
     }
 }
 
+/// The squared coefficient of variation of a particle's lifetime, `Var L / (E L)²`, from the share
+/// of the band's emitted energy still in the room at the end of each step (`alive`, the room
+/// table over the sources' power; 1 at time 0), by the trapezoid rule: `E L = ∫S`,
+/// `E L² = ∫2t·S`. In random mode the share alive is the share of particles alive, so this is
+/// their lifetimes' spread: 1 for an exponential decay, more for a double slope. `None` when the
+/// shares are not finite numbers of at least 0, or nothing is alive after time 0.
+pub fn lifetime_cv2(alive: &[f64], dt: f64) -> Option<f64> {
+    if !(dt.is_finite() && dt > 0.0) || alive.iter().any(|a| !(a.is_finite() && *a >= 0.0)) {
+        return None;
+    }
+    let (mut first, mut second) = (0.0, 0.0);
+    let mut prev = (0.0, 1.0);
+    for (k, &s) in alive.iter().enumerate() {
+        let t = (k + 1) as f64 * dt;
+        first += dt * (prev.1 + s) / 2.0;
+        second += dt * (2.0 * prev.0 * prev.1 + 2.0 * t * s) / 2.0;
+        prev = (t, s);
+    }
+    (first > 0.0).then(|| (second / (first * first) - 1.0).max(0.0))
+}
+
+/// The crossings of a receiver per particle behind a series holding `total` in all, each crossing
+/// adding `least_deposit` at most on average: `total / (least_deposit · particles)`. Exact in
+/// random mode with one source; with several, taken at the smallest source's deposit, it is at
+/// least each source's own; in energetic mode it counts crossings weighted by the particles'
+/// energies.
+pub fn crossings_per_particle(total: f64, least_deposit: f64, particles: f64) -> f64 {
+    total / (least_deposit * particles)
+}
+
 /// `x` rounded up to two significant digits: 1,234,567 to 1,300,000.
 pub fn round_up_two_digits(x: f64) -> u64 {
     if !x.is_finite() || x <= 0.0 {

@@ -129,3 +129,129 @@ R2-4. Any energetic quantity that fails any W- cell ships with factor 1: M7's st
       seeds' spread was 0.03 to 0.84 of it in every energetic cell of round 1). Reported, not
       re-fitted.
 R2-5. The report states which quantities rest on which round.
+
+ROUND 3, 2026-09-25 08:10, after two reviews of the shipped model and BEFORE any round-3 cell is
+run. Every cell of rounds 1 and 2 has been read; they become calibration cells here. Nothing below
+is fitted to a round-3 validation cell.
+
+WHY (the reviews of 7132e42): (a) every cell had receiver spheres of 0.31 m, so a particle's
+crossings of one receiver were few (0.25 per particle at most); the random-mode shortfall of the
+independent-crossing model grows with them (Spearman 0.90 for T20 against the crossings per
+particle), and a user who enlarges the receivers leaves the measured range with nothing to stop
+it; (b) no cell ran below 150,000 particles, while the committed fixtures run 2,000 and 50,000;
+(c) the direct field alone was never a cell: with every particle stopped at its first surface
+energetic mode runs random mode's transport, and energetic SPL's 0.91 claims less noise than the
+level box's ten seeds show (1.12 times M7's model there); (d) energetic T20 and T30 carry M7's
+bound, 30 to 40 times the spread in M8's Lambert cells; (e) rule 4 was two-sided and withheld
+counts over deviations in the safe direction; (f) the 95 % bounds took receiver-bands as
+independent and normal.
+
+CELLS (crates/simpa/tests/noise_calibration.rs, CELLS, ids C3- and V3-; seeds 1 to 10; octave
+bands 125 Hz to 4 kHz; six receivers as in rounds 1 and 2, each sphere at least 5 cm clear of every
+wall and 40 cm of the source; R the receiver radius, m; "dead walls": walls 0.8, floor and ceiling
+0.1, Lambert; "Lambert dead floor": floor 0.6, the rest 0.05, scattering 1; "Lambert dead ceiling"
+likewise; "Lambert extreme floor": floor 0.9, the rest 0.02, scattering 1):
+Random mode (trans_epsilon 5):
+ C3-R1 5x4x3    Lambert a0.05          150k  3 s    dt 10 ms R 0.9
+ C3-R2 6x10x3   Lambert a0.1           150k  3 s    dt 10 ms R 0.9
+ C3-R3 6x10x3   dead floor, specular   500k  3 s    dt 10 ms R 0.9
+ C3-R4 10x10x10 Lambert a0.05          150k  6 s    dt 10 ms R 1.4
+ C3-R5 5x4x3    Lambert a0.2           5k    1.5 s  dt 10 ms R 0.31
+ C3-R6 6x10x3   tutorial 1's materials 15k   2 s    dt 10 ms R 0.31
+ C3-R7 6x10x3   every surface a1 (the direct field alone) 150k 0.05 s dt 1 ms R 0.31
+ C3-R8 5x4x3    dead walls             150k  1 s    dt 10 ms R 0.31
+ C3-R9 5x4x3    Lambert a0.05          50k   3 s    dt 10 ms R 0.6
+ V3-R1 20x4x3   Lambert a0.05          300k  4 s    dt 10 ms R 0.9
+ V3-R2 5x4x3    specular a0.05         300k  3 s    dt 10 ms R 0.7
+ V3-R3 10x10x10 Lambert a0.1           30k   3 s    dt 10 ms R 1.2
+ V3-R4 6x10x3   tutorial 1's materials 8k    2 s    dt 10 ms R 0.31
+ V3-R5 20x4x3   every surface a1       150k  0.08 s dt 1 ms  R 0.5
+ V3-R6 6x10x3   dead walls             150k  1 s    dt 1 ms  R 0.31
+ V3-R7 20x8x6   dead floor, specular   300k  3 s    dt 10 ms R 0.9
+ V3-R8 5x4x3    Lambert a0.2           50k   1.5 s  dt 10 ms R 0.31
+ V3-R9 5x4x3    Lambert a0.05          500k  3 s    dt 10 ms R 0.6
+Energetic mode (trans_epsilon 7; tutorial 1's materials 5):
+ C3-E1  5x4x3    Lambert a0.05          150k 3 s    dt 10 ms R 0.9
+ C3-E2  6x10x3   Lambert dead floor     300k 3 s    dt 10 ms R 0.31
+ C3-E3  20x4x3   Lambert dead floor     300k 3 s    dt 10 ms R 0.31
+ C3-E4  6x10x3   dead floor, specular   300k 3 s    dt 10 ms R 0.9
+ C3-E5  5x4x3    Lambert a0.2           5k   1.5 s  dt 10 ms R 0.31
+ C3-E6  6x10x3   tutorial 1's materials 15k  2 s    dt 10 ms R 0.31
+ C3-E7  6x10x3   every surface a1       150k 0.05 s dt 1 ms  R 0.31
+ C3-E8  20x8x6   Lambert extreme floor  300k 3 s    dt 10 ms R 0.31
+ C3-E9  5x4x3    dead walls             150k 1 s    dt 10 ms R 0.31
+ C3-E10 5x4x3    Lambert a0.05          50k  3 s    dt 10 ms R 0.6
+ V3-E1  20x4x3   Lambert a0.05          300k 3 s    dt 10 ms R 0.9
+ V3-E2  30x4x3   Lambert dead ceiling   300k 3 s    dt 10 ms R 0.31
+ V3-E3  10x10x10 Lambert dead floor     150k 3 s    dt 10 ms R 1.2
+ V3-E4  5x4x3    specular a0.05         150k 3 s    dt 10 ms R 0.7
+ V3-E5  5x4x3    Lambert a0.2           50k  1.5 s  dt 10 ms R 0.31
+ V3-E6  20x4x3   every surface a1       150k 0.08 s dt 1 ms  R 0.5
+ V3-E7  6x10x3   dead walls             150k 1 s    dt 10 ms R 0.31
+ V3-E8  6x10x3   Lambert extreme floor  300k 2 s    dt 1 ms  R 0.31
+ V3-E9  5x4x3    Lambert a0.05          300k 3 s    dt 10 ms R 0.6
+ V3-E10 20x4x3   dead floor, every surface scattering 0.3  300k 3 s dt 10 ms R 0.6
+
+THE MODEL (fixed now; its numbers are fixed by the rules below on the calibration cells): the
+calibrated standard deviation of a quantity is k * sqrt(1 + kappa * n) * sd, sd the bootstrap's
+(params::noise::bootstrap, unchanged), n the run's multi-crossing variable for the series:
+n1 = the series' total / (the least source deposit * particles per source), the crossings per
+particle (params::noise::crossings_per_particle), or n1 * cv2, cv2 = Var L / (E L)^2 of the
+particles' lifetimes from the band's room table (params::noise::lifetime_cv2). Energetic T20 and
+T30 take one (k, kappa) for bands whose every face is Lambert with scattering 1 (the report's
+reference, lambert_walls) and another for the rest; every other quantity one per method.
+
+RULES (the code: crates/simpa-core/tests/common/noise_calibration.rs, "Round 3"):
+R3-1. Per method, quantity and split: for each kappa in 0, 0.25, ..., 3, k = the largest over the
+      calibration cells of the one-sided 95 % upper bound of the pooled ratio of the seeds'
+      spread to sqrt(1 + kappa * n) * sd, rounded up to two significant digits; the kappa whose
+      k overstates least (geometric mean over the cells of k over the pooled ratio) is chosen,
+      the smaller on a tie. Energetic T20 and T30 outside Lambert bands keep k = 1 (M7's
+      structure, as rounds 1 and 2 left them) and take the smallest kappa with every upper
+      bound at most 1; if none does, F4.
+R3-2. The variable per method: n1 or n1 * cv2, whichever makes the R3-1 fits of every quantity
+      and split overstate least together (geometric mean over every cell, quantity and split);
+      n1 on a tie.
+R3-3. Every bound takes effective degrees of freedom: rows * 9 / (phi * deff), phi the dispersion
+      of the rows' ratio^2 against the chi-square's 2/9 (at least 1), deff = 1 + (m - 1) * rho^2,
+      rho^2 the mean squared correlation over the seeds of the values of two receivers of one
+      band less its bias 1/9 (at least 0), m the mean rows per band.
+R3-4. The splits as above; the Lambert split is calibrated on Lambert rows only, the other on the
+      rest.
+R3-5. The domain of a method, quantity and split: at least the fewest particles of a calibration
+      cell with a row of it, and n at most the largest of any seed of its calibration rows. A
+      value outside it is refused (a new reason, noise_uncalibrated), naming the particles that
+      reach the domain, or how far the receiver radius must shrink (n grows as R^2).
+R3-6. 1/sqrt(N), one-sided: on every pair of cells that differ only in N (rounds 1 and 2's six,
+      and C3-R5/V3-R8, C3-R6/C-R5, C3-R9/V3-R9, C3-E5/V3-E5, C3-E6/C-E5, C3-E10/V3-E9),
+      z = (the higher count's spread * sqrt(N) - the lower count's) / their joint standard error
+      (on R3-3's degrees of freedom). A named count falls short only if the spread falls slower
+      than 1/sqrt(N), so a quantity names no count when any pair gives z above 2. This replaces
+      rule 4, which was two-sided; it is adopted after reading rounds 1 and 2's pairs, where it
+      turns random T30 (-2.1) and energetic EDT (-2.5) to confirmed, and it is tested on the new
+      pairs, which no rule has seen: the calibration pairs fix the flags before the validation;
+      the validation pairs can only withdraw a count.
+R3-7. Margins by rule 5b over round 3's calibration cells (per split for energetic T20 and T30).
+R3-8. Validation, once, after every number above is committed in params::noise: on every V3 cell,
+      method, quantity and split, over its rows inside the domain (and only if the cell's N is in
+      it), the one-sided 95 % lower bound (R3-3) of the pooled ratio of the seeds' spread to
+      k * sqrt(1 + kappa * n) * sd must be at most 1. Reported: the rows outside the domain.
+      Coverage: every method, quantity and split should have at least two V3 cells with six rows
+      inside the domain; a shortfall is reported, not made up.
+R3-9. The named counts (rule 6) on every pair, with the shipped model, for every quantity;
+      target 80 %, reported, not tuned.
+R3-10. Say-NO partners in the suite on the committed receipt: the factors halved fail the
+      validation; a quantity's observed spread raised above its prediction fails its check;
+      kappa set to 0 where R3-1 chose more fails a cell that needs it (reported as found); a value
+      outside the domain is refused.
+
+IF THE VALIDATION FAILS (fixed now; reported, never re-fitted on a validation cell):
+F1. Energetic T20 or T30 in Lambert bands fails a V3 cell: that quantity takes the other split's
+    (k = 1, kappa) in Lambert bands too.
+F2. A method, quantity and split fails a V3 cell whose failing rows reach n above the largest n of
+    rounds 1 and 2's rows of it, or whose N is below 150,000: its domain returns to rounds 1 and
+    2's in that respect (n at most their largest; N at least 150,000). k and kappa stay.
+F3. Any other failure: the quantity ships with k raised to cover the failing cell's upper bound,
+    marked not validated in the JSON and the README, for Burhan's decision.
+F4. If no kappa keeps k = 1 for energetic T20 and T30 outside Lambert bands: their domain is
+    rounds 1 and 2's (n at most the largest there), with kappa 0.

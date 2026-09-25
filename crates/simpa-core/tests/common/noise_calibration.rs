@@ -334,6 +334,472 @@ pub fn root_n(a: &Value, b: &Value, quantity: &str) -> Option<(Scaled, Scaled, b
     Some((x, y, ok))
 }
 
+// --- Round 3 (`PREREGISTER.txt`, "ROUND 3") -----------------------------------------------------
+//
+// The prediction for a receiver-band is `k · √(1 + κ·n) · sd`: `sd` the bootstrap's (before
+// calibration), `n` the run's crossings per particle (`n1`) or that times its particles' lifetime
+// spread (`n1·cv2`), whichever rule R3-2 chooses per method; `k` and `κ` per method and quantity,
+// and for energetic T20 and T30 per kind of band (every face Lambert with scattering 1, or not).
+// The bounds take effective degrees of freedom (R3-3). A value is given only inside the domain
+// its quantity was calibrated on: at least the fewest particles and at most the most crossings per
+// particle of its calibration rows (R3-5).
+
+/// The grid `κ` is chosen from (R3-1): 0 to 3 in steps of 0.25.
+pub const KAPPAS: [f64; 13] = [
+    0.0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0,
+];
+
+/// The multi-crossing variable (R3-2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Var {
+    /// Crossings per particle.
+    N1,
+    /// Crossings per particle times the lifetimes' `Var L / (E L)²`.
+    N1Cv2,
+}
+
+pub const VARS: [Var; 2] = [Var::N1, Var::N1Cv2];
+
+pub fn var_name(v: Var) -> &'static str {
+    match v {
+        Var::N1 => "n1",
+        Var::N1Cv2 => "n1*cv2",
+    }
+}
+
+/// Which receiver-bands a factor covers: all, or for energetic T20 and T30 those whose every face
+/// is Lambert with scattering 1 and the others (R3-4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Split {
+    All,
+    Lambert,
+    Other,
+}
+
+pub fn split_name(s: Split) -> &'static str {
+    match s {
+        Split::All => "all",
+        Split::Lambert => "lambert",
+        Split::Other => "other",
+    }
+}
+
+/// The splits of a method's quantity.
+pub fn splits(method: &str, quantity: &str) -> &'static [Split] {
+    if round_two(method, quantity) {
+        &[Split::Lambert, Split::Other]
+    } else {
+        &[Split::All]
+    }
+}
+
+/// The factor a split is held to rather than fitted (R3-4): energetic T20 and T30 outside Lambert
+/// bands keep M7's structure, factor 1, as rounds 1 and 2 left them.
+pub fn fixed_factor(method: &str, quantity: &str, split: Split) -> Option<f64> {
+    (round_two(method, quantity) && split == Split::Other).then_some(1.0)
+}
+
+/// One receiver-band for round 3.
+#[derive(Clone, Debug)]
+pub struct Row3 {
+    pub receiver: u64,
+    pub freq_hz: i64,
+    pub observed: f64,
+    /// Each seed's model standard deviation before calibration.
+    pub seed_sd: Vec<f64>,
+    /// Each seed's multi-crossing variable.
+    pub seed_n: Vec<f64>,
+    pub seed_values: Vec<f64>,
+    pub lambert: bool,
+}
+
+impl Row3 {
+    /// The predicted variance with correction `κ`: the mean over the seeds of `sd²·(1 + κ·n)`.
+    pub fn predicted_var(&self, kappa: f64) -> f64 {
+        self.seed_sd
+            .iter()
+            .zip(&self.seed_n)
+            .map(|(s, n)| s * s * (1.0 + kappa * n))
+            .sum::<f64>()
+            / self.seed_sd.len() as f64
+    }
+
+    /// The largest of the seeds' multi-crossing variable.
+    pub fn n_max(&self) -> f64 {
+        self.seed_n.iter().copied().fold(0.0, f64::max)
+    }
+}
+
+fn floats(v: &Value) -> Vec<f64> {
+    v.as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_f64().unwrap())
+        .collect()
+}
+
+/// A cell's rows of `quantity` in `split`, with `var`, whose largest `n` is at most `n_max`.
+pub fn rows3(cell: &Value, quantity: &str, var: Var, split: Split, n_max: f64) -> Vec<Row3> {
+    cell["quantities"][quantity]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|r| {
+                    let lambert = r["lambert"].as_bool().unwrap();
+                    match split {
+                        Split::All => {}
+                        Split::Lambert if lambert => {}
+                        Split::Other if !lambert => {}
+                        _ => return None,
+                    }
+                    let n1 = floats(&r["seed_n1"]);
+                    let cv2 = floats(&r["seed_cv2"]);
+                    let seed_n = match var {
+                        Var::N1 => n1,
+                        Var::N1Cv2 => n1.iter().zip(&cv2).map(|(a, b)| a * b).collect(),
+                    };
+                    let row = Row3 {
+                        receiver: r["receiver"].as_u64().unwrap(),
+                        freq_hz: r["freq_hz"].as_i64().unwrap(),
+                        observed: r["observed_sd"].as_f64().unwrap(),
+                        seed_sd: floats(&r["seed_model_sd"]),
+                        seed_n,
+                        seed_values: floats(&r["seed_values"]),
+                        lambert,
+                    };
+                    (row.n_max() <= n_max).then_some(row)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The Pearson correlation of two equal-length series.
+fn correlation(a: &[f64], b: &[f64]) -> f64 {
+    let n = a.len() as f64;
+    let (ma, mb) = (a.iter().sum::<f64>() / n, b.iter().sum::<f64>() / n);
+    let (mut sab, mut saa, mut sbb) = (0.0, 0.0, 0.0);
+    for (x, y) in a.iter().zip(b) {
+        sab += (x - ma) * (y - mb);
+        saa += (x - ma) * (x - ma);
+        sbb += (y - mb) * (y - mb);
+    }
+    if saa > 0.0 && sbb > 0.0 {
+        sab / (saa * sbb).sqrt()
+    } else {
+        0.0
+    }
+}
+
+/// R3-3: the effective degrees of freedom of a pooled ratio: `rows × (seeds − 1)` over the
+/// dispersion `φ` of the rows' ratios² against what the chi-square allows (at least 1) and the
+/// design effect of the receivers of one band sharing its particles, `1 + (m − 1)·ρ²`, `ρ²` the
+/// mean squared correlation of the seeds' values between receivers of one band, less its bias
+/// `1/(seeds − 1)`, and `m` the mean rows per band.
+pub fn dof_eff(rows: &[Row3], kappa: f64, seeds: usize) -> f64 {
+    let m = rows.len();
+    let nu = (seeds - 1) as f64;
+    let x: Vec<f64> = rows
+        .iter()
+        .map(|r| r.observed * r.observed / r.predicted_var(kappa))
+        .collect();
+    let phi = if m > 1 {
+        let mean = x.iter().sum::<f64>() / m as f64;
+        let var = x.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (m - 1) as f64;
+        (var / (2.0 / nu * mean * mean)).max(1.0)
+    } else {
+        1.0
+    };
+    let (mut sum_r2, mut pairs) = (0.0, 0usize);
+    let mut bands: Vec<i64> = rows.iter().map(|r| r.freq_hz).collect();
+    bands.sort_unstable();
+    bands.dedup();
+    for f in &bands {
+        let group: Vec<&Row3> = rows.iter().filter(|r| r.freq_hz == *f).collect();
+        for i in 0..group.len() {
+            for j in i + 1..group.len() {
+                sum_r2 += correlation(&group[i].seed_values, &group[j].seed_values).powi(2);
+                pairs += 1;
+            }
+        }
+    }
+    let deff = if pairs > 0 {
+        let bias = 1.0 / nu;
+        let rho2 = ((sum_r2 / pairs as f64 - bias) / (1.0 - bias)).max(0.0);
+        let per_band = m as f64 / bands.len() as f64;
+        1.0 + (per_band - 1.0) * rho2
+    } else {
+        1.0
+    };
+    m as f64 * nu / (phi * deff)
+}
+
+/// A cell's pooled ratio of the seeds' spread to `k · √(1 + κ·n) · sd`, with one-sided 95 % bounds
+/// on R3-3's degrees of freedom. `None` without rows.
+pub fn pooled3(rows: &[Row3], k: f64, kappa: f64, seeds: usize) -> Option<Pooled> {
+    if rows.is_empty() {
+        return None;
+    }
+    let o: f64 = rows.iter().map(|r| r.observed * r.observed).sum();
+    let p: f64 = rows.iter().map(|r| k * k * r.predicted_var(kappa)).sum();
+    let ratio = (o / p).sqrt();
+    let dof = dof_eff(rows, kappa, seeds);
+    Some(Pooled {
+        ratio,
+        dof,
+        lower: ratio * (dof / chi2_quantile(dof, 0.95)).sqrt(),
+        upper: ratio * (dof / chi2_quantile(dof, 0.05)).sqrt(),
+    })
+}
+
+/// Round 3's calibration cells of a method: every cell of rounds 1 and 2, and round 3's own.
+pub fn calibration3_cells<'a>(receipt: &'a Value, method: &str) -> Vec<&'a Value> {
+    cells_in(
+        receipt,
+        method,
+        &["calibration", "validation", "validation2", "calibration3"],
+    )
+}
+
+/// Round 3's validation cells of a method.
+pub fn validation3_cells<'a>(receipt: &'a Value, method: &str) -> Vec<&'a Value> {
+    cells_in(receipt, method, &["validation3"])
+}
+
+/// R3-1: a quantity's (and split's) factor and correction on its calibration cells.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fit {
+    pub k: f64,
+    pub kappa: f64,
+    /// The cell whose upper bound sets `k` (or, for a fixed factor, the largest bound under it).
+    pub by: String,
+    /// The geometric mean over the cells of `k·√(1 + κ·n)` over the seeds' spread.
+    pub overstates: f64,
+    /// Cells with rows.
+    pub cells: usize,
+    /// `ln(k / ratio)` per cell, for R3-2.
+    pub logs: Vec<f64>,
+}
+
+/// R3-1 for one `κ`: `k` the largest one-sided 95 % upper bound over `cells` of the pooled ratio
+/// at factor 1 with correction `κ`, rounded up to two significant digits (or the fixed factor,
+/// when every bound is at most it; `None` when one is above it or no cell has rows).
+pub fn fit_at(
+    cells: &[&Value],
+    quantity: &str,
+    var: Var,
+    split: Split,
+    kappa: f64,
+    fixed: Option<f64>,
+) -> Option<Fit> {
+    let mut best: Option<(f64, String)> = None;
+    let mut ratios = Vec::new();
+    for c in cells {
+        let rows = rows3(c, quantity, var, split, f64::INFINITY);
+        let Some(p) = pooled3(&rows, 1.0, kappa, seeds(c)) else {
+            continue;
+        };
+        ratios.push(p.ratio);
+        if best.as_ref().is_none_or(|(u, _)| p.upper > *u) {
+            best = Some((p.upper, c["cell"]["id"].as_str().unwrap().to_string()));
+        }
+    }
+    let (upper, by) = best?;
+    let k = match fixed {
+        Some(f) if upper <= f => f,
+        Some(_) => return None,
+        None => round_up_two_digits(upper),
+    };
+    let logs: Vec<f64> = ratios.iter().map(|r| (k / r).ln()).collect();
+    Some(Fit {
+        k,
+        kappa,
+        by,
+        overstates: (logs.iter().sum::<f64>() / logs.len() as f64).exp(),
+        cells: ratios.len(),
+        logs,
+    })
+}
+
+/// R3-1: the `κ` of [`KAPPAS`] whose fit overstates least (the geometric mean), the smaller on a
+/// tie; for a fixed factor, the smallest `κ` that keeps it (`None` when none does).
+pub fn fit(cells: &[&Value], quantity: &str, var: Var, split: Split) -> Option<Fit> {
+    let method = cells.first()?["cell"]["method"].as_str().unwrap();
+    let fixed = fixed_factor(method, quantity, split);
+    let mut best: Option<Fit> = None;
+    for kappa in KAPPAS {
+        let Some(f) = fit_at(cells, quantity, var, split, kappa, fixed) else {
+            continue;
+        };
+        if fixed.is_some() {
+            return Some(f);
+        }
+        if best.as_ref().is_none_or(|b| f.overstates < b.overstates) {
+            best = Some(f);
+        }
+    }
+    best
+}
+
+/// R3-2: a method's variable, the one whose fits overstate least over every quantity, split and
+/// calibration cell together (geometric mean); `n1` on a tie. With the geometric means.
+pub fn choose_var(receipt: &Value, method: &str) -> (Var, Vec<(Var, f64)>) {
+    let cells = calibration3_cells(receipt, method);
+    let mut out = Vec::new();
+    for var in VARS {
+        let mut logs = Vec::new();
+        for q in QUANTITIES {
+            for &s in splits(method, q) {
+                if let Some(f) = fit(&cells, q, var, s) {
+                    logs.extend(f.logs);
+                }
+            }
+        }
+        out.push((var, (logs.iter().sum::<f64>() / logs.len() as f64).exp()));
+    }
+    let best = if out[1].1 < out[0].1 {
+        out[1].0
+    } else {
+        out[0].0
+    };
+    (best, out)
+}
+
+/// R3-5: the domain of a quantity's (and split's) calibration: the fewest particles of a
+/// calibration cell with a row of it, and the largest `n` of any seed of those rows.
+pub fn domain(cells: &[&Value], quantity: &str, var: Var, split: Split) -> Option<(f64, f64)> {
+    let mut least: Option<f64> = None;
+    let mut most = 0.0f64;
+    for c in cells {
+        let rows = rows3(c, quantity, var, split, f64::INFINITY);
+        if rows.is_empty() {
+            continue;
+        }
+        let n = c["cell"]["particles_per_source"].as_f64().unwrap();
+        least = Some(least.map_or(n, |l| l.min(n)));
+        for r in &rows {
+            most = most.max(r.n_max());
+        }
+    }
+    least.map(|l| (l, most))
+}
+
+/// Rule 5b over round 3's calibration cells, for a quantity and split.
+pub fn margin3(cells: &[&Value], quantity: &str, split: Split) -> Option<(f64, String)> {
+    let mut best: Option<(f64, String)> = None;
+    for c in cells {
+        let mut sc: Vec<f64> = c["quantities"][quantity]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .filter(|r| match split {
+                        Split::All => true,
+                        Split::Lambert => r["lambert"] == true,
+                        Split::Other => r["lambert"] == false,
+                    })
+                    .map(|r| r["predicted_scatter"].as_f64().unwrap())
+                    .collect()
+            })
+            .unwrap_or_default();
+        if sc.is_empty() {
+            continue;
+        }
+        sc.sort_by(f64::total_cmp);
+        let median = sc[sc.len() / 2];
+        if best.as_ref().is_none_or(|(b, _)| median > *b) {
+            best = Some((median, c["cell"]["id"].as_str().unwrap().to_string()));
+        }
+    }
+    best.map(|(s, id)| (round_up_two_digits(1.0 + 1.28 * s).max(1.1), id))
+}
+
+/// The pairs of cells that differ only in their particle count, round 3's added to rounds 1 and
+/// 2's (R3-6), the lower count first.
+pub const PAIRS3: [(&str, &str); 12] = [
+    ("C-R1", "C-R2"),
+    ("C-R3", "C-R4"),
+    ("C-R5", "V-R4"),
+    ("C-E1", "C-E2"),
+    ("C-E3", "C-E4"),
+    ("C-E5", "V-E4"),
+    ("C3-R5", "V3-R8"),
+    ("C3-R6", "C-R5"),
+    ("C3-R9", "V3-R9"),
+    ("C3-E5", "V3-E5"),
+    ("C3-E6", "C-E5"),
+    ("C3-E10", "V3-E9"),
+];
+
+/// R3-6 on one pair: the seeds' spread times `√N` over the receiver-bands both have, each with
+/// its standard error on R3-3's degrees of freedom, and `z` = (higher count's − lower count's) /
+/// joint standard error. The named count is safe unless the spread falls slower than `1/√N`,
+/// `z` above 2.
+pub fn root_n3(a: &Value, b: &Value, quantity: &str) -> Option<(Scaled, Scaled, f64)> {
+    let key = |r: &Row3| (r.receiver, r.freq_hz);
+    let ra = rows3(a, quantity, Var::N1, Split::All, f64::INFINITY);
+    let rb = rows3(b, quantity, Var::N1, Split::All, f64::INFINITY);
+    let ca: Vec<Row3> = ra
+        .iter()
+        .filter(|x| rb.iter().any(|y| key(y) == key(x)))
+        .cloned()
+        .collect();
+    let cb: Vec<Row3> = rb
+        .iter()
+        .filter(|y| ca.iter().any(|x| key(x) == key(y)))
+        .cloned()
+        .collect();
+    if ca.is_empty() {
+        return None;
+    }
+    let at = |rows: &[Row3], c: &Value| {
+        let n = c["cell"]["particles_per_source"].as_f64().unwrap();
+        let rms =
+            (rows.iter().map(|x| x.observed * x.observed).sum::<f64>() / rows.len() as f64).sqrt();
+        let dof = dof_eff(rows, 0.0, seeds(c));
+        let v = rms * n.sqrt();
+        (v, v / (2.0 * dof).sqrt())
+    };
+    let (x, y) = (at(&ca, a), at(&cb, b));
+    Some((x, y, (y.0 - x.0) / x.1.hypot(y.1)))
+}
+
+/// R3-6 for a method and quantity over the pairs whose both cells are among `ids` (the cells read
+/// so far): confirmed unless a pair's `z` is above 2; with the pairs read and those that fail.
+pub fn root_n3_confirmed(
+    receipt: &Value,
+    method: &str,
+    quantity: &str,
+    ids: &[&str],
+) -> (bool, Vec<String>, Vec<String>) {
+    let find = |id: &str| {
+        receipt["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["cell"]["id"] == id)
+    };
+    let (mut read, mut unsafe_) = (Vec::new(), Vec::new());
+    for (a, b) in PAIRS3 {
+        if !ids.contains(&a) || !ids.contains(&b) {
+            continue;
+        }
+        let (Some(ca), Some(cb)) = (find(a), find(b)) else {
+            continue;
+        };
+        if ca["cell"]["method"] != method {
+            continue;
+        }
+        if let Some((_, _, z)) = root_n3(ca, cb, quantity) {
+            let line = format!("{a}/{b} {z:+.2}");
+            if z > 2.0 {
+                unsafe_.push(line.clone());
+            }
+            read.push(line);
+        }
+    }
+    (unsafe_.is_empty(), read, unsafe_)
+}
+
 /// The inverse of the chi-square distribution's CDF at `p` with `dof` degrees of freedom
 /// (Wilson–Hilferty; within 0.1 % above 30 degrees of freedom).
 pub fn chi2_quantile(dof: f64, p: f64) -> f64 {

@@ -167,6 +167,14 @@ enum Walls {
     DeadCeiling,
     /// The dead floor with every surface scattering `s` by Lambert's law (round 2).
     DeadFloorScattering(f64),
+    /// The floor, the ceiling and the four walls each of their own absorption, every surface
+    /// scattering `scattering`: 1 is Lambert's law throughout (M8's walls), 0 specular (round 3).
+    Mixed {
+        floor: f64,
+        ceiling: f64,
+        walls: f64,
+        scattering: f64,
+    },
 }
 
 impl Walls {
@@ -180,6 +188,21 @@ impl Walls {
             Walls::DeadFloorScattering(sc) => {
                 format!("dead floor (0.6; 0.05 elsewhere), scattering {sc}")
             }
+            Walls::Mixed {
+                floor,
+                ceiling,
+                walls,
+                scattering,
+            } => {
+                let law = if scattering == 1.0 {
+                    "Lambert".to_string()
+                } else if scattering == 0.0 {
+                    "specular".to_string()
+                } else {
+                    format!("scattering {scattering}")
+                };
+                format!("{law}: floor a{floor}, ceiling a{ceiling}, walls a{walls}")
+            }
         }
     }
 }
@@ -190,10 +213,16 @@ enum Role {
     Validation,
     /// Round 2's validation cells, held out of both rounds' factors.
     Validation2,
+    /// Round 3's new calibration cells (`PREREGISTER.txt`, "ROUND 3"); round 3 calibrates on
+    /// these and on every cell of rounds 1 and 2.
+    Calibration3,
+    /// Round 3's validation cells, held out of every round's factors.
+    Validation3,
 }
 
 /// One cell: a room and its walls, SPPS in `method` with `particles` per source, `duration` s in
-/// steps of `dt`, `trans_epsilon` `eps`; octave bands 125 Hz to 4 kHz; six receivers.
+/// steps of `dt`, `trans_epsilon` `eps`, receiver spheres of radius `radius` m; octave bands
+/// 125 Hz to 4 kHz; six receivers.
 #[derive(Clone, Copy, Debug)]
 struct Cell {
     id: &'static str,
@@ -205,12 +234,13 @@ struct Cell {
     duration: f64,
     dt: f64,
     eps: f64,
+    radius: f64,
 }
 
 impl Cell {
     fn label(&self) -> String {
         format!(
-            "{} {} {} {:?} N {} {} s dt {} eps {}",
+            "{} {} {} {:?} N {} {} s dt {} eps {} R {}",
             self.id,
             self.room.name(),
             self.walls.label(),
@@ -218,7 +248,8 @@ impl Cell {
             self.particles,
             self.duration,
             self.dt,
-            self.eps
+            self.eps,
+            self.radius
         )
     }
 
@@ -229,6 +260,8 @@ impl Cell {
                 Role::Calibration => "calibration",
                 Role::Validation => "validation",
                 Role::Validation2 => "validation2",
+                Role::Calibration3 => "calibration3",
+                Role::Validation3 => "validation3",
             },
             "room": self.room.name(),
             "walls": self.walls.label(),
@@ -237,18 +270,49 @@ impl Cell {
             "duration_s": self.duration,
             "time_step_s": self.dt,
             "trans_epsilon": self.eps,
+            "receiver_radius_m": self.radius,
             "bands_hz": [125, 250, 500, 1000, 2000, 4000],
             "receivers": self.room.receivers().to_vec(),
             "source": self.room.source(),
             "seeds": SEEDS.collect::<Vec<u32>>(),
         })
     }
+
+    /// Every receiver sphere clear of the walls by 5 cm and of the source by 40 cm, so that the
+    /// project validates (`receiver_sphere_crosses_surface`) and no source sits in a sphere.
+    fn check_geometry(&self) {
+        let size = self.room.size();
+        let s = self.room.source();
+        for r in self.room.receivers() {
+            let clearance = (0..3)
+                .map(|i| r[i].min(size[i] - r[i]))
+                .fold(f64::INFINITY, f64::min);
+            assert!(
+                clearance >= self.radius + 0.05,
+                "{}: receiver {r:?} is {clearance} m from a wall, radius {}",
+                self.id,
+                self.radius
+            );
+            let d = ((r[0] - s[0]).powi(2) + (r[1] - s[1]).powi(2) + (r[2] - s[2]).powi(2)).sqrt();
+            assert!(
+                d >= self.radius + 0.4,
+                "{}: receiver {r:?} is {d} m from the source, radius {}",
+                self.id,
+                self.radius
+            );
+        }
+    }
 }
 
 const SEEDS: std::ops::RangeInclusive<u32> = 1..=10;
 
 use ComputationMethod::{Energetic, Random};
-use Role::{Calibration as C, Validation as V, Validation2 as W};
+use Role::{
+    Calibration as C, Calibration3 as C3, Validation as V, Validation2 as W, Validation3 as V3,
+};
+
+/// SPPS's default receiver radius, every cell's in rounds 1 and 2.
+const R0: f64 = 0.31;
 
 #[allow(clippy::too_many_arguments)]
 const fn cell(
@@ -262,6 +326,25 @@ const fn cell(
     dt: f64,
     eps: f64,
 ) -> Cell {
+    cell_r(
+        id, role, room, walls, method, particles, duration, dt, eps, R0,
+    )
+}
+
+/// [`cell`] with receiver spheres of radius `radius` m (round 3).
+#[allow(clippy::too_many_arguments)]
+const fn cell_r(
+    id: &'static str,
+    role: Role,
+    room: Room,
+    walls: Walls,
+    method: ComputationMethod,
+    particles: u32,
+    duration: f64,
+    dt: f64,
+    eps: f64,
+    radius: f64,
+) -> Cell {
     Cell {
         id,
         role,
@@ -272,13 +355,34 @@ const fn cell(
         duration,
         dt,
         eps,
+        radius,
     }
 }
 
+/// Round 3's wall layouts (`Walls::Mixed`).
+const fn mixed(floor: f64, ceiling: f64, walls: f64, scattering: f64) -> Walls {
+    Walls::Mixed {
+        floor,
+        ceiling,
+        walls,
+        scattering,
+    }
+}
+
+/// The dead floor with Lambert walls: floor 0.6, the rest 0.05, scattering 1.
+const LAMBERT_DEAD_FLOOR: Walls = mixed(0.6, 0.05, 0.05, 1.0);
+/// The dead ceiling with Lambert walls.
+const LAMBERT_DEAD_CEILING: Walls = mixed(0.05, 0.6, 0.05, 1.0);
+/// An extreme contrast with Lambert walls: floor 0.9, the rest 0.02.
+const LAMBERT_EXTREME_FLOOR: Walls = mixed(0.9, 0.02, 0.02, 1.0);
+/// Dead walls: the four walls 0.8, floor and ceiling 0.1, Lambert. The direct sound dominates.
+const DEAD_WALLS: Walls = mixed(0.1, 0.1, 0.8, 1.0);
+
 #[rustfmt::skip]
 /// The cells, pre-registered before any was run (`PREREGISTER.txt` in the investigation's
-/// folder). Random mode's `trans_epsilon` is SPPS's default 5; it drops nothing there.
-const CELLS: [Cell; 32] = [
+/// folder; round 3's under "ROUND 3"). Random mode's `trans_epsilon` is SPPS's default 5; it
+/// drops nothing there.
+const CELLS: [Cell; 70] = [
     cell("C-R1", C, Room::Tutorial, Walls::Lambert(0.1), Random, 150_000, 3.0, 0.01, 5.0),
     cell("C-R2", C, Room::Tutorial, Walls::Lambert(0.1), Random, 1_500_000, 3.0, 0.01, 5.0),
     cell("C-R3", C, Room::Small, Walls::Lambert(0.4), Random, 150_000, 1.0, 0.001, 5.0),
@@ -313,6 +417,47 @@ const CELLS: [Cell; 32] = [
     cell("W-E4", W, Room::Long, Walls::DeadFloorScattering(0.3), Energetic, 300_000, 3.0, 0.01, 7.0),
     cell("W-E5", W, Room::Cube, Walls::DeadFloor, Energetic, 300_000, 4.0, 0.01, 7.0),
     cell("W-E6", W, Room::Long, Walls::DeadFloor, Energetic, 600_000, 3.0, 0.001, 7.0),
+    // Round 3 (PREREGISTER.txt, "ROUND 3"): larger receivers (more crossings per particle), fewer
+    // particles, the direct field alone and dead walls, Lambert walls with the absorption on one
+    // surface; calibrated on these and on every cell above, validated on the V3- cells.
+    cell_r("C3-R1", C3, Room::Small, Walls::Lambert(0.05), Random, 150_000, 3.0, 0.01, 5.0, 0.9),
+    cell_r("C3-R2", C3, Room::Tutorial, Walls::Lambert(0.1), Random, 150_000, 3.0, 0.01, 5.0, 0.9),
+    cell_r("C3-R3", C3, Room::Tutorial, Walls::DeadFloor, Random, 500_000, 3.0, 0.01, 5.0, 0.9),
+    cell_r("C3-R4", C3, Room::Cube, Walls::Lambert(0.05), Random, 150_000, 6.0, 0.01, 5.0, 1.4),
+    cell_r("C3-R5", C3, Room::Small, Walls::Lambert(0.2), Random, 5_000, 1.5, 0.01, 5.0, R0),
+    cell_r("C3-R6", C3, Room::Tutorial, Walls::Tutorial, Random, 15_000, 2.0, 0.01, 5.0, R0),
+    cell_r("C3-R7", C3, Room::Tutorial, Walls::Lambert(1.0), Random, 150_000, 0.05, 0.001, 5.0, R0),
+    cell_r("C3-R8", C3, Room::Small, DEAD_WALLS, Random, 150_000, 1.0, 0.01, 5.0, R0),
+    cell_r("C3-R9", C3, Room::Small, Walls::Lambert(0.05), Random, 50_000, 3.0, 0.01, 5.0, 0.6),
+    cell_r("V3-R1", V3, Room::Long, Walls::Lambert(0.05), Random, 300_000, 4.0, 0.01, 5.0, 0.9),
+    cell_r("V3-R2", V3, Room::Small, Walls::Specular(0.05), Random, 300_000, 3.0, 0.01, 5.0, 0.7),
+    cell_r("V3-R3", V3, Room::Cube, Walls::Lambert(0.1), Random, 30_000, 3.0, 0.01, 5.0, 1.2),
+    cell_r("V3-R4", V3, Room::Tutorial, Walls::Tutorial, Random, 8_000, 2.0, 0.01, 5.0, R0),
+    cell_r("V3-R5", V3, Room::Long, Walls::Lambert(1.0), Random, 150_000, 0.08, 0.001, 5.0, 0.5),
+    cell_r("V3-R6", V3, Room::Tutorial, DEAD_WALLS, Random, 150_000, 1.0, 0.001, 5.0, R0),
+    cell_r("V3-R7", V3, Room::Hall, Walls::DeadFloor, Random, 300_000, 3.0, 0.01, 5.0, 0.9),
+    cell_r("V3-R8", V3, Room::Small, Walls::Lambert(0.2), Random, 50_000, 1.5, 0.01, 5.0, R0),
+    cell_r("V3-R9", V3, Room::Small, Walls::Lambert(0.05), Random, 500_000, 3.0, 0.01, 5.0, 0.6),
+    cell_r("C3-E1", C3, Room::Small, Walls::Lambert(0.05), Energetic, 150_000, 3.0, 0.01, 7.0, 0.9),
+    cell_r("C3-E2", C3, Room::Tutorial, LAMBERT_DEAD_FLOOR, Energetic, 300_000, 3.0, 0.01, 7.0, R0),
+    cell_r("C3-E3", C3, Room::Long, LAMBERT_DEAD_FLOOR, Energetic, 300_000, 3.0, 0.01, 7.0, R0),
+    cell_r("C3-E4", C3, Room::Tutorial, Walls::DeadFloor, Energetic, 300_000, 3.0, 0.01, 7.0, 0.9),
+    cell_r("C3-E5", C3, Room::Small, Walls::Lambert(0.2), Energetic, 5_000, 1.5, 0.01, 7.0, R0),
+    cell_r("C3-E6", C3, Room::Tutorial, Walls::Tutorial, Energetic, 15_000, 2.0, 0.01, 5.0, R0),
+    cell_r("C3-E7", C3, Room::Tutorial, Walls::Lambert(1.0), Energetic, 150_000, 0.05, 0.001, 7.0, R0),
+    cell_r("C3-E8", C3, Room::Hall, LAMBERT_EXTREME_FLOOR, Energetic, 300_000, 3.0, 0.01, 7.0, R0),
+    cell_r("C3-E9", C3, Room::Small, DEAD_WALLS, Energetic, 150_000, 1.0, 0.01, 7.0, R0),
+    cell_r("C3-E10", C3, Room::Small, Walls::Lambert(0.05), Energetic, 50_000, 3.0, 0.01, 7.0, 0.6),
+    cell_r("V3-E1", V3, Room::Long, Walls::Lambert(0.05), Energetic, 300_000, 3.0, 0.01, 7.0, 0.9),
+    cell_r("V3-E2", V3, Room::Corridor, LAMBERT_DEAD_CEILING, Energetic, 300_000, 3.0, 0.01, 7.0, R0),
+    cell_r("V3-E3", V3, Room::Cube, LAMBERT_DEAD_FLOOR, Energetic, 150_000, 3.0, 0.01, 7.0, 1.2),
+    cell_r("V3-E4", V3, Room::Small, Walls::Specular(0.05), Energetic, 150_000, 3.0, 0.01, 7.0, 0.7),
+    cell_r("V3-E5", V3, Room::Small, Walls::Lambert(0.2), Energetic, 50_000, 1.5, 0.01, 7.0, R0),
+    cell_r("V3-E6", V3, Room::Long, Walls::Lambert(1.0), Energetic, 150_000, 0.08, 0.001, 7.0, 0.5),
+    cell_r("V3-E7", V3, Room::Tutorial, DEAD_WALLS, Energetic, 150_000, 1.0, 0.01, 7.0, R0),
+    cell_r("V3-E8", V3, Room::Tutorial, LAMBERT_EXTREME_FLOOR, Energetic, 300_000, 2.0, 0.001, 7.0, R0),
+    cell_r("V3-E9", V3, Room::Small, Walls::Lambert(0.05), Energetic, 300_000, 3.0, 0.01, 7.0, 0.6),
+    cell_r("V3-E10", V3, Room::Long, Walls::DeadFloorScattering(0.3), Energetic, 300_000, 3.0, 0.01, 7.0, 0.6),
 ];
 
 /// Tutorial 1's box (`rooms/tutorial1_box.simpa`) on the octave bands 125 Hz to 4 kHz, without its
@@ -413,6 +558,28 @@ fn project(c: &Cell, seed: u32) -> Project {
                 Some(("Floor", scatter(material(2, "floor", 0.6, true)))),
             ))
         }
+        Walls::Mixed { .. } => None,
+    };
+    // One material per surface group: tutorial 1's box has exactly Floor, Ceiling and Walls.
+    let mixed = match c.walls {
+        Walls::Mixed {
+            floor,
+            ceiling,
+            walls,
+            scattering,
+        } => {
+            let with = |id: u128, name: &str, alpha: f64| {
+                let mut m = material(id, name, alpha, scattering > 0.0);
+                m.scattering = vec![schema::F64::new(scattering); n];
+                m
+            };
+            Some([
+                ("Floor", with(1, "floor", floor)),
+                ("Ceiling", with(2, "ceiling", ceiling)),
+                ("Walls", with(3, "walls", walls)),
+            ])
+        }
+        _ => None,
     };
     if let Some((rest, dead)) = set {
         for g in &mut p.surface_groups {
@@ -425,15 +592,35 @@ fn project(c: &Cell, seed: u32) -> Project {
         p.solvers.spps.air_absorption = false;
         p.solvers.tcr.air_absorption = false;
     }
+    if let Some(mats) = mixed {
+        assert_eq!(
+            p.surface_groups.len(),
+            3,
+            "tutorial 1's box has three groups"
+        );
+        for g in &mut p.surface_groups {
+            g.material = mats
+                .iter()
+                .find(|(name, _)| g.name == *name)
+                .unwrap_or_else(|| panic!("surface group {:?}", g.name))
+                .1
+                .id;
+        }
+        p.materials = mats.into_iter().map(|(_, m)| m).collect();
+        p.solvers.spps.air_absorption = false;
+        p.solvers.tcr.air_absorption = false;
+    }
     let s = c.room.source();
     p.sources[0].position = Vec3::new(s[0], s[1], s[2]);
     with_receivers(&mut p, &c.room.receivers());
+    c.check_geometry();
     let spps = &mut p.solvers.spps;
     spps.method = c.method;
     spps.particles_per_source = c.particles;
     spps.duration_s = schema::F64::new(c.duration);
     spps.time_step_s = schema::F64::new(c.dt);
     spps.extinction_exponent = schema::F64::new(c.eps);
+    spps.receiver_radius_m = schema::F64::new(c.radius);
     p
 }
 
@@ -543,8 +730,8 @@ fn cost(c: &Cell) -> f64 {
 }
 
 #[test]
-#[ignore = "evidence for the noise model, not a gate: runs SPPS on 26 cells over ten seeds; run on \
-            purpose"]
+#[ignore = "evidence for the noise model, not a gate: runs SPPS on the cells of CELLS (70) over ten \
+            seeds; run on purpose"]
 fn noise_calibration_runs() {
     let root = evidence_root("noise-cal");
     let mut cells = chosen_cells();
@@ -597,6 +784,14 @@ struct Band {
     /// The share of the emitted energy alive at the end of each step (the room table over the
     /// sources' power, both times `ρc`).
     alive: Vec<f64>,
+    /// Crossings per particle, `params::noise::crossings_per_particle` (one source: its deposit is
+    /// the least).
+    n1: f64,
+    /// The spread of the particles' lifetimes, `params::noise::lifetime_cv2` of `alive`.
+    cv2: f64,
+    /// Every face reflects by Lambert's law with scattering 1 in the band (the report's
+    /// `reference`; false when it was not computed).
+    lambert: bool,
 }
 
 /// Every receiver-band of a report, receivers then bands.
@@ -604,6 +799,12 @@ fn bands_of(rep: &Value) -> Vec<Band> {
     let s = &rep["spps"];
     let dt = s["time_step_s"].as_f64().unwrap();
     let half = s["receiver_crossing_s"].as_f64().unwrap() / 2.0;
+    let particles = s["particles_per_source"].as_f64().unwrap();
+    assert_eq!(
+        s["sources"].as_array().unwrap().len(),
+        1,
+        "one source a cell"
+    );
     let floats = |v: &Value| -> Vec<f64> {
         v.as_array()
             .unwrap()
@@ -611,18 +812,32 @@ fn bands_of(rep: &Value) -> Vec<Band> {
             .map(|x| x.as_f64().unwrap())
             .collect()
     };
+    let reference = &s["reference"];
     let mut out = Vec::new();
     for r in s["point_receivers"].as_array().unwrap() {
         let t_a = r["arrival_s"].as_f64().unwrap();
         for (bi, b) in r["bands"].as_array().unwrap().iter().enumerate() {
             let power = b["source_power_rho_c"].as_f64().unwrap();
             let room = floats(&s["total_energy"][bi]["energy"]);
+            let energy = floats(&b["energy_pa2"]);
+            let mean_deposit = b["noise_model"]["mean_deposit"].as_f64().unwrap();
+            let alive: Vec<f64> = room.iter().map(|e| e / power).collect();
+            let lambert = reference["status"] == "computed"
+                && reference["bands"][bi]["freq_hz"] == b["freq_hz"]
+                && reference["bands"][bi]["lambert_walls"] == true;
             out.push(Band {
                 dt,
-                energy: floats(&b["energy_pa2"]),
+                n1: noise::crossings_per_particle(
+                    energy.iter().sum::<f64>(),
+                    mean_deposit,
+                    particles,
+                ),
+                cv2: noise::lifetime_cv2(&alive, dt).expect("the room table gives a lifetime"),
+                lambert,
+                energy,
                 arrival: Arrival::spread(t_a, half),
-                mean_deposit: b["noise_model"]["mean_deposit"].as_f64().unwrap(),
-                alive: room.iter().map(|e| e / power).collect(),
+                mean_deposit,
+                alive,
             });
         }
     }
@@ -734,11 +949,15 @@ fn bootstrap(
 }
 
 /// One run's receiver-bands: each quantity's value, its standard deviation under each
-/// structure, and how many of the constant structure's resamples refused it.
+/// structure, how many of the constant structure's resamples refused it, and the band's
+/// crossings per particle, lifetime spread and Lambert flag (round 3).
 struct RunNumbers {
     values: Vec<[Option<f64>; 8]>,
     sd: Vec<Vec<[Option<f64>; 8]>>,
     refused: Vec<[usize; 8]>,
+    n1: Vec<f64>,
+    cv2: Vec<f64>,
+    lambert: Vec<bool>,
 }
 
 fn numbers(rep: &Value, structures: &[Structure]) -> RunNumbers {
@@ -771,6 +990,9 @@ fn numbers(rep: &Value, structures: &[Structure]) -> RunNumbers {
         values: values_out,
         sd,
         refused: refused_out,
+        n1: bands.iter().map(|b| b.n1).collect(),
+        cv2: bands.iter().map(|b| b.cv2).collect(),
+        lambert: bands.iter().map(|b| b.lambert).collect(),
     }
 }
 
@@ -790,6 +1012,8 @@ fn roles() -> Vec<Role> {
             "calibration" => Role::Calibration,
             "validation" => Role::Validation,
             "validation2" => Role::Validation2,
+            "calibration3" => Role::Calibration3,
+            "validation3" => Role::Validation3,
             other => panic!("role {other:?}"),
         })
         .collect()
@@ -845,16 +1069,25 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
     let first = &reports[0]["spps"]["point_receivers"];
     let per = rbs / first.as_array().unwrap().len();
     let mut quantities = serde_json::Map::new();
+    let mut incomplete = serde_json::Map::new();
     for (qi, q) in calibration::QUANTITIES.iter().enumerate() {
         let mut rows = Vec::new();
+        let mut partial = Vec::new();
         for rb in 0..rbs {
             let got: Vec<f64> = runs.iter().filter_map(|r| r.values[rb][qi]).collect();
             let sds: Vec<Vec<f64>> = (0..STRUCTURES.len())
                 .map(|si| runs.iter().filter_map(|r| r.sd[si][rb][qi]).collect())
                 .collect();
             // Every seed gives the value and the code's structure its standard deviation; the
-            // other candidate is kept where it gives one in every seed too.
+            // other candidate is kept where it gives one in every seed too. The others are kept
+            // apart, each seed's value or null, so that every run's result is in the receipt.
             if got.len() < n || sds[0].len() < n {
+                partial.push(json!({
+                    "receiver": rb / per,
+                    "freq_hz": first[rb / per]["bands"][rb % per]["freq_hz"],
+                    "seed_values": runs.iter().map(|r| r.values[rb][qi]).collect::<Vec<_>>(),
+                    "seed_model_sd": runs.iter().map(|r| r.sd[0][rb][qi]).collect::<Vec<_>>(),
+                }));
                 continue;
             }
             let (m, sd) = mean_sd(&got);
@@ -886,9 +1119,15 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
                         json!((s.iter().map(|x| x * x).sum::<f64>() / n as f64).sqrt()),
                     ))
                     .collect::<serde_json::Map<_, _>>(),
+                // Round 3: each seed's crossings per particle and lifetime spread, and whether
+                // every face is Lambert with scattering 1 in the band.
+                "seed_n1": runs.iter().map(|r| r.n1[rb]).collect::<Vec<_>>(),
+                "seed_cv2": runs.iter().map(|r| r.cv2[rb]).collect::<Vec<_>>(),
+                "lambert": runs[0].lambert[rb],
             }));
         }
         quantities.insert(q.to_string(), Value::Array(rows));
+        incomplete.insert(q.to_string(), Value::Array(partial));
     }
     let mut config = c.config();
     // Each seed's wall time, s, from the runs' `wall.json` when it is there.
@@ -902,7 +1141,7 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
                 .map(|x| x["wall_s"].clone())
         });
     config["wall_s"] = wall.unwrap_or(Value::Null);
-    let receipt = json!({"cell": config, "quantities": quantities});
+    let receipt = json!({"cell": config, "quantities": quantities, "incomplete": incomplete});
     for q in calibration::QUANTITIES {
         let mut sc: Vec<f64> = receipt["quantities"][q]
             .as_array()
@@ -1187,6 +1426,74 @@ fn noise_calibration() {
                         f64::NAN
                     }
                 );
+            }
+        }
+    }
+    // Round 3 (PREREGISTER.txt, "ROUND 3"), when its calibration cells are read: R3-2's variable,
+    // R3-1's factor and correction, R3-5's domain, rule 5b's margin and R3-6's 1/√N over the
+    // pairs read, per method, quantity and split.
+    if roles.contains(&Role::Calibration3) {
+        let ids: Vec<&str> = cells.iter().map(|c| c.id).collect();
+        for method in ["random", "energetic"] {
+            let cal = calibration::calibration3_cells(&all, method);
+            let (var, gms) = calibration::choose_var(&all, method);
+            println!(
+                "\nROUND 3, {method} mode, on {} calibration cells: variable {} (geometric-mean \
+                 overstatement {})",
+                cal.len(),
+                calibration::var_name(var),
+                gms.iter()
+                    .map(|(v, g)| format!("{} {g:.4}", calibration::var_name(*v)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            for q in calibration::QUANTITIES {
+                let (confirmed, read, unsafe_) =
+                    calibration::root_n3_confirmed(&all, method, q, &ids);
+                for &s in calibration::splits(method, q) {
+                    let fit = calibration::fit(&cal, q, var, s);
+                    let dom = calibration::domain(&cal, q, var, s);
+                    let margin = calibration::margin3(&cal, q, s);
+                    println!(
+                        "  {q:<7} {:<7} {}; domain {}; margin {}; 1/sqrt(N) {} (read {read:?}, \
+                         unsafe {unsafe_:?})",
+                        calibration::split_name(s),
+                        match &fit {
+                            Some(f) => format!(
+                                "k {} kappa {} (set by {}, {} cells, overstates {:.3})",
+                                f.k, f.kappa, f.by, f.cells, f.overstates
+                            ),
+                            None => "NO FIT".into(),
+                        },
+                        dom.map_or("-".into(), |(n, x)| format!(
+                            "N >= {n}, {} <= {x:.6}",
+                            calibration::var_name(var)
+                        )),
+                        margin.map_or("-".into(), |(m, by)| format!("{m} (by {by})")),
+                        if confirmed { "confirmed" } else { "NOT" },
+                    );
+                    // Every calibration cell's pooled ratio against the fit.
+                    if let Some(f) = &fit {
+                        for c in &cal {
+                            let rows = calibration::rows3(c, q, var, s, f64::INFINITY);
+                            if let Some(p) =
+                                calibration::pooled3(&rows, f.k, f.kappa, calibration::seeds(c))
+                            {
+                                println!(
+                                    "      {:<6} {:>2} rows, n up to {:.4}: {:.3} [{:.3}, {:.3}] \
+                                     dof {:.1}",
+                                    c["cell"]["id"].as_str().unwrap(),
+                                    rows.len(),
+                                    rows.iter().map(|r| r.n_max()).fold(0.0, f64::max),
+                                    p.ratio,
+                                    p.lower,
+                                    p.upper,
+                                    p.dof
+                                );
+                            }
+                        }
+                    }
+                }
             }
         }
     }
