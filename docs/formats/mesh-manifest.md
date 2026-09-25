@@ -13,7 +13,7 @@ decision 7). It is our own format: no upstream program reads or writes it.
 
 | File | Written | Notes |
 |---|---|---|
-| `scene_mesh.poly` | always, before TetGen | the scene as a TetGen PLC (`docs/formats/poly.md`); see "What TetGen is given". With upstream's scene correction, what `preprocess.exe` saved, markers restored outside parity mode |
+| `scene_mesh.poly` | always, before TetGen; by `mesh_from_tetgen` into an output folder other than the TetGen folder | the scene as a TetGen PLC (`docs/formats/poly.md`); see "What TetGen is given". With upstream's scene correction, what `preprocess.exe` saved, markers restored outside parity mode. From `mesh_from_tetgen`: the `.poly` the regions were held to, `<base>.poly`'s own bytes or the project's own `.poly`, so that `run --mesh`, which holds a reused folder's regions to its `.poly` and takes no `mesh.json` as proof, finds the same cells |
 | `scene_mesh.input.poly` | with upstream's scene correction | the `.poly` as the mesher wrote it, before `preprocess.exe` rewrote it |
 | `preprocess.stdout.txt`, `preprocess.stderr.txt` | with upstream's scene correction, line by line | |
 | `scene_mesh.var` | when `surface_receiver_max_area_m2` is set | `docs/formats/var.md` |
@@ -35,7 +35,8 @@ loads `<name>.edge`, `<name>.var` and `<name>.mtr` from beside the `.poly` whene
 without case. Other files are left alone. A file that will not be deleted (read-only, or held
 open) is `stale_delete_failed`, and nothing is meshed over it. `mesh_from_tetgen` deletes only
 `mesh.cbin`, `tetramesh.mbin` and `mesh.json` from its output folder, which may be the folder
-holding the TetGen files it reads.
+holding the TetGen files it reads; into another folder, `scene_mesh.poly` too, which it then
+writes.
 
 ## What TetGen is given
 

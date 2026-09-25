@@ -1221,13 +1221,14 @@ fn both_rounds_energetic_t20_and_t30_fail_where_they_failed() {
 
 /// What `docs/params.md` ("Monte-Carlo noise") gives as tutorial 1's reverberation times, each
 /// with its source: Sabine's 0.67 s and Eyring's 0.60 s from the room (`params::room`, with SPPS's
-/// `K`), and SPPS's own converged T30 in that specular box from the receipt, the mean over six
-/// receivers of each one's mean over ten seeds: C-R6 (random, 1.5 M, `dt` 1 ms) 0.98 s at 125 Hz to
-/// 0.79 s at 4 kHz, V4-R2 (random, 6 M) and V4-E14 (energetic, 1.2 M) 0.95 s to 0.78 s. Says no:
+/// `K`), and SPPS's own T30 in that specular box from the receipt (not a converged value: the
+/// cells differ by up to 2.6 % at 125 Hz, `docs/params.md`), the mean over six receivers of each
+/// one's mean over ten seeds: C-R6 (random, 1.5 M, `dt` 1 ms) 0.98 s at 125 Hz to 0.79 s at
+/// 4 kHz, V4-R2 (random, 6 M) and V4-E14 (energetic, 1.2 M) 0.95 s to 0.78 s. Says no:
 /// Sabine's 0.67 s is not SPPS's time, which lies above it by more than 15 % in every band of
 /// every cell, so the first version's "the room's time is 0.67 s" fails.
 #[test]
-fn tutorial_ones_t30_is_spps_converged_not_sabines() {
+fn tutorial_ones_t30_is_spps_own_not_sabines() {
     use simpa_core::params::room::{RtConstant, Surface, eyring_rt, sabine_rt};
     let k = RtConstant::Physical {
         speed_of_sound: 343.2,
@@ -1292,4 +1293,73 @@ fn tutorial_ones_t30_is_spps_converged_not_sabines() {
             assert!(*t > 1.15 * sabine, "{id} at {f} Hz: {t} is Sabine's time");
         }
     }
+
+    // Why the doc calls none of them converged (the review of piece C): at 125 Hz, each cell's
+    // mean over the six receivers per seed, its mean and standard error over the ten seeds.
+    let at_125 = |id: &str| -> (f64, f64, Vec<Vec<f64>>) {
+        let c = r["cells"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|c| c["cell"]["id"] == id)
+            .unwrap();
+        let seeds: Vec<Vec<f64>> = c["quantities"]["t30_s"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["freq_hz"] == 125)
+            .map(|row| {
+                row["seed_values"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_f64().unwrap())
+                    .collect()
+            })
+            .collect();
+        assert_eq!(seeds.len(), 6, "{id}");
+        let per_seed: Vec<f64> = (0..10)
+            .map(|i| seeds.iter().map(|s| s[i]).sum::<f64>() / 6.0)
+            .collect();
+        let mean = per_seed.iter().sum::<f64>() / 10.0;
+        let var = per_seed.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / 9.0;
+        (mean, (var / 10.0).sqrt(), seeds)
+    };
+    let (c_r6, c_r6_se, c_r6_seeds) = at_125("C-R6");
+    let (v4_r2, v4_r2_se, _) = at_125("V4-R2");
+    let (v4_e14, v4_e14_se, _) = at_125("V4-E14");
+    println!(
+        "125 Hz: C-R6 {c_r6:.4} ± {c_r6_se:.4}, V4-R2 {v4_r2:.4} ± {v4_r2_se:.4}, V4-E14 \
+         {v4_e14:.4} ± {v4_e14_se:.4}"
+    );
+    let above = c_r6 / v4_r2 - 1.0;
+    assert!((above - 0.026).abs() < 0.001, "{above}");
+    assert!(((c_r6 - v4_r2) / c_r6_se - 2.5).abs() < 0.1);
+    assert!((c_r6_se - 0.010).abs() < 0.0005, "{c_r6_se}");
+    assert!((v4_r2_se - 0.005).abs() < 0.0005, "{v4_r2_se}");
+    assert!((v4_e14 - 0.9545).abs() < 0.00005 && v4_e14_se < 0.0006);
+    let first = &c_r6_seeds[0];
+    let (lo, hi) = first
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(lo, hi), &x| (lo.min(x), hi.max(x)));
+    assert!(
+        (lo - 0.935).abs() < 0.001 && (hi - 1.188).abs() < 0.001,
+        "{lo} {hi}"
+    );
+    let cv: Vec<f64> = c_r6_seeds
+        .iter()
+        .map(|s| {
+            let m = s.iter().sum::<f64>() / 10.0;
+            (s.iter().map(|x| (x - m).powi(2)).sum::<f64>() / 9.0).sqrt() / m
+        })
+        .collect();
+    let (cv_lo, cv_hi) = cv
+        .iter()
+        .fold((f64::MAX, f64::MIN), |(lo, hi), &x| (lo.min(x), hi.max(x)));
+    assert!(
+        (0.04..0.05).contains(&cv_lo) && (0.07..0.08).contains(&cv_hi),
+        "{cv:?}"
+    );
+    // Says no: the cells agreeing within C-R6's error would have made "converged" defensible.
+    assert!(c_r6 - v4_r2 > 2.0 * c_r6_se);
 }

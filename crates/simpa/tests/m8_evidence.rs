@@ -4,8 +4,9 @@
 //!
 //! `cargo test --release -p simpa --test m8_evidence -- --ignored --nocapture <name>`
 //!
-//! The run folders go under `$SIMPA_EVIDENCE_ROOT` when it is set, else under cargo's test scratch
-//! space. `$SIMPA_EVIDENCE_JOBS` (default 8) is how many solver runs go at once: a seeded SPPS run
+//! The run folders go under `$SIMPA_EVIDENCE_ROOT` when it is set, and stay there; else under
+//! cargo's test scratch space, removed when the test passes (`support::scratch`, as every test
+//! folder is since the 2026-09-25 disk emergency). `$SIMPA_EVIDENCE_JOBS` (default 8) is how many solver runs go at once: a seeded SPPS run
 //! is single-threaded.
 //!
 //! - `arrival_outside_the_onset_bin_over_receiver_positions`: tutorial 1 at upstream's defaults,

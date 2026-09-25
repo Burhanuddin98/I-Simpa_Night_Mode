@@ -424,14 +424,19 @@ room: at tutorial 1's 150,000 particles T30 came out at 0.8 to 2.4 s, and was re
 number. What that is to be read against, each value with its source: **Sabine's formula** gives
 0.67 s (`V` 180 m³, `S` 216 m², α 0.2 on every face, `K` 0.161, no air), and Eyring's 0.60 s;
 neither is the room's time, since tutorial 1's walls are specular and its decay is not a diffuse
-field's. **SPPS's own T30, converged**, in that box with its materials and air, mean over six
-receivers of each one's mean over ten seeds (`docs/investigations/2026-09-25-noise-calibration/
-calibration.json`): 0.98 s at 125 Hz to 0.79 s at 4 kHz in cell C-R6 (random, 1.5 M particles, `dt`
-1 ms), 0.95 s to 0.78 s in V4-R2 (random, 6 M) and in V4-E14 (energetic, 1.2 M)
-(`params_noise_calibration.rs`, `tutorial_ones_t30_is_spps_converged_not_sabines`). The first
-version of this text called 0.67 s "the room's time"; it is Sabine's. `params::noise` estimates each value's Monte-Carlo standard
-deviation, calibrates it against SPPS's own seed-to-seed spread, and refuses the value when it is
-too large, or when the run lies outside what the calibration measured. Calibrated pre-M8 (Burhan,
+field's. **SPPS's own T30** in that box with its materials and air is about 1.0 s at low
+frequency. Mean over six receivers of each one's mean over ten seeds
+(`docs/investigations/2026-09-25-noise-calibration/calibration.json`): 0.98 s at 125 Hz to 0.79 s
+at 4 kHz in cell C-R6 (random, 1.5 M particles, `dt` 1 ms), 0.95 s to 0.78 s in V4-R2 (random,
+6 M, `dt` 10 ms) and in V4-E14 (energetic, 1.2 M, `dt` 10 ms) (`params_noise_calibration.rs`,
+`tutorial_ones_t30_is_spps_own_not_sabines`). None of the three is a converged value: at 125 Hz
+C-R6 lies 2.6 % above the other two, 2.5 of its own standard errors (0.98 ± 0.01 s; its ten seeds
+spread 4 to 8 % at each receiver, 0.93 to 1.19 s at the first), which leaves open whether the
+difference is noise or its 1 ms step; V4-R2 gives 0.955 ± 0.005 s and V4-E14 0.9545 ± 0.0005 s.
+The first version of this text called 0.67 s "the room's time"; it is Sabine's. `params::noise`
+estimates each value's Monte-Carlo standard deviation, calibrates it against SPPS's own
+seed-to-seed spread, and refuses the value when it is too large, or when the run lies outside what
+the calibration measured. Calibrated pre-M8 (Burhan,
 2026-09-24 17:45: "never below the observed noise", and a refusal names the particles it needs),
 in four pre-registered rounds; every number is in
 `docs/investigations/2026-09-25-noise-calibration/`.

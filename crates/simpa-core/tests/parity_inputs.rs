@@ -952,8 +952,8 @@ fn a_box_zone_flush_with_a_wall_lies_in_the_walls_plane() {
 // What the solvers make of the differences left
 //
 // Upstream's SPPS and TCR, our M1 builds (`$SIMPA_SOLVERS_DIR`, `common/paths.rs`), each run in
-// a fresh folder under `target/test-runs/config_xml/` (kept), once on upstream's inputs and once
-// with ours in their place, with the same seed. The outputs must be the same files, byte for
+// a fresh folder under `target/test-runs/config_xml/` (kept when the test fails), once on
+// upstream's inputs and once with ours in their place, with the same seed. The outputs must be the same files, byte for
 // byte, apart from the ids the differences carry.
 
 fn solver(kind: SolverKind) -> std::path::PathBuf {

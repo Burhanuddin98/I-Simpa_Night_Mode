@@ -36,13 +36,10 @@ fn put_u16(buf: &mut [u8], at: usize, value: u16) {
     buf[at..at + 2].copy_from_slice(&value.to_le_bytes());
 }
 
-/// A scratch directory under cargo's target tmp directory, one per test, reused across runs.
+/// A fresh scratch folder under `target/tmp/cbin_golden/`: removed when the test passes, kept
+/// when it fails (`common/scratch.rs`).
 fn scratch(name: &str) -> std::path::PathBuf {
-    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("cbin_golden")
-        .join(name);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    common::scratch::fresh("cbin_golden", name)
 }
 
 /// The eight vertices of io_test.cpp:24-31 and :96-103.

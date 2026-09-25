@@ -13,7 +13,9 @@
 //! - `--mesh <dir>` reuses a mesh, and refuses a stale one (`mesh_out_of_date`, M5(d1)) or one
 //!   whose re-mesh was cancelled (`mesh_missing`, M5(d2)) before any solver starts;
 //! - a cancel exits 130 with the solver killed mid-run, and `simpa` itself killed mid-run leaves
-//!   no solver running 2 s later (M6(f)).
+//!   no solver running 2 s later (M6(f));
+//! - a passing test leaves nothing in its scratch root, and a failing one keeps its folder and
+//!   names it (the disk emergency of 2026-09-25).
 
 mod support;
 
@@ -779,6 +781,116 @@ fn a_run_whose_preprocess_gives_up_records_the_warning() {
         serde_json::from_str(&std::fs::read_to_string(run_dir(&m).join("mesh/mesh.json")).unwrap())
             .unwrap();
     assert_eq!(mm["preprocess"]["outcome"], "corrected", "{mm:#}");
+}
+
+/// Every file and folder below the group folders of a scratch root (`<root>/<group>/...`), which
+/// is what the tests that used it left behind.
+fn left_below(root: &Path) -> Vec<PathBuf> {
+    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            out.push(p.clone());
+            if p.is_dir() {
+                walk(&p, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for group in std::fs::read_dir(root).unwrap() {
+        walk(&group.unwrap().path(), &mut out);
+    }
+    out
+}
+
+/// The disk emergency of 2026-09-25: no test removed its scratch folders, and 368,032 files,
+/// about 47 GB of B:'s exFAT clusters, had piled up under `target/tmp` and `target/test-runs`.
+/// A test's folders now go when it passes and stay, named in its output, when it fails
+/// (`crates/simpa-core/tests/common/scratch.rs`). Checked on a representative CLI test, the one
+/// above (a project meshed through `preprocess.exe` and TetGen, two TCR runs and their run
+/// folders), run again by itself in a child process with its scratch root moved into a folder of
+/// this test's (removed with it), so that nothing else running changes the count:
+/// - passing: the root holds as many entries after the run as before, none, its group folder
+///   `cli/` aside (which shows the child's folder went there);
+/// - says no, the cleanup switched off (`$SIMPA_KEEP_SCRATCH=1`, the fault in the code): the
+///   count rises by the run's files, so the count sees a folder left behind;
+/// - failing (`$SIMPA_SOLVERS_DIR` at an empty folder, the fault in the input: the test's second
+///   half finds no `preprocess.exe`): the child fails, its folder is kept with its run folders,
+///   and its output names it.
+#[test]
+fn a_passing_test_leaves_no_scratch_behind_and_a_failing_one_keeps_its_folder() {
+    const CHILD: &str = "a_run_whose_preprocess_gives_up_records_the_warning";
+    let outer = scratch("scratch-count");
+    let no_solvers = outer.join("no-solvers");
+    std::fs::create_dir(&no_solvers).unwrap();
+    let child = |arm: &str, env: &[(&str, &std::ffi::OsStr)]| {
+        // Short, beside the group folders: the run folders nest deep, and a longer root takes
+        // the solvers' output paths past MAX_PATH (`output_path_too_long`).
+        let root = scratch_files::root().join(format!("sc-{}-{arm}", std::process::id()));
+        scratch_files::own(&root);
+        std::fs::create_dir(&root).unwrap();
+        let before = left_below(&root).len();
+        let mut cmd = std::process::Command::new(std::env::current_exe().unwrap());
+        cmd.args([CHILD, "--exact", "--test-threads=1"])
+            .env(scratch_files::ROOT_ENV, &root)
+            .env_remove(scratch_files::KEEP_ENV);
+        for (k, v) in env {
+            cmd.env(k, v);
+        }
+        let out = cmd.output().unwrap();
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let after = left_below(&root);
+        println!(
+            "{arm}: exit {:?}; entries below {} before {before}, after {}",
+            out.status.code(),
+            root.display(),
+            after.len()
+        );
+        (out.status.success(), text, root, before, after)
+    };
+    let is_run_json = |p: &PathBuf| p.file_name().is_some_and(|n| n == "run.json");
+
+    let (passed, text, root, before, after) = child("pass", &[]);
+    assert!(passed && text.contains("1 passed"), "{text}");
+    assert!(
+        root.join("cli").is_dir(),
+        "the child's scratch root was not {}",
+        root.display()
+    );
+    assert_eq!((before, after), (0, Vec::new()), "{text}");
+
+    let (passed, text, _, before, after) =
+        child("keep", &[(scratch_files::KEEP_ENV, "1".as_ref())]);
+    assert!(passed && text.contains("1 passed"), "{text}");
+    assert_eq!(before, 0);
+    assert!(after.iter().any(is_run_json), "{after:#?}");
+
+    let (passed, text, root, before, after) =
+        child("fail", &[("SIMPA_SOLVERS_DIR", no_solvers.as_os_str())]);
+    assert!(
+        !passed && text.contains("preprocess.exe is missing"),
+        "{text}"
+    );
+    let kept: Vec<PathBuf> = text
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix(scratch_files::KEPT))
+        .map(|p| PathBuf::from(p.trim()))
+        .collect();
+    assert_eq!(kept.len(), 1, "{text}");
+    assert!(kept[0].starts_with(root.join("cli")), "{kept:?}");
+    assert_eq!(before, 0);
+    assert!(after.contains(&kept[0]), "{after:#?}");
+    assert!(
+        after
+            .iter()
+            .filter(|p| p.starts_with(&kept[0]))
+            .any(is_run_json),
+        "{after:#?}"
+    );
+    assert!(after.iter().all(|p| p.starts_with(&kept[0])), "{after:#?}");
 }
 
 fn strings_of(v: &Value) -> Vec<String> {

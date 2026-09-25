@@ -2180,7 +2180,7 @@
                     "type": "null"
                   }
                 ],
-                "description": "The diffuse transport's free paths in the room: the mean free path, `γ²`, their\nstandard errors, `4V/S`, and the transport's settings. `null` when the transport\nrefused, every band's `kuttruff_s` then carrying its refusal; and when no computed band\nhas Lambert walls, so that it was not run, every `kuttruff_s` then refused\n`params_reference_not_applicable`."
+                "description": "The diffuse transport's free paths in the room: the mean free path, `γ²`, their\nstandard errors, `4V/S`, and the transport's settings. `null` when the transport\nrefused, every band with Lambert walls then carrying that refusal in `kuttruff_s`\n(the others refused `params_reference_not_applicable`, as always); and when no computed\nband has Lambert walls, so that it was not run, every `kuttruff_s` then refused\n`params_reference_not_applicable`."
               },
               "label": {
                 "description": "Always [`crate::results::reference::REFERENCE_LABEL`].",

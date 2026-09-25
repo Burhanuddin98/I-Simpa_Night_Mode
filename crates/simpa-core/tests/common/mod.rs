@@ -1,5 +1,6 @@
 //! Shared helpers for the format tests. [`paths`] finds the solver build, the upstream sources
-//! and the oracle for every test target.
+//! and the oracle for every test target; [`scratch`] gives each test folders that are removed
+//! when it passes and kept when it fails.
 //!
 //! Fuzz tests install [`Tracking`] as the global allocator of their own test binary and measure
 //! the peak between [`reset_peak`] and [`peak_since_reset`]. The counters are per thread, so the
@@ -80,6 +81,7 @@ pub fn budget(len: usize) -> usize {
 }
 
 pub mod paths;
+pub mod scratch;
 
 /// Path of a file under `tests/fixtures/`.
 pub use paths::fixture;

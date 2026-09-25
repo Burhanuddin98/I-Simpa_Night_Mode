@@ -244,8 +244,8 @@ fn unsupported_versions() {
         csbin::read(&4i32.to_le_bytes()),
         Err(FormatError::Version { .. })
     ));
-    // Through a file too; overwritten on every run, never deleted.
-    let p = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("csbin_golden_version2.csbin");
+    // Through a file too, in a folder removed when the test passes (`common/scratch.rs`).
+    let p = common::scratch::fresh("csbin_golden", "version2").join("csbin_golden_version2.csbin");
     let mut m = b.clone();
     put_i32(&mut m, 0, 2);
     std::fs::write(&p, &m).unwrap();

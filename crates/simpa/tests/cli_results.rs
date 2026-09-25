@@ -729,7 +729,10 @@ fn a_cancelled_run_is_refused_with_exit_5() {
     // fixture's 2,000 particles SPPS could finish before a 1 ms timer thread ran, with other SPPS
     // runs of the same test binary alongside, and the run came back OK (exit 0; the pre-M8
     // piece B verifier, round 1). A timer 150 ms in on 1,000,000 particles only made that
-    // unlikely.
+    // unlikely. Measured by making the cancel late on purpose
+    // (`docs/investigations/2026-09-25-cancel-race/`): at 2,000 particles SPPS runs 0.2 s and a
+    // cancel 0.3 s late gives exit 0, the verifier's failure; here SPPS runs 6.0 s and is stopped
+    // 0.13 s in, so the cancel would have to be 5.9 s late to miss.
     let mut p = schema::load(&fixture(SEATS)).unwrap();
     p.solvers.spps.particles_per_source = 1_000_000;
     let project = root.join("seats_long.simpa");

@@ -399,8 +399,7 @@ fn validate_rejects_what_the_solver_cannot_index() {
     assert!(mutate(&|m| m.tetrahedra[2].faces[3].marker = 12345).is_ok());
 
     // write_file refuses an invalid mesh and writes nothing.
-    let dir = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("mbin_golden");
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = common::scratch::fresh("mbin_golden", "write");
     let path = dir.join("bad.mbin");
     let mut bad = good.clone();
     bad.tetrahedra[0].vertices[1] = bad.tetrahedra[0].vertices[0];

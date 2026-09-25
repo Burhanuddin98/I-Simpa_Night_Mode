@@ -6,8 +6,9 @@
 //!
 //! - `noise_calibration_runs`: every cell of [`CELLS`] (or those `$SIMPA_NOISE_CELLS` names,
 //!   comma-separated ids) over SPPS seeds 1 to 10, each run's `simpa results --json` kept as
-//!   `report.json` beside its project. The runs go under `$SIMPA_EVIDENCE_ROOT` (else cargo's test
-//!   scratch space); `$SIMPA_EVIDENCE_JOBS` (default 8) runs go at once.
+//!   `report.json` beside its project. The runs go under `$SIMPA_EVIDENCE_ROOT`, and stay there
+//!   for the next test to read; without it, under cargo's test scratch space, removed when the
+//!   test passes (`support::scratch`). `$SIMPA_EVIDENCE_JOBS` (default 8) runs go at once.
 //! - `noise_calibration`: reads those reports (`$SIMPA_NOISE_FROM`, the folders the first test
 //!   wrote, `;`-separated) and measures, per cell, quantity and receiver-band, the spread of the
 //!   values over the seeds against the model's standard deviation; applies the pre-registered
@@ -726,7 +727,8 @@ fn jobs() -> usize {
         .unwrap_or(8)
 }
 
-/// Where the runs go: `$SIMPA_EVIDENCE_ROOT/<label>-<stamp>`, else cargo's test scratch space.
+/// Where the runs go: `$SIMPA_EVIDENCE_ROOT/<label>-<stamp>`, kept; else cargo's test scratch
+/// space, removed when the test passes.
 fn evidence_root(label: &str) -> PathBuf {
     match std::env::var_os("SIMPA_EVIDENCE_ROOT") {
         Some(d) if !d.is_empty() => {

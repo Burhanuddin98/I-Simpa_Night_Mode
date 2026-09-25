@@ -692,8 +692,9 @@ pub enum ReferenceReport {
         constant_s_per_m: f64,
         /// The diffuse transport's free paths in the room: the mean free path, `γ²`, their
         /// standard errors, `4V/S`, and the transport's settings. `null` when the transport
-        /// refused, every band's `kuttruff_s` then carrying its refusal; and when no computed band
-        /// has Lambert walls, so that it was not run, every `kuttruff_s` then refused
+        /// refused, every band with Lambert walls then carrying that refusal in `kuttruff_s`
+        /// (the others refused `params_reference_not_applicable`, as always); and when no computed
+        /// band has Lambert walls, so that it was not run, every `kuttruff_s` then refused
         /// `params_reference_not_applicable`.
         free_paths: Option<FreePaths>,
         bands: Vec<ReferenceBandReport>,

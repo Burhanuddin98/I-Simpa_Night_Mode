@@ -8,7 +8,9 @@
 #     and meshed by `simpa`, against the files original I-Simpa wrote into each .proj, and SPPS and
 #     TCR run with one seed on our inputs and on the original inputs, every output compared.
 #     tutorial_1, tutorial_2, tutorial_3, tutorial_3_same_seed_runs,
-#     tutorial_3_each_region_check_says_no_alone and the_comparisons_say_no must pass, and the four
+#     tutorial_3_each_region_check_says_no_alone,
+#     tutorial_3_from_tetgen_mesh_folder_runs_as_its_source_does (run --mesh on a --from-tetgen
+#     folder, with its say-NO) and the_comparisons_say_no must pass, and the four
 #     tests the plain suite ignores ((4) and (5)) must say so. tutorial_3 is end to end
 #     (decision 12): import-proj, then `simpa mesh --parity` through preprocess.exe, our geometry
 #     check, TetGen 1.5.0 and our builder, whose .poly, .1.* and .mbin must be upstream's byte for
@@ -189,7 +191,7 @@ Check "(1) says NO: upstream's TetGen 1.6.0 build is not the manifest's tetgen.e
 
 # --- (2) the bed -------------------------------------------------------------------------------------
 $script:bed = CargoTest 'cargo test -p simpa --test parity_tutorials --no-fail-fast -- --nocapture --test-threads=1' 'bed' @{ SIMPA_TETGEN160 = $Tetgen160 }
-foreach ($t in @('tutorial_1', 'tutorial_2', 'tutorial_3', 'tutorial_3_same_seed_runs', 'tutorial_3_each_region_check_says_no_alone', 'the_comparisons_say_no')) {
+foreach ($t in @('tutorial_1', 'tutorial_2', 'tutorial_3', 'tutorial_3_same_seed_runs', 'tutorial_3_each_region_check_says_no_alone', 'tutorial_3_from_tetgen_mesh_folder_runs_as_its_source_does', 'the_comparisons_say_no')) {
     Check "(2) bed: $t" {
         $r = $script:bed.Results[$t]
         Write-Host "      $t ... $r"

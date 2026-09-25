@@ -17,10 +17,15 @@ use simpa_core::mesh::{MeshManifest, MeshStatus, Mesher, TetgenMesher, codes, me
 use simpa_core::process::{CancelToken, Line, Outcome};
 use support::{invariants, load_room, process_running, scratch, tetgen_exe};
 
+/// The hall's mesh, and what the tests read of its folder, held in memory: the folder is the
+/// scratch folder of the test that meshed it, removed when that test passes
+/// (`common/scratch.rs`), while the other test may still be reading.
 struct Reference {
-    dir: PathBuf,
     manifest: MeshManifest,
     wall_ms: f64,
+    /// `scene_mesh.1.face` and `tetramesh.mbin`, as read right after the mesh, or why not.
+    face: Result<TetgenFile, String>,
+    mesh: Result<mbin::Mesh, String>,
 }
 
 /// The hall, meshed once, uncancelled: the reference the cancel test compares with.
@@ -38,10 +43,12 @@ fn hall() -> &'static Reference {
             &mut |_: &Line| {},
         )
         .unwrap();
+        let wall_ms = t0.elapsed().as_secs_f64() * 1e3;
         Reference {
-            dir,
             manifest,
-            wall_ms: t0.elapsed().as_secs_f64() * 1e3,
+            wall_ms,
+            face: tetgen::read_file(&dir.join("scene_mesh.1.face")).map_err(|e| e.to_string()),
+            mesh: mbin::read_file(&dir.join("tetramesh.mbin")).map_err(|e| e.to_string()),
         }
     })
 }
@@ -54,8 +61,7 @@ fn the_corrected_hall_meshes() {
     let call = m.tetgen.as_ref().unwrap();
     assert_eq!(call.argv, ["-pq2", "-A", "-n", "scene_mesh.poly"]);
 
-    let TetgenFile::Face(face) = tetgen::read_file(&r.dir.join("scene_mesh.1.face")).unwrap()
-    else {
+    let TetgenFile::Face(face) = r.face.as_ref().unwrap() else {
         panic!("not a .face")
     };
     let markers = face.markers.as_ref().expect(".face has markers");
@@ -63,8 +69,8 @@ fn the_corrected_hall_meshes() {
     let covered: BTreeSet<i32> = markers.iter().copied().collect();
     assert_eq!(covered, (0..7860).collect::<BTreeSet<i32>>());
 
-    let mesh = mbin::read_file(&r.dir.join("tetramesh.mbin")).unwrap();
-    assert_eq!(invariants(&mesh), Vec::<String>::new());
+    let mesh = r.mesh.as_ref().unwrap();
+    assert_eq!(invariants(mesh), Vec::<String>::new());
     // One region, TetGen's attribute 1, written unchanged (decision 1).
     assert!(mesh.tetrahedra.iter().all(|t| t.id_volume == 1));
     let in_mbin: BTreeSet<i32> = mesh
@@ -78,7 +84,7 @@ fn the_corrected_hall_meshes() {
     let volume: f64 = mesh
         .tetrahedra
         .iter()
-        .map(|t| support::orient(&mesh, t).abs() / 6.0)
+        .map(|t| support::orient(mesh, t).abs() / 6.0)
         .sum();
     println!(
         "hall -pq2 -A -n: {} nodes, {} tetrahedra, {} .face rows, volume {volume:.3} m³; TetGen \

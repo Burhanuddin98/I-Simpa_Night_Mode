@@ -2,8 +2,10 @@
 //!
 //! **The defect** (M7 review, 2026-09-24). A random-mode series that SPPS's statistics show to be
 //! complete has no tail to bound, and nothing else bounded its noise: on tutorial 1 at 150,000
-//! particles T30 came out anywhere from 0.8 to 2.4 s where the room's time is 0.67 s, and was
-//! reported as a number.
+//! particles T30 came out anywhere from 0.8 to 2.4 s, and was reported as a number. What that is
+//! to be read against (`docs/params.md`, "Monte-Carlo noise"): Sabine's 0.67 s, Eyring's 0.60 s,
+//! and SPPS's own T30 in that specular box, about 1.0 s at 125 Hz and 0.8 s at 4 kHz. An earlier
+//! version of this note called 0.67 s "the room's time"; it is Sabine's.
 //!
 //! **The model the tests are held to**: what SPPS does at a receiver in random mode. An exponential
 //! decay with `T = 0.67 s` (tutorial 1's 1 kHz Sabine time) and a direct sound, in 10 ms bins from

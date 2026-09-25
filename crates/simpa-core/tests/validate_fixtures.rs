@@ -17,7 +17,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use simpa_core::schema::{
     self, AirAbsorption, AttenuationUnit, DiffusionLaw, Directivity, F64, FittingShape,
@@ -32,6 +31,9 @@ use simpa_core::validate::{
 #[allow(dead_code)]
 #[path = "common/paths.rs"]
 mod paths;
+#[allow(dead_code)]
+#[path = "common/scratch.rs"]
+mod scratch;
 
 fn repo(rel: &str) -> PathBuf {
     paths::repo_file(rel)
@@ -696,21 +698,11 @@ fn a_fitting_zones_solver_id_is_part_of_the_mesh_stamp() {
 // ---------------------------------------------------------------------------------------------
 // Export fixtures
 
-static RUN: AtomicUsize = AtomicUsize::new(0);
-
-/// A fresh run folder under cargo's test scratch space, holding the baseline meshes and
-/// `config` as `config.xml` with its placeholders filled in. Nothing is removed afterwards:
-/// `target/` is build output.
+/// A fresh run folder under `target/tmp/validate-export/`, holding the baseline meshes and
+/// `config` as `config.xml` with its placeholders filled in: removed when the test passes, kept
+/// when it fails (`common/scratch.rs`).
 fn run_folder(label: &str, config: &str) -> PathBuf {
-    let n = RUN.fetch_add(1, Ordering::SeqCst);
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join("validate-export")
-        .join(format!("{label}-{}-{n}-{stamp}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = scratch::fresh("validate-export", label);
     for name in ["mesh.cbin", "tetramesh.mbin"] {
         std::fs::copy(export_dir().join("baseline").join(name), dir.join(name)).unwrap();
     }

@@ -1754,6 +1754,15 @@ pub fn find_basename(dir: &Path) -> Result<String, FindBasename> {
 /// `<base>.poly` beside the output, or, when there is none, of the project's own `.poly` as
 /// [`mesh_project`] writes it without upstream's scene correction; a geometry the check refuses
 /// is `geometry_refused`.
+///
+/// When `out_dir` is another folder than `tetgen_dir`, the `.poly` the regions were held to is
+/// written into it as `scene_mesh.poly` (`<base>.poly`'s own bytes, or the project's `.poly`),
+/// its sha256 in `files.poly`, after a stale `scene_mesh.poly` there is deleted with the three
+/// others: `run --mesh` holds a reused folder's regions to the `.poly` in it, taking no
+/// `mesh.json` as proof, and without it fell back to the `.cbin`, which a room whose raw scene
+/// the geometry check refuses (tutorial 3's box standing on the floor) gives no cells (the
+/// review of piece C). In `tetgen_dir` itself nothing is written: the `.poly` is already there,
+/// or the project's stood in for it.
 pub fn mesh_from_tetgen(
     project: &Project,
     tetgen_dir: &Path,
@@ -1765,7 +1774,26 @@ pub fn mesh_from_tetgen(
     let mut m = new_manifest(MeshSource::External);
     m.input_path = Some(tetgen_dir.display().to_string());
     m.mesh_input_hash = Some(crate::validate::mesh_input_hash(project));
-    for name in [names::SCENE_MESH, names::TETRA_MESH, MANIFEST_FILE] {
+    // Another folder than the TetGen output's: it receives the checked .poly. A path that does
+    // not resolve is read as the same folder, so nothing beside TetGen's files is overwritten.
+    let separate = match (
+        std::fs::canonicalize(tetgen_dir),
+        std::fs::canonicalize(out_dir),
+    ) {
+        (Ok(a), Ok(b)) => a != b,
+        _ => false,
+    };
+    let stale: &[&str] = if separate {
+        &[
+            names::SCENE_MESH,
+            names::TETRA_MESH,
+            MANIFEST_FILE,
+            POLY_FILE,
+        ]
+    } else {
+        &[names::SCENE_MESH, names::TETRA_MESH, MANIFEST_FILE]
+    };
+    for &name in stale {
         let path = out_dir.join(name);
         match std::fs::remove_file(&path) {
             Ok(()) => {}
@@ -1837,9 +1865,13 @@ pub fn mesh_from_tetgen(
     // correction, which must then pass the geometry check itself. No region check is skipped.
     let poly_path = tetgen_dir.join(format!("{base}.poly"));
     let reference = if poly_path.is_file() {
-        poly::read_file(&poly_path)
-            .map(|model| (model, "external", poly_path.display().to_string()))
+        std::fs::read(&poly_path)
             .map_err(|e| format!("{}: {e}", poly_path.display()))
+            .and_then(|bytes| {
+                poly::read(&bytes)
+                    .map(|model| (model, bytes, "external", poly_path.display().to_string()))
+                    .map_err(|e| format!("{}: {e}", poly_path.display()))
+            })
     } else {
         m.messages.push(format!(
             "{} is not there: the regions are held to the cells of the project's own .poly, as \
@@ -1849,7 +1881,15 @@ pub fn mesh_from_tetgen(
         let mut plain = project.clone();
         plain.solvers.meshing.preprocess = false;
         project_input(&plain)
-            .map(|i| (i.poly, "project", "the project's own .poly".to_string()))
+            .map(|i| {
+                let bytes = poly::write(&i.poly);
+                (
+                    i.poly,
+                    bytes,
+                    "project",
+                    "the project's own .poly".to_string(),
+                )
+            })
             .map_err(|e| {
                 format!(
                     "the project's own .poly, standing in for {base}.poly: {}",
@@ -1858,7 +1898,13 @@ pub fn mesh_from_tetgen(
             })
     };
     let checked = match reference {
-        Ok((model, checked_as, what)) => {
+        Ok((model, bytes, checked_as, what)) => {
+            if separate {
+                match write_file(out_dir, POLY_FILE, &bytes) {
+                    Ok(sha) => m.files.poly = Some(sha),
+                    Err(e) => fail(&mut m, codes::INPUT_WRITE_FAILED, e),
+                }
+            }
             let (report, gate) = check_poly(&model, checked_as);
             m.geometry = Some(gate);
             if !report.is_ok() {

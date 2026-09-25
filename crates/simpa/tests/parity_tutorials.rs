@@ -87,7 +87,8 @@ use support::{json, simpa_run, solver_exe};
 
 /// A new folder under `<repo>/target/parity-bed/`, short enough that the deepest solver output
 /// stays well under Windows' 260-character path limit (a longer path is skipped by the solvers
-/// with exit 0 and no message, `config_xml_solver.rs`). Never reused, never deleted.
+/// with exit 0 and no message, `config_xml_solver.rs`). Never reused: removed when the test
+/// passes, kept (and named in its output) when it fails (`support::scratch_files`).
 fn bed_dir(label: &str) -> PathBuf {
     static N: AtomicUsize = AtomicUsize::new(0);
     let dir = support::paths::repo_root()
@@ -97,6 +98,7 @@ fn bed_dir(label: &str) -> PathBuf {
             std::process::id(),
             N.fetch_add(1, Ordering::SeqCst)
         ));
+    support::scratch_files::own(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let deepest = dir.as_os_str().len()
         + "/Punctual receivers/Receiver 1/Punctual receiver intensity.gabe".len();
@@ -2862,6 +2864,91 @@ fn shipped_solvers_on_tutorial_3_parity_mesh() {
     print_report(
         "tutorial 3, upstream's shipped SPPS on the parity mesh",
         &report,
+    );
+}
+
+/// `simpa run --mesh` on a folder `simpa mesh --from-tetgen` built from a mesh folder it runs
+/// (the review of piece C): tutorial 3, imported with Receiver 1 moved 1 mm off the wall (the
+/// validator refuses it on the wall), meshed by `simpa mesh` into A, and A's TetGen output built
+/// again by `--from-tetgen` into B. B's `.mbin` is A's byte for byte, and B now holds the `.poly`
+/// its regions were held to, A's own, so `run --mesh` holds B's regions to the same cells as A's
+/// and runs both (TCR). Says no: B as it was written before, without that `.poly`, is refused
+/// before launch with `regions_unchecked`, since the fallback, the run's `.cbin`, has the box
+/// standing on the floor, which the geometry check refuses, and `run --mesh` takes no `mesh.json`
+/// as proof that the regions were checked.
+#[test]
+fn tutorial_3_from_tetgen_mesh_folder_runs_as_its_source_does() {
+    let dir = bed_dir("t3fromtg");
+    let (imported, _) = import_proj_json(parity::TUTORIAL3, &dir);
+    let mut p = simpa_core::schema::load(&imported).unwrap();
+    assert_eq!(f64::from(p.point_receivers[0].position.x), 0.0);
+    p.point_receivers[0].position.x = simpa_core::schema::F64::from(0.001);
+    let project = dir.join("receiver-moved.simpa");
+    simpa_core::schema::save(&p, &project).unwrap();
+
+    let a = dir.join("mesh");
+    let (code, ma) = mesh_with(&project, &a, &[]);
+    assert_eq!((code, ma["status"].as_str()), (0, Some("OK")), "{ma:#}");
+    let b = dir.join("from-tetgen");
+    let a_arg = a.display().to_string();
+    let (code, mb) = mesh_with(&project, &b, &["--from-tetgen", &a_arg]);
+    assert_eq!((code, mb["status"].as_str()), (0, Some("OK")), "{mb:#}");
+    assert_eq!(mb["geometry"]["checked"], "external", "{mb:#}");
+    assert_eq!(
+        std::fs::read(b.join("tetramesh.mbin")).unwrap(),
+        std::fs::read(a.join("tetramesh.mbin")).unwrap()
+    );
+    let poly = std::fs::read(b.join("scene_mesh.poly")).unwrap();
+    assert_eq!(poly, std::fs::read(a.join("scene_mesh.poly")).unwrap());
+    assert_eq!(
+        mb["files"]["poly"].as_str(),
+        Some(simpa_core::mesh::sha256_hex(&poly).as_str())
+    );
+
+    let runs = dir.join("runs");
+    let run_mesh = |mesh_dir: &Path| {
+        let o = simpa_run(&[
+            "run".to_string(),
+            project.display().to_string(),
+            "--solver".into(),
+            "tcr".into(),
+            "--mesh".into(),
+            mesh_dir.display().to_string(),
+            "--runs".into(),
+            runs.display().to_string(),
+            "--json".into(),
+        ]);
+        let m = json(&o);
+        (o.code, m)
+    };
+    for (label, mesh_dir) in [("simpa mesh", &a), ("simpa mesh --from-tetgen", &b)] {
+        let (code, m) = run_mesh(mesh_dir);
+        assert_eq!(
+            (code, m["stage"].as_str(), m["verdict"]["status"].as_str()),
+            (0, Some("solve"), Some("OK")),
+            "{label}: {m:#}"
+        );
+    }
+
+    // Says no: B without its .poly, as mesh --from-tetgen wrote it before.
+    let bare = dir.join("from-tetgen-no-poly");
+    std::fs::create_dir_all(&bare).unwrap();
+    for f in ["mesh.json", "tetramesh.mbin", "mesh.cbin"] {
+        std::fs::copy(b.join(f), bare.join(f)).unwrap();
+    }
+    let (code, m) = run_mesh(&bare);
+    assert_eq!(
+        (code, m["stage"].as_str(), support::codes(&m)),
+        (
+            5,
+            Some("pre_launch"),
+            vec!["mesh_invalid".to_string(), "regions_unchecked".to_string()]
+        ),
+        "{m:#}"
+    );
+    assert!(
+        !support::run_dir(&m).join("solver.stdout.txt").exists(),
+        "the solver was launched: {m:#}"
     );
 }
 

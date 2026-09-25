@@ -12,7 +12,6 @@
 mod common;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde_json::Value;
 use simpa_core::formats::gabe::{self, ColumnData, Gabe};
@@ -41,17 +40,10 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// A fresh copy of a fixture run folder.
+/// A fresh copy of a fixture run folder under `target/tmp/results-load/`: removed when the test
+/// passes, kept when it fails (`common/scratch.rs`).
 fn copy_of(name: &str, label: &str) -> PathBuf {
-    static N: AtomicUsize = AtomicUsize::new(0);
-    let to = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "results-load/{label}-{}-{}",
-        std::process::id(),
-        N.fetch_add(1, Ordering::SeqCst)
-    ));
-    if to.exists() {
-        panic!("{} exists", to.display());
-    }
+    let to = common::scratch::fresh("results-load", label);
     copy_dir(&common::fixture(name), &to);
     to
 }

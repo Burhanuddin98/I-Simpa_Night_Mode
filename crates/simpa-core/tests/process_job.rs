@@ -10,7 +10,7 @@
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
@@ -26,13 +26,14 @@ use windows_sys::Win32::System::Threading::{
 /// Set in the environment of the re-run test binary that plays the parent process.
 const HELPER_ENV: &str = "SIMPA_PROCESS_JOB_HELPER";
 
-/// A fresh working folder per test, under cargo's scratch folder.
+#[allow(dead_code)]
+#[path = "common/scratch.rs"]
+mod scratch;
+
+/// A fresh working folder per test under `target/tmp/process_job/`, removed when the test passes
+/// and kept when it fails (`common/scratch.rs`).
 fn work_dir(name: &str) -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("process_job")
-        .join(name);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+    scratch::fresh("process_job", name)
 }
 
 fn spec(program: &str, args: &[&str], cwd: PathBuf) -> Spec {
@@ -412,6 +413,8 @@ fn helper_parent_process() {
 #[test]
 fn killing_the_parent_kills_the_tree() {
     let exe = std::env::current_exe().unwrap();
+    // The helper is killed, so it removes nothing: its folder goes inside this test's own.
+    let helper_root = work_dir("parent_killed_root");
     let mut parent = Command::new(exe)
         .args([
             "helper_parent_process",
@@ -421,6 +424,7 @@ fn killing_the_parent_kills_the_tree() {
             "--test-threads=1",
         ])
         .env(HELPER_ENV, "1")
+        .env(scratch::ROOT_ENV, &helper_root)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())

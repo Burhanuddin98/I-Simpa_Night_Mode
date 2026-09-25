@@ -79,13 +79,9 @@ fn run_and_copy() -> (SppsResults, PathBuf, String) {
     let SolverResults::Spps(s) = r.data else {
         panic!("an SPPS run")
     };
-    // One folder per call: the tests run beside each other in one process.
-    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-    let to = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "noise-inputs-{}-{}",
-        std::process::id(),
-        N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-    ));
+    // One folder per call: the tests run beside each other in one process. Removed when the test
+    // passes, kept when it fails (`common/scratch.rs`).
+    let to = common::scratch::fresh("noise-inputs", "solve");
     copy_dir(&run.join("solve"), &to);
     let config = std::fs::read_to_string(to.join("config.xml")).unwrap();
     (s, to, config)
