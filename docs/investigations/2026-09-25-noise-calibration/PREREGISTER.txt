@@ -98,3 +98,34 @@ one run inherits that scatter. So, fixed now, on the calibration cells only:
     seeds refused for noise at the lower count whose named count is at most the higher count, the
     share whose value the higher count's seeds give (each seed at the higher count judged on its
     own) is reported per method and quantity. Target: at least 80 %; reported, not tuned.
+
+ROUND 2, 2026-09-25 06:21, after the validation of round 1 and BEFORE any round-2 cell is run.
+
+Round 1's validation (validation-round1.txt): every random-mode validation cell passes every
+quantity (pooled ratio of the seeds' spread to the calibrated prediction 0.61 to 0.92). Energetic
+mode passes five cells of six; V-E6 (20x4x3 m, floor 0.6, the rest 0.05, specular, 300,000
+particles) FAILS for T20 (1.514, lower bound 1.423) and T30 (1.902, lower bound 1.787): there the
+calibrated model claims 1.5 and 1.9 times less noise than the seeds show. The failure stands:
+round 1's energetic T20 and T30 factors (0.26, 0.15) are not shipped, and they are not re-fitted
+on V-E6.
+
+Round 2 re-calibrates energetic T20 and T30 alone, and validates on cells no factor has seen:
+R2-1. Calibration: all 13 energetic cells of round 1 (C-E1..C-E7 and V-E1..V-E6), rule 2 as
+      before: T20 0.43 and T30 0.31 (upper bounds 0.4209 and 0.3051, both set by V-E6). Margins
+      by rule 5b over the same 13 cells. The other energetic factors and every random-mode factor
+      stay as round 1 set them.
+R2-2. Validation cells (W-), energetic, octave bands 125 Hz to 4 kHz, 6 receivers, seeds 1 to 10,
+      trans_epsilon 7, chosen for being at least as adverse as V-E6 in what drove it (absorption
+      on one surface, specular walls, long free paths along one axis) or near it:
+       W-E1 30x4x3  dead floor (0.6; 0.05 elsewhere), specular  300k 3 s dt 10 ms
+       W-E2 20x4x3  dead ceiling (0.6; 0.05 elsewhere), specular 300k 3 s dt 10 ms
+       W-E3 20x8x6  dead floor, specular                        300k 3 s dt 10 ms
+       W-E4 20x4x3  dead floor, every surface scattering 0.3    300k 3 s dt 10 ms
+       W-E5 10x10x10 dead floor, specular                       300k 4 s dt 10 ms
+       W-E6 20x4x3  dead floor, specular                        600k 3 s dt 1 ms
+R2-3. Rule 3 on every W- cell for all eight quantities, with the factors as shipped after R2-1.
+R2-4. Any energetic quantity that fails any W- cell ships with factor 1: M7's structure
+      uncalibrated, which in energetic mode bounds each deposit by a particle's start energy (the
+      seeds' spread was 0.03 to 0.84 of it in every energetic cell of round 1). Reported, not
+      re-fitted.
+R2-5. The report states which quantities rest on which round.
