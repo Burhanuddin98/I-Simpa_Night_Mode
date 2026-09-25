@@ -77,10 +77,13 @@ pub mod limits {
 /// The model's calibration against SPPS's own seed-to-seed spread
 /// (`docs/investigations/2026-09-25-noise-calibration/`): per computation method, the factor each
 /// quantity's bootstrap standard deviation is multiplied by, in [`QUANTITY_NAMES`]' order (SPL,
-/// EDT, T20, T30, C50, C80, D50, Ts). Each is the largest one-sided 95 % upper bound, over the
-/// seven calibration cells of its method (ten seeds each), of the ratio of the seeds' spread to
-/// the model, rounded up to two digits; the pre-registered rule, which the suite re-derives from
-/// the committed receipt (`tests/params_noise_calibration.rs`).
+/// EDT, T20, T30, C50, C80, D50, Ts). Each is the largest one-sided 95 % upper bound, over its
+/// calibration cells (ten seeds each), of the ratio of the seeds' spread to the model, rounded up
+/// to two digits; the pre-registered rule, which the suite re-derives from the committed receipt
+/// (`tests/params_noise_calibration.rs`). Round 1 calibrated on seven cells per method and
+/// validated on six more; its energetic T20 and T30 failed that validation in a 20 m corridor
+/// whose absorption is on its floor, and round 2 re-calibrated those two on all thirteen energetic
+/// cells, validated on six new rooms (`PREREGISTER.txt`, "ROUND 2").
 pub mod calibration {
     use super::Method;
 
@@ -90,10 +93,10 @@ pub mod calibration {
     /// Ts), tutorial 1's materials (T30 at 150,000 particles, C50) and the Lambert box (D50).
     pub const RANDOM: [f64; 8] = [1.3, 1.4, 1.4, 1.6, 1.2, 1.2, 1.2, 1.4];
     /// Energetic mode: the model bounds each deposit by a particle's start energy, and SPPS's
-    /// spread is 0.03 to 0.84 times it; set by the dead-floor cell (SPL, EDT, T20, T30), whose
-    /// particles' energies spread apart the most, and the Lambert box at 600,000 particles (C50,
-    /// C80, D50, Ts).
-    pub const ENERGETIC: [f64; 8] = [0.91, 0.59, 0.26, 0.15, 0.85, 0.78, 0.85, 0.62];
+    /// spread is 0.03 to 0.84 times it; set by the dead-floor room (SPL, EDT), whose particles'
+    /// energies spread apart the most, the Lambert box at 600,000 particles (C50, C80, D50, Ts),
+    /// and, in round 2, the dead-floor corridor (T20, T30).
+    pub const ENERGETIC: [f64; 8] = [0.91, 0.59, 0.43, 0.31, 0.85, 0.78, 0.85, 0.62];
 
     /// The factor for quantity `i` ([`super::QUANTITY_NAMES`]) under `method`. A test build can
     /// scale every factor through a fault seam (`crate::faults::Fault::NoiseCalibrationScaled`),
@@ -117,8 +120,8 @@ pub mod calibration {
     /// below 1.1: about a 90 % chance that the estimate the count was named from was not too low
     /// (pre-registered before the validation, rule 5b).
     pub const RANDOM_MARGIN: [f64; 8] = [1.1, 1.1, 1.4, 1.5, 1.1, 1.1, 1.1, 1.1];
-    /// Energetic mode's margins, by the same rule.
-    pub const ENERGETIC_MARGIN: [f64; 8] = [1.1, 1.1, 1.1, 1.2, 1.1, 1.1, 1.1, 1.1];
+    /// Energetic mode's margins, by the same rule (T20 and T30 over round 2's thirteen cells).
+    pub const ENERGETIC_MARGIN: [f64; 8] = [1.1, 1.1, 1.2, 1.3, 1.1, 1.1, 1.1, 1.1];
 
     /// The margin for quantity `i` under `method`.
     pub fn margin(method: Method, i: usize) -> f64 {

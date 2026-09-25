@@ -1,4 +1,4 @@
-﻿
+
 
 CELL C-R1 6x10x3 Lambert a0.1 Random N 150000 3 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.072

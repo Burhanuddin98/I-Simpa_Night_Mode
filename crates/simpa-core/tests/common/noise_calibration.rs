@@ -32,6 +32,42 @@ pub fn structure(method: &str) -> &'static str {
 /// Energetic mode's structure (rule 1).
 pub const ENERGETIC_STRUCTURE: &str = "constant";
 
+/// The roles of the cells a method's quantity is calibrated on: round 1's calibration cells, and
+/// for energetic T20 and T30, whose round-1 factors failed their validation, round 2's: every
+/// energetic cell of round 1 (`PREREGISTER.txt`, "ROUND 2").
+pub fn calibration_roles(method: &str, quantity: &str) -> &'static [&'static str] {
+    if round_two(method, quantity) {
+        &["calibration", "validation"]
+    } else {
+        &["calibration"]
+    }
+}
+
+/// The roles of the cells that validate a method's quantity: round 1's validation cells and round
+/// 2's, which validate every quantity; for energetic T20 and T30 round 2's alone.
+pub fn validation_roles(method: &str, quantity: &str) -> &'static [&'static str] {
+    if round_two(method, quantity) {
+        &["validation2"]
+    } else {
+        &["validation", "validation2"]
+    }
+}
+
+/// Energetic T20 and T30: re-calibrated in round 2.
+pub fn round_two(method: &str, quantity: &str) -> bool {
+    method == "energetic" && matches!(quantity, "t20_s" | "t30_s")
+}
+
+/// The cells of `receipt` in `roles` for `method`.
+pub fn cells_in<'a>(receipt: &'a Value, method: &str, roles: &[&str]) -> Vec<&'a Value> {
+    receipt["cells"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|c| c["cell"]["method"] == method && roles.iter().any(|r| c["cell"]["role"] == *r))
+        .collect()
+}
+
 /// The pairs of cells that differ only in their particle count (rule 4), the lower count first.
 pub const PAIRS: [(&str, &str); 6] = [
     ("C-R1", "C-R2"),

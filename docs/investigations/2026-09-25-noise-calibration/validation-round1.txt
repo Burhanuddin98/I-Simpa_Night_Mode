@@ -1,4 +1,4 @@
-﻿  spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.072
+  spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.072
   edt_s   one seed's model sd over the seeds: median scatter 0.063, largest 0.122
   t20_s   one seed's model sd over the seeds: median scatter 0.147, largest 0.284
   t30_s   one seed's model sd over the seeds: median scatter 0.282, largest 0.622

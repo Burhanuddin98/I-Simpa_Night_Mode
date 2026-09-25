@@ -8,13 +8,14 @@
 //!   comma-separated ids) over SPPS seeds 1 to 10, each run's `simpa results --json` kept as
 //!   `report.json` beside its project. The runs go under `$SIMPA_EVIDENCE_ROOT` (else cargo's test
 //!   scratch space); `$SIMPA_EVIDENCE_JOBS` (default 8) runs go at once.
-//! - `noise_calibration`: reads those reports (`$SIMPA_NOISE_FROM`, the folder the first test
-//!   wrote) and measures, per cell, quantity and receiver-band, the spread of the values over the
-//!   seeds against the model's standard deviation; `$SIMPA_NOISE_ROLES` (`calibration`,
-//!   `validation` or both, comma-separated; `calibration` by default) says which cells are looked
-//!   at, so that the validation cells stay unseen until the calibration is fixed. With
-//!   `$SIMPA_NOISE_OUT` it writes the numbers there as JSON (the receipt committed under
-//!   `docs/investigations/2026-09-25-noise-calibration/`).
+//! - `noise_calibration`: reads those reports (`$SIMPA_NOISE_FROM`, the folders the first test
+//!   wrote, `;`-separated) and measures, per cell, quantity and receiver-band, the spread of the
+//!   values over the seeds against the model's standard deviation; applies the pre-registered
+//!   rules (factors, margins, validation, `1/√N`, the named counts on the pairs);
+//!   `$SIMPA_NOISE_ROLES` (`calibration`, `validation`, `validation2`, comma-separated;
+//!   `calibration` by default) says which cells are looked at, so that validation cells stay
+//!   unseen until the calibration is fixed. With `$SIMPA_NOISE_OUT` it writes the numbers there as
+//!   JSON (the receipt committed under `docs/investigations/2026-09-25-noise-calibration/`).
 //! - `tutorial1_at_upstreams_default`: tutorial 1 as shipped (27 third-octave bands, both
 //!   receivers, 150,000 particles, random mode, and again in energetic mode), seeds 1 to 10: how
 //!   many T30, EDT, C80 and D50 values come through. `$SIMPA_T1_FROM` reads an earlier run's
@@ -50,6 +51,12 @@ enum Room {
     Small,
     /// 20 × 4 × 3 m, elongated.
     Long,
+    /// 30 × 4 × 3 m, a corridor (round 2).
+    Corridor,
+    /// 20 × 8 × 6 m, a hall (round 2).
+    Hall,
+    /// 10 × 10 × 10 m (round 2).
+    Cube,
 }
 
 impl Room {
@@ -58,6 +65,9 @@ impl Room {
             Room::Tutorial => [6.0, 10.0, 3.0],
             Room::Small => [5.0, 4.0, 3.0],
             Room::Long => [20.0, 4.0, 3.0],
+            Room::Corridor => [30.0, 4.0, 3.0],
+            Room::Hall => [20.0, 8.0, 6.0],
+            Room::Cube => [10.0, 10.0, 10.0],
         }
     }
 
@@ -68,6 +78,9 @@ impl Room {
             Room::Tutorial => [3.0, 5.0, 1.8],
             Room::Small => [2.52, 1.97, 1.53],
             Room::Long => [5.03, 1.97, 1.53],
+            Room::Corridor => [7.03, 1.97, 1.53],
+            Room::Hall => [5.03, 3.97, 2.53],
+            Room::Cube => [4.03, 4.97, 3.53],
         }
     }
 
@@ -98,6 +111,30 @@ impl Room {
                 [18.5, 2.8, 1.1],
                 [3.2, 3.0, 1.9],
             ],
+            Room::Corridor => [
+                [2.0, 1.0, 1.0],
+                [10.0, 3.0, 2.0],
+                [16.0, 2.0, 1.5],
+                [22.0, 1.2, 1.8],
+                [28.0, 2.8, 1.1],
+                [4.2, 3.0, 1.9],
+            ],
+            Room::Hall => [
+                [2.0, 1.5, 1.2],
+                [10.0, 6.5, 4.5],
+                [15.0, 4.0, 2.0],
+                [18.5, 1.5, 3.5],
+                [8.0, 2.0, 5.0],
+                [3.0, 6.5, 1.5],
+            ],
+            Room::Cube => [
+                [2.0, 2.0, 2.0],
+                [8.0, 8.0, 8.0],
+                [8.0, 2.0, 5.0],
+                [2.0, 8.0, 3.0],
+                [5.0, 5.0, 8.5],
+                [7.0, 3.0, 1.5],
+            ],
         }
     }
 
@@ -106,6 +143,9 @@ impl Room {
             Room::Tutorial => "6x10x3",
             Room::Small => "5x4x3",
             Room::Long => "20x4x3",
+            Room::Corridor => "30x4x3",
+            Room::Hall => "20x8x6",
+            Room::Cube => "10x10x10",
         }
     }
 }
@@ -121,6 +161,10 @@ enum Walls {
     Tutorial,
     /// Absorption on one surface: the floor 0.6, the ceiling and walls 0.05, specular.
     DeadFloor,
+    /// The same on the ceiling: the ceiling 0.6, the floor and walls 0.05, specular (round 2).
+    DeadCeiling,
+    /// The dead floor with every surface scattering `s` by Lambert's law (round 2).
+    DeadFloorScattering(f64),
 }
 
 impl Walls {
@@ -130,6 +174,10 @@ impl Walls {
             Walls::Specular(a) => format!("specular a{a}"),
             Walls::Tutorial => "tutorial 1's materials, air on".into(),
             Walls::DeadFloor => "dead floor (0.6; 0.05 elsewhere), specular".into(),
+            Walls::DeadCeiling => "dead ceiling (0.6; 0.05 elsewhere), specular".into(),
+            Walls::DeadFloorScattering(sc) => {
+                format!("dead floor (0.6; 0.05 elsewhere), scattering {sc}")
+            }
         }
     }
 }
@@ -138,6 +186,8 @@ impl Walls {
 enum Role {
     Calibration,
     Validation,
+    /// Round 2's validation cells, held out of both rounds' factors.
+    Validation2,
 }
 
 /// One cell: a room and its walls, SPPS in `method` with `particles` per source, `duration` s in
@@ -173,7 +223,11 @@ impl Cell {
     fn config(&self) -> Value {
         json!({
             "id": self.id,
-            "role": match self.role { Role::Calibration => "calibration", Role::Validation => "validation" },
+            "role": match self.role {
+                Role::Calibration => "calibration",
+                Role::Validation => "validation",
+                Role::Validation2 => "validation2",
+            },
             "room": self.room.name(),
             "walls": self.walls.label(),
             "method": match self.method { ComputationMethod::Random => "random", ComputationMethod::Energetic => "energetic" },
@@ -192,7 +246,7 @@ impl Cell {
 const SEEDS: std::ops::RangeInclusive<u32> = 1..=10;
 
 use ComputationMethod::{Energetic, Random};
-use Role::{Calibration as C, Validation as V};
+use Role::{Calibration as C, Validation as V, Validation2 as W};
 
 #[allow(clippy::too_many_arguments)]
 const fn cell(
@@ -222,7 +276,7 @@ const fn cell(
 #[rustfmt::skip]
 /// The cells, pre-registered before any was run (`PREREGISTER.txt` in the investigation's
 /// folder). Random mode's `trans_epsilon` is SPPS's default 5; it drops nothing there.
-const CELLS: [Cell; 26] = [
+const CELLS: [Cell; 32] = [
     cell("C-R1", C, Room::Tutorial, Walls::Lambert(0.1), Random, 150_000, 3.0, 0.01, 5.0),
     cell("C-R2", C, Room::Tutorial, Walls::Lambert(0.1), Random, 1_500_000, 3.0, 0.01, 5.0),
     cell("C-R3", C, Room::Small, Walls::Lambert(0.4), Random, 150_000, 1.0, 0.001, 5.0),
@@ -249,6 +303,14 @@ const CELLS: [Cell; 26] = [
     cell("V-E4", V, Room::Tutorial, Walls::Tutorial, Energetic, 1_500_000, 2.0, 0.01, 5.0),
     cell("V-E5", V, Room::Small, Walls::Specular(0.2), Energetic, 600_000, 1.5, 0.001, 7.0),
     cell("V-E6", V, Room::Long, Walls::DeadFloor, Energetic, 300_000, 3.0, 0.01, 7.0),
+    // Round 2 (PREREGISTER.txt, "ROUND 2"): energetic T20 and T30 re-calibrated on every energetic
+    // cell above; these validate it.
+    cell("W-E1", W, Room::Corridor, Walls::DeadFloor, Energetic, 300_000, 3.0, 0.01, 7.0),
+    cell("W-E2", W, Room::Long, Walls::DeadCeiling, Energetic, 300_000, 3.0, 0.01, 7.0),
+    cell("W-E3", W, Room::Hall, Walls::DeadFloor, Energetic, 300_000, 3.0, 0.01, 7.0),
+    cell("W-E4", W, Room::Long, Walls::DeadFloorScattering(0.3), Energetic, 300_000, 3.0, 0.01, 7.0),
+    cell("W-E5", W, Room::Cube, Walls::DeadFloor, Energetic, 300_000, 4.0, 0.01, 7.0),
+    cell("W-E6", W, Room::Long, Walls::DeadFloor, Energetic, 600_000, 3.0, 0.001, 7.0),
 ];
 
 /// Tutorial 1's box (`rooms/tutorial1_box.simpa`) on the octave bands 125 Hz to 4 kHz, without its
@@ -326,24 +388,38 @@ fn project(c: &Cell, seed: u32) -> Project {
         m.solver_id = None;
         m
     };
-    // Each surface group's (floor, the rest) material.
+    // The rest's material, and the one surface group with its own.
     let set = match c.walls {
         Walls::Tutorial => None,
         Walls::Lambert(a) => Some((material(1, "uniform", a, true), None)),
         Walls::Specular(a) => Some((material(1, "uniform", a, false), None)),
         Walls::DeadFloor => Some((
             material(1, "rest", 0.05, false),
-            Some(material(2, "floor", 0.6, false)),
+            Some(("Floor", material(2, "floor", 0.6, false))),
         )),
+        Walls::DeadCeiling => Some((
+            material(1, "rest", 0.05, false),
+            Some(("Ceiling", material(2, "ceiling", 0.6, false))),
+        )),
+        Walls::DeadFloorScattering(sc) => {
+            let scatter = |mut m: schema::Material| {
+                m.scattering = vec![schema::F64::new(sc); n];
+                m
+            };
+            Some((
+                scatter(material(1, "rest", 0.05, true)),
+                Some(("Floor", scatter(material(2, "floor", 0.6, true)))),
+            ))
+        }
     };
-    if let Some((rest, floor)) = set {
+    if let Some((rest, dead)) = set {
         for g in &mut p.surface_groups {
-            g.material = match (&floor, g.name.as_str()) {
-                (Some(f), "Floor") => f.id,
+            g.material = match &dead {
+                Some((group, m)) if g.name == *group => m.id,
                 _ => rest.id,
             };
         }
-        p.materials = std::iter::once(rest).chain(floor).collect();
+        p.materials = std::iter::once(rest).chain(dead.map(|(_, m)| m)).collect();
         p.solvers.spps.air_absorption = false;
         p.solvers.tcr.air_absorption = false;
     }
@@ -711,6 +787,7 @@ fn roles() -> Vec<Role> {
         .map(|r| match r.trim() {
             "calibration" => Role::Calibration,
             "validation" => Role::Validation,
+            "validation2" => Role::Validation2,
             other => panic!("role {other:?}"),
         })
         .collect()
@@ -892,33 +969,49 @@ fn judged(
 #[ignore = "evidence for the noise model, not a gate: reads the calibration runs; run on purpose \
             with SIMPA_NOISE_FROM"]
 fn noise_calibration() {
-    let from = PathBuf::from(std::env::var("SIMPA_NOISE_FROM").expect("SIMPA_NOISE_FROM"));
+    // `$SIMPA_NOISE_FROM`: the folders `noise_calibration_runs` wrote, `;`-separated; each cell is
+    // read from the first that holds it.
+    let from: Vec<PathBuf> = std::env::var("SIMPA_NOISE_FROM")
+        .expect("SIMPA_NOISE_FROM")
+        .split(';')
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| PathBuf::from(s.trim()))
+        .collect();
     let roles = roles();
     let cells: Vec<Cell> = chosen_cells()
         .into_iter()
         .filter(|c| roles.contains(&c.role))
         .collect();
-    let (receipts, runs): (Vec<Value>, Vec<Vec<RunNumbers>>) =
-        cells.iter().map(|c| cell_receipt(c, &from)).unzip();
-    let of = |role: &str, method: &str| -> Vec<&Value> {
-        receipts
-            .iter()
-            .filter(|r| r["cell"]["role"] == role && r["cell"]["method"] == method)
-            .collect()
-    };
-    // Rules 1 and 2 on the calibration cells: per method and structure, each quantity's factor and
-    // how much the calibrated model overstates the seeds' spread, cell by cell.
-    for method in ["random", "energetic"] {
-        let cal = of("calibration", method);
-        if cal.is_empty() {
-            continue;
+    let (receipts, runs): (Vec<Value>, Vec<Vec<RunNumbers>>) = cells
+        .iter()
+        .map(|c| {
+            let dir = from
+                .iter()
+                .find(|f| f.join(c.id).is_dir())
+                .unwrap_or_else(|| panic!("{}: in none of {from:?}", c.id));
+            cell_receipt(c, dir)
+        })
+        .unzip();
+    let all = json!({ "cells": receipts });
+    let method_of = |name: &str| {
+        if name == "random" {
+            noise::Method::Random
+        } else {
+            noise::Method::Energetic
         }
-        println!("\n{method} mode, {} calibration cells:", cal.len());
+    };
+    // Rules 1, 2 and 5b on each quantity's calibration cells (round 1's, or for energetic T20 and
+    // T30 round 2's): the factor each structure would get, how much it would overstate the seeds'
+    // spread cell by cell, and the margin.
+    for method in ["random", "energetic"] {
+        println!("\n{method} mode:");
         for st in STRUCTURES {
             let name = structure_name(st);
             let mut logs = Vec::new();
-            let mut line = format!("  {name:<11}");
+            let mut line = format!("  {name}");
             for q in calibration::QUANTITIES {
+                let cal =
+                    calibration::cells_in(&all, method, calibration::calibration_roles(method, q));
                 let mut best: Option<(f64, &str)> = None;
                 let mut ratios = Vec::new();
                 for c in &cal {
@@ -935,13 +1028,16 @@ fn noise_calibration() {
                     }
                 }
                 let Some((upper, id)) = best else {
-                    line += &format!(" {q} -;");
                     continue;
                 };
                 let k = calibration::round_up_two_digits(upper);
                 logs.extend(ratios.iter().map(|r| (k / r).ln()));
+                let margin = calibration::margin(&cal, q)
+                    .map_or("-".to_string(), |(m, by)| format!("{m} (by {by})"));
                 line += &format!(
-                    "\n    {q:<7} k {k} (upper bound {upper:.6}, set by {id}); overstates {:.2} to {:.2}",
+                    "\n    {q:<7} on {} cells: k {k} (upper bound {upper:.6}, set by {id}); \
+                     overstates {:.2} to {:.2}; margin {margin}",
+                    cal.len(),
                     k / ratios.iter().copied().fold(0.0, f64::max),
                     k / ratios.iter().copied().fold(f64::INFINITY, f64::min)
                 );
@@ -953,33 +1049,18 @@ fn noise_calibration() {
             println!("{line}\n    geometric-mean overstatement {gm:.3}");
         }
     }
-    // Rule 5b: the named count's margins, from the calibration cells.
+    // Rule 3 on each quantity's validation cells, with the code's factors.
     for method in ["random", "energetic"] {
-        let cal = of("calibration", method);
-        if cal.is_empty() {
-            continue;
-        }
-        let line: Vec<String> = calibration::QUANTITIES
-            .iter()
-            .filter_map(|q| calibration::margin(&cal, q).map(|(m, id)| format!("{q} {m} ({id})")))
-            .collect();
-        println!("\n{method} mode, margins: {}", line.join(", "));
-    }
-    // Rule 3 on the validation cells, with the code's factors.
-    for method in ["random", "energetic"] {
-        let val = of("validation", method);
-        if val.is_empty() {
-            continue;
-        }
-        let m = if method == "random" {
-            noise::Method::Random
-        } else {
-            noise::Method::Energetic
-        };
+        let m = method_of(method);
         println!("\n{method} mode, validation with the code's factors:");
-        for c in &val {
+        for c in calibration::cells_in(&all, method, &["validation", "validation2"]) {
             let mut line = format!("  {}", c["cell"]["id"].as_str().unwrap());
             for (qi, q) in calibration::QUANTITIES.iter().enumerate() {
+                let role = c["cell"]["role"].as_str().unwrap();
+                if !calibration::validation_roles(method, q).contains(&role) {
+                    line += &format!("\n    {q:<7} (calibrates it)");
+                    continue;
+                }
                 match calibration::validates(c, q, noise::calibration::factor(m, qi)) {
                     Some((ok, p)) => {
                         line += &format!(
@@ -997,7 +1078,6 @@ fn noise_calibration() {
         }
     }
     // Rule 4: cells that differ only in N.
-    let all = json!({"cells": receipts});
     for (a, b) in calibration::PAIRS {
         let find = |id: &str| receipts.iter().find(|r| r["cell"]["id"] == id);
         let (Some(ra), Some(rb)) = (find(a), find(b)) else {
@@ -1093,15 +1173,27 @@ fn noise_calibration() {
         }
     }
     if let Ok(out) = std::env::var("SIMPA_NOISE_OUT") {
-        std::fs::write(
-            &out,
-            serde_json::to_string_pretty(&json!({
-                "preregistration": "PREREGISTER.txt",
-                "cells": receipts,
-            }))
-            .unwrap(),
-        )
-        .unwrap();
+        // Six significant digits are more than ten seeds resolve, and keep the receipt small.
+        fn round(v: &mut Value) {
+            match v {
+                Value::Number(n) if n.is_f64() => {
+                    let x = n.as_f64().unwrap();
+                    if x != 0.0 && x.is_finite() {
+                        let s: f64 = format!("{x:.5e}").parse().unwrap();
+                        *v = json!(s);
+                    }
+                }
+                Value::Array(a) => a.iter_mut().for_each(round),
+                Value::Object(o) => o.values_mut().for_each(round),
+                _ => {}
+            }
+        }
+        let mut out_json = json!({
+            "preregistration": "PREREGISTER.txt",
+            "cells": receipts,
+        });
+        round(&mut out_json);
+        std::fs::write(&out, serde_json::to_string(&out_json).unwrap()).unwrap();
         println!("written {out}");
     }
 }
