@@ -12,7 +12,7 @@
 //!   within ±0.5 dB of `Lw − 20·lg r − 11`. Says no: Night Mode's `.gap` level (energy over
 //!   1e-12, `main:project/result_parser.cpp:486`) and a 1 dB offset each way miss it in every
 //!   band. Tighter (M7 review): the same SPL against the exact free field within its Monte-Carlo
-//!   noise, which the SPL 0.1 dB either way, or with `ρc` = 400, misses.
+//!   noise, which the SPL 0.15 dB either way, or with `ρc` = 400, misses.
 //! - **Gate M7(d):** tutorial 1's box through TCR: per band, TCR's Sabine and Eyring times equal
 //!   `core::params`' within 0.5 %, computed both from the project and from the run's own inputs,
 //!   and no value TCR wrote for display is NaN or infinite. Says no: the walls' α 5 % higher
@@ -126,9 +126,10 @@ fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
 
 /// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
 /// typed `error`.
-const NULLABLE: [&str; 26] = [
+const NULLABLE: [&str; 27] = [
     ".crossings_per_particle",
     ".lambert_walls",
+    ".uniform_lambert_walls",
     ".particles_at_least",
     ".receiver_radius_scale_at_most",
     ".spps",
@@ -322,15 +323,41 @@ const EIGHT: [&str; 8] = [
 
 #[test]
 fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() {
-    // The Seat run's 2,000 particles are too few for any value since the noise model was
-    // calibrated against SPPS's own seeds (pre-M8): every refusal for noise then names the count
-    // that would bring its value within its limit. The energetic run's 50,000 give values.
-    for (run, n) in [(SEATS_SPPS, 2_000u64), (ENERGETIC_SPPS, 50_000)] {
+    use simpa_core::params::noise::{Method, Walls, calibration};
+    // Round 3 of the noise calibration (pre-M8): the Seat run's 2,000 particles are below every
+    // quantity's calibrated domain (5,000 particles for SPL, C50, C80 and D50, 50,000 for the
+    // decay times and Ts), so every value is refused, `noise_uncalibrated`, naming the particles
+    // that reach the domain. The energetic run's 50,000 give values.
+    for (run, n, method, name) in [
+        (SEATS_SPPS, 2_000u64, Method::Random, "random"),
+        (ENERGETIC_SPPS, 50_000, Method::Energetic, "energetic"),
+    ] {
         let rep = json(&results(&fixture(run), true));
-        let (mut values, mut noise) = (0, 0);
+        // The run's computation method picks its calibration: a report that took every run for
+        // random mode (the pre-M8 review's mutation) reads so here, and its factors with it.
+        let mc = &rep["spps"]["monte_carlo"];
+        assert_eq!(mc["method"], name, "{run}");
+        for (i, q) in EIGHT.iter().enumerate() {
+            let e = calibration::entry(method, i, Walls::Other);
+            assert_eq!(
+                mc["calibration"][q]["factor"].as_f64(),
+                Some(e.factor),
+                "{run} {q}"
+            );
+            assert_eq!(
+                mc["calibration"][q]["kappa"].as_f64(),
+                Some(e.kappa),
+                "{run} {q}"
+            );
+        }
+        let (mut values, mut noise, mut outside) = (0, 0, 0);
         for r in rep["spps"]["point_receivers"].as_array().unwrap() {
             let bands = r["bands"].as_array().unwrap();
             assert_eq!(bands.len(), 2);
+            for b in bands {
+                assert_eq!(b["noise_model"]["method"], name, "{run}");
+                assert!(b["crossings_per_particle"].is_f64(), "{run}: {b}");
+            }
             for b in bands.iter().chain([&r["aggregate"]]) {
                 for q in EIGHT {
                     let p = &b["parameters"][q];
@@ -344,25 +371,27 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
                         && why["sd"].as_f64() > why["limit"].as_f64()
                     {
                         noise += 1;
+                        // Every flag of round 3 is on: every refusal for noise names a count.
                         let c = &why["particle_count"];
-                        // Random-mode T30 and energetic EDT name none: their fall as 1/√N was not
-                        // confirmed (`params::noise::calibration::root_n_confirmed`).
-                        let unconfirmed = (run == SEATS_SPPS && q == "t30_s")
-                            || (run == ENERGETIC_SPPS && q == "edt_s");
-                        if unconfirmed {
-                            assert_eq!(c["count"], "scaling_not_confirmed", "{run} {q}: {why}");
-                        } else {
-                            assert_eq!(c["count"], "named", "{run} {q}: {why}");
-                            assert!(c["particles"].as_u64().unwrap() > n, "{run} {q}: {why}");
-                        }
+                        assert_eq!(c["count"], "named", "{run} {q}: {why}");
+                        assert!(c["particles"].as_u64().unwrap() > n, "{run} {q}: {why}");
+                    }
+                    if why["why"] == "noise_uncalibrated" {
+                        outside += 1;
+                        let least = why["particles_at_least"].as_u64();
+                        assert_eq!(least, why["min_particles"].as_u64(), "{run} {q}: {why}");
+                        assert!(least.unwrap() > n, "{run} {q}: {why}");
                     }
                 }
             }
         }
-        println!("{run}: {values} values, {noise} refused for noise above the limit");
+        println!(
+            "{run}: {values} values, {noise} refused for noise above the limit, {outside} \
+             outside the calibration"
+        );
         if run == SEATS_SPPS {
             assert_eq!(values, 0, "{run}");
-            assert!(noise > 20, "{run}: {noise}");
+            assert!(outside > 20, "{run}: {outside}");
         } else {
             assert!(values > 0, "{run}: the SPPS run has values");
         }
@@ -1261,11 +1290,15 @@ fn gate_c_level_calibration_and_the_offsets_it_catches() {
         assert!((shift - moved).abs() < 1e-3, "{name}: {shift}");
         assert_eq!(caught, rows.len(), "{name}");
     }
-    // The exact free field through the same seam: p0² moved 0.1 dB either way, and the reference
+    // The exact free field through the same seam: p0² moved 0.15 dB either way, and the reference
     // as it would read with rho c = 400 instead of SPPS's (-0.141 dB), each miss it.
     for (name, pa2) in [
-        ("p0^2 0.1 dB low", P_REF_SQUARED / db(0.1)),
-        ("p0^2 0.1 dB high", P_REF_SQUARED * db(0.1)),
+        // 0.15 dB, not 0.1 (pre-M8 review): the check's window is set by the calibrated
+        // `mc_sd`, and seed 1 sits 0.028 dB high, so 0.1 dB high was caught by 0.0004 dB with
+        // round 2's SPL factor and by 0.006 dB with round 3's. The window itself is printed
+        // above ("catches an offset above ... or below ...") and asserted within 0.1 dB.
+        ("p0^2 0.15 dB low", P_REF_SQUARED / db(0.15)),
+        ("p0^2 0.15 dB high", P_REF_SQUARED * db(0.15)),
         ("rho c 400", P_REF_SQUARED * rho_c / 400.0),
     ] {
         let (m, _, ok) = exact_check(&at(pa2), radius, rho_c, 0.0);

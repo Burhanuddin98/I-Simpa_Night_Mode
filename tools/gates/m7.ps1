@@ -30,7 +30,7 @@
 #   The reverberant field is kept out by the 20 ms duration (no particle reaches a wall), which the
 #   statistics must show; a run whose walls are reached and reflect fails that check. Beyond the
 #   plan's bound (M7 review), the same run is held to the exact free field within its Monte-Carlo
-#   noise, and the reference 0.1 dB off either way, or as rho c = 400 would read, misses that;
+#   noise, and the reference 0.15 dB off either way, or as rho c = 400 would read, misses that;
 # - (d): the walls' alpha 5 % higher, run through TCR, gives analytic times outside 0.5 % of the
 #   unchanged run in every band; one plane's alpha raised past the smallest increase the gate
 #   resolves (measured) is caught, and 2 % below it is not; the air term dropped, or taken at ISO's
@@ -324,7 +324,7 @@ Check "(c) what keeps the reverberant field out is the 20 ms duration: SPPS's st
 # to the SPL the correct run produced): cli_results' gate (c) test runs the level box, then
 # computes its report again in-process with the level code path's reference constant replaced
 # (simpa_core::faults::Fault::LevelReference, a test-only feature no normal build has).
-Check "(c) says NO through the code: SPL's reference p0^2 replaced by Night Mode's 1e-12 (main:project/result_parser.cpp:486), and by p0^2 1 dB off either way, misses the bound in every band; p0^2 0.1 dB off either way, or as rho c = 400 would read, misses the exact free field" {
+Check "(c) says NO through the code: SPL's reference p0^2 replaced by Night Mode's 1e-12 (main:project/result_parser.cpp:486), and by p0^2 1 dB off either way, misses the bound in every band; p0^2 0.15 dB off either way, or as rho c = 400 would read, misses the exact free field" {
     $line = @(git show main:project/result_parser.cpp)[485]
     Write-Host "      result_parser.cpp:486: $($line.Trim())"
     if (-not (OneTest 'simpa' 'cli_results' 'gate_c_level_calibration_and_the_offsets_it_catches')) { return $false }

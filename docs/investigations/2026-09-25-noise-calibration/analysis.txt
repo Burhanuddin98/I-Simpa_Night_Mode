@@ -1,5 +1,10 @@
+   Compiling simpa v0.1.0 (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\t3-proj\crates\simpa)
+    Finished `release` profile [optimized] target(s) in 2.36s
+     Running tests\noise_calibration.rs (target\release\deps\noise_calibration-1097715296d3ece9.exe)
 
-CELL C-R1 6x10x3 Lambert a0.1 Random N 150000 3 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 1 s)
+running 1 test
+
+CELL C-R1 6x10x3 Lambert a0.1 Random N 150000 3 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.072
   edt_s   one seed's model sd over the seeds: median scatter 0.063, largest 0.122
   t20_s   one seed's model sd over the seeds: median scatter 0.147, largest 0.284
@@ -17,7 +22,7 @@ CELL C-R1 6x10x3 Lambert a0.1 Random N 150000 3 s dt 0.01 eps 5 (10 seeds, 36 re
   d50     24 of 36:  constant 1.052 [0.975, 1.143]
   ts_s    24 of 36:  constant 1.111 [1.030, 1.208]
 
-CELL C-R2 6x10x3 Lambert a0.1 Random N 1500000 3 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 1 s)
+CELL C-R2 6x10x3 Lambert a0.1 Random N 1500000 3 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.041, largest 0.061
   edt_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.068
   t20_s   one seed's model sd over the seeds: median scatter 0.078, largest 0.133
@@ -35,7 +40,7 @@ CELL C-R2 6x10x3 Lambert a0.1 Random N 1500000 3 s dt 0.01 eps 5 (10 seeds, 36 r
   d50     24 of 36:  constant 1.047 [0.970, 1.137]
   ts_s    24 of 36:  constant 1.037 [0.961, 1.127]
 
-CELL C-R3 5x4x3 Lambert a0.4 Random N 150000 1 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 1 s)
+CELL C-R3 5x4x3 Lambert a0.4 Random N 150000 1 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.080
   edt_s   one seed's model sd over the seeds: median scatter 0.064, largest 0.088
   t20_s   one seed's model sd over the seeds: median scatter 0.206, largest 0.412
@@ -49,7 +54,7 @@ CELL C-R3 5x4x3 Lambert a0.4 Random N 150000 1 s dt 0.001 eps 5 (10 seeds, 36 re
   d50      0 of 36:
   ts_s     0 of 36:
 
-CELL C-R4 5x4x3 Lambert a0.4 Random N 15000000 1 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 1 s)
+CELL C-R4 5x4x3 Lambert a0.4 Random N 15000000 1 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.071
   edt_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.069
   t20_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.078
@@ -63,7 +68,7 @@ CELL C-R4 5x4x3 Lambert a0.4 Random N 15000000 1 s dt 0.001 eps 5 (10 seeds, 36 
   d50      0 of 36:
   ts_s     0 of 36:
 
-CELL C-R5 6x10x3 tutorial 1's materials, air on Random N 150000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+CELL C-R5 6x10x3 tutorial 1's materials, air on Random N 150000 2 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.077
   t20_s   one seed's model sd over the seeds: median scatter 0.271, largest 0.501
   t30_s   one seed's model sd over the seeds: median scatter 0.360, largest 0.360
@@ -79,7 +84,7 @@ CELL C-R5 6x10x3 tutorial 1's materials, air on Random N 150000 2 s dt 0.01 eps 
   d50     24 of 36:  constant 0.999 [0.926, 1.085]
   ts_s     0 of 36:
 
-CELL C-R6 6x10x3 tutorial 1's materials, air on Random N 1500000 2 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 5 s)
+CELL C-R6 6x10x3 tutorial 1's materials, air on Random N 1500000 2 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.076
   edt_s   one seed's model sd over the seeds: median scatter 0.054, largest 0.078
   t20_s   one seed's model sd over the seeds: median scatter 0.106, largest 0.176
@@ -97,7 +102,7 @@ CELL C-R6 6x10x3 tutorial 1's materials, air on Random N 1500000 2 s dt 0.001 ep
   d50     18 of 36:  constant 1.034 [0.948, 1.139]
   ts_s    18 of 36:  constant 0.967 [0.886, 1.065]
 
-CELL C-R7 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Random N 500000 3 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 2 s)
+CELL C-R7 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Random N 500000 3 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.080
   edt_s   one seed's model sd over the seeds: median scatter 0.063, largest 0.090
   t20_s   one seed's model sd over the seeds: median scatter 0.162, largest 0.250
@@ -115,7 +120,7 @@ CELL C-R7 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Random N 500000 3 s 
   d50     24 of 36:  constant 1.019 [0.945, 1.107]
   ts_s    24 of 36:  constant 1.287 [1.194, 1.399]
 
-CELL V-R1 20x4x3 Lambert a0.2 Random N 500000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+CELL V-R1 20x4x3 Lambert a0.2 Random N 500000 2 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.071
   edt_s   one seed's model sd over the seeds: median scatter 0.101, largest 0.146
   t20_s   one seed's model sd over the seeds: median scatter 0.177, largest 0.377
@@ -133,7 +138,7 @@ CELL V-R1 20x4x3 Lambert a0.2 Random N 500000 2 s dt 0.01 eps 5 (10 seeds, 36 re
   d50     30 of 36:  constant 1.006 [0.940, 1.083]
   ts_s    11 of 36:  constant 0.973 [0.873, 1.103]
 
-CELL V-R2 6x10x3 Lambert a0.4 Random N 600000 1 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 2 s)
+CELL V-R2 6x10x3 Lambert a0.4 Random N 600000 1 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.087
   edt_s   one seed's model sd over the seeds: median scatter 0.064, largest 0.083
   t20_s   one seed's model sd over the seeds: median scatter 0.161, largest 0.375
@@ -151,7 +156,7 @@ CELL V-R2 6x10x3 Lambert a0.4 Random N 600000 1 s dt 0.001 eps 5 (10 seeds, 36 r
   d50     18 of 36:  constant 0.946 [0.867, 1.042]
   ts_s    18 of 36:  constant 1.029 [0.943, 1.133]
 
-CELL V-R3 5x4x3 Lambert a0.05 Random N 300000 3 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 1 s)
+CELL V-R3 5x4x3 Lambert a0.05 Random N 300000 3 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.076
   edt_s   one seed's model sd over the seeds: median scatter 0.046, largest 0.083
   t20_s   one seed's model sd over the seeds: median scatter 0.063, largest 0.088
@@ -169,7 +174,7 @@ CELL V-R3 5x4x3 Lambert a0.05 Random N 300000 3 s dt 0.01 eps 5 (10 seeds, 36 re
   d50     36 of 36:  constant 0.998 [0.938, 1.068]
   ts_s    36 of 36:  constant 1.223 [1.149, 1.307]
 
-CELL V-R4 6x10x3 tutorial 1's materials, air on Random N 600000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+CELL V-R4 6x10x3 tutorial 1's materials, air on Random N 600000 2 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.071
   t20_s   one seed's model sd over the seeds: median scatter 0.147, largest 0.245
   t30_s   one seed's model sd over the seeds: median scatter 0.331, largest 0.828
@@ -185,7 +190,7 @@ CELL V-R4 6x10x3 tutorial 1's materials, air on Random N 600000 2 s dt 0.01 eps 
   d50     24 of 36:  constant 1.068 [0.991, 1.161]
   ts_s     0 of 36:
 
-CELL V-R5 5x4x3 specular a0.2 Random N 5000000 1.5 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 0 s)
+CELL V-R5 5x4x3 specular a0.2 Random N 5000000 1.5 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.076
   t20_s   one seed's model sd over the seeds: median scatter 0.055, largest 0.091
   t30_s   one seed's model sd over the seeds: median scatter 0.119, largest 0.216
@@ -201,7 +206,7 @@ CELL V-R5 5x4x3 specular a0.2 Random N 5000000 1.5 s dt 0.01 eps 5 (10 seeds, 36
   d50     36 of 36:  constant 1.027 [0.965, 1.099]
   ts_s     0 of 36:
 
-CELL V-R6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Random N 1500000 3 s dt 0.001 eps 5 (10 seeds, 36 receiver-bands; read in 21 s)
+CELL V-R6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Random N 1500000 3 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 7 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.072
   edt_s   one seed's model sd over the seeds: median scatter 0.073, largest 0.122
   t20_s   one seed's model sd over the seeds: median scatter 0.135, largest 0.196
@@ -215,7 +220,7 @@ CELL V-R6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Random N 1500000 3 s
   d50      0 of 36:
   ts_s     0 of 36:
 
-CELL C-E1 6x10x3 Lambert a0.1 Energetic N 150000 2.5 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 2 s)
+CELL C-E1 6x10x3 Lambert a0.1 Energetic N 150000 2.5 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.070
   edt_s   one seed's model sd over the seeds: median scatter 0.049, largest 0.077
   t20_s   one seed's model sd over the seeds: median scatter 0.046, largest 0.071
@@ -233,7 +238,7 @@ CELL C-E1 6x10x3 Lambert a0.1 Energetic N 150000 2.5 s dt 0.01 eps 7 (10 seeds, 
   d50     24 of 36:  constant 0.735 [0.681, 0.798]  mean_energy 0.963 [0.893, 1.046]
   ts_s    24 of 36:  constant 0.505 [0.468, 0.548]  mean_energy 1.024 [0.950, 1.113]
 
-CELL C-E2 6x10x3 Lambert a0.1 Energetic N 600000 2.5 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 3 s)
+CELL C-E2 6x10x3 Lambert a0.1 Energetic N 600000 2.5 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.042, largest 0.059
   edt_s   one seed's model sd over the seeds: median scatter 0.048, largest 0.070
   t20_s   one seed's model sd over the seeds: median scatter 0.043, largest 0.057
@@ -251,7 +256,7 @@ CELL C-E2 6x10x3 Lambert a0.1 Energetic N 600000 2.5 s dt 0.01 eps 7 (10 seeds, 
   d50     24 of 36:  constant 0.779 [0.722, 0.846]  mean_energy 1.014 [0.940, 1.102]
   ts_s    24 of 36:  constant 0.570 [0.528, 0.619]  mean_energy 1.113 [1.032, 1.209]
 
-CELL C-E3 5x4x3 Lambert a0.4 Energetic N 150000 0.5 s dt 0.001 eps 9 (10 seeds, 36 receiver-bands; read in 5 s)
+CELL C-E3 5x4x3 Lambert a0.4 Energetic N 150000 0.5 s dt 0.001 eps 9 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.071
   edt_s   one seed's model sd over the seeds: median scatter 0.052, largest 0.081
   t20_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.087
@@ -265,7 +270,7 @@ CELL C-E3 5x4x3 Lambert a0.4 Energetic N 150000 0.5 s dt 0.001 eps 9 (10 seeds, 
   d50      0 of 36:
   ts_s     0 of 36:
 
-CELL C-E4 5x4x3 Lambert a0.4 Energetic N 2400000 0.5 s dt 0.001 eps 9 (10 seeds, 36 receiver-bands; read in 4 s)
+CELL C-E4 5x4x3 Lambert a0.4 Energetic N 2400000 0.5 s dt 0.001 eps 9 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.069
   edt_s   one seed's model sd over the seeds: median scatter 0.049, largest 0.070
   t20_s   one seed's model sd over the seeds: median scatter 0.038, largest 0.060
@@ -279,7 +284,7 @@ CELL C-E4 5x4x3 Lambert a0.4 Energetic N 2400000 0.5 s dt 0.001 eps 9 (10 seeds,
   d50      0 of 36:
   ts_s     0 of 36:
 
-CELL C-E5 6x10x3 tutorial 1's materials, air on Energetic N 150000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 1 s)
+CELL C-E5 6x10x3 tutorial 1's materials, air on Energetic N 150000 2 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.044, largest 0.070
   t20_s   one seed's model sd over the seeds: median scatter 0.054, largest 0.095
   t30_s   one seed's model sd over the seeds: median scatter 0.103, largest 0.183
@@ -295,7 +300,7 @@ CELL C-E5 6x10x3 tutorial 1's materials, air on Energetic N 150000 2 s dt 0.01 e
   d50     24 of 36:  constant 0.542 [0.503, 0.589]  mean_energy 1.001 [0.928, 1.088]
   ts_s     0 of 36:
 
-CELL C-E6 6x10x3 tutorial 1's materials, air on Energetic N 600000 2 s dt 0.001 eps 7 (10 seeds, 36 receiver-bands; read in 14 s)
+CELL C-E6 6x10x3 tutorial 1's materials, air on Energetic N 600000 2 s dt 0.001 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 5 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.072
   edt_s   one seed's model sd over the seeds: median scatter 0.045, largest 0.091
   t20_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.091
@@ -313,7 +318,7 @@ CELL C-E6 6x10x3 tutorial 1's materials, air on Energetic N 600000 2 s dt 0.001 
   d50     17 of 36:  constant 0.542 [0.496, 0.598]  mean_energy 1.045 [0.956, 1.154]
   ts_s    17 of 36:  constant 0.446 [0.408, 0.493]  mean_energy 1.012 [0.925, 1.117]
 
-CELL C-E7 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 2 s)
+CELL C-E7 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.072
   edt_s   one seed's model sd over the seeds: median scatter 0.055, largest 0.086
   t20_s   one seed's model sd over the seeds: median scatter 0.058, largest 0.098
@@ -331,7 +336,7 @@ CELL C-E7 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3
   d50     24 of 36:  constant 0.727 [0.674, 0.790]  mean_energy 1.197 [1.110, 1.300]
   ts_s    24 of 36:  constant 0.540 [0.501, 0.587]  mean_energy 1.642 [1.522, 1.784]
 
-CELL V-E1 20x4x3 Lambert a0.2 Energetic N 300000 1.5 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 1 s)
+CELL V-E1 20x4x3 Lambert a0.2 Energetic N 300000 1.5 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.091
   edt_s   one seed's model sd over the seeds: median scatter 0.043, largest 0.054
   t20_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.078
@@ -349,7 +354,7 @@ CELL V-E1 20x4x3 Lambert a0.2 Energetic N 300000 1.5 s dt 0.01 eps 7 (10 seeds, 
   d50     30 of 36:  constant 0.556 [0.520, 0.599]  mean_energy 1.183 [1.105, 1.273]
   ts_s     8 of 36:  constant 0.485 [0.427, 0.563]  mean_energy 1.286 [1.133, 1.493]
 
-CELL V-E2 6x10x3 Lambert a0.4 Energetic N 150000 0.6 s dt 0.001 eps 9 (10 seeds, 36 receiver-bands; read in 3 s)
+CELL V-E2 6x10x3 Lambert a0.4 Energetic N 150000 0.6 s dt 0.001 eps 9 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.080
   edt_s   one seed's model sd over the seeds: median scatter 0.058, largest 0.099
   t20_s   one seed's model sd over the seeds: median scatter 0.057, largest 0.103
@@ -367,7 +372,7 @@ CELL V-E2 6x10x3 Lambert a0.4 Energetic N 150000 0.6 s dt 0.001 eps 9 (10 seeds,
   d50     15 of 36:  constant 0.292 [0.266, 0.325]  mean_energy 1.146 [1.043, 1.274]
   ts_s    15 of 36:  constant 0.494 [0.449, 0.549]  mean_energy 1.094 [0.995, 1.217]
 
-CELL V-E3 5x4x3 Lambert a0.05 Energetic N 150000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 2 s)
+CELL V-E3 5x4x3 Lambert a0.05 Energetic N 150000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.076
   edt_s   one seed's model sd over the seeds: median scatter 0.051, largest 0.065
   t20_s   one seed's model sd over the seeds: median scatter 0.041, largest 0.063
@@ -385,7 +390,7 @@ CELL V-E3 5x4x3 Lambert a0.05 Energetic N 150000 3 s dt 0.01 eps 7 (10 seeds, 36
   d50     36 of 36:  constant 0.839 [0.788, 0.897]  mean_energy 1.029 [0.967, 1.100]
   ts_s    36 of 36:  constant 0.525 [0.493, 0.561]  mean_energy 1.079 [1.014, 1.154]
 
-CELL V-E4 6x10x3 tutorial 1's materials, air on Energetic N 1500000 2 s dt 0.01 eps 5 (10 seeds, 36 receiver-bands; read in 1 s)
+CELL V-E4 6x10x3 tutorial 1's materials, air on Energetic N 1500000 2 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.078
   t20_s   one seed's model sd over the seeds: median scatter 0.042, largest 0.061
   t30_s   one seed's model sd over the seeds: median scatter 0.052, largest 0.089
@@ -401,7 +406,7 @@ CELL V-E4 6x10x3 tutorial 1's materials, air on Energetic N 1500000 2 s dt 0.01 
   d50     24 of 36:  constant 0.529 [0.491, 0.575]  mean_energy 0.972 [0.901, 1.056]
   ts_s     0 of 36:
 
-CELL V-E5 5x4x3 specular a0.2 Energetic N 600000 1.5 s dt 0.001 eps 7 (10 seeds, 36 receiver-bands; read in 5 s)
+CELL V-E5 5x4x3 specular a0.2 Energetic N 600000 1.5 s dt 0.001 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 3 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.075
   edt_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.075
   t20_s   one seed's model sd over the seeds: median scatter 0.049, largest 0.067
@@ -415,7 +420,7 @@ CELL V-E5 5x4x3 specular a0.2 Energetic N 600000 1.5 s dt 0.001 eps 7 (10 seeds,
   d50      0 of 36:
   ts_s     0 of 36:
 
-CELL V-E6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 3 s)
+CELL V-E6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.084
   edt_s   one seed's model sd over the seeds: median scatter 0.056, largest 0.086
   t20_s   one seed's model sd over the seeds: median scatter 0.080, largest 0.122
@@ -433,7 +438,7 @@ CELL V-E6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3
   d50     30 of 36:  constant 0.731 [0.683, 0.787]  mean_energy 1.449 [1.354, 1.560]
   ts_s    18 of 36:  constant 0.588 [0.539, 0.647]  mean_energy 2.378 [2.180, 2.618]
 
-CELL W-E1 30x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 3 s)
+CELL W-E1 30x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.073
   edt_s   one seed's model sd over the seeds: median scatter 0.071, largest 0.091
   t20_s   one seed's model sd over the seeds: median scatter 0.084, largest 0.132
@@ -451,7 +456,7 @@ CELL W-E1 30x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3
   d50     36 of 36:  constant 0.764 [0.718, 0.817]  mean_energy 1.623 [1.525, 1.736]
   ts_s    23 of 36:  constant 0.571 [0.528, 0.621]  mean_energy 2.752 [2.547, 2.995]
 
-CELL W-E2 20x4x3 dead ceiling (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 3 s)
+CELL W-E2 20x4x3 dead ceiling (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.086
   edt_s   one seed's model sd over the seeds: median scatter 0.060, largest 0.078
   t20_s   one seed's model sd over the seeds: median scatter 0.081, largest 0.130
@@ -469,7 +474,7 @@ CELL W-E2 20x4x3 dead ceiling (0.6; 0.05 elsewhere), specular Energetic N 300000
   d50     30 of 36:  constant 0.688 [0.643, 0.741]  mean_energy 1.374 [1.284, 1.479]
   ts_s    18 of 36:  constant 0.513 [0.470, 0.565]  mean_energy 2.090 [1.916, 2.301]
 
-CELL W-E3 20x8x6 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 3 s)
+CELL W-E3 20x8x6 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.094
   edt_s   one seed's model sd over the seeds: median scatter 0.063, largest 0.088
   t20_s   one seed's model sd over the seeds: median scatter 0.069, largest 0.108
@@ -487,7 +492,7 @@ CELL W-E3 20x8x6 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3
   d50     30 of 36:  constant 0.762 [0.711, 0.820]  mean_energy 1.099 [1.026, 1.183]
   ts_s    30 of 36:  constant 0.489 [0.457, 0.526]  mean_energy 1.489 [1.391, 1.603]
 
-CELL W-E4 20x4x3 dead floor (0.6; 0.05 elsewhere), scattering 0.3 Energetic N 300000 3 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 1 s)
+CELL W-E4 20x4x3 dead floor (0.6; 0.05 elsewhere), scattering 0.3 Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.085
   edt_s   one seed's model sd over the seeds: median scatter 0.065, largest 0.065
   t20_s   one seed's model sd over the seeds: median scatter 0.130, largest 0.305
@@ -505,7 +510,7 @@ CELL W-E4 20x4x3 dead floor (0.6; 0.05 elsewhere), scattering 0.3 Energetic N 30
   d50     30 of 36:  constant 0.614 [0.574, 0.661]  mean_energy 1.433 [1.338, 1.542]
   ts_s     5 of 36:  constant 0.558 [0.477, 0.677]  mean_energy 1.607 [1.373, 1.948]
 
-CELL W-E5 10x10x10 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 4 s dt 0.01 eps 7 (10 seeds, 36 receiver-bands; read in 3 s)
+CELL W-E5 10x10x10 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 4 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.083
   edt_s   one seed's model sd over the seeds: median scatter 0.057, largest 0.084
   t20_s   one seed's model sd over the seeds: median scatter 0.062, largest 0.104
@@ -523,7 +528,7 @@ CELL W-E5 10x10x10 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000
   d50     30 of 36:  constant 0.823 [0.769, 0.886]  mean_energy 1.041 [0.973, 1.121]
   ts_s    30 of 36:  constant 0.464 [0.434, 0.500]  mean_energy 1.254 [1.171, 1.350]
 
-CELL W-E6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 600000 3 s dt 0.001 eps 7 (10 seeds, 36 receiver-bands; read in 98 s)
+CELL W-E6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 600000 3 s dt 0.001 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 15 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.065
   edt_s   one seed's model sd over the seeds: median scatter 0.061, largest 0.111
   t20_s   one seed's model sd over the seeds: median scatter 0.070, largest 0.100
@@ -536,6 +541,631 @@ CELL W-E6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 600000 3
   c80_db   0 of 36:
   d50      0 of 36:
   ts_s     0 of 36:
+
+CELL C3-R1 5x4x3 Lambert a0.05 Random N 150000 3 s dt 0.01 eps 5 R 0.9 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.065
+  edt_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.075
+  t20_s   one seed's model sd over the seeds: median scatter 0.058, largest 0.109
+  t30_s   one seed's model sd over the seeds: median scatter 0.168, largest 0.459
+  c50_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.068
+  c80_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.072
+  d50     one seed's model sd over the seeds: median scatter 0.049, largest 0.068
+  ts_s    one seed's model sd over the seeds: median scatter 0.047, largest 0.075
+  spl_db  36 of 36:  constant 1.711 [1.608, 1.830]
+  edt_s   36 of 36:  constant 2.013 [1.892, 2.153]
+  t20_s   36 of 36:  constant 2.405 [2.260, 2.572]
+  t30_s   36 of 36:  constant 2.553 [2.399, 2.730]
+  c50_db  36 of 36:  constant 1.330 [1.250, 1.423]
+  c80_db  36 of 36:  constant 1.483 [1.393, 1.586]
+  d50     36 of 36:  constant 1.329 [1.249, 1.422]
+  ts_s    36 of 36:  constant 2.152 [2.022, 2.302]
+
+CELL C3-R2 6x10x3 Lambert a0.1 Random N 150000 3 s dt 0.01 eps 5 R 0.9 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.070
+  edt_s   one seed's model sd over the seeds: median scatter 0.051, largest 0.071
+  t20_s   one seed's model sd over the seeds: median scatter 0.087, largest 0.161
+  t30_s   one seed's model sd over the seeds: median scatter 0.191, largest 0.376
+  c50_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.069
+  c80_db  one seed's model sd over the seeds: median scatter 0.053, largest 0.066
+  d50     one seed's model sd over the seeds: median scatter 0.049, largest 0.068
+  ts_s    one seed's model sd over the seeds: median scatter 0.052, largest 0.084
+  spl_db  36 of 36:  constant 1.400 [1.316, 1.497]
+  edt_s   36 of 36:  constant 1.492 [1.402, 1.596]
+  t20_s   36 of 36:  constant 1.445 [1.358, 1.545]
+  t30_s   36 of 36:  constant 1.385 [1.301, 1.481]
+  c50_db  18 of 36:  constant 1.185 [1.087, 1.305]
+  c80_db  18 of 36:  constant 1.270 [1.165, 1.399]
+  d50     18 of 36:  constant 1.182 [1.084, 1.301]
+  ts_s    18 of 36:  constant 1.527 [1.400, 1.682]
+
+CELL C3-R3 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Random N 500000 3 s dt 0.01 eps 5 R 0.9 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.073
+  edt_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.080
+  t20_s   one seed's model sd over the seeds: median scatter 0.104, largest 0.156
+  t30_s   one seed's model sd over the seeds: median scatter 0.224, largest 0.551
+  c50_db  one seed's model sd over the seeds: median scatter 0.056, largest 0.072
+  c80_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.078
+  d50     one seed's model sd over the seeds: median scatter 0.056, largest 0.072
+  ts_s    one seed's model sd over the seeds: median scatter 0.050, largest 0.061
+  spl_db  36 of 36:  constant 1.497 [1.407, 1.601]
+  edt_s   36 of 36:  constant 1.788 [1.680, 1.913]
+  t20_s   36 of 36:  constant 2.297 [2.158, 2.456]
+  t30_s   36 of 36:  constant 2.435 [2.288, 2.604]
+  c50_db  18 of 36:  constant 1.430 [1.311, 1.575]
+  c80_db  18 of 36:  constant 1.546 [1.417, 1.702]
+  d50     18 of 36:  constant 1.428 [1.309, 1.572]
+  ts_s    18 of 36:  constant 2.182 [2.001, 2.404]
+
+CELL C3-R4 10x10x10 Lambert a0.05 Random N 150000 6 s dt 0.01 eps 5 R 1.4 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.067
+  edt_s   one seed's model sd over the seeds: median scatter 0.046, largest 0.072
+  t20_s   one seed's model sd over the seeds: median scatter 0.072, largest 0.101
+  t30_s   one seed's model sd over the seeds: median scatter 0.167, largest 0.276
+  c50_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.089
+  c80_db  one seed's model sd over the seeds: median scatter 0.055, largest 0.074
+  d50     one seed's model sd over the seeds: median scatter 0.053, largest 0.084
+  ts_s    one seed's model sd over the seeds: median scatter 0.052, largest 0.082
+  spl_db  36 of 36:  constant 1.240 [1.165, 1.326]
+  edt_s   36 of 36:  constant 1.371 [1.288, 1.466]
+  t20_s   36 of 36:  constant 1.595 [1.498, 1.705]
+  t30_s   36 of 36:  constant 1.616 [1.518, 1.728]
+  c50_db  18 of 36:  constant 1.170 [1.073, 1.289]
+  c80_db  18 of 36:  constant 1.181 [1.082, 1.300]
+  d50     18 of 36:  constant 1.169 [1.072, 1.288]
+  ts_s    18 of 36:  constant 1.508 [1.383, 1.661]
+
+CELL C3-R5 5x4x3 Lambert a0.2 Random N 5000 1.5 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.061, largest 0.087
+  c50_db  one seed's model sd over the seeds: median scatter 0.070, largest 0.110
+  c80_db  one seed's model sd over the seeds: median scatter 0.110, largest 0.162
+  d50     one seed's model sd over the seeds: median scatter 0.068, largest 0.090
+  spl_db  36 of 36:  constant 0.979 [0.920, 1.047]
+  edt_s    0 of 36:
+  t20_s    0 of 36:
+  t30_s    0 of 36:
+  c50_db  36 of 36:  constant 0.997 [0.937, 1.066]
+  c80_db  36 of 36:  constant 0.986 [0.926, 1.054]
+  d50     36 of 36:  constant 0.998 [0.937, 1.067]
+  ts_s     0 of 36:
+
+CELL C3-R6 6x10x3 tutorial 1's materials, air on Random N 15000 2 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.054, largest 0.081
+  t20_s   one seed's model sd over the seeds: median scatter 0.369, largest 0.369
+  c50_db  one seed's model sd over the seeds: median scatter 0.064, largest 0.115
+  c80_db  one seed's model sd over the seeds: median scatter 0.067, largest 0.121
+  d50     one seed's model sd over the seeds: median scatter 0.061, largest 0.094
+  spl_db  36 of 36:  constant 1.029 [0.967, 1.101]
+  edt_s    0 of 36:
+  t20_s    1 of 36:  constant 1.809 [1.320, 2.981]
+  t30_s    0 of 36:
+  c50_db  24 of 36:  constant 1.052 [0.975, 1.143]
+  c80_db  24 of 36:  constant 0.994 [0.922, 1.080]
+  d50     24 of 36:  constant 1.044 [0.968, 1.135]
+  ts_s     0 of 36:
+
+CELL C3-R7 6x10x3 Lambert a1 Random N 150000 0.05 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.044, largest 0.067
+  spl_db  36 of 36:  constant 1.027 [0.965, 1.099]
+  edt_s    0 of 36:
+  t20_s    0 of 36:
+  t30_s    0 of 36:
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL C3-R8 5x4x3 Lambert: floor a0.1, ceiling a0.1, walls a0.8 Random N 150000 1 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.065
+  t20_s   one seed's model sd over the seeds: median scatter 0.139, largest 0.157
+  c50_db  one seed's model sd over the seeds: median scatter 0.117, largest 0.209
+  c80_db  one seed's model sd over the seeds: median scatter 0.141, largest 0.183
+  d50     one seed's model sd over the seeds: median scatter 0.096, largest 0.162
+  spl_db  36 of 36:  constant 0.962 [0.904, 1.029]
+  edt_s    0 of 36:
+  t20_s    5 of 36:  constant 0.939 [0.803, 1.139]
+  t30_s    0 of 36:
+  c50_db  36 of 36:  constant 1.004 [0.943, 1.074]
+  c80_db  27 of 36:  constant 1.132 [1.054, 1.224]
+  d50     36 of 36:  constant 1.025 [0.963, 1.096]
+  ts_s     0 of 36:
+
+CELL C3-R9 5x4x3 Lambert a0.05 Random N 50000 3 s dt 0.01 eps 5 R 0.6 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.066
+  edt_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.092
+  t20_s   one seed's model sd over the seeds: median scatter 0.103, largest 0.156
+  t30_s   one seed's model sd over the seeds: median scatter 0.252, largest 0.615
+  c50_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.069
+  c80_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.081
+  d50     one seed's model sd over the seeds: median scatter 0.045, largest 0.068
+  ts_s    one seed's model sd over the seeds: median scatter 0.052, largest 0.071
+  spl_db  36 of 36:  constant 1.522 [1.430, 1.627]
+  edt_s   36 of 36:  constant 1.601 [1.504, 1.712]
+  t20_s   36 of 36:  constant 1.563 [1.468, 1.671]
+  t30_s   36 of 36:  constant 1.732 [1.627, 1.852]
+  c50_db  36 of 36:  constant 1.188 [1.116, 1.271]
+  c80_db  36 of 36:  constant 1.290 [1.212, 1.380]
+  d50     36 of 36:  constant 1.188 [1.117, 1.271]
+  ts_s    36 of 36:  constant 1.712 [1.608, 1.831]
+
+CELL V3-R1 20x4x3 Lambert a0.05 Random N 300000 4 s dt 0.01 eps 5 R 0.9 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.043, largest 0.076
+  edt_s   one seed's model sd over the seeds: median scatter 0.048, largest 0.070
+  t20_s   one seed's model sd over the seeds: median scatter 0.071, largest 0.110
+  t30_s   one seed's model sd over the seeds: median scatter 0.160, largest 0.313
+  c50_db  one seed's model sd over the seeds: median scatter 0.055, largest 0.074
+  c80_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.089
+  d50     one seed's model sd over the seeds: median scatter 0.056, largest 0.073
+  ts_s    one seed's model sd over the seeds: median scatter 0.052, largest 0.079
+  spl_db  36 of 36:  constant 1.502 [1.411, 1.606]
+  edt_s   36 of 36:  constant 1.600 [1.503, 1.711]
+  t20_s   36 of 36:  constant 1.887 [1.773, 2.018]
+  t30_s   36 of 36:  constant 1.689 [1.587, 1.806]
+  c50_db  30 of 36:  constant 1.192 [1.114, 1.283]
+  c80_db  30 of 36:  constant 1.289 [1.204, 1.388]
+  d50     30 of 36:  constant 1.233 [1.152, 1.328]
+  ts_s    30 of 36:  constant 1.683 [1.572, 1.812]
+
+CELL V3-R2 5x4x3 specular a0.05 Random N 300000 3 s dt 0.01 eps 5 R 0.7 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.070
+  edt_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.065
+  t20_s   one seed's model sd over the seeds: median scatter 0.062, largest 0.095
+  t30_s   one seed's model sd over the seeds: median scatter 0.144, largest 0.240
+  c50_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.071
+  c80_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.072
+  d50     one seed's model sd over the seeds: median scatter 0.046, largest 0.070
+  ts_s    one seed's model sd over the seeds: median scatter 0.048, largest 0.069
+  spl_db  36 of 36:  constant 1.560 [1.466, 1.668]
+  edt_s   36 of 36:  constant 1.775 [1.668, 1.898]
+  t20_s   36 of 36:  constant 2.106 [1.979, 2.253]
+  t30_s   36 of 36:  constant 2.182 [2.050, 2.333]
+  c50_db  36 of 36:  constant 1.257 [1.181, 1.344]
+  c80_db  36 of 36:  constant 1.277 [1.199, 1.365]
+  d50     36 of 36:  constant 1.257 [1.181, 1.344]
+  ts_s    36 of 36:  constant 1.937 [1.820, 2.072]
+
+CELL V3-R3 10x10x10 Lambert a0.1 Random N 30000 3 s dt 0.01 eps 5 R 1.2 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.070
+  edt_s   one seed's model sd over the seeds: median scatter 0.066, largest 0.096
+  t20_s   one seed's model sd over the seeds: median scatter 0.173, largest 0.312
+  t30_s   one seed's model sd over the seeds: median scatter 0.368, largest 0.794
+  c50_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.073
+  c80_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.075
+  d50     one seed's model sd over the seeds: median scatter 0.052, largest 0.071
+  ts_s    one seed's model sd over the seeds: median scatter 0.046, largest 0.066
+  spl_db  36 of 36:  constant 1.277 [1.200, 1.365]
+  edt_s   36 of 36:  constant 1.287 [1.210, 1.377]
+  t20_s   36 of 36:  constant 1.279 [1.202, 1.368]
+  t30_s   35 of 36:  constant 1.484 [1.393, 1.588]
+  c50_db  18 of 36:  constant 1.137 [1.042, 1.252]
+  c80_db  18 of 36:  constant 1.154 [1.058, 1.271]
+  d50     18 of 36:  constant 1.135 [1.041, 1.250]
+  ts_s    18 of 36:  constant 1.352 [1.240, 1.489]
+
+CELL V3-R4 6x10x3 tutorial 1's materials, air on Random N 8000 2 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.057, largest 0.101
+  c50_db  one seed's model sd over the seeds: median scatter 0.064, largest 0.102
+  c80_db  one seed's model sd over the seeds: median scatter 0.105, largest 0.195
+  d50     one seed's model sd over the seeds: median scatter 0.066, largest 0.092
+  spl_db  36 of 36:  constant 1.009 [0.948, 1.079]
+  edt_s    0 of 36:
+  t20_s    0 of 36:
+  t30_s    0 of 36:
+  c50_db  24 of 36:  constant 0.975 [0.904, 1.059]
+  c80_db  24 of 36:  constant 1.027 [0.952, 1.115]
+  d50     24 of 36:  constant 0.973 [0.902, 1.057]
+  ts_s     0 of 36:
+
+CELL V3-R5 20x4x3 Lambert a1 Random N 150000 0.08 s dt 0.001 eps 5 R 0.5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.057, largest 0.130
+  spl_db  36 of 36:  constant 1.043 [0.980, 1.116]
+  edt_s    0 of 36:
+  t20_s    0 of 36:
+  t30_s    0 of 36:
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL V3-R6 6x10x3 Lambert: floor a0.1, ceiling a0.1, walls a0.8 Random N 150000 1 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.075
+  edt_s   one seed's model sd over the seeds: median scatter 0.108, largest 0.162
+  t20_s   one seed's model sd over the seeds: median scatter 0.276, largest 0.505
+  t30_s   one seed's model sd over the seeds: median scatter 0.318, largest 0.354
+  c50_db  one seed's model sd over the seeds: median scatter 0.067, largest 0.094
+  c80_db  one seed's model sd over the seeds: median scatter 0.119, largest 0.228
+  d50     one seed's model sd over the seeds: median scatter 0.074, largest 0.099
+  ts_s    one seed's model sd over the seeds: median scatter 0.063, largest 0.083
+  spl_db  36 of 36:  constant 0.955 [0.897, 1.021]
+  edt_s   36 of 36:  constant 0.981 [0.921, 1.049]
+  t20_s   36 of 36:  constant 0.856 [0.804, 0.915]
+  t30_s   10 of 36:  constant 1.556 [1.388, 1.776]
+  c50_db  15 of 36:  constant 1.071 [0.975, 1.192]
+  c80_db  15 of 36:  constant 0.899 [0.818, 1.000]
+  d50     15 of 36:  constant 1.088 [0.990, 1.210]
+  ts_s    15 of 36:  constant 0.961 [0.874, 1.068]
+
+CELL V3-R7 20x8x6 dead floor (0.6; 0.05 elsewhere), specular Random N 300000 3 s dt 0.01 eps 5 R 0.9 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.093
+  edt_s   one seed's model sd over the seeds: median scatter 0.067, largest 0.112
+  t20_s   one seed's model sd over the seeds: median scatter 0.125, largest 0.170
+  t30_s   one seed's model sd over the seeds: median scatter 0.111, largest 0.191
+  c50_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.080
+  c80_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.074
+  d50     one seed's model sd over the seeds: median scatter 0.052, largest 0.080
+  ts_s    one seed's model sd over the seeds: median scatter 0.053, largest 0.075
+  spl_db  36 of 36:  constant 1.199 [1.126, 1.282]
+  edt_s   36 of 36:  constant 1.341 [1.260, 1.434]
+  t20_s   36 of 36:  constant 1.577 [1.482, 1.687]
+  t30_s   36 of 36:  constant 1.486 [1.396, 1.589]
+  c50_db  24 of 36:  constant 1.043 [0.967, 1.133]
+  c80_db  24 of 36:  constant 1.129 [1.047, 1.227]
+  d50     24 of 36:  constant 1.048 [0.972, 1.139]
+  ts_s    24 of 36:  constant 1.620 [1.502, 1.760]
+
+CELL V3-R8 5x4x3 Lambert a0.2 Random N 50000 1.5 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.068
+  t20_s   one seed's model sd over the seeds: median scatter 0.244, largest 0.413
+  c50_db  one seed's model sd over the seeds: median scatter 0.054, largest 0.076
+  c80_db  one seed's model sd over the seeds: median scatter 0.055, largest 0.080
+  d50     one seed's model sd over the seeds: median scatter 0.053, largest 0.068
+  spl_db  36 of 36:  constant 1.099 [1.033, 1.175]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.916 [0.860, 0.979]
+  t30_s    0 of 36:
+  c50_db  36 of 36:  constant 1.011 [0.950, 1.081]
+  c80_db  36 of 36:  constant 1.007 [0.946, 1.077]
+  d50     36 of 36:  constant 1.011 [0.950, 1.081]
+  ts_s     0 of 36:
+
+CELL V3-R9 5x4x3 Lambert a0.05 Random N 500000 3 s dt 0.01 eps 5 R 0.6 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.072
+  edt_s   one seed's model sd over the seeds: median scatter 0.047, largest 0.069
+  t20_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.077
+  t30_s   one seed's model sd over the seeds: median scatter 0.093, largest 0.134
+  c50_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.077
+  c80_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.065
+  d50     one seed's model sd over the seeds: median scatter 0.048, largest 0.078
+  ts_s    one seed's model sd over the seeds: median scatter 0.047, largest 0.075
+  spl_db  36 of 36:  constant 1.330 [1.249, 1.422]
+  edt_s   36 of 36:  constant 1.682 [1.581, 1.799]
+  t20_s   36 of 36:  constant 1.688 [1.586, 1.805]
+  t30_s   36 of 36:  constant 1.723 [1.619, 1.842]
+  c50_db  36 of 36:  constant 1.196 [1.123, 1.279]
+  c80_db  36 of 36:  constant 1.262 [1.186, 1.349]
+  d50     36 of 36:  constant 1.194 [1.122, 1.277]
+  ts_s    36 of 36:  constant 1.753 [1.647, 1.874]
+
+CELL C3-E1 5x4x3 Lambert a0.05 Energetic N 150000 3 s dt 0.01 eps 7 R 0.9 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.069
+  edt_s   one seed's model sd over the seeds: median scatter 0.060, largest 0.081
+  t20_s   one seed's model sd over the seeds: median scatter 0.048, largest 0.065
+  t30_s   one seed's model sd over the seeds: median scatter 0.044, largest 0.069
+  c50_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.068
+  c80_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.073
+  d50     one seed's model sd over the seeds: median scatter 0.045, largest 0.068
+  ts_s    one seed's model sd over the seeds: median scatter 0.052, largest 0.073
+  spl_db  36 of 36:  constant 0.782 [0.735, 0.836]  mean_energy 1.083 [1.018, 1.159]
+  edt_s   36 of 36:  constant 0.394 [0.370, 0.422]  mean_energy 1.106 [1.039, 1.183]
+  t20_s   36 of 36:  constant 0.085 [0.080, 0.091]  mean_energy 1.240 [1.165, 1.326]
+  t30_s   36 of 36:  constant 0.030 [0.029, 0.033]  mean_energy 1.338 [1.257, 1.431]
+  c50_db  36 of 36:  constant 1.007 [0.946, 1.077]  mean_energy 1.141 [1.072, 1.220]
+  c80_db  36 of 36:  constant 0.856 [0.804, 0.915]  mean_energy 1.092 [1.026, 1.167]
+  d50     36 of 36:  constant 1.006 [0.945, 1.076]  mean_energy 1.140 [1.071, 1.219]
+  ts_s    36 of 36:  constant 0.596 [0.560, 0.637]  mean_energy 1.138 [1.069, 1.217]
+
+CELL C3-E2 6x10x3 Lambert: floor a0.6, ceiling a0.05, walls a0.05 Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.071
+  t20_s   one seed's model sd over the seeds: median scatter 0.052, largest 0.072
+  t30_s   one seed's model sd over the seeds: median scatter 0.074, largest 0.119
+  c50_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.068
+  c80_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.067
+  d50     one seed's model sd over the seeds: median scatter 0.047, largest 0.070
+  spl_db  36 of 36:  constant 0.820 [0.770, 0.877]  mean_energy 1.148 [1.078, 1.227]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.159 [0.149, 0.170]  mean_energy 2.400 [2.255, 2.567]
+  t30_s   36 of 36:  constant 0.075 [0.070, 0.080]  mean_energy 3.580 [3.364, 3.828]
+  c50_db  24 of 36:  constant 0.590 [0.547, 0.641]  mean_energy 1.107 [1.026, 1.203]
+  c80_db  24 of 36:  constant 0.467 [0.433, 0.508]  mean_energy 1.317 [1.221, 1.431]
+  d50     24 of 36:  constant 0.592 [0.549, 0.643]  mean_energy 1.114 [1.033, 1.211]
+  ts_s     0 of 36:
+test noise_calibration has been running for over 60 seconds
+
+CELL C3-E3 20x4x3 Lambert: floor a0.6, ceiling a0.05, walls a0.05 Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.065
+  edt_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.060
+  t20_s   one seed's model sd over the seeds: median scatter 0.059, largest 0.080
+  t30_s   one seed's model sd over the seeds: median scatter 0.090, largest 0.550
+  c50_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.074
+  c80_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.072
+  d50     one seed's model sd over the seeds: median scatter 0.050, largest 0.075
+  ts_s    one seed's model sd over the seeds: median scatter 0.060, largest 0.061
+  spl_db  36 of 36:  constant 0.766 [0.719, 0.819]  mean_energy 1.531 [1.438, 1.637]
+  edt_s    3 of 36:  constant 0.290 [0.238, 0.375]  mean_energy 1.287 [1.056, 1.664]
+  t20_s   36 of 36:  constant 0.125 [0.118, 0.134]  mean_energy 2.761 [2.595, 2.953]
+  t30_s   36 of 36:  constant 0.088 [0.083, 0.094]  mean_energy 4.442 [4.174, 4.751]
+  c50_db  30 of 36:  constant 0.586 [0.548, 0.631]  mean_energy 1.316 [1.230, 1.417]
+  c80_db  30 of 36:  constant 0.431 [0.402, 0.464]  mean_energy 1.408 [1.316, 1.516]
+  d50     30 of 36:  constant 0.589 [0.550, 0.634]  mean_energy 1.357 [1.268, 1.461]
+  ts_s     5 of 36:  constant 0.442 [0.378, 0.536]  mean_energy 1.157 [0.989, 1.403]
+
+CELL C3-E4 6x10x3 dead floor (0.6; 0.05 elsewhere), specular Energetic N 300000 3 s dt 0.01 eps 7 R 0.9 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.053, largest 0.088
+  edt_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.083
+  t20_s   one seed's model sd over the seeds: median scatter 0.039, largest 0.069
+  t30_s   one seed's model sd over the seeds: median scatter 0.055, largest 0.083
+  c50_db  one seed's model sd over the seeds: median scatter 0.054, largest 0.072
+  c80_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.061
+  d50     one seed's model sd over the seeds: median scatter 0.054, largest 0.072
+  ts_s    one seed's model sd over the seeds: median scatter 0.049, largest 0.070
+  spl_db  36 of 36:  constant 1.003 [0.942, 1.072]  mean_energy 1.592 [1.496, 1.702]
+  edt_s   36 of 36:  constant 0.710 [0.667, 0.759]  mean_energy 3.615 [3.397, 3.866]
+  t20_s   36 of 36:  constant 0.386 [0.363, 0.413]  mean_energy 13.717 [12.889, 14.670]
+  t30_s   36 of 36:  constant 0.251 [0.236, 0.268]  mean_energy 25.818 [24.259, 27.610]
+  c50_db  18 of 36:  constant 0.921 [0.844, 1.014]  mean_energy 1.479 [1.356, 1.629]
+  c80_db  18 of 36:  constant 0.866 [0.794, 0.954]  mean_energy 1.697 [1.556, 1.869]
+  d50     18 of 36:  constant 0.922 [0.845, 1.015]  mean_energy 1.482 [1.359, 1.632]
+  ts_s    18 of 36:  constant 0.833 [0.764, 0.917]  mean_energy 2.447 [2.244, 2.695]
+
+CELL C3-E5 5x4x3 Lambert a0.2 Energetic N 5000 1.5 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.055, largest 0.072
+  t20_s   one seed's model sd over the seeds: median scatter 0.112, largest 0.184
+  c50_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.084
+  c80_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.074
+  d50     one seed's model sd over the seeds: median scatter 0.064, largest 0.093
+  spl_db  36 of 36:  constant 0.720 [0.677, 0.770]  mean_energy 0.964 [0.906, 1.031]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.088 [0.083, 0.095]  mean_energy 1.115 [1.048, 1.192]
+  t30_s    0 of 36:
+  c50_db  36 of 36:  constant 0.498 [0.468, 0.533]  mean_energy 0.988 [0.929, 1.057]
+  c80_db  36 of 36:  constant 0.302 [0.284, 0.323]  mean_energy 0.943 [0.887, 1.009]
+  d50     36 of 36:  constant 0.505 [0.474, 0.540]  mean_energy 0.989 [0.929, 1.057]
+  ts_s     0 of 36:
+
+CELL C3-E6 6x10x3 tutorial 1's materials, air on Energetic N 15000 2 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.078
+  t20_s   one seed's model sd over the seeds: median scatter 0.121, largest 0.197
+  c50_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.077
+  c80_db  one seed's model sd over the seeds: median scatter 0.053, largest 0.069
+  d50     one seed's model sd over the seeds: median scatter 0.055, largest 0.088
+  spl_db  36 of 36:  constant 0.722 [0.678, 0.772]  mean_energy 1.036 [0.973, 1.108]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.123 [0.116, 0.132]  mean_energy 2.415 [2.269, 2.583]
+  t30_s    0 of 36:
+  c50_db  24 of 36:  constant 0.566 [0.525, 0.615]  mean_energy 1.064 [0.987, 1.156]
+  c80_db  24 of 36:  constant 0.415 [0.385, 0.451]  mean_energy 1.083 [1.005, 1.177]
+  d50     24 of 36:  constant 0.568 [0.527, 0.618]  mean_energy 1.062 [0.984, 1.154]
+  ts_s     0 of 36:
+
+CELL C3-E7 6x10x3 Lambert a1 Energetic N 150000 0.05 s dt 0.001 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.038, largest 0.056
+  spl_db  36 of 36:  constant 0.862 [0.810, 0.922]  mean_energy 1.522 [1.430, 1.627]
+  edt_s    0 of 36:
+  t20_s    0 of 36:
+  t30_s    0 of 36:
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL C3-E8 20x8x6 Lambert: floor a0.9, ceiling a0.02, walls a0.02 Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.075
+  edt_s   one seed's model sd over the seeds: median scatter 0.109, largest 0.130
+  t20_s   one seed's model sd over the seeds: median scatter 0.161, largest 0.252
+  t30_s   one seed's model sd over the seeds: median scatter 0.206, largest 0.778
+  c50_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.076
+  c80_db  one seed's model sd over the seeds: median scatter 0.056, largest 0.086
+  d50     one seed's model sd over the seeds: median scatter 0.053, largest 0.077
+  ts_s    one seed's model sd over the seeds: median scatter 0.057, largest 0.072
+  spl_db  36 of 36:  constant 0.958 [0.900, 1.024]  mean_energy 1.535 [1.442, 1.642]
+  edt_s    6 of 36:  constant 0.667 [0.577, 0.793]  mean_energy 2.489 [2.153, 2.962]
+  t20_s   36 of 36:  constant 0.482 [0.453, 0.516]  mean_energy 8.189 [7.694, 8.757]
+  t30_s   32 of 36:  constant 0.634 [0.593, 0.681]  mean_energy 18.947 [17.739, 20.349]
+  c50_db  30 of 36:  constant 0.884 [0.826, 0.952]  mean_energy 1.553 [1.451, 1.672]
+  c80_db  30 of 36:  constant 0.795 [0.742, 0.855]  mean_energy 1.870 [1.747, 2.013]
+  d50     30 of 36:  constant 0.888 [0.830, 0.956]  mean_energy 1.567 [1.464, 1.687]
+  ts_s     6 of 36:  constant 0.705 [0.610, 0.839]  mean_energy 1.668 [1.443, 1.986]
+
+CELL C3-E9 5x4x3 Lambert: floor a0.1, ceiling a0.1, walls a0.8 Energetic N 150000 1 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.075
+  t20_s   one seed's model sd over the seeds: median scatter 0.062, largest 0.087
+  t30_s   one seed's model sd over the seeds: median scatter 0.111, largest 0.159
+  c50_db  one seed's model sd over the seeds: median scatter 0.059, largest 0.099
+  c80_db  one seed's model sd over the seeds: median scatter 0.070, largest 0.113
+  d50     one seed's model sd over the seeds: median scatter 0.053, largest 0.094
+  spl_db  36 of 36:  constant 0.851 [0.799, 0.910]  mean_energy 1.051 [0.988, 1.124]
+  edt_s    0 of 36:
+  t20_s   31 of 36:  constant 0.390 [0.365, 0.419]  mean_energy 3.905 [3.652, 4.198]
+  t30_s   35 of 36:  constant 0.342 [0.321, 0.366]  mean_energy 7.137 [6.701, 7.640]
+  c50_db  36 of 36:  constant 0.329 [0.310, 0.352]  mean_energy 3.002 [2.821, 3.211]
+  c80_db  36 of 36:  constant 0.194 [0.182, 0.207]  mean_energy 6.432 [6.043, 6.878]
+  d50     36 of 36:  constant 0.343 [0.323, 0.367]  mean_energy 3.005 [2.823, 3.213]
+  ts_s     0 of 36:
+
+CELL C3-E10 5x4x3 Lambert a0.05 Energetic N 50000 3 s dt 0.01 eps 7 R 0.6 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.070
+  edt_s   one seed's model sd over the seeds: median scatter 0.051, largest 0.089
+  t20_s   one seed's model sd over the seeds: median scatter 0.040, largest 0.068
+  t30_s   one seed's model sd over the seeds: median scatter 0.042, largest 0.071
+  c50_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.074
+  c80_db  one seed's model sd over the seeds: median scatter 0.045, largest 0.078
+  d50     one seed's model sd over the seeds: median scatter 0.052, largest 0.074
+  ts_s    one seed's model sd over the seeds: median scatter 0.049, largest 0.094
+  spl_db  36 of 36:  constant 0.760 [0.714, 0.813]  mean_energy 1.077 [1.012, 1.152]
+  edt_s   36 of 36:  constant 0.372 [0.350, 0.398]  mean_energy 1.090 [1.024, 1.165]
+  t20_s   36 of 36:  constant 0.082 [0.077, 0.088]  mean_energy 1.272 [1.195, 1.360]
+  t30_s   36 of 36:  constant 0.028 [0.027, 0.030]  mean_energy 1.280 [1.202, 1.369]
+  c50_db  36 of 36:  constant 0.900 [0.846, 0.962]  mean_energy 1.088 [1.022, 1.164]
+  c80_db  36 of 36:  constant 0.821 [0.772, 0.878]  mean_energy 1.111 [1.044, 1.188]
+  d50     36 of 36:  constant 0.900 [0.846, 0.962]  mean_energy 1.088 [1.022, 1.163]
+  ts_s    36 of 36:  constant 0.549 [0.516, 0.587]  mean_energy 1.109 [1.042, 1.186]
+
+CELL V3-E1 20x4x3 Lambert a0.05 Energetic N 300000 3 s dt 0.01 eps 7 R 0.9 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.078
+  edt_s   one seed's model sd over the seeds: median scatter 0.047, largest 0.073
+  t20_s   one seed's model sd over the seeds: median scatter 0.039, largest 0.056
+  t30_s   one seed's model sd over the seeds: median scatter 0.039, largest 0.067
+  c50_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.071
+  c80_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.071
+  d50     one seed's model sd over the seeds: median scatter 0.048, largest 0.071
+  ts_s    one seed's model sd over the seeds: median scatter 0.046, largest 0.075
+  spl_db  36 of 36:  constant 0.854 [0.802, 0.913]  mean_energy 1.325 [1.245, 1.417]
+  edt_s   36 of 36:  constant 0.481 [0.452, 0.514]  mean_energy 1.461 [1.372, 1.562]
+  t20_s   36 of 36:  constant 0.092 [0.086, 0.098]  mean_energy 1.516 [1.425, 1.621]
+  t30_s   36 of 36:  constant 0.035 [0.033, 0.038]  mean_energy 1.667 [1.566, 1.783]
+  c50_db  30 of 36:  constant 0.993 [0.928, 1.069]  mean_energy 1.178 [1.100, 1.268]
+  c80_db  30 of 36:  constant 1.013 [0.947, 1.091]  mean_energy 1.265 [1.182, 1.362]
+  d50     30 of 36:  constant 0.999 [0.933, 1.075]  mean_energy 1.148 [1.073, 1.236]
+  ts_s    30 of 36:  constant 0.599 [0.559, 0.645]  mean_energy 1.285 [1.200, 1.383]
+
+CELL V3-E2 30x4x3 Lambert: floor a0.05, ceiling a0.6, walls a0.05 Energetic N 300000 3 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.082
+  t20_s   one seed's model sd over the seeds: median scatter 0.074, largest 0.217
+  t30_s   one seed's model sd over the seeds: median scatter 0.090, largest 0.274
+  c50_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.073
+  c80_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.064
+  d50     one seed's model sd over the seeds: median scatter 0.050, largest 0.073
+  ts_s    one seed's model sd over the seeds: median scatter 0.087, largest 0.100
+  spl_db  36 of 36:  constant 0.725 [0.682, 0.776]  mean_energy 1.817 [1.707, 1.943]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.120 [0.112, 0.128]  mean_energy 3.105 [2.917, 3.320]
+  t30_s   24 of 36:  constant 0.095 [0.088, 0.103]  mean_energy 4.115 [3.815, 4.471]
+  c50_db  36 of 36:  constant 0.619 [0.581, 0.662]  mean_energy 1.669 [1.568, 1.784]
+  c80_db  36 of 36:  constant 0.439 [0.412, 0.469]  mean_energy 1.687 [1.585, 1.804]
+  d50     36 of 36:  constant 0.626 [0.588, 0.669]  mean_energy 1.722 [1.618, 1.841]
+  ts_s     3 of 36:  constant 0.517 [0.424, 0.668]  mean_energy 1.643 [1.348, 2.124]
+
+CELL V3-E3 10x10x10 Lambert: floor a0.6, ceiling a0.05, walls a0.05 Energetic N 150000 3 s dt 0.01 eps 7 R 1.2 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.072
+  edt_s   one seed's model sd over the seeds: median scatter 0.052, largest 0.084
+  t20_s   one seed's model sd over the seeds: median scatter 0.038, largest 0.062
+  t30_s   one seed's model sd over the seeds: median scatter 0.054, largest 0.079
+  c50_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.078
+  c80_db  one seed's model sd over the seeds: median scatter 0.053, largest 0.087
+  d50     one seed's model sd over the seeds: median scatter 0.050, largest 0.076
+  ts_s    one seed's model sd over the seeds: median scatter 0.051, largest 0.071
+  spl_db  36 of 36:  constant 0.873 [0.820, 0.934]  mean_energy 1.240 [1.165, 1.326]
+  edt_s   36 of 36:  constant 0.503 [0.473, 0.538]  mean_energy 1.448 [1.360, 1.548]
+  t20_s   36 of 36:  constant 0.187 [0.175, 0.200]  mean_energy 2.936 [2.758, 3.139]
+  t30_s   36 of 36:  constant 0.093 [0.087, 0.100]  mean_energy 4.118 [3.870, 4.404]
+  c50_db  18 of 36:  constant 0.993 [0.910, 1.093]  mean_energy 1.273 [1.167, 1.402]
+  c80_db  18 of 36:  constant 0.912 [0.836, 1.004]  mean_energy 1.308 [1.199, 1.440]
+  d50     18 of 36:  constant 0.994 [0.911, 1.094]  mean_energy 1.274 [1.168, 1.403]
+  ts_s    18 of 36:  constant 0.696 [0.638, 0.766]  mean_energy 1.445 [1.325, 1.591]
+
+CELL V3-E4 5x4x3 specular a0.05 Energetic N 150000 3 s dt 0.01 eps 7 R 0.7 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.066
+  edt_s   one seed's model sd over the seeds: median scatter 0.044, largest 0.065
+  t20_s   one seed's model sd over the seeds: median scatter 0.040, largest 0.059
+  t30_s   one seed's model sd over the seeds: median scatter 0.040, largest 0.062
+  c50_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.079
+  c80_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.078
+  d50     one seed's model sd over the seeds: median scatter 0.052, largest 0.079
+  ts_s    one seed's model sd over the seeds: median scatter 0.043, largest 0.079
+  spl_db  36 of 36:  constant 0.839 [0.788, 0.897]  mean_energy 1.155 [1.086, 1.236]
+  edt_s   36 of 36:  constant 0.425 [0.400, 0.455]  mean_energy 1.317 [1.238, 1.409]
+  t20_s   36 of 36:  constant 0.141 [0.132, 0.150]  mean_energy 2.543 [2.390, 2.720]
+  t30_s   36 of 36:  constant 0.087 [0.082, 0.093]  mean_energy 4.606 [4.328, 4.926]
+  c50_db  36 of 36:  constant 0.835 [0.785, 0.893]  mean_energy 0.937 [0.880, 1.002]
+  c80_db  36 of 36:  constant 0.801 [0.753, 0.857]  mean_energy 1.022 [0.960, 1.092]
+  d50     36 of 36:  constant 0.835 [0.785, 0.893]  mean_energy 0.936 [0.880, 1.001]
+  ts_s    36 of 36:  constant 0.568 [0.533, 0.607]  mean_energy 1.115 [1.048, 1.192]
+
+CELL V3-E5 5x4x3 Lambert a0.2 Energetic N 50000 1.5 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.044, largest 0.088
+  t20_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.085
+  t30_s   one seed's model sd over the seeds: median scatter 0.108, largest 0.156
+  c50_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.078
+  c80_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.088
+  d50     one seed's model sd over the seeds: median scatter 0.053, largest 0.077
+  spl_db  36 of 36:  constant 0.759 [0.714, 0.812]  mean_energy 0.974 [0.915, 1.042]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.080 [0.076, 0.086]  mean_energy 1.103 [1.036, 1.179]
+  t30_s   36 of 36:  constant 0.035 [0.033, 0.037]  mean_energy 1.212 [1.139, 1.296]
+  c50_db  36 of 36:  constant 0.498 [0.468, 0.533]  mean_energy 0.961 [0.903, 1.027]
+  c80_db  36 of 36:  constant 0.332 [0.312, 0.355]  mean_energy 1.029 [0.967, 1.101]
+  d50     36 of 36:  constant 0.499 [0.469, 0.534]  mean_energy 0.962 [0.904, 1.029]
+  ts_s     0 of 36:
+
+CELL V3-E6 20x4x3 Lambert a1 Energetic N 150000 0.08 s dt 0.001 eps 7 R 0.5 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.125
+  spl_db  36 of 36:  constant 1.049 [0.985, 1.121]  mean_energy 5.893 [5.538, 6.303]
+  edt_s    0 of 36:
+  t20_s    0 of 36:
+  t30_s    0 of 36:
+  c50_db   0 of 36:
+  c80_db   0 of 36:
+  d50      0 of 36:
+  ts_s     0 of 36:
+
+CELL V3-E7 6x10x3 Lambert: floor a0.1, ceiling a0.1, walls a0.8 Energetic N 150000 1 s dt 0.01 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.051, largest 0.077
+  t20_s   one seed's model sd over the seeds: median scatter 0.080, largest 0.130
+  t30_s   one seed's model sd over the seeds: median scatter 0.225, largest 0.543
+  c50_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.074
+  c80_db  one seed's model sd over the seeds: median scatter 0.058, largest 0.092
+  d50     one seed's model sd over the seeds: median scatter 0.057, largest 0.089
+  spl_db  36 of 36:  constant 0.770 [0.724, 0.824]  mean_energy 1.010 [0.949, 1.080]
+  edt_s    0 of 36:
+  t20_s   36 of 36:  constant 0.282 [0.265, 0.301]  mean_energy 3.986 [3.745, 4.263]
+  t30_s   36 of 36:  constant 0.282 [0.265, 0.301]  mean_energy 7.282 [6.842, 7.787]
+  c50_db  24 of 36:  constant 0.490 [0.454, 0.532]  mean_energy 1.749 [1.622, 1.900]
+  c80_db  24 of 36:  constant 0.320 [0.297, 0.348]  mean_energy 2.623 [2.432, 2.850]
+  d50     24 of 36:  constant 0.488 [0.453, 0.531]  mean_energy 1.733 [1.607, 1.883]
+  ts_s     0 of 36:
+
+CELL V3-E8 6x10x3 Lambert: floor a0.9, ceiling a0.02, walls a0.02 Energetic N 300000 2 s dt 0.001 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 2 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.092
+  edt_s   one seed's model sd over the seeds: median scatter 0.064, largest 0.090
+  t20_s   one seed's model sd over the seeds: median scatter 0.123, largest 0.187
+  t30_s   one seed's model sd over the seeds: median scatter 0.169, largest 0.326
+  c50_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.070
+  c80_db  one seed's model sd over the seeds: median scatter 0.052, largest 0.075
+  d50     one seed's model sd over the seeds: median scatter 0.044, largest 0.072
+  ts_s    one seed's model sd over the seeds: median scatter 0.052, largest 0.080
+  spl_db  36 of 36:  constant 0.932 [0.875, 0.996]  mean_energy 1.414 [1.329, 1.513]
+  edt_s   36 of 36:  constant 0.766 [0.720, 0.819]  mean_energy 2.390 [2.245, 2.556]
+  t20_s   36 of 36:  constant 0.582 [0.547, 0.622]  mean_energy 9.524 [8.949, 10.185]
+  t30_s   36 of 36:  constant 0.511 [0.480, 0.547]  mean_energy 21.767 [20.453, 23.278]
+  c50_db  15 of 36:  constant 0.786 [0.715, 0.874]  mean_energy 2.260 [2.056, 2.513]
+  c80_db  15 of 36:  constant 0.736 [0.669, 0.818]  mean_energy 3.697 [3.363, 4.111]
+  d50     15 of 36:  constant 0.790 [0.719, 0.878]  mean_energy 2.293 [2.086, 2.550]
+  ts_s    15 of 36:  constant 0.766 [0.697, 0.851]  mean_energy 1.643 [1.495, 1.828]
+
+CELL V3-E9 5x4x3 Lambert a0.05 Energetic N 300000 3 s dt 0.01 eps 7 R 0.6 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.050, largest 0.070
+  edt_s   one seed's model sd over the seeds: median scatter 0.045, largest 0.079
+  t20_s   one seed's model sd over the seeds: median scatter 0.045, largest 0.071
+  t30_s   one seed's model sd over the seeds: median scatter 0.043, largest 0.061
+  c50_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.065
+  c80_db  one seed's model sd over the seeds: median scatter 0.047, largest 0.066
+  d50     one seed's model sd over the seeds: median scatter 0.047, largest 0.065
+  ts_s    one seed's model sd over the seeds: median scatter 0.042, largest 0.069
+  spl_db  36 of 36:  constant 0.740 [0.696, 0.792]  mean_energy 1.022 [0.960, 1.093]
+  edt_s   36 of 36:  constant 0.362 [0.340, 0.387]  mean_energy 1.022 [0.960, 1.093]
+  t20_s   36 of 36:  constant 0.083 [0.078, 0.089]  mean_energy 1.220 [1.146, 1.304]
+  t30_s   36 of 36:  constant 0.029 [0.028, 0.032]  mean_energy 1.302 [1.224, 1.393]
+  c50_db  36 of 36:  constant 0.915 [0.860, 0.979]  mean_energy 1.058 [0.994, 1.131]
+  c80_db  36 of 36:  constant 0.785 [0.738, 0.840]  mean_energy 1.013 [0.952, 1.083]
+  d50     36 of 36:  constant 0.915 [0.860, 0.979]  mean_energy 1.058 [0.994, 1.131]
+  ts_s    36 of 36:  constant 0.543 [0.510, 0.581]  mean_energy 1.053 [0.989, 1.126]
+
+CELL V3-E10 20x4x3 dead floor (0.6; 0.05 elsewhere), scattering 0.3 Energetic N 300000 3 s dt 0.01 eps 7 R 0.6 (10 seeds, 36 receiver-bands; read in 1 s)
+  spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.075
+  edt_s   one seed's model sd over the seeds: median scatter 0.044, largest 0.060
+  t20_s   one seed's model sd over the seeds: median scatter 0.082, largest 0.166
+  t30_s   one seed's model sd over the seeds: median scatter 0.205, largest 0.511
+  c50_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.077
+  c80_db  one seed's model sd over the seeds: median scatter 0.043, largest 0.075
+  d50     one seed's model sd over the seeds: median scatter 0.048, largest 0.073
+  ts_s    one seed's model sd over the seeds: median scatter 0.055, largest 0.070
+  spl_db  36 of 36:  constant 0.753 [0.707, 0.805]  mean_energy 1.315 [1.236, 1.406]
+  edt_s    6 of 36:  constant 0.571 [0.494, 0.680]  mean_energy 2.650 [2.293, 3.154]
+  t20_s   36 of 36:  constant 0.533 [0.501, 0.570]  mean_energy 12.559 [11.801, 13.431]
+  t30_s   36 of 36:  constant 0.517 [0.486, 0.553]  mean_energy 42.133 [39.590, 45.059]
+  c50_db  30 of 36:  constant 0.695 [0.649, 0.748]  mean_energy 1.561 [1.459, 1.681]
+  c80_db  30 of 36:  constant 0.615 [0.575, 0.663]  mean_energy 1.893 [1.768, 2.037]
+  d50     30 of 36:  constant 0.689 [0.643, 0.741]  mean_energy 1.598 [1.493, 1.721]
+  ts_s     6 of 36:  constant 0.648 [0.560, 0.771]  mean_energy 1.874 [1.622, 2.231]
 
 random mode:
   constant
@@ -571,7 +1201,7 @@ energetic mode:
     ts_s    on 7 cells: k 1.8 (upper bound 1.783942, set by C-E7); overstates 1.10 to 1.78; margin 1.1 (by C-E1)
     geometric-mean overstatement 3.347
 
-random mode, validation with the code's factors:
+random mode, validation with rounds 1 and 2's factors:
   V-R1
     spl_db  0.813 [0.764, 0.869] ok
     edt_s   0.611 [0.529, 0.727] ok
@@ -627,7 +1257,7 @@ random mode, validation with the code's factors:
     d50     -
     ts_s    -
 
-energetic mode, validation with the code's factors:
+energetic mode, validation with rounds 1 and 2's factors:
   V-E1
     spl_db  0.664 [0.624, 0.711] ok
     edt_s   0.406 [0.346, 0.492] ok
@@ -787,33 +1417,662 @@ energetic mode, validation with the code's factors:
 random mode, 1/sqrt(N) over the pairs read: spl_db confirmed; edt_s confirmed; t20_s confirmed; t30_s NOT ["C-R1/C-R2: 33.6116 vs 29.7798 (-2.1 se)"]; c50_db confirmed; c80_db confirmed; d50 confirmed; ts_s confirmed
 energetic mode, 1/sqrt(N) over the pairs read: spl_db confirmed; edt_s NOT ["C-E3/C-E4: 3.6936 vs 3.2136 (-2.5 se)"]; t20_s confirmed; t30_s confirmed; c50_db confirmed; c80_db confirmed; d50 confirmed; ts_s confirmed
 
-named counts, C-R1 (150000) against C-R2 (1500000):
-    edt_s   28 refused for noise at C-R1, 28 name a count, 28 at most C-R2's; of those, 100.0 % of C-R2's seeds give the value
-    t20_s   360 refused for noise at C-R1, 360 name a count, 137 at most C-R2's; of those, 100.0 % of C-R2's seeds give the value
-    t30_s   358 refused for noise at C-R1, 0 name a count, 0 at most C-R2's; of those, NaN % of C-R2's seeds give the value
+ROUND 3, random mode, on 22 calibration cells: variable n1*cv2 (geometric-mean overstatement n1 1.6068, n1*cv2 1.3571)
+  spl_db  all     k 1.2 kappa 1.75 (set by C3-R2, 22 cells, overstates 1.219); domain N >= 5000, n1*cv2 <= 2.164181, mean absorption <= 1; margin 1.1 (by C3-R5); 1/sqrt(N) confirmed (read ["C-R1/C-R2 -1.62", "C-R3/C-R4 +0.89", "C-R5/V-R4 +0.17", "C3-R5/V3-R8 +1.77", "C3-R6/C-R5 +0.17", "C3-R9/V3-R9 -1.92"], unsafe [])
+      C-R1   36 rows, n up to 0.0568: 0.895 [0.837, 0.962] dof 282.0
+      C-R2   36 rows, n up to 0.0561: 0.814 [0.764, 0.871] dof 317.9
+      C-R3   36 rows, n up to 0.0242: 0.799 [0.750, 0.856] dof 308.5
+      C-R4   36 rows, n up to 0.0235: 0.855 [0.803, 0.914] dof 323.7
+      C-R5   36 rows, n up to 0.0315: 0.860 [0.806, 0.923] dof 298.0
+      C-R6   36 rows, n up to 0.0306: 0.880 [0.827, 0.942] dof 318.2
+      C-R7   36 rows, n up to 0.0983: 0.907 [0.852, 0.969] dof 324.0
+      V-R1   36 rows, n up to 0.0334: 0.875 [0.822, 0.935] dof 324.0
+      V-R2   36 rows, n up to 0.0122: 0.861 [0.806, 0.925] dof 284.5
+      V-R3   36 rows, n up to 0.2548: 0.780 [0.723, 0.849] dof 208.8
+      V-R4   36 rows, n up to 0.0306: 0.873 [0.811, 0.944] dof 235.6
+      V-R5   36 rows, n up to 0.0587: 0.812 [0.760, 0.872] dof 285.4
+      V-R6   36 rows, n up to 0.1001: 0.785 [0.735, 0.843] dof 288.2
+      C3-R1  36 rows, n up to 2.1642: 0.662 [0.606, 0.732] dof 153.0
+      C3-R2  36 rows, n up to 0.4775: 0.890 [0.803, 0.999] dof 114.4
+      C3-R3  36 rows, n up to 0.8258: 0.834 [0.768, 0.914] dof 179.3
+      C3-R4  36 rows, n up to 0.8261: 0.670 [0.624, 0.724] dof 250.6
+      C3-R5  36 rows, n up to 0.0671: 0.781 [0.734, 0.835] dof 324.0
+      C3-R6  36 rows, n up to 0.0328: 0.840 [0.789, 0.900] dof 313.2
+      C3-R7  36 rows, n up to 0.0011: 0.856 [0.803, 0.917] dof 308.5
+      C3-R8  36 rows, n up to 0.0167: 0.793 [0.744, 0.851] dof 299.3
+      C3-R9  36 rows, n up to 0.9664: 0.784 [0.725, 0.854] dof 203.7
+  edt_s   all     k 1.3 kappa 2 (set by C3-R3, 15 cells, overstates 1.295); domain N >= 50000, n1*cv2 <= 2.164181, mean absorption <= 0.4000000059604645; margin 1.2 (by V-R1); 1/sqrt(N) confirmed (read ["C-R1/C-R2 -0.85", "C-R3/C-R4 +0.09", "C3-R9/V3-R9 +0.58"], unsafe [])
+      C-R1   36 rows, n up to 0.0568: 0.796 [0.738, 0.865] dof 213.2
+      C-R2   36 rows, n up to 0.0561: 0.764 [0.713, 0.824] dof 257.9
+      C-R3   36 rows, n up to 0.0242: 0.777 [0.730, 0.832] dof 315.8
+      C-R4   36 rows, n up to 0.0235: 0.791 [0.742, 0.849] dof 299.9
+      C-R6   36 rows, n up to 0.0306: 0.729 [0.674, 0.795] dof 197.7
+      C-R7   36 rows, n up to 0.0983: 0.870 [0.812, 0.936] dof 269.0
+      V-R1    6 rows, n up to 0.0043: 0.655 [0.567, 0.780] dof 54.0
+      V-R2   36 rows, n up to 0.0122: 0.799 [0.751, 0.855] dof 318.5
+      V-R3   36 rows, n up to 0.2548: 0.754 [0.701, 0.816] dof 237.2
+      V-R6   36 rows, n up to 0.1001: 0.896 [0.841, 0.959] dof 313.8
+      C3-R1  36 rows, n up to 2.1642: 0.682 [0.615, 0.767] dof 112.7
+      C3-R2  36 rows, n up to 0.4775: 0.849 [0.793, 0.914] dof 269.5
+      C3-R3  36 rows, n up to 0.8258: 0.884 [0.808, 0.978] dof 147.9
+      C3-R4  36 rows, n up to 0.8261: 0.657 [0.602, 0.724] dof 159.2
+      C3-R9  36 rows, n up to 0.9664: 0.730 [0.662, 0.814] dof 127.1
+  t20_s   all     k 1.5 kappa 2.75 (set by C3-R3, 19 cells, overstates 1.509); domain N >= 50000, n1*cv2 <= 2.164181, mean absorption <= 0.5021276670567533; margin 1.5 (by C3-R6); 1/sqrt(N) confirmed (read ["C-R1/C-R2 -0.01", "C-R3/C-R4 -0.02", "C-R5/V-R4 -0.39", "C3-R6/C-R5 -0.41", "C3-R9/V3-R9 +0.36"], unsafe [])
+      C-R1   36 rows, n up to 0.0568: 0.657 [0.601, 0.726] dof 153.4
+      C-R2   36 rows, n up to 0.0561: 0.683 [0.637, 0.736] dof 261.8
+      C-R3   36 rows, n up to 0.0242: 0.605 [0.568, 0.648] dof 307.5
+      C-R4   36 rows, n up to 0.0235: 0.663 [0.623, 0.709] dof 324.0
+      C-R5   36 rows, n up to 0.0315: 0.643 [0.603, 0.690] dof 295.8
+      C-R6   36 rows, n up to 0.0306: 0.670 [0.629, 0.716] dof 323.8
+      C-R7   36 rows, n up to 0.0983: 0.771 [0.722, 0.828] dof 287.6
+      V-R1   36 rows, n up to 0.0334: 0.626 [0.588, 0.670] dof 315.1
+      V-R2   36 rows, n up to 0.0122: 0.640 [0.601, 0.685] dof 311.1
+      V-R3   36 rows, n up to 0.2548: 0.621 [0.579, 0.670] dof 255.0
+      V-R4   36 rows, n up to 0.0306: 0.695 [0.651, 0.746] dof 295.0
+      V-R5   36 rows, n up to 0.0587: 0.722 [0.675, 0.776] dof 280.7
+      V-R6   36 rows, n up to 0.1001: 0.726 [0.678, 0.781] dof 267.4
+      C3-R1  36 rows, n up to 2.1642: 0.619 [0.551, 0.709] dof 85.6
+      C3-R2  36 rows, n up to 0.4775: 0.660 [0.607, 0.724] dof 175.7
+      C3-R3  36 rows, n up to 0.8258: 0.892 [0.806, 0.999] dof 119.0
+      C3-R4  36 rows, n up to 0.8261: 0.597 [0.548, 0.657] dof 164.4
+      C3-R6   1 rows, n up to 0.0311: 1.161 [0.847, 1.913] dof 9.0 (below the domain)
+      C3-R8   5 rows, n up to 0.0126: 0.616 [0.527, 0.747] dof 45.0
+      C3-R9  36 rows, n up to 0.9664: 0.554 [0.509, 0.608] dof 173.8
+  t30_s   all     k 1.6 kappa 3 (set by C3-R3, 18 cells, overstates 1.541); domain N >= 50000, n1*cv2 <= 2.164181, mean absorption <= 0.4000000059604645; margin 1.5 (by C-R7); 1/sqrt(N) confirmed (read ["C-R1/C-R2 -1.89", "C-R3/C-R4 +0.00", "C-R5/V-R4 +1.24", "C3-R9/V3-R9 -1.04"], unsafe [])
+      C-R1   35 rows, n up to 0.0568: 0.687 [0.636, 0.747] dof 210.6
+      C-R2   36 rows, n up to 0.0561: 0.576 [0.541, 0.616] dof 318.7
+      C-R3   34 rows, n up to 0.0242: 0.675 [0.630, 0.727] dof 266.2
+      C-R4   36 rows, n up to 0.0235: 0.661 [0.621, 0.707] dof 324.0
+      C-R5    1 rows, n up to 0.0306: 0.569 [0.415, 0.937] dof 9.0
+      C-R6   36 rows, n up to 0.0306: 0.773 [0.694, 0.875] dof 100.9
+      C-R7   36 rows, n up to 0.0983: 0.799 [0.729, 0.886] dof 143.1
+      V-R1   20 rows, n up to 0.0334: 0.683 [0.627, 0.752] dof 164.6
+      V-R2   36 rows, n up to 0.0122: 0.627 [0.582, 0.679] dof 228.7
+      V-R3   36 rows, n up to 0.2548: 0.522 [0.484, 0.568] dof 212.1
+      V-R4   36 rows, n up to 0.0306: 0.651 [0.603, 0.708] dof 210.0
+      V-R5   36 rows, n up to 0.0587: 0.724 [0.669, 0.791] dof 193.2
+      V-R6   36 rows, n up to 0.1001: 0.701 [0.656, 0.753] dof 286.8
+      C3-R1  36 rows, n up to 2.1642: 0.593 [0.526, 0.682] dof 82.0
+      C3-R2  36 rows, n up to 0.4775: 0.579 [0.538, 0.629] dof 220.4
+      C3-R3  36 rows, n up to 0.8258: 0.860 [0.773, 0.972] dof 104.5
+      C3-R4  36 rows, n up to 0.8261: 0.550 [0.505, 0.605] dof 168.2
+      C3-R9  36 rows, n up to 0.9664: 0.557 [0.506, 0.622] dof 127.2
+  c50_db  all     k 1.2 kappa 1.25 (set by C3-R3, 18 cells, overstates 1.262); domain N >= 5000, n1*cv2 <= 2.164181, mean absorption <= 0.5021276670567533; margin 1.2 (by C3-R8); 1/sqrt(N) confirmed (read ["C-R1/C-R2 -0.03", "C-R5/V-R4 +0.87", "C3-R5/V3-R8 -0.11", "C3-R6/C-R5 -1.10", "C3-R9/V3-R9 +0.04"], unsafe [])
+      C-R1   24 rows, n up to 0.0568: 0.851 [0.776, 0.943] dof 143.7
+      C-R2   24 rows, n up to 0.0561: 0.847 [0.786, 0.921] dof 216.0
+      C-R5   24 rows, n up to 0.0315: 0.818 [0.759, 0.889] dof 216.0
+      C-R6   18 rows, n up to 0.0306: 0.854 [0.783, 0.941] dof 162.0
+      C-R7   24 rows, n up to 0.0983: 0.808 [0.749, 0.878] dof 216.0
+      V-R1   30 rows, n up to 0.0334: 0.839 [0.782, 0.905] dof 255.1
+      V-R2   18 rows, n up to 0.0122: 0.780 [0.708, 0.871] dof 126.3
+      V-R3   36 rows, n up to 0.2548: 0.728 [0.682, 0.781] dof 296.7
+      V-R4   24 rows, n up to 0.0306: 0.872 [0.806, 0.950] dof 202.7
+      V-R5   36 rows, n up to 0.0587: 0.829 [0.778, 0.889] dof 302.2
+      C3-R1  36 rows, n up to 2.1642: 0.585 [0.531, 0.651] dof 131.9
+      C3-R2  18 rows, n up to 0.4775: 0.797 [0.723, 0.891] dof 125.2
+      C3-R3  18 rows, n up to 0.8258: 0.860 [0.768, 0.978] dof 93.6
+      C3-R4  18 rows, n up to 0.7901: 0.696 [0.638, 0.767] dof 162.0
+      C3-R5  36 rows, n up to 0.0671: 0.804 [0.749, 0.869] dof 248.9
+      C3-R6  24 rows, n up to 0.0328: 0.863 [0.796, 0.943] dof 189.5
+      C3-R8  36 rows, n up to 0.0167: 0.830 [0.780, 0.888] dof 324.0
+      C3-R9  36 rows, n up to 0.9664: 0.675 [0.630, 0.726] dof 269.6
+  c80_db  all     k 1.4 kappa 1 (set by C3-R8, 18 cells, overstates 1.407); domain N >= 5000, n1*cv2 <= 2.164181, mean absorption <= 0.5021276670567533; margin 1.2 (by C3-R8); 1/sqrt(N) confirmed (read ["C-R1/C-R2 -0.58", "C-R5/V-R4 +0.64", "C3-R5/V3-R8 -0.45", "C3-R6/C-R5 +0.03", "C3-R9/V3-R9 -0.39"], unsafe [])
+      C-R1   24 rows, n up to 0.0568: 0.724 [0.670, 0.788] dof 207.5
+      C-R2   24 rows, n up to 0.0561: 0.693 [0.640, 0.756] dof 195.6
+      C-R5   24 rows, n up to 0.0315: 0.714 [0.656, 0.784] dof 172.1
+      C-R6   18 rows, n up to 0.0306: 0.711 [0.642, 0.800] dof 112.4
+      C-R7   24 rows, n up to 0.0983: 0.736 [0.679, 0.805] dof 186.4
+      V-R1   30 rows, n up to 0.0334: 0.690 [0.644, 0.743] dof 270.0
+      V-R2   18 rows, n up to 0.0122: 0.697 [0.633, 0.776] dof 132.9
+      V-R3   36 rows, n up to 0.2548: 0.649 [0.608, 0.696] dof 296.5
+      V-R4   24 rows, n up to 0.0306: 0.759 [0.703, 0.825] dof 212.4
+      V-R5   36 rows, n up to 0.0587: 0.768 [0.722, 0.822] dof 318.4
+      C3-R1  36 rows, n up to 2.1642: 0.604 [0.551, 0.670] dof 141.5
+      C3-R2  18 rows, n up to 0.4775: 0.759 [0.684, 0.854] dof 111.7
+      C3-R3  18 rows, n up to 0.8258: 0.838 [0.749, 0.951] dof 95.9
+      C3-R4  18 rows, n up to 0.7901: 0.634 [0.575, 0.707] dof 127.3
+      C3-R5  36 rows, n up to 0.0671: 0.686 [0.645, 0.734] dof 324.0
+      C3-R6  24 rows, n up to 0.0328: 0.701 [0.646, 0.769] dof 179.1
+      C3-R8  27 rows, n up to 0.0167: 0.803 [0.693, 0.960] dof 52.1
+      C3-R9  36 rows, n up to 0.9664: 0.665 [0.618, 0.719] dof 235.5
+  d50     all     k 1.2 kappa 1.25 (set by C3-R3, 18 cells, overstates 1.261); domain N >= 5000, n1*cv2 <= 2.164181, mean absorption <= 0.5021276670567533; margin 1.2 (by C3-R8); 1/sqrt(N) confirmed (read ["C-R1/C-R2 -0.04", "C-R5/V-R4 +0.95", "C3-R5/V3-R8 -0.05", "C3-R6/C-R5 -0.94", "C3-R9/V3-R9 +0.02"], unsafe [])
+      C-R1   24 rows, n up to 0.0568: 0.850 [0.776, 0.943] dof 143.7
+      C-R2   24 rows, n up to 0.0561: 0.846 [0.785, 0.919] dof 216.0
+      C-R5   24 rows, n up to 0.0315: 0.820 [0.760, 0.890] dof 216.0
+      C-R6   18 rows, n up to 0.0306: 0.848 [0.778, 0.934] dof 162.0
+      C-R7   24 rows, n up to 0.0983: 0.807 [0.749, 0.877] dof 216.0
+      V-R1   30 rows, n up to 0.0334: 0.835 [0.778, 0.901] dof 255.2
+      V-R2   18 rows, n up to 0.0122: 0.784 [0.712, 0.874] dof 129.1
+      V-R3   36 rows, n up to 0.2548: 0.728 [0.682, 0.781] dof 296.7
+      V-R4   24 rows, n up to 0.0306: 0.877 [0.811, 0.956] dof 200.9
+      V-R5   36 rows, n up to 0.0587: 0.828 [0.777, 0.888] dof 302.1
+      C3-R1  36 rows, n up to 2.1642: 0.584 [0.531, 0.650] dof 132.0
+      C3-R2  18 rows, n up to 0.4775: 0.795 [0.720, 0.887] dof 125.2
+      C3-R3  18 rows, n up to 0.8258: 0.859 [0.768, 0.977] dof 93.8
+      C3-R4  18 rows, n up to 0.7901: 0.696 [0.638, 0.766] dof 162.0
+      C3-R5  36 rows, n up to 0.0671: 0.805 [0.750, 0.869] dof 250.6
+      C3-R6  24 rows, n up to 0.0328: 0.857 [0.792, 0.936] dof 194.2
+      C3-R8  36 rows, n up to 0.0167: 0.847 [0.796, 0.906] dof 324.0
+      C3-R9  36 rows, n up to 0.9664: 0.675 [0.630, 0.726] dof 270.2
+  ts_s    all     k 1.4 kappa 3 (set by C3-R3, 12 cells, overstates 1.441); domain N >= 50000, n1*cv2 <= 2.164181, mean absorption <= 0.4000000059604645; margin 1.1 (by V-R1); 1/sqrt(N) confirmed (read ["C-R1/C-R2 -1.32", "C3-R9/V3-R9 +0.25"], unsafe [])
+      C-R1   24 rows, n up to 0.0568: 0.741 [0.687, 0.805] dof 214.5
+      C-R2   24 rows, n up to 0.0561: 0.691 [0.641, 0.751] dof 216.0
+      C-R6   18 rows, n up to 0.0306: 0.665 [0.606, 0.738] dof 138.7
+      C-R7   24 rows, n up to 0.0983: 0.821 [0.758, 0.897] dof 190.9
+      V-R1   11 rows, n up to 0.0043: 0.692 [0.619, 0.785] dof 96.7
+      V-R2   18 rows, n up to 0.0122: 0.725 [0.665, 0.799] dof 162.0
+      V-R3   36 rows, n up to 0.2548: 0.663 [0.617, 0.716] dof 243.6
+      C3-R1  36 rows, n up to 2.1642: 0.572 [0.512, 0.649] dof 96.6
+      C3-R2  18 rows, n up to 0.4775: 0.722 [0.648, 0.816] dof 102.5
+      C3-R3  18 rows, n up to 0.8258: 0.871 [0.782, 0.986] dof 101.1
+      C3-R4  18 rows, n up to 0.7901: 0.592 [0.522, 0.685] dof 74.2
+      C3-R9  36 rows, n up to 0.9664: 0.630 [0.574, 0.699] dof 139.1
 
-named counts, C-R3 (150000) against C-R4 (15000000):
-    edt_s   360 refused for noise at C-R3, 360 name a count, 360 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value
-    t20_s   360 refused for noise at C-R3, 360 name a count, 359 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value
-    t30_s   358 refused for noise at C-R3, 0 name a count, 0 at most C-R4's; of those, NaN % of C-R4's seeds give the value
+ROUND 3, energetic mode, on 29 calibration cells: variable n1*cv2 (geometric-mean overstatement n1 1.9418, n1*cv2 1.9241)
+  spl_db  all     k 1.1 kappa 0 (set by C3-E4, 29 cells, overstates 1.448); domain N >= 5000, n1*cv2 <= 2.129384, mean absorption <= 1; margin 1.1 (by C3-E5); 1/sqrt(N) confirmed (read ["C-E1/C-E2 +0.34", "C-E3/C-E4 -0.99", "C-E5/V-E4 +0.42", "C3-E5/V3-E5 +0.70", "C3-E6/C-E5 -0.60", "C3-E10/V3-E9 -0.37"], unsafe [])
+      C-E1   36 rows, n up to 0.0565: 0.688 [0.647, 0.736] dof 323.5
+      C-E2   36 rows, n up to 0.0561: 0.701 [0.658, 0.750] dof 320.2
+      C-E3   36 rows, n up to 0.0241: 0.712 [0.667, 0.764] dof 295.5
+      C-E4   36 rows, n up to 0.0235: 0.675 [0.622, 0.737] dof 188.8
+      C-E5   36 rows, n up to 0.0311: 0.645 [0.606, 0.690] dof 324.0
+      C-E6   36 rows, n up to 0.0306: 0.638 [0.592, 0.694] dof 213.1
+      C-E7   36 rows, n up to 0.0974: 0.767 [0.714, 0.830] dof 241.5
+      V-E1   36 rows, n up to 0.0329: 0.550 [0.515, 0.590] dof 288.8
+      V-E2   36 rows, n up to 0.0123: 0.633 [0.591, 0.682] dof 262.6
+      V-E3   36 rows, n up to 0.2522: 0.653 [0.612, 0.700] dof 295.4
+      V-E4   36 rows, n up to 0.0306: 0.660 [0.614, 0.714] dof 235.4
+      V-E5   36 rows, n up to 0.0578: 0.606 [0.567, 0.650] dof 290.2
+      V-E6   36 rows, n up to 0.1022: 0.674 [0.634, 0.721] dof 324.0
+      W-E1   36 rows, n up to 0.0796: 0.651 [0.612, 0.696] dof 324.0
+      W-E2   36 rows, n up to 0.0995: 0.689 [0.639, 0.748] dof 219.2
+      W-E3   36 rows, n up to 0.0335: 0.665 [0.620, 0.717] dof 261.2
+      W-E4   36 rows, n up to 0.0344: 0.682 [0.641, 0.729] dof 324.0
+      W-E5   36 rows, n up to 0.0253: 0.712 [0.669, 0.761] dof 324.0
+      W-E6   36 rows, n up to 0.1000: 0.633 [0.595, 0.677] dof 324.0
+      C3-E1  36 rows, n up to 2.1294: 0.711 [0.665, 0.764] dof 279.6
+      C3-E2  36 rows, n up to 0.0246: 0.745 [0.700, 0.797] dof 324.0
+      C3-E3  36 rows, n up to 0.0320: 0.696 [0.653, 0.746] dof 305.3
+      C3-E4  36 rows, n up to 0.8194: 0.912 [0.845, 0.991] dof 212.8
+      C3-E5  36 rows, n up to 0.0622: 0.655 [0.612, 0.704] dof 279.2
+      C3-E6  36 rows, n up to 0.0338: 0.656 [0.609, 0.713] dof 217.1
+      C3-E7  36 rows, n up to 0.0011: 0.783 [0.736, 0.838] dof 324.0
+      C3-E8  36 rows, n up to 0.0081: 0.871 [0.808, 0.946] dof 218.7
+      C3-E9  36 rows, n up to 0.0167: 0.773 [0.727, 0.827] dof 324.0
+      C3-E10 36 rows, n up to 0.9475: 0.691 [0.646, 0.743] dof 283.0
+  edt_s   all     k 0.86 kappa 0 (set by C3-E8, 22 cells, overstates 2.030); domain N >= 50000, n1*cv2 <= 2.129384, mean absorption <= 0.4000000059604645; margin 1.2 (by C3-E8); 1/sqrt(N) confirmed (read ["C-E1/C-E2 +0.31", "C-E3/C-E4 -2.18", "C3-E10/V3-E9 -0.40"], unsafe [])
+      C-E1   36 rows, n up to 0.0565: 0.414 [0.386, 0.446] dof 256.9
+      C-E2   36 rows, n up to 0.0561: 0.432 [0.404, 0.463] dof 294.9
+      C-E3   36 rows, n up to 0.0241: 0.474 [0.439, 0.515] dof 214.2
+      C-E4   36 rows, n up to 0.0235: 0.421 [0.395, 0.451] dof 311.8
+      C-E6   36 rows, n up to 0.0306: 0.406 [0.382, 0.434] dof 324.0
+      C-E7   36 rows, n up to 0.0974: 0.638 [0.591, 0.693] dof 214.7
+      V-E1    5 rows, n up to 0.0042: 0.278 [0.238, 0.337] dof 45.0
+      V-E2   36 rows, n up to 0.0123: 0.380 [0.356, 0.407] dof 295.2
+      V-E3   36 rows, n up to 0.2522: 0.442 [0.414, 0.474] dof 293.0
+      V-E5   36 rows, n up to 0.0578: 0.382 [0.357, 0.410] dof 276.8
+      V-E6   18 rows, n up to 0.0572: 0.650 [0.595, 0.718] dof 153.1
+      W-E1   18 rows, n up to 0.0418: 0.563 [0.516, 0.620] dof 162.0
+      W-E2   18 rows, n up to 0.0573: 0.576 [0.528, 0.634] dof 162.0
+      W-E3   36 rows, n up to 0.0335: 0.568 [0.532, 0.611] dof 285.3
+      W-E4    2 rows, n up to 0.0096: 0.605 [0.478, 0.837] dof 18.0
+      W-E5   36 rows, n up to 0.0253: 0.520 [0.489, 0.556] dof 324.0
+      W-E6   36 rows, n up to 0.1000: 0.649 [0.610, 0.695] dof 319.6
+      C3-E1  36 rows, n up to 2.1294: 0.458 [0.430, 0.491] dof 310.7
+      C3-E3   3 rows, n up to 0.0037: 0.337 [0.266, 0.467] dof 17.9
+      C3-E4  36 rows, n up to 0.8194: 0.825 [0.758, 0.907] dof 167.5
+      C3-E8   6 rows, n up to 0.0027: 0.775 [0.637, 1.000] dof 27.5
+      C3-E10 36 rows, n up to 0.9475: 0.433 [0.405, 0.466] dof 274.1
+  t20_s   uniform_lambert k 0.098 kappa 0 (set by C-E3, 10 cells, overstates 1.236); domain N >= 5000, n1*cv2 <= 2.129384, mean absorption <= 0.4000000059604645; margin 1.2 (by C3-E5); 1/sqrt(N) confirmed (read ["C-E1/C-E2 -0.87", "C-E3/C-E4 -1.17", "C-E5/V-E4 +1.78", "C3-E5/V3-E5 +0.15", "C3-E6/C-E5 -1.06", "C3-E10/V3-E9 -0.34"], unsafe [])
+      C-E1   36 rows, n up to 0.0565: 0.782 [0.735, 0.836] dof 324.0
+      C-E2   36 rows, n up to 0.0561: 0.743 [0.698, 0.795] dof 324.0
+      C-E3   36 rows, n up to 0.0241: 0.928 [0.872, 0.992] dof 324.0
+      C-E4   36 rows, n up to 0.0235: 0.887 [0.818, 0.970] dof 185.5
+      V-E1   36 rows, n up to 0.0329: 0.605 [0.551, 0.670] dof 143.1
+      V-E2   36 rows, n up to 0.0123: 0.856 [0.804, 0.915] dof 324.0
+      V-E3   36 rows, n up to 0.2522: 0.735 [0.690, 0.786] dof 318.0
+      C3-E1  36 rows, n up to 2.1294: 0.868 [0.807, 0.939] dof 239.3
+      C3-E5  36 rows, n up to 0.0622: 0.902 [0.845, 0.967] dof 299.5
+      C3-E10 36 rows, n up to 0.9475: 0.842 [0.788, 0.903] dof 291.8
+  t20_s   lambert k 0.52 kappa 0 (set by C3-E8, 4 cells, overstates 2.103); domain N >= 150000, n1*cv2 <= 0.031960, mean absorption <= 0.5021276670567533; margin 1.3 (by C3-E8); 1/sqrt(N) confirmed (read ["C-E1/C-E2 -0.87", "C-E3/C-E4 -1.17", "C-E5/V-E4 +1.78", "C3-E5/V3-E5 +0.15", "C3-E6/C-E5 -1.06", "C3-E10/V3-E9 -0.34"], unsafe [])
+      C3-E2  36 rows, n up to 0.0246: 0.306 [0.287, 0.328] dof 302.6
+      C3-E3  36 rows, n up to 0.0320: 0.241 [0.221, 0.265] dof 163.1
+      C3-E8  36 rows, n up to 0.0081: 0.927 [0.866, 0.999] dof 263.4
+      C3-E9  31 rows, n up to 0.0166: 0.750 [0.693, 0.818] dof 198.3
+  t20_s   other   k 1 kappa 0 (set by W-E4, 14 cells, overstates 4.539); domain N >= 15000, n1*cv2 <= 0.819434, mean absorption <= 0.20277778493861356; margin 1.2 (by W-E4); 1/sqrt(N) confirmed (read ["C-E1/C-E2 -0.87", "C-E3/C-E4 -1.17", "C-E5/V-E4 +1.78", "C3-E5/V3-E5 +0.15", "C3-E6/C-E5 -1.06", "C3-E10/V3-E9 -0.34"], unsafe [])
+      C-E5   36 rows, n up to 0.0311: 0.110 [0.103, 0.118] dof 284.0
+      C-E6   36 rows, n up to 0.0306: 0.124 [0.116, 0.133] dof 324.0
+      C-E7   36 rows, n up to 0.0974: 0.242 [0.226, 0.260] dof 290.4
+      V-E4   36 rows, n up to 0.0306: 0.121 [0.113, 0.129] dof 310.1
+      V-E5   36 rows, n up to 0.0578: 0.094 [0.088, 0.101] dof 276.5
+      V-E6   36 rows, n up to 0.1022: 0.394 [0.363, 0.431] dof 185.6
+      W-E1   36 rows, n up to 0.0796: 0.423 [0.389, 0.465] dof 171.7
+      W-E2   36 rows, n up to 0.0995: 0.362 [0.337, 0.391] dof 242.9
+      W-E3   36 rows, n up to 0.0335: 0.224 [0.209, 0.241] dof 271.7
+      W-E4   36 rows, n up to 0.0344: 0.467 [0.437, 0.501] dof 294.3
+      W-E5   36 rows, n up to 0.0253: 0.158 [0.148, 0.169] dof 289.3
+      W-E6   36 rows, n up to 0.1000: 0.359 [0.329, 0.396] dof 160.3
+      C3-E4  36 rows, n up to 0.8194: 0.386 [0.347, 0.435] dof 106.3
+      C3-E6  36 rows, n up to 0.0338: 0.123 [0.114, 0.134] dof 210.0
+  t30_s   uniform_lambert k 0.052 kappa 0 (set by V-E2, 9 cells, overstates 1.664); domain N >= 50000, n1*cv2 <= 2.129384, mean absorption <= 0.4000000059604645; margin 1.3 (by V-E2); 1/sqrt(N) confirmed (read ["C-E1/C-E2 -0.17", "C-E3/C-E4 -0.51", "C-E5/V-E4 +1.07", "C3-E10/V3-E9 +0.37"], unsafe [])
+      C-E1   36 rows, n up to 0.0565: 0.519 [0.484, 0.561] dof 248.8
+      C-E2   36 rows, n up to 0.0561: 0.525 [0.493, 0.562] dof 324.0
+      C-E3   36 rows, n up to 0.0241: 0.661 [0.621, 0.707] dof 324.0
+      C-E4   36 rows, n up to 0.0235: 0.635 [0.590, 0.689] dof 226.8
+      V-E1   36 rows, n up to 0.0329: 0.601 [0.561, 0.648] dof 258.4
+      V-E2   36 rows, n up to 0.0123: 0.917 [0.858, 0.985] dof 285.3
+      V-E3   36 rows, n up to 0.2522: 0.509 [0.477, 0.546] dof 296.4
+      C3-E1  36 rows, n up to 2.1294: 0.585 [0.545, 0.631] dof 250.3
+      C3-E10 36 rows, n up to 0.9475: 0.544 [0.511, 0.583] dof 317.5
+  t30_s   lambert k 0.73 kappa 2 (set by C3-E8, 4 cells, overstates 3.797); domain N >= 150000, n1*cv2 <= 0.031960, mean absorption <= 0.5021276670567533; margin 1.3 (by C3-E8); 1/sqrt(N) confirmed (read ["C-E1/C-E2 -0.17", "C-E3/C-E4 -0.51", "C-E5/V-E4 +1.07", "C3-E10/V3-E9 +0.37"], unsafe [])
+      C3-E2  36 rows, n up to 0.0246: 0.101 [0.094, 0.109] dof 243.3
+      C3-E3  36 rows, n up to 0.0320: 0.119 [0.103, 0.143] dof 49.5
+      C3-E8  32 rows, n up to 0.0081: 0.864 [0.763, 1.000] dof 75.0
+      C3-E9  35 rows, n up to 0.0167: 0.463 [0.428, 0.505] dof 196.5
+  t30_s   other   k 1 kappa 0 (set by W-E4, 13 cells, overstates 6.339); domain N >= 150000, n1*cv2 <= 0.819434, mean absorption <= 0.20277778493861356; margin 1.3 (by W-E4); 1/sqrt(N) confirmed (read ["C-E1/C-E2 -0.17", "C-E3/C-E4 -0.51", "C-E5/V-E4 +1.07", "C3-E10/V3-E9 +0.37"], unsafe [])
+      C-E5   36 rows, n up to 0.0311: 0.069 [0.065, 0.074] dof 324.0
+      C-E6   36 rows, n up to 0.0306: 0.065 [0.061, 0.070] dof 295.5
+      C-E7   36 rows, n up to 0.0974: 0.136 [0.127, 0.148] dof 228.0
+      V-E4   36 rows, n up to 0.0306: 0.067 [0.061, 0.074] dof 150.2
+      V-E5   36 rows, n up to 0.0578: 0.048 [0.044, 0.052] dof 195.1
+      V-E6   36 rows, n up to 0.1022: 0.285 [0.264, 0.311] dof 205.1
+      W-E1   36 rows, n up to 0.0796: 0.329 [0.305, 0.358] dof 208.1
+      W-E2   36 rows, n up to 0.0995: 0.284 [0.266, 0.305] dof 297.4
+      W-E3   36 rows, n up to 0.0335: 0.206 [0.191, 0.225] dof 200.3
+      W-E4   36 rows, n up to 0.0344: 0.622 [0.550, 0.719] dof 76.0
+      W-E5   36 rows, n up to 0.0253: 0.082 [0.077, 0.088] dof 310.1
+      W-E6   36 rows, n up to 0.1000: 0.271 [0.253, 0.292] dof 261.0
+      C3-E4  36 rows, n up to 0.8194: 0.251 [0.228, 0.280] dof 127.0
+  c50_db  all     k 0.96 kappa 0.25 (set by C3-E4, 24 cells, overstates 1.512); domain N >= 5000, n1*cv2 <= 2.129384, mean absorption <= 0.5021276670567533; margin 1.1 (by C3-E9); 1/sqrt(N) confirmed (read ["C-E1/C-E2 +0.49", "C-E5/V-E4 -0.44", "C3-E5/V3-E5 -0.53", "C3-E6/C-E5 -0.76", "C3-E10/V3-E9 +0.54"], unsafe [])
+      C-E1   24 rows, n up to 0.0565: 0.761 [0.703, 0.830] dof 197.2
+      C-E2   24 rows, n up to 0.0561: 0.806 [0.747, 0.876] dof 216.0
+      C-E5   24 rows, n up to 0.0311: 0.560 [0.514, 0.618] dof 159.4
+      C-E6   17 rows, n up to 0.0306: 0.565 [0.517, 0.624] dof 153.0
+      C-E7   24 rows, n up to 0.0974: 0.750 [0.695, 0.815] dof 216.0
+      V-E1   30 rows, n up to 0.0329: 0.575 [0.537, 0.619] dof 270.0
+      V-E2   15 rows, n up to 0.0123: 0.303 [0.275, 0.338] dof 128.7
+      V-E3   36 rows, n up to 0.2522: 0.847 [0.796, 0.907] dof 316.7
+      V-E4   24 rows, n up to 0.0306: 0.548 [0.509, 0.596] dof 216.0
+      V-E6   30 rows, n up to 0.1022: 0.755 [0.698, 0.823] dof 201.4
+      W-E1   36 rows, n up to 0.0796: 0.785 [0.732, 0.847] dof 251.6
+      W-E2   30 rows, n up to 0.0995: 0.711 [0.664, 0.765] dof 270.0
+      W-E3   30 rows, n up to 0.0335: 0.788 [0.736, 0.849] dof 264.9
+      W-E4   30 rows, n up to 0.0344: 0.650 [0.604, 0.705] dof 226.3
+      W-E5   30 rows, n up to 0.0249: 0.854 [0.790, 0.930] dof 204.9
+      C3-E1  36 rows, n up to 2.1294: 0.851 [0.782, 0.935] dof 170.3
+      C3-E2  24 rows, n up to 0.0246: 0.613 [0.563, 0.675] dof 165.6
+      C3-E3  30 rows, n up to 0.0320: 0.610 [0.566, 0.662] dof 222.8
+      C3-E4  18 rows, n up to 0.8194: 0.881 [0.792, 0.995] dof 104.7
+      C3-E5  36 rows, n up to 0.0622: 0.516 [0.484, 0.553] dof 307.0
+      C3-E6  24 rows, n up to 0.0338: 0.588 [0.526, 0.667] dof 97.9
+      C3-E8  30 rows, n up to 0.0081: 0.920 [0.860, 0.991] dof 270.0
+      C3-E9  36 rows, n up to 0.0167: 0.343 [0.320, 0.369] dof 262.8
+      C3-E10 36 rows, n up to 0.9475: 0.845 [0.794, 0.904] dof 324.0
+  c80_db  all     k 0.86 kappa 0.5 (set by C3-E8, 24 cells, overstates 1.689); domain N >= 5000, n1*cv2 <= 2.129384, mean absorption <= 0.5021276670567533; margin 1.1 (by C3-E9); 1/sqrt(N) confirmed (read ["C-E1/C-E2 +1.00", "C-E5/V-E4 -0.27", "C3-E5/V3-E5 +1.27", "C3-E6/C-E5 -0.60", "C3-E10/V3-E9 -0.59"], unsafe [])
+      C-E1   24 rows, n up to 0.0565: 0.761 [0.705, 0.827] dof 212.8
+      C-E2   24 rows, n up to 0.0561: 0.823 [0.762, 0.896] dof 207.3
+      C-E5   24 rows, n up to 0.0311: 0.467 [0.433, 0.508] dof 216.0
+      C-E6   17 rows, n up to 0.0306: 0.482 [0.441, 0.534] dof 147.9
+      C-E7   24 rows, n up to 0.0974: 0.794 [0.736, 0.863] dof 214.8
+      V-E1   30 rows, n up to 0.0329: 0.479 [0.448, 0.516] dof 270.0
+      V-E2   15 rows, n up to 0.0123: 0.165 [0.149, 0.185] dof 113.7
+      V-E3   36 rows, n up to 0.2522: 0.854 [0.801, 0.914] dof 312.3
+      V-E4   24 rows, n up to 0.0306: 0.467 [0.424, 0.522] dof 126.1
+      V-E6   30 rows, n up to 0.1022: 0.818 [0.765, 0.881] dof 270.0
+      W-E1   36 rows, n up to 0.0796: 0.766 [0.718, 0.820] dof 304.6
+      W-E2   30 rows, n up to 0.0995: 0.757 [0.708, 0.815] dof 270.0
+      W-E3   30 rows, n up to 0.0335: 0.855 [0.799, 0.921] dof 267.6
+      W-E4   30 rows, n up to 0.0344: 0.622 [0.579, 0.672] dof 242.8
+      W-E5   30 rows, n up to 0.0249: 0.870 [0.811, 0.939] dof 253.7
+      C3-E1  36 rows, n up to 2.1294: 0.697 [0.644, 0.762] dof 190.6
+      C3-E2  24 rows, n up to 0.0246: 0.541 [0.501, 0.588] dof 216.0
+      C3-E3  30 rows, n up to 0.0320: 0.499 [0.462, 0.544] dof 207.9
+      C3-E4  18 rows, n up to 0.8194: 0.861 [0.786, 0.954] dof 143.9
+      C3-E5  36 rows, n up to 0.0622: 0.347 [0.325, 0.371] dof 308.8
+      C3-E6  24 rows, n up to 0.0338: 0.480 [0.444, 0.523] dof 203.1
+      C3-E8  30 rows, n up to 0.0081: 0.923 [0.861, 0.995] dof 258.7
+      C3-E9  36 rows, n up to 0.0167: 0.224 [0.211, 0.240] dof 324.0
+      C3-E10 36 rows, n up to 0.9475: 0.790 [0.736, 0.853] dof 250.1
+  d50     all     k 0.96 kappa 0.25 (set by C3-E4, 24 cells, overstates 1.507); domain N >= 5000, n1*cv2 <= 2.129384, mean absorption <= 0.5021276670567533; margin 1.1 (by C3-E5); 1/sqrt(N) confirmed (read ["C-E1/C-E2 +0.51", "C-E5/V-E4 -0.45", "C3-E5/V3-E5 -0.57", "C3-E6/C-E5 -0.72", "C3-E10/V3-E9 +0.53"], unsafe [])
+      C-E1   24 rows, n up to 0.0565: 0.761 [0.703, 0.830] dof 197.2
+      C-E2   24 rows, n up to 0.0561: 0.806 [0.748, 0.876] dof 216.0
+      C-E5   24 rows, n up to 0.0311: 0.563 [0.516, 0.620] dof 159.8
+      C-E6   17 rows, n up to 0.0306: 0.563 [0.515, 0.621] dof 153.0
+      C-E7   24 rows, n up to 0.0974: 0.750 [0.695, 0.815] dof 216.0
+      V-E1   30 rows, n up to 0.0329: 0.579 [0.541, 0.623] dof 270.0
+      V-E2   15 rows, n up to 0.0123: 0.304 [0.276, 0.339] dof 128.6
+      V-E3   36 rows, n up to 0.2522: 0.848 [0.796, 0.908] dof 316.8
+      V-E4   24 rows, n up to 0.0306: 0.550 [0.510, 0.597] dof 216.0
+      V-E6   30 rows, n up to 0.1022: 0.756 [0.699, 0.824] dof 201.5
+      W-E1   36 rows, n up to 0.0796: 0.792 [0.738, 0.855] dof 251.0
+      W-E2   30 rows, n up to 0.0995: 0.711 [0.665, 0.766] dof 270.0
+      W-E3   30 rows, n up to 0.0335: 0.791 [0.738, 0.852] dof 264.8
+      W-E4   30 rows, n up to 0.0344: 0.639 [0.593, 0.693] dof 226.8
+      W-E5   30 rows, n up to 0.0249: 0.855 [0.791, 0.931] dof 204.6
+      C3-E1  36 rows, n up to 2.1294: 0.850 [0.781, 0.934] dof 170.5
+      C3-E2  24 rows, n up to 0.0246: 0.615 [0.564, 0.677] dof 163.3
+      C3-E3  30 rows, n up to 0.0320: 0.613 [0.569, 0.666] dof 218.9
+      C3-E4  18 rows, n up to 0.8194: 0.883 [0.793, 0.997] dof 104.7
+      C3-E5  36 rows, n up to 0.0622: 0.522 [0.490, 0.560] dof 305.7
+      C3-E6  24 rows, n up to 0.0338: 0.590 [0.529, 0.670] dof 97.7
+      C3-E8  30 rows, n up to 0.0081: 0.925 [0.864, 0.995] dof 270.0
+      C3-E9  36 rows, n up to 0.0167: 0.357 [0.333, 0.385] dof 260.4
+      C3-E10 36 rows, n up to 0.9475: 0.845 [0.794, 0.904] dof 324.0
+  ts_s    all     k 0.84 kappa 0.5 (set by C3-E8, 18 cells, overstates 1.627); domain N >= 50000, n1*cv2 <= 2.129384, mean absorption <= 0.4000000059604645; margin 1.1 (by W-E4); 1/sqrt(N) confirmed (read ["C-E1/C-E2 +1.25", "C3-E10/V3-E9 -0.00"], unsafe [])
+      C-E1   24 rows, n up to 0.0565: 0.594 [0.543, 0.656] dof 152.9
+      C-E2   24 rows, n up to 0.0561: 0.670 [0.620, 0.729] dof 209.4
+      C-E6   17 rows, n up to 0.0306: 0.528 [0.482, 0.584] dof 149.0
+      C-E7   24 rows, n up to 0.0974: 0.630 [0.582, 0.687] dof 195.5
+      V-E1    8 rows, n up to 0.0042: 0.577 [0.508, 0.670] dof 72.0
+      V-E2   15 rows, n up to 0.0123: 0.587 [0.533, 0.654] dof 129.1
+      V-E3   36 rows, n up to 0.2522: 0.590 [0.554, 0.631] dof 324.0
+      V-E6   18 rows, n up to 0.0799: 0.691 [0.631, 0.764] dof 150.4
+      W-E1   23 rows, n up to 0.0724: 0.673 [0.623, 0.734] dof 200.5
+      W-E2   18 rows, n up to 0.0789: 0.603 [0.550, 0.668] dof 142.9
+      W-E3   30 rows, n up to 0.0335: 0.578 [0.540, 0.622] dof 270.0
+      W-E4    5 rows, n up to 0.0096: 0.663 [0.567, 0.804] dof 45.0
+      W-E5   30 rows, n up to 0.0249: 0.549 [0.511, 0.594] dof 241.7
+      C3-E1  36 rows, n up to 2.1294: 0.497 [0.460, 0.541] dof 203.5
+      C3-E3   5 rows, n up to 0.0037: 0.526 [0.449, 0.638] dof 45.0
+      C3-E4  18 rows, n up to 0.8194: 0.848 [0.762, 0.960] dof 102.5
+      C3-E8   6 rows, n up to 0.0027: 0.839 [0.726, 0.999] dof 54.0
+      C3-E10 36 rows, n up to 0.9475: 0.541 [0.505, 0.582] dof 268.6
 
-named counts, C-R5 (150000) against V-R4 (600000):
-    t20_s   360 refused for noise at C-R5, 360 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value
-    t30_s   212 refused for noise at C-R5, 0 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value
+ROUND 3 VALIDATION, random mode, with the code's numbers:
+  V3-R1 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.898 [0.832, 0.976] dof 211.8 ok
+    edt_s all         36 of 36 rows inside: 0.822 [0.766, 0.888] dof 249.9 ok
+    t20_s all         36 of 36 rows inside: 0.794 [0.724, 0.880] dof 141.4 ok
+    t30_s all         36 of 36 rows inside: 0.648 [0.600, 0.706] dof 206.7 ok
+    c50_db all        30 of 30 rows inside: 0.794 [0.738, 0.860] dof 232.0 ok
+    c80_db all        30 of 30 rows inside: 0.754 [0.704, 0.812] dof 270.0 ok
+    d50 all           30 of 30 rows inside: 0.758 [0.705, 0.822] dof 230.0 ok
+    ts_s all          30 of 30 rows inside: 0.753 [0.691, 0.828] dof 165.9 ok
+  V3-R2 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.711 [0.646, 0.793] dof 128.3 ok
+    edt_s all         36 of 36 rows inside: 0.712 [0.643, 0.800] dof 114.9 ok
+    t20_s all         36 of 36 rows inside: 0.649 [0.584, 0.733] dof 104.7 ok
+    t30_s all         36 of 36 rows inside: 0.609 [0.550, 0.684] dof 115.8 ok
+    c50_db all        36 of 36 rows inside: 0.641 [0.599, 0.690] dof 268.7 ok
+    c80_db all        36 of 36 rows inside: 0.596 [0.553, 0.648] dof 217.0 ok
+    d50 all           36 of 36 rows inside: 0.641 [0.599, 0.690] dof 268.9 ok
+    ts_s all          36 of 36 rows inside: 0.618 [0.556, 0.698] dof 104.3 ok
+  V3-R3 (N 30000)
+    spl_db all        36 of 36 rows inside: 0.874 [0.818, 0.939] dof 286.3 ok
+    edt_s all          0 of 36 rows inside the domain
+    t20_s all          0 of 36 rows inside the domain
+    t30_s all          0 of 35 rows inside the domain
+    c50_db all        18 of 18 rows inside: 0.821 [0.753, 0.906] dof 158.9 ok
+    c80_db all        18 of 18 rows inside: 0.733 [0.645, 0.853] dof 70.2 ok
+    d50 all           18 of 18 rows inside: 0.820 [0.752, 0.904] dof 159.2 ok
+    ts_s all           0 of 18 rows inside the domain
+  V3-R4 (N 8000)
+    spl_db all        36 of 36 rows inside: 0.824 [0.764, 0.895] dof 217.9 ok
+    c50_db all        24 of 24 rows inside: 0.800 [0.728, 0.891] dof 133.4 ok
+    c80_db all        24 of 24 rows inside: 0.725 [0.670, 0.790] dof 201.9 ok
+    d50 all           24 of 24 rows inside: 0.799 [0.726, 0.889] dof 133.1 ok
+  V3-R5 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.869 [0.817, 0.930] dof 321.7 ok
+  V3-R6 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.792 [0.744, 0.847] dof 324.0 ok
+    edt_s all         36 of 36 rows inside: 0.750 [0.704, 0.803] dof 317.9 ok
+    t20_s all         36 of 36 rows inside: 0.566 [0.532, 0.605] dof 324.0 ok
+    t30_s all         10 of 10 rows inside: 0.958 [0.815, 1.170] dof 42.2 ok
+    c50_db all        15 of 15 rows inside: 0.889 [0.809, 0.989] dof 135.0 ok
+    c80_db all        15 of 15 rows inside: 0.640 [0.582, 0.712] dof 135.0 ok
+    d50 all           15 of 15 rows inside: 0.903 [0.822, 1.004] dof 135.0 ok
+    ts_s all          15 of 15 rows inside: 0.680 [0.618, 0.756] dof 135.0 ok
+  V3-R7 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.848 [0.787, 0.920] dof 222.6 ok
+    edt_s all         36 of 36 rows inside: 0.854 [0.795, 0.924] dof 240.6 ok
+    t20_s all         36 of 36 rows inside: 0.827 [0.763, 0.902] dof 194.3 ok
+    t30_s all         36 of 36 rows inside: 0.717 [0.666, 0.777] dof 228.3 ok
+    c50_db all        24 of 24 rows inside: 0.768 [0.707, 0.842] dof 177.8 ok
+    c80_db all        24 of 24 rows inside: 0.728 [0.665, 0.807] dof 145.3 ok
+    d50 all           24 of 24 rows inside: 0.770 [0.709, 0.844] dof 177.8 ok
+    ts_s all          24 of 24 rows inside: 0.895 [0.826, 0.978] dof 191.6 ok
+  V3-R8 (N 50000)
+    spl_db all        36 of 36 rows inside: 0.876 [0.823, 0.937] dof 324.0 ok
+    t20_s all         36 of 36 rows inside: 0.570 [0.532, 0.615] dof 261.1 ok
+    c50_db all        36 of 36 rows inside: 0.815 [0.765, 0.874] dof 302.0 ok
+    c80_db all        36 of 36 rows inside: 0.701 [0.657, 0.752] dof 298.6 ok
+    d50 all           36 of 36 rows inside: 0.816 [0.765, 0.874] dof 300.8 ok
+  V3-R9 (N 500000)
+    spl_db all        36 of 36 rows inside: 0.686 [0.632, 0.751] dof 181.7 ok
+    edt_s all         36 of 36 rows inside: 0.768 [0.696, 0.857] dof 124.9 ok
+    t20_s all         36 of 36 rows inside: 0.599 [0.542, 0.669] dof 123.4 ok
+    t30_s all         36 of 36 rows inside: 0.555 [0.504, 0.618] dof 130.5 ok
+    c50_db all        36 of 36 rows inside: 0.679 [0.634, 0.732] dof 262.8 ok
+    c80_db all        36 of 36 rows inside: 0.650 [0.607, 0.701] dof 262.1 ok
+    d50 all           36 of 36 rows inside: 0.679 [0.633, 0.731] dof 262.7 ok
+    ts_s all          36 of 36 rows inside: 0.645 [0.573, 0.741] dof 82.7 ok
+  1/sqrt(N) spl_db : true over ["C-R1/C-R2 -1.62", "C-R3/C-R4 +0.89", "C-R5/V-R4 +0.17", "C3-R5/V3-R8 +1.77", "C3-R6/C-R5 +0.17", "C3-R9/V3-R9 -1.92"]; unsafe []
+  1/sqrt(N) edt_s  : true over ["C-R1/C-R2 -0.85", "C-R3/C-R4 +0.09", "C3-R9/V3-R9 +0.58"]; unsafe []
+  1/sqrt(N) t20_s  : true over ["C-R1/C-R2 -0.01", "C-R3/C-R4 -0.02", "C-R5/V-R4 -0.39", "C3-R6/C-R5 -0.41", "C3-R9/V3-R9 +0.36"]; unsafe []
+  1/sqrt(N) t30_s  : true over ["C-R1/C-R2 -1.89", "C-R3/C-R4 +0.00", "C-R5/V-R4 +1.24", "C3-R9/V3-R9 -1.04"]; unsafe []
+  1/sqrt(N) c50_db : true over ["C-R1/C-R2 -0.03", "C-R5/V-R4 +0.87", "C3-R5/V3-R8 -0.11", "C3-R6/C-R5 -1.10", "C3-R9/V3-R9 +0.04"]; unsafe []
+  1/sqrt(N) c80_db : true over ["C-R1/C-R2 -0.58", "C-R5/V-R4 +0.64", "C3-R5/V3-R8 -0.45", "C3-R6/C-R5 +0.03", "C3-R9/V3-R9 -0.39"]; unsafe []
+  1/sqrt(N) d50    : true over ["C-R1/C-R2 -0.04", "C-R5/V-R4 +0.95", "C3-R5/V3-R8 -0.05", "C3-R6/C-R5 -0.94", "C3-R9/V3-R9 +0.02"]; unsafe []
+  1/sqrt(N) ts_s   : true over ["C-R1/C-R2 -1.32", "C3-R9/V3-R9 +0.25"]; unsafe []
 
-named counts, C-E1 (150000) against C-E2 (600000):
-    t20_s   360 refused for noise at C-E1, 360 name a count, 149 at most C-E2's; of those, 100.0 % of C-E2's seeds give the value
-    t30_s   360 refused for noise at C-E1, 360 name a count, 0 at most C-E2's; of those, NaN % of C-E2's seeds give the value
+ROUND 3 VALIDATION, energetic mode, with the code's numbers:
+  V3-E1 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.776 [0.725, 0.835] dof 273.8 ok
+    edt_s all         36 of 36 rows inside: 0.559 [0.524, 0.600] dof 294.3 ok
+    t20_s uniform_lambert 36 of 36 rows inside: 0.935 [0.859, 1.028] dof 168.6 ok
+    t30_s uniform_lambert 36 of 36 rows inside: 0.679 [0.612, 0.763] dof 112.9 ok
+    c50_db all        30 of 30 rows inside: 0.981 [0.916, 1.056] dof 268.6 ok
+    c80_db all        30 of 30 rows inside: 1.056 [0.967, 1.165] dof 157.1 ok
+    d50 all           30 of 30 rows inside: 0.963 [0.899, 1.037] dof 268.6 ok
+    ts_s all          30 of 30 rows inside: 0.636 [0.586, 0.697] dof 179.9 ok
+  V3-E2 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.660 [0.618, 0.708] dof 293.3 ok
+    t20_s lambert     36 of 36 rows inside: 0.120 [0.110, 0.131] dof 186.3 ok
+    t30_s lambert     24 of 24 rows inside: 0.128 [0.113, 0.148] dof 73.5 ok
+    c50_db all        36 of 36 rows inside: 0.644 [0.604, 0.691] dof 303.8 ok
+    c80_db all        36 of 36 rows inside: 0.509 [0.479, 0.545] dof 324.0 ok
+    d50 all           36 of 36 rows inside: 0.652 [0.611, 0.698] dof 303.4 ok
+    ts_s all           3 of  3 rows inside: 0.615 [0.505, 0.795] dof 27.0 ok
+  V3-E3 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.794 [0.746, 0.849] dof 322.3 ok
+    edt_s all         36 of 36 rows inside: 0.585 [0.550, 0.626] dof 324.0 ok
+    t20_s lambert      0 of 36 rows inside the domain
+    t30_s lambert      0 of 36 rows inside the domain
+    c50_db all        18 of 18 rows inside: 1.011 [0.924, 1.118] dof 150.2 ok
+    c80_db all        18 of 18 rows inside: 1.015 [0.925, 1.126] dof 140.8 ok
+    d50 all           18 of 18 rows inside: 1.012 [0.925, 1.119] dof 150.1 ok
+    ts_s all          18 of 18 rows inside: 0.793 [0.722, 0.881] dof 138.7 ok
+  V3-E4 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.763 [0.715, 0.817] dof 308.8 ok
+    edt_s all         36 of 36 rows inside: 0.495 [0.459, 0.536] dof 224.2 ok
+    t20_s other        0 of 36 rows inside the domain
+    t30_s other        0 of 36 rows inside the domain
+    c50_db all        36 of 36 rows inside: 0.753 [0.704, 0.811] dof 269.7 ok
+    c80_db all        36 of 36 rows inside: 0.721 [0.676, 0.773] dof 304.5 ok
+    d50 all           36 of 36 rows inside: 0.753 [0.704, 0.811] dof 269.7 ok
+    ts_s all          36 of 36 rows inside: 0.523 [0.492, 0.559] dof 324.0 ok
+  V3-E5 (N 50000)
+    spl_db all        36 of 36 rows inside: 0.690 [0.649, 0.738] dof 322.7 ok
+    t20_s uniform_lambert 36 of 36 rows inside: 0.821 [0.767, 0.885] dof 262.6 ok
+    t30_s uniform_lambert 36 of 36 rows inside: 0.666 [0.626, 0.713] dof 324.0 ok
+    c50_db all        36 of 36 rows inside: 0.516 [0.483, 0.553] dof 301.0 ok
+    c80_db all        36 of 36 rows inside: 0.381 [0.358, 0.407] dof 324.0 ok
+    d50 all           36 of 36 rows inside: 0.517 [0.484, 0.554] dof 301.2 ok
+  V3-E6 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.953 [0.893, 1.023] dof 293.0 ok
+  V3-E7 (N 150000)
+    spl_db all        36 of 36 rows inside: 0.700 [0.658, 0.749] dof 324.0 ok
+    t20_s lambert     36 of 36 rows inside: 0.282 [0.264, 0.302] dof 293.8 ok
+    t30_s lambert     36 of 36 rows inside: 0.384 [0.347, 0.430] dof 116.8 ok
+    c50_db all        24 of 24 rows inside: 0.510 [0.473, 0.555] dof 210.9 ok
+    c80_db all        24 of 24 rows inside: 0.372 [0.345, 0.404] dof 216.0 ok
+    d50 all           24 of 24 rows inside: 0.508 [0.471, 0.552] dof 216.0 ok
+  V3-E8 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.847 [0.796, 0.906] dof 324.0 ok
+    edt_s all         36 of 36 rows inside: 0.891 [0.837, 0.952] dof 324.0 ok
+    t20_s lambert     36 of 36 rows inside: 0.582 [0.541, 0.630] dof 233.8 ok
+    t30_s lambert     36 of 36 rows inside: 0.693 [0.633, 0.766] dof 151.7 ok
+    c50_db all        15 of 15 rows inside: 0.818 [0.744, 0.910] dof 135.0 ok
+    c80_db all        15 of 15 rows inside: 0.853 [0.766, 0.966] dof 101.6 ok
+    d50 all           15 of 15 rows inside: 0.822 [0.748, 0.914] dof 135.0 ok
+    ts_s all          15 of 15 rows inside: 0.909 [0.825, 1.013] dof 129.5 ok
+  V3-E9 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.673 [0.632, 0.721] dof 315.6 ok
+    edt_s all         36 of 36 rows inside: 0.421 [0.391, 0.457] dof 219.2 ok
+    t20_s uniform_lambert 36 of 36 rows inside: 0.846 [0.787, 0.915] dof 240.4 ok
+    t30_s uniform_lambert 36 of 36 rows inside: 0.567 [0.522, 0.622] dof 178.0 ok
+    c50_db all        36 of 36 rows inside: 0.859 [0.806, 0.922] dof 298.2 ok
+    c80_db all        36 of 36 rows inside: 0.755 [0.706, 0.814] dof 267.2 ok
+    d50 all           36 of 36 rows inside: 0.859 [0.805, 0.922] dof 298.3 ok
+    ts_s all          36 of 36 rows inside: 0.535 [0.497, 0.580] dof 230.3 ok
+  V3-E10 (N 300000)
+    spl_db all        36 of 36 rows inside: 0.684 [0.640, 0.735] dof 280.3 ok
+    edt_s all          6 of  6 rows inside: 0.665 [0.552, 0.841] dof 31.5 ok
+    t20_s other       36 of 36 rows inside: 0.533 [0.499, 0.573] dof 279.4 ok
+    t30_s other       36 of 36 rows inside: 0.517 [0.481, 0.561] dof 229.7 ok
+    c50_db all        30 of 30 rows inside: 0.718 [0.664, 0.783] dof 201.9 ok
+    c80_db all        30 of 30 rows inside: 0.705 [0.654, 0.765] dof 219.2 ok
+    d50 all           30 of 30 rows inside: 0.713 [0.659, 0.777] dof 202.2 ok
+    ts_s all           6 of  6 rows inside: 0.765 [0.662, 0.910] dof 54.0 ok
+  1/sqrt(N) spl_db : true over ["C-E1/C-E2 +0.34", "C-E3/C-E4 -0.99", "C-E5/V-E4 +0.42", "C3-E5/V3-E5 +0.70", "C3-E6/C-E5 -0.60", "C3-E10/V3-E9 -0.37"]; unsafe []
+  1/sqrt(N) edt_s  : true over ["C-E1/C-E2 +0.31", "C-E3/C-E4 -2.18", "C3-E10/V3-E9 -0.40"]; unsafe []
+  1/sqrt(N) t20_s  : true over ["C-E1/C-E2 -0.87", "C-E3/C-E4 -1.17", "C-E5/V-E4 +1.78", "C3-E5/V3-E5 +0.15", "C3-E6/C-E5 -1.06", "C3-E10/V3-E9 -0.34"]; unsafe []
+  1/sqrt(N) t30_s  : true over ["C-E1/C-E2 -0.17", "C-E3/C-E4 -0.51", "C-E5/V-E4 +1.07", "C3-E10/V3-E9 +0.37"]; unsafe []
+  1/sqrt(N) c50_db : true over ["C-E1/C-E2 +0.49", "C-E5/V-E4 -0.44", "C3-E5/V3-E5 -0.53", "C3-E6/C-E5 -0.76", "C3-E10/V3-E9 +0.54"]; unsafe []
+  1/sqrt(N) c80_db : true over ["C-E1/C-E2 +1.00", "C-E5/V-E4 -0.27", "C3-E5/V3-E5 +1.27", "C3-E6/C-E5 -0.60", "C3-E10/V3-E9 -0.59"]; unsafe []
+  1/sqrt(N) d50    : true over ["C-E1/C-E2 +0.51", "C-E5/V-E4 -0.45", "C3-E5/V3-E5 -0.57", "C3-E6/C-E5 -0.72", "C3-E10/V3-E9 +0.53"]; unsafe []
+  1/sqrt(N) ts_s   : true over ["C-E1/C-E2 +1.25", "C3-E10/V3-E9 -0.00"]; unsafe []
 
-named counts, C-E3 (150000) against C-E4 (2400000):
-    t20_s   360 refused for noise at C-E3, 360 name a count, 360 at most C-E4's; of those, 100.0 % of C-E4's seeds give the value
-    t30_s   360 refused for noise at C-E3, 360 name a count, 0 at most C-E4's; of those, NaN % of C-E4's seeds give the value
+named counts (round 3), C-R1 (150000) against C-R2 (1500000):
+    edt_s   10 refused for noise at C-R1, 10 name a count, 10 at most C-R2's; of those, 100.0 % of C-R2's seeds give the value; 0 outside the domain at C-R1
+    t20_s   360 refused for noise at C-R1, 360 name a count, 11 at most C-R2's; of those, 98.2 % of C-R2's seeds give the value; 0 outside the domain at C-R1
+    t30_s   358 refused for noise at C-R1, 358 name a count, 0 at most C-R2's; of those, NaN % of C-R2's seeds give the value; 0 outside the domain at C-R1
 
-named counts, C-E5 (150000) against V-E4 (1500000):
-    t20_s   360 refused for noise at C-E5, 360 name a count, 1 at most V-E4's; of those, 100.0 % of V-E4's seeds give the value
-    t30_s   360 refused for noise at C-E5, 360 name a count, 0 at most V-E4's; of those, NaN % of V-E4's seeds give the value
-written B:/repos/I-Simpa_Night_Mode/.claude/worktrees/t3-proj/docs/investigations/2026-09-25-noise-calibration/calibration.json
+named counts (round 3), C-R3 (150000) against C-R4 (15000000):
+    edt_s   357 refused for noise at C-R3, 357 name a count, 357 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value; 0 outside the domain at C-R3
+    t20_s   360 refused for noise at C-R3, 360 name a count, 358 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value; 0 outside the domain at C-R3
+    t30_s   358 refused for noise at C-R3, 358 name a count, 265 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value; 0 outside the domain at C-R3
+
+named counts (round 3), C-R5 (150000) against V-R4 (600000):
+    t20_s   360 refused for noise at C-R5, 360 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value; 0 outside the domain at C-R5
+    t30_s   212 refused for noise at C-R5, 212 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value; 0 outside the domain at C-R5
+
+named counts (round 3), C-E1 (150000) against C-E2 (600000):
+
+named counts (round 3), C-E3 (150000) against C-E4 (2400000):
+    t30_s   303 refused for noise at C-E3, 0 name a count, 0 at most C-E4's; of those, NaN % of C-E4's seeds give the value; 0 outside the domain at C-E3
+
+named counts (round 3), C-E5 (150000) against V-E4 (1500000):
+    t20_s   360 refused for noise at C-E5, 360 name a count, 1 at most V-E4's; of those, 100.0 % of V-E4's seeds give the value; 0 outside the domain at C-E5
+    t30_s   360 refused for noise at C-E5, 360 name a count, 0 at most V-E4's; of those, NaN % of V-E4's seeds give the value; 0 outside the domain at C-E5
+
+named counts (round 3), C3-R5 (5000) against V3-R8 (50000):
+    t20_s   0 refused for noise at C3-R5, 0 name a count, 0 at most V3-R8's; of those, NaN % of V3-R8's seeds give the value; 158 outside the domain at C3-R5
+    t30_s   0 refused for noise at C3-R5, 0 name a count, 0 at most V3-R8's; of those, NaN % of V3-R8's seeds give the value; 7 outside the domain at C3-R5
+    c50_db  360 refused for noise at C3-R5, 360 name a count, 360 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value; 0 outside the domain at C3-R5
+    c80_db  360 refused for noise at C3-R5, 360 name a count, 206 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value; 0 outside the domain at C3-R5
+    d50     359 refused for noise at C3-R5, 359 name a count, 359 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value; 0 outside the domain at C3-R5
+
+named counts (round 3), C3-R6 (15000) against C-R5 (150000):
+    t20_s   0 refused for noise at C3-R6, 0 name a count, 0 at most C-R5's; of those, NaN % of C-R5's seeds give the value; 203 outside the domain at C3-R6
+    t30_s   0 refused for noise at C3-R6, 0 name a count, 0 at most C-R5's; of those, NaN % of C-R5's seeds give the value; 4 outside the domain at C3-R6
+    c50_db  239 refused for noise at C3-R6, 239 name a count, 239 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value; 0 outside the domain at C3-R6
+    c80_db  240 refused for noise at C3-R6, 240 name a count, 239 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value; 0 outside the domain at C3-R6
+    d50     237 refused for noise at C3-R6, 237 name a count, 237 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value; 0 outside the domain at C3-R6
+    ts_s    0 refused for noise at C3-R6, 0 name a count, 0 at most C-R5's; of those, NaN % of C-R5's seeds give the value; 3 outside the domain at C3-R6
+
+named counts (round 3), C3-R9 (50000) against V3-R9 (500000):
+    t20_s   360 refused for noise at C3-R9, 360 name a count, 290 at most V3-R9's; of those, 100.0 % of V3-R9's seeds give the value; 0 outside the domain at C3-R9
+    t30_s   360 refused for noise at C3-R9, 360 name a count, 0 at most V3-R9's; of those, NaN % of V3-R9's seeds give the value; 0 outside the domain at C3-R9
+
+named counts (round 3), C3-E5 (5000) against V3-E5 (50000):
+    t20_s   360 refused for noise at C3-E5, 2 name a count, 2 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value; 0 outside the domain at C3-E5
+    t30_s   0 refused for noise at C3-E5, 0 name a count, 0 at most V3-E5's; of those, NaN % of V3-E5's seeds give the value; 360 outside the domain at C3-E5
+    c50_db  359 refused for noise at C3-E5, 359 name a count, 359 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value; 0 outside the domain at C3-E5
+    c80_db  360 refused for noise at C3-E5, 360 name a count, 360 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value; 0 outside the domain at C3-E5
+    d50     79 refused for noise at C3-E5, 79 name a count, 79 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value; 0 outside the domain at C3-E5
+
+named counts (round 3), C3-E6 (15000) against C-E5 (150000):
+    t20_s   360 refused for noise at C3-E6, 360 name a count, 0 at most C-E5's; of those, NaN % of C-E5's seeds give the value; 0 outside the domain at C3-E6
+    t30_s   0 refused for noise at C3-E6, 0 name a count, 0 at most C-E5's; of those, NaN % of C-E5's seeds give the value; 360 outside the domain at C3-E6
+    c50_db  147 refused for noise at C3-E6, 147 name a count, 147 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value; 0 outside the domain at C3-E6
+    c80_db  232 refused for noise at C3-E6, 232 name a count, 232 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value; 0 outside the domain at C3-E6
+    d50     105 refused for noise at C3-E6, 105 name a count, 105 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value; 0 outside the domain at C3-E6
+
+named counts (round 3), C3-E10 (50000) against V3-E9 (300000):
+
+values through the shipped model (receiver-band seeds whose series gives one):
+  C-R1   spl_db 360/360 edt_s 350/360 {"noise": 10} t20_s 0/360 {"noise": 360} t30_s 0/358 {"noise": 358} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  C-R2   spl_db 360/360 edt_s 360/360 t20_s 353/360 {"noise": 7} t30_s 1/360 {"noise": 359} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  C-R3   spl_db 360/360 edt_s 3/360 {"noise": 357} t20_s 0/360 {"noise": 360} t30_s 0/358 {"noise": 358}
+  C-R4   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360
+  C-R5   spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/212 {"noise": 212} c50_db 240/240 c80_db 240/240 d50 240/240
+  C-R6   spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 120/180 {"resamples": 60} c80_db 120/180 {"resamples": 60} d50 120/180 {"resamples": 60} ts_s 120/180 {"resamples": 60}
+  C-R7   spl_db 360/360 edt_s 34/360 {"noise": 326} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  V-R1   spl_db 360/360 edt_s 1/69 {"noise": 68} t20_s 0/360 {"noise": 360} t30_s 0/262 {"noise": 262} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 96/119 {"resamples": 23}
+  V-R2   spl_db 360/360 edt_s 170/360 {"noise": 190} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 120/180 {"resamples": 60} c80_db 3/180 {"noise": 166, "resamples": 11} d50 120/180 {"resamples": 60} ts_s 120/180 {"resamples": 60}
+  V-R3   spl_db 360/360 edt_s 360/360 t20_s 135/360 {"noise": 225} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V-R4   spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240
+  V-R5   spl_db 360/360 t20_s 360/360 t30_s 164/360 {"noise": 196} c50_db 360/360 c80_db 360/360 d50 360/360
+  V-R6   spl_db 360/360 edt_s 347/360 {"noise": 13} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360}
+  C-E1   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  C-E2   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  C-E3   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 57/360 {"resamples": 303}
+  C-E4   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360
+  C-E5   spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240
+  C-E6   spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 120/179 {"resamples": 59} c80_db 120/179 {"resamples": 59} d50 120/179 {"resamples": 59} ts_s 120/179 {"resamples": 59}
+  C-E7   spl_db 360/360 edt_s 359/360 {"noise": 1} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  V-E1   spl_db 360/360 edt_s 11/68 {"noise": 55, "resamples": 2} t20_s 360/360 t30_s 163/360 {"resamples": 197} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 77/112 {"resamples": 35}
+  V-E2   spl_db 360/360 edt_s 2/360 {"noise": 358} t20_s 360/360 t30_s 0/360 {"resamples": 360} c50_db 108/174 {"noise": 1, "resamples": 65} c80_db 0/174 {"noise": 174} d50 109/174 {"resamples": 65} ts_s 109/174 {"resamples": 65}
+  V-E3   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V-E4   spl_db 360/360 t20_s 139/360 {"noise": 221} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240
+  V-E5   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 0/360 {"noise": 360}
+  V-E6   spl_db 360/360 edt_s 0/187 {"noise": 183, "resamples": 4} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 180/180
+  W-E1   spl_db 360/360 edt_s 0/180 {"noise": 180} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 202/245 {"noise": 13, "resamples": 30}
+  W-E2   spl_db 360/360 edt_s 0/195 {"noise": 183, "resamples": 12} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 180/180
+  W-E3   spl_db 360/360 edt_s 0/360 {"noise": 360} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 269/300 {"noise": 31}
+  W-E4   spl_db 360/360 edt_s 0/50 {"noise": 44, "resamples": 6} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 33/58 {"resamples": 25}
+  W-E5   spl_db 360/360 edt_s 24/360 {"noise": 336} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 300/300
+  W-E6   spl_db 360/360 edt_s 350/360 {"noise": 10} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360}
+  C3-R1  spl_db 360/360 edt_s 360/360 t20_s 226/360 {"noise": 134} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  C3-R2  spl_db 360/360 edt_s 360/360 t20_s 1/360 {"noise": 359} t30_s 0/360 {"noise": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  C3-R3  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  C3-R4  spl_db 360/360 edt_s 360/360 t20_s 44/360 {"noise": 316} t30_s 0/360 {"noise": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  C3-R5  spl_db 360/360 t20_s 0/158 {"few": 158} t30_s 0/7 {"few": 7} c50_db 0/360 {"noise": 360} c80_db 0/360 {"noise": 360} d50 1/360 {"noise": 359}
+  C3-R6  spl_db 360/360 t20_s 0/203 {"few": 203} t30_s 0/4 {"few": 4} c50_db 1/240 {"noise": 239} c80_db 0/240 {"noise": 240} d50 3/240 {"noise": 237} ts_s 0/3 {"few": 3}
+  C3-R7  spl_db 360/360
+  C3-R8  spl_db 360/360 t20_s 0/279 {"noise": 279} t30_s 0/83 {"noise": 83} c50_db 0/360 {"noise": 360} c80_db 0/349 {"noise": 349} d50 360/360
+  C3-R9  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-R1  spl_db 360/360 edt_s 360/360 t20_s 346/360 {"noise": 14} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 300/300
+  V3-R2  spl_db 360/360 edt_s 360/360 t20_s 358/360 {"noise": 2} t30_s 0/360 {"noise": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-R3  spl_db 360/360 edt_s 0/360 {"few": 360} t20_s 0/360 {"few": 360} t30_s 0/359 {"few": 359} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 0/180 {"few": 180}
+  V3-R4  spl_db 360/360 edt_s 0/1 {"few": 1} t20_s 0/69 {"few": 69} t30_s 0/2 {"few": 2} c50_db 0/240 {"noise": 240} c80_db 0/240 {"noise": 240} d50 0/240 {"noise": 240} ts_s 0/3 {"few": 3}
+  V3-R5  spl_db 240/360 {"noise": 120}
+  V3-R6  spl_db 360/360 edt_s 0/360 {"noise": 360} t20_s 0/360 {"noise": 360} t30_s 0/243 {"noise": 243} c50_db 41/177 {"noise": 84, "resamples": 52} c80_db 0/177 {"noise": 177} d50 106/177 {"resamples": 71} ts_s 106/177 {"resamples": 71}
+  V3-R7  spl_db 360/360 edt_s 301/360 {"noise": 59} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240 ts_s 240/240
+  V3-R8  spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/145 {"noise": 145} c50_db 360/360 c80_db 360/360 d50 360/360
+  V3-R9  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 12/360 {"noise": 348} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  C3-E1  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  C3-E2  spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 240/240 c80_db 240/240 d50 240/240
+  C3-E3  spl_db 360/360 edt_s 1/55 {"noise": 53, "resamples": 1} t20_s 0/360 {"crossings": 1, "noise": 359} t30_s 0/360 {"crossings": 1, "noise": 357, "resamples": 2} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 38/77 {"resamples": 39}
+  C3-E4  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 0/360 {"noise": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  C3-E5  spl_db 360/360 t20_s 0/360 {"noise": 2, "resamples": 358} t30_s 0/360 {"few": 360} c50_db 1/360 {"noise": 359} c80_db 0/360 {"noise": 360} d50 281/360 {"noise": 79}
+  C3-E6  spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"few": 360} c50_db 93/240 {"noise": 147} c80_db 8/240 {"noise": 232} d50 135/240 {"noise": 105}
+  C3-E7  spl_db 360/360
+  C3-E8  spl_db 360/360 edt_s 0/90 {"noise": 90} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 358, "resamples": 2} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 60/60
+  C3-E9  spl_db 360/360 t20_s 0/355 {"noise": 355} t30_s 0/359 {"noise": 359} c50_db 0/360 {"noise": 360} c80_db 0/360 {"noise": 360} d50 360/360
+  C3-E10 spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-E1  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 300/300
+  V3-E2  spl_db 360/360 edt_s 0/72 {"noise": 72} t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 354, "resamples": 6} c50_db 301/360 {"noise": 59} c80_db 300/360 {"noise": 60} d50 289/360 {"noise": 71} ts_s 15/106 {"resamples": 91}
+  V3-E3  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"crossings": 360} t30_s 0/360 {"crossings": 360} c50_db 180/180 c80_db 180/180 d50 180/180 ts_s 180/180
+  V3-E4  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"crossings": 360} t30_s 0/360 {"crossings": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-E5  spl_db 360/360 t20_s 360/360 t30_s 0/360 {"resamples": 360} c50_db 360/360 c80_db 360/360 d50 360/360
+  V3-E6  spl_db 243/360 {"noise": 117}
+  V3-E7  spl_db 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 184/240 {"noise": 56} c80_db 0/240 {"noise": 240} d50 240/240
+  V3-E8  spl_db 360/360 edt_s 360/360 t20_s 0/360 {"noise": 360} t30_s 0/360 {"noise": 360} c50_db 120/177 {"resamples": 57} c80_db 120/177 {"resamples": 57} d50 120/177 {"resamples": 57} ts_s 120/177 {"resamples": 57}
+  V3-E9  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
+  V3-E10 spl_db 360/360 edt_s 30/60 {"resamples": 30} t20_s 73/360 {"noise": 287} t30_s 0/360 {"noise": 360} c50_db 300/300 c80_db 300/300 d50 300/300 ts_s 59/60 {"resamples": 1}
+written B:/repos/I-Simpa_Night_Mode/target/agents/pm8-fix-noise-scratch/calibration_final.json
 test noise_calibration ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 195.62s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 71.98s
 

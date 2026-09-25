@@ -20,7 +20,13 @@
 //!   receivers, 150,000 particles, random mode, and again in energetic mode), seeds 1 to 10: how
 //!   many T30, EDT, C80 and D50 values come through. `$SIMPA_T1_FROM` reads an earlier run's
 //!   folder again with this build's `simpa results`, keeping each report as `$SIMPA_T1_REPORT`
-//!   (default `report.json`) beside the run.
+//!   (default `report.json`) beside the run, or under `$SIMPA_T1_OUT` when it is set.
+//!
+//! Round 3 (`PREREGISTER.txt`, "ROUND 3" and its addendum) reads its cells with
+//! `$SIMPA_NOISE_ROLES` taking `calibration3` and then `validation3`: the first prints what the
+//! rules derive, the second judges the V3 cells with the numbers committed in
+//! `params::noise::calibration`, the named counts on every pair and, per cell, how many values
+//! come through the shipped model and why the rest are refused.
 
 mod support;
 
@@ -1151,14 +1157,6 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
                         json!((s.iter().map(|x| x * x).sum::<f64>() / n as f64).sqrt()),
                     ))
                     .collect::<serde_json::Map<_, _>>(),
-                // Round 3: each seed's crossings per particle and lifetime spread, and whether
-                // every face is Lambert with scattering 1 in the band.
-                "seed_n1": runs.iter().map(|r| r.n1[rb]).collect::<Vec<_>>(),
-                "seed_cv2": runs.iter().map(|r| r.cv2[rb]).collect::<Vec<_>>(),
-                "lambert": runs[0].lambert[rb],
-                // A2: every face of the same absorption (the cell's walls), and the mean.
-                "uniform": c.walls.uniform(),
-                "mean_absorption": runs[0].mean_absorption[rb],
             }));
         }
         quantities.insert(q.to_string(), Value::Array(rows));
@@ -1176,7 +1174,28 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
                 .map(|x| x["wall_s"].clone())
         });
     config["wall_s"] = wall.unwrap_or(Value::Null);
-    let receipt = json!({"cell": config, "quantities": quantities, "incomplete": incomplete});
+    // Round 3, once per receiver-band: each seed's crossings per particle and lifetime spread,
+    // whether every face is Lambert with scattering 1 in the band, whether every face has the
+    // same absorption (the cell's walls, A2), and the mean absorption.
+    let bands: Vec<Value> = (0..rbs)
+        .map(|rb| {
+            json!({
+                "receiver": rb / per,
+                "freq_hz": first[rb / per]["bands"][rb % per]["freq_hz"],
+                "seed_n1": runs.iter().map(|r| r.n1[rb]).collect::<Vec<_>>(),
+                "seed_cv2": runs.iter().map(|r| r.cv2[rb]).collect::<Vec<_>>(),
+                "lambert": runs[0].lambert[rb],
+                "uniform": c.walls.uniform(),
+                "mean_absorption": runs[0].mean_absorption[rb],
+            })
+        })
+        .collect();
+    let receipt = json!({
+        "cell": config,
+        "bands": bands,
+        "quantities": quantities,
+        "incomplete": incomplete,
+    });
     for q in calibration::QUANTITIES {
         let mut sc: Vec<f64> = receipt["quantities"][q]
             .as_array()
@@ -1217,18 +1236,34 @@ fn cell_receipt(c: &Cell, from: &Path) -> (Value, Vec<RunNumbers>) {
     (receipt, runs)
 }
 
+/// How `params::noise::evaluate` judged a value (R3-9 and the per-cell counts).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Judged {
+    /// Given.
+    Given,
+    /// Refused for its noise, naming this many particles per source.
+    Named(u64),
+    /// Refused for its noise: the standard deviation within the limit, too many resamples refusing.
+    WithinLimit,
+    /// Refused for its noise with no count named for another reason.
+    NoCount,
+    /// Outside the calibration's domain: too few particles (run at least this many) ...
+    FewParticles(u64),
+    /// ... or too many crossings per particle.
+    ManyCrossings,
+}
+
 /// How `params::noise::evaluate` judges quantity `qi` of receiver-band `rb` of one run, by the
 /// code a report uses (`params::noise::judge_one`, with the run's own crossings per particle,
-/// lifetime spread and Lambert flag): `Ok(())` when it gives the value, `Err(count)` when it
-/// refuses it for its noise or its domain with the particle count it names (if any); `None` when
-/// the series gives no value.
+/// lifetime spread, Lambert and uniform flags and mean absorption); `None` when the series gives
+/// no value.
 fn judged(
     run: &RunNumbers,
     rb: usize,
     qi: usize,
     method: ComputationMethod,
     particles: u32,
-) -> Option<Result<(), Option<u64>>> {
+) -> Option<Judged> {
     let value = run.values[rb][qi]?;
     let m = match method {
         Random => noise::Method::Random,
@@ -1260,21 +1295,24 @@ fn judged(
     });
     Some(
         match noise::judge_one(&model, qi, value, raw, run.refused[rb][qi], Some(n)) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(match e.not_evaluable() {
-                Some(NotEvaluable::MonteCarloNoise {
-                    particle_count:
+            Ok(_) => Judged::Given,
+            Err(e) => match e.not_evaluable() {
+                Some(NotEvaluable::MonteCarloNoise { particle_count, .. }) => {
+                    match particle_count {
                         ParticleCount::Named {
                             particles: Some(n), ..
-                        },
-                    ..
-                }) => Some(*n),
+                        } => Judged::Named(*n),
+                        ParticleCount::WithinLimit => Judged::WithinLimit,
+                        _ => Judged::NoCount,
+                    }
+                }
                 Some(NotEvaluable::NoiseUncalibrated {
                     particles_at_least: Some(n),
                     ..
-                }) => Some(u64::from(*n)),
-                _ => None,
-            }),
+                }) => Judged::FewParticles(u64::from(*n)),
+                Some(NotEvaluable::NoiseUncalibrated { .. }) => Judged::ManyCrossings,
+                other => panic!("judge_one refused {other:?}"),
+            },
         },
     )
 }
@@ -1598,32 +1636,42 @@ fn noise_calibration() {
                 ca.particles, cb.particles
             );
             for qi in 0..8 {
-                let (mut refusals, mut named, mut within, mut pass) = (0, 0, 0, 0.0);
+                let (mut refusals, mut named, mut within, mut pass, mut outside) =
+                    (0, 0, 0, 0.0, 0);
                 let rbs = runs[ia][0].values.len();
                 for rb in 0..rbs {
-                    let hi: Vec<Option<Result<(), Option<u64>>>> = runs[ib]
+                    let hi: Vec<Option<Judged>> = runs[ib]
                         .iter()
                         .map(|r| judged(r, rb, qi, ca.method, cb.particles))
                         .collect();
                     for run in &runs[ia] {
-                        let Some(Err(count)) = judged(run, rb, qi, ca.method, ca.particles) else {
-                            continue;
+                        let n = match judged(run, rb, qi, ca.method, ca.particles) {
+                            None | Some(Judged::Given) => continue,
+                            Some(Judged::FewParticles(_) | Judged::ManyCrossings) => {
+                                outside += 1;
+                                continue;
+                            }
+                            Some(Judged::Named(n)) => n,
+                            Some(_) => {
+                                refusals += 1;
+                                continue;
+                            }
                         };
                         refusals += 1;
-                        let Some(n) = count else { continue };
                         named += 1;
                         if n > u64::from(cb.particles) {
                             continue;
                         }
                         within += 1;
-                        let given = hi.iter().filter(|h| matches!(h, Some(Ok(())))).count();
+                        let given = hi.iter().filter(|h| **h == Some(Judged::Given)).count();
                         pass += given as f64 / hi.len() as f64;
                     }
                 }
-                if refusals > 0 {
+                if refusals > 0 || outside > 0 {
                     println!(
-                        "    {:<7} {refusals} refused at {a}, {named} name a count, {within} at \
-                         most {b}'s; of those, {:.1} % of {b}'s seeds give the value",
+                        "    {:<7} {refusals} refused for noise at {a}, {named} name a count, \
+                         {within} at most {b}'s; of those, {:.1} % of {b}'s seeds give the \
+                         value; {outside} outside the domain at {a}",
                         calibration::QUANTITIES[qi],
                         if within > 0 {
                             100.0 * pass / within as f64
@@ -1633,6 +1681,49 @@ fn noise_calibration() {
                     );
                 }
             }
+        }
+        // Every cell of the pairs and the validation: how many values come through the shipped
+        // model, and why the rest are refused.
+        println!(
+            "\nvalues through the shipped model (receiver-band seeds whose series gives one):"
+        );
+        for (ci, c) in cells.iter().enumerate() {
+            let mut line = format!("  {:<6}", c.id);
+            for qi in 0..8 {
+                let (mut given, mut total) = (0, 0);
+                let mut why: std::collections::BTreeMap<&str, usize> = Default::default();
+                for run in &runs[ci] {
+                    for rb in 0..run.values.len() {
+                        let Some(j) = judged(run, rb, qi, c.method, c.particles) else {
+                            continue;
+                        };
+                        total += 1;
+                        let w = match j {
+                            Judged::Given => {
+                                given += 1;
+                                continue;
+                            }
+                            Judged::Named(_) | Judged::NoCount => "noise",
+                            Judged::WithinLimit => "resamples",
+                            Judged::FewParticles(_) => "few",
+                            Judged::ManyCrossings => "crossings",
+                        };
+                        *why.entry(w).or_default() += 1;
+                    }
+                }
+                if total > 0 {
+                    line += &format!(
+                        " {} {given}/{total}{}",
+                        calibration::QUANTITIES[qi],
+                        if why.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" {why:?}")
+                        }
+                    );
+                }
+            }
+            println!("{line}");
         }
     }
     if let Ok(out) = std::env::var("SIMPA_NOISE_OUT") {
@@ -1718,10 +1809,14 @@ fn tutorial1_at_upstreams_default() {
             projects.push((format!("{method:?}/seed{seed:02}"), p));
         }
     }
-    let root = match std::env::var_os("SIMPA_T1_FROM") {
+    // Where the reports go: beside each run, or under `$SIMPA_T1_OUT` when it is set (reading an
+    // earlier piece's runs again without writing into its folders).
+    let out = std::env::var_os("SIMPA_T1_OUT").map(PathBuf::from);
+    let (root, reports_root) = match std::env::var_os("SIMPA_T1_FROM") {
         Some(from) if !from.is_empty() => {
             // Read again with this build's `simpa results`.
             let from = PathBuf::from(from);
+            let to = out.clone().unwrap_or_else(|| from.clone());
             for (folder, _) in &projects {
                 let runs = from.join(folder).join("runs");
                 let run = std::fs::read_dir(&runs)
@@ -1738,14 +1833,15 @@ fn tutorial1_at_upstreams_default() {
                 assert!(r.code == 0 || r.code == 6, "{r:#?}");
                 let name =
                     std::env::var("SIMPA_T1_REPORT").unwrap_or_else(|_| "report.json".into());
-                std::fs::write(from.join(folder).join(name), &r.stdout).unwrap();
+                std::fs::create_dir_all(to.join(folder)).unwrap();
+                std::fs::write(to.join(folder).join(name), &r.stdout).unwrap();
             }
-            from
+            (from, to)
         }
         _ => {
             let root = evidence_root("tutorial1-default");
             run_all(&root, &projects);
-            root
+            (root.clone(), root)
         }
     };
     let name = std::env::var("SIMPA_T1_REPORT").unwrap_or_else(|_| "report.json".into());
@@ -1755,8 +1851,10 @@ fn tutorial1_at_upstreams_default() {
             .iter()
             .filter(|(f, _)| f.starts_with(&format!("{method:?}/")))
             .map(|(f, _)| {
-                serde_json::from_str(&std::fs::read_to_string(root.join(f).join(&name)).unwrap())
-                    .unwrap()
+                serde_json::from_str(
+                    &std::fs::read_to_string(reports_root.join(f).join(&name)).unwrap(),
+                )
+                .unwrap()
             })
             .collect();
         summary.insert(

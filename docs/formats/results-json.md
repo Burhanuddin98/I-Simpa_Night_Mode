@@ -60,7 +60,7 @@ are not for publication.`
   from a Monte-Carlo histogram), `band_hz` and `aggregate` (a surface file's: the first for the
   `Global` file, the second for a band's), `curved`, `decay_curve`, `field`, `air_m_per_metre`,
   `onset`, `position_m`, `arrival_s`, `decay_arrival`, `floor_db`, `lost_share`, `crossings`,
-  `crossings_per_particle`, `lambert_walls` (a quantity's calibration that has no Lambert entry),
+  `crossings_per_particle`, `lambert_walls` and `uniform_lambert_walls` (a quantity's calibration that has no entry of its own for those walls),
   `free_paths` (the reference's, when the transport refused), and inside a refusal's typed
   `error`, `sd`, `with_tail`, `with_missing`, `low`, `high`, `particles_at_least` and
   `receiver_radius_scale_at_most`

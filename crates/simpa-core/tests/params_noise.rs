@@ -416,9 +416,11 @@ fn at_count(particles: f64, g: &mut Gen) -> (Vec<f64>, NoiseModel) {
 fn the_particle_count_a_refusal_names_brings_the_value_within_its_limit() {
     // 10,000 crossings: T20 is refused for its noise, and the refusal names the count at which
     // the calibrated standard deviation, falling as 1/√N, is its margin below the limit
-    // (`noise::calibration::margin`: random-mode T20's one-run estimate scatters by up to 27 %,
-    // so its margin is 1.4). Ten new runs at that count pass; at a quarter of it most are refused
-    // again.
+    // (`noise::calibration::margin`: random-mode T20's one-run estimate scatters by up to 30 %,
+    // so its margin is 1.5). Ten new runs at that count pass; at a sixth of it, where the
+    // calibrated standard deviation is √6/1.5 = 1.63 times the limit, most are refused again. (A
+    // quarter, 1.33 times the limit with round 3's margin, lets a run whose own estimate reads
+    // low through about 4 times in 10.)
     let mut g = Gen(0x0c0f_fee0_0000_0077);
     let (v, model) = at_count(BASE, &mut g);
     let p = noise::evaluate(&series(v), AT, &model);
@@ -441,7 +443,7 @@ fn the_particle_count_a_refusal_names_brings_the_value_within_its_limit() {
         "T20 {value:.3} s ± {:.2} %: run at least {needed} particles",
         100.0 * sd / value
     );
-    let (mut pass_at, mut pass_quarter) = (0, 0);
+    let (mut pass_at, mut pass_sixth) = (0, 0);
     for _ in 0..10 {
         let (v, m) = at_count(needed as f64, &mut g);
         let r = noise::evaluate(&series(v), AT, &m).t20_s;
@@ -454,24 +456,22 @@ fn the_particle_count_a_refusal_names_brings_the_value_within_its_limit() {
             Err(e) => println!("  at the count: {e}"),
         }
         pass_at += usize::from(r.is_ok());
-        let (v, m) = at_count(needed as f64 / 4.0, &mut g);
-        pass_quarter += usize::from(noise::evaluate(&series(v), AT, &m).t20_s.is_ok());
+        let (v, m) = at_count(needed as f64 / 6.0, &mut g);
+        pass_sixth += usize::from(noise::evaluate(&series(v), AT, &m).t20_s.is_ok());
     }
-    println!("at the named count {pass_at} of 10 pass; at a quarter of it {pass_quarter}");
+    println!("at the named count {pass_at} of 10 pass; at a sixth of it {pass_sixth}");
     assert!(pass_at >= 9, "{pass_at}");
-    // Says no: a quarter of the named count is not enough.
-    assert!(pass_quarter <= 3, "{pass_quarter}");
-    // Random-mode T30's fall as 1/√N was not confirmed on SPPS's own seeds (calibration rule 4),
-    // so its refusal names no count, and says so.
-    match p.t30_s.as_ref().unwrap_err().not_evaluable() {
-        Some(NotEvaluable::MonteCarloNoise {
-            particle_count: ParticleCount::ScalingNotConfirmed,
-            ..
-        }) => {}
-        other => panic!("{other:?}"),
-    }
-    let text = p.t30_s.as_ref().unwrap_err().to_string();
-    assert!(text.contains("did not confirm"), "{text}");
+    // Says no: a sixth of the named count is not enough.
+    assert!(pass_sixth <= 3, "{pass_sixth}");
+    // Random-mode T30's spread did not fall slower than 1/√N on any pair of SPPS cells (round 3's
+    // one-sided rule), so its refusal names a count too, with its own margin; a quantity whose
+    // flag is off names none (`params::noise`'s unit tests).
+    let (_, _, margin) = named(&p.t30_s);
+    assert_eq!(margin, noise::calibration::margin(noise::Method::Random, 3));
+    assert!(noise::calibration::root_n_confirmed(
+        noise::Method::Random,
+        3
+    ));
     // A value refused for its resamples alone, its standard deviation within the limit, names
     // no count: more particles need not cure what refuses the resamples.
     let e = ParamError::NotEvaluable {

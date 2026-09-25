@@ -213,9 +213,12 @@ pub mod calibration {
     /// scattering 1 and not every face has the same absorption ([`super::Walls::Lambert`]): the
     /// particles' energies spread apart as in specular rooms when the absorption is concentrated
     /// (0.63 of M7's structure for T30 with the floor at 0.9 and the rest at 0.02). Measured with
-    /// receivers of 0.31 m only, so their domain stops at few crossings per particle.
+    /// receivers of 0.31 m only, so their domain stops at few crossings per particle. T20's
+    /// fitted 0.52 failed its validation (a 6 × 10 × 3 m room, floor 0.9, the rest 0.02, 1 ms
+    /// steps: 1.12 times the prediction, lower bound 1.04), so by F1 it takes the other bands'
+    /// factor 1 and kappa 0, in its own domain.
     pub const ENERGETIC_LAMBERT: [Entry; 2] = [
-        e(0.52, 0.0, 150_000, ENERGETIC_LAMBERT_MAX_N, 1.3, true),
+        e(1.0, 0.0, 150_000, ENERGETIC_LAMBERT_MAX_N, 1.3, true),
         e(0.73, 2.0, 150_000, ENERGETIC_LAMBERT_MAX_N, 1.3, true),
     ];
     /// Energetic T20 and T30 in bands whose every face reflects by Lambert's law with
@@ -741,7 +744,8 @@ pub fn judge_one(
     if let Some(run) = run {
         let n = n.unwrap_or(f64::INFINITY);
         let few = run.particles < e.min_particles;
-        let many = !(n <= e.max_crossings_per_particle);
+        // A NaN is outside too.
+        let many = n.is_nan() || n > e.max_crossings_per_particle;
         if few || many {
             return Err(not_evaluable(
                 quantity,
@@ -1141,7 +1145,7 @@ mod tests {
                     let want = 1e-6 * e.factor * (1.0 + e.kappa * inside_n).sqrt();
                     assert!(
                         (got.sd - want).abs() <= 1e-12 * want,
-                        "{method:?} {i} {lambert}"
+                        "{method:?} {i} {lambert:?}"
                     );
                     // Says no: more crossings per particle than the calibration measured.
                     let many = 2.0 * e.max_crossings_per_particle.max(1e-3);
@@ -1172,6 +1176,48 @@ mod tests {
                     assert!(judge_one(&m, i, value, raw, 0, None).is_err());
                 }
             }
+        }
+    }
+
+    #[test]
+    fn a_quantity_whose_fall_as_one_over_root_n_is_not_confirmed_names_no_count() {
+        // Every flag of round 3 is on; the path stays for a calibration that turns one off.
+        let judged = |margin| {
+            judge(
+                Quantity::T30,
+                1.0,
+                Some(0.1),
+                0,
+                Judged {
+                    limit: limits::DECAY_RELATIVE,
+                    relative: true,
+                    factor: 1.0,
+                    margin,
+                    particles: Some(150_000),
+                },
+            )
+            .unwrap_err()
+        };
+        let off = judged(None);
+        match off.not_evaluable() {
+            Some(NotEvaluable::MonteCarloNoise {
+                particle_count: ParticleCount::ScalingNotConfirmed,
+                ..
+            }) => {}
+            other => panic!("{other:?}"),
+        }
+        assert!(off.to_string().contains("did not confirm"), "{off}");
+        // Says no: with the flag on, the same value names a count, (1.2 · 0.1 / 0.025)² = 23.04
+        // times the run's particles, rounded up to two digits.
+        match judged(Some(1.2)).not_evaluable() {
+            Some(NotEvaluable::MonteCarloNoise {
+                particle_count:
+                    ParticleCount::Named {
+                        particles: Some(n), ..
+                    },
+                ..
+            }) => assert_eq!(*n, 3_500_000),
+            other => panic!("{other:?}"),
         }
     }
 

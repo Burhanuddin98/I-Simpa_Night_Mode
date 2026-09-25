@@ -456,6 +456,18 @@ fn floats(v: &Value) -> Vec<f64> {
         .collect()
 }
 
+/// A row's receiver-band in its cell's `bands` (round 3: each seed's crossings per particle and
+/// lifetime spread, the Lambert and uniform flags and the mean absorption, once per
+/// receiver-band).
+pub fn band_of<'a>(cell: &'a Value, row: &Value) -> &'a Value {
+    cell["bands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|b| b["receiver"] == row["receiver"] && b["freq_hz"] == row["freq_hz"])
+        .unwrap_or_else(|| panic!("{}: no band for {row}", cell["cell"]["id"]))
+}
+
 /// A cell's rows of `quantity` in `split`, with `var`, whose largest `n` is at most `n_max`.
 pub fn rows3(cell: &Value, quantity: &str, var: Var, split: Split, n_max: f64) -> Vec<Row3> {
     cell["quantities"][quantity]
@@ -463,13 +475,14 @@ pub fn rows3(cell: &Value, quantity: &str, var: Var, split: Split, n_max: f64) -
         .map(|a| {
             a.iter()
                 .filter_map(|r| {
-                    let lambert = r["lambert"].as_bool().unwrap();
-                    let uniform = r["uniform"].as_bool().unwrap();
+                    let b = band_of(cell, r);
+                    let lambert = b["lambert"].as_bool().unwrap();
+                    let uniform = b["uniform"].as_bool().unwrap();
                     if !in_split(split, lambert, uniform) {
                         return None;
                     }
-                    let n1 = floats(&r["seed_n1"]);
-                    let cv2 = floats(&r["seed_cv2"]);
+                    let n1 = floats(&b["seed_n1"]);
+                    let cv2 = floats(&b["seed_cv2"]);
                     let seed_n = match var {
                         Var::N1 => n1,
                         Var::N1Cv2 => n1.iter().zip(&cv2).map(|(a, b)| a * b).collect(),
@@ -483,7 +496,7 @@ pub fn rows3(cell: &Value, quantity: &str, var: Var, split: Split, n_max: f64) -
                         seed_values: floats(&r["seed_values"]),
                         lambert,
                         uniform,
-                        mean_absorption: r["mean_absorption"].as_f64().unwrap(),
+                        mean_absorption: b["mean_absorption"].as_f64().unwrap(),
                     };
                     (row.n_max() <= n_max).then_some(row)
                 })
@@ -746,10 +759,11 @@ pub fn margin3(cells: &[&Value], quantity: &str, split: Split) -> Option<(f64, S
             .map(|a| {
                 a.iter()
                     .filter(|r| {
+                        let b = band_of(c, r);
                         in_split(
                             split,
-                            r["lambert"].as_bool().unwrap(),
-                            r["uniform"].as_bool().unwrap(),
+                            b["lambert"].as_bool().unwrap(),
+                            b["uniform"].as_bool().unwrap(),
                         )
                     })
                     .map(|r| r["predicted_scatter"].as_f64().unwrap())

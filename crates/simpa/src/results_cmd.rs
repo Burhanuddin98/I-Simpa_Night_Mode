@@ -336,6 +336,39 @@ mod tests {
     }
 
     #[test]
+    fn a_run_outside_the_calibration_shows_what_would_bring_it_inside() {
+        let refusal = |at_least, scale| {
+            let e = ParamError::NotEvaluable {
+                quantity: Quantity::T30,
+                why: NotEvaluable::NoiseUncalibrated {
+                    value: 0.8,
+                    particles: 2_000,
+                    crossings_per_particle: 3.0,
+                    min_particles: 50_000,
+                    max_crossings_per_particle: 2.16,
+                    particles_at_least: at_least,
+                    receiver_radius_scale_at_most: scale,
+                },
+            };
+            Evaluated::NotEvaluable {
+                not_evaluable: report::Refused {
+                    code: e.code().to_string(),
+                    message: e.to_string(),
+                    error: e,
+                },
+            }
+        };
+        assert_eq!(cell(&refusal(Some(50_000), None), 2, 1.0), "NE(uncal:50k)");
+        // At most: 0.8485 is shown 0.84, never 0.85.
+        assert_eq!(
+            cell(&refusal(None, Some((2.16f64 / 3.0).sqrt())), 2, 1.0),
+            "NE(uncal:R<=0.84x)"
+        );
+        // Says no: with neither, nothing is claimed.
+        assert_eq!(cell(&refusal(None, None), 2, 1.0), "NE(uncal)");
+    }
+
+    #[test]
     fn a_count_is_shortened_but_never_shown_smaller_than_it_is() {
         for (n, want) in [
             (999, "999"),

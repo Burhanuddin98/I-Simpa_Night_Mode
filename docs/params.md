@@ -416,8 +416,9 @@ Added after the M7 review. A complete random-mode series is exact for its partic
 room: at tutorial 1's 150,000 particles T30 came out at 0.8 to 2.4 s where the room's time is
 0.67 s, and was reported as a number. `params::noise` estimates each value's Monte-Carlo standard
 deviation, calibrates it against SPPS's own seed-to-seed spread, and refuses the value when it is
-too large. Calibrated pre-M8 (Burhan, 2026-09-24 17:45: "never below the observed noise", and a
-refusal names the particles it needs); every number of the calibration is in
+too large, or when the run lies outside what the calibration measured. Calibrated pre-M8 (Burhan,
+2026-09-24 17:45: "never below the observed noise", and a refusal names the particles it needs),
+in three pre-registered rounds; every number is in
 `docs/investigations/2026-09-25-noise-calibration/`.
 
 - **The model.** SPPS adds, for every particle crossing a receiver sphere of radius `R`, its
@@ -426,43 +427,66 @@ refusal names the particles it needs); every number of the calibration is in
   its start energy `W/N` (`sppsNantes.cpp:73`) until it is absorbed whole, so one crossing adds
   `W/N · ℓ · ρc/V`. A uniform beam crossing a sphere gives chords of density `ℓ/(2R²)` on
   `[0, 2R]`: mean `4R/3`, `E[ℓ²]/E[ℓ]² = 9/8`. The mean deposit is `d̄ = W·ρc/(N·πR²)`; a bin
-  holding `E` holds about `E/d̄` crossings; crossings are Poisson, so its variance is
-  `(9/8)·d̄·E`. In energetic mode a particle's energy only falls from `W/N`, so the same `d̄`
-  bounds each deposit from above. (A deposit scaled step by step by the particles' mean energy,
-  from the room table, was measured as energetic mode's other structure; calibrated, it overstated
-  more, because the particles' energies spread apart as they are absorbed, and is not used.)
+  holding `E` holds about `E/d̄` crossings; counted as independent Poisson crossings, its variance
+  is `(9/8)·d̄·E`. In energetic mode a particle's energy only falls from `W/N`, so the same `d̄`
+  bounds each deposit from above. **Neither bounds the variance**: one particle crosses a receiver
+  at several times, and its crossings share its lifetime (random mode) or its energy (energetic
+  mode), so SPPS's spread can exceed the structure in either mode; only the calibration says by
+  how much, and only where it was measured. (A deposit scaled step by step by the particles' mean
+  energy, from the room table, was measured as energetic mode's other structure; calibrated, it
+  overstated more, and is not used.)
 - **The estimate.** A parametric bootstrap (`noise::bootstrap`): 200 series drawn from the model
   around the series, each bin a compound Poisson sum of `E/d̄` expected crossings with chord
   deposits (a normal draw of the same mean and variance above 30), each evaluated as it is
   (complete, nothing missing: the tail, the floor and lost particles are judged once, on the
   series); the standard deviation over them is the model's. The seed is fixed, so a series gives
   the same estimate every time.
-- **The calibration** (`noise::calibration`): the model's standard deviation times a factor per
-  computation method and quantity, the largest one-sided 95 % upper bound, over the calibration
-  cells, of the ratio of SPPS's seed-to-seed spread to the model (ten seeds a cell, 36
-  receiver-bands; pre-registered, then validated on cells no factor saw):
+- **The calibration** (`noise::calibration`, round 3): the model's standard deviation times
+  `k·√(1 + κ·n)`, per computation method and quantity. `n` is the run's own crossings of the
+  receiver per particle, `n1 = Σ E/(d̄_least·N)` (`noise::crossings_per_particle`), times the
+  spread of the particles' lifetimes, `Var L/(E L)²` from the band's room table
+  (`noise::lifetime_cv2`; 1 for an exponential decay, more for a double slope): the correction for a
+  particle's crossings of one receiver at several times, which grow with the receiver's size
+  (`n ∝ R²`) and a room's reverberance. `k` is the largest one-sided 95 % upper bound over the
+  calibration cells of the ratio of SPPS's seed-to-seed spread to `√(1 + κ·n)` times the model
+  (ten seeds a cell, on effective degrees of freedom), `κ` the one of 0 to 3 that overstates least.
+  Energetic T20 and T30 take theirs by kind of band: every face Lambert with scattering 1 and the
+  same absorption, up to a mean absorption of 0.4 ("uniform Lambert", M8's rooms); Lambert with
+  unequal absorption; and the rest. Pre-registered, calibrated on 51 cells (70 in all) and
+  validated on 19 no rule saw (`docs/investigations/2026-09-25-noise-calibration/`):
 
   | Method | SPL | EDT | T20 | T30 | C50 | C80 | D50 | Ts |
   |---|---|---|---|---|---|---|---|---|
-  | random | 1.3 | 1.4 | 1.4 | 1.6 | 1.2 | 1.2 | 1.2 | 1.4 |
-  | energetic | 0.91 | 0.59 | 1 | 1 | 0.85 | 0.78 | 0.85 | 0.62 |
+  | random: k (κ) | 1.2 (1.75) | 1.3 (2) | 1.5 (2.75) | 1.6 (3) | 1.2 (1.25) | 1.4 (1) | 1.2 (1.25) | 1.4 (3) |
+  | energetic: k (κ) | 1.1 (0) | 0.86 (0) | uniform Lambert 0.098, Lambert 1, other 1 (0) | uniform Lambert 0.052 (0), Lambert 0.73 (2), other 1 (0) | 0.96 (0.25) | 0.86 (0.5) | 0.96 (0.25) | 0.84 (0.5) |
 
-  - **Random mode**: M7's model counts crossings as independent. SPPS's spread was above it,
-    significantly, in 11 of 13 cells for at least one quantity, by up to 1.43 times (T30, specular
-    walls with the absorption on the floor: a particle crosses a receiver again and again on a
-    near-periodic path). With the factors, every validation cell's spread is 0.61 to 0.92 of the
-    prediction.
-  - **Energetic mode**: M7's bound is 1.2 to 38 times the spread. SPL, EDT, C50, C80, D50 and Ts
-    are calibrated and pass every validation cell (0.18 to 1.00 of the prediction). **T20 and T30
-    keep factor 1, M7's bound**: late in an energetic decay the energy is carried by the particles
-    that met the absorption least, and how far their energies spread apart depends on the room;
-    the spread was 0.026 to 0.622 of the bound over nineteen rooms, and each of two calibrations
-    failed a held-out room (a 20 m corridor with its absorption on the floor, specular, then
-    scattering 0.3: T30 1.9 and 2.0 times the calibrated prediction).
-  - Checked in the suite on the committed receipt (`tests/params_noise_calibration.rs`): the
-    factors, margins and flags are what the rules give; every validation cell passes; halved
-    factors (a model twice too optimistic, through a fault seam) fail in every validation cell; a
-    quantity's spread raised above its prediction fails its check alone.
+  - **Random mode**: the correction is large. With receivers of 0.9 m in a 60 m³ room at α 0.05
+    (up to 2.2 crossings per particle), the seeds' spread was 1.7 (SPL) to 2.6 (T30) times the
+    bootstrap's; with SPPS's default 0.31 m it is 1.0 to 1.4 times, highest with specular walls
+    and the absorption on one surface.
+  - **Energetic mode**: in uniform Lambert rooms every particle meets the same absorption at every
+    reflection, so their energies spread apart only as their reflection counts do, and T30's
+    spread is 0.026 to 0.048 of M7's structure (13 cells): factor 0.052. With the absorption on one
+    surface, even Lambert walls spread the energies apart as specular ones do (up to 0.63), and
+    energetic T20 there failed its validation at its fitted 0.52 (V3-E8, 1.12 of the prediction),
+    so it keeps factor 1. SPL is above 1 because the direct field alone is among the cells: with
+    every particle stopped at its first surface, energetic mode runs random mode's transport.
+  - Checked in the suite on the committed receipt (`tests/params_noise_calibration.rs`): every
+    number of the code is what the rules give; every validation cell passes; halved factors (a
+    model twice too optimistic, through a fault seam) fail in every validation cell; a quantity's
+    spread raised above its prediction fails its check alone; without the correction the cells
+    with large receivers fail.
+- **The domain.** A calibration holds where it was measured. Each quantity (and kind of band) has
+  the fewest particles per source and the most crossings per particle its calibration saw with at
+  least one band's six receivers: random SPL, C50, C80 and D50 from 5,000 particles, the decay
+  times and Ts from 50,000; energetic likewise, with T30 outside uniform Lambert rooms from 150,000;
+  `n` up to 2.16 (random) and 2.13 (energetic), and 0.032 for energetic T20 and T30 in Lambert
+  rooms with unequal absorption (measured with 0.31 m receivers only). **A value outside is
+  refused, `noise_uncalibrated`**, with the particles to run to reach the domain
+  (`particles_at_least`), or, since more particles do not lower `n`, the most the receiver radius
+  may be as a multiple of the run's (`receiver_radius_scale_at_most`, `√(max/n)`). What the code
+  cannot check is stated beside every report's calibration (`monte_carlo.measured_on`): box rooms
+  of 60 to 1,000 m³; no transmission, no fitting zones, no coupled volumes; steps of 1 and 10 ms.
 - **The refusal:** `monte_carlo_noise`, when the calibrated standard deviation is above the limit
   or more than 10 of the 200 resamples refuse the quantity themselves. The limit is half the
   limen: twice the standard deviation, about a 95 % interval, stays within one limen.
@@ -476,21 +500,27 @@ refusal names the particles it needs); every number of the calibration is in
   | SPL | 0.5 dB |
 
   M8's bed asks more of three seeds (a spread of at most 2 %); this limit is what one run may
-  show, not the bed's.
-- **The particle count a refusal names** (`particle_count`): SPPS's spread falls as `1/√N`
-  (checked on six pairs of cells that differ only in `N`, 150,000 against 600,000 to 15,000,000),
-  so the count at which the calibrated standard deviation is the limit over a margin is
-  `N·(margin·sd/limit)²`, rounded up to two significant digits. The margin covers the scatter of
-  one run's own estimate: about 5 % for most quantities, but up to 36 % for random-mode T20 and T30
-  (median over a cell's receiver-bands), so margins of 1.4 and 1.5 there, 1.2 and 1.3 for energetic
-  T20 and T30, and 1.1 elsewhere. On the pairs, every refusal whose named count the higher count
-  reached gave its value there (1,394 of 1,394). **No count is named** when the standard deviation
-  is within the limit (the resamples refuse the value; more particles need not cure that), and for
-  **random-mode T30 and energetic EDT**, whose `1/√N` fall differed by 2.1 and 2.5 standard errors
-  on one pair each (the pre-registered rule; `docs/investigations/…/README.md`, "Open").
-- **Several sources:** the largest of their mean deposits, an upper bound. **A directivity
-  balloon** scales each particle's energy by its direction, so `d̄` is not known: every value is
-  refused, `noise_unknown`.
+  show, not the bed's. The resamples carry the model's structure, not its calibration: in
+  energetic mode, where the structure is 20 to 38 times T30's real noise in uniform Lambert rooms,
+  more than 10 resamples can refuse T30 (α 0.2 to 0.4 below about a million particles) although
+  its calibrated noise is within the limit; the value is then refused with its count
+  `within_limit`.
+- **The particle count a refusal names** (`particle_count`): SPPS's spread falls as `1/√N` or
+  faster on every one of twelve pairs of cells that differ only in `N` (5,000 against 50,000 up to
+  150,000 against 15,000,000; no pair showed it falling slower by more than two standard errors,
+  the one direction in which a count named from it would be too low), so the count at which the
+  calibrated standard deviation is the limit over a margin is `N·(margin·sd/limit)²`, rounded up
+  to two significant digits. The margin covers the scatter of one run's own estimate: about 5 %
+  for most quantities, but up to about 40 % for random-mode T20 and T30 (median over a cell's
+  receiver-bands), so margins of 1.5 there; 1.2 for random EDT, C50, C80 and D50 and energetic EDT;
+  1.2 or 1.3 for energetic T20 and T30; 1.1 elsewhere. On the pairs, the
+  refusals whose named count the higher count reached gave their value there in 98.2 % to 100 % of
+  its seeds. **No count is named** when the standard deviation is within the limit (the resamples
+  refuse the value; more particles need not cure that).
+- **Several sources:** the largest of their mean deposits, an upper bound, and crossings per
+  particle counted at the smallest, at least each source's own. **A directivity balloon** scales
+  each particle's energy by its direction, so `d̄` is not known: every value is refused,
+  `noise_unknown`.
 - **Checked against the model's own runs** (`tests/params_noise.rs`, its own generator): the
   bootstrap's estimate is the spread of 60 independent runs within a factor 1.4 at 40,000 and
   400,000 crossings; the spread falls as `1/√N` from 10,000 to 160,000 crossings (400 runs each,
@@ -498,16 +528,17 @@ refusal names the particles it needs); every number of the calibration is in
   10 runs give a T30 more than 5 % off from the series alone, and every one is refused. At 4,000
   crossings the estimate of T30's spread runs 11 % low on average and scatters 35 % from run to
   run (`the_bootstrap_against_the_true_spread_at_low_counts`, run on purpose); the calibration's
-  cells at 150,000 particles carry that.
+  cells at low counts carry that, and below the domain the value is refused.
+- **Selection by the refusal.** A seed whose decay reads long also has the larger spread of its
+  own, so where some seeds of a receiver-band are refused for their noise and others pass, the
+  passing mean sits low: random T30 −0.97 % ± 0.16 %, T20 −0.45 %, EDT −0.27 % over the receipt's
+  cells. A mean over the values that came through is not a mean over runs; M8 must not take one
+  (`docs/results.md`, "What M8 needs").
 - **The M7 review's check** (`crates/simpa/tests/cli_results.rs`,
   `noise_estimate_against_the_spread_of_twenty_seeds`, run on purpose; tutorial 1, seeds 1 to 20):
   the uncalibrated model matched the spread at 150,000 particles (pooled 0.95 to 1.05) and ran
   15 to 21 % low at 1,500,000 for EDT, T20 and Ts. The calibration measured the same thing over
-  32 cells, and the factors now cover it.
-- **What it assumes:** that a room is like one of the 32 measured: boxes of 60 to 1,000 m³,
-  Lambert and specular walls, uniform and one-surface absorption, 150,000 to 15,000,000
-  particles, steps of 1 and 10 ms. The random-mode factors' largest source, specular walls with the
-  absorption on one surface, is among them.
+  70 cells, and the factors now cover it.
 
 ## Decay times: EDT, T20 and T30
 

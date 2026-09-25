@@ -94,6 +94,14 @@
             },
             "type": "array"
           },
+          "crossings_per_particle": {
+            "description": "As for a band: the aggregate's own (its bands' particles together, counted at the least\ndeposit of any band, with the largest lifetime spread of any); `null` for TCR.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "curvature": {
             "$ref": "#/$defs/CurvatureReport",
             "description": "As for a band."
@@ -402,6 +410,50 @@
         ],
         "type": "object"
       },
+      "Entry": {
+        "description": "One quantity's calibration under one method (and, for energetic T20 and T30, one kind of\nband).",
+        "properties": {
+          "factor": {
+            "description": "`k`: the largest one-sided 95 % upper bound, over the calibration cells, of the ratio of\nthe seeds' spread to `√(1 + kappa·n)` times the bootstrap, rounded up to two digits\n(rule R3-1).",
+            "format": "double",
+            "type": "number"
+          },
+          "kappa": {
+            "description": "`κ`: how much a particle's crossings of one receiver at several times add (R3-1).",
+            "format": "double",
+            "type": "number"
+          },
+          "margin": {
+            "description": "A refusal names the particle count at which the calibrated standard deviation would be\nthe limit over this margin: one run's own estimate scatters from seed to seed, so a\ncount named from one run can fall short (rule 5b over round 3's calibration cells).",
+            "format": "double",
+            "type": "number"
+          },
+          "max_crossings_per_particle": {
+            "description": "... and the most crossings per particle, `n`. Outside it the value is refused,\n`noise_uncalibrated`.",
+            "format": "double",
+            "type": "number"
+          },
+          "min_particles": {
+            "description": "The domain (R3-5): the fewest particles per source the quantity was calibrated at ...",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "root_n_confirmed": {
+            "description": "Whether a refusal names a count: the seeds' spread did not fall slower than `1/√N` on\nany pair of cells that differ only in `N` (rule R3-6, one-sided).",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "factor",
+          "kappa",
+          "min_particles",
+          "max_crossings_per_particle",
+          "margin",
+          "root_n_confirmed"
+        ],
+        "type": "object"
+      },
       "Evaluated": {
         "anyOf": [
           {
@@ -566,7 +618,7 @@
         "type": "object"
       },
       "Method": {
-        "description": "SPPS's computation method (`computation_method`): how a crossing's deposit is modelled, and\nwhich of [`calibration`]'s factors apply.",
+        "description": "SPPS's computation method (`computation_method`): how a crossing's deposit is modelled, and\nwhich of [`calibration`]'s tables apply.",
         "oneOf": [
           {
             "const": "random",
@@ -587,8 +639,12 @@
             "additionalProperties": {
               "$ref": "#/$defs/QuantityCalibration"
             },
-            "description": "Per quantity, by name, for this computation method (`params::noise::calibration`;\n`docs/investigations/2026-09-25-noise-calibration/`).",
+            "description": "Per quantity, by name, for this computation method (`params::noise::calibration`;\n`docs/investigations/2026-09-25-noise-calibration/`): each value's standard deviation is\nthe bootstrap's times `factor·√(1 + kappa·n)`, and a value is given only with at least\n`min_particles` particles per source and `n` at most `max_crossings_per_particle`.",
             "type": "object"
+          },
+          "crossings_variable": {
+            "$ref": "#/$defs/Variable",
+            "description": "What `n`, the crossings of a receiver per particle each band's `crossings_per_particle`\ngives, is for this method (`params::noise::calibration::variable`)."
           },
           "limit_centre_time_s": {
             "format": "double",
@@ -611,6 +667,10 @@
             "format": "double",
             "type": "number"
           },
+          "measured_on": {
+            "description": "What the calibration was measured on beyond what the code checks (particles and crossings\nper particle, in `calibration`): [`noise::calibration::MEASURED_ON`].",
+            "type": "string"
+          },
           "method": {
             "$ref": "#/$defs/Method",
             "description": "The run's computation method, which picks the calibration."
@@ -631,6 +691,11 @@
             "description": "The bootstrap's seed, as `0x` and 16 hex digits: as a JSON number above 2⁵³ it would not\nsurvive a reader that parses numbers as doubles.",
             "pattern": "^0x[0-9a-f]{16}$",
             "type": "string"
+          },
+          "uniform_lambert_max_mean_absorption": {
+            "description": "Energetic T20 and T30: a band whose every face is Lambert with scattering 1 and has the\nsame absorption takes `uniform_lambert_walls` up to this mean absorption, and\n`lambert_walls` above it.",
+            "format": "double",
+            "type": "number"
           }
         },
         "required": [
@@ -643,6 +708,9 @@
           "limit_centre_time_s",
           "limit_spl_db",
           "method",
+          "crossings_variable",
+          "measured_on",
+          "uniform_lambert_max_mean_absorption",
           "calibration"
         ],
         "type": "object"
@@ -673,6 +741,17 @@
                   "integer",
                   "null"
                 ]
+              },
+              "run": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RunNoise"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The run behind the series, for the calibration's correction and domain. `null` only\nfor a series that is no run's (a synthetic one in the tests): then `n` is taken as 0\nand no domain is checked. Every model `core::results` makes from a run carries it."
               }
             },
             "required": [
@@ -1050,6 +1129,68 @@
               "why",
               "value",
               "detail"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The run lies outside what the noise model's calibration measured for this quantity\n([`noise::calibration`]): fewer particles per source than its fewest, or more crossings of\na receiver per particle than its most. The model's standard deviation is not known to\nbound the noise there, so the value is refused whatever it reads.",
+            "properties": {
+              "crossings_per_particle": {
+                "description": "The run's crossings of the receiver per particle, as the calibration measures them\n([`noise::calibration::variable`]).",
+                "format": "double",
+                "type": "number"
+              },
+              "max_crossings_per_particle": {
+                "description": "The most crossings per particle it measured this quantity at.",
+                "format": "double",
+                "type": "number"
+              },
+              "min_particles": {
+                "description": "The fewest particles per source the calibration measured this quantity at.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "particles": {
+                "description": "The run's particles per source.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "particles_at_least": {
+                "description": "When the run has too few particles: `min_particles`, the count to run at least.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "receiver_radius_scale_at_most": {
+                "description": "When the run has too many crossings per particle: the most the receiver radius may be,\nas a multiple of the run's (crossings per particle grow as its square):\n`√(max_crossings_per_particle / crossings_per_particle)`.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "value": {
+                "description": "The value from the series. Not reported as the quantity.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "noise_uncalibrated",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "value",
+              "particles",
+              "crossings_per_particle",
+              "min_particles",
+              "max_crossings_per_particle"
             ],
             "type": "object"
           },
@@ -1662,25 +1803,66 @@
         ]
       },
       "QuantityCalibration": {
-        "description": "How one quantity's noise is calibrated and how a refusal names a particle count.",
+        "description": "How one quantity's noise is calibrated, where the calibration holds, and how a refusal names a\nparticle count (`params::noise::calibration::Entry`).",
         "properties": {
           "factor": {
-            "description": "The factor the bootstrap's standard deviation is multiplied by: the largest one-sided 95 %\nupper bound of SPPS's seed-to-seed spread over the model on the calibration cells.",
+            "description": "`k`: the largest one-sided 95 % upper bound, over the calibration cells, of the ratio of\nthe seeds' spread to `√(1 + kappa·n)` times the bootstrap, rounded up to two digits\n(rule R3-1).",
             "format": "double",
             "type": "number"
+          },
+          "kappa": {
+            "description": "`κ`: how much a particle's crossings of one receiver at several times add (R3-1).",
+            "format": "double",
+            "type": "number"
+          },
+          "lambert_walls": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Entry"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law\nwith scattering 1 and not every face has the same absorption (or the absorption is above\n`uniform_lambert_max_mean_absorption`); `null` otherwise."
           },
           "margin": {
-            "description": "A refusal names the particle count at which the calibrated standard deviation would be the\nlimit over this margin (`params::noise::calibration::margin`).",
+            "description": "A refusal names the particle count at which the calibrated standard deviation would be\nthe limit over this margin: one run's own estimate scatters from seed to seed, so a\ncount named from one run can fall short (rule 5b over round 3's calibration cells).",
             "format": "double",
             "type": "number"
           },
+          "max_crossings_per_particle": {
+            "description": "... and the most crossings per particle, `n`. Outside it the value is refused,\n`noise_uncalibrated`.",
+            "format": "double",
+            "type": "number"
+          },
+          "min_particles": {
+            "description": "The domain (R3-5): the fewest particles per source the quantity was calibrated at ...",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
           "root_n_confirmed": {
-            "description": "Whether the spread's fall as `1/√N` was confirmed for the quantity in this method; when\nnot, a refusal names no count (`scaling_not_confirmed`).",
+            "description": "Whether a refusal names a count: the seeds' spread did not fall slower than `1/√N` on\nany pair of cells that differ only in `N` (rule R3-6, one-sided).",
             "type": "boolean"
+          },
+          "uniform_lambert_walls": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Entry"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law\nwith scattering 1 and has the same absorption, at most\n`uniform_lambert_max_mean_absorption`; `null` otherwise."
           }
         },
         "required": [
           "factor",
+          "kappa",
+          "min_particles",
+          "max_crossings_per_particle",
           "margin",
           "root_n_confirmed"
         ],
@@ -1711,6 +1893,14 @@
           },
           "crossings": {
             "description": "The receiver crossings behind the series, estimated as its total over the mean deposit;\n`null` when the noise has no model.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "crossings_per_particle": {
+            "description": "`n`: the crossings of the receiver per particle as the noise calibration measures them\n(`monte_carlo.crossings_variable`), which its correction and domain take\n(`params::noise::NoiseModel::multi_crossing`); `null` when the noise has no model or the\nseries is refused.",
             "format": "double",
             "type": [
               "number",
@@ -1856,12 +2046,17 @@
             "description": "`ᾱ = Σ Sᵢ·αᵢ / S` over the room's faces.",
             "format": "double",
             "type": "number"
+          },
+          "uniform_absorption": {
+            "description": "Every face has the same absorption in this band.",
+            "type": "boolean"
           }
         },
         "required": [
           "freq_hz",
           "mean_absorption",
           "lambert_walls",
+          "uniform_absorption",
           "eyring_s",
           "kuttruff_s"
         ],
@@ -1970,6 +2165,56 @@
         ],
         "type": "object"
       },
+      "RunNoise": {
+        "description": "What the calibration's correction and domain need from the run behind a series.",
+        "properties": {
+          "bands": {
+            "description": "The bands summed into the series: 1 for a band. Each band has its own particles.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "lambert_walls": {
+            "description": "Every face reflects by Lambert's law with scattering 1 in the band (in every band of an\naggregate); false when the run's reference was not computed.",
+            "type": "boolean"
+          },
+          "least_deposit": {
+            "description": "The smallest of the contributing sources' mean deposits: crossings per particle counted\nat it are at least each source's own.",
+            "format": "double",
+            "type": "number"
+          },
+          "lifetime_cv2": {
+            "description": "The spread of the particles' lifetimes, [`lifetime_cv2`] of the band's room table (the\nlargest over the bands of an aggregate).",
+            "format": "double",
+            "type": "number"
+          },
+          "mean_absorption": {
+            "description": "The faces' mean absorption in the band, `ᾱ` (the largest over an aggregate's bands).",
+            "format": "double",
+            "type": "number"
+          },
+          "particles": {
+            "description": "Particles per source (`nbparticules`).",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "uniform_absorption": {
+            "description": "Every face has the same absorption in the band (in every band of an aggregate); false\nwhen the run's reference was not computed.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "particles",
+          "least_deposit",
+          "lifetime_cv2",
+          "lambert_walls",
+          "uniform_absorption",
+          "mean_absorption",
+          "bands"
+        ],
+        "type": "object"
+      },
       "SolverKind": {
         "enum": [
           "spps",
@@ -1985,6 +2230,14 @@
             "description": "As for the receiver's band, from this source's own arrival."
           },
           "crossings": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "crossings_per_particle": {
+            "description": "As for the receiver's band.",
             "format": "double",
             "type": [
               "number",
@@ -2651,6 +2904,21 @@
           "level_db"
         ],
         "type": "object"
+      },
+      "Variable": {
+        "description": "What `n`, the multi-crossing variable, is (rule R3-2, per method).",
+        "oneOf": [
+          {
+            "const": "crossings_per_particle",
+            "description": "The crossings of the receiver per particle, `n1`\n([`super::crossings_per_particle`]).",
+            "type": "string"
+          },
+          {
+            "const": "crossings_times_lifetime_spread",
+            "description": "`n1` times the spread of the particles' lifetimes, `Var L/(E L)²`\n([`super::lifetime_cv2`]): a particle alive late has more crossings ahead of it when\nthe decay has a long second slope.",
+            "type": "string"
+          }
+        ]
       }
     },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
