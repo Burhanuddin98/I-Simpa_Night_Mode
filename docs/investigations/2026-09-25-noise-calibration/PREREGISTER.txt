@@ -1,0 +1,73 @@
+PRE-REGISTRATION: calibration of the Monte-Carlo noise model (pre-M8, piece B)
+Written 2026-09-25 05:40, before any calibration run.
+
+WHAT IS MEASURED
+- A cell: one room, walls, method, particle count, duration, time step, trans_epsilon; octave bands
+  125 Hz to 4 kHz; 6 point receivers; SPPS seeds 1 to 10. The bands and receivers of a cell are its
+  receiver-bands (36).
+- Per receiver-band and quantity (SPL, EDT, T20, T30, C50, C80, D50, Ts): the value from each seed's
+  series as the bootstrap evaluates its resamples (complete, early reverberation unresolved as the
+  report reads it, measured from the report's arrival). Only receiver-bands where every seed gives a
+  value are used (no seed selected away).
+- OBSERVED: the sample standard deviation of the value over the 10 seeds (relative to the mean for
+  EDT, T20, T30).
+- PREDICTED: the root-mean-square over the seeds of the model's standard deviation for that seed's
+  series (relative to that seed's value for the decay times).
+- A cell's POOLED RATIO per quantity: sqrt(sum observed^2 / sum predicted^2) over its receiver-bands,
+  with dof = receiver-bands x (seeds - 1). Its one-sided 95 % bounds: ratio * sqrt(dof / chi2(dof, q))
+  with q = 0.05 (upper bound) and 0.95 (lower bound).
+
+CELLS (C = calibration, V = validation; held out from every choice below)
+Random mode:
+ C-R1 6x10x3 Lambert a0.1        150k   3 s   dt 10 ms
+ C-R2 6x10x3 Lambert a0.1        1.5M   3 s   dt 10 ms
+ C-R3 5x4x3  Lambert a0.4        150k   1 s   dt 1 ms
+ C-R4 5x4x3  Lambert a0.4        15M    1 s   dt 1 ms
+ C-R5 tutorial 1 own materials   150k   2 s   dt 10 ms  (specular; ceiling 0.3, floor 0.1, walls 0.2; air on)
+ C-R6 tutorial 1 own materials   1.5M   2 s   dt 1 ms
+ C-R7 6x10x3 dead floor          500k   3 s   dt 10 ms  (specular; floor 0.6, the rest 0.05)
+ V-R1 20x4x3 Lambert a0.2        500k   2 s   dt 10 ms
+ V-R2 6x10x3 Lambert a0.4        600k   1 s   dt 1 ms
+ V-R3 5x4x3  Lambert a0.05       300k   3 s   dt 10 ms
+ V-R4 tutorial 1 own materials   600k   2 s   dt 10 ms
+ V-R5 5x4x3  specular a0.2       5M     1.5 s dt 10 ms
+ V-R6 20x4x3 dead floor          1.5M   3 s   dt 1 ms
+Energetic mode (trans_epsilon as given):
+ C-E1 6x10x3 Lambert a0.1        150k   2.5 s dt 10 ms eps 7
+ C-E2 6x10x3 Lambert a0.1        600k   2.5 s dt 10 ms eps 7
+ C-E3 5x4x3  Lambert a0.4        150k   0.5 s dt 1 ms  eps 9
+ C-E4 5x4x3  Lambert a0.4        2.4M   0.5 s dt 1 ms  eps 9
+ C-E5 tutorial 1 own materials   150k   2 s   dt 10 ms eps 5
+ C-E6 tutorial 1 own materials   600k   2 s   dt 1 ms  eps 7
+ C-E7 6x10x3 dead floor          300k   3 s   dt 10 ms eps 7
+ V-E1 20x4x3 Lambert a0.2        300k   1.5 s dt 10 ms eps 7
+ V-E2 6x10x3 Lambert a0.4        150k   0.6 s dt 1 ms  eps 9
+ V-E3 5x4x3  Lambert a0.05       150k   3 s   dt 10 ms eps 7
+ V-E4 tutorial 1 own materials   1.5M   2 s   dt 10 ms eps 5
+ V-E5 5x4x3  specular a0.2       600k   1.5 s dt 1 ms  eps 7
+ V-E6 20x4x3 dead floor          300k   3 s   dt 10 ms eps 7
+
+RULES, fixed now
+1. Structure. Random mode keeps M7's structure (compound Poisson crossings of constant mean deposit;
+   it is exact in structure there). Energetic mode: the candidates are (a) M7's constant deposit and
+   (b) a per-bin deposit from the particles' mean energy (the room table), and any further candidate
+   is added before the validation cells are looked at. The candidate is chosen on the CALIBRATION
+   cells only: the one whose calibrated model overstates least (geometric mean over calibration cells
+   and quantities of k / pooled ratio).
+2. Calibration factor per mode and quantity: k = the largest, over the calibration cells of that
+   mode, of the one-sided 95 % UPPER bound of the pooled ratio. The calibrated standard deviation is
+   k times the model's. Rounded UP to 2 significant digits. Never below the observed on the
+   calibration cells by construction.
+3. Validation, run once after k is fixed and committed: on every validation cell and quantity, the
+   one-sided 95 % LOWER bound of (observed / calibrated prediction) must be at most 1 ("the
+   prediction is at or above the observed within its statistical uncertainty"). A failure is
+   reported as a failure; k is not re-fitted on validation cells.
+4. 1/sqrt(N): for the cell pairs that differ only in N (C-R1/C-R2, C-R3/C-R4, C-E1/C-E2,
+   C-E3/C-E4, C-R5/V-R4 and V-E4 against C-E5 where the floor allows), observed * sqrt(N) must
+   agree within their joint uncertainty (2 standard errors) for the particle count a refusal names
+   to be taken from the 1/sqrt(N) scaling. Where it does not, that is reported and the refusal
+   names no count for that mode or quantity.
+5. Say-NO partners, in the normal suite on the committed numbers: the factors halved fail the
+   validation; one quantity's observed noise raised above its prediction fails that quantity's check.
+6. Refusal limits are unchanged (Burhan's decisions): EDT, T20, T30 2.5 % relative; C50, C80 0.5 dB;
+   D50 0.025; Ts 5 ms; SPL 0.5 dB.
