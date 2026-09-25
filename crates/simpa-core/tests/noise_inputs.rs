@@ -4,11 +4,11 @@
 //! configuration and nothing held the report's reading of it to the run's materials).
 //!
 //! On the committed energetic SPPS run (tutorial 1's box, three materials) with its `config.xml`'s
-//! materials rewritten: every face Lambert with scattering 1 and one absorption (uniform Lambert,
-//! M8's rooms), the same above the uniform-Lambert entries' largest calibrated absorption, Lambert
-//! with the run's three absorptions, the run's own specular walls, and Lambert with scattering
-//! 0.5. For each, `results::reference` reads the walls from the materials, `SppsResults::walls`
-//! and `noise_model` carry them into the band's model, and `params::noise` picks the entry and the
+//! materials rewritten: every face Lambert with scattering 1 and one absorption, 0.2 (uniform
+//! Lambert, M8's rooms at 0.2) and 0.5 (above the uniform-Lambert entries' bound), Lambert with
+//! three unequal absorptions, specular walls, and Lambert with scattering 0.5. For each,
+//! `results::reference` reads the walls from the materials, `SppsResults::walls` and
+//! `noise_model` carry them into the band's model, and `params::noise` picks the entry and the
 //! structure. Says no through the code: every band read as having one absorption, or the
 //! uniform-Lambert entries taken at any absorption, each moves a case to the wrong entry.
 
@@ -79,8 +79,13 @@ fn run_and_copy() -> (SppsResults, PathBuf, String) {
     let SolverResults::Spps(s) = r.data else {
         panic!("an SPPS run")
     };
-    let to =
-        Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("noise-inputs-{}", std::process::id()));
+    // One folder per call: the tests run beside each other in one process.
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let to = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "noise-inputs-{}-{}",
+        std::process::id(),
+        N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    ));
     copy_dir(&run.join("solve"), &to);
     let config = std::fs::read_to_string(to.join("config.xml")).unwrap();
     (s, to, config)
@@ -116,7 +121,9 @@ fn read_walls(
 /// The five cases, each with the kind of wall and energetic T30's structure every band must read.
 #[allow(clippy::type_complexity)]
 fn cases() -> Vec<(&'static str, Box<dyn Fn(usize) -> (f64, f64, i32)>, Walls)> {
-    let alphas = [0.3, 0.1, 0.2];
+    // Unequal, and below the uniform-Lambert bound (0.2) on average, so that a fault reading them
+    // as uniform lands in the uniform-Lambert entries.
+    let alphas = [0.15, 0.05, 0.1];
     vec![
         (
             "uniform Lambert 0.2",

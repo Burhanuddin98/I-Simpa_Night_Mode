@@ -418,3 +418,28 @@ energetic and random SPL (V3-E6, V3-R5), random T30 (C-R1, C-R5, V3-R8, C3-R9) a
 THE ANALYSIS reads every run of rounds 1 to 4 again with this build's simpa results
 (SIMPA_NOISE_REREAD), so that the receipt's crossings, lifetime spreads, walls and judgements are
 the shipped code's (R4-6).
+
+ROUND 4 AFTER ITS VALIDATION, 2026-09-25 11:25, written after every V4 cell was read with the
+numbers of 1cf8339 (validation-round4.txt). What the pre-registered rules did, and what was changed
+beyond them, each in the safe direction and disclosed in the README:
+- R4-4: the roughness entries passed every V4 cell they were registered for (11); every other
+  quantity and random mode passed every V4 cell. The uniform-Lambert entries failed V4-E1 (T30) and
+  V4-E4 (T20, T30), both long rooms at a mean absorption of 0.4.
+- F6 applied: the uniform-Lambert bound falls to 0.2 (as SPPS reads it, 0.20000000298023224); the
+  uniform Lambert bands above it take the roughness entries. Under them V4-E1 to V4-E4 and V4-E16
+  pass.
+- NOT REGISTERED (F3's remedy extended to an in-sample cell F6 exposed): under the roughness
+  entries C-E3's uniform Lambert T20 rows (alpha 0.4, 1 ms) read 1.07 of the prediction, lower bound
+  1.004; energetic T20's roughness factor is raised from 1.2 to 1.4, its upper bound rounded up.
+- R4-5 and F8: the counts named from the resamples for energetic C50, C80, D50 and Ts gave the value
+  in 64.7 % of V4-E16's seeds (17 within reach): by F8 they name none.
+- NOT REGISTERED: the counts named from the roughness structure's standard deviation fell short
+  (V4-E13/V4-E14 T20 43.5 %, T30 36.0 %; C-E5/V-E4 T20 42.8 %; C3-E6/C-E5 T20 77.7 %). No fallback
+  had been registered for counts from the standard deviation. Counts are now named from M7's
+  structure calibrated with the roughness's factor (an upper bound on the roughness's standard
+  deviation, falling exactly as 1/N). No pair's higher count reaches the counts so named, so they
+  are safe by construction and untested at a higher count.
+- R4-5 as registered also falls short for EDT on W-E3/V4-E15 (65.4 %) and C-R7/V4-R5 (71.9 %), where
+  every higher-count seed that does not give EDT is refused truncated or missing_moves, not for its
+  noise; reported, no change.
+- F9 did not apply: no pair gives z above 2.

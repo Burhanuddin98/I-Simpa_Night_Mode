@@ -541,8 +541,8 @@ pub struct MonteCarloReport {
     /// per particle, in `calibration`): [`noise::calibration::MEASURED_ON`].
     pub measured_on: String,
     /// Energetic T20 and T30: a band whose every face is Lambert with scattering 1 and has the
-    /// same absorption takes `uniform_lambert_walls` up to this mean absorption, and
-    /// `lambert_walls` above it.
+    /// same absorption takes `uniform_lambert_walls` up to this mean absorption, and the other
+    /// bands' entry above it.
     pub uniform_lambert_max_mean_absorption: f64,
     /// Per quantity, by name, for this computation method (`params::noise::calibration`;
     /// `docs/investigations/2026-09-25-noise-calibration/`): each value's standard deviation is
@@ -556,12 +556,14 @@ pub struct MonteCarloReport {
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct QuantityCalibration {
     /// For bands not every face of which reflects by Lambert's law with scattering 1 (and for
-    /// every band, when the two below are `null`).
+    /// every band, when the two below are `null`), with the structure its resamples are drawn
+    /// with (`structure`: `constant`, or since round 4 `roughness` for energetic T20 and T30).
     #[serde(flatten)]
     pub entry: noise::calibration::Entry,
     /// Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law
     /// with scattering 1 and not every face has the same absorption (or the absorption is above
-    /// `uniform_lambert_max_mean_absorption`); `null` otherwise.
+    /// `uniform_lambert_max_mean_absorption`), the same as `entry` since round 4; `null`
+    /// otherwise.
     pub lambert_walls: Option<noise::calibration::Entry>,
     /// Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law
     /// with scattering 1 and has the same absorption, at most

@@ -418,7 +418,7 @@ room: at tutorial 1's 150,000 particles T30 came out at 0.8 to 2.4 s where the r
 deviation, calibrates it against SPPS's own seed-to-seed spread, and refuses the value when it is
 too large, or when the run lies outside what the calibration measured. Calibrated pre-M8 (Burhan,
 2026-09-24 17:45: "never below the observed noise", and a refusal names the particles it needs),
-in three pre-registered rounds; every number is in
+in four pre-registered rounds; every number is in
 `docs/investigations/2026-09-25-noise-calibration/`.
 
 - **The model.** SPPS adds, for every particle crossing a receiver sphere of radius `R`, its
@@ -435,13 +435,25 @@ in three pre-registered rounds; every number is in
   how much, and only where it was measured. (A deposit scaled step by step by the particles' mean
   energy, from the room table, was measured as energetic mode's other structure; calibrated, it
   overstated more, and is not used.)
+- **The roughness structure** (round 4, `noise::Structure::Roughness`): for energetic T20 and T30
+  outside uniform Lambert rooms, each bin's deposit is read from the series itself
+  (`noise::roughness_deposits`). Late in an energetic decay a crossing brings far less than `d̄`,
+  by how much depending on how far the particles' energies have spread apart; SPPS does not write
+  that spread, but it shows as the series' roughness. Over blocks of at least one receiver
+  crossing (`2R/c`, since SPPS splits a crossing over the steps it spans), each block's departure
+  from its neighbours' geometric mean, `r = B_j/√(B_{j−1}·B_{j+1}) − 1`, over the blocks within six
+  of it, gives its relative variance `mean(r²)/1.5` and so a deposit `mean(r²)/1.5·B_j/(9/8)`, at
+  most `d̄`. The roughness also holds the true curve's fine structure (specular echoes), so it
+  reads high where that is strong: on tutorial 1 at 150,000 particles T30 is overstated 2.4 times,
+  against 14 times under M7's structure, and at 1,500,000 5.6 times.
 - **The estimate.** A parametric bootstrap (`noise::bootstrap`): 200 series drawn from the model
   around the series, each bin a compound Poisson sum of `E/d̄` expected crossings with chord
   deposits (a normal draw of the same mean and variance above 30), each evaluated as it is
   (complete, nothing missing: the tail, the floor and lost particles are judged once, on the
   series); the standard deviation over them is the model's. The seed is fixed, so a series gives
   the same estimate every time.
-- **The calibration** (`noise::calibration`, round 3): the model's standard deviation times
+- **The calibration** (`noise::calibration`, round 3, and round 4 for energetic T20 and T30
+  outside uniform Lambert rooms): the model's standard deviation times
   `k·√(1 + κ·n)`, per computation method and quantity. `n` is the run's own crossings of the
   receiver per particle, `n1 = Σ E/(d̄_least·N)` (`noise::crossings_per_particle`), times the
   spread of the particles' lifetimes, `Var L/(E L)²` from the band's room table
@@ -449,16 +461,17 @@ in three pre-registered rounds; every number is in
   particle's crossings of one receiver at several times, which grow with the receiver's size
   (`n ∝ R²`) and a room's reverberance. `k` is the largest one-sided 95 % upper bound over the
   calibration cells of the ratio of SPPS's seed-to-seed spread to `√(1 + κ·n)` times the model
-  (ten seeds a cell, on effective degrees of freedom), `κ` the one of 0 to 3 that overstates least.
-  Energetic T20 and T30 take theirs by kind of band: every face Lambert with scattering 1 and the
-  same absorption, up to a mean absorption of 0.4 ("uniform Lambert", M8's rooms); Lambert with
-  unequal absorption; and the rest. Pre-registered, calibrated on 51 cells (70 in all) and
-  validated on 19 no rule saw (`docs/investigations/2026-09-25-noise-calibration/`):
+  (ten seeds a cell, on effective degrees of freedom), `κ` the one of 0 to 3 (0 to 6 in round 4)
+  that overstates least. Energetic T20 and T30 take theirs by kind of band: every face Lambert with
+  scattering 1 and the same absorption, up to a mean absorption of 0.2 ("uniform Lambert"; 0.4 in
+  round 3, lowered by F6), under M7's structure; every other band under the roughness structure. Pre-registered;
+  round 3 calibrated on 51 cells and validated on 19 no rule saw, round 4 calibrated on all 70 and
+  validated on 24 new ones (`docs/investigations/2026-09-25-noise-calibration/`):
 
   | Method | SPL | EDT | T20 | T30 | C50 | C80 | D50 | Ts |
   |---|---|---|---|---|---|---|---|---|
   | random: k (κ) | 1.2 (1.75) | 1.3 (2) | 1.5 (2.75) | 1.6 (3) | 1.2 (1.25) | 1.4 (1) | 1.2 (1.25) | 1.4 (3) |
-  | energetic: k (κ) | 1.1 (0) | 0.86 (0) | uniform Lambert 0.098, Lambert 1, other 1 (0) | uniform Lambert 0.052 (0), Lambert 0.73 (2), other 1 (0) | 0.96 (0.25) | 0.86 (0.5) | 0.96 (0.25) | 0.84 (0.5) |
+  | energetic: k (κ) | 1.1 (0) | 0.86 (0) | uniform Lambert 0.098 (0), up to ᾱ 0.2; other bands 1.4 (5.25), roughness | uniform Lambert 0.052 (0), up to ᾱ 0.2; other bands 1.3 (4.75), roughness | 0.96 (0.25) | 0.86 (0.5) | 0.96 (0.25) | 0.84 (0.5) |
 
   - **Random mode**: the correction is large. With receivers of 0.9 m in a 60 m³ room at α 0.05
     (up to 2.2 crossings per particle), the seeds' spread was 1.7 (SPL) to 2.6 (T30) times the
@@ -466,11 +479,18 @@ in three pre-registered rounds; every number is in
     and the absorption on one surface.
   - **Energetic mode**: in uniform Lambert rooms every particle meets the same absorption at every
     reflection, so their energies spread apart only as their reflection counts do, and T30's
-    spread is 0.026 to 0.048 of M7's structure (13 cells): factor 0.052. With the absorption on one
-    surface, even Lambert walls spread the energies apart as specular ones do (up to 0.63), and
-    energetic T20 there failed its validation at its fitted 0.52 (V3-E8, 1.12 of the prediction),
-    so it keeps factor 1. SPL is above 1 because the direct field alone is among the cells: with
-    every particle stopped at its first surface, energetic mode runs random mode's transport.
+    spread is 0.026 to 0.048 of M7's structure (13 cells): factor 0.052. Elsewhere (specular,
+    partly scattering, or Lambert with the absorption concentrated) the particles' energies spread
+    apart far more, from 0.048 to 0.63 of M7's structure for T30 with nothing in the run's
+    configuration to tell which, so round 3 kept factor 1 there; round 4's roughness structure
+    reads it from the series (geometric-mean overstatement 2.0 for T30, 1.8 for T20 over 23 and 24
+    calibration cells). Its correction for repeated crossings is large (κ 4.75 and 5.25), set by a
+    room with receivers of 1.2 m. The uniform-Lambert factors failed two held-out long rooms at
+    ᾱ 0.4 (T30 2.88 times the prediction in a 30 × 4 × 3 m corridor), so they hold only up to ᾱ
+    0.2 (F6), and above it the roughness decides; there T20's fitted 1.2 claimed less noise than a
+    5 × 4 × 3 m box at 0.4 showed, so it ships 1.4. SPL is above 1 because the direct field alone
+    is among the cells: with every particle stopped at its first surface, energetic mode runs
+    random mode's transport.
   - Checked in the suite on the committed receipt (`tests/params_noise_calibration.rs`): every
     number of the code is what the rules give; every validation cell passes; halved factors (a
     model twice too optimistic, through a fault seam) fail in every validation cell; a quantity's
@@ -479,9 +499,9 @@ in three pre-registered rounds; every number is in
 - **The domain.** A calibration holds where it was measured. Each quantity (and kind of band) has
   the fewest particles per source and the most crossings per particle its calibration saw with at
   least one band's six receivers: random SPL, C50, C80 and D50 from 5,000 particles, the decay
-  times and Ts from 50,000; energetic likewise, with T30 outside uniform Lambert rooms from 150,000;
-  `n` up to 2.16 (random) and 2.13 (energetic), and 0.032 for energetic T20 and T30 in Lambert
-  rooms with unequal absorption (measured with 0.31 m receivers only). **A value outside is
+  times and Ts from 50,000; energetic likewise, with T20 outside uniform Lambert rooms from 15,000
+  and T30 there from 150,000; `n` up to 2.16 (random) and 2.13 (energetic), and 1.37 for energetic
+  T20 and T30 outside uniform Lambert rooms (and uniform ones above ᾱ 0.2). **A value outside is
   refused, `noise_uncalibrated`**, with the particles to run to reach the domain
   (`particles_at_least`), or, since more particles do not lower `n`, the most the receiver radius
   may be as a multiple of the run's (`receiver_radius_scale_at_most`, `√(max/n)`). What the code
@@ -501,10 +521,10 @@ in three pre-registered rounds; every number is in
 
   M8's bed asks more of three seeds (a spread of at most 2 %); this limit is what one run may
   show, not the bed's. The resamples carry the model's structure, not its calibration: in
-  energetic mode, where the structure is 20 to 38 times T30's real noise in uniform Lambert rooms,
+  energetic mode, where M7's structure is 20 to 38 times T30's real noise in uniform Lambert rooms,
   more than 10 resamples can refuse T30 (α 0.2 to 0.4 below about a million particles) although
-  its calibrated noise is within the limit; the value is then refused with its count
-  `within_limit`.
+  its calibrated noise is within the limit; the value is then refused naming the count at which
+  the resamples clear (below).
 - **The particle count a refusal names** (`particle_count`): SPPS's spread falls as `1/√N` or
   faster on every one of twelve pairs of cells that differ only in `N` (5,000 against 50,000 up to
   150,000 against 15,000,000; no pair showed it falling slower by more than two standard errors,
@@ -515,8 +535,18 @@ in three pre-registered rounds; every number is in
   receiver-bands), so margins of 1.5 there; 1.2 for random EDT, C50, C80 and D50 and energetic EDT;
   1.2 or 1.3 for energetic T20 and T30; 1.1 elsewhere. On the pairs, the
   refusals whose named count the higher count reached gave their value there in 98.2 % to 100 % of
-  its seeds. **No count is named** when the standard deviation is within the limit (the resamples
-  refuse the value; more particles need not cure that).
+  its seeds (round 3). **A value its resamples refuse** (more than 10 of 200) names the first of 2,
+  4, 8, 16, 32 and 64 times the run's particles at which the model's own resamples of the series,
+  every deposit over that multiple, refuse it at most 5 times and its calibrated standard
+  deviation times the margin is within the limit (round 4, R4-3; `particle_count`
+  `{"count": "resampled"}`); when none does, no count is named (`beyond_resampled`: more particles
+  may not help). On the pairs these counts gave the value at the higher count in 97 to 100 % of its
+  seeds for T30, but for energetic C50, C80, D50 and Ts in 64.7 % (a receiver whose arrival sits at
+  a 1 ms bin's edge keeps refusing them), so those name none (`resampled_not_confirmed`, F8).
+  **Every count is named from M7's structure**, whose deposits fall exactly as `1/N`: for the
+  roughness structure, which also holds the curve's fine structure and does not fall as `1/N`, that
+  is an upper bound (counts named from the roughness itself gave the value in only 36 to 44 % of
+  the higher count's seeds).
 - **Several sources:** the largest of their mean deposits, an upper bound, and crossings per
   particle counted at the smallest, at least each source's own. **A directivity balloon** scales
   each particle's energy by its direction, so `d̄` is not known: every value is refused,
@@ -531,8 +561,8 @@ in three pre-registered rounds; every number is in
   cells at low counts carry that, and below the domain the value is refused.
 - **Selection by the refusal.** A seed whose decay reads long also has the larger spread of its
   own, so where some seeds of a receiver-band are refused for their noise and others pass, the
-  passing mean sits low: random T30 −0.97 % ± 0.16 %, T20 −0.45 %, EDT −0.27 % over the receipt's
-  cells. A mean over the values that came through is not a mean over runs; M8 must not take one
+  passing mean sits low: random T30 −0.82 % ± 0.13 %, T20 −0.47 %, EDT −0.27 %, energetic T30
+  −1.23 % and T20 −0.75 % over the receipt's cells (round 4's model). A mean over the values that came through is not a mean over runs; M8 must not take one
   (`docs/results.md`, "What M8 needs").
 - **The M7 review's check** (`crates/simpa/tests/cli_results.rs`,
   `noise_estimate_against_the_spread_of_twenty_seeds`, run on purpose; tutorial 1, seeds 1 to 20):

@@ -1,5 +1,6 @@
-Round 4's last read: every cell of rounds 1 to 4 read again with the shipped code (after F6, F8,
-energetic T20's cover and the counts named from M7's structure); it wrote calibration.json.
+Round 4's validation read (PREREGISTER.txt, ROUND 4, R4-4 and R4-5): every cell of rounds 1 to 4 read
+again with the numbers committed at 1cf8339 (before F6, F8, T20's cover and the counts from M7's
+structure), the first read of any V4 cell. The shipped code's read is analysis.txt.
 
 running 1 test
 
@@ -137,7 +138,7 @@ CELL V-R1 20x4x3 Lambert a0.2 Random N 500000 2 s dt 0.01 eps 5 R 0.31 (10 seeds
   d50     30 of 36:  constant 1.006 [0.940, 1.083]
   ts_s    11 of 36:  constant 0.973 [0.873, 1.103]
 
-CELL V-R2 6x10x3 Lambert a0.4 Random N 600000 1 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
+CELL V-R2 6x10x3 Lambert a0.4 Random N 600000 1 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.087
   edt_s   one seed's model sd over the seeds: median scatter 0.064, largest 0.083
   t20_s   one seed's model sd over the seeds: median scatter 0.161, largest 0.375
@@ -155,7 +156,7 @@ CELL V-R2 6x10x3 Lambert a0.4 Random N 600000 1 s dt 0.001 eps 5 R 0.31 (10 seed
   d50     18 of 36:  constant 0.946 [0.867, 1.042]
   ts_s    18 of 36:  constant 1.029 [0.943, 1.133]
 
-CELL V-R3 5x4x3 Lambert a0.05 Random N 300000 3 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 1 s)
+CELL V-R3 5x4x3 Lambert a0.05 Random N 300000 3 s dt 0.01 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 0 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.076
   edt_s   one seed's model sd over the seeds: median scatter 0.046, largest 0.083
   t20_s   one seed's model sd over the seeds: median scatter 0.063, largest 0.088
@@ -205,7 +206,7 @@ CELL V-R5 5x4x3 specular a0.2 Random N 5000000 1.5 s dt 0.01 eps 5 R 0.31 (10 se
   d50     36 of 36:  constant 1.027 [0.965, 1.099]
   ts_s     0 of 36:
 
-CELL V-R6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Random N 1500000 3 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 9 s)
+CELL V-R6 20x4x3 dead floor (0.6; 0.05 elsewhere), specular Random N 1500000 3 s dt 0.001 eps 5 R 0.31 (10 seeds, 36 receiver-bands; read in 7 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.046, largest 0.072
   edt_s   one seed's model sd over the seeds: median scatter 0.073, largest 0.122
   t20_s   one seed's model sd over the seeds: median scatter 0.135, largest 0.196
@@ -299,7 +300,7 @@ CELL C-E5 6x10x3 tutorial 1's materials, air on Energetic N 150000 2 s dt 0.01 e
   d50     24 of 36:  constant 0.542 [0.503, 0.589]  mean_energy 1.001 [0.928, 1.088]  roughness 0.585 [0.542, 0.635]
   ts_s     0 of 36:
 
-CELL C-E6 6x10x3 tutorial 1's materials, air on Energetic N 600000 2 s dt 0.001 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 9 s)
+CELL C-E6 6x10x3 tutorial 1's materials, air on Energetic N 600000 2 s dt 0.001 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 8 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.072
   edt_s   one seed's model sd over the seeds: median scatter 0.045, largest 0.091
   t20_s   one seed's model sd over the seeds: median scatter 0.053, largest 0.091
@@ -405,7 +406,7 @@ CELL V-E4 6x10x3 tutorial 1's materials, air on Energetic N 1500000 2 s dt 0.01 
   d50     24 of 36:  constant 0.529 [0.491, 0.575]  mean_energy 0.972 [0.901, 1.056]  roughness 0.532 [0.493, 0.578]
   ts_s     0 of 36:
 
-CELL V-E5 5x4x3 specular a0.2 Energetic N 600000 1.5 s dt 0.001 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 4 s)
+CELL V-E5 5x4x3 specular a0.2 Energetic N 600000 1.5 s dt 0.001 eps 7 R 0.31 (10 seeds, 36 receiver-bands; read in 5 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.075
   edt_s   one seed's model sd over the seeds: median scatter 0.050, largest 0.075
   t20_s   one seed's model sd over the seeds: median scatter 0.049, largest 0.067
@@ -1418,7 +1419,7 @@ CELL V4-E15 20x8x6 dead floor (0.6; 0.05 elsewhere), specular Energetic N 240000
   d50     30 of 36:  constant 0.780 [0.729, 0.840]  mean_energy 1.122 [1.048, 1.208]  roughness 0.789 [0.738, 0.850]
   ts_s    30 of 36:  constant 0.524 [0.489, 0.564]  mean_energy 1.568 [1.465, 1.688]  roughness 0.698 [0.652, 0.751]
 
-CELL V4-E16 6x10x3 Lambert a0.4 Energetic N 2400000 0.6 s dt 0.001 eps 9 R 0.31 (10 seeds, 36 receiver-bands; read in 3 s)
+CELL V4-E16 6x10x3 Lambert a0.4 Energetic N 2400000 0.6 s dt 0.001 eps 9 R 0.31 (10 seeds, 36 receiver-bands; read in 2 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.049, largest 0.067
   edt_s   one seed's model sd over the seeds: median scatter 0.048, largest 0.079
   t20_s   one seed's model sd over the seeds: median scatter 0.048, largest 0.068
@@ -1513,7 +1514,7 @@ CELL V4-R3 5x4x3 Lambert a0.2 Random N 800000 1.5 s dt 0.01 eps 5 R 0.31 (10 see
   d50     36 of 36:  constant 1.040 [0.977, 1.112]
   ts_s     0 of 36:
 
-CELL V4-R4 5x4x3 Lambert a0.05 Random N 2000000 3 s dt 0.01 eps 5 R 0.6 (10 seeds, 36 receiver-bands; read in 0 s)
+CELL V4-R4 5x4x3 Lambert a0.05 Random N 2000000 3 s dt 0.01 eps 5 R 0.6 (10 seeds, 36 receiver-bands; read in 1 s)
   spl_db  one seed's model sd over the seeds: median scatter 0.048, largest 0.064
   edt_s   one seed's model sd over the seeds: median scatter 0.046, largest 0.072
   t20_s   one seed's model sd over the seeds: median scatter 0.052, largest 0.065
@@ -2363,7 +2364,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
     ts_s all                    30 of 30 rows inside: 0.636 [0.586, 0.697] dof 179.9 ok
   V3-E2 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.660 [0.618, 0.708] dof 293.3 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.698 [0.651, 0.753] dof 259.6 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.815 [0.760, 0.878] dof 259.6 ok
     t30_s not_uniform_lambert   24 of 24 rows inside: 0.795 [0.713, 0.899] dof 101.4 ok
     c50_db all                  36 of 36 rows inside: 0.644 [0.604, 0.691] dof 303.8 ok
     c80_db all                  36 of 36 rows inside: 0.509 [0.479, 0.545] dof 324.0 ok
@@ -2372,7 +2373,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V3-E3 (N 150000)
     spl_db all                  36 of 36 rows inside: 0.794 [0.746, 0.849] dof 322.3 ok
     edt_s all                   36 of 36 rows inside: 0.585 [0.550, 0.626] dof 324.0 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.791 [0.739, 0.850] dof 277.1 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.922 [0.862, 0.992] dof 277.1 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.894 [0.812, 0.997] dof 130.3 ok
     c50_db all                  18 of 18 rows inside: 1.011 [0.924, 1.118] dof 150.2 ok
     c80_db all                  18 of 18 rows inside: 1.015 [0.925, 1.126] dof 140.8 ok
@@ -2381,7 +2382,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V3-E4 (N 150000)
     spl_db all                  36 of 36 rows inside: 0.763 [0.715, 0.817] dof 308.8 ok
     edt_s all                   36 of 36 rows inside: 0.495 [0.459, 0.536] dof 224.2 ok
-    t20_s not_uniform_lambert   35 of 36 rows inside: 0.470 [0.432, 0.515] dof 176.9 ok
+    t20_s not_uniform_lambert   35 of 36 rows inside: 0.548 [0.504, 0.601] dof 176.9 ok
     t30_s not_uniform_lambert   35 of 36 rows inside: 0.685 [0.626, 0.759] dof 146.9 ok
     c50_db all                  36 of 36 rows inside: 0.753 [0.704, 0.811] dof 269.7 ok
     c80_db all                  36 of 36 rows inside: 0.721 [0.676, 0.773] dof 304.5 ok
@@ -2398,7 +2399,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
     spl_db all                  36 of 36 rows inside: 0.953 [0.893, 1.023] dof 293.0 ok
   V3-E7 (N 150000)
     spl_db all                  36 of 36 rows inside: 0.700 [0.658, 0.749] dof 324.0 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.523 [0.489, 0.562] dof 286.1 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.610 [0.571, 0.655] dof 286.1 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.541 [0.494, 0.599] dof 145.1 ok
     c50_db all                  24 of 24 rows inside: 0.510 [0.473, 0.555] dof 210.9 ok
     c80_db all                  24 of 24 rows inside: 0.372 [0.345, 0.404] dof 216.0 ok
@@ -2406,7 +2407,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V3-E8 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.847 [0.796, 0.906] dof 324.0 ok
     edt_s all                   36 of 36 rows inside: 0.891 [0.837, 0.952] dof 324.0 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.657 [0.607, 0.716] dof 196.5 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.766 [0.708, 0.836] dof 196.5 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.478 [0.434, 0.532] dof 131.9 ok
     c50_db all                  15 of 15 rows inside: 0.818 [0.744, 0.910] dof 135.0 ok
     c80_db all                  15 of 15 rows inside: 0.853 [0.766, 0.966] dof 101.6 ok
@@ -2424,7 +2425,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V3-E10 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.684 [0.640, 0.735] dof 280.3 ok
     edt_s all                    6 of  6 rows inside: 0.665 [0.552, 0.841] dof 31.5 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.535 [0.492, 0.588] dof 169.8 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.624 [0.573, 0.686] dof 169.8 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.439 [0.407, 0.478] dof 212.9 ok
     c50_db all                  30 of 30 rows inside: 0.718 [0.664, 0.783] dof 201.9 ok
     c80_db all                  30 of 30 rows inside: 0.705 [0.654, 0.765] dof 219.2 ok
@@ -2433,36 +2434,36 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V4-E1 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.576 [0.541, 0.616] dof 324.0 ok
     edt_s all                   36 of 36 rows inside: 0.331 [0.301, 0.367] dof 141.9 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.808 [0.759, 0.864] dof 324.0 ok
-    t30_s not_uniform_lambert   24 of 24 rows inside: 1.045 [0.967, 1.138] dof 205.5 ok
+    t20_s uniform_lambert       36 of 36 rows inside: 0.717 [0.651, 0.799] dof 129.8 ok
+    t30_s uniform_lambert       24 of 24 rows inside: 1.192 [1.097, 1.306] dof 179.3 FAIL
   V4-E2 (N 150000)
     spl_db all                  36 of 36 rows inside: 0.681 [0.640, 0.728] dof 324.0 ok
     edt_s all                    6 of  6 rows inside: 0.379 [0.325, 0.458] dof 46.4 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.743 [0.698, 0.794] dof 324.0 ok
-    t30_s not_uniform_lambert   32 of 32 rows inside: 0.808 [0.749, 0.877] dof 218.2 ok
+    t20_s uniform_lambert       36 of 36 rows inside: 0.819 [0.769, 0.876] dof 324.0 ok
+    t30_s uniform_lambert       32 of 32 rows inside: 0.920 [0.853, 1.000] dof 214.0 ok
     c50_db all                  30 of 30 rows inside: 0.642 [0.587, 0.709] dof 150.6 ok
     c80_db all                  30 of 30 rows inside: 0.560 [0.518, 0.610] dof 205.5 ok
     d50 all                     30 of 30 rows inside: 0.644 [0.589, 0.712] dof 150.1 ok
     ts_s all                     6 of  6 rows inside: 0.663 [0.564, 0.809] dof 42.3 ok
   V4-E3 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.604 [0.557, 0.661] dof 184.6 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.693 [0.649, 0.743] dof 301.4 ok
-    t30_s not_uniform_lambert   25 of 25 rows inside: 0.753 [0.698, 0.818] dof 214.6 ok
+    t20_s uniform_lambert       36 of 36 rows inside: 0.746 [0.682, 0.825] dof 151.6 ok
+    t30_s uniform_lambert       25 of 25 rows inside: 0.898 [0.832, 0.976] dof 214.6 ok
     c50_db all                  30 of 30 rows inside: 0.571 [0.530, 0.621] dof 214.4 ok
     c80_db all                  30 of 30 rows inside: 0.474 [0.442, 0.512] dof 255.9 ok
     d50 all                     30 of 30 rows inside: 0.588 [0.545, 0.640] dof 212.7 ok
     ts_s all                     1 of  1 rows inside: 0.627 [0.457, 1.032] dof 9.0 ok
   V4-E4 (N 150000)
     spl_db all                  36 of 36 rows inside: 0.610 [0.570, 0.656] dof 278.6 ok
-    t20_s not_uniform_lambert   24 of 24 rows inside: 0.456 [0.390, 0.554] dof 44.6 ok
-    t30_s not_uniform_lambert   17 of 17 rows inside: 0.453 [0.400, 0.525] dof 73.3 ok
+    t20_s uniform_lambert       24 of 24 rows inside: 1.104 [1.014, 1.212] dof 170.8 FAIL
+    t30_s uniform_lambert       17 of 17 rows inside: 2.880 [2.476, 3.461] dof 49.1 FAIL
     c50_db all                  36 of 36 rows inside: 0.313 [0.290, 0.340] dof 212.6 ok
     c80_db all                  36 of 36 rows inside: 0.235 [0.210, 0.266] dof 98.0 ok
     d50 all                     36 of 36 rows inside: 0.358 [0.329, 0.394] dof 164.0 ok
   V4-E5 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.650 [0.611, 0.695] dof 321.5 ok
     edt_s all                   19 of 19 rows inside: 0.445 [0.408, 0.490] dof 164.4 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.558 [0.523, 0.599] dof 290.6 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.651 [0.610, 0.699] dof 290.6 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.756 [0.706, 0.813] dof 272.6 ok
     c50_db all                  36 of 36 rows inside: 0.718 [0.675, 0.768] dof 324.0 ok
     c80_db all                  36 of 36 rows inside: 0.630 [0.591, 0.674] dof 319.1 ok
@@ -2471,7 +2472,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V4-E6 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.660 [0.618, 0.707] dof 302.8 ok
     edt_s all                   36 of 36 rows inside: 0.568 [0.526, 0.619] dof 203.8 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.491 [0.448, 0.544] dof 143.3 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.573 [0.523, 0.635] dof 143.3 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.448 [0.398, 0.514] dof 83.5 ok
     c50_db all                  30 of 30 rows inside: 0.777 [0.722, 0.843] dof 227.3 ok
     c80_db all                  30 of 30 rows inside: 0.835 [0.779, 0.900] dof 259.8 ok
@@ -2480,7 +2481,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V4-E7 (N 150000)
     spl_db all                  36 of 36 rows inside: 0.667 [0.622, 0.720] dof 256.8 ok
     edt_s all                   24 of 24 rows inside: 0.444 [0.411, 0.482] dof 216.0 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.714 [0.670, 0.763] dof 320.0 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.832 [0.782, 0.891] dof 320.0 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.773 [0.724, 0.830] dof 290.4 ok
     c50_db all                  30 of 30 rows inside: 0.730 [0.674, 0.797] dof 195.6 ok
     c80_db all                  30 of 30 rows inside: 0.698 [0.647, 0.758] dof 213.6 ok
@@ -2488,7 +2489,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
     ts_s all                    24 of 24 rows inside: 0.625 [0.575, 0.685] dof 176.0 ok
   V4-E8 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.621 [0.583, 0.666] dof 306.9 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.391 [0.354, 0.436] dof 124.9 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.456 [0.413, 0.509] dof 124.9 ok
     t30_s not_uniform_lambert   31 of 31 rows inside: 0.521 [0.455, 0.611] dof 63.0 ok
     c50_db all                  36 of 36 rows inside: 0.603 [0.565, 0.647] dof 295.1 ok
     c80_db all                  36 of 36 rows inside: 0.600 [0.563, 0.641] dof 324.0 ok
@@ -2496,7 +2497,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V4-E9 (N 600000)
     spl_db all                  36 of 36 rows inside: 0.718 [0.671, 0.771] dof 282.2 ok
     edt_s all                   36 of 36 rows inside: 0.618 [0.573, 0.671] dof 219.1 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.723 [0.672, 0.783] dof 231.3 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.843 [0.784, 0.914] dof 231.3 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.807 [0.746, 0.879] dof 199.8 ok
     c50_db all                  17 of 17 rows inside: 0.746 [0.678, 0.831] dof 131.0 ok
     c80_db all                  17 of 17 rows inside: 0.776 [0.707, 0.860] dof 140.9 ok
@@ -2505,7 +2506,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V4-E10 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.627 [0.587, 0.673] dof 293.5 ok
     edt_s all                    7 of  7 rows inside: 0.342 [0.276, 0.455] dof 22.5 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.355 [0.322, 0.396] dof 127.9 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.414 [0.376, 0.462] dof 127.9 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.270 [0.239, 0.311] dof 78.7 ok
     c50_db all                  30 of 30 rows inside: 0.713 [0.654, 0.784] dof 167.4 ok
     c80_db all                  30 of 30 rows inside: 0.678 [0.616, 0.754] dof 134.4 ok
@@ -2514,12 +2515,12 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V4-E11 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.860 [0.801, 0.930] dof 244.5 ok
     edt_s all                   36 of 36 rows inside: 0.920 [0.864, 0.984] dof 324.0 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.731 [0.683, 0.787] dof 270.1 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.853 [0.797, 0.918] dof 270.1 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.562 [0.528, 0.601] dof 324.0 ok
   V4-E12 (N 300000)
     spl_db all                  36 of 36 rows inside: 0.730 [0.684, 0.785] dof 286.1 ok
     edt_s all                   36 of 36 rows inside: 0.446 [0.407, 0.496] dof 138.8 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.245 [0.225, 0.268] dof 178.7 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.286 [0.263, 0.313] dof 178.7 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.346 [0.313, 0.386] dof 124.8 ok
     c50_db all                  24 of 24 rows inside: 0.777 [0.719, 0.846] dof 204.5 ok
     c80_db all                  24 of 24 rows inside: 0.717 [0.665, 0.779] dof 216.0 ok
@@ -2527,14 +2528,14 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
     ts_s all                    24 of 24 rows inside: 0.589 [0.546, 0.640] dof 216.0 ok
   V4-E13 (N 150000)
     spl_db all                  36 of 36 rows inside: 0.619 [0.580, 0.665] dof 288.8 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.345 [0.312, 0.387] dof 117.0 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.403 [0.364, 0.452] dof 117.0 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.470 [0.426, 0.526] dof 123.7 ok
     c50_db all                  24 of 24 rows inside: 0.544 [0.504, 0.591] dof 216.0 ok
     c80_db all                  24 of 24 rows inside: 0.456 [0.420, 0.498] dof 187.5 ok
     d50 all                     24 of 24 rows inside: 0.542 [0.503, 0.589] dof 216.0 ok
   V4-E14 (N 1200000)
     spl_db all                  36 of 36 rows inside: 0.623 [0.579, 0.675] dof 231.4 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.147 [0.134, 0.161] dof 164.7 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.171 [0.157, 0.188] dof 164.7 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.179 [0.165, 0.196] dof 181.8 ok
     c50_db all                  24 of 24 rows inside: 0.565 [0.523, 0.614] dof 209.1 ok
     c80_db all                  24 of 24 rows inside: 0.486 [0.449, 0.529] dof 202.3 ok
@@ -2542,7 +2543,7 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V4-E15 (N 2400000)
     spl_db all                  36 of 36 rows inside: 0.689 [0.647, 0.736] dof 324.0 ok
     edt_s all                   36 of 36 rows inside: 0.607 [0.569, 0.650] dof 307.5 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.454 [0.405, 0.519] dof 88.1 ok
+    t20_s not_uniform_lambert   36 of 36 rows inside: 0.530 [0.472, 0.606] dof 88.1 ok
     t30_s not_uniform_lambert   36 of 36 rows inside: 0.456 [0.406, 0.522] dof 86.5 ok
     c50_db all                  30 of 30 rows inside: 0.813 [0.760, 0.875] dof 270.0 ok
     c80_db all                  30 of 30 rows inside: 0.844 [0.783, 0.917] dof 215.4 ok
@@ -2551,8 +2552,8 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   V4-E16 (N 2400000)
     spl_db all                  36 of 36 rows inside: 0.687 [0.640, 0.742] dof 245.7 ok
     edt_s all                   36 of 36 rows inside: 0.413 [0.384, 0.447] dof 240.1 ok
-    t20_s not_uniform_lambert   36 of 36 rows inside: 0.832 [0.761, 0.918] dof 155.7 ok
-    t30_s not_uniform_lambert   36 of 36 rows inside: 0.933 [0.876, 0.999] dof 317.6 ok
+    t20_s uniform_lambert       36 of 36 rows inside: 0.869 [0.799, 0.953] dof 176.9 ok
+    t30_s uniform_lambert       36 of 36 rows inside: 0.643 [0.604, 0.688] dof 317.6 ok
     c50_db all                  18 of 18 rows inside: 0.341 [0.313, 0.376] dof 162.0 ok
     c80_db all                  18 of 18 rows inside: 0.177 [0.157, 0.203] dof 84.5 ok
     d50 all                     18 of 18 rows inside: 0.340 [0.312, 0.374] dof 162.0 ok
@@ -2576,117 +2577,123 @@ VALIDATION of ["validation3", "validation4"], energetic mode, with the code's nu
   1/sqrt(N) ts_s   : true over ["C-E1/C-E2 +1.25", "C3-E10/V3-E9 -0.00", "W-E3/V4-E15 +0.71", "V-E2/V4-E16 +0.72"]; unsafe []
 
 named counts, C-R1 (150000) against C-R2 (1500000):
-    edt_s   standard deviation: 10 refusals at C-R1 name a count, 10 at most C-R2's; of those, 100.0 % of C-R2's seeds give the value, 100.0 % are not refused for their noise
-    t20_s   standard deviation: 360 refusals at C-R1 name a count, 11 at most C-R2's; of those, 98.2 % of C-R2's seeds give the value, 98.2 % are not refused for their noise
-    t30_s   standard deviation: 1 refusals at C-R1 name a count, 0 at most C-R2's; of those, NaN % of C-R2's seeds give the value, NaN % are not refused for their noise
-    t30_s   resamples         : 202 refusals at C-R1 name a count, 0 at most C-R2's; of those, NaN % of C-R2's seeds give the value, NaN % are not refused for their noise
+    edt_s   standard deviation: 10 refusals at C-R1 name a count, 10 at most C-R2's; of those, 100.0 % of C-R2's seeds give the value (10 in every seed)
+    t20_s   standard deviation: 360 refusals at C-R1 name a count, 11 at most C-R2's; of those, 98.2 % of C-R2's seeds give the value (9 in every seed)
+    t30_s   standard deviation: 1 refusals at C-R1 name a count, 0 at most C-R2's; of those, NaN % of C-R2's seeds give the value (0 in every seed)
+    t30_s   resamples         : 202 refusals at C-R1 name a count, 0 at most C-R2's; of those, NaN % of C-R2's seeds give the value (0 in every seed)
     t30_s   148 refused for noise naming no count, 0 outside the domain at C-R1
 
 named counts, C-R3 (150000) against C-R4 (15000000):
-    edt_s   standard deviation: 357 refusals at C-R3 name a count, 357 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value, 100.0 % are not refused for their noise
-    t20_s   standard deviation: 360 refusals at C-R3 name a count, 358 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value, 100.0 % are not refused for their noise
-    t30_s   resamples         : 87 refusals at C-R3 name a count, 87 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value, 100.0 % are not refused for their noise
+    edt_s   standard deviation: 357 refusals at C-R3 name a count, 357 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value (357 in every seed)
+    t20_s   standard deviation: 360 refusals at C-R3 name a count, 358 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value (358 in every seed)
+    t30_s   resamples         : 87 refusals at C-R3 name a count, 87 at most C-R4's; of those, 100.0 % of C-R4's seeds give the value (87 in every seed)
     t30_s   271 refused for noise naming no count, 0 outside the domain at C-R3
 
 named counts, C-R5 (150000) against V-R4 (600000):
-    t20_s   standard deviation: 360 refusals at C-R5 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value, NaN % are not refused for their noise
-    t30_s   resamples         : 22 refusals at C-R5 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value, NaN % are not refused for their noise
+    t20_s   standard deviation: 360 refusals at C-R5 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value (0 in every seed)
+    t30_s   resamples         : 22 refusals at C-R5 name a count, 0 at most V-R4's; of those, NaN % of V-R4's seeds give the value (0 in every seed)
     t30_s   184 refused for noise naming no count, 0 outside the domain at C-R5
 
 named counts, C-E1 (150000) against C-E2 (600000):
 
 named counts, C-E3 (150000) against C-E4 (2400000):
+    t30_s   resamples         : 303 refusals at C-E3 name a count, 303 at most C-E4's; of those, 100.0 % of C-E4's seeds give the value (303 in every seed)
 
 named counts, C-E5 (150000) against V-E4 (1500000):
-    t20_s   standard deviation: 134 refusals at C-E5 name a count, 0 at most V-E4's; of those, NaN % of V-E4's seeds give the value, NaN % are not refused for their noise
+    t20_s   standard deviation: 109 refusals at C-E5 name a count, 109 at most V-E4's; of those, 42.8 % of V-E4's seeds give the value (33 in every seed)
 
 named counts, C3-R5 (5000) against V3-R8 (50000):
     t20_s   0 refused for noise naming no count, 158 outside the domain at C3-R5
     t30_s   0 refused for noise naming no count, 7 outside the domain at C3-R5
-    c50_db  standard deviation: 360 refusals at C3-R5 name a count, 360 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value, 100.0 % are not refused for their noise
-    c80_db  standard deviation: 360 refusals at C3-R5 name a count, 206 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value, 100.0 % are not refused for their noise
-    d50     standard deviation: 359 refusals at C3-R5 name a count, 359 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value, 100.0 % are not refused for their noise
+    c50_db  standard deviation: 360 refusals at C3-R5 name a count, 360 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value (360 in every seed)
+    c80_db  standard deviation: 360 refusals at C3-R5 name a count, 206 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value (206 in every seed)
+    d50     standard deviation: 359 refusals at C3-R5 name a count, 359 at most V3-R8's; of those, 100.0 % of V3-R8's seeds give the value (359 in every seed)
 
 named counts, C3-R6 (15000) against C-R5 (150000):
     t20_s   0 refused for noise naming no count, 203 outside the domain at C3-R6
     t30_s   0 refused for noise naming no count, 4 outside the domain at C3-R6
-    c50_db  standard deviation: 239 refusals at C3-R6 name a count, 239 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value, 100.0 % are not refused for their noise
-    c80_db  standard deviation: 240 refusals at C3-R6 name a count, 239 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value, 100.0 % are not refused for their noise
-    d50     standard deviation: 237 refusals at C3-R6 name a count, 237 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value, 100.0 % are not refused for their noise
+    c50_db  standard deviation: 239 refusals at C3-R6 name a count, 239 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value (239 in every seed)
+    c80_db  standard deviation: 240 refusals at C3-R6 name a count, 239 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value (239 in every seed)
+    d50     standard deviation: 237 refusals at C3-R6 name a count, 237 at most C-R5's; of those, 100.0 % of C-R5's seeds give the value (237 in every seed)
     ts_s    0 refused for noise naming no count, 3 outside the domain at C3-R6
 
 named counts, C3-R9 (50000) against V3-R9 (500000):
-    t20_s   standard deviation: 360 refusals at C3-R9 name a count, 290 at most V3-R9's; of those, 100.0 % of V3-R9's seeds give the value, 100.0 % are not refused for their noise
-    t30_s   standard deviation: 285 refusals at C3-R9 name a count, 0 at most V3-R9's; of those, NaN % of V3-R9's seeds give the value, NaN % are not refused for their noise
+    t20_s   standard deviation: 360 refusals at C3-R9 name a count, 290 at most V3-R9's; of those, 100.0 % of V3-R9's seeds give the value (290 in every seed)
+    t30_s   standard deviation: 285 refusals at C3-R9 name a count, 0 at most V3-R9's; of those, NaN % of V3-R9's seeds give the value (0 in every seed)
 
 named counts, C3-E5 (5000) against V3-E5 (50000):
-    t20_s   resamples         : 354 refusals at C3-E5 name a count, 354 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value, 100.0 % are not refused for their noise
+    t20_s   resamples         : 354 refusals at C3-E5 name a count, 354 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value (354 in every seed)
     t30_s   0 refused for noise naming no count, 354 outside the domain at C3-E5
-    c50_db  standard deviation: 330 refusals at C3-E5 name a count, 330 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value, 100.0 % are not refused for their noise
-    c80_db  standard deviation: 354 refusals at C3-E5 name a count, 354 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value, 100.0 % are not refused for their noise
-    d50     standard deviation: 78 refusals at C3-E5 name a count, 78 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value, 100.0 % are not refused for their noise
+    c50_db  standard deviation: 330 refusals at C3-E5 name a count, 330 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value (330 in every seed)
+    c80_db  standard deviation: 354 refusals at C3-E5 name a count, 354 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value (354 in every seed)
+    d50     standard deviation: 78 refusals at C3-E5 name a count, 78 at most V3-E5's; of those, 100.0 % of V3-E5's seeds give the value (78 in every seed)
 
 named counts, C3-E6 (15000) against C-E5 (150000):
-    t20_s   standard deviation: 314 refusals at C3-E6 name a count, 0 at most C-E5's; of those, NaN % of C-E5's seeds give the value, NaN % are not refused for their noise
+    t20_s   standard deviation: 310 refusals at C3-E6 name a count, 215 at most C-E5's; of those, 77.7 % of C-E5's seeds give the value (152 in every seed)
     t30_s   0 refused for noise naming no count, 60 outside the domain at C3-E6
-    c50_db  standard deviation: 129 refusals at C3-E6 name a count, 129 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value, 100.0 % are not refused for their noise
-    c80_db  standard deviation: 200 refusals at C3-E6 name a count, 200 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value, 100.0 % are not refused for their noise
-    d50     standard deviation: 91 refusals at C3-E6 name a count, 91 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value, 100.0 % are not refused for their noise
+    c50_db  standard deviation: 129 refusals at C3-E6 name a count, 129 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value (129 in every seed)
+    c80_db  standard deviation: 200 refusals at C3-E6 name a count, 200 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value (200 in every seed)
+    d50     standard deviation: 91 refusals at C3-E6 name a count, 91 at most C-E5's; of those, 100.0 % of C-E5's seeds give the value (91 in every seed)
 
 named counts, C3-E10 (50000) against V3-E9 (300000):
 
 named counts, V4-E13 (150000) against V4-E14 (1200000):
-    t20_s   standard deviation: 129 refusals at V4-E13 name a count, 0 at most V4-E14's; of those, NaN % of V4-E14's seeds give the value, NaN % are not refused for their noise
-    t30_s   standard deviation: 92 refusals at V4-E13 name a count, 0 at most V4-E14's; of those, NaN % of V4-E14's seeds give the value, NaN % are not refused for their noise
+    t20_s   standard deviation: 106 refusals at V4-E13 name a count, 100 at most V4-E14's; of those, 43.5 % of V4-E14's seeds give the value (30 in every seed)
+    t30_s   standard deviation: 92 refusals at V4-E13 name a count, 89 at most V4-E14's; of those, 36.0 % of V4-E14's seeds give the value (32 in every seed)
 
 named counts, W-E3 (300000) against V4-E15 (2400000):
-    edt_s   standard deviation: 203 refusals at W-E3 name a count, 203 at most V4-E15's; of those, 65.4 % of V4-E15's seeds give the value, 100.0 % are not refused for their noise
+    edt_s   standard deviation: 203 refusals at W-E3 name a count, 203 at most V4-E15's; of those, 65.4 % of V4-E15's seeds give the value (58 in every seed)
 
 named counts, V-E2 (150000) against V4-E16 (2400000):
-    edt_s   standard deviation: 358 refusals at V-E2 name a count, 358 at most V4-E16's; of those, 100.0 % of V4-E16's seeds give the value, 100.0 % are not refused for their noise
-    c50_db  standard deviation: 1 refusals at V-E2 name a count, 1 at most V4-E16's; of those, 100.0 % of V4-E16's seeds give the value, 100.0 % are not refused for their noise
-    c50_db  65 refused for noise naming no count, 0 outside the domain at V-E2
-    c80_db  standard deviation: 109 refusals at V-E2 name a count, 109 at most V4-E16's; of those, 100.0 % of V4-E16's seeds give the value, 100.0 % are not refused for their noise
-    c80_db  65 refused for noise naming no count, 0 outside the domain at V-E2
-    d50     65 refused for noise naming no count, 0 outside the domain at V-E2
-    ts_s    65 refused for noise naming no count, 0 outside the domain at V-E2
+    edt_s   standard deviation: 358 refusals at V-E2 name a count, 358 at most V4-E16's; of those, 100.0 % of V4-E16's seeds give the value (358 in every seed)
+    t30_s   resamples         : 360 refusals at V-E2 name a count, 360 at most V4-E16's; of those, 100.0 % of V4-E16's seeds give the value (360 in every seed)
+    c50_db  standard deviation: 1 refusals at V-E2 name a count, 1 at most V4-E16's; of those, 100.0 % of V4-E16's seeds give the value (1 in every seed)
+    c50_db  resamples         : 39 refusals at V-E2 name a count, 17 at most V4-E16's; of those, 64.7 % of V4-E16's seeds give the value (11 in every seed)
+    c50_db  26 refused for noise naming no count, 0 outside the domain at V-E2
+    c80_db  standard deviation: 109 refusals at V-E2 name a count, 109 at most V4-E16's; of those, 100.0 % of V4-E16's seeds give the value (109 in every seed)
+    c80_db  resamples         : 39 refusals at V-E2 name a count, 17 at most V4-E16's; of those, 64.7 % of V4-E16's seeds give the value (11 in every seed)
+    c80_db  26 refused for noise naming no count, 0 outside the domain at V-E2
+    d50     resamples         : 39 refusals at V-E2 name a count, 17 at most V4-E16's; of those, 64.7 % of V4-E16's seeds give the value (11 in every seed)
+    d50     26 refused for noise naming no count, 0 outside the domain at V-E2
+    ts_s    resamples         : 39 refusals at V-E2 name a count, 17 at most V4-E16's; of those, 64.7 % of V4-E16's seeds give the value (11 in every seed)
+    ts_s    26 refused for noise naming no count, 0 outside the domain at V-E2
 
 named counts, V3-E5 (50000) against V4-E17 (800000):
-    t30_s   resamples         : 360 refusals at V3-E5 name a count, 360 at most V4-E17's; of those, 100.0 % of V4-E17's seeds give the value, 100.0 % are not refused for their noise
+    t30_s   resamples         : 360 refusals at V3-E5 name a count, 360 at most V4-E17's; of those, 100.0 % of V4-E17's seeds give the value (360 in every seed)
 
 named counts, V3-E6 (150000) against V4-E18 (1200000):
-    spl_db  standard deviation: 53 refusals at V3-E6 name a count, 53 at most V4-E18's; of those, 100.0 % of V4-E18's seeds give the value, 100.0 % are not refused for their noise
+    spl_db  standard deviation: 53 refusals at V3-E6 name a count, 53 at most V4-E18's; of those, 100.0 % of V4-E18's seeds give the value (53 in every seed)
 
 named counts, C-R1 (150000) against V4-R1 (6000000):
-    edt_s   standard deviation: 10 refusals at C-R1 name a count, 10 at most V4-R1's; of those, 100.0 % of V4-R1's seeds give the value, 100.0 % are not refused for their noise
-    t20_s   standard deviation: 360 refusals at C-R1 name a count, 355 at most V4-R1's; of those, 100.0 % of V4-R1's seeds give the value, 100.0 % are not refused for their noise
-    t30_s   standard deviation: 1 refusals at C-R1 name a count, 0 at most V4-R1's; of those, NaN % of V4-R1's seeds give the value, NaN % are not refused for their noise
-    t30_s   resamples         : 202 refusals at C-R1 name a count, 48 at most V4-R1's; of those, 97.1 % of V4-R1's seeds give the value, 97.1 % are not refused for their noise
+    edt_s   standard deviation: 10 refusals at C-R1 name a count, 10 at most V4-R1's; of those, 100.0 % of V4-R1's seeds give the value (10 in every seed)
+    t20_s   standard deviation: 360 refusals at C-R1 name a count, 355 at most V4-R1's; of those, 100.0 % of V4-R1's seeds give the value (355 in every seed)
+    t30_s   standard deviation: 1 refusals at C-R1 name a count, 0 at most V4-R1's; of those, NaN % of V4-R1's seeds give the value (0 in every seed)
+    t30_s   resamples         : 202 refusals at C-R1 name a count, 48 at most V4-R1's; of those, 97.1 % of V4-R1's seeds give the value (38 in every seed)
     t30_s   148 refused for noise naming no count, 0 outside the domain at C-R1
 
 named counts, C-R5 (150000) against V4-R2 (6000000):
-    t20_s   standard deviation: 360 refusals at C-R5 name a count, 102 at most V4-R2's; of those, 99.7 % of V4-R2's seeds give the value, 99.7 % are not refused for their noise
-    t30_s   resamples         : 22 refusals at C-R5 name a count, 0 at most V4-R2's; of those, NaN % of V4-R2's seeds give the value, NaN % are not refused for their noise
+    t20_s   standard deviation: 360 refusals at C-R5 name a count, 102 at most V4-R2's; of those, 99.7 % of V4-R2's seeds give the value (99 in every seed)
+    t30_s   resamples         : 22 refusals at C-R5 name a count, 0 at most V4-R2's; of those, NaN % of V4-R2's seeds give the value (0 in every seed)
     t30_s   184 refused for noise naming no count, 0 outside the domain at C-R5
 
 named counts, V3-R8 (50000) against V4-R3 (800000):
-    t20_s   standard deviation: 359 refusals at V3-R8 name a count, 7 at most V4-R3's; of those, 28.6 % of V4-R3's seeds give the value, 28.6 % are not refused for their noise
+    t20_s   standard deviation: 359 refusals at V3-R8 name a count, 7 at most V4-R3's; of those, 28.6 % of V4-R3's seeds give the value (0 in every seed)
     t20_s   1 refused for noise naming no count, 0 outside the domain at V3-R8
-    t30_s   resamples         : 15 refusals at V3-R8 name a count, 0 at most V4-R3's; of those, NaN % of V4-R3's seeds give the value, NaN % are not refused for their noise
+    t30_s   resamples         : 15 refusals at V3-R8 name a count, 0 at most V4-R3's; of those, NaN % of V4-R3's seeds give the value (0 in every seed)
     t30_s   124 refused for noise naming no count, 0 outside the domain at V3-R8
 
 named counts, C3-R9 (50000) against V4-R4 (2000000):
-    t20_s   standard deviation: 360 refusals at C3-R9 name a count, 360 at most V4-R4's; of those, 100.0 % of V4-R4's seeds give the value, 100.0 % are not refused for their noise
-    t30_s   standard deviation: 285 refusals at C3-R9 name a count, 217 at most V4-R4's; of those, 100.0 % of V4-R4's seeds give the value, 100.0 % are not refused for their noise
+    t20_s   standard deviation: 360 refusals at C3-R9 name a count, 360 at most V4-R4's; of those, 100.0 % of V4-R4's seeds give the value (360 in every seed)
+    t30_s   standard deviation: 285 refusals at C3-R9 name a count, 217 at most V4-R4's; of those, 100.0 % of V4-R4's seeds give the value (217 in every seed)
 
 named counts, C-R7 (500000) against V4-R5 (4000000):
-    edt_s   standard deviation: 159 refusals at C-R7 name a count, 159 at most V4-R5's; of those, 71.9 % of V4-R5's seeds give the value, 100.0 % are not refused for their noise
-    t20_s   standard deviation: 86 refusals at C-R7 name a count, 0 at most V4-R5's; of those, NaN % of V4-R5's seeds give the value, NaN % are not refused for their noise
-    t30_s   standard deviation: 58 refusals at C-R7 name a count, 0 at most V4-R5's; of those, NaN % of V4-R5's seeds give the value, NaN % are not refused for their noise
-    t30_s   resamples         : 1 refusals at C-R7 name a count, 0 at most V4-R5's; of those, NaN % of V4-R5's seeds give the value, NaN % are not refused for their noise
+    edt_s   standard deviation: 159 refusals at C-R7 name a count, 159 at most V4-R5's; of those, 71.9 % of V4-R5's seeds give the value (9 in every seed)
+    t20_s   standard deviation: 86 refusals at C-R7 name a count, 0 at most V4-R5's; of those, NaN % of V4-R5's seeds give the value (0 in every seed)
+    t30_s   standard deviation: 58 refusals at C-R7 name a count, 0 at most V4-R5's; of those, NaN % of V4-R5's seeds give the value (0 in every seed)
+    t30_s   resamples         : 1 refusals at C-R7 name a count, 0 at most V4-R5's; of those, NaN % of V4-R5's seeds give the value (0 in every seed)
 
 named counts, V3-R5 (150000) against V4-R6 (1200000):
-    spl_db  standard deviation: 120 refusals at V3-R5 name a count, 120 at most V4-R6's; of those, 100.0 % of V4-R6's seeds give the value, 100.0 % are not refused for their noise
+    spl_db  standard deviation: 120 refusals at V3-R5 name a count, 120 at most V4-R6's; of those, 100.0 % of V4-R6's seeds give the value (120 in every seed)
 
 values through the shipped model (every receiver-band seed, as the report says):
   C-R1    spl_db 360/360 edt_s 350/360 {"noise": 10} t20_s 0/360 {"noise": 360} t30_s 0/360 {"missing_moves": 7, "noise": 1, "range_not_reached": 2, "resamples": 202, "resamples_beyond": 148} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 240/360 {"params_bad_arrival": 120}
@@ -2704,23 +2711,23 @@ values through the shipped model (every receiver-band seed, as the report says):
   V-R6    spl_db 250/360 {"truncated": 110} edt_s 177/360 {"missing_moves": 1, "noise": 9, "range_not_reached": 1, "truncated": 172} t20_s 0/360 {"noise": 34, "range_not_reached": 19, "truncated": 307} t30_s 0/360 {"missing_moves": 1, "missing_not_cleared": 1, "noise": 13, "range_not_reached": 113, "truncated": 232} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
   C-E1    spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 240/360 {"params_bad_arrival": 120}
   C-E2    spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 240/360 {"params_bad_arrival": 120}
-  C-E3    spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
+  C-E3    spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 57/360 {"resamples": 303} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
   C-E4    spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
-  C-E5    spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 226/360 {"noise": 134} t30_s 9/360 {"missing_moves": 351} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 0/360 {"early_unresolved": 240, "params_bad_arrival": 120}
-  C-E6    spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 120/360 {"noise": 59, "params_bad_arrival": 181} c80_db 120/360 {"noise": 59, "params_bad_arrival": 181} d50 120/360 {"noise": 59, "params_bad_arrival": 181} ts_s 120/360 {"noise": 59, "params_bad_arrival": 181}
-  C-E7    spl_db 360/360 edt_s 359/360 {"noise": 1} t20_s 332/360 {"missing_moves": 1, "noise": 24, "truncated": 3} t30_s 10/360 {"missing_moves": 4, "noise": 1, "truncated": 345} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 240/360 {"params_bad_arrival": 120}
-  V-E1    spl_db 360/360 edt_s 11/360 {"early_unresolved": 292, "noise": 40, "resamples": 14, "resamples_beyond": 3} t20_s 360/360 t30_s 163/360 {"resamples": 197} c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 77/360 {"early_unresolved": 188, "noise": 35, "params_bad_arrival": 60}
-  V-E2    spl_db 360/360 edt_s 2/360 {"noise": 358} t20_s 360/360 t30_s 360/360 c50_db 108/360 {"noise": 66, "params_bad_arrival": 186} c80_db 0/360 {"noise": 174, "params_bad_arrival": 186} d50 109/360 {"noise": 65, "params_bad_arrival": 186} ts_s 109/360 {"noise": 65, "params_bad_arrival": 186}
+  C-E5    spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 251/360 {"noise": 109} t30_s 9/360 {"missing_moves": 351} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 0/360 {"early_unresolved": 240, "params_bad_arrival": 120}
+  C-E6    spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 120/360 {"params_bad_arrival": 181, "resamples": 56, "resamples_beyond": 3} c80_db 120/360 {"params_bad_arrival": 181, "resamples": 56, "resamples_beyond": 3} d50 120/360 {"params_bad_arrival": 181, "resamples": 56, "resamples_beyond": 3} ts_s 120/360 {"params_bad_arrival": 181, "resamples": 56, "resamples_beyond": 3}
+  C-E7    spl_db 360/360 edt_s 359/360 {"noise": 1} t20_s 351/360 {"missing_moves": 1, "noise": 5, "truncated": 3} t30_s 10/360 {"missing_moves": 4, "noise": 1, "truncated": 345} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 240/360 {"params_bad_arrival": 120}
+  V-E1    spl_db 360/360 edt_s 11/360 {"early_unresolved": 292, "noise": 40, "resamples": 14, "resamples_beyond": 3} t20_s 360/360 t30_s 163/360 {"resamples": 197} c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 77/360 {"early_unresolved": 188, "params_bad_arrival": 60, "resamples": 35}
+  V-E2    spl_db 360/360 edt_s 2/360 {"noise": 358} t20_s 360/360 t30_s 0/360 {"resamples": 360} c50_db 108/360 {"noise": 1, "params_bad_arrival": 186, "resamples": 39, "resamples_beyond": 26} c80_db 0/360 {"noise": 109, "params_bad_arrival": 186, "resamples": 39, "resamples_beyond": 26} d50 109/360 {"params_bad_arrival": 186, "resamples": 39, "resamples_beyond": 26} ts_s 109/360 {"params_bad_arrival": 186, "resamples": 39, "resamples_beyond": 26}
   V-E3    spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 126/360 {"missing_moves": 234} c80_db 314/360 {"missing_moves": 46} d50 360/360 ts_s 360/360
-  V-E4    spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 249/360 {"noise": 111} t30_s 0/360 {"missing_moves": 360} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 0/360 {"early_unresolved": 240, "params_bad_arrival": 120}
+  V-E4    spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 297/360 {"noise": 63} t30_s 0/360 {"missing_moves": 360} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 0/360 {"early_unresolved": 240, "params_bad_arrival": 120}
   V-E5    spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
   V-E6    spl_db 333/360 {"truncated": 27} edt_s 0/360 {"early_unresolved": 156, "missing_moves": 17, "noise": 88, "resamples": 1, "resamples_beyond": 5, "truncated": 93} t20_s 0/360 {"missing_moves": 2, "noise": 7, "range_not_reached": 23, "truncated": 328} t30_s 0/360 {"range_not_reached": 143, "truncated": 217} c50_db 221/360 {"missing_moves": 7, "params_bad_arrival": 60, "truncated": 72} c80_db 216/360 {"missing_moves": 7, "params_bad_arrival": 60, "truncated": 77} d50 246/360 {"missing_moves": 1, "params_bad_arrival": 60, "truncated": 53} ts_s 24/360 {"early_unresolved": 48, "missing_moves": 5, "params_bad_arrival": 60, "truncated": 223}
-  W-E1    spl_db 331/360 {"truncated": 29} edt_s 0/360 {"early_unresolved": 113, "missing_moves": 38, "noise": 44, "truncated": 165} t20_s 0/360 {"range_not_reached": 37, "truncated": 323} t30_s 0/360 {"range_not_reached": 233, "truncated": 127} c50_db 206/360 {"missing_moves": 19, "truncated": 135} c80_db 177/360 {"missing_moves": 30, "truncated": 153} d50 270/360 {"missing_moves": 7, "truncated": 83} ts_s 9/360 {"early_unresolved": 19, "missing_moves": 4, "noise": 3, "truncated": 325}
+  W-E1    spl_db 331/360 {"truncated": 29} edt_s 0/360 {"early_unresolved": 113, "missing_moves": 38, "noise": 44, "truncated": 165} t20_s 0/360 {"range_not_reached": 37, "truncated": 323} t30_s 0/360 {"range_not_reached": 233, "truncated": 127} c50_db 206/360 {"missing_moves": 19, "truncated": 135} c80_db 177/360 {"missing_moves": 30, "truncated": 153} d50 270/360 {"missing_moves": 7, "truncated": 83} ts_s 9/360 {"early_unresolved": 19, "missing_moves": 4, "noise": 1, "resamples": 2, "truncated": 325}
   W-E2    spl_db 332/360 {"truncated": 28} edt_s 0/360 {"early_unresolved": 151, "missing_moves": 10, "noise": 90, "resamples": 9, "resamples_beyond": 5, "truncated": 95} t20_s 0/360 {"missing_moves": 2, "noise": 5, "range_not_reached": 16, "truncated": 337} t30_s 0/360 {"range_not_reached": 142, "truncated": 218} c50_db 227/360 {"missing_moves": 11, "params_bad_arrival": 60, "truncated": 62} c80_db 223/360 {"missing_moves": 5, "params_bad_arrival": 60, "truncated": 72} d50 248/360 {"missing_moves": 2, "params_bad_arrival": 60, "truncated": 50} ts_s 22/360 {"early_unresolved": 49, "missing_moves": 8, "params_bad_arrival": 60, "truncated": 221}
   W-E3    spl_db 348/360 {"truncated": 12} edt_s 0/360 {"missing_moves": 21, "noise": 203, "range_not_reached": 1, "truncated": 135} t20_s 0/360 {"range_not_reached": 14, "truncated": 346} t30_s 0/360 {"range_not_reached": 282, "truncated": 78} c50_db 249/360 {"missing_moves": 16, "params_bad_arrival": 60, "truncated": 35} c80_db 235/360 {"missing_moves": 14, "params_bad_arrival": 60, "truncated": 51} d50 283/360 {"missing_moves": 3, "params_bad_arrival": 60, "truncated": 14} ts_s 32/360 {"missing_moves": 2, "params_bad_arrival": 60, "truncated": 266}
-  W-E4    spl_db 229/360 {"truncated": 131} edt_s 0/360 {"early_unresolved": 192, "noise": 6, "resamples": 28, "resamples_beyond": 3, "truncated": 131} t20_s 5/360 {"noise": 224, "truncated": 131} t30_s 0/360 {"noise": 186, "resamples": 1, "resamples_beyond": 41, "truncated": 132} c50_db 189/360 {"params_bad_arrival": 60, "truncated": 111} c80_db 189/360 {"params_bad_arrival": 60, "truncated": 111} d50 189/360 {"params_bad_arrival": 60, "truncated": 111} ts_s 25/360 {"early_unresolved": 145, "noise": 18, "params_bad_arrival": 60, "truncated": 112}
-  W-E5    spl_db 360/360 edt_s 24/360 {"noise": 336} t20_s 357/360 {"noise": 3} t30_s 234/360 {"missing_moves": 13, "truncated": 113} c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 300/360 {"params_bad_arrival": 60}
-  W-E6    spl_db 358/360 {"truncated": 2} edt_s 274/360 {"missing_moves": 22, "noise": 5, "truncated": 59} t20_s 0/360 {"missing_moves": 1, "noise": 2, "range_not_reached": 11, "truncated": 346} t30_s 0/360 {"range_not_reached": 162, "truncated": 198} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
+  W-E4    spl_db 229/360 {"truncated": 131} edt_s 0/360 {"early_unresolved": 192, "noise": 6, "resamples": 28, "resamples_beyond": 3, "truncated": 131} t20_s 13/360 {"noise": 216, "truncated": 131} t30_s 0/360 {"noise": 186, "resamples": 7, "resamples_beyond": 35, "truncated": 132} c50_db 189/360 {"params_bad_arrival": 60, "truncated": 111} c80_db 189/360 {"params_bad_arrival": 60, "truncated": 111} d50 189/360 {"params_bad_arrival": 60, "truncated": 111} ts_s 25/360 {"early_unresolved": 145, "params_bad_arrival": 60, "resamples": 16, "resamples_beyond": 2, "truncated": 112}
+  W-E5    spl_db 360/360 edt_s 24/360 {"noise": 336} t20_s 360/360 t30_s 234/360 {"missing_moves": 13, "truncated": 113} c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 300/360 {"params_bad_arrival": 60}
+  W-E6    spl_db 358/360 {"truncated": 2} edt_s 274/360 {"missing_moves": 22, "noise": 5, "truncated": 59} t20_s 1/360 {"missing_moves": 1, "noise": 1, "range_not_reached": 11, "truncated": 346} t30_s 0/360 {"range_not_reached": 162, "truncated": 198} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
   C3-R1   spl_db 360/360 edt_s 360/360 t20_s 226/360 {"noise": 134} t30_s 0/360 {"missing_moves": 15, "noise": 345} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
   C3-R2   spl_db 360/360 edt_s 360/360 t20_s 1/360 {"noise": 359} t30_s 0/360 {"missing_moves": 4, "noise": 356} c50_db 180/360 {"params_bad_arrival": 180} c80_db 180/360 {"params_bad_arrival": 180} d50 180/360 {"params_bad_arrival": 180} ts_s 180/360 {"params_bad_arrival": 180}
   C3-R3   spl_db 271/360 {"truncated": 89} edt_s 257/360 {"truncated": 103} t20_s 0/360 {"noise": 172, "range_not_reached": 2, "truncated": 186} t30_s 0/360 {"missing_moves": 4, "noise": 82, "range_not_reached": 25, "truncated": 249} c50_db 128/360 {"params_bad_arrival": 180, "truncated": 52} c80_db 127/360 {"params_bad_arrival": 180, "truncated": 53} d50 131/360 {"params_bad_arrival": 180, "truncated": 49} ts_s 108/360 {"params_bad_arrival": 180, "truncated": 72}
@@ -2741,40 +2748,40 @@ values through the shipped model (every receiver-band seed, as the report says):
   V3-R9   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 12/360 {"missing_moves": 2, "noise": 346} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
   C3-E1   spl_db 360/360 edt_s 359/360 {"missing_moves": 1} t20_s 360/360 t30_s 360/360 c50_db 126/360 {"missing_moves": 234} c80_db 316/360 {"missing_moves": 44} d50 360/360 ts_s 360/360
   C3-E2   spl_db 359/360 {"truncated": 1} edt_s 0/360 {"early_unresolved": 359, "truncated": 1} t20_s 359/360 {"truncated": 1} t30_s 359/360 {"truncated": 1} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 0/360 {"early_unresolved": 240, "params_bad_arrival": 120}
-  C3-E3   spl_db 357/360 {"truncated": 3} edt_s 1/360 {"early_unresolved": 302, "noise": 16, "resamples": 32, "resamples_beyond": 6, "truncated": 3} t20_s 349/360 {"noise": 8, "truncated": 3} t30_s 351/360 {"noise": 6, "truncated": 3} c50_db 298/360 {"params_bad_arrival": 60, "truncated": 2} c80_db 298/360 {"params_bad_arrival": 60, "truncated": 2} d50 298/360 {"params_bad_arrival": 60, "truncated": 2} ts_s 38/360 {"early_unresolved": 221, "noise": 39, "params_bad_arrival": 60, "truncated": 2}
-  C3-E4   spl_db 360/360 edt_s 360/360 t20_s 314/360 {"noise": 46} t30_s 0/360 {"truncated": 360} c50_db 180/360 {"params_bad_arrival": 180} c80_db 180/360 {"params_bad_arrival": 180} d50 180/360 {"params_bad_arrival": 180} ts_s 180/360 {"params_bad_arrival": 180}
+  C3-E3   spl_db 357/360 {"truncated": 3} edt_s 1/360 {"early_unresolved": 302, "noise": 16, "resamples": 32, "resamples_beyond": 6, "truncated": 3} t20_s 355/360 {"noise": 2, "truncated": 3} t30_s 351/360 {"noise": 6, "truncated": 3} c50_db 298/360 {"params_bad_arrival": 60, "truncated": 2} c80_db 298/360 {"params_bad_arrival": 60, "truncated": 2} d50 298/360 {"params_bad_arrival": 60, "truncated": 2} ts_s 38/360 {"early_unresolved": 221, "params_bad_arrival": 60, "resamples": 29, "resamples_beyond": 10, "truncated": 2}
+  C3-E4   spl_db 360/360 edt_s 360/360 t20_s 353/360 {"noise": 7} t30_s 0/360 {"truncated": 360} c50_db 180/360 {"params_bad_arrival": 180} c80_db 180/360 {"params_bad_arrival": 180} d50 180/360 {"params_bad_arrival": 180} ts_s 180/360 {"params_bad_arrival": 180}
   C3-E5   spl_db 360/360 edt_s 0/360 {"early_unresolved": 330, "missing_moves": 30} t20_s 0/360 {"missing_moves": 6, "resamples": 354} t30_s 0/360 {"few": 354, "missing_moves": 6} c50_db 0/360 {"missing_moves": 30, "noise": 330} c80_db 0/360 {"missing_moves": 6, "noise": 354} d50 281/360 {"missing_moves": 1, "noise": 78} ts_s 0/360 {"early_unresolved": 360}
-  C3-E6   spl_db 315/360 {"truncated": 45} edt_s 0/360 {"early_unresolved": 309, "missing_moves": 6, "truncated": 45} t20_s 1/360 {"noise": 314, "truncated": 45} t30_s 0/360 {"few": 60, "missing_moves": 253, "truncated": 47} c50_db 78/360 {"noise": 129, "params_bad_arrival": 120, "truncated": 33} c80_db 7/360 {"noise": 200, "params_bad_arrival": 120, "truncated": 33} d50 116/360 {"noise": 91, "params_bad_arrival": 120, "truncated": 33} ts_s 0/360 {"early_unresolved": 207, "params_bad_arrival": 120, "truncated": 33}
+  C3-E6   spl_db 315/360 {"truncated": 45} edt_s 0/360 {"early_unresolved": 309, "missing_moves": 6, "truncated": 45} t20_s 5/360 {"noise": 310, "truncated": 45} t30_s 0/360 {"few": 60, "missing_moves": 253, "truncated": 47} c50_db 78/360 {"noise": 129, "params_bad_arrival": 120, "truncated": 33} c80_db 7/360 {"noise": 200, "params_bad_arrival": 120, "truncated": 33} d50 116/360 {"noise": 91, "params_bad_arrival": 120, "truncated": 33} ts_s 0/360 {"early_unresolved": 207, "params_bad_arrival": 120, "truncated": 33}
   C3-E7   spl_db 120/360 {"truncated": 240} edt_s 0/360 {"range_not_reached": 180, "range_too_short": 180} t20_s 0/360 {"range_not_reached": 180, "range_too_short": 180} t30_s 0/360 {"range_not_reached": 215, "range_too_short": 145} c50_db 0/360 {"params_bad_arrival": 190, "params_series_too_short": 170} c80_db 0/360 {"params_bad_arrival": 190, "params_series_too_short": 170} d50 0/360 {"params_bad_arrival": 190, "params_series_too_short": 170} ts_s 0/360 {"params_bad_arrival": 190, "truncated": 170}
-  C3-E8   spl_db 302/360 {"truncated": 58} edt_s 0/360 {"early_unresolved": 225, "noise": 56, "resamples": 17, "resamples_beyond": 4, "truncated": 58} t20_s 0/360 {"noise": 302, "truncated": 58} t30_s 0/360 {"noise": 274, "resamples_beyond": 28, "truncated": 58} c50_db 256/360 {"params_bad_arrival": 60, "truncated": 44} c80_db 256/360 {"params_bad_arrival": 60, "truncated": 44} d50 256/360 {"params_bad_arrival": 60, "truncated": 44} ts_s 54/360 {"early_unresolved": 202, "params_bad_arrival": 60, "truncated": 44}
-  C3-E9   spl_db 305/360 {"truncated": 55} edt_s 0/360 {"early_unresolved": 305, "truncated": 55} t20_s 1/360 {"early_unresolved": 5, "noise": 63, "resamples": 229, "resamples_beyond": 7, "truncated": 55} t30_s 41/360 {"early_unresolved": 1, "noise": 187, "resamples": 3, "resamples_beyond": 73, "truncated": 55} c50_db 0/360 {"noise": 305, "truncated": 55} c80_db 0/360 {"noise": 305, "truncated": 55} d50 305/360 {"truncated": 55} ts_s 0/360 {"early_unresolved": 305, "truncated": 55}
+  C3-E8   spl_db 302/360 {"truncated": 58} edt_s 0/360 {"early_unresolved": 225, "noise": 56, "resamples": 17, "resamples_beyond": 4, "truncated": 58} t20_s 0/360 {"noise": 302, "truncated": 58} t30_s 0/360 {"noise": 274, "resamples": 2, "resamples_beyond": 26, "truncated": 58} c50_db 256/360 {"params_bad_arrival": 60, "truncated": 44} c80_db 256/360 {"params_bad_arrival": 60, "truncated": 44} d50 256/360 {"params_bad_arrival": 60, "truncated": 44} ts_s 54/360 {"early_unresolved": 202, "params_bad_arrival": 60, "truncated": 44}
+  C3-E9   spl_db 305/360 {"truncated": 55} edt_s 0/360 {"early_unresolved": 305, "truncated": 55} t20_s 1/360 {"early_unresolved": 5, "noise": 63, "resamples": 231, "resamples_beyond": 5, "truncated": 55} t30_s 41/360 {"early_unresolved": 1, "noise": 187, "resamples": 66, "resamples_beyond": 10, "truncated": 55} c50_db 0/360 {"noise": 305, "truncated": 55} c80_db 0/360 {"noise": 230, "resamples": 75, "truncated": 55} d50 305/360 {"truncated": 55} ts_s 0/360 {"early_unresolved": 305, "truncated": 55}
   C3-E10  spl_db 360/360 edt_s 348/360 {"missing_moves": 12} t20_s 360/360 t30_s 360/360 c50_db 180/360 {"missing_moves": 180} c80_db 268/360 {"missing_moves": 92} d50 360/360 ts_s 360/360
   V3-E1   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 64/360 {"missing_moves": 236, "params_bad_arrival": 60} c80_db 155/360 {"missing_moves": 145, "params_bad_arrival": 60} d50 293/360 {"missing_moves": 7, "params_bad_arrival": 60} ts_s 300/360 {"params_bad_arrival": 60}
-  V3-E2   spl_db 352/360 {"truncated": 8} edt_s 0/360 {"early_unresolved": 281, "noise": 4, "resamples": 52, "resamples_beyond": 15, "truncated": 8} t20_s 290/360 {"noise": 62, "truncated": 8} t30_s 330/360 {"noise": 22, "truncated": 8} c50_db 295/360 {"noise": 57, "truncated": 8} c80_db 294/360 {"noise": 58, "truncated": 8} d50 283/360 {"noise": 69, "truncated": 8} ts_s 15/360 {"early_unresolved": 249, "noise": 88, "truncated": 8}
+  V3-E2   spl_db 352/360 {"truncated": 8} edt_s 0/360 {"early_unresolved": 281, "noise": 4, "resamples": 52, "resamples_beyond": 15, "truncated": 8} t20_s 321/360 {"noise": 31, "truncated": 8} t30_s 330/360 {"noise": 22, "truncated": 8} c50_db 295/360 {"noise": 57, "truncated": 8} c80_db 294/360 {"noise": 58, "truncated": 8} d50 283/360 {"noise": 69, "truncated": 8} ts_s 15/360 {"early_unresolved": 249, "resamples": 81, "resamples_beyond": 7, "truncated": 8}
   V3-E3   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 180/360 {"params_bad_arrival": 180} c80_db 180/360 {"params_bad_arrival": 180} d50 180/360 {"params_bad_arrival": 180} ts_s 180/360 {"params_bad_arrival": 180}
   V3-E4   spl_db 360/360 edt_s 348/360 {"missing_moves": 12} t20_s 359/360 {"crossings": 1} t30_s 359/360 {"crossings": 1} c50_db 204/360 {"missing_moves": 156} c80_db 300/360 {"missing_moves": 60} d50 354/360 {"missing_moves": 6} ts_s 360/360
   V3-E5   spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 360/360 t30_s 0/360 {"resamples": 360} c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 0/360 {"early_unresolved": 360}
   V3-E6   spl_db 2/360 {"noise": 53, "truncated": 305} edt_s 0/360 {"range_not_reached": 91, "range_too_short": 269} t20_s 0/360 {"range_not_reached": 360} t30_s 0/360 {"range_not_reached": 360} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
-  V3-E7   spl_db 324/360 {"truncated": 36} edt_s 0/360 {"early_unresolved": 324, "truncated": 36} t20_s 11/360 {"noise": 313, "truncated": 36} t30_s 39/360 {"noise": 284, "resamples_beyond": 1, "truncated": 36} c50_db 167/360 {"noise": 49, "params_bad_arrival": 120, "truncated": 24} c80_db 0/360 {"noise": 216, "params_bad_arrival": 120, "truncated": 24} d50 216/360 {"params_bad_arrival": 120, "truncated": 24} ts_s 0/360 {"early_unresolved": 216, "params_bad_arrival": 120, "truncated": 24}
-  V3-E8   spl_db 307/360 {"truncated": 53} edt_s 307/360 {"truncated": 53} t20_s 4/360 {"noise": 303, "truncated": 53} t30_s 3/360 {"noise": 304, "truncated": 53} c50_db 99/360 {"noise": 51, "params_bad_arrival": 183, "truncated": 27} c80_db 99/360 {"noise": 51, "params_bad_arrival": 183, "truncated": 27} d50 99/360 {"noise": 51, "params_bad_arrival": 183, "truncated": 27} ts_s 99/360 {"noise": 51, "params_bad_arrival": 183, "truncated": 27}
+  V3-E7   spl_db 324/360 {"truncated": 36} edt_s 0/360 {"early_unresolved": 324, "truncated": 36} t20_s 24/360 {"noise": 300, "truncated": 36} t30_s 39/360 {"noise": 284, "resamples_beyond": 1, "truncated": 36} c50_db 167/360 {"noise": 49, "params_bad_arrival": 120, "truncated": 24} c80_db 0/360 {"noise": 216, "params_bad_arrival": 120, "truncated": 24} d50 216/360 {"params_bad_arrival": 120, "truncated": 24} ts_s 0/360 {"early_unresolved": 216, "params_bad_arrival": 120, "truncated": 24}
+  V3-E8   spl_db 307/360 {"truncated": 53} edt_s 307/360 {"truncated": 53} t20_s 13/360 {"noise": 294, "truncated": 53} t30_s 3/360 {"noise": 304, "truncated": 53} c50_db 99/360 {"params_bad_arrival": 183, "resamples": 33, "resamples_beyond": 18, "truncated": 27} c80_db 99/360 {"params_bad_arrival": 183, "resamples": 33, "resamples_beyond": 18, "truncated": 27} d50 99/360 {"params_bad_arrival": 183, "resamples": 33, "resamples_beyond": 18, "truncated": 27} ts_s 99/360 {"params_bad_arrival": 183, "resamples": 33, "resamples_beyond": 18, "truncated": 27}
   V3-E9   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 76/360 {"missing_moves": 284} c80_db 307/360 {"missing_moves": 53} d50 360/360 ts_s 360/360
-  V3-E10  spl_db 258/360 {"truncated": 102} edt_s 25/360 {"early_unresolved": 213, "resamples": 20, "truncated": 102} t20_s 61/360 {"noise": 197, "truncated": 102} t30_s 0/360 {"noise": 258, "truncated": 102} c50_db 219/360 {"params_bad_arrival": 60, "truncated": 81} c80_db 219/360 {"params_bad_arrival": 60, "truncated": 81} d50 219/360 {"params_bad_arrival": 60, "truncated": 81} ts_s 44/360 {"early_unresolved": 174, "noise": 1, "params_bad_arrival": 60, "truncated": 81}
-  V4-E1   spl_db 360/360 edt_s 165/360 {"noise": 195} t20_s 357/360 {"noise": 3} t30_s 359/360 {"noise": 1} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
-  V4-E2   spl_db 360/360 edt_s 0/360 {"early_unresolved": 296, "noise": 51, "resamples": 11, "resamples_beyond": 2} t20_s 360/360 t30_s 360/360 c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 61/360 {"early_unresolved": 192, "noise": 47, "params_bad_arrival": 60}
-  V4-E3   spl_db 360/360 edt_s 0/360 {"early_unresolved": 339, "resamples": 13, "resamples_beyond": 8} t20_s 360/360 t30_s 360/360 c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 11/360 {"early_unresolved": 247, "noise": 42, "params_bad_arrival": 60}
-  V4-E4   spl_db 236/360 {"noise": 117, "truncated": 7} edt_s 0/360 {"early_unresolved": 353, "truncated": 7} t20_s 95/360 {"noise": 256, "resamples_beyond": 2, "truncated": 7} t30_s 180/360 {"noise": 173, "truncated": 7} c50_db 91/360 {"noise": 262, "truncated": 7} c80_db 0/360 {"noise": 353, "truncated": 7} d50 236/360 {"noise": 117, "truncated": 7} ts_s 0/360 {"early_unresolved": 353, "truncated": 7}
+  V3-E10  spl_db 258/360 {"truncated": 102} edt_s 25/360 {"early_unresolved": 213, "resamples": 20, "truncated": 102} t20_s 98/360 {"noise": 160, "truncated": 102} t30_s 0/360 {"noise": 258, "truncated": 102} c50_db 219/360 {"params_bad_arrival": 60, "truncated": 81} c80_db 219/360 {"params_bad_arrival": 60, "truncated": 81} d50 219/360 {"params_bad_arrival": 60, "truncated": 81} ts_s 44/360 {"early_unresolved": 174, "params_bad_arrival": 60, "resamples": 1, "truncated": 81}
+  V4-E1   spl_db 360/360 edt_s 165/360 {"noise": 195} t20_s 240/360 {"resamples": 120} t30_s 60/360 {"resamples": 300} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
+  V4-E2   spl_db 360/360 edt_s 0/360 {"early_unresolved": 296, "noise": 51, "resamples": 11, "resamples_beyond": 2} t20_s 357/360 {"resamples": 3} t30_s 0/360 {"resamples": 360} c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 61/360 {"early_unresolved": 192, "params_bad_arrival": 60, "resamples": 37, "resamples_beyond": 10}
+  V4-E3   spl_db 360/360 edt_s 0/360 {"early_unresolved": 339, "resamples": 13, "resamples_beyond": 8} t20_s 256/360 {"resamples": 104} t30_s 0/360 {"resamples": 360} c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 11/360 {"early_unresolved": 247, "params_bad_arrival": 60, "resamples": 36, "resamples_beyond": 6}
+  V4-E4   spl_db 236/360 {"noise": 117, "truncated": 7} edt_s 0/360 {"early_unresolved": 353, "truncated": 7} t20_s 85/360 {"resamples": 268, "truncated": 7} t30_s 0/360 {"resamples": 236, "resamples_beyond": 117, "truncated": 7} c50_db 91/360 {"noise": 261, "resamples": 1, "truncated": 7} c80_db 0/360 {"noise": 268, "resamples": 49, "resamples_beyond": 36, "truncated": 7} d50 236/360 {"noise": 117, "truncated": 7} ts_s 0/360 {"early_unresolved": 353, "truncated": 7}
   V4-E5   spl_db 360/360 edt_s 86/360 {"early_unresolved": 93, "resamples": 161, "resamples_beyond": 20} t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
   V4-E6   spl_db 350/360 {"truncated": 10} edt_s 0/360 {"missing_moves": 30, "noise": 201, "truncated": 129} t20_s 0/360 {"range_not_reached": 21, "truncated": 339} t30_s 0/360 {"range_not_reached": 287, "truncated": 73} c50_db 251/360 {"missing_moves": 12, "params_bad_arrival": 60, "truncated": 37} c80_db 238/360 {"missing_moves": 9, "params_bad_arrival": 60, "truncated": 53} d50 283/360 {"missing_moves": 1, "params_bad_arrival": 60, "truncated": 16} ts_s 34/360 {"missing_moves": 4, "params_bad_arrival": 60, "truncated": 262}
   V4-E7   spl_db 360/360 edt_s 0/360 {"early_unresolved": 120, "noise": 219, "resamples": 21} t20_s 360/360 t30_s 360/360 c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 240/360 {"early_unresolved": 60, "params_bad_arrival": 60}
-  V4-E8   spl_db 243/360 {"truncated": 117} edt_s 0/360 {"early_unresolved": 243, "truncated": 117} t20_s 21/360 {"noise": 222, "truncated": 117} t30_s 4/360 {"noise": 236, "resamples_beyond": 2, "truncated": 118} c50_db 243/360 {"truncated": 117} c80_db 243/360 {"truncated": 117} d50 243/360 {"truncated": 117} ts_s 0/360 {"early_unresolved": 238, "noise": 5, "truncated": 117}
-  V4-E9   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 0/360 {"missing_moves": 3, "truncated": 357} c50_db 120/360 {"noise": 59, "params_bad_arrival": 181} c80_db 120/360 {"noise": 59, "params_bad_arrival": 181} d50 120/360 {"noise": 59, "params_bad_arrival": 181} ts_s 120/360 {"noise": 59, "params_bad_arrival": 181}
-  V4-E10  spl_db 360/360 edt_s 0/360 {"early_unresolved": 272, "noise": 45, "resamples": 37, "resamples_beyond": 6} t20_s 37/360 {"noise": 323} t30_s 34/360 {"noise": 326} c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 55/360 {"early_unresolved": 186, "noise": 59, "params_bad_arrival": 60}
-  V4-E11  spl_db 338/360 {"truncated": 22} edt_s 338/360 {"truncated": 22} t20_s 246/360 {"noise": 92, "truncated": 22} t30_s 64/360 {"noise": 274, "truncated": 22} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
+  V4-E8   spl_db 243/360 {"truncated": 117} edt_s 0/360 {"early_unresolved": 243, "truncated": 117} t20_s 39/360 {"noise": 204, "truncated": 117} t30_s 4/360 {"noise": 236, "resamples_beyond": 2, "truncated": 118} c50_db 243/360 {"truncated": 117} c80_db 243/360 {"truncated": 117} d50 243/360 {"truncated": 117} ts_s 0/360 {"early_unresolved": 238, "resamples": 3, "resamples_beyond": 2, "truncated": 117}
+  V4-E9   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 0/360 {"missing_moves": 3, "truncated": 357} c50_db 120/360 {"params_bad_arrival": 181, "resamples": 49, "resamples_beyond": 10} c80_db 120/360 {"params_bad_arrival": 181, "resamples": 49, "resamples_beyond": 10} d50 120/360 {"params_bad_arrival": 181, "resamples": 49, "resamples_beyond": 10} ts_s 120/360 {"params_bad_arrival": 181, "resamples": 49, "resamples_beyond": 10}
+  V4-E10  spl_db 360/360 edt_s 0/360 {"early_unresolved": 272, "noise": 45, "resamples": 37, "resamples_beyond": 6} t20_s 93/360 {"noise": 267} t30_s 34/360 {"noise": 326} c50_db 300/360 {"params_bad_arrival": 60} c80_db 300/360 {"params_bad_arrival": 60} d50 300/360 {"params_bad_arrival": 60} ts_s 55/360 {"early_unresolved": 186, "params_bad_arrival": 60, "resamples": 46, "resamples_beyond": 13}
+  V4-E11  spl_db 338/360 {"truncated": 22} edt_s 338/360 {"truncated": 22} t20_s 316/360 {"noise": 22, "truncated": 22} t30_s 64/360 {"noise": 274, "truncated": 22} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
   V4-E12  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 240/360 {"params_bad_arrival": 120}
-  V4-E13  spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 231/360 {"noise": 129} t30_s 268/360 {"noise": 92} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 0/360 {"early_unresolved": 240, "params_bad_arrival": 120}
-  V4-E14  spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 245/360 {"noise": 115} t30_s 300/360 {"noise": 60} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 0/360 {"early_unresolved": 240, "params_bad_arrival": 120}
+  V4-E13  spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 254/360 {"noise": 106} t30_s 268/360 {"noise": 92} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 0/360 {"early_unresolved": 240, "params_bad_arrival": 120}
+  V4-E14  spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 297/360 {"noise": 63} t30_s 300/360 {"noise": 60} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 0/360 {"early_unresolved": 240, "params_bad_arrival": 120}
   V4-E15  spl_db 360/360 edt_s 205/360 {"missing_moves": 56, "truncated": 99} t20_s 0/360 {"range_not_reached": 1, "truncated": 359} t30_s 0/360 {"range_not_reached": 326, "truncated": 34} c50_db 293/360 {"missing_moves": 4, "params_bad_arrival": 60, "truncated": 3} c80_db 282/360 {"missing_moves": 12, "params_bad_arrival": 60, "truncated": 6} d50 300/360 {"params_bad_arrival": 60} ts_s 2/360 {"params_bad_arrival": 60, "truncated": 298}
-  V4-E16  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 120/360 {"noise": 60, "params_bad_arrival": 180} c80_db 120/360 {"noise": 60, "params_bad_arrival": 180} d50 120/360 {"noise": 60, "params_bad_arrival": 180} ts_s 120/360 {"noise": 60, "params_bad_arrival": 180}
+  V4-E16  spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 120/360 {"params_bad_arrival": 180, "resamples": 60} c80_db 120/360 {"params_bad_arrival": 180, "resamples": 60} d50 120/360 {"params_bad_arrival": 180, "resamples": 60} ts_s 120/360 {"params_bad_arrival": 180, "resamples": 60}
   V4-E17  spl_db 360/360 edt_s 0/360 {"early_unresolved": 360} t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 0/360 {"early_unresolved": 360}
   V4-E18  spl_db 60/360 {"truncated": 300} edt_s 0/360 {"range_not_reached": 77, "range_too_short": 283} t20_s 0/360 {"range_not_reached": 360} t30_s 0/360 {"range_not_reached": 360} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
   V4-R1   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 343/360 {"noise": 17} c50_db 240/360 {"params_bad_arrival": 120} c80_db 240/360 {"params_bad_arrival": 120} d50 240/360 {"params_bad_arrival": 120} ts_s 240/360 {"params_bad_arrival": 120}
@@ -2783,8 +2790,8 @@ values through the shipped model (every receiver-band seed, as the report says):
   V4-R4   spl_db 360/360 edt_s 360/360 t20_s 360/360 t30_s 360/360 c50_db 360/360 c80_db 360/360 d50 360/360 ts_s 360/360
   V4-R5   spl_db 260/360 {"truncated": 100} edt_s 254/360 {"truncated": 106} t20_s 94/360 {"missing_moves": 3, "noise": 79, "range_not_reached": 3, "truncated": 181} t30_s 0/360 {"missing_moves": 6, "noise": 65, "range_not_reached": 15, "truncated": 274} c50_db 172/360 {"params_bad_arrival": 120, "truncated": 68} c80_db 171/360 {"params_bad_arrival": 120, "truncated": 69} d50 174/360 {"params_bad_arrival": 120, "truncated": 66} ts_s 148/360 {"params_bad_arrival": 120, "truncated": 92}
   V4-R6   spl_db 360/360 edt_s 0/360 {"range_not_reached": 300, "range_too_short": 60} t20_s 0/360 {"range_not_reached": 360} t30_s 0/360 {"range_not_reached": 360} c50_db 0/360 {"params_bad_arrival": 360} c80_db 0/360 {"params_bad_arrival": 360} d50 0/360 {"params_bad_arrival": 360} ts_s 0/360 {"params_bad_arrival": 360}
-written B:/repos/I-Simpa_Night_Mode/target/agents/pm8-fix-noise-scratch/calibration_r4final3.json
+written B:/repos/I-Simpa_Night_Mode/target/agents/pm8-fix-noise-scratch/calibration_r4final.json
 test noise_calibration ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 606.84s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 617.88s
 

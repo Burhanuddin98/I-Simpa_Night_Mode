@@ -152,6 +152,10 @@ pub enum ParticleCount {
     /// do, or its standard deviation is still above the limit, at `multiple` times the run's
     /// particles, the largest tried (R4-3): no count is named, and more particles may not help.
     BeyondResampled { multiple: u32 },
+    /// More than [`noise::REFUSED_RESAMPLES_ALLOWED`] resamples refuse the value, and for this
+    /// quantity in this computation method the counts its resamples named were not borne out at
+    /// a higher count (round 4, F8): no count is named.
+    ResampledNotConfirmed,
     /// The fall of the seeds' spread as `1/√N` was not confirmed for this quantity in the run's
     /// computation method ([`noise::calibration::root_n_confirmed`]), so no count is named.
     ScalingNotConfirmed,
@@ -455,6 +459,10 @@ impl fmt::Display for NotEvaluable {
                         " No particle count is named: at {multiple} times the particles its \
                          resamples would still refuse it, or its noise would still be above its \
                          limit, so more particles may not help"
+                    ),
+                    ParticleCount::ResampledNotConfirmed => write!(
+                        f,
+                        " No particle count is named: for this quantity the counts its resamples                          named were not borne out at a higher count"
                     ),
                     ParticleCount::ScalingNotConfirmed => write!(
                         f,

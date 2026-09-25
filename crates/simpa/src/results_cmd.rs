@@ -339,6 +339,7 @@ mod tests {
             named(None),
             resampled(None),
             ParticleCount::BeyondResampled { multiple: 64 },
+            ParticleCount::ResampledNotConfirmed,
             ParticleCount::ScalingNotConfirmed,
             ParticleCount::NoStandardDeviation,
         ] {

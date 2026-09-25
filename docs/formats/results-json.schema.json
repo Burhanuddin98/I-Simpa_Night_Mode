@@ -439,6 +439,10 @@
             "minimum": 0,
             "type": "integer"
           },
+          "resampled_confirmed": {
+            "description": "Whether a value its resamples refuse names the count at which they would not (R4-3):\nfalse where such counts were not borne out at a pair's higher count (round 4, F8).",
+            "type": "boolean"
+          },
           "root_n_confirmed": {
             "description": "Whether a refusal names a count: the seeds' spread did not fall slower than `1/√N` on\nany pair of cells that differ only in `N` (rule R3-6, one-sided).",
             "type": "boolean"
@@ -455,7 +459,8 @@
           "max_crossings_per_particle",
           "margin",
           "root_n_confirmed",
-          "structure"
+          "structure",
+          "resampled_confirmed"
         ],
         "type": "object"
       },
@@ -698,7 +703,7 @@
             "type": "string"
           },
           "uniform_lambert_max_mean_absorption": {
-            "description": "Energetic T20 and T30: a band whose every face is Lambert with scattering 1 and has the\nsame absorption takes `uniform_lambert_walls` up to this mean absorption, and\n`lambert_walls` above it.",
+            "description": "Energetic T20 and T30: a band whose every face is Lambert with scattering 1 and has the\nsame absorption takes `uniform_lambert_walls` up to this mean absorption, and the other\nbands' entry above it.",
             "format": "double",
             "type": "number"
           }
@@ -1656,6 +1661,19 @@
             "type": "object"
           },
           {
+            "description": "More than [`noise::REFUSED_RESAMPLES_ALLOWED`] resamples refuse the value, and for this\nquantity in this computation method the counts its resamples named were not borne out at\na higher count (round 4, F8): no count is named.",
+            "properties": {
+              "count": {
+                "const": "resampled_not_confirmed",
+                "type": "string"
+              }
+            },
+            "required": [
+              "count"
+            ],
+            "type": "object"
+          },
+          {
             "description": "The fall of the seeds' spread as `1/√N` was not confirmed for this quantity in the run's\ncomputation method ([`noise::calibration::root_n_confirmed`]), so no count is named.",
             "properties": {
               "count": {
@@ -1867,7 +1885,7 @@
                 "type": "null"
               }
             ],
-            "description": "Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law\nwith scattering 1 and not every face has the same absorption (or the absorption is above\n`uniform_lambert_max_mean_absorption`); `null` otherwise."
+            "description": "Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law\nwith scattering 1 and not every face has the same absorption (or the absorption is above\n`uniform_lambert_max_mean_absorption`), the same as `entry` since round 4; `null`\notherwise."
           },
           "margin": {
             "description": "A refusal names the particle count at which the calibrated standard deviation would be\nthe limit over this margin: one run's own estimate scatters from seed to seed, so a\ncount named from one run can fall short (rule 5b over round 3's calibration cells).",
@@ -1884,6 +1902,10 @@
             "format": "uint32",
             "minimum": 0,
             "type": "integer"
+          },
+          "resampled_confirmed": {
+            "description": "Whether a value its resamples refuse names the count at which they would not (R4-3):\nfalse where such counts were not borne out at a pair's higher count (round 4, F8).",
+            "type": "boolean"
           },
           "root_n_confirmed": {
             "description": "Whether a refusal names a count: the seeds' spread did not fall slower than `1/√N` on\nany pair of cells that differ only in `N` (rule R3-6, one-sided).",
@@ -1912,7 +1934,8 @@
           "max_crossings_per_particle",
           "margin",
           "root_n_confirmed",
-          "structure"
+          "structure",
+          "resampled_confirmed"
         ],
         "type": "object"
       },

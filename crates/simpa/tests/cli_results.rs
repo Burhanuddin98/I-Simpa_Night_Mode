@@ -371,9 +371,13 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
                         && why["sd"].as_f64() > why["limit"].as_f64()
                     {
                         noise += 1;
-                        // Every flag of round 3 is on: every refusal for noise names a count.
+                        // Every 1/sqrt(N) flag is on: every refusal for noise above its limit
+                        // names a count, from its standard deviation or its resamples (R4-3).
                         let c = &why["particle_count"];
-                        assert_eq!(c["count"], "named", "{run} {q}: {why}");
+                        assert!(
+                            c["count"] == "named" || c["count"] == "resampled",
+                            "{run} {q}: {why}"
+                        );
                         assert!(c["particles"].as_u64().unwrap() > n, "{run} {q}: {why}");
                     }
                     if why["why"] == "noise_uncalibrated" {

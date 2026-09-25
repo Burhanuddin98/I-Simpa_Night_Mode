@@ -27,6 +27,13 @@
 //! rules derive, the second judges the V3 cells with the numbers committed in
 //! `params::noise::calibration`, the named counts on every pair and, per cell, how many values
 //! come through the shipped model and why the rest are refused.
+//!
+//! Round 4 (`PREREGISTER.txt`, "ROUND 4") reads every cell of rounds 1 to 3 (R4-1 and R4-2's fit of
+//! the roughness structure), then with `validation4` its V4 cells (R4-4) and every pair (R4-5).
+//! With `$SIMPA_NOISE_REREAD` set to a folder, every run is first read again with this build's
+//! `simpa results` into that folder, and the analysis takes each band's crossings per particle,
+//! lifetime spread, walls and judgements from those reports, checking them against its own
+//! computation and the cell's configuration (R4-6).
 
 mod support;
 
@@ -1936,10 +1943,12 @@ fn noise_calibration() {
                 ca.particles, cb.particles
             );
             for qi in 0..8 {
-                // Per kind of count: from the standard deviation, from the resamples.
-                let mut kinds: [(&str, usize, usize, usize, f64); 2] = [
-                    ("standard deviation", 0, 0, 0, 0.0),
-                    ("resamples", 0, 0, 0, 0.0),
+                // Per kind of count: from the standard deviation, from the resamples; the refusals
+                // naming one, those the higher count reaches, and there the mean share of its seeds
+                // that give the value (R4-5 as registered) and that are not refused for their noise.
+                let mut kinds: [(&str, usize, usize, f64, f64); 2] = [
+                    ("standard deviation", 0, 0, 0.0, 0.0),
+                    ("resamples", 0, 0, 0.0, 0.0),
                 ];
                 let (mut none, mut outside) = (0, 0);
                 let rbs = runs[ia][0].values.len();
@@ -1966,24 +1975,32 @@ fn noise_calibration() {
                         }
                         kinds[k].2 += 1;
                         let given = hi.iter().filter(|h| **h == Some(Judged::Given)).count();
-                        kinds[k].4 += given as f64 / hi.len() as f64;
-                        kinds[k].3 += usize::from(given == hi.len());
+                        let quiet = hi
+                            .iter()
+                            .filter(|h| matches!(h, None | Some(Judged::Given)))
+                            .count();
+                        kinds[k].3 += given as f64 / hi.len() as f64;
+                        kinds[k].4 += quiet as f64 / hi.len() as f64;
                     }
                 }
-                for (kind, named, within, all_given, pass) in kinds {
+                for (kind, named, within, pass, quiet) in kinds {
                     if named == 0 {
                         continue;
                     }
-                    println!(
-                        "    {:<7} {kind:<18}: {named} refusals at {a} name a count, {within} at \
-                         most {b}'s; of those, {:.1} % of {b}'s seeds give the value ({all_given} \
-                         in every seed)",
-                        calibration::QUANTITIES[qi],
+                    let share = |x: f64| {
                         if within > 0 {
-                            100.0 * pass / within as f64
+                            100.0 * x / within as f64
                         } else {
                             f64::NAN
                         }
+                    };
+                    println!(
+                        "    {:<7} {kind:<18}: {named} refusals at {a} name a count, {within} at \
+                         most {b}'s; of those, {:.1} % of {b}'s seeds give the value, {:.1} % are \
+                         not refused for their noise",
+                        calibration::QUANTITIES[qi],
+                        share(pass),
+                        share(quiet)
                     );
                 }
                 if none > 0 || outside > 0 {

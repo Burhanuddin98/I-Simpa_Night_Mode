@@ -464,9 +464,18 @@ fn the_particle_count_a_refusal_names_brings_the_value_within_its_limit() {
     // Says no: a sixth of the named count is not enough.
     assert!(pass_sixth <= 3, "{pass_sixth}");
     // Random-mode T30's spread did not fall slower than 1/√N on any pair of SPPS cells (round 3's
-    // one-sided rule), so its refusal names a count too, with its own margin; a quantity whose
-    // flag is off names none (`params::noise`'s unit tests).
-    let (_, _, margin) = named(&p.t30_s);
+    // one-sided rule), so its refusal names a count too, with its own margin: from its standard
+    // deviation, or, when more than 10 of its resamples refuse it (here), from the first multiple
+    // of the particles at which they would not (R4-3); a quantity whose flag is off names none
+    // (`params::noise`'s unit tests).
+    let margin = match p.t30_s.as_ref().unwrap_err().not_evaluable() {
+        Some(NotEvaluable::MonteCarloNoise {
+            particle_count:
+                ParticleCount::Named { margin, .. } | ParticleCount::Resampled { margin, .. },
+            ..
+        }) => *margin,
+        other => panic!("{other:?}"),
+    };
     assert_eq!(margin, noise::calibration::margin(noise::Method::Random, 3));
     assert!(noise::calibration::root_n_confirmed(
         noise::Method::Random,

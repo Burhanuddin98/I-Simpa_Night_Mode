@@ -30,11 +30,20 @@
 //! tail, the floor and the lost particles are judged once, on the series itself); the standard
 //! deviation over them is the model's. A fixed seed ([`SEED`]) makes it repeatable.
 //!
+//! **The roughness structure** (round 4, [`Structure::Roughness`]). For energetic T20 and T30
+//! outside uniform Lambert rooms each bin's deposit is read from the series itself
+//! ([`roughness_deposits`]): late in an energetic decay a crossing brings far less than `d̄`, by
+//! how much depending on how far the particles' energies have spread apart, which SPPS does not
+//! write but which shows as the series' bin-to-bin roughness. It holds the true curve's fine
+//! structure too (specular echoes), so it reads high where that is strong; the calibration covers
+//! the rest.
+//!
 //! **The calibration** ([`calibration`]). The model leaves out what SPPS does beyond it (a
 //! particle's crossings at several times, and in energetic mode the spread of the particles'
 //! energies), so each quantity's standard deviation is multiplied by `factor·√(1 + kappa·n)`, per
-//! computation method (and for energetic T20 and T30 per kind of band), `n` the run's crossings
-//! of the receiver per particle ([`NoiseModel::multi_crossing`]): measured on real SPPS runs over
+//! computation method (and for energetic T20 and T30 per kind of band and structure), `n` the run's
+//! crossings of the receiver per particle ([`NoiseModel::multi_crossing`]): measured on real SPPS
+//! runs over
 //! ten seeds per cell and validated on cells held out of the measurement
 //! (`docs/investigations/2026-09-25-noise-calibration/`). The factor is the largest one-sided 95 %
 //! upper bound of the ratio of the seeds' spread to the corrected model over the calibration
@@ -49,9 +58,12 @@
 //!
 //! **The refusal.** A value whose calibrated standard deviation is above its limit ([`limits`]),
 //! or that more than [`REFUSED_RESAMPLES_ALLOWED`] of the resamples refuse themselves, is refused
-//! as `monte_carlo_noise`, with both numbers and, when the standard deviation is the reason, the
-//! particle count that would bring it within its limit from its fall as `1/√N` (measured,
-//! `docs/investigations/2026-09-25-noise-calibration/`). A value whose noise has no model
+//! as `monte_carlo_noise`, with both numbers and the particle count that would bring it within its
+//! limit: from the standard deviation's fall as `1/√N` when that is the reason (measured,
+//! `docs/investigations/2026-09-25-noise-calibration/`), and when the resamples are, the first of
+//! [`RESAMPLED_MULTIPLES`] at which the model's own resamples of the series, every deposit over
+//! the multiple, would refuse it at most [`RESAMPLED_REFUSALS_NAMED`] times with its noise within
+//! the limit (none when no multiple tried clears it). A value whose noise has no model
 //! ([`NoiseModel::Unknown`]) is refused as `noise_unknown`. No value is ever reported with noise
 //! nothing bounds.
 
@@ -149,6 +161,9 @@ pub mod calibration {
         pub root_n_confirmed: bool,
         /// How the resamples the factor applies to are drawn ([`super::Structure`]).
         pub structure: super::Structure,
+        /// Whether a value its resamples refuse names the count at which they would not (R4-3):
+        /// false where such counts were not borne out at a pair's higher count (round 4, F8).
+        pub resampled_confirmed: bool,
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -168,6 +183,15 @@ pub mod calibration {
             margin,
             root_n_confirmed,
             structure: super::Structure::Constant,
+            resampled_confirmed: true,
+        }
+    }
+
+    /// `entry` naming no count from its resamples (F8).
+    const fn resamples_unconfirmed(entry: Entry) -> Entry {
+        Entry {
+            resampled_confirmed: false,
+            ..entry
         }
     }
 
@@ -239,30 +263,44 @@ pub mod calibration {
     /// overstated 2.4 times (tutorial 1's materials, 150,000 particles) where M7's structure
     /// overstated it 14 times. The correction for a particle's repeated crossings is larger than
     /// the other quantities' (κ 5.25 and 4.75), set by a room with receivers of 1.2 m.
+    ///
+    /// T20's factor is 1.4, not the 1.2 R4-1 fitted: once F6 sent uniform Lambert bands above a
+    /// mean absorption of 0.2 to these entries, the 5 × 4 × 3 m room at α 0.4 with 1 ms steps
+    /// (C-E3, 150,000 particles) read 1.07 times the prediction at 1.2, lower bound 1.004, so its
+    /// factor is raised to cover that cell's upper bound (F3's remedy; after the validation, not
+    /// validated beyond it).
+    ///
+    /// C50, C80, D50 and Ts name no count from their resamples (F8): on V-E2 against V4-E16
+    /// (6 × 10 × 3 m, α 0.4, 1 ms steps, 150,000 against 2,400,000 particles) the counts their
+    /// resamples named gave the value at the higher count in 64.7 % of its seeds, against the 80 %
+    /// R4-5 asks: at 1 ms a receiver whose arrival falls near a bin's edge keeps refusing them.
     pub const ENERGETIC: [Entry; 8] = [
         e(1.1, 0.0, 5_000, ENERGETIC_MAX_N, 1.1, true),
         e(0.86, 0.0, 50_000, ENERGETIC_MAX_N, 1.2, true),
-        rough(1.2, 5.25, 15_000, ENERGETIC_ROUGH_MAX_N, 1.5, true),
+        rough(1.4, 5.25, 15_000, ENERGETIC_ROUGH_MAX_N, 1.5, true),
         rough(1.3, 4.75, 150_000, ENERGETIC_ROUGH_MAX_N, 1.6, true),
-        e(0.96, 0.25, 5_000, ENERGETIC_MAX_N, 1.1, true),
-        e(0.86, 0.5, 5_000, ENERGETIC_MAX_N, 1.1, true),
-        e(0.96, 0.25, 5_000, ENERGETIC_MAX_N, 1.1, true),
-        e(0.84, 0.5, 50_000, ENERGETIC_MAX_N, 1.1, true),
+        resamples_unconfirmed(e(0.96, 0.25, 5_000, ENERGETIC_MAX_N, 1.1, true)),
+        resamples_unconfirmed(e(0.86, 0.5, 5_000, ENERGETIC_MAX_N, 1.1, true)),
+        resamples_unconfirmed(e(0.96, 0.25, 5_000, ENERGETIC_MAX_N, 1.1, true)),
+        resamples_unconfirmed(e(0.84, 0.5, 50_000, ENERGETIC_MAX_N, 1.1, true)),
     ];
     /// Energetic T20 and T30 in bands whose every face reflects by Lambert's law with
     /// scattering 1 and has the same absorption, at most
-    /// [`UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION`] ([`super::Walls::UniformLambert`]; M8's rooms):
-    /// every particle meets the same absorption at every reflection, so their energies spread
-    /// apart only as their reflection counts do (T30 0.027 to 0.047 of M7's structure in ten
-    /// cells).
+    /// [`UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION`] ([`super::Walls::UniformLambert`]; M8's rooms up
+    /// to α 0.2): every particle meets the same absorption at every reflection, so their energies
+    /// spread apart only as their reflection counts do in the boxes they were fitted on (T30 0.027
+    /// to 0.047 of M7's structure in ten cells), but not in long rooms at high absorption (F6).
     pub const ENERGETIC_UNIFORM_LAMBERT: [Entry; 2] = [
         e(0.098, 0.0, 5_000, ENERGETIC_MAX_N, 1.2, true),
         e(0.052, 0.0, 50_000, ENERGETIC_MAX_N, 1.3, true),
     ];
-    /// The largest mean absorption the uniform-Lambert entries were calibrated at (0.4, as SPPS
-    /// reads it in `f32`): the particles' energies spread apart faster the more each reflection
-    /// absorbs, so a uniform-Lambert band above it takes the other bands' entries.
-    pub const UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION: f64 = 0.4000000059604645;
+    /// The largest mean absorption the uniform-Lambert entries hold at: 0.2, as SPPS reads it in
+    /// `f32` (F6). They were calibrated up to 0.4, but failed two held-out long rooms at 0.4 (V4-E1,
+    /// 20 × 4 × 3 m at 1 ms: T30 1.19 times the prediction, lower bound 1.10; V4-E4, 30 × 4 × 3 m:
+    /// T30 2.88, T20 1.10), so by F6 their bound falls to round 3's largest held-out absorption that
+    /// passed, and a uniform-Lambert band above it takes the other bands' entries (the roughness
+    /// structure).
+    pub const UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION: f64 = 0.20000000298023224;
 
     /// The variable `method`'s correction and domain take.
     pub fn variable(method: Method) -> Variable {
@@ -863,8 +901,8 @@ pub fn evaluate(
         out.push(b.and_then(|value| {
             let st = model.structure(i).unwrap_or(Structure::Constant);
             let (raw, refused) = resampler.spread(st, 1, i);
-            judge_one(model, i, value, raw, refused, n, &mut |m| {
-                resampler.spread(st, m, i)
+            judge_one(model, i, value, raw, refused, n, &mut |at, m| {
+                resampler.spread(at, m, i)
             })
         }));
     }
@@ -931,9 +969,13 @@ pub fn calibrated_factor(model: &NoiseModel, i: usize, n: Option<f64>) -> Option
 /// the bootstrap's standard deviation before calibration (`raw_sd`, in the quantity's unit, under
 /// the quantity's structure), the resamples that refused the quantity and the series' multi-crossing
 /// variable `n` ([`NoiseModel::multi_crossing`]): the value with its calibrated standard deviation,
-/// or its refusal. `resampled(m)` gives the same two numbers from the resamples at `m` times the
-/// run's particles ([`bootstrap_with`]); it is asked only for a value its resamples refuse (R4-3).
-/// Public so that the calibration's evidence judges exactly as a report does.
+/// or its refusal. `resampled(st, m)` gives the same two numbers from the resamples under structure
+/// `st` at `m` times the run's particles ([`bootstrap_with`]); it is asked only for a value it
+/// refuses, to name a count. Every count is named from M7's constant structure, whose deposits
+/// fall exactly as `1/N`: for the roughness structure, which also reads the true curve's fine
+/// structure and so does not fall as `1/N`, that is an upper bound on each deposit (round 4, after
+/// R4-5 found counts named from the roughness too low). Public so that the calibration's evidence
+/// judges exactly as a report does.
 pub fn judge_one(
     model: &NoiseModel,
     i: usize,
@@ -941,7 +983,7 @@ pub fn judge_one(
     raw_sd: Option<f64>,
     refused: usize,
     n: Option<f64>,
-    resampled: &mut dyn FnMut(u32) -> (Option<f64>, usize),
+    resampled: &mut dyn FnMut(Structure, u32) -> (Option<f64>, usize),
 ) -> Result<Estimate, ParamError> {
     let (quantity, limit, relative) = QUANTITIES[i];
     let (method, particles, run) = match model {
@@ -996,6 +1038,8 @@ pub fn judge_one(
             factor: calibrated_factor(model, i, n).unwrap_or(e.factor),
             margin: e.root_n_confirmed.then_some(e.margin),
             particles,
+            structure: e.structure,
+            resampled_confirmed: e.resampled_confirmed,
         },
         resampled,
     )
@@ -1010,17 +1054,21 @@ struct Judged {
     factor: f64,
     margin: Option<f64>,
     particles: Option<u32>,
+    /// The structure the value's resamples were drawn with.
+    structure: Structure,
+    /// Whether a refusal by the resamples names a count (F8).
+    resampled_confirmed: bool,
 }
 
 /// A value against its bootstrap standard deviation before calibration (`raw_sd`) and the number
-/// of resamples that refused it; `resampled(m)` as for [`judge_one`].
+/// of resamples that refused it; `resampled(st, m)` as for [`judge_one`].
 fn judge(
     quantity: Quantity,
     value: f64,
     raw_sd: Option<f64>,
     refused: usize,
     j: Judged,
-    resampled: &mut dyn FnMut(u32) -> (Option<f64>, usize),
+    resampled: &mut dyn FnMut(Structure, u32) -> (Option<f64>, usize),
 ) -> Result<Estimate, ParamError> {
     let calibrate = |raw: Option<f64>| {
         let sd = raw.map(|s| s * j.factor);
@@ -1039,12 +1087,13 @@ fn judge(
         (_, None) if too_many => ParticleCount::ScalingNotConfirmed,
         (None, None) => ParticleCount::NoStandardDeviation,
         (Some(_), None) => ParticleCount::ScalingNotConfirmed,
+        (_, Some(_)) if too_many && !j.resampled_confirmed => ParticleCount::ResampledNotConfirmed,
         // Too many resamples refuse it (R4-3): the smallest multiple of the run's particles at
-        // which the model's own resamples refuse it at most half as often as allowed and its
-        // calibrated standard deviation, times the margin, is within the limit.
+        // which the model's own resamples (M7's structure) refuse it at most half as often as
+        // allowed and its calibrated standard deviation, times the margin, is within the limit.
         (_, Some(margin)) if too_many => {
             let found = RESAMPLED_MULTIPLES.iter().copied().find(|&k| {
-                let (raw, refused_k) = resampled(k);
+                let (raw, refused_k) = resampled(Structure::Constant, k);
                 let (_, m) = calibrate(raw);
                 refused_k <= RESAMPLED_REFUSALS_NAMED && m.is_some_and(|m| margin * m <= j.limit)
             });
@@ -1061,6 +1110,14 @@ fn judge(
         }
         (None, Some(_)) => ParticleCount::NoStandardDeviation,
         (Some(m), Some(margin)) => {
+            // Named from M7's structure: under the roughness structure its standard deviation, at
+            // least the roughness's, calibrated with the same factor.
+            let m = match j.structure {
+                Structure::Constant => m,
+                Structure::Roughness => calibrate(resampled(Structure::Constant, 1).0)
+                    .1
+                    .map_or(m, |c| c.max(m)),
+            };
             let factor = (margin * m / j.limit).powi(2);
             ParticleCount::Named {
                 factor,
@@ -1222,8 +1279,8 @@ mod tests {
         NoiseModel::crossings(d, Method::Random, None).unwrap()
     }
 
-    /// A resampling that must never be asked for: the value's resamples do not refuse it.
-    fn never(_: u32) -> (Option<f64>, usize) {
+    /// A resampling that must never be asked for: the value is given, or its count needs none.
+    fn never(_: Structure, _: u32) -> (Option<f64>, usize) {
         panic!("the resamples at a multiple were asked for")
     }
 
@@ -1307,6 +1364,8 @@ mod tests {
             factor: 1.0,
             margin,
             particles: Some(150_000),
+            structure: Structure::Constant,
+            resampled_confirmed: true,
         };
         // 30 of 200 resamples refuse it, its sd within the limit. At 2× they still refuse 12, at 4×
         // 5 (at most half the allowance) with the sd 0.02·1.3 over the limit, at 8× 3 and 0.014.
@@ -1317,10 +1376,18 @@ mod tests {
             _ => (Some(0.01), 0),
         };
         let mut asked = Vec::new();
-        let e = judge(Quantity::T30, 1.0, Some(0.02), 30, j(Some(1.3)), &mut |m| {
-            asked.push(m);
-            at(m)
-        })
+        let e = judge(
+            Quantity::T30,
+            1.0,
+            Some(0.02),
+            30,
+            j(Some(1.3)),
+            &mut |st, m| {
+                assert_eq!(st, Structure::Constant);
+                asked.push(m);
+                at(m)
+            },
+        )
         .unwrap_err();
         match e.not_evaluable() {
             Some(NotEvaluable::MonteCarloNoise {
@@ -1347,7 +1414,7 @@ mod tests {
             Some(0.02),
             30,
             j(Some(1.3)),
-            &mut |_| (Some(0.02), 40),
+            &mut |_, _| (Some(0.02), 40),
         )
         .unwrap_err();
         match e.not_evaluable() {
@@ -1360,6 +1427,81 @@ mod tests {
         assert!(e.to_string().contains("more particles may not help"), "{e}");
         // At most the allowance: judged by its standard deviation alone, the multiples never asked.
         assert!(judge(Quantity::T30, 1.0, Some(0.02), 10, j(Some(1.3)), &mut never).is_ok());
+        // Where such counts were not borne out (F8), none is named and nothing is tried.
+        let off = Judged {
+            resampled_confirmed: false,
+            ..j(Some(1.3))
+        };
+        let e = judge(Quantity::T30, 1.0, Some(0.02), 30, off, &mut never).unwrap_err();
+        assert!(matches!(
+            e.not_evaluable(),
+            Some(NotEvaluable::MonteCarloNoise {
+                particle_count: ParticleCount::ResampledNotConfirmed,
+                ..
+            })
+        ));
+        assert!(e.to_string().contains("not borne out"), "{e}");
+    }
+
+    #[test]
+    fn a_count_under_the_roughness_structure_is_named_from_m7s_structure() {
+        // The roughness reads the true curve's fine structure too, which does not fall with more
+        // particles, so a count named from it can fall short (R4-5); M7's structure, at least as
+        // large and falling exactly as 1/N, names it instead, with the same calibration.
+        let j = |structure| Judged {
+            limit: limits::DECAY_RELATIVE,
+            relative: true,
+            factor: 1.3,
+            margin: Some(1.6),
+            particles: Some(150_000),
+            structure,
+            resampled_confirmed: true,
+        };
+        let named = |e: ParamError| match e.not_evaluable() {
+            Some(NotEvaluable::MonteCarloNoise {
+                particle_count:
+                    ParticleCount::Named {
+                        particles: Some(n), ..
+                    },
+                ..
+            }) => *n,
+            other => panic!("{other:?}"),
+        };
+        // Roughness 0.03 relative, M7's structure 0.09: the count from 0.09.
+        let rough = named(
+            judge(
+                Quantity::T30,
+                1.0,
+                Some(0.03),
+                0,
+                j(Structure::Roughness),
+                &mut |st, m| {
+                    assert_eq!((st, m), (Structure::Constant, 1));
+                    (Some(0.09), 0)
+                },
+            )
+            .unwrap_err(),
+        );
+        let want = round_up_two_digits((1.6f64 * 1.3 * 0.09 / 0.025).powi(2) * 150_000.0);
+        assert_eq!(rough, want);
+        // Says no: under the constant structure its own standard deviation names it, and M7's is
+        // never asked.
+        let constant = named(
+            judge(
+                Quantity::T30,
+                1.0,
+                Some(0.03),
+                0,
+                j(Structure::Constant),
+                &mut never,
+            )
+            .unwrap_err(),
+        );
+        assert_eq!(
+            constant,
+            round_up_two_digits((1.6f64 * 1.3 * 0.03 / 0.025).powi(2) * 150_000.0)
+        );
+        assert!(rough > 8 * constant);
     }
 
     #[test]
@@ -1600,6 +1742,8 @@ mod tests {
                     factor: 1.0,
                     margin,
                     particles: Some(150_000),
+                    structure: Structure::Constant,
+                    resampled_confirmed: true,
                 },
                 &mut never,
             )
