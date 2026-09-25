@@ -54,18 +54,21 @@ pub const MIN_REGRESSION_BINS: f64 = 2.0;
 pub const CURVATURE_LIMIT_PERCENT: f64 = 10.0;
 
 /// How far an unknown the histogram cannot show (the tail after its end, the energy missing from
-/// it, the arrival inside the onset bin) may move each quantity before it is refused: the tighter
-/// of 1/10 of a difference limen and gate (a)'s bound (`docs/params.md`, "Truncation"). ISO
-/// 3382-1's Table A.1, as commonly reproduced, gives limens for EDT, C80, D50, Ts and G only; T20
-/// and T30 take EDT's, C50 takes C80's.
+/// it, the arrival inside the onset bin) may move each quantity before it is refused: 1/10 of a
+/// difference limen, the strict rule Burhan confirmed on 2026-09-24 (`docs/params.md`,
+/// "Truncation"). ISO 3382-1's Table A.1, as commonly reproduced, gives limens for EDT, C80, D50,
+/// Ts and G only; T20 and T30 take EDT's, C50 takes C80's. Gate (a)'s bounds are a separate test
+/// of exact decays, which no unknown moves; for C and D they are tighter than these limits.
 pub mod limits {
     /// EDT, T20, T30: relative. 1/10 of EDT's 5 % limen, and gate (a)'s bound.
     pub const DECAY_RELATIVE: f64 = 0.005;
-    /// C50, C80: dB. Gate (a)'s bound, tighter than 1/10 of C80's 1 dB limen.
-    pub const CLARITY_DB: f64 = 0.01;
-    /// D50: fraction (0.1 percentage points). Gate (a)'s bound, tighter than 1/10 of the 0.05
-    /// limen.
-    pub const DEFINITION: f64 = 0.001;
+    /// C50, C80: dB. 1/10 of C80's 1 dB limen. Until 2026-09-25 it was gate (a)'s 0.01 dB,
+    /// ten times stricter than the rule; aligned to the rule by the M8 design decision 3 of
+    /// 2026-09-25 00:20.
+    pub const CLARITY_DB: f64 = 0.1;
+    /// D50: fraction (0.5 percentage points). 1/10 of the 0.05 limen. Until 2026-09-25 it was
+    /// gate (a)'s 0.1 points, aligned as [`CLARITY_DB`] was.
+    pub const DEFINITION: f64 = 0.005;
     /// Ts: s, 1/10 of the 10 ms limen; or [`CENTRE_TIME_RELATIVE`] of Ts, whichever is tighter.
     pub const CENTRE_TIME_S: f64 = 0.001;
     /// Ts: relative, the bound gate (a)'s test holds Ts to (the gate names none; this is the

@@ -218,7 +218,9 @@ geometry is fine but the grouping is wrong. It is regenerated from `tutorial_2.p
   3. Source names need be unique only within their source group; a receiver exactly on a wall
      stays refused, with a message naming the wall.
   4. The truncation limits stay strict, 1/10 of the difference limens (0.5 % on T, 0.1 dB on C),
-     to revisit after M8.
+     to revisit after M8. The code held C and D ten and five times tighter still (gate (a)'s
+     0.01 dB and 0.1 points) until the pre-M8 piece aligned them to this rule (the M8 design
+     decision 3 of 2026-09-25 00:20; `docs/investigations/2026-09-25-cd-limits/`).
 - **The follow-ups on branch `t3-followups`:**
   - Piece A (decisions 13 to 15: upstream's ids pinned on import, what `preprocess.exe` gives up
     on meshed as upstream's GUI meshes it, every folder's regions held to its own geometry, time
@@ -248,7 +250,9 @@ geometry is fine but the grouping is wrong. It is regenerated from `tutorial_2.p
     16 kHz.
   - **With the arrival detected**, gate (a)'s six decays give EDT, T20 and T30 within 0.5 %, and
     C50, C80 and D50 refused `unresolved` in all six: gate (a)'s C80 and D50 hold with the arrival
-    given.
+    given. Since the C and D limits were aligned (pre-M8), at 1 ms D50 comes through in all three
+    decays and C50 and C80 in two (T 1 and 3 s), within their 0.1 dB and 0.5 points but outside
+    gate (a)'s tighter bounds; at 10 ms all three are still refused.
 - **Upstream differences M7 measured** (internal, for the record and for M8; each with its receipt
   in `docs/params.md` or `docs/results.md`; none raised upstream):
   - ISO 9613-1 in `Coef_Att_Atmos.cpp`: the humidity `h` lacks the standard's pressure factor

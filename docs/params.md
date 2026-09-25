@@ -293,29 +293,34 @@ extrapolation. Instead each parameter carries a bound:
    refuses everything that depends on it. **The second number is never reported as the value.**
 
    The same limits bound what `Arrival::Detected` leaves open (`unresolved`, above), and what the
-   energy missing from a series can move ("Missing energy", below). Each is the tighter of 1/10 of
-   a difference limen and gate (a)'s bound. **The limens:** ISO 3382-1:2009 Table A.1, as commonly
-   reproduced (not read here), gives them for G (1 dB), EDT (5 %), C80 (1 dB), D50 (0.05) and Ts
-   (10 ms) only. T20 and T30 have none there; they take EDT's 5 %, and C50 takes C80's 1 dB. Those
-   two are extensions, not the standard's:
+   energy missing from a series can move ("Missing energy", below). Each is 1/10 of a difference
+   limen. **The limens:** ISO 3382-1:2009 Table A.1, as commonly reproduced (not read here), gives
+   them for G (1 dB), EDT (5 %), C80 (1 dB), D50 (0.05) and Ts (10 ms) only. T20 and T30 have none
+   there; they take EDT's 5 %, and C50 takes C80's 1 dB. Those two are extensions, not the
+   standard's:
 
-   | Quantity | Limit | 1/10 limen | Gate (a) |
+   | Quantity | Limit | 1/10 limen | Gate (a), on exact decays |
    |---|---|---|---|
    | EDT | 0.5 % relative | 0.5 % (of EDT's 5 %) | 0.5 % |
    | T20, T30 | 0.5 % relative | 0.5 % (of EDT's 5 %, extended) | 0.5 % |
-   | C80 | 0.01 dB | 0.1 dB (of 1 dB) | 0.01 dB |
-   | C50 | 0.01 dB | 0.1 dB (of C80's 1 dB, extended) | none named; held as C80 |
-   | D50 | 0.001 (0.1 points) | 0.005 (of 0.05) | 0.1 points |
+   | C80 | 0.1 dB | 0.1 dB (of 1 dB) | 0.01 dB |
+   | C50 | 0.1 dB | 0.1 dB (of C80's 1 dB, extended) | none named; held as C80 |
+   | D50 | 0.005 (0.5 points) | 0.005 (of 0.05) | 0.1 points |
    | Ts | 1 ms or 0.5 % of Ts, the tighter | 1 ms (of 10 ms) | none named; the test holds Ts to 0.5 % |
    | SPL | 0.1 dB | 0.1 dB (of the 1 dB given for G) | none (gate (c) is ±0.5 dB) |
 
-   The first version used 1/10 of the limen alone, 0.1 dB for C and 0.5 points for D50, so a
-   truncated series could return a C80 0.1 dB off as a number while gate (a) asks for 0.01 dB.
-
    **Confirmed by Burhan, 2026-09-24 14:11:** the strict rule, 1/10 of the limen (0.5 % for decay
-   times, 0.1 dB for clarity), to be revisited after M8. The C and D limits above are tighter still
-   (gate (a)'s bound, from the review fix), so they refuse more than the rule he confirmed. Whether
-   C and D keep the tighter bound is his to decide at the M8 review.
+   times, 0.1 dB for clarity), to be revisited after M8. **C and D aligned to it on 2026-09-25**
+   (the M8 design decision 3 of 00:20, on Burhan's "what would be best for the people using
+   this"): from the M7 review until then, C was held to gate (a)'s 0.01 dB and D50 to its 0.1
+   points, ten and five times stricter than the rule he confirmed. Gate (a) is a test of exact
+   decays, which no unknown moves, and it still holds them to its bounds with the arrival given
+   (`params_synthetic.rs`). What the alignment costs: a value refused before because an unknown
+   could move it by more than 0.01 dB (C) or 0.1 points (D50) now comes through, known only to
+   within the rule's 0.1 dB or 0.5 points. On gate (a)'s decays with the arrival detected, 40 C, D
+   and Ts values now come through at 1 ms where 10 did, 16 of them outside gate (a)'s bound and
+   inside their limit (`an_arrival_not_given_leaves_c_d_and_ts_unresolved`); what it changes on
+   SPPS runs is measured in `docs/results.md`, "What M8 needs".
 
 3. **The depth reached.** A decay time needs the curve to reach the bottom of its range. The depth
    is read from the curve **with** the tail added: that is how far the decay had fallen when the

@@ -138,6 +138,34 @@ fn gate_checks(p: &BandParameters, c: &Closed) -> [bool; 7] {
     ]
 }
 
+/// Which of `[EDT, T20, T30, C50, C80, D50, Ts]` are values within the limit an unknown may move
+/// them by before they are refused (`decay::limits`, 1/10 of a difference limen): what a value
+/// the code gives is held to. For the decay times it is gate (a)'s bound; for C and D, ten times
+/// looser than gate (a)'s, which only an arrival given meets.
+fn limit_checks(p: &BandParameters, c: &Closed) -> [bool; 7] {
+    use simpa_core::params::decay::limits;
+    let d = |r: &Result<decay::DecayFit, _>| {
+        r.as_ref()
+            .is_ok_and(|f| (f.t_s / c.t - 1.0).abs() <= limits::DECAY_RELATIVE)
+    };
+    let within = |r: &Result<f64, _>, want: f64, limit: f64| {
+        r.as_ref().is_ok_and(|&x| (x - want).abs() <= limit)
+    };
+    [
+        d(&p.edt),
+        d(&p.t20),
+        d(&p.t30),
+        within(&p.c50_db, c.c50, limits::CLARITY_DB),
+        within(&p.c80_db, c.c80, limits::CLARITY_DB),
+        within(&p.d50, c.d50, limits::DEFINITION),
+        within(
+            &p.ts_s,
+            c.ts,
+            limits::CENTRE_TIME_S.min(limits::CENTRE_TIME_RELATIVE * c.ts),
+        ),
+    ]
+}
+
 /// The largest deviation of `p` from `c` in each gated unit: relative for the times, dB for C,
 /// percentage points for D50.
 fn deviations(p: &BandParameters, c: &Closed) -> [f64; 7] {
@@ -183,12 +211,14 @@ fn exact_decays_meet_every_bound() {
 }
 
 /// What gate (a)'s six decays give with the arrival detected, not given: per quantity of
-/// `[EDT, T20, T30, C50, C80, D50, Ts]`, `Some(true)` when it meets its bound, `None` when it is
-/// refused `unresolved` with the closed form between the two ends of the onset bin; anything else
-/// panics (a value outside its bound, another refusal, or an `unresolved` that misses the closed
-/// form).
+/// `[EDT, T20, T30, C50, C80, D50, Ts]`, `Some(true)` when it meets gate (a)'s bound,
+/// `Some(false)` when it is a value within its limit (`limit_checks`) but outside gate (a)'s
+/// tighter bound, `None` when it is refused `unresolved` with the closed form between the two ends
+/// of the onset bin; anything else panics (a value outside its limit, another refusal, or an
+/// `unresolved` that misses the closed form).
 fn detected_outcome(p: &BandParameters, c: &Closed) -> [Option<bool>; 7] {
     let ok = gate_checks(p, c);
+    let limit = limit_checks(p, c);
     // The truth is one end of the bin, so it may lie a rounding step outside the pair.
     let bracketed = |e: &simpa_core::params::ParamError, want: f64| match e.not_evaluable() {
         Some(NotEvaluable::Unresolved { low, high, .. }) => {
@@ -208,6 +238,7 @@ fn detected_outcome(p: &BandParameters, c: &Closed) -> [Option<bool>; 7] {
     for (i, r) in times.into_iter().enumerate() {
         match r {
             Ok(_) if ok[i] => out[i] = Some(true),
+            Ok(_) if limit[i] => out[i] = Some(false),
             Err(e) if bracketed(e, c.t) => {}
             other => panic!("quantity {i}: {other:?}"),
         }
@@ -215,6 +246,7 @@ fn detected_outcome(p: &BandParameters, c: &Closed) -> [Option<bool>; 7] {
     for (i, (r, want)) in others.into_iter().enumerate() {
         match r {
             Ok(_) if ok[3 + i] => out[3 + i] = Some(true),
+            Ok(_) if limit[3 + i] => out[3 + i] = Some(false),
             Err(e) if bracketed(e, want) => {}
             other => panic!("quantity {}: {other:?} against {want}", 3 + i),
         }
@@ -234,7 +266,12 @@ fn gate_a_decays_with_the_arrival_detected() {
             let s = exact_decay(t, dt, 150.0);
             let p = evaluate(&s, Arrival::Detected);
             let got = detected_outcome(&p, &Closed::decay(t));
-            let cell = |x: Option<bool>| if x.is_some() { "pass" } else { "unresolved" };
+            let cell = |x: Option<bool>| match x {
+                Some(true) => "pass",
+                // A value within its limit, outside gate (a)'s bound.
+                Some(false) => "limit",
+                None => "unresolved",
+            };
             println!(
                 "detected, T {t} s, dt {dt} s: EDT {}, T20 {}, T30 {}, C50 {}, C80 {}, D50 {}, \
                  Ts {}",
@@ -246,21 +283,25 @@ fn gate_a_decays_with_the_arrival_detected() {
                 cell(got[5]),
                 cell(got[6])
             );
-            table.push(((t, dt), got.map(|x| x.is_some())));
+            table.push(((t, dt), got));
         }
     }
-    // The decay times do not depend on where in the bin time starts: they pass everywhere. C50,
-    // C80 and D50 are refused in all six, the truth (the bin's start) one end of the bracket; Ts
-    // comes through only at T = 3 s, dt = 1 ms, where the two ends of the bin give Ts within its
-    // limit of each other. Gate (a)'s C80 and D50 therefore need the arrival given
+    // The decay times do not depend on where in the bin time starts: they pass everywhere. At
+    // 10 ms C50, C80, D50 and Ts are refused, the truth (the bin's start) one end of the bracket.
+    // At 1 ms the two ends of the bin give C and D within their limits of each other (0.1 dB and
+    // 0.5 points since 2026-09-25, the M8 design decision 3 of 00:20; with gate (a)'s 0.01 dB and
+    // 0.1 points all of them were refused) in more cells: the values come through within their
+    // limits, but outside gate (a)'s tighter bound. Ts comes through at T = 3 s only, within gate
+    // (a)'s bound. Gate (a)'s C80 and D50 therefore still need the arrival given
     // (`docs/params.md`).
+    let (t, f, u) = (Some(true), Some(false), None);
     let pinned = [
-        ((0.3, 0.001), [true, true, true, false, false, false, false]),
-        ((0.3, 0.01), [true, true, true, false, false, false, false]),
-        ((1.0, 0.001), [true, true, true, false, false, false, false]),
-        ((1.0, 0.01), [true, true, true, false, false, false, false]),
-        ((3.0, 0.001), [true, true, true, false, false, false, true]),
-        ((3.0, 0.01), [true, true, true, false, false, false, false]),
+        ((0.3, 0.001), [t, t, t, u, u, f, u]),
+        ((0.3, 0.01), [t, t, t, u, u, u, u]),
+        ((1.0, 0.001), [t, t, t, f, f, f, u]),
+        ((1.0, 0.01), [t, t, t, u, u, u, u]),
+        ((3.0, 0.001), [t, t, t, f, f, f, t]),
+        ((3.0, 0.01), [t, t, t, u, u, u, u]),
     ];
     assert_eq!(table, pinned);
     // Says no: the same six decays 1 % off, detected, miss the decay times' bound.
@@ -613,6 +654,7 @@ fn the_first_versions_edt_regression_fails_with_a_direct_sound() {
 
 #[test]
 fn an_arrival_not_given_leaves_c_d_and_ts_unresolved() {
+    let mut seen = Vec::new();
     for t in TS {
         for dt in DTS {
             for f in OFFSETS {
@@ -620,12 +662,14 @@ fn an_arrival_not_given_leaves_c_d_and_ts_unresolved() {
                 let p = evaluate(&s, Arrival::Detected);
                 let closed = Closed::direct_and_decay(t, DIRECT);
                 let ok = gate_checks(&p, &closed);
+                let limit = limit_checks(&p, &closed);
                 // The decay times are the same from either end of the onset bin.
                 assert_eq!(ok[..3], [true; 3], "T {t}, dt {dt}, offset {f}");
-                // At 10 ms, C, D and Ts are all refused. At 1 ms, C still is: where in the bin
-                // the direct sound arrived moves it by more than 0.01 dB. D50 and Ts come through
-                // at T = 3 s, and then meet their bounds. Where refused, the two ends bracket the
-                // closed form.
+                // At 10 ms, C, D and Ts are all refused. At 1 ms, where in the bin the direct
+                // sound arrived moves C by more than its 0.1 dB limit at T = 0.3 s only, D50 by
+                // more than 0.5 points nowhere, and Ts by more than its limit at T = 0.3 and 1 s.
+                // Every value that comes through is within its limit of the closed form; where
+                // refused, the two ends bracket it.
                 let mut refused = [false; 4];
                 for (i, (r, want)) in [
                     (&p.c50_db, closed.c50),
@@ -637,7 +681,7 @@ fn an_arrival_not_given_leaves_c_d_and_ts_unresolved() {
                 .enumerate()
                 {
                     match r {
-                        Ok(_) => assert!(ok[3 + i], "T {t}, dt {dt}, offset {f}: {r:?}"),
+                        Ok(_) => assert!(limit[3 + i], "T {t}, dt {dt}, offset {f}: {r:?}"),
                         Err(e) => match e.not_evaluable() {
                             Some(NotEvaluable::Unresolved { low, high, .. }) => {
                                 assert!(*low <= want && want <= *high, "{low} {want} {high}");
@@ -647,16 +691,40 @@ fn an_arrival_not_given_leaves_c_d_and_ts_unresolved() {
                         },
                     }
                 }
-                println!("T {t}, dt {dt}, offset {f}: unresolved [C50, C80, D50, Ts] {refused:?}");
-                let d_and_ts = !(dt == 0.001 && t == 3.0);
-                assert_eq!(
-                    refused,
-                    [true, true, d_and_ts, d_and_ts],
-                    "T {t}, dt {dt}, offset {f}"
+                println!(
+                    "T {t}, dt {dt}, offset {f}: unresolved [C50, C80, D50, Ts] {refused:?}, \
+                     within gate (a) {:?}",
+                    &ok[3..]
                 );
+                seen.push(((t, dt, f), refused, [ok[3], ok[4], ok[5], ok[6]]));
             }
         }
     }
+    for &((t, dt, f), refused, _) in &seen {
+        let want = if dt == 0.01 {
+            [true; 4]
+        } else if t == 0.3 {
+            [true, true, false, true]
+        } else if t == 1.0 {
+            [false, false, false, true]
+        } else {
+            [false; 4]
+        };
+        assert_eq!(refused, want, "T {t}, dt {dt}, offset {f}");
+    }
+    // What the limits of 2026-09-25 let through that gate (a)'s bound would not: of the 40
+    // values given at 1 ms, 16 lie between gate (a)'s bound and their limit. With the limits at
+    // gate (a)'s bound (before 2026-09-25) 10 came through, D50 and Ts at T = 3 s, all within it.
+    let given: usize = seen
+        .iter()
+        .map(|s| s.1.iter().filter(|r| !**r).count())
+        .sum();
+    let beyond_gate: usize = seen
+        .iter()
+        .map(|s| (0..4).filter(|&i| !s.1[i] && !s.2[i]).count())
+        .sum();
+    println!("given {given}, of which outside gate (a)'s bound {beyond_gate}");
+    assert_eq!((given, beyond_gate), (40, 16));
 }
 
 #[test]

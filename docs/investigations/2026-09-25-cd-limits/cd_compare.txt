@@ -1,0 +1,95 @@
+C50, C80 and D50 given as values, before (limits 0.01 dB, 0.1 points) and after (0.1 dB,
+0.5 points), receiver-bands summed over each group's ten seeds and six receivers.
+
+cell C-R7                                     random     c50_db    116 ->   125 of 360
+cell C-R7                                     random     c80_db    113 ->   124 of 360
+cell C-R7                                     random     d50       121 ->   124 of 360
+cell C3-E1                                    energetic  c50_db    126 ->   360 of 360
+cell C3-E1                                    energetic  c80_db    316 ->   360 of 360
+cell C3-E10                                   energetic  c50_db    180 ->   360 of 360
+cell C3-E10                                   energetic  c80_db    268 ->   360 of 360
+cell C3-E5                                    energetic  c50_db      0 ->     1 of 360
+cell C3-R3                                    random     c50_db    128 ->   133 of 360
+cell C3-R3                                    random     c80_db    127 ->   133 of 360
+cell C3-R3                                    random     d50       131 ->   133 of 360
+cell V-E3                                     energetic  c50_db    126 ->   360 of 360
+cell V-E3                                     energetic  c80_db    314 ->   360 of 360
+cell V-E6                                     energetic  c50_db    221 ->   269 of 360
+cell V-E6                                     energetic  c80_db    216 ->   267 of 360
+cell V-E6                                     energetic  d50       246 ->   267 of 360
+cell V-R2                                     random     c50_db    109 ->   114 of 360
+cell V-R2                                     random     d50       112 ->   115 of 360
+cell V3-E1                                    energetic  c50_db     64 ->   300 of 360
+cell V3-E1                                    energetic  c80_db    155 ->   300 of 360
+cell V3-E1                                    energetic  d50       293 ->   300 of 360
+cell V3-E4                                    energetic  c50_db    204 ->   360 of 360
+cell V3-E4                                    energetic  c80_db    300 ->   360 of 360
+cell V3-E4                                    energetic  d50       354 ->   360 of 360
+cell V3-E9                                    energetic  c50_db     76 ->   360 of 360
+cell V3-E9                                    energetic  c80_db    307 ->   360 of 360
+cell V3-R6                                    random     d50       101 ->   103 of 360
+cell V3-R7                                    random     c50_db    135 ->   190 of 360
+cell V3-R7                                    random     c80_db    127 ->   187 of 360
+cell V3-R7                                    random     d50       163 ->   188 of 360
+cell V4-E15                                   energetic  c50_db    293 ->   300 of 360
+cell V4-E15                                   energetic  c80_db    282 ->   300 of 360
+cell V4-E6                                    energetic  c50_db    251 ->   293 of 360
+cell V4-E6                                    energetic  c80_db    238 ->   293 of 360
+cell V4-E6                                    energetic  d50       283 ->   293 of 360
+cell V4-R5                                    random     c50_db    172 ->   175 of 360
+cell V4-R5                                    random     c80_db    171 ->   175 of 360
+cell V4-R5                                    random     d50       174 ->   175 of 360
+cell W-E1                                     energetic  c50_db    206 ->   329 of 360
+cell W-E1                                     energetic  c80_db    177 ->   326 of 360
+cell W-E1                                     energetic  d50       270 ->   329 of 360
+cell W-E2                                     energetic  c50_db    227 ->   274 of 360
+cell W-E2                                     energetic  c80_db    223 ->   274 of 360
+cell W-E2                                     energetic  d50       248 ->   274 of 360
+cell W-E3                                     energetic  c50_db    249 ->   295 of 360
+cell W-E3                                     energetic  c80_db    235 ->   295 of 360
+cell W-E3                                     energetic  d50       283 ->   295 of 360
+
+All groups, by method:
+  energetic  c50_db   10536 ->  12174 of 21060
+  energetic  c80_db   10880 ->  11704 of 21060
+  energetic  d50      12867 ->  13008 of 21060
+  random     c50_db    7136 ->   7213 of 13860
+  random     c80_db    6937 ->   7018 of 13860
+  random     d50       7644 ->   7680 of 13860
+
+What the newly given values were refused for before:
+  energetic  c50_db    1394  params_not_evaluable: missing_moves
+  energetic  c50_db     244  params_not_evaluable: truncated
+  energetic  c50_db      29  still refused, reason changed: missing_moves -> monte_carlo_noise
+  energetic  c50_db       1  still refused, reason changed: truncated -> missing_moves
+  energetic  c80_db     517  params_not_evaluable: missing_moves
+  energetic  c80_db     307  params_not_evaluable: truncated
+  energetic  c80_db      26  still refused, reason changed: missing_moves -> monte_carlo_noise
+  energetic  d50        114  params_not_evaluable: truncated
+  energetic  d50         27  params_not_evaluable: missing_moves
+  energetic  d50          1  still refused, reason changed: truncated -> missing_moves
+  energetic  d50          1  still refused, reason changed: missing_moves -> monte_carlo_noise
+  random     c50_db      77  params_not_evaluable: truncated
+  random     c50_db       1  still refused, reason changed: truncated -> monte_carlo_noise
+  random     c50_db       1  still refused, reason changed: truncated -> missing_moves
+  random     c80_db      81  params_not_evaluable: truncated
+  random     c80_db       7  still refused, reason changed: truncated -> monte_carlo_noise
+  random     c80_db       5  still refused, reason changed: missing_moves -> monte_carlo_noise
+  random     d50         36  params_not_evaluable: truncated
+
+Values given before and refused after: 0
+Values that changed, or other quantities that changed: 0
+
+Tutorial 1 at upstream's default (no change expected or found above if absent):
+  tutorial 1 at upstream's default, Energetic   c50_db    510 ->   510 of 540
+  tutorial 1 at upstream's default, Energetic   c80_db    484 ->   484 of 540
+  tutorial 1 at upstream's default, Energetic   d50       540 ->   540 of 540
+  tutorial 1 at upstream's default, Random      c50_db    498 ->   498 of 540
+  tutorial 1 at upstream's default, Random      c80_db    458 ->   458 of 540
+  tutorial 1 at upstream's default, Random      d50       540 ->   540 of 540
+
+Newly given values against the mean of the same receiver-band's values given before by
+other seeds (at least 3), dB for C, points for D50:
+  c50_db  n  1116, mean -0.0015 +- 0.0020 (SE), median |d| 0.0242, 95th |d| 0.1521, max |d| 0.5207
+  c80_db  n   721, mean +0.0024 +- 0.0029 (SE), median |d| 0.0321, 95th |d| 0.1646, max |d| 0.3445
+  d50     n   170, mean -0.0283 +- 0.0436 (SE), median |d| 0.3646, 95th |d| 1.0833, max |d| 1.5667
