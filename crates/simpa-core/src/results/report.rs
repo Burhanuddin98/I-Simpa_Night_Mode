@@ -237,6 +237,7 @@ impl CurvatureReport {
 /// decay times were measured from, and the Schroeder curve they were fitted to.
 struct Evaluation {
     parameters: Parameters,
+    crossings_per_particle: Option<f64>,
     curvature: CurvatureReport,
     onset: Option<Onset>,
     decay_arrival: Option<Arrival>,
@@ -279,6 +280,7 @@ fn evaluated(
             ts_s: Evaluated::of_estimate(p.ts_s),
         },
         curvature: CurvatureReport::of(p.curvature_percent),
+        crossings_per_particle: p.crossings_per_particle,
         onset: p.onset,
         decay_arrival: p.decay_arrival,
         decay_curve: series.as_ref().ok().map(|s| decay::decay_curve(s, arrival)),
@@ -331,6 +333,11 @@ pub struct ReceiverBandReport {
     /// The receiver crossings behind the series, estimated as its total over the mean deposit;
     /// `null` when the noise has no model.
     pub crossings: Option<f64>,
+    /// `n`: the crossings of the receiver per particle as the noise calibration measures them
+    /// (`monte_carlo.crossings_variable`), which its correction and domain take
+    /// (`params::noise::NoiseModel::multi_crossing`); `null` when the noise has no model or the
+    /// series is refused.
+    pub crossings_per_particle: Option<f64>,
     /// The `.recp` column, Pa² per time step.
     pub energy_pa2: Vec<f64>,
     /// Their sum.
@@ -369,6 +376,9 @@ pub struct AggregateReport {
     pub aggregate: String,
     /// The bands summed: those whose series `params` accepts. Empty for TCR.
     pub bands_hz: Vec<i32>,
+    /// As for a band: the aggregate's own (its bands' particles together, counted at the least
+    /// deposit of any band, with the largest lifetime spread of any); `null` for TCR.
+    pub crossings_per_particle: Option<f64>,
     pub parameters: Parameters,
     /// As for a band.
     pub curvature: CurvatureReport,
@@ -386,6 +396,8 @@ pub struct SourceBandReport {
     pub decay_arrival: Option<Arrival>,
     pub noise_model: NoiseModel,
     pub crossings: Option<f64>,
+    /// As for the receiver's band.
+    pub crossings_per_particle: Option<f64>,
     /// The source's `.recp` column, Pa² per time step.
     pub energy_pa2: Vec<f64>,
     pub total_pa2: f64,
@@ -522,23 +534,39 @@ pub struct MonteCarloReport {
     pub limit_spl_db: f64,
     /// The run's computation method, which picks the calibration.
     pub method: noise::Method,
+    /// What `n`, the crossings of a receiver per particle each band's `crossings_per_particle`
+    /// gives, is for this method (`params::noise::calibration::variable`).
+    pub crossings_variable: noise::calibration::Variable,
+    /// What the calibration was measured on beyond what the code checks (particles and crossings
+    /// per particle, in `calibration`): [`noise::calibration::MEASURED_ON`].
+    pub measured_on: String,
+    /// Energetic T20 and T30: a band whose every face is Lambert with scattering 1 and has the
+    /// same absorption takes `uniform_lambert_walls` up to this mean absorption, and
+    /// `lambert_walls` above it.
+    pub uniform_lambert_max_mean_absorption: f64,
     /// Per quantity, by name, for this computation method (`params::noise::calibration`;
-    /// `docs/investigations/2026-09-25-noise-calibration/`).
+    /// `docs/investigations/2026-09-25-noise-calibration/`): each value's standard deviation is
+    /// the bootstrap's times `factor·√(1 + kappa·n)`, and a value is given only with at least
+    /// `min_particles` particles per source and `n` at most `max_crossings_per_particle`.
     pub calibration: std::collections::BTreeMap<String, QuantityCalibration>,
 }
 
-/// How one quantity's noise is calibrated and how a refusal names a particle count.
+/// How one quantity's noise is calibrated, where the calibration holds, and how a refusal names a
+/// particle count (`params::noise::calibration::Entry`).
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct QuantityCalibration {
-    /// The factor the bootstrap's standard deviation is multiplied by: the largest one-sided 95 %
-    /// upper bound of SPPS's seed-to-seed spread over the model on the calibration cells.
-    pub factor: f64,
-    /// A refusal names the particle count at which the calibrated standard deviation would be the
-    /// limit over this margin (`params::noise::calibration::margin`).
-    pub margin: f64,
-    /// Whether the spread's fall as `1/√N` was confirmed for the quantity in this method; when
-    /// not, a refusal names no count (`scaling_not_confirmed`).
-    pub root_n_confirmed: bool,
+    /// For bands not every face of which reflects by Lambert's law with scattering 1 (and for
+    /// every band, when the two below are `null`).
+    #[serde(flatten)]
+    pub entry: noise::calibration::Entry,
+    /// Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law
+    /// with scattering 1 and not every face has the same absorption (or the absorption is above
+    /// `uniform_lambert_max_mean_absorption`); `null` otherwise.
+    pub lambert_walls: Option<noise::calibration::Entry>,
+    /// Energetic T20 and T30 only: the entry for bands whose every face reflects by Lambert's law
+    /// with scattering 1 and has the same absorption, at most
+    /// `uniform_lambert_max_mean_absorption`; `null` otherwise.
+    pub uniform_lambert_walls: Option<noise::calibration::Entry>,
 }
 
 impl MonteCarloReport {
@@ -554,16 +582,25 @@ impl MonteCarloReport {
             limit_centre_time_s: limits::CENTRE_TIME_S,
             limit_spl_db: limits::SPL_DB,
             method,
+            crossings_variable: noise::calibration::variable(method),
+            measured_on: noise::calibration::MEASURED_ON.into(),
+            uniform_lambert_max_mean_absorption:
+                noise::calibration::UNIFORM_LAMBERT_MAX_MEAN_ABSORPTION,
             calibration: noise::QUANTITY_NAMES
                 .iter()
                 .enumerate()
                 .map(|(i, q)| {
+                    use noise::Walls;
+                    let entry = noise::calibration::entry(method, i, Walls::Other);
+                    let lambert = noise::calibration::entry(method, i, Walls::Lambert);
+                    let uniform = noise::calibration::entry(method, i, Walls::UniformLambert);
+                    let split = method == noise::Method::Energetic && (i == 2 || i == 3);
                     (
                         q.to_string(),
                         QuantityCalibration {
-                            factor: noise::calibration::factor(method, i),
-                            margin: noise::calibration::margin(method, i),
-                            root_n_confirmed: noise::calibration::root_n_confirmed(method, i),
+                            entry,
+                            lambert_walls: split.then_some(lambert),
+                            uniform_lambert_walls: split.then_some(uniform),
                         },
                     )
                 })
@@ -617,6 +654,8 @@ pub struct ReferenceBandReport {
     /// Every face reflects by Lambert's law with scattering 1 in this band: the only walls the
     /// transport's `γ²` describes. When false, neither time describes the run's field.
     pub lambert_walls: bool,
+    /// Every face has the same absorption in this band.
+    pub uniform_absorption: bool,
     /// Plain Eyring, `K·V/(4·m·V − S·ln(1 − ᾱ))`, s, with SPPS's `K`: **reported only**.
     pub eyring_s: Evaluated,
     /// Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:
@@ -678,6 +717,7 @@ impl ReferenceReport {
                         air_m_per_metre: b.air_m_per_metre,
                         mean_absorption: b.mean_absorption,
                         lambert_walls: b.lambert_walls,
+                        uniform_absorption: b.uniform_absorption,
                         eyring_s: Evaluated::of(b.eyring_s.clone()),
                         kuttruff_s: match &b.kuttruff_s {
                             Ok((value, sd)) => Evaluated::Value {
@@ -812,6 +852,7 @@ impl TcrReceiverReport {
             aggregate: AggregateReport {
                 aggregate: AGGREGATE_NO_SERIES.into(),
                 bands_hz: Vec::new(),
+                crossings_per_particle: None,
                 parameters,
                 curvature,
                 decay_curve: None,
@@ -904,18 +945,36 @@ fn crossings(model: &NoiseModel, total: f64) -> Option<f64> {
 }
 
 /// The aggregate's noise model: crossings of the largest band deposit, under the bands' method
-/// and particle count; unknown when any band's is.
+/// and particle count; its run the bands' together (the least deposit of any band, the largest
+/// lifetime spread, Lambert only when every band is, and the bands counted, each with its own
+/// particles); unknown when any band's is, or a band's model is no run's while another's is.
 fn aggregate_model(models: &[&NoiseModel]) -> NoiseModel {
     let mut largest: Option<(f64, noise::Method, Option<u32>)> = None;
+    let mut run: Option<noise::RunNoise> = None;
+    let mut runless = false;
     for m in models {
         match m {
             NoiseModel::Crossings {
                 mean_deposit,
                 method,
                 particles,
+                run: r,
             } => {
                 if largest.is_none_or(|(l, _, _)| *mean_deposit > l) {
                     largest = Some((*mean_deposit, *method, *particles));
+                }
+                match (r, &mut run) {
+                    (None, _) => runless = true,
+                    (Some(r), None) => run = Some(r.clone()),
+                    (Some(r), Some(a)) => {
+                        a.least_deposit = a.least_deposit.min(r.least_deposit);
+                        a.lifetime_cv2 = a.lifetime_cv2.max(r.lifetime_cv2);
+                        a.lambert_walls &= r.lambert_walls;
+                        a.uniform_absorption &= r.uniform_absorption;
+                        a.mean_absorption = a.mean_absorption.max(r.mean_absorption);
+                        a.particles = a.particles.min(r.particles);
+                        a.bands += r.bands;
+                    }
                 }
             }
             NoiseModel::Unknown { detail } => {
@@ -925,14 +984,25 @@ fn aggregate_model(models: &[&NoiseModel]) -> NoiseModel {
             }
         }
     }
-    match largest {
-        Some((mean_deposit, method, particles)) => NoiseModel::Crossings {
+    let Some((mean_deposit, method, particles)) = largest else {
+        return NoiseModel::Unknown {
+            detail: "no band to aggregate".into(),
+        };
+    };
+    match (run, runless) {
+        (Some(_), true) => NoiseModel::Unknown {
+            detail: "the bands' noise models are not all from the run".into(),
+        },
+        (Some(run), false) => {
+            NoiseModel::of_run(mean_deposit, method, run).unwrap_or_else(|e| NoiseModel::Unknown {
+                detail: e.to_string(),
+            })
+        }
+        (None, _) => NoiseModel::Crossings {
             mean_deposit,
             method,
             particles,
-        },
-        None => NoiseModel::Unknown {
-            detail: "no band to aggregate".into(),
+            run: None,
         },
     }
 }
@@ -970,6 +1040,7 @@ fn aggregate_report(
     AggregateReport {
         aggregate: AGGREGATE_BANDS_SUMMED.into(),
         bands_hz: valid,
+        crossings_per_particle: e.crossings_per_particle,
         parameters: e.parameters,
         curvature: e.curvature,
         decay_curve: e.decay_curve,
@@ -1035,6 +1106,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             decay_arrival: e.decay_arrival,
             contributing_sources: contributing.iter().map(|c| c.to_string()).collect(),
             crossings: crossings(&model, total_pa2),
+            crossings_per_particle: e.crossings_per_particle,
             noise_model: model.clone(),
             energy_pa2: b.energy.clone(),
             total_pa2,
@@ -1081,6 +1153,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                         decay_arrival: e.decay_arrival,
                         noise_model: model.clone(),
                         crossings: crossings(model, total_pa2),
+                        crossings_per_particle: e.crossings_per_particle,
                         energy_pa2: energy.clone(),
                         total_pa2,
                         onset: e.onset,
@@ -1661,6 +1734,7 @@ mod tests {
                 air_m_per_metre: None,
                 mean_absorption: 0.2,
                 lambert_walls: true,
+                uniform_absorption: true,
                 eyring_s: Ok(0.6),
                 kuttruff_s: Err(refusal),
             }],

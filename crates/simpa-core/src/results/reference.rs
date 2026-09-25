@@ -43,6 +43,9 @@ pub struct ReferenceBand {
     /// Every face's material reflects by Lambert's law (`loi` 2) with scattering (`diffusion`) 1
     /// in this band.
     pub lambert_walls: bool,
+    /// Every face has the same absorption in this band (the noise calibration tells uniform
+    /// Lambert rooms apart: `params::noise::Walls`).
+    pub uniform_absorption: bool,
     /// Plain Eyring, `params::room::eyring_rt`, with SPPS's `K`.
     pub eyring_s: Result<f64, ParamError>,
     /// Kuttruff's time and the standard deviation it inherits from `γ²`'s standard error
@@ -109,11 +112,15 @@ fn inner(solve: &Path, exp: &Expectation, c: f64) -> Result<Reference, String> {
         let air = band.air_m_per_metre.clone()?;
         let lambert_walls = lambert_walls(&room.faces, &laws, band.index);
         let sa: f64 = surfaces.iter().map(|x| x.area_m2 * x.absorption).sum();
+        let uniform_absorption = surfaces
+            .first()
+            .is_some_and(|f| surfaces.iter().all(|x| x.absorption == f.absorption));
         bands.push(ReferenceBand {
             freq_hz: band.freq_hz,
             air_m_per_metre: air,
             mean_absorption: sa / area_m2,
             lambert_walls,
+            uniform_absorption,
             eyring_s: room::eyring_rt(room.volume_m3, &surfaces, air, constant),
             kuttruff_s: kuttruff(&paths, &surfaces, air, constant),
         });

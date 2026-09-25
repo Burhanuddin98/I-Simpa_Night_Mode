@@ -83,7 +83,9 @@ pub fn results_cmd(args: &[&str]) -> ExitCode {
 
 /// A value to its precision, or `NE(<why>)` for a refusal; for a refusal for its Monte-Carlo
 /// noise, `NE(noise:<count>)` with the particles per source that would bring it within its limit
-/// ([`particles`]), or `NE(noise)` when none can be named.
+/// ([`particles`]), or `NE(noise)` when none can be named; for a run outside the noise model's
+/// calibration, `NE(uncal:<count>)` with the particles per source that reach it, or
+/// `NE(uncal:R<=<s>x)` with the most the receiver radius may be as a multiple of the run's.
 fn cell(e: &Evaluated, digits: usize, scale: f64) -> String {
     match e {
         Evaluated::Value { value, .. } => format!("{:.*}", digits, value * scale),
@@ -97,6 +99,18 @@ fn cell(e: &Evaluated, digits: usize, scale: f64) -> String {
                 return match error["why"]["particle_count"]["particles"].as_u64() {
                     Some(n) => format!("NE(noise:{})", particles(n)),
                     None => "NE(noise)".into(),
+                };
+            }
+            if why == "noise_uncalibrated" {
+                let w = &error["why"];
+                return match (
+                    w["particles_at_least"].as_u64(),
+                    w["receiver_radius_scale_at_most"].as_f64(),
+                ) {
+                    (Some(n), _) => format!("NE(uncal:{})", particles(n)),
+                    // At most: never shown larger than it is.
+                    (None, Some(s)) => format!("NE(uncal:R<={:.2}x)", (s * 100.0).floor() / 100.0),
+                    (None, None) => "NE(uncal)".into(),
                 };
             }
             format!("NE({why})")
@@ -151,7 +165,9 @@ fn text(rep: &Report) -> String {
             s,
             "NE(<why>): not evaluable, and why. NE(noise:<count>): refused for its Monte-Carlo \
              noise; <count> particles per source would bring it within its limit (NE(noise): \
-             no count is named, the JSON says why)."
+             no count is named, the JSON says why). NE(uncal:<count>) or NE(uncal:R<=<s>x): \
+             the run is outside what the noise model was calibrated on; run <count> particles \
+             per source, or make the receiver radius at most <s> times this run's."
         );
         for r in &sp.point_receivers {
             let arrival = r

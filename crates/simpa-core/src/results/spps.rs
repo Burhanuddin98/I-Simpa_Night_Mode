@@ -35,7 +35,7 @@ use super::reference::{Reference, reference};
 use super::{Refusal, SurfaceFile, band_of, file_invalid, key, read_surfaces, value_invalid};
 use crate::formats::gabe::{self, Gabe};
 use crate::formats::pbin;
-use crate::params::noise::{Method, NoiseModel};
+use crate::params::noise::{Method, NoiseModel, RunNoise};
 use crate::run::expect::{self, Expectation, fixed};
 use crate::run::locate;
 use crate::run::stats::ParticleStats;
@@ -347,11 +347,15 @@ impl SppsResults {
 
     /// The noise model of a series of band `index` made by the sources named `names`: crossings
     /// of the largest of their mean deposits, under the run's computation method (which picks the
-    /// calibration) and particle count (from which a refusal names the count it needs); or
-    /// [`NoiseModel::Unknown`] when one of the sources is a directivity balloon, whose particles
-    /// carry unequal energies, or a deposit is not known.
+    /// calibration) and particle count (from which a refusal names the count it needs), with what
+    /// the calibration's correction and domain need ([`RunNoise`]: the least of the deposits, the
+    /// spread of the particles' lifetimes from the band's room table, whether every face is
+    /// Lambert with scattering 1 in the band); or [`NoiseModel::Unknown`] when one of the sources
+    /// is a directivity balloon, whose particles carry unequal energies, a deposit is not known,
+    /// or the room table gives no lifetime.
     pub fn noise_model(&self, index: usize, names: &[&str]) -> NoiseModel {
         let mut largest: Option<f64> = None;
+        let mut least: Option<f64> = None;
         for (i, s) in self.sources.iter().enumerate() {
             if !names.contains(&s.name.as_str()) {
                 continue;
@@ -367,7 +371,10 @@ impl SppsResults {
                 };
             }
             match self.mean_deposit(i, index) {
-                Some(d) => largest = Some(largest.map_or(d, |l: f64| l.max(d))),
+                Some(d) => {
+                    largest = Some(largest.map_or(d, |l: f64| l.max(d)));
+                    least = Some(least.map_or(d, |l: f64| l.min(d)));
+                }
                 None => {
                     return NoiseModel::Unknown {
                         detail: format!("source {:?}'s mean deposit is not known", s.name),
@@ -375,15 +382,76 @@ impl SppsResults {
                 }
             }
         }
-        let (method, n) = (self.noise_method(), Some(self.particles_per_source));
-        match largest.map(|d| NoiseModel::crossings(d, method, n)) {
-            Some(Ok(m)) => m,
-            Some(Err(e)) => NoiseModel::Unknown {
-                detail: e.to_string(),
-            },
-            None => NoiseModel::Unknown {
+        let (Some(largest), Some(least)) = (largest, least) else {
+            return NoiseModel::Unknown {
                 detail: "no source emits in the band".into(),
-            },
+            };
+        };
+        let Some(lifetime_cv2) = self.lifetime_cv2(index) else {
+            return NoiseModel::Unknown {
+                detail: "the room table does not give the particles' lifetimes in the band, which \
+                         the calibration's correction for repeated crossings needs"
+                    .into(),
+            };
+        };
+        let (lambert_walls, uniform_absorption, mean_absorption) = self.walls(index);
+        let run = RunNoise {
+            particles: self.particles_per_source,
+            least_deposit: least,
+            lifetime_cv2,
+            lambert_walls,
+            uniform_absorption,
+            mean_absorption,
+            bands: 1,
+        };
+        NoiseModel::of_run(largest, self.noise_method(), run).unwrap_or_else(|e| {
+            NoiseModel::Unknown {
+                detail: e.to_string(),
+            }
+        })
+    }
+
+    /// The spread of the particles' lifetimes in band `index`, `Var L/(E L)²`
+    /// (`params::noise::lifetime_cv2`), from the room table over the sources' power (both times
+    /// `ρc`, the `.gap`'s column 2 of the first receiver). `None` without a receiver, a room table
+    /// for the band, or a positive power.
+    pub fn lifetime_cv2(&self, index: usize) -> Option<f64> {
+        let power = self
+            .point_receivers
+            .first()?
+            .bands
+            .get(index)?
+            .source_power_rho_c;
+        if !(power.is_finite() && power > 0.0) {
+            return None;
+        }
+        let alive: Vec<f64> = self
+            .total_energy
+            .get(index)?
+            .energy
+            .iter()
+            .map(|e| e / power)
+            .collect();
+        crate::params::noise::lifetime_cv2(&alive, self.time_step_s)
+    }
+
+    /// Band `index`'s faces as the run's reference read them (the band of the same frequency):
+    /// whether every one reflects by Lambert's law with scattering 1, whether every one has the
+    /// same absorption, and their mean absorption. `(false, false, 1.0)` when the reference was
+    /// not computed or has no such band: nothing is known of the faces.
+    pub fn walls(&self, index: usize) -> (bool, bool, f64) {
+        let unknown = (false, false, 1.0);
+        let Some(freq) = self.total_energy.get(index).map(|b| b.freq_hz) else {
+            return unknown;
+        };
+        match self.reference.as_ref() {
+            Reference::Computed { bands, .. } => bands
+                .iter()
+                .find(|b| b.freq_hz == freq)
+                .map_or(unknown, |b| {
+                    (b.lambert_walls, b.uniform_absorption, b.mean_absorption)
+                }),
+            Reference::NotComputed { .. } => unknown,
         }
     }
 

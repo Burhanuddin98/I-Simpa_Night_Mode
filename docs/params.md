@@ -1199,15 +1199,17 @@ and one of:
   reached or the value with the missing energy added ("Missing energy");
 - `monte_carlo_noise`, with the value, its calibrated standard deviation, the limit, the resamples
   that refused it and the particle count that would bring it within the limit, or why none is
-  named; `noise_unknown`, with why ("Monte-Carlo noise");
+  named; `noise_unknown`, with why; `noise_uncalibrated`, with the run's particles and crossings
+  per particle, the domain its quantity's calibration was measured on, and the particles to run
+  or how far to shrink the receiver radius ("Monte-Carlo noise");
 - `several_sources`, with the sources: made by `core::results`, not by `params`
   (`docs/results.md`, "Several sources");
 - `no_time_series`, with where the solver's own values are: made by `core::results` for every
   parameter of a TCR receiver, which has steady-state levels and no series
   (`docs/formats/results-json.md`, "`tcr`").
 
-`params_bad_noise_input` refuses a floor, a share alive or lost, or a mean deposit that is not a
-finite number in its domain.
+`params_bad_noise_input` refuses a floor, a share alive or lost, a mean or least deposit, a
+lifetime spread, a particle count or a band count that is not a finite number in its domain.
 
 `params_transport_refused` refuses the diffuse transport's own result: inputs it cannot run with,
 a ray that left the room, or a mean free path that is not `4V/S` within its error ("Kuttruff's

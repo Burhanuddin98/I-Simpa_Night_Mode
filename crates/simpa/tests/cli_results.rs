@@ -126,7 +126,11 @@ fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
 
 /// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
 /// typed `error`.
-const NULLABLE: [&str; 22] = [
+const NULLABLE: [&str; 26] = [
+    ".crossings_per_particle",
+    ".lambert_walls",
+    ".particles_at_least",
+    ".receiver_radius_scale_at_most",
     ".spps",
     ".tcr",
     ".free_paths",
@@ -595,15 +599,23 @@ fn a_failed_run_is_refused_with_exit_5_and_its_reasons() {
 fn a_cancelled_run_is_refused_with_exit_5() {
     solver_exe("spps.exe");
     let root = scratch("results-cancelled");
+    // The Seat box at 1,000,000 particles, which SPPS takes many seconds over: the cancel, 150 ms
+    // in, always lands on a running solver. At the fixture's 2,000 particles, with other SPPS
+    // runs loading the machine, SPPS could finish before a 1 ms timer thread ran, and the run
+    // came back OK (exit 0) instead of cancelled.
+    let mut p = schema::load(&fixture(SEATS)).unwrap();
+    p.solvers.spps.particles_per_source = 1_000_000;
+    let project = root.join("seats_long.simpa");
+    schema::save(&p, &project).unwrap();
     let o = simpa_run(&[
         "run".to_string(),
-        fixture(SEATS).display().to_string(),
+        project.display().to_string(),
         "--solver".into(),
         "spps".into(),
         "--runs".into(),
-        root.display().to_string(),
+        root.join("runs").display().to_string(),
         "--cancel-after-ms".into(),
-        "1".into(),
+        "150".into(),
         "--json".into(),
     ]);
     assert_eq!(o.code, 130, "{o:#?}");

@@ -250,6 +250,29 @@ pub enum NotEvaluable {
         value: f64,
         detail: String,
     },
+    /// The run lies outside what the noise model's calibration measured for this quantity
+    /// ([`noise::calibration`]): fewer particles per source than its fewest, or more crossings of
+    /// a receiver per particle than its most. The model's standard deviation is not known to
+    /// bound the noise there, so the value is refused whatever it reads.
+    NoiseUncalibrated {
+        /// The value from the series. Not reported as the quantity.
+        value: f64,
+        /// The run's particles per source.
+        particles: u32,
+        /// The run's crossings of the receiver per particle, as the calibration measures them
+        /// ([`noise::calibration::variable`]).
+        crossings_per_particle: f64,
+        /// The fewest particles per source the calibration measured this quantity at.
+        min_particles: u32,
+        /// The most crossings per particle it measured this quantity at.
+        max_crossings_per_particle: f64,
+        /// When the run has too few particles: `min_particles`, the count to run at least.
+        particles_at_least: Option<u32>,
+        /// When the run has too many crossings per particle: the most the receiver radius may be,
+        /// as a multiple of the run's (crossings per particle grow as its square):
+        /// `√(max_crossings_per_particle / crossings_per_particle)`.
+        receiver_radius_scale_at_most: Option<f64>,
+    },
     /// More than one source contributes to the series. ISO 3382-1 defines the onset-relative
     /// quantities per source–receiver pair, and a sum of several sources' responses is not one.
     /// Made by `core::results`, which knows the sources; `params` never sees them.
@@ -424,6 +447,34 @@ impl fmt::Display for NotEvaluable {
                 "noise_unknown: {value} from the series, but its Monte-Carlo noise cannot be \
                  estimated: {detail}"
             ),
+            NotEvaluable::NoiseUncalibrated {
+                value,
+                particles,
+                crossings_per_particle,
+                min_particles,
+                max_crossings_per_particle,
+                particles_at_least,
+                receiver_radius_scale_at_most,
+            } => {
+                write!(
+                    f,
+                    "noise_uncalibrated: {value} from the series, but the noise model was \
+                     calibrated for this quantity at {min_particles} particles per source or \
+                     more and {max_crossings_per_particle} crossings of a receiver per particle \
+                     or fewer; this run has {particles} and {crossings_per_particle}."
+                )?;
+                if let Some(n) = particles_at_least {
+                    write!(f, " Run at least {n} particles per source.")?;
+                }
+                if let Some(s) = receiver_radius_scale_at_most {
+                    write!(
+                        f,
+                        " Make the receiver radius at most {s:.3} times this run's: crossings per \
+                         particle grow as its square, and more particles do not lower them."
+                    )?;
+                }
+                Ok(())
+            }
             NotEvaluable::SeveralSources { sources } => write!(
                 f,
                 "several_sources: {sources:?} all contribute; the quantity is defined per source \
