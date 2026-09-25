@@ -617,7 +617,8 @@ impl Ray {
 /// studies of the transport in test builds.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct FreePathSettings {
-    /// Independent replicas; their spread is the statistical error. At least 2.
+    /// Independent replicas, each its own random stream, traced on as many threads as the
+    /// machine has. At least 2. The statistical errors are over the rays (`PathStats`).
     pub replicas: u32,
     /// Rays per replica, each started at a point drawn evenly from the enclosure's volume, in an
     /// isotropic direction.
@@ -627,20 +628,42 @@ pub struct FreePathSettings {
     pub burn_in_paths: u32,
     /// Free paths counted per ray after the burn-in. At least 2.
     pub paths_per_ray: u32,
-    /// The seed of the replicas' random streams.
+    /// The seed of the replicas' random streams. In JSON, `0x` and 16 hex digits: a number above
+    /// 2⁵³ would not survive a reader that parses numbers as doubles.
+    #[serde(serialize_with = "super::serialize_seed")]
+    #[schemars(with = "String", pattern(super::SEED_PATTERN))]
     pub seed: u64,
 }
 
 impl FreePathSettings {
-    /// What [`free_paths`], and so `core::results`, uses: 16 × 1024 rays of 1 + 32 + 64 paths,
-    /// 1,048,576 paths counted, and a fixed seed. 32 left out: in an L-shaped room the mean free
-    /// path sits 1.8 standard errors from 4V/S with 16 left out and 0.2 with 64
+    /// What [`free_paths`], and so `core::results`, uses: 16 × 4096 rays of 1 + 32 + 512 paths,
+    /// 33,554,432 paths counted, and a fixed seed (the one the first settings had).
+    ///
+    /// **Its precision is set by a stated target, not by where a draw landed** (pre-M8 review,
+    /// round 2: the first settings, 16 × 1024 rays of 64 paths, put the shipped reference 0.005
+    /// points above the 0.6 % in one cell, and changing them until a draw fell below would have
+    /// been the fishing `free_paths` exists to close). The target: in every one of M8's cells,
+    /// three of the standard deviations Kuttruff's time inherits from `γ²` fit between the
+    /// formula's own error there and the 0.6 % the formula is held to. The formula's error, with
+    /// the exact `γ²` against the transport at high counts, is at most +0.587 % (5×4×3 m, `ᾱ`
+    /// 0.4, on the receivers; +0.585 % on the room energy), so `3·σ(T)/T ≤ 0.013 %`; there
+    /// `∂T/T` is 0.2807 per unit `γ²`, so `σ(γ²) ≤ 0.000154`. Measured at another seed (never
+    /// this one, so that no candidate's draw was seen), `σ(γ²)·√paths` is 0.72 in that room and
+    /// 0.83 in 6×10×3 m, at 64 or 512 paths a ray alike. So at least 21.7 M paths counted; the
+    /// smallest power-of-two multiple of the first settings' 1,048,576 that reaches it is 32
+    /// (`σ(γ²)` about 0.000124, `3σ(T)/T` 0.0105 %). The seed was kept, and the draw these
+    /// settings give is the reference whatever it is.
+    ///
+    /// 512 paths a ray rather than 64 spends 6 % of the tracing on the 33 paths left out instead
+    /// of 34 %: the same precision in three quarters of the time (0.55 s against 0.74 s for a
+    /// box in a release build, 28 threads). 32 left out: in an L-shaped room the mean free path
+    /// sits 1.8 standard errors from 4V/S with 16 left out and 0.2 with 64
     /// (`tests/params_lambert.rs`).
     pub const STANDARD: FreePathSettings = FreePathSettings {
         replicas: 16,
-        rays_per_replica: 1024,
+        rays_per_replica: 4096,
         burn_in_paths: 32,
-        paths_per_ray: 64,
+        paths_per_ray: 512,
         seed: 0x6c61_6d62_6572_7431,
     };
 }
@@ -838,14 +861,27 @@ struct PathSums {
     /// Pairs of successive counted paths of one ray, and `Σ ℓₖ·ℓₖ₊₁` over them.
     pairs: u64,
     s11: f64,
-    /// Rays, and the sum over them of each ray's counted length and of its square.
+    /// Rays, and the sums over them of each ray's counted length `Lᵣ = Σ ℓ` and of `Lᵣ²`, of `Qᵣ²`
+    /// for its counted `Qᵣ = Σ ℓ²` (whose sum is `s2`), and of `Lᵣ·Qᵣ`.
     rays: u64,
     r1: f64,
     r2: f64,
+    q2: f64,
+    rq: f64,
 }
 
-/// What the replicas' sums give: each value pooled over the replicas, with the standard error of
-/// the replicas' own values. The correlation and the effective `γ²` are read by studies only.
+/// What the replicas' sums give. The mean free path and `γ²` are pooled over every counted path,
+/// and their standard errors are over the rays (below); the correlation and the effective `γ²`,
+/// read by studies only, are pooled too, with the standard error of the replicas' own values.
+///
+/// **The standard errors are over the rays**, each ray's counted paths summed first: rays are
+/// independent, the paths of one ray are not (successive paths are correlated), so a ray is the
+/// unit. With `R` rays of `K` counted paths, `xᵣ = Lᵣ/K` and `yᵣ = Qᵣ/K`, the mean free path's is
+/// `√(var x/(R − 1))`, and `γ² = ȳ/x̄² − 1`'s the delta method's,
+/// `√((var y/x̄⁴ − 4ȳ·cov(x, y)/x̄⁵ + 4ȳ²·var x/x̄⁶)/(R − 1))`. Over tens of thousands of rays each
+/// is itself known to a fraction of a per cent, where 16 replicas' spread knew it only to about a
+/// fifth, so a room's refusal for its mean free path no longer turns on how that spread fell (the
+/// pre-M8 review: a volume 0.4 % off was refused and one 0.5 % off accepted).
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(not(feature = "transport-study"), allow(dead_code))]
 struct PathStats {
@@ -883,6 +919,25 @@ impl PathSums {
         self.rays += o.rays;
         self.r1 += o.r1;
         self.r2 += o.r2;
+        self.q2 += o.q2;
+        self.rq += o.rq;
+    }
+
+    /// The standard errors of the mean free path and of `γ²` over the rays ([`PathStats`]). NaN
+    /// for fewer than 2 rays.
+    fn ray_errors(&self) -> (f64, f64) {
+        let r = self.rays as f64;
+        let k = self.n as f64 / r;
+        let (x, y) = (self.s1 / self.n as f64, self.s2 / self.n as f64);
+        let rk2 = r * k * k;
+        // Population moments of xᵣ = Lᵣ/K and yᵣ = Qᵣ/K; the (R − 1) below makes them the
+        // samples'.
+        let var_x = self.r2 / rk2 - x * x;
+        let var_y = self.q2 / rk2 - y * y;
+        let cov = self.rq / rk2 - x * y;
+        let mean_se = (var_x / (r - 1.0)).sqrt();
+        let var_g = var_y / x.powi(4) - 4.0 * y * cov / x.powi(5) + 4.0 * y * y * var_x / x.powi(6);
+        (mean_se, (var_g / (r - 1.0)).sqrt())
     }
 }
 
@@ -896,13 +951,14 @@ fn path_stats(sums: &[PathSums]) -> PathStats {
         }
     }
     let [mean, gamma2, lag1, effective_gamma2] = all.values();
+    let (mean_error, gamma2_error) = all.ray_errors();
     let se = |k: usize| mean_se(&per[k]).1;
     PathStats {
         paths: all.n,
         mean,
-        mean_se: se(0),
+        mean_se: mean_error,
         gamma2,
-        gamma2_se: se(1),
+        gamma2_se: gamma2_error,
         lag1,
         lag1_se: se(2),
         effective_gamma2,
@@ -940,7 +996,7 @@ fn trace(
                 None => enclosure.start_point(&mut rng),
             };
             let mut ray = Ray::from_source(start, &mut rng);
-            let (mut length, mut previous) = (0.0f64, None::<f64>);
+            let (mut length, mut square, mut previous) = (0.0f64, 0.0f64, None::<f64>);
             // Path 0 runs from the start point; paths 1 to burn_in are left out too.
             for k in 0..=u64::from(s.burn_in_paths) + u64::from(s.paths_per_ray) {
                 let (run, face) = ray.run(enclosure, reflections)?;
@@ -954,6 +1010,7 @@ fn trace(
                     }
                     previous = Some(run);
                     length += run;
+                    square += run * run;
                 }
                 ray.reflect(enclosure, run, face, &mut rng, uniform);
                 reflections += 1;
@@ -961,6 +1018,8 @@ fn trace(
             sums.rays += 1;
             sums.r1 += length;
             sums.r2 += length * length;
+            sums.q2 += square * square;
+            sums.rq += length * square;
         }
         Ok(sums)
     })

@@ -523,6 +523,17 @@ pub(crate) fn not_evaluable(quantity: Quantity, why: NotEvaluable) -> ParamError
     ParamError::NotEvaluable { quantity, why }
 }
 
+/// The JSON pattern of a seed as [`serialize_seed`] writes it.
+pub(crate) const SEED_PATTERN: &str = "^0x[0-9a-f]{16}$";
+
+/// Writes a 64-bit seed as the string `0x` and 16 lowercase hex digits. A JSON number above 2⁵³
+/// is read as a different value by every reader that parses numbers as doubles (JavaScript, and
+/// many JSON libraries): the transport's seed, `0x6c61_6d62_6572_7431`, would be read as
+/// 7809643498213372928, not 7809643498213372977 (pre-M8 review).
+pub(crate) fn serialize_seed<S: serde::Serializer>(seed: &u64, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str(&format!("{seed:#018x}"))
+}
+
 /// A solver's floor: it drops each particle once its energy falls `-db` dB below its start
 /// ([`EnergySeries::with_solver_floor`]).
 #[derive(Clone, Copy, Debug, PartialEq)]
