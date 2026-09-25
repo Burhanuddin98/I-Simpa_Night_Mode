@@ -855,8 +855,8 @@ Eyring time of 0 s, a fully absorbing room.
 ### The reference M8 compares against (decided)
 
 **Decided since** (Burhan, 2026-09-24 23:14): Kuttruff's corrected Eyring with `γ²` from the
-geometry, 5 %, with the transport as a cross-check and plain Eyring reported only; Michael to
-ratify. It is core code now: "Kuttruff's reference", below. What follows is the M7 follow-ups'
+geometry, 5 %, with the transport as a cross-check and plain Eyring reported only; final, as Burhan's decision needs no
+ratification. It is core code now: "Kuttruff's reference", below. What follows is the M7 follow-ups'
 evidence as they wrote it.
 
 Added by the M7 follow-ups, before the decisions were taken. `T_Eyring = K·V/(A + 4mV)` has two open
@@ -892,8 +892,8 @@ options, for Burhan: Eyring and a tolerance or α set that allows for it; Kuttru
 computed apart from SPPS for each room (within 0.6 % here); or the independent transport itself as
 the reference (within its own noise, 0.02 % at 4,000,000 rays). **Decided by Burhan on 2026-09-24
 23:14:** Kuttruff's with `γ²` computed from the geometry by the transport, never fitted to SPPS,
-5 %, with the transport as the tight cross-check and plain Eyring reported only; Michael ratifies
-the gate text ("Kuttruff's reference", below).
+5 %, with the transport as the tight cross-check and plain Eyring reported only; final
+("Kuttruff's reference", below).
 
 **Decided as recommended here.** `K`: 2026-09-24 17:45, decision 2. `m` as the solver applies
 it, and TCR keeping 0.163: 2026-09-25 00:20, decisions 4 and 5. The recommendation as it was
@@ -1234,7 +1234,7 @@ number when written, and the `config.xml` importer refuses a `diffusion` that is
 reads the solvers' comma decimal `0,5` as 0.5). Only a run folder given as it is can carry one.
 
 **Open, for M8 and later**: the bed itself (Kuttruff at 5 %, the transport's T30 as the tight
-cross-check, `dt` 1 ms); Michael's ratification of the gate text; M12's use of `lambert_walls`;
+cross-check, `dt` 1 ms); M12's use of `lambert_walls`;
 rooms whose parts barely exchange sound (coupled volumes), and faces with the room on both sides
 (thin reflectors), which the mean-free-path check refuses rather than describe (the corrected
 Elmia hall, with hanging reflectors, was not refused: `γ²` 0.55499 ± 0.00024; whether its

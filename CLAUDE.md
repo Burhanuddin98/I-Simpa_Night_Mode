@@ -26,8 +26,8 @@ with its receipt and a "done when" test. Milestone M14 closes it.
 Live handoff: `session-logs/HANDOFF-2026-09-08.md`. Read it before the arc plan — it names
 what is proven, what is retracted, and the traps already paid for.
 
-**Nothing is pushed.** `main` sits ahead of `origin/main`; the remote is still the April
-release. Pushing is Michael's call and has not been asked.
+**This is Burhan's personal project.** Decisions and pushes are his; nothing is routed to anyone else
+for approval. `rebuild` is on GitHub as a public branch; `main` is still the April release.
 
 **Develop against `testdata/elmia_corrected.ply`**, not against upstream's raw `elmia.ply`.
 The raw hall self-intersects and produces a solve in which ~99.997% of particles die while

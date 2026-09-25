@@ -876,7 +876,7 @@ reflections a step) cannot be told from them. `ρ` = 10 is about 2.3 times the l
 Once open, now decided:
 - **The reference** (Burhan, 2026-09-24 23:14): Kuttruff's corrected Eyring with `γ²` computed from
   the geometry, 5 %, with the independent transport as the tight cross-check and plain Eyring
-  reported only. Michael ratifies the gate text (`docs/params.md`, "Kuttruff's reference"). SPPS
+  reported only; final (`docs/params.md`, "Kuttruff's reference"). SPPS
   matches the transport to 0.04 % (energetic).
 - **Seed spread** (M8 design decision 1 of 2026-09-25 00:20): gated on the cell's mean, which is met
   from 1.5 M. Per-receiver σ is reported and users see per-receiver `mc_sd`. Per receiver-band would

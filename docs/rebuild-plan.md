@@ -92,7 +92,7 @@ are in the raw JSON.
 | M10 | Concept B: Geometry, Materials, Sources & receivers | M9, M4 |
 | M7 | Result readers and our own acoustic parameters, checked on synthetic decays | M6, M9 |
 | M11 | Concept B: Simulate, Console, Runs | M10, M6 |
-| M8 | Physics test bed at `dt` 1 ms: T30 against Kuttruff's corrected Eyring with `γ²` from the room's geometry (5 %) and the independent transport as the tight cross-check, and EDT (decisions of 2026-09-24 23:14 and 2026-09-25 00:20, Michael to ratify); SPL's diffuse field, C80 and D50 reported, not gated, until their references are chosen | M7 |
+| M8 | Physics test bed at `dt` 1 ms: T30 against Kuttruff's corrected Eyring with `γ²` from the room's geometry (5 %) and the independent transport as the tight cross-check, and EDT (Burhan's decisions of 2026-09-24 23:14 and 2026-09-25 00:20, final); SPL's diffuse field, C80 and D50 reported, not gated, until their references are chosen | M7 |
 | M12 | Concept B: Results. Only numbers with a passing bed are shown | M11, M7, M8 |
 | M13 | Windows installer (one NSIS build) | M12, M1 |
 | M14 | v1.1: every item in `docs/v1.1-backlog.md` closed, or dropped by Burhan in his own words. The backlog is the only place a deferral lives (Burhan's filter, 2026-09-25) | M13 |
@@ -121,7 +121,7 @@ M5-M8 instead of after them.
    the solver's. So Burhan decided on 2026-09-24 23:14 that M8 compares T30 against Kuttruff's
    corrected Eyring with `γ²` computed from the room's geometry by that transport
    (`params::lambert`), never fitted to SPPS, at ±5 %, with the transport as a tight cross-check
-   and plain Eyring reported only; the gate text changes, so Michael ratifies. A bed failure
+   and plain Eyring reported only; the gate text changes on Burhan's decision, which is final. A bed failure
    blocks only M12, and it is treated as a finding to investigate.
 3. **The GUI had been queued behind the bed.** Reordered, as above.
 4. **CI could not run gates that need Grace.** Gates are split in two:
