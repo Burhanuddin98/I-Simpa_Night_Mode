@@ -35,6 +35,12 @@ into the file named here in the same session, never only into a chat or a handof
 5. **Check the solver executables against `solvers/manifest.json` on every run.** The main checkout's
    tetgen.exe is stale; the one in `t3-proj` is correct.
 
+## Decided 2026-09-27
+
+- **EDT display (Burhan): "Show the range always".** EDT is always shown with its guaranteed range; wide ranges are flagged.
+- **M8 split (Jarvis's call, Burhan may overrule):** M8a T30 first, M8b EDT once the band is in Rust.
+- **Default step:** pending the step-cost measurement (Burhan: "needs more research").
+
 ## M8 decisions (the critic's, 2026-09-25 23:12; recommendations of 2026-09-26 00:34)
 
 1. EDT in M8: build the new band first. *Recommended.*
