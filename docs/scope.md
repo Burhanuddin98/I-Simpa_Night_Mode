@@ -25,6 +25,9 @@ into the file named here in the same session, never only into a chat or a handof
      found 0 escapes, and 217 of 217 Z3 cases are inside the band.
    - Then comes the fix round, the evaluation (which also re-checks the upstream EDT port) and the critic.
    - The design and its evidence are committed to `docs/investigations/` when the workflow ends.
+   - **Workflow done (07:22)**, committed at `docs/investigations/2026-09-26-edt-band/`: 0 wrong among 24,866 accepted EDTs.
+     The critic's gates before Rust: (1) the f32 air-rate fix, (2) production tail and eps inputs, (3) noise and band evaluated together,
+     (4) a Z4 golden corpus, (5) a measured Rust benchmark.
    - Then the Rust build, with Z4 parity against the Python version.
 2. **The seed-batch noise rule** (SB-1..SB-9, k = 10), from the accepted follow-up spec.
 3. **The 2 ms ceilings for C50, C80 and D50** (D5). At 10 ms they can be off by up to 0.13 dB today.
