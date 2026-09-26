@@ -79,6 +79,8 @@ Michael should still ratify the Rust core, since he will review it.
 Every milestone has a script gate (`tools/gates/mN.ps1`) that exits 0 or not. The full gates
 are in the raw JSON.
 
+Every scope dimension (engine work before M8, decisions, upstream parity, backlog) is tracked in `docs/scope.md`.
+
 | # | Milestone | Depends on |
 |---|---|---|
 | M0 | Repo, toolchain, gate harness | – |
