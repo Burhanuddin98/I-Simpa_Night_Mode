@@ -108,6 +108,48 @@ So the kill is a bias of SPPS's estimator, like its Monte-Carlo noise, not a dis
 
 **Unrecorded energy.** P4 covers energy after the series end (a truncated series), and any other bounded unrecorded energy.
 
+**GATE 2 (2026-09-27): production `T_max`, `band_early.production_tail_max`/`production_inputs`.**
+Setup's default `T_max = 0` is an assumption, not a bound (the critic's finding). Two run-derived
+components, both expressed as a share of `S(onset)` (the sum of the recorded bins from the onset
+bin on) and reused as `T_max = share * S(onset)`:
+- **(a) still alive at the series end.** `total_energy[]` (`results-json.md`, `spps.total_energy`)
+  is the room's total energy per step; the room table and the source `.gap` both carry a factor
+  `rho c` (`reportmanager.cpp:155-166, 807-816`), which cancels in a ratio. `f_end =
+  total_energy[-1] / total_energy[onset_step]` is the share of the energy alive at the arrival that
+  is still alive, unaccounted, when the series ends.
+- **(b) killed at the `trans_epsilon` floor** (energetic mode only). A killed particle's energy at
+  the kill is at most `E0 * 10^-trans_epsilon` (`CalculationCore.cpp:57-60, 141-146, 305-310`;
+  `sppsNantes.cpp:75`). With `killed_particles` of `N = particles_per_source * n_sources` (the safe
+  over-count is `absorbed_by_atmosphere + absorbed_by_materials + absorbed_by_fittings`,
+  `run/stats.rs::BandStats`, since only the energetic branches of those three states are floor
+  kills and the rest are counted anyway), together at most `killed_particles * 10^-trans_epsilon /
+  N` of the total emitted energy.
+
+**What this is not.** Both (a) and (b) bound unaccounted energy in the ROOM, not what a small
+receiver ball could still catch of it. That conversion needs a spatial assumption (diffuse: energy
+reaches the receiver in proportion to its room share, the assumption `docs/results.md`, "Lost
+particles" / "the solver's floor" already make and calibrate against a closed-form model, `alpha`
+0.05-0.9, `trans_epsilon` 1-7, `tests/params_floor.rs`: 487 of 855 cells accepted, none of the
+accepted further from the model than its limit) or a hard geometric worst case, which this section
+already rejected above as useless ("of the order of the whole recorded energy"). **No fully
+rigorous, model-free bound on (a) or (b) is possible from SPPS's outputs alone.**
+`production_tail_max` returns the diffuse-field bound (the best run-derived one available, strictly
+better than the production default of 0 per decision-log row 12), labelled as an assumption, not a
+proof; `GATE2.md` states the residual risk plainly. The run-length rule (`band_early.min_run_length`,
+decision-log row 12) refuses `run_too_short` rather than assume 0, and never extrapolates the
+alive-share curve past what it is given (no log-linear fit, per the decision).
+
+**GATE 2: `m_n`, `band_early.safe_contributions_per_bin`.** `spps_rel_eps`'s gamma bound needs
+`contributions_per_bin` (P1's `m_n`), which SPPS's output does not carry. The smallest safe
+substitute with no run of the solver: `m_n <= particles_per_source * n_sources` for every bin. SPPS
+records one deposit per particle per time step it is tracked (`CalculationCore.cpp:78`,
+`ReportManager::RecordTimeStep`, called at most once per particle per step; an energetic-mode
+transmitted particle is a second, independent particle, already counted in the emitted total), so
+no bin's true `m_n` exceeds the number of particles ever emitted. This is loose (almost every bin's
+true `m_n` is far smaller) but never an underestimate, so `eps_n` is only widened, never narrowed,
+by using it: it can only add truths the band holds, never drop one (the same principle as GATE 1's
+widening, section 1.1).
+
 **What is not known:**
 - where inside its bin any energy arrived;
 - how the energy in the direct window splits into direct sound and reflections;

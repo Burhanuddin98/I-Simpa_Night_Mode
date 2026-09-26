@@ -138,6 +138,156 @@ def spps_rel_eps(n_bins, contributions_per_bin, max_reflections=0, storage='f32'
 
 
 # ------------------------------------------------------------------------------------------------
+# GATE 2: production inputs (tail_max, eps_n) from a finished run's own outputs, and the run-length
+# rule that refuses a run too short to trust. SPEC.md section 1.3/P4 and P1; GATE2.md.
+# ------------------------------------------------------------------------------------------------
+ENERGETIC_METHOD = 1     # config.xml / results-json computation_method: 1 energetic, 0 random
+
+
+def safe_contributions_per_bin(particles_per_source, n_sources=1):
+    """A model-free, run-derived upper bound on m_n (SPEC P1), with no m_n in the output.
+
+    SPPS records one deposit per particle per time step it is tracked (`ReportManager::
+    RecordTimeStep`, called at most once per particle per step, `CalculationCore.cpp:78`; a
+    transmitted particle in the energetic method is a second, independent particle, already
+    counted in the total emitted). So no bin's true contribution count can exceed the number of
+    particles ever emitted, `particles_per_source * n_sources`: a particle contributes to a given
+    bin at most once (it occupies one step), so summing over all particles bounds every bin's m_n
+    at once, with no assumption on where in time any particle's contributions fall. This is the
+    'smallest safe substitute' SPEC 1 asks for when m_n itself is not in the output: it is loose
+    (almost every bin's true m_n is far smaller), but it never underestimates, so spps_rel_eps
+    only widens, never narrows, the true tolerance.
+    """
+    return int(particles_per_source) * int(n_sources)
+
+
+def production_tail_max(total_energy, onset_step, trans_epsilon=None, computation_method=ENERGETIC_METHOD,
+                         killed_particles=0, particles_per_source=1, n_sources=1, receiver_recorded_from_onset=None):
+    """The production (a, b) tail bound of GATE 2's brief, as a fraction of S(onset) (the energy the
+    receiver records from the arrival on) -- multiply by that sum to get Setup's tail_max in the
+    histogram's own units.
+
+    (a) Energy still alive in the room when the series ends, unaccounted in any bin.
+        `total_energy[]` (results-json.md, `spps.total_energy`) is the room's total energy per step,
+        in the same units up to a single factor (rho c, reportmanager.cpp:155-166 and 807-816: the
+        room table and the source .gap both carry it, so it cancels in a ratio). Let
+        f_end = total_energy[-1] / total_energy[onset_step]: the share of the energy alive at the
+        arrival that is STILL alive, and so still able to reach the receiver, when the series ends.
+
+    (b) Energy SPPS killed at the trans_epsilon floor (energetic mode only; SPEC 1.3,
+        CalculationCore.cpp:57-60, 141-146, 305-310; sppsNantes.cpp:75). A killed particle's energy
+        at the instant of the kill is at most `E0 * 10^-trans_epsilon` (E0 its start energy; every
+        particle from one source starts equal, `sppsNantes.cpp:75`'s `confPartFrame.energie`).
+        `killed_particles` (the caller's count; the safe over-count is
+        `absorbed_by_atmosphere + absorbed_by_materials + absorbed_by_fittings`, since only the
+        energetic-mode branches of those three states can be a floor kill and the others are
+        counted anyway, per-band, `run/stats.rs::BandStats`) of `N = particles_per_source *
+        n_sources` total, each at most `10^-trans_epsilon` of `E0 = 1/N` (normalised so the total
+        emitted is 1), together are at most `killed_particles * 10^-trans_epsilon / N` of the total
+        emitted energy.
+
+    **What this bound is NOT.** Both (a) and (b) answer "how much energy is unaccounted for",
+    not "how much of it could still reach one small receiver ball". Converting a room-wide energy
+    total into a bound on one receiver's future deposit needs either a spatial assumption (a
+    diffuse field: energy arrives at the receiver in proportion to its share of the room, which is
+    the assumption `docs/results.md` "Lost particles" and "the solver's floor" make, calibrated
+    there against a closed-form model over alpha 0.05-0.9, trans_epsilon 1-7) or a hard geometric
+    worst case, which SPEC 1.3 already rejects as useless ("of the order of the whole recorded
+    energy": nothing rules out every remaining joule funnelling through the ball). **No fully
+    rigorous, model-free (assumption-free) bound on either (a) or (b) is possible from SPPS's
+    outputs alone**; see GATE2.md. This function returns the best available run-derived bound,
+    reusing the diffuse-field assumption `docs/results.md` already ships and has tested
+    (`tests/params_floor.rs`, 487 of 855 cells accepted, none of the accepted further from the
+    model than its limit), converted to Setup's Tmax convention (a bound on TRUE energy, not a
+    share of it): multiply the returned fraction by `receiver_recorded_from_onset` (S(onset), the
+    caller's own sum of recorded bins from the onset bin on) to get an absolute tail_max.
+
+    Returns (tail_fraction, detail dict). tail_fraction is dimensionless: the bound on unaccounted
+    TRUE energy as a multiple of S(onset). Pass None for trans_epsilon (or killed_particles=0) to
+    skip (b) (random mode has no floor kill).
+    """
+    total_energy = np.asarray(total_energy, dtype=np.float64)
+    if total_energy.ndim != 1 or len(total_energy) == 0:
+        raise ValueError('total_energy must be a non-empty 1-D series')
+    if not (0 <= onset_step < len(total_energy)):
+        raise ValueError('onset_step out of range')
+    e_onset = float(total_energy[onset_step])
+    if not e_onset > 0:
+        raise ValueError('total_energy at onset must be > 0: alive_share is undefined')
+    f_end = float(total_energy[-1]) / e_onset
+    detail = dict(f_end=f_end, e_onset=e_onset, e_end=float(total_energy[-1]))
+    kill_frac = 0.0
+    if computation_method == ENERGETIC_METHOD and trans_epsilon is not None and killed_particles > 0:
+        N = int(particles_per_source) * int(n_sources)
+        if N <= 0:
+            raise ValueError('particles_per_source * n_sources must be > 0')
+        kill_frac = float(killed_particles) * (10.0 ** (-float(trans_epsilon))) / N
+        detail.update(killed_particles=int(killed_particles), N=N, kill_frac=kill_frac)
+    tail_fraction = f_end + kill_frac
+    detail['tail_fraction'] = tail_fraction
+    if receiver_recorded_from_onset is not None:
+        detail['tail_max_abs'] = tail_fraction * float(receiver_recorded_from_onset)
+    return tail_fraction, detail
+
+
+def production_inputs(B, dt, onset_step, total_energy, particles_per_source, n_sources=1,
+                       trans_epsilon=None, computation_method=ENERGETIC_METHOD, killed_particles=0,
+                       max_reflections=0, storage='f32', air_rate_true_diff=None):
+    """GATE 2's entry point: production_inputs(run-derived fields) -> (tail_max, eps array), in
+    Setup's own units (tail_max absolute, eps per-bin), built only from what a finished run's JSON
+    (results-json.md) and particle-statistics table (`run/stats.rs`) give -- no oracle, no fit.
+
+    B            : the recorded bin series (Setup's own B), used only for S(onset) = sum(B).
+    onset_step   : the onset bin's index into `total_energy` (results-json.md's per-step room
+                   table starts at step 0; the onset bin is the same index into B).
+    """
+    B = np.asarray(B, dtype=np.float64)
+    s_onset = float(B.sum())
+    tail_fraction, detail = production_tail_max(
+        total_energy, onset_step, trans_epsilon=trans_epsilon, computation_method=computation_method,
+        killed_particles=killed_particles, particles_per_source=particles_per_source, n_sources=n_sources,
+        receiver_recorded_from_onset=s_onset)
+    tail_max = tail_fraction * s_onset
+    m_n = safe_contributions_per_bin(particles_per_source, n_sources)
+    eps = spps_rel_eps(len(B), m_n, max_reflections=max_reflections, storage=storage, dt=dt,
+                        air_rate_true_diff=air_rate_true_diff)
+    return tail_max, eps, detail
+
+
+def min_run_length(dt, alive_share_curve, tolerance_fraction, trans_epsilon=None,
+                    computation_method=ENERGETIC_METHOD, killed_particles_rate=0.0,
+                    particles_per_source=1, n_sources=1, max_steps=2_000_000):
+    """The run-length rule (decision-log row 12): the fewest steps for `production_tail_max`'s
+    fraction to fall, and STAY (monotonically, since alive_share_curve is taken non-increasing), at
+    or below `tolerance_fraction`. Refuses 'run_too_short' rather than assume 0, and never
+    extrapolates the curve past what it is given (no log-linear fit): it only reads the alive-share
+    curve the caller already measured or is willing to keep measuring, one step at a time.
+
+    alive_share_curve : total_energy[n] / total_energy[onset_step] for n = onset_step, onset_step+1,
+                         ..., as far as the caller has it (or is willing to run it). A callable
+                         step -> share is also accepted, for a caller that can extend the run.
+    killed_particles_rate : killed particles per step (energetic mode), for the (b) term's growth;
+                         0 to ignore (b), e.g. when trans_epsilon is None or mode is random.
+
+    Returns (steps_needed, 'ok') or (None, 'run_too_short') if max_steps is reached first.
+    """
+    get = alive_share_curve if callable(alive_share_curve) else (lambda n, c=alive_share_curve: c[n] if n < len(c) else None)
+    N = int(particles_per_source) * int(n_sources)
+    n = 0
+    while n <= max_steps:
+        share = get(n)
+        if share is None:
+            return None, 'run_too_short'
+        kill_frac = 0.0
+        if computation_method == ENERGETIC_METHOD and trans_epsilon is not None and killed_particles_rate > 0 and N > 0:
+            kill_frac = (killed_particles_rate * n) * (10.0 ** (-float(trans_epsilon))) / N
+        if share + kill_frac <= tolerance_fraction:
+            return n, 'ok'
+        n += 1
+    return None, 'run_too_short'
+
+
+# ------------------------------------------------------------------------------------------------
 # Exact continuous-time parameters of an explicit arrangement (the ground truth of every test)
 # ------------------------------------------------------------------------------------------------
 def exact_params(pos, mass, te_list=(0.05, 0.08)):
