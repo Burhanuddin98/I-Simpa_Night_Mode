@@ -15,6 +15,7 @@ into the file named here in the same session, never only into a chat or a handof
 | **v2 contenders** | `docs/v1.1-backlog.md`, "v2 contenders" | 1 item (the GPU particle tracer), after M14. |
 | **Open physics questions** | This file, below | 4 open. |
 | **Why W1G was dropped** | `docs/investigations/2026-09-25-z3-w1g-hunt/z3-verdict.md` | 217 robust false accepts; three mechanisms. |
+| **Decisions (who, why, revisit?)** | `docs/decision-log.md` | 13 recorded. |
 | **The running log** | `session-logs/HANDOFF-2026-09-23.md` | Burhan's words verbatim, decisions, restart order. |
 
 ## Engine work before M8
