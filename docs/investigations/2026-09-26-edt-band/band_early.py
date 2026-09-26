@@ -49,7 +49,49 @@ def _suffix_excl(x):
     return np.concatenate([c[1:], [0.0]])
 
 
-def spps_rel_eps(n_bins, contributions_per_bin, max_reflections=0, storage='f32'):
+def air_rate_mismatch_bound(dt, n_f32_ops=4):
+    """A priori worst-case bound on |a_f32 - m c| (SPEC 1.1, GATE 1), with no knowledge of m or c.
+
+    SPPS's per-step air factor is p_f32 = fl32(exp(fl32(-fl32(m) * fl32(fl32(c) * fl32(dt)))))
+    (base_core_configuration.cpp:114-115): the exact value x = -m c dt goes through at most
+    n_f32_ops = 4 float32 roundings (c*dt, m*(...), the negate is exact, exp). Each elementary f32
+    op has relative error at most u32 = 2^-24, so to the accuracy of first-order accumulation,
+    p_f32 = exp(x) (1 + delta) with |delta| <= (1 + u32)^n_f32_ops - 1. band_early's air rate is
+    a_f32 = -ln(p_f32)/dt = m c - ln(1 + delta)/dt, so
+
+        |a_f32 - m c| = |ln(1 + delta)| / dt <= (|delta| / (1 - |delta|)) / dt =: Delta(dt).
+
+    Delta(dt) is a pure function of the step (not of m, c): it blows up as dt -> 0, because the f32
+    rounding of p turns into an ever larger rate error once fewer bits of the exponent survive.
+    This is why the gap concentrates at the smallest grid steps (0.1-0.2 ms), not the largest.
+    When the caller already has both rates (e.g. it ran the f32 chain itself, as eval_diag_p32.py
+    does), the exact |a_f32 - m c| is tighter than Delta(dt) and should be used instead
+    (air_rate_true_diff below); Delta(dt) is the bound to use with no other information.
+    """
+    u32 = F32_U
+    delta = (1.0 + u32) ** n_f32_ops - 1.0
+    if delta >= 1.0:
+        raise ValueError('n_f32_ops too large for this bound')
+    return (delta / (1.0 - delta)) / float(dt)
+
+
+def widen_eps_for_air_rate(rel_eps, n_bins, dt, air_rate_true_diff):
+    """Compound a rate-mismatch widening onto an existing per-bin (or scalar) recording tolerance
+    (GATE 1, SPEC 1.1). See spps_rel_eps's air_rate_true_diff for the derivation; this is the same
+    formula, usable with any base tolerance (not only spps_rel_eps's own gamma-bound one), so a
+    caller with its own recording tolerance still gets the fix as one call, not a hand-rolled one.
+
+        eps_n_fix = (1 + eps_n) * exp(|a_f32 - m c| * (n + 1) * dt) - 1.
+    """
+    n = np.arange(int(n_bins), dtype=np.float64)
+    base = np.broadcast_to(np.asarray(rel_eps, np.float64), n.shape)
+    da = abs(float(air_rate_true_diff))
+    rate_eps = np.expm1(da * (n + 1.0) * float(dt))
+    return (1.0 + base) * (1.0 + rate_eps) - 1.0
+
+
+def spps_rel_eps(n_bins, contributions_per_bin, max_reflections=0, storage='f32', dt=None,
+                  air_rate_true_diff=None):
     """Rigorous per-bin relative tolerance eps_n of SPPS's recorded values (SPEC section 1, P1).
 
     SPPS keeps each particle's energy in double (sppsTypes.h:72, l_decimal = double,
@@ -61,6 +103,23 @@ def spps_rel_eps(n_bins, contributions_per_bin, max_reflections=0, storage='f32'
     product) g = k u64 / (1 - k u64) bounds the double part (Higham's gamma_k), and one f32 rounding
     is at most u32 relative to the stored value. The exact value X_n then satisfies
     |X_n / B_n - 1| <= (u32 + g) / (1 - g) = eps_n.  storage='f64' for a double output file.
+
+    air_rate_true_diff (GATE 1): band_early's air rate a is a_f32 = -ln(p_f32)/dt (Setup's
+    air_rate docstring), which is what SPPS actually propagates. A caller checking against a
+    truth built on the physical rate m c (rather than SPPS's own a_f32) needs a wider tolerance,
+    because P1 as stated only bounds the recording of the a_f32 series, not its distance to m c
+    (SPEC 1.1). Pass |a_f32 - m c| here (air_rate_mismatch_bound(dt) if only dt is known, tighter
+    if the caller has both rates) and dt; every bin gets its rate error compounded onto the
+    recording tolerance:
+
+        eps_n_fix = (1 + eps_n) * exp(|a_f32 - m c| * (n + 1) * dt) - 1,
+
+    which is exact because energy read in bin n arrived at some tau <= (n + 1) dt since emission
+    (Setup's cn = (n + kappa) dt - t_a, kappa = 1), so the true-rate value differs from the
+    a_f32-rate value by at most the factor exp(|a_f32 - m c| * (n + 1) * dt) at every tau in the
+    bin's admissible range; compounding it onto (1 +- eps_n) keeps a single interval that contains
+    both the a_f32-consistent and the m-c-consistent true energy. Widening eps only enlarges the
+    admissible set (SPEC section 2), so this can only add truths a band holds, never drop one.
     """
     n = np.arange(int(n_bins), dtype=np.float64)
     m = np.broadcast_to(np.asarray(contributions_per_bin, np.float64), n.shape)
@@ -70,7 +129,12 @@ def spps_rel_eps(n_bins, contributions_per_bin, max_reflections=0, storage='f32'
         raise ValueError('too many roundings for the gamma bound')
     g = ku / (1.0 - ku)
     s = F32_U if storage == 'f32' else F64_U
-    return (s + g) / (1.0 - g)
+    eps = (s + g) / (1.0 - g)
+    if air_rate_true_diff is not None:
+        if dt is None:
+            raise ValueError('dt is required with air_rate_true_diff')
+        eps = widen_eps_for_air_rate(eps, n_bins, dt, air_rate_true_diff)
+    return eps
 
 
 # ------------------------------------------------------------------------------------------------

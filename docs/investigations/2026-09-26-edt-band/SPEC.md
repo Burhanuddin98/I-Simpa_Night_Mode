@@ -17,7 +17,7 @@ Section 11 lists every output file.
 1. Every quantity gets an interval that holds its continuous-time value for every arrangement of energy inside the bins that the recorded sums allow. No shape is assumed.
 2. C and D are exact in closed form. Ts is exact up to Dinkelbach's convergence, and every iterate is certified. EDT is a certified outer bound. Every edge is a supremum or infimum over the admissible set, which is reached only in the limit.
 3. Round 2 fixes the one wrong lemma: the window-end intervals now satisfy `Ub ≤ 2·Ua`. It also fixes the crash, the Ts certificate, the premise on SPPS's arithmetic, the seed batch and the unbounded work. Section 0 lists each finding and its fix.
-4. No truth fell outside its band in any test or re-run attack (section 9).
+4. No truth fell outside its band in any test or re-run attack against the truth built on SPPS's own air rate `a_f32` (section 9). **GATE 1 correction (2026-09-27):** against a truth built on the physical rate `m·c` instead, the histogram's own `f32(p)` rounding put 46 of 1,010 z3grid C50/C80/D50 rows (23 in each of `b1`, `b0`) outside the band, by up to 0.0015 L. Section 1.1 now derives and applies the fix; see `GATE1.md`.
 5. The model-free EDT band is still about `±(1.6–2.1)·dt/U` wide on exponentials, because that is the data's own ambiguity. EDT is therefore refused at τ = L almost everywhere at the 2 ms preset.
 
 ---
@@ -58,7 +58,21 @@ SPPS writes `B[n]`, the energy recorded in step `n`, for `n = 0 … N−1`. Bin 
 - p is an f32. The energy is a double (`l_decimal`, `#define l_decimal double`, `coreString.h:43`), so the product is formed in double.
 - Step `n` therefore carries `p^(n+1)` counted from emission, to within `(n+1)` double roundings.
 
-The band's air rate is `a = −ln(p_f32)/dt`. With it, the per-step factor and the band's `e^{−a·dt}` are the same number. If the caller passes `m·c` instead, the difference is `|ln p_f32 + m·c·dt|` per step. The Z3 check shows this changes no verdict.
+The band's air rate is `a = a_f32 = −ln(p_f32)/dt`. With it, the per-step factor and the band's `e^{−a·dt}` are the same number, so P1 as stated (below) bounds exactly what SPPS propagated. **It does not, by itself, bound the distance from that to a truth built on the physical rate `m·c`** — that was checked only for two of the Z3 cases (`eval_diag_z3cd.py`) and wrongly generalised here in round 2; the full 1,010-row z3grid sweep (`eval_diag_p32.py`) found 46 rows (23 each in `b1`, `b0`) where a C50/C80/D50 truth built on `m·c` sat outside the band by up to 0.0015 L, concentrated at the smallest grid steps (0.1–0.2 ms). EDT and Ts containment was unaffected (their functionals are far less sensitive to a small rate shift than the C/D ratio near onset).
+
+**GATE 1 (2026-09-27): the derivation and the fix.**
+
+`p_f32` is formed from the exact value `x = −m·c·dt` through at most 4 float32 roundings (`c·dt`, `m·(...)`, the negate is exact, `expf`). Each elementary f32 op has relative error at most `u32 = 2^−24`, so `p_f32 = exp(x)·(1 + δ)` with `|δ| ≤ (1 + u32)^4 − 1`. Then
+
+`a_f32 = −ln(p_f32)/dt = m·c − ln(1 + δ)/dt`, so `|a_f32 − m·c| = |ln(1 + δ)|/dt ≤ (|δ|/(1 − |δ|))/dt =: Δ(dt)`.
+
+`Δ(dt)` depends only on the step, not on `m` or `c`, and it grows as `dt → 0` — this is exactly why the misses concentrate at the smallest grid steps: shrinking `dt` shrinks `m·c·dt`, so fewer bits of the exponent survive `expf`'s own rounding, and the *relative* rate error against `m·c` grows even though the absolute one does not. `band_early.air_rate_mismatch_bound(dt)` returns `Δ(dt)`; when the caller already has both rates (as every eval script here does, by running the f32 chain itself), the exact `|a_f32 − m·c|` is tighter and is what is used below.
+
+Energy read in bin `n` arrived at some `τ ≤ (n+1)·dt` since emission (`cn` above, `κ = 1`). At every such `τ`, the value consistent with the physical rate differs from the value consistent with `a_f32` by at most the factor `exp(|a_f32 − m·c|·(n+1)·dt)`. Compounding that factor onto the recording tolerance gives a single per-bin tolerance whose admissible set contains both:
+
+`ε_n,fix = (1 + ε_n)·exp(|a_f32 − m·c|·(n+1)·dt) − 1`.
+
+Because widening `ε_n` only enlarges the admissible set (section 2), this can only add truths a band holds, never drop one — it is implemented as an optional `air_rate_true_diff` argument to `spps_rel_eps` (`band_early.py`), not as a separate scalar hack, so it composes per-bin with the existing recording tolerance. `GATE1.md` has the before/after containment counts and the width cost.
 
 Energy that truly arrived at τ in bin `n`, with continuous air `e^{−aτ}`, was recorded with the factor `e^{−a((n+κ)dt − τ)}`, with κ = 1.
 
