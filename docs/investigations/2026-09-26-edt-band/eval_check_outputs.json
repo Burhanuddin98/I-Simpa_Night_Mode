@@ -1,0 +1,242 @@
+{
+ "z3": {
+  "json": true,
+  "log": true,
+  "bytes": 2165279,
+  "rows": 1227,
+  "series": 202,
+  "errors": 0,
+  "log_counts": [
+   1227,
+   202,
+   0
+  ],
+  "counts_match_log": true,
+  "rows_missing_method": {},
+  "rows_without_series": 0,
+  "band_errors": 0,
+  "steps": {
+   "2.0": 293,
+   "1.0": 211,
+   "0.5": 202,
+   "0.2": 202,
+   "0.1": 202,
+   "1.78": 2,
+   "1.88": 4,
+   "1.98": 13,
+   "1.38": 2,
+   "0.9": 1,
+   "0.199999995": 1,
+   "0.500000024": 10,
+   "0.39999999": 1,
+   "0.699999975": 2,
+   "1.000000047": 9,
+   "0.79999998": 1,
+   "0.899999985": 1,
+   "0.750000007": 3,
+   "1.999899978": 3,
+   "1.8": 3,
+   "1.990000019": 1,
+   "1.099999994": 1,
+   "1.500000013": 5,
+   "1.5": 14,
+   "0.96": 1,
+   "1.59999996": 1,
+   "2.000000095": 4,
+   "0.600000028": 1,
+   "1.46": 14,
+   "1.6": 1,
+   "0.68": 1,
+   "1.68": 1,
+   "1.7": 2,
+   "1.42": 3,
+   "1.92": 6,
+   "1.86": 1,
+   "1.44": 1,
+   "1.9": 1,
+   "1.84": 2
+  },
+  "status": "COMPLETE"
+ },
+ "ism": {
+  "json": true,
+  "log": true,
+  "bytes": 52385641,
+  "rows": 28890,
+  "series": 3210,
+  "errors": 0,
+  "log_counts": [
+   28890,
+   3210,
+   0
+  ],
+  "counts_match_log": true,
+  "rows_missing_method": {},
+  "rows_without_series": 0,
+  "series_with_wrong_row_count": 0,
+  "band_errors": 0,
+  "steps": {
+   "0.1": 3210,
+   "0.2": 3210,
+   "0.5": 3210,
+   "1.0": 3210,
+   "1.5": 3210,
+   "2.0": 3210,
+   "3.0": 3210,
+   "4.0": 3210,
+   "5.0": 3210
+  },
+  "status": "COMPLETE"
+ },
+ "synth": {
+  "json": true,
+  "log": true,
+  "bytes": 47908024,
+  "rows": 26368,
+  "series": 3296,
+  "errors": 0,
+  "log_counts": [
+   26368,
+   3296,
+   0
+  ],
+  "counts_match_log": true,
+  "rows_missing_method": {},
+  "rows_without_series": 0,
+  "series_with_wrong_row_count": 0,
+  "band_errors": 0,
+  "steps": {
+   "0.1": 3296,
+   "0.2": 3296,
+   "0.5": 3296,
+   "1": 3296,
+   "2": 3296,
+   "3": 3296,
+   "4": 3296,
+   "5": 3296
+  },
+  "status": "COMPLETE"
+ },
+ "pos200": {
+  "json": true,
+  "log": true,
+  "bytes": 20485872,
+  "rows": 11200,
+  "series": 1400,
+  "errors": 0,
+  "log_counts": [
+   11200,
+   1400,
+   0
+  ],
+  "counts_match_log": true,
+  "rows_missing_method": {},
+  "rows_without_series": 0,
+  "series_with_wrong_row_count": 0,
+  "band_errors": 0,
+  "steps": {
+   "0.1": 1400,
+   "0.2": 1400,
+   "0.5": 1400,
+   "1": 1400,
+   "2": 1400,
+   "3": 1400,
+   "4": 1400,
+   "5": 1400
+  },
+  "status": "COMPLETE"
+ },
+ "real": {
+  "json": true,
+  "log": true,
+  "bytes": 49023149,
+  "rows": 26808,
+  "series": 5304,
+  "errors": 0,
+  "log_counts": [
+   26808,
+   5304,
+   0
+  ],
+  "counts_match_log": true,
+  "rows_missing_method": {},
+  "rows_without_series": 0,
+  "band_errors": 0,
+  "steps": {
+   "0.4": 144,
+   "1.0": 144,
+   "2.0": 5304,
+   "3.0": 5304,
+   "4.0": 5304,
+   "5.0": 5304,
+   "10.0": 5304
+  },
+  "status": "COMPLETE"
+ },
+ "synth_10ms": {
+  "json": true,
+  "log": true,
+  "bytes": 8916804,
+  "rows": 3296,
+  "series": 3296,
+  "errors": 0,
+  "log_counts": [
+   3296,
+   3296,
+   0
+  ],
+  "counts_match_log": true,
+  "rows_missing_method": {},
+  "rows_without_series": 0,
+  "series_with_wrong_row_count": 0,
+  "band_errors": 0,
+  "steps": {
+   "10": 3296
+  },
+  "status": "COMPLETE"
+ },
+ "pos200_10ms": {
+  "json": true,
+  "log": true,
+  "bytes": 3878374,
+  "rows": 1400,
+  "series": 1400,
+  "errors": 0,
+  "log_counts": [
+   1400,
+   1400,
+   0
+  ],
+  "counts_match_log": true,
+  "rows_missing_method": {},
+  "rows_without_series": 0,
+  "series_with_wrong_row_count": 0,
+  "band_errors": 0,
+  "steps": {
+   "10": 1400
+  },
+  "status": "COMPLETE"
+ },
+ "ism_10ms": {
+  "json": true,
+  "log": true,
+  "bytes": 8738199,
+  "rows": 3210,
+  "series": 3210,
+  "errors": 0,
+  "log_counts": [
+   3210,
+   3210,
+   0
+  ],
+  "counts_match_log": true,
+  "rows_missing_method": {},
+  "rows_without_series": 0,
+  "series_with_wrong_row_count": 0,
+  "band_errors": 0,
+  "steps": {
+   "10.0": 3210
+  },
+  "status": "COMPLETE"
+ }
+}
