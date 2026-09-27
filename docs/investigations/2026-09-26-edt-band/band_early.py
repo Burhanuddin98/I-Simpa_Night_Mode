@@ -143,6 +143,33 @@ def spps_rel_eps(n_bins, contributions_per_bin, max_reflections=0, storage='f32'
 # ------------------------------------------------------------------------------------------------
 ENERGETIC_METHOD = 1     # config.xml / results-json computation_method: 1 energetic, 0 random
 
+# Decision-log row 14 (2026-09-27 01:50, Jarvis, technical call): turning the room-wide unrecorded
+# fraction f_end into a bound on ONE receiver's future deposit needs a diffuse-field assumption
+# (docs/results.md "Lost particles"), which is not model-free. GATE2_TAIL_SAFETY_FACTOR inflates
+# the diffuse-field bound before it is used as Setup's tail_max, so the band still holds even if
+# the true receiver capture is up to this many times worse than the diffuse-field estimate.
+GATE2_TAIL_SAFETY_FACTOR = 1000.0
+
+# Decision-log row 14: if even the inflated bound already eats a material share of the quantity's
+# own recording tolerance, the run is too short to trust rather than silently widened further.
+#
+# GATE 4b fix (2026-09-27): the original refusal compared tail_max (an absolute energy, units of
+# sum(B)) against GATE2_TAIL_REFUSAL_TOLERANCE_SHARE * quantity_tolerance (a half-width, in the
+# quantity's own units -- seconds for Ts, relative for EDT, dB for C, dimensionless for D). Those
+# units do not agree, so the comparison was dimensionally meaningless and never a real gate
+# (production_inputs() no longer takes quantity_tolerance at all; passing it raises TypeError).
+# The replacement, applied in Setup.all_bands(), stays entirely in each quantity's own units: solve
+# the same band twice from the same B/eps/everything-else, once with the caller's (x1000-inflated)
+# tail_max and once with tail_max = 0, and take tail_widening_q = halfwidth_with_tail -
+# halfwidth_without_tail in the units all_bands() already reports and already compares against tau
+# for that quantity. If tail_widening_q > GATE2_TAIL_REFUSAL_TOLERANCE_SHARE * tau_q, that quantity
+# (only that quantity -- others are judged independently) is refused 'run_too_short'. The 1% share
+# is unchanged from the original rule: below it, even a x1000-wrong diffuse-field assumption cannot
+# move the reported range by more than a hundredth of a JND-scale unit, so the run is trusted;
+# above it, the guarantee is resting on the diffuse-field assumption GATE2.md documents as not
+# model-free, so the quantity is outside the method's premises and is refused rather than reported.
+GATE2_TAIL_REFUSAL_TOLERANCE_SHARE = 0.01
+
 
 def safe_contributions_per_bin(particles_per_source, n_sources=1):
     """A model-free, run-derived upper bound on m_n (SPEC P1), with no m_n in the output.
@@ -223,8 +250,11 @@ def production_tail_max(total_energy, onset_step, trans_epsilon=None, computatio
             raise ValueError('particles_per_source * n_sources must be > 0')
         kill_frac = float(killed_particles) * (10.0 ** (-float(trans_epsilon))) / N
         detail.update(killed_particles=int(killed_particles), N=N, kill_frac=kill_frac)
-    tail_fraction = f_end + kill_frac
+    tail_fraction_raw = f_end + kill_frac
+    tail_fraction = GATE2_TAIL_SAFETY_FACTOR * tail_fraction_raw
+    detail['tail_fraction_raw'] = tail_fraction_raw
     detail['tail_fraction'] = tail_fraction
+    detail['safety_factor'] = GATE2_TAIL_SAFETY_FACTOR
     if receiver_recorded_from_onset is not None:
         detail['tail_max_abs'] = tail_fraction * float(receiver_recorded_from_onset)
     return tail_fraction, detail
@@ -232,7 +262,7 @@ def production_tail_max(total_energy, onset_step, trans_epsilon=None, computatio
 
 def production_inputs(B, dt, onset_step, total_energy, particles_per_source, n_sources=1,
                        trans_epsilon=None, computation_method=ENERGETIC_METHOD, killed_particles=0,
-                       max_reflections=0, storage='f32', air_rate_true_diff=None):
+                       max_reflections=0, storage='f32', air_rate_true_diff=None, quantity_tolerance=None):
     """GATE 2's entry point: production_inputs(run-derived fields) -> (tail_max, eps array), in
     Setup's own units (tail_max absolute, eps per-bin), built only from what a finished run's JSON
     (results-json.md) and particle-statistics table (`run/stats.rs`) give -- no oracle, no fit.
@@ -240,7 +270,20 @@ def production_inputs(B, dt, onset_step, total_energy, particles_per_source, n_s
     B            : the recorded bin series (Setup's own B), used only for S(onset) = sum(B).
     onset_step   : the onset bin's index into `total_energy` (results-json.md's per-step room
                    table starts at step 0; the onset bin is the same index into B).
+    quantity_tolerance : REMOVED (GATE 4b, 2026-09-27): the old refusal compared this absolute-energy
+                   tail_max against a per-quantity half-width tolerance, which do not share units --
+                   see the comment above GATE2_TAIL_REFUSAL_TOLERANCE_SHARE. Pass a non-None value
+                   here and this function raises TypeError. The run-too-short refusal now happens in
+                   Setup.all_bands(), per quantity, by comparing the band's own tail-widening against
+                   that quantity's own tau, both in the quantity's own units.
     """
+    if quantity_tolerance is not None:
+        raise TypeError(
+            "production_inputs() no longer takes quantity_tolerance -- the tail_max vs. "
+            "quantity_tolerance comparison mixed an absolute energy with a per-quantity half-width "
+            "and was dimensionally meaningless (GATE 4b). The run_too_short refusal is now computed "
+            "per quantity by Setup.all_bands(), from tail_widening vs. that quantity's own tau; see "
+            "the comment above GATE2_TAIL_REFUSAL_TOLERANCE_SHARE in this module.")
     B = np.asarray(B, dtype=np.float64)
     s_onset = float(B.sum())
     tail_fraction, detail = production_tail_max(
@@ -1180,12 +1223,39 @@ class Setup:
 
     # -------------------------------------------------------------------------------------------
     def all_bands(self, tau=None, upstream=True):
-        """Every early parameter: band, point value, half-width, refusal (SPEC section 6)."""
+        """Every early parameter: band, point value, half-width, refusal (SPEC section 6).
+
+        GATE 4b run-too-short refusal (decision-log row 14, comment above
+        GATE2_TAIL_REFUSAL_TOLERANCE_SHARE): when this Setup carries a positive tail_max
+        (self.Tmax > 0), every quantity's band is also solved with an identical Setup ("notail")
+        whose tail_max is 0 (same B, eps, everything else). The half-width the tail adds --
+        tail_widening, in that quantity's own units (relative for EDT, seconds for Ts, dB for C,
+        dimensionless for D) -- is recorded on the quantity's output. When the tail-inclusive
+        half-width exceeds tau (what would otherwise be reported as 'band_too_wide'), the more
+        specific 'run_too_short' is reported instead if tail_widening alone already exceeds
+        GATE2_TAIL_REFUSAL_TOLERANCE_SHARE of tau -- i.e. the tail estimate, not the recorded bins,
+        is what pushed the band over -- so the run-too-short refusal takes priority over the generic
+        band-too-wide one whenever the tail is the material cause; each quantity is judged
+        independently.
+        """
         user = dict(tau or {})
         tau = dict(LIMIT, **user)
+        notail = None
+        if self.Tmax > 0:
+            notail = Setup(self.B_rec, self.dt, self.ta, half_width=self.h, air_rate=self.a,
+                            kappa=self.kappa, rel_eps=self.eps, tail_max=0.0,
+                            tail_t_max=self.tail_t_max, t_refl_min=self.t_refl_min,
+                            misfit_tol=self.misfit_tol, tail_t_min=self.tail_t_min,
+                            n_sources=self.n_sources, homogeneous_celerity=self.homogeneous_celerity)
+
+        def widening(band, band_n, relative):
+            hw, hwn = _halfwidth(band, relative), _halfwidth(band_n, relative)
+            return None if (hw is None or hwn is None) else hw - hwn
+
         res = {}
         band, info = self.edt_band()
-        res['edt'] = _package('edt', band, info, tau['edt'], relative=True)
+        w = widening(band, notail.edt_band()[0], True) if notail is not None else None
+        res['edt'] = _package('edt', band, info, tau['edt'], relative=True, tail_widening=w)
         if upstream:
             res['edt']['isimpa'] = upstream_edt(self.B_rec, self.dt)
         band, info = self.ts_band()
@@ -1193,7 +1263,8 @@ class Setup:
             tau_ts = tau['ts']
         else:
             tau_ts = min(LIMIT['ts'], TS_RELATIVE * 0.5 * (band[0] + band[1]))
-        res['ts'] = _package('ts', band, info, tau_ts, relative=False)
+        w = widening(band, notail.ts_band()[0], False) if notail is not None else None
+        res['ts'] = _package('ts', band, info, tau_ts, relative=False, tail_widening=w)
         res['ts']['tau'] = tau_ts
         pr = self.premise_refusal()
         for te in (0.05, 0.08):
@@ -1201,15 +1272,33 @@ class Setup:
                 dband, cband, info = None, None, dict(pr)
             else:
                 dband, cband, info = self.cd_band(te)
+            w_c = w_d = None
+            if notail is not None and not pr:
+                dband_n, cband_n, _ = notail.cd_band(te)
+                w_c = widening(cband, cband_n, False)
+                if te == 0.05:
+                    w_d = widening(dband, dband_n, False)
             tag = '%g' % (te * 1e3)
-            res['c' + tag] = _package('c', cband, dict(info), tau['c'], relative=False)
+            res['c' + tag] = _package('c', cband, dict(info), tau['c'], relative=False, tail_widening=w_c)
             if te == 0.05:
-                res['d' + tag] = _package('d', dband, dict(info), tau['d'], relative=False)
+                res['d' + tag] = _package('d', dband, dict(info), tau['d'], relative=False, tail_widening=w_d)
         res['diagnostics'] = dict(misfit_share=self.misfit_share, S0_ratio=self.S0_hi / self.S0_lo)
         return res
 
 
-def _package(q, band, info, tau, relative):
+def _halfwidth(band, relative):
+    """The half-width all_bands()/_package() would report for band = (lo, hi), or None if the
+    band is missing/unbounded -- used to measure tail_widening between a with-tail and a
+    tail_max=0 run of the same Setup (GATE 4b)."""
+    if band is None:
+        return None
+    lo, hi = band
+    if not (np.isfinite(lo) and np.isfinite(hi)):
+        return None
+    return (hi - lo) / (hi + lo) if relative else 0.5 * (hi - lo)
+
+
+def _package(q, band, info, tau, relative, tail_widening=None):
     out = dict(info)
     if band is None:
         out.setdefault('refused', 'refused')
@@ -1235,9 +1324,22 @@ def _package(q, band, info, tau, relative):
     out['half_width_L'] = hw / LIMIT[q]
     out['half_width_JND'] = hw / JND[q]
     out['value'] = value
+    out['tau'] = tau
+    if tail_widening is not None:
+        out['tail_widening'] = tail_widening
     if 'refused' not in out and hw > tau:
-        out['refused'] = 'band_too_wide'
-        out['why'] = 'half-width %.4g exceeds tau %.4g' % (hw, tau)
+        # GATE 4b: when the tail estimate alone already eats more than
+        # GATE2_TAIL_REFUSAL_TOLERANCE_SHARE of tau, the tail is the material cause of the
+        # band being too wide, so the more specific 'run_too_short' is reported instead of the
+        # generic 'band_too_wide' (comment above GATE2_TAIL_REFUSAL_TOLERANCE_SHARE).
+        if tail_widening is not None and tail_widening > GATE2_TAIL_REFUSAL_TOLERANCE_SHARE * tau:
+            out['refused'] = 'run_too_short'
+            out['why'] = ('tail widening %.4g exceeds %.4g of tau %.4g (GATE2_TAIL_REFUSAL_'
+                          'TOLERANCE_SHARE, decision-log row 14)' %
+                          (tail_widening, GATE2_TAIL_REFUSAL_TOLERANCE_SHARE, tau))
+        else:
+            out['refused'] = 'band_too_wide'
+            out['why'] = 'half-width %.4g exceeds tau %.4g' % (hw, tau)
     return out
 
 

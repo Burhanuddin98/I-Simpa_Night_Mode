@@ -534,13 +534,13 @@ def t4_worker(args):
         return dict(seed=seed, error=traceback.format_exc())
 
 
-def t4(workers=8, n_series=160, n_arr=40):
+def t4(workers=2, n_series=160, n_arr=40):
     log('\n=== T4: random bin sums, %d series x %d arrangements at 0.001 ms (%d workers) ===' % (
         n_series, n_arr, workers))
     from multiprocessing import Pool
     args = [(1000 + i, n_arr) for i in range(n_series)]
     t = time.time()
-    with Pool(min(workers, 8)) as pool:
+    with Pool(min(workers, 2)) as pool:
         rows = pool.map(t4_worker, args, chunksize=1)
     errs = [r for r in rows if 'error' in r]
     rows = [r for r in rows if 'error' not in r]
@@ -883,12 +883,12 @@ def t5_worker(args):
         return dict(seed=seed, error=traceback.format_exc())
 
 
-def t5(workers=8, n_series=40, budget=120.0):
+def t5(workers=2, n_series=40, budget=120.0):
     log('\n=== T5: adversarial climb on EDT: two-atom splits held on -10 dB, eps signs, late mass, tails '
         '(%d series) ===' % n_series)
     from multiprocessing import Pool
     t = time.time()
-    with Pool(min(workers, 8)) as pool:
+    with Pool(min(workers, 2)) as pool:
         rows = pool.map(t5_worker, [(5000 + i, budget) for i in range(n_series)], chunksize=1)
     bad = 0
     errs = 0
@@ -1067,12 +1067,12 @@ def t6_worker(seed):
         return dict(seed=seed, error=traceback.format_exc())
 
 
-def t6(workers=8, n_series=240):
+def t6(workers=2, n_series=240):
     log('\n=== T6: exact band at a = 0, eps = 0 (layer-cake extremiser) against the certified band '
         '(%d series) ===' % n_series)
     from multiprocessing import Pool
     t = time.time()
-    with Pool(min(workers, 8)) as pool:
+    with Pool(min(workers, 2)) as pool:
         rows = pool.map(t6_worker, list(range(n_series)), chunksize=1)
     errs = [r for r in rows if 'error' in r]
     done = [r for r in rows if r.get('exact') is not None and 'error' not in r]
@@ -1274,7 +1274,7 @@ def t7_wide_range(n_seeds=600, n_keep=16, budget=90.0):
         if len(picks) >= n_keep:
             break
     from multiprocessing import Pool
-    with Pool(min(8, max(len(picks), 1))) as pool:
+    with Pool(min(2, max(len(picks), 1))) as pool:
         rows = pool.map(t5_worker, [(p, budget, 'wide') for p in picks], chunksize=1)
     bad = 0
     for r in rows:
@@ -1293,13 +1293,79 @@ def t7_wide_range(n_seeds=600, n_keep=16, budget=90.0):
     return dict(seeds=picks, rows=rows, ok=bad == 0)
 
 
+def _gate4b_edt_setup(dt, tail_max, n_bins=None):
+    """A fixed exponential-decay series (T1's own generator) with an explicit tail_max, used to
+    probe GATE2's tail-widening refusal in isolation (GATE 4b)."""
+    ta = 0.01234
+    T60 = 0.5
+    a = AIR['none']
+    k = 6 * math.log(10) / T60
+    h = 0.31 / C
+    Ed = 0.5 * (1.0 / k) * math.exp(-k * ta)
+    dtau, dE = ball_direct_atoms(ta, h, Ed)
+    n_bins = n_bins or int(math.ceil(3.0 / dt))
+    B, rem = expo_bins(dt, ta, dtau, dE, 1.0, k, ta, a, n_bins)
+    return be.Setup(B, dt, ta, half_width=h, air_rate=a, tail_max=tail_max, tail_t_max=n_bins * dt + 100.0)
+
+
+def t7_gate4b_refusal():
+    """GATE 4b unit tests for the per-quantity tail-widening refusal (band_early.Setup.all_bands):
+    (a) tail_max = 0 never refuses 'run_too_short'; (b) a large tail refuses and names
+    'run_too_short'; (c) a tiny tail does not refuse; (d) production_inputs(quantity_tolerance=...)
+    raises TypeError."""
+    dt = 1e-4
+    checks = []
+
+    # (a) tail_max = 0 never triggers run_too_short (nothing to widen against).
+    s0 = _gate4b_edt_setup(dt, 0.0)
+    r0 = s0.all_bands()
+    ok_a = all(r0[q].get('refused') != 'run_too_short' for q in ('edt', 'ts', 'c50', 'c80', 'd50'))
+    checks.append(('tail_zero_never_refuses', ok_a))
+    if not ok_a:
+        log('  FAIL (a): %s' % {q: r0[q].get('refused') for q in ('edt', 'ts', 'c50', 'c80', 'd50')})
+
+    # (b) a large tail (10% of S(onset)) refuses 'run_too_short' on at least one quantity that is
+    # not already refused for some other reason.
+    S = float(_gate4b_edt_setup(dt, 0.0).B_rec.sum())
+    s_big = _gate4b_edt_setup(dt, 1e-4 * S)
+    r_big = s_big.all_bands()
+    refs_big = {q: r_big[q].get('refused') for q in ('edt', 'ts', 'c50', 'c80', 'd50')}
+    ok_b = any(v == 'run_too_short' for v in refs_big.values())
+    checks.append(('large_tail_refuses_run_too_short', ok_b))
+    if not ok_b:
+        log('  FAIL (b): %s' % refs_big)
+
+    # (c) a tiny tail (1e-9 of S(onset)) refuses nothing via run_too_short.
+    s_tiny = _gate4b_edt_setup(dt, 1e-9 * S)
+    r_tiny = s_tiny.all_bands()
+    refs_tiny = {q: r_tiny[q].get('refused') for q in ('edt', 'ts', 'c50', 'c80', 'd50')}
+    ok_c = all(v != 'run_too_short' for v in refs_tiny.values())
+    checks.append(('tiny_tail_does_not_refuse', ok_c))
+    if not ok_c:
+        log('  FAIL (c): %s' % refs_tiny)
+
+    # (d) production_inputs(quantity_tolerance=...) raises TypeError (removed, GATE 4b).
+    ok_d = False
+    try:
+        be.production_inputs(np.ones(5), dt, 0, np.ones(5), 1, quantity_tolerance=1e-9)
+    except TypeError:
+        ok_d = True
+    checks.append(('quantity_tolerance_raises_typeerror', ok_d))
+    if not ok_d:
+        log('  FAIL (d): production_inputs(quantity_tolerance=...) did not raise TypeError')
+
+    fails = sum(0 if ok else 1 for _, ok in checks)
+    log('GATE 4b refusal unit tests: %d of %d failed (%s)' % (fails, len(checks), checks))
+    return dict(checks=dict(checks), ok=fails == 0)
+
+
 def t7():
     log('\n=== T7: edge cases from the adversary, run through the code ===')
     out = {}
     fails = 0
     for name, f in (('e1', t7_e1), ('lemma_w', t7_lemma_w), ('ts_cap', t7_ts_cap),
                     ('eps_unrecorded', t7_eps_and_unrecorded), ('unsupported', t7_unsupported),
-                    ('wide_range', t7_wide_range)):
+                    ('wide_range', t7_wide_range), ('gate4b_refusal', t7_gate4b_refusal)):
         try:
             r = f()
         except Exception:
@@ -1314,11 +1380,11 @@ def t7():
 # ------------------------------------------------------------------------------------------------
 def main():
     argv = sys.argv[1:]
-    workers = 8
+    workers = 2
     n_series = 400
     if '--workers' in argv:
         i = argv.index('--workers')
-        workers = min(int(argv[i + 1]), 8)
+        workers = min(int(argv[i + 1]), 2)
         del argv[i:i + 2]
     if '--series' in argv:
         i = argv.index('--series')

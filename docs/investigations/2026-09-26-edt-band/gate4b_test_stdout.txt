@@ -1,0 +1,319 @@
+free space on B: 97.1 GiB
+
+=== T1: exact exponential decay, closed-form truth ===
+dt  2.0 ms  air none  impulse     gap 0.0 ms | EDT [0.46544, 0.52352] true 0.50000 in=True hw 5.873% = 11.75 L REFUSED band_too_wide | I-Simpa 0.46374 (-7.25%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.03s
+dt  2.0 ms  air none  impulse     gap 2.5 ms | EDT [0.48309, 0.52315] true 0.50181 in=True hw 3.981% = 7.96 L REFUSED band_too_wide | I-Simpa 0.47601 (-5.14%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.02s
+dt  2.0 ms  air none  ball R=0.31 gap 0.0 ms | EDT [0.46824, 0.52352] true 0.50000 in=True hw 5.574% = 11.15 L REFUSED band_too_wide | I-Simpa 0.46527 (-6.95%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.02s
+dt  2.0 ms  air none  ball R=0.31 gap 2.5 ms | EDT [0.48309, 0.52315] true 0.50181 in=True hw 3.981% = 7.96 L REFUSED band_too_wide | I-Simpa 0.47757 (-4.83%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.01s
+dt  2.0 ms  air 1k    impulse     gap 0.0 ms | EDT [0.46542, 0.52356] true 0.50000 in=True hw 5.879% = 11.76 L REFUSED band_too_wide | I-Simpa 0.46375 (-7.25%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.07s
+dt  2.0 ms  air 1k    impulse     gap 2.5 ms | EDT [0.48307, 0.52312] true 0.50181 in=True hw 3.981% = 7.96 L REFUSED band_too_wide | I-Simpa 0.47602 (-5.14%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.07s
+dt  2.0 ms  air 1k    ball R=0.31 gap 0.0 ms | EDT [0.46822, 0.52356] true 0.50000 in=True hw 5.579% = 11.16 L REFUSED band_too_wide | I-Simpa 0.46528 (-6.94%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.07s
+dt  2.0 ms  air 1k    ball R=0.31 gap 2.5 ms | EDT [0.48307, 0.52312] true 0.50181 in=True hw 3.981% = 7.96 L REFUSED band_too_wide | I-Simpa 0.47758 (-4.83%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.07s
+dt  2.0 ms  air 16k   impulse     gap 0.0 ms | EDT [0.46234, 0.52830] true 0.50000 in=True hw 6.658% = 13.32 L REFUSED band_too_wide | I-Simpa 0.46468 (-7.06%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.99s
+dt  2.0 ms  air 16k   impulse     gap 2.5 ms | EDT [0.47933, 0.52647] true 0.50181 in=True hw 4.687% = 9.37 L REFUSED band_too_wide | I-Simpa 0.47694 (-4.96%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.90s
+dt  2.0 ms  air 16k   ball R=0.31 gap 0.0 ms | EDT [0.46493, 0.52824] true 0.50000 in=True hw 6.375% = 12.75 L REFUSED band_too_wide | I-Simpa 0.46556 (-6.89%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.98s
+dt  2.0 ms  air 16k   ball R=0.31 gap 2.5 ms | EDT [0.47928, 0.52647] true 0.50181 in=True hw 4.692% = 9.38 L REFUSED band_too_wide | I-Simpa 0.47784 (-4.78%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.97s
+dt  2.0 ms  air 20k   impulse     gap 0.0 ms | EDT [0.45978, 0.53094] true 0.50000 in=True hw 7.182% = 14.36 L REFUSED band_too_wide | I-Simpa 0.46510 (-6.98%) | Ts in=True C50 in=True C80 in=True D50 in=True  1.62s
+dt  2.0 ms  air 20k   impulse     gap 2.5 ms | EDT [0.47602, 0.52985] true 0.50181 in=True hw 5.351% = 10.70 L REFUSED band_too_wide | I-Simpa 0.47735 (-4.88%) | Ts in=True C50 in=True C80 in=True D50 in=True  1.05s
+dt  2.0 ms  air 20k   ball R=0.31 gap 0.0 ms | EDT [0.46183, 0.53158] true 0.50000 in=True hw 7.022% = 14.04 L REFUSED band_too_wide | I-Simpa 0.46569 (-6.86%) | Ts in=True C50 in=True C80 in=True D50 in=True  1.53s
+dt  2.0 ms  air 20k   ball R=0.31 gap 2.5 ms | EDT [0.47601, 0.52987] true 0.50181 in=True hw 5.354% = 10.71 L REFUSED band_too_wide | I-Simpa 0.47795 (-4.76%) | Ts in=True C50 in=True C80 in=True D50 in=True  1.37s
+dt  1.0 ms  air none  impulse     gap 0.0 ms | EDT [0.48338, 0.51144] true 0.50000 in=True hw 2.820% = 5.64 L REFUSED band_too_wide | I-Simpa 0.46408 (-7.18%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.02s
+dt  1.0 ms  air none  impulse     gap 2.5 ms | EDT [0.49220, 0.51212] true 0.50181 in=True hw 1.983% = 3.97 L REFUSED band_too_wide | I-Simpa 0.47697 (-4.95%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.02s
+dt  1.0 ms  air none  ball R=0.31 gap 0.0 ms | EDT [0.48410, 0.51188] true 0.50000 in=True hw 2.790% = 5.58 L REFUSED band_too_wide | I-Simpa 0.46468 (-7.06%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.02s
+dt  1.0 ms  air none  ball R=0.31 gap 2.5 ms | EDT [0.49220, 0.51212] true 0.50181 in=True hw 1.983% = 3.97 L REFUSED band_too_wide | I-Simpa 0.47756 (-4.83%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.02s
+dt  1.0 ms  air 1k    impulse     gap 0.0 ms | EDT [0.48337, 0.51139] true 0.50000 in=True hw 2.817% = 5.63 L REFUSED band_too_wide | I-Simpa 0.46408 (-7.18%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.21s
+dt  1.0 ms  air 1k    impulse     gap 2.5 ms | EDT [0.49219, 0.51213] true 0.50181 in=True hw 1.985% = 3.97 L REFUSED band_too_wide | I-Simpa 0.47697 (-4.95%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.08s
+dt  1.0 ms  air 1k    ball R=0.31 gap 0.0 ms | EDT [0.48408, 0.51185] true 0.50000 in=True hw 2.788% = 5.58 L REFUSED band_too_wide | I-Simpa 0.46467 (-7.07%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.21s
+dt  1.0 ms  air 1k    ball R=0.31 gap 2.5 ms | EDT [0.49219, 0.51213] true 0.50181 in=True hw 1.985% = 3.97 L REFUSED band_too_wide | I-Simpa 0.47756 (-4.83%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.08s
+dt  1.0 ms  air 16k   impulse     gap 0.0 ms | EDT [0.48165, 0.51330] true 0.50000 in=True hw 3.181% = 6.36 L REFUSED band_too_wide | I-Simpa 0.46500 (-7.00%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.61s
+dt  1.0 ms  air 16k   impulse     gap 2.5 ms | EDT [0.49032, 0.51402] true 0.50181 in=True hw 2.360% = 4.72 L REFUSED band_too_wide | I-Simpa 0.47718 (-4.91%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.64s
+dt  1.0 ms  air 16k   ball R=0.31 gap 0.0 ms | EDT [0.48232, 0.51374] true 0.50000 in=True hw 3.154% = 6.31 L REFUSED band_too_wide | I-Simpa 0.46464 (-7.07%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.88s
+dt  1.0 ms  air 16k   ball R=0.31 gap 2.5 ms | EDT [0.49027, 0.51402] true 0.50181 in=True hw 2.365% = 4.73 L REFUSED band_too_wide | I-Simpa 0.47753 (-4.84%) | Ts in=True C50 in=True C80 in=True D50 in=True  1.77s
+dt  1.0 ms  air 20k   impulse     gap 0.0 ms | EDT [0.48030, 0.51492] true 0.50000 in=True hw 3.479% = 6.96 L REFUSED band_too_wide | I-Simpa 0.46510 (-6.98%) | Ts in=True C50 in=True C80 in=True D50 in=True  1.77s
+dt  1.0 ms  air 20k   impulse     gap 2.5 ms | EDT [0.48885, 0.51534] true 0.50181 in=True hw 2.638% = 5.28 L REFUSED band_too_wide | I-Simpa 0.47729 (-4.89%) | Ts in=True C50 in=True C80 in=True D50 in=True  1.49s
+dt  1.0 ms  air 20k   ball R=0.31 gap 0.0 ms | EDT [0.48095, 0.51536] true 0.50000 in=True hw 3.454% = 6.91 L REFUSED band_too_wide | I-Simpa 0.46463 (-7.07%) | Ts in=True C50 in=True C80 in=True D50 in=True  1.62s
+dt  1.0 ms  air 20k   ball R=0.31 gap 2.5 ms | EDT [0.48883, 0.51560] true 0.50181 in=True hw 2.664% = 5.33 L REFUSED band_too_wide | I-Simpa 0.47752 (-4.84%) | Ts in=True C50 in=True C80 in=True D50 in=True  1.76s
+dt  0.5 ms  air none  impulse     gap 0.0 ms | EDT [0.49312, 0.50561] true 0.50000 in=True hw 1.250% = 2.50 L REFUSED band_too_wide | I-Simpa 0.46465 (-7.07%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.03s
+dt  0.5 ms  air none  impulse     gap 2.5 ms | EDT [0.49693, 0.50697] true 0.50181 in=True hw 1.000% = 2.00 L REFUSED band_too_wide | I-Simpa 0.47730 (-4.88%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.01s
+dt  0.5 ms  air none  ball R=0.31 gap 0.0 ms | EDT [0.49133, 0.50588] true 0.50000 in=True hw 1.459% = 2.92 L REFUSED band_too_wide | I-Simpa 0.46417 (-7.17%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.02s
+dt  0.5 ms  air none  ball R=0.31 gap 2.5 ms | EDT [0.49693, 0.50697] true 0.50181 in=True hw 1.000% = 2.00 L REFUSED band_too_wide | I-Simpa 0.47682 (-4.98%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.01s
+dt  0.5 ms  air 1k    impulse     gap 0.0 ms | EDT [0.49312, 0.50566] true 0.50000 in=True hw 1.255% = 2.51 L REFUSED band_too_wide | I-Simpa 0.46465 (-7.07%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.13s
+dt  0.5 ms  air 1k    impulse     gap 2.5 ms | EDT [0.49693, 0.50692] true 0.50181 in=True hw 0.995% = 1.99 L REFUSED band_too_wide | I-Simpa 0.47730 (-4.89%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.11s
+dt  0.5 ms  air 1k    ball R=0.31 gap 0.0 ms | EDT [0.49133, 0.50592] true 0.50000 in=True hw 1.463% = 2.93 L REFUSED band_too_wide | I-Simpa 0.46416 (-7.17%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.10s
+dt  0.5 ms  air 1k    ball R=0.31 gap 2.5 ms | EDT [0.49693, 0.50692] true 0.50181 in=True hw 0.995% = 1.99 L REFUSED band_too_wide | I-Simpa 0.47681 (-4.98%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.11s
+dt  0.5 ms  air 16k   impulse     gap 0.0 ms | EDT [0.49218, 0.50657] true 0.50000 in=True hw 1.441% = 2.88 L REFUSED band_too_wide | I-Simpa 0.46452 (-7.10%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.11s
+dt  0.5 ms  air 16k   impulse     gap 2.5 ms | EDT [0.49602, 0.50780] true 0.50181 in=True hw 1.173% = 2.35 L REFUSED band_too_wide | I-Simpa 0.47717 (-4.91%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.12s
+dt  0.5 ms  air 16k   ball R=0.31 gap 0.0 ms | EDT [0.49038, 0.50685] true 0.50000 in=True hw 1.651% = 3.30 L REFUSED band_too_wide | I-Simpa 0.46417 (-7.17%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.39s
+dt  0.5 ms  air 16k   ball R=0.31 gap 2.5 ms | EDT [0.49600, 0.50780] true 0.50181 in=True hw 1.176% = 2.35 L REFUSED band_too_wide | I-Simpa 0.47682 (-4.98%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.31s
+dt  0.5 ms  air 20k   impulse     gap 0.0 ms | EDT [0.49144, 0.50731] true 0.50000 in=True hw 1.589% = 3.18 L REFUSED band_too_wide | I-Simpa 0.46446 (-7.11%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.32s
+dt  0.5 ms  air 20k   impulse     gap 2.5 ms | EDT [0.49529, 0.50857] true 0.50181 in=True hw 1.323% = 2.65 L REFUSED band_too_wide | I-Simpa 0.47711 (-4.92%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.29s
+dt  0.5 ms  air 20k   ball R=0.31 gap 0.0 ms | EDT [0.48968, 0.50759] true 0.50000 in=True hw 1.797% = 3.59 L REFUSED band_too_wide | I-Simpa 0.46417 (-7.17%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.33s
+dt  0.5 ms  air 20k   ball R=0.31 gap 2.5 ms | EDT [0.49528, 0.50857] true 0.50181 in=True hw 1.324% = 2.65 L REFUSED band_too_wide | I-Simpa 0.47682 (-4.98%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.28s
+dt  0.2 ms  air none  impulse     gap 0.0 ms | EDT [0.49727, 0.50222] true 0.50000 in=True hw 0.496% = 0.99 L accepted | I-Simpa 0.46422 (-7.16%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+dt  0.2 ms  air none  impulse     gap 2.5 ms | EDT [0.49985, 0.50382] true 0.50181 in=True hw 0.395% = 0.79 L accepted | I-Simpa 0.47690 (-4.97%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.03s
+dt  0.2 ms  air none  ball R=0.31 gap 0.0 ms | EDT [0.49555, 0.50251] true 0.50000 in=True hw 0.698% = 1.40 L REFUSED band_too_wide | I-Simpa 0.46394 (-7.21%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.03s
+dt  0.2 ms  air none  ball R=0.31 gap 2.5 ms | EDT [0.49985, 0.50382] true 0.50181 in=True hw 0.395% = 0.79 L accepted | I-Simpa 0.47661 (-5.02%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.03s
+dt  0.2 ms  air 1k    impulse     gap 0.0 ms | EDT [0.49727, 0.50227] true 0.50000 in=True hw 0.501% = 1.00 L REFUSED band_too_wide | I-Simpa 0.46422 (-7.16%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.03s
+dt  0.2 ms  air 1k    impulse     gap 2.5 ms | EDT [0.49985, 0.50382] true 0.50181 in=True hw 0.396% = 0.79 L accepted | I-Simpa 0.47690 (-4.97%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.03s
+dt  0.2 ms  air 1k    ball R=0.31 gap 0.0 ms | EDT [0.49555, 0.50256] true 0.50000 in=True hw 0.703% = 1.41 L REFUSED band_too_wide | I-Simpa 0.46393 (-7.21%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.03s
+dt  0.2 ms  air 1k    ball R=0.31 gap 2.5 ms | EDT [0.49985, 0.50382] true 0.50181 in=True hw 0.396% = 0.79 L accepted | I-Simpa 0.47661 (-5.02%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.02s
+dt  0.2 ms  air 16k   impulse     gap 0.0 ms | EDT [0.49689, 0.50261] true 0.50000 in=True hw 0.572% = 1.14 L REFUSED band_too_wide | I-Simpa 0.46416 (-7.17%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.04s
+dt  0.2 ms  air 16k   impulse     gap 2.5 ms | EDT [0.49948, 0.50422] true 0.50181 in=True hw 0.473% = 0.95 L accepted | I-Simpa 0.47684 (-4.98%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.04s
+dt  0.2 ms  air 16k   ball R=0.31 gap 0.0 ms | EDT [0.49515, 0.50297] true 0.50000 in=True hw 0.783% = 1.57 L REFUSED band_too_wide | I-Simpa 0.46393 (-7.21%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.04s
+dt  0.2 ms  air 16k   ball R=0.31 gap 2.5 ms | EDT [0.49948, 0.50422] true 0.50181 in=True hw 0.473% = 0.95 L accepted | I-Simpa 0.47662 (-5.02%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.11s
+dt  0.2 ms  air 20k   impulse     gap 0.0 ms | EDT [0.49658, 0.50295] true 0.50000 in=True hw 0.638% = 1.28 L REFUSED band_too_wide | I-Simpa 0.46414 (-7.17%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.13s
+dt  0.2 ms  air 20k   impulse     gap 2.5 ms | EDT [0.49919, 0.50448] true 0.50181 in=True hw 0.526% = 1.05 L REFUSED band_too_wide | I-Simpa 0.47682 (-4.98%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.11s
+dt  0.2 ms  air 20k   ball R=0.31 gap 0.0 ms | EDT [0.49486, 0.50325] true 0.50000 in=True hw 0.840% = 1.68 L REFUSED band_too_wide | I-Simpa 0.46393 (-7.21%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.13s
+dt  0.2 ms  air 20k   ball R=0.31 gap 2.5 ms | EDT [0.49915, 0.50453] true 0.50181 in=True hw 0.535% = 1.07 L REFUSED band_too_wide | I-Simpa 0.47662 (-5.02%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.25s
+dt  0.1 ms  air none  impulse     gap 0.0 ms | EDT [0.49835, 0.50110] true 0.50000 in=True hw 0.275% = 0.55 L accepted | I-Simpa 0.46394 (-7.21%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.08s
+dt  0.1 ms  air none  impulse     gap 2.5 ms | EDT [0.50083, 0.50281] true 0.50181 in=True hw 0.198% = 0.40 L accepted | I-Simpa 0.47657 (-5.03%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.04s
+dt  0.1 ms  air none  ball R=0.31 gap 0.0 ms | EDT [0.49691, 0.50136] true 0.50000 in=True hw 0.446% = 0.89 L accepted | I-Simpa 0.46385 (-7.23%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.04s
+dt  0.1 ms  air none  ball R=0.31 gap 2.5 ms | EDT [0.50083, 0.50281] true 0.50181 in=True hw 0.198% = 0.40 L accepted | I-Simpa 0.47648 (-5.05%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.04s
+dt  0.1 ms  air 1k    impulse     gap 0.0 ms | EDT [0.49835, 0.50111] true 0.50000 in=True hw 0.276% = 0.55 L accepted | I-Simpa 0.46394 (-7.21%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.04s
+dt  0.1 ms  air 1k    impulse     gap 2.5 ms | EDT [0.50083, 0.50282] true 0.50181 in=True hw 0.198% = 0.40 L accepted | I-Simpa 0.47657 (-5.03%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.04s
+dt  0.1 ms  air 1k    ball R=0.31 gap 0.0 ms | EDT [0.49691, 0.50138] true 0.50000 in=True hw 0.447% = 0.89 L accepted | I-Simpa 0.46385 (-7.23%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.04s
+dt  0.1 ms  air 1k    ball R=0.31 gap 2.5 ms | EDT [0.50083, 0.50282] true 0.50181 in=True hw 0.198% = 0.40 L accepted | I-Simpa 0.47649 (-5.05%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+dt  0.1 ms  air 16k   impulse     gap 0.0 ms | EDT [0.49816, 0.50132] true 0.50000 in=True hw 0.316% = 0.63 L accepted | I-Simpa 0.46404 (-7.19%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+dt  0.1 ms  air 16k   impulse     gap 2.5 ms | EDT [0.50065, 0.50300] true 0.50181 in=True hw 0.235% = 0.47 L accepted | I-Simpa 0.47663 (-5.02%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+dt  0.1 ms  air 16k   ball R=0.31 gap 0.0 ms | EDT [0.49672, 0.50161] true 0.50000 in=True hw 0.490% = 0.98 L accepted | I-Simpa 0.46386 (-7.23%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+dt  0.1 ms  air 16k   ball R=0.31 gap 2.5 ms | EDT [0.50064, 0.50304] true 0.50181 in=True hw 0.239% = 0.48 L accepted | I-Simpa 0.47649 (-5.05%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+dt  0.1 ms  air 20k   impulse     gap 0.0 ms | EDT [0.49801, 0.50150] true 0.50000 in=True hw 0.349% = 0.70 L accepted | I-Simpa 0.46403 (-7.19%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+dt  0.1 ms  air 20k   impulse     gap 2.5 ms | EDT [0.50050, 0.50319] true 0.50181 in=True hw 0.268% = 0.54 L accepted | I-Simpa 0.47663 (-5.02%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+dt  0.1 ms  air 20k   ball R=0.31 gap 0.0 ms | EDT [0.49658, 0.50176] true 0.50000 in=True hw 0.520% = 1.04 L REFUSED band_too_wide | I-Simpa 0.46385 (-7.23%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+dt  0.1 ms  air 20k   ball R=0.31 gap 2.5 ms | EDT [0.50050, 0.50319] true 0.50181 in=True hw 0.268% = 0.54 L accepted | I-Simpa 0.47648 (-5.05%) | Ts in=True C50 in=True C80 in=True D50 in=True  0.05s
+T1: 160 rows, 0 truths outside their band
+[t1 done in 51 s]
+
+=== T2: a single impulse ===
+direct + lone reflection   dt  2.0 ms air none | EDT [2.39204, inf] truth inf refused not_decaying | Ts [0.023872, 0.025660] truth 0.023888 in=True | D50 [0.6250, 0.6250] truth 0.6250 in=True | C50 [2.218, 2.218] (accepted) truth 2.218 | C80 unbounded truth inf | I-Simpa EDT nan
+direct alone               dt  2.0 ms air none | EDT - truth nan refused range_in_arrival | Ts [0.000000, 0.001660] truth 0.000000 in=True | D50 [1.0000, 1.0000] truth 1.0000 in=True | C50 [inf, inf] (unbounded) truth inf | C80 unbounded truth inf | I-Simpa EDT nan
+reflection on a decay      dt  2.0 ms air none | EDT [0.46404, 0.50831] truth 0.48719 refused band_too_wide | Ts [0.028789, 0.030702] truth 0.029685 in=True | D50 [0.8125, 0.8210] truth 0.8140 in=True | C50 [6.369, 6.614] (band_too_wide) truth 6.411 | C80 band_too_wide truth 9.879465381943877 | I-Simpa EDT 0.48528
+energy before the arrival  dt  2.0 ms air none | every quantity refused arrival_misfit: True  (misfit share 0.0345)
+direct + lone reflection   dt  2.0 ms air 20k  | EDT [2.36739, inf] truth inf refused not_decaying | Ts [0.023386, 0.025942] truth 0.023888 in=True | D50 [0.6084, 0.6438] truth 0.6250 in=True | C50 [1.913, 2.571] (band_too_wide) truth 2.218 | C80 unbounded truth inf | I-Simpa EDT nan
+direct alone               dt  2.0 ms air 20k  | EDT - truth nan refused range_in_arrival | Ts [0.000000, 0.001660] truth 0.000000 in=True | D50 [1.0000, 1.0000] truth 1.0000 in=True | C50 [inf, inf] (unbounded) truth inf | C80 unbounded truth inf | I-Simpa EDT nan
+reflection on a decay      dt  2.0 ms air 20k  | EDT [0.45412, 0.51296] truth 0.48719 refused band_too_wide | Ts [0.028419, 0.031454] truth 0.029685 in=True | D50 [0.7996, 0.8322] truth 0.8140 in=True | C50 [6.010, 6.953] (band_too_wide) truth 6.411 | C80 band_too_wide truth 9.879465381943877 | I-Simpa EDT 0.48422
+energy before the arrival  dt  2.0 ms air 20k  | every quantity refused arrival_misfit: True  (misfit share 0.0338)
+direct + lone reflection   dt  1.0 ms air none | EDT [4.95703, inf] truth inf refused not_decaying | Ts [0.023872, 0.024660] truth 0.023888 in=True | D50 [0.6250, 0.6250] truth 0.6250 in=True | C50 [2.218, 2.218] (accepted) truth 2.218 | C80 unbounded truth inf | I-Simpa EDT nan
+direct alone               dt  1.0 ms air none | EDT - truth nan refused range_in_arrival | Ts [0.000000, 0.000660] truth 0.000000 in=True | D50 [1.0000, 1.0000] truth 1.0000 in=True | C50 [inf, inf] (unbounded) truth inf | C80 unbounded truth inf | I-Simpa EDT nan
+reflection on a decay      dt  1.0 ms air none | EDT [0.47649, 0.49773] truth 0.48719 refused band_too_wide | Ts [0.029254, 0.030171] truth 0.029685 in=True | D50 [0.8125, 0.8168] truth 0.8140 in=True | C50 [6.369, 6.492] (accepted) truth 6.411 | C80 [9.842, 9.952] truth 9.879465381943877 | I-Simpa EDT 0.48434
+energy before the arrival  dt  1.0 ms air none | every quantity refused arrival_misfit: True  (misfit share 0.0345)
+direct + lone reflection   dt  1.0 ms air 20k  | EDT [4.92622, inf] truth inf refused not_decaying | Ts [0.023648, 0.024715] truth 0.023888 in=True | D50 [0.6182, 0.6343] truth 0.6250 in=True | C50 [2.093, 2.391] (band_too_wide) truth 2.218 | C80 unbounded truth inf | I-Simpa EDT nan
+direct alone               dt  1.0 ms air 20k  | EDT - truth nan refused range_in_arrival | Ts [0.000000, 0.000660] truth 0.000000 in=True | D50 [1.0000, 1.0000] truth 1.0000 in=True | C50 [inf, inf] (unbounded) truth inf | C80 unbounded truth inf | I-Simpa EDT nan
+reflection on a decay      dt  1.0 ms air 20k  | EDT [0.47164, 0.50043] truth 0.48719 refused band_too_wide | Ts [0.029078, 0.030508] truth 0.029685 in=True | D50 [0.8063, 0.8224] truth 0.8140 in=True | C50 [6.194, 6.657] (band_too_wide) truth 6.411 | C80 band_too_wide truth 9.879465381943877 | I-Simpa EDT 0.48382
+energy before the arrival  dt  1.0 ms air 20k  | every quantity refused arrival_misfit: True  (misfit share 0.0343)
+direct + lone reflection   dt  0.5 ms air none | EDT [11.66922, inf] truth inf refused not_decaying | Ts [0.023872, 0.024160] truth 0.023888 in=True | D50 [0.6250, 0.6250] truth 0.6250 in=True | C50 [2.218, 2.218] (accepted) truth 2.218 | C80 unbounded truth inf | I-Simpa EDT nan
+direct alone               dt  0.5 ms air none | EDT - truth nan refused range_in_arrival | Ts [0.000000, 0.000160] truth 0.000000 in=True | D50 [1.0000, 1.0000] truth 1.0000 in=True | C50 [inf, inf] (unbounded) truth inf | C80 unbounded truth inf | I-Simpa EDT nan
+reflection on a decay      dt  0.5 ms air none | EDT [0.48198, 0.49184] truth 0.48719 refused band_too_wide | Ts [0.029487, 0.029907] truth 0.029685 in=True | D50 [0.8125, 0.8147] truth 0.8140 in=True | C50 [6.369, 6.430] (accepted) truth 6.411 | C80 [9.842, 9.897] truth 9.879465381943877 | I-Simpa EDT 0.48319
+energy before the arrival  dt  0.5 ms air none | every quantity refused arrival_misfit: True  (misfit share 0.0345)
+direct + lone reflection   dt  0.5 ms air 20k  | EDT [11.63044, inf] truth inf refused not_decaying | Ts [0.023774, 0.024096] truth 0.023888 in=True | D50 [0.6231, 0.6295] truth 0.6250 in=True | C50 [2.182, 2.301] (accepted) truth 2.218 | C80 unbounded truth inf | I-Simpa EDT nan
+direct alone               dt  0.5 ms air 20k  | EDT - truth nan refused range_in_arrival | Ts [0.000000, 0.000160] truth 0.000000 in=True | D50 [1.0000, 1.0000] truth 1.0000 in=True | C50 [inf, inf] (unbounded) truth inf | C80 unbounded truth inf | I-Simpa EDT nan
+reflection on a decay      dt  0.5 ms air 20k  | EDT [0.47988, 0.49358] truth 0.48719 refused band_too_wide | Ts [0.029405, 0.030032] truth 0.029685 in=True | D50 [0.8096, 0.8174] truth 0.8140 in=True | C50 [6.286, 6.509] (band_too_wide) truth 6.411 | C80 band_too_wide truth 9.879465381943877 | I-Simpa EDT 0.48296
+energy before the arrival  dt  0.5 ms air 20k  | every quantity refused arrival_misfit: True  (misfit share 0.0346)
+direct + lone reflection   dt  0.1 ms air none | EDT [49.06816, inf] truth inf refused not_decaying | Ts [0.023872, 0.023947] truth 0.023888 in=True | D50 [0.6250, 0.6250] truth 0.6250 in=True | C50 [2.218, 2.218] (accepted) truth 2.218 | C80 unbounded truth inf | I-Simpa EDT nan
+direct alone               dt  0.1 ms air none | EDT - truth nan refused range_in_arrival | Ts [0.000000, 0.000060] truth 0.000000 in=True | D50 [1.0000, 1.0000] truth 1.0000 in=True | C50 [inf, inf] (unbounded) truth inf | C80 unbounded truth inf | I-Simpa EDT nan
+reflection on a decay      dt  0.1 ms air none | EDT [0.48604, 0.48814] truth 0.48719 in=True | Ts [0.029640, 0.029730] truth 0.029685 in=True | D50 [0.8138, 0.8142] truth 0.8140 in=True | C50 [6.406, 6.418] (accepted) truth 6.411 | C80 [9.875, 9.886] truth 9.879465381943877 | I-Simpa EDT 0.48202
+energy before the arrival  dt  0.1 ms air none | every quantity refused arrival_misfit: True  (misfit share 0.0345)
+direct + lone reflection   dt  0.1 ms air 20k  | EDT [49.03525, inf] truth inf refused not_decaying | Ts [0.023873, 0.023972] truth 0.023888 in=True | D50 [0.6240, 0.6256] truth 0.6250 in=True | C50 [2.200, 2.229] (accepted) truth 2.218 | C80 unbounded truth inf | I-Simpa EDT nan
+direct alone               dt  0.1 ms air 20k  | EDT - truth nan refused range_in_arrival | Ts [0.000000, 0.000060] truth 0.000000 in=True | D50 [1.0000, 1.0000] truth 1.0000 in=True | C50 [inf, inf] (unbounded) truth inf | C80 unbounded truth inf | I-Simpa EDT nan
+reflection on a decay      dt  0.1 ms air 20k  | EDT [0.48554, 0.48851] truth 0.48719 in=True | Ts [0.029622, 0.029762] truth 0.029685 in=True | D50 [0.8132, 0.8148] truth 0.8140 in=True | C50 [6.389, 6.435] (accepted) truth 6.411 | C80 [9.858, 9.903] truth 9.879465381943877 | I-Simpa EDT 0.48194
+energy before the arrival  dt  0.1 ms air 20k  | every quantity refused arrival_misfit: True  (misfit share 0.0345)
+T2: 32 cases, 0 truths outside their band
+[t2 done in 5 s]
+
+=== T3: two impulses straddling a bin edge ===
+dt  2.0 ms air none edge at u=0.0097 s masses (0.20, 0.05) | EDT [0.32306, 0.37872] truth 0.35189 in=True hw 15.86 L band_too_wide | I-Simpa 0.33918 (-3.61%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air none edge at u=0.0097 s masses (0.05, 0.20) | EDT [0.31935, 0.37325] truth 0.35189 in=True hw 15.57 L band_too_wide | I-Simpa 0.33794 (-3.96%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air none edge at u=0.0097 s masses (0.12, 0.12) | EDT [0.32242, 0.37740] truth 0.35363 in=True hw 15.71 L band_too_wide | I-Simpa 0.33967 (-3.95%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air none edge at u=0.0217 s masses (0.20, 0.05) | EDT [0.29879, 0.33967] truth 0.32152 in=True hw 12.80 L band_too_wide | I-Simpa 0.33312 (+3.61%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air none edge at u=0.0217 s masses (0.05, 0.20) | EDT [0.29810, 0.33778] truth 0.32152 in=True hw 12.48 L band_too_wide | I-Simpa 0.33346 (+3.71%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air none edge at u=0.0217 s masses (0.12, 0.12) | EDT [0.30028, 0.34107] truth 0.32395 in=True hw 12.72 L band_too_wide | I-Simpa 0.33458 (+3.28%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air none edge at u=0.0417 s masses (0.20, 0.05) | EDT [0.34443, 0.42723] truth 0.39137 in=True hw 21.46 L band_too_wide | I-Simpa 0.38692 (-1.14%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air none edge at u=0.0417 s masses (0.05, 0.20) | EDT [0.35400, 0.44755] truth 0.39138 in=True hw 23.34 L band_too_wide | I-Simpa 0.39548 (+1.05%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air none edge at u=0.0417 s masses (0.12, 0.12) | EDT [0.35022, 0.43834] truth 0.39068 in=True hw 22.35 L band_too_wide | I-Simpa 0.39126 (+0.15%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air 16k  edge at u=0.0097 s masses (0.20, 0.05) | EDT [0.32131, 0.38054] truth 0.35189 in=True hw 16.88 L band_too_wide | I-Simpa 0.33935 (-3.56%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air 16k  edge at u=0.0097 s masses (0.05, 0.20) | EDT [0.31883, 0.37621] truth 0.35189 in=True hw 16.51 L band_too_wide | I-Simpa 0.33909 (-3.64%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air 16k  edge at u=0.0097 s masses (0.12, 0.12) | EDT [0.32131, 0.37984] truth 0.35363 in=True hw 16.70 L band_too_wide | I-Simpa 0.34035 (-3.76%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air 16k  edge at u=0.0217 s masses (0.20, 0.05) | EDT [0.29640, 0.34011] truth 0.32152 in=True hw 13.73 L band_too_wide | I-Simpa 0.33317 (+3.62%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air 16k  edge at u=0.0217 s masses (0.05, 0.20) | EDT [0.29696, 0.34104] truth 0.32152 in=True hw 13.82 L band_too_wide | I-Simpa 0.33462 (+4.08%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air 16k  edge at u=0.0217 s masses (0.12, 0.12) | EDT [0.29866, 0.34300] truth 0.32395 in=True hw 13.82 L band_too_wide | I-Simpa 0.33520 (+3.47%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air 16k  edge at u=0.0417 s masses (0.20, 0.05) | EDT [0.34087, 0.45146] truth 0.39137 in=True hw 27.92 L band_too_wide | I-Simpa 0.38770 (-0.94%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air 16k  edge at u=0.0417 s masses (0.05, 0.20) | EDT [0.35046, 0.47325] truth 0.39138 in=True hw 29.81 L band_too_wide | I-Simpa 0.39609 (+1.20%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  2.0 ms air 16k  edge at u=0.0417 s masses (0.12, 0.12) | EDT [0.34633, 0.45215] truth 0.39068 in=True hw 26.51 L band_too_wide | I-Simpa 0.39196 (+0.33%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air none edge at u=0.0087 s masses (0.20, 0.05) | EDT [0.34086, 0.36872] truth 0.35590 in=True hw 7.85 L band_too_wide | I-Simpa 0.33833 (-4.94%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air none edge at u=0.0087 s masses (0.05, 0.20) | EDT [0.33863, 0.36603] truth 0.35590 in=True hw 7.78 L band_too_wide | I-Simpa 0.33764 (-5.13%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air none edge at u=0.0087 s masses (0.12, 0.12) | EDT [0.34103, 0.36874] truth 0.35752 in=True hw 7.81 L band_too_wide | I-Simpa 0.33912 (-5.15%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air none edge at u=0.0217 s masses (0.20, 0.05) | EDT [0.30996, 0.32967] truth 0.32152 in=True hw 6.16 L band_too_wide | I-Simpa 0.33178 (+3.19%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air none edge at u=0.0217 s masses (0.05, 0.20) | EDT [0.30950, 0.32890] truth 0.32152 in=True hw 6.08 L band_too_wide | I-Simpa 0.33201 (+3.26%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air none edge at u=0.0217 s masses (0.12, 0.12) | EDT [0.31176, 0.33158] truth 0.32395 in=True hw 6.16 L band_too_wide | I-Simpa 0.33322 (+2.86%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air none edge at u=0.0407 s masses (0.20, 0.05) | EDT [0.35895, 0.39871] truth 0.37999 in=True hw 10.50 L band_too_wide | I-Simpa 0.38788 (+2.08%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air none edge at u=0.0407 s masses (0.05, 0.20) | EDT [0.36427, 0.40642] truth 0.37999 in=True hw 10.94 L band_too_wide | I-Simpa 0.39233 (+3.25%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air none edge at u=0.0407 s masses (0.12, 0.12) | EDT [0.36268, 0.40365] truth 0.37981 in=True hw 10.69 L band_too_wide | I-Simpa 0.39003 (+2.69%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air 16k  edge at u=0.0087 s masses (0.20, 0.05) | EDT [0.33984, 0.37063] truth 0.35590 in=True hw 8.67 L band_too_wide | I-Simpa 0.33824 (-4.96%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air 16k  edge at u=0.0087 s masses (0.05, 0.20) | EDT [0.33821, 0.36856] truth 0.35590 in=True hw 8.59 L band_too_wide | I-Simpa 0.33805 (-5.02%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air 16k  edge at u=0.0087 s masses (0.12, 0.12) | EDT [0.34033, 0.37094] truth 0.35752 in=True hw 8.61 L band_too_wide | I-Simpa 0.34045 (-4.77%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air 16k  edge at u=0.0217 s masses (0.20, 0.05) | EDT [0.30872, 0.33125] truth 0.32152 in=True hw 7.04 L band_too_wide | I-Simpa 0.33163 (+3.15%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air 16k  edge at u=0.0217 s masses (0.05, 0.20) | EDT [0.30895, 0.33159] truth 0.32152 in=True hw 7.07 L band_too_wide | I-Simpa 0.33243 (+3.39%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air 16k  edge at u=0.0217 s masses (0.12, 0.12) | EDT [0.31088, 0.33371] truth 0.32395 in=True hw 7.08 L band_too_wide | I-Simpa 0.33397 (+3.09%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air 16k  edge at u=0.0407 s masses (0.20, 0.05) | EDT [0.35467, 0.39950] truth 0.37999 in=True hw 11.89 L band_too_wide | I-Simpa 0.38808 (+2.13%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air 16k  edge at u=0.0407 s masses (0.05, 0.20) | EDT [0.35953, 0.40707] truth 0.37999 in=True hw 12.40 L band_too_wide | I-Simpa 0.39244 (+3.28%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  1.0 ms air 16k  edge at u=0.0407 s masses (0.12, 0.12) | EDT [0.35753, 0.40337] truth 0.37981 in=True hw 12.05 L band_too_wide | I-Simpa 0.38558 (+1.52%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air none edge at u=0.0082 s masses (0.20, 0.05) | EDT [0.35158, 0.36449] truth 0.35799 in=True hw 3.61 L band_too_wide | I-Simpa 0.33855 (-5.43%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air none edge at u=0.0082 s masses (0.05, 0.20) | EDT [0.35037, 0.36317] truth 0.35799 in=True hw 3.59 L band_too_wide | I-Simpa 0.33819 (-5.53%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air none edge at u=0.0082 s masses (0.12, 0.12) | EDT [0.35227, 0.36515] truth 0.35954 in=True hw 3.59 L band_too_wide | I-Simpa 0.33951 (-5.57%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air none edge at u=0.0217 s masses (0.20, 0.05) | EDT [0.31675, 0.32564] truth 0.32152 in=True hw 2.77 L band_too_wide | I-Simpa 0.33145 (+3.09%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air none edge at u=0.0217 s masses (0.05, 0.20) | EDT [0.31647, 0.32529] truth 0.32152 in=True hw 2.75 L band_too_wide | I-Simpa 0.33157 (+3.13%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air none edge at u=0.0217 s masses (0.12, 0.12) | EDT [0.31875, 0.32772] truth 0.32395 in=True hw 2.78 L band_too_wide | I-Simpa 0.33285 (+2.75%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air none edge at u=0.0407 s masses (0.20, 0.05) | EDT [0.36969, 0.38814] truth 0.37999 in=True hw 4.87 L band_too_wide | I-Simpa 0.38981 (+2.59%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air none edge at u=0.0407 s masses (0.05, 0.20) | EDT [0.37254, 0.39154] truth 0.37999 in=True hw 4.97 L band_too_wide | I-Simpa 0.39210 (+3.19%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air none edge at u=0.0407 s masses (0.12, 0.12) | EDT [0.37219, 0.39090] truth 0.37981 in=True hw 4.90 L band_too_wide | I-Simpa 0.39078 (+2.89%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air 16k  edge at u=0.0082 s masses (0.20, 0.05) | EDT [0.35096, 0.36485] truth 0.35799 in=True hw 3.88 L band_too_wide | I-Simpa 0.33833 (-5.49%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air 16k  edge at u=0.0082 s masses (0.05, 0.20) | EDT [0.35004, 0.36381] truth 0.35799 in=True hw 3.86 L band_too_wide | I-Simpa 0.33821 (-5.52%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air 16k  edge at u=0.0082 s masses (0.12, 0.12) | EDT [0.35183, 0.36624] truth 0.35954 in=True hw 4.01 L band_too_wide | I-Simpa 0.33941 (-5.60%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air 16k  edge at u=0.0217 s masses (0.20, 0.05) | EDT [0.31604, 0.32640] truth 0.32152 in=True hw 3.23 L band_too_wide | I-Simpa 0.33121 (+3.01%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air 16k  edge at u=0.0217 s masses (0.05, 0.20) | EDT [0.31618, 0.32663] truth 0.32152 in=True hw 3.25 L band_too_wide | I-Simpa 0.33162 (+3.14%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air 16k  edge at u=0.0217 s masses (0.12, 0.12) | EDT [0.31828, 0.32880] truth 0.32395 in=True hw 3.25 L band_too_wide | I-Simpa 0.33275 (+2.72%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air 16k  edge at u=0.0407 s masses (0.20, 0.05) | EDT [0.36771, 0.38900] truth 0.37999 in=True hw 5.63 L band_too_wide | I-Simpa 0.38971 (+2.56%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air 16k  edge at u=0.0407 s masses (0.05, 0.20) | EDT [0.37044, 0.39247] truth 0.37999 in=True hw 5.77 L band_too_wide | I-Simpa 0.39194 (+3.14%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.5 ms air 16k  edge at u=0.0407 s masses (0.12, 0.12) | EDT [0.36937, 0.39086] truth 0.37981 in=True hw 5.65 L band_too_wide | I-Simpa 0.39064 (+2.85%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air none edge at u=0.0083 s masses (0.20, 0.05) | EDT [0.35517, 0.36028] truth 0.35757 in=True hw 1.43 L band_too_wide | I-Simpa 0.33770 (-5.56%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air none edge at u=0.0083 s masses (0.05, 0.20) | EDT [0.35468, 0.35977] truth 0.35756 in=True hw 1.43 L band_too_wide | I-Simpa 0.33755 (-5.60%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air none edge at u=0.0083 s masses (0.12, 0.12) | EDT [0.35626, 0.36137] truth 0.35913 in=True hw 1.42 L band_too_wide | I-Simpa 0.33877 (-5.67%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air none edge at u=0.0215 s masses (0.20, 0.05) | EDT [0.31999, 0.32354] truth 0.32174 in=True hw 1.10 L band_too_wide | I-Simpa 0.33071 (+2.79%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air none edge at u=0.0215 s masses (0.05, 0.20) | EDT [0.31986, 0.32340] truth 0.32174 in=True hw 1.10 L band_too_wide | I-Simpa 0.33076 (+2.80%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air none edge at u=0.0215 s masses (0.12, 0.12) | EDT [0.32210, 0.32569] truth 0.32417 in=True hw 1.11 L band_too_wide | I-Simpa 0.33207 (+2.44%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air none edge at u=0.0407 s masses (0.20, 0.05) | EDT [0.37498, 0.38229] truth 0.37999 in=True hw 1.93 L band_too_wide | I-Simpa 0.39038 (+2.74%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air none edge at u=0.0407 s masses (0.05, 0.20) | EDT [0.37616, 0.38355] truth 0.37999 in=True hw 1.95 L band_too_wide | I-Simpa 0.39131 (+2.98%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air none edge at u=0.0407 s masses (0.12, 0.12) | EDT [0.37662, 0.38397] truth 0.37981 in=True hw 1.93 L band_too_wide | I-Simpa 0.39059 (+2.84%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air 16k  edge at u=0.0083 s masses (0.20, 0.05) | EDT [0.35466, 0.36040] truth 0.35757 in=True hw 1.61 L band_too_wide | I-Simpa 0.33736 (-5.65%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air 16k  edge at u=0.0083 s masses (0.05, 0.20) | EDT [0.35428, 0.36001] truth 0.35756 in=True hw 1.60 L band_too_wide | I-Simpa 0.33756 (-5.60%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air 16k  edge at u=0.0083 s masses (0.12, 0.12) | EDT [0.35608, 0.36180] truth 0.35913 in=True hw 1.59 L band_too_wide | I-Simpa 0.33873 (-5.68%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air 16k  edge at u=0.0215 s masses (0.20, 0.05) | EDT [0.31945, 0.32360] truth 0.32174 in=True hw 1.29 L band_too_wide | I-Simpa 0.33048 (+2.72%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air 16k  edge at u=0.0215 s masses (0.05, 0.20) | EDT [0.31950, 0.32366] truth 0.32174 in=True hw 1.29 L band_too_wide | I-Simpa 0.33077 (+2.81%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air 16k  edge at u=0.0215 s masses (0.12, 0.12) | EDT [0.32193, 0.32612] truth 0.32417 in=True hw 1.29 L band_too_wide | I-Simpa 0.33203 (+2.43%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air 16k  edge at u=0.0407 s masses (0.20, 0.05) | EDT [0.37494, 0.38370] truth 0.37999 in=True hw 2.31 L band_too_wide | I-Simpa 0.39139 (+3.00%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air 16k  edge at u=0.0407 s masses (0.05, 0.20) | EDT [0.37613, 0.38500] truth 0.37999 in=True hw 2.33 L band_too_wide | I-Simpa 0.39123 (+2.96%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.2 ms air 16k  edge at u=0.0407 s masses (0.12, 0.12) | EDT [0.37548, 0.38405] truth 0.37981 in=True hw 2.26 L band_too_wide | I-Simpa 0.39052 (+2.82%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air none edge at u=0.0082 s masses (0.20, 0.05) | EDT [0.35656, 0.35934] truth 0.35799 in=True hw 0.78 L accepted | I-Simpa 0.33736 (-5.76%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air none edge at u=0.0082 s masses (0.05, 0.20) | EDT [0.35631, 0.35909] truth 0.35799 in=True hw 0.78 L accepted | I-Simpa 0.33729 (-5.78%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air none edge at u=0.0082 s masses (0.12, 0.12) | EDT [0.35789, 0.36068] truth 0.35954 in=True hw 0.77 L accepted | I-Simpa 0.33860 (-5.83%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air none edge at u=0.0214 s masses (0.20, 0.05) | EDT [0.32079, 0.32275] truth 0.32185 in=True hw 0.61 L accepted | I-Simpa 0.33030 (+2.63%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air none edge at u=0.0214 s masses (0.05, 0.20) | EDT [0.32072, 0.32268] truth 0.32185 in=True hw 0.61 L accepted | I-Simpa 0.33032 (+2.63%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air none edge at u=0.0214 s masses (0.12, 0.12) | EDT [0.32308, 0.32506] truth 0.32428 in=True hw 0.61 L accepted | I-Simpa 0.33172 (+2.29%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air none edge at u=0.0406 s masses (0.20, 0.05) | EDT [0.37619, 0.38009] truth 0.37894 in=True hw 1.03 L band_too_wide | I-Simpa 0.39019 (+2.97%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air none edge at u=0.0406 s masses (0.05, 0.20) | EDT [0.37679, 0.38071] truth 0.37894 in=True hw 1.04 L band_too_wide | I-Simpa 0.39066 (+3.09%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air none edge at u=0.0406 s masses (0.12, 0.12) | EDT [0.37687, 0.38074] truth 0.37881 in=True hw 1.02 L band_too_wide | I-Simpa 0.38965 (+2.86%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air 16k  edge at u=0.0082 s masses (0.20, 0.05) | EDT [0.35631, 0.35940] truth 0.35799 in=True hw 0.87 L accepted | I-Simpa 0.33735 (-5.76%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air 16k  edge at u=0.0082 s masses (0.05, 0.20) | EDT [0.35611, 0.35921] truth 0.35799 in=True hw 0.86 L accepted | I-Simpa 0.33733 (-5.77%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air 16k  edge at u=0.0082 s masses (0.12, 0.12) | EDT [0.35777, 0.36088] truth 0.35954 in=True hw 0.87 L accepted | I-Simpa 0.33861 (-5.82%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air 16k  edge at u=0.0214 s masses (0.20, 0.05) | EDT [0.32052, 0.32278] truth 0.32185 in=True hw 0.70 L accepted | I-Simpa 0.33028 (+2.62%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air 16k  edge at u=0.0214 s masses (0.05, 0.20) | EDT [0.32055, 0.32281] truth 0.32185 in=True hw 0.70 L accepted | I-Simpa 0.33036 (+2.64%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air 16k  edge at u=0.0214 s masses (0.12, 0.12) | EDT [0.32296, 0.32527] truth 0.32428 in=True hw 0.71 L accepted | I-Simpa 0.33173 (+2.30%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air 16k  edge at u=0.0406 s masses (0.20, 0.05) | EDT [0.37612, 0.38076] truth 0.37894 in=True hw 1.22 L band_too_wide | I-Simpa 0.39019 (+2.97%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air 16k  edge at u=0.0406 s masses (0.05, 0.20) | EDT [0.37672, 0.38139] truth 0.37894 in=True hw 1.23 L band_too_wide | I-Simpa 0.39065 (+3.09%) | Ts/C50/C80/D50 in=True/True/True/True
+dt  0.1 ms air 16k  edge at u=0.0406 s masses (0.12, 0.12) | EDT [0.37634, 0.38091] truth 0.37881 in=True hw 1.21 L band_too_wide | I-Simpa 0.38966 (+2.86%) | Ts/C50/C80/D50 in=True/True/True/True
+T3: 90 cases, 0 truths outside their band
+[t3 done in 19 s]
+
+=== T4: random bin sums, 400 series x 40 arrangements at 0.001 ms (2 workers) ===
+T4: 400 series (0 errors), 80000 arrangement-quantity checks, 0 outside their band, 735 s
+  edt  accepted  67/400; random arrangements reach a median [0.33, 0.68] of the band
+  ts   accepted 102/400; random arrangements reach a median [0.30, 0.68] of the band
+  c50  accepted 264/400; random arrangements reach a median [0.13, 0.84] of the band
+  c80  accepted 259/400; random arrangements reach a median [0.14, 0.83] of the band
+  d50  accepted 368/400; random arrangements reach a median [0.13, 0.85] of the band
+  EDT band widened to a witness by the rounding guard in 0 of 400 series
+  I-Simpa EDT inside the band in 34 of 399 series; its largest error against an arrangement: median 36.51 %, max 29083.3 %
+  EDT half-width at 0.1 ms: median 0.89 L, 38 of 74 within L
+  EDT half-width at 0.2 ms: median 1.26 L, 29 of 85 within L
+  EDT half-width at 0.5 ms: median 4.64 L, 0 of 77 within L
+  EDT half-width at 1.0 ms: median 10.33 L, 0 of 94 within L
+  EDT half-width at 2.0 ms: median 22.65 L, 0 of 68 within L
+[t4 done in 735 s]
+
+=== T5: adversarial climb on EDT: two-atom splits held on -10 dB, eps signs, late mass, tails (40 series) ===
+seed 5000 dt 0.5 ms air none eps 0.001   cut False W 107 n0 1 band [0.40279, 0.43484] witness [0.40279, 0.43479] climbed [0.40279, 0.43484] (reaches 0.000..1.000 of the band) inside
+seed 5001 dt 2.0 ms air 1k   eps 0       cut False W  17 n0 1 band [0.25811, 0.49532] witness [0.25812, 0.49434] climbed [0.25811, 0.49524] (reaches 0.000..1.000 of the band) inside
+seed 5002: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5003 dt 1.0 ms air 1k   eps 0.001   cut True  W  55 n0 1 band [0.56966, 0.65322] witness [0.56967, 0.65301] climbed [0.56966, 0.65318] (reaches 0.000..1.000 of the band) inside
+seed 5004 dt 2.0 ms air none eps 0.001   cut True  W  20 n0 1 band [0.24717, 0.33267] witness [0.24717, 0.33201] climbed [0.24717, 0.33263] (reaches 0.000..1.000 of the band) inside
+seed 5005: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5006 dt 1.0 ms air 20k  eps 0       cut False W 102 n0 1 band [0.60883, 0.63935] witness [0.60894, 0.63917] climbed [0.60894, 0.63917] (reaches 0.004..0.994 of the band) inside
+seed 5007 dt 0.5 ms air 20k  eps 0       cut False W  60 n0 1 band [0.16056, 0.17013] witness [0.16058, 0.17009] climbed [0.16059, 0.17009] (reaches 0.003..0.996 of the band) inside
+seed 5008: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5009 dt 1.0 ms air 1k   eps 0.001   cut False W  25 n0 1 band [0.28857, 0.35990] witness [0.28857, 0.35989] climbed [0.28858, 0.35989] (reaches 0.000..1.000 of the band) inside
+seed 5010 dt 1.0 ms air 1k   eps 0       cut False W  27 n0 1 band [0.50261, 0.73676] witness [0.50261, 0.73676] climbed [0.50262, 0.73676] (reaches 0.000..1.000 of the band) inside
+seed 5011 dt 2.0 ms air 8k   eps 6e-08   cut False W  26 n0 1 band [0.22270, 0.25040] witness [0.22273, 0.24987] climbed [0.22273, 0.25009] (reaches 0.001..0.989 of the band) inside
+seed 5012 dt 1.0 ms air 20k  eps 6e-08   cut False W  39 n0 1 band [0.29804, 0.33319] witness [0.29816, 0.33299] climbed [0.29858, 0.33299] (reaches 0.015..0.994 of the band) inside
+seed 5013 dt 1.0 ms air 16k  eps 6e-08   cut False W  17 n0 1 band [0.09912, 0.11322] witness [0.09945, 0.11319] climbed [0.09923, 0.11319] (reaches 0.008..0.998 of the band) inside
+seed 5014 dt 0.5 ms air 16k  eps 0.001   cut False W 205 n0 1 band [0.60122, 0.61653] witness [0.60130, 0.61643] climbed [0.60180, 0.61645] (reaches 0.038..0.995 of the band) inside
+seed 5015: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5016: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5017 dt 2.0 ms air none eps 0.01    cut True  W  25 n0 1 band [0.27184, 0.32956] witness [0.27186, 0.32946] climbed [0.27186, 0.32946] (reaches 0.000..0.998 of the band) inside
+seed 5018 dt 0.5 ms air 1k   eps 0       cut False W  67 n0 1 band [0.21679, 0.24026] witness [0.21679, 0.24026] climbed [0.21679, 0.24026] (reaches 0.000..1.000 of the band) inside
+seed 5019: skipped (not_decaying)
+seed 5020 dt 0.5 ms air 8k   eps 6e-08   cut False W 150 n0 1 band [0.60408, 0.63081] witness [0.60414, 0.63072] climbed [0.60414, 0.63078] (reaches 0.002..0.999 of the band) inside
+seed 5021 dt 1.0 ms air 8k   eps 0.01    cut False W  79 n0 1 band [0.56816, 0.60658] witness [0.56822, 0.60644] climbed [0.56821, 0.60645] (reaches 0.001..0.997 of the band) inside
+seed 5022 dt 2.0 ms air 8k   eps 0.001   cut True  W  66 n0 1 band [0.76714, 0.81156] witness [0.76727, 0.81140] climbed [0.76735, 0.81141] (reaches 0.005..0.997 of the band) inside
+seed 5023 dt 2.0 ms air 20k  eps 0       cut False W  13 n0 1 band [0.18020, 0.43194] witness [0.18203, 0.43088] climbed [0.18163, 0.43082] (reaches 0.006..0.996 of the band) inside
+seed 5024 dt 2.0 ms air 16k  eps 6e-08   cut False W  14 n0 1 band [0.12916, 0.18112] witness [0.12923, 0.18080] climbed [0.12921, 0.17976] (reaches 0.001..0.974 of the band) inside
+seed 5025: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5026 dt 2.0 ms air 16k  eps 0.001   cut True  W  15 n0 1 band [0.13731, 0.26601] witness [0.13748, 0.26568] climbed [0.13816, 0.26568] (reaches 0.007..0.997 of the band) inside
+seed 5027: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5028: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5029 dt 0.5 ms air 1k   eps 6e-08   cut False W 257 n0 1 band [0.78210, 0.79149] witness [0.78224, 0.79134] climbed [0.78210, 0.79137] (reaches 0.000..0.987 of the band) inside
+seed 5030: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5031: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5032: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5033: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5034 dt 2.0 ms air 8k   eps 0       cut False W  12 n0 1 band [0.18251, 0.25797] witness [0.18261, 0.25777] climbed [0.18263, 0.25777] (reaches 0.002..0.997 of the band) inside
+seed 5035: skipped (dt below 0.5 ms (window too long for the climb))
+seed 5036 dt 1.0 ms air 16k  eps 0.01    cut True  W  42 n0 1 band [0.35725, 0.44216] witness [0.35760, 0.44132] climbed [0.35856, 0.44131] (reaches 0.015..0.990 of the band) inside
+seed 5037 dt 0.5 ms air 20k  eps 0.001   cut False W 170 n0 1 band [0.76202, 0.78583] witness [0.76216, 0.78569] climbed [0.76217, 0.78496] (reaches 0.006..0.964 of the band) inside
+seed 5038 dt 2.0 ms air 20k  eps 6e-08   cut True  W  17 n0 1 band [0.15009, 0.34699] witness [0.15053, 0.33432] climbed [0.15038, 0.32659] (reaches 0.001..0.896 of the band) inside
+seed 5039: skipped (dt below 0.5 ms (window too long for the climb))
+T5: 0 climbs escaped the band, 0 errors; batched evaluator vs exact_params: max relative difference 4.44e-16; 44 s
+[t5 done in 44 s]
+
+=== T6: exact band at a = 0, eps = 0 (layer-cake extremiser) against the certified band (240 series) ===
+T6: 240 series, 0 errors, 239 with a band and an exact band, 0 VIOLATIONS, 17 s
+  certified over exact, relative: lo median 4.21e-09 max 1.70e-05 | hi median 1.18e-08 max 2.44e-02
+  half-width excess over the exact band, in L: median 0.000, 90th pct 0.012, max 0.019 (n = 236)
+  loosest: seed 111 sparse dt 0.2 ms band [0.80736, 400202] exact [0.807371, 390656] n0 1
+  loosest: seed 57 sparse dt 0.5 ms band [0.0447378, 61753.2] exact [0.0447379, 61049.7] n0 1
+  loosest: seed 129 sparse dt 1.0 ms band [0.0508297, 23245] exact [0.0508297, 23207.8] n0 1
+  loosest: seed 21 sparse dt 1.0 ms band [7.64972, 119918] exact [7.64985, 119797] n0 1
+  loosest: seed 213 sparse dt 2.0 ms band [0.537596, 80044.8] exact [0.537597, 79967.9] n0 1
+  loosest: seed 87 sparse dt 2.0 ms band [0.257367, 0.792038] exact [0.257367, 0.79183] n0 1
+  refusals: {'range_in_arrival': 1, 'not_decaying': 3}
+  EDT band widened to a witness by the rounding guard in 0 of 240 series
+[t6 done in 17 s]
+
+=== T7: edge cases from the adversary, run through the code ===
+E1 histogram: band (0.47995942902907274, inf) refused not_decaying (an admissible arrangement (a witness) has a least-squares slope >= 0 over EDT's range); witness (0.48084333434325616, 58.843249280985376); the adversary found EDTs from 0.6125 s to 2213 s: OK
+Lemma W on 4000 random curves with x <= Ua: min (J - G-)/U^2 = 7.048e-07, min (G+ - J)/U^2 = -1.012e-16: OK; the adversary's E2 has x = 5 ms > Ua = 1 ms, outside the precondition the method now enforces (every window-end interval has Ub <= 2 Ua)
+Ts with Dinkelbach capped at 1, 2, 3 iterations: 0 of 180 bands fail to cover the converged band
+per-bin eps and unrecorded energy inside the series: 6000 checks, 0 outside
+two sources: every quantity refused premise_unsupported: OK
+  seed 23 skipped (not_decaying)
+  seed 53 dt 2.0 ms air 20k  n0 2 band [0.03287, 0.84644] climbed [0.03290, 0.53807] inside
+  seed 69 skipped (not_decaying)
+  seed 73 skipped (not_decaying)
+  seed 98 dt 2.0 ms air 16k  n0 2 band [0.03298, 0.55464] climbed [0.03301, 0.15597] inside
+  seed 110 dt 2.0 ms air 20k  n0 2 band [0.16732, 1.08261] climbed [0.17897, 1.03634] inside
+  seed 121 skipped (not_decaying)
+  seed 125 skipped (not_decaying)
+  seed 130 dt 1.0 ms air 20k  n0 2 band [0.04244, 0.16911] climbed [0.04311, 0.16703] inside
+  seed 202 skipped (not_decaying)
+  seed 311 skipped (not_decaying)
+  seed 316 skipped (not_decaying)
+  seed 333 dt 2.0 ms air 20k  n0 2 band [0.10157, 1.06751] climbed [0.10887, 0.98693] inside
+  seed 349 dt 1.0 ms air 20k  n0 2 band [0.01654, 0.48225] climbed [0.01655, 0.19309] inside
+  seed 366 dt 1.0 ms air 20k  n0 2 band [0.01967, 1.61801] climbed [0.01968, 0.71903] inside
+  seed 367 dt 2.0 ms air 20k  n0 2 band [0.17142, 0.53789] climbed [0.18626, 0.52666] inside
+U_max > 2 U_min: 16 series found in 600 seeds, 0 escapes
+GATE 4b refusal unit tests: 0 of 4 failed ([('tail_zero_never_refuses', True), ('large_tail_refuses_run_too_short', True), ('tiny_tail_does_not_refuse', True), ('quantity_tolerance_raises_typeerror', True)])
+T7: 0 of 7 edge checks failed
+[t7 done in 147 s]
+
+TOTAL: 0 failures
+EXIT=0

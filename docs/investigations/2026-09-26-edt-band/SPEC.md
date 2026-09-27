@@ -176,6 +176,29 @@ EDT, Ts, C and D are the ISO functionals of that reading `ρ`, a measure on `u �
 | P4 | Energy of μ that is not in B (after the series end, or any other) totals at most `T_max`, and arrives within `[t_u,min, t_u,max]`. The defaults are the series end and ∞, and `t_u,min ≥ t_a` | caller |
 | P5 | One point source, and a medium of one celerity | scope; anything else refuses `premise_unsupported` |
 
+**P4 in production (decision-log row 14, 2026-09-27):** `production_inputs`'s `T_max` is the
+diffuse-field receiver bound (`docs/results.md` "Lost particles") on the room-wide unrecorded
+fraction f_end plus the trans_epsilon kill term, inflated by a named `GATE2_TAIL_SAFETY_FACTOR`
+(1000x) because the diffuse-field step is not model-free.
+
+**The run-too-short refusal (GATE 4b fix, 2026-09-27).** The original refusal compared `T_max` (an
+absolute energy, units of `sum(B)`) against `GATE2_TAIL_REFUSAL_TOLERANCE_SHARE` (1 %) of
+`quantity_tolerance`, a per-quantity half-width (seconds for Ts, relative for EDT, dB for C,
+dimensionless for D) -- the comparison mixed units and was not a real gate (`production_inputs` no
+longer accepts `quantity_tolerance`; passing it raises `TypeError`). The replacement stays inside
+each quantity's own units throughout: `Setup.all_bands` solves the same band twice from identical
+inputs, once with the caller's (x1000-inflated) `T_max` and once with `T_max = 0`, and takes
+`tail_widening = halfwidth_with_tail - halfwidth_without_tail`, in the units `all_bands` already
+reports and already compares against `tau` for that quantity. If `tail_widening >
+GATE2_TAIL_REFUSAL_TOLERANCE_SHARE * tau`, that quantity -- and only that quantity, others are
+judged independently -- is refused `run_too_short` in place of the generic `band_too_wide` (the
+more specific reason takes priority whenever the tail estimate, not the recorded bins, is the
+material cause of the band being too wide). Rationale for the 1 % share: below it, even a
+x1000-wrong diffuse-field assumption cannot move the reported range by more than a hundredth of the
+quantity's own JND-scale unit, so the run is still trusted; above it, the guarantee is resting on
+the diffuse-field assumption GATE2.md documents as not model-free, so the quantity is outside the
+method's premises and refused rather than silently widened.
+
 P5 exists for two reasons.
 - With a celerity gradient (`CalculationCore.cpp:80-83`, `OnChangeCelerite`), rays bend. The direct sound then leaves `[t_a − h, t_a + h]`, and reflected paths are no longer bounded below by `d/c`.
 - With several sources, the direct arrival is not unique, so Definition A's `t = 0` is undefined.
