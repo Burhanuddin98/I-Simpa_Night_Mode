@@ -1,0 +1,28 @@
+set   method       n  usable%   ok%  med|err|%  p95|err|%  wrong-s  out-rng  med hw%
+--------------------------------------------------------------------------------------
+t1    final       160  100.00 100.00      0.00       0.22        0        0     0.50
+t1    leanband    160  100.00 100.00      0.85       2.65        0       56     0.82
+t1    upstream    160  100.00 100.00      6.00       7.23      108      160     0.00
+z3    final       217   86.64  12.90      1.72      28.65        4       18    11.84
+z3    leanband    217   93.55  16.13      2.18      64.82        3       40     9.47
+z3    upstream    217  100.00 100.00     27.98     231.97      178      204     0.00
+real  final      3600   99.75  98.64      0.52       1.83        0      570     2.10
+real  leanband   3600  100.00 100.00      0.78       2.79        1      458     2.01
+real  upstream   3600  100.00 100.00      1.93       8.59      621     3600     0.00
+ism   final      1920   83.49  45.36      0.61       4.64        0        1     4.40
+ism   leanband   1920   98.80  62.45      1.51      13.80        3      212     3.64
+ism   upstream   1920  100.00 100.00      3.89      49.29      781     1888     0.00
+
+set   method     n(truth)  benefit  regression  both-good  neither
+t1    final          160      108           0         52        0
+t1    leanband       160      108           0         52        0
+      final refusals: {}
+z3    final          204       13          15         11      165
+z3    leanband       204       20          14         12      158
+      final refusals: {'step_too_coarse': 14, 'direct_only': 15}
+real  final         3600      614          42       2937        7
+real  leanband      3600      620           0       2979        1
+      final refusals: {'run_too_short': 9}
+ism   final         1888      175         411        696      606
+ism   leanband      1888      330         241        866      451
+      final refusals: {'direct_only': 32, 'step_too_coarse': 65, 'run_too_short': 220}
