@@ -1,38 +1,17 @@
+// The menu bar (design:28-44): the menus, the project as a tab, Commands and Run.
+// Hand-over stub from the M10 foundation (M9's menu, routed through actions.ts); the scene
+// package owns it from here (PLAN.md 6.3).
 import { useEffect, useRef, useState } from 'react';
-import { open } from '@tauri-apps/plugin-dialog';
-import { asCmdError, backend, type ProjectInfo } from '../backend';
-import { log, projectStore } from '../store';
-import { Play, Search } from './icons';
+import * as actions from '../actions';
+import { sceneStore, useStore } from '../store';
+import { Search } from './icons';
+import { RunButton } from './RunButton';
+import './chrome.css';
 
 const MENUS = ['File', 'Edit', 'View', 'Model', 'Simulate', 'Results', 'Help'] as const;
 
-async function openProject(): Promise<void> {
-  const path = await open({
-    multiple: false,
-    directory: false,
-    filters: [{ name: 'Night Mode project', extensions: ['simpa'] }],
-  });
-  if (typeof path !== 'string') return;
-  try {
-    const info = await backend.projectOpen(path);
-    projectStore.set(info);
-    log('OK', `Opened project "${info.name}"`);
-  } catch (e) {
-    const err = asCmdError(e);
-    log('FAIL', `Could not open ${path}: ${err.message} (${err.code})`);
-  }
-}
-
-async function newProject(): Promise<void> {
-  try {
-    projectStore.set(await backend.projectNew('Untitled'));
-    log('INFO', 'New project');
-  } catch (e) {
-    log('FAIL', `Could not create a project: ${asCmdError(e).message}`);
-  }
-}
-
-export function MenuBar({ project }: { project: ProjectInfo | null }) {
+export function MenuBar() {
+  const project = useStore(sceneStore)?.info ?? null;
   const [fileOpen, setFileOpen] = useState(false);
   const bar = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -43,9 +22,9 @@ export function MenuBar({ project }: { project: ProjectInfo | null }) {
     window.addEventListener('mousedown', close);
     return () => window.removeEventListener('mousedown', close);
   }, [fileOpen]);
-  const run = (action: () => Promise<void>) => () => {
+  const run = (action: () => Promise<unknown>) => () => {
     setFileOpen(false);
-    void action();
+    actions.fire(action());
   };
   return (
     <header className="menubar" ref={bar}>
@@ -69,11 +48,17 @@ export function MenuBar({ project }: { project: ProjectInfo | null }) {
       )}
       {fileOpen && (
         <div className="dropdown" role="menu">
-          <button role="menuitem" onClick={run(newProject)}>
+          <button role="menuitem" onClick={run(() => actions.newProject())}>
             New project
           </button>
-          <button role="menuitem" onClick={run(openProject)}>
-            Open project…
+          <button role="menuitem" onClick={run(actions.openDialog)}>
+            Open…
+          </button>
+          <button role="menuitem" onClick={run(actions.save)} disabled={!project}>
+            Save
+          </button>
+          <button role="menuitem" onClick={run(() => actions.saveAs())} disabled={!project}>
+            Save as…
           </button>
         </div>
       )}
@@ -86,10 +71,7 @@ export function MenuBar({ project }: { project: ProjectInfo | null }) {
         <Search />
         Commands<span className="kbd">Ctrl K</span>
       </button>
-      <button className="run" disabled title="Runs arrive with the Simulate step">
-        <Play />
-        Run<span className="key">F5</span>
-      </button>
+      <RunButton />
     </header>
   );
 }

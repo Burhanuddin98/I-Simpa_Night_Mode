@@ -22,6 +22,7 @@ use crate::events::{
     BATCH_PERIOD, BatchStats, Batcher, LineClass, RunEvent, RunEventBatch, Stream,
 };
 use crate::guard::{self, CmdError, CmdResult, lock};
+use crate::scene::{EditOutcome, SceneState};
 use crate::selftest::Selftest;
 use crate::webview2::{self, WebviewInfo};
 
@@ -32,11 +33,15 @@ pub struct AppState {
     pub selftest: Option<Arc<Selftest>>,
     /// Why `--project` could not be opened, shown once in the Console.
     pub startup_error: Option<CmdError>,
+    /// `--e2e`: the UI installs its test hooks (PLAN.md 2.5).
+    pub e2e: bool,
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct StartupInfo {
     pub selftest: bool,
+    /// Started with `--e2e`: the UI installs its test hooks.
+    pub e2e: bool,
     pub project: Option<ProjectInfo>,
     pub project_error: Option<CmdError>,
     pub app_version: &'static str,
@@ -48,10 +53,12 @@ pub struct StartupInfo {
 pub async fn app_startup(state: State<'_, AppState>) -> CmdResult<StartupInfo> {
     let session = state.session.clone();
     let selftest = state.selftest.is_some();
+    let e2e = state.e2e;
     let project_error = state.startup_error.clone();
     guard::blocking("app_startup", move || {
         Ok(StartupInfo {
             selftest,
+            e2e,
             project: lock(&session, "project")?.info(),
             project_error,
             app_version: env!("CARGO_PKG_VERSION"),
@@ -263,6 +270,103 @@ pub async fn project_undo(state: State<'_, AppState>) -> CmdResult<ProjectInfo> 
 pub async fn project_redo(state: State<'_, AppState>) -> CmdResult<ProjectInfo> {
     let session = state.session.clone();
     guard::blocking("project_redo", move || lock(&session, "project")?.redo()).await
+}
+
+// ---- M10 (docs/investigations/2026-09-29-m10/PLAN.md, section 1) ------------------------------
+// Every M10 command returns the whole `SceneState` (or the mesh bytes), so the UI replaces its
+// copy with the backend's truth after each call. Check and import lines travel in `lines`.
+
+/// The current state, or `None` with no project open. Takes any pending Console lines, such as
+/// the check lines of a `--project` opened at startup.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn scene_state(state: State<'_, AppState>) -> CmdResult<Option<SceneState>> {
+    let session = state.session.clone();
+    guard::blocking("scene_state", move || {
+        Ok(lock(&session, "project")?.scene_state())
+    })
+    .await
+}
+
+/// A new empty project. The history is cleared.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn scene_new(state: State<'_, AppState>, name: String) -> CmdResult<SceneState> {
+    let session = state.session.clone();
+    guard::blocking("scene_new", move || {
+        lock(&session, "project")?.scene_new(&name)
+    })
+    .await
+}
+
+/// Opens a `.simpa` file (`schema::load`), then runs the model check and the validator.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn scene_open(state: State<'_, AppState>, path: String) -> CmdResult<SceneState> {
+    let session = state.session.clone();
+    guard::blocking("scene_open", move || {
+        lock(&session, "project")?.scene_open(&PathBuf::from(path))
+    })
+    .await
+}
+
+/// Imports a PLY, OBJ or STL file as a new project. `unit` is m, cm, mm, ft or in; `up` is y or
+/// z. A geometry the check refuses is loaded, its faces highlighted and Run blocked.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn model_import(
+    state: State<'_, AppState>,
+    path: String,
+    unit: String,
+    up: String,
+) -> CmdResult<SceneState> {
+    let session = state.session.clone();
+    guard::blocking("model_import", move || {
+        lock(&session, "project")?.model_import(&PathBuf::from(path), &unit, &up)
+    })
+    .await
+}
+
+/// Saves atomically: `None` to the session's path, `Some` as Save As.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn project_save(
+    state: State<'_, AppState>,
+    path: Option<String>,
+) -> CmdResult<SceneState> {
+    let session = state.session.clone();
+    guard::blocking("project_save", move || {
+        lock(&session, "project")?.save(path.map(PathBuf::from).as_deref())
+    })
+    .await
+}
+
+/// The checked apply: `op` is one `Op` as JSON text. A validator refusal is `applied: false`,
+/// not an error.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn edit_apply(state: State<'_, AppState>, op: String) -> CmdResult<EditOutcome> {
+    let session = state.session.clone();
+    guard::blocking("edit_apply", move || {
+        lock(&session, "project")?.edit_apply(&op)
+    })
+    .await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn edit_undo(state: State<'_, AppState>) -> CmdResult<SceneState> {
+    let session = state.session.clone();
+    guard::blocking("edit_undo", move || lock(&session, "project")?.edit_undo()).await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn edit_redo(state: State<'_, AppState>) -> CmdResult<SceneState> {
+    let session = state.session.clone();
+    guard::blocking("edit_redo", move || lock(&session, "project")?.edit_redo()).await
+}
+
+/// The geometry as raw bytes (`scene::mesh_bytes`): an ArrayBuffer in JS, no JSON step.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn scene_mesh(state: State<'_, AppState>) -> CmdResult<Response> {
+    let session = state.session.clone();
+    guard::blocking("scene_mesh", move || {
+        Ok(Response::new(lock(&session, "project")?.mesh()?))
+    })
+    .await
 }
 
 /// The UI's self-test result as JSON text. Written to the `--selftest` path, then the app exits

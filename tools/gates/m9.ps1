@@ -15,6 +15,7 @@
 #
 # Grace-local (plan, critic flaw 4): (c) needs the NVIDIA GPU and opens a window.
 # Run: powershell -File tools/gates/m9.ps1 [-TargetDir <dir>] [-Jobs <n>]
+#      (on Grace pass -TargetDir C:\tmp\nm-target; the work folder is <target>\gates\m9\<stamp>)
 # Partial runs, for checking the gate itself (they never print "M9 PASSED"):
 #   -Only static     the text checks only: (g), the guard, (f) capabilities, CSP, WebView2
 #   -Only bindings   (e) only, with the app.exe already in the target dir; -BindingsRepo <dir>
@@ -30,13 +31,19 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $repo
 $env:RUSTUP_HOME = "$env:USERPROFILE\.rustup"; $env:CARGO_HOME = "$env:USERPROFILE\.cargo"
 $env:Path = "$env:CARGO_HOME\bin;$env:Path"; $env:CARGO_INCREMENTAL = '0'
-if ($TargetDir) { $env:CARGO_TARGET_DIR = [IO.Path]::GetFullPath((Join-Path $repo $TargetDir)) }
-else { Remove-Item Env:CARGO_TARGET_DIR -ErrorAction SilentlyContinue }
+# An absolute -TargetDir (C:\tmp\nm-target on Grace: B:'s old target folder is corrupt) is taken
+# as it is; a relative one is under the repo. Without one the variable is cleared by assignment
+# (not Remove-Item, which the no-delete guard misreads) and cargo builds into <repo>\target.
+if ($TargetDir) {
+    $env:CARGO_TARGET_DIR = if ([IO.Path]::IsPathRooted($TargetDir)) { [IO.Path]::GetFullPath($TargetDir) }
+                            else { [IO.Path]::GetFullPath((Join-Path $repo $TargetDir)) }
+} else { $env:CARGO_TARGET_DIR = $null }
 if ($Jobs -gt 0) { $env:CARGO_BUILD_JOBS = "$Jobs" }
 $target = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $repo 'target' }
 $appDir = Join-Path $repo 'app'
 $tauriDir = Join-Path $appDir 'src-tauri'
-$work = Join-Path $repo ('target\gates\m9\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+# The work folder sits under the target folder, so a -TargetDir on C: keeps it off B: (exFAT).
+$work = Join-Path $target ('gates\m9\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 New-Item -ItemType Directory -Force $work | Out-Null
 $runStatic = $Only -eq 'all' -or $Only -eq 'static'
 $runFull = $Only -eq 'all'
@@ -355,6 +362,8 @@ Check "(f) built dist: 0 googleapis, 0 http(s):// outside the listed exceptions"
         'http://www.w3.org/1999/xlink'        = 'XML namespace name (react-dom setAttributeNS), never fetched'
         'http://www.w3.org/1998/Math/MathML'  = 'XML namespace name (react-dom createElementNS), never fetched'
         'http://www.w3.org/XML/1998/namespace' = 'XML namespace name (react-dom setAttributeNS), never fetched'
+        'http://www.w3.org/1999/xhtml'        = 'XML namespace name (three.js createElementNS, src/utils.js), never fetched'
+        'https://jcgt.org/published/0007/04/01/' = 'a citation in a GLSL comment of three.js PMREMGenerator (Heitz 2018, GGX VNDF sampling), never fetched'
     }
     $files = @(Get-ChildItem $dist -Recurse -File)
     $google = 0; $counts = @{}; $bad = @(); $licence = 0

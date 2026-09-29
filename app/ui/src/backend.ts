@@ -1,19 +1,39 @@
 // Typed calls to the app's commands. Result types come from the generated bindings
 // (ui/src/bindings, from the Rust types); schema values go out as JSON text and are read by the
 // core's exact reader, never by a serde_json-typed command argument.
-import { Channel, invoke } from '@tauri-apps/api/core';
+//
+// Only actions.ts calls the M10 commands, and only selftest.ts the M9 project commands
+// (tools/gates/m10.ps1 lints both). Every call is counted in `busyStore` for the `idle()` hook.
+import { Channel, invoke as tauriInvoke, type InvokeArgs } from '@tauri-apps/api/core';
 import type {
   CmdError,
+  EditOutcome,
   EventsProbeReport,
   FloatProbe,
   Prepared,
   ProjectInfo,
   RunEventBatch,
+  SceneState,
   StartupInfo,
 } from './bindings/ipc';
 import type { Op } from './bindings/schema';
+import { opText } from './ops';
+import { busyStore } from './store';
 
-export type { CmdError, ProjectInfo, RunEventBatch, StartupInfo };
+export type { CmdError, EditOutcome, ProjectInfo, RunEventBatch, SceneState, StartupInfo };
+
+/** A mesh file's length unit and vertical axis, as `model_import` names them. */
+export type Unit = 'm' | 'cm' | 'mm' | 'ft' | 'in';
+export type Up = 'y' | 'z';
+
+async function invoke<T>(cmd: string, args?: InvokeArgs): Promise<T> {
+  busyStore.set(busyStore.get() + 1);
+  try {
+    return await tauriInvoke<T>(cmd, args);
+  } finally {
+    busyStore.set(busyStore.get() - 1);
+  }
+}
 
 /** Every rejected command carries `{code, message}`; anything else is wrapped as UNKNOWN. */
 export function asCmdError(e: unknown): CmdError {
@@ -47,4 +67,18 @@ export const backend = {
   projectRedo: () => invoke<ProjectInfo>('project_redo'),
   selftestReport: (report: object) =>
     invoke<boolean>('selftest_report', { report: JSON.stringify(report) }),
+
+  // M10 (PLAN.md 1.5). Each returns the whole SceneState, or the mesh bytes.
+  sceneState: () => invoke<SceneState | null>('scene_state'),
+  sceneNew: (name: string) => invoke<SceneState>('scene_new', { name }),
+  sceneOpen: (path: string) => invoke<SceneState>('scene_open', { path }),
+  modelImport: (path: string, unit: Unit, up: Up) => invoke<SceneState>('model_import', { path, unit, up }),
+  /** `null` saves to the project's own path; a path is Save As. */
+  projectSave: (path: string | null) => invoke<SceneState>('project_save', { path }),
+  /** The checked apply. The op goes as `opText`, never `JSON.stringify` (-0, NaN). */
+  editApply: (op: Op) => invoke<EditOutcome>('edit_apply', { op: opText(op) }),
+  editUndo: () => invoke<SceneState>('edit_undo'),
+  editRedo: () => invoke<SceneState>('edit_redo'),
+  /** The geometry as raw bytes (mesh.ts decodes them). */
+  sceneMesh: () => invoke<ArrayBuffer>('scene_mesh'),
 };

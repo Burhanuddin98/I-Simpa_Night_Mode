@@ -17,6 +17,7 @@ use crate::bridge::{FloatProbe, ProjectInfo};
 use crate::commands::{EventsProbeReport, StartupInfo};
 use crate::events::RunEventBatch;
 use crate::guard::CmdError;
+use crate::scene::{EditOutcome, SceneState};
 
 struct Dump {
     file: &'static str,
@@ -69,6 +70,16 @@ fn dumps() -> Vec<Dump> {
                     "events_probe_report",
                     "EventsProbeReport",
                     schema_for!(EventsProbeReport).to_value(),
+                ),
+                (
+                    "scene_state",
+                    "SceneState",
+                    schema_for!(SceneState).to_value(),
+                ),
+                (
+                    "edit_outcome",
+                    "EditOutcome",
+                    schema_for!(EditOutcome).to_value(),
                 ),
             ],
         },
@@ -214,6 +225,22 @@ mod tests {
             "RunEventBatch",
             "RunEvent",
             "EventsProbeReport",
+            "SceneState",
+            "EditOutcome",
+            "ProjectView",
+            "GroupStats",
+            "CheckSummary",
+            "CheckReasonOut",
+            "CheckCounts",
+            "CheckVerdict",
+            "UiIssue",
+            "IssueSeverity",
+            "LogLine",
+            "LineClass",
+            "EntityRef",
+            "Material",
+            "Source",
+            "PointReceiver",
         ] {
             assert!(defs.contains_key(name), "missing {name}");
         }

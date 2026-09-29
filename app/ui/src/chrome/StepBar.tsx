@@ -1,19 +1,12 @@
-import type { ProjectInfo } from '../backend';
-import { STEPS, type StepKey } from '../steps';
+// The step bar (design:46-65): the five steps and the variant switch.
+// Hand-over stub from the M10 foundation (M9's step bar, the step now in `stepStore`); the scene
+// package owns it from here and adds the subs (`data-part="sub"`, PLAN.md 6.3).
+import { STEPS } from '../steps';
+import { stepStore, useStore } from '../store';
+import { VariantSwitch } from './VariantSwitch';
 
-export function StepBar({
-  current,
-  onPick,
-  project,
-}: {
-  current: StepKey;
-  onPick: (step: StepKey) => void;
-  project: ProjectInfo | null;
-}) {
-  // The variant switch is a placeholder until variants are editable (M10): it shows the base
-  // and the project's variants, and follows the project's active variant.
-  const variants = [{ id: null as string | null, name: 'Base' }, ...(project?.variants ?? [])];
-  const active = project?.active_variant ?? null;
+export function StepBar() {
+  const current = useStore(stepStore);
   return (
     <div className="stepbar">
       <nav className="steps" aria-label="Workflow">
@@ -23,7 +16,7 @@ export function StepBar({
             className="step"
             data-step={s.key}
             aria-current={s.key === current ? 'step' : undefined}
-            onClick={() => onPick(s.key)}
+            onClick={() => stepStore.set(s.key)}
           >
             <span className="badge">{i + 1}</span>
             <span className="name" data-part="name">
@@ -33,16 +26,7 @@ export function StepBar({
         ))}
       </nav>
       <div className="grow" />
-      <div className="variants">
-        <span className="label">Variant</span>
-        <div className="segmented" role="tablist" aria-label="Variants">
-          {variants.map((v) => (
-            <button key={v.id ?? 'base'} role="tab" aria-selected={v.id === active} aria-disabled="true">
-              {v.name}
-            </button>
-          ))}
-        </div>
-      </div>
+      <VariantSwitch />
     </div>
   );
 }

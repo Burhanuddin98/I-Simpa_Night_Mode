@@ -1,0 +1,24 @@
+// Type-checks the e2e config and specs against the pinned WebdriverIO that tools/gates/m10.ps1
+// installs under C:\tmp\nm-e2e\node (never on B:). m10.ps1 runs it after that install:
+//   app\node_modules\.bin\tsc -p app\e2e\tsconfig.json
+// The specs import only node: built-ins and relative files; the wdio globals come from the
+// "types" below, found through "typeRoots".
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "typeRoots": ["C:/tmp/nm-e2e/node/node_modules/@types", "C:/tmp/nm-e2e/node/node_modules"],
+    "types": ["node", "mocha", "@wdio/globals/types"]
+  },
+  "include": ["m10.conf.ts", "lib/**/*.ts", "specs/**/*.ts"]
+}
