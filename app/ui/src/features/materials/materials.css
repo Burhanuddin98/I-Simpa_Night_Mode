@@ -1,0 +1,353 @@
+/* The Materials step (design:312-350), in the properties panel: the selected group, the material
+   radio list with the design's α mini-bars, and the library grid. Uses theme.css's variables;
+   #55555e is the design's own unselected radio and bar grey, which has no token. */
+.mat-panel {
+  display: flex;
+  flex-direction: column;
+}
+.mat-sec {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.mat-group {
+  padding: 16px 16px 14px;
+}
+.mat-title {
+  font-size: 17px;
+  font-weight: 600;
+}
+.mat-sub {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+.mat-strong {
+  color: var(--text);
+  font-weight: 500;
+}
+.mat-flag {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.mat-tag {
+  flex-shrink: 0;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--edge);
+  background: var(--badge);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 16px;
+  color: var(--warn);
+}
+.mat-sec-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.mat-sec-title {
+  margin-bottom: 10px;
+}
+
+/* The material radio list */
+.mat-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mat-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  text-align: left;
+  box-sizing: border-box;
+}
+.mat-option[aria-checked='true'] {
+  border-color: var(--red);
+  background: var(--red-wash);
+}
+.mat-option .radio {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1.5px solid #55555e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+.mat-option .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.mat-option[aria-checked='true'] .radio {
+  border-color: var(--red);
+}
+.mat-option[aria-checked='true'] .dot {
+  background: var(--red);
+}
+.mat-option .name {
+  flex-grow: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mat-swatch {
+  width: 10px;
+  height: 10px;
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+.mat-bars {
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+.mat-bars span {
+  width: 5px;
+  background: #55555e;
+}
+.mat-bars.many {
+  gap: 1px;
+}
+.mat-bars.many span {
+  width: 2px;
+}
+.mat-option[aria-checked='true'] .mat-bars span {
+  background: var(--red);
+}
+.mat-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.mat-row .mono {
+  flex-shrink: 0;
+  color: var(--text);
+}
+.mat-row .mg-of {
+  color: var(--text-3);
+}
+.mat-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+.mat-hint {
+  padding: 14px 16px;
+}
+/* The library bleeds a little into the panel's side padding so that six octave bands fit
+   beside the names without scrolling; thirds scroll sideways. */
+.mat-lib {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+/* The library grid. The scroll container takes theme.css's themed scrollbars. */
+.mg-wrap {
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--raised);
+  outline: none;
+  overflow: hidden;
+}
+.mg-wrap:focus-within {
+  border-color: #34343c;
+}
+.mg-scroll {
+  overflow: auto;
+  max-height: 340px;
+}
+.mg {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+.mg th,
+.mg td {
+  height: 34px;
+  padding: 0;
+  box-sizing: border-box;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.mg thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: 26px;
+  background: var(--raised-2);
+  color: var(--text-3);
+  font-weight: 500;
+  cursor: pointer;
+}
+.mg thead th:hover {
+  color: var(--text);
+}
+.mg .mg-name {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  padding: 0 6px;
+  background: var(--raised);
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 400;
+  cursor: default;
+}
+.mg thead .mg-name {
+  z-index: 3;
+  background: var(--raised-2);
+  font-family: var(--cond);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.mg-band {
+  min-width: 36px;
+  padding: 0 2px;
+  text-align: center;
+}
+.mg-sort {
+  margin-left: 2px;
+  font-size: 8px;
+  color: var(--red-hi);
+}
+.mg-namecell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mg-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.mg-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mg-used {
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.mg-cell {
+  position: relative;
+  min-width: 36px;
+  padding: 0 2px;
+  text-align: center;
+  color: var(--text);
+  cursor: cell;
+}
+.mg-cell.rounded {
+  color: var(--text-2);
+}
+.mg .sel {
+  background: var(--red-wash);
+}
+.mg .cur {
+  box-shadow: inset 0 0 0 1px #34343c;
+}
+.mg-wrap:focus-within .cur {
+  box-shadow: inset 0 0 0 1.5px var(--red);
+}
+/* A cell with an issue: a dashed outline and a "!" mark, besides the FAIL line under the grid
+   (never colour alone). */
+.mg .bad {
+  outline: 1.5px dashed var(--red-hi);
+  outline-offset: -3px;
+}
+.mg-cell.bad::after {
+  content: '!';
+  position: absolute;
+  top: 1px;
+  right: 3px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--red-hi);
+}
+.mg-editor {
+  width: 100%;
+  min-width: 36px;
+  height: 100%;
+  padding: 0 4px;
+  border: none;
+  border-radius: 0;
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+  outline: 1.5px solid var(--red);
+  outline-offset: -1.5px;
+}
+.mg-name .mg-editor {
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 12px;
+}
+.mg-empty {
+  padding: 10px;
+}
+.mg-tools {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.mg-tools button {
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 5px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  color: var(--text-2);
+  font-size: 12px;
+}
+.mg-tools button:hover:not(:disabled) {
+  color: var(--text);
+}
+.mg-tools button:disabled {
+  opacity: 0.5;
+}
+.mg-tools .kbd {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.mg-note {
+  margin-top: 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}

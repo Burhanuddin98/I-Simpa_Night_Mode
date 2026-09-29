@@ -13,6 +13,10 @@ import { decodeMesh } from './mesh';
 import { addReceiver, addSource, newReceiver, newSource, nextName, type Vec3 } from './ops';
 import { importRequestStore, log, logAll, meshStore, refusalStore, sceneStore } from './store';
 
+/** A rejected action's `{code, message}`, for a package that shows it inline (packages never
+ * import backend.ts, PLAN.md 2.4 rule 7). */
+export { asCmdError } from './backend';
+
 /** Runs an action from a UI handler: its failure is already in the Console. */
 export function fire(p: Promise<unknown>): void {
   p.catch(() => {});
