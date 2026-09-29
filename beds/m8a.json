@@ -1,0 +1,885 @@
+{
+  "bed": "m8a",
+  "spec": "docs/investigations/2026-09-29-m8a/SPEC.md",
+  "template": "tests/fixtures/rooms/tutorial1_box.simpa",
+  "template_sha256": "e32acbf09c588abf7392f062093488389bd699c2fd22b95ee6b90703a72f3857",
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "extension_seeds": [
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20
+  ],
+  "time_step_s": 0.001,
+  "bands_air_off_hz": [
+    125,
+    250,
+    500,
+    1000,
+    2000,
+    4000
+  ],
+  "bands_air_on_hz": [
+    125,
+    250,
+    500,
+    1000,
+    2000,
+    4000,
+    8000
+  ],
+  "atmosphere": {
+    "temperature_c": 20.0,
+    "relative_humidity_percent": 50.0,
+    "pressure_pa": 101325.0
+  },
+  "rooms": [
+    {
+      "name": "6x10x3",
+      "size_m": [
+        6.0,
+        10.0,
+        3.0
+      ],
+      "source_m": [
+        3.0,
+        5.0,
+        1.8
+      ],
+      "receivers_m": [
+        [
+          1.0,
+          1.0,
+          1.8
+        ],
+        [
+          3.0,
+          7.0,
+          1.8
+        ],
+        [
+          5.0,
+          8.5,
+          1.2
+        ]
+      ],
+      "gated": true
+    },
+    {
+      "name": "5x4x3",
+      "size_m": [
+        5.0,
+        4.0,
+        3.0
+      ],
+      "source_m": [
+        2.52,
+        1.97,
+        1.53
+      ],
+      "receivers_m": [
+        [
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          4.0,
+          3.0,
+          2.0
+        ],
+        [
+          1.0,
+          3.0,
+          1.9
+        ]
+      ],
+      "gated": true
+    },
+    {
+      "name": "20x8x4",
+      "size_m": [
+        20.0,
+        8.0,
+        4.0
+      ],
+      "source_m": [
+        4.02,
+        3.97,
+        1.53
+      ],
+      "receivers_m": [
+        [
+          2.0,
+          2.0,
+          1.2
+        ],
+        [
+          10.0,
+          6.0,
+          1.8
+        ],
+        [
+          18.0,
+          3.0,
+          2.5
+        ]
+      ],
+      "gated": false
+    }
+  ],
+  "cells": [
+    {
+      "id": "6x10x3-a0.05-random-air-off",
+      "room": "6x10x3",
+      "alpha": 0.05,
+      "method": "random",
+      "particles_per_source": 8400000,
+      "duration_s": 4.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.05-energetic-air-off",
+      "room": "6x10x3",
+      "alpha": 0.05,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 4.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.1-random-air-off",
+      "room": "6x10x3",
+      "alpha": 0.1,
+      "method": "random",
+      "particles_per_source": 18000000,
+      "duration_s": 3.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.1-energetic-air-off",
+      "room": "6x10x3",
+      "alpha": 0.1,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 2.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.2-random-air-off",
+      "room": "6x10x3",
+      "alpha": 0.2,
+      "method": "random",
+      "particles_per_source": 33000000,
+      "duration_s": 2.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.2-energetic-air-off",
+      "room": "6x10x3",
+      "alpha": 0.2,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 1.0,
+      "trans_epsilon": 9.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.4-random-air-off",
+      "room": "6x10x3",
+      "alpha": 0.4,
+      "method": "random",
+      "particles_per_source": 110000000,
+      "duration_s": 1.5,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.4-energetic-air-off",
+      "room": "6x10x3",
+      "alpha": 0.4,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 0.5,
+      "trans_epsilon": 9.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.05-random-air-on",
+      "room": "6x10x3",
+      "alpha": 0.05,
+      "method": "random",
+      "particles_per_source": 8400000,
+      "duration_s": 4.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.05-energetic-air-on",
+      "room": "6x10x3",
+      "alpha": 0.05,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 4.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.1-random-air-on",
+      "room": "6x10x3",
+      "alpha": 0.1,
+      "method": "random",
+      "particles_per_source": 18000000,
+      "duration_s": 3.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.1-energetic-air-on",
+      "room": "6x10x3",
+      "alpha": 0.1,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 2.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.2-random-air-on",
+      "room": "6x10x3",
+      "alpha": 0.2,
+      "method": "random",
+      "particles_per_source": 33000000,
+      "duration_s": 2.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.2-energetic-air-on",
+      "room": "6x10x3",
+      "alpha": 0.2,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 1.0,
+      "trans_epsilon": 9.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.4-random-air-on",
+      "room": "6x10x3",
+      "alpha": 0.4,
+      "method": "random",
+      "particles_per_source": 110000000,
+      "duration_s": 1.5,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.4-energetic-air-on",
+      "room": "6x10x3",
+      "alpha": 0.4,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 0.5,
+      "trans_epsilon": 9.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.05-random-air-off",
+      "room": "5x4x3",
+      "alpha": 0.05,
+      "method": "random",
+      "particles_per_source": 3500000,
+      "duration_s": 3.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.05-energetic-air-off",
+      "room": "5x4x3",
+      "alpha": 0.05,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 3.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.1-random-air-off",
+      "room": "5x4x3",
+      "alpha": 0.1,
+      "method": "random",
+      "particles_per_source": 7900000,
+      "duration_s": 2.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.1-energetic-air-off",
+      "room": "5x4x3",
+      "alpha": 0.1,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 2.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.2-random-air-off",
+      "room": "5x4x3",
+      "alpha": 0.2,
+      "method": "random",
+      "particles_per_source": 14000000,
+      "duration_s": 1.5,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.2-energetic-air-off",
+      "room": "5x4x3",
+      "alpha": 0.2,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 0.8,
+      "trans_epsilon": 9.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.4-random-air-off",
+      "room": "5x4x3",
+      "alpha": 0.4,
+      "method": "random",
+      "particles_per_source": 31000000,
+      "duration_s": 1.0,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.4-energetic-air-off",
+      "room": "5x4x3",
+      "alpha": 0.4,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 0.4,
+      "trans_epsilon": 9.0,
+      "air": false,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.05-random-air-on",
+      "room": "5x4x3",
+      "alpha": 0.05,
+      "method": "random",
+      "particles_per_source": 3500000,
+      "duration_s": 3.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.05-energetic-air-on",
+      "room": "5x4x3",
+      "alpha": 0.05,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 3.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.1-random-air-on",
+      "room": "5x4x3",
+      "alpha": 0.1,
+      "method": "random",
+      "particles_per_source": 7900000,
+      "duration_s": 2.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.1-energetic-air-on",
+      "room": "5x4x3",
+      "alpha": 0.1,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 2.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.2-random-air-on",
+      "room": "5x4x3",
+      "alpha": 0.2,
+      "method": "random",
+      "particles_per_source": 14000000,
+      "duration_s": 1.5,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.2-energetic-air-on",
+      "room": "5x4x3",
+      "alpha": 0.2,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 0.8,
+      "trans_epsilon": 9.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.4-random-air-on",
+      "room": "5x4x3",
+      "alpha": 0.4,
+      "method": "random",
+      "particles_per_source": 31000000,
+      "duration_s": 1.0,
+      "trans_epsilon": 7.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.4-energetic-air-on",
+      "room": "5x4x3",
+      "alpha": 0.4,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 0.4,
+      "trans_epsilon": 9.0,
+      "air": true,
+      "gated": true
+    },
+    {
+      "id": "20x8x4-a0.05-random-air-off",
+      "room": "20x8x4",
+      "alpha": 0.05,
+      "method": "random",
+      "particles_per_source": 1500000,
+      "duration_s": 5.7,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.05-energetic-air-off",
+      "room": "20x8x4",
+      "alpha": 0.05,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 5.7,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.1-random-air-off",
+      "room": "20x8x4",
+      "alpha": 0.1,
+      "method": "random",
+      "particles_per_source": 1500000,
+      "duration_s": 4.3,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.1-energetic-air-off",
+      "room": "20x8x4",
+      "alpha": 0.1,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 2.9,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.2-random-air-off",
+      "room": "20x8x4",
+      "alpha": 0.2,
+      "method": "random",
+      "particles_per_source": 1500000,
+      "duration_s": 2.9,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.2-energetic-air-off",
+      "room": "20x8x4",
+      "alpha": 0.2,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 1.5,
+      "trans_epsilon": 9.0,
+      "air": false,
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.4-random-air-off",
+      "room": "20x8x4",
+      "alpha": 0.4,
+      "method": "random",
+      "particles_per_source": 1500000,
+      "duration_s": 2.2,
+      "trans_epsilon": 7.0,
+      "air": false,
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.4-energetic-air-off",
+      "room": "20x8x4",
+      "alpha": 0.4,
+      "method": "energetic",
+      "particles_per_source": 1500000,
+      "duration_s": 0.8,
+      "trans_epsilon": 9.0,
+      "air": false,
+      "gated": false
+    }
+  ],
+  "tcr": [
+    {
+      "id": "6x10x3-a0.05-tcr-air-off",
+      "project_of": "6x10x3-a0.05-energetic-air-off",
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.1-tcr-air-off",
+      "project_of": "6x10x3-a0.1-energetic-air-off",
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.2-tcr-air-off",
+      "project_of": "6x10x3-a0.2-energetic-air-off",
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.4-tcr-air-off",
+      "project_of": "6x10x3-a0.4-energetic-air-off",
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.05-tcr-air-on",
+      "project_of": "6x10x3-a0.05-energetic-air-on",
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.1-tcr-air-on",
+      "project_of": "6x10x3-a0.1-energetic-air-on",
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.2-tcr-air-on",
+      "project_of": "6x10x3-a0.2-energetic-air-on",
+      "gated": true
+    },
+    {
+      "id": "6x10x3-a0.4-tcr-air-on",
+      "project_of": "6x10x3-a0.4-energetic-air-on",
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.05-tcr-air-off",
+      "project_of": "5x4x3-a0.05-energetic-air-off",
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.1-tcr-air-off",
+      "project_of": "5x4x3-a0.1-energetic-air-off",
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.2-tcr-air-off",
+      "project_of": "5x4x3-a0.2-energetic-air-off",
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.4-tcr-air-off",
+      "project_of": "5x4x3-a0.4-energetic-air-off",
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.05-tcr-air-on",
+      "project_of": "5x4x3-a0.05-energetic-air-on",
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.1-tcr-air-on",
+      "project_of": "5x4x3-a0.1-energetic-air-on",
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.2-tcr-air-on",
+      "project_of": "5x4x3-a0.2-energetic-air-on",
+      "gated": true
+    },
+    {
+      "id": "5x4x3-a0.4-tcr-air-on",
+      "project_of": "5x4x3-a0.4-energetic-air-on",
+      "gated": true
+    },
+    {
+      "id": "20x8x4-a0.05-tcr-air-off",
+      "project_of": "20x8x4-a0.05-energetic-air-off",
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.1-tcr-air-off",
+      "project_of": "20x8x4-a0.1-energetic-air-off",
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.2-tcr-air-off",
+      "project_of": "20x8x4-a0.2-energetic-air-off",
+      "gated": false
+    },
+    {
+      "id": "20x8x4-a0.4-tcr-air-off",
+      "project_of": "20x8x4-a0.4-energetic-air-off",
+      "gated": false
+    }
+  ],
+  "transport": {
+    "replicas": 16,
+    "rays_factor": 16.0,
+    "duration_eyring_factor": 1.4,
+    "seed_base": "0x6d3863656c6c0000",
+    "seed_per_alpha": 1000.0,
+    "speed_of_sound_m_s": 343.2,
+    "receiver_radius_m": 0.31,
+    "time_step_s": 0.001
+  },
+  "atmospheric_validation": {
+    "proj": "src/isimpa/resources/doc/validation/atmospheric_absorption/Validation_atmospheric_absorption.proj",
+    "proj_sha256": "487e4d0ff19e69e14d60b065d110de3da4f30ee812f2bd5006163379ff1e2e5b",
+    "xlsx": "src/isimpa/resources/doc/validation/atmospheric_absorption/Validation_atmospheric_absorption.xlsx",
+    "xlsx_sha256": "bb11404ea70b147bb33f01e78311f4c11977f9252c585143d20aa7dc944d1062",
+    "seeds": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "trans_epsilon": 7.0,
+    "time_step_s": 0.001,
+    "columns": "spps_2018_rt30_s and spps_1_3_4_rt30_s: sheet 'SPPS' (2), rows 33-59, columns B ('SPPS 2018') and C ('SPPS 1.3.4') under 'RT30 (s)'; tcr_eyring_s: sheet 'TCR' (3), rows 33-59, column B under 'RT Eyring (s)'; md_octave_rt30_s: sheet 'MD' (4), rows 33-59, column B ('MD Octave') under 'RT30 (s)'. Made by upstream at seed 0, dt 10 ms and trans_epsilon 6: not like for like",
+    "bands_hz": [
+      50,
+      63,
+      80,
+      100,
+      125,
+      160,
+      200,
+      250,
+      315,
+      400,
+      500,
+      630,
+      800,
+      1000,
+      1250,
+      1600,
+      2000,
+      2500,
+      3150,
+      4000,
+      5000,
+      6300,
+      8000,
+      10000,
+      12500,
+      16000,
+      20000
+    ],
+    "spps_2018_rt30_s": [
+      0.9970279,
+      0.9965895,
+      0.9964896,
+      0.9950515,
+      0.9941306,
+      0.9937508,
+      0.9922833,
+      0.9894863,
+      0.9872737,
+      0.9836834,
+      0.9816568,
+      0.9782395,
+      0.97488,
+      0.9708613,
+      0.9650897,
+      0.955174,
+      0.9440701,
+      0.9242678,
+      0.8964995,
+      0.8531513,
+      0.7953542,
+      0.7190524,
+      0.6227126,
+      0.5232825,
+      0.4232365,
+      0.3227535,
+      0.2492215
+    ],
+    "spps_1_3_4_rt30_s": [
+      0.9970102,
+      0.9961597,
+      0.9953468,
+      0.995307,
+      0.9934611,
+      0.9936479,
+      0.9919118,
+      0.9894354,
+      0.9873552,
+      0.9837132,
+      0.9828663,
+      0.9794886,
+      0.9744252,
+      0.970069,
+      0.9658157,
+      0.9552461,
+      0.9437342,
+      0.9241039,
+      0.8955307,
+      0.8519886,
+      0.7952037,
+      0.7191042,
+      0.62239,
+      0.5229257,
+      0.4232141,
+      0.3233969,
+      0.249577
+    ],
+    "tcr_eyring_s": [
+      0.9870604,
+      0.9868162,
+      0.9864252,
+      0.9858739,
+      0.985073,
+      0.9838083,
+      0.9822621,
+      0.9803256,
+      0.9779752,
+      0.9753052,
+      0.9726825,
+      0.9698054,
+      0.9664195,
+      0.9624361,
+      0.9569871,
+      0.948068,
+      0.9358492,
+      0.9176299,
+      0.8896199,
+      0.8472099,
+      0.7919419,
+      0.7168926,
+      0.6219621,
+      0.5234252,
+      0.4244825,
+      0.3253897,
+      0.2515414
+    ],
+    "md_octave_rt30_s": [
+      1.001793,
+      1.001531,
+      1.001132,
+      1.00057,
+      0.9997421,
+      0.9984554,
+      0.9968535,
+      0.9948663,
+      0.992456,
+      0.9897066,
+      0.987009,
+      0.9840598,
+      0.9805676,
+      0.9764861,
+      0.9708909,
+      0.9617118,
+      0.9491774,
+      0.9304868,
+      0.9017729,
+      0.8583668,
+      0.8019147,
+      0.7254755,
+      0.6291149,
+      0.529474,
+      0.4298387,
+      0.3304634,
+      0.2567113
+    ]
+  },
+  "say_no": {
+    "n5": {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "seed": 10,
+      "particles_per_source": 31000
+    },
+    "n6": {
+      "room": "5x4x3",
+      "alpha": 0.2,
+      "method": "energetic",
+      "particles_per_source": 150000,
+      "duration_s": 0.8,
+      "trans_epsilon": 9.0,
+      "scattering": 0.0,
+      "seed": 1
+    }
+  }
+}

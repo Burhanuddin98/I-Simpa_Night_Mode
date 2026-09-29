@@ -167,6 +167,13 @@ pub fn analytic(solve: &Path, exp: &Expectation) -> Analytic {
 
 fn analytic_inner(solve: &Path, exp: &Expectation) -> Result<Analytic, String> {
     let room = RoomInputs::read(solve, exp)?;
+    // TCR's own constant; the say-NO N8 of M8a's bed puts the physical one in its place.
+    let constant = match crate::faults::active() {
+        Some(crate::faults::Fault::TcrAnalyticPhysicalConstant) => RtConstant::Physical {
+            speed_of_sound: 343.2,
+        },
+        _ => RtConstant::Tcr,
+    };
     let mut bands = Vec::new();
     for band in &room.bands {
         let surfaces = band_surfaces(&room.faces, &room.materials, band.index)?;
@@ -175,8 +182,8 @@ fn analytic_inner(solve: &Path, exp: &Expectation) -> Result<Analytic, String> {
         bands.push(AnalyticBand {
             freq_hz: band.freq_hz,
             air_m_per_metre,
-            sabine_s: room::sabine_rt(volume_m3, &surfaces, air_m_per_metre, RtConstant::Tcr),
-            eyring_s: room::eyring_rt(volume_m3, &surfaces, air_m_per_metre, RtConstant::Tcr),
+            sabine_s: room::sabine_rt(volume_m3, &surfaces, air_m_per_metre, constant),
+            eyring_s: room::eyring_rt(volume_m3, &surfaces, air_m_per_metre, constant),
         });
     }
     Ok(Analytic::Computed {

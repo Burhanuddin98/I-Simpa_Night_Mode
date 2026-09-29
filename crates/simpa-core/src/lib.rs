@@ -3,6 +3,7 @@
 //! Every stage returns a typed result with a reason code; no stage downgrades a
 //! failure to a warning. See `docs/rebuild-plan.md`.
 
+pub mod bed;
 pub mod config_xml;
 pub mod faults;
 pub mod formats;
