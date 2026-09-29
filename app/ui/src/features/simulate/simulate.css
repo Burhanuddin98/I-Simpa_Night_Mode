@@ -1,5 +1,7 @@
-/* The Run button (design:43), moved unchanged out of chrome/chrome.css by the M11 foundation.
-   Owned by the simulate package (docs/investigations/2026-09-29-m11/PLAN.md 9.1). */
+/* The simulate package's rules (docs/investigations/2026-09-29-m11/PLAN.md 9.1): the Run button
+   (design:43, moved unchanged out of chrome/chrome.css by the M11 foundation), the Simulate step
+   (design:386-426) and the Results step (design:428-470). Colours are theme.css's tokens; a
+   failure always carries its FAIL label as text, never colour alone. */
 .run-wrap {
   display: flex;
   margin-left: 6px;
@@ -22,9 +24,324 @@
 .run:disabled {
   opacity: 0.45;
 }
+/* Running: still the design's red button with its percentage, not greyed out as a blocked Run
+   would be; it is disabled (RUN_ACTIVE) and says so in its tooltip. */
+.run[data-running='true']:disabled {
+  opacity: 0.85;
+}
 .run .key {
   font-family: var(--mono);
   font-size: 10.5px;
   font-weight: 400;
   opacity: 0.8;
+}
+.run .run-label {
+  white-space: nowrap;
+}
+
+/* ---- Simulate: the solver choice (design:393-396) ---- */
+.sim-solvers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.sim-solver {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  color: var(--text);
+  text-align: left;
+}
+.sim-solver:hover {
+  border-color: var(--text-3);
+}
+.sim-solver[aria-checked='true'] {
+  border-color: var(--red);
+  background: var(--red-wash);
+}
+.sim-solver .name {
+  font-weight: 600;
+}
+.sim-solver .what {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ---- Simulate: the settings, read-only as drawn (design:397-401) ---- */
+.sim-settings {
+  margin-top: 12px;
+}
+.sim-setting {
+  height: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.sim-setting .k {
+  color: var(--text-2);
+}
+.sim-setting .v {
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ---- Simulate: "Before running" (design:403-408) ---- */
+.sim-section-label {
+  margin-bottom: 8px;
+}
+.sim-check {
+  min-height: 28px;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 5px 0;
+  box-sizing: border-box;
+}
+.sim-state {
+  width: 32px;
+  flex-shrink: 0;
+  padding-top: 2px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.sim-state.ok {
+  color: var(--ok);
+}
+.sim-state.fail {
+  color: var(--red-hi);
+}
+.sim-state.unchecked {
+  color: var(--text-3);
+}
+.sim-check-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.sim-check-body .k {
+  color: var(--text-2);
+}
+.sim-check[data-state='FAIL'] .k {
+  color: var(--text);
+}
+.sim-check-why {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 11.5px;
+}
+.sim-check-why .code {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--red-hi);
+}
+.sim-check-why .detail {
+  color: var(--fail-text);
+}
+.sim-check[data-state='UNCHECKED'] .detail {
+  color: var(--text-3);
+}
+
+/* ---- Simulate: the running block (design:410-415) ---- */
+.sim-running {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sim-running-head .diag {
+  font-family: var(--mono);
+  color: var(--red-hi);
+}
+.sim-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.sim-bar-fill {
+  height: 4px;
+  background: var(--red);
+}
+.sim-running-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.sim-running-meta .mono {
+  color: var(--text);
+}
+.sim-cancel {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 5px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  color: var(--text);
+  font-weight: 500;
+}
+.sim-cancel:not(:disabled):hover {
+  border-color: var(--red);
+}
+.sim-note {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ---- Simulate: the last run and the big Run button (design:417-425) ---- */
+.sim-idle {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sim-last-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.sim-run-link {
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sim-run-link:hover {
+  text-decoration: underline;
+}
+.sim-status {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 500;
+}
+.sim-status.ok {
+  color: var(--ok);
+}
+.sim-status.fail {
+  color: var(--red-hi);
+}
+.sim-status.muted {
+  color: var(--text-2);
+}
+.sim-reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sim-reason {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-size: 11.5px;
+}
+.sim-reason .code,
+.sim-reason .label-warn {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--red-hi);
+}
+.sim-reason.warn .code,
+.sim-reason .label-warn {
+  color: var(--warn);
+}
+.sim-reason .core {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.sim-kv {
+  height: 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sim-kv .k {
+  color: var(--text-2);
+}
+.sim-kv .v {
+  font-size: 12px;
+}
+.sim-kv .dim {
+  color: var(--text-3);
+}
+.sim-run-big {
+  height: 38px;
+  margin-top: 4px;
+  border: none;
+  border-radius: 6px;
+  background: var(--red);
+  color: #fff;
+  font-weight: 600;
+}
+.sim-run-big:disabled {
+  opacity: 0.45;
+}
+
+/* ---- Results: the selected run's state, never a value (design:428-470) ---- */
+.res-verdict {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 600;
+}
+.res-label {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+.res-verdict.ok .res-label {
+  color: var(--ok);
+}
+.res-verdict.fail .res-label {
+  color: var(--red-hi);
+}
+.res-text {
+  margin-top: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.res-section-label {
+  margin-top: 12px;
+  margin-bottom: 6px;
+}
+.res-codes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+.res-code {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.res-code .code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--red-hi);
+}
+.res-code .core {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-3);
 }
