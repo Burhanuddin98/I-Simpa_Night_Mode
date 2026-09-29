@@ -18,7 +18,7 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent } from 'react
 import * as actions from '../../actions';
 import type { SceneState } from '../../bindings/ipc';
 import { runTooltip } from '../../chrome/sceneModel';
-import { joinBlockers } from '../../flow';
+import { detailTitle, joinBlockers } from '../../flow';
 import {
   type ActiveRun,
   type LinePart,
@@ -234,7 +234,7 @@ function LastRun({ last }: { last: LastRunView }) {
       {last.reasons.length > 0 && (
         <div className="sim-reasons" data-part="last-reasons">
           {last.reasons.map((r, i) => (
-            <div key={`${r.code}-${i}`} className="sim-reason" data-code={r.ui_code} title={r.detail}>
+            <div key={`${r.code}-${i}`} className="sim-reason" data-code={r.ui_code} title={detailTitle(r.detail)}>
               <span className="code">{r.ui_code}</span>
               <span className="core">{r.code}</span>
             </div>
@@ -265,7 +265,7 @@ function LastRun({ last }: { last: LastRunView }) {
       {last.warnings.length > 0 && (
         <div className="sim-reasons" data-part="last-run-warnings">
           {last.warnings.map((w, i) => (
-            <div key={`${w.code}-${i}`} className="sim-reason warn" data-code={w.ui_code} title={w.detail}>
+            <div key={`${w.code}-${i}`} className="sim-reason warn" data-code={w.ui_code} title={detailTitle(w.detail)}>
               <span className="label-warn">WARN</span>
               <span className="code">{w.ui_code}</span>
               <span className="core">{w.code}</span>

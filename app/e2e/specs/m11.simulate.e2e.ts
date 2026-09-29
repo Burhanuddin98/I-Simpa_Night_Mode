@@ -142,6 +142,10 @@ const scanProps = () =>
       })),
     );
     const whole = regions.map((r) => r.innerText).join('\n');
+    // Every tooltip in the regions, the regions' own included (M11 review 2, app 4).
+    const titles = regions
+      .flatMap((r) => [r, ...r.querySelectorAll<HTMLElement>('[title]')])
+      .flatMap((e) => (e.hasAttribute('title') ? [e.getAttribute('title') ?? ''] : []));
     const hide = regions.flatMap((r) => [...r.querySelectorAll<HTMLElement>('[data-diagnostic]')]);
     const strays: string[] = [];
     for (const attr of Object.keys(exempt)) {
@@ -155,7 +159,7 @@ const scanProps = () =>
     const before = hide.map((e) => e.style.display);
     hide.forEach((e) => (e.style.display = 'none'));
     try {
-      return { step: props.getAttribute('data-props-step'), text: regions.map((r) => r.innerText).join('\n'), whole, diags, strays };
+      return { step: props.getAttribute('data-props-step'), text: regions.map((r) => r.innerText).join('\n'), whole, diags, strays, titles };
     } finally {
       hide.forEach((e, i) => (e.style.display = before[i]));
     }
@@ -183,6 +187,8 @@ const resultsDom = () =>
       label: aside.querySelector('[data-run-label]')?.textContent ?? null,
       results: aside.querySelectorAll('[data-result]').length,
       text: clone.textContent ?? '',
+      // Tooltips are read as surely as text (M11 review 2, app 4).
+      titles: [...clone.querySelectorAll('[title]')].map((e) => e.getAttribute('title') ?? ''),
     };
   });
 
@@ -327,6 +333,8 @@ describe('M11 simulate', () => {
       assert.equal(hit, null, `step ${step}: "${hit?.[0]}" outside [data-input] and the diagnostics`);
       const param = s.whole.match(PARAMETER_NUMBER);
       assert.equal(param, null, `step ${step}: "${param?.[0]}" names a parameter with a number`);
+      const tip = s.titles.find((t) => ACOUSTIC_NUMBER.test(t) || PARAMETER_NUMBER.test(t));
+      assert.equal(tip, undefined, `step ${step}: a tooltip holds a number next to a unit, or a parameter's number: "${tip}"`);
       for (const d of s.diags) {
         assert.ok(d.leaf, `${d.field} is not a leaf span`);
         assert.ok((GRAMMAR as Record<string, RegExp>)[d.field]?.test(d.text), `${d.field} '${d.text}' fails its grammar`);
@@ -342,6 +350,8 @@ describe('M11 simulate', () => {
         assert.equal(r.run, boxRun.run, 'the newest run is shown');
         assert.equal(r.state, 'verified', 'the OK box run verifies');
         assert.ok(!/\d/.test(r.text), `a digit outside [data-run-label]: ${r.text}`);
+        const digitTip = r.titles.find((t) => /\d/.test(t));
+        assert.equal(digitTip, undefined, `a tooltip with a digit on the Results step: "${digitTip}"`);
         assert.equal(s.diags.length, 0, 'the Results step holds no diagnostic');
       }
     }

@@ -133,3 +133,41 @@ export function isReloadKey(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey'
   if (e.altKey) return false;
   return e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r');
 }
+
+// ---- free text from the core -------------------------------------------------------------------------
+
+// The no-acoustic-number check's two patterns, the same as app/e2e/lib/dom.ts ACOUSTIC_NUMBER
+// and PARAMETER_NUMBER (the UI cannot import the harness). In M11 a number next to a unit may
+// be shown only as a diagnostic the check can prove against run.json (PLAN.md 3.4 rule 1, 4.2).
+// A reason's detail is the core's prose, which the check cannot prove: `particle_loss_excess`
+// quotes the loss to four decimals ("2000 Hz: 3 of 150000 (0.0020 %)"). Such a detail is not
+// shown, in the text or in a tooltip; the Runs row says it is in run.json, and the loss itself
+// is shown per band, proven.
+const UNIT_NUMBER = /\d\s*(dB|s|ms|%)(?![\p{L}\p{N}])/u;
+const PARAMETER_NUMBER =
+  /(?:\b(?:T15|T20|T30|T60|RT60|EDT|RT|C50|C80|D50|Ts|STI|SPL|LF|LFC|G)\b|\b(?:[Ss]abine|[Ee]yring|[Rr]everberation time)\b)\s*[:=·]?\s*[-+]?\d/;
+
+export type Detail = { kind: 'none' } | { kind: 'shown'; text: string } | { kind: 'withheld' };
+
+/** A reason's detail (or other core text) as the row may show it. */
+export function detailView(text: string | null | undefined): Detail {
+  const t = (text ?? '').trim();
+  if (!t) return { kind: 'none' };
+  if (UNIT_NUMBER.test(t) || PARAMETER_NUMBER.test(t)) return { kind: 'withheld' };
+  return { kind: 'shown', text: t };
+}
+
+/** What a withheld detail's place says instead (the Runs row's title, and every tooltip). */
+export const WITHHELD_DETAIL =
+  'This detail quotes numbers with units. Until the physics checks behind them pass, only values proven against run.json are shown.';
+
+/**
+ * A reason's detail as a tooltip may carry it: the text when the row could show it, the
+ * explanation when it is withheld, nothing when there is none. A tooltip is shown to the user as
+ * surely as the text is, so the same rule holds (M11 review 2, app 4: the Simulate step put the
+ * raw detail, the dock's withheld loss quote included, in a `title`).
+ */
+export function detailTitle(text: string | null | undefined): string | undefined {
+  const d = detailView(text);
+  return d.kind === 'shown' ? d.text : d.kind === 'withheld' ? WITHHELD_DETAIL : undefined;
+}

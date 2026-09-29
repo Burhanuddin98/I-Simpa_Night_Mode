@@ -1,7 +1,18 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { RunRow, RunStreamEvent } from './bindings/ipc.ts';
-import { emptyLog, endLine, foldEvent, isReloadKey, joinBlockers, needsSavePrompt, progressText, RUN_ACTIVE } from './flow.ts';
+import {
+  detailTitle,
+  emptyLog,
+  endLine,
+  foldEvent,
+  isReloadKey,
+  joinBlockers,
+  needsSavePrompt,
+  progressText,
+  RUN_ACTIVE,
+  WITHHELD_DETAIL,
+} from './flow.ts';
 
 const solvers = (blockers: string[]) => ({ checks: [], blockers });
 
@@ -122,4 +133,15 @@ test("the webview's reload keys are known, and ordinary keys are not (review 2, 
   for (const e of [k('r'), k('R'), k('F4'), k('s', { ctrlKey: true }), k('F5', { altKey: true }), k('Home')]) {
     assert.equal(isReloadKey(e), false, JSON.stringify(e));
   }
+});
+
+test("a tooltip carries a reason's detail only when the row could show it (review 2, app 4)", () => {
+  // The verdict's particle_loss_excess detail, which the Runs row withholds.
+  const loss = '1 band(s) lost more than 1 % of their particles to loops and meshing: 500 Hz: 1600 of 150000 (1.0667 %)';
+  assert.equal(detailTitle(loss), WITHHELD_DETAIL);
+  assert.equal(detailTitle('the solver reported T30 = 1.52'), WITHHELD_DETAIL);
+  assert.equal(detailTitle('no run.json'), 'no run.json');
+  assert.equal(detailTitle('  '), undefined);
+  assert.equal(detailTitle(null), undefined);
+  assert.ok(!/\d/.test(WITHHELD_DETAIL), 'the explanation holds no digit');
 });

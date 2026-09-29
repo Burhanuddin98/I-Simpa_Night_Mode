@@ -15,6 +15,9 @@
 //      violation of rule 3 or 4 by itself.
 //   1x. A [data-input] or [data-geometry] element outside its regions (M11 review F2: the
 //      exemptions covered the whole page).
+//   1t. A tooltip (`title`) in a region that shows runs (the diagnostic regions and the Results
+//      step) with a number next to a unit or a parameter's name followed by a number: a tooltip
+//      is shown to the user and cannot be proven (M11 review 2, app 4).
 //   2. A parameter's name followed by a number (PARAMETER_NUMBER), anywhere, nothing hidden.
 //   3. A [data-diagnostic] span that is not (i) one of the four fields, (ii) inside an allowed
 //      region, a leaf, (iii) its field's grammar exactly, and (iv) the manifest's own value at the
@@ -71,6 +74,8 @@ export const ALLOWED_REGIONS: Record<string, string> = {
 export interface SnapshotConfig {
   /** Region name to selector: a diagnostic's region is the first that contains it. */
   regions: Record<string, string>;
+  /** Region name to selector: the regions whose tooltips rule 1t reads. */
+  titleRegions: Record<string, string>;
   /** Hidden for rule 1, wherever they are. */
   hide: string[];
   /** Hidden for rule 1 only inside their regions: attribute, then region name to selector. */
@@ -79,8 +84,20 @@ export interface SnapshotConfig {
   acoustics: string;
 }
 
+/**
+ * Where rule 1t reads tooltips: every region that shows runs, the diagnostic regions and the
+ * Results step (M11 review 2, app 4: the Simulate and Results steps put the core's raw details,
+ * numbers and units included, in `title`s, where no text check could see them). A tooltip
+ * elsewhere, such as an input field's validator message, is the M10 checks' business.
+ */
+export const TITLE_REGIONS: Record<string, string> = {
+  ...ALLOWED_REGIONS,
+  results: '[data-props-step="results"]',
+};
+
 export const SNAPSHOT_CONFIG: SnapshotConfig = {
   regions: ALLOWED_REGIONS,
+  titleRegions: TITLE_REGIONS,
   hide: ['[data-diagnostic]', '[data-verbatim]'],
   exempt: EXEMPT_REGIONS,
   acoustics: '[data-dock-panel="acoustics"]',
@@ -119,12 +136,21 @@ export interface ExemptEl {
   sayNo: boolean;
 }
 
+/** A tooltip (`title`) in a region where runs are shown, and that region. */
+export interface TitleEl {
+  text: string;
+  region: string;
+  sayNo: boolean;
+}
+
 export interface DomSnapshot {
   /** Set when a plant's host was missing: nothing else was read. */
   error?: string;
   diagnostics: DiagnosticEl[];
   verbatim: VerbatimEl[];
   exempt: ExemptEl[];
+  /** Every `title` inside the diagnostic regions and the Results step (rule 1t). */
+  titles: TitleEl[];
   /** document.body.innerText, nothing hidden (rule 2). */
   wholeText: string;
   /** document.body.innerText with `hide` hidden, and the exempt elements inside their regions
@@ -144,7 +170,7 @@ export function collectSnapshot(cfg: SnapshotConfig, plant: Plant | null): DomSn
   if (plant) {
     const host = document.querySelector(plant.host);
     if (!host) {
-      return { error: `no ${plant.host} to plant in`, diagnostics: [], verbatim: [], exempt: [], wholeText: '', hiddenText: '', acousticsText: null };
+      return { error: `no ${plant.host} to plant in`, diagnostics: [], verbatim: [], exempt: [], titles: [], wholeText: '', hiddenText: '', acousticsText: null };
     }
     planted = document.createElement(plant.tag);
     for (const [k, v] of Object.entries(plant.attrs)) planted.setAttribute(k, v);
@@ -176,6 +202,11 @@ export function collectSnapshot(cfg: SnapshotConfig, plant: Plant | null): DomSn
         exempt.push({ attr, region, text: (el.textContent ?? '').slice(0, 120), sayNo: el.hasAttribute('data-say-no') });
       }
     }
+    const titles: TitleEl[] = [];
+    for (const el of document.querySelectorAll<HTMLElement>('[title]')) {
+      const region = Object.keys(cfg.titleRegions).find((k) => el.closest(cfg.titleRegions[k]) !== null) ?? null;
+      if (region !== null) titles.push({ text: el.getAttribute('title') ?? '', region, sayNo: el.hasAttribute('data-say-no') });
+    }
     const wholeText = document.body.innerText;
     const hidden = [...document.querySelectorAll<HTMLElement>(cfg.hide.join(', ')), ...inRegion];
     const before = hidden.map((el) => el.style.display);
@@ -195,6 +226,7 @@ export function collectSnapshot(cfg: SnapshotConfig, plant: Plant | null): DomSn
       diagnostics,
       verbatim,
       exempt,
+      titles,
       wholeText,
       hiddenText,
       acousticsText: acoustics ? (acoustics.textContent ?? '') : null,
@@ -245,7 +277,7 @@ export function runResolver(roots: string[], folders: (root: string) => string[]
   };
 }
 
-export type Rule = '1' | '1x' | '2' | '3i' | '3ii' | '3iii' | '3iv' | '4' | 'acoustics';
+export type Rule = '1' | '1x' | '1t' | '2' | '3i' | '3ii' | '3iii' | '3iv' | '4' | 'acoustics';
 
 export interface Violation {
   rule: Rule;
@@ -314,6 +346,16 @@ export function judge(snap: DomSnapshot, proof: (run: string) => RunProof | null
   }
   for (const t of matchesWithContext(snap.wholeText, PARAMETER_NUMBER)) {
     out.push({ rule: '2', text: t, detail: "a room-acoustic parameter's name followed by a number", sayNo: false });
+  }
+  for (const t of snap.titles) {
+    const hits = [...matchesWithContext(t.text, ACOUSTIC_NUMBER), ...matchesWithContext(t.text, PARAMETER_NUMBER)];
+    if (hits.length === 0) continue;
+    out.push({
+      rule: '1t',
+      text: `[title] in ${t.region}: ${hits[0]}`,
+      detail: "a tooltip with a number next to a unit, or a parameter's name followed by a number: a tooltip is shown to the user, and cannot be a proven diagnostic",
+      sayNo: t.sayNo,
+    });
   }
   if (snap.acousticsText !== null && /\d/.test(snap.acousticsText)) {
     out.push({ rule: 'acoustics', text: snap.acousticsText.slice(0, 120), detail: 'a digit in the Acoustics panel', sayNo: false });
@@ -395,9 +437,10 @@ export const MODEL_FACT = EXEMPT_REGIONS['data-geometry']['statusbar-model-fact'
  * time as displayed, `elapsed`, and its worst loss, `lossPct`). The elapsed plant reads 1.8 s
  * unless the manifest says exactly that, when it reads 2.8 s: it must differ.
  *
- * The last three hold the exemptions to their regions (M11 review F2): a `[data-geometry]` and a
+ * H6 to H8 hold the exemptions to their regions (M11 review F2): a `[data-geometry]` and a
  * `[data-input]` element outside every region of theirs, and the review's mutation M13 inside an
- * allowed region, which only rule 2's wider names can see.
+ * allowed region, which only rule 2's wider names can see. H9 is a tooltip holding the verdict's
+ * loss quote (review 2, app 4), which no text rule can see.
  */
 export function sayNoCases(run: string, elapsed: string, lossPctText: string): SayNo[] {
   const wrong = elapsed === '1.8' ? '2.8 s' : '1.8 s';
@@ -434,6 +477,16 @@ export function sayNoCases(run: string, elapsed: string, lossPctText: string): S
       plant: { host: MODEL_FACT, tag: 'span', attrs: { 'data-geometry': '' }, text: 'Reverberation time · Sabine 1.52 s' },
       rule: '2',
       marker: 'Sabine 1.52',
+    },
+    {
+      name: "H9: a reason's tooltip in the Runs tab quoting the verdict's loss detail, which the row withholds",
+      plant: {
+        host: ALLOWED_REGIONS.runs,
+        tag: 'span',
+        attrs: { title: '1 band(s) lost more than 1 % of their particles to loops and meshing: 500 Hz: 1600 of 150000 (1.0667 %)' },
+        text: '',
+      },
+      rule: '1t',
     },
   ];
 }

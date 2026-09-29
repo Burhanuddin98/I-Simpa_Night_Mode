@@ -59,6 +59,7 @@ const snap = (over: Partial<DomSnapshot> = {}): DomSnapshot => ({
   diagnostics: [],
   verbatim: [],
   exempt: [],
+  titles: [],
   wholeText: 'Geometry\nMaterials\nRun #1 · SPPS finished · OK · Particles lost (limit )',
   hiddenText: 'Geometry\nMaterials\nRun #1 · SPPS finished · OK · Particles lost (limit )',
   acousticsText: null,
@@ -200,7 +201,7 @@ test('a plant whose host is missing fails the snapshot', () => {
 
 test('say-NO: every plant is flagged under its own rule', () => {
   const cases = sayNoCases(RUN, '1.4', '0.13');
-  assert.equal(cases.length, 8);
+  assert.equal(cases.length, 9);
   for (const c of cases) {
     // What collectSnapshot reads with the plant in its host.
     const text = `Ready\n${c.plant.text}`;
@@ -209,6 +210,10 @@ test('say-NO: every plant is flagged under its own rule', () => {
     if (c.rule === '1' || c.rule === '2') {
       // Rule 2 reads the whole text; an exempt plant in its region is hidden from rule 1.
       s = snap({ wholeText: text, hiddenText: exemptAttr ? 'Ready' : text });
+    } else if (c.rule === '1t') {
+      // A tooltip: no text at all, so only rule 1t can see it.
+      s = snap({ titles: [{ text: c.plant.attrs.title, region: 'runs', sayNo: true }] });
+      assert.deepEqual(rules(snap({ wholeText: text, hiddenText: text })), [], `${c.name}: the text rules see nothing`);
     } else if (c.rule === '1x') {
       assert.ok(exemptAttr, c.name);
       s = snap({ wholeText: text, hiddenText: text, exempt: [{ attr: exemptAttr, region: null, text: c.plant.text, sayNo: true }] });
@@ -237,4 +242,20 @@ test('say-NO: a checker that let a plant through would be caught', () => {
   const c = sayNoCases(RUN, '1.4', '0.13')[2];
   // The same span, reading the manifest's own value, is not flagged: flagged() needs the rule.
   assert.equal(flagged(c, judge(snap({ diagnostics: [diag('elapsed_s', '1.4 s', { sayNo: true })] }), proof)), false);
+});
+
+test('rule 1t: a tooltip with a number and a unit, or a parameter and a number, is flagged; others pass (review 2, app 4)', () => {
+  const t = (text: string) => ({ text, region: 'simulate', sayNo: false });
+  assert.deepEqual(rules(snap({ titles: [t('500 Hz: 1600 of 150000 (1.0667 %)')] })), ['1t']);
+  assert.deepEqual(rules(snap({ titles: [t('the solver reported T30 = 1.52')] })), ['1t']);
+  assert.deepEqual(rules(snap({ titles: [t('elapsed 12.5 s')] })), ['1t']);
+  for (const clean of [
+    'C:\\tmp\\nm-target\\gates\\m11\\20260930-011500\\solvers\\spps.exe',
+    'C:\\tmp\\nm-target\\gates\\m11\\20260930-011500\\p\\box\\runs\\20260929-234927-813-spps',
+    'b9f1c3a2e4d5f60718293a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d',
+    "The reason's detail is on the Runs tab",
+    'Stop the solver and record the run as Cancelled',
+  ]) {
+    assert.deepEqual(rules(snap({ titles: [t(clean)] })), [], clean);
+  }
 });

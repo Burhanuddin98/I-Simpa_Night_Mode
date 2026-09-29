@@ -14,7 +14,7 @@
 import { type ReactNode, useEffect } from 'react';
 import * as actions from '../../actions';
 import type { ReasonUi, RunRow } from '../../bindings/ipc';
-import { statusWord } from '../../flow';
+import { statusWord, WITHHELD_DETAIL } from '../../flow';
 import { type ActiveRun, runsStore, runStore, sceneStore, selectedRunStore, useStore } from '../../store';
 import {
   baseName,
@@ -42,7 +42,7 @@ function DetailText({ text }: { text: string | null | undefined }) {
       <span
         className="reason-detail withheld"
         data-part="detail-withheld"
-        title="This detail quotes numbers with units. Until the physics checks behind them pass, only values proven against run.json are shown."
+        title={WITHHELD_DETAIL}
       >
         : in run.json
       </span>

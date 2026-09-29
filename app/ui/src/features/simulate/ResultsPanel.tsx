@@ -4,9 +4,11 @@
 //
 // `[data-results-state]` is `none`, `running`, `checking`, `verified`, `refused` or `error`. A
 // refusal reads "FAIL · Results refused" with its UI code and core code, then the codes of the
-// run's own reasons. There is no `[data-result]` element, and the panel's text has no digit
-// outside `[data-run-label]` ("Run <n> · <variant>"): a reason's detail may hold numbers, so it
-// goes in a title, never in the text (gate (e), m11-e-results).
+// run's own reasons. There is no `[data-result]` element, and neither the panel's text nor its
+// tooltips hold a digit outside `[data-run-label]` ("Run <n> · <variant>"): a reason's detail may
+// hold numbers, even a solver-computed one (`results_value_invalid` quotes the value it refused),
+// so it is not shown here at all, not even in a title, which a user reads as surely as the text
+// (M11 review 2, app 4). The Runs tab shows it, withheld when it quotes a number with a unit.
 import { useEffect, useState } from 'react';
 import * as actions from '../../actions';
 import type { ReasonUi } from '../../bindings/ipc';
@@ -15,11 +17,14 @@ import { registerHook } from '../../testhooks';
 import { resultsStateName, runVariantName, solverLabel } from './model';
 import './simulate.css';
 
+/** A reason's title on this step: where its detail is, never the detail. */
+const DETAIL_ON_RUNS_TAB = "The reason's detail is on the Runs tab";
+
 function Codes({ reasons, part }: { reasons: readonly ReasonUi[]; part: string }) {
   return (
     <div className="res-codes" data-part={part}>
       {reasons.map((r, i) => (
-        <div key={`${r.code}-${i}`} className="res-code" data-code={r.ui_code} title={r.detail}>
+        <div key={`${r.code}-${i}`} className="res-code" data-code={r.ui_code} title={DETAIL_ON_RUNS_TAB}>
           <span className="code">{r.ui_code}</span>
           <span className="core">{r.code}</span>
         </div>
@@ -119,7 +124,7 @@ export function ResultsPanel() {
               The results could not be checked
             </div>
             <div className="res-codes" data-part="error">
-              <div className="res-code" data-code={error.code} title={error.message}>
+              <div className="res-code" data-code={error.code} title="The message is in the Console">
                 <span className="code">{error.code}</span>
               </div>
             </div>

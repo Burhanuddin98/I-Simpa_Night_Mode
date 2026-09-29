@@ -306,6 +306,8 @@ describe('M11 gate', () => {
           unlabelled: copy?.textContent ?? '',
           results: p?.querySelectorAll('[data-result]').length ?? -1,
           label: p?.querySelector('[data-run-label]')?.textContent ?? null,
+          // Tooltips are read as surely as text (M11 review 2, app 4).
+          titles: [...(copy?.querySelectorAll('[title]') ?? [])].map((e) => e.getAttribute('title') ?? ''),
         };
       }, panel);
     };
@@ -315,6 +317,11 @@ describe('M11 gate', () => {
     assert.ok(failed.text.includes('RESULTS_RUN_FAILED'), 'the refusal names RESULTS_RUN_FAILED');
     assert.equal(failed.results, 0, 'no [data-result] element');
     assert.ok(!/\d/.test(failed.unlabelled), `a digit on the Results step outside [data-run-label]: ${failed.unlabelled}`);
+    // The refusal's reasons carry the mesh failure's details (TetGen's exit code among them):
+    // none may reach a tooltip either.
+    assert.ok(failed.titles.length > 0, 'the refusal shows its reasons, each with a tooltip (the control)');
+    const digitTip = failed.titles.find((t) => /\d/.test(t));
+    assert.equal(digitTip, undefined, `a tooltip with a digit on the Results step: "${digitTip}"`);
     // Control: the same panel on m11-a's OK run reads verified.
     await m10.openProject(BOX());
     const ok = await stateOf(boxRun, 'verified');
