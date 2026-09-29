@@ -1,0 +1,30 @@
+/* The Run button (design:43), moved unchanged out of chrome/chrome.css by the M11 foundation.
+   Owned by the simulate package (docs/investigations/2026-09-29-m11/PLAN.md 9.1). */
+.run-wrap {
+  display: flex;
+  margin-left: 6px;
+}
+.run {
+  height: 28px;
+  min-width: 118px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 5px;
+  background: var(--red);
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+.run:disabled {
+  opacity: 0.45;
+}
+.run .key {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  opacity: 0.8;
+}

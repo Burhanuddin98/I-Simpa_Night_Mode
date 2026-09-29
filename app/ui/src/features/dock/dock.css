@@ -1,0 +1,117 @@
+/* The dock: tabs, Console and Runs (design:175-275), moved unchanged out of chrome/chrome.css by
+   the M11 foundation. Owned by the dock package (docs/investigations/2026-09-29-m11/PLAN.md 9.2). */
+/* Dock (design:175-275) */
+.dock {
+  height: 250px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+.dock-tabs {
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+.dock-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+.dock-tab[aria-selected='true'] {
+  border-bottom-color: var(--red);
+  color: var(--text);
+}
+.dock-tab .tab-badge {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+.dock-body {
+  flex-grow: 1;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.dock-empty {
+  padding: 16px;
+}
+.console {
+  padding: 8px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.console-empty {
+  padding: 4px 16px;
+}
+.console-line {
+  display: flex;
+  gap: 14px;
+  padding: 4px 16px;
+  user-select: text;
+}
+.console-line .time {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.console-line .tag {
+  width: 40px;
+  flex-shrink: 0;
+}
+.console-line .text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.console-line.FAIL {
+  background: rgba(224, 32, 46, 0.08);
+}
+.console-line.FAIL .tag {
+  color: var(--red-hi);
+}
+.console-line.FAIL .text {
+  color: var(--fail-text);
+}
+.console-line.WARN .tag {
+  color: var(--warn);
+}
+.console-line.INFO .tag {
+  color: var(--text-2);
+}
+.console-line.OK .tag {
+  color: var(--ok);
+}
+.runs {
+  padding: 6px 16px;
+}
+.runs-head {
+  display: flex;
+  height: 26px;
+  align-items: center;
+  font-size: 11.5px;
+  letter-spacing: 1.2px;
+  border-bottom: 1px solid var(--line);
+}
+.runs-head span:nth-child(1) {
+  width: 70px;
+}
+.runs-head span:nth-child(2) {
+  width: 170px;
+}
+.runs-head span:nth-child(3),
+.runs-head span:nth-child(4) {
+  width: 90px;
+}
+.runs-empty {
+  padding: 10px 0;
+}

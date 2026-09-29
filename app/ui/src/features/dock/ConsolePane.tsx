@@ -2,7 +2,7 @@
 // label (never colour alone). It follows new lines while it is scrolled to the bottom, and stays
 // put while the user reads further up.
 import { useLayoutEffect, useRef } from 'react';
-import { consoleStore, useStore } from '../store';
+import { consoleStore, useStore } from '../../store';
 
 export function ConsolePane() {
   const lines = useStore(consoleStore);

@@ -92,7 +92,14 @@ export function GeometryPanel() {
         </div>
         <div className="fact-line">
           <span>
-            Volume <span className="mono v">{fact(check.enclosed_volume_m3, 1)} m³</span>
+            Volume{' '}
+            {check.enclosed_volume_m3 === null ? (
+              // A refused model encloses no volume anyone should read (M10 MINOR B-18; the
+              // wording is the project package's to settle, M11 PLAN.md 4.2 m11-b18).
+              <span className="mono v">none: the model is refused</span>
+            ) : (
+              <span className="mono v">{fact(check.enclosed_volume_m3, 1)} m³</span>
+            )}
           </span>
           <span>
             Surface <span className="mono v">{fact(check.area_m2, 1)} m²</span>

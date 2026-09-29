@@ -45,6 +45,13 @@ export async function textOutsideInputsAndGeometry(): Promise<string> {
 /** A solver-computed acoustic number: a digit next to dB, s, ms or % (PLAN.md 3, m10-h). */
 export const ACOUSTIC_NUMBER = /\d\s*(dB|s|ms|%)(?![\p{L}\p{N}])/u;
 
+/**
+ * A room-acoustic parameter's name followed by a number, whatever its unit or none (M11 PLAN.md
+ * 4.2 rule 2, closing M10 MINOR A-2: `STI 0.62 · D50 0.45` carries no unit, so
+ * `ACOUSTIC_NUMBER` cannot see it). Read over the whole page, nothing hidden.
+ */
+export const PARAMETER_NUMBER = /\b(T15|T20|T30|EDT|RT|C50|C80|D50|Ts|STI|SPL|LF|LFC|G)\b\s*[:=]?\s*[-+]?\d/;
+
 export async function clickSelector(selector: string): Promise<void> {
   const el = await $(selector);
   await el.waitForExist({ timeout: 30_000 });

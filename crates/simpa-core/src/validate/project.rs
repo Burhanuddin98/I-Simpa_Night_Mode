@@ -105,7 +105,8 @@ fn placeholders(p: &Project, out: &mut Vec<Issue>) {
                 MATERIAL_PLACEHOLDER,
                 format!("/surface_groups/{i}/material"),
                 format!(
-                    "surface group '{}' has material '{}', upstream's placeholder for no material                      chosen (absorption and scattering 0 in every band): choose a material for it",
+                    "surface group '{}' has material '{}', upstream's placeholder for no material \
+                     chosen (absorption and scattering 0 in every band): choose a material for it",
                     g.name, m.name
                 ),
             ));

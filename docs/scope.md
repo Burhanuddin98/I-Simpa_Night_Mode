@@ -10,7 +10,7 @@ into the file named here in the same session, never only into a chat or a handof
 | **Engine work before M8** | This file, below | Open. |
 | **M8 decisions** | This file, below | The 7 technical calls were adopted as recommended on 2026-09-29 (decision row 17). The reference is decided, and Burhan's word is final. |
 | **Upstream feature parity** (what the screens must hold) | `docs/investigations/2026-09-25-parity-audit/parity-matrix.md` | Upstream has 250 user-facing features. **43 are before v1** (15 absent or deferred, 14 core-only, 14 design-only; 38 small, 5 medium), 85 are v1.x and 55 later. They fold into M10-M13. |
-| **Product decisions for Burhan** | The parity matrix (open decisions, raw:348-360); this file, below; M11 PLAN section 10 | 8 open. M11 adds PQ1-PQ6, each with a recommended default that the build follows until Burhan says otherwise. |
+| **Product decisions for Burhan** | The parity matrix (open decisions, raw:348-360); this file, below; M11 PLAN section 10 | 8 open. M11 adds PQ1-PQ6 (PLAN section 10) and PQ7 (the foundation, `docs/investigations/2026-09-29-m11/FOUNDATION.md` F-1: a project never saved and never edited leaves without the save prompt), each with a recommended default that the build follows until Burhan says otherwise. |
 | **Deferred work (v1.1)** | `docs/v1.1-backlog.md` | 18 items, closed by M14. Rows 6-18 were added by the M11 plan: M10's minor findings, the core test targets under `<repo>\target`, and the remaining-time estimate. |
 | **v1 pieces outside the milestone specs** | This file | Two, both v1 (row 21), neither started. (1) Face regrouping (G19) and grouped receivers on `.proj` import (M37): row 22 gives them their own piece. (2) The Simulate settings editor (C7, C8, C10, C11, C12, C21, C22, C25, C26, C27): M11 PLAN PQ3, due before M12 because C8 and C22 feed M12's playback and multi-source runs. |
 | **v2 contenders** | `docs/v1.1-backlog.md`, "v2 contenders" | 14 items (the GPU tracer and 13 community requests, row 16), after M14. |
@@ -35,7 +35,9 @@ into the file named here in the same session, never only into a chat or a handof
 3. **The 2 ms ceilings for C50, C80 and D50** (D5). At 10 ms they can be off by up to 0.13 dB today.
 4. **Refuse single-run energetic T20/T30 until R4** (D7).
 5. **Check the solver executables against `solvers/manifest.json` on every run.** The main checkout's
-   tetgen.exe is stale; the one in `t3-proj` is correct.
+   tetgen.exe is stale; the one in `t3-proj` is correct. **Built for the app in the M11 foundation**
+   (C7, `RunOptions::verify`: stage `solvers`, `solver_unverified`, recorded in `run.json`); the CLI
+   and the bed run without it, as before.
 
 ## Decided 2026-09-27
 

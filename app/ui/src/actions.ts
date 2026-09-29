@@ -1,17 +1,66 @@
-// The M10 actions (PLAN.md 2.2): the only code that calls the M10 commands. The menus, the
-// packages and the e2e hooks all go through these, so a hook exercises exactly what a click
-// does, minus the native dialog.
+// The M10 and M11 actions (M10 PLAN.md 2.2, M11 PLAN.md 3.2): the only code that calls the M10
+// and M11 commands. The menus, the packages and the e2e hooks all go through these, so a hook
+// exercises exactly what a click does, minus the native dialog.
 //
 // Every response replaces `sceneStore` whole; its Console lines are appended; the mesh is
 // refetched when `info.geometry_rev` moved. A failure is logged as a FAIL line with its code and
 // rethrown, so a caller that must know (a hook, a dialog) can; UI handlers use `fire`.
 import { open, save as saveDialog } from '@tauri-apps/plugin-dialog';
-import { asCmdError, backend, type EditOutcome, type SceneState, type Unit, type Up } from './backend';
+import {
+  asCmdError,
+  backend,
+  Channel,
+  type AppEvent,
+  type EditOutcome,
+  type LibraryMaterial,
+  type ResultsState,
+  type RunStarted,
+  type RunStreamBatch,
+  type RunsView,
+  type SceneState,
+  type SolversStatus,
+  type Unit,
+  type Up,
+} from './backend';
 import type { UiIssue } from './bindings/ipc';
-import type { Op } from './bindings/schema';
+import type { Op, ReflectionLaw } from './bindings/schema';
+import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
 import { decodeMesh } from './mesh';
-import { addReceiver, addSource, newReceiver, newSource, nextName, type Vec3 } from './ops';
-import { importRequestStore, log, logAll, meshStore, refusalStore, sceneStore } from './store';
+import {
+  addMaterial,
+  addReceiver,
+  addSource,
+  libraryMaterial,
+  newReceiver,
+  newSource,
+  nextName,
+  replaceMaterial,
+  setSourceEnabled as setSourceEnabledOp,
+  type Vec3,
+  withLaw,
+} from './ops';
+import {
+  appendLines,
+  type ConsoleLine,
+  importRequestStore,
+  libraryStore,
+  log,
+  logAll,
+  meshStore,
+  promptStore,
+  type PromptChoice,
+  refusalStore,
+  resultsStore,
+  type RunLog,
+  runLinesStore,
+  runsStore,
+  runStore,
+  sceneStore,
+  selectedRunStore,
+  type SolverName,
+  solversStatusStore,
+  solverStore,
+} from './store';
 
 /** A rejected action's `{code, message}`, for a package that shows it inline (packages never
  * import backend.ts, PLAN.md 2.4 rule 7). */
@@ -54,39 +103,59 @@ export async function loadInitialState(): Promise<void> {
   if (state) await accept(state);
 }
 
-export async function newProject(name = 'Untitled'): Promise<SceneState> {
+/** A new, empty project, after the save prompt (row 22, A9); `null` when the user cancelled or
+ * a run is active. */
+export async function newProject(name = 'Untitled'): Promise<SceneState | null> {
+  if (refuseDuringRun('New project')) return null;
+  if (!(await confirmDiscard())) return null;
   refusalStore.set(new Map());
-  return run('Could not create a project', async () => accept(await backend.sceneNew(name)));
+  const state = await run('Could not create a project', async () => accept(await backend.sceneNew(name)));
+  fire(refreshRuns());
+  return state;
 }
 
+/** Opens a `.simpa` (no prompt: callers that leave the project go through `openPath`). */
 export async function openProject(path: string): Promise<SceneState> {
   refusalStore.set(new Map());
-  return run(`Could not open ${path}`, async () => accept(await backend.sceneOpen(path)));
+  const state = await run(`Could not open ${path}`, async () => accept(await backend.sceneOpen(path)));
+  selectedRunStore.set(null);
+  resultsStore.set(new Map());
+  fire(refreshRuns());
+  return state;
 }
 
 export async function importModel(path: string, unit: Unit, up: Up): Promise<SceneState> {
   refusalStore.set(new Map());
-  return run(`Could not import ${path}`, async () => accept(await backend.modelImport(path, unit, up)));
+  const state = await run(`Could not import ${path}`, async () => accept(await backend.modelImport(path, unit, up)));
+  selectedRunStore.set(null);
+  fire(refreshRuns());
+  return state;
 }
 
 const MESH_EXTENSIONS = ['ply', 'obj', 'stl'];
 
-/** Opens a file by path: a `.simpa` directly, a mesh through the import dialog (unit and up
- * axis are the user's to confirm, never guessed). */
+/** Opens a file by path, after the save prompt: a `.simpa` directly, an upstream `.proj` as a
+ * new unsaved project (it carries its own units), a mesh through the import dialog (unit and up
+ * axis are the user's to confirm, never guessed). Nothing opens while a run is active. */
 export async function openPath(path: string): Promise<void> {
+  if (refuseDuringRun('Open')) return;
+  if (!(await confirmDiscard())) return;
   const ext = path.split('.').pop()?.toLowerCase() ?? '';
   if (MESH_EXTENSIONS.includes(ext)) importRequestStore.set({ path });
+  else if (ext === 'proj') await importProj(path);
   else await openProject(path);
 }
 
 /** File › Open…: the native dialog, then `openPath`. */
 export async function openDialog(): Promise<void> {
+  if (refuseDuringRun('Open')) return;
   const path = await open({
     multiple: false,
     directory: false,
     filters: [
-      { name: 'Project or room model', extensions: ['simpa', ...MESH_EXTENSIONS] },
+      { name: 'Project or room model', extensions: ['simpa', 'proj', ...MESH_EXTENSIONS] },
       { name: 'Night Mode project', extensions: ['simpa'] },
+      { name: 'I-Simpa project', extensions: ['proj'] },
       { name: 'Room model', extensions: MESH_EXTENSIONS },
     ],
   });
@@ -102,7 +171,10 @@ export async function saveAs(path?: string): Promise<SceneState | null> {
       filters: [{ name: 'Night Mode project', extensions: ['simpa'] }],
     }));
   if (typeof target !== 'string') return null;
-  return run(`Could not save ${target}`, async () => accept(await backend.projectSave(target)));
+  const state = await run(`Could not save ${target}`, async () => accept(await backend.projectSave(target)));
+  // Another folder is another runs root.
+  fire(refreshRuns());
+  return state;
 }
 
 /** Save: to the project's own path, or Save as for a project never saved. */
@@ -173,4 +245,249 @@ export async function placeAt(kind: 'receiver' | 'source', point: Vec3): Promise
 /** The issues of the current state and the refusals of one field, for inline messages. */
 export function refusalsFor(fieldKey: string): UiIssue[] {
   return refusalStore.get().get(fieldKey) ?? [];
+}
+
+// ---- M11 (docs/investigations/2026-09-29-m11/PLAN.md 3.2) -------------------------------------
+// The run, the Runs tab, the results state, the solvers, the library, the save prompt and the
+// close request. Still the only code that calls the backend.
+
+function active(): boolean {
+  return runStore.get() !== null;
+}
+
+/** New, Open and Import wait while a run is active (PQ4): the run would be orphaned from the
+ * project the Runs tab lists. */
+function refuseDuringRun(what: string): boolean {
+  if (!active()) return false;
+  log('INFO', `${what}: a run is active: cancel it first`);
+  return true;
+}
+
+/**
+ * Before New, Open and Exit (row 22, A9): when the project holds something to lose, asks
+ * "Save changes to <name>?" through `promptStore` (the dialog answers). Save runs Save, or Save
+ * as for a project never saved, and goes on only if that saved; Don't save goes on; Cancel stops.
+ * `true` when the caller may go on.
+ */
+export async function confirmDiscard(): Promise<boolean> {
+  const info = sceneStore.get()?.info ?? null;
+  if (!needsSavePrompt(info)) return true;
+  if (promptStore.get()) return false;
+  const choice = await new Promise<PromptChoice>((resolve) => {
+    promptStore.set({
+      name: info?.name ?? 'Untitled',
+      resolve: (c) => {
+        promptStore.set(null);
+        resolve(c);
+      },
+    });
+  });
+  if (choice === 'cancel') return false;
+  if (choice === 'discard') return true;
+  const saved = await save().catch(() => null);
+  return saved !== null && !(sceneStore.get()?.info.dirty ?? false);
+}
+
+/** The solvers' status, refreshed at boot and before each run. */
+export async function refreshSolvers(): Promise<SolversStatus | null> {
+  try {
+    const status = await backend.solversStatus();
+    solversStatusStore.set(status);
+    return status;
+  } catch (e) {
+    const err = asCmdError(e);
+    log('FAIL', `Checking the solvers: ${err.message} (${err.code})`);
+    return null;
+  }
+}
+
+/** Upstream's reference materials, from the core, once at boot. */
+export async function loadLibrary(): Promise<void> {
+  const lib = await run('Reading the material library', () => backend.materialLibrary());
+  libraryStore.set(lib);
+}
+
+/** The Runs tab's rows for the open project. */
+export async function refreshRuns(): Promise<RunsView | null> {
+  if (!sceneStore.get()) {
+    runsStore.set(null);
+    return null;
+  }
+  const view = await run('Listing the runs', () => backend.runsList());
+  runsStore.set(view);
+  if (selectedRunStore.get() === null && view.rows.length > 0) selectedRunStore.set(view.rows[view.rows.length - 1].run);
+  return view;
+}
+
+/** Shows `run` on the Results step (a Runs row click, the Simulate step's "Run n" link). */
+export function selectRun(run: string | null): void {
+  selectedRunStore.set(run);
+}
+
+/** Whether `run`'s results verify, fetched once per run; never a value. */
+export async function resultsFor(runName: string): Promise<ResultsState> {
+  const cached = resultsStore.get().get(runName);
+  if (cached) return cached;
+  const state = await run(`Checking the results of ${runName}`, () => backend.runResults(runName));
+  const next = new Map(resultsStore.get());
+  next.set(runName, state);
+  resultsStore.set(next);
+  return state;
+}
+
+/**
+ * The run stream's handler, the one writer of `runStore`, `runLinesStore` and a run's Console
+ * lines. A batch is folded locally and each store set once, so thousands of PROGRESS lines cost
+ * one render per batch.
+ */
+function onRunEvents(batch: RunStreamBatch): void {
+  const lines: Omit<ConsoleLine, 'time'>[] = [];
+  let current = runStore.get();
+  let logs: Map<string, RunLog> | null = null;
+  let ended: string | null = null;
+  let finished = false;
+  for (const e of batch.events) {
+    const runName = e.kind === 'started' ? e.run : current?.run;
+    if (runName !== undefined) {
+      logs ??= new Map(runLinesStore.get());
+      const f = foldEvent(logs.get(runName) ?? emptyLog(), runName, e);
+      logs.set(runName, f.log);
+      if (f.line) lines.push(f.line);
+    }
+    switch (e.kind) {
+      case 'started':
+        if (current) current = { ...current, run: e.run, status: current.status === 'cancelling' ? 'cancelling' : 'running' };
+        break;
+      case 'stage':
+        if (current) current = { ...current, stage: e.stage };
+        break;
+      case 'line':
+        if (current && e.class === 'PROGRESS' && e.source === 'solver') {
+          current = { ...current, progress: e.progress ?? null, progressText: progressText(e.text) };
+        }
+        break;
+      case 'ended':
+        current = null;
+        lines.push(endLine(e.row));
+        ended = e.row.run;
+        finished = true;
+        break;
+      case 'failed':
+        current = null;
+        lines.push({ tag: 'FAIL', text: `The run could not record itself: ${e.error.message} (${e.error.code})`, source: 'app' });
+        finished = true;
+        break;
+    }
+  }
+  if (logs) runLinesStore.set(logs);
+  runStore.set(current);
+  appendLines(lines);
+  if (ended !== null) selectRun(ended);
+  if (finished) fire(refreshRuns());
+}
+
+/**
+ * Run (PQ1: the run is of what is on screen, so it saves first): with no path, Save as (a
+ * cancelled dialog runs nothing); with unsaved changes, Save. Then the solvers are checked and
+ * the run starts; its events arrive through the channel. Returns what `run_start` answered, or
+ * `null` when nothing was started.
+ */
+export async function runStart(solver: SolverName = solverStore.get()): Promise<RunStarted | null> {
+  if (refuseDuringRun('Run')) return null;
+  const state = sceneStore.get();
+  if (!state) return null;
+  if (!state.info.path || state.info.dirty) {
+    const saved = await save();
+    if (!saved || saved.info.dirty || !saved.info.path) return null;
+    log('INFO', `Saved ${saved.info.path} before the run`);
+  }
+  await refreshSolvers();
+  const info = sceneStore.get()?.info;
+  runStore.set({
+    solver,
+    variant: info?.active_variant ?? null,
+    stage: null,
+    progress: null,
+    progressText: '',
+    startedAt: Date.now(),
+    status: 'starting',
+  });
+  const channel = new Channel<RunStreamBatch>();
+  channel.onmessage = onRunEvents;
+  try {
+    const started = await backend.runStart(solver, channel);
+    log('INFO', `${solver.toUpperCase()} run started: ${started.project_path}`);
+    return started;
+  } catch (e) {
+    runStore.set(null);
+    const err = asCmdError(e);
+    log('FAIL', `Could not start the run: ${err.message} (${err.code})`);
+    throw e;
+  }
+}
+
+/** Cancel: the core stops the run and ends the solver's Job Object; the row reads Cancelled. */
+export async function runCancel(): Promise<boolean> {
+  const current = runStore.get();
+  if (current) runStore.set({ ...current, status: 'cancelling' });
+  return run('Could not cancel the run', () => backend.runCancel());
+}
+
+/** Opens an upstream `.proj` (no unit dialog: it carries its own units). Not saved: Save as
+ * follows. A refusal is a FAIL line with its code, and the project is unchanged. */
+export async function importProj(path: string): Promise<SceneState> {
+  refusalStore.set(new Map());
+  const state = await run(`Could not open ${path}`, async () => accept(await backend.projImport(path)));
+  fire(refreshRuns());
+  return state;
+}
+
+/** Adds a library material to the project (row 22, M1): one `add_material`, one undo step. */
+export async function addFromLibrary(entry: LibraryMaterial): Promise<EditOutcome> {
+  const view = sceneStore.get()?.view;
+  if (!view) throw new Error('addFromLibrary: no project is open');
+  const m = libraryMaterial(entry, crypto.randomUUID(), view.bands.frequencies_hz.length);
+  return apply(addMaterial(view.materials.length, m), `material:new:library`);
+}
+
+/** Switches a source on or off (row 22, M26). */
+export async function setSourceEnabled(id: string, enabled: boolean): Promise<EditOutcome> {
+  return apply(setSourceEnabledOp(id, enabled), `source:${id}:enabled`);
+}
+
+/** Sets one reflection law for every band of a material (row 22, M5): one undo step. */
+export async function setLaw(materialId: string, law: ReflectionLaw): Promise<EditOutcome> {
+  const m = sceneStore.get()?.view.materials.find((x) => x.id === materialId);
+  if (!m) throw new Error(`setLaw: no material ${materialId}`);
+  return apply(replaceMaterial(withLaw(m, law)), `material:${materialId}:reflection_law`);
+}
+
+/** The close request (the window's close button, Alt+F4, WM_CLOSE): the save prompt, then quit,
+ * unless the answer is Cancel. The backend cancels an active run before it exits (PQ4). */
+async function onCloseRequested(): Promise<void> {
+  if (promptStore.get()) return;
+  if (!(await confirmDiscard())) return;
+  await run('Could not quit', () => backend.appQuit());
+}
+
+/** At boot: the channel the backend sends the close request on. */
+export async function listenAppEvents(): Promise<void> {
+  const channel = new Channel<AppEvent>();
+  channel.onmessage = (e) => {
+    if (e.kind === 'close_requested') fire(onCloseRequested());
+  };
+  await run('Registering the app events', () => backend.appEvents(channel));
+}
+
+let pid: number | null = null;
+
+/** This process's id, from `app_startup` (the gate's WM_CLOSE and Stop-Process use it). */
+export async function startupPid(): Promise<number> {
+  if (pid === null) pid = (await run('Reading the startup info', () => backend.startup())).pid;
+  return pid;
+}
+
+/** One IPC round trip, for the gate's latency measurement. */
+export async function ping(): Promise<string> {
+  return backend.ping();
 }

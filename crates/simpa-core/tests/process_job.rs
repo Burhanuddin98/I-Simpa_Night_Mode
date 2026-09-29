@@ -247,7 +247,10 @@ fn raw_bytes_split_on_lf_with_one_cr_stripped_and_lossy_utf8() {
 #[test]
 fn children_run_below_normal_priority() {
     let spec = powershell(
-        "[Console]::Out.WriteLine('PIDS ' + $PID + ' 0');          [Console]::Out.WriteLine('CLASS ' + [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass);          Start-Sleep -Milliseconds 1500",
+        "[Console]::Out.WriteLine('PIDS ' + $PID + ' 0'); \
+         [Console]::Out.WriteLine('CLASS ' + \
+         [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass); \
+         Start-Sleep -Milliseconds 1500",
         work_dir("priority"),
     );
     let mut class = None;

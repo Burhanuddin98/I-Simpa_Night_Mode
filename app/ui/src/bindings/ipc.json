@@ -1,5 +1,31 @@
 {
   "$defs": {
+    "AppEvent": {
+      "description": "What the app sends the UI on the channel the UI registers at boot (`app_events`).",
+      "oneOf": [
+        {
+          "description": "The window's close button, Alt+F4 or `WM_CLOSE`: the close is held until the UI answers\nwith `app_quit` (after the save prompt), or not at all when the user cancels.",
+          "properties": {
+            "dirty": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "close_requested",
+              "type": "string"
+            },
+            "run_active": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "dirty",
+            "run_active"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "BandKind": {
       "description": "Octave or third-octave bands.",
       "enum": [
@@ -7,6 +33,36 @@
         "third_octave"
       ],
       "type": "string"
+    },
+    "BandLossUi": {
+      "description": "A band's particle loss: lost by meshing problems plus lost by infinite loops, over its total.",
+      "properties": {
+        "freq_hz": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "lost": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pct": {
+          "description": "The loss in percent, two decimals, rounded half up in integers ([`loss_pct`]).",
+          "type": "string"
+        },
+        "total": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "freq_hz",
+        "lost",
+        "total",
+        "pct"
+      ],
+      "type": "object"
     },
     "BandSet": {
       "additionalProperties": false,
@@ -218,8 +274,12 @@
           "$ref": "#/$defs/CheckCounts"
         },
         "enclosed_volume_m3": {
+          "description": "The volume the faces enclose; `None` when the check refuses the model, whose \"volume\" is\nnot a number anyone should read (a refused model encloses no volume, M10 MINOR B-18).",
           "format": "double",
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "extents_m": {
           "items": {
@@ -255,7 +315,6 @@
         "reasons",
         "counts",
         "area_m2",
-        "enclosed_volume_m3",
         "bbox_min",
         "extents_m",
         "highlight_faces"
@@ -599,6 +658,21 @@
       ],
       "type": "object"
     },
+    "FileRefUi": {
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "type": "object"
+    },
     "FloatProbe": {
       "description": "What each reader made of a JSON array of numbers: the bits as `0x` + 16 hex digits.",
       "properties": {
@@ -666,6 +740,43 @@
       ],
       "type": "string"
     },
+    "LibraryMaterial": {
+      "description": "One of upstream's reference materials, as the library adds it (`library_material`).",
+      "properties": {
+        "absorption": {
+          "description": "The `f32`-widened absorption, the same in every band, as a `.proj` import makes it.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reference_id": {
+          "description": "Upstream's `idmateriau`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "reference_id",
+        "name",
+        "absorption",
+        "color"
+      ],
+      "type": "object"
+    },
     "LineClass": {
       "description": "The Console's classes (docs/design/README.md: FAIL, INFO and OK; WARN for the amber lines).",
       "enum": [
@@ -673,6 +784,59 @@
         "WARN",
         "INFO",
         "OK"
+      ],
+      "type": "string"
+    },
+    "LineCounts": {
+      "description": "`run.json`'s `lines`: the solver's lines per class.",
+      "properties": {
+        "fail": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "info": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "progress": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unclassified": {
+          "description": "Of the WARN lines, those no pattern matched.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "warn": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "progress",
+        "info",
+        "ok",
+        "warn",
+        "fail",
+        "unclassified"
+      ],
+      "type": "object"
+    },
+    "LineSource": {
+      "description": "Where a streamed line came from: the solver (classified by the core) or TetGen while the run\nmeshes (INFO).",
+      "enum": [
+        "solver",
+        "mesh"
       ],
       "type": "string"
     },
@@ -689,6 +853,36 @@
       "required": [
         "class",
         "text"
+      ],
+      "type": "object"
+    },
+    "LossUi": {
+      "description": "SPPS's particle loss, as the verdict holds it against the limit: per band.",
+      "properties": {
+        "bands": {
+          "items": {
+            "$ref": "#/$defs/BandLossUi"
+          },
+          "type": "array"
+        },
+        "limit_pct": {
+          "description": "The verdict's limit, in percent ([`limit_pct`]).",
+          "type": "string"
+        },
+        "worst_band_hz": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "worst_pct": {
+          "description": "The largest band's `pct` (the first such band on a tie).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "worst_pct",
+        "worst_band_hz",
+        "limit_pct",
+        "bands"
       ],
       "type": "object"
     },
@@ -1115,6 +1309,26 @@
       ],
       "type": "object"
     },
+    "ReasonUi": {
+      "description": "A reason with its core code and its UI code (row 22 (3): both are shown).",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "ui_code": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "ui_code",
+        "detail"
+      ],
+      "type": "object"
+    },
     "ReflectionLaw": {
       "description": "How a surface reflects the diffuse part of the energy: `type_surface/bfreq@loi`, the solver's\n`REFLECTION_LAW` (`lib_interface/coreTypes.h:83-92`). The discriminant is the solver code.\n\nSPPS draws a diffuse reflection with probability equal to the scattering coefficient\n(`spps/CalculationCore.cpp:318`), so the law has no effect at scattering 0.\n[`ReflectionLaw::SemiDiffuse`] has no case in SPPS's `ReflectionLaws::SolveReflection`\n(`spps/tools/dotreflection.h:23-45`) and falls to its default, a specular reflection.",
       "oneOf": [
@@ -1151,6 +1365,32 @@
         }
       ],
       "description": "A material's reflection law: one law for every band, or one per band. The solvers read it per\nband (`type_surface/bfreq@loi`, `base_core_configuration.cpp:210-219`), and upstream's GUI\nkeeps one per band (the `loi` list of each row, `e_data_row_materiau.h:218`): tutorial 3's\nmaterial 100 is Lambert in the six octave bands and specular in the others.\n\nIn JSON: one law, `\"lambert\"`, or one per band in the band set's order,\n`[\"specular\", \"lambert\", ...]`. [`ReflectionLaws::from_bands`] gives the single spelling\nwhenever every band has the same law."
+    },
+    "ResultsState": {
+      "description": "Whether a run's results verify (`results::load`), never a value from them.",
+      "properties": {
+        "refusal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasonUi"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "run": {
+          "type": "string"
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "run",
+        "verified"
+      ],
+      "type": "object"
     },
     "RunEvent": {
       "properties": {
@@ -1210,6 +1450,453 @@
       ],
       "type": "object"
     },
+    "RunLineClass": {
+      "description": "The core's line classes (`docs/solver-contract.md` Part B), as the Console labels them.",
+      "enum": [
+        "PROGRESS",
+        "INFO",
+        "OK",
+        "WARN",
+        "FAIL"
+      ],
+      "type": "string"
+    },
+    "RunRow": {
+      "description": "One row of the Runs tab: every field is read from the run's `run.json`, formatted here.",
+      "properties": {
+        "elapsed_s": {
+          "description": "The solver's wall time in seconds, one decimal ([`elapsed_s`]).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "exe": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileRefUi"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The solver executable and its sha256."
+        },
+        "exit_code": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "lines": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LineCounts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "loss": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LossUi"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "SPPS with its statistics table read."
+        },
+        "manifest_error": {
+          "description": "`run.json` is there but does not read.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "mesh_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "number": {
+          "description": "1, 2, ... by start time among this project's runs.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reasons": {
+          "description": "The verdict's reasons, in order.",
+          "items": {
+            "$ref": "#/$defs/ReasonUi"
+          },
+          "type": "array"
+        },
+        "run": {
+          "description": "The folder's name: the row's key.",
+          "type": "string"
+        },
+        "solver": {
+          "description": "`spps` or `tcr`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "solvers": {
+          "description": "The executables checked against the verified build before the run; `None` for a CLI run\nor one written before M11.",
+          "items": {
+            "$ref": "#/$defs/SolverCheck"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "stage": {
+          "description": "The stage the run ended in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "started": {
+          "description": "`run.json`'s `started` (RFC 3339).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/RunStatusUi"
+        },
+        "variant": {
+          "description": "The variant written (its id); `None` for the project's own materials.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/ReasonUi"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "run",
+        "number",
+        "status",
+        "reasons",
+        "warnings"
+      ],
+      "type": "object"
+    },
+    "RunStarted": {
+      "description": "What `run_start` answers at once; the run itself reports through the stream.",
+      "properties": {
+        "project_path": {
+          "type": "string"
+        },
+        "runs_root": {
+          "type": "string"
+        },
+        "solver": {
+          "type": "string"
+        },
+        "variant": {
+          "description": "The active variant's id, `None` for the project's own materials.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "solver",
+        "project_path",
+        "runs_root"
+      ],
+      "type": "object"
+    },
+    "RunStatusUi": {
+      "description": "A run as the Runs tab lists it.",
+      "oneOf": [
+        {
+          "enum": [
+            "OK",
+            "FAIL",
+            "CRASH",
+            "CANCELLED"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "RUNNING",
+          "description": "The active run, whose `run.json` is not written yet.",
+          "type": "string"
+        },
+        {
+          "const": "INTERRUPTED",
+          "description": "A run folder with no `run.json` that is not the active run: the app died mid-run\n(Stop-Process, a crash). Listed, never dropped and never guessed.",
+          "type": "string"
+        }
+      ]
+    },
+    "RunStreamBatch": {
+      "properties": {
+        "batch": {
+          "description": "0, 1, 2, ... per run.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/RunStreamEvent"
+          },
+          "type": "array"
+        },
+        "last": {
+          "description": "The run thread has finished; no batch follows.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "batch",
+        "events",
+        "last"
+      ],
+      "type": "object"
+    },
+    "RunStreamEvent": {
+      "description": "One event of a run, in order. `seq` is 0, 1, 2, ... per run, so the UI can prove it lost\nnothing.",
+      "oneOf": [
+        {
+          "description": "The run folder exists (the core's `RunEvent::Started`). Always the first event.",
+          "properties": {
+            "folder": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "started",
+              "type": "string"
+            },
+            "run": {
+              "description": "The folder's name: the run's key everywhere in the UI.",
+              "type": "string"
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "t_ms": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "seq",
+            "t_ms",
+            "run",
+            "folder"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A stage begins: solvers, geometry, validate, mesh, export, pre_launch or solve.",
+          "properties": {
+            "kind": {
+              "const": "stage",
+              "type": "string"
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "stage": {
+              "type": "string"
+            },
+            "t_ms": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "seq",
+            "t_ms",
+            "stage"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A classified solver line, or a TetGen line (`source: mesh`, INFO).",
+          "properties": {
+            "class": {
+              "$ref": "#/$defs/RunLineClass"
+            },
+            "continuation": {
+              "type": "boolean"
+            },
+            "kind": {
+              "const": "line",
+              "type": "string"
+            },
+            "progress": {
+              "description": "A PROGRESS line's percentage.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "rule": {
+              "description": "The contract's row id (`spps_end_of_calculation`, ...); empty for a mesh line.",
+              "type": "string"
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "solver_seq": {
+              "description": "The core's arrival index of a solver line (`Classified::seq`).",
+              "format": "uint64",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "source": {
+              "$ref": "#/$defs/LineSource"
+            },
+            "stream": {
+              "$ref": "#/$defs/Stream"
+            },
+            "t_ms": {
+              "format": "double",
+              "type": "number"
+            },
+            "text": {
+              "description": "Exactly as the program printed it.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "seq",
+            "t_ms",
+            "source",
+            "stream",
+            "class",
+            "rule",
+            "continuation",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`run.json` is written. `row` is what `runs_list` lists for it.",
+          "properties": {
+            "kind": {
+              "const": "ended",
+              "type": "string"
+            },
+            "row": {
+              "$ref": "#/$defs/RunRow"
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "t_ms": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "seq",
+            "t_ms",
+            "row"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "No run folder with its `run.json` could be made (the core's `RunError`), or the run\nthread panicked: `RUN_PROJECT`, `RUN_IO` or `RUN_PANIC`.",
+          "properties": {
+            "error": {
+              "$ref": "#/$defs/CmdError"
+            },
+            "kind": {
+              "const": "failed",
+              "type": "string"
+            },
+            "seq": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "t_ms": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "kind",
+            "seq",
+            "t_ms",
+            "error"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RunsView": {
+      "description": "The Runs tab: every run of the open project under its runs root.",
+      "properties": {
+        "active": {
+          "description": "The active run's folder name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "other_projects": {
+          "description": "Run folders of other projects under the same root: counted, not listed.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "root": {
+          "type": "string"
+        },
+        "rows": {
+          "items": {
+            "$ref": "#/$defs/RunRow"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "root",
+        "rows",
+        "other_projects"
+      ],
+      "type": "object"
+    },
     "SceneState": {
       "description": "The state of the open project as the M10 UI shows it. Returned by every M10 command.",
       "properties": {
@@ -1249,7 +1936,7 @@
           "type": "array"
         },
         "run_blockers": {
-          "description": "Why Run is disabled, as UI codes. Never empty in M10: `M11_PENDING` is always present.",
+          "description": "Why Run is disabled by the project itself, as UI codes; empty when the project may run.\nThe UI adds the app's own blockers beside them: `SOLVER_NOT_FOUND` and\n`SOLVER_UNVERIFIED` (`solvers_status`) and `RUN_ACTIVE` (the run slot).",
           "items": {
             "type": "string"
           },
@@ -1267,6 +1954,74 @@
         "issues",
         "run_blockers",
         "lines"
+      ],
+      "type": "object"
+    },
+    "SolverCheck": {
+      "description": "One executable checked against the manifest.",
+      "properties": {
+        "code_sha256": {
+          "description": "The file's code sha256 (link times zeroed), or why it has none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "detail": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "manifest_code_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "matches": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "raw_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "matches"
+      ],
+      "type": "object"
+    },
+    "SolversStatus": {
+      "description": "The four executables a run needs, each checked against the verified build.",
+      "properties": {
+        "blockers": {
+          "description": "`SOLVER_NOT_FOUND` and/or `SOLVER_UNVERIFIED`; empty when all four are the verified build.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "checks": {
+          "items": {
+            "$ref": "#/$defs/SolverCheck"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "checks",
+        "blockers"
       ],
       "type": "object"
     },
@@ -1452,6 +2207,12 @@
           "description": "Started with `--e2e`: the UI installs its test hooks.",
           "type": "boolean"
         },
+        "pid": {
+          "description": "This process's id: the M11 gate sends `WM_CLOSE` to its window and stops it by it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "project": {
           "anyOf": [
             {
@@ -1483,6 +2244,7 @@
         }
       },
       "required": [
+        "pid",
         "selftest",
         "e2e",
         "app_version",
@@ -1784,6 +2546,9 @@
   "additionalProperties": false,
   "description": "The app's command results and events, dumped by app.exe --dump-schema. Do not edit.",
   "properties": {
+    "app_event": {
+      "$ref": "#/$defs/AppEvent"
+    },
     "cmd_error": {
       "$ref": "#/$defs/CmdError"
     },
@@ -1796,31 +2561,56 @@
     "float_probe": {
       "$ref": "#/$defs/FloatProbe"
     },
+    "library_material": {
+      "$ref": "#/$defs/LibraryMaterial"
+    },
     "prepared": {
       "$ref": "#/$defs/Prepared"
     },
     "project_info": {
       "$ref": "#/$defs/ProjectInfo"
     },
+    "results_state": {
+      "$ref": "#/$defs/ResultsState"
+    },
     "run_event_batch": {
       "$ref": "#/$defs/RunEventBatch"
     },
+    "run_started": {
+      "$ref": "#/$defs/RunStarted"
+    },
+    "run_stream_batch": {
+      "$ref": "#/$defs/RunStreamBatch"
+    },
+    "runs_view": {
+      "$ref": "#/$defs/RunsView"
+    },
     "scene_state": {
       "$ref": "#/$defs/SceneState"
+    },
+    "solvers_status": {
+      "$ref": "#/$defs/SolversStatus"
     },
     "startup_info": {
       "$ref": "#/$defs/StartupInfo"
     }
   },
   "required": [
+    "app_event",
     "cmd_error",
     "edit_outcome",
     "events_probe_report",
     "float_probe",
+    "library_material",
     "prepared",
     "project_info",
+    "results_state",
     "run_event_batch",
+    "run_started",
+    "run_stream_batch",
+    "runs_view",
     "scene_state",
+    "solvers_status",
     "startup_info"
   ],
   "title": "IpcBindings",

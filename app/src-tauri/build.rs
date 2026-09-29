@@ -30,6 +30,15 @@ fn main() {
         "edit_undo",
         "edit_redo",
         "scene_mesh",
+        "run_start",
+        "run_cancel",
+        "runs_list",
+        "run_results",
+        "proj_import",
+        "material_library",
+        "solvers_status",
+        "app_events",
+        "app_quit",
     ];
     let attributes = tauri_build::Attributes::new()
         .app_manifest(tauri_build::AppManifest::new().commands(commands));

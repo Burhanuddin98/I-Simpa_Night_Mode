@@ -1,13 +1,15 @@
-//! Run events for the UI: one `ipc::Channel` per run, events batched about every 50 ms.
+//! Events for the UI: one `ipc::Channel` per stream, events batched about every 50 ms.
 //!
 //! A solver can print thousands of lines a second; one IPC message per line would flood the
-//! WebView2 UI thread. The [`Batcher`] collects events on its own thread and sends a
-//! [`RunEventBatch`] at most [`BATCH_PERIOD`] after the first event of the batch arrived, so the
-//! UI sees every line, in order, at most one period late. The last batch has `last: true`, sent
-//! when the producer finishes, so the UI knows the stream is complete.
+//! WebView2 UI thread. The [`Batcher`] collects events on its own thread and hands them on as a
+//! batch at most [`BATCH_PERIOD`] after the first event of the batch arrived, so the UI sees every
+//! line, in order, at most one period late. The last batch is marked `last`, sent when the
+//! producer finishes, so the UI knows the stream is complete.
 //!
-//! The run manager (M6) will be the producer; until then `run_events_probe` drives it with
-//! synthetic lines.
+//! The batcher is generic over its event: M9's `run_events_probe` streams synthetic
+//! [`RunEvent`]s as [`RunEventBatch`]es (unchanged, so M9's self-test measures what it measured),
+//! and M11's runs stream `runs::RunStreamEvent`s. [`AppEvent`] is the app's own channel to the UI
+//! (the close request), which carries one event at a time.
 
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::thread::JoinHandle;
@@ -65,32 +67,38 @@ pub struct BatchStats {
     pub send_failures: u64,
 }
 
+/// What the app sends the UI on the channel the UI registers at boot (`app_events`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AppEvent {
+    /// The window's close button, Alt+F4 or `WM_CLOSE`: the close is held until the UI answers
+    /// with `app_quit` (after the save prompt), or not at all when the user cancels.
+    CloseRequested { dirty: bool, run_active: bool },
+}
+
 /// Collects events on its own thread and hands them to a sink in batches.
-pub struct Batcher {
-    tx: mpsc::Sender<RunEvent>,
+pub struct Batcher<E> {
+    tx: mpsc::Sender<E>,
     thread: JoinHandle<BatchStats>,
 }
 
-impl Batcher {
-    /// Starts the batching thread. `sink` returns whether the batch was delivered.
+impl<E: Send + 'static> Batcher<E> {
+    /// Starts the batching thread. `sink(batch, events, last)` gets each batch's number (0, 1,
+    /// 2, ...), its events and whether it is the last, and returns whether it was delivered.
     pub fn spawn<S>(period: Duration, mut sink: S) -> Self
     where
-        S: FnMut(RunEventBatch) -> bool + Send + 'static,
+        S: FnMut(u64, Vec<E>, bool) -> bool + Send + 'static,
     {
-        let (tx, rx) = mpsc::channel::<RunEvent>();
+        let (tx, rx) = mpsc::channel::<E>();
         let thread = std::thread::spawn(move || {
             let mut stats = BatchStats::default();
-            let mut pending: Vec<RunEvent> = Vec::new();
+            let mut pending: Vec<E> = Vec::new();
             let mut deadline: Option<Instant> = None;
-            let mut flush = |events: Vec<RunEvent>, last: bool, stats: &mut BatchStats| {
+            let mut flush = |events: Vec<E>, last: bool, stats: &mut BatchStats| {
                 stats.events += events.len() as u64;
-                let batch = RunEventBatch {
-                    batch: stats.batches,
-                    events,
-                    last,
-                };
+                let batch = stats.batches;
                 stats.batches += 1;
-                if !sink(batch) {
+                if !sink(batch, events, last) {
                     stats.send_failures += 1;
                 }
             };
@@ -122,8 +130,9 @@ impl Batcher {
         Batcher { tx, thread }
     }
 
-    pub fn push(&self, event: RunEvent) {
-        // The receiver lives until `finish`, which consumes `self`, so this cannot fail.
+    pub fn push(&self, event: E) {
+        // The receiver lives until `finish`, which consumes `self`, so this cannot fail; and a
+        // send is never unwrapped, so the producer (a solver's line loop) never panics here.
         let _ = self.tx.send(event);
     }
 
@@ -153,11 +162,18 @@ mod tests {
 
     type Received = Arc<Mutex<Vec<(Instant, RunEventBatch)>>>;
 
-    fn collect(period: Duration) -> (Batcher, Received) {
+    fn collect(period: Duration) -> (Batcher<RunEvent>, Received) {
         let got = Arc::new(Mutex::new(Vec::new()));
         let sink_got = got.clone();
-        let b = Batcher::spawn(period, move |batch| {
-            sink_got.lock().unwrap().push((Instant::now(), batch));
+        let b = Batcher::spawn(period, move |batch, events, last| {
+            sink_got.lock().unwrap().push((
+                Instant::now(),
+                RunEventBatch {
+                    batch,
+                    events,
+                    last,
+                },
+            ));
             true
         });
         (b, got)
@@ -213,7 +229,7 @@ mod tests {
 
     #[test]
     fn a_refused_batch_is_counted() {
-        let b = Batcher::spawn(Duration::from_millis(5), |_| false);
+        let b = Batcher::spawn(Duration::from_millis(5), |_, _: Vec<RunEvent>, _| false);
         b.push(event(0));
         assert_eq!(b.finish().send_failures, 1);
     }

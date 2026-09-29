@@ -94,13 +94,14 @@ describe('M10 scene', () => {
     assert.deepEqual(raw, await m10.runBlockers(), 'the DOM shows the backend blockers');
     assert.ok(((await run.getAttribute('title')) ?? '').includes('GEOMETRY_REFUSED'), 'the tooltip names the blocker as text');
 
-    // Positive control: a room with nothing wrong is blocked only because Run is not wired yet,
-    // so "disabled" above is not vacuous.
+    // Positive control: a room with nothing wrong has no blocker at all and Run is enabled
+    // (M11 wired Run; PLAN.md 4.5), so "disabled" above is not vacuous.
     await m10.openProject(TEACHING_ROOM());
-    assert.equal(await run.isEnabled(), false);
     const room = await run.getAttribute('data-blockers');
-    console.log(`m10-a-run receipt: teaching room data-blockers = ${room}`);
-    assert.equal(room, 'M11_PENDING');
+    console.log(`m10-a-run receipt: teaching room data-blockers = '${room}'`);
+    assert.equal(room, '');
+    assert.deepEqual(await m10.runBlockers(), []);
+    assert.equal(await run.isEnabled(), true, 'Run is enabled on a clean project');
   });
 
   it("m10-b-materials: the step bar reads Materials '0 / 10' on the corrected hall", async () => {

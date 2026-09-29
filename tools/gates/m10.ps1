@@ -10,8 +10,14 @@
 #   (h) added by the plan, not in the gate text: no solver-computed acoustic number on screen
 # Each is a WebdriverIO test id (m10-a-console, ..., m10-h) run against the release app by
 # `wdio run app/e2e/m10.conf.ts`; every id must pass, none skipped, nothing failing. Plus the
-# static checks (M9's static checks, the 28-command inventory across four places, the UI lints,
-# theme.css frozen), the Rust checks and the fixtures' recipe.
+# static checks (M9's static checks, the command inventory across four places with M10's 28
+# commands present, the UI lints, theme.css frozen), the Rust checks and the fixtures' recipe.
+#
+# M11 (docs/investigations/2026-09-29-m11/PLAN.md 4.5), none a loosening: the inventory no longer
+# pins the count at 28 (M11 adds 9) but requires M10's 28 by name and the four sets equal; the core
+# step runs the two tests M10 had to skip (both fixed in M11); the e2e step passes only on wdio's
+# exit 0 (M10 MINOR A-4); and the app gets the solver build too, since Run is wired and the
+# teaching room's control now reads Run enabled.
 #
 # Windows PowerShell 5.1 (pwsh is not installed on Grace; the gate text says pwsh). Grace-local:
 # the e2e opens windows, and needs tauri-driver, the msedgedriver of the live WebView2 runtime,
@@ -105,8 +111,14 @@ Check "M9 static checks (m9.ps1 -Only static -TargetDir $target)" {
 }
 
 # M9 (g) compares the attributes, the handler and build.rs; a command missing from the
-# capability file fails only at run time, so it joins the comparison here.
-Check "command inventory: 28 commands, the same set in the attributes, generate_handler!, build.rs and capabilities" {
+# capability file fails only at run time, so it joins the comparison here. M10's 28 commands must
+# all be there by name; later milestones add to the set (M11: 9), so the count is not pinned.
+$m10Commands = @('ping', 'panic_probe', 'panic_probe_unguarded', 'unguarded_panic_runs', 'bench_prepare',
+    'bench_take', 'bench_clear', 'run_events_probe', 'exact_float_probe', 'project_new', 'project_load_text',
+    'project_open', 'project_info', 'project_json', 'project_apply', 'project_undo', 'project_redo',
+    'app_startup', 'selftest_report', 'scene_state', 'scene_new', 'scene_open', 'model_import', 'project_save',
+    'edit_apply', 'edit_undo', 'edit_redo', 'scene_mesh')
+Check "command inventory: M10's 28 commands present, the same set in the attributes, generate_handler!, build.rs and capabilities" {
     $strip = { param($p) [regex]::Replace((Get-Content $p -Raw), '//[^\n]*', '') }
     $attrs = @()
     foreach ($f in Get-ChildItem (Join-Path $tauriDir 'src') -Filter *.rs) {
@@ -134,7 +146,9 @@ Check "command inventory: 28 commands, the same set in the attributes, generate_
             if ($missing -or $extra) { Note "${k}: missing $($missing -join ', '); extra $($extra -join ', ')" }
         }
     }
-    $same -and $attrs.Count -eq 28
+    $absent = @($m10Commands | Where-Object { $attrs -notcontains $_ })
+    Note "M10's $($m10Commands.Count) named commands: $(if ($absent) { "MISSING $($absent -join ', ')" } else { 'all present' }); $($attrs.Count) in all"
+    $same -and $m10Commands.Count -eq 28 -and $absent.Count -eq 0
 }
 
 # The UI's ownership rules (PLAN.md 2.4), read on the code with comments removed.
@@ -231,8 +245,6 @@ if (-not $SkipCore) {
         'simpa-core dump_helpers, gabe_golden, pbin_golden, poly_golden, tetgen_golden' = 'build the oracle into <repo>\target\oracle (tests/common/paths.rs oracle())'
         'simpa-core config_xml_write, parity_inputs'                                   = 'scratch folders under <repo>\target\test-runs (config_xml_support.rs fresh_run_dir)'
         'simpa parity_tutorials'                                                       = 'solver runs under <repo>\target\parity-bed'
-        'simpa-core lib: run::manager logs_that_cannot_be_created_are_launch_failed'   = 'folders under <repo>\target\tmp'
-        'simpa-core mesh_project: every_failure_code_fires_on_its_input'                = 'HANGS with scratch on NTFS (C:): it expects a read-only stale file to survive deletion, which holds on exFAT but not on NTFS with this toolchain, so the fake mesher that must not run panics and the binary never ends (measured 2026-09-29, M10 foundation)'
     }
     $skipTargets = @('dump_helpers', 'gabe_golden', 'pbin_golden', 'poly_golden', 'tetgen_golden', 'config_xml_write',
         'parity_inputs', 'parity_tutorials', 'config_xml_support', 'parity_support')
@@ -268,7 +280,9 @@ if (-not $SkipCore) {
         $t0 = Get-Date
         $log1 = Join-Path $work 'cargo-test-core.log'
         $log2 = Join-Path $work 'cargo-test-cli.log'
-        $c1 = Native "cargo test -q --no-fail-fast -p simpa-core --lib $coreSel -- --skip logs_that_cannot_be_created_are_launch_failed --skip every_failure_code_fires_on_its_input" $log1
+        # No skip since M11: the log test writes under the scratch root, and the stale-file test
+        # holds its file open with no sharing instead of trusting a read-only attribute (M11 C1-C3).
+        $c1 = Native "cargo test -q --no-fail-fast -p simpa-core --lib $coreSel" $log1
         $c2 = Native "cargo test -q --no-fail-fast -p simpa --bins $cliSel" $log2
         $results = @(Get-Content $log1, $log2 | Where-Object { $_ -match '^test result' })
         $failed = @(Get-Content $log1, $log2 | Where-Object { $_ -match ' --- FAILED$|^test .* ... FAILED$|^thread .* panicked at' })
@@ -380,7 +394,13 @@ Check "harness: the raw hall is present (gate a)" {
 }
 
 $junitDir = Join-Path $work 'wdio'
-Check "e2e: wdio run app/e2e/m10.conf.ts (-Spec $($Spec -join ','))" {
+# The solver build the app finds (msedgedriver passes the environment on to app.exe): Run is
+# wired since M11, and the teaching room's control reads it enabled only when the solvers are the
+# verified build.
+$e2eSolvers = if ($SolversDir) { $SolversDir }
+    elseif (Test-Path (Join-Path $repo 'target\solvers\bin\tetgen.exe')) { Join-Path $repo 'target\solvers\bin' }
+    else { $SolversFallback }
+Check "e2e: wdio ran (verdict below) (-Spec $($Spec -join ','))" {
     if (-not $built) { throw 'no fresh app.exe from the build' }
     if (-not $script:driverExe) { throw 'no msedgedriver' }
     New-Item -ItemType Directory -Force $junitDir | Out-Null
@@ -388,11 +408,14 @@ Check "e2e: wdio run app/e2e/m10.conf.ts (-Spec $($Spec -join ','))" {
     $env:M10_TAURI_DRIVER = $tauriDriver; $env:M10_NATIVE_DRIVER = $script:driverExe
     $env:M10_ELMIA_RAW = $ElmiaRaw; $env:M10_SPEC = $Spec -join ','
     $env:M10_SCREENS = if ($ScreensDir) { [IO.Path]::GetFullPath($ScreensDir) } else { Join-Path $work 'screens' }
+    $env:SIMPA_SOLVERS_DIR = $e2eSolvers
+    Note "the app finds its solvers in $e2eSolvers"
     $t0 = Get-Date
     $log = Join-Path $work 'wdio.log'
     $code = Native "`"$node\node_modules\.bin\wdio.cmd`" run app/e2e/m10.conf.ts" $log
-    Note "exit $code in $([math]::Round(((Get-Date) - $t0).TotalSeconds, 1)) s; log $log"
-    $true  # the verdict is read from the junit files below
+    Note "exit $code in $([math]::Round(((Get-Date) - $t0).TotalSeconds, 1)) s; log $log; the ids are judged from the junit files below"
+    # Passes only when wdio itself exited 0 (M10 MINOR A-4: a PASS line on exit 1 is not one).
+    $code -eq 0
 }
 
 } finally {

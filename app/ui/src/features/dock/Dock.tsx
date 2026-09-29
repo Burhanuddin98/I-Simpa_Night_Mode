@@ -1,10 +1,12 @@
-// The bottom dock (design:175-275): Acoustics, Console and Runs.
+// The bottom dock (design:175-275): Acoustics, Console and Runs. Moved unchanged from chrome/ by
+// the M11 foundation; owned by the dock package (docs/investigations/2026-09-29-m11/PLAN.md 9.2).
 // The Acoustics tab keeps M9's empty state: no solver-computed number before M12 (PLAN.md 2.4).
 // The Console tab carries an "n fail" badge, as text.
 import { useState } from 'react';
-import { consoleStore, useStore } from '../store';
+import { consoleStore, useStore } from '../../store';
 import { ConsolePane } from './ConsolePane';
 import { RunsPane } from './RunsPane';
+import './dock.css';
 
 const DOCK_TABS = [
   { key: 'acoustics', name: 'Acoustics' },

@@ -1,8 +1,11 @@
 // The properties panel (design:278-471), switched by step. Geometry and Sources & receivers are
-// the scene package's panels; Materials is the materials package's `MaterialsPanel`, which draws
-// its own head (the selected group); Simulate and Results keep M9's hints until M11 and M12.
-// Each panel draws its own head, as the design does ("Room model", "Rear wall", "S1").
+// the project package's panels; Materials is the materials package's `MaterialsPanel`, which
+// draws its own head (the selected group); Simulate and Results are the simulate package's
+// `SimulatePanel` and `ResultsPanel` (M11). Each panel draws its own head, as the design does
+// ("Room model", "Rear wall", "S1").
 import { MaterialsPanel } from '../features/materials/MaterialsPanel';
+import { ResultsPanel } from '../features/simulate/ResultsPanel';
+import { SimulatePanel } from '../features/simulate/SimulatePanel';
 import { STEPS } from '../steps';
 import { stepStore, useStore } from '../store';
 import { GeometryPanel } from './GeometryPanel';
@@ -16,15 +19,8 @@ export function PropertiesPanel() {
       {s.key === 'geometry' && <GeometryPanel />}
       {s.key === 'materials' && <MaterialsPanel />}
       {s.key === 'sources' && <SourcesPanel />}
-      {(s.key === 'simulate' || s.key === 'results') && (
-        <>
-          <div className="props-head">
-            <div className="title">{s.name}</div>
-            <div className="sub">{s.sub}</div>
-          </div>
-          <div className="props-body empty">{s.hint}</div>
-        </>
-      )}
+      {s.key === 'simulate' && <SimulatePanel />}
+      {s.key === 'results' && <ResultsPanel />}
     </aside>
   );
 }

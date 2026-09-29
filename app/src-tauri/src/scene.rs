@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use schemars::JsonSchema;
 use serde::Serialize;
 use simpa_core::geometry::check::{CheckReport, ReasonCode, Verdict};
-use simpa_core::geometry::import::{ImportReport, REFERENCE_MATERIALS};
+use simpa_core::geometry::import::ImportReport;
 use simpa_core::schema::{
     BandSet, EntityRef, GroupId, Material, PointReceiver, Project, Source, SurfaceGroup,
     SurfaceReceiver, Variant, VariantId,
@@ -33,7 +33,9 @@ pub struct SceneState {
     pub check: Option<CheckSummary>,
     /// The validator's issues on the current project, with their UI codes.
     pub issues: Vec<UiIssue>,
-    /// Why Run is disabled, as UI codes. Never empty in M10: `M11_PENDING` is always present.
+    /// Why Run is disabled by the project itself, as UI codes; empty when the project may run.
+    /// The UI adds the app's own blockers beside them: `SOLVER_NOT_FOUND` and
+    /// `SOLVER_UNVERIFIED` (`solvers_status`) and `RUN_ACTIVE` (the run slot).
     pub run_blockers: Vec<String>,
     /// Console lines produced since the last state was returned.
     pub lines: Vec<LogLine>,
@@ -116,7 +118,9 @@ pub struct CheckSummary {
     pub reasons: Vec<CheckReasonOut>,
     pub counts: CheckCounts,
     pub area_m2: f64,
-    pub enclosed_volume_m3: f64,
+    /// The volume the faces enclose; `None` when the check refuses the model, whose "volume" is
+    /// not a number anyone should read (a refused model encloses no volume, M10 MINOR B-18).
+    pub enclosed_volume_m3: Option<f64>,
     /// The bounding box of the vertices the faces use.
     pub bbox_min: [f64; 3],
     pub extents_m: [f64; 3],
@@ -179,9 +183,9 @@ pub struct EditOutcome {
 
 /// Run blockers only the app produces.
 pub const GEOMETRY_REFUSED: &str = "GEOMETRY_REFUSED";
+/// Also the UI code of the core's `material_placeholder` (M11), so the blocker is one code
+/// wherever it comes from.
 pub const MATERIALS_UNASSIGNED: &str = "MATERIALS_UNASSIGNED";
-/// Always present in M10: Run is wired in M11.
-pub const M11_PENDING: &str = "M11_PENDING";
 
 /// The UI code of a core rule or structural code (PLAN.md 1.7). The core codes are stable API and
 /// stay as they are; the UI shows both.
@@ -195,6 +199,7 @@ pub fn ui_code(rule: &str) -> String {
         codes::NAME_NOT_FILENAME_SAFE => "LABEL_UNSAFE",
         codes::NAME_TOO_LONG => "LABEL_TOO_LONG",
         codes::NAME_DUPLICATE => "LABEL_DUPLICATE",
+        codes::MATERIAL_PLACEHOLDER => MATERIALS_UNASSIGNED,
         other => return other.to_ascii_uppercase(),
     };
     named.to_string()
@@ -275,11 +280,10 @@ pub fn issue_key(issue: &UiIssue) -> IssueKey {
 
 /// Upstream's reference material 0 as an import leaves it: named `Default`, absorption and
 /// scattering 0 in every band. Upstream gives it to a face "that no surface group holds"; the UI
-/// counts it as no material chosen (PLAN.md F1).
+/// counts it as no material chosen (M10 PLAN.md F1). The core's own predicate, the one its
+/// `material_placeholder` rule uses (M11), so the counter and the core refuse the same groups.
 pub fn is_placeholder(material: &Material) -> bool {
-    material.name == REFERENCE_MATERIALS[0].name
-        && material.absorption.iter().all(|v| v.get() == 0.0)
-        && material.scattering.iter().all(|v| v.get() == 0.0)
+    simpa_core::validate::is_placeholder_material(material)
 }
 
 /// Whether the group's effective material under the active variant is a real one.
@@ -414,7 +418,8 @@ pub fn check_summary(project: &Project, report: &CheckReport) -> CheckSummary {
             coincident_vertices: c.coincident_vertices,
         },
         area_m2: report.measures.area_m2,
-        enclosed_volume_m3: report.measures.enclosed_volume_m3,
+        enclosed_volume_m3: (report.verdict == Verdict::Ok)
+            .then_some(report.measures.enclosed_volume_m3),
         bbox_min,
         extents_m,
         highlight_faces: highlight,
@@ -553,8 +558,9 @@ pub fn import_lines(
 
 // ---- run blockers -------------------------------------------------------------------------------
 
-/// Why Run is disabled: the refused check, unassigned groups, each error's UI code once, and
-/// `M11_PENDING`, in that order.
+/// Why the project may not run: the refused check, unassigned groups, then each error's UI code
+/// once, in that order. The core's `material_placeholder` has the UI code `MATERIALS_UNASSIGNED`,
+/// so it is listed once with the app's own count.
 pub fn run_blockers(
     project: &Project,
     check: Option<&CheckSummary>,
@@ -572,7 +578,6 @@ pub fn run_blockers(
             out.push(i.code.clone());
         }
     }
-    out.push(M11_PENDING.to_string());
     out
 }
 
@@ -673,9 +678,16 @@ mod tests {
             "MATERIAL_VALUE_OUT_OF_RANGE"
         );
         assert_eq!(ui_code("source_none"), "SOURCE_NONE");
-        for app in [GEOMETRY_REFUSED, MATERIALS_UNASSIGNED, M11_PENDING] {
-            assert!(!seen.contains(app), "{app} collides with a core code");
-        }
+        // The one deliberate meeting of a core code and an app code: the core's placeholder rule
+        // is the app's MATERIALS_UNASSIGNED blocker (M11 PLAN.md 2.7).
+        assert_eq!(ui_code("material_placeholder"), MATERIALS_UNASSIGNED);
+        let to_app: Vec<&str> = RULES
+            .iter()
+            .map(|r| r.code)
+            .chain(STRUCTURAL_CODES)
+            .filter(|c| [GEOMETRY_REFUSED, MATERIALS_UNASSIGNED].contains(&ui_code(c).as_str()))
+            .collect();
+        assert_eq!(to_app, ["material_placeholder"]);
     }
 
     #[test]
@@ -768,6 +780,8 @@ mod tests {
         let report = check(&open.geometry);
         let s = check_summary(&open, &report);
         assert_eq!(s.verdict, CheckVerdict::Refused);
+        // A refused model encloses no volume anyone should read (M10 MINOR B-18).
+        assert_eq!(s.enclosed_volume_m3, None);
         let mut want: Vec<u32> = report
             .reasons
             .iter()
@@ -781,11 +795,8 @@ mod tests {
         let s = check_summary(&ok, &check(&ok.geometry));
         assert_eq!(s.verdict, CheckVerdict::Ok);
         assert!(s.highlight_faces.is_empty() && s.reasons.is_empty());
-        assert!(
-            (s.enclosed_volume_m3 - 180.0).abs() < 1e-9,
-            "{}",
-            s.enclosed_volume_m3
-        );
+        let volume = s.enclosed_volume_m3.expect("an ok model has its volume");
+        assert!((volume - 180.0).abs() < 1e-9, "{volume}");
         assert!((s.area_m2 - 216.0).abs() < 1e-9);
     }
 
