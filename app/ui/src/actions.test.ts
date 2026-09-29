@@ -225,3 +225,19 @@ test("a run's stream is filed under the run its own channel named, whatever runS
   assert.equal(store.runLinesStore.get().get('another-run'), undefined);
   store.runStore.set(null);
 });
+
+test('a Cancel pressed while the run is starting reaches the run once it is registered (review 2, M2)', async () => {
+  let release!: () => void;
+  backend.plan = new Promise<void>((r) => (release = r));
+  const started = actions.runStart('spps');
+  await until('the run is starting', () => store.runStore.get()?.status === 'starting' && backend.count('run_start') === 1);
+  // The Cancel button is on screen from here (SimulatePanel renders RunningBlock on runStore).
+  assert.equal(await actions.runCancel(), false, 'the backend has no run registered yet');
+  assert.equal(store.runStore.get()?.status, 'cancelling');
+  release(); // plan() done: run_start registers a fresh run and answers
+  backend.plan = null;
+  await started;
+  await until('the Cancel reached the registered run', () => backend.slot?.cancelled === true);
+  assert.equal(await backend.stream(50), 'CANCELLED', 'the run ended cancelled, not after 50 progress lines');
+  await until('the run ended in the page', () => store.runStore.get() === null);
+});

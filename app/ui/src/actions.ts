@@ -441,6 +441,7 @@ export async function runStart(solver: SolverName = solverStore.get()): Promise<
     try {
       const started = await backend.runStart(solver, channel);
       log('INFO', `${solver.toUpperCase()} run started: ${started.project_path}`);
+      resendCancel(id);
       return started;
     } catch (e) {
       // This run's state only: never a run that another start put there.
@@ -452,6 +453,17 @@ export async function runStart(solver: SolverName = solverStore.get()): Promise<
   } finally {
     starting = false;
   }
+}
+
+/**
+ * A Cancel pressed while the run was starting went to the backend before `run_start` had
+ * registered the run, and was answered `false` with nothing cancelled: the solver then ran to its
+ * end while the UI read "Cancelling…" with its Cancel disabled (M11 review 2, M2). Once
+ * `run_start` has answered, the run is registered, so a Cancel pressed meanwhile is sent again.
+ */
+function resendCancel(id: number): void {
+  const current = runStore.get();
+  if (current?.id === id && current.status === 'cancelling') fire(run('Could not cancel the run', () => backend.runCancel()));
 }
 
 /** Cancel: the core stops the run and ends the solver's Job Object; the row reads Cancelled. */
