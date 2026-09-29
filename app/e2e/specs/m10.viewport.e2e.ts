@@ -1,6 +1,8 @@
 // The viewport package's gate ids (PLAN.md 3 and 6.1), and the package's extra checks.
-//   m10-a-highlight  raw hall: __m10.highlightedFaceCount() > 0 and the chip "FAIL · n faces
-//                    highlighted" visible; teaching room: 0 and no chip
+//   m10-a-highlight  raw hall: __m10.highlightedFaceCount() > 0, the overlay turns at least
+//                    MIN_WARN_PIXELS pixels of the drawn view warn (highlightPixels), and the
+//                    chip "FAIL · n faces highlighted" visible; teaching room: 0, no pixel
+//                    changed, no chip
 //   m10-d            the box: double-click the ceiling (aimAtFace) selects faces [10, 11], group
 //                    Ceiling; a wall double-click selects 2 faces, not the Walls group's 8
 //   m10-g            the hall, every step, both view tabs, all dock tabs, then the box: one canvas
@@ -35,13 +37,18 @@ type Project = {
   sources: { name: string; position: [number, number, number] }[];
 };
 
-const VIEWPORT_HOOKS = ['highlightedFaceCount', 'selection', 'facesOfGroup', 'aimAtFace', 'frame', 'faceClientPoint', 'cameraState'];
+type Pixels = { pixels: number; changed: number; warn: number };
+
+const VIEWPORT_HOOKS = ['highlightedFaceCount', 'highlightPixels', 'selection', 'facesOfGroup', 'aimAtFace', 'frame', 'faceClientPoint', 'cameraState'];
+/** Gate (a): the fewest pixels the raw hall's overlay must turn warn, a 32 × 32 patch. */
+const MIN_WARN_PIXELS = 1024;
 
 const canvases = () => browser.execute(() => document.querySelectorAll('canvas').length);
 const selection = () => hook<Sel>('selection');
 const facesOfGroup = (name: string) => hook<number[]>('facesOfGroup', name);
 const aimAtFace = (face: number) => hook<Point | null>('aimAtFace', face);
 const cameraState = () => hook<Cam>('cameraState');
+const highlightPixels = () => hook<Pixels | null>('highlightPixels');
 
 /** A left click at a client point, as the mouse does it. */
 async function clickAt(p: Point): Promise<void> {
@@ -104,6 +111,13 @@ describe('M10 viewport', () => {
     const n = await hook<number>('highlightedFaceCount');
     console.log(`m10-a-highlight receipt: raw hall, ${n} faces uploaded to the check-highlight overlay`);
     assert.ok(n > 0, `highlightedFaceCount() = ${n}`);
+    // The upload count is not the drawing: an overlay that is hidden, transparent, recoloured or
+    // behind the faces keeps the count. So the pixels the overlay turns warn must be on screen.
+    const px = await highlightPixels();
+    console.log(`m10-a-highlight receipt: raw hall, the overlay changes ${px?.changed} of ${px?.pixels} pixels, ${px?.warn} towards the warn colour`);
+    assert.ok(px, 'the 3D view is live');
+    assert.ok(px.warn >= MIN_WARN_PIXELS, `${px.warn} pixels turned warn by the overlay (${px.changed} changed), fewer than ${MIN_WARN_PIXELS}`);
+    assert.ok(px.warn >= px.changed / 2, `most of what the overlay changes is not the warn colour: ${px.warn} of ${px.changed}`);
     const c = await chip();
     assert.ok(c, 'the check chip is in the DOM');
     assert.ok(c.shown, 'the check chip is visible');
@@ -112,6 +126,9 @@ describe('M10 viewport', () => {
     // Negative control: the teaching room passes the check, so nothing is highlighted.
     await m10.openProject(TEACHING_ROOM());
     assert.equal(await hook<number>('highlightedFaceCount'), 0);
+    const none = await highlightPixels();
+    assert.ok(none, 'the 3D view is live');
+    assert.deepEqual([none.changed, none.warn], [0, 0], 'the overlay draws nothing on a model that passes');
     assert.equal(await chip(), null, 'no check chip for a model that passes');
   });
 

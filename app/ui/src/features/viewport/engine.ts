@@ -285,6 +285,8 @@ class ViewportEngine {
       // current camera (no camera move), and the camera itself.
       registerHook('faceClientPoint', (face: number) => this.faceClientPoint(face)),
       registerHook('cameraState', () => this.cameraState()),
+      // Gate (a): what the check-highlight overlay puts on screen, not what was uploaded to it.
+      registerHook('highlightPixels', () => this.highlightPixels()),
     ];
     // A remount (React StrictMode in dev) rebuilds the DOM-side state from the stores.
     this.setMesh(meshStore.get(), true);
@@ -953,6 +955,61 @@ class ViewportEngine {
     }
     this.renderNow();
     return null;
+  }
+
+  /**
+   * What the check-highlight overlay changes on screen. The view is drawn as the app draws it
+   * and read back, drawn again with the overlay hidden and read back, then drawn as before; all
+   * in one task, so the hidden frame is never shown. `changed` counts the pixels that differ.
+   * `warn` counts those the overlay moved towards the warn colour: the change is a multiple
+   * between 0.2 and 1.05 of (warn − the pixel without it), within 16 levels. An overlay that is
+   * hidden, transparent, recoloured, rejected by the depth test or not in the scene counts 0.
+   * Null without a live renderer.
+   */
+  private highlightPixels(): { pixels: number; changed: number; warn: number } | null {
+    const r = this.renderer;
+    if (!r || !this.dom || this.contextLost || !this.syncSize()) return null;
+    const gl = r.getContext();
+    const read = () => {
+      const px = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+      gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return px;
+    };
+    this.renderNow();
+    const drawn = read();
+    const was = this.highlight.visible;
+    this.highlight.visible = false;
+    try {
+      this.renderNow();
+    } finally {
+      this.highlight.visible = was;
+    }
+    const bare = read();
+    this.renderNow();
+    if (drawn.length !== bare.length) return null;
+
+    const warn = [(WARN >> 16) & 0xff, (WARN >> 8) & 0xff, WARN & 0xff];
+    let changed = 0;
+    let toward = 0;
+    for (let i = 0; i < drawn.length; i += 4) {
+      const d0 = drawn[i] - bare[i];
+      const d1 = drawn[i + 1] - bare[i + 1];
+      const d2 = drawn[i + 2] - bare[i + 2];
+      if (Math.max(Math.abs(d0), Math.abs(d1), Math.abs(d2)) <= 2) continue;
+      changed++;
+      const t0 = warn[0] - bare[i];
+      const t1 = warn[1] - bare[i + 1];
+      const t2 = warn[2] - bare[i + 2];
+      const tt = t0 * t0 + t1 * t1 + t2 * t2;
+      // Under a pixel already close to the warn colour a change cannot be told apart.
+      if (tt < 40 * 40) continue;
+      const a = (d0 * t0 + d1 * t1 + d2 * t2) / tt;
+      const e0 = d0 - a * t0;
+      const e1 = d1 - a * t1;
+      const e2 = d2 - a * t2;
+      if (a >= 0.2 && a <= 1.05 && e0 * e0 + e1 * e1 + e2 * e2 <= 16 * 16) toward++;
+    }
+    return { pixels: drawn.length / 4, changed, warn: toward };
   }
 
   private setUi(patch: Partial<ViewportUi>): void {

@@ -494,6 +494,7 @@ says is "shown" is read from the DOM**; hooks cover what the DOM cannot show.
 | `frame()` | viewport | Frames the model |
 | `faceClientPoint(face)` | viewport (added by the package) | The client point of a face's centroid under the current camera, without moving it; `null` unless a click there takes that face |
 | `cameraState()` | viewport (added by the package) | `{ view, projection, position, direction, target }` of the main view's camera |
+| `highlightPixels()` | viewport (added after the review, finding 1) | `{ pixels, changed, warn }`: the main view drawn as the app draws it and again with the check-highlight overlay hidden, read back in one task; the pixels that differ, and those moved towards the warn colour |
 | `materialsGrid()` | materials (added by the package) | The grid as shown: quantity, sort, band columns, rows with their exact values, cursor and extent |
 | `materialsCopy()` | materials (added by the package) | The TSV text Ctrl+C would copy for the current selection |
 | `openImportDialog(path)` | scene (added by the package) | Opens the import dialog for a mesh path, as File › Open… does after the native dialog |
@@ -508,7 +509,7 @@ skipped, with no test failing.
 | Id | Gate text | Fixture and action | Evidence read | Negative or positive control | Spec (owner) |
 |---|---|---|---|---|---|
 | `m10-a-console` | (a) FAIL line with 'open' and '955' | `importModel(<upstream>/tutorial 2/elmia.ply, 'm', 'z')` | DOM `.console-line.FAIL .text`: one line contains `open` and `955` | Teaching room: 0 FAIL lines | `m10.shell.e2e.ts` (foundation) |
-| `m10-a-highlight` | (a) highlighted faces > 0 | same | `__m10.highlightedFaceCount() > 0`, and the chip "FAIL · n faces" is visible | Teaching room: `highlightedFaceCount() == 0` | `m10.viewport.e2e.ts` |
+| `m10-a-highlight` | (a) highlighted faces > 0 | same | `__m10.highlightedFaceCount() > 0`; `highlightPixels()` has at least 1024 warn pixels, and they are at least half of the changed ones; the chip "FAIL · n faces" is visible | Teaching room: `highlightedFaceCount() == 0`, and `highlightPixels()` changes 0 pixels | `m10.viewport.e2e.ts` |
 | `m10-a-run` | (a) Run disabled | same | `[data-part=run]` has `disabled`, and `data-blockers` holds `GEOMETRY_REFUSED` | **Teaching room: `data-blockers` is exactly `M11_PENDING`.** Without this, "disabled" is vacuous, because Run is unwired in M10 | `m10.scene.e2e.ts` |
 | `m10-b-console` | (b) INFO 'Closed volume, 0 self-intersections' | `importModel(testdata/elmia_corrected.ply, 'm', 'z')` | DOM `.console-line.INFO .text` starts with that literal | Raw hall: no such line | shell (foundation) |
 | `m10-b-materials` | (b) Materials '0 / 10' | same | `[data-step="materials"] [data-part="sub"]` text is exactly `0 / 10` | `tutorial1_box.simpa` reads `3 / 3` | scene |
