@@ -137,6 +137,10 @@
 .console-counts .count.OK .k {
   color: var(--ok);
 }
+/* A class with no lines stays grey: a red "FAIL 0" read as a failure (M11 review B.10). */
+.console-counts .count.zero .k {
+  color: var(--text-3);
+}
 .console-counts .counts-check.ok {
   color: var(--ok);
 }

@@ -362,6 +362,23 @@ describe('M11 dock', () => {
     }
     assert.deepEqual([log.dupes, log.gaps], [0, 0]);
     assert.equal(await attrOf(`[data-run-counts="${name}"] [data-part="counts-check"]`, 'data-match'), 'true');
+    // A class word is coloured only above 0 (M11 review B.10): this run's FAIL 0 is as grey as
+    // INFO, which has no colour of its own, and its OK 1 is not (the control).
+    const colours = await browser.execute(
+      (run: string) =>
+        Object.fromEntries(
+          ['FAIL', 'INFO', 'OK'].map((c) => {
+            const el = document.querySelector(`[data-run-counts="${run}"] .count.${c} .k`);
+            return [c, el ? getComputedStyle(el).color : null];
+          }),
+        ) as Record<string, string | null>,
+      name,
+    );
+    console.log(`m11-dock-row receipt: counts strip class colours ${JSON.stringify(colours)}; run.json lines ${JSON.stringify(m.lines)}`);
+    assert.equal(m.lines.fail, 0);
+    assert.ok(colours.FAIL && colours.INFO && colours.OK, 'the strip has its class words');
+    assert.equal(colours.FAIL, colours.INFO, 'FAIL 0 is not coloured');
+    assert.notEqual(colours.OK, colours.INFO, 'OK 1 keeps its colour');
     // Verbatim: every solver and TetGen line shown is a line of the run's own logs.
     const verbatim = await browser.execute(
       (run: string) =>

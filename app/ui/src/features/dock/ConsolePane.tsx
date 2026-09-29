@@ -89,8 +89,10 @@ function Counts({ item }: { item: Extract<ConsoleItem, { kind: 'counts' }> }) {
       <span className="time" />
       <span className="tag" />
       <span className="who">{item.label} lines</span>
+      {/* A class word takes its colour only when its count is above 0: a red "FAIL 0" read as a
+          failure (M11 review B.10; decision-log row 28). */}
       {CLASSES.map((c) => (
-        <span key={c} className={`count ${c}`}>
+        <span key={c} className={`count ${c}${item.counts[c] === 0 ? ' zero' : ''}`}>
           <span className="k">{c}</span> <span data-count={c}>{item.counts[c]}</span>
         </span>
       ))}
