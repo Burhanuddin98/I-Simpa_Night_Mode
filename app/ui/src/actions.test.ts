@@ -200,3 +200,28 @@ test('a start the backend refuses clears its own state only, and the refusal is 
   await backend.stream(1);
   await until('the run ended in the page', () => store.runStore.get() === null);
 });
+
+test("a run's stream is filed under the run its own channel named, whatever runStore holds (review 2, E1)", async () => {
+  await actions.runStart('spps');
+  const r = backend.slot;
+  assert.ok(r);
+  let seq = 0;
+  const line = (i: number) =>
+    ({
+      kind: 'line', seq: seq++, t_ms: i, source: 'solver', stream: 'stdout', class: i % 2 ? 'WARN' : 'PROGRESS', rule: 'x',
+      solver_seq: i, progress: i, continuation: false, text: `#${i}`,
+    }) as RunStreamEvent;
+  r.channel.onmessage({ batch: 0, events: [{ kind: 'started', seq: seq++, t_ms: 0, run: r.name, folder: r.name } as RunStreamEvent, line(1)], last: false });
+  assert.equal(store.runStore.get()?.run, r.name);
+  // Something else takes runStore (what a refused second start's catch used to do, with null).
+  const other = { ...store.runStore.get()!, id: 999, run: 'another-run' };
+  store.runStore.set(other);
+  r.channel.onmessage({ batch: 1, events: [line(2), line(3)], last: false });
+  const log = store.runLinesStore.get().get(r.name);
+  assert.equal(log?.seqs.size, 3, "three solver lines, all under the channel's own run");
+  assert.deepEqual([log?.lastEventSeq, log?.gaps], [3, 0], 'every event of the stream, none skipped');
+  assert.deepEqual([log?.counts.WARN, log?.counts.PROGRESS], [2, 1], 'the lines after runStore moved are counted');
+  assert.equal(store.runStore.get(), other, 'runStore, which no longer holds this run, is left alone');
+  assert.equal(store.runLinesStore.get().get('another-run'), undefined);
+  store.runStore.set(null);
+});

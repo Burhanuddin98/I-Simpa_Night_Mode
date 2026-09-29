@@ -350,54 +350,60 @@ export async function resultsFor(runName: string): Promise<ResultsState> {
 }
 
 /**
- * The run stream's handler, the one writer of `runStore`, `runLinesStore` and a run's Console
- * lines. A batch is folded locally and each store set once, so thousands of PROGRESS lines cost
- * one render per batch.
+ * The run stream's handler for the run with `ActiveRun.id` `id`, the one writer of
+ * `runLinesStore` and a run's Console lines. Each event is filed under the run this channel
+ * named in its own `started` event, never under whatever `runStore` holds, and `runStore` is
+ * updated only while it still holds this run (M11 review 2, E1). A batch is folded locally and
+ * each store set once, so thousands of PROGRESS lines cost one render per batch.
  */
-function onRunEvents(batch: RunStreamBatch): void {
-  const lines: Omit<ConsoleLine, 'time'>[] = [];
-  let current = runStore.get();
-  let logs: Map<string, RunLog> | null = null;
-  let ended: string | null = null;
-  let finished = false;
-  for (const e of batch.events) {
-    const runName = e.kind === 'started' ? e.run : current?.run;
-    if (runName !== undefined) {
-      logs ??= new Map(runLinesStore.get());
-      const f = foldEvent(logs.get(runName) ?? emptyLog(), runName, e);
-      logs.set(runName, f.log);
-      if (f.line) lines.push(f.line);
+function runEvents(id: number): (batch: RunStreamBatch) => void {
+  let runName: string | undefined;
+  return (batch) => {
+    const lines: Omit<ConsoleLine, 'time'>[] = [];
+    const held = runStore.get();
+    let current = held?.id === id ? held : null;
+    let logs: Map<string, RunLog> | null = null;
+    let ended: string | null = null;
+    let finished = false;
+    for (const e of batch.events) {
+      if (e.kind === 'started') runName = e.run;
+      if (runName !== undefined) {
+        logs ??= new Map(runLinesStore.get());
+        const f = foldEvent(logs.get(runName) ?? emptyLog(), runName, e);
+        logs.set(runName, f.log);
+        if (f.line) lines.push(f.line);
+      }
+      switch (e.kind) {
+        case 'started':
+          if (current) current = { ...current, run: e.run, status: current.status === 'cancelling' ? 'cancelling' : 'running' };
+          break;
+        case 'stage':
+          if (current) current = { ...current, stage: e.stage };
+          break;
+        case 'line':
+          if (current && e.class === 'PROGRESS' && e.source === 'solver') {
+            current = { ...current, progress: e.progress ?? null, progressText: progressText(e.text) };
+          }
+          break;
+        case 'ended':
+          current = null;
+          lines.push(endLine(e.row));
+          ended = e.row.run;
+          finished = true;
+          break;
+        case 'failed':
+          current = null;
+          lines.push({ tag: 'FAIL', text: `The run could not record itself: ${e.error.message} (${e.error.code})`, source: 'app' });
+          finished = true;
+          break;
+      }
     }
-    switch (e.kind) {
-      case 'started':
-        if (current) current = { ...current, run: e.run, status: current.status === 'cancelling' ? 'cancelling' : 'running' };
-        break;
-      case 'stage':
-        if (current) current = { ...current, stage: e.stage };
-        break;
-      case 'line':
-        if (current && e.class === 'PROGRESS' && e.source === 'solver') {
-          current = { ...current, progress: e.progress ?? null, progressText: progressText(e.text) };
-        }
-        break;
-      case 'ended':
-        current = null;
-        lines.push(endLine(e.row));
-        ended = e.row.run;
-        finished = true;
-        break;
-      case 'failed':
-        current = null;
-        lines.push({ tag: 'FAIL', text: `The run could not record itself: ${e.error.message} (${e.error.code})`, source: 'app' });
-        finished = true;
-        break;
-    }
-  }
-  if (logs) runLinesStore.set(logs);
-  runStore.set(current);
-  appendLines(lines);
-  if (ended !== null) selectRun(ended);
-  if (finished) fire(refreshRuns());
+    if (logs) runLinesStore.set(logs);
+    if (runStore.get()?.id === id) runStore.set(current);
+    appendLines(lines);
+    if (ended !== null) selectRun(ended);
+    if (finished) fire(refreshRuns());
+  };
 }
 
 /**
@@ -431,7 +437,7 @@ export async function runStart(solver: SolverName = solverStore.get()): Promise<
       status: 'starting',
     });
     const channel = new Channel<RunStreamBatch>();
-    channel.onmessage = onRunEvents;
+    channel.onmessage = runEvents(id);
     try {
       const started = await backend.runStart(solver, channel);
       log('INFO', `${solver.toUpperCase()} run started: ${started.project_path}`);
