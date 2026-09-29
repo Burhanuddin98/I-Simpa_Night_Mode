@@ -1,7 +1,9 @@
 //! Windows: the child and everything it starts, in one Job Object. The crate's process `unsafe`
 //! is confined to this module.
 //!
-//! The child is created with `CREATE_SUSPENDED | CREATE_NO_WINDOW`, assigned to a fresh job with
+//! The child is created with `CREATE_SUSPENDED | CREATE_NO_WINDOW` at below-normal priority
+//! (`BELOW_NORMAL_PRIORITY_CLASS`: the desktop app must stay usable while a solver takes every
+//! core; priority changes when the child runs, never what it computes), assigned to a fresh job with
 //! `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, and only then resumed, so it cannot start a process
 //! outside the job. No breakaway flag is set, so its descendants cannot leave the job either.
 //! [`Job`] owns the only handle to the job: it is unnamed and not inheritable, so no child holds
@@ -41,8 +43,9 @@ use windows_sys::Win32::System::JobObjects::{
     SetInformationJobObject, TerminateJobObject,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_NO_WINDOW, CREATE_SUSPENDED, OpenProcess, OpenThread, PROCESS_QUERY_LIMITED_INFORMATION,
-    PROCESS_SYNCHRONIZE, ResumeThread, THREAD_SUSPEND_RESUME, WaitForSingleObject,
+    BELOW_NORMAL_PRIORITY_CLASS, CREATE_NO_WINDOW, CREATE_SUSPENDED, OpenProcess, OpenThread,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, ResumeThread, THREAD_SUSPEND_RESUME,
+    WaitForSingleObject,
 };
 
 use super::Tree;
@@ -67,7 +70,7 @@ impl JobTree {
     pub(super) fn spawn(mut command: Command) -> io::Result<(Self, ChildStdout, ChildStderr)> {
         let job = Job::new()?;
         let mut child = command
-            .creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW)
+            .creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS)
             .spawn()?;
         if let Err(e) = job.assign(&child).and_then(|()| resume(child.id())) {
             let _ = child.kill();

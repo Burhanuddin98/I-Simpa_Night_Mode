@@ -60,6 +60,7 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 | Code | Stage | Severity | Rule | What it prevents |
 |---|---|---|---|---|
 | `material_unassigned` | project | error | Every surface group has a material in the active variant | Where a face's material is undeclared, both solvers print `Wrong project configuration…` on stderr and exit -1 (VERIFIED P2 `mat22_miss`, `tcr_mat22_miss`). For material id 0 on the first faces there is no check at all, and SPPS crashes `0xC0000005` (VERIFIED S `run_mat0miss`; `coreinitialisation.cpp:409-434`) |
+| `material_placeholder` | project | error | No surface group's effective material, under the active variant, is upstream's placeholder for no material chosen: reference material 0, named `Default`, with absorption and scattering exactly 0 in every band (`geometry::import::REFERENCE_MATERIALS[0]`; `validate::is_placeholder_material`). One issue per group, at `/surface_groups/<i>/material`. A material named `Default` with any other value is a chosen material | Upstream gives the placeholder to a face no surface group holds, and a mesh import gives it to every group. It is a real material with α 0, so the solvers accept it and run a room with perfectly reflecting surfaces nobody chose, with no message (M10 PLAN.md F1: `simpa validate` on the hall imported from PLY gave only `source_none`). The app's Materials counter and its `MATERIALS_UNASSIGNED` Run blocker use the same predicate, so the app and the core refuse the same projects |
 | `material_value_out_of_range` | project | error | 0 ≤ α ≤ 1, 0 ≤ diffusion ≤ 1, transmission loss R ≥ 0 dB, all finite | The solvers check none of these. Energetic mode multiplies energy by (1 - α) and by τ = 10^(-R/10) (`CalculationCore.cpp:249-285`), so α > 1 or R < 0 negates or creates energy. Random mode compares α and diffusion with a uniform draw (`CalculationCore.cpp:288-300, 318`) (inferred) |
 | `material_diffusion_ignored` | project | warning | α = 1 while diffusion > 0: the diffusion value has no effect | An α = 1 hit never reflects (`CalculationCore.cpp:249-261`). Upstream's GUI forces diffusion to 0 in that case (`e_data_row_materiau.h:116-120`) |
 | `material_transmission_exceeds_absorption` | project | warning, corrected | The transmission coefficient τ = 10^(-R/10) must not exceed α, and transmission needs α > 0. The exporter writes τ = α (R = -10·log10 α) and says so (`config_xml::write::transmission_loss_written`); for α = 0 it leaves `affaiblissement` out of the band, as upstream's GUI does (`e_data_row_materiau.h:98-106, 131-134`), so the band does not transmit | Random mode transmits an absorbed particle when rand·α ≤ τ, so τ > α acts as τ = α (`CalculationCore.cpp:292`). Energetic mode keeps (1 - α) of the energy and adds a τ copy, which creates energy when τ > α (`CalculationCore.cpp:262-285`). With α = 0 no transmission happens in either mode (`CalculationCore.cpp:262, 288`). Upstream's GUI makes the same correction, with a warning (`e_data_row_materiau.h:128-143, 185-197`) |
@@ -148,14 +149,14 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 | `solver_id_mapping_invalid` | export | error | Solver ids are unique within materials, within surface receivers and within fittings. Every id used by a face (idMat, idRs, idEn) or by a tetrahedron (idVolume ≠ 0) is declared. At the project stage: pinned solver ids (`solver_id` of materials, point receivers, surface receivers, fitting zones and sources, which a `.proj` import sets to upstream's element ids, `docs/m5-m6-design.md`, decision 13) are unique within each kind, no fitting zone is pinned to 0, and no enabled fitting zone is pinned so high that TetGen's room ids could pass a C `int` above it: a pin must be at most 2,147,483,647 minus the `.poly`'s facets (the scene's faces and 12 per enabled box zone), since TetGen numbers the room's regions from one above the largest fitting id, one per region (`tetgen.cxx:22403-22436`), and a region is bounded by at least four facets. The mesher checks the same on the `.poly` it writes (`input_invalid`) | Lookups return the first match, so a duplicate id silently hides the second item (`base_core_configuration.cpp:374-391`); a point receiver's id is only TCR's column label (`ctr/input_output/reportmanager.cpp:98`), so two would share one. An undeclared idMat exits -1 or crashes (`material_unassigned`). An undeclared idRs indexes a vector at -1 (`coreinitialisation.cpp:291-304, 353-360`). An undeclared fitting id drops the fitting silently (`coreinitialisation.cpp:151-176, 437-445`) (inferred) |
 | `fitting_id_collides_with_room_region` | export | error | No fitting's solver id equals the TetGen region attribute of the room's own tetrahedra | Every tetrahedron whose idVolume is not 0 gets the fitting with that id (`coreinitialisation.cpp:151-176`). TetGen `-A` gave all 2,257 of tutorial 1's room tetrahedra idVolume 1 (read from `tests/fixtures/upstream/tutorial1/spps/tetramesh.mbin` on 2026-09-23), so a fitting with id 1 would fill the whole room (inferred) |
 
-**Count: 42 rules.** 35 are `project` rules and 7 are `export` rules; 39 are errors and 3 are
+**Count: 43 rules.** 36 are `project` rules and 7 are `export` rules; 40 are errors and 3 are
 warnings. Every item in `plan.components[core::validate]` maps to a rule:
 
 | Plan item | Rule(s) |
 |---|---|
 | same band set everywhere, no duplicate frequencies | `band_set_mismatch`, `band_duplicate`, `band_set_empty`, `band_frequency_not_integer` |
 | `docalc` as the literal `'1'` | `docalc_not_literal_one` |
-| material 0 defined; every idMat, idRs and idEn declared | `material_unassigned`, `solver_id_mapping_invalid` |
+| material 0 defined; every idMat, idRs and idEn declared | `material_unassigned`, `material_placeholder`, `solver_id_mapping_invalid` |
 | sources and receivers strictly inside and off every face | `source_outside_volume`, `source_near_surface`, `receiver_outside_volume`, `receiver_on_surface`, `receiver_sphere_crosses_surface` |
 | type-5 directivity files parsed | `directivity_file_missing`, `directivity_file_invalid`, `directivity_band_missing` |
 | `trans_epsilon` present, `rayon_recepteurp` > 0, `pasdetemps` > 0 | `trans_epsilon_invalid`, `receiver_radius_invalid`, `time_step_invalid` |
@@ -440,6 +441,7 @@ order, and its status is OK exactly when it lists none.
 
 | Code | Status | Signal | When |
 |---|---|---|---|
+| `solver_unverified` | FAIL | before launch | `run` and `run-folder` asked to verify their executables (`RunOptions::verify`; the desktop app always asks, the CLI and the bed do not): the solver, and with a mesh built in the run `tetgen.exe` and `preprocess.exe`, are checked first, stage `solvers`, and one's code sha256 (the file with its link times zeroed, `bed::pe`) is not `solvers/manifest.json`'s, or it cannot be read. The detail names each file and both hashes. Nothing is meshed or launched, and `run.json`'s `solvers` records every check. Exit class 2 |
 | `geometry_refused` | FAIL | before launch | `run`: `geometry::check` refuses the project's geometry, or, for a project meshed through upstream's scene correction, what `preprocess.exe` made of it (the mesher's gate before TetGen, "Preprocessing and the meshed volume" below); its own codes and counts are in the detail. The mesher gives the same code, and `simpa mesh` exits 3 with it. Exit class 3 |
 | `mesh_missing` | FAIL | before launch | `run --mesh <dir>`: the folder has no readable `mesh.json`, a manifest that is not `OK`, or no `tetramesh.mbin`; or the run's own mesh folder cannot be used. Exit class 4 |
 | `mesh_parity` | FAIL | before launch | `run --mesh <dir>`: the folder's `mesh.json` records a mesh made in parity mode (`"parity": true`, `simpa mesh --parity`), whatever its `status` says. Such a `.mbin` keeps the facet markers `preprocess.exe` gave, for byte comparison with original I-Simpa's files, and a run on it is never OK (Burhan, 2026-09-24, decision 2). Listed after `mesh_missing` when the manifest is not `OK` either. Exit class 4 |
@@ -466,6 +468,9 @@ order, and its status is OK exactly when it lists none.
 
 `core::run::manager` runs a project (`simpa run`) or a folder as it is (`simpa run-folder`) end
 to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout").
+- **`RunEvent::Started`** names the run folder to the caller as soon as it exists, before any
+  stage: the first event of every run that gets a folder, so a shell can list and cancel the run
+  while it works.
 - **The run folder** is `<root>/<yyyyMMdd-HHmmss-fff>-<solver>[-n]/` in this machine's local
   time, made with `create_dir` and never reused (`-2`, `-3`, ... on a collision). `run.json`'s
   `started` is the same instant in RFC 3339 with the UTC offset. The solver runs in its
@@ -480,6 +485,7 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
 
   | Stage | Refused with | Exit class |
   |---|---|---|
+  | solvers (only when asked, `RunOptions::verify`) | `solver_unverified` | 2 |
   | geometry | `geometry_refused` | 3 |
   | validate | each Part A error's code; Part A warnings are recorded as the verdict's warnings | 2 |
   | mesh | the mesher's codes (`docs/formats/mesh-manifest.md`); with `--mesh <dir>`, `mesh_missing`, `mesh_parity`, `manifest_mismatch` or Part A's `mesh_out_of_date`. The mesher's `geometry_refused` ends the run at stage geometry, exit class 3: with upstream's scene correction on, the geometry stage leaves the check to the mesher, on what `preprocess.exe` saves | 4 |

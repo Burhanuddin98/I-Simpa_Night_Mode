@@ -19,8 +19,8 @@ use std::time::{Duration, Instant};
 use simpa_core::process::{self, CancelToken, Line, Outcome, Spec, Stream};
 use windows_sys::Win32::Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
-    TerminateProcess, WaitForSingleObject,
+    BELOW_NORMAL_PRIORITY_CLASS, GetPriorityClass, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
 };
 
 /// Set in the environment of the re-run test binary that plays the parent process.
@@ -238,6 +238,38 @@ fn raw_bytes_split_on_lf_with_one_cr_stripped_and_lossy_utf8() {
             ("tail".into(), false),
         ]
     );
+}
+
+/// The children run below normal priority (M11 PLAN.md 2.9, C9): the desktop app stays usable
+/// while a solver takes every core. The class is read with `GetPriorityClass` on the child's own
+/// handle while it runs, and the child reads its own as well. Priority changes when a child runs,
+/// never what it computes.
+#[test]
+fn children_run_below_normal_priority() {
+    let spec = powershell(
+        "[Console]::Out.WriteLine('PIDS ' + $PID + ' 0');          [Console]::Out.WriteLine('CLASS ' + [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass);          Start-Sleep -Milliseconds 1500",
+        work_dir("priority"),
+    );
+    let mut class = None;
+    let mut own = None;
+    let mut procs = Vec::new();
+    let outcome = process::run(&spec, &CancelToken::new(), &mut |l| {
+        if let Some(ids) = pids(&l.text) {
+            let p = Proc::open_alive(ids[0]);
+            // SAFETY: the handle is open with PROCESS_QUERY_LIMITED_INFORMATION.
+            class = Some(unsafe { GetPriorityClass(p.handle.as_raw_handle()) });
+            // Held until the child has exited by itself, so dropping it ends nothing.
+            procs.push(p);
+        }
+        if let Some(c) = l.text.strip_prefix("CLASS ") {
+            own = Some(c.trim().to_string());
+        }
+    })
+    .expect("the child starts");
+    assert!(alive(&procs, 0).is_empty(), "the child outlived run()");
+    assert_eq!(outcome.exit_code, Some(0));
+    assert_eq!(class, Some(BELOW_NORMAL_PRIORITY_CLASS), "GetPriorityClass");
+    assert_eq!(own.as_deref(), Some("BelowNormal"), "as the child reads it");
 }
 
 #[test]

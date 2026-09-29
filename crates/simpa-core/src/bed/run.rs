@@ -361,6 +361,7 @@ pub fn run_one(p: &Planned, root: &Path, exes: &Exes) -> Result<Read, String> {
         loss_limit: DEFAULT_LOSS_LIMIT,
         cancel_after_ms: Some(limits::RUN_TIME_LIMIT_MS),
         cancel_after_progress: None,
+        verify: None,
     };
     let mesh = MeshChoice::Build {
         tetgen: exes.tetgen.clone(),

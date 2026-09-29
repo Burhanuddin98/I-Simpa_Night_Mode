@@ -152,6 +152,35 @@ pub mod codes {
     /// printed that it saved nothing (see [`PREPROCESS_ABORTED`]) and the `.poly` changed or went
     /// all the same.
     pub const PREPROCESS_OUTPUT_INVALID: &str = "preprocess_output_invalid";
+
+    /// Every code above, in the order they are declared: a list a caller can walk, so that a
+    /// table keyed by the mesher's codes (the app's UI codes) can be proven complete.
+    /// `tests/reason_codes_docs.rs` checks it holds every constant of this module.
+    pub const ALL: [&str; 23] = [
+        MESH_SETTINGS_CONFLICT,
+        INPUT_INVALID,
+        STALE_DELETE_FAILED,
+        INPUT_WRITE_FAILED,
+        TETGEN_LAUNCH_FAILED,
+        CANCELLED,
+        TETGEN_CRASH,
+        TETGEN_EXIT_NONZERO,
+        TETGEN_TIMEOUT,
+        TETGEN_SKIPPED_FACETS,
+        TETGEN_SELF_INTERSECTION,
+        TETGEN_OUTPUT_MISSING,
+        NEIGH_MISSING,
+        TETGEN_OUTPUT_INVALID,
+        MESH_INVALID,
+        MBIN_WRITE_FAILED,
+        GEOMETRY_REFUSED,
+        PREPROCESS_LAUNCH_FAILED,
+        PREPROCESS_CRASH,
+        PREPROCESS_EXIT_NONZERO,
+        PREPROCESS_TIMEOUT,
+        PREPROCESS_ABORTED,
+        PREPROCESS_OUTPUT_INVALID,
+    ];
 }
 
 /// A failure to use the mesh folder at all: it could not be created, or no manifest could be
@@ -1204,6 +1233,15 @@ fn run_preprocess_inner(
 /// How often the watchdog of [`call`] looks at the caller's cancel and the clock.
 const WATCH: Duration = Duration::from_millis(20);
 
+/// Sets its flag when dropped, on a normal return and on a panic alike.
+struct SetOnDrop<'a>(&'a AtomicBool);
+
+impl Drop for SetOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
 /// Runs one mesher call and records it in `slot`; `Err` holds why it could not start. `lines`,
 /// when given, collects the stdout lines. The call is stopped when `cancel` is, or when it still
 /// runs `limit` after it started: a watchdog then cancels it, and the record says `timed_out`.
@@ -1251,6 +1289,12 @@ fn call(
                 }
             })
         };
+        // Set however `mesher.run` leaves, a panic included: `thread::scope` joins the watch
+        // thread before a panic can leave it, and a watch thread still waiting for `done` would
+        // hold the panic until the caller's cancel or the time limit (an hour for TetGen). The
+        // line callback is the caller's code (the app's event sink), so a panic there is
+        // possible, and must not freeze the run.
+        let done_guard = SetOnDrop(&done);
         let result = mesher.run(dir, argv, &local, &mut |l: &Line| {
             if let Some(lines) = lines.as_deref_mut()
                 && l.stream == Stream::Stdout
@@ -1259,7 +1303,7 @@ fn call(
             }
             on_line(l);
         });
-        done.store(true, Ordering::SeqCst);
+        drop(done_guard);
         let _ = watch.join();
         result
     });

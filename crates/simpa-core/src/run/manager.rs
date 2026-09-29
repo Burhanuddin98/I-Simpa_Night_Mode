@@ -46,6 +46,7 @@ use super::manifest::{
 };
 use super::stats::ParticleStats;
 use super::verdict::{Evidence, Outputs, Reason, Status, Verdict, codes, judge};
+use crate::bed::pe::{SolverCheck, SolverManifest, check_solvers};
 use crate::config_xml::{self, names};
 use crate::formats::{cbin, mbin};
 use crate::geometry::check;
@@ -106,7 +107,7 @@ impl ExitClass {
             (Status::Ok, _) => ExitClass::Ok,
             (Status::Cancelled, _) => ExitClass::Cancelled,
             (_, Stage::Geometry) => ExitClass::Geometry,
-            (_, Stage::Validate | Stage::Export) => ExitClass::Usage,
+            (_, Stage::Solvers | Stage::Validate | Stage::Export) => ExitClass::Usage,
             (_, Stage::Mesh) => ExitClass::Mesh,
             (_, Stage::PreLaunch | Stage::Solve) => ExitClass::Solver,
         }
@@ -136,11 +137,15 @@ impl TryFrom<u8> for ExitClass {
     }
 }
 
-/// The stages of a run, in order. `run_project` reaches `pre_launch` with SPPS, or with a mesh
-/// folder given (`MeshChoice::Reuse`); `run_folder` has only `pre_launch` and `solve`.
+/// The stages of a run, in order. `solvers` runs only when the caller asks for the executables
+/// to be verified ([`RunOptions::verify`]). `run_project` reaches `pre_launch` with SPPS, or with a
+/// mesh folder given (`MeshChoice::Reuse`); `run_folder` has only `solvers`, `pre_launch` and
+/// `solve`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Stage {
+    /// The executables are checked against the verified build (`solvers/manifest.json`).
+    Solvers,
     Geometry,
     Validate,
     Mesh,
@@ -152,6 +157,10 @@ pub enum Stage {
 /// What the run manager tells its caller while it works.
 #[derive(Clone, Copy, Debug)]
 pub enum RunEvent<'a> {
+    /// The run folder exists: its absolute path, the folder `run.json` will be written into.
+    /// Always the first event of a run that gets a folder, sent before any stage, so a caller
+    /// can name the run (and cancel it) at once rather than when it ends.
+    Started(&'a Path),
     /// A stage starts.
     Stage(Stage),
     /// A TetGen output line, while meshing into the run folder.
@@ -412,6 +421,13 @@ pub struct RunOptions {
     /// Cancel the solver at its first progress line at or above this percentage. Real SPPS
     /// output ends at `#99.99`, never 100.
     pub cancel_after_progress: Option<f64>,
+    /// Verify the executables against this manifest of the verified build before anything else
+    /// (stage `solvers`): the solver, and with [`MeshChoice::Build`], `tetgen.exe` and
+    /// `preprocess.exe`, each by its code sha256 ([`crate::bed::pe::check_solvers`]). A mismatch
+    /// is refused `solver_unverified`, exit class 2, with nothing meshed or launched, and the
+    /// checks are recorded in `run.json`'s `solvers`. `None` (the CLI, the bed, the tests):
+    /// no check, and no `solvers` key.
+    pub verify: Option<SolverManifest>,
 }
 
 /// Where `run_project`'s mesh comes from.
@@ -449,6 +465,8 @@ struct Record<'a> {
     solve: PathBuf,
     source: RunSource,
     exe: FileRef,
+    /// The executables checked before the run, when it was asked to verify them.
+    solvers: Option<Vec<SolverCheck>>,
     started: String,
     inputs: Vec<FileRef>,
     mesh: Option<MeshRef>,
@@ -478,6 +496,7 @@ impl Record<'_> {
             source: self.source,
             solver: self.opts.solver,
             exe: self.exe,
+            solvers: self.solvers,
             argv: vec![SOLVER_ARGUMENT.to_string()],
             cwd: self.solve.display().to_string(),
             started: self.started,
@@ -548,6 +567,53 @@ impl Record<'_> {
     }
 }
 
+/// The executables a run launches, by the manifest's names: the solver, then the mesher's when
+/// the run builds its mesh.
+fn run_exes(opts: &RunOptions, mesh: Option<&MeshChoice>) -> Vec<(&'static str, PathBuf)> {
+    let mut exes = vec![(solver_exe_name(opts.solver), opts.solver_exe.clone())];
+    if let Some(MeshChoice::Build { tetgen, preprocess }) = mesh {
+        exes.push((TETGEN_EXE_NAME, tetgen.clone()));
+        if let Some(p) = preprocess {
+            exes.push((PREPROCESS_EXE_NAME, p.clone()));
+        }
+    }
+    exes
+}
+
+/// Stage `solvers`: each of `exes` against `manifest`. Records the checks in `rec`; the reason
+/// when one is not the verified build.
+fn verify_solvers(
+    rec: &mut Record,
+    exes: &[(&'static str, PathBuf)],
+    manifest: &SolverManifest,
+) -> Option<Reason> {
+    let pairs: Vec<(&str, &Path)> = exes.iter().map(|(n, p)| (*n, p.as_path())).collect();
+    let checks = check_solvers(&pairs, manifest);
+    let bad: Vec<String> = checks
+        .iter()
+        .filter(|c| !c.matches)
+        .map(|c| {
+            format!(
+                "{} ({}): {}",
+                c.name,
+                c.path,
+                c.detail.as_deref().unwrap_or("not the verified build")
+            )
+        })
+        .collect();
+    rec.solvers = Some(checks);
+    (!bad.is_empty()).then(|| {
+        Reason::new(
+            codes::SOLVER_UNVERIFIED,
+            format!(
+                "{}; run the verified build (solvers/manifest.json), or set SIMPA_SOLVERS_DIR to \
+                 its folder",
+                bad.join("; ")
+            ),
+        )
+    })
+}
+
 /// A validator issue as a reason: its code, and where and what in words.
 fn issue_reason(i: &Issue) -> Reason {
     Reason::new(i.code, format!("{}: {}", i.path, i.message))
@@ -593,11 +659,25 @@ pub fn run_project(
             variant: variant.map(str::to_string),
         },
         exe,
+        solvers: None,
         started: rfc3339(started),
         inputs: Vec::new(),
         mesh: None,
         warnings: Vec::new(),
     };
+    on_event(&RunEvent::Started(&rec.dir));
+
+    // The executables, when the caller asked: a build that is not the verified one is refused
+    // before anything runs, exit class 2.
+    if let Some(manifest) = &opts.verify {
+        on_event(&RunEvent::Stage(Stage::Solvers));
+        if let Some(reason) = verify_solvers(&mut rec, &run_exes(opts, Some(mesh)), manifest) {
+            return rec.refuse(Stage::Solvers, false, vec![reason]);
+        }
+        if cancel.is_cancelled() {
+            return rec.cancelled(Stage::Solvers);
+        }
+    }
 
     // Geometry: refused is exit class 3. With upstream's scene correction on, what TetGen meshes
     // is what preprocess.exe makes of the scene: the mesher checks that before TetGen runs, and
@@ -988,11 +1068,19 @@ pub fn run_folder(
             path: fixture.display().to_string(),
         },
         exe,
+        solvers: None,
         started: rfc3339(started),
         inputs: Vec::new(),
         mesh: None,
         warnings: Vec::new(),
     };
+    on_event(&RunEvent::Started(&rec.dir));
+    if let Some(manifest) = &opts.verify {
+        on_event(&RunEvent::Stage(Stage::Solvers));
+        if let Some(reason) = verify_solvers(&mut rec, &run_exes(opts, None), manifest) {
+            return rec.refuse(Stage::Solvers, false, vec![reason]);
+        }
+    }
     copy_fixture(fixture, &solve)?;
     let config = solve.join(names::CONFIG);
     let text = fs::read(&config).map_err(io_at(&config))?;
@@ -1640,9 +1728,12 @@ mod tests {
 
     #[test]
     fn logs_that_cannot_be_created_are_launch_failed() {
-        let base = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/tmp")
-            .join(format!("manager-logs-{}", std::process::id()));
+        // Under the tests' scratch root when one is set, else the system temp folder: never
+        // `<repo>/target`, which a worktree on B: would put on the exFAT drive.
+        let root = std::env::var_os("SIMPA_TEST_SCRATCH_ROOT")
+            .filter(|v| !v.is_empty())
+            .map_or_else(std::env::temp_dir, PathBuf::from);
+        let base = root.join(format!("manager-logs-{}", std::process::id()));
         for blocked in [STDOUT_LOG, STDERR_LOG] {
             let dir = base.join(blocked);
             // A folder where the log file should go: File::create fails on it.
@@ -1664,6 +1755,11 @@ mod tests {
         use Stage::*;
         assert_eq!(ExitClass::of(Solve, Status::Ok), ExitClass::Ok);
         assert_eq!(ExitClass::of(Geometry, Status::Fail), ExitClass::Geometry);
+        assert_eq!(ExitClass::of(Solvers, Status::Fail), ExitClass::Usage);
+        assert_eq!(
+            ExitClass::of(Solvers, Status::Cancelled),
+            ExitClass::Cancelled
+        );
         assert_eq!(ExitClass::of(Validate, Status::Fail), ExitClass::Usage);
         assert_eq!(ExitClass::of(Export, Status::Fail), ExitClass::Usage);
         assert_eq!(ExitClass::of(Mesh, Status::Fail), ExitClass::Mesh);

@@ -813,15 +813,22 @@ fn left_below(root: &Path) -> Vec<PathBuf> {
 ///   `cli/` aside (which shows the child's folder went there);
 /// - says no, the cleanup switched off (`$SIMPA_KEEP_SCRATCH=1`, the fault in the code): the
 ///   count rises by the run's files, so the count sees a folder left behind;
-/// - failing (`$SIMPA_SOLVERS_DIR` at an empty folder, the fault in the input: the test's second
-///   half finds no `preprocess.exe`): the child fails, its folder is kept with its run folders,
-///   and its output names it.
+/// - failing (`$SIMPA_SOLVERS_DIR` at a build without `preprocess.exe`, the fault in the input:
+///   the test's second half finds no `preprocess.exe`): the child fails, its folder is kept with
+///   its run folders, and its output names it. The build is a copy of `classicalTheory.exe` and
+///   `tetgen.exe` alone, from `$SIMPA_SOLVERS_DIR`, inside this test's scratch: the child's first
+///   half runs them, and must not depend on the dev tree's `<repo>/target/solvers/bin`, which
+///   does not exist when cargo builds outside the repository (M11 PLAN.md section 7).
 #[test]
 fn a_passing_test_leaves_no_scratch_behind_and_a_failing_one_keeps_its_folder() {
     const CHILD: &str = "a_run_whose_preprocess_gives_up_records_the_warning";
     let outer = scratch("scratch-count");
-    let no_solvers = outer.join("no-solvers");
+    let no_solvers = outer.join("no-preprocess");
     std::fs::create_dir(&no_solvers).unwrap();
+    for name in ["classicalTheory.exe", "tetgen.exe"] {
+        std::fs::copy(solver_exe(name), no_solvers.join(name)).unwrap();
+    }
+    assert!(!no_solvers.join("preprocess.exe").exists());
     let child = |arm: &str, env: &[(&str, &std::ffi::OsStr)]| {
         // Short, beside the group folders: the run folders nest deep, and a longer root takes
         // the solvers' output paths past MAX_PATH (`output_path_too_long`).

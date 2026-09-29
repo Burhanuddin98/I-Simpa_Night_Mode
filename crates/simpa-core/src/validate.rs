@@ -6,7 +6,7 @@
 //! proceeds. No rule turns a solver failure into a warning.
 //!
 //! There are two stages, as on the contract page:
-//! - [`validate`] and [`validate_with`] check a typed [`Project`] (35 `project` rules), with its
+//! - [`validate`] and [`validate_with`] check a typed [`Project`] (36 `project` rules), with its
 //!   geometry, its directivity files and, when one is given, the stamp of its tetrahedral mesh.
 //! - [`validate_export`] checks the exact files the exporter wrote to a run folder
 //!   (`config.xml`, the `.cbin` and the `.mbin`) immediately before launch (7 `export` rules).
@@ -133,6 +133,7 @@ pub mod codes {
     pub const BAND_SET_MISMATCH: &str = "band_set_mismatch";
     // Materials.
     pub const MATERIAL_UNASSIGNED: &str = "material_unassigned";
+    pub const MATERIAL_PLACEHOLDER: &str = "material_placeholder";
     pub const MATERIAL_VALUE_OUT_OF_RANGE: &str = "material_value_out_of_range";
     pub const MATERIAL_DIFFUSION_IGNORED: &str = "material_diffusion_ignored";
     pub const MATERIAL_TRANSMISSION_EXCEEDS_ABSORPTION: &str =
@@ -212,14 +213,15 @@ const fn rule(code: &'static str, stage: Stage, severity: Severity) -> Rule {
 use Severity::{Error as E, Warning as W};
 use Stage::{Export as X, Project as P};
 
-/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 35 project rules and 7
-/// export rules, 39 errors and 3 warnings.
-pub const RULES: [Rule; 42] = [
+/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 36 project rules and 7
+/// export rules, 40 errors and 3 warnings.
+pub const RULES: [Rule; 43] = [
     rule(codes::BAND_SET_EMPTY, P, E),
     rule(codes::BAND_DUPLICATE, P, E),
     rule(codes::BAND_FREQUENCY_NOT_INTEGER, P, E),
     rule(codes::BAND_SET_MISMATCH, P, E),
     rule(codes::MATERIAL_UNASSIGNED, P, E),
+    rule(codes::MATERIAL_PLACEHOLDER, P, E),
     rule(codes::MATERIAL_VALUE_OUT_OF_RANGE, P, E),
     rule(codes::MATERIAL_DIFFUSION_IGNORED, P, W),
     rule(codes::MATERIAL_TRANSMISSION_EXCEEDS_ABSORPTION, P, W),
@@ -297,6 +299,18 @@ pub fn severity_of(code: &str) -> Severity {
         .iter()
         .find(|r| r.code == code)
         .map_or(Severity::Error, |r| r.severity)
+}
+
+/// Upstream's placeholder for "no material chosen": its reference material 0 as an import leaves
+/// it, named `Default` (`geometry::import::REFERENCE_MATERIALS[0]`) with absorption and
+/// scattering exactly 0 in every band. Upstream gives it to a face that no surface group holds; a
+/// mesh import gives it to every group. A material named `Default` with any other value is a
+/// real, chosen material. The one predicate for `material_placeholder` and the app's count of
+/// assigned groups.
+pub fn is_placeholder_material(material: &schema::Material) -> bool {
+    material.name == crate::geometry::import::REFERENCE_MATERIALS[0].name
+        && material.absorption.iter().all(|v| v.get() == 0.0)
+        && material.scattering.iter().all(|v| v.get() == 0.0)
 }
 
 pub(crate) fn issue(
@@ -475,14 +489,14 @@ mod tests {
 
     #[test]
     fn rule_table_matches_the_contract_counts() {
-        assert_eq!(RULES.len(), 42);
+        assert_eq!(RULES.len(), 43);
         let project = RULES.iter().filter(|r| r.stage == Stage::Project).count();
         let warnings = RULES
             .iter()
             .filter(|r| r.severity == Severity::Warning)
             .count();
-        assert_eq!((project, 42 - project), (35, 7));
-        assert_eq!((42 - warnings, warnings), (39, 3));
+        assert_eq!((project, 43 - project), (36, 7));
+        assert_eq!((43 - warnings, warnings), (40, 3));
         let mut all: Vec<&str> = RULES.iter().map(|r| r.code).collect();
         all.extend(STRUCTURAL_CODES);
         let n = all.len();

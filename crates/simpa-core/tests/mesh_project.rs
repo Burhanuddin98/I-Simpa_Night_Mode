@@ -582,9 +582,101 @@ fn fake_run(label: &str, p: &Project, mesher: &dyn Mesher) -> (PathBuf, MeshMani
     (dir, m)
 }
 
+/// A stale file that cannot be deleted while the mesher runs, and the guard that keeps it so.
+///
+/// On Windows the file is held open with no sharing at all (`share_mode(0)`, so no
+/// `FILE_SHARE_DELETE`): deleting it fails with a sharing violation on NTFS and on exFAT alike.
+/// The read-only attribute this test used before proved nothing on NTFS, where `remove_file`
+/// deletes a read-only file with this toolchain; the mesher then went on and called a fake that
+/// must not run, and its panic hung the test (M11 PLAN.md section 6). Elsewhere the file is made
+/// read-only, as before.
+struct Undeletable {
+    #[cfg(windows)]
+    _held: std::fs::File,
+    #[cfg(not(windows))]
+    path: PathBuf,
+}
+
+impl Undeletable {
+    fn new(path: &Path) -> Undeletable {
+        std::fs::write(path, "stale").unwrap();
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            let held = std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(0)
+                .open(path)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            Undeletable { _held: held }
+        }
+        #[cfg(not(windows))]
+        {
+            let mut perms = std::fs::metadata(path).unwrap().permissions();
+            perms.set_readonly(true);
+            std::fs::set_permissions(path, perms).unwrap();
+            Undeletable {
+                path: path.to_path_buf(),
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+impl Drop for Undeletable {
+    // Clearing the read-only attribute is the point.
+    #[allow(clippy::permissions_set_readonly_false)]
+    fn drop(&mut self) {
+        if let Ok(m) = std::fs::metadata(&self.path) {
+            let mut perms = m.permissions();
+            perms.set_readonly(false);
+            let _ = std::fs::set_permissions(&self.path, perms);
+        }
+    }
+}
+
+/// A mesher that panics inside `mesher.run` (the caller's line callback, the app's event sink,
+/// runs there) must not be held for the mesher's time limit: the watch thread of `call` ends
+/// with it, so the panic leaves at once (M11 PLAN.md 2.9, C1). Before the fix it took the whole
+/// limit, 120 s here and an hour at TetGen's default.
 #[test]
-// Clearing the read-only attribute is the point on Windows.
-#[allow(clippy::permissions_set_readonly_false)]
+fn a_mesher_that_panics_is_not_held_for_its_time_limit() {
+    let p = load_room("tutorial1_box.simpa");
+    let dir = scratch("fake-panics");
+    let started = std::time::Instant::now();
+    // On a thread of its own: its panic is the point, and must not mark this test as failed.
+    let joined = std::thread::spawn(move || {
+        let panics = Fake {
+            act: |_: &Path| panic!("a deliberate panic inside the mesher"),
+            outcome: exited(0),
+        };
+        let tools = mesh::MeshTools {
+            tetgen: &panics,
+            preprocess: None,
+            markers: mesh::Markers::Restored,
+            timeouts: mesh::Timeouts {
+                tetgen: std::time::Duration::from_secs(120),
+                ..mesh::Timeouts::default()
+            },
+        };
+        mesh::mesh_project_with(&p, &dir, &tools, &CancelToken::new(), &mut |_: &Line| {})
+    })
+    .join();
+    let took = started.elapsed();
+    let payload = joined.expect_err("the mesher's panic propagates");
+    let text = payload
+        .downcast_ref::<&str>()
+        .map(|s| s.to_string())
+        .or_else(|| payload.downcast_ref::<String>().cloned())
+        .unwrap_or_default();
+    assert!(text.contains("deliberate panic"), "{text}");
+    assert!(
+        took < std::time::Duration::from_secs(5),
+        "the panic was held {took:?}"
+    );
+}
+
+#[test]
 fn every_failure_code_fires_on_its_input() {
     let p = load_room("tutorial1_box.simpa");
     let set = |m: &MeshManifest| m.codes.iter().cloned().collect::<BTreeSet<String>>();
@@ -685,19 +777,21 @@ fn every_failure_code_fires_on_its_input() {
     assert_eq!(m.codes, [codes::INPUT_WRITE_FAILED], "{m:#?}");
     assert_eq!(read_manifest(&dir).unwrap(), m);
 
-    // A stale file that will not be deleted (read-only): nothing is meshed over it.
-    let dir = scratch("fake-readonly");
+    // A stale file that will not be deleted (held open with no sharing): nothing is meshed over
+    // it, and the fake that must not run is not called.
+    let dir = scratch("fake-undeletable");
     let stale = dir.join("scene_mesh.var");
-    std::fs::write(&stale, "stale").unwrap();
-    let mut perms = std::fs::metadata(&stale).unwrap().permissions();
-    perms.set_readonly(true);
-    std::fs::set_permissions(&stale, perms.clone()).unwrap();
+    let held = Undeletable::new(&stale);
     let m = mesh_project(&p, &dir, &never, &CancelToken::new(), &mut |_: &Line| {}).unwrap();
     assert_eq!(m.codes, [codes::STALE_DELETE_FAILED], "{m:#?}");
     assert_eq!(read_manifest(&dir).unwrap(), m);
     assert!(!dir.join("scene_mesh.poly").exists());
-    perms.set_readonly(false);
-    std::fs::set_permissions(&stale, perms).unwrap();
+    drop(held);
+    assert_eq!(
+        std::fs::read(&stale).unwrap(),
+        b"stale",
+        "the stale file is untouched"
+    );
 
     // A _skipped.face that does not read: the skip cannot be mapped, so the output is invalid.
     let garbled = Fake {

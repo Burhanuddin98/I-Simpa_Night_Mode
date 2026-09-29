@@ -297,6 +297,22 @@ fn every_code_is_produced_and_documented_in_exactly_one_table() {
     let mut all = simpa_core::geometry::import::proj::codes::ALL.to_vec();
     all.sort_unstable();
     assert_eq!(import_codes, all);
+    // The mesher's codes: `mesh::codes::ALL` is every constant of its codes module, so a table
+    // keyed by them (the app's UI codes) can be proven complete by walking the list.
+    let mesher_codes: Vec<&str> = found
+        .iter()
+        .filter(|(_, sites)| sites.iter().any(|s| s == "mesh.rs (mod codes)"))
+        .map(|(c, _)| c.as_str())
+        .collect();
+    let mut all = simpa_core::mesh::codes::ALL.to_vec();
+    all.sort_unstable();
+    all.dedup();
+    assert_eq!(
+        all.len(),
+        simpa_core::mesh::codes::ALL.len(),
+        "no code twice"
+    );
+    assert_eq!(mesher_codes, all);
     for code in simpa_core::geometry::import::proj::codes::ALL {
         let sites = &tables[*code];
         assert!(

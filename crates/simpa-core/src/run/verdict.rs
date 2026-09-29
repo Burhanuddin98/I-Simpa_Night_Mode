@@ -56,6 +56,11 @@ pub const DEFAULT_LOSS_LIMIT: f64 = 0.01;
 /// The verdict's own reason codes. A FAIL line's reason is its row id
 /// ([`LINE_RULES`](super::classify::LINE_RULES)).
 pub mod codes {
+    /// The run was asked to verify its executables (`RunOptions::verify`, which the desktop app
+    /// always sets) and one of them is not the verified build: its code sha256 (link times
+    /// zeroed, `bed::pe`) is not `solvers/manifest.json`'s, or it cannot be read. Checked first,
+    /// before the geometry; nothing is meshed or launched. Exit class 2.
+    pub const SOLVER_UNVERIFIED: &str = "solver_unverified";
     /// The run manager refused the project's geometry (`geometry::check`); its own codes are in
     /// the reason's detail.
     pub const GEOMETRY_REFUSED: &str = "geometry_refused";
@@ -98,7 +103,8 @@ pub mod codes {
 
     /// Every code above, in the order a verdict lists them: the run manager's refusals before
     /// launch, then the four signals.
-    pub const ALL: [&str; 22] = [
+    pub const ALL: [&str; 23] = [
+        SOLVER_UNVERIFIED,
         GEOMETRY_REFUSED,
         MESH_MISSING,
         MESH_PARITY,
