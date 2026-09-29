@@ -51,8 +51,28 @@ The status bar reads "Simulating · <p> %" during a run, the percentage in a
 
 **Harness**: `app/e2e/m11.conf.ts`, `lib/procs.ts` (foreground and window state, processes by
 path, `WM_CLOSE`, Stop-Process; nothing moves or activates a window), `specs/m11.smoke.e2e.ts`
-(`m11-smoke`), and `tools/gates/m11.ps1`, a skeleton that runs every step of PLAN.md 4.4 but the
-focus watcher, and reports missing spec files as pending.
+(`m11-smoke`), and `tools/gates/m11.ps1`, which runs every step of PLAN.md 4.4 and reports a
+missing spec file as pending (its ids fail).
+
+**The gate's specs and libraries** (the second foundation session, 21:00-21:25):
+
+| File | What it holds |
+|---|---|
+| `specs/m11.gate.e2e.ts` | `m11-a`, `m11-b-ipc`, `m11-b-frames`, `m11-c`, `m11-e-row`, `m11-e-results`, `m11-h`, `m11-r22-default`, in that order, one session. Written against PLAN.md 3.6's DOM; the packages make it true |
+| `specs/m11.close.e2e.ts`, `m11.kill.e2e.ts`, `m11.after.e2e.ts` | `m11-d-close`, `m11-d-kill`, `m11-d-after`, each its own session; the close and kill runs reach the after spec through `<work>\d-runs.json` |
+| `lib/runs.ts` (tested) | `run.json` and the logs read in Node; the loss, limit and elapsed rules of PLAN.md 2.3 in BigInt or the same IEEE operations as `runs.rs`; exact decimals |
+| `lib/acoustic.ts` (tested) | `m11-h`'s checker: `collectSnapshot` runs in the page (one read, an optional say-NO plant removed before it returns); `judge` holds the snapshot to rules 1-4 of PLAN.md 4.2 with each run's `run.json` and logs; the five say-NO cases |
+| `lib/focus.ts` (tested), `lib/focus-judge.ts` | `m11-focus`'s judge and its command line (`--min-sessions`, `--expect-steal`) |
+| `lib/stats.ts` (tested), `lib/m11.ts` | nearest-rank percentiles; the typed run hooks, `waitRun` in slices, the Runs row and Console count reads, the gate's environment |
+| `tools/gates/focus-watch.ps1` | the watcher of PLAN.md 4.2 item 2: C# through `Add-Type`, a WinEvent foreground hook, low-level mouse and keyboard hooks (times, points, injected flags; no key code), a 250 ms window sample of the gate's `app.exe`s; `-CheckOnly` compiles and probes with no hook |
+| `ui/src/testhooks.ts` | one hook added: `issues()` (UI code, core rule, path, severity) |
+
+`m11.ps1` now also: runs the harness libraries' suites and the watcher's `-CheckOnly` in the static
+step; makes `<work>\t1_cli.simpa` (`simpa import-proj`) and an 8-byte `<work>\bad.proj`; passes
+`M11_GATEWORK`, `M11_SIMPA`, `M11_ELMIA_RAW`, `M11_T1_PROJ`, `M11_T1_CLI`, `M11_BAD_PROJ`; starts the
+watcher before the first test window and judges it after the prior gates (`--min-sessions` = the
+M11 spec files run); and with `-FocusSayNo` first proves the judge flags a window of its own that
+calls `Activate()`.
 
 ## Where this departs from PLAN.md, and the calls made (row 13)
 
@@ -68,6 +88,16 @@ focus watcher, and reports missing spec files as pending.
 | F-8 | `model_import` opens a `.proj` whatever unit was chosen, besides the `proj_import` command | A `.proj` carries its own units; the task names ".proj open in model_import" |
 | F-9 | `m11.ps1` requires `-TargetDir` off the repository's drive, and fails on any file a run leaves untracked in the repository | The exFAT rules, made checks |
 | F-10 | F9 (page focus): **no emulation is built.** Measured: with the window unfocused (`document.hasFocus()` false), all 27 of M10's e2e tests pass, `m10-f`'s 50 Ctrl+Z and the materials grid's focused cell included | T11 applies only if a spec fails on page focus; none did |
+| F-11 | **A defect in the close contract, fixed: the save prompt could be skipped.** `CloseState.requested` was cleared only by `app_quit`, so after Cancel on the prompt, or on a second click of the close button while the prompt was open, a close request within 5 s was taken for a hung UI and closed the window without the prompt, losing unsaved work. Now the UI acknowledges each close request at once by registering a fresh channel (`app_events`, which clears `requested`); a hung UI acknowledges nothing and still closes on the second request. No command or signature changed, so the bindings and the inventory stand | A9 is a feature Burhan asked for (row 22), and a double click on the close button is ordinary. The channel is fresh because re-sending one restarts its message index on the Rust side (`@tauri-apps/api` `Channel`), which stalls it. `m11-d-close` now sends `WM_CLOSE` again with the prompt open and just after Cancel, both inside the 5 s, and requires the prompt each time |
+| F-12 | **No package spec shells.** | By 21:14 the three packages had written `m11.simulate`, `m11.dock` and `m11.project` themselves; a shell would have overwritten a package's file. `m11.ps1` already reports a missing spec file as pending and fails its ids, which is what a shell was for |
+| F-13 | `m11-h` rule 1 hides every `[data-diagnostic]` and `[data-verbatim]`, not only the proven ones | The same verdict: an unproven one is a violation of rule 3 or 4 by itself |
+| F-14 | A verbatim line of source `mesh` is proven against every `*.stdout.txt` and `*.stderr.txt` under the run's `mesh/` (TetGen, its `diag/` follow-up, `preprocess.exe`); one of source `solver` against the solver's two logs only | All three mesher programs stream as `MeshLine` (`manager.rs`), so all are TetGen-side lines; PLAN.md 4.2 names only `mesh/tetgen.*`. Keying the logs by source is tighter than "a line of any of the four" |
+| F-15 | A `progress_pct` span keeps the plan's grammar and is proven at its displayed digits, in exact decimals (half up), or as 100 once SPPS printed `End of calculation.` | SPPS's `#` values are multiples of 0.01 (the box: 9,999 lines; the hall at `#25.22`: 2,522 lines, PROVENANCE.md), which the grammar fits |
+| F-16 | A diagnostic must be a leaf element, checked under (ii) | PLAN.md 3.4 rule 1 says "leaf span"; a span holding elements could carry other text that rule 1 would never see |
+| F-17 | Each say-NO plant must be flagged **under its own rule** (H1 rule 1, H2 rule 2, the elapsed span (iv), the Acoustics loss span (ii), the verbatim line rule 4). The elapsed plant reads 1.8 s, or 2.8 s when the manifest says exactly 1.8 s | Stronger than "flagged at all": a plant caught by the wrong rule would hide a blind rule. The plant must differ from the manifest to be a lie |
+| F-18 | The focus judge excuses an invisible sample only when that window is gone from a sample within 1,000 ms; a minimised or off-monitor sample is never excused. A session is an `app.exe` with a titled window that is not an IME window | `DestroyWindow` hides a window before destroying it, and every session ends with its window closed. Every GUI thread has a hidden "Default IME" window |
+| F-19 | The watcher is its own `powershell` with `CreateNoWindow`, rooted at the gate's pid; it stops on `<log>.stop` or when the gate's process is gone. A "child" created before its parent is a reused pid and not counted | No window, so starting it takes no focus; no hook outlives the gate even if `m11.ps1` dies. The pid check keeps an unrelated process out of the gate's tree |
+| F-20 | The specs wait for a run in slices of at most 20 s, and raise WebDriver's script timeout to 120 s | The default script timeout is 30 s; meshing the hall, or `idle()`, may take longer than one call may |
 
 ## Receipts (2026-09-29, Grace)
 
@@ -88,11 +118,23 @@ focus watcher, and reports missing spec files as pending.
 | `m11.ps1 -Only static` with the core crates' suite (20:41-20:49), 4 test threads, scratch on C:, no dev-tree staging, only the `<repo>\target` writers left out | **761 passed, 0 failed, 30 ignored** in 72 binaries, 499 s. The first full run (20:30) had 3 failures, both causes fixed: the two TetGen 1.6.0 reference tests had no `SIMPA_TETGEN160` (m11.ps1 now passes it, `-Tetgen160`), and `validate_fixtures` requires a negative fixture per project rule (`material_placeholder.simpa` added through its generator) |
 | `m9.ps1 -TargetDir C:\tmp\nm-target`, in full (20:49) | **M9 PASSED**, (e) the bindings regenerating to the committed blobs and the unfocused self-test window included |
 
+| Second session (21:00-21:25), no app, no e2e, no solver launched | Result |
+|---|---|
+| `node --test app/e2e/lib/*.test.ts` | 36 of 36 passed (runs 6, acoustic 13, focus 14, stats 3) |
+| `tsc -p app/e2e/tsconfig.json` against the pinned WebdriverIO | clean, every spec included (the packages' three too) |
+| `npm run typecheck`; `npm test` | clean; 134 of 134 |
+| `cargo fmt --all --check`; `cargo clippy -p app --no-deps --all-targets -D warnings` after F-11 | clean; the app crate re-checked (`Checking app`) |
+| tsx's transform of `collectSnapshot` (what WebdriverIO serialises into the page) | no `__name` helper; its source parses as a standalone function |
+| `focus-watch.ps1 -CheckOnly` | compiles; a read-only probe of Explorer's windows (`-AppName explorer.exe`): 48 processes, 39 windows sampled |
+| A 2.4 s live run of the watcher (rooted at a PowerShell of this session; its log in the session's scratchpad, deleted after) | hooks installed (foreground, mouse, keyboard), 9 samples, stopped on its stop file, exit 0; `focus-judge.ts`: PASS |
+| Windows PowerShell 5.1 parser on `m11.ps1`, `focus-watch.ps1`, `m10.ps1` | 0 errors |
+
 ## Not done here (the next foundation steps, not deferred past v1)
 
-- The gate's specs: `m11.gate` (a, b, c, e, h, r22-default), `close`, `kill`, `after`; the
-  package spec shells.
-- `m11-h`'s checker (`lib/acoustic.ts` and its suite), `runs.ts` (the BigInt formulas in Node),
-  and `emulation.ts` (not needed, F-10).
-- The focus watcher (`focus-watch.ps1`, `lib/focus.ts` and its suite, `-FocusSayNo`).
+- **The first run of the gate's specs:** `m11.ps1 -Spec smoke,gate,close,kill,after`, and its
+  `m11-focus` judgement, with `-FocusSayNo` once. This session was not to launch the app. Until
+  the packages land, the ids whose DOM is theirs fail (`m11-a`, `m11-c`, `m11-e-row`,
+  `m11-e-results`, `m11-h`, `m11-d-after`); the foundation-only ids are `m11-smoke`, `m11-b-ipc`,
+  `m11-b-frames`, `m11-d-close`, `m11-d-kill` and `m11-r22-default`.
+- `emulation.ts`: not needed (F-10).
 - The packages: simulate, dock, project (PLAN.md 9.1 to 9.3).

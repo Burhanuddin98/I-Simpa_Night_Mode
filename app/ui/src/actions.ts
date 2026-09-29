@@ -470,13 +470,27 @@ async function onCloseRequested(): Promise<void> {
   await run('Could not quit', () => backend.appQuit());
 }
 
-/** At boot: the channel the backend sends the close request on. */
-export async function listenAppEvents(): Promise<void> {
+/**
+ * A channel for the backend's app events. A close request is acknowledged at once by registering
+ * a fresh channel: the backend takes a request nobody acknowledged within 5 s for a hung UI and
+ * closes the window past the save prompt, so without the acknowledgement a second click on the
+ * close button (the prompt open, or just cancelled) would lose unsaved work. The channel is
+ * fresh because re-sending one restarts its message index on the Rust side, and this side would
+ * then wait for an index that never comes.
+ */
+function appEventsChannel(): Channel<AppEvent> {
   const channel = new Channel<AppEvent>();
   channel.onmessage = (e) => {
-    if (e.kind === 'close_requested') fire(onCloseRequested());
+    if (e.kind !== 'close_requested') return;
+    fire(run('Acknowledging the close request', () => backend.appEvents(appEventsChannel())));
+    fire(onCloseRequested());
   };
-  await run('Registering the app events', () => backend.appEvents(channel));
+  return channel;
+}
+
+/** At boot: the channel the backend sends the close request on. */
+export async function listenAppEvents(): Promise<void> {
+  await run('Registering the app events', () => backend.appEvents(appEventsChannel()));
 }
 
 let pid: number | null = null;

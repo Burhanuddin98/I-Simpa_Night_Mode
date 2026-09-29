@@ -17,9 +17,11 @@
 //! focus afterwards.
 //!
 //! **Closing.** Once the UI has registered its app-event channel, a close request (the close
-//! button, Alt+F4, `WM_CLOSE`) is held and passed to the UI, which asks to save a dirty project
-//! and answers with `app_quit`. A second request within 5 s with no answer means the UI cannot
-//! answer: the window closes after all. Whatever closes it, an active run is cancelled first and
+//! button, Alt+F4, `WM_CLOSE`) is held and passed to the UI, which acknowledges it at once (it
+//! registers a fresh channel), asks to save a dirty project and answers with `app_quit`. A second
+//! request within 5 s of one the UI never acknowledged means the UI cannot answer: the window
+//! closes after all. A live UI's prompt is never skipped that way, however fast the close button
+//! is clicked again. Whatever closes it, an active run is cancelled first and
 //! given up to 3 s to write its `run.json`; if the process is killed instead, the Job Object's
 //! `KILL_ON_JOB_CLOSE` ends the solver with it.
 

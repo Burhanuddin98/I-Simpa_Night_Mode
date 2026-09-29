@@ -7,13 +7,20 @@
 # plus m11-h (no solver-computed acoustic number, the diagnostic allowance proven), row 22's items,
 # m11-b18, and m11-focus (the test windows visible, and never taking keyboard focus).
 #
-# THIS IS THE FOUNDATION'S SKELETON (PLAN.md 9.0). It runs the static checks, the Rust checks, the
-# fixtures' recipe, the core crates' tests, the release build, the harness prerequisites (the
-# private solver copy, the projects on C:, the mesh-failure run), the e2e specs that exist, the
-# prior gates, and the file counts. Spec files the packages have not written yet are reported as
-# pending, and their ids fail: a run that lacks any required id never prints "M11 PASSED". Still
-# to come with the packages and at integration: the gate, close, kill and after specs, the
-# focus watcher (focus-watch.ps1 and its judge), and m11-h's checker.
+# Steps (PLAN.md 4.4): the static checks (M10's and M9's, the inventory, the lints, typecheck, the
+# UI's and the harness libraries' node --test suites, the watcher's compile check), the Rust
+# checks, the fixtures' recipe, the core crates' tests, the release build, the harness
+# prerequisites (the private solver copy, the projects on C:, the mesh-failure run, tutorial 1's
+# .proj through the CLI, an 8-byte bad.proj), the focus watcher, the e2e specs, the prior gates
+# under the watcher, the m11-focus judgement, and the file counts. A spec file not written yet is
+# reported as pending and its ids fail: a run that lacks any required id never prints
+# "M11 PASSED".
+#
+# m11-focus (PLAN.md 4.2): tools/gates/focus-watch.ps1 runs as a process with no window from
+# before the first test window to after the last (M11's specs, then m10.ps1 and m9.ps1), and
+# app/e2e/lib/focus-judge.ts judges its log. -FocusSayNo first opens one small window of the
+# gate's own that calls Activate(), and requires the judge to flag it: it takes the foreground
+# on purpose, once, so it never runs by default.
 #
 # Windows PowerShell 5.1 (pwsh is not installed on Grace). Grace-local: the e2e opens windows,
 # visible and unfocused (app.exe builds its window with focused(false) under --e2e), and needs
@@ -21,7 +28,7 @@
 #
 # Run: powershell -File tools/gates/m11.ps1 [-TargetDir C:\tmp\nm-target] [-E2eHome C:\tmp\nm-e2e]
 #        [-Only all|static|e2e] [-Spec smoke,gate,close,kill,after,simulate,dock,project]
-#        [-SolversDir C:\tmp\nm-m8a-solvers] [-SkipCore] [-SkipPrior] [-FetchDriver]
+#        [-SolversDir C:\tmp\nm-m8a-solvers] [-SkipCore] [-SkipPrior] [-FocusSayNo] [-FetchDriver]
 # Partial runs (-Only other than all, a -Spec subset, -SkipCore, -SkipPrior) never print
 # "M11 PASSED".
 param(
@@ -36,6 +43,8 @@ param(
     [string]$Upstream = 'B:\repos\I-Simpa-upstream',
     [switch]$SkipCore,
     [switch]$SkipPrior,
+    # The live proof of the focus watcher: a window of the gate's own takes the foreground once.
+    [switch]$FocusSayNo,
     [switch]$FetchDriver
 )
 $ErrorActionPreference = 'Stop'
@@ -53,6 +62,9 @@ $appDir = Join-Path $repo 'app'
 $uiDir = Join-Path $appDir 'ui\src'
 $tauriDir = Join-Path $appDir 'src-tauri'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+# Upstream's raw hall (gate (a)'s control, m11-b18) and tutorial 1's project (m11-r22-a3).
+$ElmiaRaw = Join-Path $Upstream 'src\isimpa\resources\doc\tutorial\tutorial 2\elmia.ply'
+$t1Proj = Join-Path $Upstream 'src\isimpa\resources\doc\tutorial\tutorial 1\tutorial_1.proj'
 $work = Join-Path $target "gates\m11\$stamp"
 New-Item -ItemType Directory -Force $work | Out-Null
 # What is untracked in the repository before the run: the run must add nothing to it (B: is exFAT).
@@ -102,6 +114,40 @@ function Native([string]$cmdline, [string]$log) {
 function Tail([string]$log, [int]$n = 6) { if (Test-Path $log) { Get-Content $log -Tail $n | ForEach-Object { Note $_ } } }
 function Sha256([string]$path) { (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant() }
 . (Join-Path $repo 'solvers\pe-fingerprint.ps1')
+
+# A process with no window at all (CreateNoWindow; no STARTF_USESHOWWINDOW, so a window it makes
+# shows normally): starting it shows nothing and takes no focus.
+function Start-Hidden([string]$file, [string]$arguments) {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $file
+    $psi.Arguments = $arguments
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    [System.Diagnostics.Process]::Start($psi)
+}
+# m11-focus's watcher (focus-watch.ps1), rooted at this gate's process: it also stops by itself
+# when this process is gone. Returns once its hooks are installed and its first record written.
+$focusLog = Join-Path $work 'focus.jsonl'
+$script:watch = $null
+$script:e2eSessions = 0
+function Start-FocusWatch([string]$out) {
+    $p = Start-Hidden 'powershell.exe' "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$repo\tools\gates\focus-watch.ps1`" -Out `"$out`" -RootPid $PID"
+    $t0 = Get-Date
+    while (-not (Test-Path "$out.started")) {
+        if ($p.HasExited) {
+            $err = if (Test-Path "$out.err.txt") { Get-Content "$out.err.txt" -Raw } else { '' }
+            throw "the focus watcher exited $($p.ExitCode) before it started: $err"
+        }
+        if (((Get-Date) - $t0).TotalSeconds -gt 30) { throw 'the focus watcher did not start within 30 s' }
+        Start-Sleep -Milliseconds 100
+    }
+    $p
+}
+function Stop-FocusWatch($p, [string]$out) {
+    if (-not $p) { return }
+    New-Item -ItemType File -Force "$out.stop" | Out-Null
+    if (-not $p.WaitForExit(15000)) { $p.Kill(); Note 'the focus watcher did not stop within 15 s and was killed: its log has no stop record, so the judge fails' }
+}
 
 # Code with comments removed, for the lints.
 function RustCode([string]$path) { [regex]::Replace((Get-Content $path -Raw), '//[^\n]*', '') }
@@ -215,6 +261,21 @@ Check "UI: npm test (checksum known answers; node --test ui/src/**/*.test.ts)" {
     try { $code = Native 'npm test -s' (Join-Path $work 'npm-test.log') } finally { Pop-Location }
     Get-Content (Join-Path $work 'npm-test.log') | Where-Object { $_ -match 'known answers|^. (tests|pass|fail) |not ok' } | ForEach-Object { Note $_ }
     $code -eq 0
+}
+
+Check "harness: node --test app/e2e/lib (run.json's numbers in BigInt, m11-h's checker, the focus judge, the percentiles)" {
+    $log = Join-Path $work 'e2e-lib-test.log'
+    Push-Location $appDir
+    try { $code = Native 'node --test "e2e/lib/*.test.ts"' $log } finally { Pop-Location }
+    Get-Content $log | Where-Object { $_ -match '^. (tests|pass|fail) |not ok' } | ForEach-Object { Note $_ }
+    $code -eq 0 -and (Select-String -Path $log -Pattern '^. pass [1-9]' -Quiet)
+}
+
+Check "m11-focus: focus-watch.ps1 compiles and reads the gate's process tree (-CheckOnly: no hook installed)" {
+    $log = Join-Path $work 'focus-check.log'
+    $code = Native "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$repo\tools\gates\focus-watch.ps1`" -CheckOnly -RootPid $PID" $log
+    Tail $log 2
+    $code -eq 0 -and (Select-String -Path $log -Pattern ('"root":' + $PID) -Quiet)
 }
 
 # ---- 2. Rust ------------------------------------------------------------------------------------
@@ -434,6 +495,56 @@ Check "harness: the projects copied to C: (runs never land on B:), and the mesh-
     $code -eq 4 -and $m.stage -eq 'mesh' -and $m.verdict.status -eq 'FAIL' -and $codes -contains 'tetgen_skipped_facets'
 }
 
+$t1Cli = Join-Path $work 't1_cli.simpa'
+$badProj = Join-Path $work 'bad.proj'
+Check "harness: gate-time inputs: the raw hall, tutorial 1's .proj imported by the CLI (t1_cli.simpa), an 8-byte bad.proj" {
+    $ok = $true
+    foreach ($f in @($ElmiaRaw, $t1Proj)) { if (-not (Test-Path -LiteralPath $f)) { Note "MISSING $f"; $ok = $false } }
+    [IO.File]::WriteAllBytes($badProj, [Text.Encoding]::ASCII.GetBytes('notazip!'))
+    $code = Native "`"$simpa`" import-proj `"$t1Proj`" `"$t1Cli`"" (Join-Path $work 't1-import.log')
+    $t1Size = if (Test-Path $t1Cli) { "$((Get-Item $t1Cli).Length) B" } else { 'MISSING' }
+    Note "simpa import-proj exit $code; t1_cli.simpa $t1Size; bad.proj $((Get-Item $badProj).Length) B"
+    $ok -and $code -eq 0 -and (Test-Path $t1Cli) -and (Get-Item $badProj).Length -eq 8
+}
+
+# m11-focus: the say-NO (opt-in), then the watcher, from before the first test window.
+if ($FocusSayNo) {
+    Check "m11-focus live proof (-FocusSayNo): a window of the gate's own that calls Activate() is judged a steal" {
+        $sayLog = Join-Path $work 'focus-sayno.jsonl'
+        $w = Start-FocusWatch $sayLog
+        $sayScript = Join-Path $work 'focus-sayno.ps1'
+        Set-Content -Path $sayScript -Encoding ascii -Value @'
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.Form
+$f.Text = 'M11 focus say-no'
+$f.Width = 380; $f.Height = 120; $f.StartPosition = 'CenterScreen'
+$l = New-Object System.Windows.Forms.Label
+$l.Text = 'm11.ps1 -FocusSayNo: this window takes the foreground on purpose, once.'
+$l.Dock = 'Fill'
+$f.Controls.Add($l)
+$t = New-Object System.Windows.Forms.Timer
+$t.Interval = 1500
+$t.Add_Tick({ $t.Stop(); $f.Close() })
+$f.Add_Shown({ $f.Activate(); $t.Start() })
+[void]$f.ShowDialog()
+'@
+        $p = Start-Hidden 'powershell.exe' "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File `"$sayScript`""
+        if (-not $p.WaitForExit(20000)) { $p.Kill(); Note 'the say-no window did not close within 20 s' }
+        Stop-FocusWatch $w $sayLog
+        $log = Join-Path $work 'focus-sayno-judge.log'
+        $code = Native "node `"$appDir\e2e\lib\focus-judge.ts`" `"$sayLog`" --expect-steal `"M11 focus say-no`"" $log
+        Get-Content $log | Where-Object { $_ -match '^(FAIL|say-NO|note) ' } | ForEach-Object { Note $_ }
+        if ($code -ne 0) { Note "if the log shows no foreground change, Windows refused the say-no window the foreground (the gate's terminal was not in front): the live proof did not happen" }
+        $code -eq 0
+    }
+}
+Check "m11-focus: the watcher runs (foreground, mouse and keyboard hooks installed)" {
+    $script:watch = Start-FocusWatch $focusLog
+    $first = Get-Content $focusLog -TotalCount 1 -Encoding UTF8 | ConvertFrom-Json
+    Note "watcher pid $($script:watch.Id); log $focusLog; hooks foreground $($first.hooks.foreground), mouse $($first.hooks.mouse), keyboard $($first.hooks.keyboard); foreground at start: pid $($first.foreground_at_start.pid) '$($first.foreground_at_start.title)'"
+    $first.hooks.foreground -and $first.hooks.mouse -and $first.hooks.keyboard
+}
+
 $junitDir = Join-Path $work 'wdio'
 $present = @($Spec | Where-Object { Test-Path (Join-Path $appDir "e2e\specs\m11.$_.e2e.ts") })
 $pending = @($Spec | Where-Object { $present -notcontains $_ })
@@ -446,6 +557,9 @@ Check "e2e: wdio ran (verdict below) (-Spec $($present -join ','))" {
     $env:M11_APP = $exe; $env:M11_WORK = $junitDir; $env:M11_REPO = $repo
     $env:M11_TAURI_DRIVER = $tauriDriver; $env:M11_NATIVE_DRIVER = $script:driverExe
     $env:M11_SPEC = $present -join ','; $env:M11_SOLVERS = $privateSolvers; $env:M11_P = $projects
+    $env:M11_GATEWORK = $work; $env:M11_SIMPA = $simpa; $env:M11_ELMIA_RAW = $ElmiaRaw
+    $env:M11_T1_PROJ = $t1Proj; $env:M11_T1_CLI = $t1Cli; $env:M11_BAD_PROJ = $badProj
+    $script:e2eSessions = $present.Count
     # msedgedriver passes the environment on to app.exe: this is where the app finds its solvers.
     $env:SIMPA_SOLVERS_DIR = $privateSolvers
     $t0 = Get-Date
@@ -509,6 +623,18 @@ if (-not $SkipPrior -and $Only -eq 'all') {
         $code -eq 0 -and (Select-String -Path $log -Pattern '^M9 PASSED' -Quiet)
     }
 } else { Note 'prior gates: not run (-SkipPrior or a partial -Only)' }
+
+# ---- 8. m11-focus, judged (PLAN.md 4.2) -----------------------------------------------------------
+if ($runE2e) {
+    Check "m11-focus: no test window took the foreground without a person's input, and every one stayed visible, restored and on a monitor" {
+        if (-not $script:watch) { throw 'the watcher never started' }
+        Stop-FocusWatch $script:watch $focusLog
+        $log = Join-Path $work 'focus-judge.log'
+        $code = Native "node `"$appDir\e2e\lib\focus-judge.ts`" `"$focusLog`" --min-sessions $($script:e2eSessions)" $log
+        Get-Content $log | ForEach-Object { Note $_ }
+        $code -eq 0
+    }
+}
 
 # ---- 9. file counts ----------------------------------------------------------------------------------
 $files = @(Get-ChildItem $work -Recurse -File)

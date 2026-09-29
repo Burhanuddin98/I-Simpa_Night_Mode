@@ -107,6 +107,10 @@ function foundationHooks(): Record<string, Hook> {
     // What the Run button's data-blockers shows: the project's, the solvers' and RUN_ACTIVE.
     runBlockers: () => joinBlockers(sceneStore.get()?.run_blockers ?? null, solversStatusStore.get(), runStore.get() !== null) ?? [],
     dirty: () => sceneStore.get()?.info.dirty ?? false,
+    // The validator's issues on the open project, each with its UI code and the core's rule
+    // (M11 m11-r22-default reads `material_placeholder` here).
+    issues: () =>
+      (sceneStore.get()?.issues ?? []).map((i) => ({ code: i.code, rule: i.rule, path: i.path, severity: i.severity })),
     setStep: (key: StepKey) => {
       if (!STEPS.some((s) => s.key === key)) throw new Error(`setStep: no step '${key}'`);
       stepStore.set(key);
