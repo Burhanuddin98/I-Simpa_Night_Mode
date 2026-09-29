@@ -5,7 +5,8 @@
 //   m11-dock-interrupted  the control folder with no run.json lists as Interrupted, with its
 //                         reason, and a click selects it
 //   m11-dock-live         during a run the Console badge reads "live" and one PROGRESS line is
-//                         shown however many arrive; the Console follows the bottom and stays
+//                         shown however many arrive, its value rising sample by sample (M11
+//                         review F3); the Console follows the bottom and stays
 //                         put when scrolled up; Cancel lists the run as Cancelled; after it, the
 //                         badge reads "<n> fail" with n the Console's FAIL lines
 //   m11-dock-row          an OK run's row and its opened record equal run.json: the per-band
@@ -26,6 +27,7 @@ import { ACOUSTIC_NUMBER, clickSelector, consoleLines, PARAMETER_NUMBER } from '
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
 import { PLANTED } from '../lib/plant-loss.ts';
 import { processesFrom } from '../lib/procs.ts';
+import { decimalAbove } from '../lib/runs.ts';
 import { env } from '../lib/types.ts';
 
 const P = (name: string, file: string) => path.join(env('M11_P'), name, file);
@@ -294,6 +296,13 @@ describe('M11 dock', () => {
     assert.equal(await attrOf(`[data-run-counts="${name}"] [data-part="counts-check"]`, 'data-match'), 'true');
     const after = await assertFailBadge();
     assert.ok(after >= before + 2, `the two FAIL lines added during the run are counted: ${before} then ${after}`);
+    // The live line moved with the run (M11 review F3): each sample above the one before. A line
+    // frozen at the run's first '#' passed the checks on the samples above (the review's mutation
+    // M23). Judged after Cancel, so a failure here leaves no run going.
+    for (let i = 1; i < samples.length; i++) {
+      const [now, was] = [samples[i].text ?? '', samples[i - 1].text ?? ''];
+      assert.equal(decimalAbove(now.slice(1), was.slice(1)), true, `the live PROGRESS line did not move: ${samples.map((s) => s.text).join(', ')}`);
+    }
   });
 
   it('m11-dock-row: an OK run\'s row and record equal its run.json, and the Console\'s counts strip equals run.json', async () => {

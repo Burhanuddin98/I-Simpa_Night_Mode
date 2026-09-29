@@ -16,7 +16,8 @@
 //                      with no loss line
 //   m11-sim-link       the "Run <n>" link selects that run on the Results step
 //   m11-sim-running    during the hall's solve: "Solving · <p> %" (p one of the run's '#' lines
-//                      at the digits shown, as m11-h proves it), Run disabled with RUN_ACTIVE and
+//                      at the digits shown, as m11-h proves it, and rising from sample to sample:
+//                      M11 review F3), Run disabled with RUN_ACTIVE and
 //                      "Running …", the elapsed clock; a click on Cancel ends it Cancelled with no
 //                      spps.exe left running from the gate's private copy
 //
@@ -31,7 +32,7 @@ import { ACOUSTIC_NUMBER, clickSelector, EXEMPT_REGIONS, PARAMETER_NUMBER } from
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
 import { PLANTED } from '../lib/plant-loss.ts';
 import { processesFrom } from '../lib/procs.ts';
-import { limitPct, type Manifest, progressValues, readManifest, roundedTo, worstLoss } from '../lib/runs.ts';
+import { decimalAbove, limitPct, type Manifest, progressValues, readManifest, roundedTo, worstLoss } from '../lib/runs.ts';
 import { env } from '../lib/types.ts';
 
 interface Row {
@@ -497,5 +498,12 @@ describe('M11 simulate', () => {
     console.log(`m11-sim-running receipt: ${lines.length} '#' lines in ${runDir(hall, name)}`);
     assert.ok(lines.length > 0, `no '#' line in ${runDir(hall, name)}'s solver.stdout.txt`);
     for (const s of samples) assert.ok(provenProgress(s, lines), `${s} % is no '#' line of ${name} at the digits shown`);
+    // And the readout moved with the solve (M11 review F3): each sample above the one before. A
+    // head frozen at its first value passed the check above, since that value is one of the
+    // run's '#' lines (the review's mutation M23: 0.01 five times). Judged after Cancel, so a
+    // failure here leaves no run going.
+    for (let i = 1; i < samples.length; i++) {
+      assert.equal(decimalAbove(samples[i], samples[i - 1]), true, `the progress readout did not move: ${samples.join(', ')}`);
+    }
   });
 });

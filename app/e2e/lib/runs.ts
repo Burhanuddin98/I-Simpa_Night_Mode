@@ -184,6 +184,15 @@ export function parseDecimal(text: string): { n: bigint; k: number } | null {
   return { n: m[1] === '-' ? -n : n, k };
 }
 
+/** Whether decimal numeral `a` is strictly above `b`, compared exactly (`1.667e-05`, `25.22`);
+ * null when either is not a numeral. */
+export function decimalAbove(a: string, b: string): boolean | null {
+  const x = parseDecimal(a);
+  const y = parseDecimal(b);
+  if (!x || !y) return null;
+  return x.n * 10n ** BigInt(y.k) > y.n * 10n ** BigInt(x.k);
+}
+
 /** A non-negative decimal rounded half up to `d` decimals, as the integer `round(x · 10^d)`. */
 export function roundedTo(text: string, d: number): bigint | null {
   const x = parseDecimal(text);

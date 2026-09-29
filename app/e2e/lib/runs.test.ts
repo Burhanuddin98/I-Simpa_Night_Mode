@@ -8,6 +8,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import {
   bandLosses,
+  decimalAbove,
   elapsedS,
   endedCalculation,
   limitPct,
@@ -111,6 +112,17 @@ test('decimals parse exactly and round half up at the displayed digits', () => {
   assert.equal(roundedTo('25.2', 2), 2520n);
   assert.equal(roundedTo('99.99', 0), 100n);
   assert.equal(roundedTo('1.667e-05', 2), 0n);
+});
+
+test('one progress figure is above another, compared exactly', () => {
+  assert.equal(decimalAbove('0.11', '0.01'), true);
+  assert.equal(decimalAbove('0.1', '0.09'), true);
+  assert.equal(decimalAbove('1.667e-05', '0.0006667'), false);
+  assert.equal(decimalAbove('0.0006667', '1.667e-05'), true);
+  // Equal values, however written, are not above: a frozen readout fails.
+  assert.equal(decimalAbove('0.01', '0.01'), false);
+  assert.equal(decimalAbove('0.10', '0.1'), false);
+  assert.equal(decimalAbove('x', '0.1'), null);
 });
 
 test('logs read as the core streams them, from a run folder', (t) => {
