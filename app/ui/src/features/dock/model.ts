@@ -272,7 +272,8 @@ export function baseName(path: string): string {
 // quotes the loss to four decimals ("2000 Hz: 3 of 150000 (0.0020 %)"). Such a detail is not
 // shown; the row says it is in run.json, and the loss itself is shown per band, proven.
 const UNIT_NUMBER = /\d\s*(dB|s|ms|%)(?![\p{L}\p{N}])/u;
-const PARAMETER_NUMBER = /\b(T15|T20|T30|EDT|RT|C50|C80|D50|Ts|STI|SPL|LF|LFC|G)\b\s*[:=]?\s*[-+]?\d/;
+const PARAMETER_NUMBER =
+  /(?:\b(?:T15|T20|T30|T60|RT60|EDT|RT|C50|C80|D50|Ts|STI|SPL|LF|LFC|G)\b|\b(?:[Ss]abine|[Ee]yring|[Rr]everberation time)\b)\s*[:=·]?\s*[-+]?\d/;
 
 export type Detail = { kind: 'none' } | { kind: 'shown'; text: string } | { kind: 'withheld' };
 

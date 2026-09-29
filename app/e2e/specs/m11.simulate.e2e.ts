@@ -25,7 +25,7 @@ import { strict as assert } from 'node:assert';
 import { copyFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { GRAMMAR } from '../lib/acoustic.ts';
-import { ACOUSTIC_NUMBER, clickSelector, PARAMETER_NUMBER } from '../lib/dom.ts';
+import { ACOUSTIC_NUMBER, clickSelector, EXEMPT_REGIONS, PARAMETER_NUMBER } from '../lib/dom.ts';
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
 import { processesFrom } from '../lib/procs.ts';
 import { limitPct, type Manifest, progressValues, readManifest, roundedTo, worstLoss } from '../lib/runs.ts';
@@ -113,11 +113,13 @@ async function runByClick(selector: string, timeout = 180_000): Promise<Row> {
 
 /**
  * This package's regions (the props panel, the Run button, the Simulate sub): their text with
- * inputs, geometry facts and diagnostics hidden, their text with nothing hidden, and their
- * diagnostic spans.
+ * diagnostics hidden, and inputs and geometry facts hidden only inside their own regions
+ * (dom.ts EXEMPT_REGIONS: here, the Simulate settings), their text with nothing hidden, their
+ * diagnostic spans, and every `[data-input]` or `[data-geometry]` outside its regions (`strays`,
+ * which must be none: M11 review F2).
  */
 const scanProps = () =>
-  browser.execute(() => {
+  browser.execute((exempt: Record<string, Record<string, string>>) => {
     const props = document.querySelector<HTMLElement>('[data-props-step]');
     if (!props) return null;
     const regions = [props, document.querySelector<HTMLElement>('[data-part="run"]'), document.querySelector<HTMLElement>('[data-step="simulate"] [data-part="sub"]')].filter(
@@ -132,15 +134,24 @@ const scanProps = () =>
       })),
     );
     const whole = regions.map((r) => r.innerText).join('\n');
-    const hide = regions.flatMap((r) => [...r.querySelectorAll<HTMLElement>('[data-input], [data-geometry], [data-diagnostic]')]);
+    const hide = regions.flatMap((r) => [...r.querySelectorAll<HTMLElement>('[data-diagnostic]')]);
+    const strays: string[] = [];
+    for (const attr of Object.keys(exempt)) {
+      for (const r of regions) {
+        for (const e of r.querySelectorAll<HTMLElement>(`[${attr}]`)) {
+          if (Object.values(exempt[attr]).some((sel) => e.closest(sel) !== null)) hide.push(e);
+          else strays.push(`[${attr}] "${(e.textContent ?? '').slice(0, 80)}"`);
+        }
+      }
+    }
     const before = hide.map((e) => e.style.display);
     hide.forEach((e) => (e.style.display = 'none'));
     try {
-      return { step: props.getAttribute('data-props-step'), text: regions.map((r) => r.innerText).join('\n'), whole, diags };
+      return { step: props.getAttribute('data-props-step'), text: regions.map((r) => r.innerText).join('\n'), whole, diags, strays };
     } finally {
       hide.forEach((e, i) => (e.style.display = before[i]));
     }
-  });
+  }, EXEMPT_REGIONS);
 
 /** The running block's head and its progress span, read in one go (both move during a solve). */
 const runningHead = () =>
@@ -270,6 +281,7 @@ describe('M11 simulate', () => {
       const s = await scanProps();
       assert.ok(s, 'the properties panel is shown');
       console.log(`m11-sim-numbers receipt: step ${s.step}, ${s.diags.length} diagnostic span(s) ${JSON.stringify(s.diags)}`);
+      assert.deepEqual(s.strays, [], `step ${step}: [data-input] or [data-geometry] outside its regions`);
       const hit = s.text.match(ACOUSTIC_NUMBER);
       assert.equal(hit, null, `step ${step}: "${hit?.[0]}" outside [data-input] and the diagnostics`);
       const param = s.whole.match(PARAMETER_NUMBER);

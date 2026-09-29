@@ -58,6 +58,7 @@ const verb = (key: string, text: string, sayNo = false): VerbatimEl => ({ key, t
 const snap = (over: Partial<DomSnapshot> = {}): DomSnapshot => ({
   diagnostics: [],
   verbatim: [],
+  exempt: [],
   wholeText: 'Geometry\nMaterials\nRun #1 · SPPS finished · OK · Particles lost (limit )',
   hiddenText: 'Geometry\nMaterials\nRun #1 · SPPS finished · OK · Particles lost (limit )',
   acousticsText: null,
@@ -99,6 +100,24 @@ test('rule 2: a parameter name followed by a number, whatever the unit, nothing 
   assert.deepEqual(rules(snap({ wholeText: 'T30: 1.8' })), ['2']);
   assert.deepEqual(rules(snap({ wholeText: 'EDT=-0.2' })), ['2']);
   assert.deepEqual(rules(snap({ wholeText: 'T30 and EDT appear in M12' })), []);
+  // The reverberation time's other spellings (M11 review F2, mutation M13), with a `·` allowed.
+  for (const t of ['Reverberation time · Sabine 1.52 s', 'Eyring: 1.4', 'RT60 1.9', 'T60 = 2.0', 'reverberation time · 1.5', 'sabine 1.5']) {
+    assert.deepEqual(rules(snap({ wholeText: t })), ['2'], t);
+  }
+  // Names with no number after them, and the app's own text, stay clean.
+  for (const t of ['Live · Sabine and Eyring, 1/1 octave', 'Run 3 · Baseline', 'Model closed · 6 surfaces', 'rt 3 g 2', 'Start 3']) {
+    assert.deepEqual(rules(snap({ wholeText: t })), [], t);
+  }
+});
+
+test('rule 1x: an exempt attribute holds only inside its regions', () => {
+  const ex = (attr: string, region: string | null, sayNo = false) => ({ attr, region, text: '1.52 s', sayNo });
+  assert.deepEqual(rules(snap({ exempt: [ex('data-geometry', 'geometry-panel'), ex('data-input', 'simulate-settings')] })), []);
+  assert.deepEqual(rules(snap({ exempt: [ex('data-geometry', null)] })), ['1x']);
+  assert.deepEqual(rules(snap({ exempt: [ex('data-input', null), ex('data-geometry', null)] })), ['1x', '1x']);
+  // The detail names the regions it should have been in.
+  const v = judge(snap({ exempt: [ex('data-geometry', null, true)] }), proof)[0];
+  assert.ok(v.sayNo && v.detail.includes('statusbar-model-fact') && v.detail.includes('geometry-panel'), v.detail);
 });
 
 test('the Acoustics panel holds no digit', () => {
@@ -181,27 +200,32 @@ test('a plant whose host is missing fails the snapshot', () => {
 
 test('say-NO: every plant is flagged under its own rule', () => {
   const cases = sayNoCases(RUN, '1.4', '0.13');
-  assert.equal(cases.length, 5);
-  const texts: Record<string, DomSnapshot> = {
-    '1': snap({ hiddenText: 'Ready\nT30 1.8 s', wholeText: 'Ready\nT30 1.8 s' }),
-    '2': snap({ wholeText: 'Ready\nSTI 0.62 · D50 0.45', hiddenText: 'Ready\nSTI 0.62 · D50 0.45' }),
-  };
+  assert.equal(cases.length, 8);
   for (const c of cases) {
-    const s =
-      texts[c.rule] ??
-      (c.plant.attrs['data-diagnostic']
-        ? snap({
-            diagnostics: [
-              diag(c.plant.attrs['data-diagnostic'], c.plant.text, {
-                sayNo: true,
-                region: c.plant.host.includes('acoustics') ? null : 'runs',
-              }),
-            ],
-          })
-        : snap({ verbatim: [verb(c.plant.attrs['data-verbatim'], c.plant.text, true)] }));
+    // What collectSnapshot reads with the plant in its host.
+    const text = `Ready\n${c.plant.text}`;
+    const exemptAttr = ['data-geometry', 'data-input'].find((a) => a in c.plant.attrs);
+    let s: DomSnapshot;
+    if (c.rule === '1' || c.rule === '2') {
+      // Rule 2 reads the whole text; an exempt plant in its region is hidden from rule 1.
+      s = snap({ wholeText: text, hiddenText: exemptAttr ? 'Ready' : text });
+    } else if (c.rule === '1x') {
+      assert.ok(exemptAttr, c.name);
+      s = snap({ wholeText: text, hiddenText: text, exempt: [{ attr: exemptAttr, region: null, text: c.plant.text, sayNo: true }] });
+    } else if (c.plant.attrs['data-diagnostic']) {
+      s = snap({
+        diagnostics: [diag(c.plant.attrs['data-diagnostic'], c.plant.text, { sayNo: true, region: c.plant.host.includes('acoustics') ? null : 'runs' })],
+      });
+    } else {
+      s = snap({ verbatim: [verb(c.plant.attrs['data-verbatim'], c.plant.text, true)] });
+    }
     const vs = judge(s, proof);
     assert.ok(flagged(c, vs), `${c.name}: not flagged under rule ${c.rule}: ${JSON.stringify(vs)}`);
   }
+  // H8 sits in an allowed region: rule 1 cannot see it, so only rule 2's wider names catch it.
+  const h8 = cases[7];
+  assert.equal(h8.rule, '2');
+  assert.deepEqual(rules(snap({ wholeText: `Ready\n${h8.plant.text}`, hiddenText: 'Ready' })), ['2']);
   // The elapsed plant always differs from the manifest.
   assert.equal(sayNoCases(RUN, '1.8', '0.00')[2].plant.text, '2.8 s');
   // And the loss plant is otherwise honest: only its region gives it away.

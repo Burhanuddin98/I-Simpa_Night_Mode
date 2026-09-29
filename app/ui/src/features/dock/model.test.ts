@@ -214,8 +214,12 @@ test('a core detail that quotes a number with a unit, or a parameter with a numb
   assert.deepEqual(detailView('level 85 dB'), { kind: 'withheld' });
   assert.deepEqual(detailView('STI 0.62'), { kind: 'withheld' });
   assert.deepEqual(detailView('T30: 1.8'), { kind: 'withheld' });
+  // The reverberation time's other spellings, with no unit to give them away (M11 review F2).
+  for (const t of ['Sabine 1.52', 'Eyring: 1.4', 'RT60 2', 'T60=1.9', 'reverberation time · 1.5']) {
+    assert.deepEqual(detailView(t), { kind: 'withheld' }, t);
+  }
   // Counts, frequencies, exit codes and file names stay.
-  for (const ok of ['125 Hz: 9999', 'exit 0xC0000005: access violation', '2 of 5 expected files: a.gabe (missing)', '3 solvers']) {
+  for (const ok of ['125 Hz: 9999', 'exit 0xC0000005: access violation', '2 of 5 expected files: a.gabe (missing)', '3 solvers', 'Sabine and Eyring, 1/1 octave']) {
     assert.equal(detailView(ok).kind, 'shown', ok);
   }
 });

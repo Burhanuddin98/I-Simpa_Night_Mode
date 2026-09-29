@@ -9,9 +9,12 @@
 //
 // The rules, each able to fail:
 //   1. A number next to a unit (M10's ACOUSTIC_NUMBER, unchanged) in the page's text with
-//      [data-input], [data-geometry], [data-diagnostic] and [data-verbatim] hidden. Hiding every
-//      diagnostic and verbatim element is the same verdict as hiding only the proven ones: an
-//      unproven one is a violation of rule 3 or 4 by itself.
+//      [data-diagnostic] and [data-verbatim] hidden, and [data-input] and [data-geometry] hidden
+//      only inside their own regions (dom.ts EXEMPT_REGIONS). Hiding every diagnostic and
+//      verbatim element is the same verdict as hiding only the proven ones: an unproven one is a
+//      violation of rule 3 or 4 by itself.
+//   1x. A [data-input] or [data-geometry] element outside its regions (M11 review F2: the
+//      exemptions covered the whole page).
 //   2. A parameter's name followed by a number (PARAMETER_NUMBER), anywhere, nothing hidden.
 //   3. A [data-diagnostic] span that is not (i) one of the four fields, (ii) inside an allowed
 //      region, a leaf, (iii) its field's grammar exactly, and (iv) the manifest's own value at the
@@ -24,7 +27,7 @@
 // nothing and names no function inside itself (tsx's keepNames would wrap a named one in a
 // helper the page does not have).
 import path from 'node:path';
-import { ACOUSTIC_NUMBER, PARAMETER_NUMBER } from './dom.ts';
+import { ACOUSTIC_NUMBER, EXEMPT_REGIONS, PARAMETER_NUMBER } from './dom.ts';
 import {
   elapsedS,
   endedCalculation,
@@ -68,15 +71,18 @@ export const ALLOWED_REGIONS: Record<string, string> = {
 export interface SnapshotConfig {
   /** Region name to selector: a diagnostic's region is the first that contains it. */
   regions: Record<string, string>;
-  /** Hidden for rule 1. */
+  /** Hidden for rule 1, wherever they are. */
   hide: string[];
+  /** Hidden for rule 1 only inside their regions: attribute, then region name to selector. */
+  exempt: Record<string, Record<string, string>>;
   /** The Acoustics panel. */
   acoustics: string;
 }
 
 export const SNAPSHOT_CONFIG: SnapshotConfig = {
   regions: ALLOWED_REGIONS,
-  hide: ['[data-input]', '[data-geometry]', '[data-diagnostic]', '[data-verbatim]'],
+  hide: ['[data-diagnostic]', '[data-verbatim]'],
+  exempt: EXEMPT_REGIONS,
   acoustics: '[data-dock-panel="acoustics"]',
 };
 
@@ -104,14 +110,25 @@ export interface VerbatimEl {
   sayNo: boolean;
 }
 
+/** A `[data-input]` or `[data-geometry]` element, and the region that makes it exempt. */
+export interface ExemptEl {
+  attr: string;
+  /** The first of its attribute's regions that contains it; null outside all of them. */
+  region: string | null;
+  text: string;
+  sayNo: boolean;
+}
+
 export interface DomSnapshot {
   /** Set when a plant's host was missing: nothing else was read. */
   error?: string;
   diagnostics: DiagnosticEl[];
   verbatim: VerbatimEl[];
+  exempt: ExemptEl[];
   /** document.body.innerText, nothing hidden (rule 2). */
   wholeText: string;
-  /** document.body.innerText with `hide` hidden (rule 1). */
+  /** document.body.innerText with `hide` hidden, and the exempt elements inside their regions
+   * (rule 1). */
   hiddenText: string;
   /** The Acoustics panel's text; null when it is not shown. */
   acousticsText: string | null;
@@ -127,7 +144,7 @@ export function collectSnapshot(cfg: SnapshotConfig, plant: Plant | null): DomSn
   if (plant) {
     const host = document.querySelector(plant.host);
     if (!host) {
-      return { error: `no ${plant.host} to plant in`, diagnostics: [], verbatim: [], wholeText: '', hiddenText: '', acousticsText: null };
+      return { error: `no ${plant.host} to plant in`, diagnostics: [], verbatim: [], exempt: [], wholeText: '', hiddenText: '', acousticsText: null };
     }
     planted = document.createElement(plant.tag);
     for (const [k, v] of Object.entries(plant.attrs)) planted.setAttribute(k, v);
@@ -150,8 +167,17 @@ export function collectSnapshot(cfg: SnapshotConfig, plant: Plant | null): DomSn
       text: el.textContent ?? '',
       sayNo: el.hasAttribute('data-say-no'),
     }));
+    const exempt: ExemptEl[] = [];
+    const inRegion: HTMLElement[] = [];
+    for (const attr of Object.keys(cfg.exempt)) {
+      for (const el of document.querySelectorAll<HTMLElement>(`[${attr}]`)) {
+        const region = Object.keys(cfg.exempt[attr]).find((k) => el.closest(cfg.exempt[attr][k]) !== null) ?? null;
+        if (region !== null) inRegion.push(el);
+        exempt.push({ attr, region, text: (el.textContent ?? '').slice(0, 120), sayNo: el.hasAttribute('data-say-no') });
+      }
+    }
     const wholeText = document.body.innerText;
-    const hidden = [...document.querySelectorAll<HTMLElement>(cfg.hide.join(', '))];
+    const hidden = [...document.querySelectorAll<HTMLElement>(cfg.hide.join(', ')), ...inRegion];
     const before = hidden.map((el) => el.style.display);
     hidden.forEach((el) => {
       el.style.display = 'none';
@@ -168,6 +194,7 @@ export function collectSnapshot(cfg: SnapshotConfig, plant: Plant | null): DomSn
     return {
       diagnostics,
       verbatim,
+      exempt,
       wholeText,
       hiddenText,
       acousticsText: acoustics ? (acoustics.textContent ?? '') : null,
@@ -218,7 +245,7 @@ export function runResolver(roots: string[], folders: (root: string) => string[]
   };
 }
 
-export type Rule = '1' | '2' | '3i' | '3ii' | '3iii' | '3iv' | '4' | 'acoustics';
+export type Rule = '1' | '1x' | '2' | '3i' | '3ii' | '3iii' | '3iv' | '4' | 'acoustics';
 
 export interface Violation {
   rule: Rule;
@@ -278,7 +305,12 @@ export function judge(snap: DomSnapshot, proof: (run: string) => RunProof | null
   const out: Violation[] = [];
   if (snap.error) return [{ rule: '1', text: '', detail: snap.error, sayNo: false }];
   for (const t of matchesWithContext(snap.hiddenText, ACOUSTIC_NUMBER)) {
-    out.push({ rule: '1', text: t, detail: 'a number next to a unit outside [data-input], [data-geometry], diagnostics and verbatim lines', sayNo: false });
+    out.push({ rule: '1', text: t, detail: 'a number next to a unit outside diagnostics, verbatim lines, and [data-input] and [data-geometry] in their regions', sayNo: false });
+  }
+  for (const e of snap.exempt) {
+    if (e.region !== null) continue;
+    const regions = Object.keys(EXEMPT_REGIONS[e.attr as keyof typeof EXEMPT_REGIONS] ?? {}).join(', ');
+    out.push({ rule: '1x', text: `[${e.attr}] "${e.text}"`, detail: `a [${e.attr}] element outside its regions (${regions || 'none'})`, sayNo: e.sayNo });
   }
   for (const t of matchesWithContext(snap.wholeText, PARAMETER_NUMBER)) {
     out.push({ rule: '2', text: t, detail: "a room-acoustic parameter's name followed by a number", sayNo: false });
@@ -354,10 +386,18 @@ export interface SayNo {
   marker?: string;
 }
 
+/** The host of the say-NO plant inside an allowed `[data-geometry]` region: the status bar's
+ * model fact, shown whenever a project with a checked model is open. */
+export const MODEL_FACT = EXEMPT_REGIONS['data-geometry']['statusbar-model-fact'];
+
 /**
- * The five plants the checker must flag, given a run whose manifest is known (`run`, its
- * elapsed time as displayed, `elapsed`, and its worst loss, `lossPct`). The elapsed plant reads
- * 1.8 s unless the manifest says exactly that, when it reads 2.8 s: it must differ.
+ * The plants the checker must flag, given a run whose manifest is known (`run`, its elapsed
+ * time as displayed, `elapsed`, and its worst loss, `lossPct`). The elapsed plant reads 1.8 s
+ * unless the manifest says exactly that, when it reads 2.8 s: it must differ.
+ *
+ * The last three hold the exemptions to their regions (M11 review F2): a `[data-geometry]` and a
+ * `[data-input]` element outside every region of theirs, and the review's mutation M13 inside an
+ * allowed region, which only rule 2's wider names can see.
  */
 export function sayNoCases(run: string, elapsed: string, lossPctText: string): SayNo[] {
   const wrong = elapsed === '1.8' ? '2.8 s' : '1.8 s';
@@ -378,6 +418,22 @@ export function sayNoCases(run: string, elapsed: string, lossPctText: string): S
       name: 'a verbatim line that is not in the logs',
       plant: { host: ALLOWED_REGIONS.console, tag: 'div', attrs: { 'data-verbatim': `${run}:solver` }, text: 'Reverberation estimate written by nobody' },
       rule: '4',
+    },
+    {
+      name: 'H6: a [data-geometry] span reading 1.52 s in the status bar, outside the model fact',
+      plant: { host: ALLOWED_REGIONS.statusbar, tag: 'span', attrs: { 'data-geometry': '' }, text: '1.52 s' },
+      rule: '1x',
+    },
+    {
+      name: 'H7: a [data-input] span reading 85 dB in the Runs tab',
+      plant: { host: ALLOWED_REGIONS.runs, tag: 'span', attrs: { 'data-input': '' }, text: '85 dB' },
+      rule: '1x',
+    },
+    {
+      name: "H8: 'Reverberation time · Sabine 1.52 s' in a [data-geometry] span inside the model fact",
+      plant: { host: MODEL_FACT, tag: 'span', attrs: { 'data-geometry': '' }, text: 'Reverberation time · Sabine 1.52 s' },
+      rule: '2',
+      marker: 'Sabine 1.52',
     },
   ];
 }
