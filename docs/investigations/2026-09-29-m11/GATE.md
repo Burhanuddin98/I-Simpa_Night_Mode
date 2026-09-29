@@ -1,4 +1,79 @@
-# M11 gate: passed
+# M11 gate: passed, and passed again after the review's fixes
+
+## After the review (2026-09-29 23:10 to 2026-09-30 00:05)
+
+The review (`REVIEW-gate-design.md`) found two majors in gate honesty, F1 and F2, and minors. Each
+fix is its own commit on `m11`, on top of `ca96476`:
+
+| Commit | Finding | What changed |
+|---|---|---|
+| `72e6f25` | **F2, major:** m11-h's exemption for `[data-geometry]` and `[data-input]` covered the whole page | Each attribute is exempt only inside a listed region (`app/e2e/lib/dom.ts` `EXEMPT_REGIONS`). Outside its regions it hides nothing, and m11-h flags the element itself (rule 1x). m11-sim-numbers reports it as a stray, and m10-h's helper reads its text. `PARAMETER_NUMBER` adds RT60, T60, Sabine, Eyring and "reverberation time", with `·` allowed before the number; the UI's copy of the pattern follows it. m11-h has three new say-NO plants, H6-H8 |
+| `3e6f9e0` | **F1, major:** no fixture had a non-zero particle loss | `m11.ps1` makes one real box run through the core in `p\loss`, and `app/e2e/lib/plant-loss.ts` rewrites that `run.json`'s statistics to a known loss: 150, 1,234, 7 and 1,000 of 150,000 in four bands. The worst is **0.82 % at 500 Hz, not the first band**, under the 1 % limit, so the OK verdict stays true, and every band still sums to its total. m11-a, m11-dock-row, m11-dock-h, m11-sim-last-run, m11-sim-numbers and m11-h read it. Each is checked against `run.json` recomputed in BigInt and against the hand-worked values; m11-h also requires a non-zero loss span to be proven |
+| `0ca241d` | **F3, minor:** a frozen progress readout passed | m11-sim-running and m11-dock-live require each sample to be above the one before, compared exactly (`runs.ts` `decimalAbove`). This is judged after Cancel, so a failure leaves no run going. Fixed, not deferred: a stuck percentage is a wrong number shown to the user |
+| `d40bb9d` | **Design B.10, minor:** "FAIL 0" was painted red in the Console's counts strip | A class word takes its colour only when its count is above 0. It changes what users see, so it is a product question with the reviewer's default built (decision-log row 28). m11-dock-row checks it: FAIL 0 is the same grey as INFO, and OK 1 is not |
+| `414ad5c` | the rest | The review and its screenshots are committed. F4, B.15, B.16 and B.20 go to `docs/v1.1-backlog.md` rows 23-26, each with its receipt and a "done when". Decision-log row 28 records the calls |
+
+**Why the minors split as they do (v1 filter, decision row 5).** F3 and B.10 can put a wrong or
+misleading number in front of a user: a stuck percentage, and a zero count painted as a failure.
+The other four cannot. F4 is a static lint that the live focus watcher backs up in every full
+gate. B.15, B.16 and B.20 are layout: the digits are never covered, every reason's codes are
+shown, and the percentage is proven. The review's two "notes, not defects" are not findings and
+were left as written.
+
+**The review's `REVIEW-code.md` does not exist.** It is not in this folder, in any worktree, in the
+main checkout or in the session temp folders (searched at 23:16). The fixes answer the two majors
+the task named, both from `REVIEW-gate-design.md`, and that file's minors.
+
+### The fixes, proven by the review's own mutations (on this tree, then reverted)
+
+Each mutation was a temporary edit to the UI, built and run with `m11.ps1 -Only e2e`, then
+reverted with `git checkout -- <file>`. Afterwards `git status` showed only my intended changes,
+and no `spps.exe`, `app.exe`, `tauri-driver.exe` or `msedgedriver.exe` was left running.
+
+| Mutation | Run (work folder) | Result |
+|---|---|---|
+| **M01**: the Runs row's loss span prints a literal `0.00 %`. **M13**: the Simulate panel's last-run block shows "Reverberation time · `<span data-geometry>Sabine 1.52 s</span>`" | `-Spec gate,dock,simulate` (`20260929-232711`) | **FAIL, 5 ids**. m11-a: `'Particles lost 0.00 %'` against `'Particles lost 0.82 %'`. m11-dock-row: the same. m11-dock-h: `loss_pct "0.00 %" is not run.json's "0.82 %"`. m11-h: the box's Simulate step broke rule 1, **rule 1x** (`a [data-geometry] element outside its regions`) and **rule 2** (`Sabine 1.52`). m11-sim-numbers: `[data-geometry] "Sabine 1.52 s"` outside its regions. Before the fixes, M01 passed 13 of 13 and M13 passed 14 of 14 |
+| **M01b**: the Simulate panel's loss prints `0.00 %` | `-Spec gate,simulate` (`20260929-232851`) | **FAIL**. m11-sim-last-run: `'0.00 %' !== '0.82 %'`. m11-h, rule 3 (iv): `run.json gives '0.82 %'` on the planted run's Simulate step. The simulate ids after it failed in a cascade. The spec now reopens the box in a `finally`, so a failure cannot start a run in the planted project |
+| **M23**: the progress text is kept at its first value (`actions.ts`) | `-Spec simulate,dock` (`20260929-233332`) | **FAIL**. m11-sim-running: `the progress readout did not move: 0.01, 0.01, 0.01, 0.01, 0.01`. m11-dock-live: `#0.01` in all 8 samples. dock-row and dock-h then failed in a cascade, because the run was left active. The check has since moved after Cancel. Before the fix, M23 passed 19 of 19 |
+| none (the fixed tree) | `-Spec gate,dock,simulate` (`20260929-232519`) | 19 of 19 passed |
+
+### The final runs, on `414ad5c` (every fix committed, the tree clean)
+
+| Run | When | Result |
+|---|---|---|
+| `powershell -File tools/gates/m11.ps1`, bare | 23:38:48-23:52:15 | **M11 PASSED**, exit 0. **30 of 30** required e2e ids, 0 failures, 0 skipped. Every static, Rust and harness check PASS: the inventory is 37; `npm test` 134 of 134, checksum known answers 6 of 6; harness `node --test` **40 of 40**, up from 36; `cargo test -p app` 51 passed; **core crates 72 test binaries, 762 passed, 0 failed, 30 ignored, in 542 s** at 4 test threads. The planted-loss run's per-band loss is `125:150 250:0 500:1234 1000:7 2000:1000 4000:0`, verdict OK. Inside it, `m10.ps1 -SkipCore` exited 0 and `m9.ps1` printed **M9 PASSED**. `m11-focus` PASS: **0 foreground changes in 170 s**, 646 samples, 14 app sessions. Work folder `C:\tmp\nm-target\gates\m11\20260929-233848`: 362 files, 17.7 MB. Files left on B:: 0 |
+| `powershell -File tools/gates/m10.ps1 -SolversDir C:\tmp\nm-m8a-solvers`, in full, `SIMPA_TETGEN160` set to the TetGen 1.6.0 reference build | 23:52:46-00:02:14 | **M10 PASSED**, exit 0. Every static check PASS; **core crates 72 test binaries, 762 passed, 0 failed, 30 ignored, in 498 s**; 27 tests, 13 required ids, 0 failures, 0 skipped; **m10-h passed with the exemptions now scoped** (the same helper no longer hides an out-of-region element) |
+| `powershell -File tools/gates/m9.ps1 -TargetDir C:\tmp\nm-target` | 00:02:38-00:03:22 | **M9 PASSED**, exit 0, every check PASS |
+
+**Receipts from the M11 run** (`wdio.log`):
+- **m11-a:** the box row reads `Particles lost 0.00 %`, as before. The planted run's row reads
+  `Particles lost 0.82 %` and `at 500 Hz`; `run.json`'s worst band is 500 Hz, 1234 of 150000, 0.82 %.
+- **m11-dock-row:** the planted run, band by band: `125 Hz 150 of 150000 0.10 %; 250 Hz 0 of 150000
+  0.00 %; 500 Hz 1234 of 150000 0.82 %; 1000 Hz 7 of 150000 0.00 %; 2000 Hz 1000 of 150000 0.67 %;
+  4000 Hz 0 of 150000 0.00 %`. The counts strip's class colours: FAIL (0) `rgb(133, 133, 142)` =
+  INFO `rgb(133, 133, 142)`, OK (1) `rgb(116, 211, 159)`.
+- **m11-sim-last-run / m11-sim-numbers:** the planted run's idle block reads `0.82 %` and `1 %`, both
+  leaf diagnostic spans naming the run.
+- **m11-h:** **8 say-NO plants** each flagged under its own rule: H1 rule 1, H2 rule 2, a wrong
+  `elapsed_s` 3 (iv), a `loss_pct` in the Acoustics panel 3 (ii), a false verbatim line 4. Then
+  **H6** (a `[data-geometry]` "1.52 s" in the status bar, outside the model fact) **rule 1x**,
+  **H7** (a `[data-input]` "85 dB" in the Runs tab) **rule 1x**, and **H8** ("Reverberation time ·
+  Sabine 1.52 s" in `[data-geometry]` inside the model fact, an allowed region) **rule 2**. There
+  were 3 mid-run views, clean. Then **60 views** (box, hall, mesh failure and planted loss × 5
+  steps × 3 dock tabs) were clean: 162 diagnostic spans proven, **23 of them a non-zero loss**, and
+  1,700 verbatim lines.
+- **m11-sim-running:** `0.01, 0.11, 0.21, 0.31, 0.41`. **m11-dock-live:** `#0.44 … #3.08`, rising at
+  every sample.
+
+**Files.** On C:, this session made 14 gate work folders: 6 of M11, 3 of M10 and 5 of M9, together
+1,542 files and 95.7 MB. Five of the M11 folders are partial runs. `20260929-232345` failed at the
+planted-loss step's first draft, which read `simpa run`'s stdout and stderr as one stream. The
+other four are the passing partial run and the three mutation runs. The session scratchpad holds
+238 files, 5.3 MB: logs, commit messages, and two probe copies of a run folder. On B:, the new
+tracked files are `app/e2e/lib/plant-loss.ts` and its test, and the review with its 7 PNGs; no run
+left a file. C: free: **21.3 GB** at the end (23.6 GB at 23:16).
+
+## The first pass (2026-09-29 21:44, before the review)
 
 2026-09-29, Grace, branch `m11` at **`acdf1e6`** (the integration commit; the only uncommitted
 change during the run was `docs/scope.md`, text only). Built to `PLAN.md` on the foundation
