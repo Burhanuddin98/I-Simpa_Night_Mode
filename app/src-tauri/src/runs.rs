@@ -298,10 +298,29 @@ pub fn loss_pct(lost: u64, total: u64) -> String {
     format!("{}.{:02}", h / 100, h % 100)
 }
 
-/// The loss limit (a fraction) in percent: `limit × 100`, printed as its shortest decimal, so
-/// with no trailing zeros (0.01 is `1`).
+/// The loss limit (a fraction) in percent: the limit's shortest decimal (Rust's `{}` of an f64,
+/// which never uses an exponent) with its point moved two places, so with no trailing zeros
+/// (0.01 is `1`). Moving the point in the text, not multiplying the double by 100, is what keeps
+/// 0.07 at `7` (M11 review 2, app 5: `0.07 * 100.0` is 7.000000000000001, and the Runs tab read
+/// "7.000000000000001 % limit" for `simpa run --loss-limit 0.07`). NaN and the infinities print
+/// as Rust prints them.
 pub fn limit_pct(limit: f64) -> String {
-    format!("{}", limit * 100.0)
+    if !limit.is_finite() {
+        return format!("{limit}");
+    }
+    let text = format!("{}", limit.abs());
+    let (int, frac) = text.split_once('.').unwrap_or((&text, ""));
+    let digits = format!("{int}{frac:0<2}");
+    let (int, frac) = digits.split_at(int.len() + 2);
+    let int = int.trim_start_matches('0');
+    let frac = frac.trim_end_matches('0');
+    let int = if int.is_empty() { "0" } else { int };
+    let sign = if limit < 0.0 { "-" } else { "" };
+    if frac.is_empty() {
+        format!("{sign}{int}")
+    } else {
+        format!("{sign}{int}.{frac}")
+    }
 }
 
 /// A wall time in ms as seconds with one decimal: `floor(ms / 100 + 0.5) / 10`, printed from the
@@ -1296,6 +1315,20 @@ mod tests {
         assert_eq!(limit_pct(0.01), "1");
         assert_eq!(limit_pct(0.015), "1.5");
         assert_eq!(limit_pct(DEFAULT_LOSS_LIMIT), "1");
+        // M11 review 2, app 5: limits whose double times 100 is not the decimal times 100.
+        assert_eq!(limit_pct(0.07), "7");
+        assert_eq!(limit_pct(0.035), "3.5");
+        assert_eq!(limit_pct(0.29), "29");
+        assert_eq!(limit_pct(0.14), "14");
+        assert_eq!(limit_pct(0.001), "0.1");
+        assert_eq!(limit_pct(0.00001), "0.001");
+        assert_eq!(limit_pct(0.5), "50");
+        assert_eq!(limit_pct(1.0), "100");
+        assert_eq!(limit_pct(12.5), "1250");
+        assert_eq!(limit_pct(0.0), "0");
+        assert_eq!(limit_pct(-0.07), "-7");
+        assert_eq!(limit_pct(f64::NAN), "NaN");
+        assert_eq!(limit_pct(f64::INFINITY), "inf");
         assert_eq!(elapsed_s(1497.2341), "1.5");
         assert_eq!(elapsed_s(1449.999), "1.4");
         assert_eq!(elapsed_s(1450.0), "1.5");

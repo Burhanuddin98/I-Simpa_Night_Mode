@@ -50,6 +50,17 @@ test('the limit prints as its shortest decimal, as Rust does', () => {
   assert.equal(limitPct(0), '0');
   assert.equal(limitPct('inf'), 'inf');
   assert.equal(limitPct('NaN'), 'NaN');
+  // M11 review 2, app 5: the double times 100 is not the decimal times 100 for these.
+  assert.equal(0.07 * 100, 7.000000000000001, 'the product the UI used to print');
+  assert.equal(limitPct(0.07), '7');
+  assert.equal(limitPct(0.035), '3.5');
+  assert.equal(limitPct(0.29), '29');
+  assert.equal(limitPct(0.14), '14');
+  assert.equal(limitPct(0.001), '0.1');
+  assert.equal(limitPct(0.00001), '0.001');
+  assert.equal(limitPct(1), '100');
+  assert.equal(limitPct(12.5), '1250');
+  assert.equal(limitPct(-0.07), '-7');
 });
 
 test('elapsed time is floor(ms / 100 + 0.5) / 10', () => {

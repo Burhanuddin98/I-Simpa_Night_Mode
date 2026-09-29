@@ -103,10 +103,18 @@ export function limitPct(limit: number | string): string {
   if (limit === 'NaN') return 'NaN';
   if (limit === 'inf') return 'inf';
   if (limit === '-inf') return '-inf';
-  const v = (limit as number) * 100;
-  const s = String(v);
-  if (/e/i.test(s)) throw new Error(`limitPct: ${v} would print in exponent form in JavaScript, not in Rust`);
-  return s;
+  // The point of the limit's own shortest decimal moved two places, in the text: `0.07 * 100` is
+  // 7.000000000000001 in doubles, and the product would pass a UI printing that (M11 review 2,
+  // app 5). Written apart from runs.rs `limit_pct`, from the decimal string, not the double.
+  const v = limit as number;
+  const text = String(Math.abs(v));
+  if (/e/i.test(text)) throw new Error(`limitPct: ${v} prints in exponent form in JavaScript, not in Rust`);
+  const [int, frac = ''] = text.split('.');
+  const digits = int + frac.padEnd(2, '0');
+  const at = int.length + 2;
+  const whole = digits.slice(0, at).replace(/^0+/, '') || '0';
+  const part = digits.slice(at).replace(/0+$/, '');
+  return `${v < 0 ? '-' : ''}${whole}${part ? `.${part}` : ''}`;
 }
 
 /** A wall time in ms as seconds with one decimal: `floor(ms / 100 + 0.5) / 10`, the same IEEE
