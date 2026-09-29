@@ -623,7 +623,8 @@ fn issue_reason(i: &Issue) -> Reason {
 // run_project
 
 /// Runs the project in `project_file` with the solver `opts` names, `variant`'s materials
-/// (`None`: the project's own) and the mesh `mesh` says, into a fresh run folder under
+/// (`None`: the project's own, whichever variant the file has active; the validator judges the
+/// same materials) and the mesh `mesh` says, into a fresh run folder under
 /// `opts.runs_root`. `Err` only when no run folder with its `run.json` could be made; every
 /// other ending, refusals included, is in the report.
 pub fn run_project(
@@ -638,13 +639,25 @@ pub fn run_project(
         path: project_file.to_path_buf(),
         message: e.to_string(),
     })?;
-    let project = std::str::from_utf8(&bytes)
+    let mut project = std::str::from_utf8(&bytes)
         .map_err(|e| e.to_string())
         .and_then(|t| validate::read_project_text(t).map_err(|e| format!("{} ({e})", e.code())))
         .map_err(|message| RunError::Project {
             path: project_file.to_path_buf(),
             message,
         })?;
+    // The validator judges the materials under the project's active variant; the export writes
+    // `variant`'s. The app passes the active variant, but the CLI passes `--variant` as given, or
+    // none (the base). So the variant exported is made the active one here, and every material
+    // rule (`material_placeholder` among them) judges what the solver will read. A selector that
+    // does not resolve leaves the project as it is: the export refuses it (`variant_not_found`).
+    // So does an active variant that does not exist, which the validator refuses as it stands.
+    let active_exists = project
+        .active_variant
+        .is_none_or(|v| project.variant(v).is_some());
+    if active_exists && let Ok(exported) = config_xml::resolve_variant(&project, variant) {
+        project.active_variant = exported;
+    }
     let exe = exe_ref(&opts.solver_exe)?;
     let started = SystemTime::now();
     let dir =

@@ -863,3 +863,110 @@ fn a_project_on_the_placeholder_material_is_refused_before_meshing() {
     );
     assert!(!r.dir.join("mesh").exists(), "nothing was meshed");
 }
+
+/// C5 on every path a run takes: the run validates the materials it exports. `run_project`
+/// exports `variant`'s materials (`None`: the base project); the file's active variant is what
+/// the app shows and passes, but the CLI passes `--variant` as given, or nothing. So the rules
+/// must be judged under the variant exported, not the one the file has active (M11 review 2,
+/// core finding 1). An empty mesh folder stands in for the mesh: a run the validator lets through
+/// is refused at the mesh stage instead, and no solver is launched either way.
+#[test]
+fn the_materials_validated_are_the_materials_exported() {
+    use simpa_core::geometry::import::{REFERENCE_MATERIALS, library_material};
+    use simpa_core::schema::{MaterialId, Variant, VariantId};
+    let base = simpa_core::schema::load(&fixture("rooms/tutorial1_box_seeded.simpa")).unwrap();
+    let n = base.bands.frequencies_hz.len();
+    let placeholder = library_material(&REFERENCE_MATERIALS[0], MaterialId::from_u128(0xd0), n);
+    assert!(simpa_core::validate::is_placeholder_material(&placeholder));
+    let dir = fresh_dir("m11-variant-exported");
+    let empty = fresh_dir("m11-variant-exported-mesh");
+    let opts = options(
+        "m11-variant-exported-runs",
+        SolverKind::Tcr,
+        exe_for(SolverKind::Tcr),
+    );
+    let run = |file: &Path, variant: Option<&str>| {
+        run_project(
+            file,
+            variant,
+            &MeshChoice::Reuse(empty.clone()),
+            &opts,
+            &CancelToken::new(),
+            &mut |_: &RunEvent| {},
+        )
+        .unwrap()
+    };
+    let validates = |p: &simpa_core::schema::Project| {
+        !simpa_core::validate::has_errors(&simpa_core::validate::validate(p))
+    };
+
+    // (1) The base on the placeholder, the active variant "real" choosing every group's own
+    // material: what the app shows validates, but a run with no variant exports the base.
+    let mut p = base.clone();
+    p.materials.push(placeholder.clone());
+    let mut real = Variant {
+        id: VariantId::from_u128(0xd1),
+        name: "real".to_string(),
+        overrides: Vec::new(),
+    };
+    for g in &mut p.surface_groups {
+        real.set_override(g.id, Some(g.material));
+        g.material = placeholder.id;
+    }
+    p.variants.push(real);
+    p.active_variant = Some(VariantId::from_u128(0xd1));
+    assert!(validates(&p), "the control: the active variant validates");
+    let file = dir.join("base_placeholder.simpa");
+    simpa_core::schema::save(&p, &file).unwrap();
+    let r = run(&file, None);
+    assert_refused(
+        &r,
+        Stage::Validate,
+        &["material_placeholder"],
+        ExitClass::Usage,
+    );
+    // The control: the variant with the chosen materials passes the validator.
+    let r = run(&file, Some("real"));
+    assert_refused(&r, Stage::Mesh, &[codes::MESH_MISSING], ExitClass::Mesh);
+
+    // (2) The reverse: the base chooses every material, no variant is active, and the variant
+    // "cli" puts every group on the placeholder.
+    let mut p = base.clone();
+    p.materials.push(placeholder.clone());
+    let mut cli = Variant {
+        id: VariantId::from_u128(0xd2),
+        name: "cli".to_string(),
+        overrides: Vec::new(),
+    };
+    for g in &p.surface_groups {
+        cli.set_override(g.id, Some(placeholder.id));
+    }
+    p.variants.push(cli);
+    p.active_variant = None;
+    assert!(validates(&p), "the control: the base validates");
+    let file = dir.join("variant_placeholder.simpa");
+    simpa_core::schema::save(&p, &file).unwrap();
+    let r = run(&file, Some("cli"));
+    assert_refused(
+        &r,
+        Stage::Validate,
+        &["material_placeholder"],
+        ExitClass::Usage,
+    );
+    let r = run(&file, None);
+    assert_refused(&r, Stage::Mesh, &[codes::MESH_MISSING], ExitClass::Mesh);
+
+    // (3) A file whose active variant does not exist is still refused as it stands, whatever
+    // the run exports.
+    let mut p = base.clone();
+    p.active_variant = Some(VariantId::from_u128(0xd3));
+    let file = dir.join("active_dangling.simpa");
+    std::fs::write(&file, simpa_core::schema::to_json(&p)).unwrap();
+    let r = run(&file, None);
+    assert_refused(
+        &r,
+        Stage::Validate,
+        &["variant_reference_invalid"],
+        ExitClass::Usage,
+    );
+}
