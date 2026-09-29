@@ -268,15 +268,20 @@ if (-not $SkipCore) {
         }
         Note "CLI fallback staged at ${fallback}: $((Get-ChildItem $fallback -Filter *.exe).Count) exe(s), $staged copied now"
         $env:SIMPA_SOLVERS_DIR = $solvers
-        $env:SIMPA_TETGEN160 = Join-Path (Split-Path -Parent $solvers) 'build\src\tetgen\Release\tetgen.exe'
+        # The TetGen 1.6.0 reference two tests refuse by name: $SIMPA_TETGEN160 when set (a solver
+        # build without solvers/build.ps1's layout beside it, such as C:\tmp\nm-m8a-solvers, has
+        # none), else beside the solver build.
+        if (-not $env:SIMPA_TETGEN160) { $env:SIMPA_TETGEN160 = Join-Path (Split-Path -Parent $solvers) 'build\src\tetgen\Release\tetgen.exe' }
         $env:SIMPA_UPSTREAM = $Upstream
         $env:SIMPA_TEST_SCRATCH_ROOT = Join-Path $target 'test-scratch'
+        # At most 4 solver processes at once (M11 PLAN.md T18): the tests run 4 at a time.
+        $env:RUST_TEST_THREADS = '4'
         New-Item -ItemType Directory -Force $env:SIMPA_TEST_SCRATCH_ROOT | Out-Null
         $sel = { param($dir) @(Get-ChildItem $dir -Filter *.rs | ForEach-Object { $_.BaseName } | Where-Object { $skipTargets -notcontains $_ } | ForEach-Object { "--test $_" }) -join ' ' }
         $coreSel = & $sel (Join-Path $repo 'crates\simpa-core\tests')
         $cliSel = & $sel (Join-Path $repo 'crates\simpa\tests')
         foreach ($k in $coreExcluded.Keys) { Note "NOT RUN here: $k :: $($coreExcluded[$k])" }
-        Note "solvers $solvers; upstream $Upstream; scratch $env:SIMPA_TEST_SCRATCH_ROOT"
+        Note "solvers $solvers; TetGen 1.6.0 reference $env:SIMPA_TETGEN160 (present: $(Test-Path $env:SIMPA_TETGEN160)); upstream $Upstream; scratch $env:SIMPA_TEST_SCRATCH_ROOT; RUST_TEST_THREADS 4"
         $t0 = Get-Date
         $log1 = Join-Path $work 'cargo-test-core.log'
         $log2 = Join-Path $work 'cargo-test-cli.log'
@@ -284,6 +289,7 @@ if (-not $SkipCore) {
         # holds its file open with no sharing instead of trusting a read-only attribute (M11 C1-C3).
         $c1 = Native "cargo test -q --no-fail-fast -p simpa-core --lib $coreSel" $log1
         $c2 = Native "cargo test -q --no-fail-fast -p simpa --bins $cliSel" $log2
+        Remove-Item Env:\RUST_TEST_THREADS
         $results = @(Get-Content $log1, $log2 | Where-Object { $_ -match '^test result' })
         $failed = @(Get-Content $log1, $log2 | Where-Object { $_ -match ' --- FAILED$|^test .* ... FAILED$|^thread .* panicked at' })
         $sum = { param($re) ($results | ForEach-Object { if ($_ -match $re) { [int]$Matches[1] } } | Measure-Object -Sum).Sum }
