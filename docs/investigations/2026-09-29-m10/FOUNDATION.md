@@ -137,6 +137,8 @@ regenerated blobs equalled the working tree.
 - (f) passed with the two new three.js strings.
 - (h) passed.
 
+After the foundation commit (`13d7d54`), `m9.ps1` in full printed **M9 PASSED** (09:47, 40 s).
+
 ## The core crates' tests: what fails in this environment
 
 The core crates have no change on this branch except the new `tests/ui_fixtures.rs`.
