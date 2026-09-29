@@ -1,6 +1,6 @@
 // The bottom dock (design:175-275): Acoustics, Console and Runs.
-// Hand-over stub from the M10 foundation (M9's dock); the scene package owns it from here.
 // The Acoustics tab keeps M9's empty state: no solver-computed number before M12 (PLAN.md 2.4).
+// The Console tab carries an "n fail" badge, as text.
 import { useState } from 'react';
 import { consoleStore, useStore } from '../store';
 import { ConsolePane } from './ConsolePane';
@@ -29,7 +29,11 @@ export function Dock() {
             onClick={() => setTab(d.key)}
           >
             {d.name}
-            {d.key === 'console' && fails > 0 && <span className="tab-badge">{fails} fail</span>}
+            {d.key === 'console' && fails > 0 && (
+              <span className="tab-badge fail" data-part="fail-count">
+                {fails} fail
+              </span>
+            )}
           </button>
         ))}
       </div>

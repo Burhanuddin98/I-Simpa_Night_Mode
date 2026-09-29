@@ -1,9 +1,8 @@
-// The Runs tab: M9's empty run history, until M11 wires Run.
-// Hand-over stub from the M10 foundation; the scene package owns it from here.
+// The Runs tab (design:259-274): the run history's table, empty until M11 wires Run.
 export function RunsPane() {
   return (
-    <div className="runs">
-      <div className="runs-head label">
+    <div className="runs" data-part="runs">
+      <div className="runs-head label" role="row">
         <span>Run</span>
         <span>Variant</span>
         <span>Solver</span>

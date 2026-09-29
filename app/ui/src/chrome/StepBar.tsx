@@ -1,12 +1,14 @@
-// The step bar (design:46-65): the five steps and the variant switch.
-// Hand-over stub from the M10 foundation (M9's step bar, the step now in `stepStore`); the scene
-// package owns it from here and adds the subs (`data-part="sub"`, PLAN.md 6.3).
+// The step bar (design:46-65): the five steps, each with its sub (`data-part="sub"`), and the
+// variant switch. `[data-step]` and `[data-part="name"]` are what the M9 self-test reads; the sub
+// sits outside the name so the names stay exactly the five.
 import { STEPS } from '../steps';
-import { stepStore, useStore } from '../store';
+import { sceneStore, stepStore, useStore } from '../store';
+import { stepSubs } from './sceneModel';
 import { VariantSwitch } from './VariantSwitch';
 
 export function StepBar() {
   const current = useStore(stepStore);
+  const subs = stepSubs(useStore(sceneStore));
   return (
     <div className="stepbar">
       <nav className="steps" aria-label="Workflow">
@@ -21,6 +23,9 @@ export function StepBar() {
             <span className="badge">{i + 1}</span>
             <span className="name" data-part="name">
               {s.name}
+            </span>
+            <span className={`sub${subs[s.key] === 'refused' ? ' fail' : ''}`} data-part="sub">
+              {subs[s.key]}
             </span>
           </button>
         ))}
