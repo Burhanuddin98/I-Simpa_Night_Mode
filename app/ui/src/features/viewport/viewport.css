@@ -8,6 +8,20 @@
   overflow: hidden;
   background: var(--bg) radial-gradient(ellipse at 50% 60%, rgba(224, 32, 46, 0.07) 0%, rgba(9, 9, 11, 0) 60%);
 }
+/* The one canvas (engine.ts), transparent over the region's background. */
+.viewport-host {
+  position: absolute;
+  inset: 0;
+}
+.viewport-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  outline: none;
+}
 .viewport .overlay-tl {
   position: absolute;
   top: 12px;
@@ -38,31 +52,134 @@
   background: transparent;
   color: var(--text-2);
 }
+.tool:not(:disabled):hover {
+  color: var(--text);
+}
 .tool[aria-pressed='true'] {
   background: var(--red-deep);
   color: var(--red-hi);
+}
+.tool:disabled,
+.segmented.view button:disabled {
+  opacity: 0.35;
 }
 .segmented.view button[aria-selected='true'] {
   background: var(--edge);
   color: var(--text);
 }
+
+/* The plan inset. The drawing box is a hole: the panel colour is painted around it by the
+   box's spread shadow (clipped by the panel's rounded edge), and the engine draws the plan
+   into the box's rectangle with a scissor, in the same canvas underneath. */
 .plan-inset {
   position: absolute;
   left: 12px;
   bottom: 12px;
   padding: 8px 10px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--edge);
+  overflow: hidden;
 }
-.plan-inset .box {
+.plan-head {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.plan-head .label {
+  font-size: 11.5px;
+  letter-spacing: 1.3px;
+}
+.plan-head .dims {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+  text-transform: none;
+}
+.plan-box {
   width: 180px;
   height: 116px;
-  margin-top: 6px;
-  border: 1px dashed rgba(237, 237, 239, 0.15);
-  box-sizing: border-box;
+  box-shadow: 0 0 0 400px rgba(15, 15, 17, 0.92);
 }
+
+/* Chips above the view: the model check (FAIL, with the overlay's colour) and placement. */
+.vp-chips {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.vp-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 7px;
+  background: rgba(15, 15, 17, 0.92);
+  border: 1px solid var(--edge);
+  font-size: 12.5px;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+.vp-chip.fail {
+  color: var(--fail-text);
+}
+.vp-chip .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--warn);
+}
+.vp-fail {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--red-hi);
+}
+
+/* Marker labels, placed by the engine each frame. */
+.vp-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.vp-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--text);
+  white-space: nowrap;
+  text-shadow: 0 0 3px var(--bg);
+}
+.vp-label.source {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--red-hi);
+}
+.vp-label.selected {
+  color: var(--red-hi);
+  font-weight: 600;
+}
+.vp-label.off {
+  opacity: 0.5;
+}
+
 .gizmo {
   position: absolute;
   right: 12px;
   bottom: 10px;
+  pointer-events: none;
 }
 .viewport-empty {
   position: absolute;
