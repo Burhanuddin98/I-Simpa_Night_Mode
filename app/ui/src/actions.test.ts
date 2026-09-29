@@ -241,3 +241,33 @@ test('a Cancel pressed while the run is starting reaches the run once it is regi
   assert.equal(await backend.stream(50), 'CANCELLED', 'the run ended cancelled, not after 50 progress lines');
   await until('the run ended in the page', () => store.runStore.get() === null);
 });
+
+test("New, a .proj import and a Save as into another folder forget the previous project's run and verdicts (review 2, app 3)", async () => {
+  const verified = { run: 'R-old', verified: true, refusal: null };
+  const seed = () => {
+    store.selectedRunStore.set('R-old');
+    store.resultsStore.set(new Map([['R-old', verified]]));
+  };
+  const forgotten = (what: string) => {
+    assert.equal(store.selectedRunStore.get(), null, `${what}: the Results step still shows the previous run`);
+    assert.equal(store.resultsStore.get().size, 0, `${what}: a previous verdict is still cached`);
+  };
+  seed();
+  assert.ok(await actions.newProject('Untitled'));
+  forgotten('File > New');
+  seed();
+  await actions.importProj('C:/u/tutorial_1.proj');
+  forgotten('File > Open of a .proj');
+  // Saved, then Save as into another folder: another runs root.
+  backend.scene = scene('room', 'C:/p/room.simpa', false);
+  store.sceneStore.set(backend.scene);
+  seed();
+  await actions.saveAs('C:/q/room.simpa');
+  forgotten('Save as into another folder');
+  // The control: Save as beside the file keeps the runs root, and the selection with it.
+  seed();
+  await actions.saveAs('C:/Q/room-2.simpa');
+  assert.equal(store.selectedRunStore.get(), 'R-old', 'Save as in the same folder keeps the run');
+  assert.equal(store.resultsStore.get().get('R-old'), verified);
+  await sleep(5); // the refreshRuns() each action fires
+});

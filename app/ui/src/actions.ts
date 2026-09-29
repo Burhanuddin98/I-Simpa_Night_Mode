@@ -110,16 +110,32 @@ export async function newProject(name = 'Untitled'): Promise<SceneState | null> 
   if (!(await confirmDiscard())) return null;
   refusalStore.set(new Map());
   const state = await run('Could not create a project', async () => accept(await backend.sceneNew(name)));
+  forgetRuns();
   fire(refreshRuns());
   return state;
+}
+
+/**
+ * The Results step's run and the verdicts checked so far belong to one project's runs root:
+ * after New, an Open, an import, or a Save as into another folder, neither may be shown. Kept,
+ * the Results step read "OK Results verified" for the previous project's run (M11 review 2,
+ * app 3).
+ */
+function forgetRuns(): void {
+  selectedRunStore.set(null);
+  resultsStore.set(new Map());
+}
+
+/** The folder of a project file: its runs root's parent. */
+function folderOf(path: string | null | undefined): string | null {
+  return path ? path.replace(/[\\/][^\\/]*$/, '').toLowerCase() : null;
 }
 
 /** Opens a `.simpa` (no prompt: callers that leave the project go through `openPath`). */
 export async function openProject(path: string): Promise<SceneState> {
   refusalStore.set(new Map());
   const state = await run(`Could not open ${path}`, async () => accept(await backend.sceneOpen(path)));
-  selectedRunStore.set(null);
-  resultsStore.set(new Map());
+  forgetRuns();
   fire(refreshRuns());
   return state;
 }
@@ -127,7 +143,7 @@ export async function openProject(path: string): Promise<SceneState> {
 export async function importModel(path: string, unit: Unit, up: Up): Promise<SceneState> {
   refusalStore.set(new Map());
   const state = await run(`Could not import ${path}`, async () => accept(await backend.modelImport(path, unit, up)));
-  selectedRunStore.set(null);
+  forgetRuns();
   fire(refreshRuns());
   return state;
 }
@@ -171,8 +187,10 @@ export async function saveAs(path?: string): Promise<SceneState | null> {
       filters: [{ name: 'Night Mode project', extensions: ['simpa'] }],
     }));
   if (typeof target !== 'string') return null;
+  const before = folderOf(sceneStore.get()?.info.path);
   const state = await run(`Could not save ${target}`, async () => accept(await backend.projectSave(target)));
   // Another folder is another runs root.
+  if (folderOf(state.info.path) !== before) forgetRuns();
   fire(refreshRuns());
   return state;
 }
@@ -478,6 +496,7 @@ export async function runCancel(): Promise<boolean> {
 export async function importProj(path: string): Promise<SceneState> {
   refusalStore.set(new Map());
   const state = await run(`Could not open ${path}`, async () => accept(await backend.projImport(path)));
+  forgetRuns();
   fire(refreshRuns());
   return state;
 }
