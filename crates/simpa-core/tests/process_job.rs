@@ -289,6 +289,28 @@ fn exit_codes_are_raw_u32() {
     }
 }
 
+/// M11 review 2, m2: a cancel that arrives after the child has exited, but before the loop has
+/// looked at it again, keeps the child's exit code. The child prints `done`, runs a second more
+/// and exits 0; the line callback holds the loop for 3 s, so the exit happens inside it, and only
+/// then cancels. The run is still recorded cancelled; its exit code is 0, not `None` ("killed
+/// before it reported one"), which the Runs tab showed as "no exit code".
+#[test]
+fn a_cancel_after_the_exit_keeps_the_exit_code() {
+    let spec = cmd(
+        "echo done& ping -n 2 127.0.0.1 > nul& exit 0",
+        work_dir("exit_then_cancel"),
+    );
+    let token = CancelToken::new();
+    let outcome = process::run(&spec, &token, &mut |l| {
+        if l.text == "done" {
+            thread::sleep(Duration::from_secs(3));
+            token.cancel();
+        }
+    })
+    .unwrap();
+    assert_eq!((outcome.exit_code, outcome.cancelled), (Some(0), true));
+}
+
 #[test]
 fn cancel_from_another_thread_kills_the_grandchild() {
     let spec = powershell(

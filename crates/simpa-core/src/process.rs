@@ -157,6 +157,12 @@ fn drive<T: Tree>(
         if give_up.is_none() {
             let ended = if cancel.is_cancelled() {
                 cancelled = true;
+                // A child that already exited keeps its exit code: a cancel that lost the race
+                // to the natural exit must not record "killed before it reported one" (M11
+                // review 2, m2: a solver that exited 0 with every file written read `null`).
+                if let Some(status) = tree.wait_exit(Duration::ZERO)? {
+                    exit_code = status.code().map(|c| c as u32);
+                }
                 true
             } else if !open || Instant::now() >= next_wait {
                 // With both pipes closed there is nothing else to wait on. They close before the
