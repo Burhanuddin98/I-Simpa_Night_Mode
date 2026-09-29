@@ -6,16 +6,16 @@ into the file named here in the same session, never only into a chat or a handof
 
 | Dimension | Where it lives | State |
 |---|---|---|
-| **Milestones M0-M14** | `docs/rebuild-plan.md` (table) | M0-M7 and M9 gated. Pre-M8 merged (`df7d8e5`; M4 12/12, M5 43/43, M6 39/39, M7 32/32, M9 23/23, parity 26/26). M8, M10-M13 and M14 not started. |
+| **Milestones M0-M14** | `docs/rebuild-plan.md` (table) | M0-M7 and M9 gated. Pre-M8 merged (`df7d8e5`; M4 12/12, M5 43/43, M6 39/39, M7 32/32, M9 23/23, parity 26/26). M8a and M10 started 2026-09-29 (branches `m8a`, `m10`); M8b, M11-M14 not started. |
 | **Engine work before M8** | This file, below | Open. |
 | **M8 decisions** | This file, below | 7 technical calls open, each with a recommendation. The reference is decided, and Burhan's word is final. |
 | **Upstream feature parity** (what the screens must hold) | `docs/investigations/2026-09-25-parity-audit/parity-matrix.md` | Upstream has 250 user-facing features. **43 are before v1** (15 absent or deferred, 14 core-only, 14 design-only; 38 small, 5 medium), 85 are v1.x and 55 later. They fold into M10-M13. |
 | **Product decisions for Burhan** | The parity matrix (open decisions, raw:348-360); this file, below | 8 open. |
 | **Deferred work (v1.1)** | `docs/v1.1-backlog.md` | 5 items, closed by M14. |
-| **v2 contenders** | `docs/v1.1-backlog.md`, "v2 contenders" | 1 item (the GPU particle tracer), after M14. |
+| **v2 contenders** | `docs/v1.1-backlog.md`, "v2 contenders" | 14 items (the GPU tracer and 13 community requests, row 16), after M14. |
 | **Open physics questions** | This file, below | 4 open. |
 | **Why W1G was dropped** | `docs/investigations/2026-09-25-z3-w1g-hunt/z3-verdict.md` | 217 robust false accepts; three mechanisms. |
-| **Decisions (who, why, revisit?)** | `docs/decision-log.md` | 13 recorded. |
+| **Decisions (who, why, revisit?)** | `docs/decision-log.md` | 17 recorded. |
 | **The running log** | `session-logs/HANDOFF-2026-09-23.md` | Burhan's words verbatim, decisions, restart order. |
 
 ## Engine work before M8
