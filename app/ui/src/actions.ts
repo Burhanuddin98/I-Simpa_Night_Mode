@@ -251,16 +251,30 @@ export function refusalsFor(fieldKey: string): UiIssue[] {
 // The run, the Runs tab, the results state, the solvers, the library, the save prompt and the
 // close request. Still the only code that calls the backend.
 
-function active(): boolean {
-  return runStore.get() !== null;
-}
+/** The next run's `ActiveRun.id`. */
+let nextRunId = 1;
 
-/** New, Open and Import wait while a run is active (PQ4): the run would be orphaned from the
- * project the Runs tab lists. */
+/**
+ * A Run accepted and not yet answered by `run_start`: set before `runStart`'s first await (the
+ * save, the solvers' check) and cleared once `run_start` has answered. `runStore` is set only
+ * after those awaits, so without it a second Run in that window (a double click, F5 held down,
+ * the menu) passed the check, reached `run_start`, and its RUN_ACTIVE refusal cleared the first
+ * run's state while that run went on (M11 review 2, M3 and E1).
+ */
+let starting = false;
+
+/** New, Open, Import and Run wait while a run is starting or active (PQ4): the run would be
+ * orphaned from the project the Runs tab lists. */
 function refuseDuringRun(what: string): boolean {
-  if (!active()) return false;
-  log('INFO', `${what}: a run is active: cancel it first`);
-  return true;
+  if (runStore.get() !== null) {
+    log('INFO', `${what}: a run is active: cancel it first`);
+    return true;
+  }
+  if (starting) {
+    log('INFO', `${what}: a run is starting`);
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -396,33 +410,41 @@ export async function runStart(solver: SolverName = solverStore.get()): Promise<
   if (refuseDuringRun('Run')) return null;
   const state = sceneStore.get();
   if (!state) return null;
-  if (!state.info.path || state.info.dirty) {
-    const saved = await save();
-    if (!saved || saved.info.dirty || !saved.info.path) return null;
-    log('INFO', `Saved ${saved.info.path} before the run`);
-  }
-  await refreshSolvers();
-  const info = sceneStore.get()?.info;
-  runStore.set({
-    solver,
-    variant: info?.active_variant ?? null,
-    stage: null,
-    progress: null,
-    progressText: '',
-    startedAt: Date.now(),
-    status: 'starting',
-  });
-  const channel = new Channel<RunStreamBatch>();
-  channel.onmessage = onRunEvents;
+  starting = true;
   try {
-    const started = await backend.runStart(solver, channel);
-    log('INFO', `${solver.toUpperCase()} run started: ${started.project_path}`);
-    return started;
-  } catch (e) {
-    runStore.set(null);
-    const err = asCmdError(e);
-    log('FAIL', `Could not start the run: ${err.message} (${err.code})`);
-    throw e;
+    if (!state.info.path || state.info.dirty) {
+      const saved = await save();
+      if (!saved || saved.info.dirty || !saved.info.path) return null;
+      log('INFO', `Saved ${saved.info.path} before the run`);
+    }
+    await refreshSolvers();
+    const info = sceneStore.get()?.info;
+    const id = nextRunId++;
+    runStore.set({
+      id,
+      solver,
+      variant: info?.active_variant ?? null,
+      stage: null,
+      progress: null,
+      progressText: '',
+      startedAt: Date.now(),
+      status: 'starting',
+    });
+    const channel = new Channel<RunStreamBatch>();
+    channel.onmessage = onRunEvents;
+    try {
+      const started = await backend.runStart(solver, channel);
+      log('INFO', `${solver.toUpperCase()} run started: ${started.project_path}`);
+      return started;
+    } catch (e) {
+      // This run's state only: never a run that another start put there.
+      if (runStore.get()?.id === id) runStore.set(null);
+      const err = asCmdError(e);
+      log('FAIL', `Could not start the run: ${err.message} (${err.code})`);
+      throw e;
+    }
+  } finally {
+    starting = false;
   }
 }
 

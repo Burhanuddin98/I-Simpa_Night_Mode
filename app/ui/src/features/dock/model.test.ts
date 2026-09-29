@@ -52,6 +52,7 @@ function row(run: string, over: Partial<RunRow> = {}): RunRow {
 }
 
 const active = (over: Partial<ActiveRun> = {}): ActiveRun => ({
+  id: 1,
   run: B,
   solver: 'spps',
   variant: null,

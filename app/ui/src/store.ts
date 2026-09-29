@@ -106,8 +106,11 @@ export const viewportStore = new Store<{ live: boolean; drawnRev: number | null 
 
 export type SolverName = 'spps' | 'tcr';
 
-/** The run in progress: written only by the run stream's handler in actions.ts. */
+/** The run in progress: written only by the run actions in actions.ts. */
 export interface ActiveRun {
+  /** Which start of this page's this is: a run's stream and its `run_start` answer touch this
+   * store only while it still holds their run (M11 review 2, M3/E1). */
+  id: number;
   /** The run folder's name, once the core has made it (the `started` event). */
   run?: string;
   solver: SolverName;

@@ -28,6 +28,7 @@ import {
 } from './model.ts';
 
 const active = (over: Partial<ActiveRun> = {}): ActiveRun => ({
+  id: 1,
   run: '20260929-202553-613-spps',
   solver: 'spps',
   variant: null,
