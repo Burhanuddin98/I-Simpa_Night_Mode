@@ -365,6 +365,9 @@ export async function refreshRuns(): Promise<RunsView | null> {
 function reattach(view: RunsView): void {
   const name = view.active ?? null;
   if (name === null || runStore.get() !== null || starting) return;
+  // A run this page streamed is not lost: a `runs_list` answer from before its `ended` can
+  // arrive after it, still naming the run as active.
+  if (runLinesStore.get().has(name)) return;
   const row = view.rows.find((r) => r.run === name);
   const id = nextRunId++;
   runStore.set({

@@ -295,3 +295,26 @@ test('after a reload mid-run the page takes the run back, New and Run wait, and 
   await until('the page let the ended run go', () => store.runStore.get() === null, 3_000);
   assert.equal(store.selectedRunStore.get(), 'R-live');
 });
+
+test('a runs_list answer from before the end of a run this page streamed does not take the run back', async () => {
+  await actions.runStart('spps');
+  const name = backend.slot?.name;
+  assert.ok(name);
+  // The Runs tab asks while the run is live; its answer names the run as active.
+  const stale = { root: 'C:/p/runs', rows: [row(name, 'RUNNING')], other_projects: 0, active: name };
+  await backend.stream(2);
+  await until('the run ended in the page', () => store.runStore.get() === null);
+  const ipc = (globalThis as Record<string, unknown>).__TAURI_TEST_IPC__ as (cmd: string, args: Record<string, unknown>) => Promise<unknown>;
+  (globalThis as Record<string, unknown>).__TAURI_TEST_IPC__ = (cmd: string, args: Record<string, unknown>) =>
+    cmd === 'runs_list' ? Promise.resolve(stale) : ipc(cmd, args);
+  try {
+    await actions.refreshRuns();
+    assert.equal(store.runStore.get(), null, 'the ended run was taken back as live');
+    assert.ok(!store.consoleStore.get().some((l) => l.text.includes('page was reloaded')), 'no reload line');
+  } finally {
+    // A run wrongly taken back is watched until runs_list stops naming it, which this stale
+    // answer never does: let it go, so a failure cannot hold the suite open.
+    store.runStore.set(null);
+    (globalThis as Record<string, unknown>).__TAURI_TEST_IPC__ = ipc;
+  }
+});
