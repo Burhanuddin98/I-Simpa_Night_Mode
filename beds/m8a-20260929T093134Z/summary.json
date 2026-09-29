@@ -1,0 +1,6088 @@
+{
+  "pass": true,
+  "exploratory": false,
+  "git_commit": "da6f15cf0c9a3c757442a4e58c0ee419b04f2597",
+  "solvers_code_sha256": {
+    "classicalTheory.exe": "fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234",
+    "preprocess.exe": "7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26",
+    "spps.exe": "550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d",
+    "tetgen.exe": "d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f"
+  },
+  "report_sha256": "5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad",
+  "wall_s": 21181.0289436,
+  "files": 16902,
+  "bytes": 1211948999,
+  "failures": 0,
+  "rows": [
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0005347171468311762,
+      "lo": -0.0023392447912728206,
+      "hi": 0.003408679084935173,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0003314263032186182,
+      "lo": -0.002661014871811068,
+      "hi": 0.0033238674782483046,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.00256975401743319,
+      "lo": -0.0007384563165454029,
+      "hi": 0.005877964351411783,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0031166898133087708,
+      "lo": -0.0007522774766177604,
+      "hi": 0.0069856571032353015,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.001612258775775721,
+      "lo": -0.002023359032823273,
+      "hi": 0.0052478765843747156,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0044651428974419646,
+      "lo": 0.0009148748741058714,
+      "hi": 0.008015410920778059,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.007443170153345842,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.0000897248866276179,
+      "lo": -0.0016826444490509445,
+      "hi": 0.0018620942223061803,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0018925520758174218,
+      "lo": 0.0017353807484496654,
+      "hi": 0.002049723403185178,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0018646925224868216,
+      "lo": 0.0016566522873046607,
+      "hi": 0.0020727327576689825,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0019359598985551508,
+      "lo": 0.001872026609315399,
+      "hi": 0.0019998931877949024,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0018954295858758297,
+      "lo": 0.0017381253081807182,
+      "hi": 0.002052733863570941,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.001926410683179869,
+      "lo": 0.0018234445649870713,
+      "hi": 0.002029376801372667,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0018456396626887138,
+      "lo": 0.0016855823753393136,
+      "hi": 0.002005696950038114,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.00018287045699172275,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.00012140043057005113,
+      "lo": -0.0004765979271323293,
+      "hi": 0.000233797065992227,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0014792270648553928,
+      "lo": -0.0023867366492609835,
+      "hi": 0.005345190778971769,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0026926220326341176,
+      "lo": 0.0004924607819598963,
+      "hi": 0.004892783283308339,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0024949002918839614,
+      "lo": 0.00046693158764238036,
+      "hi": 0.0045228689961255425,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0016230565129174757,
+      "lo": -0.001642734604758076,
+      "hi": 0.004888847630593027,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.004565782732523083,
+      "lo": 0.0014262111256971859,
+      "hi": 0.0077053543393489805,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.002588557956671822,
+      "lo": 0.00003316710900302944,
+      "hi": 0.005143948804340615,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.004847040353643944,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.0008603383776768836,
+      "lo": -0.001984509120489526,
+      "hi": 0.00026383236513575885,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.003281746022394372,
+      "lo": 0.0030699162145512195,
+      "hi": 0.003493575830237524,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0030995839723124696,
+      "lo": 0.002838567064981067,
+      "hi": 0.003360600879643872,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0032365866247873855,
+      "lo": 0.002961320465845256,
+      "hi": 0.003511852783729515,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.003169002336260762,
+      "lo": 0.0029321088044755366,
+      "hi": 0.0034058958680459874,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.003378007536889327,
+      "lo": 0.00310115991681334,
+      "hi": 0.003654855156965314,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.003283007113765235,
+      "lo": 0.0030791222223097436,
+      "hi": 0.0034868920052207267,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.0002791262046102567,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.00019532640086966646,
+      "lo": -0.0006200541388547138,
+      "hi": 0.00022940133711538097,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.005826685446672286,
+      "lo": 0.0025174969628724776,
+      "hi": 0.009135873930472094,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.006539215080097915,
+      "lo": 0.003943251211367746,
+      "hi": 0.009135178948828085,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.004523024873823589,
+      "lo": 0.001258964714815001,
+      "hi": 0.007787085032832176,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.002576625923255671,
+      "lo": -0.00022317528226206782,
+      "hi": 0.00537642712877341,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.004366200902763584,
+      "lo": 0.0016983390660113063,
+      "hi": 0.007034062739515862,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0036962228745282657,
+      "lo": 0.0001527830224646162,
+      "hi": 0.007239662726591915,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.005612633138164269,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.0004266422161440353,
+      "lo": -0.0009750821308986653,
+      "hi": 0.0018283665631867359,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.003985427751442927,
+      "lo": 0.0033967097894891402,
+      "hi": 0.004574145713396713,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.003936010726177286,
+      "lo": 0.003596390842606773,
+      "hi": 0.004275630609747799,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0041327623085033235,
+      "lo": 0.003772567490882805,
+      "hi": 0.004492957126123842,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0041829421629532735,
+      "lo": 0.0035754648980217798,
+      "hi": 0.004790419427884767,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.004292236793312166,
+      "lo": 0.003974449915162373,
+      "hi": 0.0046100236714619585,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.00428768286310075,
+      "lo": 0.0038738596022512917,
+      "hi": 0.004701506123950208,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.0008030883623775513,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.000023304942387547544,
+      "lo": -0.00044347785711120873,
+      "hi": 0.00039686797233611366,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": -0.002520308648409175,
+      "lo": -0.006327889253255028,
+      "hi": 0.0012872719564366772,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": -0.0004908459736986837,
+      "lo": -0.002553461462647637,
+      "hi": 0.00157176951525027,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": -0.003871866564618587,
+      "lo": -0.006498377847906132,
+      "hi": -0.0012453552813310423,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": -0.0021824804823836973,
+      "lo": -0.005075760649772098,
+      "hi": 0.0007107996850047034,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": -0.0023955367813215055,
+      "lo": -0.003950501120028112,
+      "hi": -0.0008405724426148989,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": -0.0025225751798339966,
+      "lo": -0.005934725948651189,
+      "hi": 0.0008895755889831961,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.002648668136178191,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.00047156395199771106,
+      "lo": -0.0003047389849147416,
+      "hi": 0.0012478668889101636,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": -0.0021240327785567283,
+      "lo": -0.0031923362638755135,
+      "hi": -0.001055729293237943,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": -0.003010705549451753,
+      "lo": -0.004004768589814475,
+      "hi": -0.0020166425090890313,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": -0.0023677725854257202,
+      "lo": -0.0030838106007626213,
+      "hi": -0.0016517345700888192,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": -0.0030144419341819662,
+      "lo": -0.003956383003048821,
+      "hi": -0.0020725008653151122,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": -0.0020765796941168866,
+      "lo": -0.0025683768261959916,
+      "hi": -0.0015847825620377818,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": -0.002185812949604804,
+      "lo": -0.0031052397986750606,
+      "hi": -0.0012663861005345477,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.0012382526924600596,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.00033856947818594607,
+      "lo": -0.0002654570642135728,
+      "hi": 0.0009425960205854649,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.003252720119589192,
+      "lo": -0.00013061551281190725,
+      "hi": 0.006636055751990291,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.006033316457108329,
+      "lo": 0.0016104423719240958,
+      "hi": 0.010456190542292562,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0020825784550008277,
+      "lo": -0.001291920658846782,
+      "hi": 0.005457077568848437,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.00023143993298866406,
+      "lo": -0.003798294503486867,
+      "hi": 0.004261174369464195,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0012352909697467163,
+      "lo": -0.0027121283869726365,
+      "hi": 0.005182710326466069,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0019541157561583254,
+      "lo": -0.003708367386355468,
+      "hi": 0.007616598898672119,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": -0.00011078012620009403,
+      "lo": -0.007835785732899624,
+      "hi": 0.007614225480499437,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.005796816150602877,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.0005854532670520052,
+      "lo": -0.0009368108235060584,
+      "hi": 0.0021077173576100686,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-random-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0019001541004665333,
+      "lo": 0.0017012782086021625,
+      "hi": 0.002099029992330904,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.001800218062601533,
+      "lo": 0.0016660206383461219,
+      "hi": 0.0019344154868569442,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0018804992895917528,
+      "lo": 0.0016624677247198969,
+      "hi": 0.0020985308544636087,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0017947516091136873,
+      "lo": 0.0015952976395953995,
+      "hi": 0.001994205578631975,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0017656390828411084,
+      "lo": 0.0016481091531035425,
+      "hi": 0.0018831690125786743,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0012025266266434854,
+      "lo": 0.001008772518900731,
+      "hi": 0.0013962807343862397,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.000834896263331375,
+      "lo": 0.0006574524761634687,
+      "hi": 0.0010123400504992814,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.00020862509615525955,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.00008651641452410708,
+      "lo": -0.000371292535993137,
+      "hi": 0.0005443253650413511,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-energetic-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.004939996686092662,
+      "lo": 0.002354052000962902,
+      "hi": 0.007525941371222422,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.002932462856707052,
+      "lo": -0.00013695488832469278,
+      "hi": 0.006001880601738797,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.002712594145912006,
+      "lo": -0.0020377413387716063,
+      "hi": 0.007462929630595618,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0011542602628079157,
+      "lo": -0.0020511815726710686,
+      "hi": 0.0043597020982869,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.003205702331550475,
+      "lo": -0.000742741926535082,
+      "hi": 0.007154146589636032,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.003926996103100944,
+      "lo": 0.0021339454574132574,
+      "hi": 0.00572004674878863,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.0010245909617371152,
+      "lo": -0.0028763854412182013,
+      "hi": 0.004925567364692432,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.005727932851317077,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.00011371494120463455,
+      "lo": -0.001553298085181487,
+      "hi": 0.0013258682027722176,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-random-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0032733050455353574,
+      "lo": 0.003062078835468137,
+      "hi": 0.0034845312556025776,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0032408366536720522,
+      "lo": 0.0029778957306786343,
+      "hi": 0.00350377757666547,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0031193162533110106,
+      "lo": 0.002885615502760776,
+      "hi": 0.0033530170038612453,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.00315117034718142,
+      "lo": 0.0028418386613416518,
+      "hi": 0.003460502033021188,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.002871993841827414,
+      "lo": 0.002615715019010749,
+      "hi": 0.003128272664644079,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0025028572282256743,
+      "lo": 0.0021800201089502446,
+      "hi": 0.002825694347501104,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.0018318242949791007,
+      "lo": 0.0015602581357189956,
+      "hi": 0.002103390454239206,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.0004569300145248722,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.00010014920597583022,
+      "lo": -0.00047283802942571106,
+      "hi": 0.00027253961747405065,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-energetic-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.005270448048116716,
+      "lo": 0.0027374212770476794,
+      "hi": 0.0078034748191857526,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.006614671029867058,
+      "lo": 0.00426552523273289,
+      "hi": 0.008963816827001227,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.007189898767785552,
+      "lo": 0.0034928789644045346,
+      "hi": 0.01088691857116657,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.003424614735189635,
+      "lo": -0.00004761827573279871,
+      "hi": 0.006896847746112069,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0019820786442732554,
+      "lo": -0.0019053691959891794,
+      "hi": 0.00586952648453569,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0043073778725278514,
+      "lo": 0.0013465705322776057,
+      "hi": 0.007268185212778097,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.005012000512269199,
+      "lo": -0.00005140795115809657,
+      "hi": 0.010075408975696495,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.004662432756994702,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.0010240255059940195,
+      "lo": -0.00014804644167948832,
+      "hi": 0.0021960974536675273,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-random-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.003980911675770504,
+      "lo": 0.0033919601621220778,
+      "hi": 0.004569863189418931,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.003917321339750646,
+      "lo": 0.0035760263612875202,
+      "hi": 0.004258616318213771,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.004512322399633261,
+      "lo": 0.004321404828732471,
+      "hi": 0.004703239970534052,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.004042589442968492,
+      "lo": 0.003460119978764717,
+      "hi": 0.004625058907172267,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.003996302425231279,
+      "lo": 0.0036735657842491367,
+      "hi": 0.004319039066213421,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.003592460041184853,
+      "lo": 0.0030248239226067864,
+      "hi": 0.004160096159762919,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.0028479613636148036,
+      "lo": 0.0025090042815100917,
+      "hi": 0.0031869184457195155,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.0005424132353348381,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.0000404042462850418,
+      "lo": -0.0003865820841718514,
+      "hi": 0.000467390576741935,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-energetic-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": -0.0011969253507199018,
+      "lo": -0.0045796062062866995,
+      "hi": 0.0021857555048468954,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": -0.0015239447991715726,
+      "lo": -0.004677486471992552,
+      "hi": 0.0016295968736494062,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": -0.0019533754776474787,
+      "lo": -0.004135892323711086,
+      "hi": 0.00022914136841612875,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": -0.002219967717548332,
+      "lo": -0.0051285463769498146,
+      "hi": 0.0006886109418531498,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": -0.0021654750265711065,
+      "lo": -0.006426944984510495,
+      "hi": 0.0020959949313682823,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": -0.001882004835992135,
+      "lo": -0.005071452957352419,
+      "hi": 0.0013074432853681494,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": -0.004058455701941655,
+      "lo": -0.007366494689322829,
+      "hi": -0.0007504167145604805,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.005513335769706683,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.00019425782096738065,
+      "lo": -0.0011883151089195666,
+      "hi": 0.001576830750854328,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-random-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": -0.002123713673073513,
+      "lo": -0.0031928001450698563,
+      "hi": -0.0010546272010771695,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": -0.003013537824672319,
+      "lo": -0.004012050168025903,
+      "hi": -0.002015025481318735,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": -0.0023593289049148704,
+      "lo": -0.0030657931951509386,
+      "hi": -0.0016528646146788024,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": -0.0029823561396900454,
+      "lo": -0.003915173003772443,
+      "hi": -0.0020495392756076478,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": -0.002092245599563336,
+      "lo": -0.0028816359960069197,
+      "hi": -0.001302855203119752,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": -0.002535856068722342,
+      "lo": -0.0032708444688754764,
+      "hi": -0.0018008676685692076,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": -0.002327111881760835,
+      "lo": -0.003097952484141017,
+      "hi": -0.0015562712793806533,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.0011531782329939231,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.00015431711598521414,
+      "lo": -0.000748989920796902,
+      "hi": 0.00044035568882647375,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-energetic-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.003240878306723138,
+      "lo": -0.0006657915485065473,
+      "hi": 0.007147548161952824,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0022784966784536896,
+      "lo": -0.002129927306784481,
+      "hi": 0.00668692066369186,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.002622998918360442,
+      "lo": -0.0011123493699122322,
+      "hi": 0.006358347206633116,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": -0.0014055567318628337,
+      "lo": -0.004974137496618248,
+      "hi": 0.0021630240328925814,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0018715410316462288,
+      "lo": -0.0027983807640673767,
+      "hi": 0.006541462827359835,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.001426763229063266,
+      "lo": -0.0036936407642043046,
+      "hi": 0.0065471672223308365,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.006218698396576579,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.00011381501928910964,
+      "lo": -0.0014408559568067903,
+      "hi": 0.0012132259182285712,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.001815889495715317,
+      "lo": 0.0017369657751051988,
+      "hi": 0.0018948132163254354,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0017577996395318652,
+      "lo": 0.001616673749456214,
+      "hi": 0.0018989255296075164,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0018080798523401054,
+      "lo": 0.0016967592840533986,
+      "hi": 0.0019194004206268122,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0017475232879276437,
+      "lo": 0.0016325137890828283,
+      "hi": 0.001862532786772459,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0018235989351871762,
+      "lo": 0.0016655215471726055,
+      "hi": 0.001981676323201747,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0017372280985936683,
+      "lo": 0.0016171435849155768,
+      "hi": 0.0018573126122717598,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.00021744026084627853,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -4.843388494291112e-6,
+      "lo": -0.0002291912275837578,
+      "hi": 0.0002195044505951756,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.004142241146693548,
+      "lo": -0.00018214472568373486,
+      "hi": 0.008466627019070833,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.002904570557883157,
+      "lo": 0.00021915968051549467,
+      "hi": 0.00558998143525082,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.004140017240429239,
+      "lo": -0.00006479431278522477,
+      "hi": 0.008344828793643703,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0020326756326378035,
+      "lo": -0.0006209757316958378,
+      "hi": 0.004686326996971445,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0020060681746923324,
+      "lo": 0.0006700231400416055,
+      "hi": 0.0033421132093430592,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.005182727979935975,
+      "lo": 0.003036973438493271,
+      "hi": 0.007328482521378679,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.005558629191493793,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.0003904509337749551,
+      "lo": -0.0007676001628190637,
+      "hi": 0.001548502030368974,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0030215481454206384,
+      "lo": 0.0028485258669865596,
+      "hi": 0.0031945704238547173,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.003159478581749431,
+      "lo": 0.002998996257114649,
+      "hi": 0.003319960906384213,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.002995099687119729,
+      "lo": 0.0028063937892616694,
+      "hi": 0.0031838055849777885,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0030709034338928243,
+      "lo": 0.002894591036502821,
+      "hi": 0.0032472158312828276,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0030445391714520875,
+      "lo": 0.002861062752283649,
+      "hi": 0.003228015590620526,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0030976752323435665,
+      "lo": 0.002896576494398782,
+      "hi": 0.003298773970288351,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.00044975518093018574,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.000054951292905702774,
+      "lo": -0.0002369557990818102,
+      "hi": 0.00034685838489321573,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.00444559453307648,
+      "lo": 0.0021217404771793013,
+      "hi": 0.006769448588973659,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0047525955378890814,
+      "lo": 0.0005808050904693631,
+      "hi": 0.0089243859853088,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0014186233681081962,
+      "lo": -0.0022106759980290423,
+      "hi": 0.005047922734245435,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0039603149499560005,
+      "lo": 0.0010472645171520994,
+      "hi": 0.006873365382759901,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.001561738213523356,
+      "lo": -0.0035504043499649867,
+      "hi": 0.006673880777011699,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0034341215730486095,
+      "lo": 0.0009631364257163787,
+      "hi": 0.00590510672038084,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.004680304563515497,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.0002851236302921278,
+      "lo": -0.001194146543242893,
+      "hi": 0.0006238992826586374,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.003477615323221461,
+      "lo": 0.0032540890383845095,
+      "hi": 0.003701141608058413,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.003581513018854032,
+      "lo": 0.00336008868487788,
+      "hi": 0.0038029373528301845,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0035141153626103705,
+      "lo": 0.003123095639837886,
+      "hi": 0.003905135085382855,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.003285771937546289,
+      "lo": 0.0029611269304919514,
+      "hi": 0.003610416944600627,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0035509203325835735,
+      "lo": 0.0034413363194829515,
+      "hi": 0.0036605043456841954,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.003401592954139754,
+      "lo": 0.00315334545462989,
+      "hi": 0.003649840453649618,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.000632942921125389,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.00007943003399376591,
+      "lo": -0.0003969308677893264,
+      "hi": 0.0002380707998017946,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": -0.0037293332984153827,
+      "lo": -0.006736924527913572,
+      "hi": -0.0007217420689171932,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": -0.007553953906169475,
+      "lo": -0.01091558363632144,
+      "hi": -0.00419232417601751,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": -0.0048768912155549345,
+      "lo": -0.007932199164787566,
+      "hi": -0.0018215832663223035,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": -0.006915208156780106,
+      "lo": -0.0100541363009552,
+      "hi": -0.003776280012605012,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": -0.006646790823348725,
+      "lo": -0.00904890196612905,
+      "hi": -0.0042446796805684,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": -0.004934001664741483,
+      "lo": -0.008592845184716105,
+      "hi": -0.0012751581447668593,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.007652599992712687,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.00002868256517472023,
+      "lo": -0.0019526417051532559,
+      "hi": 0.0020100068355026965,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": -0.005867000213805507,
+      "lo": -0.006295970277503244,
+      "hi": -0.00543803015010777,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": -0.005501442350851382,
+      "lo": -0.005762302846037506,
+      "hi": -0.0052405818556652585,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": -0.006171528249240809,
+      "lo": -0.0066579131414455425,
+      "hi": -0.005685143357036076,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": -0.005603506726990881,
+      "lo": -0.006108506374319362,
+      "hi": -0.0050985070796624,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": -0.005852189198868263,
+      "lo": -0.006291934519835265,
+      "hi": -0.005412443877901261,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": -0.005783294907526837,
+      "lo": -0.00626474233291032,
+      "hi": -0.005301847482143354,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "B",
+      "gated": true,
+      "value": 0.000776798791231336,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 8.099325100263677e-6,
+      "lo": -0.0003308240047577208,
+      "hi": 0.00034702265495824817,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-off",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.00015060869890262118,
+      "lo": -0.0038648583507239127,
+      "hi": 0.004166075748529155,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": -0.001439301603852494,
+      "lo": -0.0059570627011935485,
+      "hi": 0.00307845949348856,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": -0.0018850689487165506,
+      "lo": -0.005886204556110185,
+      "hi": 0.002116066658677083,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.005320876461237689,
+      "lo": -0.0011242929076588064,
+      "hi": 0.011766045830134185,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": -0.0022744591562144367,
+      "lo": -0.00605585292028132,
+      "hi": 0.0015069346078524473,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.002370349504743452,
+      "lo": -0.0020918539663102795,
+      "hi": 0.006832552975797183,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": -0.0020279685995899023,
+      "lo": -0.004948549382535154,
+      "hi": 0.0008926121833553492,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.005446626201474958,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.0016478863817885104,
+      "lo": -0.0032996220617242875,
+      "hi": 3.8492981472664205e-6,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-random-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0017572425468142193,
+      "lo": 0.0015914626630987138,
+      "hi": 0.0019230224305297249,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0017708739407635622,
+      "lo": 0.0016805952367893021,
+      "hi": 0.0018611526447378222,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0018416465203104915,
+      "lo": 0.001785177454175402,
+      "hi": 0.001898115586445581,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0017575382005871275,
+      "lo": 0.001640822134885077,
+      "hi": 0.001874254266289178,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0016519913273928654,
+      "lo": 0.0015265054542450123,
+      "hi": 0.0017774772005407185,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0013029779477914173,
+      "lo": 0.0011555206147023291,
+      "hi": 0.0014504352808805054,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.000707957418275873,
+      "lo": 0.0005444576604489722,
+      "hi": 0.0008714571761027737,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.00026587180671744685,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.00013944121572773138,
+      "lo": -0.0003637274318109372,
+      "hi": 0.00008484500035547444,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-energetic-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0033971739038341497,
+      "lo": 0.0004896819903843271,
+      "hi": 0.006304665817283972,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.006437925421827806,
+      "lo": 0.0010996106202155517,
+      "hi": 0.01177624022344006,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0009652475793073823,
+      "lo": -0.0021554179626183108,
+      "hi": 0.004085913121233076,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.00009509738480262264,
+      "lo": -0.0032875530378567667,
+      "hi": 0.003477747807462012,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.00040583323734523226,
+      "lo": -0.0017809071026463161,
+      "hi": 0.0025925735773367807,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": -0.00024007959011025372,
+      "lo": -0.0039391808864296515,
+      "hi": 0.0034590217062091437,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.00185091175736124,
+      "lo": -0.003564366595270022,
+      "hi": 0.007266190109992502,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.0068637990980461505,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.0009467143323984683,
+      "lo": -0.0025467550185028047,
+      "hi": 0.0006533263537058681,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-random-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0030156489291814693,
+      "lo": 0.002841190515514377,
+      "hi": 0.003190107342848562,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0030058024382672464,
+      "lo": 0.0028038123622186285,
+      "hi": 0.0032077925143158643,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.003033912805065331,
+      "lo": 0.0029080669775264968,
+      "hi": 0.003159758632604165,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0029653247743984144,
+      "lo": 0.0028741983163159826,
+      "hi": 0.003056451232480846,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0028258796106001905,
+      "lo": 0.0026177697278030885,
+      "hi": 0.0030339894933972926,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.002623398364009222,
+      "lo": 0.0024580961399775845,
+      "hi": 0.0027887005880408594,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.0017555518032730255,
+      "lo": 0.001571436403836528,
+      "hi": 0.001939667202709523,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.00022661096750520738,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.000047245916624272245,
+      "lo": -0.00027291821567369785,
+      "hi": 0.00017842638242515334,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-energetic-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0045432196126334425,
+      "lo": 0.0013820764864459685,
+      "hi": 0.007704362738820917,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0021439643817596555,
+      "lo": -0.00180170936134233,
+      "hi": 0.0060896381248616415,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0014104253778315589,
+      "lo": -0.0027633297281489627,
+      "hi": 0.00558418048381208,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0018137023992305878,
+      "lo": -0.0019129823539702647,
+      "hi": 0.00554038715243144,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0030006071403430256,
+      "lo": 0.0003001459645752165,
+      "hi": 0.005701068316110835,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0031295933838978106,
+      "lo": 0.00024958046647115435,
+      "hi": 0.006009606301324467,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.003515883990272195,
+      "lo": -0.0012835418809763691,
+      "hi": 0.00831530986152076,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.006408893762803084,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": -0.00043950116581027433,
+      "lo": -0.0020416896303009943,
+      "hi": 0.0011626872986804457,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-random-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": 0.0034735983476744227,
+      "lo": 0.00324934068862428,
+      "hi": 0.0036978560067245656,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": 0.0035661268570035707,
+      "lo": 0.0033468699346123005,
+      "hi": 0.003785383779394841,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": 0.0034795382996452907,
+      "lo": 0.003093940689081495,
+      "hi": 0.0038651359102090865,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": 0.0032472949276262765,
+      "lo": 0.0029696081021531266,
+      "hi": 0.0035249817530994265,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": 0.0033138360061675254,
+      "lo": 0.003027106639367616,
+      "hi": 0.0036005653729674347,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": 0.0031816840752413532,
+      "lo": 0.0029228652367044943,
+      "hi": 0.003440502913778212,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": 0.002656620730333903,
+      "lo": 0.0023511625340179748,
+      "hi": 0.002962078926649831,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.0003763530453206186,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.000039044028589829696,
+      "lo": -0.00020800907563658076,
+      "hi": 0.0002860971328162401,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-energetic-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": -0.005591604569426622,
+      "lo": -0.008618333213016697,
+      "hi": -0.0025648759258365484,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": -0.004860436300617677,
+      "lo": -0.007766440240773327,
+      "hi": -0.0019544323604620264,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": -0.004574367517468736,
+      "lo": -0.008189793700630336,
+      "hi": -0.0009589413343071345,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": -0.004505257709272514,
+      "lo": -0.007935840760583061,
+      "hi": -0.0010746746579619664,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": -0.005633478887170007,
+      "lo": -0.0073613465741098035,
+      "hi": -0.00390561120023021,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": -0.004099978756841749,
+      "lo": -0.006881183015813324,
+      "hi": -0.0013187744978701743,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": -0.004907130781255142,
+      "lo": -0.007992068872013014,
+      "hi": -0.0018221926904972703,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.006924496964728889,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.0008648278465296144,
+      "lo": -0.0007842485907881357,
+      "hi": 0.0025139042838473644,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-random-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "E2",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "E3",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "E6",
+      "gated": true,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "A 125 Hz",
+      "gated": true,
+      "value": -0.005864508650326094,
+      "lo": -0.006293949102711015,
+      "hi": -0.005435068197941173,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "A 250 Hz",
+      "gated": true,
+      "value": -0.005491345240313738,
+      "lo": -0.005751137761568183,
+      "hi": -0.0052315527190592934,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "A 500 Hz",
+      "gated": true,
+      "value": -0.006154310269923968,
+      "lo": -0.006645393314153053,
+      "hi": -0.005663227225694884,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "A 1000 Hz",
+      "gated": true,
+      "value": -0.00558109227171395,
+      "lo": -0.006094292557709407,
+      "hi": -0.0050678919857184935,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "A 2000 Hz",
+      "gated": true,
+      "value": -0.005660280981183552,
+      "lo": -0.0061050925733214904,
+      "hi": -0.005215469389045614,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "A 4000 Hz",
+      "gated": true,
+      "value": -0.005397304453495411,
+      "lo": -0.005901720356093697,
+      "hi": -0.0048928885508971245,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "A 8000 Hz",
+      "gated": true,
+      "value": -0.005226975208262286,
+      "lo": -0.00559522821136141,
+      "hi": -0.004858722205163162,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "B",
+      "gated": true,
+      "value": 0.0007585803899491678,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "C (10 seeds)",
+      "gated": true,
+      "value": 0.00011718675366964026,
+      "lo": -0.00023579591926610908,
+      "hi": 0.00047016942660538957,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-energetic-air-on",
+      "check": "cell",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-random-air-off",
+      "check": "E2",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-random-air-off",
+      "check": "E3",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-random-air-off",
+      "check": "E6",
+      "gated": false,
+      "value": 3.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "fail"
+    },
+    {
+      "cell": "20x8x4-a0.05-random-air-off",
+      "check": "cell",
+      "gated": false,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "reported"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "E2",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "E3",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "E6",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": false,
+      "value": 0.0020535903998181613,
+      "lo": 0.0017769316915967688,
+      "hi": 0.002330249108039554,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": false,
+      "value": 0.002009548287272178,
+      "lo": 0.0017282016616042627,
+      "hi": 0.0022908949129400937,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": false,
+      "value": 0.001751820308142582,
+      "lo": 0.0014325040841021226,
+      "hi": 0.0020711365321830415,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": false,
+      "value": 0.0017668296250753057,
+      "lo": 0.0015346145585731932,
+      "hi": 0.0019990446915774183,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": false,
+      "value": 0.0019357844494931609,
+      "lo": 0.001577775625697756,
+      "hi": 0.002293793273288566,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": false,
+      "value": 0.0018441618211112898,
+      "lo": 0.001422604000601006,
+      "hi": 0.0022657196416215734,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "B",
+      "gated": false,
+      "value": 0.0006155799650312353,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": false,
+      "value": -0.000014773251767552509,
+      "lo": -0.0005519021046756183,
+      "hi": 0.0005223556011405133,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-energetic-air-off",
+      "check": "cell",
+      "gated": false,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "reported"
+    },
+    {
+      "cell": "20x8x4-a0.1-random-air-off",
+      "check": "E2",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-random-air-off",
+      "check": "E3",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-random-air-off",
+      "check": "E6",
+      "gated": false,
+      "value": 3.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "fail"
+    },
+    {
+      "cell": "20x8x4-a0.1-random-air-off",
+      "check": "cell",
+      "gated": false,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "reported"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "E2",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "E3",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "E6",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": false,
+      "value": 0.002518595204726837,
+      "lo": 0.0022590209784861363,
+      "hi": 0.0027781694309675373,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": false,
+      "value": 0.002296977110990794,
+      "lo": 0.0018537651099346498,
+      "hi": 0.0027401891120469386,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": false,
+      "value": 0.0024335505806712733,
+      "lo": 0.0021871860437126557,
+      "hi": 0.002679915117629891,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": false,
+      "value": 0.002400202372595928,
+      "lo": 0.0021881707833381857,
+      "hi": 0.00261223396185367,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": false,
+      "value": 0.002629229797674082,
+      "lo": 0.00205736972563693,
+      "hi": 0.003201089869711234,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": false,
+      "value": 0.0024467956294208725,
+      "lo": 0.0018663493394830088,
+      "hi": 0.0030272419193587362,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "B",
+      "gated": false,
+      "value": 0.0008545753112257523,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": false,
+      "value": -0.000141349430354909,
+      "lo": -0.000698643928288101,
+      "hi": 0.00041594506757828306,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-energetic-air-off",
+      "check": "cell",
+      "gated": false,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "reported"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "E2",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "E3",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "E6",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "A 125 Hz",
+      "gated": false,
+      "value": 0.003896890977198075,
+      "lo": -0.02069369123058155,
+      "hi": 0.028487473184977703,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "A 250 Hz",
+      "gated": false,
+      "value": 0.0074607974567356015,
+      "lo": -0.03395725541720478,
+      "hi": 0.04887885033067598,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "A 500 Hz",
+      "gated": false,
+      "value": 0.02115216838110464,
+      "lo": -0.010485592538661416,
+      "hi": 0.052789929300870696,
+      "limit": 0.05,
+      "verdict": "fail"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "A 1000 Hz",
+      "gated": false,
+      "value": -0.0004447120473550448,
+      "lo": -0.02514420523406731,
+      "hi": 0.024254781139357223,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "A 2000 Hz",
+      "gated": false,
+      "value": -0.0063493936615117595,
+      "lo": -0.032107309587111034,
+      "hi": 0.019408522264087517,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "A 4000 Hz",
+      "gated": false,
+      "value": 0.018712065275984104,
+      "lo": -0.006594887685537679,
+      "hi": 0.04401901823750588,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "B",
+      "gated": false,
+      "value": 0.05398822868357177,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "fail"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "C (10 seeds)",
+      "gated": false,
+      "value": 0.007450521595034077,
+      "lo": -0.005807454423328143,
+      "hi": 0.020708497613396295,
+      "limit": 0.005,
+      "verdict": "inconclusive"
+    },
+    {
+      "cell": "20x8x4-a0.2-random-air-off",
+      "check": "cell",
+      "gated": false,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "reported"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "E2",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "E3",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "E6",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": false,
+      "value": -0.00014486285919634856,
+      "lo": -0.0005825379683897798,
+      "hi": 0.0002928122499970827,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": false,
+      "value": -0.0005306957105059684,
+      "lo": -0.0009746389005918045,
+      "hi": -0.00008675252042013228,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": false,
+      "value": -0.0005680117170844378,
+      "lo": -0.0010880306380100556,
+      "hi": -0.000047992796158819926,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": false,
+      "value": -0.0005099773100292304,
+      "lo": -0.0010913099048631733,
+      "hi": 0.00007135528480471253,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": false,
+      "value": -0.00034261641806824226,
+      "lo": -0.0011023413989882753,
+      "hi": 0.0004171085628517907,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": false,
+      "value": -0.00031697238060873767,
+      "lo": -0.0010985693254820495,
+      "hi": 0.00046462456426457415,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "B",
+      "gated": false,
+      "value": 0.0008378078559624262,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": false,
+      "value": -0.00035665945524691043,
+      "lo": -0.0008721485401283072,
+      "hi": 0.00015882962963448635,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-energetic-air-off",
+      "check": "cell",
+      "gated": false,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "reported"
+    },
+    {
+      "cell": "20x8x4-a0.4-random-air-off",
+      "check": "E2",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-random-air-off",
+      "check": "E3",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-random-air-off",
+      "check": "E6",
+      "gated": false,
+      "value": 26.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "fail"
+    },
+    {
+      "cell": "20x8x4-a0.4-random-air-off",
+      "check": "cell",
+      "gated": false,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "reported"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "E2",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "E3",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "E6",
+      "gated": false,
+      "value": 0.0,
+      "lo": null,
+      "hi": null,
+      "limit": 0.0,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "A 125 Hz",
+      "gated": false,
+      "value": -0.010478373133600883,
+      "lo": -0.01237443306107761,
+      "hi": -0.008582313206124155,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "A 250 Hz",
+      "gated": false,
+      "value": -0.010150342917618349,
+      "lo": -0.012182991797811411,
+      "hi": -0.008117694037425287,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "A 500 Hz",
+      "gated": false,
+      "value": -0.009546326725232035,
+      "lo": -0.010812388526703064,
+      "hi": -0.008280264923761006,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "A 1000 Hz",
+      "gated": false,
+      "value": -0.010293432844830298,
+      "lo": -0.01150827132724721,
+      "hi": -0.009078594362413385,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "A 2000 Hz",
+      "gated": false,
+      "value": -0.010037330838505665,
+      "lo": -0.011171368378272645,
+      "hi": -0.008903293298738684,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "A 4000 Hz",
+      "gated": false,
+      "value": -0.011025632213143089,
+      "lo": -0.012175406197210109,
+      "hi": -0.009875858229076068,
+      "limit": 0.05,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "B",
+      "gated": false,
+      "value": 0.002404948495038187,
+      "lo": null,
+      "hi": null,
+      "limit": 0.02,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "C (10 seeds)",
+      "gated": false,
+      "value": 0.00023383148714613,
+      "lo": -0.0012572386064794317,
+      "hi": 0.0017249015807716916,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-energetic-air-off",
+      "check": "cell",
+      "gated": false,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "reported"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -3.0569378295375316e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -3.0569378295375316e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -3.0569378295375316e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -3.0569378295375316e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -3.0569378295375316e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -3.0569378295375316e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -3.524044219771483e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -3.524044219771483e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -3.524044219771483e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -3.524044219771483e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -3.524044219771483e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -3.524044219771483e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": 6.66163437745837e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": 6.66163437745837e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": 6.66163437745837e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": 6.66163437745837e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": 6.66163437745837e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": 6.66163437745837e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": 4.599989633646828e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": 4.599989633646828e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": 4.599989633646828e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": 4.599989633646828e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": 4.599989633646828e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": 4.599989633646828e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-on",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -3.297169820504209e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-on",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -2.5690903460162673e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-on",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -2.7669349988990177e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-on",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -2.576502476925313e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-on",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -2.880900517032714e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-on",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -2.2994164394773975e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.05-tcr-air-on",
+      "check": "D 8000 Hz",
+      "gated": true,
+      "value": -1.1353084905518784e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-on",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -4.0210234053539295e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-on",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -2.8567448562277775e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-on",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -3.514952277017258e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-on",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -2.585033384017166e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-on",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -3.03501530574124e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-on",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -2.790768155458423e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.1-tcr-air-on",
+      "check": "D 8000 Hz",
+      "gated": true,
+      "value": -1.8574971383245042e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-on",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": 1.0937199568239464e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-on",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": 9.393224331688543e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-on",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": 3.4921958658173935e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-on",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": 4.9367843146796986e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-on",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": 4.7098727584682365e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-on",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -3.3551459832636965e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.2-tcr-air-on",
+      "check": "D 8000 Hz",
+      "gated": true,
+      "value": 2.5012013571412695e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-on",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -2.692237377477369e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-on",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -2.4709280621593166e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-on",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": 8.129887429930704e-9,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-on",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": 5.34894795123364e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-on",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": 5.605482811255058e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-on",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -2.4883754168314454e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "6x10x3-a0.4-tcr-air-on",
+      "check": "D 8000 Hz",
+      "gated": true,
+      "value": 1.1243933561999597e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -4.157322452957857e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -4.157322452957857e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -4.157322452957857e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -4.157322452957857e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -4.157322452957857e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -4.157322452957857e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -4.410175834523855e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -4.410175834523855e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -4.410175834523855e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -4.410175834523855e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -4.410175834523855e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -4.410175834523855e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -7.753923791931072e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -7.753923791931072e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -7.753923791931072e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -7.753923791931072e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -7.753923791931072e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -7.753923791931072e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -4.117109075885139e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -4.117109075885139e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -4.117109075885139e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -4.117109075885139e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -4.117109075885139e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -4.117109075885139e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-on",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -2.7292414683799393e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-on",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -3.522770128938646e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-on",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -3.5125821418180436e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-on",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -4.0951299751235126e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-on",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -3.323302671942585e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-on",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -2.1907432234957724e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.05-tcr-air-on",
+      "check": "D 8000 Hz",
+      "gated": true,
+      "value": -1.7689570519507924e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-on",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -4.237769825055082e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-on",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -4.237261446160545e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-on",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -4.282426916413229e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-on",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -4.053092556022264e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-on",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -4.136166181778478e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-on",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -3.654712888989664e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.1-tcr-air-on",
+      "check": "D 8000 Hz",
+      "gated": true,
+      "value": -2.2442041636150378e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-on",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": -4.5844954055240805e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-on",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -4.282414656220368e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-on",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -5.657427670779924e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-on",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": -8.146069707670733e-9,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-on",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -2.762562723024331e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-on",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": -2.0177489790107472e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.2-tcr-air-on",
+      "check": "D 8000 Hz",
+      "gated": true,
+      "value": -6.796501195172056e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-on",
+      "check": "D 125 Hz",
+      "gated": true,
+      "value": 3.51845901302994e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-on",
+      "check": "D 250 Hz",
+      "gated": true,
+      "value": -1.1617723116863488e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-on",
+      "check": "D 500 Hz",
+      "gated": true,
+      "value": -9.706076831150767e-9,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-on",
+      "check": "D 1000 Hz",
+      "gated": true,
+      "value": 1.2637865198783516e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-on",
+      "check": "D 2000 Hz",
+      "gated": true,
+      "value": -1.1292164869836085e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-on",
+      "check": "D 4000 Hz",
+      "gated": true,
+      "value": 2.2681185374295865e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "5x4x3-a0.4-tcr-air-on",
+      "check": "D 8000 Hz",
+      "gated": true,
+      "value": -6.0423105852081e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": false,
+      "value": -2.9443984972399306e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": false,
+      "value": -2.9443984972399306e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": false,
+      "value": -2.9443984972399306e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": false,
+      "value": -2.9443984972399306e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": false,
+      "value": -2.9443984972399306e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.05-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": false,
+      "value": -2.9443984972399306e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": false,
+      "value": -3.562571685433724e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": false,
+      "value": -3.562571685433724e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": false,
+      "value": -3.562571685433724e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": false,
+      "value": -3.562571685433724e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": false,
+      "value": -3.562571685433724e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.1-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": false,
+      "value": -3.562571685433724e-7,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": false,
+      "value": 2.5817593840571362e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": false,
+      "value": 2.5817593840571362e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": false,
+      "value": 2.5817593840571362e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": false,
+      "value": 2.5817593840571362e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": false,
+      "value": 2.5817593840571362e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.2-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": false,
+      "value": 2.5817593840571362e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-tcr-air-off",
+      "check": "D 125 Hz",
+      "gated": false,
+      "value": 8.80287647220257e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-tcr-air-off",
+      "check": "D 250 Hz",
+      "gated": false,
+      "value": 8.80287647220257e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-tcr-air-off",
+      "check": "D 500 Hz",
+      "gated": false,
+      "value": 8.80287647220257e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-tcr-air-off",
+      "check": "D 1000 Hz",
+      "gated": false,
+      "value": 8.80287647220257e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-tcr-air-off",
+      "check": "D 2000 Hz",
+      "gated": false,
+      "value": 8.80287647220257e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "20x8x4-a0.4-tcr-air-off",
+      "check": "D 4000 Hz",
+      "gated": false,
+      "value": 8.80287647220257e-8,
+      "lo": null,
+      "hi": null,
+      "limit": 0.005,
+      "verdict": "pass"
+    },
+    {
+      "cell": "bed",
+      "check": "E1",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "bed",
+      "check": "E2",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "bed",
+      "check": "E3",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "bed",
+      "check": "E4",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "bed",
+      "check": "E5",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "bed",
+      "check": "E6",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    },
+    {
+      "cell": "bed",
+      "check": "E7",
+      "gated": true,
+      "value": null,
+      "lo": null,
+      "hi": null,
+      "limit": null,
+      "verdict": "pass"
+    }
+  ]
+}
