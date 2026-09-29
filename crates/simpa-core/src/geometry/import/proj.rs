@@ -152,7 +152,7 @@ use uuid::Uuid;
 
 use super::appconst::{reference_material, reference_spectrum};
 use super::zip::Archive;
-use super::{IdSource, ImportError, Result, default_material, read_bytes, weld_key};
+use super::{IdSource, ImportError, Result, library_material, read_bytes, weld_key};
 use crate::config_xml::widen_f32;
 use crate::schema::{
     AirAbsorption, AttenuationUnit, BandKind, BandSet, BoxBound, ComputationMethod, DiffusionLaw,
@@ -708,10 +708,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
             )
         })?;
         let index = materials.len();
-        let mut m = default_material(MaterialId(ids.uuid("material", index)), n);
-        m.name = r.name.to_string();
-        m.color = Rgb(r.color[0], r.color[1], r.color[2]);
-        m.absorption = vec![F64::new(widen_f32(r.absorption)); n];
+        let mut m = library_material(r, MaterialId(ids.uuid("material", index)), n);
         m.solver_id = Some(idmat);
         materials.push(m);
         Ok(materials[index].id)

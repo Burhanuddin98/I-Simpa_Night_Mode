@@ -1,0 +1,237 @@
+{
+  "format_version": 1,
+  "id": "00000000-0000-0000-0000-000000000001",
+  "name": "Teaching room",
+  "description": "Concept B's teaching room (crates/simpa-core/tests/ui_fixtures.rs).",
+  "frame": {
+    "length_unit": "metre",
+    "up_axis": "z"
+  },
+  "bands": {
+    "kind": "octave",
+    "frequencies_hz": [125, 250, 500, 1000, 2000, 4000]
+  },
+  "geometry": {
+    "vertices": [
+      [0.0, 0.0, 0.0],
+      [10.0, 0.0, 0.0],
+      [10.0, 6.0, 0.0],
+      [0.0, 6.0, 0.0],
+      [0.0, 0.0, 3.0],
+      [10.0, 0.0, 3.0],
+      [10.0, 6.0, 3.0],
+      [0.0, 6.0, 3.0]
+    ],
+    "faces": [
+      [0, 2, 1, "00000000-0000-0000-0000-000000000100"],
+      [0, 3, 2, "00000000-0000-0000-0000-000000000100"],
+      [4, 5, 6, "00000000-0000-0000-0000-000000000101"],
+      [4, 6, 7, "00000000-0000-0000-0000-000000000101"],
+      [3, 7, 6, "00000000-0000-0000-0000-000000000102"],
+      [3, 6, 2, "00000000-0000-0000-0000-000000000102"],
+      [0, 1, 5, "00000000-0000-0000-0000-000000000103"],
+      [0, 5, 4, "00000000-0000-0000-0000-000000000103"],
+      [0, 4, 7, "00000000-0000-0000-0000-000000000104"],
+      [0, 7, 3, "00000000-0000-0000-0000-000000000104"],
+      [1, 2, 6, "00000000-0000-0000-0000-000000000105"],
+      [1, 6, 5, "00000000-0000-0000-0000-000000000105"]
+    ]
+  },
+  "surface_groups": [
+    {
+      "id": "00000000-0000-0000-0000-000000000100",
+      "name": "Floor",
+      "material": "00000000-0000-0000-0000-000000000200"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000101",
+      "name": "Ceiling",
+      "material": "00000000-0000-0000-0000-000000000201"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000102",
+      "name": "Left wall",
+      "material": "00000000-0000-0000-0000-000000000202"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000103",
+      "name": "Right wall",
+      "material": "00000000-0000-0000-0000-000000000202"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000104",
+      "name": "Front wall",
+      "material": "00000000-0000-0000-0000-000000000202"
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000105",
+      "name": "Rear wall",
+      "material": "00000000-0000-0000-0000-000000000203"
+    }
+  ],
+  "materials": [
+    {
+      "id": "00000000-0000-0000-0000-000000000200",
+      "name": "Linoleum on concrete",
+      "color": "#6b6b73",
+      "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "scattering": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000201",
+      "name": "Mineral-fibre tile",
+      "color": "#b8b8c0",
+      "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "scattering": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000202",
+      "name": "Painted plaster",
+      "color": "#4a4a52",
+      "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "scattering": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000203",
+      "name": "Slotted wood panel",
+      "color": "#8a5a3c",
+      "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "scattering": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000204",
+      "name": "Heavy velour curtain",
+      "color": "#7a1520",
+      "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "scattering": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000205",
+      "name": "Glass window",
+      "color": "#5e7a86",
+      "absorption": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "scattering": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+      "reflection_law": "specular",
+      "transmission_loss_db": null,
+      "double_sided": true,
+      "solver_id": null
+    }
+  ],
+  "sources": [
+    {
+      "id": "00000000-0000-0000-0000-000000000300",
+      "name": "S1",
+      "enabled": true,
+      "position": [2.0, 3.0, 1.5],
+      "power": {
+        "global_db": 85.0,
+        "shape": {
+          "kind": "pink"
+        }
+      },
+      "directivity": {
+        "kind": "omni"
+      },
+      "delay_s": 0.0,
+      "group": null,
+      "solver_id": null
+    }
+  ],
+  "point_receivers": [
+    {
+      "id": "00000000-0000-0000-0000-000000000400",
+      "name": "R1",
+      "position": [5.0, 2.0, 1.2],
+      "orientation": [1.0, 0.0, 0.0],
+      "background_noise": null,
+      "solver_id": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000401",
+      "name": "R2",
+      "position": [8.0, 4.0, 1.2],
+      "orientation": [1.0, 0.0, 0.0],
+      "background_noise": null,
+      "solver_id": null
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000402",
+      "name": "R3",
+      "position": [3.5, 4.5, 1.2],
+      "orientation": [1.0, 0.0, 0.0],
+      "background_noise": null,
+      "solver_id": null
+    }
+  ],
+  "surface_receivers": [],
+  "fitting_zones": [],
+  "environment": {
+    "temperature_c": 20.0,
+    "relative_humidity_percent": 50.0,
+    "pressure_pa": 101325.0,
+    "air_absorption": {
+      "kind": "iso9613"
+    },
+    "ground_roughness_m": 0.02,
+    "celerity_gradient_log": 0.0,
+    "celerity_gradient_lin": 0.0
+  },
+  "solvers": {
+    "spps": {
+      "particles_per_source": 7000000,
+      "particles_saved": 0,
+      "duration_s": 2.0,
+      "time_step_s": 0.01,
+      "random_seed": 5,
+      "method": "random",
+      "air_absorption": true,
+      "fittings": true,
+      "direct_field_only": false,
+      "transmission": true,
+      "extinction_exponent": 5.0,
+      "receiver_radius_m": 0.31,
+      "sound_map": "intensity",
+      "sound_maps_per_band": true,
+      "echogram_per_source": false,
+      "save_surface_intersections": true,
+      "save_receiver_intersections": true,
+      "bands_computed": [true, true, true, true, true, true]
+    },
+    "tcr": {
+      "air_absorption": true,
+      "bands_computed": [true, true, true, true, true, true]
+    },
+    "meshing": {
+      "min_radius_edge_ratio": 5.0,
+      "max_volume_m3": null,
+      "surface_receiver_max_area_m2": null,
+      "preserve_boundary": true,
+      "preprocess": false
+    }
+  },
+  "variants": [],
+  "active_variant": null,
+  "view": {
+    "camera": null
+  }
+}
