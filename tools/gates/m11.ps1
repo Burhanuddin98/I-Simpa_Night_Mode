@@ -30,6 +30,9 @@ param(
     [ValidateSet('all', 'static', 'e2e')][string]$Only = 'all',
     [string[]]$Spec = @('smoke', 'gate', 'close', 'kill', 'after', 'simulate', 'dock', 'project'),
     [string]$SolversDir = 'C:\tmp\nm-m8a-solvers',
+    # Upstream's TetGen 1.6.0 build, the reference two core tests refuse by name. Default:
+    # $SIMPA_TETGEN160, else beside the solver build (solvers/build.ps1's layout), else M10's copy.
+    [string]$Tetgen160 = '',
     [string]$Upstream = 'B:\repos\I-Simpa-upstream',
     [switch]$SkipCore,
     [switch]$SkipPrior,
@@ -262,6 +265,11 @@ if (-not $SkipCore) {
         $staged = Join-Path $target 'target\solvers\bin'
         if (Test-Path $staged) { Note "NOTE: $staged exists (M10's staging); nothing here relies on it" }
         $env:SIMPA_SOLVERS_DIR = $SolversDir
+        $t160 = if ($Tetgen160) { $Tetgen160 } elseif ($env:SIMPA_TETGEN160) { $env:SIMPA_TETGEN160 } else {
+            @((Join-Path (Split-Path -Parent $SolversDir) 'build\src\tetgen\Release\tetgen.exe'),
+                'C:\tmp\nm-m10-solvers\build\src\tetgen\Release\tetgen.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1 }
+        if (-not $t160) { throw 'no TetGen 1.6.0 reference build (pass -Tetgen160)' }
+        $env:SIMPA_TETGEN160 = $t160
         $env:SIMPA_UPSTREAM = $Upstream
         $env:SIMPA_TEST_SCRATCH_ROOT = Join-Path $target 'test-scratch'
         # At most 4 solver processes at once: the tests run 4 at a time.
@@ -271,7 +279,7 @@ if (-not $SkipCore) {
         $coreSel = & $sel (Join-Path $repo 'crates\simpa-core\tests')
         $cliSel = & $sel (Join-Path $repo 'crates\simpa\tests')
         foreach ($k in $coreExcluded.Keys) { Note "NOT RUN here: $k :: $($coreExcluded[$k])" }
-        Note "solvers $SolversDir; upstream $Upstream; scratch $env:SIMPA_TEST_SCRATCH_ROOT; RUST_TEST_THREADS 4"
+        Note "solvers $SolversDir; TetGen 1.6.0 reference $t160; upstream $Upstream; scratch $env:SIMPA_TEST_SCRATCH_ROOT; RUST_TEST_THREADS 4"
         $t0 = Get-Date
         $log1 = Join-Path $work 'cargo-test-core.log'
         $log2 = Join-Path $work 'cargo-test-cli.log'

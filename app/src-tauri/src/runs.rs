@@ -1682,4 +1682,83 @@ mod tests {
         assert_eq!(st.refusal.unwrap().code, "results_manifest_missing");
         std::fs::remove_dir_all(&dir).unwrap();
     }
+
+    /// Cancel reaches the solver through the slot: `RunSlot::cancel` sets the run's token, the
+    /// core's process layer ends the Job Object (the fake solver's `ping` grandchild with it),
+    /// and the run ends CANCELLED long before the 30 s the solver would have taken, with the slot
+    /// freed. No process id is looked up anywhere.
+    #[test]
+    fn cancel_ends_the_run_through_its_token() {
+        let dir = scratch("cancel");
+        let bat = dir.join("slow_spps.bat");
+        std::fs::write(
+            &bat,
+            "@echo off\r\necho SPPS version 2.2.1\r\necho #1\r\nping -n 30 127.0.0.1 > nul\r\necho End of calculation.\r\n",
+        )
+        .unwrap();
+        let batches = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
+        let got = batches.clone();
+        let channel: Channel<RunStreamBatch> = Channel::new(move |body| {
+            if let tauri::ipc::InvokeResponseBody::Json(text) = body {
+                got.lock()
+                    .unwrap()
+                    .push(serde_json::from_str(&text).unwrap());
+            }
+            Ok(())
+        });
+        let slot = Arc::new(Mutex::new(RunSlot::default()));
+        let finished = Arc::new(AtomicBool::new(false));
+        let token = CancelToken::new();
+        slot.lock().unwrap().active = Some(ActiveRun {
+            id: 11,
+            run: None,
+            token: token.clone(),
+            finished: finished.clone(),
+        });
+        // Cancel as run_cancel does, once the run has a folder and the solver has printed.
+        let canceller = {
+            let slot = slot.clone();
+            std::thread::spawn(move || {
+                let t0 = Instant::now();
+                while t0.elapsed() < Duration::from_secs(20) {
+                    if slot.lock().unwrap().active_run().is_some() {
+                        std::thread::sleep(Duration::from_millis(500));
+                        return slot.lock().unwrap().cancel();
+                    }
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                false
+            })
+        };
+        let opts = fake_options(bat, dir.join("runs"));
+        let fixture = repo("tests/fixtures/runs/spps_ok");
+        let job = RunJob {
+            id: 11,
+            project: dir.join("none.simpa"),
+            token,
+            finished: finished.clone(),
+            slot: slot.clone(),
+            channel,
+        };
+        let t0 = Instant::now();
+        run_thread(job, |t, on| run_folder(&fixture, &opts, t, on));
+        let took = t0.elapsed();
+        assert!(canceller.join().unwrap(), "a run was active to cancel");
+        assert!(
+            took < Duration::from_secs(15),
+            "the run took {took:?}: not cancelled"
+        );
+        assert!(!slot.lock().unwrap().run_active());
+        let batches = batches.lock().unwrap();
+        let last = batches
+            .iter()
+            .flat_map(|b| b["events"].as_array().unwrap())
+            .last()
+            .unwrap()
+            .clone();
+        assert_eq!(last["kind"], "ended", "{last:#}");
+        assert_eq!(last["row"]["status"], "CANCELLED", "{last:#}");
+        assert_eq!(last["row"]["reasons"][0]["ui_code"], "CANCELLED");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

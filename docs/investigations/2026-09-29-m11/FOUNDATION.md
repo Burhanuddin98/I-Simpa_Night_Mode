@@ -74,10 +74,10 @@ focus watcher, and reports missing spec files as pending.
 | Check | Result |
 |---|---|
 | C1's test on the unfixed core | **FAILED, held 120.01 s**; fixed: passes in under 1 s |
-| `mesh_project` (the formerly hanging `every_failure_code_fires_on_its_input` included), scratch on C: | 18 passed, 1 ignored, 1.05 s |
+| `mesh_project` (the formerly hanging `every_failure_code_fires_on_its_input` included), scratch on C: | 18 passed, 1.05 s |
 | `run_manager`, `run_manifest`, `run_verdict`, `run_contract_docs`, `reason_codes_docs`, `validate_projects`, `validate_contract_docs`, `process_job`, lib | all pass |
 | `cli_run`'s two tests, target on C:, **no** `target\solvers\bin` staged | 2 passed |
-| `cargo test -p app` | 50 passed (41 in M10) |
+| `cargo test -p app` | 51 passed (41 in M10), the stream order, a panicking run, every kind of Runs row, the UI-code table, the integer formulas, run names and the library among them; `cancel_ends_the_run_through_its_token` ends a fake solver's 30 s `ping` grandchild through `RunSlot::cancel` in under a second |
 | clippy `-D warnings` (app; simpa-core and simpa, all targets), `cargo fmt --all --check` | clean |
 | `npm run typecheck`; `npm test` | clean; 93 of 93 |
 | `m11.ps1 -Only static -SkipCore` | every check passed, M10's and M9's static checks included |
@@ -85,7 +85,8 @@ focus watcher, and reports missing spec files as pending.
 | `m10.ps1 -Only e2e` (20:29), the window unfocused | 27 of 27 passed, the 13 required ids included, 0 failures |
 | The mesh-failure run by the core with `tetgen_skips.bat` | exit 4, stage mesh, FAIL, `tetgen_exit_nonzero, tetgen_skipped_facets, tetgen_output_missing, neigh_missing` |
 
-The full core suite and `m9.ps1` are recorded in the commit that adds this page's last lines.
+| `m11.ps1 -Only static` with the core crates' suite (20:41-20:49), 4 test threads, scratch on C:, no dev-tree staging, only the `<repo>\target` writers left out | **761 passed, 0 failed, 30 ignored** in 72 binaries, 499 s. The first full run (20:30) had 3 failures, both causes fixed: the two TetGen 1.6.0 reference tests had no `SIMPA_TETGEN160` (m11.ps1 now passes it, `-Tetgen160`), and `validate_fixtures` requires a negative fixture per project rule (`material_placeholder.simpa` added through its generator) |
+| `m9.ps1 -TargetDir C:\tmp\nm-target`, in full (20:49) | **M9 PASSED**, (e) the bindings regenerating to the committed blobs and the unfocused self-test window included |
 
 ## Not done here (the next foundation steps, not deferred past v1)
 
