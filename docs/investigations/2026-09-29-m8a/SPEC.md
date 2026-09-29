@@ -453,7 +453,7 @@ Grace, 2026-09-29 08:22 to 08:43, through `m8_evidence.rs` `m8_cells` (`SIMPA_M8
 this branch at `6a2b411` into `C:\tmp\nm-target-m8a`, with the verified solver build copied to
 `C:\tmp\nm-m8a-solvers` (all four code sha256s equal `solvers/manifest.json`; the run's `run.json`
 names that `spps.exe`, raw sha256 `1d9900db…`). The run folder is kept at
-`C:\tmp\nm-m8a-cell\m8-cells-1790662923`; the test's output is `measured-cell.log` beside this file.
+`C:\tmp\nm-m8a-cell\m8-cells-1790662923`; the test's output is `measured-cell.txt` beside this file.
 
 | Measured | |
 |---|---|
