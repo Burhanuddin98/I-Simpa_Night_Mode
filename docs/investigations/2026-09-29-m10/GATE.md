@@ -1,20 +1,22 @@
 # M10 gate: passed
 
-2026-09-29, Grace, branch `m10` at **`1024de6`**, with a clean tree. Built to `PLAN.md` on the
+2026-09-29, Grace, branch `m10` at **`a5f275d`**, with a clean tree. Built to `PLAN.md` on the
 foundation (`13d7d54`, `9fabfe5`), with the three packages committed as `b5c9133` (viewport),
-`d1aad23` (materials) and `bbd0796` (scene), and the integration as `1024de6`.
+`d1aad23` (materials) and `bbd0796` (scene), the integration as `1024de6`, and the review's one
+major finding fixed in `c41e656` (below, "After the review").
 
 | Run | When | Result |
 |---|---|---|
-| `powershell -File tools/gates/m10.ps1`, bare (Windows PowerShell 5.1: `pwsh` is not installed, although the gate text says `pwsh`) | 10:40:56-10:53:56 | **M10 PASSED**, exit 0 |
-| `powershell -File tools/gates/m9.ps1 -TargetDir C:\tmp\nm-target` | 10:54:05-10:54:48 | **M9 PASSED**, exit 0 |
+| `powershell -File tools/gates/m10.ps1`, bare (Windows PowerShell 5.1: `pwsh` is not installed, although the gate text says `pwsh`), on `a5f275d` | 11:42:11-11:55:21 | **M10 PASSED**, exit 0 |
+| `powershell -File tools/gates/m9.ps1 -TargetDir C:\tmp\nm-target`, on `a5f275d` | 11:55:21-11:56:10 | **M9 PASSED**, exit 0: 23 PASS, 0 FAIL |
+| The same two on `1024de6`, before the review | 10:40:56-10:54:48 | both passed |
 
 ## The gate text against the tests
 
 | Gate (`rebuild-plan-raw-2026-09-23.json`, M10) | Test id (spec) | Receipt from the passing run's `wdio.log` |
 |---|---|---|
 | (a) raw `elmia.ply`: a Console FAIL line with 'open' and '955' | `m10-a-console` (shell) | `FAIL Model check refused elmia.ply: open_boundary: 955 open edges in the census (953 on the outer shell after analysis), 1085 faces with the exterior on both sides. ...`. Control: the teaching room adds no FAIL line |
-| (a) the viewport hook reports more than 0 highlighted faces | `m10-a-highlight` (viewport) | `raw hall, 1086 faces uploaded to the check-highlight overlay`; the chip reads `FAIL · 1086 faces highlighted`. Control: the teaching room gives 0 and no chip |
+| (a) the viewport hook reports more than 0 highlighted faces | `m10-a-highlight` (viewport) | `raw hall, 1086 faces uploaded to the check-highlight overlay`; **as drawn:** `the overlay changes 95018 of 461070 pixels, 74370 towards the warn colour` (at least 1024, and half the changed ones, required); the chip reads `FAIL · 1086 faces highlighted`. Control: the teaching room gives 0 faces, 0 changed pixels and no chip |
 | (a) the Run control is disabled | `m10-a-run` (scene) | raw hall `data-blockers = GEOMETRY_REFUSED MATERIALS_UNASSIGNED SOURCE_NONE M11_PENDING`. Control: the teaching room reads exactly `M11_PENDING`, so "disabled" is not vacuous |
 | (b) the INFO line 'Closed volume, 0 self-intersections' | `m10-b-console` (shell) | `INFO Closed volume, 0 self-intersections · 7860 faces, 10 surface groups` |
 | (b) the step bar shows Materials '0 / 10' | `m10-b-materials` (scene) | corrected hall `'0 / 10'`. Control: `tutorial1_box.simpa` `'3 / 3'` |
@@ -29,7 +31,7 @@ foundation (`13d7d54`, `9fabfe5`), with the three packages committed as `b5c9133
 The 14 tests without an id are the packages' extra checks (PLAN.md 3). The verdict requires them
 too: 27 tests, 0 failed, 0 skipped.
 
-## Output of the passing run
+## Output of the passing run (`a5f275d`)
 
 ```
       PASS  (g) 0 non-async #[tauri::command]
@@ -52,11 +54,11 @@ PASS  lint: theme.css unchanged since the M10 foundation (git blob)
 PASS  UI: tsc typecheck (app and its node --test suites)
       checksum known answers: 6 of 6 passed
 PASS  UI: npm test (checksum known answers; node --test ui/src/**/*.test.ts)
-      test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+      test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
 PASS  app crate: unit tests
 PASS  app crate: clippy -D warnings
 PASS  app crate: rustfmt --check
-      test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+      test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 PASS  fixtures: tests/fixtures/ui equal their recipe (cargo test -p simpa-core --test ui_fixtures)
       CLI fallback staged at C:\tmp\nm-target\target\solvers\bin: 4 exe(s), 0 copied now
       NOT RUN here: simpa-core dump_helpers, gabe_golden, pbin_golden, poly_golden, tetgen_golden :: build the oracle into <repo>\target\oracle (tests/common/paths.rs oracle())
@@ -65,15 +67,15 @@ PASS  fixtures: tests/fixtures/ui equal their recipe (cargo test -p simpa-core -
       NOT RUN here: simpa-core lib: run::manager logs_that_cannot_be_created_are_launch_failed :: folders under <repo>\target\tmp
       NOT RUN here: simpa-core mesh_project: every_failure_code_fires_on_its_input :: HANGS with scratch on NTFS (C:): it expects a read-only stale file to survive deletion, which holds on exFAT but not on NTFS with this toolchain, so the fake mesher that must not run panics and the binary never ends (measured 2026-09-29, M10 foundation)
       solvers C:\tmp\nm-m10-solvers\bin; upstream B:\repos\I-Simpa-upstream; scratch C:\tmp\nm-target\test-scratch
-      71 test binaries: 726 passed, 0 failed, 23 ignored, in 708 s; logs C:\tmp\nm-target\gates\m10\20260929-104056\cargo-test-core.log, C:\tmp\nm-target\gates\m10\20260929-104056\cargo-test-cli.log
+      71 test binaries: 726 passed, 0 failed, 23 ignored, in 676 s; logs C:\tmp\nm-target\gates\m10\20260929-114211\cargo-test-core.log, C:\tmp\nm-target\gates\m10\20260929-114211\cargo-test-cli.log
 PASS  core crates: cargo test -p simpa-core -p simpa (--no-fail-fast)
       held after 0 s
 PASS  e2e lock (C:\tmp\nm-e2e\e2e.lock)
       - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
          Compiling app v0.1.0 (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m10\app\src-tauri)
-          Finished `release` profile [optimized] target(s) in 26.06s
+          Finished `release` profile [optimized] target(s) in 30.22s
              Built application at: C:\tmp\nm-target\release\app.exe
-      exit 0 in 28.9 s; app.exe rebuilt: True
+      exit 0 in 33.6 s; app.exe rebuilt: True
 PASS  build: npx tauri build --no-bundle (custom protocol, ui/dist embedded)
       C:\Users\Burhan\.cargo\bin\tauri-driver.exe (tauri-driver v2.1.0:)
 PASS  harness: tauri-driver present
@@ -84,40 +86,40 @@ PASS  harness: WebdriverIO installed from app/e2e/package-lock.json (by its sha2
 PASS  harness: the e2e config and specs typecheck against it
       B:\repos\I-Simpa-upstream\src\isimpa\resources\doc\tutorial\tutorial 2\elmia.ply
 PASS  harness: the raw hall is present (gate a)
-      exit 0 in 34.8 s; log C:\tmp\nm-target\gates\m10\20260929-104056\wdio.log
+      exit 0 in 36.9 s; log C:\tmp\nm-target\gates\m10\20260929-114211\wdio.log
 PASS  e2e: wdio run app/e2e/m10.conf.ts (-Spec smoke,shell,viewport,materials,scene)
       e2e lock released
       passed      0.3 s  m10-smoke        m10 smoke the built app launches and shows the five steps
       passed      0.2 s  m10-a-console    m10 a console the raw hall shows a FAIL line naming the open boundary and its 955 census edges
       passed      0.1 s  m10-b-console    m10 b console the corrected hall shows the INFO line Closed volume 0 self intersections
       passed      6.2 s  m10-f            m10 f 50 edits then 50 Ctrl Z leave the saved file byte identical
-      passed      2.0 s  m10-h            m10 h no solver computed acoustic number is shown on any step or dock tab
+      passed      2.5 s  m10-h            m10 h no solver computed acoustic number is shown on any step or dock tab
       passed      0.2 s  m10-a-highlight  m10 a highlight the refused faces of the raw hall are highlighted
       passed      1.0 s  m10-d            m10 d a double click on the box ceiling selects its 2 faces group Ceiling
-      passed      5.5 s  (no id)          viewport a pick after the camera orbits maps to the right project face
+      passed      5.6 s  (no id)          viewport a pick after the camera orbits maps to the right project face
       passed      1.0 s  (no id)          viewport the Plan tab is a top orthographic view and picks through it
       passed      3.1 s  (no id)          viewport a placement click puts a receiver 1 2 m and a source 1 5 m above the floor
-      passed      0.8 s  m10-g            m10 g document querySelectorAll canvas length 1 throughout
+      passed      0.9 s  m10-g            m10 g document querySelectorAll canvas length 1 throughout
       passed      0.3 s  m10-c            m10 c the pasted 6x6 block saves byte identical to materials 6x6 expected json
       passed      0.4 s  (no id)          materials Ctrl C copies the exact shortest round trip values and pasting them back is exact
-      passed      0.4 s  (no id)          materials row fill copies the focused cell across its row as one undo step Ctrl R and the button
-      passed      0.5 s  (no id)          materials 1 5 on a used material is refused as MATERIAL VALUE OUT OF RANGE and 0 5 as NOT A NUMBER the project unchanged
+      passed      0.5 s  (no id)          materials row fill copies the focused cell across its row as one undo step Ctrl R and the button
+      passed      0.6 s  (no id)          materials 1 5 on a used material is refused as MATERIAL VALUE OUT OF RANGE and 0 5 as NOT A NUMBER the project unchanged
       passed      0.1 s  (no id)          materials tutorial1 box s third octave band headers read 50 20k in ascending order
-      passed      0.4 s  (no id)          materials a paste with a header row maps its columns by frequency
+      passed      0.5 s  (no id)          materials a paste with a header row maps its columns by frequency
       passed      0.2 s  m10-a-run        m10 a run Run is disabled and why is named
       passed      0.2 s  m10-b-materials  m10 b materials the step bar reads Materials 0 10 on the corrected hall
-      passed      0.5 s  m10-e-outside    m10 e outside a receiver placed outside shows RECEIVER OUTSIDE and changes nothing
+      passed      0.4 s  m10-e-outside    m10 e outside a receiver placed outside shows RECEIVER OUTSIDE and changes nothing
       passed      0.6 s  m10-e-label      m10 e label the label a b is refused with LABEL UNSAFE
       passed      0.3 s  (no id)          scene the step subs read the project closed refused no model assigned sources receivers
       passed      0.3 s  (no id)          scene the dirty dot follows edits saves and undo
-      passed      0.8 s  (no id)          scene a variant is added made active switched and renamed
-      passed      0.5 s  (no id)          scene the filter narrows the list by name and by material
-      passed      0.4 s  (no id)          scene every scroll container has the themed scrollbar colours
-      passed      0.2 s  (no id)          scene the import dialog opens on m and z shows every choice and imports
+      passed      0.9 s  (no id)          scene a variant is added made active switched and renamed
+      passed      0.6 s  (no id)          scene the filter narrows the list by name and by material
+      passed      0.6 s  (no id)          scene every scroll container has the themed scrollbar colours
+      passed      0.3 s  (no id)          scene the import dialog opens on m and z shows every choice and imports
       27 test(s); required 13; not passed: ; failures 0; skipped 0
 PASS  verdict: every required id passed, 0 failures, 0 skipped
 
-work folder: C:\tmp\nm-target\gates\m10\20260929-104056 (21 files, 0.4 MB)
+work folder: C:\tmp\nm-target\gates\m10\20260929-114211 (21 files, 0.4 MB)
 M10 PASSED
 exit 0
 ```
@@ -158,10 +160,48 @@ exit 0
 No other shared file changed. The scene package's `MenuBar` imports `setView` and `frameModel`
 from `features/viewport/engine.ts`, and both exist under those names.
 
+## After the review
+
+`REVIEW-gate-design.md` ran 20 mutations against the gate. One gate check passed when it should
+not have. That is the one major finding.
+
+**`m10-a-highlight` did not see the highlight.** It read `highlightedFaceCount()`, the number of
+faces uploaded to the overlay, and the chip is built from the same number. With the overlay drawn
+at opacity 0 (mutation A2b), the check still passed.
+
+**The fix, `c41e656`.** A new viewport hook, `highlightPixels()`:
+1. draws the view as the app draws it and reads the drawing buffer back;
+2. draws it again with the overlay hidden and reads it back, in the same task, so the hidden
+   frame is never shown;
+3. counts the pixels that differ, and those the overlay moved towards the warn colour.
+
+The check now also needs at least 1024 warn pixels on the raw hall, at least half of the changed
+ones, and 0 changed pixels on the teaching room. `highlightedFaceCount()` stays, as PLAN.md 2.5
+defines it.
+
+**The fix was mutated before it was trusted.** Each mutation ran with
+`m10.ps1 -Only e2e -Spec viewport` and was reverted by `git checkout` on `engine.ts`:
+
+| # | Mutation of the overlay in `engine.ts` | Result | Failing assertion |
+|---|---|---|---|
+| M1 | opacity 0.55 → 0 (the review's A2b) | **FAILED** `m10-a-highlight` | `0 pixels turned warn by the overlay (0 changed), fewer than 1024` |
+| M2 | not added to the scene | **FAILED** `m10-a-highlight` | `0 pixels turned warn by the overlay (0 changed)` |
+| M3 | colour warn → the selection red | **FAILED** `m10-a-highlight` | `0 pixels turned warn by the overlay (95018 changed)` |
+| M4 | `visible = false` after construction | **FAILED** `m10-a-highlight` | `0 pixels turned warn by the overlay (0 changed)` |
+| control | none: 4 runs, 2 before the mutations and 2 where a mutation script missed its pattern (the file had become CRLF) and left the code clean | passed, 6 of 6, each time | `95018 of 461070 pixels, 74370 towards the warn colour` |
+
+In each failing run the other 5 viewport tests passed. The full gate above ran after the reverts,
+so `C:\tmp\nm-target\release\app.exe` is built from `a5f275d`.
+
+**The minor findings are held in `MINOR.md`**, each with a "done when" test. None is fixed here.
+Two need Burhan: the scrollbar hover, because `theme.css` is frozen, and the Materials panel
+layout. The review's code half, `REVIEW-code.md`, was not in the tree; the gate-and-design review
+names no other blocker or major.
+
 ## M9
 
-`m9.ps1` passed in full on `1024de6` (above), and at 10:40 on the tree before the integration
-commit.
+`m9.ps1` passed in full on `a5f275d` (above), on `1024de6`, and at 10:40 on the tree before the
+integration commit.
 
 The first full run at 10:37 failed one check, "app crate: unit tests". It printed no
 `test result` line, and `m9.ps1` keeps only lines matching `test result|FAILED|panicked`, so the
@@ -189,11 +229,15 @@ tauri-driver gives it:
 - 1 spec, `m10.screens.e2e.ts`;
 - this file.
 
+**On B:, after the review:** `MINOR.md`, and the review's own record, `REVIEW-gate-design.md` and
+8 PNG in `review-screens/` (1.77 MB), committed in `a5f275d`.
+
 The packages had added 25 files in `app/ui/src` and changed 17 there, plus their 3 specs. An
 18th changed file there, `actions.ts`, is the integration's.
 
-**On C:** the gate work folders under `C:\tmp\nm-target\gates\m10\` (21 files for the passing run),
-and 4 exe staged in `C:\tmp\nm-target\target\solvers\bin`.
+**On C:** the gate work folders under `C:\tmp\nm-target\gates\m10\` (21 files for the passing run,
+and 8 folders of 4 files each for the fix's control and mutation runs), and 4 exe staged in
+`C:\tmp\nm-target\target\solvers\bin`.
 
 ## Open, for Burhan
 
