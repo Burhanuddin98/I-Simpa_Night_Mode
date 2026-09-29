@@ -18,10 +18,12 @@
 //!
 //! **Closing.** Once the UI has registered its app-event channel, a close request (the close
 //! button, Alt+F4, `WM_CLOSE`) is held and passed to the UI, which acknowledges it at once (it
-//! registers a fresh channel), asks to save a dirty project and answers with `app_quit`. A second
-//! request within 5 s of one the UI never acknowledged means the UI cannot answer: the window
-//! closes after all. A live UI's prompt is never skipped that way, however fast the close button
-//! is clicked again. Whatever closes it, an active run is cancelled first and
+//! registers a fresh channel), asks to save a dirty project and answers with `app_quit`. A page
+//! busy with other work acknowledges late, not never: further requests while one is unanswered
+//! are held, and only a request that has gone unanswered for 5 s (what Windows itself calls a
+//! hung window) means the UI cannot answer, so the next one closes the window after all (M11
+//! review 2, app 1: two clicks 153 ms apart on a page busy for 600 ms closed a dirty project
+//! with no prompt). Whatever closes it, an active run is cancelled first and
 //! given up to 3 s to write its `run.json`; if the process is killed instead, the Job Object's
 //! `KILL_ON_JOB_CLOSE` ends the solver with it, even one killed in the milliseconds between its
 //! creation and its own job (the core's `process::winproc`, "the spawn window").
@@ -138,6 +140,28 @@ fn focus_on_open(args: &GuiArgs) -> bool {
     !(args.e2e || args.selftest.is_some())
 }
 
+/// What a close request does, given when the UI was told of the oldest request it has not
+/// acknowledged (`None`: it has acknowledged every one).
+#[derive(Debug, PartialEq, Eq)]
+enum CloseAction {
+    /// Tell the UI and hold the window: the save prompt decides.
+    AskUi,
+    /// The UI has a request it has not answered yet, for less than [`CloseState::HUNG_UI`]: a
+    /// page busy with other work, not a hung one. Hold the window; the UI answers the request it
+    /// already has.
+    Hold,
+    /// The UI has not answered for [`CloseState::HUNG_UI`]: it cannot, so the window closes.
+    LetThrough,
+}
+
+fn close_action(unanswered_since: Option<Instant>, now: Instant) -> CloseAction {
+    match unanswered_since {
+        None => CloseAction::AskUi,
+        Some(t) if now.duration_since(t) >= CloseState::HUNG_UI => CloseAction::LetThrough,
+        Some(_) => CloseAction::Hold,
+    }
+}
+
 /// A close request (PLAN.md 2.2): held and passed to the UI once it has registered its channel,
 /// let through otherwise, with any active run cancelled and given up to 3 s for its `run.json`.
 fn on_close_requested(state: &AppState, api: &tauri::CloseRequestApi) {
@@ -149,15 +173,12 @@ fn on_close_requested(state: &AppState, api: &tauri::CloseRequestApi) {
         return let_through(state);
     };
     let now = Instant::now();
-    let unanswered = state
-        .close
-        .lock()
-        .ok()
-        .and_then(|c| c.requested)
-        .is_some_and(|t| now.duration_since(t) < CloseState::HUNG_UI);
-    if unanswered {
-        // The UI did not answer the first request: it cannot, so the window closes.
-        return let_through(state);
+    let unanswered_since = state.close.lock().ok().and_then(|c| c.requested);
+    match close_action(unanswered_since, now) {
+        CloseAction::AskUi => {}
+        CloseAction::Hold => return api.prevent_close(),
+        // The UI did not answer for 5 s: it cannot, so the window closes.
+        CloseAction::LetThrough => return let_through(state),
     }
     // Never block the window's thread on a busy session: a busy one counts as dirty.
     let dirty = state
@@ -311,6 +332,32 @@ mod tests {
         assert!(parse(&["--selftest", "a", "--selftest", "b"]).is_err());
         assert!(parse(&["--dump-schema", "s", "--selftest", "o"]).is_err());
         assert!(parse(&["--frobnicate"]).is_err());
+    }
+
+    use std::time::Duration;
+
+    /// M11 review 2, app 1: a page busy for 600 ms got two close requests 153 ms apart, could
+    /// not acknowledge the first in between, and the second closed a dirty project with no
+    /// prompt. A request unanswered for less than HUNG_UI is a busy page: the next is held.
+    #[test]
+    fn a_busy_page_is_not_a_hung_one() {
+        let now = Instant::now();
+        let ago = |ms: u64| now - Duration::from_millis(ms);
+        assert_eq!(close_action(None, now), CloseAction::AskUi);
+        for ms in [0, 2, 153, 1_008, 4_999] {
+            assert_eq!(
+                close_action(Some(ago(ms)), now),
+                CloseAction::Hold,
+                "a request unanswered for {ms} ms"
+            );
+        }
+        for ms in [5_000, 5_001, 60_000] {
+            assert_eq!(
+                close_action(Some(ago(ms)), now),
+                CloseAction::LetThrough,
+                "a request unanswered for {ms} ms: a hung UI"
+            );
+        }
     }
 
     #[test]

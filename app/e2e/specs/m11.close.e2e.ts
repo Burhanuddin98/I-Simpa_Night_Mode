@@ -7,7 +7,9 @@
 // the prompt appears, and Cancel keeps the app alive. A second WM_CLOSE while the prompt is open,
 // and a third just after Cancel, both within the 5 s the backend gives an unanswered request
 // before it takes the UI for hung, must not close past the prompt either (the UI acknowledges
-// each request at once; FOUNDATION.md F-11). Then, with the project saved and a run solving,
+// each request at once; FOUNDATION.md F-11). Nor may two WM_CLOSE sent while the page's main
+// thread is busy, which cannot acknowledge in between (review 2, app 1). Then, with the project
+// saved and a run solving,
 // WM_CLOSE again: the app cancels the run, waits for its run.json, and exits.
 import { strict as assert } from 'node:assert';
 import path from 'node:path';
@@ -75,6 +77,34 @@ describe('M11 close', () => {
     assert.ok(shown && shown.visible && !shown.minimised, `the window is gone or hidden after Cancel: ${JSON.stringify(windowState(pid).windows)}`);
     assert.equal(await m10.dirty(), true, 'Cancel keeps the unsaved edit');
 
+    // A busy page (M11 review 2, app 1): its main thread blocked for BUSY_MS, and two WM_CLOSE
+    // inside that spell. The page cannot acknowledge the first before the second arrives, which
+    // the backend used to take for a hung UI and let through, closing the dirty project with no
+    // prompt. A busy page is not a hung one: both must be held, and the prompt appear once the
+    // page runs again.
+    const BUSY_MS = 4_000;
+    await browser.execute((ms: number) => {
+      setTimeout(() => {
+        const t = Date.now();
+        while (Date.now() - t < ms) {
+          // The page's main thread is busy: no event, no channel message, no acknowledgement.
+        }
+      }, 0);
+    }, BUSY_MS);
+    const tBusy = Date.now();
+    assert.equal(closeMainWindow(pid), true, 'the first WM_CLOSE on the busy page was not delivered');
+    const gap1 = Date.now() - tBusy;
+    assert.equal(closeMainWindow(pid), true, 'the second WM_CLOSE on the busy page was not delivered');
+    const gap2 = Date.now() - tBusy;
+    assert.ok(gap2 < BUSY_MS, `the two WM_CLOSE took ${gap2} ms, past the page's ${BUSY_MS} ms busy spell: nothing was tested`);
+    await sleepUntil(tBusy + BUSY_MS + 500);
+    assert.ok(alive(pid), `two WM_CLOSE at +${gap1} and +${gap2} ms on a page busy for ${BUSY_MS} ms closed the app past the save prompt`);
+    await waitPrompt(`two WM_CLOSE at +${gap1} and +${gap2} ms on a page busy for ${BUSY_MS} ms`);
+    console.log(`m11-d-close receipt: two WM_CLOSE at +${gap1} and +${gap2} ms while the page was busy for ${BUSY_MS} ms: the app alive, then the prompt`);
+    await cancelPrompt();
+    assert.ok(alive(pid), 'the app exited after Cancel (busy page)');
+    assert.equal(await m10.dirty(), true, 'Cancel keeps the unsaved edit (busy page)');
+
     // Undo and save: a clean project on disk, then a run.
     await m10.undo();
     await m10.saveAs(LONG());
@@ -102,7 +132,9 @@ describe('M11 close', () => {
       }
       await new Promise((r) => setTimeout(r, 100));
     }
-    console.log(`m11-d-close receipt: app.exe ${exited >= 0 ? `exited ${exited} ms after WM_CLOSE` : 'STILL RUNS 5 s after WM_CLOSE'}`);
+    // First looked for after the 2 s solver check, so this is an upper bound on the exit time,
+    // not the exit latency (review 2, m4).
+    console.log(`m11-d-close receipt: app.exe ${exited >= 0 ? `gone when first looked for, ${exited} ms after WM_CLOSE (it exited by then)` : 'STILL RUNS 5 s after WM_CLOSE'}`);
     assert.ok(exited >= 0, 'app.exe did not exit within 5 s of WM_CLOSE');
     // The close path cancelled the run and waited for its record.
     const m = readManifest(path.join(runsRootOf(LONG()), run));

@@ -50,10 +50,12 @@ pub struct AppState {
     pub close: Arc<Mutex<CloseState>>,
 }
 
-/// A close request the UI was told of and has not acknowledged, and when: a second one within
-/// [`CloseState::HUNG_UI`] means the UI cannot answer, and the window closes after all (the run
-/// is cancelled first). The UI acknowledges each request at once by registering a fresh channel
-/// (`app_events`), and `app_quit` clears it too, so a live UI's save prompt is never skipped.
+/// The oldest close request the UI was told of and has not acknowledged, and when. Requests
+/// while it is unanswered are held: a page busy with other work acknowledges late. Only once it
+/// has gone unanswered for [`CloseState::HUNG_UI`] does the next request close the window after
+/// all (the run is cancelled first). The UI acknowledges each request as soon as its page runs,
+/// by registering a fresh channel (`app_events`), and `app_quit` clears it too, so a live UI's
+/// save prompt is skipped only if its page stays blocked for 5 s and the user asks again.
 #[derive(Default)]
 pub struct CloseState {
     pub requested: Option<Instant>,
@@ -505,9 +507,10 @@ pub async fn solvers_status(state: State<'_, AppState>) -> CmdResult<SolversStat
 
 /// Registers the UI's app-event channel (the close request). Until it is registered, a close
 /// request is let through. The UI registers a fresh channel as soon as a close request reaches
-/// it: that is its acknowledgement, so the request no longer counts as unanswered, and a second
-/// close within [`CloseState::HUNG_UI`] goes to the UI (the save prompt) instead of closing past
-/// it. A hung UI acknowledges nothing, and its window still closes on the second request.
+/// it: that is its acknowledgement, so the request no longer counts as unanswered, and the next
+/// close goes to the UI (the save prompt) instead of closing past it. A hung UI acknowledges
+/// nothing, and its window closes on a request made once the first has gone unanswered for
+/// [`CloseState::HUNG_UI`].
 #[tauri::command(rename_all = "snake_case")]
 pub async fn app_events(state: State<'_, AppState>, on_event: Channel<AppEvent>) -> CmdResult<()> {
     let (slot, close) = (state.ui_events.clone(), state.close.clone());
