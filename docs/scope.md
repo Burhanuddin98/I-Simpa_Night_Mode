@@ -15,7 +15,7 @@ into the file named here in the same session, never only into a chat or a handof
 | **v2 contenders** | `docs/v1.1-backlog.md`, "v2 contenders" | 14 items (the GPU tracer and 13 community requests, row 16), after M14. |
 | **Open physics questions** | This file, below | 4 open. |
 | **Why W1G was dropped** | `docs/investigations/2026-09-25-z3-w1g-hunt/z3-verdict.md` | 217 robust false accepts; three mechanisms. |
-| **Decisions (who, why, revisit?)** | `docs/decision-log.md` | 20 recorded. |
+| **Decisions (who, why, revisit?)** | `docs/decision-log.md` | 21 recorded. |
 | **The running log** | `session-logs/HANDOFF-2026-09-23.md` | Burhan's words verbatim, decisions, restart order. |
 
 ## Engine work before M8
@@ -46,7 +46,8 @@ into the file named here in the same session, never only into a chat or a handof
 
 - **M8b's scope (Burhan, row 18):** EDT, C50, C80, D50 and SPL, each with a chosen reference and a gate. None is 'reported only'.
 - **STI is in v1 (row 19),** tested like the core parameters. **Every other parameter ships labelled 'not yet validated' (row 20).**
-- **Burhan wants all of upstream's features in v1 (2026-09-29 08:58).** How far 'all' reaches is being settled with him.
+- **v1's scope is settled (row 21):** the about 102 planned features, plus T20, Ts, dB(A), G and STI, all tested. The 85 v1.x features become point releases in the order users ask. LF, LFC, LG, ST early and platform work stay later.
+- **M8b's scope now reads:** EDT, T20, Ts, C50, C80, D50, SPL and STI, each against a chosen reference. dB(A) and G get unit tests on top of the tested SPL.
 
 ## M8 decisions (the critic's, 2026-09-25 23:12; recommendations of 2026-09-26 00:34)
 
