@@ -21,7 +21,10 @@
 //! handle and kills whatever it started, the window included. `PROC_THREAD_ATTRIBUTE_JOB_LIST`
 //! would close the window per child, but `std::process::Command` cannot pass it on stable Rust.
 //! The job is joined at the first spawn, not at startup, so the app's WebView2 processes, started
-//! before any run, are not in it.
+//! before any run, are not in it. Everything this process starts after that is in it and dies
+//! with it: a process meant to outlive it (M13's updater) must be started with
+//! `CREATE_BREAKAWAY_FROM_JOB`, which this job would first have to allow
+//! (`JOB_OBJECT_LIMIT_BREAKAWAY_OK`).
 //!
 //! None of the three children starts processes of its own: a grep of upstream
 //! `src/{spps,ctr,tetgen,lib_interface}` at 929a5c8 for `CreateProcess`, `ShellExecute`,
