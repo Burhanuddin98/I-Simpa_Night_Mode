@@ -6,12 +6,13 @@ into the file named here in the same session, never only into a chat or a handof
 
 | Dimension | Where it lives | State |
 |---|---|---|
-| **Milestones M0-M14** | `docs/rebuild-plan.md` (table) | M0-M7 and M9 gated. Pre-M8 merged (`df7d8e5`; M4 12/12, M5 43/43, M6 39/39, M7 32/32, M9 23/23, parity 26/26). **M10 gated and merged 2026-09-29** (`a67b8db`). **M8a gated and merged 2026-09-29** (`06588a2`): the T30 bed passed 23 of 23 at 12 jobs, and an independent three-lens judge returned PASS (`docs/investigations/2026-09-29-m8a/VERDICT.md`). Two latent gate defects (VERDICT findings 1 and 2) block any reuse of `simpa bed` until fixed: that is M8b's first step (decision row 23). M8b and M11-M14 not started. |
+| **Milestones M0-M14** | `docs/rebuild-plan.md` (table) | M0-M7 and M9 gated. Pre-M8 merged (`df7d8e5`; M4 12/12, M5 43/43, M6 39/39, M7 32/32, M9 23/23, parity 26/26). **M10 gated and merged 2026-09-29** (`a67b8db`). **M8a gated and merged 2026-09-29** (`06588a2`): the T30 bed passed 23 of 23 at 12 jobs, and an independent three-lens judge returned PASS (`docs/investigations/2026-09-29-m8a/VERDICT.md`). Two latent gate defects (VERDICT findings 1 and 2) block any reuse of `simpa bed` until fixed: that is M8b's first step (decision row 23). M8b and M11-M14 not started. **M11 planned 2026-09-29** (`docs/investigations/2026-09-29-m11/PLAN.md`): one foundation, then three packages (simulate, dock, project). |
 | **Engine work before M8** | This file, below | Open. |
 | **M8 decisions** | This file, below | The 7 technical calls were adopted as recommended on 2026-09-29 (decision row 17). The reference is decided, and Burhan's word is final. |
 | **Upstream feature parity** (what the screens must hold) | `docs/investigations/2026-09-25-parity-audit/parity-matrix.md` | Upstream has 250 user-facing features. **43 are before v1** (15 absent or deferred, 14 core-only, 14 design-only; 38 small, 5 medium), 85 are v1.x and 55 later. They fold into M10-M13. |
-| **Product decisions for Burhan** | The parity matrix (open decisions, raw:348-360); this file, below | 8 open. |
-| **Deferred work (v1.1)** | `docs/v1.1-backlog.md` | 5 items, closed by M14. |
+| **Product decisions for Burhan** | The parity matrix (open decisions, raw:348-360); this file, below; M11 PLAN section 10 | 8 open. M11 adds PQ1-PQ6, each with a recommended default that the build follows until Burhan says otherwise. |
+| **Deferred work (v1.1)** | `docs/v1.1-backlog.md` | 18 items, closed by M14. Rows 6-18 were added by the M11 plan: M10's minor findings, the core test targets under `<repo>\target`, and the remaining-time estimate. |
+| **v1 pieces outside the milestone specs** | This file | Two, both v1 (row 21), neither started. (1) Face regrouping (G19) and grouped receivers on `.proj` import (M37): row 22 gives them their own piece. (2) The Simulate settings editor (C7, C8, C10, C11, C12, C21, C22, C25, C26, C27): M11 PLAN PQ3, due before M12 because C8 and C22 feed M12's playback and multi-source runs. |
 | **v2 contenders** | `docs/v1.1-backlog.md`, "v2 contenders" | 14 items (the GPU tracer and 13 community requests, row 16), after M14. |
 | **Open physics questions** | This file, below | 4 open. |
 | **Why W1G was dropped** | `docs/investigations/2026-09-25-z3-w1g-hunt/z3-verdict.md` | 217 robust false accepts; three mechanisms. |

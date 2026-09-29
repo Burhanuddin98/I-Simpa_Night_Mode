@@ -6,6 +6,29 @@ major finding, `m10-a-highlight` passing with the overlay invisible, is fixed in
 Anything still open when M10 merges moves to `docs/v1.1-backlog.md`, with its receipt and a
 "done when" test, as the project's CLAUDE.md asks.
 
+## Where each went (M11 plan, 2026-09-29, `docs/investigations/2026-09-29-m11/PLAN.md` section 8)
+
+An item went into M11 if it lets a wrong or misleading number reach a user, or it breaks a gate's
+honesty. Every other item went to `docs/v1.1-backlog.md`, which is now the only place it lives.
+
+| Item | Went to |
+|---|---|
+| A-2 | **M11, foundation:** the parameter-name rule in `m10-h` and `m11-h` (PLAN 4.2, rule 2) |
+| A-3 | No action: a note, kept |
+| A-4 | **M11, foundation:** `m10.ps1`'s line becomes "e2e: wdio ran (verdict below)", passing only on exit 0 (PLAN 4.5) |
+| A-5 | Backlog 7 |
+| B-2 | Backlog 8 |
+| B-5 | Backlog 9 |
+| B-6 | Backlog 10 |
+| B-9 | Backlog 11 |
+| B-11 | Backlog 12 |
+| B-17 | Backlog 13 |
+| B-18 | **M11, foundation and project package:** no volume for a refused model, one precision for the dimensions; check `m11-b18` |
+| B-20 | Backlog 14, Burhan's to decide |
+| B-23 | Backlog 15 |
+| B-24 | Backlog 16 |
+| B-25 | Backlog 17, Burhan's to decide |
+
 ## Gate honesty (review part A)
 
 | # | Finding | Receipt | Done when |
