@@ -2,13 +2,91 @@
 // name), Sources, Receivers and surface receivers, each row `[data-entity="<kind>:<id>"]` with a
 // FAIL (or WARN) label and the UI code when the validator names it. A row click selects it;
 // Del and F2 act on a selected source or receiver (PLAN.md 7.5).
+//
+// M11 (row 22, M26): each source has an on/off switch, `[data-source-toggle=<id>]`, here and in
+// the Sources panel's list, through the checked apply (`set_source_enabled`). A disabled source
+// reads "off" as text. A refused switch (the only enabled source switched off: SOURCE_NONE; a
+// source switched on outside the room: SOURCE_OUTSIDE) is shown inline under the sources, in
+// both places, and the project is left unchanged. The switch is a button of its own beside the
+// row's button, never inside it.
 import { useState } from 'react';
-import type { UiIssue } from '../bindings/ipc';
+import * as actions from '../actions';
+import type { Source, UiIssue } from '../bindings/ipc';
 import { issuesByEntity, projectIssues } from '../issues';
-import { sceneStore, selectionStore, useStore } from '../store';
+import { refusalStore, sceneStore, selectionStore, useStore } from '../store';
 import { Search } from './icons';
-import { coord, effectiveMaterial, matchesFilter, sentence, worstSeverity } from './sceneModel';
+import { coord, effectiveMaterial, matchesFilter, sentence, uniqueIssues, worstSeverity } from './sceneModel';
 import { onEntityKey, selectGroup, selectPoint } from './sceneUi';
+
+// ---- the source switch (M26) -------------------------------------------------------------------
+
+/** actions.setSourceEnabled files a switch's refusals under `source:<id>:enabled`. */
+const isToggleKey = (key: string) => key.startsWith('source:') && key.endsWith(':enabled');
+/** Refusals put away by a later switch attempt (by identity, so a new refusal shows again). */
+const dismissedToggles = new WeakSet<readonly UiIssue[]>();
+
+/** The latest switch attempt's refusals, if it was refused. */
+export function toggleRefusals(refusals: ReadonlyMap<string, UiIssue[]>): UiIssue[] {
+  const out: UiIssue[][] = [];
+  for (const [key, list] of refusals) if (isToggleKey(key) && !dismissedToggles.has(list)) out.push(list);
+  return uniqueIssues(...out);
+}
+
+/** Switches a source on or off; the messages shown become this attempt's. */
+async function toggleSource(id: string, enabled: boolean): Promise<void> {
+  for (const [key, list] of refusalStore.get()) if (isToggleKey(key)) dismissedToggles.add(list);
+  await actions.setSourceEnabled(id, enabled);
+}
+
+/**
+ * A source's on/off switch (the design's switch, design:446-449): red with the knob right when
+ * on, grey with the knob left when off, and the state as text beside it (`compact` leaves the
+ * text to the row, which prints "off"). `aria-checked` and `data-state` carry the state too.
+ */
+export function SourceSwitch({ source, compact = false }: { source: Source; compact?: boolean }) {
+  const [pending, setPending] = useState(false);
+  const on = source.enabled;
+  return (
+    <button
+      type="button"
+      role="switch"
+      className={`switch${compact ? ' compact' : ''}`}
+      aria-checked={on}
+      aria-label={`${source.name} on`}
+      data-source-toggle={source.id}
+      data-state={on ? 'on' : 'off'}
+      disabled={pending}
+      title={on ? `Switch ${source.name} off: it emits nothing and the run leaves it out` : `Switch ${source.name} on`}
+      onClick={(e) => {
+        e.stopPropagation();
+        setPending(true);
+        toggleSource(source.id, !on)
+          .catch(() => {})
+          .finally(() => setPending(false));
+      }}
+    >
+      <span className="switch-track" aria-hidden>
+        <span className="switch-knob" />
+      </span>
+      {!compact && <span className="switch-text">{on ? 'on' : 'off'}</span>}
+    </button>
+  );
+}
+
+/** A refused switch, inline: FAIL and the UI code as text, then the message. */
+export function ToggleRefusalLines({ issues }: { issues: readonly UiIssue[] }) {
+  if (!issues.length) return null;
+  return (
+    <div className="issues toggle-issues" data-part="source-toggle-issues">
+      {issues.map((i) => (
+        <div key={`${i.code}|${i.path}|${i.message}`} className="issue" data-issue-code={i.code} role="alert">
+          <span className="code">FAIL {i.code}</span>
+          <span className="msg">{sentence(i.message)} Refused; the project is unchanged.</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /** FAIL or WARN and the first code, as text: a failure never relies on colour alone. */
 export function IssueTag({ issues }: { issues: readonly UiIssue[] }) {
@@ -43,6 +121,7 @@ function Head({ title, shown, total }: { title: string; shown: number; total: nu
 export function ScenePanel() {
   const scene = useStore(sceneStore);
   const selection = useStore(selectionStore);
+  const refusals = useStore(refusalStore);
   const [query, setQuery] = useState('');
   const view = scene?.view ?? null;
   const byEntity = issuesByEntity(scene?.issues ?? []);
@@ -111,23 +190,30 @@ export function ScenePanel() {
 
             <Head title="Sources" shown={sources.length} total={view.sources.length} />
             {sources.map((s) => (
-              <button
-                key={s.id}
-                className="scene-row"
-                data-entity={`source:${s.id}`}
-                aria-pressed={selection.kind === 'source' && selection.id === s.id}
-                onClick={() => selectPoint('source', s.id)}
-              >
-                <span className={`marker source${s.enabled ? '' : ' off'}`} />
-                <span className="row-name">{s.name}</span>
-                <IssueTag issues={issuesOf('source', s.id)} />
-                {!s.enabled && <span className="row-detail">off</span>}
-                <span className="row-detail" data-input>
-                  {s.directivity.kind === 'omni' ? 'Omni' : 'Directional'} · {String(s.power.global_db)} dB
-                </span>
-              </button>
+              <div key={s.id} className="scene-line">
+                <button
+                  className="scene-row"
+                  data-entity={`source:${s.id}`}
+                  aria-pressed={selection.kind === 'source' && selection.id === s.id}
+                  onClick={() => selectPoint('source', s.id)}
+                >
+                  <span className={`marker source${s.enabled ? '' : ' off'}`} />
+                  <span className="row-name">{s.name}</span>
+                  <IssueTag issues={issuesOf('source', s.id)} />
+                  {!s.enabled && (
+                    <span className="row-detail row-off" data-part="source-off">
+                      off
+                    </span>
+                  )}
+                  <span className="row-detail" data-input>
+                    {s.directivity.kind === 'omni' ? 'Omni' : 'Directional'} · {String(s.power.global_db)} dB
+                  </span>
+                </button>
+                <SourceSwitch source={s} compact />
+              </div>
             ))}
             {!view.sources.length && <div className="scene-empty empty">No sources</div>}
+            <ToggleRefusalLines issues={toggleRefusals(refusals)} />
 
             <Head
               title="Receivers"

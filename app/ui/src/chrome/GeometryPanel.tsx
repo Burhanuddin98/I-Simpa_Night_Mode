@@ -2,14 +2,38 @@
 // (closed, self-intersections, flipped normals, open edges, units), the dimensions, volume and
 // surface (geometry facts, inside `[data-geometry]`), and Import model…, which opens the same
 // dialog as File › Open… on a mesh (unit and up axis confirmed, never guessed).
+//
+// M11 (M10 MINOR B-18, check m11-b18):
+// - The three dimensions share one precision, two decimals, as the design writes them
+//   ("10.00 m"), where M10 dropped trailing zeros and mixed `41.45 m` with `16.1 m`.
+// - A refused model shows no volume: the core sends none (`enclosed_volume_m3` null), and the
+//   row says why in words, with no digit. A checked model's volume keeps the status bar's
+//   spelling (`fact(v, 1)`: "180 m³"), so one number reads the same in both places.
+// - Import model… waits while a run is active (PQ4), saying why.
 import * as actions from '../actions';
-import { sceneStore, useStore } from '../store';
+import { runStore, sceneStore, useStore } from '../store';
+import { RUN_ACTIVE_TITLE } from './MenuBar';
 import { checkRows, fact, fileLabel, unitsText } from './sceneModel';
 
+/** Decimals of every dimension (the design's "10.00 m"). */
+const DIMENSION_DECIMALS = 2;
+
+/** A dimension with exactly `DIMENSION_DECIMALS` decimals; an em dash when not a finite number. */
+function dimension(v: number | null | undefined): string {
+  return typeof v === 'number' && Number.isFinite(v) ? v.toFixed(DIMENSION_DECIMALS) : '—';
+}
+
 function ImportBlock() {
+  const running = useStore(runStore) !== null;
   return (
     <div className="props-section">
-      <button className="wide-button" data-part="import-model" onClick={() => actions.fire(actions.openDialog())}>
+      <button
+        className="wide-button"
+        data-part="import-model"
+        disabled={running}
+        title={running ? RUN_ACTIVE_TITLE : undefined}
+        onClick={() => actions.fire(actions.openDialog())}
+      >
         Import model…
       </button>
       <div className="formats">PLY · OBJ · STL</div>
@@ -38,6 +62,7 @@ export function GeometryPanel() {
   const ok = check.verdict === 'ok';
   const imported = !info.path;
   const [lx, ly, lz] = check.extents_m;
+  const volume = check.enclosed_volume_m3;
   return (
     <div data-part="geometry-panel">
       <div className="props-head">
@@ -84,24 +109,27 @@ export function GeometryPanel() {
               ['Height', lz],
             ] as const
           ).map(([k, v]) => (
-            <div key={k} className="fact-cell">
+            <div key={k} className="fact-cell" data-dimension={k.toLowerCase()}>
               <div className="k">{k}</div>
-              <div className="v mono">{fact(v, 2)} m</div>
+              <div className="v mono">{dimension(v)} m</div>
             </div>
           ))}
         </div>
         <div className="fact-line">
-          <span>
+          <span data-part="volume" data-volume={volume == null ? 'none' : 'enclosed'}>
             Volume{' '}
-            {check.enclosed_volume_m3 === null ? (
-              // A refused model encloses no volume anyone should read (M10 MINOR B-18; the
-              // wording is the project package's to settle, M11 PLAN.md 4.2 m11-b18).
-              <span className="mono v">none: the model is refused</span>
+            {volume == null ? (
+              <span
+                className="v"
+                title={ok ? 'The model check gave no volume' : 'The model check refused this model: it encloses no volume anyone should read'}
+              >
+                {ok ? 'not given' : 'none: the model is refused'}
+              </span>
             ) : (
-              <span className="mono v">{fact(check.enclosed_volume_m3, 1)} m³</span>
+              <span className="mono v">{fact(volume, 1)} m³</span>
             )}
           </span>
-          <span>
+          <span data-part="surface">
             Surface <span className="mono v">{fact(check.area_m2, 1)} m²</span>
           </span>
         </div>

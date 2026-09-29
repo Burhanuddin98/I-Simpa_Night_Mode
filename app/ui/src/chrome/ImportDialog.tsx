@@ -6,8 +6,9 @@
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
 import type { Unit, Up } from '../backend';
-import { importRequestStore, useStore } from '../store';
+import { importRequestStore, runStore, useStore } from '../store';
 import { registerHook } from '../testhooks';
+import { RUN_ACTIVE_TITLE } from './MenuBar';
 
 const UNITS: readonly Unit[] = ['m', 'cm', 'mm', 'ft', 'in'];
 const UPS: readonly Up[] = ['z', 'y'];
@@ -47,10 +48,14 @@ function Choice<T extends string>(props: {
 function Dialog({ path }: { path: string }) {
   const [unit, setUnit] = useState<Unit>('m');
   const [up, setUp] = useState<Up>('z');
+  // A run that started while the dialog was open (F5) belongs to the project the import would
+  // replace: Import waits for it (M11 PQ4), as New and Open do.
+  const running = useStore(runStore) !== null;
   const confirm = useRef<HTMLButtonElement>(null);
   useEffect(() => confirm.current?.focus(), []);
   const close = () => importRequestStore.set(null);
   const go = () => {
+    if (runStore.get() !== null) return;
     close();
     actions.fire(actions.importModel(path, unit, up));
   };
@@ -85,7 +90,14 @@ function Dialog({ path }: { path: string }) {
           <button onClick={close} data-part="import-cancel">
             Cancel
           </button>
-          <button ref={confirm} className="primary" onClick={go} data-part="import-confirm">
+          <button
+            ref={confirm}
+            className="primary"
+            onClick={go}
+            data-part="import-confirm"
+            disabled={running}
+            title={running ? RUN_ACTIVE_TITLE : undefined}
+          >
             Import
           </button>
         </div>

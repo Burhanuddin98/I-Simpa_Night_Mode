@@ -785,3 +785,100 @@
   color: #fff;
   font-weight: 600;
 }
+
+/* M11, row 22 (A9): the save prompt, in the import dialog's frame. */
+.dialog.prompt {
+  width: 420px;
+}
+.dialog.prompt .dialog-file {
+  margin-bottom: 10px;
+}
+
+/* M11, row 22 (M26): a source's on/off switch (design:446-449). On: the red track with a white
+   knob on the right; off: the edge-grey track with a grey knob on the left. The state is also
+   text ("on"/"off" beside the switch, or "off" on the row), never colour alone. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 2px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.switch:disabled {
+  opacity: 0.6;
+}
+.switch-track {
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--edge);
+  box-sizing: border-box;
+}
+.switch-knob {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.switch[aria-checked='true'] .switch-track {
+  justify-content: flex-end;
+  background: var(--red);
+}
+.switch[aria-checked='true'] .switch-knob {
+  background: #fff;
+}
+.switch-text {
+  width: 20px;
+  text-align: left;
+}
+.switch.compact .switch-track {
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+}
+.switch.compact .switch-knob {
+  width: 10px;
+  height: 10px;
+}
+
+/* The switch sits beside its row's button (never inside it), over the row's right end. */
+.scene-line,
+.point-line {
+  position: relative;
+}
+.scene-line .scene-row {
+  padding-right: 40px;
+}
+.scene-line .switch {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+}
+.point-line .point-row {
+  padding-right: 64px;
+}
+.point-line .switch {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+}
+.row-detail.row-off,
+.point-state.off {
+  color: var(--text-2);
+}
+.scene-list .toggle-issues {
+  margin: 6px 8px 0;
+}
