@@ -17,7 +17,7 @@ import { StepBar } from './chrome/StepBar';
 import { Dock } from './features/dock/Dock';
 import { frameModel } from './features/viewport/engine';
 import { Viewport } from './features/viewport/Viewport';
-import { joinBlockers } from './flow';
+import { isReloadKey, joinBlockers } from './flow';
 import { probeWebGL } from './gpu';
 import { runSelftest } from './selftest';
 import { log, runStore, sceneStore, solversStatusStore, solverStore, statusStore } from './store';
@@ -82,8 +82,16 @@ function onPlainKey(e: KeyboardEvent): boolean {
   return false;
 }
 
-/** The named verbs' keys (PLAN.md 7.5, point 3): undo, redo, save, save as, open. */
+/** WebView2's own context menu offers Refresh, a reload of the page (M11 review 2, app 2): it
+ * stays only in text fields, whose menu is the edit menu (cut, copy, paste). */
+function onContextMenu(e: MouseEvent): void {
+  if (!typing(e.target)) e.preventDefault();
+}
+
+/** The named verbs' keys (PLAN.md 7.5, point 3): undo, redo, save, save as, open. The
+ * webview's reload keys never reload the page, in a text field or not. */
 function onKey(e: KeyboardEvent): void {
+  if (isReloadKey(e)) e.preventDefault();
   if (onPlainKey(e)) return;
   if (!e.ctrlKey || e.altKey || e.metaKey || typing(e.target)) return;
   const key = e.key.toLowerCase();
@@ -102,7 +110,11 @@ export function App() {
   useEffect(() => {
     void boot();
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('contextmenu', onContextMenu);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('contextmenu', onContextMenu);
+    };
   }, []);
   return (
     <div className="shell">

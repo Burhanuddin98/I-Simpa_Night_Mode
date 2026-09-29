@@ -27,7 +27,7 @@
 # tauri-driver, the msedgedriver of the live WebView2 runtime, and the solver build.
 #
 # Run: powershell -File tools/gates/m11.ps1 [-TargetDir C:\tmp\nm-target] [-E2eHome C:\tmp\nm-e2e]
-#        [-Only all|static|e2e] [-Spec smoke,gate,close,kill,after,simulate,dock,project]
+#        [-Only all|static|e2e] [-Spec smoke,gate,close,kill,after,simulate,dock,project,reload]
 #        [-SolversDir C:\tmp\nm-m8a-solvers] [-SkipCore] [-SkipPrior] [-FocusSayNo] [-FetchDriver]
 # Partial runs (-Only other than all, a -Spec subset, -SkipCore, -SkipPrior) never print
 # "M11 PASSED".
@@ -35,7 +35,7 @@ param(
     [string]$TargetDir = 'C:\tmp\nm-target',
     [string]$E2eHome = 'C:\tmp\nm-e2e',
     [ValidateSet('all', 'static', 'e2e')][string]$Only = 'all',
-    [string[]]$Spec = @('smoke', 'gate', 'close', 'kill', 'after', 'simulate', 'dock', 'project'),
+    [string[]]$Spec = @('smoke', 'gate', 'close', 'kill', 'after', 'simulate', 'dock', 'project', 'reload'),
     [string]$SolversDir = 'C:\tmp\nm-m8a-solvers',
     # Upstream's TetGen 1.6.0 build, the reference two core tests refuse by name. Default:
     # $SIMPA_TETGEN160, else beside the solver build (solvers/build.ps1's layout), else M10's copy.
@@ -86,6 +86,8 @@ $specIds = [ordered]@{
     simulate = @('m11-sim-preflight', 'm11-sim-last-run', 'm11-sim-numbers', 'm11-sim-tcr', 'm11-sim-link', 'm11-sim-running')
     dock     = @('m11-dock-interrupted', 'm11-dock-live', 'm11-dock-row', 'm11-dock-meshfail', 'm11-dock-h')
     project  = @('m11-r22-a9', 'm11-r22-a3', 'm11-r22-g42', 'm11-r22-m26', 'm11-r22-m5', 'm11-r22-m1', 'm11-b18')
+    # M11 review 2, app 2: a page reloaded mid-run.
+    reload   = @('m11-reload')
     # Not a gate spec: the screenshots for the investigation folder (m11.screens.e2e.ts), no id.
     screens  = @()
 }
@@ -481,7 +483,7 @@ Check "harness: the private solver copy, each executable the verified build by c
 
 Check "harness: the projects copied to C: (runs never land on B:), and the mesh-failure run made by the core" {
     $fx = Join-Path $repo 'tests\fixtures\ui'
-    foreach ($pair in @(@('box', 'box_run.simpa'), @('long', 'box_long.simpa'), @('hall', 'hall_run.simpa'), @('meshfail', 'box_run.simpa'), @('room', 'teaching_room.simpa'), @('loss', 'box_run.simpa'))) {
+    foreach ($pair in @(@('box', 'box_run.simpa'), @('long', 'box_long.simpa'), @('reload', 'box_long.simpa'), @('hall', 'hall_run.simpa'), @('meshfail', 'box_run.simpa'), @('room', 'teaching_room.simpa'), @('loss', 'box_run.simpa'))) {
         $d = Join-Path $projects $pair[0]
         New-Item -ItemType Directory -Force $d | Out-Null
         Copy-Item (Join-Path $fx $pair[1]) $d -Force

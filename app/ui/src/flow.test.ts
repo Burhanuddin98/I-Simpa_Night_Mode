@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { RunRow, RunStreamEvent } from './bindings/ipc.ts';
-import { emptyLog, endLine, foldEvent, joinBlockers, needsSavePrompt, progressText, RUN_ACTIVE } from './flow.ts';
+import { emptyLog, endLine, foldEvent, isReloadKey, joinBlockers, needsSavePrompt, progressText, RUN_ACTIVE } from './flow.ts';
 
 const solvers = (blockers: string[]) => ({ checks: [], blockers });
 
@@ -107,4 +107,19 @@ test("a run's end line names its status and keeps its numbers in diagnostic part
   assert.equal(cancelled.tag, 'INFO');
   assert.ok(cancelled.text.includes('· Cancelled ·'), cancelled.text);
   assert.equal(endLine(row({ status: 'CRASH' })).tag, 'FAIL');
+});
+
+test("the webview's reload keys are known, and ordinary keys are not (review 2, app 2)", () => {
+  const k = (key: string, mods: { ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean } = {}) => ({
+    key,
+    ctrlKey: mods.ctrlKey ?? false,
+    metaKey: mods.metaKey ?? false,
+    altKey: mods.altKey ?? false,
+  });
+  for (const e of [k('F5'), k('F5', { ctrlKey: true }), k('r', { ctrlKey: true }), k('R', { ctrlKey: true }), k('r', { metaKey: true })]) {
+    assert.equal(isReloadKey(e), true, JSON.stringify(e));
+  }
+  for (const e of [k('r'), k('R'), k('F4'), k('s', { ctrlKey: true }), k('F5', { altKey: true }), k('Home')]) {
+    assert.equal(isReloadKey(e), false, JSON.stringify(e));
+  }
 });

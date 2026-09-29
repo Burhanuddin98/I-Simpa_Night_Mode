@@ -122,3 +122,14 @@ export function endLine(row: RunRow): Omit<ConsoleLine, 'time'> {
   }
   return { tag, text: parts.map((p) => p.text).join(''), source: 'app', run: row.run, parts };
 }
+
+/**
+ * The keys WebView2 takes for a reload of the page (its browser accelerators, on by default):
+ * F5 and Ctrl+F5 or Shift+F5, Ctrl+R and Ctrl+Shift+R. A reload mid-run loses the page's record
+ * of the run (M11 review 2, app 2), so the app's key handler cancels each of these, text field or
+ * not; F5 alone outside a text field is still the app's Run key.
+ */
+export function isReloadKey(e: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey'>): boolean {
+  if (e.altKey) return false;
+  return e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r');
+}

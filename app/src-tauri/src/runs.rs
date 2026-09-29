@@ -811,6 +811,20 @@ impl RunSlot {
     }
 }
 
+/// PQ4 in the backend (M11 review 2, app 2): New, Open and Import replace the project whose runs
+/// the Runs tab lists, so they are refused while a run is active. The page refuses them too, but
+/// its record of the run lives in its memory, which a reload of the page loses. The caller holds
+/// the session lock, as `plan` does when it checks the slot.
+pub fn refuse_while_running(slot: &Mutex<RunSlot>, what: &str) -> CmdResult<()> {
+    if lock(slot, "run")?.run_active() {
+        return Err(CmdError::new(
+            RUN_ACTIVE,
+            format!("{what}: a run is active: cancel it first"),
+        ));
+    }
+    Ok(())
+}
+
 /// Cancels the active run, if any, and waits up to `limit` for its `run.json`. `true` when no
 /// run is left running.
 pub fn cancel_and_wait(slot: &Mutex<RunSlot>, limit: Duration) -> bool {
@@ -1687,6 +1701,21 @@ mod tests {
     /// core's process layer ends the Job Object (the fake solver's `ping` grandchild with it),
     /// and the run ends CANCELLED long before the 30 s the solver would have taken, with the slot
     /// freed. No process id is looked up anywhere.
+    #[test]
+    fn new_open_and_import_are_refused_while_a_run_is_active() {
+        let slot = Mutex::new(RunSlot::default());
+        assert!(refuse_while_running(&slot, "New project").is_ok());
+        slot.lock().unwrap().active = Some(ActiveRun {
+            id: 1,
+            run: None,
+            token: CancelToken::new(),
+            finished: Arc::new(AtomicBool::new(false)),
+        });
+        let e = refuse_while_running(&slot, "New project").unwrap_err();
+        assert_eq!(e.code, RUN_ACTIVE);
+        assert_eq!(e.message, "New project: a run is active: cancel it first");
+    }
+
     #[test]
     fn cancel_ends_the_run_through_its_token() {
         let dir = scratch("cancel");

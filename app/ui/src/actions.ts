@@ -282,7 +282,8 @@ let nextRunId = 1;
 let starting = false;
 
 /** New, Open, Import and Run wait while a run is starting or active (PQ4): the run would be
- * orphaned from the project the Runs tab lists. */
+ * orphaned from the project the Runs tab lists. The backend refuses New, Open and Import during
+ * a run too, since this page's memory is lost when it is reloaded. */
 function refuseDuringRun(what: string): boolean {
   if (runStore.get() !== null) {
     log('INFO', `${what}: a run is active: cancel it first`);
@@ -348,7 +349,60 @@ export async function refreshRuns(): Promise<RunsView | null> {
   const view = await run('Listing the runs', () => backend.runsList());
   runsStore.set(view);
   if (selectedRunStore.get() === null && view.rows.length > 0) selectedRunStore.set(view.rows[view.rows.length - 1].run);
+  reattach(view);
   return view;
+}
+
+/**
+ * A run the backend is running that this page has no record of: the page was reloaded mid-run
+ * (WebView2's reload, the devtools), which loses everything in its memory, `runStore` included,
+ * while the run goes on. Without this the page showed no Cancel, enabled Run, and let New replace
+ * the project while the solver ran (M11 review 2, app 2). The page takes the run back as its
+ * active run, so Cancel is shown and Run, New and Open wait. Its stream went to the page that
+ * was reloaded, so its progress is not shown here; the run is watched through `runs_list` until
+ * it ends.
+ */
+function reattach(view: RunsView): void {
+  const name = view.active ?? null;
+  if (name === null || runStore.get() !== null || starting) return;
+  const row = view.rows.find((r) => r.run === name);
+  const id = nextRunId++;
+  runStore.set({
+    id,
+    run: name,
+    solver: row?.solver === 'tcr' ? 'tcr' : 'spps',
+    variant: row?.variant ?? null,
+    stage: null,
+    progress: null,
+    progressText: '',
+    startedAt: Date.now(),
+    status: 'running',
+  });
+  log('WARN', 'A run is still going, and this page no longer receives its progress (the page was reloaded): Cancel still stops it');
+  void watchReattached(id);
+}
+
+const REATTACHED_POLL_MS = 500;
+
+/** Lists the runs until the backend has no active run, then lets the reattached run go. */
+async function watchReattached(id: number): Promise<void> {
+  for (;;) {
+    await new Promise<void>((r) => setTimeout(r, REATTACHED_POLL_MS));
+    if (runStore.get()?.id !== id) return;
+    let view: RunsView;
+    try {
+      view = await backend.runsList();
+    } catch {
+      continue;
+    }
+    if ((view.active ?? null) !== null) continue;
+    if (runStore.get()?.id !== id) return;
+    runStore.set(null);
+    runsStore.set(view);
+    const last = view.rows[view.rows.length - 1];
+    if (last) selectRun(last.run);
+    return;
+  }
 }
 
 /** Shows `run` on the Results step (a Runs row click, the Simulate step's "Run n" link). */

@@ -271,3 +271,27 @@ test("New, a .proj import and a Save as into another folder forget the previous 
   assert.equal(store.resultsStore.get().get('R-old'), verified);
   await sleep(5); // the refreshRuns() each action fires
 });
+
+test('after a reload mid-run the page takes the run back, New and Run wait, and the run is let go when it ends (review 2, app 2)', async () => {
+  // A fresh page (runStore null) and a backend still running a run.
+  backend.slot = { name: 'R-live', cancelled: false, channel: { onmessage: () => {} } };
+  backend.rows = [row('R-live', 'RUNNING')];
+  await actions.refreshRuns();
+  const r = store.runStore.get();
+  assert.deepEqual([r?.run, r?.status], ['R-live', 'running'], 'the page took the run back');
+  assert.ok(
+    store.consoleStore.get().some((l) => l.tag === 'WARN' && l.text.includes('page was reloaded')),
+    'a line tells the user',
+  );
+  assert.equal(await actions.newProject('Untitled'), null, 'New waits');
+  assert.equal(backend.count('scene_new'), 0);
+  assert.equal(await actions.runStart('spps'), null, 'Run waits');
+  assert.equal(backend.count('run_start'), 0);
+  assert.equal(await actions.runCancel(), true, "Cancel reaches the backend's run");
+  assert.equal(backend.slot?.cancelled, true);
+  // The run ends: the page, which receives no stream for it, sees it through runs_list.
+  backend.slot = null;
+  backend.rows = [row('R-live', 'CANCELLED')];
+  await until('the page let the ended run go', () => store.runStore.get() === null, 3_000);
+  assert.equal(store.selectedRunStore.get(), 'R-live');
+});

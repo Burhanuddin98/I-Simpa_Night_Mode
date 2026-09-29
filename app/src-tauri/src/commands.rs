@@ -329,9 +329,11 @@ pub async fn scene_state(state: State<'_, AppState>) -> CmdResult<Option<SceneSt
 /// A new empty project. The history is cleared.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn scene_new(state: State<'_, AppState>, name: String) -> CmdResult<SceneState> {
-    let session = state.session.clone();
+    let (session, slot) = (state.session.clone(), state.run.clone());
     guard::blocking("scene_new", move || {
-        lock(&session, "project")?.scene_new(&name)
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "New project")?;
+        s.scene_new(&name)
     })
     .await
 }
@@ -339,9 +341,11 @@ pub async fn scene_new(state: State<'_, AppState>, name: String) -> CmdResult<Sc
 /// Opens a `.simpa` file (`schema::load`), then runs the model check and the validator.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn scene_open(state: State<'_, AppState>, path: String) -> CmdResult<SceneState> {
-    let session = state.session.clone();
+    let (session, slot) = (state.session.clone(), state.run.clone());
     guard::blocking("scene_open", move || {
-        lock(&session, "project")?.scene_open(&PathBuf::from(path))
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Open")?;
+        s.scene_open(&PathBuf::from(path))
     })
     .await
 }
@@ -355,9 +359,11 @@ pub async fn model_import(
     unit: String,
     up: String,
 ) -> CmdResult<SceneState> {
-    let session = state.session.clone();
+    let (session, slot) = (state.session.clone(), state.run.clone());
     guard::blocking("model_import", move || {
-        lock(&session, "project")?.model_import(&PathBuf::from(path), &unit, &up)
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Import")?;
+        s.model_import(&PathBuf::from(path), &unit, &up)
     })
     .await
 }
@@ -485,9 +491,11 @@ pub async fn run_results(state: State<'_, AppState>, run: String) -> CmdResult<R
 /// Opens an upstream I-Simpa `.proj` as a new, unsaved project.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn proj_import(state: State<'_, AppState>, path: String) -> CmdResult<SceneState> {
-    let session = state.session.clone();
+    let (session, slot) = (state.session.clone(), state.run.clone());
     guard::blocking("proj_import", move || {
-        lock(&session, "project")?.proj_import(&PathBuf::from(path))
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Open")?;
+        s.proj_import(&PathBuf::from(path))
     })
     .await
 }
