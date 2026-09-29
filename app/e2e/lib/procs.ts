@@ -5,12 +5,21 @@
 // minimises or activates a window: the test windows stay as Burhan sees them.
 import { spawnSync } from 'node:child_process';
 
-/** Runs `script` in Windows PowerShell and returns its stdout; throws on a non-zero exit. */
-export function ps(script: string): string {
+/**
+ * Runs `script` in Windows PowerShell and returns its stdout; throws on a non-zero exit. Each of
+ * `vars` is set as a PowerShell variable of that name before the script, passed through the
+ * environment, not the command line.
+ */
+export function ps(script: string, vars: Record<string, string> = {}): string {
+  const env = { ...process.env };
+  const set = Object.keys(vars).map((k) => {
+    env[`M11_PS_${k}`] = vars[k];
+    return `$${k} = $env:M11_PS_${k}; `;
+  });
   const r = spawnSync(
     'powershell.exe',
-    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', `$ProgressPreference='SilentlyContinue'; ${script}`],
-    { encoding: 'utf8', windowsHide: true },
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', `$ProgressPreference='SilentlyContinue'; ${set.join('')}${script}`],
+    { encoding: 'utf8', windowsHide: true, env },
   );
   if (r.status !== 0) throw new Error(`powershell exited ${r.status}: ${r.stderr}`);
   return r.stdout.trim();
@@ -78,11 +87,46 @@ export function windowState(pid: number): WindowState {
   return state;
 }
 
-/** Ids of the processes whose executable is exactly `exe` (case-insensitive), as CIM reports them. */
+const IMAGE = `
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public static class M11Image {
+  [DllImport("kernel32.dll", SetLastError = true)] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+  [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool QueryFullProcessImageNameW(IntPtr h, uint flags, StringBuilder path, ref uint size);
+  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+  public static string Path(uint pid) {
+    IntPtr h = OpenProcess(0x1000, false, pid);
+    if (h == IntPtr.Zero) return "";
+    try {
+      var s = new StringBuilder(32768);
+      uint n = 32768;
+      return QueryFullProcessImageNameW(h, 0, s, ref n) ? s.ToString() : "";
+    } finally { CloseHandle(h); }
+  }
+}`;
+
+/**
+ * Ids of the processes whose executable is exactly `exe` (case-insensitive). Every process named
+ * like `exe` is looked at. CIM's `ExecutablePath` is empty for a process that has never run (one
+ * created suspended, as the core creates every child, and orphaned before it was resumed: M11
+ * review 2, B1 and M1), so for those the kernel's image name is read (`QueryFullProcessImageNameW`,
+ * set at creation). A process of that name whose path cannot be read at all is counted: it cannot
+ * be shown not to run from `exe`.
+ */
 export function processesFrom(exe: string): number[] {
-  const esc = exe.replace(/'/g, "''");
+  const quote = (t: string) => `'${t.replace(/'/g, "''")}'`;
+  const leaf = exe.split(/[\\/]/).pop() ?? exe;
   const out = ps(
-    `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath -ieq '${esc}' } | ForEach-Object { $_.ProcessId }`,
+    [
+      `$want = ${quote(exe)}; $leaf = ${quote(leaf)}; $typed = $false`,
+      'Get-CimInstance Win32_Process | Where-Object { $_.Name -ieq $leaf } | ForEach-Object {',
+      '  $p = $_.ExecutablePath',
+      "  if (-not $p) { if (-not $typed) { Add-Type -TypeDefinition $image; $typed = $true }; $p = [M11Image]::Path([uint32]$_.ProcessId) }",
+      '  if (-not $p -or $p -ieq $want) { $_.ProcessId }',
+      '}',
+    ].join('\n'),
+    { image: IMAGE },
   );
   return out
     .split(/\r?\n/)
