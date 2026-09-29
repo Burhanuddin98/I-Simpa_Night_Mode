@@ -32,6 +32,12 @@
 //!   calibration (the review of `50695f6`): the particles' lifetime spread read from a room table
 //!   scaled, every band read as having one absorption, and the uniform-Lambert entries taken above
 //!   their largest calibrated absorption.
+//! - [`Fault::BedEyringReference`], [`Fault::BedTransportAirOff`] and
+//!   [`Fault::TcrAnalyticPhysicalConstant`]: M8a's physics bed (`crate::bed`) judging its check A
+//!   against plain Eyring instead of Kuttruff, tracing its transport with the air off in every
+//!   band, and `results::tcr`'s analytic times with the physical `K` instead of TCR's 0.163: the
+//!   say-NOs N3, N7 and N8 of `docs/investigations/2026-09-29-m8a/SPEC.md`, section 7. The bed
+//!   hands the fault set on the calling thread to its worker threads (`bed::par_map`).
 
 /// One fault, set by [`with`].
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -64,6 +70,15 @@ pub enum Fault {
     UniformAbsorptionForced,
     /// `params::noise::RunNoise::walls` takes the uniform-Lambert entries at any mean absorption.
     UniformLambertBoundIgnored,
+    /// `bed::check`'s check A reads each band's plain Eyring time (`eyring_s`) where it should
+    /// read Kuttruff's (`kuttruff_s`), the reference Burhan decided on (M8a, say-NO N3).
+    BedEyringReference,
+    /// `bed::transport` traces every band with the air off, whatever the cell's air (M8a,
+    /// say-NO N7).
+    BedTransportAirOff,
+    /// `results::tcr`'s analytic Sabine and Eyring times with the physical
+    /// `K = 24·ln 10/343.2` instead of TCR's own 0.163 (M8a, say-NO N8).
+    TcrAnalyticPhysicalConstant,
 }
 
 #[cfg(feature = "fault-injection")]

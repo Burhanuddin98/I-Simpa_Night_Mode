@@ -1,0 +1,106 @@
+bed file: exploratory []
+report.json: the committed copy is byte-identical: true
+
+== coverage in report.json
+pass true exploratory false failures 0 needs_extension []
+E1 true (runs checked 433, solvers 4), E2 true (0), E3 true (0), E4 true (8 cells, max diff 4.637635275805962e-10 s), E5 true (8 cells), E6 true (0), E7 true
+  E5 6x10x3 a0.05: K Some(2.6423570862134285) vs HIGH receivers -0.2011 %, room energy -0.1939 %
+  E5 6x10x3 a0.1: K Some(1.300202881433545) vs HIGH receivers -0.3426 %, room energy -0.3257 %
+  E5 6x10x3 a0.2: K Some(0.6286091711343897) vs HIGH receivers -0.4142 %, room energy -0.4106 %
+  E5 6x10x3 a0.4: K Some(0.2916510870828291) vs HIGH receivers +0.2809 %, room energy +0.2487 %
+  E5 5x4x3 a0.05: K Some(2.022014279263784) vs HIGH receivers -0.1783 %, room energy -0.1876 %
+  E5 5x4x3 a0.1: K Some(0.9939418548138248) vs HIGH receivers -0.3001 %, room energy -0.3060 %
+  E5 5x4x3 a0.2: K Some(0.4794394614973576) vs HIGH receivers -0.3536 %, room energy -0.3374 %
+  E5 5x4x3 a0.4: K Some(0.2210955202530984) vs HIGH receivers +0.5838 %, room energy +0.5823 %
+gated cells 32 of 40 (verdicts: {"Pass": 32}); seed-runs 320; receiver-band-seed values 6240; by source {"monte_carlo_noise": 1, "value": 6239}
+A bands judged 208; gated TCR 16 of 20, D bands 104
+worst A reach 1.178 % (5x4x3-a0.1-random-air-on 250 Hz, mean +0.644 %, [+0.110, +1.178] %), limit 5 %
+worst B spread 0.765 % (5x4x3-a0.4-random-air-off), limit 2 %
+worst C |d|+t*SE 0.330 % (5x4x3-a0.05-random-air-on: d -0.165 %, [-0.330, +0.000] %, se_tr 0.0096 %), limit 0.5 %
+worst D |dev| 0.00004 % (5x4x3-a0.1-tcr-air-off 125 Hz: -0.00004 %), limit 0.5 %
+air on: run m against the bed's m, largest relative difference 0e0
+coverage problems: 0
+N5 in the report: cell_verdict Some(NotJudged), failed_by ["E6"], as_required true, error None
+  N5: 5x4x3-a0.4-random-air-off: not judged: E6: seed 10, receiver R000, 125 Hz: T30 refused range_not_reached; seed 10, receiver R000, 250 Hz: T30 refused range_not_reached; seed 10, receiver R000, 500 Hz: T30 refused range_not_reached; seed 10, receiver R000, 1000 Hz: T30 refused range_not_reached; seed 10, receiver R000, 4000 Hz: T30 refused range_not_reached; seed 10, receiver R001, 125 Hz: T30 refu
+N6 in the report: codes [Some("params_reference_not_applicable"), Some("params_reference_not_applicable"), Some("params_reference_not_applicable"), Some("params_reference_not_applicable"), Some("params_reference_not_applicable"), Some("params_reference_not_applicable")], as_required true
+reported notes: 6
+  (reported) 20x8x4-a0.05-random-air-off: not judged: E6: seed 3, receiver R001, 2000 Hz: T30 refused missing_moves; seed 4, receiver R002, 4000 Hz: T30 refused missing_moves; seed 9, receiver R001, 4000 Hz: T30 refused mi
+  (reported) 20x8x4-a0.1-random-air-off: not judged: E6: seed 4, receiver R001, 4000 Hz: T30 refused missing_moves; seed 5, receiver R001, 1000 Hz: T30 refused missing_moves; seed 5, receiver R002, 1000 Hz: T30 refused mis
+  (reported) 20x8x4-a0.2-random-air-off: A 500 Hz Fail: T30/kuttruff_s − 1 = +2.115 %, interval [-1.049, +5.279] %, limit ±5.0 %
+  (reported) 20x8x4-a0.2-random-air-off: B Fail: seed spread of the cell mean 5.399 %, limit 2.0 %
+  (reported) 20x8x4-a0.2-random-air-off: C Inconclusive on 10 seeds: d = +0.745 %, interval [-0.581, +2.071] %, limit ±0.5 %
+  (reported) 20x8x4-a0.4-random-air-off: not judged: E6: seed 1, receiver R002, 125 Hz: T30 refused range_not_reached; seed 1, receiver R002, 250 Hz: T30 refused range_not_reached; seed 1, receiver R002, 500 Hz: T30 refuse
+
+== re-judged from the run folders with this build
+read 422 runs in 344 s
+  re-judged: pass true | failures 0 | first: -
+  cells identical to report.json: false; TCR identical: false; say_no identical: true; E1 runs checked 422 (report 433, the 11 atmospheric runs not read here)
+  differing leaves 3900; by path: {
+    "cells.[].a.bands.[].interval.hi": 20,
+    "cells.[].a.bands.[].interval.lo": 26,
+    "cells.[].a.bands.[].interval.mean": 27,
+    "cells.[].a.bands.[].interval.sd": 9,
+    "cells.[].a.bands.[].interval.se": 34,
+    "cells.[].a.bands.[].reference_s": 28,
+    "cells.[].b.cell_means.[]": 94,
+    "cells.[].b.spread": 2,
+    "cells.[].c.interval.hi": 18,
+    "cells.[].c.interval.lo": 18,
+    "cells.[].c.interval.mean": 13,
+    "cells.[].c.interval.sd": 16,
+    "cells.[].c.interval.se": 15,
+    "cells.[].c.per_seed.[]": 85,
+    "cells.[].c.se_transport": 12,
+    "cells.[].reference.bands.[].eyring_s": 66,
+    "cells.[].reference.bands.[].kuttruff_against_transport": 72,
+    "cells.[].reference.bands.[].kuttruff_mc_sd": 38,
+    "cells.[].reference.bands.[].kuttruff_s": 40,
+    "cells.[].reference.bands.[].sabine_s": 66,
+    "cells.[].reference.gamma2": 16,
+    "cells.[].reported.coverage": 8,
+    "cells.[].reported.eyring.bands.[].interval.hi": 51,
+    "cells.[].reported.eyring.bands.[].interval.lo": 49,
+    "cells.[].reported.eyring.bands.[].interval.mean": 44,
+    "cells.[].reported.eyring.bands.[].interval.sd": 18,
+    "cells.[].reported.eyring.bands.[].interval.se": 32,
+    "cells.[].reported.eyring.bands.[].reference_s": 60,
+    "cells.[].reported.mean_all": 2,
+    "cells.[].reported.mean_values_only": 2,
+    "cells.[].reported.noise_refusal_share": 2,
+    "cells.[].reported.receiver_bands.[].mean_s": 113,
+    "cells.[].reported.receiver_bands.[].model_rms_sd_s": 69,
+    "cells.[].reported.receiver_bands.[].ratio": 47,
+    "cells.[].reported.receiver_bands.[].ratio_90.[]": 179,
+    "cells.[].reported.receiver_bands.[].relative_range": 72,
+    "cells.[].reported.receiver_bands.[].relative_sd": 62,
+    "cells.[].reported.receiver_bands.[].seeds_sd_s": 81,
+    "cells.[].reported.sabine.bands.[].interval.hi": 23,
+    "cells.[].reported.sabine.bands.[].interval.lo": 24,
+    "cells.[].reported.sabine.bands.[].interval.mean": 29,
+    "cells.[].reported.sabine.bands.[].interval.sd": 17,
+    "cells.[].reported.sabine.bands.[].interval.se": 28,
+    "cells.[].reported.sabine.bands.[].reference_s": 48,
+    "cells.[].seeds.[].run.solver_wall_s": 4,
+    "cells.[].seeds.[].t30.[].[].mc_sd": 759,
+    "cells.[].seeds.[].t30.[].[].t": 1228,
+    "tcr.[].d.bands.[].analytic_eyring_s": 31,
+    "tcr.[].d.bands.[].deviation": 33,
+    "tcr.[].d.bands.[].tcr_eyring_s": 18,
+    "tcr.[].eyring_against_kuttruff.[]": 6,
+    "tcr.[].sabine_against_analytic.[]": 46,
+}
+  numeric diffs within 1e-12 relative: 3900; others: 17
+  largest relative difference 3.1912236887314266e-11
+    cells.[2].c.per_seed.[0] : -0.00003599110384810977 against -0.000035991103847776706 (relative 9.254145379734982e-12) BIG
+    cells.[3].c.per_seed.[1] : -0.000188975852598805 against -0.00018897585259858296 (relative 1.1749893008628522e-12) BIG
+    cells.[3].c.per_seed.[5] : -0.00007441061864754683 against -0.00007441061864732479 (relative 2.984044602246452e-12) BIG
+    cells.[9].c.per_seed.[5] : -0.000010436965248272756 against -0.000010436965247939689 (relative 3.1912236887314266e-11) BIG
+    cells.[9].c.per_seed.[7] : 0.00015097867003333043 against 0.00015097867003355248 (relative 1.4707018208312844e-12) BIG
+    cells.[11].c.per_seed.[0] : -0.00021416334952428784 against -0.0002141633495240658 (relative 1.0368002060961867e-12) BIG
+    cells.[19].c.interval.mean : 0.000054951292905702774 against 0.000054951292905569546 (relative 2.424476498421171e-12) BIG
+    cells.[19].c.per_seed.[1] : 0.00020336411830168544 against 0.0002033641183014634 (relative 1.0918573383512713e-12) BIG
+    cells.[19].c.per_seed.[3] : -0.000014250074686028569 against -0.000014250074686250613 (relative 1.558199587117071e-11) BIG
+    cells.[19].c.per_seed.[4] : 0.000052953904030594856 against 0.00005295390403015077 (relative 8.386335587145452e-12) BIG
+    cells.[19].c.per_seed.[7] : 0.00016479226670806923 against 0.0001647922667078472 (relative 1.3474212677612173e-12) BIG
+    cells.[24].c.interval.hi : 0.0000038492981472664205 against 0.000003849298147244953 (relative 5.576913555126387e-12) BIG
+exit 0

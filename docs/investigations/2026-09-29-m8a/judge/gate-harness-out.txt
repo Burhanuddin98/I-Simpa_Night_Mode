@@ -1,0 +1,87 @@
+bed file: exploratory []
+report.json: the committed copy is byte-identical: true
+
+== coverage in report.json
+pass true exploratory false failures 0 needs_extension []
+E1 true (runs checked 433, solvers 4), E2 true (0), E3 true (0), E4 true (8 cells, max diff 4.637635275805962e-10 s), E5 true (8 cells), E6 true (0), E7 true
+  E5 6x10x3 a0.05: K Some(2.6423570862134285) vs HIGH receivers -0.2011 %, room energy -0.1939 %
+  E5 6x10x3 a0.1: K Some(1.300202881433545) vs HIGH receivers -0.3426 %, room energy -0.3257 %
+  E5 6x10x3 a0.2: K Some(0.6286091711343897) vs HIGH receivers -0.4142 %, room energy -0.4106 %
+  E5 6x10x3 a0.4: K Some(0.2916510870828291) vs HIGH receivers +0.2809 %, room energy +0.2487 %
+  E5 5x4x3 a0.05: K Some(2.022014279263784) vs HIGH receivers -0.1783 %, room energy -0.1876 %
+  E5 5x4x3 a0.1: K Some(0.9939418548138248) vs HIGH receivers -0.3001 %, room energy -0.3060 %
+  E5 5x4x3 a0.2: K Some(0.4794394614973576) vs HIGH receivers -0.3536 %, room energy -0.3374 %
+  E5 5x4x3 a0.4: K Some(0.2210955202530984) vs HIGH receivers +0.5838 %, room energy +0.5823 %
+gated cells 32 of 40 (verdicts: {"Pass": 32}); seed-runs 320; receiver-band-seed values 6240; by source {"monte_carlo_noise": 1, "value": 6239}
+A bands judged 208; gated TCR 16 of 20, D bands 104
+worst A reach 1.178 % (5x4x3-a0.1-random-air-on 250 Hz, mean +0.644 %, [+0.110, +1.178] %), limit 5 %
+worst B spread 0.765 % (5x4x3-a0.4-random-air-off), limit 2 %
+worst C |d|+t*SE 0.330 % (5x4x3-a0.05-random-air-on: d -0.165 %, [-0.330, +0.000] %, se_tr 0.0096 %), limit 0.5 %
+worst D |dev| 0.00004 % (5x4x3-a0.1-tcr-air-off 125 Hz: -0.00004 %), limit 0.5 %
+air on: run m against the bed's m, largest relative difference 0e0
+coverage problems: 0
+N5 in the report: cell_verdict Some(NotJudged), failed_by ["E6"], as_required true, error None
+  N5: 5x4x3-a0.4-random-air-off: not judged: E6: seed 10, receiver R000, 125 Hz: T30 refused range_not_reached; seed 10, receiver R000, 250 Hz: T30 refused range_not_reached; seed 10, receiver R000, 500 Hz: T30 refused range_not_reached; seed 10, receiver R000, 1000 Hz: T30 refused range_not_reached; seed 10, receiver R000, 4000 Hz: T30 refused range_not_reached; seed 10, receiver R001, 125 Hz: T30 refu
+N6 in the report: codes [Some("params_reference_not_applicable"), Some("params_reference_not_applicable"), Some("params_reference_not_applicable"), Some("params_reference_not_applicable"), Some("params_reference_not_applicable"), Some("params_reference_not_applicable")], as_required true
+reported notes: 6
+  (reported) 20x8x4-a0.05-random-air-off: not judged: E6: seed 3, receiver R001, 2000 Hz: T30 refused missing_moves; seed 4, receiver R002, 4000 Hz: T30 refused missing_moves; seed 9, receiver R001, 4000 Hz: T30 refused mi
+  (reported) 20x8x4-a0.1-random-air-off: not judged: E6: seed 4, receiver R001, 4000 Hz: T30 refused missing_moves; seed 5, receiver R001, 1000 Hz: T30 refused missing_moves; seed 5, receiver R002, 1000 Hz: T30 refused mis
+  (reported) 20x8x4-a0.2-random-air-off: A 500 Hz Fail: T30/kuttruff_s − 1 = +2.115 %, interval [-1.049, +5.279] %, limit ±5.0 %
+  (reported) 20x8x4-a0.2-random-air-off: B Fail: seed spread of the cell mean 5.399 %, limit 2.0 %
+  (reported) 20x8x4-a0.2-random-air-off: C Inconclusive on 10 seeds: d = +0.745 %, interval [-0.581, +2.071] %, limit ±0.5 %
+  (reported) 20x8x4-a0.4-random-air-off: not judged: E6: seed 1, receiver R002, 125 Hz: T30 refused range_not_reached; seed 1, receiver R002, 250 Hz: T30 refused range_not_reached; seed 1, receiver R002, 500 Hz: T30 refuse
+
+== re-judged from the run folders with this build
+read 422 runs in 262 s
+  re-judged: pass true | failures 0 | first: -
+  cells identical to report.json: false; TCR identical: false; say_no identical: true; E1 runs checked 422 (report 433, the 11 atmospheric runs not read here)
+
+== perturbations (each alone on a copy of what was read)
+  A just outside: 5x4x3-a0.1-random-air-on band 250 Kuttruff x1.05390: reach 5.010 %; A Some(Fail), B Some(Pass), C Some(Pass), cell Fail
+  A just outside: pass false | failures 1 | first: 5x4x3-a0.1-random-air-on: A 250 Hz Fail: T30/kuttruff_s − 1 = -4.503 %, interval [-5.010, -3.997] %, limit ±5.0 %
+  A just inside: 5x4x3-a0.1-random-air-on band 250 Kuttruff x1.05368: reach 4.990 %; A Some(Pass), B Some(Pass), C Some(Pass), cell Pass
+  A just inside: pass true | failures 0 | first: -
+  B just outside: 5x4x3-a0.4-random-air-off seed 3 x1.01243: spread 2.010 %; A Some(Pass), B Some(Fail), C Some(Inconclusive), cell Fail
+  B just outside: pass false | failures 2 | first: 5x4x3-a0.4-random-air-off: B Fail: seed spread of the cell mean 2.010 %, limit 2.0 %
+  B just inside: 5x4x3-a0.4-random-air-off seed 3 x1.01223: spread 1.990 %; A Some(Pass), B Some(Pass), C Some(Inconclusive), cell Inconclusive
+  B just inside: pass false | failures 1 | first: 5x4x3-a0.4-random-air-off: C Inconclusive on 10 seeds: d = +0.126 %, interval [-0.284, +0.535] %, limit ±0.5 %
+  C just outside: 5x4x3-a0.05-random-air-on all T30 x0.998194: reach 0.510 %; A Some(Pass), B Some(Pass), C Some(Inconclusive), cell Inconclusive; needs_extension ["5x4x3-a0.05-random-air-on"]
+  C just outside: pass false | failures 1 | first: 5x4x3-a0.05-random-air-on: C Inconclusive on 10 seeds: d = -0.345 %, interval [-0.510, -0.180] %, limit ±0.5 %
+  C just inside: 5x4x3-a0.05-random-air-on all T30 x0.998394: reach 0.490 %; A Some(Pass), B Some(Pass), C Some(Pass), cell Pass; needs_extension []
+  C just inside: pass true | failures 0 | first: -
+  D just outside: 5x4x3-a0.1-tcr-air-off 125 Hz x1.0051: D Fail
+  D just outside: pass false | failures 1 | first: 5x4x3-a0.1-tcr-air-off: D 125 Hz Fail: TCR Eyring 0.992527 s against analytic Some(0.98749091067862) s (+0.5100 %), limit ±0.5 %
+  D just inside: 5x4x3-a0.1-tcr-air-off 125 Hz x1.0049: D Pass
+  D just inside: pass true | failures 0 | first: -
+  (removing transport 6x10x3|3fc999999999999a|3f5199bd131c5bce: present true)
+  seed 7's run missing: cell NotJudged (E2 false E3 true E6 true), TCR Pass D bands 7
+  seed 7's run missing: pass false | failures 2 | first: E2: 6x10x3-a0.2-random-air-on: seed 7: no run
+  one T30 refused range_not_reached: cell NotJudged (E2 true E3 true E6 false), TCR Pass D bands 7
+  one T30 refused range_not_reached: pass false | failures 2 | first: E6: 6x10x3-a0.2-random-air-on: seed 3, receiver R001, 2000 Hz: T30 refused range_not_reached
+  one T30 relabelled truncated, value kept: cell NotJudged (E2 true E3 true E6 false), TCR Pass D bands 7
+  one T30 relabelled truncated, value kept: pass false | failures 2 | first: E6: 6x10x3-a0.2-random-air-on: seed 3, receiver R001, 2000 Hz: T30 refused truncated
+  one T30 NaN: cell Fail (E2 true E3 true E6 true), TCR Pass D bands 7
+  one T30 NaN: pass false | failures 3 | first: 6x10x3-a0.2-random-air-on: A 2000 Hz Fail: T30/kuttruff_s − 1 = NaN %, interval [NaN, NaN] %, limit ±5.0 %
+  seed 5's run FAIL: cell NotJudged (E2 false E3 true E6 true), TCR Pass D bands 7
+  seed 5's run FAIL: pass false | failures 2 | first: E2: 6x10x3-a0.2-random-air-on: seed 5: run C:\tmp\nm-m8a-bed\20260929T093134Z\runs\6x10x3-a0.2-random-air-on\s5\20260929-150501-323-spps is FAIL ()
+  seed 5 with 2 receivers: cell NotJudged (E2 true E3 false E6 true), TCR Pass D bands 7
+  seed 5 with 2 receivers: pass false | failures 2 | first: E3: 6x10x3-a0.2-random-air-on: seed 5: 2 receivers, the bed's 3
+  Kuttruff refused in one band, every seed: cell NotJudged (E2 true E3 false E6 true), TCR Pass D bands 7
+  Kuttruff refused in one band, every seed: pass false | failures 11 | first: E3: 6x10x3-a0.2-random-air-on: seed 1, 500 Hz: kuttruff_s refused ?
+  one band's transport missing: cell NotJudged (E2 true E3 true E6 true), TCR Pass D bands 7
+  one band's transport missing: pass false | failures 2 | first: 6x10x3-a0.2-random-air-on: C not judged: no transport (not traced (band 3))
+  a gated TCR run missing: cell Pass (E2 true E3 true E6 true), TCR NotJudged D bands 0
+  a gated TCR run missing: pass false | failures 2 | first: E2: 6x10x3-a0.2-tcr-air-on: no run
+  a gated TCR band's analytic time missing: cell Pass (E2 true E3 true E6 true), TCR Fail D bands 7
+  a gated TCR band's analytic time missing: pass false | failures 1 | first: 6x10x3-a0.2-tcr-air-on: D 500 Hz NotJudged: TCR Eyring 0.603067 s against analytic None s (NaN %), limit ±0.5 %
+  a gated TCR run with its 8 kHz band missing: cell Pass (E2 true E3 true E6 true), TCR Pass D bands 6
+  a gated TCR run with its 8 kHz band missing: pass true | failures 0 | first: -
+  a gated TCR run with only its 125 Hz band: cell Pass (E2 true E3 true E6 true), TCR Pass D bands 1
+  a gated TCR run with only its 125 Hz band: pass true | failures 0 | first: -
+  a reported cell 30 % long (must NOT fail the bed): cell Pass (E2 true E3 true E6 true), TCR Pass D bands 7
+  a reported cell 30 % long (must NOT fail the bed): pass true | failures 0 | first: -
+
+thread 'main' (19788) panicked at B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8a\crates\simpa-core\src\bed\check.rs:130:55:
+index out of bounds: the len is 6 but the index is 6
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+  a receiver one band short (unreachable from read_spps): Err("panicked")

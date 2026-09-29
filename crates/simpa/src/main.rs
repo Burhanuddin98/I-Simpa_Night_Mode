@@ -3,6 +3,7 @@ use std::process::ExitCode;
 
 use simpa_core::{config_xml, formats, schema, validate};
 
+mod bed_cmd;
 mod mesh_run;
 mod results_cmd;
 
@@ -43,6 +44,13 @@ const USAGE: &str = "usage:
   simpa results <run-folder> [--json]                        a verified run's results and parameters
       exit 0; 2 usage; 5 the run is FAIL, CRASH or CANCELLED; 6 its results do not verify
   simpa results --schema                                     the JSON Schemas of results --json
+  simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier>] [--upstream <dir>] [--json]
+      M8a's T30 physics bed (docs/investigations/2026-09-29-m8a/SPEC.md): checks the solvers
+      against solvers/manifest.json (exit 2 when not the verified build), runs the matrix
+      (--jobs at once, default 4) or reads an earlier bed's runs (--from), and writes
+      report.json, summary.json and decays/ under <root>/<UTC stamp>/. Exit 0 only when
+      report.pass is true; 8 not passed; 5 a run was not OK; 2 usage or an invalid bed file.
+  simpa bed --schema | --canonical                            report.json's schema; M8a's bed file
   Executables: --solver-exe / --tetgen, else $SIMPA_SOLVERS_DIR, else beside simpa.exe (its
   solvers/ folder first), else the nearest target/solvers/bin above it.";
 
@@ -74,6 +82,7 @@ fn main() -> ExitCode {
         ["run", rest @ ..] => mesh_run::run_cmd(rest),
         ["run-folder", rest @ ..] => mesh_run::run_folder_cmd(rest),
         ["results", rest @ ..] => results_cmd::results_cmd(rest),
+        ["bed", rest @ ..] => bed_cmd::bed_cmd(rest),
         [command, ..] => fail(&format!("unknown command '{command}'\n{USAGE}")),
     }
 }

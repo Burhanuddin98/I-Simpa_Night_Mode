@@ -1,0 +1,86 @@
+6x10x3  0.05 R N=   1.5M D=4.0 eps=5 air=0 wall=   97 pred=    85 ratio=1.15
+6x10x3  0.05 R N=  12.0M D=4.0 eps=5 air=0 wall=  648 pred=   677 ratio=0.96
+6x10x3  0.10 R N=   1.5M D=3.0 eps=5 air=0 wall=   48 pred=    42 ratio=1.13
+6x10x3  0.10 R N=   6.0M D=3.0 eps=5 air=0 wall=  198 pred=   169 ratio=1.17
+6x10x3  0.10 R N=  40.0M D=3.0 eps=5 air=0 wall= 1165 pred=  1129 ratio=1.03
+6x10x3  0.20 R N=   1.5M D=2.0 eps=5 air=0 wall=   23 pred=    21 ratio=1.09
+6x10x3  0.20 R N=  80.0M D=2.0 eps=5 air=0 wall= 1151 pred=  1129 ratio=1.02
+6x10x3  0.40 R N=   1.5M D=1.0 eps=5 air=0 wall=   11 pred=    11 ratio=1.04
+6x10x3  0.40 R N=  16.0M D=1.5 eps=5 air=0 wall=   98 pred=   113 ratio=0.87
+6x10x3  0.40 R N=  48.0M D=1.0 eps=5 air=0 wall=  336 pred=   339 ratio=0.99
+6x10x3  0.40 R N= 260.0M D=1.5 eps=5 air=0 wall= 1748 pred=  1834 ratio=0.95
+5x4x3   0.05 R N=   1.5M D=3.0 eps=5 air=0 wall=   98 pred=    85 ratio=1.16
+5x4x3   0.05 R N=  10.0M D=3.0 eps=5 air=0 wall=  583 pred=   564 ratio=1.03
+5x4x3   0.10 R N=   1.5M D=2.0 eps=5 air=0 wall=   48 pred=    42 ratio=1.13
+5x4x3   0.10 R N=  18.0M D=2.0 eps=5 air=0 wall=  528 pred=   508 ratio=1.04
+5x4x3   0.20 R N=   1.5M D=1.5 eps=5 air=0 wall=   23 pred=    21 ratio=1.09
+5x4x3   0.20 R N=   8.0M D=1.5 eps=5 air=0 wall=  143 pred=   113 ratio=1.27
+5x4x3   0.20 R N=  40.0M D=1.5 eps=5 air=0 wall=  585 pred=   564 ratio=1.04
+5x4x3   0.40 R N=   1.5M D=1.0 eps=5 air=0 wall=   11 pred=    11 ratio=1.04
+5x4x3   0.40 R N=  60.0M D=1.0 eps=5 air=0 wall=  431 pred=   423 ratio=1.02
+6x10x3  0.05 E N=   1.5M D=4.0 eps=7 air=0 wall= 1330 pred=  1330 ratio=1.00
+6x10x3  0.10 E N=   6.0M D=2.0 eps=7 air=0 wall= 2605 pred=  2590 ratio=1.01
+6x10x3  0.20 E N=   1.5M D=1.0 eps=9 air=0 wall=  356 pred=   393 ratio=0.91
+6x10x3  0.20 E N=   4.5M D=1.0 eps=9 air=0 wall=  906 pred=  1179 ratio=0.77
+6x10x3  0.40 E N=   1.5M D=0.5 eps=9 air=0 wall=  180 pred=   172 ratio=1.05
+6x10x3  0.40 E N=  13.0M D=0.5 eps=9 air=0 wall= 1102 pred=  1488 ratio=0.74
+5x4x3   0.05 E N=   1.5M D=3.0 eps=7 air=0 wall= 1345 pred=  1330 ratio=1.01
+5x4x3   0.10 E N=   1.5M D=2.0 eps=7 air=0 wall=  663 pred=   647 ratio=1.02
+5x4x3   0.20 E N=   1.5M D=0.8 eps=9 air=0 wall=  354 pred=   393 ratio=0.90
+5x4x3   0.20 E N=   1.5M D=0.8 eps=7 air=0 wall=  330 pred=   306 ratio=1.08
+5x4x3   0.40 E N=   1.5M D=0.4 eps=9 air=0 wall=  180 pred=   172 ratio=1.05
+5x4x3   0.40 E N=   3.5M D=0.4 eps=9 air=0 wall=  405 pred=   401 ratio=1.01
+6x10x3  0.05 R N=   6.0M D=4.0 eps=5 air=1 wall=  345 pred=   330 ratio=1.04
+6x10x3  0.05 E N=   4.0M D=4.0 eps=7 air=1 wall= 3428 pred=  3441 ratio=1.00
+5x4x3   0.10 R N=   4.0M D=2.0 eps=5 air=1 wall=  108 pred=   121 ratio=0.89
+5x4x3   0.10 E N=   4.0M D=2.0 eps=7 air=1 wall= 1864 pred=  1838 ratio=1.01
+evidence actual/predicted: min 0.74 median 1.03 max 1.27 (n=36)
+gated    6x10x3  a=0.05 R N=8400000.0M D=4.0 eps=7 air=0  run     445 s  x10     4451 s
+gated    6x10x3  a=0.05 R N=8400000.0M D=4.0 eps=7 air=1  run     434 s  x10     4341 s
+gated    6x10x3  a=0.10 R N=18000000.0M D=3.0 eps=7 air=0  run     477 s  x10     4769 s
+gated    6x10x3  a=0.10 R N=18000000.0M D=3.0 eps=7 air=1  run     500 s  x10     5003 s
+gated    6x10x3  a=0.20 R N=33000000.0M D=2.0 eps=7 air=0  run     437 s  x10     4371 s
+gated    6x10x3  a=0.20 R N=33000000.0M D=2.0 eps=7 air=1  run     483 s  x10     4825 s
+gated    6x10x3  a=0.40 R N=110000000.0M D=1.5 eps=7 air=0  run     729 s  x10     7285 s
+gated    6x10x3  a=0.40 R N=110000000.0M D=1.5 eps=7 air=1  run     831 s  x10     8307 s
+gated    5x4x3   a=0.05 R N=3500000.0M D=3.0 eps=7 air=0  run     185 s  x10     1854 s
+gated    5x4x3   a=0.05 R N=3500000.0M D=3.0 eps=7 air=1  run     186 s  x10     1861 s
+gated    5x4x3   a=0.10 R N=7900000.0M D=2.0 eps=7 air=0  run     209 s  x10     2093 s
+gated    5x4x3   a=0.10 R N=7900000.0M D=2.0 eps=7 air=1  run     224 s  x10     2239 s
+gated    5x4x3   a=0.20 R N=14000000.0M D=1.5 eps=7 air=0  run     185 s  x10     1854 s
+gated    5x4x3   a=0.20 R N=14000000.0M D=1.5 eps=7 air=1  run     207 s  x10     2070 s
+gated    5x4x3   a=0.40 R N=31000000.0M D=1.0 eps=7 air=0  run     205 s  x10     2053 s
+gated    5x4x3   a=0.40 R N=31000000.0M D=1.0 eps=7 air=1  run     235 s  x10     2353 s
+gated    6x10x3  a=0.05 E N=1500000.0M D=4.0 eps=7 air=0  run    1249 s  x10    12487 s
+gated    6x10x3  a=0.05 E N=1500000.0M D=4.0 eps=7 air=1  run    1212 s  x10    12116 s
+gated    6x10x3  a=0.10 E N=1500000.0M D=2.0 eps=7 air=0  run     608 s  x10     6079 s
+gated    6x10x3  a=0.10 E N=1500000.0M D=2.0 eps=7 air=1  run     634 s  x10     6339 s
+gated    6x10x3  a=0.20 E N=1500000.0M D=1.0 eps=9 air=0  run     369 s  x10     3690 s
+gated    6x10x3  a=0.20 E N=1500000.0M D=1.0 eps=9 air=1  run     405 s  x10     4046 s
+gated    6x10x3  a=0.40 E N=1500000.0M D=0.5 eps=9 air=0  run     161 s  x10     1612 s
+gated    6x10x3  a=0.40 E N=1500000.0M D=0.5 eps=9 air=1  run     183 s  x10     1825 s
+gated    5x4x3   a=0.05 E N=1500000.0M D=3.0 eps=7 air=0  run    1249 s  x10    12487 s
+gated    5x4x3   a=0.05 E N=1500000.0M D=3.0 eps=7 air=1  run    1248 s  x10    12480 s
+gated    5x4x3   a=0.10 E N=1500000.0M D=2.0 eps=7 air=0  run     608 s  x10     6079 s
+gated    5x4x3   a=0.10 E N=1500000.0M D=2.0 eps=7 air=1  run     647 s  x10     6470 s
+gated    5x4x3   a=0.20 E N=1500000.0M D=0.8 eps=9 air=0  run     369 s  x10     3690 s
+gated    5x4x3   a=0.20 E N=1500000.0M D=0.8 eps=9 air=1  run     410 s  x10     4097 s
+gated    5x4x3   a=0.40 E N=1500000.0M D=0.4 eps=9 air=0  run     161 s  x10     1612 s
+gated    5x4x3   a=0.40 E N=1500000.0M D=0.4 eps=9 air=1  run     184 s  x10     1837 s
+reported 20x8x4  a=0.05 R N=1500000.0M D=5.7 eps=7 air=0  run      79 s  x10      795 s
+reported 20x8x4  a=0.05 E N=1500000.0M D=5.7 eps=7 air=0  run    1249 s  x10    12487 s
+reported 20x8x4  a=0.10 R N=1500000.0M D=4.3 eps=7 air=0  run      40 s  x10      397 s
+reported 20x8x4  a=0.10 E N=1500000.0M D=2.9 eps=7 air=0  run     608 s  x10     6079 s
+reported 20x8x4  a=0.20 R N=1500000.0M D=2.9 eps=7 air=0  run      20 s  x10      199 s
+reported 20x8x4  a=0.20 E N=1500000.0M D=1.5 eps=9 air=0  run     369 s  x10     3690 s
+reported 20x8x4  a=0.40 R N=1500000.0M D=2.2 eps=7 air=0  run      10 s  x10       99 s
+reported 20x8x4  a=0.40 E N=1500000.0M D=0.8 eps=9 air=0  run     161 s  x10     1612 s
+atmo validation run 782 s x10 7816 s
+totals: gated 156676 s (43.5 h), reported 25359 s (7.0 h), atmo 7816 s; all 189851 s = 52.7 h of single-process time
+longest run ('gated', '6x10x3', 0.05, 'E', 1500000.0, 4, 7, 0, 1248.7)
+at 1 at once (perfect packing, no slowdown): 52.7 h
+at 4 at once (perfect packing, no slowdown): 13.2 h
+at 8 at once (perfect packing, no slowdown): 6.6 h
+SPPS runs 410
+SPPS matrix: files 15760, bytes 1.07 GB; atmo files 520 bytes 0.03 GB
+TCR runs 21

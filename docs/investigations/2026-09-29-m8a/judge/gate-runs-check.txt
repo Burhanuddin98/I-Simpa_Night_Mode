@@ -1,0 +1,18 @@
+﻿spps.exe             code 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d manifest 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d match True; raw 1d9900db6cc260039c53963754d4df8de4370c7c6a65cfe998a66cb5720822e8
+classicalTheory.exe  code fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234 manifest fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234 match True; raw c4a7bca35374af01405a879e649dc0e746f9267c6449e47969bb41e2f4add863
+tetgen.exe           code d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f manifest d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f match True; raw ac68f014a3b2003dc6f88ca9b3dc53e5c193888868ab9029b636e89d5be8a8f9
+preprocess.exe       code 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26 manifest 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26 match True; raw 34d9b87424f90af9999434d1c69747355d66eabf217f2cdb09448986649718d0
+expected matrix runs: 422 (400 SPPS cell runs, 320 gated; 20 TCR, 16 gated)
+run folders checked against the spec: 422; run.json files under runs/: 433; mesh.json TetGen sha256 checked: 422; SPPS config.xml checked: 402
+dt per (room, method, air):
+  20x8x4/energetic/off         40 runs, dt values: 0.001
+  20x8x4/random/off            40 runs, dt values: 0.001
+  5x4x3/energetic/off          41 runs, dt values: 0.001
+  5x4x3/energetic/on           40 runs, dt values: 0.001
+  5x4x3/random/off             41 runs, dt values: 0.001
+  5x4x3/random/on              40 runs, dt values: 0.001
+  6x10x3/energetic/off         40 runs, dt values: 0.001
+  6x10x3/energetic/on          40 runs, dt values: 0.001
+  6x10x3/random/off            40 runs, dt values: 0.001
+  6x10x3/random/on             40 runs, dt values: 0.001
+problems: 0

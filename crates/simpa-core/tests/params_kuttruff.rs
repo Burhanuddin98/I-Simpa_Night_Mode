@@ -31,6 +31,14 @@ mod lambert_exact;
 use std::f64::consts::LN_10;
 
 use lambert_exact::box_gamma2;
+// The transport's T30 in M8's eight cells at 16 times the suite's rays, committed in the library
+// (`simpa_core::bed::transport::HIGH`), where M8a's bed holds its own transport to them (E4):
+// `room` indexes [`ROOMS`], in the same order as `bed::transport::HIGH_ROOMS`. They come from
+// `kuttruff_against_the_transport_at_high_counts` below, in a release build, which re-derives
+// each and requires it equal (to 10⁻⁹): the transport and its settings are deterministic.
+// Regenerate from that test's `HighCell` lines only after a reviewed change to the transport or
+// to `params::decay`.
+use simpa_core::bed::transport::{HIGH, HIGH_ROOMS};
 use simpa_core::faults::{self, Fault};
 use simpa_core::params::air::{Atmosphere, solver_air_absorption_per_m};
 use simpa_core::params::codes;
@@ -68,89 +76,6 @@ const ROOMS: [Room; 2] = [
         size: [5.0, 4.0, 3.0],
         source: [2.52, 1.97, 1.53],
         receivers: [[1.0, 1.0, 1.0], [4.0, 3.0, 2.0], [1.0, 3.0, 1.9]],
-    },
-];
-
-/// One of M8's cells at high counts: the room (an index into [`ROOMS`]), `α`, the receivers' T30
-/// and its standard error, and the room energy's and its, s.
-struct HighCell {
-    room: usize,
-    alpha: f64,
-    t: f64,
-    se: f64,
-    room_t: f64,
-    room_se: f64,
-}
-
-/// The transport's T30 in M8's eight cells at 16 times the suite's rays (4 M to 34 M a cell),
-/// from `kuttruff_against_the_transport_at_high_counts` in a release build, which re-derives each
-/// and requires it equal (to 10⁻⁹): the transport and its settings are deterministic. Regenerate
-/// from that test's `HighCell` lines only after a reviewed change to the transport or to
-/// `params::decay`.
-const HIGH: [HighCell; 8] = [
-    HighCell {
-        room: 0,
-        alpha: 0.05,
-        t: 2.647681680,
-        se: 0.000411370,
-        room_t: 2.647489334,
-        room_se: 0.000061000,
-    },
-    HighCell {
-        room: 0,
-        alpha: 0.1,
-        t: 1.304672095,
-        se: 0.000242639,
-        room_t: 1.304451001,
-        room_se: 0.000035608,
-    },
-    HighCell {
-        room: 0,
-        alpha: 0.2,
-        t: 0.631223921,
-        se: 0.000109630,
-        room_t: 0.631200878,
-        room_se: 0.000023486,
-    },
-    HighCell {
-        room: 0,
-        alpha: 0.4,
-        t: 0.290834217,
-        se: 0.000068707,
-        room_t: 0.290927533,
-        room_se: 0.000011009,
-    },
-    HighCell {
-        room: 1,
-        alpha: 0.05,
-        t: 2.025626686,
-        se: 0.000196265,
-        room_t: 2.025813879,
-        room_se: 0.000050207,
-    },
-    HighCell {
-        room: 1,
-        alpha: 0.1,
-        t: 0.996933379,
-        se: 0.000121952,
-        room_t: 0.996993117,
-        room_se: 0.000030028,
-    },
-    HighCell {
-        room: 1,
-        alpha: 0.2,
-        t: 0.481140657,
-        se: 0.000059798,
-        room_t: 0.481062394,
-        room_se: 0.000016347,
-    },
-    HighCell {
-        room: 1,
-        alpha: 0.4,
-        t: 0.219812161,
-        se: 0.000026423,
-        room_t: 0.219815591,
-        room_se: 0.000004383,
     },
 ];
 
@@ -254,6 +179,14 @@ fn transport_t30(room: &Room, e: &Enclosure, alpha: f64, air: Option<f64>, rays:
         room: room_t30.mean,
         room_se: room_t30.se,
         diff_se: mean_se(&diffs).1,
+    }
+}
+
+#[test]
+fn the_committed_rooms_are_these_rooms() {
+    assert_eq!(HIGH_ROOMS.len(), ROOMS.len());
+    for (name, room) in HIGH_ROOMS.iter().zip(&ROOMS) {
+        assert_eq!(*name, room.name);
     }
 }
 
