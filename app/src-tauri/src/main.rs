@@ -3,6 +3,7 @@
 //! ```text
 //! app.exe                          the window
 //! app.exe --project <file.simpa>   open a project at startup
+//! app.exe --e2e                    install the UI's test hooks (the M10 e2e harness)
 //! app.exe --selftest <out.json>    measure, write <out.json>, exit (0 pass, 1 fail, 3 timeout)
 //! app.exe --dump-schema <dir>     write schema.json and ipc.json, the UI's TypeScript sources
 //! ```
@@ -15,6 +16,7 @@ mod bridge;
 mod commands;
 mod events;
 mod guard;
+mod scene;
 mod selftest;
 mod webview2;
 
@@ -29,6 +31,7 @@ use commands::AppState;
 struct GuiArgs {
     selftest: Option<PathBuf>,
     project: Option<PathBuf>,
+    e2e: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -43,6 +46,13 @@ fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<Mode, String> 
     let mut it = args.into_iter();
     while let Some(arg) = it.next() {
         let flag = arg.to_string_lossy().into_owned();
+        if flag == "--e2e" {
+            if gui.e2e {
+                return Err("--e2e given twice".to_string());
+            }
+            gui.e2e = true;
+            continue;
+        }
         let mut value = |name: &str| {
             it.next()
                 .map(PathBuf::from)
@@ -114,6 +124,7 @@ fn run(args: GuiArgs) -> ExitCode {
         bench: Arc::new(Mutex::new(bench::BenchStore::default())),
         selftest: selftest.clone(),
         startup_error,
+        e2e: args.e2e,
     };
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -138,6 +149,15 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::project_undo,
             commands::project_redo,
             commands::selftest_report,
+            commands::scene_state,
+            commands::scene_new,
+            commands::scene_open,
+            commands::model_import,
+            commands::project_save,
+            commands::edit_apply,
+            commands::edit_undo,
+            commands::edit_redo,
+            commands::scene_mesh,
         ])
         .setup(move |_app| {
             if let Some(st) = &selftest {
@@ -171,8 +191,19 @@ mod tests {
             Ok(Mode::Gui(GuiArgs {
                 selftest: Some("o.json".into()),
                 project: Some("p.simpa".into()),
+                e2e: false,
             }))
         );
+        assert_eq!(
+            parse(&["--e2e", "--project", "p.simpa"]),
+            Ok(Mode::Gui(GuiArgs {
+                selftest: None,
+                project: Some("p.simpa".into()),
+                e2e: true,
+            }))
+        );
+        assert!(parse(&["--e2e", "--e2e"]).is_err());
+        assert!(parse(&["--dump-schema", "s", "--e2e"]).is_err());
         assert_eq!(
             parse(&["--dump-schema", "s.json"]),
             Ok(Mode::DumpSchema("s.json".into()))

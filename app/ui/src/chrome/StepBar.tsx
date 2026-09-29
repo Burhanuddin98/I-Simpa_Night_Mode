@@ -1,19 +1,14 @@
-import type { ProjectInfo } from '../backend';
-import { STEPS, type StepKey } from '../steps';
+// The step bar (design:46-65): the five steps, each with its sub (`data-part="sub"`), and the
+// variant switch. `[data-step]` and `[data-part="name"]` are what the M9 self-test reads; the sub
+// sits outside the name so the names stay exactly the five.
+import { STEPS } from '../steps';
+import { sceneStore, stepStore, useStore } from '../store';
+import { stepSubs } from './sceneModel';
+import { VariantSwitch } from './VariantSwitch';
 
-export function StepBar({
-  current,
-  onPick,
-  project,
-}: {
-  current: StepKey;
-  onPick: (step: StepKey) => void;
-  project: ProjectInfo | null;
-}) {
-  // The variant switch is a placeholder until variants are editable (M10): it shows the base
-  // and the project's variants, and follows the project's active variant.
-  const variants = [{ id: null as string | null, name: 'Base' }, ...(project?.variants ?? [])];
-  const active = project?.active_variant ?? null;
+export function StepBar() {
+  const current = useStore(stepStore);
+  const subs = stepSubs(useStore(sceneStore));
   return (
     <div className="stepbar">
       <nav className="steps" aria-label="Workflow">
@@ -23,26 +18,20 @@ export function StepBar({
             className="step"
             data-step={s.key}
             aria-current={s.key === current ? 'step' : undefined}
-            onClick={() => onPick(s.key)}
+            onClick={() => stepStore.set(s.key)}
           >
             <span className="badge">{i + 1}</span>
             <span className="name" data-part="name">
               {s.name}
             </span>
+            <span className={`sub${subs[s.key] === 'refused' ? ' fail' : ''}`} data-part="sub">
+              {subs[s.key]}
+            </span>
           </button>
         ))}
       </nav>
       <div className="grow" />
-      <div className="variants">
-        <span className="label">Variant</span>
-        <div className="segmented" role="tablist" aria-label="Variants">
-          {variants.map((v) => (
-            <button key={v.id ?? 'base'} role="tab" aria-selected={v.id === active} aria-disabled="true">
-              {v.name}
-            </button>
-          ))}
-        </div>
-      </div>
+      <VariantSwitch />
     </div>
   );
 }

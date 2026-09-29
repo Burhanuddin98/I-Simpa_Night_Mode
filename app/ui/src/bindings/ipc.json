@@ -1,5 +1,35 @@
 {
   "$defs": {
+    "BandKind": {
+      "description": "Octave or third-octave bands.",
+      "enum": [
+        "octave",
+        "third_octave"
+      ],
+      "type": "string"
+    },
+    "BandSet": {
+      "additionalProperties": false,
+      "description": "The frequency bands every per-band value in the project is given on.\n\n`frequencies_hz` holds nominal centre frequencies of `kind`, strictly ascending. The solvers\nsort `freq_enum` and map every per-band array by sorted position, so ascending order here is\nthe order of every per-band array in the project.",
+      "properties": {
+        "frequencies_hz": {
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/$defs/BandKind"
+        }
+      },
+      "required": [
+        "kind",
+        "frequencies_hz"
+      ],
+      "type": "object"
+    },
     "BatchStats": {
       "properties": {
         "batches": {
@@ -26,6 +56,219 @@
       ],
       "type": "object"
     },
+    "CheckCounts": {
+      "description": "The check's counts that the UI shows.",
+      "properties": {
+        "boundary_open_edges": {
+          "description": "Open edges on the outer shell, after analysis.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cells": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "coincident_vertices": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "components": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "degenerate_faces": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duplicate_faces": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "edges": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "exterior_faces": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "faces": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "invalid_faces": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "inverted_faces": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "nonmanifold_edges": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "open_edges": {
+          "description": "Census edges used once (by index, before analysis).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "self_intersecting_faces": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "self_intersecting_pairs": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "vertices": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "vertices",
+        "faces",
+        "edges",
+        "open_edges",
+        "nonmanifold_edges",
+        "self_intersecting_pairs",
+        "self_intersecting_faces",
+        "degenerate_faces",
+        "duplicate_faces",
+        "invalid_faces",
+        "inverted_faces",
+        "exterior_faces",
+        "boundary_open_edges",
+        "cells",
+        "components",
+        "coincident_vertices"
+      ],
+      "type": "object"
+    },
+    "CheckReasonOut": {
+      "description": "One reason the check refused the geometry.",
+      "properties": {
+        "code": {
+          "description": "The core's stable reason code (`open_boundary`, ...).",
+          "type": "string"
+        },
+        "count": {
+          "description": "How many findings, as the message counts them.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "faces": {
+          "description": "How many faces are involved.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "message": {
+          "type": "string"
+        },
+        "repairable": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code",
+        "count",
+        "repairable",
+        "faces",
+        "message"
+      ],
+      "type": "object"
+    },
+    "CheckSummary": {
+      "description": "The model check, for the Geometry panel and the view's highlight.",
+      "properties": {
+        "area_m2": {
+          "format": "double",
+          "type": "number"
+        },
+        "bbox_min": {
+          "description": "The bounding box of the vertices the faces use.",
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "counts": {
+          "$ref": "#/$defs/CheckCounts"
+        },
+        "enclosed_volume_m3": {
+          "format": "double",
+          "type": "number"
+        },
+        "extents_m": {
+          "items": {
+            "format": "double",
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "highlight_faces": {
+          "description": "Every face any reason names, ascending, unique.",
+          "items": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": "array"
+        },
+        "reasons": {
+          "description": "In the core's reason order; empty exactly when the verdict is ok.",
+          "items": {
+            "$ref": "#/$defs/CheckReasonOut"
+          },
+          "type": "array"
+        },
+        "verdict": {
+          "$ref": "#/$defs/CheckVerdict"
+        }
+      },
+      "required": [
+        "verdict",
+        "reasons",
+        "counts",
+        "area_m2",
+        "enclosed_volume_m3",
+        "bbox_min",
+        "extents_m",
+        "highlight_faces"
+      ],
+      "type": "object"
+    },
+    "CheckVerdict": {
+      "enum": [
+        "ok",
+        "refused"
+      ],
+      "type": "string"
+    },
     "CmdError": {
       "description": "An error for the UI: a stable reason code and a message for people.",
       "properties": {
@@ -41,6 +284,293 @@
         "message"
       ],
       "type": "object"
+    },
+    "Directivity": {
+      "description": "Source directivity: `source@directivite`, the solver's `SOURCE_TYPE`\n(`lib_interface/coreTypes.h:96-104`). See [`Directivity::solver_code`].\n\nIn JSON: `{\"kind\": \"omni\"}`, `{\"kind\": \"unidirectional\", \"direction\": [x, y, z]}`, ...\nExtra keys are refused for every kind. (serde's derive alone would read\n`{\"kind\": \"omni\", \"file\": \"balloon.txt\"}` as omni and drop the file, so the reader is written\nby hand.)",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Code 0.",
+          "properties": {
+            "kind": {
+              "const": "omni",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 1: emits along `direction` (`@u`, `@v`, `@w`, normalised by the solver).",
+          "properties": {
+            "direction": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "kind": {
+              "const": "unidirectional",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "direction"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 2: emits in the XY plane.",
+          "properties": {
+            "kind": {
+              "const": "plane_xy",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 3: emits in the YZ plane.",
+          "properties": {
+            "kind": {
+              "const": "plane_yz",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 4: emits in the XZ plane.",
+          "properties": {
+            "kind": {
+              "const": "plane_xz",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Code 5: a directivity balloon file (`@directivity_file`), aimed along `direction`.\n`file` is relative to the project file. A missing file makes the source emit nothing,\nwith exit code 0 (contract survey, `run_dirmiss`), so it is checked before launch.",
+          "properties": {
+            "direction": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "file": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "balloon",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "file",
+            "direction"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EditOutcome": {
+      "description": "The result of `edit_apply`, the checked apply (PLAN.md 1.8).",
+      "properties": {
+        "applied": {
+          "description": "False when the validator refused the edit: the project and its history are unchanged.",
+          "type": "boolean"
+        },
+        "refusals": {
+          "description": "The new errors the edit would have introduced.",
+          "items": {
+            "$ref": "#/$defs/UiIssue"
+          },
+          "type": "array"
+        },
+        "state": {
+          "$ref": "#/$defs/SceneState"
+        }
+      },
+      "required": [
+        "applied",
+        "refusals",
+        "state"
+      ],
+      "type": "object"
+    },
+    "EntityRef": {
+      "description": "A named entity of the project. In JSON: `{\"kind\": \"material\", \"id\": \"<uuid>\"}`; any other\nkey is refused.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "surface_group",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "material",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "point_receiver",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "surface_receiver",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "fitting_zone",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "variant",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "EventsProbeReport": {
       "properties": {
@@ -100,6 +630,42 @@
       ],
       "type": "object"
     },
+    "GroupStats": {
+      "description": "A surface group's geometry facts, and whether it has a real material.",
+      "properties": {
+        "area_m2": {
+          "format": "double",
+          "type": "number"
+        },
+        "assigned": {
+          "description": "False when its effective material under the active variant is the placeholder\n([`is_placeholder`]).",
+          "type": "boolean"
+        },
+        "faces": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "faces",
+        "area_m2",
+        "assigned"
+      ],
+      "type": "object"
+    },
+    "IssueSeverity": {
+      "enum": [
+        "error",
+        "warning"
+      ],
+      "type": "string"
+    },
     "LineClass": {
       "description": "The Console's classes (docs/design/README.md: FAIL, INFO and OK; WARN for the amber lines).",
       "enum": [
@@ -109,6 +675,227 @@
         "OK"
       ],
       "type": "string"
+    },
+    "LogLine": {
+      "description": "One Console line.",
+      "properties": {
+        "class": {
+          "$ref": "#/$defs/LineClass"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "class",
+        "text"
+      ],
+      "type": "object"
+    },
+    "Material": {
+      "additionalProperties": false,
+      "description": "A surface material: `surface_absorption_enum/type_surface`.",
+      "properties": {
+        "absorption": {
+          "description": "Absorption coefficient per band, 0 to 1 (`bfreq@absorb`).",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "color": {
+          "description": "Display colour.",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "type": "string"
+        },
+        "double_sided": {
+          "description": "`@side_material`: the material acts on both sides of a face.",
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "reflection_law": {
+          "$ref": "#/$defs/ReflectionLaws",
+          "description": "`bfreq@loi`, one law for every band or one per band."
+        },
+        "scattering": {
+          "description": "Scattering coefficient per band, 0 to 1: the share of reflections that are diffuse\n(`bfreq@diffusion`).",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "type": "array"
+        },
+        "solver_id": {
+          "description": "A pinned solver id (`type_surface@id`, the `.cbin` face `idMat`). `None` lets export\nassign one. Importers set it so that a project imported from a solver mesh exports the\nsame ids and still matches that mesh. At most [`SOLVER_INT_MAX`]: the solver reads\n`@id` with `atoi`.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "transmission_loss_db": {
+          "description": "Transmission loss per band in dB (`bfreq@affaiblissement`, tau = 10^(-R/10)). `None`\nmeans no transmission in any band; a `None` band does not transmit. Either way the\nattribute is left out of that band, which is how the solver knows\n(`base_core_configuration.cpp:210-219`), as upstream's GUI leaves it out of a band whose\n`transmission` switch is off (`e_data_row_materiau.h:98-106`): tutorial 3's\n`Open_door` transmits from 250 Hz to 4 kHz but not at 125 Hz.",
+          "items": {
+            "anyOf": [
+              {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "color",
+        "absorption",
+        "scattering",
+        "reflection_law",
+        "transmission_loss_db",
+        "double_sided",
+        "solver_id"
+      ],
+      "type": "object"
+    },
+    "MaterialOverride": {
+      "additionalProperties": false,
+      "description": "One material override in a [`Variant`].",
+      "properties": {
+        "group": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "material": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "material"
+      ],
+      "type": "object"
+    },
+    "PointReceiver": {
+      "additionalProperties": false,
+      "description": "A point receiver: `recepteursp/recepteur_ponctuel`.",
+      "properties": {
+        "background_noise": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Spectrum"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Background noise, `bfreq@db` per band. `None` writes none."
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "description": "`@lbl` and `@name`. SPPS makes it a folder name and TCR a file name.",
+          "type": "string"
+        },
+        "orientation": {
+          "description": "`@u`, `@v`, `@w`, normalised by the solver; must not be zero.",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "position": {
+          "description": "`@x`, `@y`, `@z`; must lie inside the meshed volume.",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "solver_id": {
+          "description": "A pinned solver id (`recepteur_ponctuel@id`). `None` lets export assign one\n(`config_xml`, \"Solver ids\"). A `.proj` import pins upstream's element id (its `wxid`,\n`docs/m5-m6-design.md`, decision 13), so an imported project writes upstream's ids. At\nmost [`SOLVER_INT_MAX`], and unique among point receivers.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "position",
+        "orientation",
+        "background_noise",
+        "solver_id"
+      ],
+      "type": "object"
     },
     "Prepared": {
       "description": "A prepared buffer: take it with `token`; `checksum` is [`checksum`] of its bytes.",
@@ -156,7 +943,23 @@
         "can_undo": {
           "type": "boolean"
         },
+        "dirty": {
+          "description": "Changed since it was last saved or opened, or never saved.",
+          "type": "boolean"
+        },
         "faces": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "geometry_rev": {
+          "description": "Changes whenever the geometry can have changed; the UI refetches the mesh on a change.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "groups_assigned": {
+          "description": "Surface groups whose effective material is not the import placeholder\n(`scene::is_placeholder`).",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -183,6 +986,12 @@
           "minimum": 0,
           "type": "integer"
         },
+        "redo_depth": {
+          "description": "Entries on the redo stack.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "sources": {
           "format": "uint",
           "minimum": 0,
@@ -194,6 +1003,12 @@
           "type": "integer"
         },
         "surface_receivers": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "undo_depth": {
+          "description": "Entries on the undo stack.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -222,9 +1037,120 @@
         "surface_receivers",
         "variants",
         "can_undo",
-        "can_redo"
+        "can_redo",
+        "undo_depth",
+        "redo_depth",
+        "dirty",
+        "geometry_rev",
+        "groups_assigned"
       ],
       "type": "object"
+    },
+    "ProjectView": {
+      "description": "The project without its geometry.",
+      "properties": {
+        "active_variant": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bands": {
+          "$ref": "#/$defs/BandSet"
+        },
+        "description": {
+          "type": "string"
+        },
+        "materials": {
+          "items": {
+            "$ref": "#/$defs/Material"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "point_receivers": {
+          "items": {
+            "$ref": "#/$defs/PointReceiver"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/Source"
+          },
+          "type": "array"
+        },
+        "surface_groups": {
+          "items": {
+            "$ref": "#/$defs/SurfaceGroup"
+          },
+          "type": "array"
+        },
+        "surface_receivers": {
+          "items": {
+            "$ref": "#/$defs/SurfaceReceiver"
+          },
+          "type": "array"
+        },
+        "variants": {
+          "items": {
+            "$ref": "#/$defs/Variant"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "bands",
+        "surface_groups",
+        "materials",
+        "sources",
+        "point_receivers",
+        "surface_receivers",
+        "variants"
+      ],
+      "type": "object"
+    },
+    "ReflectionLaw": {
+      "description": "How a surface reflects the diffuse part of the energy: `type_surface/bfreq@loi`, the solver's\n`REFLECTION_LAW` (`lib_interface/coreTypes.h:83-92`). The discriminant is the solver code.\n\nSPPS draws a diffuse reflection with probability equal to the scattering coefficient\n(`spps/CalculationCore.cpp:318`), so the law has no effect at scattering 0.\n[`ReflectionLaw::SemiDiffuse`] has no case in SPPS's `ReflectionLaws::SolveReflection`\n(`spps/tools/dotreflection.h:23-45`) and falls to its default, a specular reflection.",
+      "oneOf": [
+        {
+          "enum": [
+            "specular",
+            "lambert",
+            "w2",
+            "w3",
+            "w4",
+            "semi_diffuse"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "uniform",
+          "description": "Uniform, `w1` in upstream's comments.",
+          "type": "string"
+        }
+      ]
+    },
+    "ReflectionLaws": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReflectionLaw",
+          "description": "The same law in every band."
+        },
+        {
+          "description": "One law per band; its length is the band count (`Project::check_integrity`).",
+          "items": {
+            "$ref": "#/$defs/ReflectionLaw"
+          },
+          "type": "array"
+        }
+      ],
+      "description": "A material's reflection law: one law for every band, or one per band. The solvers read it per\nband (`type_surface/bfreq@loi`, `base_core_configuration.cpp:210-219`), and upstream's GUI\nkeeps one per band (the `loi` list of each row, `e_data_row_materiau.h:218`): tutorial 3's\nmaterial 100 is Lambert in the six octave bands and specular in the others.\n\nIn JSON: one law, `\"lambert\"`, or one per band in the band set's order,\n`[\"specular\", \"lambert\", ...]`. [`ReflectionLaws::from_bands`] gives the single spelling\nwhenever every band has the same law."
     },
     "RunEvent": {
       "properties": {
@@ -284,10 +1210,247 @@
       ],
       "type": "object"
     },
+    "SceneState": {
+      "description": "The state of the open project as the M10 UI shows it. Returned by every M10 command.",
+      "properties": {
+        "check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CheckSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The model check of the current geometry; `None` when the project has no faces."
+        },
+        "groups": {
+          "description": "One per surface group, in project order.",
+          "items": {
+            "$ref": "#/$defs/GroupStats"
+          },
+          "type": "array"
+        },
+        "info": {
+          "$ref": "#/$defs/ProjectInfo"
+        },
+        "issues": {
+          "description": "The validator's issues on the current project, with their UI codes.",
+          "items": {
+            "$ref": "#/$defs/UiIssue"
+          },
+          "type": "array"
+        },
+        "lines": {
+          "description": "Console lines produced since the last state was returned.",
+          "items": {
+            "$ref": "#/$defs/LogLine"
+          },
+          "type": "array"
+        },
+        "run_blockers": {
+          "description": "Why Run is disabled, as UI codes. Never empty in M10: `M11_PENDING` is always present.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "view": {
+          "$ref": "#/$defs/ProjectView",
+          "description": "The project without its mesh; the mesh travels as bytes (`scene_mesh`)."
+        }
+      },
+      "required": [
+        "info",
+        "view",
+        "groups",
+        "issues",
+        "run_blockers",
+        "lines"
+      ],
+      "type": "object"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "description": "A point sound source: `sources/source`.",
+      "properties": {
+        "delay_s": {
+          "description": "`@delay`, seconds.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "directivity": {
+          "$ref": "#/$defs/Directivity"
+        },
+        "enabled": {
+          "description": "A disabled source is left out of config.xml.",
+          "type": "boolean"
+        },
+        "group": {
+          "description": "The source group it sits in, as upstream's GUI groups sources (a source list's element of\ntype 15, `e_scene_sources.h:73-87`): the groups' names from the outermost, joined by\n` / `. `None` at the top level, as for every source made here. It reaches no solver:\nupstream writes a group's sources in its place. Source names need be unique only within\none group (`name_duplicate`), unless per-source output makes them folder names.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "description": "`@name`.",
+          "type": "string"
+        },
+        "position": {
+          "description": "`@x`, `@y`, `@z`. Must lie strictly inside the meshed volume: SPPS crashes on a source\noutside it (contract survey, `run_srcout`).",
+          "items": {
+            "description": "A float. Finite values are numbers; non-finite values are strings.",
+            "oneOf": [
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                "type": "string"
+              }
+            ]
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "power": {
+          "$ref": "#/$defs/Spectrum",
+          "description": "Sound power, dB re 1 pW (`bfreq@db` per band, from [`Spectrum::band_levels_db`])."
+        },
+        "solver_id": {
+          "description": "A pinned element id: upstream's `source@id` for a source imported from a `.proj` (its\n`wxid`, `docs/m5-m6-design.md`, decision 13). `None` for a source made here. The solvers\nnumber sources by position and never read `source@id`\n(`base_core_configuration.cpp:153`); `config.xml` carries it when pinned, as upstream's\nGUI writes it, so that an imported project keeps upstream's ids. At most\n[`SOLVER_INT_MAX`], and unique among sources.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "enabled",
+        "position",
+        "power",
+        "directivity",
+        "delay_s",
+        "group",
+        "solver_id"
+      ],
+      "type": "object"
+    },
+    "Spectrum": {
+      "additionalProperties": false,
+      "description": "A level spectrum: a global level spread over the project's bands by a shape.\n\nUsed for source sound power (dB re 1 pW) and receiver background noise.",
+      "properties": {
+        "global_db": {
+          "description": "The energetic sum over the project's bands, in dB.",
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+              "type": "string"
+            }
+          ]
+        },
+        "shape": {
+          "$ref": "#/$defs/SpectrumShape"
+        }
+      },
+      "required": [
+        "global_db",
+        "shape"
+      ],
+      "type": "object"
+    },
+    "SpectrumShape": {
+      "description": "The shape of a level spectrum across the project's bands.\n\nIn JSON: `{\"kind\": \"pink\"}`, `{\"kind\": \"white\"}` or `{\"kind\": \"custom\", \"relative_db\": [...]}`.\nExtra keys are refused for every kind: serde's derive alone would read\n`{\"kind\": \"pink\", \"relative_db\": [...]}` as pink and drop the levels, so the reader is written\nby hand.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "Equal power in every band.",
+          "properties": {
+            "kind": {
+              "const": "pink",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Power proportional to bandwidth: +1 dB per third-octave band and +3 dB per octave band,\nexactly (base-10 bands). This is I-Simpa's \"White noise\": tutorial 1's source, 80 dB\nover 50 Hz to 20 kHz in thirds, reads 60.1404190063477 dB at 1 kHz, and this shape gives\n60.14042 dB.",
+          "properties": {
+            "kind": {
+              "const": "white",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Relative levels in dB, one per band. Only the differences matter.",
+          "properties": {
+            "kind": {
+              "const": "custom",
+              "type": "string"
+            },
+            "relative_db": {
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "relative_db"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "StartupInfo": {
       "properties": {
         "app_version": {
           "type": "string"
+        },
+        "e2e": {
+          "description": "Started with `--e2e`: the UI installs its test hooks.",
+          "type": "boolean"
         },
         "project": {
           "anyOf": [
@@ -321,6 +1484,7 @@
       },
       "required": [
         "selftest",
+        "e2e",
         "app_version",
         "tauri_version",
         "webview"
@@ -334,6 +1498,252 @@
         "stderr"
       ],
       "type": "string"
+    },
+    "SurfaceGroup": {
+      "additionalProperties": false,
+      "description": "A named set of faces sharing one material: the unit materials are assigned to.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "material": {
+          "description": "The base project's material; a [`Variant`] may override it.",
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "material"
+      ],
+      "type": "object"
+    },
+    "SurfaceReceiver": {
+      "additionalProperties": false,
+      "description": "A surface receiver (sound map): `recepteurss/recepteur_surfacique` or\n`recepteur_surfacique_coupe`.",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "description": "`@name`.",
+          "type": "string"
+        },
+        "shape": {
+          "$ref": "#/$defs/SurfaceReceiverShape"
+        },
+        "solver_id": {
+          "description": "A pinned solver id (`recepteur_surfacique@id` or `recepteur_surfacique_coupe@id`, and a\nscene receiver's `.cbin` `idRs`). `None` lets export assign one (`config_xml`, \"Solver\nids\"). A `.proj` import pins upstream's element id (decision 13). At most\n[`SOLVER_INT_MAX`], and unique among surface receivers and cutting planes.",
+          "format": "uint32",
+          "maximum": 2147483647,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "enabled",
+        "shape",
+        "solver_id"
+      ],
+      "type": "object"
+    },
+    "SurfaceReceiverShape": {
+      "description": "Where a surface receiver lies.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "On the model: every face of these surface groups carries this receiver's id as its `.cbin`\n`idRs`. A face has one `idRs`, so a group belongs to at most one scene receiver.",
+          "properties": {
+            "groups": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "kind": {
+              "const": "scene",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "groups"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A rectangle through corners `a`, `b`, `c` (`@ax`..`@cz`), cut into\n`ceil(|bc| / resolution) x ceil(|ba| / resolution)` cells (`@resolution`, metres).",
+          "properties": {
+            "a": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "b": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "c": {
+              "description": "[x, y, z] in metres, Z up",
+              "items": {
+                "description": "A float. Finite values are numbers; non-finite values are strings.",
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "maxItems": 3,
+              "minItems": 3,
+              "type": "array"
+            },
+            "kind": {
+              "const": "cutting_plane",
+              "type": "string"
+            },
+            "resolution_m": {
+              "description": "A float. Finite values are numbers; non-finite values are strings.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "a",
+            "b",
+            "c",
+            "resolution_m"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "UiIssue": {
+      "description": "A validator issue as the UI shows it: the UI code and the core rule, both.",
+      "properties": {
+        "code": {
+          "description": "The UI code ([`ui_code`]), e.g. `RECEIVER_OUTSIDE`.",
+          "type": "string"
+        },
+        "entity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EntityRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The entity the pointer names, resolved in the issue's own project."
+        },
+        "field": {
+          "description": "The pointer after the entity, e.g. `position` or `absorption/3`; empty when there is no\nentity or the pointer names the entity itself.",
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "path": {
+          "description": "The validator's JSON pointer into the project.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "The core's rule code, e.g. `receiver_outside_volume`.",
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/IssueSeverity"
+        }
+      },
+      "required": [
+        "code",
+        "rule",
+        "severity",
+        "path",
+        "field",
+        "message"
+      ],
+      "type": "object"
+    },
+    "Variant": {
+      "additionalProperties": false,
+      "description": "A named set of material overrides on top of the base project.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "overrides": {
+          "description": "At most one per group, strictly ascending by group id (so each variant has one spelling).",
+          "items": {
+            "$ref": "#/$defs/MaterialOverride"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "overrides"
+      ],
+      "type": "object"
     },
     "VariantInfo": {
       "properties": {
@@ -377,6 +1787,9 @@
     "cmd_error": {
       "$ref": "#/$defs/CmdError"
     },
+    "edit_outcome": {
+      "$ref": "#/$defs/EditOutcome"
+    },
     "events_probe_report": {
       "$ref": "#/$defs/EventsProbeReport"
     },
@@ -392,17 +1805,22 @@
     "run_event_batch": {
       "$ref": "#/$defs/RunEventBatch"
     },
+    "scene_state": {
+      "$ref": "#/$defs/SceneState"
+    },
     "startup_info": {
       "$ref": "#/$defs/StartupInfo"
     }
   },
   "required": [
     "cmd_error",
+    "edit_outcome",
     "events_probe_report",
     "float_probe",
     "prepared",
     "project_info",
     "run_event_batch",
+    "scene_state",
     "startup_info"
   ],
   "title": "IpcBindings",

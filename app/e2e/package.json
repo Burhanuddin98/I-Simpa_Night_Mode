@@ -1,0 +1,15 @@
+{
+  "name": "simpa-app-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "description": "The M10 e2e harness's node dependencies. tools/gates/m10.ps1 installs them under C:\tmp\nm-e2e\node (never on B:, exFAT) with npm ci whenever this lock's sha256 changes.",
+  "devDependencies": {
+    "@wdio/cli": "9.32.0",
+    "@wdio/junit-reporter": "9.32.0",
+    "@wdio/local-runner": "9.32.0",
+    "@wdio/mocha-framework": "9.32.0",
+    "@wdio/spec-reporter": "9.32.0"
+  }
+}

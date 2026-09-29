@@ -21,6 +21,15 @@ fn main() {
         "project_redo",
         "app_startup",
         "selftest_report",
+        "scene_state",
+        "scene_new",
+        "scene_open",
+        "model_import",
+        "project_save",
+        "edit_apply",
+        "edit_undo",
+        "edit_redo",
+        "scene_mesh",
     ];
     let attributes = tauri_build::Attributes::new()
         .app_manifest(tauri_build::AppManifest::new().commands(commands));
