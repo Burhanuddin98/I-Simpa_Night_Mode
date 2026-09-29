@@ -15,7 +15,7 @@ into the file named here in the same session, never only into a chat or a handof
 | **v2 contenders** | `docs/v1.1-backlog.md`, "v2 contenders" | 14 items (the GPU tracer and 13 community requests, row 16), after M14. |
 | **Open physics questions** | This file, below | 4 open. |
 | **Why W1G was dropped** | `docs/investigations/2026-09-25-z3-w1g-hunt/z3-verdict.md` | 217 robust false accepts; three mechanisms. |
-| **Decisions (who, why, revisit?)** | `docs/decision-log.md` | 17 recorded. |
+| **Decisions (who, why, revisit?)** | `docs/decision-log.md` | 18 recorded. |
 | **The running log** | `session-logs/HANDOFF-2026-09-23.md` | Burhan's words verbatim, decisions, restart order. |
 
 ## Engine work before M8
@@ -41,6 +41,10 @@ into the file named here in the same session, never only into a chat or a handof
 - **EDT display (Burhan): "Show the range always".** EDT is always shown with its guaranteed range; wide ranges are flagged.
 - **M8 split (Jarvis's call, Burhan may overrule):** M8a T30 first, M8b EDT once the band is in Rust.
 - **Default step:** pending the step-cost measurement (Burhan: "needs more research").
+
+## Decided 2026-09-29
+
+- **M8b's scope (Burhan, row 18):** EDT, C50, C80, D50 and SPL, each with a chosen reference and a gate. None is 'reported only'.
 
 ## M8 decisions (the critic's, 2026-09-25 23:12; recommendations of 2026-09-26 00:34)
 
