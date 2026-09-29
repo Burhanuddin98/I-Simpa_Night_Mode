@@ -11,7 +11,8 @@
 //   m11-dock-row          an OK run's row and its opened record equal run.json: the per-band
 //                         loss (BigInt), the limit, the solver time, the exe sha256 and the
 //                         verified mark, the mesh sha256, the line counts; the Console's counts
-//                         strip equals run.json; every verbatim line is a line of the run's logs
+//                         strip equals run.json; every verbatim line is a line of the run's logs;
+//                         and the planted-loss run's row, band by band (M11 review F1)
 //   m11-dock-meshfail     the forced mesh failure reads FAIL with MESH_TETGEN_SKIPPED and
 //                         tetgen_skipped_facets; its solver check reads "not recorded"
 //   m11-dock-h            in the dock, every diagnostic span passes its grammar and equals
@@ -23,6 +24,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { ACOUSTIC_NUMBER, clickSelector, consoleLines, PARAMETER_NUMBER } from '../lib/dom.ts';
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
+import { PLANTED } from '../lib/plant-loss.ts';
 import { processesFrom } from '../lib/procs.ts';
 import { env } from '../lib/types.ts';
 
@@ -30,6 +32,8 @@ const P = (name: string, file: string) => path.join(env('M11_P'), name, file);
 const BOX = () => P('box', 'box_run.simpa');
 const LONG = () => P('long', 'box_long.simpa');
 const MESHFAIL = () => P('meshfail', 'box_run.simpa');
+/** The planted-loss run's project (m11.ps1, M11 review F1). */
+const LOSS = () => P('loss', 'box_run.simpa');
 /** The empty run folder m11.ps1 makes in the long box's runs root (PLAN.md 5). */
 const INTERRUPTED = '20260101-000000-000-spps';
 const CLASSES = ['PROGRESS', 'INFO', 'OK', 'WARN', 'FAIL'] as const;
@@ -365,6 +369,37 @@ describe('M11 dock', () => {
     }
     // Every Console line of the run carries its run and source.
     assert.equal(await count(`.console-line[data-run="${name}"]:not([data-source])`), 0);
+
+    // The control that lets the loss checks above fail (M11 review F1): the box run loses 0
+    // particles, so a row that printed a constant 0.00 passed them. The planted-loss run
+    // (m11.ps1) carries a known loss in four of its six bands, the worst at 500 Hz, not the first.
+    const plantedRuns = readdirSync(path.join(path.dirname(LOSS()), 'runs'));
+    assert.equal(plantedRuns.length, 1, `m11.ps1 makes the one planted-loss run: ${plantedRuns.join(', ')}`);
+    const [planted] = plantedRuns;
+    const pm = manifest(LOSS(), planted);
+    const pbands = pm.particles?.bands ?? [];
+    assert.equal(worstPct(pbands), PLANTED.worst_pct, "run.json's worst band is the plant");
+    await m10.openProject(LOSS());
+    await showTab('runs');
+    const psel = await rowShown(planted);
+    await $(psel).click();
+    await browser.waitUntil(async () => (await attrOf(psel, 'aria-selected')) === 'true', { timeout: 10_000 });
+    assert.equal(await $(`${psel} [data-part="loss"]`).getText(), `Particles lost ${worstPct(pbands)} %`);
+    assert.equal(await $(`${psel} [data-part="loss"]`).getText(), 'Particles lost 0.82 %');
+    assert.equal((await $(`${psel} [data-part="worst-band"]`).getText()).trim(), `at ${PLANTED.worst_band_hz} Hz`);
+    const perBand: string[] = [];
+    for (const b of pbands) {
+      const cell = `${psel} [data-part="band-loss"][data-band="${b.freq_hz}"]`;
+      const shownPct = await textOf(`${cell} [data-diagnostic="loss_pct"]`);
+      const shownCount = await textOf(`${cell} .mono`);
+      perBand.push(`${b.freq_hz} Hz ${shownCount} ${shownPct}`);
+      assert.equal(shownPct, `${bandPct(b)} %`, `${b.freq_hz} Hz: ${bandLost(b)} of ${b.total}`);
+      assert.equal(shownCount, `${bandLost(b)} of ${b.total}`, `${b.freq_hz} Hz: the count shown`);
+      const [lost, pct] = PLANTED.bands[b.freq_hz];
+      assert.deepEqual([shownCount, shownPct], [`${lost} of ${PLANTED.total}`, `${pct} %`], `${b.freq_hz} Hz: the hand-worked plant`);
+    }
+    console.log(`m11-dock-row receipt: planted-loss run ${planted}: ${perBand.join('; ')}`);
+    assert.ok(perBand.some((t) => !t.endsWith(' 0.00 %')), 'a band shows a non-zero loss');
   });
 
   it('m11-dock-meshfail: the forced mesh failure reads FAIL with MESH_TETGEN_SKIPPED and tetgen_skipped_facets', async () => {
@@ -488,7 +523,8 @@ describe('M11 dock', () => {
     }
 
     const seen: string[] = [];
-    for (const project of [BOX(), MESHFAIL(), LONG()]) {
+    // LOSS: the planted-loss run, whose loss spans are not 0.00 (M11 review F1).
+    for (const project of [BOX(), MESHFAIL(), LONG(), LOSS()]) {
       await m10.openProject(project);
       await showTab('runs');
       const listed = await hook<Row[]>('runsRows');

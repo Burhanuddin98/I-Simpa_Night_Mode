@@ -42,6 +42,7 @@ import {
   sleepUntil,
   waitRun,
 } from '../lib/m11.ts';
+import { PLANTED } from '../lib/plant-loss.ts';
 import { machineWideCount, processesFrom } from '../lib/procs.ts';
 import { elapsedS, type Manifest, readManifest, runFolders, worstLoss } from '../lib/runs.ts';
 import { distribution, nearestRank } from '../lib/stats.ts';
@@ -50,6 +51,8 @@ import type { Op } from '../lib/types.ts';
 const BOX = () => project('box', 'box_run.simpa');
 const HALL = () => project('hall', 'hall_run.simpa');
 const MESHFAIL = () => project('meshfail', 'box_run.simpa');
+/** The planted-loss run's project (m11.ps1, M11 review F1). */
+const LOSS = () => project('loss', 'box_run.simpa');
 const CORRECTED_HALL = () => path.join(need('M11_REPO'), 'testdata', 'elmia_corrected.ply');
 const CLASSES = ['PROGRESS', 'INFO', 'OK', 'WARN', 'FAIL'] as const;
 const STEPS = ['geometry', 'materials', 'sources', 'simulate', 'results'];
@@ -99,6 +102,7 @@ describe('M11 gate', () => {
     await waitForHooks(HOOKS);
   });
 
+  // (4) of m11-a is the review's F1 control: the planted-loss run's row must read its known loss.
   it("m11-a: the box run from the UI: its Runs row reads OK and 'Particles lost 0.00 %', and the Console's counts equal run.json's", async () => {
     // Control: the raw hall blocks Run, so "empty" below is not vacuous.
     await m10.importModel(need('M11_ELMIA_RAW'), 'm', 'z');
@@ -146,6 +150,26 @@ describe('M11 gate', () => {
     assert.deepEqual(log.counts, want);
     const total = lines.progress + lines.info + lines.ok + lines.warn + lines.fail;
     assert.deepEqual([log.n, log.min, log.max, log.dupes, log.gaps], [total, 0, total - 1, 0, 0]);
+
+    // (4) The control that lets (2) fail (M11 review F1): every real run loses 0 particles, so a
+    // row that printed a constant 0.00 passed (2). The planted-loss run (m11.ps1) is a real box
+    // run whose run.json carries a known loss, worst 1,234 of 150,000 at 500 Hz, not the first
+    // band: the row must show it, as run.json recomputed in BigInt gives it and as worked by hand.
+    const planted = runFolders(runsRootOf(LOSS()));
+    assert.equal(planted.length, 1, `the planted-loss project's runs: ${planted.join(', ')}`);
+    const pm = manifestOf(LOSS(), planted[0]).m;
+    const pw = worstLoss(pm);
+    assert.ok(pw, `run.json of ${planted[0]} has no particle statistics`);
+    assert.deepEqual([pw.pct, pw.freq_hz], [PLANTED.worst_pct, PLANTED.worst_band_hz], "run.json's worst band is the plant");
+    await m10.openProject(LOSS());
+    await showTab('runs');
+    const prow = await runRow(planted[0]);
+    const ploss = shown(await (await prow.$('[data-part="loss"]')).getText());
+    const pband = shown(await (await prow.$('[data-part="worst-band"]')).getText());
+    console.log(`m11-a receipt: planted-loss run ${planted[0]}: [data-part="loss"] reads '${ploss}', [data-part="worst-band"] '${pband}'; run.json's worst band ${pw.freq_hz} Hz, ${pw.lost} of ${pw.total}: ${pw.pct} %`);
+    assert.equal(ploss, `Particles lost ${pw.pct} %`);
+    assert.equal(ploss, 'Particles lost 0.82 %');
+    assert.equal(pband, `at ${PLANTED.worst_band_hz} Hz`);
   });
 
   it('m11-b-ipc: during the corrected-hall solve, 200 IPC pings have p99 < 100 ms', async () => {
@@ -300,7 +324,7 @@ describe('M11 gate', () => {
 
   it('m11-h: no solver-computed acoustic number on any step or dock tab, and every diagnostic proven', async () => {
     assert.ok(boxRun && hallRun && meshfailRun, 'm11-h needs the runs of m11-a, m11-b and m11-e');
-    const roots = ['box', 'hall', 'meshfail', 'long', 'room'].map((p) => path.join(need('M11_P'), p, 'runs'));
+    const roots = ['box', 'hall', 'meshfail', 'long', 'room', 'loss'].map((p) => path.join(need('M11_P'), p, 'runs'));
     const proof = runResolver(roots, runFolders);
     const snapshot = (plant: Plant | null) => browser.execute(collectSnapshot, SNAPSHOT_CONFIG, plant);
 
@@ -340,11 +364,14 @@ describe('M11 gate', () => {
       assert.ok(progressRegions.has(region), `no progress_pct span in the ${region} region during the solve`);
     }
 
-    // The real scan: three projects, every step, every dock tab.
+    // The real scan: four projects, every step, every dock tab. The planted-loss run (M11 review
+    // F1) is the one whose loss spans are not 0.00, so rule 3 (iv) proves a non-zero value.
     let n = 0;
     let diagnostics = 0;
     let verbatim = 0;
-    for (const file of [BOX(), HALL(), MESHFAIL()]) {
+    let nonZeroLoss = 0;
+    const projects = [BOX(), HALL(), MESHFAIL(), LOSS()];
+    for (const file of projects) {
       await m10.openProject(file);
       await m11.runsRows();
       for (const step of STEPS) {
@@ -358,12 +385,14 @@ describe('M11 gate', () => {
           if (tab === 'acoustics') assert.notEqual(snap.acousticsText, null, 'the Acoustics panel is shown');
           diagnostics += snap.diagnostics.length;
           verbatim += snap.verbatim.length;
+          nonZeroLoss += snap.diagnostics.filter((d) => d.field === 'loss_pct' && d.text !== '0.00 %').length;
           n++;
         }
       }
     }
-    console.log(`m11-h receipt: ${n} views clean; ${diagnostics} diagnostic span(s) and ${verbatim} verbatim line(s) proven against their runs`);
-    assert.equal(n, 3 * STEPS.length * TABS.length);
+    console.log(`m11-h receipt: ${n} views clean; ${diagnostics} diagnostic span(s) (${nonZeroLoss} of them a non-zero loss) and ${verbatim} verbatim line(s) proven against their runs`);
+    assert.equal(n, projects.length * STEPS.length * TABS.length);
+    assert.ok(nonZeroLoss > 0, 'no non-zero loss span was proven: the planted-loss run was not shown');
   });
 
   it('m11-r22-default: the core refuses the Default placeholder at Run, and the app says so first', async () => {

@@ -6,10 +6,12 @@
 //                      are the project file's own
 //   m11-sim-last-run   the panel's big Run button runs the box; the idle block then reads
 //                      "Run <n> · Baseline", OK, the loss and limit the backend formatted (equal to
-//                      a BigInt recomputation from run.json), and the solver's WARN count
+//                      a BigInt recomputation from run.json), and the solver's WARN count; first,
+//                      the planted-loss run's idle block reads its known 0.82 % (M11 review F1)
 //   m11-sim-numbers    the Simulate and Results steps show no number next to a unit outside
-//                      [data-input] but in a diagnostic span that proves itself; the Results step
-//                      has no [data-result] and no digit outside [data-run-label]
+//                      [data-input] (in its own region) but in a diagnostic span that proves
+//                      itself, on the box and on the planted-loss run; the Results step has no
+//                      [data-result] and no digit outside [data-run-label]
 //   m11-sim-tcr        the radio switches the label to "Run TCR"; a TCR run of the box ends OK
 //                      with no loss line
 //   m11-sim-link       the "Run <n>" link selects that run on the Results step
@@ -22,11 +24,12 @@
 // with the gate's. The app window stays visible and unfocused (m11.conf.ts); nothing here moves,
 // resizes, hides or activates it.
 import { strict as assert } from 'node:assert';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { GRAMMAR } from '../lib/acoustic.ts';
 import { ACOUSTIC_NUMBER, clickSelector, EXEMPT_REGIONS, PARAMETER_NUMBER } from '../lib/dom.ts';
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
+import { PLANTED } from '../lib/plant-loss.ts';
 import { processesFrom } from '../lib/procs.ts';
 import { limitPct, type Manifest, progressValues, readManifest, roundedTo, worstLoss } from '../lib/runs.ts';
 import { env } from '../lib/types.ts';
@@ -59,6 +62,10 @@ function ownCopy(from: string, folder: string): string {
 }
 
 const runDir = (project: string, run: string) => path.join(path.dirname(project), 'runs', run);
+
+/** The planted-loss run's project (m11.ps1, M11 review F1), opened where the run was made: its
+ * run.json names that path, so a copy would list none of it. Only read here, never run. */
+const lossProject = () => path.join(env('M11_P'), 'loss', 'box_run.simpa');
 
 /** `<run>/run.json`, which must exist. */
 function runJson(project: string, run: string): Manifest {
@@ -240,7 +247,40 @@ describe('M11 simulate', () => {
   });
 
   it("m11-sim-last-run: the panel's Run runs the box; the idle block reads the run's own record", async () => {
+    // The control that lets the loss checks below fail (M11 review F1): the box loses 0
+    // particles, so an idle block that printed a constant 0.00 passed them. The planted-loss
+    // run (m11.ps1) carries a known loss, worst 1,234 of 150,000 at 500 Hz.
+    const loss = lossProject();
+    const plantedRuns = readdirSync(path.join(path.dirname(loss), 'runs'));
+    assert.equal(plantedRuns.length, 1, `m11.ps1 makes the one planted-loss run: ${plantedRuns.join(', ')}`);
+    const [planted] = plantedRuns;
+    const pw = lossTexts(runJson(loss, planted));
+    assert.equal(pw.pct, `${PLANTED.worst_pct} %`, "run.json's worst band is the plant");
+    await m10.openProject(loss);
+    try {
+      await m10.setStep('simulate');
+      await browser.waitUntil(async () => (await $('[data-part="last-run"]').getAttribute('data-run')) === planted, {
+        timeout: 30_000,
+        timeoutMsg: 'the idle block does not show the planted-loss run',
+      });
+      const plantedShown = {
+        loss: await text('[data-part="last-loss"] [data-diagnostic="loss_pct"]'),
+        limit: await text('[data-part="last-loss"] [data-diagnostic="loss_limit_pct"]'),
+      };
+      console.log(`m11-sim-last-run receipt: planted-loss run ${planted}: the idle block reads ${JSON.stringify(plantedShown)}; run.json ${JSON.stringify(pw)}`);
+      assert.equal(plantedShown.loss, pw.pct);
+      assert.equal(plantedShown.loss, '0.82 %');
+      assert.equal(plantedShown.limit, pw.limit);
+    } finally {
+      // The box again, whatever happened: the tests after this one run the box, and nothing may
+      // ever run in the planted-loss project.
+      await m10.openProject(box);
+    }
     await m10.setStep('simulate');
+    await browser.waitUntil(async () => (await blockersOf('[data-part="run-panel"]')).length === 0 && (await $('[data-part="run-panel"]').isEnabled()), {
+      timeout: 30_000,
+      timeoutMsg: 'Run is not free on the box',
+    });
     boxRun = await runByClick('[data-part="run-panel"]');
     const m = runJson(box, boxRun.run);
     console.log(`m11-sim-last-run receipt: ${boxRun.run} #${boxRun.number} ${boxRun.status}, loss ${JSON.stringify(boxRun.loss)}, run.json lines.warn ${m.lines.warn}`);
@@ -303,6 +343,36 @@ describe('M11 simulate', () => {
         assert.ok(!/\d/.test(r.text), `a digit outside [data-run-label]: ${r.text}`);
         assert.equal(s.diags.length, 0, 'the Results step holds no diagnostic');
       }
+    }
+
+    // The same on the planted-loss run (M11 review F1), whose loss is not 0.00: each diagnostic
+    // must be its own run.json's value, not the box's and not a constant.
+    const loss = lossProject();
+    const [planted] = readdirSync(path.join(path.dirname(loss), 'runs'));
+    const pw = lossTexts(runJson(loss, planted));
+    await m10.openProject(loss);
+    try {
+      await clickSelector('[data-step="simulate"]');
+      await m10.idle();
+      await browser.waitUntil(async () => (await $('[data-part="last-run"]').getAttribute('data-run')) === planted, {
+        timeout: 30_000,
+        timeoutMsg: 'the idle block does not show the planted-loss run',
+      });
+      const s = await scanProps();
+      assert.ok(s, 'the properties panel is shown');
+      console.log(`m11-sim-numbers receipt: planted-loss run, step ${s.step}, ${JSON.stringify(s.diags)}`);
+      assert.deepEqual(s.strays, []);
+      assert.equal(s.text.match(ACOUSTIC_NUMBER), null);
+      assert.deepEqual(
+        s.diags.map((d) => [d.field, d.run, d.text]).sort(),
+        [
+          ['loss_limit_pct', planted, pw.limit],
+          ['loss_pct', planted, pw.pct],
+        ],
+      );
+      assert.notEqual(pw.pct, '0.00 %');
+    } finally {
+      await m10.openProject(box);
     }
   });
 

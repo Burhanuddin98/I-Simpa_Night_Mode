@@ -10,8 +10,8 @@
 # Steps (PLAN.md 4.4): the static checks (M10's and M9's, the inventory, the lints, typecheck, the
 # UI's and the harness libraries' node --test suites, the watcher's compile check), the Rust
 # checks, the fixtures' recipe, the core crates' tests, the release build, the harness
-# prerequisites (the private solver copy, the projects on C:, the mesh-failure run, tutorial 1's
-# .proj through the CLI, an 8-byte bad.proj), the focus watcher, the e2e specs, the prior gates
+# prerequisites (the private solver copy, the projects on C:, the mesh-failure run, the planted-loss
+# run, tutorial 1's .proj through the CLI, an 8-byte bad.proj), the focus watcher, the e2e specs, the prior gates
 # under the watcher, the m11-focus judgement, and the file counts. A spec file not written yet is
 # reported as pending and its ids fail: a run that lacks any required id never prints
 # "M11 PASSED".
@@ -481,7 +481,7 @@ Check "harness: the private solver copy, each executable the verified build by c
 
 Check "harness: the projects copied to C: (runs never land on B:), and the mesh-failure run made by the core" {
     $fx = Join-Path $repo 'tests\fixtures\ui'
-    foreach ($pair in @(@('box', 'box_run.simpa'), @('long', 'box_long.simpa'), @('hall', 'hall_run.simpa'), @('meshfail', 'box_run.simpa'), @('room', 'teaching_room.simpa'))) {
+    foreach ($pair in @(@('box', 'box_run.simpa'), @('long', 'box_long.simpa'), @('hall', 'hall_run.simpa'), @('meshfail', 'box_run.simpa'), @('room', 'teaching_room.simpa'), @('loss', 'box_run.simpa'))) {
         $d = Join-Path $projects $pair[0]
         New-Item -ItemType Directory -Force $d | Out-Null
         Copy-Item (Join-Path $fx $pair[1]) $d -Force
@@ -497,6 +497,31 @@ Check "harness: the projects copied to C: (runs never land on B:), and the mesh-
     $codes = @($m.verdict.reasons | ForEach-Object { $_.code })
     Note "mesh-failure run: exit $code, stage $($m.stage), status $($m.verdict.status), reasons $($codes -join ', ')"
     $code -eq 4 -and $m.stage -eq 'mesh' -and $m.verdict.status -eq 'FAIL' -and $codes -contains 'tetgen_skipped_facets'
+}
+
+# M11 review F1: every real run loses 0 particles, so no check could tell a displayed loss from a
+# constant "0.00". A real box run through the core, whose run.json then carries a known loss
+# (app/e2e/lib/plant-loss.ts: worst 1,234 of 150,000 = 0.82 % at 500 Hz, not the first band).
+# m11-a, m11-dock-row, m11-dock-h, m11-sim-last-run, m11-sim-numbers and m11-h read it.
+Check "harness: the planted-loss run (a real box run; its run.json then carries a known loss, worst 0.82 % at 500 Hz)" {
+    $lp = Join-Path $projects 'loss'
+    $env:SIMPA_SOLVERS_DIR = $privateSolvers
+    # stdout is the JSON; a run that reaches the solver streams its lines on stderr.
+    $log = Join-Path $work 'loss-run.json'
+    $err = Join-Path $work 'loss-run.stderr.txt'
+    cmd /c "`"$simpa`" run `"$lp\box_run.simpa`" --solver spps --runs `"$lp\runs`" --json > `"$log`" 2> `"$err`""
+    $code = $LASTEXITCODE
+    $m = Get-Content $log -Raw | ConvertFrom-Json
+    $runs = @(Get-ChildItem (Join-Path $lp 'runs') -Directory -ErrorAction SilentlyContinue)
+    Note "planted-loss run: simpa run exit $code, status $($m.verdict.status), $($runs.Count) run folder(s)"
+    if ($code -ne 0 -or $runs.Count -ne 1) { return $false }
+    $plantLog = Join-Path $work 'loss-plant.log'
+    $pcode = Native "node `"$appDir\e2e\lib\plant-loss.ts`" `"$($runs[0].FullName)`"" $plantLog
+    Tail $plantLog 3
+    $after = Get-Content (Join-Path $runs[0].FullName 'run.json') -Raw | ConvertFrom-Json
+    $lost = @($after.particles.bands | ForEach-Object { "$($_.freq_hz):$([int64]$_.lost_by_infinite_loops + [int64]$_.lost_by_meshing_problems)" }) -join ' '
+    Note "run $($runs[0].Name): lost per band $lost; verdict $($after.verdict.status)"
+    $pcode -eq 0 -and $lost -eq '125:150 250:0 500:1234 1000:7 2000:1000 4000:0' -and $after.verdict.status -eq 'OK'
 }
 
 $t1Cli = Join-Path $work 't1_cli.simpa'
