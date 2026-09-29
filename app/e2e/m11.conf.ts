@@ -60,7 +60,16 @@ export const config = {
       maxInstances: 1,
       // WebView2 through msedgedriver speaks WebDriver classic; no BiDi session.
       'wdio:enforceWebDriverClassic': true,
-      'tauri:options': { application: need('M11_APP'), args: ['--e2e'] },
+      // msedgedriver's own capabilities, which tauri-driver passes through untouched. Not
+      // `tauri:options`: tauri-driver rebuilds ms:edgeOptions from it and cannot carry
+      // excludeSwitches. The driver adds --enable-logging to WebView2's switches by default, and
+      // with it the WebView2 browser allocates a console window of its own (its parent, app.exe,
+      // has none), which Windows activates: that console took the foreground in every session
+      // (the focus watcher, 2026-09-29 21:29; FOUNDATION.md F-21). Excluding the one switch keeps
+      // the test windows from taking focus; nothing else changes.
+      browserName: 'webview2',
+      'ms:edgeChromium': true,
+      'ms:edgeOptions': { binary: need('M11_APP'), args: ['--e2e'], excludeSwitches: ['enable-logging'] },
     },
   ],
   logLevel: 'warn',

@@ -24,7 +24,7 @@ export const LAWS: readonly LawOption[] = [
   {
     law: 'semi_diffuse',
     label: 'Semi-diffuse',
-    note: 'SPPS has no semi-diffuse case and reflects these surfaces specularly (spps/tools/dotreflection.h)',
+    note: 'SPPS has no semi-diffuse case (spps/tools/dotreflection.h): a run is refused at export (EXPORT_FAILED) while a material uses it',
   },
 ];
 
@@ -52,9 +52,14 @@ export function usesLaw(m: Pick<Material, 'reflection_law'>, law: ReflectionLaw)
   return s.kind === 'all' ? s.law === law : s.laws.includes(law);
 }
 
-/** The line under the grid while a material uses a law SPPS does not do as named. */
+/**
+ * The line under the grid while a material uses a law SPPS does not do as named. SPPS would
+ * reflect it specularly, but the core never lets it get that far: its config.xml writer refuses
+ * loi 6 (`config_xml/write.rs`, `config_value_format`), so the run fails at export. The note says
+ * what the app does, not what upstream's GUI would.
+ */
 export const SEMI_DIFFUSE_NOTE =
-  'Semi-diffuse: SPPS has no semi-diffuse case and reflects those surfaces specularly (spps/tools/dotreflection.h).';
+  'Semi-diffuse: SPPS has no semi-diffuse case (spps/tools/dotreflection.h), so a run is refused at export (EXPORT_FAILED) while a material uses it. Choose another law to run.';
 
 /** The select's value: the law, or `per_band` for a per-band law (no single law is chosen). */
 export const PER_BAND = 'per_band';

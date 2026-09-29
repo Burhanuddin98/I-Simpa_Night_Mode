@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { stepNames } from '../lib/dom.ts';
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
-import { processesFrom, windowState } from '../lib/procs.ts';
+import { processesFrom, processTree, windowState } from '../lib/procs.ts';
 import { env } from '../lib/types.ts';
 
 const FIVE_STEPS = ['Geometry', 'Materials', 'Sources & receivers', 'Simulate', 'Results'];
@@ -35,14 +35,19 @@ interface Log {
   gaps: number;
 }
 
-/** The window is visible, not minimised, on a monitor, and not the foreground window. */
+/**
+ * The window is visible, not minimised, on a monitor, and no window of the app's process tree
+ * (app.exe and the WebView2 processes it starts) is the foreground window. Comparing with the
+ * app's pid alone let a WebView2 console window through (FOUNDATION.md F-21).
+ */
 function assertUnfocusedAndShown(pid: number, when: string): void {
   const w = windowState(pid);
-  console.log(`m11-smoke receipt (${when}): foreground pid ${w.foregroundPid}, app pid ${pid}, windows ${JSON.stringify(w.windows)}`);
+  const tree = processTree(pid);
+  console.log(`m11-smoke receipt (${when}): foreground pid ${w.foregroundPid}, app pid ${pid}, app tree ${tree.join(',')}, windows ${JSON.stringify(w.windows)}`);
   const main = w.windows.find((x) => x.title === 'I-Simpa Night Mode');
   assert.ok(main, `no app window titled 'I-Simpa Night Mode': ${JSON.stringify(w.windows)}`);
   assert.ok(main.visible && !main.minimised && main.onMonitor, `${when}: the test window must stay visible and on screen`);
-  assert.notEqual(w.foregroundPid, pid, `${when}: the test window took the foreground`);
+  assert.ok(!tree.includes(w.foregroundPid), `${when}: a window of the app's process tree (pid ${w.foregroundPid}) took the foreground`);
 }
 
 describe('M11 harness smoke', () => {

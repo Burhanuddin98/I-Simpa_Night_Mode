@@ -90,6 +90,23 @@ export function processesFrom(exe: string): number[] {
     .map(Number);
 }
 
+/**
+ * `pid` and every process descended from it (CIM's ParentProcessId): the app and the WebView2
+ * processes it starts. A window of any of them in the foreground is the test taking focus.
+ */
+export function processTree(pid: number): number[] {
+  const out = ps('Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId)" }');
+  const children = new Map<number, number[]>();
+  for (const line of out.split(/\r?\n/)) {
+    const [p, parent] = line.trim().split(/\s+/).map(Number);
+    if (!Number.isFinite(p) || !Number.isFinite(parent) || p === parent) continue;
+    children.set(parent, [...(children.get(parent) ?? []), p]);
+  }
+  const tree = [pid];
+  for (let i = 0; i < tree.length; i++) for (const c of children.get(tree[i]) ?? []) if (!tree.includes(c)) tree.push(c);
+  return tree;
+}
+
 /** The machine-wide count of processes named `image`, as tasklist reports them (printed, never
  * asserted: other sessions run solvers, PLAN.md F8). */
 export function machineWideCount(image: string): number {

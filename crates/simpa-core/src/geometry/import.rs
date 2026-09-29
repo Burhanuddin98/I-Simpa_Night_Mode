@@ -68,8 +68,8 @@ pub use appconst::{
     reference_material,
 };
 pub use proj::{
-    ProjImport, ProjReport, UpstreamId, UpstreamKind, import_proj, import_proj_file,
-    import_proj_with_config,
+    ProjImport, ProjReport, UPSTREAM_DEFAULT_NAME, UpstreamId, UpstreamKind, import_proj,
+    import_proj_file, import_proj_with_config, name_after_file,
 };
 pub use reassign::{DEFAULT_REASSIGN_TOLERANCE_M, Reassigned, reassign};
 

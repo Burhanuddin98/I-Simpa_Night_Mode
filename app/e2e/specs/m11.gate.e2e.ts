@@ -18,6 +18,7 @@ import path from 'node:path';
 import {
   collectSnapshot,
   describeViolations,
+  type DomSnapshot,
   flagged,
   judge,
   type Plant,
@@ -73,6 +74,9 @@ let boxRun: string | null = null;
 let okRowReasonCodes: number | null = null;
 let hallRun: string | null = null;
 let meshfailRun: string | null = null;
+/** The page during the hall solve (m11-c, before Cancel), judged by m11-h once the run's logs are
+ * complete: the progress_pct spans exist only mid-run, so only a mid-run read can prove them. */
+const midRun: { where: string; snap: DomSnapshot }[] = [];
 
 async function blockersAttr(): Promise<string | null> {
   const run = await $('[data-part="run"]');
@@ -196,6 +200,12 @@ describe('M11 gate', () => {
     await clickSelector('[data-step="simulate"]');
     const cancel = await $('[data-part="cancel-run"]');
     await cancel.waitForExist({ timeout: 30_000, timeoutMsg: 'no [data-part="cancel-run"] on the Simulate step' });
+    // m11-h's mid-run read: the Simulate step with each dock tab, while the hall still solves.
+    for (const tab of TABS) {
+      await showTab(tab);
+      midRun.push({ where: `hall mid-run, step simulate, tab ${tab}`, snap: await browser.execute(collectSnapshot, SNAPSHOT_CONFIG, null) });
+    }
+    await stillSolving(hallRun, 'after the mid-run reads');
     // Positive control: the private spps.exe runs before the click.
     const running = processesFrom(spps);
     assert.ok(running.length > 0, `no spps.exe runs from ${spps} before the click`);
@@ -310,6 +320,24 @@ describe('M11 gate', () => {
       const vs = judge(await snapshot(c.plant), proof);
       console.log(`m11-h say-NO receipt: ${c.name}: ${flagged(c, vs) ? 'flagged' : 'NOT FLAGGED'} (rule ${c.rule})`);
       assert.ok(flagged(c, vs), `the checker let a plant through: ${c.name}\n${describeViolations(vs)}`);
+    }
+
+    // The mid-run reads of m11-c, judged now that the hall run's logs are complete. They must
+    // hold progress spans where a run shows its progress (the status bar and the Simulate sub
+    // above all, whose text is SPPS's 4-significant-digit percentage rounded for display), or
+    // the proof of rule 3 (iv) for progress_pct never ran.
+    assert.equal(midRun.length, TABS.length, 'm11-c took no mid-run read');
+    const progressRegions = new Set<string>();
+    let midDiagnostics = 0;
+    for (const { where, snap } of midRun) {
+      const vs = judge(snap, proof);
+      assert.deepEqual(vs, [], `${where}:\n${describeViolations(vs)}`);
+      for (const d of snap.diagnostics) if (d.field === 'progress_pct' && d.region) progressRegions.add(d.region);
+      midDiagnostics += snap.diagnostics.length;
+    }
+    console.log(`m11-h receipt: ${midRun.length} mid-run views clean; ${midDiagnostics} diagnostic span(s); progress_pct proven in: ${[...progressRegions].sort().join(', ')}`);
+    for (const region of ['statusbar', 'simulate-sub', 'simulate']) {
+      assert.ok(progressRegions.has(region), `no progress_pct span in the ${region} region during the solve`);
     }
 
     // The real scan: three projects, every step, every dock tab.

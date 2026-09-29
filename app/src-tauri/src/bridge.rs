@@ -447,11 +447,15 @@ impl Session {
 
     /// Opens an upstream I-Simpa `.proj` as a new, unsaved project (`import_proj_file`: the same
     /// file always gives the same project, byte for byte, so Save as gives what `simpa
-    /// import-proj` writes). The project keeps the name the import gives it; the check's lines
+    /// import-proj` writes). The project is named after the file in place of upstream's default
+    /// name, by the CLI's own rule (`name_after_file`); the check's lines
     /// call the model by the file's name. The import's notes become INFO lines. A refusal is an
     /// error with its code, and the session is left as it was.
     pub fn proj_import(&mut self, path: &Path) -> CmdResult<SceneState> {
-        let imported = import::import_proj_file(path).map_err(|e| proj_error(&e))?;
+        let mut imported = import::import_proj_file(path).map_err(|e| proj_error(&e))?;
+        // The CLI's rule: upstream's default name gives way to the file's (M11 m11-r22-a3 found
+        // the app kept "New project" while `simpa import-proj` wrote "tutorial_1").
+        import::name_after_file(&mut imported.project, path);
         let file = file_name(path);
         let r = &imported.report;
         let p = &imported.project;

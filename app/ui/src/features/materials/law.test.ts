@@ -71,5 +71,6 @@ test('the tooltip names every band of a per-band law, and the note of semi-diffu
   ]);
   const s = lawTitle(lawState({ reflection_law: 'semi_diffuse' }), [125]);
   assert.ok(s.startsWith('Reflection law: Semi-diffuse in every band\nSPPS has no semi-diffuse case'), s);
+  assert.ok(s.includes('refused at export (EXPORT_FAILED)') && !s.includes('specularly'), s);
   assert.ok(s.endsWith('it has no effect in SPPS.'), s);
 });

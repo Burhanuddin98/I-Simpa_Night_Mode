@@ -1,8 +1,11 @@
 // The status bar (design:474-481): the app's status, the model as a geometry fact ("Model closed
 // · 6 surfaces · 180 m³", inside `[data-geometry]`), the active variant, the solvers, the units.
 // While a run is active the status reads "Simulating", with SPPS's own last percentage in a
-// diagnostic span (M11 PLAN.md 3.3, 3.4 rule 1): the progress text exactly as the solver printed
-// it, never a number the UI formatted.
+// diagnostic span (M11 PLAN.md 3.3, 3.4 rule 1): SPPS's text after its `#`, as the simulate
+// package's `progressDisplay` shows it everywhere (as printed up to two decimals, else rounded
+// half up in integers). SPPS prints 4 significant digits, so its raw text below 10 % ("1.667e-05",
+// "0.0006667") would break the progress_pct grammar m11-h proves.
+import { progressDisplay } from '../features/simulate/model';
 import { runStore, sceneStore, statusStore, useStore } from '../store';
 import { fact, variantName } from './sceneModel';
 
@@ -12,16 +15,17 @@ export function StatusBar() {
   const active = useStore(runStore);
   const check = scene?.check ?? null;
   const groups = scene?.info.surface_groups ?? 0;
+  const progress = active && active.status !== 'cancelling' ? progressDisplay(active.progressText) : null;
   return (
     <footer className="statusbar">
       {active ? (
         <span className="status busy" data-part="run-status">
           <span className="dot" />
           {active.status === 'cancelling' ? 'Cancelling' : 'Simulating'}
-          {active.progressText && (
+          {progress !== null && (
             <>
               {' · '}
-              <span data-diagnostic="progress_pct" data-run={active.run ?? ''}>{`${active.progressText} %`}</span>
+              <span data-diagnostic="progress_pct" data-run={active.run ?? ''}>{`${progress} %`}</span>
             </>
           )}
         </span>

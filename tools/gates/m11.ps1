@@ -45,7 +45,9 @@ param(
     [switch]$SkipPrior,
     # The live proof of the focus watcher: a window of the gate's own takes the foreground once.
     [switch]$FocusSayNo,
-    [switch]$FetchDriver
+    [switch]$FetchDriver,
+    # Where -Spec screens saves its PNGs (default: the run's work folder). Not a gate spec.
+    [string]$ScreensDir = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -81,12 +83,14 @@ $specIds = [ordered]@{
     close    = @('m11-d-close')
     kill     = @('m11-d-kill')
     after    = @('m11-d-after')
-    simulate = @()
-    dock     = @()
+    simulate = @('m11-sim-preflight', 'm11-sim-last-run', 'm11-sim-numbers', 'm11-sim-tcr', 'm11-sim-link', 'm11-sim-running')
+    dock     = @('m11-dock-interrupted', 'm11-dock-live', 'm11-dock-row', 'm11-dock-meshfail', 'm11-dock-h')
     project  = @('m11-r22-a9', 'm11-r22-a3', 'm11-r22-g42', 'm11-r22-m26', 'm11-r22-m5', 'm11-r22-m1', 'm11-b18')
+    # Not a gate spec: the screenshots for the investigation folder (m11.screens.e2e.ts), no id.
+    screens  = @()
 }
-$allSpecs = @($specIds.Keys)
-foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $($allSpecs -join ', ')" } }
+$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' })
+foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }
 $fullRun = $Only -eq 'all' -and -not $SkipCore -and -not $SkipPrior -and (@($allSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
 # theme.css is frozen since the M10 foundation (M10 PLAN.md 2.4 rule 4; M11 PLAN.md 3.4 rule 5).
@@ -559,6 +563,8 @@ Check "e2e: wdio ran (verdict below) (-Spec $($present -join ','))" {
     $env:M11_SPEC = $present -join ','; $env:M11_SOLVERS = $privateSolvers; $env:M11_P = $projects
     $env:M11_GATEWORK = $work; $env:M11_SIMPA = $simpa; $env:M11_ELMIA_RAW = $ElmiaRaw
     $env:M11_T1_PROJ = $t1Proj; $env:M11_T1_CLI = $t1Cli; $env:M11_BAD_PROJ = $badProj
+    $env:M11_UPSTREAM = $Upstream
+    $env:M11_SCREENS = if ($ScreensDir) { [IO.Path]::GetFullPath($ScreensDir) } else { Join-Path $work 'screens' }
     $script:e2eSessions = $present.Count
     # msedgedriver passes the environment on to app.exe: this is where the app finds its solvers.
     $env:SIMPA_SOLVERS_DIR = $privateSolvers

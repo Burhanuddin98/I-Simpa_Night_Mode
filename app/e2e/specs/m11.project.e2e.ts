@@ -18,8 +18,9 @@
 //   m11-r22-m5   the rear wall's material, law Lambert in [data-law]: reflection_law "lambert",
 //                one undo step; undo gives back the original project text.
 //   m11-r22-m1   "+ From library", "30% absorbing" (reference id 21): the new material's
-//                absorption in all 6 bands is exactly the core's value (Math.fround(0.3), the
-//                f32-widened 0.3, not 0.3), name and colour the core's, law specular; assigned to
+//                absorption in all 6 bands is exactly the core's value (widen_f32 of the f32 0.3:
+//                the shortest decimal that reads back to it, 0.3, which is also what tutorial 1's
+//                .proj import gives it), name and colour the core's, law specular; assigned to
 //                the Floor, the Materials sub stays "6 / 6". The entry then reads "in project".
 //   m11-b18      the raw hall: the volume row holds no digit and says the model is refused; the
 //                three dimensions share two decimals. Control: the corrected hall shows the volume
@@ -50,6 +51,18 @@ const TUTORIAL_1 = () => upstream('src/isimpa/resources/doc/tutorial/tutorial 1/
 /** The CLI the gate builds beside app.exe. */
 const SIMPA = () => path.join(path.dirname(env('M11_APP')), 'simpa.exe');
 const WORK = () => path.join(env('M11_WORK'), 'project');
+
+/**
+ * The core's `widen_f32` (crates/simpa-core/src/config_xml/num.rs), recomputed: the shortest
+ * decimal that reads back to the same f32, as an f64; the plain widening when none does.
+ */
+function widenF32(x: number): number {
+  for (let p = 1; p <= 9; p++) {
+    const v = Number(x.toPrecision(p));
+    if (Math.fround(v) === x) return v;
+  }
+  return x;
+}
 
 interface Named {
   id: string;
@@ -432,8 +445,17 @@ describe('M11 project', () => {
     const entry = lib.find((e) => e.reference_id === 21);
     assert.ok(entry, 'no reference material 21');
     assert.equal(entry.name, '30% absorbing');
-    // The core's widen_f32(0.3): the f32 nearest 0.3, widened, which is not the double 0.3.
-    assert.ok(Object.is(entry.absorption, Math.fround(0.3)) && entry.absorption !== 0.3, String(entry.absorption));
+    // The core's widen_f32 of upstream's f32 0.3: the shortest decimal that reads back to the same
+    // f32 (config_xml/num.rs), recomputed here, and the value the core's own .proj import gives
+    // "30% absorbing" in tutorial 1 (the gate's `simpa import-proj`, M11_T1_CLI). Not
+    // f64::from(0.3f32) = 0.30000001192092896: widen_f32 is not that.
+    const widened = widenF32(Math.fround(0.3));
+    const t1 = JSON.parse(readFileSync(env('M11_T1_CLI'), 'utf8')) as ProjectFile;
+    const imported = t1.materials.find((m) => m.name === '30% absorbing');
+    assert.ok(imported, "tutorial 1's import has no '30% absorbing'");
+    console.log(`m11-r22-m1 receipt: library ${JSON.stringify(entry.absorption)}; widen_f32 recomputed ${JSON.stringify(widened)}; tutorial 1's .proj import ${JSON.stringify(imported.absorption[0])}`);
+    assert.ok(Object.is(entry.absorption, widened), `the library's ${entry.absorption} is not widen_f32's ${widened}`);
+    assert.equal(JSON.stringify(entry.absorption), JSON.stringify(imported.absorption[0]), 'the library value is what a .proj import makes');
 
     const p = await project();
     const depth = await m10.undoDepth();

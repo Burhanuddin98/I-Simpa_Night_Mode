@@ -352,6 +352,20 @@ pub fn import_proj_file(path: &Path) -> Result<ProjImport> {
     import_proj(&read_bytes(path)?)
 }
 
+/// Upstream's name for a project nobody named (`projectname`'s default).
+pub const UPSTREAM_DEFAULT_NAME: &str = "New project";
+
+/// The name an imported project keeps: its file's stem when the `.proj` carries upstream's
+/// default name or none, else its own. `simpa import-proj` and the app's File › Open… both apply
+/// it, so the app's Save as writes the CLI's bytes (M11 `m11-r22-a3`).
+pub fn name_after_file(project: &mut Project, path: &Path) {
+    if (project.name.is_empty() || project.name == UPSTREAM_DEFAULT_NAME)
+        && let Some(stem) = path.file_stem()
+    {
+        project.name = stem.to_string_lossy().into_owned();
+    }
+}
+
 /// Reads a `.proj` archive held in memory. See the module docs.
 pub fn import_proj(bytes: &[u8]) -> Result<ProjImport> {
     import(bytes, None)
@@ -2771,6 +2785,21 @@ fn read_solvers(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_imported_project_takes_its_file_s_name_only_in_place_of_upstream_s_default() {
+        let file = Path::new("C:/projects/tutorial 1/tutorial_1.proj");
+        for (had, gets) in [
+            (UPSTREAM_DEFAULT_NAME, "tutorial_1"),
+            ("", "tutorial_1"),
+            ("Concert hall", "Concert hall"),
+            ("new project", "new project"),
+        ] {
+            let mut p = Project::new(had);
+            name_after_file(&mut p, file);
+            assert_eq!(p.name, gets, "a project named '{had}'");
+        }
+    }
 
     /// [`upstream_sort`] on ids given as text (`None`: no `wxid`), as the list comes out.
     fn sorted(ids: &[Option<&str>]) -> Vec<Option<String>> {

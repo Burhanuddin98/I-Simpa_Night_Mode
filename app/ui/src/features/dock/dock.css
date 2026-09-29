@@ -195,11 +195,18 @@
   outline: 2px solid var(--red);
   outline-offset: -2px;
 }
+/* Cells align to the first line of the Check column: a long reason wraps downward and the
+   run's number, variant, solver and status stay on its first line (a centred row put them
+   mid-way down a failed run's reasons, often below the visible part of the dock). */
 .run-main {
   display: flex;
   min-height: 32px;
-  align-items: center;
+  align-items: flex-start;
   font-size: 13px;
+}
+.run-main > [role='cell'] {
+  padding-top: 6px;
+  line-height: 1.45;
 }
 .run-main .c-run {
   font-family: var(--mono);

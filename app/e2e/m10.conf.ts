@@ -58,7 +58,13 @@ export const config = {
       maxInstances: 1,
       // WebView2 through msedgedriver speaks WebDriver classic; no BiDi session.
       'wdio:enforceWebDriverClassic': true,
-      'tauri:options': { application: need('M10_APP'), args: ['--e2e'] },
+      // msedgedriver's own capabilities, passed through tauri-driver untouched, so that
+      // --enable-logging can be excluded: with it the WebView2 browser allocates a console window
+      // that Windows activates, taking focus from whatever Burhan is using (M11 FOUNDATION.md
+      // F-21). The window itself is unchanged: visible, and built unfocused by app.exe.
+      browserName: 'webview2',
+      'ms:edgeChromium': true,
+      'ms:edgeOptions': { binary: need('M10_APP'), args: ['--e2e'], excludeSwitches: ['enable-logging'] },
     },
   ],
   logLevel: 'warn',
