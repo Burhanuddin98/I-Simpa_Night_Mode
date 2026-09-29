@@ -32,6 +32,8 @@
 //!   calibration (the review of `50695f6`): the particles' lifetime spread read from a room table
 //!   scaled, every band read as having one absorption, and the uniform-Lambert entries taken above
 //!   their largest calibrated absorption.
+//! - [`Fault::HoldInSpawnWindow`]: the process layer held between creating a child and putting it
+//!   in its own job, where a parent killed by `Stop-Process` once left the child behind.
 //! - [`Fault::BedEyringReference`], [`Fault::BedTransportAirOff`] and
 //!   [`Fault::TcrAnalyticPhysicalConstant`]: M8a's physics bed (`crate::bed`) judging its check A
 //!   against plain Eyring instead of Kuttruff, tracing its transport with the air off in every
@@ -79,6 +81,11 @@ pub enum Fault {
     /// `results::tcr`'s analytic Sabine and Eyring times with the physical
     /// `K = 24·ln 10/343.2` instead of TCR's own 0.163 (M8a, say-NO N8).
     TcrAnalyticPhysicalConstant,
+    /// `process::run` on Windows stops where the child has been created, suspended, and is not
+    /// yet in its own job: it writes `SPAWN_WINDOW <child pid>` on stdout and sleeps 60 s, so a
+    /// test can kill this process in the window the M11 review measured at 1 to 20 ms (review 2,
+    /// lifecycle B1). The say-NO of `process_job`'s spawn-window kill test.
+    HoldInSpawnWindow,
 }
 
 #[cfg(feature = "fault-injection")]

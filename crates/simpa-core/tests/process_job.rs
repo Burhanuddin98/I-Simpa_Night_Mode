@@ -16,6 +16,7 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use simpa_core::faults::{self, Fault};
 use simpa_core::process::{self, CancelToken, Line, Outcome, Spec, Stream};
 use windows_sys::Win32::Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows_sys::Win32::System::Threading::{
@@ -490,6 +491,80 @@ fn killing_the_parent_kills_the_tree() {
     assert!(
         left.is_empty(),
         "alive 2 s after the parent was killed (powershell, ping): {left:?}"
+    );
+}
+
+/// Not a test on its own: the parent for `killing_the_parent_in_the_spawn_window_kills_the_child`.
+/// With [`Fault::HoldInSpawnWindow`] the process layer stops once it has created the child,
+/// suspended, and before the child is in its own job, prints `SPAWN_WINDOW <pid>`, and waits.
+#[test]
+#[ignore = "helper process for killing_the_parent_in_the_spawn_window_kills_the_child"]
+fn helper_parent_held_in_the_spawn_window() {
+    if std::env::var_os(HELPER_ENV).is_none() {
+        return;
+    }
+    let spec = spec(
+        "ping.exe",
+        &["-n", "30", "127.0.0.1"],
+        work_dir("spawn_window"),
+    );
+    faults::with(Fault::HoldInSpawnWindow, || {
+        let _ = process::run(&spec, &CancelToken::new(), &mut |_| {});
+    });
+}
+
+/// The M11 review's B1 (review 2, lifecycle): `Stop-Process` on the process that called `run`,
+/// landing after `CreateProcessW` and before the child is assigned to its own job, left the child
+/// alive, suspended and outside every job, holding its image and its inherited handles. The
+/// window is 1 to 20 ms of every spawn; the fault holds it open so the kill lands in it every
+/// time. The child must be gone 2 s after its parent.
+#[test]
+fn killing_the_parent_in_the_spawn_window_kills_the_child() {
+    let exe = std::env::current_exe().unwrap();
+    let helper_root = work_dir("spawn_window_root");
+    let mut parent = Command::new(exe)
+        .args([
+            "helper_parent_held_in_the_spawn_window",
+            "--exact",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(HELPER_ENV, "1")
+        .env(scratch::ROOT_ENV, &helper_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+    let stdout = parent.stdout.take().unwrap();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let Ok(line) = line else { break };
+            let id = line
+                .find("SPAWN_WINDOW ")
+                .and_then(|i| line[i + 13..].trim().parse::<u32>().ok());
+            if let Some(id) = id {
+                let _ = tx.send(id);
+            }
+        }
+    });
+    let pid = match rx.recv_timeout(Duration::from_secs(60)) {
+        Ok(pid) => pid,
+        Err(e) => {
+            let _ = parent.kill();
+            panic!("the helper printed no SPAWN_WINDOW line: {e}");
+        }
+    };
+    let child = Proc::open_alive(pid);
+    // What Stop-Process does, with the child created and not yet in its own job.
+    parent.kill().unwrap();
+    parent.wait().unwrap();
+    let left = alive(std::slice::from_ref(&child), 2000);
+    assert!(
+        left.is_empty(),
+        "the child created in the spawn window is alive 2 s after its parent was killed: {left:?}"
     );
 }
 

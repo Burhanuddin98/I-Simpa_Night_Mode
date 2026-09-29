@@ -23,7 +23,8 @@
 //! closes after all. A live UI's prompt is never skipped that way, however fast the close button
 //! is clicked again. Whatever closes it, an active run is cancelled first and
 //! given up to 3 s to write its `run.json`; if the process is killed instead, the Job Object's
-//! `KILL_ON_JOB_CLOSE` ends the solver with it.
+//! `KILL_ON_JOB_CLOSE` ends the solver with it, even one killed in the milliseconds between its
+//! creation and its own job (the core's `process::winproc`, "the spawn window").
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

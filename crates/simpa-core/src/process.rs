@@ -7,7 +7,9 @@
 //! nothing it starts can escape the job. Cancel is `TerminateJobObject`. The tree also ends with
 //! its root: when the child exits, whatever it left running is killed. Either way, no process of
 //! the tree is alive when [`run`] returns. If this process dies first, the kernel closes the job
-//! handle and `KILL_ON_JOB_CLOSE` takes the tree down.
+//! handle and `KILL_ON_JOB_CLOSE` takes the tree down. A child created but not yet in its job
+//! when this process dies is taken down too: this process joins a `KILL_ON_JOB_CLOSE` job of its
+//! own before its first child, so every child is born inside one (`winproc`, "the spawn window").
 //!
 //! Elsewhere a std-only fallback (`portable`) kills the direct child and nothing it started.
 
