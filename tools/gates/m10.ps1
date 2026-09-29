@@ -19,6 +19,8 @@
 #
 # Run: powershell -File tools/gates/m10.ps1 [-TargetDir C:\tmp\nm-target] [-E2eHome C:\tmp\nm-e2e]
 #        [-Only all|static|e2e] [-Spec smoke,shell,viewport,materials,scene] [-FetchDriver] [-SkipCore]
+#        [-SolversDir <dir>] [-ScreensDir <dir>]
+# -Spec screens is not a gate spec: it saves the three steps' screenshots into -ScreensDir.
 # Partial runs (-Only other than all, a -Spec subset, -SkipCore) never print "M10 PASSED".
 param(
     [string]$TargetDir = 'C:\tmp\nm-target',
@@ -28,10 +30,14 @@ param(
     [string]$ElmiaRaw = 'B:\repos\I-Simpa-upstream\src\isimpa\resources\doc\tutorial\tutorial 2\elmia.ply',
     # The core crates' tests: the M1 solver build (a copy on C: in a worktree that has none),
     # upstream's tree, and a scratch root off B:.
+    # Default: $SIMPA_SOLVERS_DIR, else the repo's own build, else the foundation's copy on C:.
     [string]$SolversDir = $(if ($env:SIMPA_SOLVERS_DIR) { $env:SIMPA_SOLVERS_DIR } else { '' }),
+    [string]$SolversFallback = 'C:\tmp\nm-m10-solvers\bin',
     [string]$Upstream = 'B:\repos\I-Simpa-upstream',
     [switch]$FetchDriver,
-    [switch]$SkipCore
+    [switch]$SkipCore,
+    # Where -Spec screens saves its PNGs (default: the run's work folder).
+    [string]$ScreensDir = ''
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -59,9 +65,12 @@ $specIds = [ordered]@{
     viewport  = @('m10-a-highlight', 'm10-d', 'm10-g')
     materials = @('m10-c')
     scene     = @('m10-a-run', 'm10-b-materials', 'm10-e-outside', 'm10-e-label')
+    # Not a gate spec: the screenshots (app/e2e/specs/m10.screens.e2e.ts), no required id.
+    screens   = @()
 }
+$gateSpecs = @('smoke', 'shell', 'viewport', 'materials', 'scene')
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $($specIds.Keys -join ', ')" } }
-$fullRun = $Only -eq 'all' -and -not $SkipCore -and (@($specIds.Keys | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
+$fullRun = $Only -eq 'all' -and -not $SkipCore -and (@($gateSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
 # theme.css is frozen after the M10 foundation (PLAN.md 2.4, rule 4): its git blob, which does
 # not depend on the checkout's line endings.
@@ -228,8 +237,24 @@ if (-not $SkipCore) {
     $skipTargets = @('dump_helpers', 'gabe_golden', 'pbin_golden', 'poly_golden', 'tetgen_golden', 'config_xml_write',
         'parity_inputs', 'parity_tutorials', 'config_xml_support', 'parity_support')
     Check "core crates: cargo test -p simpa-core -p simpa (--no-fail-fast)" {
-        $solvers = if ($SolversDir) { $SolversDir } else { Join-Path $repo 'target\solvers\bin' }
+        $solvers = if ($SolversDir) { $SolversDir }
+            elseif (Test-Path (Join-Path $repo 'target\solvers\bin\tetgen.exe')) { Join-Path $repo 'target\solvers\bin' }
+            else { $SolversFallback }
         if (-not (Test-Path (Join-Path $solvers 'tetgen.exe'))) { throw "no solver build at $solvers (pass -SolversDir, or set SIMPA_SOLVERS_DIR)" }
+        # The CLI's last fallback is the nearest <ancestor>\target\solvers\bin above simpa.exe
+        # (run::manager candidates), which in the repo layout is the repo's own build. With cargo
+        # building into $target, the same place is $target\target\solvers\bin. cli_run's scratch
+        # test relies on it: its failing arm points $SIMPA_SOLVERS_DIR at an empty folder and
+        # expects the run to get as far as the test's own preprocess.exe lookup. Stage the build
+        # there, as the repo layout has it; nothing in any test changes.
+        $fallback = Join-Path $target 'target\solvers\bin'
+        New-Item -ItemType Directory -Force $fallback | Out-Null
+        $staged = 0
+        foreach ($exe in Get-ChildItem $solvers -Filter *.exe) {
+            $dst = Join-Path $fallback $exe.Name
+            if (-not (Test-Path $dst) -or (Sha256 $dst) -ne (Sha256 $exe.FullName)) { Copy-Item $exe.FullName $dst -Force; $staged++ }
+        }
+        Note "CLI fallback staged at ${fallback}: $((Get-ChildItem $fallback -Filter *.exe).Count) exe(s), $staged copied now"
         $env:SIMPA_SOLVERS_DIR = $solvers
         $env:SIMPA_TETGEN160 = Join-Path (Split-Path -Parent $solvers) 'build\src\tetgen\Release\tetgen.exe'
         $env:SIMPA_UPSTREAM = $Upstream
@@ -362,6 +387,7 @@ Check "e2e: wdio run app/e2e/m10.conf.ts (-Spec $($Spec -join ','))" {
     $env:M10_APP = $exe; $env:M10_WORK = $junitDir; $env:M10_REPO = $repo
     $env:M10_TAURI_DRIVER = $tauriDriver; $env:M10_NATIVE_DRIVER = $script:driverExe
     $env:M10_ELMIA_RAW = $ElmiaRaw; $env:M10_SPEC = $Spec -join ','
+    $env:M10_SCREENS = if ($ScreensDir) { [IO.Path]::GetFullPath($ScreensDir) } else { Join-Path $work 'screens' }
     $t0 = Get-Date
     $log = Join-Path $work 'wdio.log'
     $code = Native "`"$node\node_modules\.bin\wdio.cmd`" run app/e2e/m10.conf.ts" $log

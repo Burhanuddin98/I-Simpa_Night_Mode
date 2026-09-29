@@ -492,6 +492,11 @@ says is "shown" is read from the DOM**; hooks cover what the DOM cannot show.
 | `facesOfGroup(name)` | viewport | `number[]` |
 | `aimAtFace(face)` | viewport | Puts the camera on the face's visible (interior) side and returns the client `{x, y}` of its centroid. Returns `null` unless the BVH's first hit at that point is that face |
 | `frame()` | viewport | Frames the model |
+| `faceClientPoint(face)` | viewport (added by the package) | The client point of a face's centroid under the current camera, without moving it; `null` unless a click there takes that face |
+| `cameraState()` | viewport (added by the package) | `{ view, projection, position, direction, target }` of the main view's camera |
+| `materialsGrid()` | materials (added by the package) | The grid as shown: quantity, sort, band columns, rows with their exact values, cursor and extent |
+| `materialsCopy()` | materials (added by the package) | The TSV text Ctrl+C would copy for the current selection |
+| `openImportDialog(path)` | scene (added by the package) | Opens the import dialog for a mesh path, as File › Open… does after the native dialog |
 
 ---
 

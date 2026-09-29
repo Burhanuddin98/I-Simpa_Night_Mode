@@ -15,7 +15,7 @@ const TEACHING_ROOM = () => repo('tests/fixtures/ui/teaching_room.simpa');
 const CORRECTED_HALL = () => repo('testdata/elmia_corrected.ply');
 const CHECK_OK = 'Closed volume, 0 self-intersections';
 /** WebDriver's Control key (the W3C key code; the specs import nothing from wdio). */
-const CTRL = '';
+const CTRL = '\uE009';
 
 /** Lines added to the Console by `action`, as `CLASS text`. */
 async function linesDuring(action: () => Promise<unknown>): Promise<string[]> {
