@@ -699,6 +699,101 @@ mod tests {
         assert_eq!(refused, 10, "{:#?}", cell.seeds);
     }
 
+    /// The small bed's plan on seeds 1 to 3, read through [`run::into_reads`], every run its own
+    /// but for its solver output files, which are `files(seed)` as `(path under solve/, sha256)`;
+    /// then judged.
+    fn judged_with_files(files: impl Fn(u32) -> Vec<(String, String)>) -> report::Report {
+        let bed = small_bed();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let (runs, _) = run::plan(&bed, None).unwrap();
+        let results: Vec<Result<run::Read, String>> = runs
+            .iter()
+            .map(|p| match &p.key {
+                run::RunKey::Cell { seed, .. } => {
+                    let mut r = as_run_of(p, spps(*seed, 0.4794, 0.0));
+                    let run::Read::Spps(s) = &mut r else {
+                        unreachable!()
+                    };
+                    s.info.output_files = files(*seed);
+                    let digest: String = s
+                        .info
+                        .output_files
+                        .iter()
+                        .map(|(p, h)| format!("{p}\t{h}\n"))
+                        .collect();
+                    s.info.outputs_sha256 =
+                        Some(crate::run::manifest::sha256_bytes(digest.as_bytes()));
+                    Ok(r)
+                }
+                run::RunKey::Tcr { id } => {
+                    let mut t = tcr_on(&bed, id, &OFF, 0.001);
+                    run::testing::as_if_read_from(&mut t.info, p, id);
+                    Ok(run::Read::Tcr(Box::new(t)))
+                }
+                _ => Err("not run here".into()),
+            })
+            .collect();
+        let mut rd = Reads::default();
+        run::into_reads(&mut rd, &runs, results, Some("not given".into()));
+        judge(&bed, &rd, &ts, &[])
+    }
+
+    /// M8b round 2: the byte-level seed rule refused a valid bed. At 31,000 particles per source,
+    /// seeds 1 and 2 of 5x4x3 α 0.4 random wrote the same `SPPS particle statistics.gabe`, byte for
+    /// byte, their receivers' files their own (`FIXES.md`, round 2; `tests/bed_binding.rs`). Only a
+    /// receiver's file, what T30 is read from, shared by two seeds refuses them; another file shared
+    /// does not, and a whole set of outputs shared still does.
+    #[test]
+    fn only_a_receivers_file_shared_by_two_seeds_refuses_them() {
+        let file = |p: &str, tag: &str| {
+            (
+                p.to_string(),
+                crate::run::manifest::sha256_bytes(tag.as_bytes()),
+            )
+        };
+        let recp = "Punctual receivers/R000/Sound level.recp";
+        let stats = "SPPS particle statistics.gabe";
+        // Seeds 2 and 3 with the same particle statistics, their receivers their own: judged.
+        let r = judged_with_files(|s| {
+            let st = if s == 1 { "1" } else { "2 and 3" };
+            vec![file(recp, &format!("recp {s}")), file(stats, st)]
+        });
+        assert!(r.pass, "{:#?}", r.failures);
+        // The same receiver file: both refused, the file named.
+        let r = judged_with_files(|s| {
+            let rc = if s == 1 { "1" } else { "2 and 3" };
+            vec![file(recp, rc), file(stats, &format!("stats {s}"))]
+        });
+        assert!(!r.pass);
+        let cell = &r.cells[0];
+        assert_eq!(cell.verdict, Verdict::NotJudged);
+        for s in &cell.seeds {
+            let e = s.error.as_deref().unwrap_or_default();
+            if s.seed == 1 {
+                assert!(s.error.is_none(), "{e}");
+            } else {
+                assert!(e.starts_with(bind::SEEDS_IDENTICAL), "{e}");
+                assert!(e.contains(&format!("1 file(s) ({recp})")), "{e}");
+            }
+        }
+        // Every file the same, receivers and statistics: refused as all of them.
+        let r = judged_with_files(|s| {
+            let tag = if s == 1 { "1" } else { "2 and 3" };
+            vec![file(recp, tag), file(stats, tag)]
+        });
+        let cell = &r.cells[0];
+        let seed3 = cell.seeds.iter().find(|s| s.seed == 3).unwrap();
+        assert!(
+            seed3
+                .error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("all of them"),
+            "{seed3:?}"
+        );
+    }
+
     /// The small bed's plan on `seeds`, read through [`run::into_reads`] as a bed reads it, every
     /// run its own (as [`as_run_of`] makes it) except that seed `to` reads seed `from`'s T30, value
     /// for value, for each `(to, from)` of `copies`: at the receiver `at`, or at every receiver

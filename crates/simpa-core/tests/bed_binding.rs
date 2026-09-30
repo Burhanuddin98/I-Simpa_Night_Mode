@@ -15,6 +15,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use simpa_core::bed::bind::{self, Seal, SealedFile, SealedRun};
+use simpa_core::bed::check::Reads;
 use simpa_core::bed::file::BedFile;
 use simpa_core::bed::read::{find_run_folder, manifest_of};
 use simpa_core::bed::run::{self, Exes, Planned, Read, RunKey};
@@ -233,4 +234,63 @@ fn the_seal_of_a_bed_this_process_ran_holds_its_runs_for_a_re_read() {
     forge(&dir);
     let e = run::read_in(&dir, &p, &seal).unwrap_err();
     assert!(e.starts_with(bind::FILES_CHANGED), "{e}");
+}
+
+/// M8b round 2: at 31,000 particles per source, seeds 1 and 2 of M8a's 5x4x3 α 0.4 random cell
+/// write `SPPS particle statistics.gabe` byte for byte the same, and their receivers' files their
+/// own: particle counts coincide when few particles run. The byte-level seed rule refused both,
+/// a valid bed refused (found by `fresh_seal_receipt.py`). Only a receiver's file shared refuses
+/// two seeds now: made by this build, read and judged as a bed reads them, the three seeds are
+/// their own.
+#[test]
+fn seeds_whose_particle_statistics_coincide_are_not_refused() {
+    let (_, root) = bed_root("stats");
+    let mut bed = BedFile::m8a();
+    bed.rooms.retain(|r| r.name == "5x4x3");
+    let id = "5x4x3-a0.4-random-air-off";
+    bed.cells.retain(|c| c.id == id);
+    bed.cells[0].particles_per_source = 31_000;
+    bed.tcr.clear();
+    bed.seeds = vec![1, 2, 3];
+    let (runs, _) = run::plan(&bed, None).unwrap();
+    let cells: Vec<Planned> = runs
+        .into_iter()
+        .filter(|p| matches!(p.key, RunKey::Cell { .. }))
+        .collect();
+    assert_eq!(cells.len(), 3);
+    let results = run::execute(&cells, &root, &exes(), 3, &|_, _, _, _| {});
+    let files = |seed: u32| -> BTreeMap<String, String> {
+        let i = cells
+            .iter()
+            .position(|p| {
+                p.key
+                    == (RunKey::Cell {
+                        id: id.into(),
+                        seed,
+                    })
+            })
+            .unwrap();
+        let r = results[i]
+            .as_ref()
+            .unwrap_or_else(|e| panic!("seed {seed}: {e}"));
+        info(r).output_files.iter().cloned().collect()
+    };
+    let (s1, s2, s3) = (files(1), files(2), files(3));
+    let stats = "SPPS particle statistics.gabe";
+    assert_eq!(s1[stats], s2[stats], "the coincidence this test stands on");
+    assert_ne!(s1[stats], s3[stats]);
+    for (path, sha) in s1
+        .iter()
+        .filter(|(p, _)| p.starts_with("Punctual receivers/"))
+    {
+        assert_ne!(Some(sha), s2.get(path), "{path}");
+    }
+    let mut reads = Reads::default();
+    run::into_reads(&mut reads, &cells, results, Some("not run".into()));
+    for (seed, r) in &reads.spps[id] {
+        if let Err(e) = r {
+            assert!(!e.starts_with(bind::SEEDS_IDENTICAL), "seed {seed}: {e}");
+        }
+    }
+    assert!(reads.spps[id].values().all(|r| r.is_ok()));
 }

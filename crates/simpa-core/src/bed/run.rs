@@ -811,6 +811,12 @@ pub fn into_reads(
     refuse_shared_outputs(&mut reads.atmospheric.spps);
 }
 
+/// Whether `path`, under `solve/`, is a point receiver's file.
+fn is_receiver_file(path: &str) -> bool {
+    path.strip_prefix(crate::config_xml::names::POINT_RECEIVER_DIR)
+        .is_some_and(|rest| rest.starts_with('/'))
+}
+
 /// One receiver's T30 over its bands as read, each value, its `mc_sd` and its source compared
 /// exactly (by their bits): what two seeds of a cell never share.
 type ReceiverT30<'a> = Vec<(Option<u64>, Option<u64>, &'a str)>;
@@ -828,11 +834,15 @@ struct Shared {
     receivers: std::collections::BTreeSet<usize>,
 }
 
-/// Refuses, [`bind::SEEDS_IDENTICAL`], every seed of `seeds` that shares a solver output file
-/// byte for byte (the same path and sha256) with another, or whose outputs are all another's.
-/// A seed's own random walk makes every output file its own: in M8a's bed no output file of 8,490
-/// is any other seed's of the same cell. So a shared file is a seed's run filed under another,
-/// or a solver that ignores its seed.
+/// Refuses, [`bind::SEEDS_IDENTICAL`], every seed of `seeds` that shares a point receiver's file
+/// (under `Punctual receivers/`, what T30 is read from) byte for byte (the same path and sha256)
+/// with another, or whose outputs are all another's. A seed's own random walk makes its receivers'
+/// files its own: in M8a's bed no output file of 8,490 is any other seed's of the same cell. So a
+/// shared receiver file is a seed's run filed under another, or a solver that ignores its seed.
+/// The files that are not a receiver's are held only as part of the whole set: a count can
+/// coincide for two seeds when few particles run. `SPPS particle statistics.gabe` of seeds 1 and 2
+/// of 5x4x3 α 0.4 random at 31,000 particles per source is byte for byte the same, their receivers
+/// not (`docs/investigations/2026-09-30-m8b-tamper/FIXES.md`, round 2).
 ///
 /// And (M8b round 2, defence in depth: `VERIFY-adversarial-1.md` finding 1) every seed that reads
 /// the same T30 as another at any receiver, in every band, value, `mc_sd` and source alike, when
@@ -850,7 +860,9 @@ fn refuse_shared_outputs(seeds: &mut std::collections::BTreeMap<u32, Result<Spps
     for (s, r) in seeds.iter() {
         let Ok(r) = r else { continue };
         for (path, sha) in &r.info.output_files {
-            owners.entry((path, sha)).or_default().push(*s);
+            if is_receiver_file(path) {
+                owners.entry((path, sha)).or_default().push(*s);
+            }
         }
         if let Some(d) = &r.info.outputs_sha256 {
             whole.entry(d).or_default().push(*s);
