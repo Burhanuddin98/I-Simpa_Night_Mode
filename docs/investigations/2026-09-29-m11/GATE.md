@@ -1,4 +1,94 @@
-# M11 gate: passed, and passed again after the review's fixes
+# M11 gate: passed, and passed again after each review's fixes
+
+## After the second review (2026-09-30 00:49 to 02:25)
+
+The second review (`review2/`: lifecycle, events, app, core; committed as the review record in
+`4ea5be5`) left two blockers and seven majors standing after verification. Each fix is its own
+commit on `m11`, on top of `2642cff`, each with a test that fails before it. "Before" below is
+that test run with the fix reverted in the working tree, then restored.
+
+| Commit | Finding | What changed | The test, and what it gave before the fix |
+|---|---|---|---|
+| `31b94dc` | **core 1, blocker:** `run_project` validated the file's active variant and exported the one its caller named. The CLI passes `--variant` or nothing, so upstream's placeholder reached the solver, with verdict OK and results verified | The exported variant is made active before the validator runs. An unresolved selector, or an active variant that does not exist, leaves the file as it stands, so those refusals are unchanged | `run_manager::the_materials_validated_are_the_materials_exported`: both directions and the dangling case, against an empty mesh folder so no solver starts. Before: refused at `Mesh`, not `Validate`; without the dangling guard, case 3 fails. The review's CLI case rebuilt in `C:\tmp\nm-rv2-cli`: `simpa validate` exit 0; `simpa run --solver tcr` now `FAIL material_placeholder exit 2` (the review got `OK - exit 0` with 81 of 81 `absorb="0"`); with `--variant real`, OK, 27 each of `absorb` 0.1, 0.2 and 0.3 |
+| `844d158` | **lifecycle B1, blocker:** a kill between `CreateProcessW` and `AssignProcessToJobObject` (1 to 20 ms, not the documented microseconds) left the child suspended, outside every job, holding its image and inherited handles | The process joins a `KILL_ON_JOB_CLOSE` job of its own before its first child, so every child is born inside one; the per-child job nests inside it as before | `process_job::killing_the_parent_in_the_spawn_window_kills_the_child`: the helper is held in the window by a new fault seam (`HoldInSpawnWindow`, test builds only) and killed there. Before: "the child created in the spawn window is alive 2 s after its parent was killed: [14268]". Unit test `a_child_is_born_inside_this_processs_own_job` |
+| `dc0a787` | **M1:** the gate's "no spps.exe" check could not see that orphan, since CIM gives it no `ExecutablePath` | `processesFrom` looks at every process of the executable's name; with no CIM path it reads the kernel's image name (`QueryFullProcessImageNameW`); a process whose path cannot be read counts | `procs.test.ts`: a copy of ping created suspended, and a running copy of the same name in another folder. The old query: actual `[]`, expected `[15000]` |
+| `caa5cd5` | **app 1:** two closes on a busy page closed a dirty project with no prompt | A request unanswered for less than 5 s holds further closes; only one unanswered for 5 s (Windows' own hung-window time) lets the next through | `main::a_busy_page_is_not_a_hung_one`; the old rule: "a request unanswered for 0 ms: left LetThrough, right Hold". `m11-d-close` now blocks the page for 4 s and sends two `WM_CLOSE` inside it (receipt below). Also lifecycle m4: the close spec's exit receipt now says it is an upper bound |
+| `143b381` | **M3:** a second Run before `runStore` was set reached `run_start`, and the refusal's catch cleared the live run | A `starting` flag from before `runStart`'s first await; a failed start clears only its own run (`ActiveRun.id`) | `actions.test.ts`, new: the real `actions.ts` under node with a stand-in backend that follows the run slot (`ui/src/testing/`). Before: the second Run reached `run_start` and was refused `RUN_ACTIVE` |
+| `672d43c` | **E1:** events were filed under the global `runStore`, so a cleared store dropped every later line of the live run | Each channel's handler files events under the run its own `started` event named, and updates `runStore` only while it holds that run | Before: 1 solver line folded, expected 3 |
+| `0b894ad` | **M2** (and E2): a Cancel while the run was starting was answered `false` and dropped; the UI stayed "Cancelling…" | Once `run_start` has answered, a Cancel pressed meanwhile is sent again | Before: "not within 2000 ms: the Cancel reached the registered run" |
+| `33791ba` | **app 3:** the Results step showed the previous project's run as "Results verified" | New, Open, a `.proj` or model import, and Save as into another folder forget the selected run and the cached verdicts | Before: "File > New: the Results step still shows the previous run" |
+| `82a0631`, `0f5cb12` | **app 2:** PQ4 lived only in page memory, so a reload mid-run lost it | The backend refuses New, Open and Import during a run. A page that finds a run it has no record of takes it back (Cancel shown, Run blocked, a WARN line, `runs_list` polled to the run's end). The reload keys and the page's context menu are cancelled outside text fields. `0f5cb12`: a stale `runs_list` answer never takes back a run the page itself streamed | `runs.rs` unit test; `actions.test.ts` (before: "the page took the run back"; `0f5cb12`'s case before: "the ended run was taken back as live"); `flow.test.ts` for the keys; the new gate spec **`m11-reload`** (below) |
+| `61d8c91` | **app 4:** raw core details, numbers and units included, sat in tooltips that no check read | The Simulate step's tooltips follow the Runs row's rule (`flow.ts` `detailTitle`). The Results step shows no detail at all, and its tooltips hold no digit. m11-h's new rule **1t** reads the tooltips in the run regions (say-NO **H9**); m11-e-results and m11-sim-numbers read them too | `flow.test.ts`; `acoustic.test.ts` (rule 1t, 9 plants). In the gate: H9 flagged under 1t; m11-e-results' refused panel shows its reasons' tooltips with no digit |
+
+**The minors (v1 filter, decision row 5).** Three could put a wrong or misleading number in front
+of a user, and are fixed in their own commits:
+- **app 5, `8fb23c0`:** a loss limit of 0.07 read "7.000000000000001 % limit" (the double times
+  100). It now prints the limit's own decimal. The judge's `limitPct` does the same, written
+  separately. Before: "7.000000000000001" against "7".
+- **lifecycle m2, `984123e`:** a cancel that lost the race to the natural exit recorded no exit
+  code, and the Runs tab said "no exit code". The code is now kept, and the run is still
+  CANCELLED. Before: `(None, true)` against `(Some(0), true)`.
+- **lifecycle m4, in `caa5cd5`:** the close receipt's number was the poll time.
+
+E2 is M2. The rest go to `docs/v1.1-backlog.md` rows 27-38, each with its receipt and a "done
+when". Row 38 ("verified" versus the verified build) is Burhan's, before M12 shows values. Row 39
+is the CLI's `--variant` default, which core 1's fix leaves to him. Decision-log row 29 records the
+calls.
+
+### The final runs, on `0f5cb12` (every fix committed, the tree clean but `review2/`'s untracked harnesses)
+
+| Run | When | Result |
+|---|---|---|
+| `powershell -File tools/gates/m11.ps1`, bare | 01:54:24-02:08:09 | **M11 PASSED**, exit 0. **31 of 31** required e2e ids, **`m11-reload` new**, 0 failures, 0 skipped. Every static, Rust and harness check PASS: `npm test` **144 of 144**; checksum known answers 6 of 6; harness `node --test` **42 of 42**; `cargo test -p app` **53 passed**; **core crates 72 test binaries, 766 passed, 0 failed, 31 ignored, in 543 s** at 4 test threads (762 before; the four new tests; the one new ignored is the spawn-window helper). Inside it, `m10.ps1 -SkipCore` exited 0 and `m9.ps1` printed **M9 PASSED**. `m11-focus` PASS: **0 foreground changes in 184 s**, 696 samples, 15 app sessions. Work folder `C:\tmp\nm-target\gates\m11\20260930-015424`: 381 files, 17.8 MB. Files left on B:: 0 |
+| `powershell -File tools/gates/m10.ps1 -SolversDir C:\tmp\nm-m8a-solvers`, in full, `SIMPA_TETGEN160` = `C:\tmp\nm-m10-solvers\build\src\tetgen\Release\tetgen.exe` | 02:08:48-02:18:19 | **M10 PASSED**, exit 0. Every static check PASS; **core crates 72 test binaries, 766 passed, 0 failed, 31 ignored, in 500 s**; 27 tests, 13 required ids, 0 failures, 0 skipped. Work folder `C:\tmp\nm-target\gates\m10\20260930-020848` |
+| `powershell -File tools/gates/m9.ps1 -TargetDir C:\tmp\nm-target` | 02:18:36-02:19:21 | **M9 PASSED**, exit 0, 23 PASS, 0 FAIL |
+| Earlier, partial: `m11.ps1 -Only e2e -Spec close,reload`, before `0f5cb12` | 01:49:38-01:53 | both ids passed; `m11-focus` PASS |
+
+After each run, `tasklist` listed no `app.exe`, `spps.exe`, `tetgen.exe`, `preprocess.exe`,
+`classicalTheory.exe`, `tauri-driver.exe` or `msedgedriver.exe`.
+
+**Receipts from the M11 run** (`wdio.log`):
+- **m11-d-close:** "two WM_CLOSE at +120 and +230 ms while the page was busy for 4000 ms: the app
+  alive, then the prompt". The review's R6 closed the app with a 153 ms gap.
+- **m11-reload:** "run 20260930-020611-643-spps taken back after the reload (status running,
+  blockers RUN_ACTIVE); Open refused: 'Could not open …\p\box\box_run.simpa: Open: a run is
+  active: cancel it first (RUN_ACTIVE)'", then "Cancel from the reloaded page: run.json
+  CANCELLED, no spps.exe from the private copy".
+- **m11-h:** 9 say-NO plants, each flagged under its own rule. **H9**, "a reason's tooltip in the
+  Runs tab quoting the verdict's loss detail, which the row withholds", was flagged under **rule
+  1t**. 3 mid-run views were clean. **60 views** were clean, with rule 1t reading their tooltips:
+  162 diagnostic spans proven, 23 of them a non-zero loss, and 1,700 verbatim lines.
+- **m11-c:** `spps.exe` pid 22096 from the gate's copy before the click, and none at t0 + 2,010 ms.
+  `processesFrom` now also sees a process that never ran.
+
+**Not proven in the app.**
+- **B1's window itself.** The core test holds it open deterministically; no gate id kills `app.exe`
+  inside it, since that window is a few ms wide.
+- **A physical F5 or Ctrl+R.** CDP key events do not reach WebView2's accelerators (review R8).
+  `m11-reload` uses `browser.refresh()`, and the keys' handling is unit-tested.
+- **M2 and M3 through the running app.** Their windows are one IPC round trip wide; they are
+  proven on the real `actions.ts` in `actions.test.ts`.
+
+**Files.**
+- **On C:**, this session made:
+  - the gate work folders above;
+  - the partial run's folder `C:\tmp\nm-target\gates\m11\20260930-014938` (111 files, 2.9 MB);
+  - M9's `C:\tmp\nm-target\gates\m9\20260930-020848` and `…\20260930-021836`;
+  - `C:\tmp\nm-rv2-cli` (the CLI case, 3.5 MB);
+  - `C:\tmp\nm-e2e-tsc.log`;
+  - two leftover folders from a first draft of `procs.test.ts`, `%TEMP%\m11-procs-3oDEWj` and
+    `…\m11-procs-rfwfWn` (two copies of ping.exe each, about 90 KB).
+
+  C: free space at the end: 21 GB. None of this was deleted at this hour.
+- **The reviewers' own scratch**, listed in `review2/core.md` 5 for after 07:00, is untouched:
+  `C:\tmp\nm-rc\`, the scratchpad's `probe\` and `mut\`, and three debug executables in
+  `C:\tmp\nm-target\debug\`.
+- **On B:**, the new tracked files are:
+  - `app/e2e/lib/procs.test.ts`, `app/e2e/specs/m11.reload.e2e.ts`;
+  - `app/ui/src/actions.test.ts`, `app/ui/src/testing/` (3 files);
+  - the four `review2/*.md`.
+
+  The reviewers' harnesses under `review2/` stay untracked, and no run left a file.
 
 ## After the review (2026-09-29 23:10 to 2026-09-30 00:05)
 
