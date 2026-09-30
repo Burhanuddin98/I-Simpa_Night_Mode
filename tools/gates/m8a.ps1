@@ -28,10 +28,15 @@
 # another bed file, for checking the gate itself: it is exploratory and never prints 'M8a PASSED'.
 # Upstream's tree for the atmospheric validation: -Upstream, else $env:SIMPA_UPSTREAM, else
 # B:\repos\I-Simpa-upstream when it is there (read-only).
-# With -From, the bed's runs are held to their run.json's output hashes, or, for a bed made before
-# M8b (whose run.json has none), to its committed seal: -Seal <file>, else
-# beds\m8a-<the -From folder's name>\outputs-seal.json when it is there. Without either, every run
-# of such a bed is refused (bed_run_unbound) and the gate fails.
+# With -From, the bed's runs are held to its committed seal and to nothing in the bed folder
+# (bed::bind; docs/investigations/2026-09-30-m8b-tamper/FIXES.md, round 2): -Seal <file>, else
+# beds\m8a-<the -From folder's name>\outputs-seal.json. The gate refuses to start without one, and
+# takes it only as a file of this repository that git tracks and that is unchanged from HEAD, and it
+# checks that simpa bed read the runs against it (report.meta.seal_sha256). A bed this gate runs
+# (-BedRoot) is sealed by simpa bed as it runs it (<stamp>\outputs-seal.json); the gate copies that
+# seal out of the bed folder, checks the copy against the sha256 simpa bed printed, and reads the
+# bed again for the say-NO tests against the copy. Commit it beside the bed's report.json
+# (beds\m8a-<stamp>\) for any later -From.
 param(
     [string]$BedRoot = '',
     [string]$From = '',
@@ -57,11 +62,37 @@ if (-not $Upstream) {
 }
 # The suite's upstream-reading tests take the same tree.
 if ($Upstream) { $env:SIMPA_UPSTREAM = $Upstream }
-if ($From -and -not $Seal) {
-    $candidate = Join-Path $repo ('beds\m8a-' + (Split-Path -Leaf $From) + '\outputs-seal.json')
-    if (Test-Path -LiteralPath $candidate) { $Seal = $candidate }
-}
 if ($Seal -and -not $From) { throw '-Seal holds an earlier bed''s runs: give it with -From' }
+# The sha256 of a seal as simpa computes it (bed::bind::Seal::load): its text with line ends as git
+# stores them (LF).
+function SealSha256([string]$path) {
+    $text = [IO.File]::ReadAllText($path)
+    $bytes = (New-Object Text.UTF8Encoding $false).GetBytes($text.Replace("`r`n", "`n"))
+    $h = [Security.Cryptography.SHA256]::Create()
+    try { return (($h.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join '') } finally { $h.Dispose() }
+}
+$sealSha = $null
+if ($From) {
+    # An earlier bed is read only against its committed seal: never on the word of the run.json files
+    # in the folder being judged (VERIFY-adversarial-1.md finding 1: a renamed copy, its records
+    # forged, passed without one).
+    if (-not $Seal) {
+        $candidate = Join-Path $repo ('beds\m8a-' + (Split-Path -Leaf $From) + '\outputs-seal.json')
+        if (Test-Path -LiteralPath $candidate) { $Seal = $candidate }
+    }
+    if (-not $Seal) { throw "no committed seal for $From (looked for beds\m8a-$(Split-Path -Leaf $From)\outputs-seal.json; or give -Seal): an earlier bed is read only against its committed seal, so a bed folder renamed or never sealed is refused" }
+    if (-not (Test-Path -LiteralPath $Seal -PathType Leaf)) { throw "-Seal $Seal is not a file" }
+    $sealFull = (Resolve-Path -LiteralPath $Seal).Path
+    $repoFull = (Resolve-Path -LiteralPath $repo).Path.TrimEnd('\')
+    if (-not $sealFull.StartsWith($repoFull + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "the seal $sealFull is not a file of this repository ($repoFull): the gate takes only a committed seal" }
+    $sealRel = $sealFull.Substring($repoFull.Length + 1).Replace('\', '/')
+    $tracked = @(git -C $repo ls-files -- $sealRel)
+    if ($LASTEXITCODE -ne 0 -or $tracked.Count -ne 1) { throw "the seal $sealRel is not tracked by git: the gate takes only a committed seal" }
+    git -C $repo diff --quiet HEAD -- $sealRel
+    if ($LASTEXITCODE -ne 0) { throw "the seal $sealRel differs from HEAD: the gate takes only a committed, unchanged seal" }
+    $Seal = $sealFull
+    $sealSha = SealSha256 $Seal
+}
 $failures = @(); $script:checks = 0
 # A check body returns exactly one bool. Anything else is a FAIL: a stray value leaking into the
 # pipeline must never turn into a PASS.
@@ -143,7 +174,7 @@ Write-Host "work: $work"
 Write-Host "solvers: $env:SIMPA_SOLVERS_DIR"
 Write-Host "bed file: $Bed"
 Write-Host "upstream: $(if ($Upstream) { $Upstream } else { '(none: the atmospheric validation is not run)' })"
-if ($From) { Write-Host "seal: $(if ($Seal) { $Seal } else { '(none: runs without output hashes in run.json are refused)' })" }
+if ($From) { Write-Host "seal: $Seal (committed, unchanged from HEAD; sha256 $sealSha)" }
 
 # --- E1 before anything runs ----------------------------------------------------------------------
 . (Join-Path $repo 'solvers\pe-fingerprint.ps1')
@@ -174,7 +205,7 @@ if ($LASTEXITCODE -ne 0) { $build | Select-Object -Last 20 | ForEach-Object { Wr
 $simpa = Join-Path $target 'release\simpa.exe'
 
 # --- the bed --------------------------------------------------------------------------------------
-$stamp = $null; $runsDir = $null; $report = $null
+$stamp = $null; $runsDir = $null; $report = $null; $freshSeal = $null
 if ($e1ok) {
     Check "simpa bed ran and exited 0 (0 only when report.pass is true; 8 not passed, 5 a run not OK)" {
         $argv = @('bed', $Bed, '--jobs', "$Jobs", '--json')
@@ -184,6 +215,8 @@ if ($e1ok) {
         $o = Call $simpa $argv 'bed' ($BedTimeoutHours * 3600)
         $m = [regex]::Matches($o.Err, '(?m)(\S+report\.json)\s*$')
         if ($m.Count) { $script:stamp = Split-Path -Parent $m[$m.Count - 1].Groups[1].Value }
+        $s = [regex]::Matches($o.Err, '(?m)^seal: (.+outputs-seal\.json) sha256 ([0-9a-f]{64}) ')
+        if ($s.Count -eq 1) { $script:freshSeal = @{ Path = $s[0].Groups[1].Value; Sha = $s[0].Groups[2].Value } }
         Note ('exit {0} after {1:N0} s; {2}' -f $o.Exit, $o.Sec, $script:stamp)
         $o.Err -split "`n" | Where-Object { $_ -match '^FAIL|^simpa:' } | Select-Object -First 40 | ForEach-Object { Note $_.TrimEnd() }
         $o.Exit -eq 0
@@ -194,6 +227,29 @@ if ($e1ok) {
 if ($stamp -and (Test-Path (Join-Path $stamp 'report.json'))) {
     $runsDir = if ($From) { $From } else { $stamp }
     $report = Get-Content -Raw (Join-Path $stamp 'report.json') | ConvertFrom-Json
+}
+if ($From) {
+    Check "the earlier bed was read against its committed seal: report.meta.seal_sha256 is the committed seal's sha256" {
+        if (-not $report) { return $false }
+        Note "meta.seal $($report.meta.seal); meta.seal_sha256 $($report.meta.seal_sha256); the committed seal's $sealSha"
+        $report.meta.seal_sha256 -is [string] -and $report.meta.seal_sha256 -eq $sealSha
+    }
+} else {
+    # The seal simpa bed wrote of the bed it ran, copied out of the bed folder before anything reads
+    # the bed again: the say-NO tests below read it against the copy.
+    Check "simpa bed sealed the bed it ran: its seal, copied out of the bed folder, has the sha256 simpa bed printed" {
+        if (-not $report -or -not $freshSeal) { Note 'no seal line from simpa bed'; return $false }
+        $dir = Join-Path $work 'fresh-seal'
+        New-Item -ItemType Directory -Force $dir | Out-Null
+        $copy = Join-Path $dir 'outputs-seal.json'
+        Copy-Item -LiteralPath $freshSeal.Path -Destination $copy
+        $got = SealSha256 $copy
+        $n = @((Get-Content -Raw $copy | ConvertFrom-Json).runs.PSObject.Properties).Count
+        Note "simpa bed printed $($freshSeal.Path) sha256 $($freshSeal.Sha); the copy $copy has $got and $n runs; meta.seal $($report.meta.seal)"
+        if ($got -ne $freshSeal.Sha -or $n -lt 1 -or $null -ne $report.meta.seal) { return $false }
+        $script:Seal = $copy
+        $true
+    }
 }
 
 # --- report.json ----------------------------------------------------------------------------------
@@ -259,8 +315,8 @@ Check "N1 says NO: a copy of spps.exe with one .text byte flipped: the bed refus
     try {
         $env:SIMPA_SOLVERS_DIR = $dir
         $argv = @('bed', $Bed, '--out', $out, '--jobs', "$Jobs")
-        if ($runsDir) { $argv += @('--from', $runsDir) }
-        if ($runsDir -and $Seal) { $argv += @('--seal', $Seal) }
+        # --from is refused without --seal: with no seal, N1 is the refusal of a bed that would run.
+        if ($runsDir -and $Seal) { $argv += @('--from', $runsDir, '--seal', $Seal) }
         $o = Call $simpa $argv 'n1' 300
     } finally { $env:SIMPA_SOLVERS_DIR = $saved }
     $written = @(Get-ChildItem -LiteralPath $out -Recurse -ErrorAction SilentlyContinue).Count
@@ -299,6 +355,7 @@ Check "N6 says NO: walls of scattering 0: the bed refuses the cell (params_refer
 # report), the bed file, the plan, E1's code sha256. The whole suite is not this gate's: on Grace
 # mesh_project's every_failure_code_fires_on_its_input hangs at the commit M8a started from too.
 Check "the bed's unit tests: cargo test -p simpa-core --lib bed::" { Cargo 'cargo test -q -p simpa-core --lib bed::' }
+Check "the bed's binding on real runs of this build: cargo test -p simpa-core --test bed_binding" { Cargo 'cargo test -q -p simpa-core --test bed_binding' }
 Check "clippy -D warnings (core and CLI)" { Cargo 'cargo clippy -q -p simpa-core -p simpa --all-targets -- -D warnings' }
 Check "cargo fmt --check (core and CLI)" { Cargo 'cargo fmt -p simpa-core -p simpa --check' }
 

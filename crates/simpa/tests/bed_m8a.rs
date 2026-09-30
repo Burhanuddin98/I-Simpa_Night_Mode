@@ -8,11 +8,11 @@
 //!
 //! `$SIMPA_BED_FROM` is the folder `simpa bed` wrote (`runs/`, `report.json`), and
 //! `$SIMPA_BED_REPORT` a `report.json` elsewhere (a bed run with `--from`); `$SIMPA_BED_FILE`
-//! the bed file (default `beds/m8a.json`); `$SIMPA_BED_SEAL` the bed's committed seal, for a bed
-//! whose runs predate the output hashes in `run.json` (M8a's: `beds/m8a-<stamp>/outputs-seal.json`;
-//! without it every such run is refused `bed_run_unbound`); `$SIMPA_BED_JOBS` how many runs are
-//! read at once (default 4). No solver runs: the faults go through the code that reads and judges
-//! the runs.
+//! the bed file (default `beds/m8a.json`); `$SIMPA_BED_SEAL` the seal the runs are read against,
+//! which is required and must lie outside the bed folder: the bed's committed seal (M8a's:
+//! `beds/m8a-<stamp>/outputs-seal.json`), or for a bed the gate has just run, the copy it took of
+//! the seal `simpa bed` wrote of it; `$SIMPA_BED_JOBS` how many runs are read at once (default
+//! 4). No solver runs: the faults go through the code that reads and judges the runs.
 //!
 //! - N2: Kuttruff with its ½ dropped (`Fault::KuttruffFullVariance`, through `results::reference`):
 //!   A fails in every α 0.4 gated cell.
@@ -45,12 +45,19 @@ fn from() -> PathBuf {
     p
 }
 
-/// `$SIMPA_BED_SEAL`, loaded and checked against the bed folder `from`; `None` when unset.
-fn seal(from: &Path) -> Option<bind::Seal> {
-    let path = std::env::var_os("SIMPA_BED_SEAL").filter(|v| !v.is_empty())?;
-    let (s, _) = bind::Seal::load(Path::new(&path)).unwrap();
+/// `$SIMPA_BED_SEAL`, loaded and checked against the bed folder `from`, which must not hold it.
+/// Required: an earlier bed's runs are read only against a seal (`bed::run::read_existing`).
+fn seal(from: &Path) -> bind::Seal {
+    let path = std::env::var_os("SIMPA_BED_SEAL")
+        .filter(|v| !v.is_empty())
+        .expect(
+            "set SIMPA_BED_SEAL to the seal of the bed in SIMPA_BED_FROM: its runs are read only              against a seal, never on their own run.json's word",
+        );
+    let path = Path::new(&path);
+    let (s, _) = bind::Seal::load(path).unwrap();
     s.for_bed(from).unwrap();
-    Some(s)
+    bind::seal_outside(from, path).unwrap();
+    s
 }
 
 fn jobs() -> usize {
@@ -105,7 +112,7 @@ fn read(bed: &BedFile, from: &Path, keep: impl Fn(&RunKey) -> bool) -> Reads {
             .into_iter()
             .filter(|p| keep(&p.key) && from.join(p.key.dir()).is_dir()),
     );
-    let results = run::read_existing(&runs, from, jobs(), seal(from).as_ref());
+    let results = run::read_existing(&runs, from, jobs(), &seal(from));
     let mut reads = Reads::default();
     run::into_reads(&mut reads, &runs, results, Some("not read".into()));
     reads

@@ -328,37 +328,39 @@ fn with_fault<R>(_: Option<crate::faults::Fault>, body: impl FnOnce() -> R) -> R
     body()
 }
 
-/// Reads the run in `dir` (the run folder the run manager made there), its files first bound to
-/// `run.json`'s output hashes or to `seal`'s entry for it ([`bind::bind`]).
-pub fn read_in(dir: &Path, p: &Planned, seal: Option<&Seal>) -> Result<Read, String> {
+/// Reads the run of an earlier bed in `dir` (the run folder the run manager made there), its
+/// files first bound to `seal`'s entry for it, and to `run.json`'s output hashes too when it
+/// records them ([`bind::bind`]). There is no read of an earlier bed without a seal: its folder is
+/// what is judged, and its `run.json` is in it (`VERIFY-adversarial-1.md` finding 1).
+pub fn read_in(dir: &Path, p: &Planned, seal: &Seal) -> Result<Read, String> {
     let folder =
         read::find_run_folder(dir).ok_or_else(|| format!("{}: no run folder", dir.display()))?;
-    read_folder(dir, &folder, p, seal)
+    // A seal holds a whole bed: a run it does not name (gate C's extension seeds, say) is bound
+    // to nothing the bed did not itself leave, and is not read on its own run.json's word.
+    let sealed = seal
+        .run(&p.key)
+        .ok_or_else(|| unsealed(&folder, seal, &p.key))?;
+    read_folder(dir, &folder, p, None, Some(sealed))
 }
 
-/// Binds the run folder `folder` under the run's folder `dir` to its records, then hashes what
-/// says what it ran ([`read::on_disk`]) and reads it. Nothing is read from a file that is not
-/// its record's.
+/// Binds the run folder `folder` under the run's folder `dir` to what this process `made` of it
+/// or to its seal's entry `sealed` (and to its `run.json`'s output hashes too when it records
+/// them), then hashes what says what it ran ([`read::on_disk`]) and reads it. Nothing is read
+/// from a file that is not its record's.
 fn read_folder(
     dir: &Path,
     folder: &Path,
     p: &Planned,
-    seal: Option<&Seal>,
+    made: Option<&bind::SealedRun>,
+    sealed: Option<&bind::SealedRun>,
 ) -> Result<Read, String> {
     let manifest = read::manifest_of(folder)?;
-    // A seal holds a whole bed: a run it does not name (gate C's extension seeds, say) is bound
-    // to nothing the bed did not itself leave, and is not read on its own run.json's word.
-    let sealed = match seal {
-        Some(s) => Some(s.run(&p.key).ok_or_else(|| unsealed(folder, s, &p.key))?),
-        None => None,
-    };
-    let bound = bind::bind(
-        dir,
-        folder,
-        manifest.outputs.as_deref(),
-        &manifest.inputs,
+    let records = bind::Records {
+        made,
         sealed,
-    )?;
+        run_json: manifest.outputs.as_deref(),
+    };
+    let bound = bind::bind(dir, folder, records, &manifest.inputs)?;
     let on_disk = read::on_disk(dir, folder, &manifest);
     let mut r = match p.solver {
         SolverKind::Spps => {
@@ -389,8 +391,19 @@ fn unsealed(folder: &Path, seal: &Seal, key: &RunKey) -> String {
     )
 }
 
-/// Runs `p` under `root` and reads it.
+/// Runs `p` under `root` and reads it, bound to what this process made ([`read_fresh`]).
 pub fn run_one(p: &Planned, root: &Path, exes: &Exes) -> Result<Read, String> {
+    let (dir, report) = launch(p, root, exes)?;
+    read_fresh(&dir, &report, p)
+}
+
+/// Runs `p` under `root`, in its folder `runs/<cell>/s<seed>/` there, which it returns with the
+/// run manager's report; reads nothing.
+pub fn launch(
+    p: &Planned,
+    root: &Path,
+    exes: &Exes,
+) -> Result<(PathBuf, manager::RunReport), String> {
     let dir = root.join(p.key.dir());
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let project = dir.join("project.simpa");
@@ -420,7 +433,60 @@ pub fn run_one(p: &Planned, root: &Path, exes: &Exes) -> Result<Read, String> {
         &mut |_| {},
     )
     .map_err(|e| format!("simpa run refused or failed: {e}"))?;
-    read_folder(&dir, &report.dir, p, None)
+    Ok((dir, report))
+}
+
+/// Reads the run this process just made of `p` in its folder `dir`, as the run manager
+/// reported it, bound to what this process made ([`made_record`], from memory), never to the
+/// `run.json` in the folder alone. What was made goes into the read (`RunInfo::made`), for the
+/// seal of a bed this process made.
+pub fn read_fresh(dir: &Path, report: &manager::RunReport, p: &Planned) -> Result<Read, String> {
+    let made = made_record(p, report)?;
+    let mut r = read_folder(dir, &report.dir, p, Some(&made), None)?;
+    match &mut r {
+        Read::Spps(s) => s.info.made = Some(made),
+        Read::Tcr(t) => t.info.made = Some(made),
+    }
+    Ok(r)
+}
+
+/// What this process made of `p`'s run, in a seal's form, from memory: `project.simpa` as the
+/// bed saved it (`schema::save` writes `schema::to_json`), the run folder's files as the run
+/// manager hashed them when the run ended (`RunManifest::outputs`, every file but `run.json`),
+/// and `run.json` as it wrote it (`RunManifest::to_json`). Refused [`bind::RUN_UNBOUND`] when the
+/// run manager could not hash the folder.
+pub fn made_record(p: &Planned, report: &manager::RunReport) -> Result<bind::SealedRun, String> {
+    use crate::run::manifest::{FILE_NAME as RUN_JSON, sha256_bytes};
+    let name = report
+        .dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("{}: no run folder name", report.dir.display()))?;
+    let outputs = report.manifest.outputs.as_ref().ok_or_else(|| {
+        format!(
+            "{}: {}: the run manager could not hash the run folder when the run ended, so \
+             nothing binds its files",
+            bind::RUN_UNBOUND,
+            report.dir.display()
+        )
+    })?;
+    let project = schema::to_json(&p.project);
+    let run_json = report.manifest.to_json();
+    let file = |path: String, text: &str| {
+        bind::SealedFile(path, text.len() as u64, sha256_bytes(text.as_bytes()))
+    };
+    let mut files = vec![file(read::PROJECT_FILE.to_string(), &project)];
+    files.extend(
+        outputs
+            .iter()
+            .map(|o| bind::SealedFile(format!("{name}/{}", o.path), o.size, o.sha256.clone())),
+    );
+    files.push(file(format!("{name}/{RUN_JSON}"), &run_json));
+    files.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(bind::SealedRun {
+        run_folder: name.to_string(),
+        files,
+    })
 }
 
 /// What [`execute`] calls as each run ends: how many have ended, the run, what was read, and
@@ -445,13 +511,13 @@ pub fn execute(
     })
 }
 
-/// Reads every planned run from an earlier bed's folder `from`, each bound to its `run.json`'s
-/// output hashes or to `seal`, the committed seal of that bed, when its runs predate them.
+/// Reads every planned run from an earlier bed's folder `from`, each bound to `seal`, the
+/// committed seal of that bed, which must name it ([`read_in`]).
 pub fn read_existing(
     runs: &[Planned],
     from: &Path,
     jobs: usize,
-    seal: Option<&Seal>,
+    seal: &Seal,
 ) -> Vec<Result<Read, String>> {
     par_map(runs, jobs, |p| read_in(&from.join(p.key.dir()), p, seal))
 }
@@ -988,6 +1054,7 @@ mod tests {
             outputs_sha256: None,
             output_files: vec![],
             on_disk: None,
+            made: None,
         }
     }
 

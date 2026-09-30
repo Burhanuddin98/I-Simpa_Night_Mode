@@ -1,19 +1,25 @@
 //! M8b: every file of a run bound to its record before the bed reads a number from it
 //! (`docs/v1.1-backlog.md` rows 41 and 42, `docs/investigations/2026-09-30-m8b-tamper/FIXES.md`).
 //!
-//! The bed reads a run only when every file in its folder is, byte for byte, the file its record
-//! names, with none gone and none added. The record is one of these, and both are checked when
-//! both are there:
-//! - `run.json`'s `outputs` (`RunManifest::outputs`), which the run manager writes when the run
-//!   ends: every file in the run folder but `run.json`, with its size and sha256;
-//! - a **seal** ([`Seal`]): one committed file for an earlier bed whose runs predate those hashes,
-//!   listing every file under each run's folder in the bed (`runs/<cell>/s<seed>/`: its
-//!   `project.simpa`, and the run folder with its `run.json`), with its size and sha256. Its
-//!   `why` says what justified sealing the files as they then were.
+//! The bed reads a run only when every file under its folder is, byte for byte, the file its
+//! record names, with none gone and none added ([`Records`]). What binds a run is a record the
+//! folder being judged does not hold:
+//! - **what this process made** (`run::made_record`): a run the bed has just made, held to its
+//!   `project.simpa` as the bed wrote it, and to its run folder as the run manager hashed it
+//!   (`RunManifest::outputs`) and wrote its `run.json` when the run ended, all kept in memory;
+//! - **a seal** ([`Seal`]): for a run of an earlier bed, one file listing every file under each
+//!   run's folder in the bed (`runs/<cell>/s<seed>/`: its `project.simpa`, and the run folder with
+//!   its `run.json`), with its size and sha256. Its `why` says what justified sealing the files as
+//!   they then were. It is evidence only from outside the bed folder ([`seal_outside`]), and the
+//!   gate takes it only as a committed file of the repository. A seal holds its whole bed: a run
+//!   it does not name is refused.
 //!
-//! A run with neither record is refused, [`RUN_UNBOUND`], never judged; a file that is not its
-//! record's, [`FILES_CHANGED`]. What the bound files hold is then matched with the plan
-//! (`run::check_planned`), and no two seeds of a cell may share a solver output file
+//! `run.json`'s `outputs` are held too when a run records them, but they bind nothing on their
+//! own: `run.json` sits in the folder being judged, and an edit of that folder can forge it with
+//! the files it names (`docs/investigations/2026-09-30-m8b-tamper/VERIFY-adversarial-1.md`,
+//! finding 1). A run with no binding record is refused, [`RUN_UNBOUND`], never judged; a file
+//! that is not its record's, [`FILES_CHANGED`]. What the bound files hold is then matched with
+//! the plan (`run::check_planned`), and no two seeds of a cell may share a solver output file
 //! (`run::into_reads`, [`SEEDS_IDENTICAL`]).
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -24,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use crate::run::manager::SOLVE_DIR;
 use crate::run::manifest::{FILE_NAME as RUN_JSON, FileRef, OutputRef, hash_tree, sha256_bytes};
 
-/// A run whose `run.json` records no output hashes and which no seal names.
+/// A run that no record binds: not made by this process, and named by no seal.
 pub const RUN_UNBOUND: &str = "bed_run_unbound";
 /// A file in a run's folder that is not its record's: changed, gone, or added.
 pub const FILES_CHANGED: &str = "bed_run_files_changed";
@@ -163,6 +169,51 @@ impl Seal {
     pub fn run(&self, key: &super::run::RunKey) -> Option<&SealedRun> {
         self.runs.get(&seal_key(key))
     }
+
+    /// A seal of the bed folder named `bed` holding `runs` (by `runs/<cell>/s<seed>`), its
+    /// totals added up. The caller says where, when, by what and why, and names the bed's
+    /// `report.json` and `summary.json`.
+    pub fn of_runs(bed: &str, runs: BTreeMap<String, SealedRun>) -> Seal {
+        let files = runs.values().map(|r| r.files.len() as u64).sum();
+        let bytes = runs.values().flat_map(|r| &r.files).map(|f| f.1).sum();
+        Seal {
+            seal_version: SEAL_VERSION,
+            bed: bed.to_string(),
+            sealed_from: String::new(),
+            sealed_utc: String::new(),
+            tool: String::new(),
+            why: String::new(),
+            provenance: BTreeMap::new(),
+            report_json_sha256: String::new(),
+            summary_json_sha256: String::new(),
+            files,
+            bytes,
+            runs,
+        }
+    }
+
+    /// The seal as written: pretty JSON with `\n` line ends, and a final one.
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).expect("a seal serialises") + "\n"
+    }
+}
+
+/// Refuses a seal file `seal` that lies inside the bed folder `from` it would hold: an edit of
+/// the bed folder can edit such a seal with the files it names, so it binds nothing. Both are
+/// compared as the file system resolves them.
+pub fn seal_outside(from: &Path, seal: &Path) -> Result<(), String> {
+    let resolve = |p: &Path| std::fs::canonicalize(p).map_err(|e| format!("{}: {e}", p.display()));
+    let (bed, file) = (resolve(from)?, resolve(seal)?);
+    if file.starts_with(&bed) {
+        Err(format!(
+            "the seal {} is inside the bed folder {} it would hold: an edit of the bed can edit \
+             it too. Give a copy committed outside it (beds/<bed>-<stamp>/outputs-seal.json)",
+            seal.display(),
+            from.display()
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 /// What a run's binding found: which records hold it, and its solver's outputs.
@@ -202,27 +253,52 @@ fn differences(
     out
 }
 
+/// What a run's files are held to ([`bind`], [module docs](self)).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Records<'a> {
+    /// A run this process has just made: every file under its folder in the bed as the bed wrote
+    /// it and the run manager hashed and wrote it when the run ended, from memory
+    /// (`run::made_record`), in a seal's form.
+    pub made: Option<&'a SealedRun>,
+    /// A run of an earlier bed: its seal's entry.
+    pub sealed: Option<&'a SealedRun>,
+    /// Its `run.json`'s `outputs`, as read from the run folder: held when there, never binding on
+    /// their own.
+    pub run_json: Option<&'a [OutputRef]>,
+}
+
 /// Binds the run in `folder`, the run folder under the run's folder `dir` in the bed
-/// (`runs/<cell>/s<seed>`), to its records: `outputs`, its `run.json`'s, for the files in
-/// `folder` but `run.json`; `sealed` for every file under `dir`. `inputs` are its `run.json`'s
-/// inputs (paths under `solve/`), which are not the solver's outputs. Refused [`RUN_UNBOUND`] with
-/// neither record, [`FILES_CHANGED`] when a file is not its record's.
+/// (`runs/<cell>/s<seed>`), to its records: `made` and `sealed` each for every file under `dir`;
+/// `run_json` for the files in `folder` but `run.json`. `inputs` are its `run.json`'s inputs
+/// (paths under `solve/`), which are not the solver's outputs. Refused [`RUN_UNBOUND`] when
+/// neither `made` nor `sealed` is there, whatever `run.json` records; [`FILES_CHANGED`] when a
+/// file is not a record's.
 pub fn bind(
     dir: &Path,
     folder: &Path,
-    outputs: Option<&[OutputRef]>,
+    records: Records<'_>,
     inputs: &[FileRef],
-    sealed: Option<&SealedRun>,
 ) -> Result<Bound, String> {
+    let Records {
+        made,
+        sealed,
+        run_json: outputs,
+    } = records;
     let name = folder
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| format!("{}: no run folder name", folder.display()))?;
-    if outputs.is_none() && sealed.is_none() {
+    if made.is_none() && sealed.is_none() {
         return Err(format!(
-            "{RUN_UNBOUND}: {}: its {RUN_JSON} records no output hashes (a run made before M8b) \
-             and no seal names it, so its files are bound to nothing and it is not judged",
-            folder.display()
+            "{RUN_UNBOUND}: {}: this process did not make it and no seal names it, so its files \
+             are bound to nothing outside the folder being judged (its {RUN_JSON}'s output \
+             hashes, {}, are in that folder and bind nothing on their own), and it is not judged",
+            folder.display(),
+            if outputs.is_some() {
+                "recorded"
+            } else {
+                "not recorded: a run made before M8b"
+            }
         ));
     }
     let tree = hash_tree(dir, &[]).map_err(|e| format!("{FILES_CHANGED}: {e}"))?;
@@ -253,11 +329,15 @@ pub fn bind(
                 .map(|p| format!("{name}/{p}")),
         );
     }
-    if let Some(s) = sealed {
-        by.push("seal");
+    for (s, what, label) in [
+        (made, "what this process made", "this process"),
+        (sealed, "the seal", "seal"),
+    ] {
+        let Some(s) = s else { continue };
+        by.push(label);
         if s.run_folder != name {
             problems.push(format!(
-                "the seal names the run folder {}, the bed found {name}",
+                "{what} names the run folder {}, the bed found {name}",
                 s.run_folder
             ));
         }
@@ -266,7 +346,7 @@ pub fn bind(
             .iter()
             .map(|SealedFile(p, size, sha)| (p.as_str(), (*size, sha.as_str())))
             .collect();
-        problems.extend(differences("the seal", &record, &disk));
+        problems.extend(differences(what, &record, &disk));
     }
     if !problems.is_empty() {
         let n = problems.len();
@@ -274,13 +354,7 @@ pub fn bind(
         if n > shown.len() {
             shown.push(format!("and {} more", n - shown.len()));
         }
-        let records = if sealed.is_some() && outputs.is_some() {
-            "run.json and the seal record"
-        } else if sealed.is_some() {
-            "the seal records"
-        } else {
-            "run.json records"
-        };
+        let records = format!("the {} record", by.join(" and "));
         return Err(format!(
             "{FILES_CHANGED}: {}: {n} difference(s) from what {records}: {}",
             dir.display(),
@@ -380,17 +454,74 @@ mod tests {
         }
     }
 
-    /// M8b, backlog row 41: a run's files bound to `run.json`'s output hashes. As the run left
-    /// them it is read, and its solver outputs are the files under `solve/` that are not inputs;
-    /// an output changed, a file added or a file of the record gone is refused
-    /// `bed_run_files_changed`, naming the file.
+    /// `records` with `made`, `sealed` and `run_json` as given.
+    fn records<'a>(
+        made: Option<&'a SealedRun>,
+        sealed: Option<&'a SealedRun>,
+        run_json: Option<&'a [OutputRef]>,
+    ) -> Records<'a> {
+        Records {
+            made,
+            sealed,
+            run_json,
+        }
+    }
+
+    /// M8b round 2, `VERIFY-adversarial-1.md` finding 1: with no seal, a run was bound to its own
+    /// `run.json`'s output hashes, and `run.json` sits in the folder being judged. U1 and U2 wrote
+    /// a forged `run.json` whose `outputs` are the files the folder holds, and the bed passed on
+    /// copied seeds. `run.json` alone binds nothing: a run neither made by this process nor named
+    /// by a seal is refused `bed_run_unbound`, even when every file is what its `run.json` says.
     #[test]
-    fn a_run_bound_to_run_json_is_refused_when_any_file_is_not_its_records() {
-        let (dir, folder, inputs) = run_dir("runjson");
+    fn a_run_bound_only_by_its_own_run_json_is_refused() {
+        let (dir, folder, inputs) = run_dir("runjson-alone");
+        // The forged record: run.json's outputs written for the files the folder holds.
         let outputs = hash_tree(&folder, &[RUN_JSON]).unwrap();
         assert_eq!(outputs.len(), 6, "{outputs:?}");
-        let b = bind(&dir, &folder, Some(&outputs), &inputs, None).unwrap();
-        assert_eq!(b.by, ["run.json"]);
+        let e = bind(&dir, &folder, records(None, None, Some(&outputs)), &inputs).unwrap_err();
+        assert!(e.starts_with(RUN_UNBOUND), "{e}");
+        assert!(
+            e.contains("this process did not make it and no seal names it"),
+            "{e}"
+        );
+        assert!(
+            e.contains("output hashes, recorded, are in that folder"),
+            "{e}"
+        );
+        // With a record from outside the folder beside it, it binds.
+        let made = sealed(&dir);
+        let b = bind(
+            &dir,
+            &folder,
+            records(Some(&made), None, Some(&outputs)),
+            &inputs,
+        )
+        .unwrap();
+        assert_eq!(b.by, ["run.json", "this process"]);
+        done(&dir);
+    }
+
+    /// M8b round 2: a run this process made, held to what it made (`run::made_record`, from
+    /// memory) and to its `run.json`'s outputs. As the run left them it is read, and its solver
+    /// outputs are the files under `solve/` that are not inputs; an output changed, an input of
+    /// the same size changed, a file added, `run.json` forged or `project.simpa` changed is refused
+    /// `bed_run_files_changed`, naming the file. `run.json`'s outputs are held too: a record of
+    /// what was made that the folder matches, but `run.json` does not, is refused.
+    #[test]
+    fn a_run_made_by_this_process_is_refused_when_any_file_is_not_what_it_made() {
+        let (dir, folder, inputs) = run_dir("made");
+        let outputs = hash_tree(&folder, &[RUN_JSON]).unwrap();
+        let made = sealed(&dir);
+        let bind_made = || {
+            bind(
+                &dir,
+                &folder,
+                records(Some(&made), None, Some(&outputs)),
+                &inputs,
+            )
+        };
+        let b = bind_made().unwrap();
+        assert_eq!(b.by, ["run.json", "this process"]);
         let names: Vec<&str> = b.outputs.iter().map(|(p, _)| p.as_str()).collect();
         assert_eq!(
             names,
@@ -399,42 +530,94 @@ mod tests {
                 "SPPS particle statistics.gabe"
             ]
         );
-        // project.simpa is not in the run folder: run.json does not bind it (the plan does).
-        std::fs::write(dir.join("project.simpa"), "{ }").unwrap();
-        assert!(bind(&dir, &folder, Some(&outputs), &inputs, None).is_ok());
-
         // An output file overwritten with another seed's: refused, named.
         let recp = folder.join("solve/Punctual receivers/R000/Sound level.recp");
         std::fs::write(&recp, "seed 4").unwrap();
-        let e = bind(&dir, &folder, Some(&outputs), &inputs, None).unwrap_err();
+        let e = bind_made().unwrap_err();
         assert!(e.starts_with(FILES_CHANGED), "{e}");
         assert!(
             e.contains("R/solve/Punctual receivers/R000/Sound level.recp has 6 bytes of sha256"),
             "{e}"
         );
+        assert!(e.contains("what this process made"), "{e}");
+        // ... also when run.json is forged to match it (U1): what was made is not in the folder.
+        let forged = hash_tree(&folder, &[RUN_JSON]).unwrap();
+        let forged_json = "{\"outputs\": \"forged\"}";
+        std::fs::write(folder.join(RUN_JSON), forged_json).unwrap();
+        let e = bind(
+            &dir,
+            &folder,
+            records(Some(&made), None, Some(&forged)),
+            &inputs,
+        )
+        .unwrap_err();
+        let want = format!("R/run.json has {} bytes", forged_json.len());
+        assert!(e.contains(&want), "{e}");
+        assert!(e.contains("Sound level.recp has 6 bytes"), "{e}");
+        std::fs::write(folder.join(RUN_JSON), "{}").unwrap();
         std::fs::write(&recp, "seed 3").unwrap();
-        assert!(bind(&dir, &folder, Some(&outputs), &inputs, None).is_ok());
+        assert!(bind_made().is_ok());
         // An input of the same size and another content: refused.
         std::fs::write(folder.join("solve/config.xml"), "<configuratiom/>").unwrap();
-        let e = bind(&dir, &folder, Some(&outputs), &inputs, None).unwrap_err();
+        let e = bind_made().unwrap_err();
         assert!(e.contains("R/solve/config.xml has 16 bytes"), "{e}");
         std::fs::write(folder.join("solve/config.xml"), "<configuration/>").unwrap();
+        // project.simpa, which the bed wrote beside the run folder: refused.
+        std::fs::write(dir.join("project.simpa"), "{ }").unwrap();
+        let e = bind_made().unwrap_err();
+        assert!(e.contains("project.simpa has 3 bytes"), "{e}");
+        std::fs::write(dir.join("project.simpa"), "{}").unwrap();
         // A file added: refused.
         std::fs::write(folder.join("solve/extra.recp"), "x").unwrap();
-        let e = bind(&dir, &folder, Some(&outputs), &inputs, None).unwrap_err();
+        let e = bind_made().unwrap_err();
+        assert!(
+            e.contains("R/solve/extra.recp is not in what this process made"),
+            "{e}"
+        );
         assert!(
             e.contains("R/solve/extra.recp is not in run.json's outputs"),
             "{e}"
         );
-        // A file of the record gone (the record naming one that is not there): refused.
-        let mut more = hash_tree(&folder, &[RUN_JSON]).unwrap();
+        // run.json's outputs that disagree with what was made, which the folder matches: refused.
+        let made_now = sealed(&dir);
+        let e = bind(
+            &dir,
+            &folder,
+            records(Some(&made_now), None, Some(&outputs)),
+            &inputs,
+        )
+        .unwrap_err();
+        assert!(
+            e.contains("R/solve/extra.recp is not in run.json's outputs"),
+            "{e}"
+        );
+        assert!(!e.contains("what this process made"), "{e}");
+        std::fs::remove_file(folder.join("solve/extra.recp")).unwrap();
+        // A file of a record gone: refused.
+        let mut more = outputs.clone();
         more.push(crate::run::manifest::OutputRef {
             path: "solve/gone.recp".into(),
             size: 1,
             sha256: "0".repeat(64),
         });
-        let e = bind(&dir, &folder, Some(&more), &inputs, None).unwrap_err();
+        let e = bind(
+            &dir,
+            &folder,
+            records(Some(&made), None, Some(&more)),
+            &inputs,
+        )
+        .unwrap_err();
         assert!(e.contains("R/solve/gone.recp is gone"), "{e}");
+        // What was made naming another run folder: refused.
+        let other = SealedRun {
+            run_folder: "Q".into(),
+            ..made.clone()
+        };
+        let e = bind(&dir, &folder, records(Some(&other), None, None), &inputs).unwrap_err();
+        assert!(
+            e.contains("what this process made names the run folder Q"),
+            "{e}"
+        );
         done(&dir);
     }
 
@@ -446,79 +629,103 @@ mod tests {
         let (dir, folder, inputs) = run_dir("seal");
         let seal = sealed(&dir);
         assert_eq!(seal.files.len(), 8);
-        let b = bind(&dir, &folder, None, &inputs, Some(&seal)).unwrap();
+        let bind_sealed =
+            |s: &SealedRun| bind(&dir, &folder, records(None, Some(s), None), &inputs);
+        let b = bind_sealed(&seal).unwrap();
         assert_eq!(b.by, ["seal"]);
         assert_eq!(b.outputs.len(), 2);
         // Both records, when both are there.
         let outputs = hash_tree(&folder, &[RUN_JSON]).unwrap();
-        let b = bind(&dir, &folder, Some(&outputs), &inputs, Some(&seal)).unwrap();
+        let b = bind(
+            &dir,
+            &folder,
+            records(None, Some(&seal), Some(&outputs)),
+            &inputs,
+        )
+        .unwrap();
         assert_eq!(b.by, ["run.json", "seal"]);
         // run.json edited (its project's sha256, say): refused by the seal.
         std::fs::write(folder.join(RUN_JSON), "{\"edited\": 1}").unwrap();
-        let e = bind(&dir, &folder, None, &inputs, Some(&seal)).unwrap_err();
+        let e = bind_sealed(&seal).unwrap_err();
         assert!(e.starts_with(FILES_CHANGED), "{e}");
         assert!(e.contains("R/run.json has 13 bytes"), "{e}");
         std::fs::write(folder.join(RUN_JSON), "{}").unwrap();
         // project.simpa changed: refused.
         std::fs::write(dir.join("project.simpa"), "{\"a\":1}").unwrap();
-        let e = bind(&dir, &folder, None, &inputs, Some(&seal)).unwrap_err();
+        let e = bind_sealed(&seal).unwrap_err();
         assert!(e.contains("project.simpa has 7 bytes"), "{e}");
         std::fs::write(dir.join("project.simpa"), "{}").unwrap();
         // An output changed: refused.
         let stats = folder.join("solve/SPPS particle statistics.gabe");
         std::fs::write(&stats, "stats 4").unwrap();
-        let e = bind(&dir, &folder, None, &inputs, Some(&seal)).unwrap_err();
+        let e = bind_sealed(&seal).unwrap_err();
         assert!(
             e.contains("R/solve/SPPS particle statistics.gabe has 7 bytes"),
             "{e}"
         );
         std::fs::write(&stats, "stats 3").unwrap();
-        assert!(bind(&dir, &folder, None, &inputs, Some(&seal)).is_ok());
+        assert!(bind_sealed(&seal).is_ok());
         // The seal naming another run folder: refused.
         let other = SealedRun {
             run_folder: "Q".into(),
             ..seal.clone()
         };
-        let e = bind(&dir, &folder, None, &inputs, Some(&other)).unwrap_err();
+        let e = bind_sealed(&other).unwrap_err();
         assert!(e.contains("the seal names the run folder Q"), "{e}");
         // A file added beside the run folder: refused.
         std::fs::write(dir.join("notes.txt"), "x").unwrap();
-        let e = bind(&dir, &folder, None, &inputs, Some(&seal)).unwrap_err();
+        let e = bind_sealed(&seal).unwrap_err();
         assert!(e.contains("notes.txt is not in the seal"), "{e}");
         done(&dir);
     }
 
-    /// M8b: a run whose `run.json` records no output hashes, and which no seal names, is refused
-    /// `bed_run_unbound` before anything is read: not judged on its files' word.
+    /// M8b: a run that no record binds, whose `run.json` records no output hashes, and which no
+    /// seal names, is refused `bed_run_unbound` before anything is read: not judged on its files'
+    /// word.
     #[test]
     fn a_run_with_no_output_hashes_and_no_seal_entry_is_refused() {
         let (dir, folder, inputs) = run_dir("unbound");
-        let e = bind(&dir, &folder, None, &inputs, None).unwrap_err();
+        let e = bind(&dir, &folder, Records::default(), &inputs).unwrap_err();
         assert!(e.starts_with(RUN_UNBOUND), "{e}");
-        assert!(e.contains("records no output hashes"), "{e}");
+        assert!(e.contains("not recorded: a run made before M8b"), "{e}");
         // A seal with no entry for the run gives it none.
-        let seal = Seal {
-            seal_version: SEAL_VERSION,
-            bed: "20260929T093134Z".into(),
-            sealed_from: String::new(),
-            sealed_utc: String::new(),
-            tool: String::new(),
-            why: String::new(),
-            provenance: BTreeMap::new(),
-            report_json_sha256: String::new(),
-            summary_json_sha256: String::new(),
-            files: 0,
-            bytes: 0,
-            runs: BTreeMap::new(),
-        };
+        let seal = Seal::of_runs("20260929T093134Z", BTreeMap::new());
         let key = super::super::run::RunKey::Cell {
             id: "c".into(),
             seed: 1,
         };
         assert_eq!(seal_key(&key), "runs/c/s1");
         assert!(seal.run(&key).is_none());
-        let e = bind(&dir, &folder, None, &inputs, seal.run(&key)).unwrap_err();
+        let e = bind(&dir, &folder, records(None, seal.run(&key), None), &inputs).unwrap_err();
         assert!(e.starts_with(RUN_UNBOUND), "{e}");
+        done(&dir);
+    }
+
+    /// M8b round 2: a seal inside the bed folder it would hold binds nothing (an edit of the bed
+    /// can edit it too), and is refused; one outside it is taken.
+    #[test]
+    fn a_seal_inside_its_bed_folder_is_refused() {
+        // `dir` stands for the bed folder here; the test's own folder holds it.
+        let (dir, folder, _) = run_dir("inside");
+        let own = dir.parent().unwrap().parent().unwrap().parent().unwrap();
+        let text = Seal::of_runs("x", BTreeMap::new()).to_json();
+        for (at, inside) in [
+            (dir.join("outputs-seal.json"), true),
+            (folder.join("outputs-seal.json"), true),
+            (own.join("outputs-seal.json"), false),
+        ] {
+            std::fs::write(&at, &text).unwrap();
+            let r = seal_outside(&dir, &at);
+            assert_eq!(r.is_err(), inside, "{}: {r:?}", at.display());
+            if let Err(e) = r {
+                assert!(e.contains("is inside the bed folder"), "{e}");
+            }
+        }
+        // A path with a `..` detour that ends in the bed is the same file.
+        let detour = folder.join("solve").join("..").join("outputs-seal.json");
+        assert!(seal_outside(&dir, &detour).is_err());
+        // A seal file that is not there is refused.
+        assert!(seal_outside(&dir, &own.join("not-there.json")).is_err());
         done(&dir);
     }
 

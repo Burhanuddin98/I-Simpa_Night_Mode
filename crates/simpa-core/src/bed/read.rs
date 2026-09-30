@@ -45,8 +45,10 @@ pub struct RunInfo {
     pub files: u64,
     pub bytes: u64,
     /// What the run's files were found bound to before anything was read from them
-    /// (`bind::bind`): `run.json` (its `outputs`), `seal`, or `run.json and seal`. `None` in a
-    /// report written before M8b; a read without it is refused (`run::check_planned`).
+    /// (`bind::bind`): `this process` (a run the bed made, held to what it made) or `seal` (a run
+    /// of an earlier bed), each after `run.json and ` when its `run.json` records output hashes,
+    /// which are held too but bind nothing alone. `None` in a report written before M8b; a read
+    /// without it is refused (`run::check_planned`).
     #[serde(default)]
     pub bound_by: Option<String>,
     /// The sha256 of the solver's outputs as bound (`bind::Bound::outputs_sha256`). Two seeds of
@@ -61,6 +63,11 @@ pub struct RunInfo {
     /// in a report written before M8b; a read without it is refused.
     #[serde(default)]
     pub on_disk: Option<OnDisk>,
+    /// What this process made of the run (`run::made_record`), which bound it: held for the seal
+    /// of a bed this process made, not written to the report. `None` for a run of an earlier bed.
+    #[serde(skip)]
+    #[schemars(skip)]
+    pub made: Option<super::bind::SealedRun>,
 }
 
 /// What a run's folder holds that says what it ran, hashed from disk when it is read, for
@@ -203,6 +210,7 @@ pub fn run_info(folder: &Path) -> Result<RunInfo, String> {
         outputs_sha256: None,
         output_files: Vec::new(),
         on_disk: None,
+        made: None,
     })
 }
 

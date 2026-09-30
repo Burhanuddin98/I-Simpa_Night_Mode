@@ -1495,6 +1495,7 @@ pub(crate) mod tests {
                     outputs_sha256: None,
                     output_files: vec![],
                     on_disk: None,
+                    made: None,
                 },
                 bands: freqs.iter().map(|&f| band(m, f)).collect(),
             })

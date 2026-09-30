@@ -126,6 +126,7 @@ mod tests {
             outputs_sha256: None,
             output_files: vec![],
             on_disk: None,
+            made: None,
         }
     }
 

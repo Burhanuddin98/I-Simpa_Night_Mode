@@ -1,4 +1,4 @@
-//! `simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier> [--seal <file>]]
+//! `simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier> --seal <file>]
 //! [--upstream <dir>] [--json]`,
 //! `simpa bed --schema` and `simpa bed --canonical`: M8a's T30 physics bed
 //! (`docs/investigations/2026-09-29-m8a/SPEC.md`, section 6), over `simpa_core::bed`.
@@ -9,19 +9,24 @@
 //!    the code sha256 `solvers/manifest.json` lists. Any other refuses the bed, exit 2, and nothing
 //!    is written.
 //! 3. Every run goes through the run manager, `--jobs` at once (default 4), longest first, under
-//!    `<root>/<UTC stamp>/runs/`, and is read as it ends; or, with `--from`, an earlier bed's
-//!    folder is read again with this build and no solver runs. Every run's files are first bound
-//!    to their record (`bed::bind`): `run.json`'s output hashes, or for an earlier bed whose runs
-//!    predate them, its committed seal given with `--seal`. A run bound to neither is refused.
+//!    `<root>/<UTC stamp>/runs/`, and is read as it ends, its files first bound to what this
+//!    process made of it, held in memory (`bed::run::made_record`); or, with `--from`, an earlier
+//!    bed's folder is read again with this build and no solver runs, every run's files first
+//!    bound to that bed's committed seal (`--seal`, required, and refused inside the bed folder).
+//!    A run's own `run.json` binds nothing alone: it is in the folder being judged (`bed::bind`).
 //! 4. The transport runs in its own phase, never beside the solvers (it takes every core).
 //! 5. The checks; gate C's one extension (seeds 11 to 20) of an INCONCLUSIVE cell is run and
 //!    judged again.
 //! 6. `report.json`, `summary.json` and `decays/<cell>.csv` are written beside `runs/`. The plots
-//!    are `tools/bed/m8a_plots.py`'s.
+//!    are `tools/bed/m8a_plots.py`'s. A bed this process ran also gets its seal, `outputs-seal.json`
+//!    (every run it made and read, as it made it, from memory), printed with its sha256: a later
+//!    `--from` takes it only from a copy outside the bed folder, which is committed beside the
+//!    bed's `report.json` (`beds/<bed>-<stamp>/`).
 //!
 //! Exit codes: 0 only when `report.pass` is true; 8 the bed ran and did not pass; 2 usage, an
 //! invalid bed file, or solvers that are not the verified build; 5 a run was not OK.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::{Instant, SystemTime};
@@ -38,7 +43,7 @@ const EXIT_RUN_NOT_OK: u8 = 5;
 fn usage(msg: &str) -> ExitCode {
     eprintln!(
         "simpa: {msg}\nusage: simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier> \
-         [--seal <file>]] [--upstream <dir>] [--json]\n       simpa bed --schema | --canonical"
+         --seal <file>] [--upstream <dir>] [--json]\n       simpa bed --schema | --canonical"
     );
     ExitCode::from(2)
 }
@@ -87,11 +92,27 @@ struct Options<'a> {
     bed: &'a str,
     out: PathBuf,
     jobs: usize,
-    from: Option<PathBuf>,
-    seal: Option<PathBuf>,
+    /// `--from <earlier> --seal <file>`: an earlier bed's folder and the seal it is read against.
+    from: Option<(PathBuf, PathBuf)>,
     upstream: Option<PathBuf>,
     json: bool,
 }
+
+/// An earlier bed read with `--from`, and its seal, loaded and checked.
+struct Earlier {
+    dir: PathBuf,
+    seal_path: PathBuf,
+    seal: bed::bind::Seal,
+    seal_sha256: String,
+}
+
+/// The seal a bed this process ran is given ([`bed::bind::Seal::why`]).
+const FRESH_SEAL_WHY: &str = "Written by the simpa bed process that ran these runs, as each ended \
+     and before any was judged: its project.simpa as the bed saved it, and its run folder as the \
+     run manager hashed it and wrote its run.json, held in memory and found on disk as recorded \
+     when the run was read (bed::run::made_record, bed::bind). A run that could not be read is not \
+     in it. It holds the bed for a later re-read (simpa bed --from --seal) only from a copy outside \
+     the bed folder, committed beside the bed's report.json.";
 
 fn parse<'a>(args: &[&'a str]) -> Result<Options<'a>, String> {
     let (mut bed, mut out, mut jobs, mut from, mut seal, mut upstream, mut json) =
@@ -120,15 +141,26 @@ fn parse<'a>(args: &[&'a str]) -> Result<Options<'a>, String> {
             _ => return Err(format!("unexpected argument '{a}'")),
         }
     }
-    if seal.is_some() && from.is_none() {
-        return Err("--seal needs --from: a seal holds an earlier bed's runs".into());
-    }
+    let from = match (from, seal) {
+        (Some(f), Some(s)) => Some((f, s)),
+        (None, None) => None,
+        (None, Some(_)) => {
+            return Err("--seal needs --from: a seal holds an earlier bed's runs".into());
+        }
+        (Some(_), None) => {
+            return Err(
+                "--from needs --seal <file>: an earlier bed's runs are read only against \
+                        its committed seal (beds/<bed>-<stamp>/outputs-seal.json), never on the \
+                        word of the run.json in the folder being judged"
+                    .into(),
+            );
+        }
+    };
     Ok(Options {
         bed: bed.ok_or("bed needs a bed file")?,
         out: out.ok_or("bed needs --out <root>: put it off B: (exFAT)")?,
         jobs,
         from,
-        seal,
         upstream: upstream.or_else(|| {
             std::env::var_os("SIMPA_UPSTREAM")
                 .filter(|v| !v.is_empty())
@@ -206,26 +238,35 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
     }
 
     // The folder, the plan, the room for it.
-    let stamp = o.out.join(utc_stamp(started));
-    if let Some(from) = &o.from
+    let stamp_name = utc_stamp(started);
+    let stamp = o.out.join(&stamp_name);
+    if let Some((from, _)) = &o.from
         && !from.join("runs").is_dir()
     {
         return usage(&format!("--from {}: no runs/ folder there", from.display()));
     }
-    // The earlier bed's seal, when its runs predate the output hashes in run.json.
-    let seal = match (&o.seal, &o.from) {
-        (Some(path), Some(from)) => {
-            match bed::bind::Seal::load(path)
-                .and_then(|(s, sha)| s.for_bed(from).map(|()| (s, sha)))
-            {
-                Ok(s) => Some(s),
+    // The earlier bed and its seal: of that bed, and not inside it.
+    let earlier = match &o.from {
+        Some((from, path)) => {
+            let loaded = bed::bind::Seal::load(path).and_then(|(s, sha)| {
+                s.for_bed(from)?;
+                bed::bind::seal_outside(from, path)?;
+                Ok((s, sha))
+            });
+            match loaded {
+                Ok((seal, seal_sha256)) => Some(Earlier {
+                    dir: from.clone(),
+                    seal_path: path.clone(),
+                    seal,
+                    seal_sha256,
+                }),
                 Err(e) => {
                     eprintln!("simpa: bed refused: --seal {e}");
                     return ExitCode::from(2);
                 }
             }
         }
-        _ => None,
+        None => None,
     };
     let (runs, atmospheric_not_run) = match run::plan(bed, o.upstream.as_deref()) {
         Ok(p) => p,
@@ -234,7 +275,7 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let projected = if o.from.is_some() {
+    let projected = if earlier.is_some() {
         0
     } else {
         run::projected_files(bed, &runs)
@@ -267,8 +308,9 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
 
     // The solver phase.
     let solver_clock = Instant::now();
-    let sealed = seal.as_ref().map(|(s, _)| s);
-    let results = run_or_read(&runs, &o, &stamp, &exes, sealed);
+    let results = run_or_read(&runs, &o, &stamp, &exes, earlier.as_ref());
+    let mut made = BTreeMap::new();
+    keep_made(&mut made, &runs, &results);
     let mut reads = Reads::default();
     run::into_reads(&mut reads, &runs, results, atmospheric_not_run);
     let solver_phase_s = solver_clock.elapsed().as_secs_f64();
@@ -303,15 +345,15 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
         );
         match run::plan_extension(bed, &rep.needs_extension) {
             Ok(ext) => {
-                let ext: Vec<Planned> = match &o.from {
+                let ext: Vec<Planned> = match &earlier {
                     // Only the extension runs the earlier bed made.
-                    Some(from) => ext
+                    Some(e) => ext
                         .into_iter()
-                        .filter(|p| from.join(p.key.dir()).is_dir())
+                        .filter(|p| e.dir.join(p.key.dir()).is_dir())
                         .collect(),
                     None => ext,
                 };
-                let room = if o.from.is_none() {
+                let room = if earlier.is_none() {
                     let (files, _) = bed::read::count_files(&stamp);
                     run::check_room_for(&stamp, files + run::projected_files(bed, &ext)).map(|_| ())
                 } else {
@@ -319,7 +361,8 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
                 };
                 match room {
                     Ok(()) if !ext.is_empty() => {
-                        let results = run_or_read(&ext, &o, &stamp, &exes, sealed);
+                        let results = run_or_read(&ext, &o, &stamp, &exes, earlier.as_ref());
+                        keep_made(&mut made, &ext, &results);
                         run::into_reads(&mut reads, &ext, results, None);
                         rep = judge(&reads, &transports);
                     }
@@ -369,13 +412,13 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
         finished_utc: utc_rfc3339(finished),
         wall_s: clock0.elapsed().as_secs_f64(),
         root: stamp.display().to_string(),
-        from: o.from.as_ref().map(|p| p.display().to_string()),
+        from: earlier.as_ref().map(|e| e.dir.display().to_string()),
         jobs: o.jobs,
         solver_phase_s: Some(solver_phase_s),
         transport_phase_s: Some(transport_phase_s),
         limits: report::limits_map(),
-        seal: o.seal.as_ref().map(|p| p.display().to_string()),
-        seal_sha256: seal.as_ref().map(|(_, sha)| sha.clone()),
+        seal: earlier.as_ref().map(|e| e.seal_path.display().to_string()),
+        seal_sha256: earlier.as_ref().map(|e| e.seal_sha256.clone()),
     };
     rep.files = report::Files {
         projected,
@@ -393,6 +436,43 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
     let summary_text = serde_json::to_string_pretty(&summary).expect("a summary serialises") + "\n";
     if let Err(e) = std::fs::write(stamp.join("summary.json"), &summary_text) {
         eprintln!("simpa: bed: summary.json: {e}");
+    }
+    // The seal of a bed this process ran: every run it made and read, as it made it.
+    if earlier.is_none() {
+        let planned = runs.len();
+        let mut seal = bed::bind::Seal::of_runs(&stamp_name, made);
+        seal.sealed_from = stamp.display().to_string();
+        seal.sealed_utc = rep.meta.finished_utc.clone();
+        seal.tool = format!(
+            "simpa bed, simpa-core {}, git {}",
+            simpa_core::VERSION,
+            rep.meta.git_commit.as_deref().unwrap_or("unknown")
+        );
+        seal.why = FRESH_SEAL_WHY.into();
+        seal.provenance = [
+            ("runs_planned_first".to_string(), planned.to_string()),
+            ("runs_sealed".to_string(), seal.runs.len().to_string()),
+        ]
+        .into();
+        seal.report_json_sha256 = pe::sha256_hex(text.as_bytes());
+        seal.summary_json_sha256 = pe::sha256_hex(summary_text.as_bytes());
+        let path = stamp.join("outputs-seal.json");
+        let json = seal.to_json();
+        match seal.check().and_then(|()| {
+            std::fs::write(&path, &json).map_err(|e| format!("{}: {e}", path.display()))
+        }) {
+            Ok(()) => eprintln!(
+                "seal: {} sha256 {} ({} runs, {} files)",
+                path.display(),
+                pe::sha256_hex(json.as_bytes()),
+                seal.runs.len(),
+                seal.files
+            ),
+            Err(e) => eprintln!(
+                "simpa: bed: the seal of this bed was not written, and a re-read of it will be \
+                 refused: {e}"
+            ),
+        }
     }
 
     for f in &rep.failures {
@@ -434,24 +514,44 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
     }
 }
 
-/// Runs `runs` (or reads them from `--from`, held to `seal` when there is one), printing a line
-/// as each ends.
+/// What this process made of each run in `results` that was read (`RunInfo::made`), by the
+/// run's folder under the bed, for the bed's seal.
+fn keep_made(
+    made: &mut BTreeMap<String, bed::bind::SealedRun>,
+    runs: &[Planned],
+    results: &[Result<Read, String>],
+) {
+    for (p, r) in runs.iter().zip(results) {
+        let info = match r {
+            Ok(Read::Spps(s)) => &s.info,
+            Ok(Read::Tcr(t)) => &t.info,
+            Err(_) => continue,
+        };
+        if let Some(m) = &info.made {
+            made.insert(bed::bind::seal_key(&p.key), m.clone());
+        }
+    }
+}
+
+/// Runs `runs` (or reads them from the `earlier` bed, held to its seal), printing a line as each
+/// ends.
 fn run_or_read(
     runs: &[Planned],
     o: &Options,
     stamp: &Path,
     exes: &Exes,
-    seal: Option<&bed::bind::Seal>,
+    earlier: Option<&Earlier>,
 ) -> Vec<Result<Read, String>> {
-    match &o.from {
-        Some(from) => {
+    match earlier {
+        Some(e) => {
             eprintln!(
-                "[{}] reading {} runs from {}",
+                "[{}] reading {} runs from {}, held to the seal {}",
                 now(),
                 runs.len(),
-                from.display()
+                e.dir.display(),
+                e.seal_path.display()
             );
-            run::read_existing(runs, from, o.jobs, seal)
+            run::read_existing(runs, &e.dir, o.jobs, &e.seal)
         }
         None => {
             let total = runs.len();
@@ -483,14 +583,26 @@ mod tests {
     #[test]
     fn a_seal_is_taken_only_with_from() {
         let o = parse(&["m8a.json", "--out", "o", "--from", "f", "--seal", "s.json"]).unwrap();
-        assert_eq!(o.seal.as_deref(), Some(Path::new("s.json")));
-        assert_eq!(o.from.as_deref(), Some(Path::new("f")));
-        let o = parse(&["m8a.json", "--out", "o", "--from", "f"]).unwrap();
-        assert!(o.seal.is_none());
+        assert_eq!(o.from, Some((PathBuf::from("f"), PathBuf::from("s.json"))));
+        let o = parse(&["m8a.json", "--out", "o"]).unwrap();
+        assert!(o.from.is_none());
         let e = parse(&["m8a.json", "--out", "o", "--seal", "s.json"])
             .err()
             .unwrap();
         assert!(e.contains("--seal needs --from"), "{e}");
         assert!(parse(&["m8a.json", "--out", "o", "--from", "f", "--seal"]).is_err());
+    }
+
+    /// M8b round 2, `VERIFY-adversarial-1.md` finding 1: `simpa bed --from` with no `--seal`
+    /// read every run on the word of the run.json in the folder being judged, so a renamed or
+    /// unsealed copy of the M8a bed, its records forged, passed. `--from` without `--seal` is
+    /// refused before anything is read or written.
+    #[test]
+    fn from_without_a_seal_is_refused() {
+        let e = parse(&["m8a.json", "--out", "o", "--from", "f"])
+            .err()
+            .unwrap();
+        assert!(e.contains("--from needs --seal"), "{e}");
+        assert!(e.contains("never on the word of the run.json"), "{e}");
     }
 }
