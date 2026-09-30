@@ -1,6 +1,308 @@
 # M8b tamper: the two tamper-only holes of the M8a gate, closed
 
 Worktree `m8b-tamper`, branch `m8b-tamper`, cut from `rebuild` at `5d46aa7` (M8a, M11 and M8b step 1).
+Burhan, 04:29: "dont take any chances". So nothing here is closed on a guess, and every claim has a
+test or a receipt. The M8a bed `C:\tmp\nm-m8a-bed\20260929T093134Z` was only read, never written, and
+the 6-hour bed was not rerun. Nothing was deleted.
+
+Two rounds:
+- **Round 2** (code `8a26d99` to `fbd346d`) answers adversarial check 1 and re-judge 1 of round 1. It
+  comes first below.
+- **Round 1** (code `239c6f5`) closed the two holes. Its record follows round 2, with round 2's
+  corrections marked in place.
+
+## Round 2: adversarial check 1 and re-judge 1, answered
+
+Round 1's code is `239c6f5`. It was checked twice, and neither check came back clean:
+- `VERIFY-adversarial-1.md` (`a3280e9`): **`ok` false**. With no seal, a forged `run.json` brought back
+  both hole-41 cases, and the M8a bed was exposed the same way through a renamed folder or `--from`
+  without `--seal`.
+- `REJUDGE-1.md` (`4d79c7d`): the real bed re-judged 23 of 23, `pass true`, but the check did not
+  refute that bypass, and it found three smaller faults in this record and in `report.meta`.
+
+Round 2's code is six commits, each one finding, each test failing with its fix reverted alone
+(`failing-first-2.txt`):
+
+| Commit | What it fixes |
+|---|---|
+| `8a26d99` | Adversarial finding 2: a run a seal does not name is refused |
+| `0069cd2` | Adversarial finding 1: no run is judged on the word of its own `run.json` |
+| `277d785` | Adversarial finding 1, its suggested defence in depth: two seeds that read the same T30 are refused |
+| `208a916` | Adversarial finding 4: the seal is found under any spelling of the bed folder's name |
+| `55c1a93` | Re-judge finding: `meta.git_commit` is the tree's when the bed starts |
+| `fbd346d` | New, found by this round's own receipt: round 1's byte-level seed rule refused a valid bed |
+
+This record and its receipts are the commits after `fbd346d`. Scope, as for adversarial check 1: an
+attacker who can edit the bed folder is in scope. One who can also change the committed seal in git is
+not, and the gate now refuses a seal that git does not track unchanged from `HEAD` (G4 below).
+
+**Verdict: every finding in scope is fixed, each with a failing-first test, and the real M8a bed still
+passes.**
+- **No run is judged on its own `run.json`.** A run is bound only by a record from outside the folder
+  being judged:
+  - a run this process made, by what it made, held in memory;
+  - a run of an earlier bed, by its seal.
+- **U1 and U2 are refused on every path.**
+  - With `--from`: `simpa bed` refuses to start without `--seal` (F4), and the seal refuses the tampered
+    files (F5).
+  - On a fresh run: the forged `run.json` is not what this process wrote (the test
+    `a_run_this_process_made_is_bound_to_what_it_made_not_to_its_run_json`).
+  - Should either get past the binding, the seeds read the same T30 and are refused.
+- **The route to the M8a bed is closed.**
+  - A renamed folder: `m8a.ps1` refuses to start (G1), and `simpa bed` refuses the seal for it.
+  - `--from` without `--seal`: refused (F4).
+- **The real bed.** Being re-judged by the gate as this is committed; its results are the next commit.
+
+### The findings
+
+| # | Finding | Verdict | What was done |
+|---|---|---|---|
+| A1 | major: with no seal, `run.json` alone binds a run; a forged one plus one padding byte per file brings back U1 and U2, and reaches the M8a bed by a rename or `--from` without `--seal` | Right, in scope | `0069cd2`, below; defence in depth `277d785` |
+| A2 | minor: a seal given, a run it does not name is bound by `run.json` alone (gate C's extension seeds) | Right, in scope | `8a26d99`: refused `bed_run_unbound` |
+| A3 | minor: `FIXES.md` and backlog row 44 say the seed rule, E3 and C stand after a forged `run.json` | Right | Corrected in round 1's text below, marked "Round 2, finding A3", and in row 44. A copied seed is real data: E3, A, B and C pass it. The seed rule is a check against a solver that ignores its seed, and since `277d785` it also compares what is read |
+| A4 | minor: `Seal::for_bed` compares the folder name case-sensitively | Right, in scope | `208a916`: the name the file system stores. The gate had the same fault one step on (git's pathspecs), fixed in the same commit |
+| R1 | major: the re-judge does not refute A1's bypass | Right | Closed by A1's fix. This round's gate also checks `report.meta.seal_sha256` against the committed seal |
+| R2 | minor: D is not bit-identical to `report.json` (at most 4.441 × 10⁻¹⁶ s) | Right, by design: D's reference is the plan's (hole 42). Round 1's record says so | No change |
+| R3 | minor: the bound "2.2 × 10⁻¹⁶ relative" is exceeded | Right. Measured again here from the round-1 re-judge's report: at most 2.584 × 10⁻¹⁶ (`20x8x4-a0.2-tcr-air-off`, 4 kHz), 2.416 × 10⁻¹⁶ over the gated runs, 13 of 128 bands above 2.2 × 10⁻¹⁶, never more than 2 ulp | The text is corrected to "at most 2.6 × 10⁻¹⁶ relative, 2 ulp". No verdict depends on it |
+| R4 | minor: `meta.git_commit` names the tree when `simpa bed` ends, not the one it was built from | Right, in scope: the report is the gate's evidence | `55c1a93` |
+| N1 | new: round 1's seed rule refused a valid bed (`fresh-seal-receipt.txt`, first attempt) | Found here | `fbd346d`, below |
+| N2 | new: `process::winproc`'s `dropping_the_tree_kills_the_child` failed once | Found here, not in the bed's code | Backlog row 45 |
+
+Out of scope, and why:
+- **An attacker who edits the committed seal in git** (as set for adversarial check 1).
+  - A seal edited in the work tree and not committed is refused by the gate (G4).
+  - A seal edited and committed is a change to the repository, seen in its history. The gate reads what
+    `HEAD` holds.
+- **A change to the files between the binding and the reading**, as in round 1. This is a check of files
+  at rest.
+- **A change during a fresh run, before the run manager hashes the run folder.** That is the run's own
+  time, not a bed at rest. From the moment the run manager hashes the folder, what it made is held in
+  memory, and the bed reads nothing that is not that.
+
+Suggested, and not done:
+- **B refusing a spread of exactly 0.** Ten seeds that read the same T30 are refused before B is
+  judged (`277d785`), so a copy never reaches B. A spread of exactly 0 from seeds that read differently
+  would be a coincidence of cell means, not a sign of a copy.
+- **A stricter gabe reader** (the unused header lengths, the padding, what follows the last column).
+  - It would not close a forgery: the numbers can be changed too.
+  - What upstream writes in those bytes has not been characterized, so a stricter reader could refuse
+    valid files.
+  - A copied or edited file is refused by its bytes, against a record from outside the bed folder.
+
+### What changed
+
+**1. A run is bound only by a record from outside the folder being judged** (`0069cd2`, finding A1).
+- `bed/bind.rs:264` `Records { made, sealed, run_json }`. `bind` (`:282`) refuses a run with neither
+  `made` nor `sealed`, `bed_run_unbound` (`:297`), whatever its `run.json` records. `run.json`'s
+  `outputs` are still held when a run records them, and bind nothing alone.
+- **A run this process made.**
+  - `bed/run.rs:458` `made_record(p, report)` builds, from memory, the run's folder in a seal's form:
+    - `project.simpa`, as the bed saved it (`schema::to_json`);
+    - the run folder's files, as the run manager hashed them when the run ended
+      (`RunReport::manifest.outputs`);
+    - `run.json`, as the run manager wrote it (`RunManifest::to_json`).
+  - `run_one` (`:395`) is `launch` (`:402`) then `read_fresh` (`:443`). `read_fresh` binds to that
+    record. The folder's own `run.json` is held to it, never taken as what binds the run.
+  - `RunInfo::made` (`bed/read.rs:70`, `serde(skip)`) keeps the record for the bed's seal.
+- **A run of an earlier bed.**
+  - `read_in` (`bed/run.rs:335`) and `read_existing` (`:516`) take a `&Seal`, not an `Option`. There is
+    no read of an earlier bed without a seal.
+  - `simpa bed --from` needs `--seal`, exit 2 without it (`crates/simpa/src/bed_cmd.rs:172`).
+  - The seal is refused when it lies inside the bed folder it would hold (`bed/bind.rs:210`
+    `seal_outside`, both paths resolved by the file system).
+  - The say-NO harness requires `SIMPA_BED_SEAL` and checks it the same way
+    (`crates/simpa/tests/bed_m8a.rs:50`).
+- **Each bed `simpa bed` runs is sealed by it** (`bed_cmd.rs:459`).
+  - The seal is written as `outputs-seal.json`, from the runs' `made` records, and its sha256 is
+    printed. It names the report and summary it was written with.
+  - A later `--from` takes it only from a copy outside the bed folder, which is committed beside the
+    bed's `report.json`.
+- **The gate** (`tools/gates/m8a.ps1`).
+  - **`-From`** refuses to start without a seal (`:99`).
+  - It takes only a seal that git tracks (`:106`) and that is unchanged from `HEAD` (`:108`).
+  - It checks that `simpa bed` read the runs against that seal: `report.meta.seal_sha256` (`:248`).
+  - **`-BedRoot`** copies the seal `simpa bed` wrote out of the bed folder, and checks the copy against
+    the printed sha256 (`:256`). The say-NO tests and N1 re-read the bed against that copy.
+  - A new check runs `tests/bed_binding.rs` (`:374`).
+
+**2. A seal holds its whole bed** (`8a26d99`, finding A2). `read_in` refuses a run its seal does not
+name, `bed_run_unbound`, before anything is read (`bed/run.rs:383` `unsealed`). Since `0069cd2`, `bind`
+would refuse it too.
+
+**3. Two seeds that read the same T30 are refused** (`277d785`, defence in depth for A1).
+- In `refuse_shared_outputs` (`bed/run.rs:855`), every seed is refused `bed_seed_outputs_identical`, the
+  receiver named, when it reads the same T30 as another seed at a receiver in every band. Values,
+  `mc_sd` and sources are compared by their bits, and at least one band must have a value.
+- Over the M8a report's 1,845 pairs of seeds (40 cells and the atmospheric validation, 18 to 27
+  receiver-bands each), no two seeds read the same value in any single receiver-band
+  (`t30-identity-probe.py`, `t30-identity-probe-out.txt`). So this cannot refuse the M8a bed.
+- It is no defence against a copy whose numbers were changed too. The binding is.
+
+**4. The seal is found under any spelling of the bed folder's name** (`208a916`, finding A4).
+- `Seal::for_bed` (`bed/bind.rs:159`) compares the name the file system stores for the folder the path
+  resolves to (`std::fs::canonicalize`).
+- Refused still:
+  - another folder;
+  - a junction named like the bed that resolves elsewhere;
+  - a path that is not there.
+- `m8a.ps1` resolves the seal's path to the stored names before it asks git (`:76` `StoredPath`). Git's
+  pathspecs match case exactly, and `0069cd2`'s gate called the committed seal "not tracked" under a
+  lower-case `-From` (G7).
+
+**5. `meta.git_commit` is the tree's when the bed starts** (`55c1a93`, finding R4).
+- `bed_cmd.rs:217` reads git before any run is made or read.
+- The state at the end goes to `meta.git_commit_at_end` and `git_dirty_at_end` (`bed/report.rs:42`,
+  `serde(default)`, so the M8a report still reads). A commit that lands during the run shows there.
+
+**6. The byte-level seed rule holds only the receivers' files** (`fbd346d`, finding N1).
+- **What happened.** This round's fresh-bed receipt ran a small bed of 31,000 particles per source.
+  Round 1's rule refused seeds 1 and 2 of its random α 0.4 cell, which shared `SPPS particle
+  statistics.gabe` byte for byte:
+  - a count file, which coincides when few particles run;
+  - seed 3's differs from seed 1's in 2 bytes of 2,505;
+  - every receiver file of the three seeds is its own.
+- **The change** (`bed/run.rs:815` `is_receiver_file`). Only a point receiver's file (under
+  `Punctual receivers/`, what T30 is read from) shared by two seeds refuses them.
+- **What still refuses.** Another file shared refuses them only as part of the whole set, which still
+  counts. So these are all still refused:
+  - a copied receiver;
+  - a solver that ignores its seed;
+  - a wholesale copy.
+- No judged number depends on the files no longer held alone. The M8a bed shared none of its 8,490
+  output files, so no refusal of it changes.
+- **The tests.** A real-run test (`tests/bed_binding.rs:246`) reproduces the coincidence with this
+  build's solvers and fails with the old rule.
+
+### Tests, each failing-first
+
+`failing-first-2.txt` holds each revert as a diff, the command, the output with the revert, the
+byte-for-byte restore, and the output after it. `failing_first_2.py` is the driver. Every case was run
+again on the final code at `fbd346d`. The first case, `f2-commitA`, is kept from commit
+`8a26d99`'s own tree, where it was the only guard.
+
+| Case (`failing-first-2.txt`) | Test | Revert (only the fix) | With the revert | Restored |
+|---|---|---|---|---|
+| `f1-bind` | `bind.rs:482` `a_run_bound_only_by_its_own_run_json_is_refused`, with U1's shape: every file is what its forged `run.json` says | `bind` takes `run.json`'s outputs alone | FAILED: `unwrap_err` on `Ok`, `Bound { by: ["run.json"], … }` | ok |
+| `f1-fresh` | `tests/bed_binding.rs:170` `a_run_this_process_made_is_bound_to_what_it_made_not_to_its_run_json`. A real TCR run, then one byte of `Main results.gabe` changed after it ended, and `run.json` rewritten by the crate's own writer to match | `read_fresh` builds its record from the `run.json` in the folder | FAILED: the forged run accepted | ok |
+| `f1-cli` | `bed_cmd.rs:643` `from_without_a_seal_is_refused` | `--from` without `--seal` taken | FAILED: `parse` accepted it | ok |
+| `f1-outside` | `bind.rs:713` `a_seal_inside_its_bed_folder_is_refused`; `tests/bed_binding.rs:204` `the_seal_of_a_bed_this_process_ran_holds_its_runs_for_a_re_read` | `seal_outside` takes any path | FAILED, both: a seal inside the bed folder taken | ok |
+| `f2-commitA` | `tests/bed_binding.rs` `a_run_its_seal_does_not_name_is_refused`, on `8a26d99`'s code (then uncommitted on `4d79c7d`) | the seal's missing entry passed on as none | FAILED: accepted, `bound_by: "run.json"` | ok |
+| `f2-final-a` | the same test, final code | `read_in`'s check alone | FAILED on the message. The run is still refused, `bed_run_unbound`, by `bind`'s rule: two layers now | ok |
+| `f2-final-b` | the same | `read_in`'s check and `bind`'s rule | FAILED: accepted on `run.json` | ok |
+| `d1-reads` | `bed.rs:849` `a_seed_reading_another_seeds_t30_does_not_pass_the_bed`; `bed.rs:876` `ten_seeds_reading_one_seeds_t30_do_not_pass_the_bed` | the T30 comparison skipped | FAILED, both: the bed passes on copied reads | ok |
+| `f4-case` | `bind.rs:802` `a_seal_is_for_its_bed_folder_by_the_name_the_file_system_stores` | `for_bed` compares the name as given | FAILED: the lower-case path refused, `the seal is of the bed 20260929T093134Z, not of …20260929t093134z` | ok |
+| `f8-git` | `bed_cmd.rs:620` `the_work_tree_is_recorded_as_it_was_when_the_bed_started` | `git_commit` taken from the end | FAILED: `a3280e9` where `dd5c683` is wanted | ok |
+| `r2-receivers` | `bed.rs:748` `only_a_receivers_file_shared_by_two_seeds_refuses_them`; `tests/bed_binding.rs:246` `seeds_whose_particle_statistics_coincide_are_not_refused` (three real runs) | every shared output file refuses | FAILED, both: seeds 1 and 2 refused over `SPPS particle statistics.gabe` | ok |
+
+**Also new, not reverts.**
+- `bind.rs` `a_run_bound_to_a_seal_is_refused_when_any_file_is_not_its_records`, now through `Records`.
+- `bind.rs` `a_run_with_no_output_hashes_and_no_seal_entry_is_refused`, the same.
+- `tests/bed_binding.rs:204` `the_seal_of_a_bed_this_process_ran_holds_its_runs_for_a_re_read`. On a
+  real TCR run, it checks five things:
+  - the seal made from `made` equals the folder hashed from disk;
+  - it re-reads the run;
+  - a copy of it inside the bed folder is refused;
+  - a renamed copy of the bed is refused by `for_bed`;
+  - U1's tamper in that copy, and in place, is refused `bed_run_files_changed`.
+- `bind.rs:802`: a junction named like the bed that resolves to another folder is refused.
+
+### The gate, and a bed run fresh, end to end
+
+**The gate** (`gate-seal-receipt.txt`, `gate_seal_receipt.py`). Each case ran `m8a.ps1`. The cases
+marked "stopped" were killed once the line named had printed, before any build or read. The bed was
+never read.
+
+| Case | Gate | Result |
+|---|---|---|
+| G1 | this round's | `-From` a renamed bed folder: refused, "no committed seal", 0.3 s |
+| G2 | this round's | `-Seal` a copy outside the repository: refused |
+| G3 | this round's | `-Seal` an untracked copy inside the repository: refused, "not tracked by git" |
+| G4 | this round's | the committed seal changed by one byte in the work tree: refused, "differs from HEAD". Restored byte for byte |
+| G5 | this round's | `-From` the M8a bed: the committed seal taken, sha256 `762f3fba…c15e09d`, stopped |
+| G6 | this round's | `-From` the M8a bed spelled `…\20260929t093134z`: the same seal taken, under the name git tracks, stopped |
+| G0 | `4d79c7d`'s, before round 2 | `-From` the renamed folder: it printed `seal: (none: …)` and went on to E1, stopped |
+| G7 | `0069cd2`'s | the lower-case spelling: refused, "not tracked by git". Fixed by `208a916` |
+
+**A bed run fresh, end to end** (`fresh-seal-receipt.txt`, `fresh_seal_receipt.py`).
+- **The bed.** A small exploratory bed cut from `beds/m8a.json` (`fresh-seal-bed.json`):
+  - the 5x4x3 room;
+  - α 0.4 random and α 0.2 energetic, at 31,000 particles per source;
+  - their TCR run;
+  - seeds 1 to 3;
+  - N5, and N6 at 31,000 particles.
+  - It never passes (E7), which does not matter here.
+- **Its first attempt found N1.**
+
+| Case | Result |
+|---|---|
+| F1 run fresh | 9 runs, each bound by `run.json and this process`. The seal is written: 9 runs, 335 files. The printed sha256 is the file's, and it names the `report.json` written. Re-hashed by Python, the seal has 0 differences from the folder |
+| F2 re-read with a copy of the seal outside the bed | 9 of 9 bound by `run.json and seal`, 0 errors. `meta.seal_sha256` is the copy's. Every verdict equal, every seed's T30 equal, the cells equal as a whole, apart from each run's record |
+| F3 `--seal` the seal inside the bed | exit 2, "is inside the bed folder", nothing written |
+| F4 `--from` with no `--seal` | exit 2, "--from needs --seal" |
+| F5 a copy under the same name: U1 in seed 2, U2 in seed 3 (seed 1's 20 outputs), records forged | Seeds 2 and 3 refused `bed_run_files_changed`: 2 differences and 21 differences. The cell is not judged, `pass false` |
+
+**The gate's `-BedRoot` path on that bed** (`gate-fresh-bed.txt`).
+- **The seal handoff held.**
+  - "simpa bed sealed the bed it ran": PASS. The copy is in the gate's work folder, with the printed
+    sha256.
+  - N1 ran with `--from` and `--seal` set to the copy: PASS.
+  - N8 re-read the TCR run through the copy: D Fail in every band, +1.230 %.
+  - N4 re-read the energetic cell through the copy and judged it: C Fail, d +14.55 %.
+- **8 of 25 checks failed, each for a reason of that bed, as expected:**
+  - E7, `pass`, and `simpa bed`'s exit;
+  - N2, N3 and N4: the random cell is not judged at 31,000 particles (E6, `range_not_reached`);
+  - N7: the bed has no air-on cell;
+  - the bed's unit tests: `the_atmospheric_validation_imports_as_the_spec_saw_it` reads upstream, and
+    the receipt pointed `-Upstream` at an empty folder so that the atmospheric validation would not
+    run.
+
+### On the real bed
+
+*The real bed is being re-judged by the gate as this is committed (`rejudge-2-wrapper.ps1`, started 08:47:04 on `5907044`). Its results are the next commit.*
+
+### Checks run
+
+On this tree: `CARGO_TARGET_DIR=C:/tmp/nm-target`, `CARGO_BUILD_JOBS=16`, `CARGO_INCREMENTAL=0`,
+`SIMPA_SOLVERS_DIR=C:/tmp/nm-m8a-solvers`, `SIMPA_UPSTREAM=B:/repos/I-Simpa-upstream`.
+
+| Check | Result |
+|---|---|
+| `cargo test -p simpa-core --lib` | 226 passed, 1 ignored, in 3 of 4 runs. The first run, just after a build, failed `process::winproc`'s `dropping_the_tree_kills_the_child` (the child not gone 2 s after its job was dropped). That test passed 5 of 5 alone and in the 3 full runs after. `src/process` is untouched by M8b. Round 1 saw it fail twice under load. It is a finding, backlog row 45, not a tolerance |
+| `cargo test -p simpa-core --lib bed::` | 46 passed, 1 ignored |
+| `cargo test -p simpa-core --test bed_binding` | 4 passed, real runs of this build |
+| `cargo test -p simpa-core --test params_reference --test reason_codes_docs --test results_load --test run_contract_docs --test run_manager --test run_manifest --test validate_contract_docs` | 3, 2, 14, 4, 14, 10 and 3 passed |
+| `cargo test -p simpa`, with `SIMPA_TETGEN160` as in round 1 | All passed. The binary's own tests: 9. By target: `cli_mesh` 10, `cli_results` 23, `cli_run` 13, `parity_tutorials` 7, `run_folder_fixtures` 3. `bed_m8a`, `m8_evidence` and `noise_calibration` are ignored by design |
+| `cargo clippy -p simpa-core -p simpa --all-targets -- -D warnings` | clean |
+| `cargo fmt -p simpa-core -p simpa --check` | clean |
+| The gate on the real bed | *running, see "On the real bed"* |
+
+### What this round does not show
+
+- **The gate's `-BedRoot` on M8a's matrix.** That is the 14-hour bed. Its new steps ran on the small bed
+  above:
+  - the seal written from memory;
+  - the copy out of the bed folder;
+  - the say-NO re-reads through it.
+- **A file symbolic link** (as in round 1). It still cannot be made without the privilege.
+  - `hash_tree` refuses it by the branch that refused the junctions: a link is neither a file nor a
+    folder.
+  - `for_bed` resolves a junction to its target, and a junction is refused by the test at
+    `bind.rs:802`.
+- **A forgery with its numbers changed.** A copied run whose T30 values were changed too would pass the
+  T30 rule. It does not pass the binding, which is what closes it.
+- **`simpa results` and the app** hold a run to its inputs only, as in round 1: backlog row 43, open.
+- **A commit of a new bed's seal.** It is a hand step: the gate prints where the seal it made is, and
+  `-From` refuses to re-read a bed whose seal git does not track unchanged.
+
+### Scratch left in place (round 2; nothing deleted)
+
+*listed when the re-judge ends*
+
+---
+
+## Round 1 (code `239c6f5`)
+
+Worktree `m8b-tamper`, branch `m8b-tamper`, cut from `rebuild` at `5d46aa7` (M8a, M11 and M8b step 1).
 The code is commit `239c6f5`; this record and its receipts are the commit after it.
 The holes are `docs/v1.1-backlog.md` rows 41 and 42, and `../2026-09-30-m8b-gate/VERIFY-adversarial.md`
 findings 1 and 2. Burhan, 04:29: "dont take any chances". So nothing here is closed on a guess, and every
@@ -33,7 +335,7 @@ Receipts beside this file:
 
 Line numbers are those of the code commit, `239c6f5`.
 
-## Hole 41: a run's outputs were bound to nothing, and seeds could be copies
+### Hole 41: a run's outputs were bound to nothing, and seeds could be copies
 
 **Before.** `run.json` hashed only the inputs. Two copies passed `check_planned` and the bed:
 - seed 3's folder with seed 4's 20 output files (its own `run.json`, `config.xml` and mesh);
@@ -107,7 +409,7 @@ Line numbers are those of the code commit, `239c6f5`.
    Its hash is taken with line ends as git stores them. `bind.rs:149` `for_bed` refuses a seal of
    another bed folder. The seal is described in "The seal" below.
 
-## Hole 42: run.json's word was the only link between a run and its plan
+### Hole 42: run.json's word was the only link between a run and its plan
 
 **Before.**
 - `run.json`'s `source.sha256` was the only thing that bound α, the materials, the scattering, the
@@ -168,7 +470,7 @@ Line numbers are those of the code commit, `239c6f5`.
    - Say-NO N8 (`crates/simpa/tests/bed_m8a.rs:313`) now holds its fault over the judging as well as
      the reading, because that is where D's reference is now computed.
 
-## The seal (`beds/m8a-20260929T093134Z/outputs-seal.json`)
+### The seal (`beds/m8a-20260929T093134Z/outputs-seal.json`)
 
 **What it holds.**
 - One file, 2,531,856 bytes, sha256 `762f3fba…c15e09d` (as written, with LF).
@@ -200,7 +502,7 @@ Line numbers are those of the code commit, `239c6f5`.
 - The link is the unchanged fingerprint, and a re-judge that reproduces `report.json` bit for bit
   (`harness-out.txt`, A1).
 
-## Tests, each failing-first
+### Tests, each failing-first
 
 `failing-first.txt` holds each revert as a diff, and the output with it and after the restore. Every
 restore was checked byte for byte, and the files' sha256 were compared before and after the whole run.
@@ -232,7 +534,7 @@ restore was checked byte for byte, and the files' sha256 were compared before an
 - `tests/run_manifest.rs:139` `the_outputs_are_written_only_when_recorded`.
 - `crates/simpa/src/bed_cmd.rs:484` `a_seal_is_taken_only_with_from`.
 
-## On real runs (`harness-out.txt`)
+### On real runs (`harness-out.txt`)
 
 **A. The M8a bed, read only, with the committed seal (8 at once).**
 - 433 of 433 runs were bound by the seal and accepted by `check_planned`. The read took 283 s on a
@@ -289,7 +591,7 @@ entry, the next layer refuses it.
 | TCR 5x4x3-a0.2-tcr-air-off | – | – | `run.json`'s `outputs` removed | `bed_run_unbound` |
 | N5 | 37 files | Bound by `run.json`, accepted | `project.simpa` replaced by its cell's seed-10 project | `bed_run_not_planned`, on `project.simpa` on disk. `run.json` does not bind the project file; the plan does |
 
-## The product CLI (`cli.txt`)
+### The product CLI (`cli.txt`)
 
 - **The run.** It ran from 05:22:45 to 05:57:29:
 
@@ -320,7 +622,7 @@ entry, the next layer refuses it.
   - a seal whose totals do not add up;
   - a seal file that is not there.
 
-## Checks run
+### Checks run
 
 On this tree: `CARGO_TARGET_DIR=C:/tmp/nm-target`, `CARGO_BUILD_JOBS=16`, `CARGO_INCREMENTAL=0`,
 `SIMPA_SOLVERS_DIR=C:/tmp/nm-m8a-solvers`, `SIMPA_UPSTREAM=B:/repos/I-Simpa-upstream`.
@@ -336,7 +638,7 @@ On this tree: `CARGO_TARGET_DIR=C:/tmp/nm-target`, `CARGO_BUILD_JOBS=16`, `CARGO
 | `cargo clippy -p simpa-core -p simpa --all-targets -- -D warnings` | clean |
 | `cargo fmt -p simpa-core -p simpa --check` | clean |
 
-## What this does not show
+### What this does not show
 
 - **The full gate.**
   - `tools/gates/m8a.ps1 -From` was not run. It now finds the committed seal by the bed's folder name
@@ -363,7 +665,7 @@ On this tree: `CARGO_TARGET_DIR=C:/tmp/nm-target`, `CARGO_BUILD_JOBS=16`, `CARGO
 - **Between the binding and the reading.** The files are hashed before they are read. A file swapped in
   the moments between the two is not seen. This is a check against files changed at rest.
 
-## Scratch left in place (nothing deleted)
+### Scratch left in place (nothing deleted)
 
 - `C:\tmp\nm-judge-tamper\`, 107 MB and 721 files:
   - `cases\` (the tampered copies);
