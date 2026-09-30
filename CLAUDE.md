@@ -23,7 +23,7 @@
 number reaching a user, or a feature Burhan asked for. Anything else goes to that file in the same session,
 with its receipt and a "done when" test. Milestone M14 closes it.
 
-Live handoff: `session-logs/HANDOFF-2026-09-29.md` (then `HANDOFF-2026-09-23.md` for history). Read it before the arc plan — it names
+Live handoff: `session-logs/HANDOFF-2026-09-30.md` (then `HANDOFF-2026-09-29.md` for history). Read it before the arc plan — it names
 what is proven, what is retracted, and the traps already paid for.
 
 **This is Burhan's personal project.** Decisions and pushes are his; nothing is routed to anyone else
