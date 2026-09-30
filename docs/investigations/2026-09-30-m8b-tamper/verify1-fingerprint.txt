@@ -1,0 +1,11 @@
+bed C:\tmp\nm-m8a-bed\20260929T093134Z: 16985 files, 1238241863 bytes, newest mtime 2026-09-29T15:25:01.891Z (plots\summary.png)
+report.json 5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad, summary.json 6af1656e16429ab8cddfeaa00fb0f0c0765f91b2fe2669dbaa9ff54bf91b3ced
+seal B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a-20260929T093134Z\outputs-seal.json: 2531856 bytes, sha256 (LF) 762f3fbab431a01d9745a73ba55fa00674e41e0605ad8521c55122bd7c15e09d, 433 runs, 16861 files, 1118668944 bytes; report 5c0041fc4685, summary 6af1656e1642
+re-hashed 16861 sealed files, 1118668944 bytes, in 433 runs; files under runs/: 16861; not as sealed: 0
+done in 8.0 s
+---- after the harness
+bed C:\tmp\nm-m8a-bed\20260929T093134Z: 16985 files, 1238241863 bytes, newest mtime 2026-09-29T15:25:01.891Z (plots\summary.png)
+report.json 5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad, summary.json 6af1656e16429ab8cddfeaa00fb0f0c0765f91b2fe2669dbaa9ff54bf91b3ced
+seal B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a-20260929T093134Z\outputs-seal.json: 2531856 bytes, sha256 (LF) 762f3fbab431a01d9745a73ba55fa00674e41e0605ad8521c55122bd7c15e09d, 433 runs, 16861 files, 1118668944 bytes; report 5c0041fc4685, summary 6af1656e1642
+re-hashed 16861 sealed files, 1118668944 bytes, in 433 runs; files under runs/: 16861; not as sealed: 0
+done in 8.4 s
