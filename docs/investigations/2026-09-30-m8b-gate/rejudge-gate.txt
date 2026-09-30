@@ -1,0 +1,98 @@
+START 2026-09-30 02:55:29 +02:00
+02:55:30 work: C:\tmp\nm-target\gates\m8a\20260930-025530
+02:55:30 solvers: C:/tmp/nm-m8a-solvers
+02:55:30 bed file: B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b\beds\m8a.json
+02:55:30 upstream: B:\repos\I-Simpa-upstream
+02:55:30       code 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d, raw 1d9900db6cc260039c53963754d4df8de4370c7c6a65cfe998a66cb5720822e8
+02:55:30 PASS  E1 spps.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+02:55:30       code fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234, raw c4a7bca35374af01405a879e649dc0e746f9267c6449e47969bb41e2f4add863
+02:55:30 PASS  E1 classicalTheory.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+02:55:30       code d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f, raw ac68f014a3b2003dc6f88ca9b3dc53e5c193888868ab9029b636e89d5be8a8f9
+02:55:30 PASS  E1 tetgen.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+02:55:30       code 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26, raw 34d9b87424f90af9999434d1c69747355d66eabf217f2cdb09448986649718d0
+02:55:30 PASS  E1 preprocess.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+02:56:11 PASS  E5 cargo test --release -p simpa-core --test params_kuttruff: Kuttruff within the bare 0.6 % of the committed transport T30s in M8's 8 cells
+03:31:12       exit 0 after 2,078 s; C:\tmp\nm-target\gates\m8a\20260930-025530\reread\20260930T005634Z
+03:31:12 PASS  simpa bed ran and exited 0 (0 only when report.pass is true; 8 not passed, 5 a run not OK)
+03:31:16 PASS  report.json validates against its schema (simpa bed --schema, by a JSON Schema validator)
+03:31:16 PASS  report.exploratory is false: the bed file is M8a's matrix (E7)
+03:31:16       0 failures
+03:31:16 PASS  report.pass is the JSON true
+03:31:17       433 run.json read; 0 not the checked files
+03:31:17 PASS  E1 again, from the files: every run's run.json executable, and every mesh.json's TetGen, is the raw sha256 of the file checked
+03:31:18       16985 files, 1,180.9 MB under C:/tmp/nm-m8a-bed/20260929T093134Z; the report counted 41 files, 89.0 MB
+03:31:18 PASS  the bed's files: fewer than the 20,000 a bed may leave (B: is exFAT with 128 KB clusters)
+03:31:37       40 cells; missing: 
+03:31:37 PASS  the decays and plots: tools/bed/m8a_plots.py writes decays/<cell>.npz, plots/<cell>.png and plots/summary.png
+03:31:38       exit 2; simpa: bed refused before any run (E1): C:\tmp\nm-target\gates\m8a\20260930-025530\n1-solvers\spps.exe is not the verified build: code sha256 46c7df488d46f57c480ebdde6aa68c4bc350916e05c31609bb79f841a1a1e186 is not the verified build's 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d (solvers/manifest.json); 0 things written
+03:31:38 PASS  N1 says NO: a copy of spps.exe with one .text byte flipped: the bed refuses before any run (E1), exit 2, nothing written
+03:32:14       6x10x3-a0.4-random-air-off: A Some(Fail): 125 Hz -11.25 %, 250 Hz -11.07 %, 500 Hz -11.37 %, 1000 Hz -11.22 %, 2000 Hz -11.24 %, 4000 Hz -11.25 %
+03:32:15       6x10x3-a0.4-energetic-air-off: A Some(Fail): 125 Hz -11.22 %, 250 Hz -11.30 %, 500 Hz -11.24 %, 1000 Hz -11.30 %, 2000 Hz -11.21 %, 4000 Hz -11.22 %
+03:32:15       6x10x3-a0.4-random-air-on: A Some(Fail): 125 Hz -11.13 %, 250 Hz -11.14 %, 500 Hz -11.15 %, 1000 Hz -11.14 %, 2000 Hz -11.04 %, 4000 Hz -10.68 %, 8000 Hz -9.75 %
+03:32:15       6x10x3-a0.4-energetic-air-on: A Some(Fail): 125 Hz -11.21 %, 250 Hz -11.27 %, 500 Hz -11.19 %, 1000 Hz -11.21 %, 2000 Hz -11.04 %, 4000 Hz -10.74 %, 8000 Hz -9.59 %
+03:32:15       5x4x3-a0.4-random-air-off: A Some(Fail): 125 Hz -10.22 %, 250 Hz -10.57 %, 500 Hz -10.33 %, 1000 Hz -10.51 %, 2000 Hz -10.49 %, 4000 Hz -10.33 %
+03:32:15       5x4x3-a0.4-energetic-air-off: A Some(Fail): 125 Hz -10.42 %, 250 Hz -10.38 %, 500 Hz -10.44 %, 1000 Hz -10.39 %, 2000 Hz -10.42 %, 4000 Hz -10.41 %
+03:32:15       5x4x3-a0.4-random-air-on: A Some(Fail): 125 Hz -10.39 %, 250 Hz -10.31 %, 500 Hz -10.27 %, 1000 Hz -10.24 %, 2000 Hz -10.27 %, 4000 Hz -9.90 %, 8000 Hz -9.17 %
+03:32:15       5x4x3-a0.4-energetic-air-on: A Some(Fail): 125 Hz -10.41 %, 250 Hz -10.37 %, 500 Hz -10.41 %, 1000 Hz -10.33 %, 2000 Hz -10.28 %, 4000 Hz -10.02 %, 8000 Hz -9.20 %
+03:32:15 PASS  N2 says NO: Kuttruff with its 1/2 dropped (through results::reference): A fails in every alpha 0.4 gated cell
+03:32:51       6x10x3-a0.4-random-air-off: A Some(Fail): 125 Hz +10.75 %, 250 Hz +10.97 %, 500 Hz +10.60 %, 1000 Hz +10.79 %, 2000 Hz +10.76 %, 4000 Hz +10.75 %
+03:32:51       6x10x3-a0.4-energetic-air-off: A Some(Fail): 125 Hz +10.79 %, 250 Hz +10.70 %, 500 Hz +10.77 %, 1000 Hz +10.69 %, 2000 Hz +10.80 %, 4000 Hz +10.79 %
+03:32:51       6x10x3-a0.4-random-air-on: A Some(Fail): 125 Hz +10.89 %, 250 Hz +10.84 %, 500 Hz +10.76 %, 1000 Hz +10.70 %, 2000 Hz +10.61 %, 4000 Hz +10.30 %, 8000 Hz +8.94 %
+03:32:51       6x10x3-a0.4-energetic-air-on: A Some(Fail): 125 Hz +10.79 %, 250 Hz +10.67 %, 500 Hz +10.72 %, 1000 Hz +10.61 %, 2000 Hz +10.62 %, 4000 Hz +10.23 %, 8000 Hz +9.13 %
+03:32:51       5x4x3-a0.4-random-air-off: A Some(Fail): 125 Hz +9.48 %, 250 Hz +9.06 %, 500 Hz +9.35 %, 1000 Hz +9.13 %, 2000 Hz +9.16 %, 4000 Hz +9.35 %
+03:32:51       5x4x3-a0.4-energetic-air-off: A Some(Fail): 125 Hz +9.24 %, 250 Hz +9.28 %, 500 Hz +9.21 %, 1000 Hz +9.27 %, 2000 Hz +9.24 %, 4000 Hz +9.25 %
+03:32:51       5x4x3-a0.4-random-air-on: A Some(Fail): 125 Hz +9.27 %, 250 Hz +9.34 %, 500 Hz +9.35 %, 1000 Hz +9.34 %, 2000 Hz +9.15 %, 4000 Hz +9.08 %, 8000 Hz +8.19 %
+03:32:51       5x4x3-a0.4-energetic-air-on: A Some(Fail): 125 Hz +9.24 %, 250 Hz +9.27 %, 500 Hz +9.18 %, 1000 Hz +9.22 %, 2000 Hz +9.14 %, 4000 Hz +8.94 %, 8000 Hz +8.16 %
+03:32:51 PASS  N3 says NO: plain Eyring as A's reference: A fails in every alpha 0.4 gated cell
+04:05:15       uniform-reflection transport 1/68 6x10x3 α 0.05 air None: 29 s
+04:05:15       uniform-reflection transport 2/68 6x10x3 α 0.1 air None: 28 s
+04:05:15       uniform-reflection transport 3/68 6x10x3 α 0.2 air None: 27 s
+04:05:15       uniform-reflection transport 4/68 6x10x3 α 0.4 air None: 24 s
+04:05:15       uniform-reflection transport 33/68 5x4x3 α 0.05 air None: 31 s
+04:05:15       uniform-reflection transport 34/68 5x4x3 α 0.1 air None: 30 s
+04:05:15       uniform-reflection transport 35/68 5x4x3 α 0.2 air None: 29 s
+04:05:15       uniform-reflection transport 36/68 5x4x3 α 0.4 air None: 25 s
+04:05:15       uniform-reflection transport 65/68 20x8x4 α 0.05 air None: 29 s
+04:05:15       uniform-reflection transport 66/68 20x8x4 α 0.1 air None: 28 s
+04:05:15       uniform-reflection transport 67/68 20x8x4 α 0.2 air None: 27 s
+04:05:15       uniform-reflection transport 68/68 20x8x4 α 0.4 air None: 24 s
+04:05:15 PASS  N4 says NO: the transport reflecting evenly over the hemisphere, traced again: C fails in every gated cell
+04:11:39       air-off transport 1/68 6x10x3 α 0.05 air None: 26 s
+04:11:39       air-off transport 2/68 6x10x3 α 0.1 air None: 25 s
+04:11:39       air-off transport 3/68 6x10x3 α 0.2 air None: 25 s
+04:11:39       air-off transport 4/68 6x10x3 α 0.4 air None: 22 s
+04:11:39       air-off transport 33/68 5x4x3 α 0.05 air None: 27 s
+04:11:39       air-off transport 34/68 5x4x3 α 0.1 air None: 26 s
+04:11:39       air-off transport 35/68 5x4x3 α 0.2 air None: 25 s
+04:11:39       air-off transport 36/68 5x4x3 α 0.4 air None: 22 s
+04:11:39       air-off transport 65/68 20x8x4 α 0.05 air None: 26 s
+04:11:39       air-off transport 66/68 20x8x4 α 0.1 air None: 26 s
+04:11:39       air-off transport 67/68 20x8x4 α 0.2 air None: 24 s
+04:11:39       air-off transport 68/68 20x8x4 α 0.4 air None: 21 s
+04:11:39 PASS  N7 says NO: the transport traced with the air off: C fails in every air-on gated cell
+04:11:39       6x10x3-a0.05-tcr-air-off 125 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.05-tcr-air-off 250 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.05-tcr-air-off 500 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.05-tcr-air-off 1000 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.05-tcr-air-off 2000 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.05-tcr-air-off 4000 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.1-tcr-air-off 125 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.1-tcr-air-off 250 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.1-tcr-air-off 500 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.1-tcr-air-off 1000 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.1-tcr-air-off 2000 Hz: D Fail, +1.230 %
+04:11:39       6x10x3-a0.1-tcr-air-off 4000 Hz: D Fail, +1.230 %
+04:11:39 PASS  N8 says NO: TCR's analytic time with the physical K (through results::tcr): D fails in every band of every gated TCR run
+04:11:39       run OK; cell not_judged, failed by E6
+04:11:39 PASS  N5 says NO: seed 10 of 5x4x3 alpha 0.4 random at 31,000 particles in its place: the cell does not pass
+04:11:39       run OK; kuttruff_s refused: params_reference_not_applicable
+04:11:39 PASS  N6 says NO: walls of scattering 0: the bed refuses the cell (params_reference_not_applicable in every band, E3)
+04:11:44 PASS  the bed's unit tests: cargo test -p simpa-core --lib bed::
+04:11:45 PASS  clippy -D warnings (core and CLI)
+04:11:46 PASS  cargo fmt --check (core and CLI)
+04:11:46 
+04:11:46 work: C:\tmp\nm-target\gates\m8a\20260930-025530
+04:11:46 bed: C:\tmp\nm-target\gates\m8a\20260930-025530\reread\20260930T005634Z
+04:11:46 M8a PASSED: 23 of 23 checks
+END 2026-09-30 04:11:46 +02:00 exit 0
+=== DONE ===

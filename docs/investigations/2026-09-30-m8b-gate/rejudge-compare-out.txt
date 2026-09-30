@@ -1,0 +1,37 @@
+old: C:/tmp/nm-m8a-bed/20260929T093134Z/report.json
+new: C:/tmp/nm-target/gates/m8a/20260930-025530/reread/20260930T005634Z/report.json
+pass: True vs True; failures: 0 vs 0; exploratory: False vs False; needs_extension: [] vs []
+cell verdicts equal: True (40 cells)
+tcr verdicts equal: True (20 TCR runs)
+say_no n5 as_required: True vs True; n6: True vs True
+
+numeric leaves, per section: count, largest |difference|, largest relative difference, where
+  atmospheric_validation           n=  1134  max|d|=0.000e+00  max rel=0.000e+00  -
+  bed_report_version               n=     1  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.a                          n=  2380  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.alpha                      n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.b                          n=   814  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.bands_hz                   n=   256  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.c                          n=  1073  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.duration_s                 n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.particles_per_source       n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reference                  n=  2944  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reported                   n= 14236  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.seeds                      n= 17296  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.trans_epsilon              n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  preconditions                    n=   115  max|d|=0.000e+00  max rel=0.000e+00  -
+  random_against_energetic         n=   102  max|d|=0.000e+00  max rel=0.000e+00  -
+  say_no                           n=     9  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.d                            n=   532  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.eyring_against_kuttruff      n=   128  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.run                          n=    80  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.sabine_against_analytic      n=   128  max|d|=0.000e+00  max rel=0.000e+00  -
+  transports                       n=  1008  max|d|=0.000e+00  max rel=0.000e+00  -
+  overall max|d| = 0.000e+00
+
+non-numeric differences: 0
+
+keys only in the old report: 0
+keys only in the new report: 453, by name:
+  band_problems: 20 (e.g. tcr[0].d.band_problems); values: [] x20
+  project_sha256: 433 (e.g. cells[0].seeds[0].run.project_sha256); values: "7c7001c73c525f08d9d5c56fed01d9b69311c8d7e99a581ee242c6663c12dda9" x1, "c52d15e400db40b05641ba9165c6f3e53c4d8aeb5cd2df2a353bcd53cc742090" x1, "d38d094c277d3bc9e6143ad4a91e9a635183b4f118d0d4d14f09aa8fd632dc39" x1, "16808a2ecb2e981e1b8de6ff44412d56fa6ef9bcc08e887c1048a0b495b10f56" x1 ...

@@ -93,6 +93,11 @@ pub struct CheckC {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CheckD {
     pub bands: Vec<BandD>,
+    /// How the run's bands differ from the bed's for its cell: a band missing, one the bed does
+    /// not have, one that repeats, or the bands in another order. Any of them fails D, whatever
+    /// the bands present show.
+    #[serde(default)]
+    pub band_problems: Vec<String>,
     pub limit: f64,
     pub verdict: Verdict,
 }
@@ -242,8 +247,53 @@ pub fn check_c(
     }
 }
 
-/// Check D: TCR's Eyring time against the analytic one, per band.
-pub fn check_d(bands: &[(i32, f64, Option<f64>)], limit: f64) -> CheckD {
+/// How the bands `got` differ from `want`, each named; empty exactly when they are equal, in
+/// order.
+pub fn band_problems(want: &[i32], got: &[i32]) -> Vec<String> {
+    if want == got {
+        return Vec::new();
+    }
+    let hz = |v: &[i32]| {
+        v.iter()
+            .map(|f| format!("{f} Hz"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    let mut out = Vec::new();
+    let missing: Vec<i32> = want.iter().copied().filter(|f| !got.contains(f)).collect();
+    if !missing.is_empty() {
+        out.push(format!("missing {}", hz(&missing)));
+    }
+    let extra: Vec<i32> = got.iter().copied().filter(|f| !want.contains(f)).collect();
+    if !extra.is_empty() {
+        out.push(format!("not the bed's: {}", hz(&extra)));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    let repeated: Vec<i32> = got.iter().copied().filter(|f| !seen.insert(*f)).collect();
+    if !repeated.is_empty() {
+        out.push(format!("repeated: {}", hz(&repeated)));
+    }
+    // What is left is the order: the bands both have, not in the bed's order.
+    let common_got: Vec<i32> = got.iter().copied().filter(|f| want.contains(f)).collect();
+    let common_want: Vec<i32> = want.iter().copied().filter(|f| got.contains(f)).collect();
+    if repeated.is_empty() && common_got != common_want {
+        out.push(format!(
+            "in the order {}, the bed's {}",
+            hz(&common_got),
+            hz(&common_want)
+        ));
+    }
+    if out.is_empty() {
+        out.push(format!("bands {}, the bed's {}", hz(got), hz(want)));
+    }
+    out
+}
+
+/// Check D: TCR's Eyring time against the analytic one, per band, on exactly the bed's bands
+/// `bands_hz` in its order: a band missing, extra, repeated or out of order fails D.
+pub fn check_d(bands_hz: &[i32], bands: &[(i32, f64, Option<f64>)], limit: f64) -> CheckD {
+    let got: Vec<i32> = bands.iter().map(|b| b.0).collect();
+    let band_problems = band_problems(bands_hz, &got);
     let bands: Vec<BandD> = bands
         .iter()
         .map(|&(freq_hz, tcr, analytic)| {
@@ -261,13 +311,17 @@ pub fn check_d(bands: &[(i32, f64, Option<f64>)], limit: f64) -> CheckD {
             }
         })
         .collect();
-    let verdict = if !bands.is_empty() && bands.iter().all(|b| b.verdict == Verdict::Pass) {
+    let verdict = if band_problems.is_empty()
+        && !bands.is_empty()
+        && bands.iter().all(|b| b.verdict == Verdict::Pass)
+    {
         Verdict::Pass
     } else {
         Verdict::Fail
     };
     CheckD {
         bands,
+        band_problems,
         limit,
         verdict,
     }
@@ -1009,8 +1063,10 @@ fn reference_of(
     }
 }
 
-/// Judges one TCR run with check D, and reports R8 against the cell `project_of`'s Kuttruff.
+/// Judges one TCR run with check D on the bed's bands for the cell `project_of`, and reports R8
+/// against that cell's Kuttruff.
 pub fn evaluate_tcr(
+    bed: &BedFile,
     t: &TcrCell,
     read: Option<&Result<TcrRead, String>>,
     kuttruff: Option<&CellReference>,
@@ -1048,13 +1104,29 @@ pub fn evaluate_tcr(
         ));
         return out;
     }
+    // The bands the bed runs the cell on; a TCR run of no cell is not judged.
+    let Some(cell) = bed.cell(&t.project_of) else {
+        out.failures.push(format!(
+            "{}: not judged: no cell '{}', so no bands to hold the run to",
+            t.id, t.project_of
+        ));
+        return out;
+    };
+    let bands_hz: Vec<i32> = bed.bands_hz(cell.air).iter().map(|&f| f as i32).collect();
     let d = check_d(
+        &bands_hz,
         &r.bands
             .iter()
             .map(|b| (b.freq_hz, b.eyring_s, b.analytic_eyring_s))
             .collect::<Vec<_>>(),
         limits::TCR_EYRING,
     );
+    for p in &d.band_problems {
+        out.failures.push(format!(
+            "{}: D Fail: the run's bands are not the bed's for {}: {p}",
+            t.id, t.project_of
+        ));
+    }
     for b in d.bands.iter().filter(|b| b.verdict != Verdict::Pass) {
         out.failures.push(format!(
             "{}: D {} Hz {:?}: TCR Eyring {:.6} s against analytic {:?} s ({:+.4} %), limit \
@@ -1299,16 +1371,125 @@ pub(crate) mod tests {
 
     #[test]
     fn d_holds_tcr_to_its_analytic_value() {
-        let d = check_d(&[(125, 1.0, Some(1.004)), (250, 0.5, Some(0.5))], 0.005);
+        let d = check_d(
+            &[125, 250],
+            &[(125, 1.0, Some(1.004)), (250, 0.5, Some(0.5))],
+            0.005,
+        );
         assert_eq!(d.verdict, Verdict::Pass);
+        assert!(d.band_problems.is_empty());
         // Says no: TCR's 0.163 against the physical K (+1.23 %).
         let k = 24.0 * std::f64::consts::LN_10 / 343.2;
-        let d = check_d(&[(125, 1.0, Some(k / 0.163))], 0.005);
+        let d = check_d(&[125], &[(125, 1.0, Some(k / 0.163))], 0.005);
         assert_eq!(d.verdict, Verdict::Fail);
         assert!(
             (d.bands[0].deviation.unwrap() - 0.0123).abs() < 0.0002,
             "{d:?}"
         );
-        assert_eq!(check_d(&[(125, 1.0, None)], 0.005).verdict, Verdict::Fail);
+        assert_eq!(
+            check_d(&[125], &[(125, 1.0, None)], 0.005).verdict,
+            Verdict::Fail
+        );
+    }
+
+    /// The judge's finding 1 (`docs/investigations/2026-09-29-m8a/judge/gate.md`): D judged
+    /// whatever bands the run held. Each band of the bed's list, in its order, or D fails and
+    /// names the band.
+    #[test]
+    fn d_fails_a_run_whose_bands_are_not_the_beds() {
+        let bed = BedFile::m8a();
+        let t = bed
+            .tcr
+            .iter()
+            .find(|t| t.id == "6x10x3-a0.2-tcr-air-on")
+            .unwrap();
+        assert!(t.gated);
+        let band = |f: i32| super::super::read::TcrBand {
+            freq_hz: f,
+            sabine_s: 0.7,
+            eyring_s: 0.6,
+            analytic_sabine_s: Some(0.7),
+            analytic_eyring_s: Some(0.6),
+            analytic_refused: None,
+            air_m_per_metre: None,
+        };
+        let run = |freqs: &[i32]| -> Result<TcrRead, String> {
+            Ok(TcrRead {
+                info: super::super::read::RunInfo {
+                    folder: "f".into(),
+                    status: "OK".into(),
+                    reasons: vec![],
+                    exit_class: 0,
+                    solver_wall_s: None,
+                    solver_cpu_s: None,
+                    exe: "classicalTheory.exe".into(),
+                    exe_sha256: "tcr".into(),
+                    project_sha256: None,
+                    tetgen_sha256: None,
+                    files: 1,
+                    bytes: 1,
+                },
+                bands: freqs.iter().map(|&f| band(f)).collect(),
+            })
+        };
+        let judged = |freqs: &[i32]| evaluate_tcr(&bed, t, Some(&run(freqs)), None);
+        // The run as the bed makes it: seven octaves to 8 kHz, air on.
+        let all = [125, 250, 500, 1000, 2000, 4000, 8000];
+        let r = judged(&all);
+        assert_eq!(r.verdict, Verdict::Pass, "{:?}", r.failures);
+        assert!(r.failures.is_empty());
+        // Its 8 kHz band removed: D fails, naming 8 kHz.
+        let r = judged(&all[..6]);
+        assert_eq!(r.verdict, Verdict::Fail, "{r:?}");
+        assert_eq!(r.d.as_ref().unwrap().verdict, Verdict::Fail);
+        assert!(
+            r.failures.iter().any(|f| f.contains("missing 8000 Hz")),
+            "{:?}",
+            r.failures
+        );
+        // Only its 125 Hz band left: D fails, naming the six missing.
+        let r = judged(&[125]);
+        assert_eq!(r.verdict, Verdict::Fail);
+        assert!(
+            r.failures
+                .iter()
+                .any(|f| f.contains("missing 250 Hz, 500 Hz, 1000 Hz, 2000 Hz, 4000 Hz, 8000 Hz")),
+            "{:?}",
+            r.failures
+        );
+        // A band the bed does not have, a band twice, two bands swapped: each fails, named.
+        let r = judged(&[125, 250, 500, 1000, 2000, 4000, 8000, 16000]);
+        assert_eq!(r.verdict, Verdict::Fail);
+        assert!(
+            r.failures
+                .iter()
+                .any(|f| f.contains("not the bed's: 16000 Hz"))
+        );
+        let r = judged(&[125, 250, 500, 1000, 2000, 4000, 8000, 8000]);
+        assert_eq!(r.verdict, Verdict::Fail);
+        assert!(r.failures.iter().any(|f| f.contains("repeated: 8000 Hz")));
+        let r = judged(&[250, 125, 500, 1000, 2000, 4000, 8000]);
+        assert_eq!(r.verdict, Verdict::Fail);
+        assert!(
+            r.failures
+                .iter()
+                .any(|f| f.contains("in the order 250 Hz, 125 Hz")),
+            "{:?}",
+            r.failures
+        );
+        // The air-off run is held to its six bands: 8 kHz there is a band too many.
+        let off = bed
+            .tcr
+            .iter()
+            .find(|t| t.id == "6x10x3-a0.2-tcr-air-off")
+            .unwrap();
+        assert_eq!(
+            evaluate_tcr(&bed, off, Some(&run(&all[..6])), None).verdict,
+            Verdict::Pass
+        );
+        assert_eq!(
+            evaluate_tcr(&bed, off, Some(&run(&all)), None).verdict,
+            Verdict::Fail
+        );
     }
 }
