@@ -236,8 +236,9 @@ pub struct RunRow {
     /// The executables checked against the verified build before the run; `None` for a CLI run
     /// or one written before M11.
     pub solvers: Option<Vec<SolverCheck>>,
-    /// The solver build's verdict, the one the row shows (backlog 38). `None` for a row with no
-    /// `run.json` that reads.
+    /// The solver build's verdict, the one the row shows (backlog 38): the core's
+    /// (`results::solver_build`, the predicate the Results step and `simpa results` use too),
+    /// never worked out from `solvers` in the UI. `None` for a row with no `run.json` that reads.
     pub solver_build: Option<SolverBuildUi>,
     /// The solver's wall time in seconds, one decimal ([`elapsed_s`]).
     pub elapsed_s: Option<String>,
@@ -254,6 +255,18 @@ pub enum SolverBuildUi {
     Unverified { reason: ReasonUi },
 }
 
+impl SolverBuildUi {
+    /// The core's verdict, its reason with its UI code.
+    pub fn of(b: &results::SolverBuild) -> Self {
+        match b.reason() {
+            None => SolverBuildUi::Verified,
+            Some(r) => SolverBuildUi::Unverified {
+                reason: reason_ui(r, None),
+            },
+        }
+    }
+}
+
 /// The Runs tab: every run of the open project under its runs root.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct RunsView {
@@ -265,10 +278,12 @@ pub struct RunsView {
     pub active: Option<String>,
 }
 
-/// Whether a run's results verify (`results::load`), never a value from them.
+/// Whether a run's results verify (`results::load`) and its solver build was verified
+/// (`results::solver_build`), never a value from them.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct ResultsState {
     pub run: String,
+    /// The results load and the solver build was verified.
     pub verified: bool,
     pub refusal: Option<ReasonUi>,
     /// Why results that load are still not verified: the solver build's reason
@@ -359,7 +374,8 @@ pub const MESH_TETGEN_SKIPPED: &str = "MESH_TETGEN_SKIPPED";
 /// - `tetgen_skipped_facets`: `MESH_TETGEN_SKIPPED`, the gate's name;
 /// - a validator code: M10's table (`scene::ui_code`), where `material_placeholder` is
 ///   `MATERIALS_UNASSIGNED`;
-/// - a verdict or results code: upper-cased (`particle_loss_excess` is `PARTICLE_LOSS_EXCESS`);
+/// - a verdict, results or solver-build code: upper-cased (`particle_loss_excess` is
+///   `PARTICLE_LOSS_EXCESS`), at every stage;
 /// - a mesher code in a run that ended at stage `mesh`: `MESH_` and the code upper-cased, or the
 ///   code upper-cased when it already starts with `mesh_`;
 /// - anything else (a FAIL line's row id, a pre-launch code): upper-cased.
@@ -371,7 +387,10 @@ pub fn run_ui_code(code: &str, stage: Option<Stage>) -> String {
         return scene::ui_code(code);
     }
     let upper = code.to_ascii_uppercase();
-    if simpa_core::run::verdict::codes::ALL.contains(&code) || results::codes::ALL.contains(&code) {
+    if simpa_core::run::verdict::codes::ALL.contains(&code)
+        || results::codes::ALL.contains(&code)
+        || results::build_codes::ALL.contains(&code)
+    {
         return upper;
     }
     if stage == Some(Stage::Mesh) && !upper.starts_with("MESH_") {
@@ -522,31 +541,10 @@ pub fn row_from_manifest(run: &str, number: u32, m: &RunManifest) -> RunRow {
         }),
         mesh_sha256: m.mesh.as_ref().map(|x| x.mbin_sha256.clone()),
         solvers: m.solvers.clone(),
-        solver_build: Some(solver_build_ui(m)),
+        solver_build: Some(SolverBuildUi::of(&results::solver_build(m))),
         elapsed_s: m.outcome.as_ref().map(|o| elapsed_s(o.elapsed_ms)),
         exit_code: m.outcome.as_ref().and_then(|o| o.exit_code),
         manifest_error: None,
-    }
-}
-
-/// The solver build's verdict for a row.
-///
-/// RED STUB (backlog 38, T38-8, `docs/investigations/2026-09-30-b38-39/PLAN.md`): today's
-/// Runs-row rule, `solversMark` (`app/ui/src/features/dock/model.ts:254-258`), unchanged: no
-/// record or an empty one is unrecorded, a failing check is a mismatch, and every check matching
-/// is verified, whatever the checks cover.
-fn solver_build_ui(m: &RunManifest) -> SolverBuildUi {
-    let code = match m.solvers.as_deref() {
-        None | Some([]) => results::build_codes::UNRECORDED,
-        Some(c) if c.iter().all(|c| c.matches) => return SolverBuildUi::Verified,
-        Some(_) => results::build_codes::MISMATCH,
-    };
-    SolverBuildUi::Unverified {
-        reason: ReasonUi {
-            code: code.to_string(),
-            ui_code: code.to_ascii_uppercase(),
-            detail: String::new(),
-        },
     }
 }
 
@@ -681,8 +679,9 @@ fn unreadable(name: &str, error: String) -> RunRow {
     bare_row(name, RunStatusUi::Fail, Some(reason), Some(error))
 }
 
-/// Whether the run `run` of the project under `root` has results that verify. `run` must be a
-/// bare run-folder name that exists under `root`; anything else is `RUN_NOT_FOUND`.
+/// Whether the run `run` of the project under `root` has results that verify, from a solver build
+/// that was verified. `run` must be a bare run-folder name that exists under `root`; anything else
+/// is `RUN_NOT_FOUND`.
 pub fn results_state(root: &Path, run: &str) -> CmdResult<ResultsState> {
     let not_found = || {
         CmdError::new(
@@ -697,15 +696,20 @@ pub fn results_state(root: &Path, run: &str) -> CmdResult<ResultsState> {
     if !dir.is_dir() {
         return Err(not_found());
     }
-    // RED (backlog 38, `docs/investigations/2026-09-30-b38-39/RED.md`): still today's verdict,
-    // `load(..).is_ok()`; `unverified` is never set yet.
     Ok(match results::load(&dir) {
-        Ok(_) => ResultsState {
-            run: run.to_string(),
-            verified: true,
-            refusal: None,
-            unverified: None,
-        },
+        // Results that load are verified only when the solver build was (backlog 38); otherwise
+        // they are marked unverified with its reason, not refused (C6).
+        Ok(r) => {
+            let unverified = results::solver_build(&r.manifest)
+                .reason()
+                .map(|x| reason_ui(x, None));
+            ResultsState {
+                run: run.to_string(),
+                verified: unverified.is_none(),
+                refusal: None,
+                unverified,
+            }
+        }
         Err(r) => ResultsState {
             run: run.to_string(),
             verified: false,
@@ -1271,6 +1275,7 @@ mod tests {
         let mut all: Vec<&str> = Vec::new();
         all.extend(simpa_core::run::verdict::codes::ALL);
         all.extend(results::codes::ALL);
+        all.extend(results::build_codes::ALL);
         all.extend(mesh::codes::ALL);
         all.extend(validate::RULES.iter().map(|r| r.code));
         all.extend(validate::STRUCTURAL_CODES);
@@ -1336,6 +1341,11 @@ mod tests {
         assert_eq!(
             run_ui_code("solver_unverified", Some(Stage::Solvers)),
             "SOLVER_UNVERIFIED"
+        );
+        // A solver-build code (backlog 38) keeps its name on a run that ended at stage mesh.
+        assert_eq!(
+            run_ui_code("solver_build_unrecorded", Some(Stage::Mesh)),
+            "SOLVER_BUILD_UNRECORDED"
         );
     }
 

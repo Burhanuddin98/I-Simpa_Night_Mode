@@ -313,6 +313,9 @@
 .res-verdict.fail .res-label {
   color: var(--red-hi);
 }
+.res-verdict.warn .res-label {
+  color: var(--warn);
+}
 .res-text {
   margin-top: 10px;
   font-size: 12.5px;

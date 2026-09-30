@@ -30,7 +30,7 @@ simpa results --schema
 
 | Exit | When | stdout | stderr |
 |---|---|---|---|
-| 0 | the run's results were read (some parameters may still be not evaluable) | the report (JSON with `--json`, a table without) | nothing |
+| 0 | the run's results were read (some parameters may still be not evaluable, and the solver build may be unverified: `solver_build`) | the report (JSON with `--json`, a table without) | nothing |
 | 2 | a usage error: no folder, an unknown option, a second folder, a path that is not a folder, `--schema` with anything else | nothing | `simpa: <what>` |
 | 5 | the run is FAIL, CRASH or CANCELLED (`results_run_failed`, `results_run_cancelled`) | with `--json`, the refusal | `simpa: results refused: <code>: <detail>` |
 | 6 | the results do not verify (every other code of `docs/solver-contract.md`, "Result refusals") | with `--json`, the refusal | the same |
@@ -47,7 +47,8 @@ FAIL or CRASH; the M7 critic.) A folder whose verdict says OK but whose manifest
 no longer verify is not a failed run but results that fail verification: 6.
 
 Without `--json` the table starts with `UNVALIDATED: M8's physics bed has not passed; these numbers
-are not for publication.`
+are not for publication.` After the run's own line comes the solver build's verdict, with its code
+on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code>: <detail>`.
 
 ## Numbers
 
@@ -110,6 +111,12 @@ are not for publication.`
   "run_folder": "<as given>",
   "solver": "spps" | "tcr",
   "status": "OK",                     // always: any other run is refused
+  "solver_build": {"status": "verified"}
+    | {"status": "unverified", "reason": {"code": "solver_build_unrecorded", "detail": "..."}},
+                                      // whether the solver build that made the run was
+                                      // verified (core::results::solver_build, backlog 38):
+                                      // it marks the run and refuses nothing; the codes are
+                                      // docs/solver-contract.md, "Solver build"
   "started": "2026-09-24T11:50:30.959+02:00",
   "bands_hz": [500, 1000],            // the computed bands, ascending
   "spps": { ... } | null,

@@ -62,6 +62,13 @@ A report holding a number that is not finite is refused the same way, `results_v
 committed run in `results_load.rs`; the CLI's exits in `cli_results.rs`, among them a real FAIL
 run (`run-folder` on the negative fixture `spps_nomesh`) and a real cancelled one.
 
+**The solver build is judged beside `load`, not by it** (backlog 38). `results::solver_build`
+reads the manifest's `solvers` checks: a run whose checks are missing or empty, fail, or do not
+cover the solver it executed is marked unverified with a code of `docs/solver-contract.md`,
+Part B, "Solver build". `load` reads it all the same, so the M8a bed's runs, none of which records
+a check, read as before. `simpa results` prints the verdict and still exits 0; the app's Results
+step and Runs tab show it (`results_solver_build.rs`, `cli_results.rs`, the app's `runs.rs`).
+
 ## What is read
 
 ### SPPS

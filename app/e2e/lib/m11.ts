@@ -82,7 +82,13 @@ export const m11 = {
   runLog: (run: string) => hook<RunLog | null>('runLog', run),
   runsRows: () => hook<RowView[]>('runsRows'),
   selectRun: (run: string | null) => hook<true>('selectRun', run),
-  resultsState: (run: string) => hook<{ run: string; verified: boolean; refusal?: { code: string; ui_code: string } | null }>('resultsState', run),
+  resultsState: (run: string) =>
+    hook<{
+      run: string;
+      verified: boolean;
+      refusal?: { code: string; ui_code: string } | null;
+      unverified?: { code: string; ui_code: string } | null;
+    }>('resultsState', run),
   pingStats: (n: number) => hook<number[]>('pingStats', n),
   frameBegin: () => hook<true>('frameStats.begin'),
   frameEnd: () => hook<number[]>('frameStats.end'),

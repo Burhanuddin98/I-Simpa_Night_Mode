@@ -622,11 +622,13 @@ fn issue_reason(i: &Issue) -> Reason {
 // ---------------------------------------------------------------------------------------------
 // run_project
 
-/// Runs the project in `project_file` with the solver `opts` names, `variant`'s materials
-/// (`None`: the project's own, whichever variant the file has active; the validator judges the
-/// same materials) and the mesh `mesh` says, into a fresh run folder under
-/// `opts.runs_root`. `Err` only when no run folder with its `run.json` could be made; every
-/// other ending, refusals included, is in the report.
+/// Runs the project in `project_file` with the solver `opts` names, `variant`'s materials and the
+/// mesh `mesh` says, into a fresh run folder under `opts.runs_root`. `variant` is a variant's id
+/// or name; `None` is the project's own materials (the base), whatever variant the file has
+/// active. The validator judges the materials exported. Which to pass is the caller's rule: the
+/// app passes the file's active variant, and so does `simpa run` unless `--variant` names another
+/// or `--base` asks for the base (backlog 39). `Err` only when no run folder with its `run.json`
+/// could be made; every other ending, refusals included, is in the report.
 pub fn run_project(
     project_file: &Path,
     variant: Option<&str>,
@@ -647,8 +649,8 @@ pub fn run_project(
             message,
         })?;
     // The validator judges the materials under the project's active variant; the export writes
-    // `variant`'s. The app passes the active variant, but the CLI passes `--variant` as given, or
-    // none (the base). So the variant exported is made the active one here, and every material
+    // `variant`'s, which a caller may choose apart from the active one (`simpa run --variant`,
+    // `--base`). So the variant exported is made the active one here, and every material
     // rule (`material_placeholder` among them) judges what the solver will read. A selector that
     // does not resolve leaves the project as it is: the export refuses it (`variant_not_found`).
     // So does an active variant that does not exist, which the validator refuses as it stands.

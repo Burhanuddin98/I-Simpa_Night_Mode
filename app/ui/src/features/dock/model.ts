@@ -244,7 +244,11 @@ export function exitText(code: number | null | undefined): string {
   return `exit ${code}`;
 }
 
-/** Whether the run's executables were checked against the verified build before it (C7). */
+/**
+ * What a run's recorded checks say of themselves (C7): none recorded, all matching, or which
+ * failed. Not the build's verdict, which also needs a check of the solver the run executed: the
+ * Runs row shows the core's (`buildMark`).
+ */
 export interface SolversMark {
   kind: 'verified' | 'unverified' | 'unrecorded';
   /** Every checked file when verified; the files that failed otherwise. */
@@ -263,12 +267,22 @@ export interface BuildMark extends SolversMark {
   reason: ReasonUi | null;
 }
 
+/** The core's code for a run whose run.json records no check of its executables. */
+const BUILD_UNRECORDED = 'solver_build_unrecorded';
+
 /**
- * RED STUB (backlog 38, T38-8, docs/investigations/2026-09-30-b38-39/PLAN.md): today's rule,
- * `solversMark` on the row's checks; the verdict the row carries is not read.
+ * The Runs row's mark for the solver build: the core's verdict as `runs_list` sends it
+ * (`RunRow.solver_build`, from `results::solver_build`, which the Results step's answer comes from
+ * too), never one worked out here from the checks (C5). `unrecorded` when the core says no check
+ * was recorded, or the row has no run.json that reads. The names, for the title, are the checked
+ * files, or the ones that failed (`solversMark`).
  */
 export function buildMark(row: Pick<RunRow, 'solvers' | 'solver_build'>): BuildMark {
-  return { ...solversMark(row.solvers), reason: null };
+  const names = solversMark(row.solvers).names;
+  const b = row.solver_build;
+  if (b?.status === 'verified') return { kind: 'verified', names, reason: null };
+  const reason = b?.status === 'unverified' ? b.reason : null;
+  return { kind: !reason || reason.code === BUILD_UNRECORDED ? 'unrecorded' : 'unverified', names, reason };
 }
 
 /** The file name of a path, either separator. */

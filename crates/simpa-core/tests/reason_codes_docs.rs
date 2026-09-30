@@ -9,7 +9,8 @@
 //! **Produced.** Read from every `.rs` file under `src/`, so that a code made anywhere in the core
 //! is held to the tables, not only in the three families whose reasons carry codes today
 //! (`validate`, `run`, `mesh`):
-//! - a `const NAME: &str = "code";` inside a `mod codes { .. }` block;
+//! - a `const NAME: &str = "code";` inside a `mod codes { .. }` block, or inside
+//!   `results::build_codes` (`mod build_codes { .. }`, backlog 38);
 //! - a row id of `LINE_RULES`: `rule("id", ..` or `rule(CONST, ..`, the constant in the same file;
 //! - a count of `VerifyReport::counts`: `("code", self.code)`, the field spelled as its code;
 //! - a folder code of `verify_dir`: `codes.push("code")`;
@@ -72,29 +73,36 @@ fn source_files() -> Vec<(String, String)> {
     out
 }
 
-/// The body of each `mod codes { .. }` block of `text`.
-fn codes_blocks(text: &str) -> Vec<&str> {
+/// The codes modules whose `&str` constants are reason codes: every `mod codes`, and
+/// `results::build_codes` (backlog 38).
+const CODES_MODULES: [&str; 2] = ["mod codes", "mod build_codes"];
+
+/// The name and body of each codes-module block of `text` (`mod codes { .. }`, ...).
+fn codes_blocks(text: &str) -> Vec<(&'static str, &str)> {
     let mut out = Vec::new();
-    let mut rest = text;
-    while let Some(at) = rest.find("mod codes {") {
-        let body = &rest[at + "mod codes {".len()..];
-        let mut depth = 1usize;
-        let mut end = body.len();
-        for (i, c) in body.char_indices() {
-            match c {
-                '{' => depth += 1,
-                '}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        end = i;
-                        break;
+    for name in CODES_MODULES {
+        let head = format!("{name} {{");
+        let mut rest = text;
+        while let Some(at) = rest.find(&head) {
+            let body = &rest[at + head.len()..];
+            let mut depth = 1usize;
+            let mut end = body.len();
+            for (i, c) in body.char_indices() {
+                match c {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = i;
+                            break;
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
+            out.push((name, &body[..end]));
+            rest = &body[end..];
         }
-        out.push(&body[..end]);
-        rest = &body[end..];
     }
     out
 }
@@ -116,9 +124,9 @@ fn produced(files: &[(String, String)]) -> Sites {
                 .or_default()
                 .push(format!("{path} ({how})"));
         };
-        for block in codes_blocks(text) {
+        for (name, block) in codes_blocks(text) {
             for c in str_const.captures_iter(block) {
-                add(&c[2], "mod codes");
+                add(&c[2], name);
             }
         }
         let consts: BTreeMap<&str, &str> = str_const
@@ -432,4 +440,37 @@ fn the_check_says_no_to_each_kind_of_drift() {
     // A table that is not a code table (the manifest's key table) is not read as one.
     let keys = manifest.replacen("| `manifest_version` |", "| `not_a_code_row` |", 1);
     assert_eq!(check(&files, &contract, &keys), Ok(vec![]));
+}
+
+/// Backlog 38: the solver-build codes (`results::build_codes`) are held to the tables as a
+/// `mod codes` is. Each is produced there and documented once, and a code added to that module
+/// without a row is undocumented.
+#[test]
+fn the_solver_build_codes_are_held_to_the_tables() {
+    let files = source_files();
+    let contract = read("docs/solver-contract.md");
+    let manifest = read("docs/formats/mesh-manifest.md");
+    let found = produced(&files);
+    for code in simpa_core::results::build_codes::ALL {
+        let sites = found
+            .get(code)
+            .unwrap_or_else(|| panic!("{code} is not read as produced"));
+        assert_eq!(sites, &["results.rs (mod build_codes)"], "{code}");
+    }
+    let mut edited = files.clone();
+    let results = edited
+        .iter_mut()
+        .find(|(p, _)| p == "results.rs")
+        .expect("results.rs is walked");
+    assert!(results.1.contains("pub mod build_codes {"));
+    results.1 = results.1.replacen(
+        "pub mod build_codes {",
+        "pub mod build_codes {\n    pub const BRAND_NEW: &str = \"brand_new_build_code\";",
+        1,
+    );
+    let text = check(&edited, &contract, &manifest).unwrap().join("\n");
+    assert!(
+        text.contains("undocumented: brand_new_build_code"),
+        "wanted brand_new_build_code undocumented, got:\n{text}"
+    );
 }

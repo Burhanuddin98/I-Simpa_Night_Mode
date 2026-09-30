@@ -729,6 +729,23 @@ solver run that did not succeed (`docs/results.md`, "Verified runs only").
 | `results_file_invalid` | a result file read here does not decode or is not laid out as the solver writes it (band columns, row counts, the `.gap`'s index), disagrees with its sibling (the `.gap`'s energy is not the `.recp`'s bit for bit, or its time step is not `pasdetemps`; a `.pbin`'s time step or step count is not the run's, it holds more particles than `nbparticules_rendu` per source, or a particle with no step or one past the last), the receiver folders or tables are not exactly the config's labels, or a surface-receiver or cutting-plane `.csbin` holds a receiver whose id is not one of the config's receivers of its kind (the two are kept apart by file name) | 6 |
 | `results_value_invalid` | a value in a result file read here is NaN or infinite, or an energy is negative (a `.pbin` position or energy included). One exception: a NaN in a `.gap` lateral column (the `E·cos²φ` or the `E·abs(cos φ)` sums) marks that column unusable and does not refuse the run, since SPPS writes it from an unclamped `acos` and the energy the parameters read is written apart (`spps::LateralNaN`; `docs/results.md`, "Verified runs only", step 6); an infinite or negative value there still does | 6 |
 
+### Solver build
+
+`core::results::solver_build` says whether the solver build that made a run was verified, from
+its `run.json` alone (backlog 38): the executables' checks (`solvers`) must be recorded, every one
+must match the verified build (`solvers/manifest.json`), and one must name the solver the run
+executed, as `check_solvers` names them (`spps.exe`, `classicalTheory.exe`). Otherwise the run is
+marked unverified with one of these codes. None is a refusal: `results::load` reads the run as
+before, `simpa results` still exits 0 and prints the verdict (a line of the text, `solver_build`
+in `--json`), and the app's Results step reads "Results unverified", never "Results verified".
+The Runs tab shows the same verdict, from the same function.
+
+| Code | Unverified when | Exit |
+|---|---|---|
+| `solver_build_unrecorded` | `run.json` records no check of the executables (no `solvers` key: a `simpa run` or `simpa run-folder` run, a bed run, or one written before M11), or an empty list | 0 |
+| `solver_build_mismatch` | a recorded check does not match the verified build | 0 |
+| `solver_build_unchecked` | the checks are recorded and match, but none names the solver the run executed | 0 |
+
 ### Corrections to the survey's run contract
 
 - **Not every non-success SPPS exit is 0 or `0xC0000005`.** There is also `0xC0000409`, an

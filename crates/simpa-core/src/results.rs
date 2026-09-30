@@ -456,12 +456,61 @@ impl SolverBuild {
 }
 
 /// The one predicate for "solver build verified" (PLAN C5): the app's Results verdict, the Runs
-/// row's solver status and `simpa results`' printed verdict all use it.
+/// row's solver status and `simpa results`' printed verdict all use it. Checks are matched by
+/// name, as `check_solvers` names them ([`solver_exe_name`], `tetgen.exe`, `preprocess.exe`):
+/// - no `solvers` record, or an empty one: [`build_codes::UNRECORDED`];
+/// - a check that does not match: [`build_codes::MISMATCH`];
+/// - no check names the solver the run executed: [`build_codes::UNCHECKED`];
+/// - otherwise verified.
 ///
-/// RED STUB (backlog 38, `docs/investigations/2026-09-30-b38-39/RED.md`): reproduces today's
-/// behaviour, where a run whose results load counts as verified whatever its manifest records
-/// about the solver build. The tests `t38_*` fail against it.
-pub fn solver_build(_manifest: &RunManifest) -> SolverBuild {
+/// [`solver_exe_name`]: crate::run::manager::solver_exe_name
+pub fn solver_build(m: &RunManifest) -> SolverBuild {
+    let unverified = |code: &str, detail: String| SolverBuild::Unverified {
+        reason: Reason::new(code, detail),
+    };
+    let checks = match m.solvers.as_deref() {
+        None => {
+            return unverified(
+                build_codes::UNRECORDED,
+                "run.json records no check of the executables against the verified build \
+                 (solvers/manifest.json): a command-line or bed run, or one made before the app \
+                 checked them"
+                    .into(),
+            );
+        }
+        Some([]) => {
+            return unverified(
+                build_codes::UNRECORDED,
+                "run.json's check of the executables lists none".into(),
+            );
+        }
+        Some(c) => c,
+    };
+    let names = |pick: fn(&crate::bed::pe::SolverCheck) -> bool| {
+        let picked: Vec<&str> = checks
+            .iter()
+            .filter(|c| pick(c))
+            .map(|c| c.name.as_str())
+            .collect();
+        picked.join(", ")
+    };
+    let bad = names(|c| !c.matches);
+    if !bad.is_empty() {
+        return unverified(
+            build_codes::MISMATCH,
+            format!("not the verified build (solvers/manifest.json): {bad}"),
+        );
+    }
+    let solver = crate::run::manager::solver_exe_name(m.solver);
+    if !checks.iter().any(|c| c.name == solver) {
+        return unverified(
+            build_codes::UNCHECKED,
+            format!(
+                "no check covers {solver}, the solver the run executed; checked: {}",
+                names(|_| true)
+            ),
+        );
+    }
     SolverBuild::Verified
 }
 

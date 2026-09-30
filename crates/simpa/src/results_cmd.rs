@@ -5,14 +5,16 @@
 //! were read; 2 a usage error, or a path that is not a folder; 5 the run is FAIL, CRASH or
 //! CANCELLED, a solver run that did not succeed (the command itself was not cancelled, so not 130);
 //! 6 its results do not verify (`core::results`' other refusals). A refusal is printed on stderr
-//! as `simpa: results refused: <code>: <detail>`, and with `--json` also on stdout as JSON.
+//! as `simpa: results refused: <code>: <detail>`, and with `--json` also on stdout as JSON. A run
+//! whose solver build is not verified (`results::solver_build`, backlog 38) is read, exit 0: the
+//! verdict and its code are a line of the text and `solver_build` in the JSON.
 
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
 use simpa_core::results::report::{self, Evaluated, ReferenceReport, RefusalReport, Report};
-use simpa_core::results::{self};
+use simpa_core::results::{self, SolverBuild};
 
 use crate::fail;
 
@@ -160,6 +162,19 @@ fn text(rep: &Report) -> String {
         rep.started,
         rep.bands_hz
     );
+    // The solver build's verdict and its code, on one line (backlog 38): it marks the run and
+    // changes no exit code.
+    let _ = match &rep.solver_build {
+        SolverBuild::Verified => writeln!(
+            s,
+            "solver build verified: its executables' checks match solvers/manifest.json"
+        ),
+        SolverBuild::Unverified { reason } => writeln!(
+            s,
+            "solver build UNVERIFIED {}: {}",
+            reason.code, reason.detail
+        ),
+    };
     if let Some(sp) = &rep.spps {
         let _ = writeln!(
             s,
