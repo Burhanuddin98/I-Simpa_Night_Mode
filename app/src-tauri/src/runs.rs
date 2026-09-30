@@ -236,11 +236,22 @@ pub struct RunRow {
     /// The executables checked against the verified build before the run; `None` for a CLI run
     /// or one written before M11.
     pub solvers: Option<Vec<SolverCheck>>,
+    /// The solver build's verdict, the one the row shows (backlog 38). `None` for a row with no
+    /// `run.json` that reads.
+    pub solver_build: Option<SolverBuildUi>,
     /// The solver's wall time in seconds, one decimal ([`elapsed_s`]).
     pub elapsed_s: Option<String>,
     pub exit_code: Option<u32>,
     /// `run.json` is there but does not read.
     pub manifest_error: Option<String>,
+}
+
+/// A run's solver build, verified or not, with the reason's core and UI codes (backlog 38).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum SolverBuildUi {
+    Verified,
+    Unverified { reason: ReasonUi },
 }
 
 /// The Runs tab: every run of the open project under its runs root.
@@ -511,9 +522,31 @@ pub fn row_from_manifest(run: &str, number: u32, m: &RunManifest) -> RunRow {
         }),
         mesh_sha256: m.mesh.as_ref().map(|x| x.mbin_sha256.clone()),
         solvers: m.solvers.clone(),
+        solver_build: Some(solver_build_ui(m)),
         elapsed_s: m.outcome.as_ref().map(|o| elapsed_s(o.elapsed_ms)),
         exit_code: m.outcome.as_ref().and_then(|o| o.exit_code),
         manifest_error: None,
+    }
+}
+
+/// The solver build's verdict for a row.
+///
+/// RED STUB (backlog 38, T38-8, `docs/investigations/2026-09-30-b38-39/PLAN.md`): today's
+/// Runs-row rule, `solversMark` (`app/ui/src/features/dock/model.ts:254-258`), unchanged: no
+/// record or an empty one is unrecorded, a failing check is a mismatch, and every check matching
+/// is verified, whatever the checks cover.
+fn solver_build_ui(m: &RunManifest) -> SolverBuildUi {
+    let code = match m.solvers.as_deref() {
+        None | Some([]) => results::build_codes::UNRECORDED,
+        Some(c) if c.iter().all(|c| c.matches) => return SolverBuildUi::Verified,
+        Some(_) => results::build_codes::MISMATCH,
+    };
+    SolverBuildUi::Unverified {
+        reason: ReasonUi {
+            code: code.to_string(),
+            ui_code: code.to_ascii_uppercase(),
+            detail: String::new(),
+        },
     }
 }
 
@@ -542,6 +575,7 @@ fn bare_row(
         exe: None,
         mesh_sha256: None,
         solvers: None,
+        solver_build: None,
         elapsed_s: None,
         exit_code: None,
         manifest_error: error,
@@ -1866,6 +1900,106 @@ mod tests {
             .unwrap_or_else(|| panic!("the reason code is given: {st:?}"));
         assert_eq!(reason.code, results::build_codes::UNRECORDED, "{st:?}");
         assert_eq!(reason.ui_code, "SOLVER_BUILD_UNRECORDED", "{st:?}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// T38-8 (backlog 38): the Runs row's data, where `runs_list` makes it. A run whose checks
+    /// cover only TetGen, or that records none, is not verified on its row. The row carries the
+    /// core predicate's verdict (`results::solver_build`, C5), code and detail, and agrees with
+    /// what `results_state` answers for the same run, so the Runs row and the Results step cannot
+    /// disagree. The run is T38-5's (the committed TCR run, whose results load), its `run.json`
+    /// rewritten for each case with the checks it records and a source naming this project.
+    #[test]
+    fn t38_8_the_runs_row_shows_the_core_verdict_on_the_solver_build() {
+        use results::build_codes::{MISMATCH, UNCHECKED, UNRECORDED};
+        let dir = scratch("t38-8");
+        let project = dir.join("room.simpa");
+        let root = runs_root(&project);
+        let run = "20260924-115031-155-tcr";
+        copy_dir(&repo("tests/fixtures/results/seats_tcr"), &root.join(run));
+        let path = root.join(run).join(MANIFEST_FILE);
+        let mut base = RunManifest::from_json(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        base.source = RunSource::Project {
+            path: project.display().to_string(),
+            sha256: "0".repeat(64),
+            variant: None,
+        };
+        let solver = solver_exe_name(base.solver);
+        let check = |name: &str, matches: bool| SolverCheck {
+            name: name.to_string(),
+            path: format!(r"C:\solvers\{name}"),
+            code_sha256: Some("a".repeat(64)),
+            raw_sha256: Some("b".repeat(64)),
+            manifest_code_sha256: Some(if matches { "a" } else { "c" }.repeat(64)),
+            matches,
+            detail: (!matches).then(|| "not the verified build".to_string()),
+        };
+        for (case, solvers, want) in [
+            (
+                "checks that cover only TetGen",
+                Some(vec![check(TETGEN_EXE_NAME, true)]),
+                Some(UNCHECKED),
+            ),
+            ("no solver record", None, Some(UNRECORDED)),
+            ("an empty solver record", Some(Vec::new()), Some(UNRECORDED)),
+            (
+                "the solver's own check failing",
+                Some(vec![check(solver, false), check(TETGEN_EXE_NAME, true)]),
+                Some(MISMATCH),
+            ),
+            (
+                "every check matching, the solver's among them",
+                Some(vec![check(solver, true), check(TETGEN_EXE_NAME, true)]),
+                None,
+            ),
+        ] {
+            let m = RunManifest {
+                solvers,
+                ..base.clone()
+            };
+            std::fs::write(&path, m.to_json()).unwrap();
+            let view = list(&root, &project, None).unwrap();
+            assert_eq!(view.rows.len(), 1, "{case}: {view:?}");
+            let shown = view.rows[0].solver_build.as_ref();
+            // Not shown as verified unless every check matches and one is the solver's own.
+            assert_eq!(
+                matches!(shown, Some(SolverBuildUi::Verified)),
+                want.is_none(),
+                "{case}: the Runs row reads {shown:?}"
+            );
+            // The row's verdict is the core predicate's, code and detail.
+            let core = results::solver_build(&m);
+            match (shown, core.reason()) {
+                (Some(SolverBuildUi::Verified), None) => {}
+                (Some(SolverBuildUi::Unverified { reason }), Some(r)) => {
+                    assert_eq!(
+                        (reason.code.as_str(), reason.detail.as_str()),
+                        (r.code.as_str(), r.detail.as_str()),
+                        "{case}"
+                    );
+                    assert_eq!(reason.ui_code, r.code.to_ascii_uppercase(), "{case}");
+                }
+                (s, c) => panic!("{case}: the Runs row reads {s:?}, the core predicate {c:?}"),
+            }
+            assert_eq!(core.reason().map(|r| r.code.as_str()), want, "{case}");
+            // The Results step's answer for the same run agrees with the row.
+            let st = results_state(&root, run).unwrap();
+            assert_eq!(st.refusal, None, "{case}: the results load (C1): {st:?}");
+            let row_reason = match shown {
+                Some(SolverBuildUi::Unverified { reason }) => Some(reason),
+                _ => None,
+            };
+            assert_eq!(
+                (st.verified, st.unverified.as_ref()),
+                (want.is_none(), row_reason),
+                "{case}: the Results step disagrees with the Runs row"
+            );
+        }
+        // A row with no run.json that reads carries no verdict.
+        std::fs::remove_file(&path).unwrap();
+        let view = list(&root, &project, None).unwrap();
+        assert_eq!(view.rows[0].status, RunStatusUi::Interrupted);
+        assert_eq!(view.rows[0].solver_build, None);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

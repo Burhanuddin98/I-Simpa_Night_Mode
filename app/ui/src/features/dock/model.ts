@@ -5,7 +5,7 @@
 //
 // Every number a Runs row prints is a string Rust formatted from run.json (PLAN.md 2.3, T14), or
 // a count. The UI formats no float.
-import type { RunRow, RunStatusUi, SolverCheck } from '../../bindings/ipc.ts';
+import type { ReasonUi, RunRow, RunStatusUi, SolverCheck } from '../../bindings/ipc.ts';
 import { rowCounts } from '../../flow.ts';
 import type { ActiveRun, ClassCounts, ConsoleLine, RunLog } from '../../store.ts';
 
@@ -255,6 +255,20 @@ export function solversMark(checks: readonly SolverCheck[] | null | undefined): 
   if (!checks || checks.length === 0) return { kind: 'unrecorded', names: [] };
   const bad = checks.filter((c) => !c.matches).map((c) => c.name);
   return bad.length === 0 ? { kind: 'verified', names: checks.map((c) => c.name) } : { kind: 'unverified', names: bad };
+}
+
+/** The Runs row's mark for the run's solver build (backlog 38). */
+export interface BuildMark extends SolversMark {
+  /** The reason the build is not verified, as the backend gives it; null when verified. */
+  reason: ReasonUi | null;
+}
+
+/**
+ * RED STUB (backlog 38, T38-8, docs/investigations/2026-09-30-b38-39/PLAN.md): today's rule,
+ * `solversMark` on the row's checks; the verdict the row carries is not read.
+ */
+export function buildMark(row: Pick<RunRow, 'solvers' | 'solver_build'>): BuildMark {
+  return { ...solversMark(row.solvers), reason: null };
 }
 
 /** The file name of a path, either separator. */
