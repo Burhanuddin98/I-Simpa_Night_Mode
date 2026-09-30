@@ -1,0 +1,82 @@
+﻿08:46:56 WATCH start pid 1132
+08:47:56 WATCH alive, 0 processes seen
+08:48:12 SIMPA  simpa.exe pid 2360 ["C:\tmp\nm-target\release\simpa.exe" bed B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a.json --jobs 12 --json --out C:\tmp\nm-target\gates\m8a\20260930-084704\reread --from C:/tmp/n] <- 21408 powershell.exe ["C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -File tools/gates/m8a.ps1 -From C:/tmp/nm-m8a-bed] <- 23140 powershell.exe [C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File B:\repos\I-Simpa_Nigh] <- 22120 bash.exe ["C:\Program Files\Git\bin\..\usr\bin\bash.exe" -c "source /c/Users/Burhan/.claude/shell-snapshots/snapshot-bash-17906620] <- 9152 bash.exe ["C:\Program Files\Git\bin\..\usr\bin\bash.exe" -c "source /c/Users/Burhan/.claude/shell-snapshots/snapshot-bash-17906620] <- 1672 bash.exe ["C:\Program Files\Git\bin\bash.exe" -c "source /c/Users/Burhan/.claude/shell-snapshots/snapshot-bash-1790662089499-07fnm] <- 21272 claude.exe [c:\Users\Burhan\.vscode\extensions\anthropic.claude-code-2.1.283-win32-x64\resources\native-binary\claude.exe --output-f] <- 3404 Code.exe ["C:\Programs\Microsoft VS Code\Code.exe" --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service] <- 2840 Code.exe ["C:\Programs\Microsoft VS Code\Code.exe" ] <- 8940 explorer.exe [C:\Windows\Explorer.EXE] <- 8912 (gone) []
+08:48:56 WATCH alive, 1 processes seen
+08:49:56 WATCH alive, 1 processes seen
+08:50:57 WATCH alive, 1 processes seen
+08:51:57 WATCH alive, 1 processes seen
+08:52:58 WATCH alive, 1 processes seen
+08:53:58 WATCH alive, 1 processes seen
+08:54:58 WATCH alive, 1 processes seen
+08:55:58 WATCH alive, 1 processes seen
+08:56:58 WATCH alive, 1 processes seen
+08:57:59 WATCH alive, 1 processes seen
+08:58:59 WATCH alive, 1 processes seen
+08:59:59 WATCH alive, 1 processes seen
+09:01:00 WATCH alive, 1 processes seen
+09:02:00 WATCH alive, 1 processes seen
+09:03:00 WATCH alive, 1 processes seen
+09:04:00 WATCH alive, 1 processes seen
+09:05:00 WATCH alive, 1 processes seen
+09:06:01 WATCH alive, 1 processes seen
+09:07:01 WATCH alive, 1 processes seen
+09:08:01 WATCH alive, 1 processes seen
+09:09:01 WATCH alive, 1 processes seen
+09:10:02 WATCH alive, 1 processes seen
+09:11:02 WATCH alive, 1 processes seen
+09:12:02 WATCH alive, 1 processes seen
+09:13:03 WATCH alive, 1 processes seen
+09:14:03 WATCH alive, 1 processes seen
+09:15:03 WATCH alive, 1 processes seen
+09:16:03 WATCH alive, 1 processes seen
+09:17:04 WATCH alive, 1 processes seen
+09:18:04 WATCH alive, 1 processes seen
+09:19:04 WATCH alive, 1 processes seen
+09:19:28 SIMPA  simpa.exe pid 17172 ["C:\tmp\nm-target\release\simpa.exe" bed B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a.json --out C:\tmp\nm-target\gates\m8a\20260930-084704\n1-out --jobs 12 --from C:/tmp/nm-m8a-b] <- 21408 powershell.exe ["C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -File tools/gates/m8a.ps1 -From C:/tmp/nm-m8a-bed] <- 23140 powershell.exe [C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File B:\repos\I-Simpa_Nigh] <- 22120 bash.exe ["C:\Program Files\Git\bin\..\usr\bin\bash.exe" -c "source /c/Users/Burhan/.claude/shell-snapshots/snapshot-bash-17906620] <- 9152 bash.exe ["C:\Program Files\Git\bin\..\usr\bin\bash.exe" -c "source /c/Users/Burhan/.claude/shell-snapshots/snapshot-bash-17906620] <- 1672 bash.exe ["C:\Program Files\Git\bin\bash.exe" -c "source /c/Users/Burhan/.claude/shell-snapshots/snapshot-bash-1790662089499-07fnm] <- 21272 claude.exe [c:\Users\Burhan\.vscode\extensions\anthropic.claude-code-2.1.283-win32-x64\resources\native-binary\claude.exe --output-f] <- 3404 Code.exe ["C:\Programs\Microsoft VS Code\Code.exe" --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service] <- 2840 Code.exe ["C:\Programs\Microsoft VS Code\Code.exe" ] <- 8940 explorer.exe [C:\Windows\Explorer.EXE] <- 8912 (gone) []
+09:20:04 WATCH alive, 2 processes seen
+09:21:04 WATCH alive, 2 processes seen
+09:22:05 WATCH alive, 2 processes seen
+09:23:05 WATCH alive, 2 processes seen
+09:24:05 WATCH alive, 2 processes seen
+09:25:05 WATCH alive, 2 processes seen
+09:26:06 WATCH alive, 2 processes seen
+09:27:06 WATCH alive, 2 processes seen
+09:28:06 WATCH alive, 2 processes seen
+09:29:06 WATCH alive, 2 processes seen
+09:30:06 WATCH alive, 2 processes seen
+09:31:06 WATCH alive, 2 processes seen
+09:32:06 WATCH alive, 2 processes seen
+09:33:07 WATCH alive, 2 processes seen
+09:34:07 WATCH alive, 2 processes seen
+09:35:07 WATCH alive, 2 processes seen
+09:36:07 WATCH alive, 2 processes seen
+09:37:07 WATCH alive, 2 processes seen
+09:38:07 WATCH alive, 2 processes seen
+09:39:07 WATCH alive, 2 processes seen
+09:40:08 WATCH alive, 2 processes seen
+09:41:08 WATCH alive, 2 processes seen
+09:42:08 WATCH alive, 2 processes seen
+09:43:08 WATCH alive, 2 processes seen
+09:44:09 WATCH alive, 2 processes seen
+09:45:09 WATCH alive, 2 processes seen
+09:46:09 WATCH alive, 2 processes seen
+09:47:10 WATCH alive, 2 processes seen
+09:48:10 WATCH alive, 2 processes seen
+09:49:10 WATCH alive, 2 processes seen
+09:50:10 WATCH alive, 2 processes seen
+09:51:10 WATCH alive, 2 processes seen
+09:52:11 WATCH alive, 2 processes seen
+09:53:11 WATCH alive, 2 processes seen
+09:54:11 WATCH alive, 2 processes seen
+09:55:11 WATCH alive, 2 processes seen
+09:56:11 WATCH alive, 2 processes seen
+09:57:11 WATCH alive, 2 processes seen
+09:58:11 WATCH alive, 2 processes seen
+09:59:07 SOLVER tetgen.exe pid 8648 [] <- 1140 bed_binding-017d9e8cf4735052.exe ["C:/tmp/nm-target\debug\deps\bed_binding-017d9e8cf4735052.exe" --quiet] <- 20628 cargo.exe ["C:\Users\Burhan\.rustup\toolchains\1.98.1-x86_64-pc-windows-msvc\bin\cargo.exe" test -q -p simpa-core --test bed_bindin] <- 8620 cargo.exe [cargo  test -q -p simpa-core --test bed_binding ] <- 22664 cmd.exe ["C:\Windows\system32\cmd.exe" /c "cargo test -q -p simpa-core --test bed_binding 2>&1"] <- 21408 powershell.exe ["C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -File tools/gates/m8a.ps1 -From C:/tmp/nm-m8a-bed] <- 23140 powershell.exe [C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoProfile -ExecutionPolicy Bypass -File B:\repos\I-Simpa_Nigh] <- 22120 bash.exe ["C:\Program Files\Git\bin\..\usr\bin\bash.exe" -c "source /c/Users/Burhan/.claude/shell-snapshots/snapshot-bash-17906620] <- 9152 bash.exe ["C:\Program Files\Git\bin\..\usr\bin\bash.exe" -c "source /c/Users/Burhan/.claude/shell-snapshots/snapshot-bash-17906620] <- 1672 bash.exe ["C:\Program Files\Git\bin\bash.exe" -c "source /c/Users/Burhan/.claude/shell-snapshots/snapshot-bash-1790662089499-07fnm] <- 21272 claude.exe [c:\Users\Burhan\.vscode\extensions\anthropic.claude-code-2.1.283-win32-x64\resources\native-binary\claude.exe --output-f] <- 3404 Code.exe ["C:\Programs\Microsoft VS Code\Code.exe" --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service] <- 2840 Code.exe ["C:\Programs\Microsoft VS Code\Code.exe" ] <- 8940 explorer.exe [C:\Windows\Explorer.EXE] <- 8912 (gone) []
+09:59:08 GATE-SOLVER tetgen.exe pid 8648 started by the gate: stopping it and the gate tree from pid 1672
+09:59:10 SOLVER tetgen.exe pid 18756 [] <- 1140 (gone) []
+09:59:10 SOLVER tetgen.exe pid 22052 [] <- 1140 (gone) []
+09:59:11 WATCH alive, 5 processes seen
+10:00:12 WATCH alive, 5 processes seen
+10:01:12 WATCH alive, 5 processes seen
+10:02:03 WATCH stop
