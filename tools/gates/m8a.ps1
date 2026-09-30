@@ -370,8 +370,9 @@ Check "N6 says NO: walls of scattering 0: the bed refuses the cell (params_refer
 # The bed's own tests: the comparisons, the pass logic (a cell outside tolerance fails the
 # report), the bed file, the plan, E1's code sha256. The whole suite is not this gate's: on Grace
 # mesh_project's every_failure_code_fires_on_its_input hangs at the commit M8a started from too.
+# tests/bed_binding.rs is not here either: it runs the solvers, and a gate that reads an earlier bed
+# (-From) starts no solver at all, which is what shows it re-judged the bed without re-running it.
 Check "the bed's unit tests: cargo test -p simpa-core --lib bed::" { Cargo 'cargo test -q -p simpa-core --lib bed::' }
-Check "the bed's binding on real runs of this build: cargo test -p simpa-core --test bed_binding" { Cargo 'cargo test -q -p simpa-core --test bed_binding' }
 Check "clippy -D warnings (core and CLI)" { Cargo 'cargo clippy -q -p simpa-core -p simpa --all-targets -- -D warnings' }
 Check "cargo fmt --check (core and CLI)" { Cargo 'cargo fmt -p simpa-core -p simpa --check' }
 
