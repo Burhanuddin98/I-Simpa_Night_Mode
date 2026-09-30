@@ -1,0 +1,355 @@
+# M8b tamper, re-judge round 1: the output of every check beside REJUDGE-1.md.
+# The scripts ran from the session scratchpad under the names r1_*.py; each is committed here byte for byte
+# as rejudge-1-*.py (the name each section gives). All read only. Python 3.13, one at a time.
+# The bed: C:/tmp/nm-m8a-bed/20260929T093134Z. The re-judged stamp: C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z.
+
+================================================================================================
+## 1. The bed before the gate (06:13:21): rejudge-1-fingerprint.py <bed> r1-bed-before.tsv
+================================================================================================
+bed: C:/tmp/nm-m8a-bed/20260929T093134Z
+at: 2026-09-30T06:13:21+02:00
+files: 16985
+bytes: 1238241863
+newest mtime: 2026-09-29T15:25:01.891Z (plots/summary.png)
+report.json sha256: 5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad
+summary.json sha256: 6af1656e16429ab8cddfeaa00fb0f0c0765f91b2fe2669dbaa9ff54bf91b3ced
+manifest (path, size, mtime_ns, sha256 per file) sha256: c4e427cf3d4f89b3b55227afde3c3eeb4689e0d4a33c04dcacaa7f7c99041e6f
+manifest: C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/2944fcd7-7038-44bd-9fc4-e0055382b531/scratchpad/r1-bed-before.tsv
+
+================================================================================================
+## 2. The bed before the gate, held to the committed seal: rejudge-1-seal-check.py beds/m8a-20260929T093134Z/outputs-seal.json r1-bed-before.tsv
+================================================================================================
+seal: 433 runs, 16861 files, 1118668944 bytes (header: 16861 files, 1118668944 bytes)
+disk under runs/: 16861 files, 1118668944 bytes
+in the seal, not on disk: 0; on disk under runs/, not in the seal: 0; size or sha256 differ: 0
+report.json: seal 5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad disk 5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad equal
+summary.json: seal 6af1656e16429ab8cddfeaa00fb0f0c0765f91b2fe2669dbaa9ff54bf91b3ced disk 6af1656e16429ab8cddfeaa00fb0f0c0765f91b2fe2669dbaa9ff54bf91b3ced equal
+
+================================================================================================
+## 3. The re-judged report.json against the M8a bed's: ../2026-09-30-m8b-gate/rejudge-compare.py <bed>/report.json C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/report.json
+================================================================================================
+old: C:/tmp/nm-m8a-bed/20260929T093134Z/report.json
+new: C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/report.json
+pass: True vs True; failures: 0 vs 0; exploratory: False vs False; needs_extension: [] vs []
+cell verdicts equal: True (40 cells)
+tcr verdicts equal: True (20 TCR runs)
+say_no n5 as_required: True vs True; n6: True vs True
+
+numeric leaves, per section: count, largest |difference|, largest relative difference, where
+  atmospheric_validation           n=  1134  max|d|=0.000e+00  max rel=0.000e+00  -
+  bed_report_version               n=     1  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.a                          n=  2380  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.alpha                      n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.b                          n=   814  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.bands_hz                   n=   256  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.c                          n=  1073  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.duration_s                 n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.particles_per_source       n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reference                  n=  2944  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reported                   n= 14236  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.seeds                      n= 17296  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.trans_epsilon              n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  preconditions                    n=   115  max|d|=0.000e+00  max rel=0.000e+00  -
+  random_against_energetic         n=   102  max|d|=0.000e+00  max rel=0.000e+00  -
+  say_no                           n=     9  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.d                            n=   532  max|d|=4.441e-16  max rel=2.731e-08  tcr[4].d.bands[1].analytic_eyring_s: 2.597263765023588 vs 2.5972637650235884
+  tcr.eyring_against_kuttruff      n=   128  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.run                          n=    80  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.sabine_against_analytic      n=   128  max|d|=2.220e-16  max rel=2.438e-08  tcr[0].sabine_against_analytic[0]: 2.6602686942212017e-08 vs 2.6602686720167412e-08
+  transports                       n=  1008  max|d|=0.000e+00  max rel=0.000e+00  -
+  overall max|d| = 4.441e-16
+
+non-numeric differences: 0
+
+keys only in the old report: 0
+keys only in the new report: 1880, by name:
+  band_problems: 20 (e.g. tcr[0].d.band_problems); values: [] x20
+  bound_by: 433 (e.g. cells[0].seeds[0].run.bound_by); values: "seal" x433
+  on_disk: 433 (e.g. cells[0].seeds[0].run.on_disk); values: {"project_sha256": "7c7001c73c525f08d9d5c56fed01d9b69311c8d7e99a581ee242c6663c12 x1, {"project_sha256": "c52d15e400db40b05641ba9165c6f3e53c4d8aeb5cd2df2a353bcd53cc74 x1, {"project_sha256": "d38d094c277d3bc9e6143ad4a91e9a635183b4f118d0d4d14f09aa8fd632 x1, {"project_sha256": "16808a2ecb2e981e1b8de6ff44412d56fa6ef9bcc08e887c1048a0b495b1 x1 ...
+  outputs_sha256: 433 (e.g. cells[0].seeds[0].run.outputs_sha256); values: "18e606fa70949952d1c99d0b76a8320ad42bc1abd00989ee920d5ccefb297f4e" x1, "d55dafb718d7a81e8afcdb74974d5a51188148cd630293833d264679283757aa" x1, "3612f2b70642538c706345ef8d5fc44e2c21f54da9b64565b8f0b6a0ccd1a51a" x1, "4592ca8ff352228ea3968e762dca4d46a121331650b1aa5d72ef657f88d6a705" x1 ...
+  project_sha256: 433 (e.g. cells[0].seeds[0].run.project_sha256); values: "7c7001c73c525f08d9d5c56fed01d9b69311c8d7e99a581ee242c6663c12dda9" x1, "c52d15e400db40b05641ba9165c6f3e53c4d8aeb5cd2df2a353bcd53cc742090" x1, "d38d094c277d3bc9e6143ad4a91e9a635183b4f118d0d4d14f09aa8fd632dc39" x1, "16808a2ecb2e981e1b8de6ff44412d56fa6ef9bcc08e887c1048a0b495b10f56" x1 ...
+  run_analytic_eyring_s: 128 (e.g. tcr[0].d.bands[0].run_analytic_eyring_s); values: 2.648169373371687 x6, 1.289224244497087 x6, 0.6087262224951493 x6, 0.2659093913307413 x6 ...
+
+================================================================================================
+## 4. Every differing numeric leaf of tcr[], in ulp: rejudge-1-d-ulps.py <bed>/report.json C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/report.json
+================================================================================================
+tcr numeric leaves: 868; differing: 164
+  sabine_against_analytic: 64 leaves differ; largest 134217728 ulp, |d| 2.220e-16 at tcr[5].sabine_against_analytic[1]: 1.0089474589136671e-08 vs 1.0089474367092066e-08
+  analytic_eyring_s: 54 leaves differ; largest 2 ulp, |d| 2.220e-16 at tcr[12].d.bands[6].analytic_eyring_s: 0.9189908938048611 vs 0.9189908938048613
+  deviation: 46 leaves differ; largest 134217728 ulp, |d| 2.220e-16 at tcr[7].d.bands[2].deviation: 8.129887429930704e-09 vs 8.1298872078861e-09
+D bands: 128; the plan's reference against the run's own: largest relative difference 2.584e-16, largest 2 ulp
+  run_analytic_eyring_s equal to the original analytic_eyring_s: 128 of 128
+  D band verdicts equal: 128 of 128; largest |deviation| now 4.410e-07 against the 0.5 % limit
+
+Where D's reference differs most, relatively (a one-off, r1_d_where.py, run 07:35, its code here):
+    import json
+    o=json.load(open("C:/tmp/nm-m8a-bed/20260929T093134Z/report.json",encoding="utf-8"))
+    n=json.load(open("C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/report.json",encoding="utf-8"))
+    rows=[]
+    gated={t["id"]:t["gated"] for t in o["tcr"]}
+    for to,tn in zip(o["tcr"],n["tcr"]):
+        if not to.get("d"): continue
+        for bo,bn in zip(to["d"]["bands"],tn["d"]["bands"]):
+            a,b=bo["analytic_eyring_s"],bn["analytic_eyring_s"]
+            rows.append((abs(a-b)/abs(a),abs(a-b),to["id"],gated[to["id"]],bo["freq_hz"],a,b))
+    rows.sort(reverse=True)
+    for r in rows[:3]: print(r)
+    print(sum(1 for r in rows if r[1]>0), "of", len(rows), "bands differ;", sum(1 for r in rows if r[0]>2.2205e-16), "above 2.2205e-16 relative")
+    g=[r for r in rows if r[3]]
+    print("gated TCR runs only:", len(g), "bands; largest relative", g[0][0], "at", g[0][2], g[0][4], "Hz")
+(2.58378215596723e-16, 2.220446049250313e-16, '20x8x4-a0.2-tcr-air-off', False, 4000, 0.8593781964637406, 0.8593781964637404)
+(2.58378215596723e-16, 2.220446049250313e-16, '20x8x4-a0.2-tcr-air-off', False, 2000, 0.8593781964637406, 0.8593781964637404)
+(2.58378215596723e-16, 2.220446049250313e-16, '20x8x4-a0.2-tcr-air-off', False, 1000, 0.8593781964637406, 0.8593781964637404)
+54 of 128 bands differ; 13 above 2.2205e-16 relative
+gated TCR runs only: 104 bands; largest relative 2.4161785108197205e-16 at 5x4x3-a0.05-tcr-air-on 8000 Hz
+
+================================================================================================
+## 5. The re-judged report.json against step 1's re-judge (8c2e603): rejudge-compare.py C:/tmp/nm-target/gates/m8a/20260930-025530/reread/20260930T005634Z/report.json C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/report.json
+================================================================================================
+old: C:/tmp/nm-target/gates/m8a/20260930-025530/reread/20260930T005634Z/report.json
+new: C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/report.json
+pass: True vs True; failures: 0 vs 0; exploratory: False vs False; needs_extension: [] vs []
+cell verdicts equal: True (40 cells)
+tcr verdicts equal: True (20 TCR runs)
+say_no n5 as_required: True vs True; n6: True vs True
+
+numeric leaves, per section: count, largest |difference|, largest relative difference, where
+  atmospheric_validation           n=  1134  max|d|=0.000e+00  max rel=0.000e+00  -
+  bed_report_version               n=     1  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.a                          n=  2380  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.alpha                      n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.b                          n=   814  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.bands_hz                   n=   256  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.c                          n=  1073  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.duration_s                 n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.particles_per_source       n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reference                  n=  2944  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reported                   n= 14236  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.seeds                      n= 17296  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.trans_epsilon              n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  preconditions                    n=   115  max|d|=0.000e+00  max rel=0.000e+00  -
+  random_against_energetic         n=   102  max|d|=0.000e+00  max rel=0.000e+00  -
+  say_no                           n=     9  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.d                            n=   532  max|d|=4.441e-16  max rel=2.731e-08  tcr[4].d.bands[1].analytic_eyring_s: 2.597263765023588 vs 2.5972637650235884
+  tcr.eyring_against_kuttruff      n=   128  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.run                          n=    80  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.sabine_against_analytic      n=   128  max|d|=2.220e-16  max rel=2.438e-08  tcr[0].sabine_against_analytic[0]: 2.6602686942212017e-08 vs 2.6602686720167412e-08
+  transports                       n=  1008  max|d|=0.000e+00  max rel=0.000e+00  -
+  overall max|d| = 4.441e-16
+
+non-numeric differences: 0
+
+keys only in the old report: 0
+keys only in the new report: 1427, by name:
+  bound_by: 433 (e.g. cells[0].seeds[0].run.bound_by); values: "seal" x433
+  on_disk: 433 (e.g. cells[0].seeds[0].run.on_disk); values: {"project_sha256": "7c7001c73c525f08d9d5c56fed01d9b69311c8d7e99a581ee242c6663c12 x1, {"project_sha256": "c52d15e400db40b05641ba9165c6f3e53c4d8aeb5cd2df2a353bcd53cc74 x1, {"project_sha256": "d38d094c277d3bc9e6143ad4a91e9a635183b4f118d0d4d14f09aa8fd632 x1, {"project_sha256": "16808a2ecb2e981e1b8de6ff44412d56fa6ef9bcc08e887c1048a0b495b1 x1 ...
+  outputs_sha256: 433 (e.g. cells[0].seeds[0].run.outputs_sha256); values: "18e606fa70949952d1c99d0b76a8320ad42bc1abd00989ee920d5ccefb297f4e" x1, "d55dafb718d7a81e8afcdb74974d5a51188148cd630293833d264679283757aa" x1, "3612f2b70642538c706345ef8d5fc44e2c21f54da9b64565b8f0b6a0ccd1a51a" x1, "4592ca8ff352228ea3968e762dca4d46a121331650b1aa5d72ef657f88d6a705" x1 ...
+  run_analytic_eyring_s: 128 (e.g. tcr[0].d.bands[0].run_analytic_eyring_s); values: 2.648169373371687 x6, 1.289224244497087 x6, 0.6087262224951493 x6, 0.2659093913307413 x6 ...
+
+================================================================================================
+## 6. The re-judged report.json against FIXES.md's CLI run (05:22 build): rejudge-compare.py C:/tmp/nm-judge-tamper/cli/20260930T032245Z/report.json C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/report.json
+================================================================================================
+old: C:/tmp/nm-judge-tamper/cli/20260930T032245Z/report.json
+new: C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/report.json
+pass: True vs True; failures: 0 vs 0; exploratory: False vs False; needs_extension: [] vs []
+cell verdicts equal: True (40 cells)
+tcr verdicts equal: True (20 TCR runs)
+say_no n5 as_required: True vs True; n6: True vs True
+
+numeric leaves, per section: count, largest |difference|, largest relative difference, where
+  atmospheric_validation           n=  1134  max|d|=0.000e+00  max rel=0.000e+00  -
+  bed_report_version               n=     1  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.a                          n=  2380  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.alpha                      n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.b                          n=   814  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.bands_hz                   n=   256  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.c                          n=  1073  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.duration_s                 n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.particles_per_source       n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reference                  n=  2944  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reported                   n= 14236  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.seeds                      n= 17296  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.trans_epsilon              n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  preconditions                    n=   115  max|d|=0.000e+00  max rel=0.000e+00  -
+  random_against_energetic         n=   102  max|d|=0.000e+00  max rel=0.000e+00  -
+  say_no                           n=     9  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.d                            n=   660  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.eyring_against_kuttruff      n=   128  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.run                          n=    80  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.sabine_against_analytic      n=   128  max|d|=0.000e+00  max rel=0.000e+00  -
+  transports                       n=  1008  max|d|=0.000e+00  max rel=0.000e+00  -
+  overall max|d| = 0.000e+00
+
+non-numeric differences: 0
+
+keys only in the old report: 0
+keys only in the new report: 0, by name:
+
+================================================================================================
+## 7. What the new checks put into the re-judged report, each run held to its seal entry independently: rejudge-1-new-checks.py C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/report.json <seal> <seal>
+================================================================================================
+meta:
+  git_commit: 'a3280e9238b79256a098e683869439ead35e14c8'
+  git_dirty: False
+  from: 'C:/tmp/nm-m8a-bed/20260929T093134Z'
+  root: 'C:\\tmp\\nm-target\\gates\\m8a\\20260930-061500\\reread\\20260930T041605Z'
+  jobs: 12
+  seal: 'B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m8b-tamper\\beds\\m8a-20260929T093134Z\\outputs-seal.json'
+  seal_sha256: '762f3fbab431a01d9745a73ba55fa00674e41e0605ad8521c55122bd7c15e09d'
+  started_utc: '2026-09-30T04:16:05Z'
+  finished_utc: '2026-09-30T04:50:54Z'
+  wall_s: 2087.3532827
+  solver_phase_s: 297.367159
+  transport_phase_s: 1789.5172877
+  machine: 'GRACE'
+  seal_sha256 equals the sha256 of the seal file on disk (762f3fbab431a01d9745a73ba55fa00674e41e0605ad8521c55122bd7c15e09d): True
+pass: True; failures: 0; exploratory: False; needs_extension: []
+transport_errors: {}
+
+run records: 433 in the report, 433 distinct run folders
+  by section: {'cells': 400, 'tcr': 20, 'atmospheric_validation': 11, 'say_no': 2}
+  status: {'OK': 433}
+  bound_by: {'seal': 433}
+  on_disk null: 0; mesh checks with a reason: 0
+  seal entries not in the report: 0
+  problems against the seal and within on_disk: 0
+
+seed groups: 41, seeds 410; groups with a repeated outputs_sha256: 0
+outputs_sha256 over all run records: 433, distinct 433
+'bed_run_unbound' in the report: 0
+'bed_run_files_changed' in the report: 0
+'bed_seed_outputs_identical' in the report: 0
+'bed_run_not_planned' in the report: 0
+
+================================================================================================
+## 8. summary.json, decays/*.csv and decays/*.npz against the M8a bed's: rejudge-1-outputs.py <bed> C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z
+================================================================================================
+summary.json: pass True vs True; failures 0 vs 0; exploratory False vs False
+  solvers_code_sha256 equal: True
+  new summary's report_sha256 is the new report.json's sha256: True
+  rows: 607 original, 627 re-judged; original rows missing: 0; original rows in the same order: True
+  original rows with any field unequal: 46; largest numeric |difference| 2.220e-16 (('6x10x3-a0.1-tcr-air-off', 'D 125 Hz'), 'value', -3.524044219771483e-07, -3.524044221991929e-07)
+    (('6x10x3-a0.1-tcr-air-off', 'D 125 Hz'), 'value', -3.524044219771483e-07, -3.524044221991929e-07)
+    (('6x10x3-a0.1-tcr-air-off', 'D 250 Hz'), 'value', -3.524044219771483e-07, -3.524044221991929e-07)
+    (('6x10x3-a0.1-tcr-air-off', 'D 500 Hz'), 'value', -3.524044219771483e-07, -3.524044221991929e-07)
+    (('6x10x3-a0.1-tcr-air-off', 'D 1000 Hz'), 'value', -3.524044219771483e-07, -3.524044221991929e-07)
+    (('6x10x3-a0.1-tcr-air-off', 'D 2000 Hz'), 'value', -3.524044219771483e-07, -3.524044221991929e-07)
+    (('6x10x3-a0.1-tcr-air-off', 'D 4000 Hz'), 'value', -3.524044219771483e-07, -3.524044221991929e-07)
+    (('6x10x3-a0.05-tcr-air-on', 'D 250 Hz'), 'value', -2.5690903460162673e-07, -2.5690903471264903e-07)
+    (('6x10x3-a0.05-tcr-air-on', 'D 1000 Hz'), 'value', -2.576502476925313e-07, -2.576502479145759e-07)
+    (('6x10x3-a0.05-tcr-air-on', 'D 2000 Hz'), 'value', -2.880900517032714e-07, -2.88090051925316e-07)
+    (('6x10x3-a0.05-tcr-air-on', 'D 4000 Hz'), 'value', -2.2994164394773975e-07, -2.2994164405876205e-07)
+    (('6x10x3-a0.1-tcr-air-on', 'D 125 Hz'), 'value', -4.0210234053539295e-07, -4.0210234075743756e-07)
+    (('6x10x3-a0.1-tcr-air-on', 'D 250 Hz'), 'value', -2.8567448562277775e-07, -2.8567448584482236e-07)
+    (('6x10x3-a0.1-tcr-air-on', 'D 500 Hz'), 'value', -3.514952277017258e-07, -3.514952279237704e-07)
+    (('6x10x3-a0.1-tcr-air-on', 'D 1000 Hz'), 'value', -2.585033384017166e-07, -2.585033385127389e-07)
+    (('6x10x3-a0.2-tcr-air-on', 'D 125 Hz'), 'value', 1.0937199568239464e-07, 1.0937199546035004e-07)
+    (('6x10x3-a0.2-tcr-air-on', 'D 250 Hz'), 'value', 9.393224331688543e-08, 9.393224309484083e-08)
+    (('6x10x3-a0.2-tcr-air-on', 'D 500 Hz'), 'value', 3.4921958658173935e-08, 3.492195843612933e-08)
+    (('6x10x3-a0.2-tcr-air-on', 'D 1000 Hz'), 'value', 4.9367843146796986e-08, 4.936784292475238e-08)
+    (('6x10x3-a0.4-tcr-air-on', 'D 250 Hz'), 'value', -2.4709280621593166e-08, -2.470928084363777e-08)
+    (('6x10x3-a0.4-tcr-air-on', 'D 500 Hz'), 'value', 8.129887429930704e-09, 8.1298872078861e-09)
+  rows only in the re-judged summary: 20
+    D bands: 20 rows; (value, limit, verdict, gated): [(0.0, 0.0, 'pass', False), (0.0, 0.0, 'pass', True)]
+
+decays: 81 original, 81 re-judged; names equal: True
+  csv: 41; not byte-identical: []
+  npz: 40, 240 arrays; byte-identical files 40; arrays not equal (dtype, shape, every value): []
+Which fields of the original rows differ (a one-off, r1_summary_fields.py, run 07:34, its code here):
+    import json
+    from collections import Counter
+    o=json.load(open("C:/tmp/nm-m8a-bed/20260929T093134Z/summary.json",encoding="utf-8"))
+    n=json.load(open("C:/tmp/nm-target/gates/m8a/20260930-061500/reread/20260930T041605Z/summary.json",encoding="utf-8"))
+    nb={(r["cell"],r["check"]):r for r in n["rows"]}
+    c=Counter(); checks=Counter()
+    for r in o["rows"]:
+        m=nb[(r["cell"],r["check"])]
+        for f in r:
+            if r[f]!=m[f]: c[f]+=1; checks[r["check"].split()[0]]+=1
+    print("fields differing:",dict(c),"by check:",dict(checks))
+    print("verdicts equal:", all(r["verdict"]==nb[(r["cell"],r["check"])]["verdict"] for r in o["rows"]))
+fields differing: {'value': 46} by check: {'D': 46}
+verdicts equal: True
+
+================================================================================================
+## 9. This gate's lines against step 1's: rejudge-1-gate-lines.py ../2026-09-30-m8b-gate/rejudge-gate.txt rejudge-1-gate.txt
+================================================================================================
+step 1: 95 lines, 23 PASS/FAIL; round 1: 96 lines, 23 PASS/FAIL
+PASS/FAIL lines identical, same order: True; FAIL lines in round 1: 0
+every other difference (step 1 '-', round 1 '+'):
+  +seal: B:\repos\I-Simpa_Night_Mode\.claude\worktrees\<wt>\beds\m8a-20260929T093134Z\outputs-seal.json
+
+================================================================================================
+## 10. The bed unit tests the gate ran, listed (07:32:30, no rebuild): cargo test -p simpa-core --lib bed::
+================================================================================================
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.15s
+     Running unittests src\lib.rs (C:/tmp/nm-target\debug\deps\simpa_core-0d166271e8c66248.exe)
+test bed::bind::tests::the_working_directory_is_left_out_of_config_xml_and_nothing_else ... ok
+test bed::bind::tests::a_seal_is_checked_before_it_is_used ... ok
+test bed::output::tests::a_curve_is_crossed_by_straight_lines ... ok
+test bed::check::tests::c_has_three_outcomes ... ok
+test bed::pe::tests::the_code_sha256_ignores_the_link_times_and_nothing_else ... ok
+test bed::file::tests::the_matrix_is_the_specs ... ok
+test bed::check::tests::a_passes_inside_five_percent_and_fails_a_band_outside ... ok
+test bed::file::tests::the_atmospheric_validation_imports_as_the_spec_saw_it ... ok
+test bed::pe::tests::a_file_of_another_shape_has_no_code_sha256 ... ok
+test bed::pe::tests::the_embedded_manifest_lists_the_four_executables ... ok
+test bed::read::tests::every_seeds_value_is_read_refused_for_noise_or_not ... ok
+test bed::file::tests::a_cells_project_is_the_measured_cells_byte_for_byte ... ok
+test bed::file::tests::a_cells_project_is_the_evidence_runs ... ok
+test bed::check::tests::b_is_the_range_of_the_cell_means ... ok
+test bed::file::tests::the_committed_file_is_the_matrix ... ok
+test bed::check::tests::d_holds_tcr_to_its_analytic_value ... ok
+test bed::stats::tests::mean_sd_and_range ... ok
+test bed::stats::tests::quantiles_are_the_published_values ... ok
+test bed::run::tests::par_map_keeps_order ... ok
+test bed::transport::tests::the_beds_transport_is_high_in_the_eight_cells ... ignored, traces the eight cells at the bed's rays, minutes in a release build; run on purpose                 with --release
+test bed::tests::the_manifest_hash_ignores_line_ends ... ok
+test bed::pe::tests::solvers_are_checked_against_the_manifest ... ok
+test bed::bind::tests::a_run_with_no_output_hashes_and_no_seal_entry_is_refused ... ok
+test bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds ... ok
+test bed::tests::a_gated_tcr_run_short_of_a_band_does_not_pass_the_bed ... ok
+test bed::file::tests::any_change_to_the_matrix_makes_the_bed_exploratory ... ok
+test bed::tests::a_bed_whose_every_check_holds_passes_and_one_cell_outside_tolerance_fails_it ... ok
+test bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed ... ok
+test bed::tests::a_seed_carrying_another_seeds_outputs_does_not_pass_the_bed ... ok
+test bed::tests::the_report_validates_against_its_schema ... ok
+test bed::bind::tests::a_run_bound_to_a_seal_is_refused_when_any_file_is_not_its_records ... ok
+test bed::bind::tests::a_run_bound_to_run_json_is_refused_when_any_file_is_not_its_records ... ok
+test bed::tests::ten_seeds_carrying_one_seeds_outputs_do_not_pass_the_bed ... ok
+test bed::run::tests::a_read_not_bound_or_not_hashed_from_disk_is_refused ... ok
+test bed::run::tests::the_plan_is_the_specs_412_spps_runs_and_21_tcr ... ok
+test bed::run::tests::a_tcr_run_whose_run_json_names_another_plan_is_refused_on_its_files ... ok
+test bed::run::tests::a_run_whose_files_on_disk_are_not_the_plans_is_refused ... ok
+test bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused ... ok
+test bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed ... ok
+test bed::transport::tests::transports_are_traced_once_per_room_alpha_and_air ... ok
+test bed::transport::tests::a_low_count_transport_is_the_committed_high_count_one_within_its_noise ... ok
+test result: ok. 40 passed; 0 failed; 1 ignored; 0 measured; 181 filtered out; finished in 5.01s
+
+================================================================================================
+## 11. The bed after the gate (07:32:09): rejudge-1-fingerprint.py <bed> r1-bed-after.tsv, the two per-file manifests compared, and the seal check again
+================================================================================================
+bed: C:/tmp/nm-m8a-bed/20260929T093134Z
+at: 2026-09-30T07:32:09+02:00
+files: 16985
+bytes: 1238241863
+newest mtime: 2026-09-29T15:25:01.891Z (plots/summary.png)
+report.json sha256: 5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad
+summary.json sha256: 6af1656e16429ab8cddfeaa00fb0f0c0765f91b2fe2669dbaa9ff54bf91b3ced
+manifest (path, size, mtime_ns, sha256 per file) sha256: c4e427cf3d4f89b3b55227afde3c3eeb4689e0d4a33c04dcacaa7f7c99041e6f
+manifest: C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/2944fcd7-7038-44bd-9fc4-e0055382b531/scratchpad/r1-bed-after.tsv
+cmp r1-bed-before.tsv r1-bed-after.tsv: identical (exit 0)
+seal: 433 runs, 16861 files, 1118668944 bytes (header: 16861 files, 1118668944 bytes)
+disk under runs/: 16861 files, 1118668944 bytes
+in the seal, not on disk: 0; on disk under runs/, not in the seal: 0; size or sha256 differ: 0
+report.json: seal 5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad disk 5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad equal
+summary.json: seal 6af1656e16429ab8cddfeaa00fb0f0c0765f91b2fe2669dbaa9ff54bf91b3ced disk 6af1656e16429ab8cddfeaa00fb0f0c0765f91b2fe2669dbaa9ff54bf91b3ced equal
+
+================================================================================================
+## 12. The process watch (rejudge-1-watch.ps1), 06:14:48 to 07:32:03, heartbeats left out
+================================================================================================
+06:14:48 WATCH start pid 23080
+06:16:05 SIMPA  simpa.exe pid 10152 ["C:\tmp\nm-target\release\simpa.exe" bed B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a.json --jobs 12 --json --out C:\tmp\nm-target\gates\m8a\20260930-061500\reread --from C:/tmp/n] <- 12916 powershell.exe ["C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -File tools/gates/m8a.ps1 -From C:/tmp/nm-m8a-bed] <- 23288 powershell.exe ["C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -File C:\Users\Burhan\AppData\Local\Temp\claude\b] <- 20056 powershell.exe ["C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"  -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command] <- 8288 cmd.exe [C:\Windows\System32\cmd.exe /d /s /c ""C:\Windows\System32\chcp.com" 65001 >nul & "C:\Windows\System32\WindowsPowerShell] <- 21272 claude.exe [c:\Users\Burhan\.vscode\extensions\anthropic.claude-code-2.1.283-win32-x64\resources\native-binary\claude.exe --output-f] <- 3404 Code.exe ["C:\Programs\Microsoft VS Code\Code.exe" --type=utility --utility-sub-type=node.mojom.NodeService --lang=en-US --service] <- 2840 Code.exe ["C:\Programs\Microsoft VS Code\Code.exe" ] <- 8940 explorer.exe [C:\Windows\Explorer.EXE] <- 8912 (gone) []
+07:32:03 WATCH stop
+(76 heartbeats, 06:15:49 to 07:31:04, the largest interval 62 s; 0 SOLVER lines, 0 GATE-SOLVER lines)
