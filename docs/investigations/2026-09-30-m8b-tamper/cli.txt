@@ -1,0 +1,293 @@
+# simpa bed --seal: the product CLI, built from the m8b-tamper tree at 05:22 (release).
+# Later edits before the code commit: rustfmt layout, two clippy fixes (a type alias, contains), the
+# wording of the bed_run_files_changed message, and doc comments. No change of behaviour.
+
+## 1. Refusals of a bad --seal (each exits 2 before anything is written: the three --out folders do not exist)
+# The first attempt at the bad seal failed on shell quoting (the SyntaxError below), so simpa was given
+# a seal file that did not exist, which it refused too; the bad seal was then made by make_bad_seal.py
+# (the M8a seal with its file total raised by one) and refused on its totals.
+== --seal without --from
+simpa: --seal needs --from: a seal holds an earlier bed's runs
+usage: simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier> [--seal <file>]] [--upstream <dir>] [--json]
+       simpa bed --schema | --canonical
+exit 2
+== a seal of another bed (--from the judge's swap-seed copy)
+simpa: bed refused: --seal the seal is of the bed 20260929T093134Z, not of C:/tmp/nm-judge-tamper/cases/swap-seed
+exit 2
+  File "<string>", line 3
+    s=json.load(open(r'beds/m8a-20260929T093134Z/outputs-seal.json'.replace('/', '\')))
+                                                                                 ^
+SyntaxError: unterminated string literal (detected at line 3); perhaps you escaped the end quote?
+== a seal whose totals do not add up
+simpa: bed refused: --seal C:/tmp/nm-judge-tamper/cli-checks/bad-seal.json: The system cannot find the file specified. (os error 2)
+exit 2
+== a seal whose totals do not add up
+simpa: bed refused: --seal C:/tmp/nm-judge-tamper/cli-checks/bad-seal.json: it lists 16861 files and 1118668944 bytes, its totals say 16862 and 1118668944
+exit 2
+
+## 2. simpa bed beds/m8a.json --out C:/tmp/nm-judge-tamper/cli --from C:/tmp/nm-m8a-bed/20260929T093134Z --seal beds/m8a-20260929T093134Z/outputs-seal.json --upstream B:/repos/I-Simpa-upstream --jobs 8 --json
+## stderr, whole:
+E1 ok   spps.exe: code sha256 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d (C:\tmp\nm-m8a-solvers\spps.exe)
+E1 ok   classicalTheory.exe: code sha256 fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234 (C:\tmp\nm-m8a-solvers\classicalTheory.exe)
+E1 ok   tetgen.exe: code sha256 d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f (C:\tmp\nm-m8a-solvers\tetgen.exe)
+E1 ok   preprocess.exe: code sha256 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26 (C:\tmp\nm-m8a-solvers\preprocess.exe)
+[05:22:45] bed beds/m8a.json: 433 runs, 8 at once, into C:/tmp/nm-judge-tamper/cli\20260930T032245Z (NTFS; about 0 files)
+[05:22:45] reading 433 runs from C:/tmp/nm-m8a-bed/20260929T093134Z
+[05:28:21] transport 1/68 6x10x3 α 0.05 air None: 26 s
+[05:28:46] transport 2/68 6x10x3 α 0.1 air None: 26 s
+[05:29:11] transport 3/68 6x10x3 α 0.2 air None: 25 s
+[05:29:32] transport 4/68 6x10x3 α 0.4 air None: 21 s
+[05:29:58] transport 5/68 6x10x3 α 0.05 air Some(0.00010127115679716098): 26 s
+[05:30:27] transport 6/68 6x10x3 α 0.05 air Some(0.00030160006427493294): 29 s
+[05:30:53] transport 7/68 6x10x3 α 0.05 air Some(0.0006282295930122581): 26 s
+[05:31:17] transport 8/68 6x10x3 α 0.05 air Some(0.0010742517883437388): 24 s
+[05:31:40] transport 9/68 6x10x3 α 0.05 air Some(0.0022771199540498614): 22 s
+[05:31:57] transport 10/68 6x10x3 α 0.05 air Some(0.006832841684719681): 18 s
+[05:32:07] transport 11/68 6x10x3 α 0.05 air Some(0.024252241169730272): 10 s
+[05:32:33] transport 12/68 6x10x3 α 0.1 air Some(0.00010127115679716098): 26 s
+[05:32:59] transport 13/68 6x10x3 α 0.1 air Some(0.00030160006427493294): 25 s
+[05:33:24] transport 14/68 6x10x3 α 0.1 air Some(0.0006282295930122581): 26 s
+[05:33:50] transport 15/68 6x10x3 α 0.1 air Some(0.0010742517883437388): 26 s
+[05:34:15] transport 16/68 6x10x3 α 0.1 air Some(0.0022771199540498614): 25 s
+[05:34:36] transport 17/68 6x10x3 α 0.1 air Some(0.006832841684719681): 22 s
+[05:34:51] transport 18/68 6x10x3 α 0.1 air Some(0.024252241169730272): 15 s
+[05:35:16] transport 19/68 6x10x3 α 0.2 air Some(0.00010127115679716098): 25 s
+[05:35:41] transport 20/68 6x10x3 α 0.2 air Some(0.00030160006427493294): 25 s
+[05:36:05] transport 21/68 6x10x3 α 0.2 air Some(0.0006282295930122581): 24 s
+[05:36:30] transport 22/68 6x10x3 α 0.2 air Some(0.0010742517883437388): 24 s
+[05:36:53] transport 23/68 6x10x3 α 0.2 air Some(0.0022771199540498614): 24 s
+[05:37:16] transport 24/68 6x10x3 α 0.2 air Some(0.006832841684719681): 23 s
+[05:37:35] transport 25/68 6x10x3 α 0.2 air Some(0.024252241169730272): 18 s
+[05:37:57] transport 26/68 6x10x3 α 0.4 air Some(0.00010127115679716098): 22 s
+[05:38:19] transport 27/68 6x10x3 α 0.4 air Some(0.00030160006427493294): 23 s
+[05:38:41] transport 28/68 6x10x3 α 0.4 air Some(0.0006282295930122581): 22 s
+[05:39:03] transport 29/68 6x10x3 α 0.4 air Some(0.0010742517883437388): 22 s
+[05:39:25] transport 30/68 6x10x3 α 0.4 air Some(0.0022771199540498614): 22 s
+[05:39:45] transport 31/68 6x10x3 α 0.4 air Some(0.006832841684719681): 20 s
+[05:40:03] transport 32/68 6x10x3 α 0.4 air Some(0.024252241169730272): 18 s
+[05:40:31] transport 33/68 5x4x3 α 0.05 air None: 28 s
+[05:40:57] transport 34/68 5x4x3 α 0.1 air None: 26 s
+[05:41:21] transport 35/68 5x4x3 α 0.2 air None: 25 s
+[05:41:42] transport 36/68 5x4x3 α 0.4 air None: 21 s
+[05:42:08] transport 37/68 5x4x3 α 0.05 air Some(0.00010127115679716098): 26 s
+[05:42:34] transport 38/68 5x4x3 α 0.05 air Some(0.00030160006427493294): 26 s
+[05:43:00] transport 39/68 5x4x3 α 0.05 air Some(0.0006282295930122581): 25 s
+[05:43:25] transport 40/68 5x4x3 α 0.05 air Some(0.0010742517883437388): 25 s
+[05:43:49] transport 41/68 5x4x3 α 0.05 air Some(0.0022771199540498614): 24 s
+[05:44:08] transport 42/68 5x4x3 α 0.05 air Some(0.006832841684719681): 20 s
+[05:44:21] transport 43/68 5x4x3 α 0.05 air Some(0.024252241169730272): 12 s
+[05:44:47] transport 44/68 5x4x3 α 0.1 air Some(0.00010127115679716098): 26 s
+[05:45:20] transport 45/68 5x4x3 α 0.1 air Some(0.00030160006427493294): 33 s
+[05:45:45] transport 46/68 5x4x3 α 0.1 air Some(0.0006282295930122581): 25 s
+[05:46:10] transport 47/68 5x4x3 α 0.1 air Some(0.0010742517883437388): 25 s
+[05:46:35] transport 48/68 5x4x3 α 0.1 air Some(0.0022771199540498614): 25 s
+[05:47:02] transport 49/68 5x4x3 α 0.1 air Some(0.006832841684719681): 27 s
+[05:47:27] transport 50/68 5x4x3 α 0.1 air Some(0.024252241169730272): 25 s
+[05:48:10] transport 51/68 5x4x3 α 0.2 air Some(0.00010127115679716098): 43 s
+[05:49:08] transport 52/68 5x4x3 α 0.2 air Some(0.00030160006427493294): 58 s
+[05:49:56] transport 53/68 5x4x3 α 0.2 air Some(0.0006282295930122581): 48 s
+[05:50:37] transport 54/68 5x4x3 α 0.2 air Some(0.0010742517883437388): 41 s
+[05:51:48] transport 55/68 5x4x3 α 0.2 air Some(0.0022771199540498614): 71 s
+[05:52:43] transport 56/68 5x4x3 α 0.2 air Some(0.006832841684719681): 55 s
+[05:53:03] transport 57/68 5x4x3 α 0.2 air Some(0.024252241169730272): 20 s
+[05:53:28] transport 58/68 5x4x3 α 0.4 air Some(0.00010127115679716098): 25 s
+[05:54:04] transport 59/68 5x4x3 α 0.4 air Some(0.00030160006427493294): 36 s
+[05:54:29] transport 60/68 5x4x3 α 0.4 air Some(0.0006282295930122581): 25 s
+[05:54:50] transport 61/68 5x4x3 α 0.4 air Some(0.0010742517883437388): 21 s
+[05:55:12] transport 62/68 5x4x3 α 0.4 air Some(0.0022771199540498614): 22 s
+[05:55:33] transport 63/68 5x4x3 α 0.4 air Some(0.006832841684719681): 21 s
+[05:55:52] transport 64/68 5x4x3 α 0.4 air Some(0.024252241169730272): 20 s
+[05:56:18] transport 65/68 20x8x4 α 0.05 air None: 26 s
+[05:56:43] transport 66/68 20x8x4 α 0.1 air None: 25 s
+[05:57:07] transport 67/68 20x8x4 α 0.2 air None: 24 s
+[05:57:29] transport 68/68 20x8x4 α 0.4 air None: 21 s
+[05:57:29] bed PASS: gated cells {"Pass": 32}, reported cells {"Reported": 8}, 0 failures, 41 files, 93.3 MB; C:/tmp/nm-judge-tamper/cli\20260930T032245Z\report.json
+exit 0
+
+## report.meta (seal, seal_sha256, from, git, phases):
+{
+ "seal": "beds/m8a-20260929T093134Z/outputs-seal.json",
+ "seal_sha256": "762f3fbab431a01d9745a73ba55fa00674e41e0605ad8521c55122bd7c15e09d",
+ "from": "C:/tmp/nm-m8a-bed/20260929T093134Z",
+ "root": "C:/tmp/nm-judge-tamper/cli\\20260930T032245Z",
+ "git_commit": "5d46aa7f9b3b63248c65d8ade434faa84b8a2030",
+ "git_dirty": true,
+ "solver_phase_s": 309.035457,
+ "transport_phase_s": 1774.4192809,
+ "wall_s": 2083.8868005,
+ "jobs": 8
+}
+
+## 3. Its report.json against the M8a bed's (report-compare.py, step 1's rejudge-compare.py; Python's json reads numbers correctly rounded)
+old: C:/tmp/nm-m8a-bed/20260929T093134Z/report.json
+new: cli/20260930T032245Z/report.json
+pass: True vs True; failures: 0 vs 0; exploratory: False vs False; needs_extension: [] vs []
+cell verdicts equal: True (40 cells)
+tcr verdicts equal: True (20 TCR runs)
+say_no n5 as_required: True vs True; n6: True vs True
+
+numeric leaves, per section: count, largest |difference|, largest relative difference, where
+  atmospheric_validation           n=  1134  max|d|=0.000e+00  max rel=0.000e+00  -
+  bed_report_version               n=     1  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.a                          n=  2380  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.alpha                      n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.b                          n=   814  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.bands_hz                   n=   256  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.c                          n=  1073  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.duration_s                 n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.particles_per_source       n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reference                  n=  2944  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.reported                   n= 14236  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.seeds                      n= 17296  max|d|=0.000e+00  max rel=0.000e+00  -
+  cells.trans_epsilon              n=    40  max|d|=0.000e+00  max rel=0.000e+00  -
+  preconditions                    n=   115  max|d|=0.000e+00  max rel=0.000e+00  -
+  random_against_energetic         n=   102  max|d|=0.000e+00  max rel=0.000e+00  -
+  say_no                           n=     9  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.d                            n=   532  max|d|=4.441e-16  max rel=2.731e-08  tcr[4].d.bands[1].analytic_eyring_s: 2.597263765023588 vs 2.5972637650235884
+  tcr.eyring_against_kuttruff      n=   128  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.run                          n=    80  max|d|=0.000e+00  max rel=0.000e+00  -
+  tcr.sabine_against_analytic      n=   128  max|d|=2.220e-16  max rel=2.438e-08  tcr[0].sabine_against_analytic[0]: 2.6602686942212017e-08 vs 2.6602686720167412e-08
+  transports                       n=  1008  max|d|=0.000e+00  max rel=0.000e+00  -
+  overall max|d| = 4.441e-16
+
+non-numeric differences: 0
+
+keys only in the old report: 0
+keys only in the new report: 1880, by name:
+  band_problems: 20 (e.g. tcr[0].d.band_problems); values: [] x20
+  bound_by: 433 (e.g. cells[0].seeds[0].run.bound_by); values: "seal" x433
+  on_disk: 433 (e.g. cells[0].seeds[0].run.on_disk); values: {"project_sha256": "7c7001c73c525f08d9d5c56fed01d9b69311c8d7e99a581ee242c6663c12 x1, {"project_sha256": "c52d15e400db40b05641ba9165c6f3e53c4d8aeb5cd2df2a353bcd53cc74 x1, {"project_sha256": "d38d094c277d3bc9e6143ad4a91e9a635183b4f118d0d4d14f09aa8fd632 x1, {"project_sha256": "16808a2ecb2e981e1b8de6ff44412d56fa6ef9bcc08e887c1048a0b495b1 x1 ...
+  outputs_sha256: 433 (e.g. cells[0].seeds[0].run.outputs_sha256); values: "18e606fa70949952d1c99d0b76a8320ad42bc1abd00989ee920d5ccefb297f4e" x1, "d55dafb718d7a81e8afcdb74974d5a51188148cd630293833d264679283757aa" x1, "3612f2b70642538c706345ef8d5fc44e2c21f54da9b64565b8f0b6a0ccd1a51a" x1, "4592ca8ff352228ea3968e762dca4d46a121331650b1aa5d72ef657f88d6a705" x1 ...
+  project_sha256: 433 (e.g. cells[0].seeds[0].run.project_sha256); values: "7c7001c73c525f08d9d5c56fed01d9b69311c8d7e99a581ee242c6663c12dda9" x1, "c52d15e400db40b05641ba9165c6f3e53c4d8aeb5cd2df2a353bcd53cc742090" x1, "d38d094c277d3bc9e6143ad4a91e9a635183b4f118d0d4d14f09aa8fd632dc39" x1, "16808a2ecb2e981e1b8de6ff44412d56fa6ef9bcc08e887c1048a0b495b10f56" x1 ...
+  run_analytic_eyring_s: 128 (e.g. tcr[0].d.bands[0].run_analytic_eyring_s); values: 2.648169373371687 x6, 1.289224244497087 x6, 0.6087262224951493 x6, 0.2659093913307413 x6 ...
+
+## 4. The new report against the schema, and the say-NO partners through the seal (release, SIMPA_BED_REPORT = this report)
+### report_validates_against_its_schema
+report.json validates: pass true, exploratory false, 40 cells, 0 failures
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.02s
+### n2_kuttruff_without_its_half_fails_a
+6x10x3-a0.4-random-air-off: A Some(Fail): 125 Hz -11.25 %, 250 Hz -11.07 %, 500 Hz -11.37 %, 1000 Hz -11.22 %, 2000 Hz -11.24 %, 4000 Hz -11.25 %
+6x10x3-a0.4-energetic-air-off: A Some(Fail): 125 Hz -11.22 %, 250 Hz -11.30 %, 500 Hz -11.24 %, 1000 Hz -11.30 %, 2000 Hz -11.21 %, 4000 Hz -11.22 %
+6x10x3-a0.4-random-air-on: A Some(Fail): 125 Hz -11.13 %, 250 Hz -11.14 %, 500 Hz -11.15 %, 1000 Hz -11.14 %, 2000 Hz -11.04 %, 4000 Hz -10.68 %, 8000 Hz -9.75 %
+6x10x3-a0.4-energetic-air-on: A Some(Fail): 125 Hz -11.21 %, 250 Hz -11.27 %, 500 Hz -11.19 %, 1000 Hz -11.21 %, 2000 Hz -11.04 %, 4000 Hz -10.74 %, 8000 Hz -9.59 %
+5x4x3-a0.4-random-air-off: A Some(Fail): 125 Hz -10.22 %, 250 Hz -10.57 %, 500 Hz -10.33 %, 1000 Hz -10.51 %, 2000 Hz -10.49 %, 4000 Hz -10.33 %
+5x4x3-a0.4-energetic-air-off: A Some(Fail): 125 Hz -10.42 %, 250 Hz -10.38 %, 500 Hz -10.44 %, 1000 Hz -10.39 %, 2000 Hz -10.42 %, 4000 Hz -10.41 %
+5x4x3-a0.4-random-air-on: A Some(Fail): 125 Hz -10.39 %, 250 Hz -10.31 %, 500 Hz -10.27 %, 1000 Hz -10.24 %, 2000 Hz -10.27 %, 4000 Hz -9.90 %, 8000 Hz -9.17 %
+5x4x3-a0.4-energetic-air-on: A Some(Fail): 125 Hz -10.41 %, 250 Hz -10.37 %, 500 Hz -10.41 %, 1000 Hz -10.33 %, 2000 Hz -10.28 %, 4000 Hz -10.02 %, 8000 Hz -9.20 %
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 36.69s
+### n3_plain_eyring_as_the_reference_fails_a
+6x10x3-a0.4-random-air-off: A Some(Fail): 125 Hz +10.75 %, 250 Hz +10.97 %, 500 Hz +10.60 %, 1000 Hz +10.79 %, 2000 Hz +10.76 %, 4000 Hz +10.75 %
+6x10x3-a0.4-energetic-air-off: A Some(Fail): 125 Hz +10.79 %, 250 Hz +10.70 %, 500 Hz +10.77 %, 1000 Hz +10.69 %, 2000 Hz +10.80 %, 4000 Hz +10.79 %
+6x10x3-a0.4-random-air-on: A Some(Fail): 125 Hz +10.89 %, 250 Hz +10.84 %, 500 Hz +10.76 %, 1000 Hz +10.70 %, 2000 Hz +10.61 %, 4000 Hz +10.30 %, 8000 Hz +8.94 %
+6x10x3-a0.4-energetic-air-on: A Some(Fail): 125 Hz +10.79 %, 250 Hz +10.67 %, 500 Hz +10.72 %, 1000 Hz +10.61 %, 2000 Hz +10.62 %, 4000 Hz +10.23 %, 8000 Hz +9.13 %
+5x4x3-a0.4-random-air-off: A Some(Fail): 125 Hz +9.48 %, 250 Hz +9.06 %, 500 Hz +9.35 %, 1000 Hz +9.13 %, 2000 Hz +9.16 %, 4000 Hz +9.35 %
+5x4x3-a0.4-energetic-air-off: A Some(Fail): 125 Hz +9.24 %, 250 Hz +9.28 %, 500 Hz +9.21 %, 1000 Hz +9.27 %, 2000 Hz +9.24 %, 4000 Hz +9.25 %
+5x4x3-a0.4-random-air-on: A Some(Fail): 125 Hz +9.27 %, 250 Hz +9.34 %, 500 Hz +9.35 %, 1000 Hz +9.34 %, 2000 Hz +9.15 %, 4000 Hz +9.08 %, 8000 Hz +8.19 %
+5x4x3-a0.4-energetic-air-on: A Some(Fail): 125 Hz +9.24 %, 250 Hz +9.27 %, 500 Hz +9.18 %, 1000 Hz +9.22 %, 2000 Hz +9.14 %, 4000 Hz +8.94 %, 8000 Hz +8.16 %
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 36.73s
+### n8_tcrs_analytic_time_with_the_physical_constant_fails_d
+6x10x3-a0.05-tcr-air-off 125 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 250 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 500 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 125 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 250 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 500 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 125 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 250 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 500 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 125 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 250 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 500 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 125 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 250 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 500 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 8000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 125 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 250 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 500 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 8000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 125 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 250 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 500 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 8000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 125 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 250 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 500 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 8000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 125 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 250 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 500 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 1000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 2000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 4000 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-off 125 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-off 250 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-off 500 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-off 1000 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-off 2000 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-off 4000 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-off 125 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-off 250 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-off 500 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-off 1000 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-off 2000 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-off 4000 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-off 125 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-off 250 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-off 500 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-off 1000 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-off 2000 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-off 4000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-on 125 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-on 250 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-on 500 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-on 1000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-on 2000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-on 4000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-on 8000 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-on 125 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-on 250 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-on 500 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-on 1000 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-on 2000 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-on 4000 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-on 8000 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-on 125 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-on 250 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-on 500 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-on 1000 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-on 2000 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-on 4000 Hz: D Fail, +1.230 %
+5x4x3-a0.2-tcr-air-on 8000 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-on 125 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-on 250 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-on 500 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-on 1000 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-on 2000 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-on 4000 Hz: D Fail, +1.230 %
+5x4x3-a0.4-tcr-air-on 8000 Hz: D Fail, +1.230 %
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.05s

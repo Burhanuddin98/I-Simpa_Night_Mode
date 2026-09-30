@@ -1,0 +1,348 @@
+==== 41-seeds: two seeds of a cell may share no solver output file (into_reads)
+file: crates/simpa-core/src/bed/run.rs
+revert:
+--- fixed
++++ reverted
+@@ -723,6 +723,5 @@
+     // with the first ten), and over the atmospheric validation's.
+-    for seeds in reads.spps.values_mut() {
+-        refuse_shared_outputs(seeds);
+-    }
+-    refuse_shared_outputs(&mut reads.atmospheric.spps);
++    if false {
++        refuse_shared_outputs(&mut reads.atmospheric.spps);
++    }
+ }
+command: cargo test -p simpa-core --lib -- --exact bed::tests::a_seed_carrying_another_seeds_outputs_does_not_pass_the_bed bed::tests::ten_seeds_carrying_one_seeds_outputs_do_not_pass_the_bed
+--- with the revert: exit 101 (2e+01 s)
+test bed::tests::a_seed_carrying_another_seeds_outputs_does_not_pass_the_bed ... FAILED
+test bed::tests::ten_seeds_carrying_one_seeds_outputs_do_not_pass_the_bed ... FAILED
+failures:
+thread 'bed::tests::a_seed_carrying_another_seeds_outputs_does_not_pass_the_bed' (8736) panicked at crates\simpa-core\src\bed.rs:655:9:
+assertion failed: !r.pass
+thread 'bed::tests::ten_seeds_carrying_one_seeds_outputs_do_not_pass_the_bed' (5580) panicked at crates\simpa-core\src\bed.rs:686:9:
+assertion failed: !r.pass
+failures:
+    bed::tests::a_seed_carrying_another_seeds_outputs_does_not_pass_the_bed
+    bed::tests::ten_seeds_carrying_one_seeds_outputs_do_not_pass_the_bed
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 220 filtered out; finished in 0.04s
+error: test failed, to rerun pass `-p simpa-core --lib`
+--- restored byte for byte: True
+--- after the restore: exit 0 (2e+01 s)
+test bed::tests::a_seed_carrying_another_seeds_outputs_does_not_pass_the_bed ... ok
+test bed::tests::ten_seeds_carrying_one_seeds_outputs_do_not_pass_the_bed ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 220 filtered out; finished in 0.04s
+
+==== 41-run.json: a run's files held to run.json's output hashes (bind)
+file: crates/simpa-core/src/bed/bind.rs
+revert:
+--- fixed
++++ reverted
+@@ -249,7 +249,3 @@
+             .collect();
+-        problems.extend(
+-            differences("run.json's outputs", &record, &here)
+-                .into_iter()
+-                .map(|p| format!("{name}/{p}")),
+-        );
++        let _ = (&record, &here);
+     }
+command: cargo test -p simpa-core --lib -- --exact bed::bind::tests::a_run_bound_to_run_json_is_refused_when_any_file_is_not_its_records
+--- with the revert: exit 101 (2e+01 s)
+test bed::bind::tests::a_run_bound_to_run_json_is_refused_when_any_file_is_not_its_records ... FAILED
+failures:
+thread 'bed::bind::tests::a_run_bound_to_run_json_is_refused_when_any_file_is_not_its_records' (6128) panicked at crates\simpa-core\src\bed\bind.rs:405:68:
+failures:
+    bed::bind::tests::a_run_bound_to_run_json_is_refused_when_any_file_is_not_its_records
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 221 filtered out; finished in 0.01s
+error: test failed, to rerun pass `-p simpa-core --lib`
+--- restored byte for byte: True
+--- after the restore: exit 0 (2e+01 s)
+test bed::bind::tests::a_run_bound_to_run_json_is_refused_when_any_file_is_not_its_records ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 221 filtered out; finished in 0.01s
+
+==== 41-seal: a sealed run's files held to the seal (bind)
+file: crates/simpa-core/src/bed/bind.rs
+revert:
+--- fixed
++++ reverted
+@@ -268,3 +268,3 @@
+             .collect();
+-        problems.extend(differences("the seal", &record, &disk));
++        let _ = &record;
+     }
+command: cargo test -p simpa-core --lib -- --exact bed::bind::tests::a_run_bound_to_a_seal_is_refused_when_any_file_is_not_its_records
+--- with the revert: exit 101 (2e+01 s)
+test bed::bind::tests::a_run_bound_to_a_seal_is_refused_when_any_file_is_not_its_records ... FAILED
+failures:
+thread 'bed::bind::tests::a_run_bound_to_a_seal_is_refused_when_any_file_is_not_its_records' (21228) panicked at crates\simpa-core\src\bed\bind.rs:458:65:
+failures:
+    bed::bind::tests::a_run_bound_to_a_seal_is_refused_when_any_file_is_not_its_records
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 221 filtered out; finished in 0.01s
+error: test failed, to rerun pass `-p simpa-core --lib`
+--- restored byte for byte: True
+--- after the restore: exit 0 (2e+01 s)
+test bed::bind::tests::a_run_bound_to_a_seal_is_refused_when_any_file_is_not_its_records ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 221 filtered out; finished in 0.01s
+
+==== 41-unbound: a run with neither record refused (bind)
+file: crates/simpa-core/src/bed/bind.rs
+revert:
+--- fixed
++++ reverted
+@@ -220,3 +220,3 @@
+         .ok_or_else(|| format!("{}: no run folder name", folder.display()))?;
+-    if outputs.is_none() && sealed.is_none() {
++    if false && outputs.is_none() && sealed.is_none() {
+         return Err(format!(
+command: cargo test -p simpa-core --lib -- --exact bed::bind::tests::a_run_with_no_output_hashes_and_no_seal_entry_is_refused
+--- with the revert: exit 101 (2e+01 s)
+test bed::bind::tests::a_run_with_no_output_hashes_and_no_seal_entry_is_refused ... FAILED
+failures:
+thread 'bed::bind::tests::a_run_with_no_output_hashes_and_no_seal_entry_is_refused' (10864) panicked at crates\simpa-core\src\bed\bind.rs:496:58:
+failures:
+    bed::bind::tests::a_run_with_no_output_hashes_and_no_seal_entry_is_refused
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 221 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p simpa-core --lib`
+--- restored byte for byte: True
+--- after the restore: exit 0 (2e+01 s)
+test bed::bind::tests::a_run_with_no_output_hashes_and_no_seal_entry_is_refused ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 221 filtered out; finished in 0.01s
+
+==== 41-record: run.json records what the run left (run manager)
+file: crates/simpa-core/src/run/manager.rs
+revert:
+--- fixed
++++ reverted
+@@ -492,3 +492,4 @@
+         // Last, so that it is what the run left: the logs are closed and the verdict is judged.
+-        let outputs = hash_tree(&self.dir, &[FILE_NAME]).ok();
++        let outputs: Option<Vec<super::manifest::OutputRef>> = None;
++        let _ = hash_tree;
+         let manifest = RunManifest {
+command: cargo test -p simpa-core --test run_manager -- --exact run_json_records_every_file_the_run_left
+--- with the revert: exit 101 (1e+01 s)
+test run_json_records_every_file_the_run_left ... FAILED
+failures:
+thread 'run_json_records_every_file_the_run_left' (22940) panicked at crates\simpa-core\tests\run_manager.rs:184:10:
+failures:
+    run_json_records_every_file_the_run_left
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.13s
+error: test failed, to rerun pass `-p simpa-core --test run_manager`
+--- restored byte for byte: True
+--- after the restore: exit 0 (1e+01 s)
+test run_json_records_every_file_the_run_left ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 0.16s
+
+==== 42-disk: project.simpa, config.xml, scene and mesh from disk held to the plan (check_planned)
+file: crates/simpa-core/src/bed/run.rs
+revert:
+--- fixed
++++ reverted
+@@ -661,3 +661,3 @@
+     // disk now and bound to their record, must be the ones the bed writes for the plan.
+-    problems.extend(disk_problems(p, info));
++    let _ = disk_problems;
+     if problems.is_empty() {
+command: cargo test -p simpa-core --lib -- --exact bed::run::tests::a_tcr_run_whose_run_json_names_another_plan_is_refused_on_its_files bed::run::tests::a_run_whose_files_on_disk_are_not_the_plans_is_refused bed::run::tests::a_read_not_bound_or_not_hashed_from_disk_is_refused bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed
+--- with the revert: exit 101 (2e+01 s)
+test bed::run::tests::a_read_not_bound_or_not_hashed_from_disk_is_refused ... FAILED
+test bed::run::tests::a_run_whose_files_on_disk_are_not_the_plans_is_refused ... FAILED
+test bed::run::tests::a_tcr_run_whose_run_json_names_another_plan_is_refused_on_its_files ... FAILED
+test bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed ... FAILED
+failures:
+thread 'bed::run::tests::a_read_not_bound_or_not_hashed_from_disk_is_refused' (10628) panicked at crates\simpa-core\src\bed\run.rs:1312:44:
+thread 'bed::run::tests::a_run_whose_files_on_disk_are_not_the_plans_is_refused' (23056) panicked at crates\simpa-core\src\bed\run.rs:1285:42:
+thread 'bed::run::tests::a_tcr_run_whose_run_json_names_another_plan_is_refused_on_its_files' (22096) panicked at crates\simpa-core\src\bed\run.rs:1217:47:
+thread 'bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed' (19668) panicked at crates\simpa-core\src\bed.rs:741:9:
+assertion `left == right` failed
+  left: Fail
+ right: NotJudged
+failures:
+    bed::run::tests::a_read_not_bound_or_not_hashed_from_disk_is_refused
+    bed::run::tests::a_run_whose_files_on_disk_are_not_the_plans_is_refused
+    bed::run::tests::a_tcr_run_whose_run_json_names_another_plan_is_refused_on_its_files
+    bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed
+test result: FAILED. 0 passed; 4 failed; 0 ignored; 0 measured; 218 filtered out; finished in 0.10s
+error: test failed, to rerun pass `-p simpa-core --lib`
+--- restored byte for byte: True
+--- after the restore: exit 0 (2e+01 s)
+test bed::run::tests::a_read_not_bound_or_not_hashed_from_disk_is_refused ... ok
+test bed::run::tests::a_tcr_run_whose_run_json_names_another_plan_is_refused_on_its_files ... ok
+test bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed ... ok
+test bed::run::tests::a_run_whose_files_on_disk_are_not_the_plans_is_refused ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 218 filtered out; finished in 0.10s
+
+==== 42-D: D's reference the planned project's analytic time, not the run's own (evaluate_tcr)
+file: crates/simpa-core/src/bed/check.rs
+revert:
+--- fixed
++++ reverted
+@@ -1140,3 +1140,3 @@
+             .iter()
+-            .map(|b| (b.freq_hz, b.eyring_s, plan(b.freq_hz).and_then(|x| x.1)))
++            .map(|b| (b.freq_hz, b.eyring_s, b.analytic_eyring_s))
+             .collect::<Vec<_>>(),
+command: cargo test -p simpa-core --lib -- --exact bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds
+--- with the revert: exit 101 (2e+01 s)
+test bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds ... FAILED
+test bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed ... FAILED
+failures:
+thread 'bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds' (18652) panicked at crates\simpa-core\src\bed\check.rs:1565:9:
+assertion `left == right` failed: TcrReport { id: "6x10x3-a0.2-tcr-air-off", project_of: "6x10x3-a0.2-energetic-air-off", gated: true, run: Some(RunInfo { folder: "f", status: "OK", reasons: [], exit_class: 0, solver_wall_s: None, solver_cpu_s: None, exe: "classicalTheory.exe", exe_sha256: "tcr", project_sha256: None, tetgen_sha256: None, files: 1, bytes: 1, bound_by: None, outputs_sha256: None, output_files: [], on_disk: None }), error: None, d: Some(CheckD { bands: [BandD { freq_hz: 125, tcr_eyring_s: 0.6078067353189239, analytic_eyring_s: Some(0.6078067353189239), deviation: Some(0.0), verdict: Pass, run_analytic_eyring_s: Some(0.6078067353189239) }, BandD { freq_hz: 250, tcr_eyring_s: 0.6059960153697629, analytic_eyring_s: Some(0.6059960153697629), deviation: Some(0.0), verdict: Pass, run_analytic_eyring_s: Some(0.6059960153697629) }, BandD { freq_hz: 500, tcr_eyring_s: 0.6030667213599256, analytic_eyring_s: Some(0.6030667213599256), deviation: Some(0.0), verdict: Pass, run_analytic_eyring_s: Some(0.6030667213599256) }, BandD { freq_hz: 1000, tcr_eyring_s: 0.5991121234764105, analytic_eyring_s: Some(0.5991121234764105), deviation: Some(0.0), verdict: Pass, run_analytic_eyring_s: Some(0.5991121234764105) }, BandD { freq_hz: 2000, tcr_eyring_s: 0.588701101232583, analytic_eyring_s: Some(0.588701101232583), deviation: Some(0.0), verdict: Pass, run_analytic_eyring_s: Some(0.588701101232583) }, BandD { freq_hz: 4000, tcr_eyring_s: 0.5523483342478828, analytic_eyring_s: Some(0.5523483342478828), deviation: Some(0.0), verdict: Pass, run_analytic_eyring_s: Some(0.5523483342478828) }], band_problems: [], limit: 0.005, verdict: Pass }), sabine_against_analytic: [Some(0.03067486198401892), Some(0.03067486198401892), Some(0.03067486198401892), Some(0.03067486198401892), Some(0.03067486198401892), Some(0.03067486198401892)], eyring_against_kuttruff: [None, None, None, None, None, None], verdict: Pass, failures: [] }
+  left: Pass
+ right: Fail
+thread 'bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed' (9168) panicked at crates\simpa-core\src\bed.rs:750:9:
+assertion failed: !r.pass
+failures:
+    bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds
+    bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 220 filtered out; finished in 0.09s
+error: test failed, to rerun pass `-p simpa-core --lib`
+--- restored byte for byte: True
+--- after the restore: exit 0 (2e+01 s)
+test bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds ... ok
+test bed::tests::a_tcr_run_of_another_plan_does_not_pass_the_bed ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 220 filtered out; finished in 0.09s
+
+==== 42-D on the M8a bed: say-NO N8's fault held over the reading only, as before M8b (bed_m8a.rs)
+file: crates/simpa/tests/bed_m8a.rs
+revert:
+--- fixed
++++ reverted
+@@ -312,6 +312,6 @@
+     // runs are judged: the fault is held over the judging as well as the reading.
+-    let judged = faults::with(Fault::TcrAnalyticPhysicalConstant, || {
+-        let reads = read(&l.bed, &from, |k| matches!(k, RunKey::Tcr { .. }));
+-        judge(&l, &reads, &traced(&rep), &rep)
+-    });
++    let reads = faults::with(Fault::TcrAnalyticPhysicalConstant, || {
++        read(&l.bed, &from, |k| matches!(k, RunKey::Tcr { .. }))
++    });
++    let judged = judge(&l, &reads, &traced(&rep), &rep);
+     let gated: Vec<_> = judged.tcr.iter().filter(|t| t.gated).collect();
+command: cargo test -p simpa --test bed_m8a -- --ignored --exact --nocapture n8_tcrs_analytic_time_with_the_physical_constant_fails_d
+--- with the revert: exit 101 (1e+01 s)
+6x10x3-a0.05-tcr-air-off 125 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-off 250 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-off 500 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-off 1000 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-off 2000 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-off 4000 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-off 125 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-off 250 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-off 500 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-off 1000 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-off 2000 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-off 4000 Hz: D Pass, -0.000 %
+6x10x3-a0.2-tcr-air-off 125 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-off 250 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-off 500 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-off 1000 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-off 2000 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-off 4000 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-off 125 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-off 250 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-off 500 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-off 1000 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-off 2000 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-off 4000 Hz: D Pass, +0.000 %
+6x10x3-a0.05-tcr-air-on 125 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-on 250 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-on 500 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-on 1000 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-on 2000 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-on 4000 Hz: D Pass, -0.000 %
+6x10x3-a0.05-tcr-air-on 8000 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-on 125 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-on 250 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-on 500 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-on 1000 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-on 2000 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-on 4000 Hz: D Pass, -0.000 %
+6x10x3-a0.1-tcr-air-on 8000 Hz: D Pass, -0.000 %
+6x10x3-a0.2-tcr-air-on 125 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-on 250 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-on 500 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-on 1000 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-on 2000 Hz: D Pass, +0.000 %
+6x10x3-a0.2-tcr-air-on 4000 Hz: D Pass, -0.000 %
+6x10x3-a0.2-tcr-air-on 8000 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-on 125 Hz: D Pass, -0.000 %
+6x10x3-a0.4-tcr-air-on 250 Hz: D Pass, -0.000 %
+6x10x3-a0.4-tcr-air-on 500 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-on 1000 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-on 2000 Hz: D Pass, +0.000 %
+6x10x3-a0.4-tcr-air-on 4000 Hz: D Pass, -0.000 %
+6x10x3-a0.4-tcr-air-on 8000 Hz: D Pass, +0.000 %
+5x4x3-a0.05-tcr-air-off 125 Hz: D Pass, -0.000 %
+5x4x3-a0.05-tcr-air-off 250 Hz: D Pass, -0.000 %
+5x4x3-a0.05-tcr-air-off 500 Hz: D Pass, -0.000 %
+5x4x3-a0.05-tcr-air-off 1000 Hz: D Pass, -0.000 %
+5x4x3-a0.05-tcr-air-off 2000 Hz: D Pass, -0.000 %
+5x4x3-a0.05-tcr-air-off 4000 Hz: D Pass, -0.000 %
+5x4x3-a0.1-tcr-air-off 125 Hz: D Pass, -0.000 %
+5x4x3-a0.1-tcr-air-off 250 Hz: D Pass, -0.000 %
+--- restored byte for byte: True
+--- after the restore: exit 0 (2e+00 s)
+6x10x3-a0.05-tcr-air-off 125 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 250 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 500 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-off 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 125 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 250 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 500 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-off 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 125 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 250 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 500 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-off 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 125 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 250 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 500 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-off 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 125 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 250 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 500 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.05-tcr-air-on 8000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 125 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 250 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 500 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.1-tcr-air-on 8000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 125 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 250 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 500 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.2-tcr-air-on 8000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 125 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 250 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 500 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 1000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 2000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 4000 Hz: D Fail, +1.230 %
+6x10x3-a0.4-tcr-air-on 8000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 125 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 250 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 500 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 1000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 2000 Hz: D Fail, +1.230 %
+5x4x3-a0.05-tcr-air-off 4000 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-off 125 Hz: D Fail, +1.230 %
+5x4x3-a0.1-tcr-air-off 250 Hz: D Fail, +1.230 %
+

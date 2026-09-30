@@ -1,0 +1,2 @@
+groups 41, output files hashed 8490, cells with two equal whole sets 0
+(cell, path) pairs with a byte-identical file in two seeds: 0
