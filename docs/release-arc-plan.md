@@ -40,6 +40,9 @@ A release blocker, not a footnote.
 
 ## Work list, in order
 
+This list stopped on 2026-09-08, before the Rust rebuild (`docs/rebuild-plan.md`), and is no longer kept.
+What is live is tracked in `docs/scope.md`, and what comes next is in the newest `session-logs/HANDOFF-*.md`.
+
 | # | item | status |
 |---|---|---|
 | 1 | Baseline: build the four solvers from the pinned tag and the GUI from a clean clone on Grace; run `test_pipeline`; one headless smoke solve | **builds done and verified**; smoke solve runs end to end but its RESULTS ARE NOT TRUSTWORTHY — see item 12 |

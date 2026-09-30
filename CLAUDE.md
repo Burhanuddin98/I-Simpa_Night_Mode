@@ -2,7 +2,7 @@
 
 **What this is.** A from-scratch ImGui and OpenGL 4.6 GUI over I-Simpa's room-acoustics solvers, SPPS particle tracing and TCR classical theory. Windows-only, GPL-3.0. Upstream is `Universite-Gustave-Eiffel/I-Simpa`, alive, with a wxWidgets GUI. We ship their solvers, built from a pinned tag plus our `patches/`, behind our own GUI.
 
-**Live arc:** THE RELEASE ARC, `docs/release-arc-plan.md`. Read it first. Its work-list table is the single source of what is live and what is done. Do not restate findings here.
+**Where things stand:** `docs/scope.md`, the scope ledger. It lists every dimension of the rebuild, where each is tracked, and its state. What comes next, in order, is in the newest `session-logs/HANDOFF-*.md`. The milestones are defined in `docs/rebuild-plan.md`, decisions are in `docs/decision-log.md`, and deferred work is in `docs/v1.1-backlog.md`. `docs/release-arc-plan.md` still holds the release definition (line 13), but its work list stopped on 2026-09-08, before the Rust rebuild, and is not kept. Do not restate findings here.
 
 ## Layout
 
@@ -23,7 +23,7 @@
 number reaching a user, or a feature Burhan asked for. Anything else goes to that file in the same session,
 with its receipt and a "done when" test. Milestone M14 closes it.
 
-Live handoff: `session-logs/HANDOFF-2026-09-30.md` (then `HANDOFF-2026-09-29.md` for history). Read it before the arc plan — it names
+Live handoff: `session-logs/HANDOFF-2026-10-01.md` (then `HANDOFF-2026-09-30.md` for history). Read it before the scope ledger. It names
 what is proven, what is retracted, and the traps already paid for.
 
 **This is Burhan's personal project.** Decisions and pushes are his; nothing is routed to anyone else
