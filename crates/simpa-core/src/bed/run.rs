@@ -346,12 +346,18 @@ fn read_folder(
     seal: Option<&Seal>,
 ) -> Result<Read, String> {
     let manifest = read::manifest_of(folder)?;
+    // A seal holds a whole bed: a run it does not name (gate C's extension seeds, say) is bound
+    // to nothing the bed did not itself leave, and is not read on its own run.json's word.
+    let sealed = match seal {
+        Some(s) => Some(s.run(&p.key).ok_or_else(|| unsealed(folder, s, &p.key))?),
+        None => None,
+    };
     let bound = bind::bind(
         dir,
         folder,
         manifest.outputs.as_deref(),
         &manifest.inputs,
-        seal.and_then(|s| s.run(&p.key)),
+        sealed,
     )?;
     let on_disk = read::on_disk(dir, folder, &manifest);
     let mut r = match p.solver {
@@ -369,6 +375,18 @@ fn read_folder(
     info.output_files = bound.outputs;
     info.on_disk = Some(on_disk);
     Ok(r)
+}
+
+/// Why a run of a sealed bed that its seal does not name is refused.
+fn unsealed(folder: &Path, seal: &Seal, key: &RunKey) -> String {
+    format!(
+        "{}: {}: the seal of the bed {} names no run {}, and a run of a sealed bed is bound only \
+         by its seal: its own run.json is in the folder being judged",
+        bind::RUN_UNBOUND,
+        folder.display(),
+        seal.bed,
+        bind::seal_key(key)
+    )
 }
 
 /// Runs `p` under `root` and reads it.
