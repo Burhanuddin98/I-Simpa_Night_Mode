@@ -73,9 +73,14 @@ Each test must fail on its assertion before the change. Each control passes both
 | T39-3 | The base spelling (C4) runs the base when an active variant is set | fails if the spelling is new |
 | T39-4 | A file with no active variant: the default runs the base | control |
 | T39-5 | The help states the default | fails |
+| T38-8 | Runs row: a run whose checks cover only TetGen, or nothing, is not shown as verified. The Runs row and the Results step agree because both use the core predicate (C5) | fails |
+| T38-9 | e2e: the Results step of a run without a solver record carries `data-results-state="unverified"` and the reason code (C6), if the M11 harness can seed such a run folder | fails, by T38-5 |
 
 A new function that a test needs in order to compile gets a stub that reproduces today's behaviour, so
 the test fails on its assertion and not on compilation.
+
+T38-8 and T38-9 were added after the RED check, from the gaps it noted (T38-7 never reaches the panel,
+and nothing pins the Runs row). Their RED receipts are in `GREEN.md`.
 
 ## Pass bar
 
@@ -103,21 +108,30 @@ The step stops if any of these is not met.
 7. After the gates, neither tree has new untracked files outside this folder, and C: free space is
    recorded.
 
-## Caps
+## Timing and check-ins
 
-These are wall-clock limits. At a cap, the running workflow is stopped and its state reported.
+Burhan, 22:32: "that is not a good way to proceed. to stop and report it will kill the progress, instead
+you must have a method to look at results at regular intervals, say every 15 minutes and report if
+everything is running as planned and if the results look promising or not".
 
-| Step | Cap |
+Nothing is stopped at a time limit. Every 15 minutes a check-in reads the branch, the progress log
+(`C:\tmp\b38-39\progress.log`) and the running agent's latest commands and results. It then reports
+whether the step is on plan and whether its results look promising.
+
+The durations below are what the check-ins judge against. They are estimates, except the gates' own
+measured times. A step is stopped only on Burhan's word, or if it starts work outside this plan: a gate
+re-run, a bed re-judge, or a solver run beyond the tests.
+
+| Step | Planned |
 |---|---|
-| 1. Tests written and RED verified | 75 min |
+| 1. Tests written and RED verified | 75 min (took 25: 22:09 to 22:34) |
 | 2. Implementation and gates | 120 min |
 | 3. Review | 60 min |
 | 4. Fix round and gate re-run, only if needed | 120 min |
 | 5. Docs (backlog 38-39 closed, decision row 29 rewritten, row 32 added), merge to `rebuild`, push | 20 min |
-| Total | 5 h from the start of step 1 |
 
-Each step runs as its own workflow. A timer wakes the main session at each step's cap; otherwise the
-workflow's end wakes it.
+Each step runs as its own workflow, and the main session reads each step's result before the next
+one starts.
 
 ## Out of scope
 
