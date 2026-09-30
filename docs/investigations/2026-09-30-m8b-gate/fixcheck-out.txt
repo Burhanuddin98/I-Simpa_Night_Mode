@@ -1,0 +1,17 @@
+bed file: exploratory []
+report.json: pass true exploratory false E1 runs checked 433
+planned 433 runs; atmospheric not run: None
+read 433 runs in 285 s (8 at once)
+by kind [matched, refused by check_planned, not read]: {"atmospheric-spps": [10, 0, 0], "atmospheric-tcr": [1, 0, 0], "cell": [400, 0, 0], "n5": [1, 0, 0], "n6": [1, 0, 0], "tcr": [20, 0, 0]}
+re-judged: pass true | failures 0 | E1 runs checked 433 (report 433) | E2 true | first: -
+cell verdicts as in report.json: 40 of 40; TCR verdicts: 20 of 20; D band problems: 0
+say-NO: N5 as_required true (report true), error None; N6 as_required true (report true), error None
+atmospheric: not_run None; runs 10 with error 0; TCR true error None
+  6x10x3-a0.2-tcr-air-on, 8 kHz removed: pass false | TCR Fail | failures 1 | 6x10x3-a0.2-tcr-air-on: D Fail: the run's bands are not the bed's for 6x10x3-a0.2-energetic-air-on: missing 8000 Hz
+  6x10x3-a0.2-tcr-air-on, only 125 Hz: pass false | TCR Fail | failures 1 | 6x10x3-a0.2-tcr-air-on: D Fail: the run's bands are not the bed's for 6x10x3-a0.2-energetic-air-on: missing 250 Hz, 500 Hz, 1000 Hz, 2000 Hz, 4000 Hz, 8000 Hz
+  untouched: pass true | TCR Pass
+  1 ms run under a 10 ms plan, 5x4x3-a0.4-energetic-air-off seed 1: bed_run_not_planned: C:\tmp\nm-m8a-bed\20260929T093134Z\runs\5x4x3-a0.4-energetic-air-off\s1\20260929-164907-408-spps is not the run the bed files under 5x4x3-a0.4-energetic-air-off seed 1: its project has sha256 f6eb65d711a4f85a25744edcf669e9fe6809be93469db664d33e2cfab77e33da, the project the bed writes for it 8dd00ee5f634d119c08c7d19aef21618965461fc02997fe1f7f6da9d57210e92; time_step_s 0.0010000000474974513, the be
+  1 ms run under a 10 ms plan, 5x4x3-a0.4-energetic-air-off seed 2: bed_run_not_planned: C:\tmp\nm-m8a-bed\20260929T093134Z\runs\5x4x3-a0.4-energetic-air-off\s2\20260929-164914-314-spps is not the run the bed files under 5x4x3-a0.4-energetic-air-off seed 2: its project has sha256 85a62d07311bc88aa69422dd638f41afa0d99cd34ebd3c3049da95648f10625d, the project the bed writes for it bd4f25f242314adf9e594adc0366e156582e29d149020eb87f0e36f389de08d0; time_step_s 0.0010000000474974513, the be
+  1 ms run under a 10 ms plan, 5x4x3-a0.4-energetic-air-off seed 3: bed_run_not_planned: C:\tmp\nm-m8a-bed\20260929T093134Z\runs\5x4x3-a0.4-energetic-air-off\s3\20260929-164916-761-spps is not the run the bed files under 5x4x3-a0.4-energetic-air-off seed 3: its project has sha256 178fc6c081469cdd1acbbe159b140df284222cd4266e5e16da881a8a73bbea81, the project the bed writes for it 4d630d32e44bcd8a929087c47b6923fce52e4d68eec4e5e876d41134c917fff8; time_step_s 0.0010000000474974513, the be
+  1 ms bed's TCR run under a 10 ms plan, 5x4x3-a0.4-tcr-air-off: bed_run_not_planned: C:\tmp\nm-m8a-bed\20260929T093134Z\runs\5x4x3-a0.4-tcr-air-off\s1\20260929-165828-434-tcr is not the run the bed files under 5x4x3-a0.4-tcr-air-off: its project has sha256 f6eb65d711a4f85a25744edcf669e9fe6809be93469db664d33e2cfab77e33da, the project the bed writes for it 8dd00ee
+gated cell verdicts re-judged: {"Pass": 32}

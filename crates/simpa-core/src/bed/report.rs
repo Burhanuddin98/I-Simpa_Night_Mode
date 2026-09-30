@@ -290,7 +290,7 @@ pub fn evaluate(i: &Inputs) -> Report {
                 .iter()
                 .find(|c| c.id == t.project_of)
                 .and_then(|c| c.reference.as_ref());
-            check::evaluate_tcr(t, i.reads.tcr.get(&t.id), k)
+            check::evaluate_tcr(bed, t, i.reads.tcr.get(&t.id), k)
         })
         .collect();
     let mut failures = Vec::new();
@@ -852,6 +852,21 @@ pub fn summary(report: &Report, report_sha256: &str) -> Summary {
     }
     for t in &report.tcr {
         if let Some(d) = &t.d {
+            rows.push(SummaryRow {
+                cell: t.id.clone(),
+                check: "D bands".into(),
+                gated: t.gated,
+                value: Some(d.band_problems.len() as f64),
+                lo: None,
+                hi: None,
+                limit: Some(0.0),
+                verdict: if d.band_problems.is_empty() {
+                    "pass"
+                } else {
+                    "fail"
+                }
+                .into(),
+            });
             for b in &d.bands {
                 rows.push(SummaryRow {
                     cell: t.id.clone(),

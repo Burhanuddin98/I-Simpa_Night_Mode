@@ -1,0 +1,189 @@
+# Failing-first receipts, M8b gate fixes (2026-09-30, worktree m8b, CARGO_TARGET_DIR=C:/tmp/nm-target)
+# Each revert is a diff against the fixed file (saved first, restored byte for byte after: cmp).
+
+================ DEFECT 1: revert (check.rs, check_d no longer compares the bed's bands)
+--- check.rs.fixed	2026-09-30 02:45:05.738786000 +0200
++++ check.rs	2026-09-30 02:45:06.000000000 +0200
+@@ -293,7 +293,7 @@
+ /// `bands_hz` in its order: a band missing, extra, repeated or out of order fails D.
+ pub fn check_d(bands_hz: &[i32], bands: &[(i32, f64, Option<f64>)], limit: f64) -> CheckD {
+     let got: Vec<i32> = bands.iter().map(|b| b.0).collect();
+-    let band_problems = band_problems(bands_hz, &got);
++    let band_problems: Vec<String> = Vec::new(); // REVERTED (receipt): the bed's bands not compared
+     let bands: Vec<BandD> = bands
+         .iter()
+         .map(|&(freq_hz, tcr, analytic)| {
+
+---------------- with the revert
+$ cargo test -p simpa-core --lib -- --exact bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds bed::tests::a_gated_tcr_run_short_of_a_band_does_not_pass_the_bed
+   Compiling simpa-core v0.1.0 (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b\crates\simpa-core)
+warning: unused variable: `bands_hz`
+   --> crates\simpa-core\src\bed\check.rs:294:16
+    |
+294 | pub fn check_d(bands_hz: &[i32], bands: &[(i32, f64, Option<f64>)], limit: f64) -> CheckD {
+    |                ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_bands_hz`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `got`
+   --> crates\simpa-core\src\bed\check.rs:295:9
+    |
+295 |     let got: Vec<i32> = bands.iter().map(|b| b.0).collect();
+    |         ^^^ help: if this is intentional, prefix it with an underscore: `_got`
+
+warning: `simpa-core` (lib) generated 2 warnings (run `cargo fix --lib -p simpa-core` to apply 2 suggestions)
+warning: `simpa-core` (lib test) generated 2 warnings (2 duplicates)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 32.46s
+     Running unittests src\lib.rs (C:/tmp/nm-target\debug\deps\simpa_core-0d166271e8c66248.exe)
+
+running 2 tests
+test bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds ... FAILED
+test bed::tests::a_gated_tcr_run_short_of_a_band_does_not_pass_the_bed ... FAILED
+
+failures:
+
+---- bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds stdout ----
+
+thread 'bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds' (2716) panicked at crates\simpa-core\src\bed\check.rs:1443:9:
+assertion `left == right` failed: TcrReport { id: "6x10x3-a0.2-tcr-air-on", project_of: "6x10x3-a0.2-energetic-air-on", gated: true, run: Some(RunInfo { folder: "f", status: "OK", reasons: [], exit_class: 0, solver_wall_s: None, solver_cpu_s: None, exe: "classicalTheory.exe", exe_sha256: "tcr", project_sha256: None, tetgen_sha256: None, files: 1, bytes: 1 }), error: None, d: Some(CheckD { bands: [BandD { freq_hz: 125, tcr_eyring_s: 0.6, analytic_eyring_s: Some(0.6), deviation: Some(0.0), verdict: Pass }, BandD { freq_hz: 250, tcr_eyring_s: 0.6, analytic_eyring_s: Some(0.6), deviation: Some(0.0), verdict: Pass }, BandD { freq_hz: 500, tcr_eyring_s: 0.6, analytic_eyring_s: Some(0.6), deviation: Some(0.0), verdict: Pass }, BandD { freq_hz: 1000, tcr_eyring_s: 0.6, analytic_eyring_s: Some(0.6), deviation: Some(0.0), verdict: Pass }, BandD { freq_hz: 2000, tcr_eyring_s: 0.6, analytic_eyring_s: Some(0.6), deviation: Some(0.0), verdict: Pass }, BandD { freq_hz: 4000, tcr_eyring_s: 0.6, analytic_eyring_s: Some(0.6), deviation: Some(0.0), verdict: Pass }], band_problems: [], limit: 0.005, verdict: Pass }), sabine_against_analytic: [Some(0.0), Some(0.0), Some(0.0), Some(0.0), Some(0.0), Some(0.0)], eyring_against_kuttruff: [None, None, None, None, None, None], verdict: Pass, failures: [] }
+  left: Pass
+ right: Fail
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- bed::tests::a_gated_tcr_run_short_of_a_band_does_not_pass_the_bed stdout ----
+
+thread 'bed::tests::a_gated_tcr_run_short_of_a_band_does_not_pass_the_bed' (1140) panicked at crates\simpa-core\src\bed.rs:469:9:
+assertion failed: !r.pass
+
+
+failures:
+    bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds
+    bed::tests::a_gated_tcr_run_short_of_a_band_does_not_pass_the_bed
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 207 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p simpa-core --lib`
+exit 101
+
+---------------- fix restored
+$ cargo test -p simpa-core --lib -- --exact bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds bed::tests::a_gated_tcr_run_short_of_a_band_does_not_pass_the_bed
+   Compiling simpa-core v0.1.0 (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b\crates\simpa-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 48.58s
+     Running unittests src\lib.rs (C:/tmp/nm-target\debug\deps\simpa_core-0d166271e8c66248.exe)
+
+running 2 tests
+test bed::check::tests::d_fails_a_run_whose_bands_are_not_the_beds ... ok
+test bed::tests::a_gated_tcr_run_short_of_a_band_does_not_pass_the_bed ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 207 filtered out; finished in 0.07s
+
+exit 0
+
+================ DEFECT 2: revert both halves (run.rs: check_planned accepts every run; into_reads does not call it)
+--- run.rs.fixed	2026-09-30 02:45:05.759327900 +0200
++++ run.rs	2026-09-30 02:46:58.000000000 +0200
+@@ -508,7 +508,7 @@
+             }
+         }
+     }
+-    if problems.is_empty() {
++    if true || problems.is_empty() { // REVERTED (receipt): nothing compared
+         Ok(())
+     } else {
+         Err(format!(
+@@ -535,7 +535,7 @@
+         };
+     }
+     for (p, r) in runs.iter().zip(results) {
+-        let r = r.and_then(|read| check_planned(p, &read).map(|()| read));
++        // REVERTED (receipt): no check_planned before the read is filed
+         let spps = |r: Result<Read, String>| -> Result<SppsRead, String> {
+             match r? {
+                 Read::Spps(s) => Ok(*s),
+
+---------------- with the revert
+$ cargo test -p simpa-core --lib -- --exact bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed
+   Compiling simpa-core v0.1.0 (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b\crates\simpa-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 34.87s
+     Running unittests src\lib.rs (C:/tmp/nm-target\debug\deps\simpa_core-0d166271e8c66248.exe)
+
+running 2 tests
+test bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed ... FAILED
+test bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused ... FAILED
+
+failures:
+
+---- bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed stdout ----
+
+thread 'bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed' (15620) panicked at crates\simpa-core\src\bed.rs:570:9:
+assertion failed: !r.pass
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused stdout ----
+
+thread 'bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused' (7048) panicked at crates\simpa-core\src\bed\run.rs:781:75:
+called `Result::unwrap_err()` on an `Ok` value: ()
+
+
+failures:
+    bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused
+    bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 207 filtered out; finished in 0.08s
+
+error: test failed, to rerun pass `-p simpa-core --lib`
+exit 101
+
+================ DEFECT 2: revert the call alone (check_planned intact, into_reads does not call it)
+--- run.rs.fixed	2026-09-30 02:45:05.759327900 +0200
++++ crates/simpa-core/src/bed/run.rs	2026-09-30 02:47:50.000000000 +0200
+@@ -535,7 +535,7 @@
+         };
+     }
+     for (p, r) in runs.iter().zip(results) {
+-        let r = r.and_then(|read| check_planned(p, &read).map(|()| read));
++        // REVERTED (receipt): no check_planned before the read is filed
+         let spps = |r: Result<Read, String>| -> Result<SppsRead, String> {
+             match r? {
+                 Read::Spps(s) => Ok(*s),
+
+---------------- with the revert
+$ cargo test -p simpa-core --lib -- --exact bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed
+   Compiling simpa-core v0.1.0 (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b\crates\simpa-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.48s
+     Running unittests src\lib.rs (C:/tmp/nm-target\debug\deps\simpa_core-0d166271e8c66248.exe)
+
+running 2 tests
+test bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed ... FAILED
+test bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused ... ok
+
+failures:
+
+---- bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed stdout ----
+
+thread 'bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed' (11128) panicked at crates\simpa-core\src\bed.rs:570:9:
+assertion failed: !r.pass
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 207 filtered out; finished in 0.17s
+
+error: test failed, to rerun pass `-p simpa-core --lib`
+exit 101
+
+---------------- fix restored
+$ cargo test -p simpa-core --lib -- --exact bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed
+   Compiling simpa-core v0.1.0 (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b\crates\simpa-core)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 24.25s
+     Running unittests src\lib.rs (C:/tmp/nm-target\debug\deps\simpa_core-0d166271e8c66248.exe)
+
+running 2 tests
+test bed::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed ... ok
+test bed::run::tests::a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 207 filtered out; finished in 0.09s
+
+exit 0

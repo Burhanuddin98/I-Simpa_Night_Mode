@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::params::{NotEvaluable, ParamError};
 use crate::results::report::{Evaluated, ReferenceReport, Report};
 use crate::run::manager::{MESH_DIR, SOLVE_DIR};
-use crate::run::manifest::{FILE_NAME as RUN_JSON, RunManifest};
+use crate::run::manifest::{FILE_NAME as RUN_JSON, RunManifest, RunSource};
 
 /// A run folder's record: `run.json` and `mesh/mesh.json`, and what the folder holds.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
@@ -34,6 +34,11 @@ pub struct RunInfo {
     /// `run.json`'s `exe`: the solver as the run saw it, and its raw sha256.
     pub exe: String,
     pub exe_sha256: String,
+    /// `run.json`'s `source.sha256`: the project file the run started from, as the run manager
+    /// hashed it. `None` for a run of a fixture folder, which has no project. The bed matches it
+    /// with the project it would write for the run's cell and seed (`run::check_planned`).
+    #[serde(default)]
+    pub project_sha256: Option<String>,
     /// `mesh.json`'s TetGen sha256, when the run meshed.
     pub tetgen_sha256: Option<String>,
     /// Files and bytes under the run folder.
@@ -88,6 +93,10 @@ pub fn run_info(folder: &Path) -> Result<RunInfo, String> {
         .ok()
         .and_then(|v| v.as_str().map(str::to_string))
         .unwrap_or_default();
+    let project_sha256 = match &m.source {
+        RunSource::Project { sha256, .. } => Some(sha256.clone()),
+        RunSource::Fixture { .. } => None,
+    };
     Ok(RunInfo {
         folder: folder.display().to_string(),
         status,
@@ -97,6 +106,7 @@ pub fn run_info(folder: &Path) -> Result<RunInfo, String> {
         solver_cpu_s: None,
         exe: m.exe.path,
         exe_sha256: m.exe.sha256,
+        project_sha256,
         tetgen_sha256,
         files,
         bytes,
@@ -267,8 +277,12 @@ pub struct SppsRead {
     pub bands_hz: Vec<i32>,
     pub particles_per_source: u32,
     pub computation_method: i32,
+    /// `trans_epsilon` and the step as SPPS reads them (`f32`).
     pub trans_epsilon: f64,
     pub time_step_s: f64,
+    /// `config.xml`'s `random_seed` as SPPS reads it (0 when absent); `None` when the config
+    /// has no SPPS settings.
+    pub random_seed: Option<i32>,
     /// `[receiver][band]`, receivers in the bed's order (`R000`, `R001`, ...).
     pub t30: Vec<Vec<T30>>,
     pub reference: Reference,
@@ -296,18 +310,23 @@ pub struct TcrRead {
     pub bands: Vec<TcrBand>,
 }
 
-/// The run's report, as `simpa results --json` prints it; its refusal in words otherwise.
-fn report_of(folder: &Path) -> Result<Report, String> {
-    crate::results::load(folder)
-        .and_then(|r| crate::results::checked_report(&r))
-        .map_err(|r| format!("simpa results refuses the run: {}: {}", r.code, r.detail))
+/// The run's report, as `simpa results --json` prints it, and its `config.xml`'s SPPS
+/// `random_seed` (which the report does not carry); its refusal in words otherwise.
+fn report_of(folder: &Path) -> Result<(Report, Option<i32>), String> {
+    let refused = |r: crate::results::Refusal| {
+        format!("simpa results refuses the run: {}: {}", r.code, r.detail)
+    };
+    let r = crate::results::load(folder).map_err(refused)?;
+    let seed = r.expectation.spps.as_ref().map(|s| s.random_seed);
+    let rep = crate::results::checked_report(&r).map_err(refused)?;
+    Ok((rep, seed))
 }
 
 /// Reads an SPPS run whose point receivers are the bed's `receivers` (`R000`, ...); with `None`,
 /// every point receiver in the report's order (upstream's validation project names its own).
 pub fn read_spps(folder: &Path, receivers: Option<usize>) -> Result<SppsRead, String> {
     let info = run_info(folder)?;
-    let rep = report_of(folder)?;
+    let (rep, random_seed) = report_of(folder)?;
     let s = rep
         .spps
         .as_ref()
@@ -361,6 +380,7 @@ pub fn read_spps(folder: &Path, receivers: Option<usize>) -> Result<SppsRead, St
         computation_method: s.computation_method,
         trans_epsilon: s.trans_epsilon,
         time_step_s: s.time_step_s,
+        random_seed,
         t30,
         reference: Reference::of(&s.reference),
         curves,
@@ -371,7 +391,7 @@ pub fn read_spps(folder: &Path, receivers: Option<usize>) -> Result<SppsRead, St
 pub fn read_tcr(folder: &Path) -> Result<TcrRead, String> {
     use crate::results::report::AnalyticReport;
     let info = run_info(folder)?;
-    let rep = report_of(folder)?;
+    let (rep, _) = report_of(folder)?;
     let t = rep
         .tcr
         .as_ref()

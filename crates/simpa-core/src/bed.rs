@@ -115,15 +115,26 @@ mod tests {
             solver_cpu_s: None,
             exe: "spps.exe".into(),
             exe_sha256: exe_sha.into(),
+            project_sha256: None,
             tetgen_sha256: Some("tet".into()),
             files: 39,
             bytes: 1000,
         }
     }
 
+    /// The small bed's bands, air off and on.
+    const OFF: [i32; 6] = [125, 250, 500, 1000, 2000, 4000];
+    const ON: [i32; 7] = [125, 250, 500, 1000, 2000, 4000, 8000];
+
     /// Seed `seed`'s run: every receiver-band at `kuttruff·(1 + offset + a small pattern)`.
     fn spps(seed: u32, kuttruff: f64, offset: f64) -> SppsRead {
-        let bands: Vec<i32> = vec![125, 250, 500, 1000, 2000, 4000];
+        spps_on(seed, kuttruff, offset, &OFF)
+    }
+
+    /// [`spps`] on the bands `bands`.
+    fn spps_on(seed: u32, kuttruff: f64, offset: f64, bands: &[i32]) -> SppsRead {
+        let bands: Vec<i32> = bands.to_vec();
+        let n = bands.len();
         SppsRead {
             info: info("spps"),
             bands_hz: bands.clone(),
@@ -131,9 +142,10 @@ mod tests {
             computation_method: 1,
             trans_epsilon: 9.0,
             time_step_s: 0.001,
+            random_seed: Some(seed as i32),
             t30: (0..3)
                 .map(|r| {
-                    (0..6)
+                    (0..n)
                         .map(|b| {
                             let u = ((seed as usize * 7 + r * 3 + b * 5) % 11) as f64 / 10.0 - 0.5;
                             T30 {
@@ -170,7 +182,28 @@ mod tests {
                     })
                     .collect(),
             },
-            curves: vec![vec![None; 6]; 3],
+            curves: vec![vec![None; n]; 3],
+        }
+    }
+
+    /// A TCR run on `bands`, TCR at `off` from its analytic Eyring time.
+    fn tcr_on(bands: &[i32], off: f64) -> TcrRead {
+        let mut ti = info("tcr");
+        ti.exe = "classicalTheory.exe".into();
+        TcrRead {
+            info: ti,
+            bands: bands
+                .iter()
+                .map(|&f| TcrBand {
+                    freq_hz: f,
+                    sabine_s: 0.52,
+                    eyring_s: 0.465 * (1.0 + off),
+                    analytic_sabine_s: Some(0.52),
+                    analytic_eyring_s: Some(0.465),
+                    analytic_refused: None,
+                    air_m_per_metre: None,
+                })
+                .collect(),
         }
     }
 
@@ -230,26 +263,8 @@ mod tests {
         }
         let mut r = Reads::default();
         r.spps.insert("5x4x3-a0.2-energetic-air-off".into(), seeds);
-        let mut ti = info("tcr");
-        ti.exe = "classicalTheory.exe".into();
-        r.tcr.insert(
-            "5x4x3-a0.2-tcr-air-off".into(),
-            Ok(TcrRead {
-                info: ti,
-                bands: [125, 250, 500, 1000, 2000, 4000]
-                    .iter()
-                    .map(|&f| TcrBand {
-                        freq_hz: f,
-                        sabine_s: 0.52,
-                        eyring_s: 0.465 * (1.0 + tcr_off),
-                        analytic_sabine_s: Some(0.52),
-                        analytic_eyring_s: Some(0.465),
-                        analytic_refused: None,
-                        air_m_per_metre: None,
-                    })
-                    .collect(),
-            }),
-        );
+        r.tcr
+            .insert("5x4x3-a0.2-tcr-air-off".into(), Ok(tcr_on(&OFF, tcr_off)));
         r.atmospheric = AtmosphericReads {
             not_run: Some("not given".into()),
             ..Default::default()
@@ -407,6 +422,167 @@ mod tests {
             let s = report::summary(&r, "abc");
             assert_eq!(s.pass, r.pass);
         }
+    }
+
+    /// The judge's finding 1 (`docs/investigations/2026-09-29-m8a/judge/gate.md`, the harness's
+    /// "a gated TCR run with its 8 kHz band missing" and "... with only its 125 Hz band", each of
+    /// which gave `pass true`): a gated air-on TCR run is held to the bed's seven bands.
+    #[test]
+    fn a_gated_tcr_run_short_of_a_band_does_not_pass_the_bed() {
+        let mut bed = small_bed();
+        // An air-on cell, reported, whose project a gated TCR run is made from.
+        let on_cell = "5x4x3-a0.2-energetic-air-on";
+        let on_tcr = "5x4x3-a0.2-tcr-air-on";
+        bed.cells.push(Cell {
+            id: on_cell.into(),
+            air: true,
+            gated: false,
+            ..bed.cells[0].clone()
+        });
+        bed.tcr.push(TcrCell {
+            id: on_tcr.into(),
+            project_of: on_cell.into(),
+            gated: true,
+        });
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let mut good = reads(k, &[0.0, 0.0005, -0.0005], 0.001);
+        good.spps.insert(
+            on_cell.into(),
+            (1..=3).map(|s| (s, Ok(spps_on(s, k, 0.0, &ON)))).collect(),
+        );
+        good.tcr.insert(on_tcr.into(), Ok(tcr_on(&ON, 0.001)));
+        // Untouched: the bed passes, the air-on TCR run on its seven bands.
+        let r = judge(&bed, &good, &ts, &[]);
+        assert!(r.pass, "{:#?}", r.failures);
+        let t = r.tcr.iter().find(|t| t.id == on_tcr).unwrap();
+        assert_eq!(t.verdict, Verdict::Pass);
+        assert_eq!(t.d.as_ref().unwrap().bands.len(), 7);
+
+        // Its 8 kHz band removed: not a pass, and the failure names the band.
+        let mut short = good.clone();
+        let run = short.tcr.get_mut(on_tcr).unwrap().as_mut().unwrap();
+        run.bands.pop();
+        assert_eq!(run.bands.len(), 6);
+        let r = judge(&bed, &short, &ts, &[]);
+        assert!(!r.pass);
+        assert_eq!(
+            r.tcr.iter().find(|t| t.id == on_tcr).unwrap().verdict,
+            Verdict::Fail
+        );
+        assert!(
+            r.failures
+                .iter()
+                .any(|f| f.starts_with(on_tcr) && f.contains("missing 8000 Hz")),
+            "{:#?}",
+            r.failures
+        );
+        let s = report::summary(&r, "abc");
+        assert!(
+            s.rows
+                .iter()
+                .any(|x| x.cell == on_tcr && x.check == "D bands" && x.verdict == "fail")
+        );
+
+        // Only its 125 Hz band left: not a pass, the six missing bands named.
+        let mut one = good.clone();
+        one.tcr
+            .get_mut(on_tcr)
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .bands
+            .truncate(1);
+        let r = judge(&bed, &one, &ts, &[]);
+        assert!(!r.pass);
+        assert!(
+            r.failures.iter().any(|f| f.starts_with(on_tcr)
+                && f.contains("missing 250 Hz, 500 Hz, 1000 Hz, 2000 Hz, 4000 Hz, 8000 Hz")),
+            "{:#?}",
+            r.failures
+        );
+    }
+
+    /// `read`'s run of `p` made to be exactly that run: the project sha256 `run.json` records
+    /// and the step as SPPS reads it (`f32`); the helper's other settings are the small bed's.
+    fn as_run_of(p: &run::Planned, r: SppsRead) -> run::Read {
+        let mut r = r;
+        r.info.project_sha256 = Some(run::planned_project_sha256(p));
+        r.time_step_s = f64::from(0.001f32);
+        run::Read::Spps(Box::new(r))
+    }
+
+    /// The judge's finding 2 (`docs/investigations/2026-09-29-m8a/judge/gate.md`): a run is
+    /// judged as the cell and seed it is filed under only when it is that run. Seed 2 of the
+    /// cell read from a bed made at a 10 ms step (its project, and the step SPPS read) is
+    /// refused `bed_run_not_planned`, and the cell does not pass.
+    #[test]
+    fn a_run_at_10_ms_filed_under_a_1_ms_cell_does_not_pass_the_bed() {
+        let bed = small_bed();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let (runs, _) = run::plan(&bed, None).unwrap();
+        let results = |ten_ms: Option<u32>| -> Vec<Result<run::Read, String>> {
+            runs.iter()
+                .map(|p| match &p.key {
+                    run::RunKey::Cell { seed, .. } => {
+                        let offsets = [0.0, 0.0005, -0.0005];
+                        let good = as_run_of(p, spps(*seed, k, offsets[*seed as usize - 1]));
+                        if ten_ms != Some(*seed) {
+                            return Ok(good);
+                        }
+                        // The same cell and seed, made by a bed at 10 ms.
+                        let run::Read::Spps(mut s) = good else {
+                            unreachable!()
+                        };
+                        let cell = &bed.cells[0];
+                        let spec = file::CellSpec::of(&bed, cell).unwrap();
+                        let project =
+                            file::cell_project(&spec, *seed, 0.01, bed.bands_hz(false)).unwrap();
+                        s.info.project_sha256 = Some(run::planned_project_sha256(&run::Planned {
+                            project,
+                            ..p.clone()
+                        }));
+                        s.time_step_s = f64::from(0.01f32);
+                        Ok(run::Read::Spps(s))
+                    }
+                    run::RunKey::Tcr { .. } => {
+                        let mut t = tcr_on(&OFF, 0.001);
+                        t.info.project_sha256 = Some(run::planned_project_sha256(p));
+                        Ok(run::Read::Tcr(Box::new(t)))
+                    }
+                    _ => Err("not run here".into()),
+                })
+                .collect()
+        };
+        let judged = |ten_ms: Option<u32>| {
+            let mut rd = Reads::default();
+            run::into_reads(&mut rd, &runs, results(ten_ms), Some("not given".into()));
+            judge(&bed, &rd, &ts, &[])
+        };
+        // Every run the bed's own: the bed passes.
+        let r = judged(None);
+        assert!(r.pass, "{:#?}", r.failures);
+        // Seed 2 from a 10 ms bed: refused, named, and the cell is not judged.
+        let r = judged(Some(2));
+        assert!(!r.pass);
+        assert!(!r.preconditions.e2.holds);
+        let cell = &r.cells[0];
+        assert_eq!(cell.verdict, Verdict::NotJudged);
+        let seed2 = cell.seeds.iter().find(|s| s.seed == 2).unwrap();
+        let e = seed2.error.as_deref().unwrap_or_default();
+        assert!(e.starts_with(run::RUN_NOT_PLANNED), "{e}");
+        assert!(e.contains("time_step_s 0.009999999776482582, the bed's 0.0010000000474974513"));
+        assert!(e.contains("its project has sha256"), "{e}");
+        assert!(
+            r.failures
+                .iter()
+                .any(|f| f.contains("seed 2: bed_run_not_planned")),
+            "{:#?}",
+            r.failures
+        );
     }
 
     #[test]

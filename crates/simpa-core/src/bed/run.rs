@@ -406,7 +406,122 @@ pub fn read_existing(runs: &[Planned], from: &Path, jobs: usize) -> Vec<Result<R
     par_map(runs, jobs, |p| read_in(&from.join(p.key.dir()), p))
 }
 
-/// Puts what was run or read where [`super::report::evaluate`] looks for it.
+/// The code a run is refused with when it is not the run its folder is filed under
+/// ([`check_planned`]).
+pub const RUN_NOT_PLANNED: &str = "bed_run_not_planned";
+
+/// The sha256 of the project file the bed writes for `p` (`schema::save` writes
+/// `schema::to_json`), which `run.json`'s `source.sha256` records when the run starts.
+pub fn planned_project_sha256(p: &Planned) -> String {
+    crate::run::manifest::sha256_bytes(schema::to_json(&p.project).as_bytes())
+}
+
+/// The bands `computed` marks, of `frequencies_hz`.
+fn computed_bands(frequencies_hz: &[u32], computed: &[bool]) -> Vec<i32> {
+    frequencies_hz
+        .iter()
+        .zip(computed)
+        .filter(|(_, on)| **on)
+        .map(|(&f, _)| f as i32)
+        .collect()
+}
+
+/// A setting SPPS reads as a C `float`, as it reads it from `config.xml` (the writer prints the
+/// shortest text that reads back as `v`; `atof`, then the `float`).
+fn as_spps_reads(v: f64) -> f64 {
+    f64::from(v as f32)
+}
+
+/// Refuses `r` unless it is the run the bed files under `p`'s key, from `p.project`: the
+/// project file's sha256 in `run.json` is the sha256 of the project the bed writes for that
+/// cell (or TCR run, say-NO run or atmospheric seed) and seed; and what the solver read is that
+/// project's: for SPPS the particles per source, the method, the step and `trans_epsilon` (as
+/// SPPS reads them, `f32`), the seed and the bands computed; for TCR the bands. Fresh runs and
+/// runs read with `--from` both pass through here ([`into_reads`]), so a run of another matrix
+/// filed under the same folder names (an exploratory bed at 10 ms, say) is refused with
+/// [`RUN_NOT_PLANNED`], every difference named, and its cell is not judged (E2).
+pub fn check_planned(p: &Planned, r: &Read) -> Result<(), String> {
+    let mut problems = Vec::new();
+    let (info, solver) = match r {
+        Read::Spps(s) => (&s.info, SolverKind::Spps),
+        Read::Tcr(t) => (&t.info, SolverKind::Tcr),
+    };
+    if solver != p.solver {
+        problems.push(format!(
+            "a {solver:?} run where the bed runs {:?}",
+            p.solver
+        ));
+    }
+    let want = planned_project_sha256(p);
+    match &info.project_sha256 {
+        Some(got) if *got == want => {}
+        Some(got) => problems.push(format!(
+            "its project has sha256 {got}, the project the bed writes for it {want}"
+        )),
+        None => problems.push("its run.json records no project (a fixture run)".into()),
+    }
+    let spps = &p.project.solvers.spps;
+    match r {
+        Read::Spps(s) => {
+            let mut differ = |what: &str, got: String, want: String| {
+                if got != want {
+                    problems.push(format!("{what} {got}, the bed's {want}"));
+                }
+            };
+            differ(
+                "particles per source",
+                s.particles_per_source.to_string(),
+                spps.particles_per_source.to_string(),
+            );
+            differ(
+                "computation_method",
+                s.computation_method.to_string(),
+                spps.method.solver_code().to_string(),
+            );
+            differ(
+                "time_step_s",
+                format!("{:?}", s.time_step_s),
+                format!("{:?}", as_spps_reads(spps.time_step_s.get())),
+            );
+            differ(
+                "trans_epsilon",
+                format!("{:?}", s.trans_epsilon),
+                format!("{:?}", as_spps_reads(spps.extinction_exponent.get())),
+            );
+            differ(
+                "random_seed",
+                s.random_seed
+                    .map_or_else(|| "none".into(), |v| v.to_string()),
+                spps.random_seed.to_string(),
+            );
+            let bands = computed_bands(&p.project.bands.frequencies_hz, &spps.bands_computed);
+            differ("bands", format!("{:?}", s.bands_hz), format!("{bands:?}"));
+        }
+        Read::Tcr(t) => {
+            let bands = computed_bands(
+                &p.project.bands.frequencies_hz,
+                &p.project.solvers.tcr.bands_computed,
+            );
+            let got: Vec<i32> = t.bands.iter().map(|b| b.freq_hz).collect();
+            if got != bands {
+                problems.push(format!("bands {got:?}, the bed's {bands:?}"));
+            }
+        }
+    }
+    if problems.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{RUN_NOT_PLANNED}: {} is not the run the bed files under {}: {}",
+            info.folder,
+            p.key.label(),
+            problems.join("; ")
+        ))
+    }
+}
+
+/// Puts what was run or read where [`super::report::evaluate`] looks for it, each run first
+/// matched with the run it is filed under ([`check_planned`]): one that is not is an `Err`.
 pub fn into_reads(
     reads: &mut Reads,
     runs: &[Planned],
@@ -420,6 +535,7 @@ pub fn into_reads(
         };
     }
     for (p, r) in runs.iter().zip(results) {
+        let r = r.and_then(|read| check_planned(p, &read).map(|()| read));
         let spps = |r: Result<Read, String>| -> Result<SppsRead, String> {
             match r? {
                 Read::Spps(s) => Ok(*s),
@@ -580,6 +696,199 @@ mod tests {
         assert!(
             ext.iter()
                 .all(|p| matches!(p.key, RunKey::Cell { seed, .. } if seed > 10))
+        );
+    }
+
+    fn info(project_sha256: Option<String>) -> read::RunInfo {
+        read::RunInfo {
+            folder: "runs/x/s1/run".into(),
+            status: "OK".into(),
+            reasons: vec![],
+            exit_class: 0,
+            solver_wall_s: None,
+            solver_cpu_s: None,
+            exe: "spps.exe".into(),
+            exe_sha256: "e".into(),
+            project_sha256,
+            tetgen_sha256: None,
+            files: 1,
+            bytes: 1,
+        }
+    }
+
+    /// What SPPS reports of a run of `bed`'s cell `id` at `seed`, `particles` and step `dt`, and
+    /// the sha256 of the project it was run from, written literally (not from the plan).
+    fn spps_run(bed: &BedFile, id: &str, seed: u32, particles: u32, dt: f64) -> Read {
+        let cell = bed.cell(id).unwrap();
+        let mut spec = CellSpec::of(bed, cell).unwrap();
+        spec.particles_per_source = particles;
+        let bands = bed.bands_hz(cell.air);
+        let project = file::cell_project(&spec, seed, dt, bands).unwrap();
+        let sha = crate::run::manifest::sha256_bytes(schema::to_json(&project).as_bytes());
+        Read::Spps(Box::new(SppsRead {
+            info: info(Some(sha)),
+            bands_hz: bands.iter().map(|&f| f as i32).collect(),
+            particles_per_source: particles,
+            computation_method: match cell.method {
+                file::Method::Random => 0,
+                file::Method::Energetic => 1,
+            },
+            trans_epsilon: f64::from(cell.trans_epsilon as f32),
+            time_step_s: f64::from(dt as f32),
+            random_seed: Some(seed as i32),
+            t30: vec![],
+            reference: read::Reference {
+                not_computed: Some("not read".into()),
+                volume_m3: f64::NAN,
+                area_m2: f64::NAN,
+                speed_of_sound_m_s: f64::NAN,
+                constant_s_per_m: f64::NAN,
+                gamma2: None,
+                gamma2_se: None,
+                mean_free_path_m: None,
+                bands: vec![],
+            },
+            curves: vec![],
+        }))
+    }
+
+    fn spps_mut(r: &mut Read) -> &mut SppsRead {
+        match r {
+            Read::Spps(s) => s,
+            Read::Tcr(_) => unreachable!(),
+        }
+    }
+
+    /// The judge's finding 2: nothing compared a run read (with `--from`, or fresh) with the cell
+    /// and seed it is filed under. Each difference refuses it, named, with `bed_run_not_planned`.
+    #[test]
+    fn a_run_at_10_ms_filed_under_a_1_ms_cell_is_refused() {
+        let bed = BedFile::m8a();
+        let (runs, _) = plan(&bed, None).unwrap();
+        let id = "5x4x3-a0.2-energetic-air-on";
+        let planned = |key: RunKey| runs.iter().find(|p| p.key == key).unwrap();
+        let p = planned(RunKey::Cell {
+            id: id.into(),
+            seed: 3,
+        });
+        assert_eq!(p.project.solvers.spps.time_step_s.get(), 0.001);
+        let particles = bed.cell(id).unwrap().particles_per_source;
+        // The run the bed makes for the cell at seed 3: accepted.
+        let good = spps_run(&bed, id, 3, particles, 0.001);
+        assert_eq!(check_planned(p, &good), Ok(()));
+
+        // The same cell and seed from a bed at 10 ms: its project and its step differ.
+        let e = check_planned(p, &spps_run(&bed, id, 3, particles, 0.01)).unwrap_err();
+        assert!(e.starts_with(RUN_NOT_PLANNED), "{e}");
+        assert!(e.contains(&p.key.label()), "{e}");
+        assert!(
+            e.contains("time_step_s 0.009999999776482582, the bed's 0.0010000000474974513"),
+            "{e}"
+        );
+        assert!(e.contains("its project has sha256"), "{e}");
+        // The step alone (a project of the right bytes whose config said 10 ms): refused.
+        let mut r = good.clone();
+        spps_mut(&mut r).time_step_s = f64::from(0.01f32);
+        let e = check_planned(p, &r).unwrap_err();
+        assert!(e.contains("time_step_s") && !e.contains("sha256"), "{e}");
+        // The project alone: refused.
+        let mut r = good.clone();
+        spps_mut(&mut r).info.project_sha256 = Some("0".repeat(64));
+        assert!(
+            check_planned(p, &r)
+                .unwrap_err()
+                .contains("its project has sha256")
+        );
+        // A fixture run, with no project: refused.
+        let mut r = good.clone();
+        spps_mut(&mut r).info.project_sha256 = None;
+        assert!(
+            check_planned(p, &r)
+                .unwrap_err()
+                .contains("records no project")
+        );
+        // Seed 4's run filed under seed 3: refused on its project and its seed.
+        let e = check_planned(p, &spps_run(&bed, id, 4, particles, 0.001)).unwrap_err();
+        assert!(e.contains("random_seed 4, the bed's 3"), "{e}");
+        // The particles, the method, trans_epsilon, the bands: each refused, named.
+        for (what, change) in [
+            (
+                "particles per source 1500001",
+                (|s: &mut SppsRead| s.particles_per_source += 1) as fn(&mut SppsRead),
+            ),
+            ("computation_method 0", |s| s.computation_method = 0),
+            ("trans_epsilon 7.0, the bed's 9.0", |s| {
+                s.trans_epsilon = 7.0
+            }),
+            ("bands [125, 250, 500, 1000, 2000, 4000]", |s| {
+                s.bands_hz.pop();
+            }),
+        ] {
+            let mut r = good.clone();
+            change(spps_mut(&mut r));
+            let e = check_planned(p, &r).unwrap_err();
+            assert!(e.contains(what), "{what}: {e}");
+        }
+
+        // The say-NO runs are held to their own projects. N5 is its cell's seed 10 at 31,000
+        // particles: the cell's own seed-10 run filed as N5 is refused.
+        let n5 = planned(RunKey::N5 { seed: 10 });
+        let n5_cell = &bed.say_no.n5.cell;
+        let full = bed.cell(n5_cell).unwrap().particles_per_source;
+        assert_eq!(
+            check_planned(n5, &spps_run(&bed, n5_cell, 10, 31_000, 0.001)),
+            Ok(())
+        );
+        let e = check_planned(n5, &spps_run(&bed, n5_cell, 10, full, 0.001)).unwrap_err();
+        assert!(
+            e.contains("particles per source 31000000, the bed's 31000"),
+            "{e}"
+        );
+        // N6's walls have scattering 0: a run of the matrix's walls under N6 is refused.
+        let n6 = planned(RunKey::N6 { seed: 1 });
+        let matrix = "5x4x3-a0.2-energetic-air-off";
+        let r = spps_run(&bed, matrix, 1, 150_000, 0.001);
+        let e = check_planned(n6, &r).unwrap_err();
+        assert!(e.contains("its project has sha256"), "{e}");
+
+        // A TCR run: its project and its bands.
+        let t = planned(RunKey::Tcr {
+            id: "5x4x3-a0.2-tcr-air-on".into(),
+        });
+        let tcr = |sha: Option<String>, bands: &[u32]| {
+            Read::Tcr(Box::new(TcrRead {
+                info: info(sha),
+                bands: bands
+                    .iter()
+                    .map(|&f| read::TcrBand {
+                        freq_hz: f as i32,
+                        sabine_s: 1.0,
+                        eyring_s: 1.0,
+                        analytic_sabine_s: None,
+                        analytic_eyring_s: None,
+                        analytic_refused: None,
+                        air_m_per_metre: None,
+                    })
+                    .collect(),
+            }))
+        };
+        let sha = Some(planned_project_sha256(t));
+        assert_eq!(
+            check_planned(t, &tcr(sha.clone(), bed.bands_hz(true))),
+            Ok(())
+        );
+        let e = check_planned(t, &tcr(sha, &bed.bands_hz(true)[..6])).unwrap_err();
+        assert!(
+            e.contains("bands [125, 250, 500, 1000, 2000, 4000], the bed's"),
+            "{e}"
+        );
+        let e = check_planned(t, &tcr(Some("0".repeat(64)), bed.bands_hz(true))).unwrap_err();
+        assert!(e.contains("its project has sha256"), "{e}");
+        // An SPPS run where the bed runs TCR.
+        assert!(
+            check_planned(t, &good)
+                .unwrap_err()
+                .contains("a Spps run where")
         );
     }
 
