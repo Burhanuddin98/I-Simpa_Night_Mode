@@ -31,9 +31,17 @@ pub struct Meta {
     pub bed_raw_sha256: String,
     pub bed_canonical_sha256: String,
     pub spec: String,
+    /// The bed file's work tree when the bed started, before any run was made or read (the tree
+    /// the gate has just built `simpa.exe` from), and whether `git status --porcelain` printed
+    /// anything then.
     pub git_commit: Option<String>,
-    /// `git status --porcelain` printed something.
     pub git_dirty: Option<bool>,
+    /// The same when the report was written: a commit that landed during the run shows here, not
+    /// in `git_commit`. `None` in a report written before M8b round 2.
+    #[serde(default)]
+    pub git_commit_at_end: Option<String>,
+    #[serde(default)]
+    pub git_dirty_at_end: Option<bool>,
     pub simpa_core_version: String,
     pub solver_commit: String,
     /// `solvers/manifest.json` as compiled in, line ends as git stores them.

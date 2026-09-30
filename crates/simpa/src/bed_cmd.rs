@@ -88,6 +88,28 @@ fn git(dir: &Path) -> (Option<String>, Option<bool>) {
     (head, dirty)
 }
 
+/// The work tree of the bed file `bed`, else the current folder's: its commit, and whether
+/// `git status --porcelain` prints anything.
+fn git_of(bed: &str) -> (Option<String>, Option<bool>) {
+    let dir = Path::new(bed)
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    match git(dir) {
+        (None, _) => git(Path::new(".")),
+        found => found,
+    }
+}
+
+/// The work tree's state as `report.meta` records it, from `start`, taken before any run is made
+/// or read (the tree the gate has just built `simpa.exe` from), and `end`, taken when the report
+/// is written: `(git_commit, git_dirty, git_commit_at_end, git_dirty_at_end)`. A commit that
+/// lands during the run moves the end, never the start.
+type GitMeta = (Option<String>, Option<bool>, Option<String>, Option<bool>);
+fn git_meta(start: (Option<String>, Option<bool>), end: (Option<String>, Option<bool>)) -> GitMeta {
+    (start.0, start.1, end.0, end.1)
+}
+
 struct Options<'a> {
     bed: &'a str,
     out: PathBuf,
@@ -191,6 +213,8 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
     };
     let started = SystemTime::now();
     let clock0 = Instant::now();
+    // The work tree now, before any run is made or read.
+    let git_at_start = git_of(o.bed);
     let loaded = match file::load(Path::new(o.bed)) {
         Ok(l) => l,
         Err(e) => {
@@ -386,15 +410,8 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
         eprintln!("simpa: bed: decay files: {e}");
     }
     let (files, bytes) = bed::read::count_files(&stamp);
-    let bed_dir = Path::new(o.bed)
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    // The bed file's work tree, else the current folder's.
-    let (git_commit, git_dirty) = match git(bed_dir) {
-        (None, _) => git(Path::new(".")),
-        found => found,
-    };
+    let (git_commit, git_dirty, git_commit_at_end, git_dirty_at_end) =
+        git_meta(git_at_start, git_of(o.bed));
     let finished = SystemTime::now();
     rep.meta = report::Meta {
         bed_file: o.bed.to_string(),
@@ -403,6 +420,8 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
         spec: bed.spec.clone(),
         git_commit,
         git_dirty,
+        git_commit_at_end,
+        git_dirty_at_end,
         simpa_core_version: simpa_core::VERSION.into(),
         solver_commit: simpa_core::SOLVER_COMMIT.into(),
         solver_manifest_sha256: bed::solver_manifest_sha256(),
@@ -591,6 +610,29 @@ mod tests {
             .unwrap();
         assert!(e.contains("--seal needs --from"), "{e}");
         assert!(parse(&["m8a.json", "--out", "o", "--from", "f", "--seal"]).is_err());
+    }
+
+    /// M8b round 2, `REJUDGE-1.md` (its last finding): `meta.git_commit` was read when the bed
+    /// ended, so a docs-only commit that landed during the transport phase (`a3280e9`) was named
+    /// in place of `dd5c683`, the tree `simpa.exe` was built from. The commit and dirtiness are the
+    /// tree's when the bed starts; its state at the end is recorded beside them.
+    #[test]
+    fn the_work_tree_is_recorded_as_it_was_when_the_bed_started() {
+        let start = (Some("dd5c683".to_string()), Some(false));
+        let end = (Some("a3280e9".to_string()), Some(false));
+        assert_eq!(
+            git_meta(start, end),
+            (
+                Some("dd5c683".to_string()),
+                Some(false),
+                Some("a3280e9".to_string()),
+                Some(false)
+            )
+        );
+        // This worktree, read now: a commit, and whether it is dirty.
+        let (commit, dirty) = git_of(concat!(env!("CARGO_MANIFEST_DIR"), "/../../beds/m8a.json"));
+        assert_eq!(commit.map(|c| c.len()), Some(40));
+        assert!(dirty.is_some());
     }
 
     /// M8b round 2, `VERIFY-adversarial-1.md` finding 1: `simpa bed --from` with no `--seal`
