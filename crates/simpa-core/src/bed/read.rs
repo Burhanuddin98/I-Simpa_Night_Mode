@@ -44,7 +44,96 @@ pub struct RunInfo {
     /// Files and bytes under the run folder.
     pub files: u64,
     pub bytes: u64,
+    /// What the run's files were found bound to before anything was read from them
+    /// (`bind::bind`): `run.json` (its `outputs`), `seal`, or `run.json and seal`. `None` in a
+    /// report written before M8b; a read without it is refused (`run::check_planned`).
+    #[serde(default)]
+    pub bound_by: Option<String>,
+    /// The sha256 of the solver's outputs as bound (`bind::Bound::outputs_sha256`). Two seeds of
+    /// a cell may share no output file, so never this.
+    #[serde(default)]
+    pub outputs_sha256: Option<String>,
+    /// The solver's outputs as bound, `(path under solve/, sha256)`: held for the comparison of a
+    /// cell's seeds (`run::into_reads`), not written to the report.
+    #[serde(skip)]
+    pub output_files: Vec<(String, String)>,
+    /// What the bed hashed on disk to match the run with its plan (`run::check_planned`). `None`
+    /// in a report written before M8b; a read without it is refused.
+    #[serde(default)]
+    pub on_disk: Option<OnDisk>,
 }
+
+/// What a run's folder holds that says what it ran, hashed from disk when it is read, for
+/// `run::check_planned` to hold to the plan: the project file beside the run folder, the solver's
+/// `config.xml` and scene mesh, and the mesh's stamp and `.mbin` as `run.json` and `mesh.json`
+/// record them. `None` where a file is missing or unreadable, which the plan never matches.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct OnDisk {
+    /// `project.simpa` beside the run folder.
+    pub project_sha256: Option<String>,
+    /// `solve/config.xml`, the value of its `workingdirectory` left out (`bind::without_workdir`).
+    pub config_sha256: Option<String>,
+    /// `solve/mesh.cbin`, the scene the solver read.
+    pub scene_sha256: Option<String>,
+    /// `solve/tetramesh.mbin`, the mesh the solver read.
+    pub mbin_sha256: Option<String>,
+    /// `run.json`'s `mesh`: the mesh stamp and the `.mbin`'s sha256 it recorded.
+    pub run_mesh_input_hash: Option<String>,
+    pub run_mbin_sha256: Option<String>,
+    /// `mesh/mesh.json`'s: the same two.
+    pub mesh_json_input_hash: Option<String>,
+    pub mesh_json_mbin_sha256: Option<String>,
+    /// The run manager's check of a reused mesh (`run::manager::reused_mesh_check`) on the run's
+    /// own files: the `.mbin` the solver read held to the scene mesh it read, the regions to the
+    /// mesh folder's `.poly`, no `mesh.json` taken as proof. Each reason as `code: detail`; empty
+    /// when the mesh holds. The mesh stamp above is FNV-1a, which finds accidental change only.
+    pub mesh_check: Option<Vec<String>>,
+}
+
+/// `run.json` of `folder`.
+pub fn manifest_of(folder: &Path) -> Result<RunManifest, String> {
+    let path = folder.join(RUN_JSON);
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    RunManifest::from_json(&text).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Hashes from disk what [`OnDisk`] holds, for the run folder `folder` under the run's folder
+/// `dir` in the bed, whose `run.json` is `manifest`.
+pub fn on_disk(dir: &Path, folder: &Path, manifest: &RunManifest) -> OnDisk {
+    use crate::config_xml::names;
+    use crate::run::manifest::{sha256_bytes, sha256_file};
+    let solve = folder.join(SOLVE_DIR);
+    let config_sha256 =
+        std::fs::read(solve.join(names::CONFIG))
+            .ok()
+            .map(|b| match std::str::from_utf8(&b) {
+                Ok(t) => sha256_bytes(super::bind::without_workdir(t).as_bytes()),
+                Err(_) => sha256_bytes(&b),
+            });
+    let mesh_json = crate::mesh::read_manifest(&folder.join(MESH_DIR)).ok();
+    let mesh_check = crate::run::manager::reused_mesh_check(&solve, &folder.join(MESH_DIR))
+        .reasons
+        .iter()
+        .map(|r| format!("{}: {}", r.code, r.detail))
+        .collect();
+    OnDisk {
+        mesh_check: Some(mesh_check),
+        project_sha256: sha256_file(&dir.join(PROJECT_FILE)).ok(),
+        config_sha256,
+        scene_sha256: sha256_file(&solve.join(names::SCENE_MESH)).ok(),
+        mbin_sha256: sha256_file(&solve.join(names::TETRA_MESH)).ok(),
+        run_mesh_input_hash: manifest
+            .mesh
+            .as_ref()
+            .and_then(|m| m.mesh_input_hash.clone()),
+        run_mbin_sha256: manifest.mesh.as_ref().map(|m| m.mbin_sha256.clone()),
+        mesh_json_input_hash: mesh_json.as_ref().and_then(|m| m.mesh_input_hash.clone()),
+        mesh_json_mbin_sha256: mesh_json.and_then(|m| m.files.mbin),
+    }
+}
+
+/// The project file the bed saves beside each run folder (`run::run_one`).
+pub const PROJECT_FILE: &str = "project.simpa";
 
 /// Files and bytes under `dir`, recursively.
 pub fn count_files(dir: &Path) -> (u64, u64) {
@@ -110,6 +199,10 @@ pub fn run_info(folder: &Path) -> Result<RunInfo, String> {
         tetgen_sha256,
         files,
         bytes,
+        bound_by: None,
+        outputs_sha256: None,
+        output_files: Vec::new(),
+        on_disk: None,
     })
 }
 

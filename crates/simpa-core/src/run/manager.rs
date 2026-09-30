@@ -42,7 +42,7 @@ use super::expect::{self, Expectation};
 use super::locate;
 use super::manifest::{
     FILE_NAME, FileCounts, FileRef, MANIFEST_VERSION, MeshRef, RunManifest, RunSource, hash_folder,
-    sha256_bytes, sha256_file,
+    hash_tree, sha256_bytes, sha256_file,
 };
 use super::stats::ParticleStats;
 use super::verdict::{Evidence, Outputs, Reason, Status, Verdict, codes, judge};
@@ -489,6 +489,8 @@ impl Record<'_> {
         let mut warnings = self.warnings;
         warnings.append(&mut verdict.warnings);
         verdict.warnings = warnings;
+        // Last, so that it is what the run left: the logs are closed and the verdict is judged.
+        let outputs = hash_tree(&self.dir, &[FILE_NAME]).ok();
         let manifest = RunManifest {
             manifest_version: MANIFEST_VERSION,
             core_version: crate::VERSION.to_string(),
@@ -507,6 +509,7 @@ impl Record<'_> {
             outcome: launched.outcome,
             lines: launched.lines,
             files: launched.files,
+            outputs,
             particles: launched.particles,
             loss_limit: self.opts.loss_limit,
             verdict,
@@ -622,6 +625,28 @@ fn issue_reason(i: &Issue) -> Reason {
 // ---------------------------------------------------------------------------------------------
 // run_project
 
+/// The project [`run_project`] runs from the bytes of a project file and `variant`: read by the
+/// validator's reader, with the variant exported made the active one. The M8 bed holds a run's
+/// `config.xml` and scene mesh to what this build exports from this for the run's plan.
+pub fn project_as_run(bytes: &[u8], variant: Option<&str>) -> Result<Project, String> {
+    let mut project = std::str::from_utf8(bytes)
+        .map_err(|e| e.to_string())
+        .and_then(|t| validate::read_project_text(t).map_err(|e| format!("{} ({e})", e.code())))?;
+    // The validator judges the materials under the project's active variant; the export writes
+    // `variant`'s. The app passes the active variant, but the CLI passes `--variant` as given, or
+    // none (the base). So the variant exported is made the active one here, and every material
+    // rule (`material_placeholder` among them) judges what the solver will read. A selector that
+    // does not resolve leaves the project as it is: the export refuses it (`variant_not_found`).
+    // So does an active variant that does not exist, which the validator refuses as it stands.
+    let active_exists = project
+        .active_variant
+        .is_none_or(|v| project.variant(v).is_some());
+    if active_exists && let Ok(exported) = config_xml::resolve_variant(&project, variant) {
+        project.active_variant = exported;
+    }
+    Ok(project)
+}
+
 /// Runs the project in `project_file` with the solver `opts` names, `variant`'s materials
 /// (`None`: the project's own, whichever variant the file has active; the validator judges the
 /// same materials) and the mesh `mesh` says, into a fresh run folder under
@@ -639,25 +664,10 @@ pub fn run_project(
         path: project_file.to_path_buf(),
         message: e.to_string(),
     })?;
-    let mut project = std::str::from_utf8(&bytes)
-        .map_err(|e| e.to_string())
-        .and_then(|t| validate::read_project_text(t).map_err(|e| format!("{} ({e})", e.code())))
-        .map_err(|message| RunError::Project {
-            path: project_file.to_path_buf(),
-            message,
-        })?;
-    // The validator judges the materials under the project's active variant; the export writes
-    // `variant`'s. The app passes the active variant, but the CLI passes `--variant` as given, or
-    // none (the base). So the variant exported is made the active one here, and every material
-    // rule (`material_placeholder` among them) judges what the solver will read. A selector that
-    // does not resolve leaves the project as it is: the export refuses it (`variant_not_found`).
-    // So does an active variant that does not exist, which the validator refuses as it stands.
-    let active_exists = project
-        .active_variant
-        .is_none_or(|v| project.variant(v).is_some());
-    if active_exists && let Ok(exported) = config_xml::resolve_variant(&project, variant) {
-        project.active_variant = exported;
-    }
+    let project = project_as_run(&bytes, variant).map_err(|message| RunError::Project {
+        path: project_file.to_path_buf(),
+        message,
+    })?;
     let exe = exe_ref(&opts.solver_exe)?;
     let started = SystemTime::now();
     let dir =

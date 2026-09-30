@@ -12,7 +12,9 @@
 //!   correlated): PASS when `|d| + t·SE ≤ 0.5 %`; FAIL when the interval excludes 0 and `|d| >
 //!   0.5 %`; otherwise INCONCLUSIVE, which does not pass, and which may be extended once by seeds
 //!   11 to 20 and judged again on all twenty.
-//! - **D**, per band of each TCR run: `|T_TCR,Eyring / T_analytic,Eyring − 1| ≤ 0.5 %`.
+//! - **D**, per band of each TCR run: `|T_TCR,Eyring / T_analytic,Eyring − 1| ≤ 0.5 %`, with
+//!   `T_analytic` the analytic time of the project the bed planned for the run
+//!   ([`planned_analytic`]), never of the run's own `config.xml` (M8b).
 //!
 //! A mean over a subset of seeds or receiver-bands is never formed (SB-3): a cell in which any
 //! seed's T30 is refused for more than its noise is not judged (E6).
@@ -107,9 +109,16 @@ pub struct CheckD {
 pub struct BandD {
     pub freq_hz: i32,
     pub tcr_eyring_s: f64,
+    /// The reference: the analytic Eyring time of the project the bed planned for the run
+    /// (`file::tcr_project`, `results::tcr::analytic_of_project`), since M8b; of the run's own
+    /// `config.xml` and meshes before.
     pub analytic_eyring_s: Option<f64>,
     pub deviation: Option<f64>,
     pub verdict: Verdict,
+    /// Reported, never judged: the analytic time on the run's own inputs, as `simpa results`
+    /// computes it. `None` in a report written before M8b.
+    #[serde(default)]
+    pub run_analytic_eyring_s: Option<f64>,
 }
 
 /// A precondition: holds or not, and what broke it.
@@ -308,6 +317,7 @@ pub fn check_d(bands_hz: &[i32], bands: &[(i32, f64, Option<f64>)], limit: f64) 
                     Some(_) => Verdict::Fail,
                     None => Verdict::NotJudged,
                 },
+                run_analytic_eyring_s: None,
             }
         })
         .collect();
@@ -1113,14 +1123,28 @@ pub fn evaluate_tcr(
         return out;
     };
     let bands_hz: Vec<i32> = bed.bands_hz(cell.air).iter().map(|&f| f as i32).collect();
-    let d = check_d(
+    // M8b: the reference is the analytic time of the project the bed planned for the run, not
+    // one computed from the run's own config.xml, which a run filed under another plan brings
+    // with it (docs/v1.1-backlog.md row 42).
+    let planned = planned_analytic(bed, t);
+    if let Err(e) = &planned {
+        out.failures.push(format!(
+            "{}: D not judged: no analytic time for the project the bed planned: {e}",
+            t.id
+        ));
+    }
+    let plan = |f: i32| planned.as_ref().ok().and_then(|m| m.get(&f).copied());
+    let mut d = check_d(
         &bands_hz,
         &r.bands
             .iter()
-            .map(|b| (b.freq_hz, b.eyring_s, b.analytic_eyring_s))
+            .map(|b| (b.freq_hz, b.eyring_s, plan(b.freq_hz).and_then(|x| x.1)))
             .collect::<Vec<_>>(),
         limits::TCR_EYRING,
     );
+    for (bd, b) in d.bands.iter_mut().zip(&r.bands) {
+        bd.run_analytic_eyring_s = b.analytic_eyring_s;
+    }
     for p in &d.band_problems {
         out.failures.push(format!(
             "{}: D Fail: the run's bands are not the bed's for {}: {p}",
@@ -1143,7 +1167,11 @@ pub fn evaluate_tcr(
     out.sabine_against_analytic = r
         .bands
         .iter()
-        .map(|b| b.analytic_sabine_s.map(|a| b.sabine_s / a - 1.0))
+        .map(|b| {
+            plan(b.freq_hz)
+                .and_then(|x| x.0)
+                .map(|a| b.sabine_s / a - 1.0)
+        })
         .collect();
     out.eyring_against_kuttruff = r
         .bands
@@ -1167,6 +1195,34 @@ pub fn evaluate_tcr(
     }
     out.d = Some(d);
     out
+}
+
+/// By band, Hz: an analytic Sabine and Eyring time, s, each `None` where it was refused.
+pub type AnalyticTimes = BTreeMap<i32, (Option<f64>, Option<f64>)>;
+
+/// The analytic Sabine and Eyring times, by band, of the project the bed plans for the TCR run
+/// `t` ([`super::file::tcr_project`]), as the run manager runs it, on the inputs this build
+/// exports for it ([`crate::results::tcr::analytic_of_project`]).
+pub fn planned_analytic(bed: &BedFile, t: &TcrCell) -> Result<AnalyticTimes, String> {
+    use crate::results::tcr::{Analytic, analytic_of_project};
+    let project = super::file::tcr_project(bed, t)?;
+    let json = crate::schema::to_json(&project);
+    let project = crate::run::manager::project_as_run(json.as_bytes(), None)?;
+    match analytic_of_project(&project) {
+        Analytic::Computed { bands, .. } => Ok(bands
+            .iter()
+            .map(|b| {
+                (
+                    b.freq_hz,
+                    (
+                        b.sabine_s.as_ref().ok().copied(),
+                        b.eyring_s.as_ref().ok().copied(),
+                    ),
+                )
+            })
+            .collect()),
+        Analytic::NotComputed { why } => Err(why),
+    }
 }
 
 /// R7: random against energetic, per (room, α, air): the difference of the two cells' means of
@@ -1404,16 +1460,23 @@ pub(crate) mod tests {
             .find(|t| t.id == "6x10x3-a0.2-tcr-air-on")
             .unwrap();
         assert!(t.gated);
-        let band = |f: i32| super::super::read::TcrBand {
-            freq_hz: f,
-            sabine_s: 0.7,
-            eyring_s: 0.6,
-            analytic_sabine_s: Some(0.7),
-            analytic_eyring_s: Some(0.6),
-            analytic_refused: None,
-            air_m_per_metre: None,
+        // TCR at the planned project's analytic time in every band it has; 0.6 s in one it has
+        // not.
+        type Planned = AnalyticTimes;
+        let planned = planned_analytic(&bed, t).unwrap();
+        let band = |m: &Planned, f: i32| {
+            let e = m.get(&f).and_then(|x| x.1).unwrap_or(0.6);
+            super::super::read::TcrBand {
+                freq_hz: f,
+                sabine_s: 0.7,
+                eyring_s: e,
+                analytic_sabine_s: Some(0.7),
+                analytic_eyring_s: Some(e),
+                analytic_refused: None,
+                air_m_per_metre: None,
+            }
         };
-        let run = |freqs: &[i32]| -> Result<TcrRead, String> {
+        let run = |m: &Planned, freqs: &[i32]| -> Result<TcrRead, String> {
             Ok(TcrRead {
                 info: super::super::read::RunInfo {
                     folder: "f".into(),
@@ -1428,11 +1491,15 @@ pub(crate) mod tests {
                     tetgen_sha256: None,
                     files: 1,
                     bytes: 1,
+                    bound_by: None,
+                    outputs_sha256: None,
+                    output_files: vec![],
+                    on_disk: None,
                 },
-                bands: freqs.iter().map(|&f| band(f)).collect(),
+                bands: freqs.iter().map(|&f| band(m, f)).collect(),
             })
         };
-        let judged = |freqs: &[i32]| evaluate_tcr(&bed, t, Some(&run(freqs)), None);
+        let judged = |freqs: &[i32]| evaluate_tcr(&bed, t, Some(&run(&planned, freqs)), None);
         // The run as the bed makes it: seven octaves to 8 kHz, air on.
         let all = [125, 250, 500, 1000, 2000, 4000, 8000];
         let r = judged(&all);
@@ -1483,13 +1550,18 @@ pub(crate) mod tests {
             .iter()
             .find(|t| t.id == "6x10x3-a0.2-tcr-air-off")
             .unwrap();
+        let planned_off = planned_analytic(&bed, off).unwrap();
         assert_eq!(
-            evaluate_tcr(&bed, off, Some(&run(&all[..6])), None).verdict,
+            evaluate_tcr(&bed, off, Some(&run(&planned_off, &all[..6])), None).verdict,
             Verdict::Pass
         );
         assert_eq!(
-            evaluate_tcr(&bed, off, Some(&run(&all)), None).verdict,
+            evaluate_tcr(&bed, off, Some(&run(&planned_off, &all)), None).verdict,
             Verdict::Fail
         );
+        // And the air-on run's times under the air-off plan: D fails in the bands where the air
+        // counts, the bed's reference being the plan's, not the run's own.
+        let r = evaluate_tcr(&bed, off, Some(&run(&planned, &all[..6])), None);
+        assert_eq!(r.verdict, Verdict::Fail, "{r:?}");
     }
 }

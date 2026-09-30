@@ -476,7 +476,10 @@ to end, for the CLI and the desktop shell alike (`docs/m5-m6-design.md`, "Layout
   `started` is the same instant in RFC 3339 with the UTC offset. The solver runs in its
   `solve/`; `mesh/` holds the run's own mesh; `run.json` and `solver.stdout.txt` /
   `solver.stderr.txt` sit beside `solve/`. Every run folder gets its `run.json`, refused or
-  launched: `stage` says where the run ended and `exit_class` is the CLI's exit code. A launched
+  launched: `stage` says where the run ended and `exit_class` is the CLI's exit code, and
+  `outputs` (since M8b) lists every file then in the run folder but `run.json` itself, each with
+  its size and sha256; the M8 bed reads a run only when every file is still that
+  (`core::bed::bind`), and `outputs` is absent from a `run.json` written before it. A launched
   run always ends in a verdict, a failed log write included (`log_write_failed`). The one
   exception is an I/O failure in the run folder itself: `run-folder` cannot copy the fixture in,
   fill its `config.xml` or hash it, or `run.json` cannot be written. The CLI then reports the

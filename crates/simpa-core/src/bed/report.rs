@@ -51,6 +51,12 @@ pub struct Meta {
     pub transport_phase_s: Option<f64>,
     /// The limits the checks used (constants of the code, not of the bed file).
     pub limits: BTreeMap<String, f64>,
+    /// The seal the earlier bed's runs were held to (`--seal`, `bind::Seal`), and its sha256.
+    /// `None` without one, and in a report written before M8b.
+    #[serde(default)]
+    pub seal: Option<String>,
+    #[serde(default)]
+    pub seal_sha256: Option<String>,
 }
 
 /// E1: the executables against `solvers/manifest.json` before any run, and every run's

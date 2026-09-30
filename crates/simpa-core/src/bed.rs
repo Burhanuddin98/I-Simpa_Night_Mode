@@ -7,6 +7,8 @@
 //! (C, 0.5 %); TCR's Eyring time to its analytic value (D, 0.5 %); and the preconditions E1 to
 //! E7 must hold. Plain Eyring, Sabine and a 20×8×4 m room are reported, never gated.
 //!
+//! - [`bind`]: every file of a run bound to its record (`run.json`'s output hashes, or an
+//!   earlier bed's committed seal) before anything is read from it;
 //! - [`file`]: the bed file and the projects the runs are built from;
 //! - [`pe`]: E1, the solvers against `solvers/manifest.json`;
 //! - [`run`]: the runs, through the run manager, and reading them again;
@@ -18,6 +20,7 @@
 //!
 //! `simpa bed` (the CLI) runs it; `tools/gates/m8a.ps1` is its gate.
 
+pub mod bind;
 pub mod check;
 pub mod file;
 pub mod output;
@@ -119,6 +122,10 @@ mod tests {
             tetgen_sha256: Some("tet".into()),
             files: 39,
             bytes: 1000,
+            bound_by: None,
+            outputs_sha256: None,
+            output_files: vec![],
+            on_disk: None,
         }
     }
 
@@ -186,22 +193,29 @@ mod tests {
         }
     }
 
-    /// A TCR run on `bands`, TCR at `off` from its analytic Eyring time.
-    fn tcr_on(bands: &[i32], off: f64) -> TcrRead {
+    /// `bed`'s TCR run `id` on `bands`, TCR at `off` from the analytic Eyring time of the project
+    /// the bed plans for it (check D's reference), and its own analytic time that one.
+    fn tcr_on(bed: &BedFile, id: &str, bands: &[i32], off: f64) -> TcrRead {
         let mut ti = info("tcr");
         ti.exe = "classicalTheory.exe".into();
+        let t = bed.tcr.iter().find(|t| t.id == id).unwrap();
+        let planned = check::planned_analytic(bed, t).unwrap();
         TcrRead {
             info: ti,
             bands: bands
                 .iter()
-                .map(|&f| TcrBand {
-                    freq_hz: f,
-                    sabine_s: 0.52,
-                    eyring_s: 0.465 * (1.0 + off),
-                    analytic_sabine_s: Some(0.52),
-                    analytic_eyring_s: Some(0.465),
-                    analytic_refused: None,
-                    air_m_per_metre: None,
+                .map(|&f| {
+                    let (sabine, eyring) = planned.get(&f).copied().unwrap_or((None, None));
+                    let (sabine, eyring) = (sabine.unwrap_or(0.52), eyring.unwrap_or(0.465));
+                    TcrBand {
+                        freq_hz: f,
+                        sabine_s: sabine,
+                        eyring_s: eyring * (1.0 + off),
+                        analytic_sabine_s: Some(sabine),
+                        analytic_eyring_s: Some(eyring),
+                        analytic_refused: None,
+                        air_m_per_metre: None,
+                    }
                 })
                 .collect(),
         }
@@ -263,8 +277,9 @@ mod tests {
         }
         let mut r = Reads::default();
         r.spps.insert("5x4x3-a0.2-energetic-air-off".into(), seeds);
+        let t = "5x4x3-a0.2-tcr-air-off";
         r.tcr
-            .insert("5x4x3-a0.2-tcr-air-off".into(), Ok(tcr_on(&OFF, tcr_off)));
+            .insert(t.into(), Ok(tcr_on(&small_bed(), t, &OFF, tcr_off)));
         r.atmospheric = AtmosphericReads {
             not_run: Some("not given".into()),
             ..Default::default()
@@ -452,7 +467,8 @@ mod tests {
             on_cell.into(),
             (1..=3).map(|s| (s, Ok(spps_on(s, k, 0.0, &ON)))).collect(),
         );
-        good.tcr.insert(on_tcr.into(), Ok(tcr_on(&ON, 0.001)));
+        good.tcr
+            .insert(on_tcr.into(), Ok(tcr_on(&bed, on_tcr, &ON, 0.001)));
         // Untouched: the bed passes, the air-on TCR run on its seven bands.
         let r = judge(&bed, &good, &ts, &[]);
         assert!(r.pass, "{:#?}", r.failures);
@@ -504,11 +520,12 @@ mod tests {
         );
     }
 
-    /// `read`'s run of `p` made to be exactly that run: the project sha256 `run.json` records
+    /// `read`'s run of `p` made to be exactly that run: the project sha256 `run.json` records,
+    /// the files it was read from as the bed writes them for `p`, bound, with outputs of its own,
     /// and the step as SPPS reads it (`f32`); the helper's other settings are the small bed's.
     fn as_run_of(p: &run::Planned, r: SppsRead) -> run::Read {
         let mut r = r;
-        r.info.project_sha256 = Some(run::planned_project_sha256(p));
+        run::testing::as_if_read_from(&mut r.info, p, &p.key.label());
         r.time_step_s = f64::from(0.001f32);
         run::Read::Spps(Box::new(r))
     }
@@ -541,16 +558,17 @@ mod tests {
                         let spec = file::CellSpec::of(&bed, cell).unwrap();
                         let project =
                             file::cell_project(&spec, *seed, 0.01, bed.bands_hz(false)).unwrap();
-                        s.info.project_sha256 = Some(run::planned_project_sha256(&run::Planned {
+                        let ten = run::Planned {
                             project,
                             ..p.clone()
-                        }));
+                        };
+                        run::testing::as_if_read_from(&mut s.info, &ten, "10 ms");
                         s.time_step_s = f64::from(0.01f32);
                         Ok(run::Read::Spps(s))
                     }
-                    run::RunKey::Tcr { .. } => {
-                        let mut t = tcr_on(&OFF, 0.001);
-                        t.info.project_sha256 = Some(run::planned_project_sha256(p));
+                    run::RunKey::Tcr { id } => {
+                        let mut t = tcr_on(&bed, id, &OFF, 0.001);
+                        run::testing::as_if_read_from(&mut t.info, p, id);
                         Ok(run::Read::Tcr(Box::new(t)))
                     }
                     _ => Err("not run here".into()),
@@ -583,6 +601,163 @@ mod tests {
             "{:#?}",
             r.failures
         );
+    }
+
+    /// The small bed's plan on `seeds`, read through [`run::into_reads`] as a bed reads it, every
+    /// run its own (as [`as_run_of`] makes it) except that seed `to` carries seed `from`'s solver
+    /// outputs, byte for byte, for each `(to, from)` of `copies`; then judged.
+    fn judged_with_copies(seeds: &[u32], copies: &[(u32, u32)]) -> report::Report {
+        let mut bed = small_bed();
+        bed.seeds = seeds.to_vec();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let (runs, _) = run::plan(&bed, None).unwrap();
+        let results: Vec<Result<run::Read, String>> = runs
+            .iter()
+            .map(|p| match &p.key {
+                run::RunKey::Cell { seed, .. } => {
+                    let mut r = as_run_of(p, spps(*seed, k, 0.0));
+                    if let Some((_, from)) = copies.iter().find(|(to, _)| to == seed) {
+                        let run::Read::Spps(s) = &mut r else {
+                            unreachable!()
+                        };
+                        let of = run::RunKey::Cell {
+                            id: bed.cells[0].id.clone(),
+                            seed: *from,
+                        };
+                        run::testing::outputs_of(&mut s.info, &of.label());
+                    }
+                    Ok(r)
+                }
+                run::RunKey::Tcr { id } => {
+                    let mut t = tcr_on(&bed, id, &OFF, 0.001);
+                    run::testing::as_if_read_from(&mut t.info, p, id);
+                    Ok(run::Read::Tcr(Box::new(t)))
+                }
+                _ => Err("not run here".into()),
+            })
+            .collect();
+        let mut rd = Reads::default();
+        run::into_reads(&mut rd, &runs, results, Some("not given".into()));
+        judge(&bed, &rd, &ts, &[])
+    }
+
+    /// M8b, backlog row 41 (`VERIFY-adversarial.md` finding 1, the tampered copy `swap-seed`):
+    /// seed 3's folder kept its own `run.json`, `config.xml` and mesh, with seed 4's output files
+    /// in it, and the bed passed. Two seeds that share their solver outputs are each refused
+    /// `bed_seed_outputs_identical`, and the cell is not judged.
+    #[test]
+    fn a_seed_carrying_another_seeds_outputs_does_not_pass_the_bed() {
+        let own = judged_with_copies(&[1, 2, 3], &[]);
+        assert!(own.pass, "{:#?}", own.failures);
+        let r = judged_with_copies(&[1, 2, 3], &[(3, 2)]);
+        assert!(!r.pass);
+        assert!(!r.preconditions.e2.holds);
+        let cell = &r.cells[0];
+        assert_eq!(cell.verdict, Verdict::NotJudged);
+        for s in &cell.seeds {
+            let e = s.error.as_deref().unwrap_or_default();
+            if s.seed == 1 {
+                assert!(s.error.is_none(), "{e}");
+            } else {
+                assert!(e.starts_with(bind::SEEDS_IDENTICAL), "seed {}: {e}", s.seed);
+                assert!(e.contains("all of them"), "{e}");
+            }
+        }
+        assert!(
+            r.failures
+                .iter()
+                .any(|f| f.contains("seed 3: bed_seed_outputs_identical")),
+            "{:#?}",
+            r.failures
+        );
+    }
+
+    /// M8b, backlog row 41 (the tampered copy `swap-all-to-s1`): seeds 2 to 10 each carrying seed
+    /// 1's outputs passed A, B and C on ten identical seeds. All ten are refused.
+    #[test]
+    fn ten_seeds_carrying_one_seeds_outputs_do_not_pass_the_bed() {
+        let seeds: Vec<u32> = (1..=10).collect();
+        let own = judged_with_copies(&seeds, &[]);
+        assert!(own.pass, "{:#?}", own.failures);
+        let copies: Vec<(u32, u32)> = (2..=10).map(|s| (s, 1)).collect();
+        let r = judged_with_copies(&seeds, &copies);
+        assert!(!r.pass);
+        let cell = &r.cells[0];
+        assert_eq!(cell.verdict, Verdict::NotJudged);
+        let refused = cell
+            .seeds
+            .iter()
+            .filter(|s| {
+                s.error
+                    .as_deref()
+                    .is_some_and(|e| e.starts_with(bind::SEEDS_IDENTICAL))
+            })
+            .count();
+        assert_eq!(refused, 10, "{:#?}", cell.seeds);
+    }
+
+    /// M8b, backlog row 42 (the tampered copy `tcr-edited-sha`): a TCR run of α 0.4's project,
+    /// its `run.json`'s sha256 edited to α 0.2's plan, filed as α 0.2's. Through `into_reads` it
+    /// is refused on the files it was read from; and judged without that refusal (as the bed
+    /// judged it before M8b), D holds it to the analytic time of α 0.2's plan, not of its own
+    /// `config.xml`, and fails.
+    #[test]
+    fn a_tcr_run_of_another_plan_does_not_pass_the_bed() {
+        let bed = small_bed();
+        let m8a = file::BedFile::m8a();
+        let (a02, a04) = ("5x4x3-a0.2-tcr-air-off", "5x4x3-a0.4-tcr-air-off");
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let (runs, _) = run::plan(&bed, None).unwrap();
+        let (m8a_runs, _) = run::plan(&m8a, None).unwrap();
+        let p04 = m8a_runs
+            .iter()
+            .find(|p| p.key == run::RunKey::Tcr { id: a04.into() })
+            .unwrap();
+        // α 0.4's run, TCR within 0.1 % of its own analytic time, its run.json edited.
+        let mut other = tcr_on(&m8a, a04, &OFF, 0.001);
+        run::testing::as_if_read_from(&mut other.info, p04, a04);
+        let p02 = runs
+            .iter()
+            .find(|p| p.key == run::RunKey::Tcr { id: a02.into() })
+            .unwrap();
+        other.info.project_sha256 = Some(run::planned_project_sha256(p02));
+        let good = reads(0.4794, &[0.0, 0.0005, -0.0005], 0.001);
+        let mut through = good.clone();
+        let results: Vec<Result<run::Read, String>> = runs
+            .iter()
+            .map(|p| match &p.key {
+                run::RunKey::Tcr { .. } => Ok(run::Read::Tcr(Box::new(other.clone()))),
+                run::RunKey::Cell { seed, .. } => Ok(as_run_of(p, spps(*seed, 0.4794, 0.0))),
+                _ => Err("not run here".into()),
+            })
+            .collect();
+        run::into_reads(&mut through, &runs, results, Some("not given".into()));
+        let r = judge(&bed, &through, &ts, &[]);
+        assert!(!r.pass);
+        let t = r.tcr.iter().find(|t| t.id == a02).unwrap();
+        assert_eq!(t.verdict, Verdict::NotJudged);
+        let e = t.error.as_deref().unwrap_or_default();
+        assert!(e.starts_with(run::RUN_NOT_PLANNED), "{e}");
+        assert!(e.contains("project.simpa on disk"), "{e}");
+
+        // Judged as it was read before M8b, with no refusal: D fails, 56 % from α 0.2's time.
+        let mut direct = good.clone();
+        direct.tcr.insert(a02.into(), Ok(other.clone()));
+        let r = judge(&bed, &direct, &ts, &[]);
+        assert!(!r.pass);
+        let t = r.tcr.iter().find(|t| t.id == a02).unwrap();
+        assert_eq!(t.verdict, Verdict::Fail);
+        let d = t.d.as_ref().unwrap();
+        for b in &d.bands {
+            assert_eq!(b.verdict, Verdict::Fail, "{b:?}");
+            // The run's own analytic time, α 0.4's, is reported: TCR is within it.
+            let own = b.run_analytic_eyring_s.unwrap();
+            assert!((b.tcr_eyring_s / own - 1.0).abs() < 0.002, "{b:?}");
+            assert!(b.deviation.unwrap() < -0.5, "{b:?}");
+        }
     }
 
     #[test]

@@ -139,6 +139,86 @@ fn a_fixture_runs_in_a_fresh_folder_with_its_logs_beside_solve() {
     assert!(read_text(&r.dir.join(STDOUT_LOG)).contains("End of calculation."));
 }
 
+/// Every file under `dir`, but `run.json` at its top, as `(path relative to dir, size, sha256)`:
+/// walked here on its own, not with `run::manifest::hash_tree`.
+fn left_in(dir: &Path) -> Vec<(String, u64, String)> {
+    fn walk(root: &Path, d: &Path, out: &mut Vec<(String, u64, String)>) {
+        for e in std::fs::read_dir(d).unwrap() {
+            let p = e.unwrap().path();
+            if p.is_dir() {
+                walk(root, &p, out);
+            } else if p != root.join("run.json") {
+                let rel = p
+                    .strip_prefix(root)
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .replace('\\', "/");
+                let bytes = std::fs::read(&p).unwrap();
+                out.push((
+                    rel,
+                    bytes.len() as u64,
+                    simpa_core::run::manifest::sha256_bytes(&bytes),
+                ));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, dir, &mut out);
+    out.sort();
+    out
+}
+
+/// M8b: `run.json` records every file the run left in its folder, but itself, with its size and
+/// sha256: the solver's outputs, the inputs as they then were, the logs; and, for a run refused
+/// before launch, what was there then.
+#[test]
+fn run_json_records_every_file_the_run_left() {
+    let opts = options("mgr-outputs", SolverKind::Spps, exe_for(SolverKind::Spps));
+    let (r, _, _) = folder("spps_ok", &opts);
+    let m = written(&r);
+    assert_eq!(m.verdict.status, Status::Ok, "{m:#?}");
+    let recorded: Vec<(String, u64, String)> = m
+        .outputs
+        .as_ref()
+        .expect("outputs recorded")
+        .iter()
+        .map(|f| (f.path.clone(), f.size, f.sha256.clone()))
+        .collect();
+    let left = left_in(&r.dir);
+    assert_eq!(recorded, left);
+    let paths: Vec<&str> = left.iter().map(|f| f.0.as_str()).collect();
+    for want in [
+        STDOUT_LOG,
+        STDERR_LOG,
+        "solve/config.xml",
+        "solve/tetramesh.mbin",
+        "solve/SPPS particle statistics.gabe",
+    ] {
+        assert!(paths.contains(&want), "{want} not in {paths:?}");
+    }
+    assert!(paths.iter().any(|p| p.ends_with(".recp")), "{paths:?}");
+    // The inputs as run.json recorded them before launch are the same files after it.
+    for i in &m.inputs {
+        let after = left
+            .iter()
+            .find(|f| f.0 == format!("solve/{}", i.path))
+            .unwrap();
+        assert_eq!(after.2, i.sha256, "{}", i.path);
+    }
+    // Refused before launch: what the folder held then.
+    let (r, _, _) = folder("spps_oneband", &opts);
+    let m = written(&r);
+    assert_eq!(m.outcome, None);
+    let recorded: Vec<(String, u64, String)> = m
+        .outputs
+        .unwrap()
+        .into_iter()
+        .map(|f| (f.path, f.size, f.sha256))
+        .collect();
+    assert_eq!(recorded, left_in(&r.dir));
+}
+
 #[test]
 fn run_folder_refuses_before_launch_what_no_signal_after_it_catches() {
     let opts = options("mgr-pre", SolverKind::Spps, exe_for(SolverKind::Spps));

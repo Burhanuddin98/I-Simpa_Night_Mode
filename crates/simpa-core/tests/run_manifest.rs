@@ -66,6 +66,7 @@ fn sample() -> RunManifest {
             expected: 65,
             present: 65,
         },
+        outputs: None,
         particles: Some(clean_stats(&exp)),
         loss_limit: DEFAULT_LOSS_LIMIT,
         verdict,
@@ -129,6 +130,41 @@ fn the_field_names_are_fixed() {
     assert_eq!(v["stage"], "solve");
     assert_eq!(v["exit_class"], 5);
     assert_eq!(v["particles"]["bands"][0]["total"], 10_000);
+}
+
+/// `outputs` (M8b): absent in a manifest written before it, which reads as `None` and writes back
+/// byte for byte; present, it round-trips, and a file entry with a field it does not know is
+/// refused, as the rest of the manifest is.
+#[test]
+fn the_outputs_are_written_only_when_recorded() {
+    let json = sample().to_json();
+    assert!(!json.contains("\"outputs\""), "{json}");
+    let back = RunManifest::from_json(&json).unwrap();
+    assert_eq!(back.outputs, None);
+    assert_eq!(back.to_json(), json);
+    let recorded = RunManifest {
+        outputs: Some(vec![
+            simpa_core::run::OutputRef {
+                path: "solve/Total energy.recp".into(),
+                size: 1234,
+                sha256: sha256_bytes(b"energy"),
+            },
+            simpa_core::run::OutputRef {
+                path: "solver.stdout.txt".into(),
+                size: 0,
+                sha256: sha256_bytes(b""),
+            },
+        ]),
+        ..sample()
+    };
+    let json = recorded.to_json();
+    let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(v["outputs"][0]["path"], "solve/Total energy.recp");
+    assert_eq!(v["outputs"][0]["size"], 1234);
+    assert_eq!(RunManifest::from_json(&json).unwrap(), recorded);
+    let extra = json.replacen("\"size\": 1234", "\"size\": 1234, \"mtime\": 5", 1);
+    assert_ne!(extra, json);
+    assert!(RunManifest::from_json(&extra).is_err());
 }
 
 /// `solvers` (M11 C7): absent when no check was asked for, so a manifest without the key (every

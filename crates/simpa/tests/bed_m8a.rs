@@ -8,8 +8,11 @@
 //!
 //! `$SIMPA_BED_FROM` is the folder `simpa bed` wrote (`runs/`, `report.json`), and
 //! `$SIMPA_BED_REPORT` a `report.json` elsewhere (a bed run with `--from`); `$SIMPA_BED_FILE`
-//! the bed file (default `beds/m8a.json`); `$SIMPA_BED_JOBS` how many runs are read at once
-//! (default 4). No solver runs: the faults go through the code that reads and judges the runs.
+//! the bed file (default `beds/m8a.json`); `$SIMPA_BED_SEAL` the bed's committed seal, for a bed
+//! whose runs predate the output hashes in `run.json` (M8a's: `beds/m8a-<stamp>/outputs-seal.json`;
+//! without it every such run is refused `bed_run_unbound`); `$SIMPA_BED_JOBS` how many runs are
+//! read at once (default 4). No solver runs: the faults go through the code that reads and judges
+//! the runs.
 //!
 //! - N2: Kuttruff with its ½ dropped (`Fault::KuttruffFullVariance`, through `results::reference`):
 //!   A fails in every α 0.4 gated cell.
@@ -20,10 +23,12 @@
 //! - N7: the transport traced with the air off (`Fault::BedTransportAirOff`): C fails in every
 //!   air-on gated cell.
 //! - N8: TCR's analytic times with the physical K (`Fault::TcrAnalyticPhysicalConstant`, through
-//!   `results::tcr`): D fails in every band of every gated TCR run.
+//!   `results::tcr`, over the planned project's analytic time that D holds TCR to): D fails in
+//!   every band of every gated TCR run.
 
 use std::path::{Path, PathBuf};
 
+use simpa_core::bed::bind;
 use simpa_core::bed::check::{Reads, Verdict};
 use simpa_core::bed::file::{self, BedFile};
 use simpa_core::bed::report::{self, Report};
@@ -38,6 +43,14 @@ fn from() -> PathBuf {
     );
     assert!(p.join("runs").is_dir(), "{}: no runs/", p.display());
     p
+}
+
+/// `$SIMPA_BED_SEAL`, loaded and checked against the bed folder `from`; `None` when unset.
+fn seal(from: &Path) -> Option<bind::Seal> {
+    let path = std::env::var_os("SIMPA_BED_SEAL").filter(|v| !v.is_empty())?;
+    let (s, _) = bind::Seal::load(Path::new(&path)).unwrap();
+    s.for_bed(from).unwrap();
+    Some(s)
 }
 
 fn jobs() -> usize {
@@ -92,7 +105,7 @@ fn read(bed: &BedFile, from: &Path, keep: impl Fn(&RunKey) -> bool) -> Reads {
             .into_iter()
             .filter(|p| keep(&p.key) && from.join(p.key.dir()).is_dir()),
     );
-    let results = run::read_existing(&runs, from, jobs());
+    let results = run::read_existing(&runs, from, jobs(), seal(from).as_ref());
     let mut reads = Reads::default();
     run::into_reads(&mut reads, &runs, results, Some("not read".into()));
     reads
@@ -295,10 +308,12 @@ fn n7_the_transport_without_air_fails_c_in_every_air_on_cell() {
 fn n8_tcrs_analytic_time_with_the_physical_constant_fails_d() {
     let (from, l) = (from(), bed());
     let rep = earlier(&from);
-    let reads = faults::with(Fault::TcrAnalyticPhysicalConstant, || {
-        read(&l.bed, &from, |k| matches!(k, RunKey::Tcr { .. }))
+    // Since M8b, D's reference is the analytic time of the planned project, computed when the
+    // runs are judged: the fault is held over the judging as well as the reading.
+    let judged = faults::with(Fault::TcrAnalyticPhysicalConstant, || {
+        let reads = read(&l.bed, &from, |k| matches!(k, RunKey::Tcr { .. }));
+        judge(&l, &reads, &traced(&rep), &rep)
     });
-    let judged = judge(&l, &reads, &traced(&rep), &rep);
     let gated: Vec<_> = judged.tcr.iter().filter(|t| t.gated).collect();
     assert!(!gated.is_empty());
     let mut wrong = Vec::new();

@@ -71,6 +71,16 @@ pub struct MeshRef {
     pub mbin_sha256: String,
 }
 
+/// A file a run left in its folder: its path relative to the run folder, `/`-separated, its size
+/// in bytes and its sha256 (lower-case hex).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OutputRef {
+    pub path: String,
+    pub size: u64,
+    pub sha256: String,
+}
+
 /// Files in `solve/` after the run.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -124,6 +134,48 @@ pub fn hash_folder(dir: &Path) -> io::Result<Vec<FileRef>> {
     Ok(out)
 }
 
+/// Every file under `dir`, recursively, except the top-level entries named in `except`, with its
+/// size and sha256, keyed by its path relative to `dir` with `/` between its parts, sorted by
+/// path: what a run left ([`RunManifest::outputs`]), and what the M8 bed hashes again to hold a
+/// run to it. Anything that is neither a file nor a folder (a link, say), and a name that is not
+/// UTF-8, is an error, never skipped: a file that cannot be hashed must not go unbound.
+pub fn hash_tree(dir: &Path, except: &[&str]) -> io::Result<Vec<OutputRef>> {
+    fn walk(root: &Path, dir: &Path, except: &[&str], out: &mut Vec<OutputRef>) -> io::Result<()> {
+        for e in std::fs::read_dir(dir)? {
+            let e = e?;
+            let path = e.path();
+            let rel = path.strip_prefix(root).unwrap_or(&path);
+            let rel = rel.to_str().ok_or_else(|| {
+                io::Error::other(format!("{}: the name is not UTF-8", path.display()))
+            })?;
+            if dir == root && except.contains(&rel) {
+                continue;
+            }
+            let kind = e.file_type()?;
+            if kind.is_dir() {
+                walk(root, &path, except, out)?;
+            } else if kind.is_file() {
+                let (sha256, size) = sha256_and_size(&path)?;
+                out.push(OutputRef {
+                    path: rel.split(['\\', '/']).collect::<Vec<_>>().join("/"),
+                    size,
+                    sha256,
+                });
+            } else {
+                return Err(io::Error::other(format!(
+                    "{}: neither a file nor a folder",
+                    path.display()
+                )));
+            }
+        }
+        Ok(())
+    }
+    let mut out = Vec::new();
+    walk(dir, dir, except, &mut out)?;
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(out)
+}
+
 /// `run.json`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -172,6 +224,14 @@ pub struct RunManifest {
     pub lines: ClassCounts,
     /// Files in `solve/` after the run, against the expected list.
     pub files: FileCounts,
+    /// Every file in the run folder when the run ended but `run.json` itself ([`hash_tree`]): the
+    /// solver's outputs, its inputs in `solve/` as they then stood, its logs, and for a run that
+    /// meshed, `mesh/` (TetGen's outputs and `mesh.json`), each with its size and sha256. The M8
+    /// bed reads a run only when every file in its folder still has these, no file gone and none
+    /// added (`bed::bind`). `None` in a manifest written before M8b, which has no such key and so
+    /// reads and writes back byte for byte, and when the folder could not be read at the end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outputs: Option<Vec<OutputRef>>,
     /// SPPS's particle statistics per band, when the table was read.
     pub particles: Option<ParticleStats>,
     /// The loss limit the verdict used (`docs/m5-m6-design.md`, decision 9). JSON has no NaN or
@@ -242,17 +302,24 @@ impl RunManifest {
 
 /// The sha256 of a file, in lower-case hex.
 pub fn sha256_file(path: &Path) -> io::Result<String> {
+    sha256_and_size(path).map(|(h, _)| h)
+}
+
+/// The sha256 of a file, in lower-case hex, and the number of bytes hashed.
+pub fn sha256_and_size(path: &Path) -> io::Result<(String, u64)> {
     let mut f = std::fs::File::open(path)?;
     let mut h = Sha256::new();
     let mut buf = vec![0u8; 1 << 16];
+    let mut size = 0u64;
     loop {
         let n = f.read(&mut buf)?;
         if n == 0 {
             break;
         }
         h.update(&buf[..n]);
+        size += n as u64;
     }
-    Ok(hex(&h.finalize()))
+    Ok((hex(&h.finalize()), size))
 }
 
 /// The sha256 of bytes, in lower-case hex.
@@ -271,6 +338,37 @@ fn hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every file under the folder, nested ones included, with its size; a top-level name in
+    /// `except` alone left out, the same name deeper kept.
+    #[test]
+    fn a_tree_is_hashed_file_by_file() {
+        let dir = std::env::temp_dir().join(format!("simpa-hash-tree-{}", std::process::id()));
+        for (p, text) in [
+            ("run.json", "{}"),
+            ("solve/run.json", "deeper"),
+            ("solve/Punctual receivers/R000/Sound level.recp", "abc"),
+            ("empty.txt", ""),
+        ] {
+            let path = dir.join(p);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, text).unwrap();
+        }
+        let t = hash_tree(&dir, &["run.json"]).unwrap();
+        let got: Vec<(&str, u64)> = t.iter().map(|f| (f.path.as_str(), f.size)).collect();
+        assert_eq!(
+            got,
+            [
+                ("empty.txt", 0),
+                ("solve/Punctual receivers/R000/Sound level.recp", 3),
+                ("solve/run.json", 6),
+            ]
+        );
+        assert_eq!(t[1].sha256, sha256_bytes(b"abc"));
+        assert_eq!(t[0].sha256, sha256_bytes(b""));
+        assert_eq!(hash_tree(&dir, &[]).unwrap().len(), 4);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn sha256_known_answers() {

@@ -28,12 +28,17 @@
 # another bed file, for checking the gate itself: it is exploratory and never prints 'M8a PASSED'.
 # Upstream's tree for the atmospheric validation: -Upstream, else $env:SIMPA_UPSTREAM, else
 # B:\repos\I-Simpa-upstream when it is there (read-only).
+# With -From, the bed's runs are held to their run.json's output hashes, or, for a bed made before
+# M8b (whose run.json has none), to its committed seal: -Seal <file>, else
+# beds\m8a-<the -From folder's name>\outputs-seal.json when it is there. Without either, every run
+# of such a bed is refused (bed_run_unbound) and the gate fails.
 param(
     [string]$BedRoot = '',
     [string]$From = '',
     [string]$Bed = '',
     [int]$Jobs = 4,
     [string]$Upstream = '',
+    [string]$Seal = '',
     [double]$BedTimeoutHours = 40
 )
 $ErrorActionPreference = 'Stop'
@@ -52,6 +57,11 @@ if (-not $Upstream) {
 }
 # The suite's upstream-reading tests take the same tree.
 if ($Upstream) { $env:SIMPA_UPSTREAM = $Upstream }
+if ($From -and -not $Seal) {
+    $candidate = Join-Path $repo ('beds\m8a-' + (Split-Path -Leaf $From) + '\outputs-seal.json')
+    if (Test-Path -LiteralPath $candidate) { $Seal = $candidate }
+}
+if ($Seal -and -not $From) { throw '-Seal holds an earlier bed''s runs: give it with -From' }
 $failures = @(); $script:checks = 0
 # A check body returns exactly one bool. Anything else is a FAIL: a stray value leaking into the
 # pipeline must never turn into a PASS.
@@ -133,6 +143,7 @@ Write-Host "work: $work"
 Write-Host "solvers: $env:SIMPA_SOLVERS_DIR"
 Write-Host "bed file: $Bed"
 Write-Host "upstream: $(if ($Upstream) { $Upstream } else { '(none: the atmospheric validation is not run)' })"
+if ($From) { Write-Host "seal: $(if ($Seal) { $Seal } else { '(none: runs without output hashes in run.json are refused)' })" }
 
 # --- E1 before anything runs ----------------------------------------------------------------------
 . (Join-Path $repo 'solvers\pe-fingerprint.ps1')
@@ -168,6 +179,7 @@ if ($e1ok) {
     Check "simpa bed ran and exited 0 (0 only when report.pass is true; 8 not passed, 5 a run not OK)" {
         $argv = @('bed', $Bed, '--jobs', "$Jobs", '--json')
         if ($From) { $argv += @('--out', (Join-Path $work 'reread'), '--from', $From) } else { $argv += @('--out', $BedRoot) }
+        if ($Seal) { $argv += @('--seal', $Seal) }
         if ($Upstream) { $argv += @('--upstream', $Upstream) }
         $o = Call $simpa $argv 'bed' ($BedTimeoutHours * 3600)
         $m = [regex]::Matches($o.Err, '(?m)(\S+report\.json)\s*$')
@@ -248,13 +260,14 @@ Check "N1 says NO: a copy of spps.exe with one .text byte flipped: the bed refus
         $env:SIMPA_SOLVERS_DIR = $dir
         $argv = @('bed', $Bed, '--out', $out, '--jobs', "$Jobs")
         if ($runsDir) { $argv += @('--from', $runsDir) }
+        if ($runsDir -and $Seal) { $argv += @('--seal', $Seal) }
         $o = Call $simpa $argv 'n1' 300
     } finally { $env:SIMPA_SOLVERS_DIR = $saved }
     $written = @(Get-ChildItem -LiteralPath $out -Recurse -ErrorAction SilentlyContinue).Count
     Note ("exit {0}; {1}; {2} things written" -f $o.Exit, (($o.Err -split "`n" | Where-Object { $_ -match 'refused' }) -join ' '), $written)
     $o.Exit -eq 2 -and $o.Err -match 'refused before any run \(E1\)' -and $written -eq 0
 }
-$sayNoVars = @{ SIMPA_BED_FROM = $runsDir; SIMPA_BED_REPORT = $(if ($stamp) { Join-Path $stamp 'report.json' } else { '' }); SIMPA_BED_FILE = $Bed; SIMPA_BED_JOBS = "$Jobs" }
+$sayNoVars = @{ SIMPA_BED_FROM = $runsDir; SIMPA_BED_REPORT = $(if ($stamp) { Join-Path $stamp 'report.json' } else { '' }); SIMPA_BED_FILE = $Bed; SIMPA_BED_JOBS = "$Jobs"; SIMPA_BED_SEAL = $Seal }
 foreach ($t in @(
         @('N2 says NO: Kuttruff with its 1/2 dropped (through results::reference): A fails in every alpha 0.4 gated cell', 'n2_kuttruff_without_its_half_fails_a'),
         @('N3 says NO: plain Eyring as A''s reference: A fails in every alpha 0.4 gated cell', 'n3_plain_eyring_as_the_reference_fails_a'),

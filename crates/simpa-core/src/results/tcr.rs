@@ -162,11 +162,78 @@ pub(crate) fn band_surfaces(
 
 /// `core::params`' Sabine and Eyring times on the run's own inputs ([module docs](self)).
 pub fn analytic(solve: &Path, exp: &Expectation) -> Analytic {
-    analytic_inner(solve, exp).unwrap_or_else(|why| Analytic::NotComputed { why })
+    RoomInputs::read(solve, exp)
+        .and_then(|room| analytic_of(&room))
+        .unwrap_or_else(|why| Analytic::NotComputed { why })
 }
 
-fn analytic_inner(solve: &Path, exp: &Expectation) -> Result<Analytic, String> {
-    let room = RoomInputs::read(solve, exp)?;
+/// [`analytic`] on the inputs this build exports for `project`, not on a run's: its TCR
+/// `config.xml` ([`crate::config_xml::write`]) and its scene mesh
+/// ([`crate::config_xml::scene_mesh`]), taken exactly as [`analytic`] takes a run's, with the
+/// volume the scene encloses in place of the `.mbin`'s, which only TetGen makes. The M8 bed holds
+/// TCR's times to this for the project it planned (check D), so that nothing the run folder holds
+/// is its reference. Pass the project as the run manager runs it
+/// (`run::manager::project_as_run`).
+pub fn analytic_of_project(project: &crate::schema::Project) -> Analytic {
+    analytic_of_project_inner(project).unwrap_or_else(|why| Analytic::NotComputed { why })
+}
+
+fn analytic_of_project_inner(project: &crate::schema::Project) -> Result<Analytic, String> {
+    use crate::config_xml::{self, SolverKind, names};
+    // Any absolute folder: the working directory is not an input of the analytic times.
+    let workdir = Path::new(if cfg!(windows) { r"C:\" } else { "/" });
+    let text = config_xml::write(project, SolverKind::Tcr, None, workdir)
+        .map_err(|e| format!("config.xml of the project: {} ({e})", e.code()))?;
+    let exp = Expectation::from_config(&text, SolverKind::Tcr)
+        .map_err(|e| format!("config.xml of the project: {e}"))?;
+    let scene = config_xml::scene_mesh(project)
+        .map_err(|e| format!("the project's scene mesh: {} ({e})", e.code()))?;
+    let volume_m3 = enclosed_volume(&scene)?;
+    let room = RoomInputs::of(
+        names::SCENE_MESH,
+        &scene,
+        volume_m3,
+        Vec::new(),
+        &text,
+        &exp,
+    )?;
+    analytic_of(&room)
+}
+
+/// The volume a scene mesh encloses, m³: `|Σ a·(b×c)| / 6` over its faces (the divergence
+/// theorem), from the `.cbin`'s `f32` vertices. Refused for a scene whose faces do not close.
+fn enclosed_volume(scene: &cbin::Model) -> Result<f64, String> {
+    let p = |i: u32| {
+        scene
+            .vertices
+            .get(i as usize)
+            .map(|v| [f64::from(v.x), f64::from(v.y), f64::from(v.z)])
+            .ok_or_else(|| format!("the scene mesh: vertex {i} out of range"))
+    };
+    // Every edge of a closed surface is shared by exactly two faces, once in each direction.
+    let mut edges: std::collections::BTreeMap<(u32, u32), i64> = Default::default();
+    let mut six_v = 0.0;
+    for f in &scene.faces {
+        let (a, b, c) = (p(f.a)?, p(f.b)?, p(f.c)?);
+        six_v += dot(a, cross(b, c));
+        for (u, v) in [(f.a, f.b), (f.b, f.c), (f.c, f.a)] {
+            *edges.entry((u.min(v), u.max(v))).or_default() += if u < v { 1 } else { -1 };
+        }
+    }
+    if let Some(((u, v), n)) = edges.iter().find(|(_, n)| **n != 0) {
+        return Err(format!(
+            "the scene mesh does not close: edge {u}-{v} is crossed {n} more times one way than \
+             the other"
+        ));
+    }
+    let v = six_v.abs() / 6.0;
+    if !(v.is_finite() && v > 0.0) {
+        return Err(format!("the scene mesh encloses a volume of {v} m³"));
+    }
+    Ok(v)
+}
+
+fn analytic_of(room: &RoomInputs) -> Result<Analytic, String> {
     // TCR's own constant; the say-NO N8 of M8a's bed puts the physical one in its place.
     let constant = match crate::faults::active() {
         Some(crate::faults::Fault::TcrAnalyticPhysicalConstant) => RtConstant::Physical {
@@ -233,14 +300,7 @@ impl RoomInputs {
         let scene_rel = key(&exp.names.model_name);
         let scene =
             cbin::read_file(&solve.join(&scene_rel)).map_err(|e| format!("{scene_rel}: {e}"))?;
-        if scene.faces.iter().any(|f| f.id_en >= 0) {
-            return Err(
-                "the scene has fitting faces (idEn), which TCR leaves out or keeps per face by \
-                 its material's transmission (TC_CalculationCore.cpp:11-17); that rule is not \
-                 emulated"
-                    .into(),
-            );
-        }
+        no_fittings(&scene)?;
         let mesh_rel = key(&exp.names.tetramesh_file_name);
         let mesh =
             mbin::read_file(&solve.join(&mesh_rel)).map_err(|e| format!("{mesh_rel}: {e}"))?;
@@ -268,6 +328,21 @@ impl RoomInputs {
             .map_err(|e| format!("config.xml: {e}"))?;
         let text = text.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&text);
         let text = std::str::from_utf8(text).map_err(|e| format!("config.xml: {e}"))?;
+        RoomInputs::of(&scene_rel, &scene, volume_m3, tetrahedra, text, exp)
+    }
+
+    /// The room from its parts: the scene mesh `scene` (named `scene_rel` in messages), the
+    /// `.mbin`'s volume and tetrahedra (or the volume the scene encloses, and none), and
+    /// `config.xml`'s text with what it asks for, `exp`. Refused as [`RoomInputs::read`] refuses.
+    pub(crate) fn of(
+        scene_rel: &str,
+        scene: &cbin::Model,
+        volume_m3: f64,
+        tetrahedra: Vec<[[f64; 3]; 4]>,
+        text: &str,
+        exp: &Expectation,
+    ) -> Result<RoomInputs, String> {
+        no_fittings(scene)?;
         let doc = Document::parse(text).map_err(|e| format!("config.xml: {e}"))?;
         let materials = materials(&doc)?;
         let root = doc.root_element();
@@ -342,6 +417,19 @@ impl RoomInputs {
             config: text.to_string(),
         })
     }
+}
+
+/// Refuses a scene with fitting faces (idEn), whose rule TCR applies per face and this does not
+/// emulate.
+fn no_fittings(scene: &cbin::Model) -> Result<(), String> {
+    if scene.faces.iter().any(|f| f.id_en >= 0) {
+        return Err(
+            "the scene has fitting faces (idEn), which TCR leaves out or keeps per face by its \
+             material's transmission (TC_CalculationCore.cpp:11-17); that rule is not emulated"
+                .into(),
+        );
+    }
+    Ok(())
 }
 
 /// The air term TCR adds for a band at nominal frequency `nominal_hz`: the solver's `m`
@@ -579,5 +667,69 @@ mod tests {
         // Says no: a material missing from the declarations, or a band it does not have.
         assert!(band_surfaces(&[(1.0, 3)], &mats, 0).is_err());
         assert!(band_surfaces(&faces, &mats, 4).is_err());
+    }
+
+    /// M8b: the analytic times of a project, on the inputs this build exports for it. For each of
+    /// M8a's TCR runs the volume is the box's and the area its six walls', exactly; each band's
+    /// Eyring time is `params::room`'s with TCR's constant on the absorption as the solver reads
+    /// it (`f32`), and the air term with the air on; and a scene that does not close is refused.
+    #[test]
+    fn the_analytic_times_of_a_project_are_its_boxs() {
+        use crate::bed::file::{self, BedFile};
+        let bed = BedFile::m8a();
+        for t in &bed.tcr {
+            let cell = bed.cell(&t.project_of).unwrap();
+            let [x, y, z] = bed.room(&cell.room).unwrap().size_m;
+            let p = file::tcr_project(&bed, t).unwrap();
+            let Analytic::Computed {
+                volume_m3,
+                area_m2,
+                bands,
+            } = analytic_of_project(&p)
+            else {
+                panic!("{}: not computed", t.id)
+            };
+            assert_eq!(volume_m3, x * y * z, "{}", t.id);
+            assert_eq!(area_m2, 2.0 * (x * y + y * z + x * z), "{}", t.id);
+            let want: Vec<i32> = bed.bands_hz(cell.air).iter().map(|&f| f as i32).collect();
+            assert_eq!(
+                bands.iter().map(|b| b.freq_hz).collect::<Vec<_>>(),
+                want,
+                "{}",
+                t.id
+            );
+            let alpha = f64::from(cell.alpha as f32);
+            for b in &bands {
+                assert_eq!(
+                    b.air_m_per_metre.is_some(),
+                    cell.air,
+                    "{} {}",
+                    t.id,
+                    b.freq_hz
+                );
+                let surfaces = [Surface {
+                    area_m2,
+                    absorption: alpha,
+                }];
+                let want =
+                    room::eyring_rt(volume_m3, &surfaces, b.air_m_per_metre, RtConstant::Tcr)
+                        .unwrap();
+                let got = *b.eyring_s.as_ref().unwrap();
+                assert!(
+                    (got / want - 1.0).abs() < 1e-12,
+                    "{} {}: {got} {want}",
+                    t.id,
+                    b.freq_hz
+                );
+            }
+        }
+        // A scene with a face turned over does not close: refused, not a volume.
+        let t = &bed.tcr[0];
+        let mut scene =
+            crate::config_xml::scene_mesh(&file::tcr_project(&bed, t).unwrap()).unwrap();
+        let f = &mut scene.faces[0];
+        std::mem::swap(&mut f.a, &mut f.b);
+        let e = enclosed_volume(&scene).unwrap_err();
+        assert!(e.contains("does not close"), "{e}");
     }
 }

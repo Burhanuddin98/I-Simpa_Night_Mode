@@ -782,6 +782,16 @@ pub fn cell_project(
     Ok(p)
 }
 
+/// The project of the TCR run `t`: its cell `project_of`'s, seed 1. The bed plans the run from it
+/// (`run::plan`), and check D takes its analytic reference from it, not from the run.
+pub fn tcr_project(bed: &BedFile, t: &TcrCell) -> Result<Project, String> {
+    let cell = bed
+        .cell(&t.project_of)
+        .ok_or(format!("no cell '{}'", t.project_of))?;
+    let spec = CellSpec::of(bed, cell)?;
+    cell_project(&spec, 1, bed.time_step_s, bed.bands_hz(cell.air))
+}
+
 /// Upstream's atmospheric-absorption validation project, imported from `proj` and changed in
 /// the three ways section 2.5 names: the seed, `trans_epsilon` and the step.
 pub fn atmospheric_project(

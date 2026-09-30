@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use super::bind::{self, Seal};
 use super::check::{AtmosphericReads, Reads};
 use super::file::{self, BedFile, CellSpec};
 use super::limits;
@@ -158,14 +159,10 @@ pub fn plan(
         }
     }
     for t in &bed.tcr {
-        let cell = bed
-            .cell(&t.project_of)
-            .ok_or(format!("no cell '{}'", t.project_of))?;
-        let spec = CellSpec::of(bed, cell)?;
         out.push(Planned {
             key: RunKey::Tcr { id: t.id.clone() },
             solver: SolverKind::Tcr,
-            project: file::cell_project(&spec, 1, bed.time_step_s, bed.bands_hz(cell.air))?,
+            project: file::tcr_project(bed, t)?,
             receivers: None,
             cost: 0.0,
         });
@@ -331,18 +328,47 @@ fn with_fault<R>(_: Option<crate::faults::Fault>, body: impl FnOnce() -> R) -> R
     body()
 }
 
-/// Reads the run in `dir` (the run folder the run manager made there).
-pub fn read_in(dir: &Path, p: &Planned) -> Result<Read, String> {
+/// Reads the run in `dir` (the run folder the run manager made there), its files first bound to
+/// `run.json`'s output hashes or to `seal`'s entry for it ([`bind::bind`]).
+pub fn read_in(dir: &Path, p: &Planned, seal: Option<&Seal>) -> Result<Read, String> {
     let folder =
         read::find_run_folder(dir).ok_or_else(|| format!("{}: no run folder", dir.display()))?;
-    read_folder(&folder, p)
+    read_folder(dir, &folder, p, seal)
 }
 
-fn read_folder(folder: &Path, p: &Planned) -> Result<Read, String> {
-    match p.solver {
-        SolverKind::Spps => read::read_spps(folder, p.receivers).map(|r| Read::Spps(Box::new(r))),
-        SolverKind::Tcr => read::read_tcr(folder).map(|r| Read::Tcr(Box::new(r))),
-    }
+/// Binds the run folder `folder` under the run's folder `dir` to its records, then hashes what
+/// says what it ran ([`read::on_disk`]) and reads it. Nothing is read from a file that is not
+/// its record's.
+fn read_folder(
+    dir: &Path,
+    folder: &Path,
+    p: &Planned,
+    seal: Option<&Seal>,
+) -> Result<Read, String> {
+    let manifest = read::manifest_of(folder)?;
+    let bound = bind::bind(
+        dir,
+        folder,
+        manifest.outputs.as_deref(),
+        &manifest.inputs,
+        seal.and_then(|s| s.run(&p.key)),
+    )?;
+    let on_disk = read::on_disk(dir, folder, &manifest);
+    let mut r = match p.solver {
+        SolverKind::Spps => {
+            read::read_spps(folder, p.receivers).map(|r| Read::Spps(Box::new(r)))?
+        }
+        SolverKind::Tcr => read::read_tcr(folder).map(|r| Read::Tcr(Box::new(r)))?,
+    };
+    let info = match &mut r {
+        Read::Spps(s) => &mut s.info,
+        Read::Tcr(t) => &mut t.info,
+    };
+    info.bound_by = Some(bound.by.join(" and "));
+    info.outputs_sha256 = Some(bound.outputs_sha256);
+    info.output_files = bound.outputs;
+    info.on_disk = Some(on_disk);
+    Ok(r)
 }
 
 /// Runs `p` under `root` and reads it.
@@ -376,7 +402,7 @@ pub fn run_one(p: &Planned, root: &Path, exes: &Exes) -> Result<Read, String> {
         &mut |_| {},
     )
     .map_err(|e| format!("simpa run refused or failed: {e}"))?;
-    read_folder(&report.dir, p)
+    read_folder(&dir, &report.dir, p, None)
 }
 
 /// What [`execute`] calls as each run ends: how many have ended, the run, what was read, and
@@ -401,9 +427,15 @@ pub fn execute(
     })
 }
 
-/// Reads every planned run from an earlier bed's folder `from`.
-pub fn read_existing(runs: &[Planned], from: &Path, jobs: usize) -> Vec<Result<Read, String>> {
-    par_map(runs, jobs, |p| read_in(&from.join(p.key.dir()), p))
+/// Reads every planned run from an earlier bed's folder `from`, each bound to its `run.json`'s
+/// output hashes or to `seal`, the committed seal of that bed, when its runs predate them.
+pub fn read_existing(
+    runs: &[Planned],
+    from: &Path,
+    jobs: usize,
+    seal: Option<&Seal>,
+) -> Vec<Result<Read, String>> {
+    par_map(runs, jobs, |p| read_in(&from.join(p.key.dir()), p, seal))
 }
 
 /// The code a run is refused with when it is not the run its folder is filed under
@@ -414,6 +446,117 @@ pub const RUN_NOT_PLANNED: &str = "bed_run_not_planned";
 /// `schema::to_json`), which `run.json`'s `source.sha256` records when the run starts.
 pub fn planned_project_sha256(p: &Planned) -> String {
     crate::run::manifest::sha256_bytes(schema::to_json(&p.project).as_bytes())
+}
+
+/// What the bed writes for a planned run, hashed as [`read::on_disk`] hashes a run's files: the
+/// project file, and from the project as the run manager runs it
+/// ([`crate::run::manager::project_as_run`]), the solver's `config.xml` (its `workingdirectory`
+/// left out), its scene mesh and its mesh stamp.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlannedInputs {
+    pub project_sha256: String,
+    pub config_sha256: String,
+    pub scene_sha256: String,
+    pub mesh_input_hash: String,
+}
+
+/// [`PlannedInputs`] of `p`.
+pub fn planned_inputs(p: &Planned) -> Result<PlannedInputs, String> {
+    use crate::run::manifest::sha256_bytes;
+    let json = schema::to_json(&p.project);
+    let project = crate::run::manager::project_as_run(json.as_bytes(), None)?;
+    // Any absolute folder: its value is left out of the comparison.
+    let workdir = Path::new(if cfg!(windows) { r"C:\" } else { "/" });
+    let config = crate::config_xml::write(&project, p.solver, None, workdir)
+        .map_err(|e| format!("config.xml: {} ({e})", e.code()))?;
+    let scene = crate::config_xml::scene_mesh(&project)
+        .map_err(|e| format!("the scene mesh: {} ({e})", e.code()))?;
+    Ok(PlannedInputs {
+        project_sha256: sha256_bytes(json.as_bytes()),
+        config_sha256: sha256_bytes(bind::without_workdir(&config).as_bytes()),
+        scene_sha256: sha256_bytes(&crate::formats::cbin::write(&scene)),
+        mesh_input_hash: crate::validate::mesh_input_hash(&project),
+    })
+}
+
+/// A file hashed from disk against what the plan writes, or why not.
+fn hash_problem(what: &str, got: Option<&str>, want: &str) -> Option<String> {
+    match got {
+        Some(g) if g == want => None,
+        Some(g) => Some(format!("{what} is {g}, the plan's {want}")),
+        None => Some(format!(
+            "{what} is missing or unreadable, the plan's {want}"
+        )),
+    }
+}
+
+/// How the files a run was read from differ from what the bed writes for `p`, each named.
+fn disk_problems(p: &Planned, info: &read::RunInfo) -> Vec<String> {
+    let mut problems = Vec::new();
+    if info.bound_by.is_none() || info.outputs_sha256.is_none() {
+        problems.push(
+            "its files were bound to no record (run.json's output hashes or a seal) when it was \
+             read"
+                .to_string(),
+        );
+    }
+    let Some(d) = &info.on_disk else {
+        problems.push("nothing of it was hashed from disk when it was read".into());
+        return problems;
+    };
+    let want = match planned_inputs(p) {
+        Ok(w) => w,
+        Err(e) => {
+            problems.push(format!("the bed cannot write the plan's inputs: {e}"));
+            return problems;
+        }
+    };
+    let s = |x: &Option<String>| x.clone();
+    for (what, got, want) in [
+        (
+            "the sha256 of project.simpa on disk",
+            s(&d.project_sha256),
+            &want.project_sha256,
+        ),
+        (
+            "the sha256 of its config.xml, workingdirectory aside,",
+            s(&d.config_sha256),
+            &want.config_sha256,
+        ),
+        (
+            "the sha256 of its scene mesh (solve/mesh.cbin)",
+            s(&d.scene_sha256),
+            &want.scene_sha256,
+        ),
+        (
+            "the mesh stamp run.json records",
+            s(&d.run_mesh_input_hash),
+            &want.mesh_input_hash,
+        ),
+        (
+            "the mesh stamp mesh.json records",
+            s(&d.mesh_json_input_hash),
+            &want.mesh_input_hash,
+        ),
+    ] {
+        problems.extend(hash_problem(what, got.as_deref(), want));
+    }
+    match (&d.mbin_sha256, &d.run_mbin_sha256, &d.mesh_json_mbin_sha256) {
+        (Some(a), Some(b), Some(c)) if a == b && b == c => {}
+        (a, b, c) => problems.push(format!(
+            "its solve/tetramesh.mbin has sha256 {a:?}, run.json records {b:?} and mesh.json \
+             {c:?}: not the mesh whose stamp is checked"
+        )),
+    }
+    match &d.mesh_check {
+        Some(reasons) if reasons.is_empty() => {}
+        Some(reasons) => problems.push(format!(
+            "its solve/tetramesh.mbin does not hold to its scene mesh: {}",
+            reasons.join("; ")
+        )),
+        None => problems.push("its mesh was not checked against its scene mesh".into()),
+    }
+    problems
 }
 
 /// The bands `computed` marks, of `frequencies_hz`.
@@ -436,10 +579,16 @@ fn as_spps_reads(v: f64) -> f64 {
 /// project file's sha256 in `run.json` is the sha256 of the project the bed writes for that
 /// cell (or TCR run, say-NO run or atmospheric seed) and seed; and what the solver read is that
 /// project's: for SPPS the particles per source, the method, the step and `trans_epsilon` (as
-/// SPPS reads them, `f32`), the seed and the bands computed; for TCR the bands. Fresh runs and
-/// runs read with `--from` both pass through here ([`into_reads`]), so a run of another matrix
-/// filed under the same folder names (an exploratory bed at 10 ms, say) is refused with
-/// [`RUN_NOT_PLANNED`], every difference named, and its cell is not judged (E2).
+/// SPPS reads them, `f32`), the seed and the bands computed; for TCR the bands. And (M8b) the
+/// files it was read from were bound to their record when it was read, and as hashed from disk
+/// are what the bed writes for the plan ([`planned_inputs`]): `project.simpa`, the solver's
+/// `config.xml` (its `workingdirectory` aside) and scene mesh, the mesh stamp in `run.json` and
+/// `mesh.json`, one `.mbin` in all three, and that `.mbin` held to the scene by the run
+/// manager's reused-mesh check (`read::OnDisk::mesh_check`). Fresh runs and runs read with
+/// `--from` both pass through here ([`into_reads`]), so a run of another matrix filed under the
+/// same folder names (an exploratory bed at 10 ms, say), or a run whose `run.json` was edited to
+/// name another plan, is refused with [`RUN_NOT_PLANNED`], every difference named, and its cell
+/// is not judged (E2).
 pub fn check_planned(p: &Planned, r: &Read) -> Result<(), String> {
     let mut problems = Vec::new();
     let (info, solver) = match r {
@@ -508,6 +657,9 @@ pub fn check_planned(p: &Planned, r: &Read) -> Result<(), String> {
             }
         }
     }
+    // M8b: run.json's sha256 is the run manager's word. The files themselves, as they are on
+    // disk now and bound to their record, must be the ones the bed writes for the plan.
+    problems.extend(disk_problems(p, info));
     if problems.is_empty() {
         Ok(())
     } else {
@@ -566,6 +718,67 @@ pub fn into_reads(
             RunKey::N5 { .. } => reads.n5 = Some(spps(r)),
             RunKey::N6 { .. } => reads.n6 = Some(spps(r)),
         }
+    }
+    // M8b: every seed's run is its own. Over all of a cell's seeds read so far (an extension's
+    // with the first ten), and over the atmospheric validation's.
+    for seeds in reads.spps.values_mut() {
+        refuse_shared_outputs(seeds);
+    }
+    refuse_shared_outputs(&mut reads.atmospheric.spps);
+}
+
+/// Refuses, [`bind::SEEDS_IDENTICAL`], every seed of `seeds` that shares a solver output file
+/// byte for byte (the same path and sha256) with another, or whose outputs are all another's.
+/// A seed's own random walk makes every output file its own: in M8a's bed no output file of 8,490
+/// is any other seed's of the same cell. So a shared file is a seed's run filed under another,
+/// or a solver that ignores its seed.
+fn refuse_shared_outputs(seeds: &mut std::collections::BTreeMap<u32, Result<SppsRead, String>>) {
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut owners: BTreeMap<(&str, &str), Vec<u32>> = BTreeMap::new();
+    let mut whole: BTreeMap<&str, Vec<u32>> = BTreeMap::new();
+    for (s, r) in seeds.iter() {
+        let Ok(r) = r else { continue };
+        for (path, sha) in &r.info.output_files {
+            owners.entry((path, sha)).or_default().push(*s);
+        }
+        if let Some(d) = &r.info.outputs_sha256 {
+            whole.entry(d).or_default().push(*s);
+        }
+    }
+    // Per seed: the seeds it shares with, the files shared, and whether it is all of them.
+    let mut shared: BTreeMap<u32, (BTreeSet<u32>, Vec<String>, bool)> = BTreeMap::new();
+    for ((path, _), ss) in owners.iter().filter(|(_, ss)| ss.len() > 1) {
+        for s in ss {
+            let e = shared.entry(*s).or_default();
+            e.0.extend(ss.iter().filter(|o| *o != s));
+            e.1.push((*path).to_string());
+        }
+    }
+    for ss in whole.values().filter(|ss| ss.len() > 1) {
+        for s in ss {
+            let e = shared.entry(*s).or_default();
+            e.0.extend(ss.iter().filter(|o| *o != s));
+            e.2 = true;
+        }
+    }
+    for (s, (others, files, all)) in shared {
+        let n = files.len();
+        let mut named: Vec<String> = files.into_iter().take(3).collect();
+        if n > named.len() {
+            named.push(format!("and {} more", n - named.len()));
+        }
+        let e = format!(
+            "{}: seed {s}'s solver outputs are seed(s) {others:?}'s, byte for byte: {} ({}): a \
+             seed's run must be its own",
+            bind::SEEDS_IDENTICAL,
+            if all {
+                "all of them".to_string()
+            } else {
+                format!("{n} file(s)")
+            },
+            named.join(", ")
+        );
+        seeds.insert(s, Err(e));
     }
 }
 
@@ -653,9 +866,49 @@ pub fn check_room_for(root: &Path, files: u64) -> Result<Option<String>, String>
     Ok(fs)
 }
 
+/// Test helpers: reads made as [`read_folder`] makes them, without a run folder.
+#[cfg(test)]
+pub(crate) mod testing {
+    use super::*;
+    use crate::run::manifest::sha256_bytes;
+
+    /// `info` as read from the files the bed writes for `p`, bound to `run.json`, with solver
+    /// outputs of its own named by `tag` ([`outputs_of`]); `run.json` records `p`'s project.
+    pub(crate) fn as_if_read_from(info: &mut read::RunInfo, p: &Planned, tag: &str) {
+        let w = planned_inputs(p).unwrap();
+        let mbin = Some(sha256_bytes(b"the mbin"));
+        info.project_sha256 = Some(w.project_sha256.clone());
+        info.on_disk = Some(read::OnDisk {
+            project_sha256: Some(w.project_sha256),
+            config_sha256: Some(w.config_sha256),
+            scene_sha256: Some(w.scene_sha256),
+            mbin_sha256: mbin.clone(),
+            run_mesh_input_hash: Some(w.mesh_input_hash.clone()),
+            run_mbin_sha256: mbin.clone(),
+            mesh_json_input_hash: Some(w.mesh_input_hash),
+            mesh_json_mbin_sha256: mbin,
+            mesh_check: Some(vec![]),
+        });
+        outputs_of(info, tag);
+    }
+
+    /// `info`'s solver outputs, bound to `run.json`: two files of contents named by `tag`.
+    pub(crate) fn outputs_of(info: &mut read::RunInfo, tag: &str) {
+        let files: Vec<(String, String)> = ["Punctual receivers/R000/Sound level.recp", "x.gabe"]
+            .iter()
+            .map(|p| (p.to_string(), sha256_bytes(format!("{tag} {p}").as_bytes())))
+            .collect();
+        let digest: String = files.iter().map(|(p, h)| format!("{p}\t{h}\n")).collect();
+        info.bound_by = Some("run.json".into());
+        info.outputs_sha256 = Some(sha256_bytes(digest.as_bytes()));
+        info.output_files = files;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use testing::as_if_read_from;
 
     #[test]
     fn the_plan_is_the_specs_412_spps_runs_and_21_tcr() {
@@ -713,20 +966,36 @@ mod tests {
             tetgen_sha256: None,
             files: 1,
             bytes: 1,
+            bound_by: None,
+            outputs_sha256: None,
+            output_files: vec![],
+            on_disk: None,
         }
     }
 
     /// What SPPS reports of a run of `bed`'s cell `id` at `seed`, `particles` and step `dt`, and
-    /// the sha256 of the project it was run from, written literally (not from the plan).
+    /// the sha256 of the project it was run from, written literally (not from the plan); its
+    /// files, as read, are the ones the bed writes for that project.
     fn spps_run(bed: &BedFile, id: &str, seed: u32, particles: u32, dt: f64) -> Read {
         let cell = bed.cell(id).unwrap();
         let mut spec = CellSpec::of(bed, cell).unwrap();
         spec.particles_per_source = particles;
         let bands = bed.bands_hz(cell.air);
         let project = file::cell_project(&spec, seed, dt, bands).unwrap();
-        let sha = crate::run::manifest::sha256_bytes(schema::to_json(&project).as_bytes());
+        let mut info = info(None);
+        let run_of = Planned {
+            key: RunKey::Cell {
+                id: id.into(),
+                seed,
+            },
+            solver: SolverKind::Spps,
+            project,
+            receivers: None,
+            cost: 0.0,
+        };
+        as_if_read_from(&mut info, &run_of, &format!("{id} {seed} {particles} {dt}"));
         Read::Spps(Box::new(SppsRead {
-            info: info(Some(sha)),
+            info,
             bands_hz: bands.iter().map(|&f| f as i32).collect(),
             particles_per_source: particles,
             computation_method: match cell.method {
@@ -856,8 +1125,11 @@ mod tests {
             id: "5x4x3-a0.2-tcr-air-on".into(),
         });
         let tcr = |sha: Option<String>, bands: &[u32]| {
+            let mut i = info(None);
+            as_if_read_from(&mut i, t, "tcr");
+            i.project_sha256 = sha;
             Read::Tcr(Box::new(TcrRead {
-                info: info(sha),
+                info: i,
                 bands: bands
                     .iter()
                     .map(|&f| read::TcrBand {
@@ -890,6 +1162,159 @@ mod tests {
                 .unwrap_err()
                 .contains("a Spps run where")
         );
+    }
+
+    /// A TCR run of `p`'s project, as read from its own files.
+    fn tcr_run_of(p: &Planned, bands: &[u32]) -> Read {
+        let mut i = info(None);
+        as_if_read_from(&mut i, p, "tcr");
+        i.exe = "classicalTheory.exe".into();
+        Read::Tcr(Box::new(TcrRead {
+            info: i,
+            bands: bands
+                .iter()
+                .map(|&f| read::TcrBand {
+                    freq_hz: f as i32,
+                    sabine_s: 1.0,
+                    eyring_s: 1.0,
+                    analytic_sabine_s: None,
+                    analytic_eyring_s: None,
+                    analytic_refused: None,
+                    air_m_per_metre: None,
+                })
+                .collect(),
+        }))
+    }
+
+    /// M8b, backlog row 42 (`VERIFY-adversarial.md` finding 2): TCR `5x4x3-a0.2-tcr-air-off`'s
+    /// run with `run.json`'s sha256 edited to `5x4x3-a0.4-tcr-air-off`'s plan was accepted, and
+    /// the bed passed. The files it was read from are still α 0.2's: `project.simpa` on disk and
+    /// the `config.xml` the solver read are not the α 0.4 plan's, and it is refused.
+    #[test]
+    fn a_tcr_run_whose_run_json_names_another_plan_is_refused_on_its_files() {
+        let bed = BedFile::m8a();
+        let (runs, _) = plan(&bed, None).unwrap();
+        let planned = |id: &str| {
+            runs.iter()
+                .find(|p| p.key == RunKey::Tcr { id: id.into() })
+                .unwrap()
+        };
+        let (a02, a04) = (
+            planned("5x4x3-a0.2-tcr-air-off"),
+            planned("5x4x3-a0.4-tcr-air-off"),
+        );
+        let bands = bed.bands_hz(false);
+        // Each run as the bed makes it is accepted under its own plan.
+        assert_eq!(check_planned(a02, &tcr_run_of(a02, bands)), Ok(()));
+        assert_eq!(check_planned(a04, &tcr_run_of(a04, bands)), Ok(()));
+        // α 0.2's run, its run.json's sha256 edited to α 0.4's plan, filed as α 0.4's: refused,
+        // on project.simpa as it is on disk and on the config.xml the solver read.
+        let mut tampered = tcr_run_of(a02, bands);
+        let Read::Tcr(t) = &mut tampered else {
+            unreachable!()
+        };
+        t.info.project_sha256 = Some(planned_project_sha256(a04));
+        let e = check_planned(a04, &tampered).unwrap_err();
+        assert!(e.starts_with(RUN_NOT_PLANNED), "{e}");
+        assert!(!e.contains("its project has sha256"), "{e}");
+        assert!(e.contains("the sha256 of project.simpa on disk is"), "{e}");
+        assert!(e.contains("the sha256 of its config.xml"), "{e}");
+        // The mesh stamp and the scene are the same room's: α is in the config alone.
+        assert!(
+            !e.contains("mesh stamp") && !e.contains("scene mesh"),
+            "{e}"
+        );
+    }
+
+    /// M8b, backlog row 42: the files a run was read from, as hashed from disk, each held to what
+    /// the bed writes for the plan. `run.json`'s sha256 left the plan's, each file changed alone
+    /// is refused and named.
+    #[test]
+    fn a_run_whose_files_on_disk_are_not_the_plans_is_refused() {
+        let bed = BedFile::m8a();
+        let (runs, _) = plan(&bed, None).unwrap();
+        let p = runs
+            .iter()
+            .find(|p| {
+                p.key
+                    == RunKey::Cell {
+                        id: "5x4x3-a0.4-energetic-air-off".into(),
+                        seed: 3,
+                    }
+            })
+            .unwrap();
+        let cell = bed.cell("5x4x3-a0.4-energetic-air-off").unwrap();
+        let good = spps_run(&bed, &cell.id, 3, cell.particles_per_source, 0.001);
+        assert_eq!(check_planned(p, &good), Ok(()));
+        type Change = fn(&mut read::OnDisk);
+        for (what, change) in [
+            (
+                "the sha256 of project.simpa on disk is 0000",
+                (|d: &mut read::OnDisk| d.project_sha256 = Some("0".repeat(64))) as Change,
+            ),
+            ("the sha256 of project.simpa on disk is missing", |d| {
+                d.project_sha256 = None
+            }),
+            ("the sha256 of its config.xml", |d| {
+                d.config_sha256 = Some("0".repeat(64))
+            }),
+            ("the sha256 of its scene mesh", |d| {
+                d.scene_sha256 = Some("0".repeat(64))
+            }),
+            ("the mesh stamp run.json records", |d| {
+                d.run_mesh_input_hash = Some("0".repeat(32))
+            }),
+            ("the mesh stamp mesh.json records", |d| {
+                d.mesh_json_input_hash = None
+            }),
+            ("its solve/tetramesh.mbin has sha256", |d| {
+                d.mbin_sha256 = Some("0".repeat(64))
+            }),
+            ("its solve/tetramesh.mbin has sha256", |d| {
+                d.mesh_json_mbin_sha256 = None
+            }),
+            ("does not hold to its scene mesh: mesh_mismatch", |d| {
+                d.mesh_check = Some(vec!["mesh_mismatch: a hull face".into()])
+            }),
+            ("its mesh was not checked against its scene mesh", |d| {
+                d.mesh_check = None
+            }),
+        ] {
+            let mut r = good.clone();
+            change(spps_mut(&mut r).info.on_disk.as_mut().unwrap());
+            let e = check_planned(p, &r).unwrap_err();
+            assert!(e.starts_with(RUN_NOT_PLANNED), "{what}: {e}");
+            assert!(e.contains(what), "{what}: {e}");
+            assert!(!e.contains("its project has sha256"), "{what}: {e}");
+        }
+    }
+
+    /// M8b: a read that did not go through [`read_folder`]'s binding, or whose files were not
+    /// hashed from disk, is never accepted.
+    #[test]
+    fn a_read_not_bound_or_not_hashed_from_disk_is_refused() {
+        let bed = BedFile::m8a();
+        let (runs, _) = plan(&bed, None).unwrap();
+        let cell = bed.cell("5x4x3-a0.4-energetic-air-off").unwrap();
+        let p = runs
+            .iter()
+            .find(|p| {
+                p.key
+                    == RunKey::Cell {
+                        id: cell.id.clone(),
+                        seed: 3,
+                    }
+            })
+            .unwrap();
+        let good = spps_run(&bed, &cell.id, 3, cell.particles_per_source, 0.001);
+        let mut unbound = good.clone();
+        spps_mut(&mut unbound).info.bound_by = None;
+        let e = check_planned(p, &unbound).unwrap_err();
+        assert!(e.contains("its files were bound to no record"), "{e}");
+        let mut unhashed = good.clone();
+        spps_mut(&mut unhashed).info.on_disk = None;
+        let e = check_planned(p, &unhashed).unwrap_err();
+        assert!(e.contains("nothing of it was hashed from disk"), "{e}");
     }
 
     #[test]

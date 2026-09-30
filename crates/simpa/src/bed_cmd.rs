@@ -1,4 +1,5 @@
-//! `simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier>] [--upstream <dir>] [--json]`,
+//! `simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier> [--seal <file>]]
+//! [--upstream <dir>] [--json]`,
 //! `simpa bed --schema` and `simpa bed --canonical`: M8a's T30 physics bed
 //! (`docs/investigations/2026-09-29-m8a/SPEC.md`, section 6), over `simpa_core::bed`.
 //!
@@ -9,7 +10,9 @@
 //!    is written.
 //! 3. Every run goes through the run manager, `--jobs` at once (default 4), longest first, under
 //!    `<root>/<UTC stamp>/runs/`, and is read as it ends; or, with `--from`, an earlier bed's
-//!    folder is read again with this build and no solver runs.
+//!    folder is read again with this build and no solver runs. Every run's files are first bound
+//!    to their record (`bed::bind`): `run.json`'s output hashes, or for an earlier bed whose runs
+//!    predate them, its committed seal given with `--seal`. A run bound to neither is refused.
 //! 4. The transport runs in its own phase, never beside the solvers (it takes every core).
 //! 5. The checks; gate C's one extension (seeds 11 to 20) of an INCONCLUSIVE cell is run and
 //!    judged again.
@@ -34,8 +37,8 @@ const EXIT_RUN_NOT_OK: u8 = 5;
 
 fn usage(msg: &str) -> ExitCode {
     eprintln!(
-        "simpa: {msg}\nusage: simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier>] \
-         [--upstream <dir>] [--json]\n       simpa bed --schema | --canonical"
+        "simpa: {msg}\nusage: simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier> \
+         [--seal <file>]] [--upstream <dir>] [--json]\n       simpa bed --schema | --canonical"
     );
     ExitCode::from(2)
 }
@@ -85,13 +88,14 @@ struct Options<'a> {
     out: PathBuf,
     jobs: usize,
     from: Option<PathBuf>,
+    seal: Option<PathBuf>,
     upstream: Option<PathBuf>,
     json: bool,
 }
 
 fn parse<'a>(args: &[&'a str]) -> Result<Options<'a>, String> {
-    let (mut bed, mut out, mut jobs, mut from, mut upstream, mut json) =
-        (None, None, 4usize, None, None, false);
+    let (mut bed, mut out, mut jobs, mut from, mut seal, mut upstream, mut json) =
+        (None, None, 4usize, None, None, None, false);
     let mut it = args.iter();
     while let Some(&a) = it.next() {
         let mut value = |name: &str| {
@@ -108,6 +112,7 @@ fn parse<'a>(args: &[&'a str]) -> Result<Options<'a>, String> {
                 ))?;
             }
             "--from" => from = Some(PathBuf::from(value("--from")?)),
+            "--seal" => seal = Some(PathBuf::from(value("--seal")?)),
             "--upstream" => upstream = Some(PathBuf::from(value("--upstream")?)),
             "--json" => json = true,
             _ if a.starts_with("--") => return Err(format!("unknown option '{a}'")),
@@ -115,11 +120,15 @@ fn parse<'a>(args: &[&'a str]) -> Result<Options<'a>, String> {
             _ => return Err(format!("unexpected argument '{a}'")),
         }
     }
+    if seal.is_some() && from.is_none() {
+        return Err("--seal needs --from: a seal holds an earlier bed's runs".into());
+    }
     Ok(Options {
         bed: bed.ok_or("bed needs a bed file")?,
         out: out.ok_or("bed needs --out <root>: put it off B: (exFAT)")?,
         jobs,
         from,
+        seal,
         upstream: upstream.or_else(|| {
             std::env::var_os("SIMPA_UPSTREAM")
                 .filter(|v| !v.is_empty())
@@ -203,6 +212,21 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
     {
         return usage(&format!("--from {}: no runs/ folder there", from.display()));
     }
+    // The earlier bed's seal, when its runs predate the output hashes in run.json.
+    let seal = match (&o.seal, &o.from) {
+        (Some(path), Some(from)) => {
+            match bed::bind::Seal::load(path)
+                .and_then(|(s, sha)| s.for_bed(from).map(|()| (s, sha)))
+            {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    eprintln!("simpa: bed refused: --seal {e}");
+                    return ExitCode::from(2);
+                }
+            }
+        }
+        _ => None,
+    };
     let (runs, atmospheric_not_run) = match run::plan(bed, o.upstream.as_deref()) {
         Ok(p) => p,
         Err(e) => {
@@ -243,7 +267,8 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
 
     // The solver phase.
     let solver_clock = Instant::now();
-    let results = run_or_read(&runs, &o, &stamp, &exes);
+    let sealed = seal.as_ref().map(|(s, _)| s);
+    let results = run_or_read(&runs, &o, &stamp, &exes, sealed);
     let mut reads = Reads::default();
     run::into_reads(&mut reads, &runs, results, atmospheric_not_run);
     let solver_phase_s = solver_clock.elapsed().as_secs_f64();
@@ -294,7 +319,7 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
                 };
                 match room {
                     Ok(()) if !ext.is_empty() => {
-                        let results = run_or_read(&ext, &o, &stamp, &exes);
+                        let results = run_or_read(&ext, &o, &stamp, &exes, sealed);
                         run::into_reads(&mut reads, &ext, results, None);
                         rep = judge(&reads, &transports);
                     }
@@ -349,6 +374,8 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
         solver_phase_s: Some(solver_phase_s),
         transport_phase_s: Some(transport_phase_s),
         limits: report::limits_map(),
+        seal: o.seal.as_ref().map(|p| p.display().to_string()),
+        seal_sha256: seal.as_ref().map(|(_, sha)| sha.clone()),
     };
     rep.files = report::Files {
         projected,
@@ -407,12 +434,14 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
     }
 }
 
-/// Runs `runs` (or reads them from `--from`), printing a line as each ends.
+/// Runs `runs` (or reads them from `--from`, held to `seal` when there is one), printing a line
+/// as each ends.
 fn run_or_read(
     runs: &[Planned],
     o: &Options,
     stamp: &Path,
     exes: &Exes,
+    seal: Option<&bed::bind::Seal>,
 ) -> Vec<Result<Read, String>> {
     match &o.from {
         Some(from) => {
@@ -422,7 +451,7 @@ fn run_or_read(
                 runs.len(),
                 from.display()
             );
-            run::read_existing(runs, from, o.jobs)
+            run::read_existing(runs, from, o.jobs, seal)
         }
         None => {
             let total = runs.len();
@@ -443,5 +472,25 @@ fn run_or_read(
                 );
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `--seal` holds an earlier bed's runs: it is taken with `--from`, and refused without it.
+    #[test]
+    fn a_seal_is_taken_only_with_from() {
+        let o = parse(&["m8a.json", "--out", "o", "--from", "f", "--seal", "s.json"]).unwrap();
+        assert_eq!(o.seal.as_deref(), Some(Path::new("s.json")));
+        assert_eq!(o.from.as_deref(), Some(Path::new("f")));
+        let o = parse(&["m8a.json", "--out", "o", "--from", "f"]).unwrap();
+        assert!(o.seal.is_none());
+        let e = parse(&["m8a.json", "--out", "o", "--seal", "s.json"])
+            .err()
+            .unwrap();
+        assert!(e.contains("--seal needs --from"), "{e}");
+        assert!(parse(&["m8a.json", "--out", "o", "--from", "f", "--seal"]).is_err());
     }
 }
