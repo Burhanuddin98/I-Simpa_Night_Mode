@@ -1154,3 +1154,248 @@ fn a_box_fitting_zones_run_folder_passes_its_own_checks() {
     assert_eq!(codes(&mr), ["mesh_invalid", "uncovered_scene_faces"]);
     assert_eq!(mr["outcome"], Value::Null);
 }
+
+// ---- backlog 39: the variant `simpa run` exports ------------------------------------------------
+//
+// `docs/investigations/2026-09-30-b38-39/PLAN.md`, T39-1 to T39-5. No solver runs: the solver
+// executable is the stub solver, which finds no `stub.json` and exits at once, after the run has
+// meshed the box and written its `solve/config.xml`. What a run exported is read from that file:
+// its `type_surface` elements, against those `config_xml::write` gives for each variant.
+
+/// The seeded box with two variants of its own three materials: "rotated" moves each group to
+/// the next group's material (Ceiling 10 %, Floor 20 %, Walls 30 %), "uniform" puts every group
+/// on the ceiling's 30 %. `active` names the file's active variant. Saved into `dir`.
+fn variant_box(dir: &Path, active: Option<&str>) -> (PathBuf, simpa_core::schema::Project) {
+    use simpa_core::schema::{Variant, VariantId};
+    let mut p = simpa_core::schema::load(&fixture(BOX)).unwrap();
+    let groups: Vec<_> = p
+        .surface_groups
+        .iter()
+        .map(|g| (g.id, g.material))
+        .collect();
+    assert_eq!(groups.len(), 3, "the seeded box has three surface groups");
+    let mut rotated = Variant {
+        id: VariantId::from_u128(0xb391),
+        name: "rotated".to_string(),
+        overrides: Vec::new(),
+    };
+    let mut uniform = Variant {
+        id: VariantId::from_u128(0xb392),
+        name: "uniform".to_string(),
+        overrides: Vec::new(),
+    };
+    for (i, (group, material)) in groups.iter().enumerate() {
+        rotated.set_override(*group, Some(groups[(i + 1) % groups.len()].1));
+        if *material != groups[0].1 {
+            uniform.set_override(*group, Some(groups[0].1));
+        }
+    }
+    p.variants.push(rotated);
+    p.variants.push(uniform);
+    p.active_variant = active.map(|name| {
+        p.variants
+            .iter()
+            .find(|v| v.name == name)
+            .expect("a variant of the box")
+            .id
+    });
+    let file = dir.join(format!("box_variants_{}.simpa", active.unwrap_or("none")));
+    simpa_core::schema::save(&p, &file).unwrap();
+    (file, p)
+}
+
+/// Every `<type_surface ...>...</type_surface>` element of a `config.xml`, in order.
+fn type_surfaces(xml: &str) -> Vec<String> {
+    const CLOSE: &str = "</type_surface>";
+    let mut out = Vec::new();
+    let mut rest = xml;
+    while let Some(i) = rest.find("<type_surface") {
+        let tail = &rest[i..];
+        let end = tail.find(CLOSE).expect("a closed type_surface") + CLOSE.len();
+        out.push(tail[..end].to_string());
+        rest = &tail[end..];
+    }
+    out
+}
+
+/// Each `type_surface` element as its first two lines, `id` and the first band's `absorb`, for a
+/// failure message.
+fn summary_of(elements: &[String]) -> Vec<String> {
+    elements
+        .iter()
+        .map(|e| {
+            e.lines()
+                .take(2)
+                .map(str::trim)
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect()
+}
+
+/// The `type_surface` elements `config_xml::write` gives `p` for TCR under `variant` (`None`:
+/// the base project).
+fn written_materials(
+    p: &simpa_core::schema::Project,
+    variant: Option<&str>,
+    dir: &Path,
+) -> Vec<String> {
+    let xml = simpa_core::config_xml::write(p, simpa_core::schema::SolverKind::Tcr, variant, dir)
+        .unwrap();
+    let t = type_surfaces(&xml);
+    assert_eq!(t.len(), 3, "one type_surface per group: {xml}");
+    t
+}
+
+/// `simpa run <file> --solver tcr --json` with the stub solver and `extra`: what it printed, its
+/// manifest, and the `type_surface` elements of the `config.xml` it exported.
+fn exported(file: &Path, root: &Path, extra: &[&str]) -> (Out, Value, Vec<String>) {
+    let stub = stub().display().to_string();
+    let mut args: Vec<&str> = vec!["--solver-exe", stub.as_str()];
+    args.extend(extra);
+    materials_of(run(file, "tcr", root, &args))
+}
+
+/// What a `simpa run --json` printed, its manifest, and the `type_surface` elements of the
+/// `config.xml` it exported.
+fn materials_of(o: Out) -> (Out, Value, Vec<String>) {
+    assert!(
+        o.stdout.trim_start().starts_with('{'),
+        "the run printed no manifest: {o:#?}"
+    );
+    let m = json(&o);
+    let config = run_dir(&m).join("solve/config.xml");
+    let xml = std::fs::read_to_string(&config).unwrap_or_else(|e| {
+        panic!(
+            "{}: {e}; the run ended at stage {} with {:?}",
+            config.display(),
+            m["stage"],
+            codes(&m)
+        )
+    });
+    (o, m, type_surfaces(&xml))
+}
+
+/// T39-1: a file with an active variant, run without `--variant`, exports the active variant's
+/// materials, as the app and `simpa validate` use them, and records that variant in `run.json`.
+#[test]
+fn t39_1_run_without_variant_exports_the_active_variant() {
+    let root = scratch("t39-1");
+    let (file, p) = variant_box(&root, Some("rotated"));
+    let base = written_materials(&p, None, &root);
+    let rotated = written_materials(&p, Some("rotated"), &root);
+    assert_ne!(base, rotated, "the variant changes the materials");
+    let (o, m, got) = exported(&file, &root, &[]);
+    assert!(
+        got == rotated,
+        "without --variant the run must export the active variant 'rotated' {:?}, not the \
+         base {:?}; it exported {:?}; {}",
+        summary_of(&rotated),
+        summary_of(&base),
+        summary_of(&got),
+        o.stderr
+    );
+    let id = simpa_core::schema::VariantId::from_u128(0xb391).to_string();
+    let recorded = m["source"]["variant"].as_str();
+    assert!(
+        recorded == Some(id.as_str()) || recorded == Some("rotated"),
+        "run.json records the variant written: {}",
+        m["source"]
+    );
+}
+
+/// T39-2, control: an explicit `--variant` wins over the file's active variant.
+#[test]
+fn t39_2_an_explicit_variant_wins_over_the_active_one() {
+    let root = scratch("t39-2");
+    let (file, p) = variant_box(&root, Some("rotated"));
+    let uniform = written_materials(&p, Some("uniform"), &root);
+    assert_ne!(uniform, written_materials(&p, Some("rotated"), &root));
+    let (o, m, got) = exported(&file, &root, &["--variant", "uniform"]);
+    assert_eq!(got, uniform, "{}", o.stderr);
+    assert_eq!(m["source"]["variant"], "uniform");
+}
+
+/// T39-3 (C4): with an active variant set, `--base` runs the base project, recorded as the base;
+/// `--base` cannot be combined with `--variant`. `config_xml::resolve_variant` has no spelling
+/// that selects the base (a selector is a variant's id or name, `None` is the base), and the CLI
+/// has none either, so the spelling is the new `--base`.
+#[test]
+fn t39_3_base_runs_the_base_when_an_active_variant_is_set() {
+    let root = scratch("t39-3");
+    let (file, p) = variant_box(&root, Some("rotated"));
+    let base = written_materials(&p, None, &root);
+    let stub = stub().display().to_string();
+    let o = run(
+        &file,
+        "tcr",
+        &root,
+        &["--solver-exe", stub.as_str(), "--base"],
+    );
+    assert_ne!(
+        o.code, 2,
+        "--base is refused as a usage error: {}",
+        o.stderr
+    );
+    let (o, m, got) = materials_of(o);
+    assert_eq!(
+        got, base,
+        "--base must export the base project: {}",
+        o.stderr
+    );
+    assert_eq!(m["source"]["variant"], Value::Null, "{}", m["source"]);
+
+    let both = run(
+        &file,
+        "tcr",
+        &root,
+        &[
+            "--solver-exe",
+            stub.as_str(),
+            "--base",
+            "--variant",
+            "uniform",
+        ],
+    );
+    assert_eq!(
+        both.code, 2,
+        "--base with --variant is a usage error: {both:#?}"
+    );
+    assert!(both.stdout.is_empty(), "{both:#?}");
+}
+
+/// T39-4, control: a file with no active variant runs the base by default.
+#[test]
+fn t39_4_with_no_active_variant_the_default_runs_the_base() {
+    let root = scratch("t39-4");
+    let (file, p) = variant_box(&root, None);
+    assert_eq!(p.active_variant, None);
+    let base = written_materials(&p, None, &root);
+    let (o, m, got) = exported(&file, &root, &[]);
+    assert_eq!(got, base, "{}", o.stderr);
+    assert_eq!(m["source"]["variant"], Value::Null, "{}", m["source"]);
+}
+
+/// T39-5: the help states the default (the file's active variant) and how to reach the base
+/// (`--base`), in the usage `simpa run` prints on a usage error.
+#[test]
+fn t39_5_the_help_states_the_default_variant_and_the_base_spelling() {
+    let o = simpa_run(&["run"]);
+    assert_eq!(o.code, 2, "{o:#?}");
+    let start = o
+        .stderr
+        .find("simpa run <project.simpa>")
+        .unwrap_or_else(|| panic!("no usage of run: {}", o.stderr));
+    let end = o.stderr[start..]
+        .find("simpa results")
+        .map_or(o.stderr.len(), |i| start + i);
+    let help = &o.stderr[start..end];
+    assert!(
+        help.contains("--base"),
+        "the help of run names no --base:\n{help}"
+    );
+    assert!(
+        help.to_ascii_lowercase().contains("active variant"),
+        "the help of run does not state that the default is the file's active variant:\n{help}"
+    );
+}

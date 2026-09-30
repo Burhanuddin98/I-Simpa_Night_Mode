@@ -260,6 +260,9 @@ pub struct ResultsState {
     pub run: String,
     pub verified: bool,
     pub refusal: Option<ReasonUi>,
+    /// Why results that load are still not verified: the solver build's reason
+    /// (`results::solver_build`, backlog 38). `None` when verified, and when refused.
+    pub unverified: Option<ReasonUi>,
 }
 
 /// One of upstream's reference materials, as the library adds it (`library_material`).
@@ -660,11 +663,14 @@ pub fn results_state(root: &Path, run: &str) -> CmdResult<ResultsState> {
     if !dir.is_dir() {
         return Err(not_found());
     }
+    // RED (backlog 38, `docs/investigations/2026-09-30-b38-39/RED.md`): still today's verdict,
+    // `load(..).is_ok()`; `unverified` is never set yet.
     Ok(match results::load(&dir) {
         Ok(_) => ResultsState {
             run: run.to_string(),
             verified: true,
             refusal: None,
+            unverified: None,
         },
         Err(r) => ResultsState {
             run: run.to_string(),
@@ -674,6 +680,7 @@ pub fn results_state(root: &Path, run: &str) -> CmdResult<ResultsState> {
                 code: r.code,
                 detail: r.detail,
             }),
+            unverified: None,
         },
     })
 }
@@ -1821,6 +1828,44 @@ mod tests {
         assert_eq!(last["kind"], "ended", "{last:#}");
         assert_eq!(last["row"]["status"], "CANCELLED", "{last:#}");
         assert_eq!(last["row"]["reasons"][0]["ui_code"], "CANCELLED");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn copy_dir(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for e in std::fs::read_dir(from).unwrap() {
+            let e = e.unwrap();
+            let target = to.join(e.file_name());
+            if e.file_type().unwrap().is_dir() {
+                copy_dir(&e.path(), &target);
+            } else {
+                std::fs::copy(e.path(), &target).unwrap();
+            }
+        }
+    }
+
+    /// T38-5 (backlog 38): the app boundary. T38-1's run, the committed TCR run whose `run.json`
+    /// has no `solvers` key, loads (C1), so it is not refused; but its solver build was never
+    /// verified, so `results_state` answers `verified: false` with the reason code, never
+    /// "Results verified" (C6).
+    #[test]
+    fn t38_5_results_state_marks_a_run_without_a_solver_record_unverified() {
+        let dir = scratch("t38-5");
+        let root = dir.join("runs");
+        let run = "20260924-115031-155-tcr";
+        copy_dir(&repo("tests/fixtures/results/seats_tcr"), &root.join(run));
+        let st = results_state(&root, run).unwrap();
+        assert!(
+            !st.verified,
+            "a run with no solver record is not verified: {st:?}"
+        );
+        assert_eq!(st.refusal, None, "unverified is not refused (C6): {st:?}");
+        let reason = st
+            .unverified
+            .as_ref()
+            .unwrap_or_else(|| panic!("the reason code is given: {st:?}"));
+        assert_eq!(reason.code, results::build_codes::UNRECORDED, "{st:?}");
+        assert_eq!(reason.ui_code, "SOLVER_BUILD_UNRECORDED", "{st:?}");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

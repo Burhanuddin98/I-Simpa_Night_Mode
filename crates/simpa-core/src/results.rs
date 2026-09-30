@@ -412,6 +412,59 @@ pub fn load(folder: &Path) -> Result<RunResults, Refusal> {
     })
 }
 
+/// The codes of a run whose solver build is not verified (backlog 38). "Unverified" marks a run;
+/// it does not refuse it, so none of these is a [`Refusal`] code and none changes an exit code.
+pub mod build_codes {
+    /// The manifest records no solver check: `solvers` is absent (a CLI or bed run, or one
+    /// written before M11) or an empty list.
+    pub const UNRECORDED: &str = "solver_build_unrecorded";
+    /// A recorded check does not match the verified build (`solvers/manifest.json`).
+    pub const MISMATCH: &str = "solver_build_mismatch";
+    /// Checks are recorded, but none covers the solver the run executed.
+    pub const UNCHECKED: &str = "solver_build_unchecked";
+
+    /// Every code.
+    pub const ALL: [&str; 3] = [UNRECORDED, MISMATCH, UNCHECKED];
+}
+
+/// Whether a run's solver build was verified, decided from its manifest alone (backlog 38,
+/// `docs/investigations/2026-09-30-b38-39/PLAN.md` C5). Computed beside [`load`], never by it:
+/// `load`'s Ok or Err does not depend on it (C1).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum SolverBuild {
+    /// `solvers` is present and non-empty, every check matches, and one covers the solver the
+    /// run executed.
+    Verified,
+    /// Anything else, with a reason whose code is one of [`build_codes::ALL`].
+    Unverified { reason: Reason },
+}
+
+impl SolverBuild {
+    /// Whether the build was verified.
+    pub fn is_verified(&self) -> bool {
+        matches!(self, SolverBuild::Verified)
+    }
+
+    /// The reason, when the build was not verified.
+    pub fn reason(&self) -> Option<&Reason> {
+        match self {
+            SolverBuild::Verified => None,
+            SolverBuild::Unverified { reason } => Some(reason),
+        }
+    }
+}
+
+/// The one predicate for "solver build verified" (PLAN C5): the app's Results verdict, the Runs
+/// row's solver status and `simpa results`' printed verdict all use it.
+///
+/// RED STUB (backlog 38, `docs/investigations/2026-09-30-b38-39/RED.md`): reproduces today's
+/// behaviour, where a run whose results load counts as verified whatever its manifest records
+/// about the solver build. The tests `t38_*` fail against it.
+pub fn solver_build(_manifest: &RunManifest) -> SolverBuild {
+    SolverBuild::Verified
+}
+
 /// A path under `solve/` as the solver joins it, `/`-separated (the key of [`Outputs::files`]).
 pub(crate) fn key(path: &str) -> String {
     expect::normalize(path)
