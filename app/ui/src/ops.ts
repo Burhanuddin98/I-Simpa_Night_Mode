@@ -1,12 +1,14 @@
 // Pure builders of edit ops over the generated `Op` type (PLAN.md 2.2), and `opText`, the only
 // way an op becomes text for the backend. A pure module: no store, no backend, only erasable
 // TypeScript, tested by ops.test.ts under `node --test`.
+import type { LibraryMaterial } from './bindings/ipc.ts';
 import type {
   EntityRef,
   Material,
   MaterialQuantity,
   Op,
   PointReceiver,
+  ReflectionLaw,
   Source,
   Variant,
 } from './bindings/schema.ts';
@@ -94,6 +96,41 @@ export const setActiveVariant = (variant: string | null): Op => ({ op: 'set_acti
 
 /** Several ops as one edit and one undo step, applied all or nothing. */
 export const batch = (ops: Op[]): Op => ({ op: 'batch', ops });
+
+// ---- M11 (docs/investigations/2026-09-29-m11/PLAN.md 3.2) ------------------------------------
+
+/** Switches a source on or off (row 22, M26). Switching off the only enabled source is refused
+ * by the checked apply as `SOURCE_NONE`. */
+export const setSourceEnabled = (id: string, enabled: boolean): Op => ({ op: 'set_source_enabled', id, enabled });
+
+/** Replaces a material whole, by its id: one undo step. */
+export const replaceMaterial = (material: Material): Op => ({ op: 'replace_material', material });
+
+/** `material` with one reflection law for every band (row 22, M5): a per-band law, which only a
+ * `.proj` import makes, becomes that one law. */
+export function withLaw(material: Material, law: ReflectionLaw): Material {
+  return { ...material, reflection_law: law };
+}
+
+/**
+ * A library entry as a new material (row 22, M1): the core's exact absorption (the `f32`-widened
+ * value `material_library` gives, as a `.proj` import makes it) in each of `bandCount` bands,
+ * scattering 0, specular, double-sided, no transmission, nothing pinned. The values come from
+ * Rust, never retyped here.
+ */
+export function libraryMaterial(entry: LibraryMaterial, id: string, bandCount: number): Material {
+  return {
+    id,
+    name: entry.name,
+    color: entry.color,
+    absorption: Array.from({ length: bandCount }, () => entry.absorption),
+    scattering: Array.from({ length: bandCount }, () => 0),
+    reflection_law: 'specular',
+    transmission_loss_db: null,
+    double_sided: true,
+    solver_id: null,
+  };
+}
 
 // ---- new entities -----------------------------------------------------------------------------
 

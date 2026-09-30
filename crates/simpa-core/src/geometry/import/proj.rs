@@ -152,7 +152,7 @@ use uuid::Uuid;
 
 use super::appconst::{reference_material, reference_spectrum};
 use super::zip::Archive;
-use super::{IdSource, ImportError, Result, default_material, read_bytes, weld_key};
+use super::{IdSource, ImportError, Result, library_material, read_bytes, weld_key};
 use crate::config_xml::widen_f32;
 use crate::schema::{
     AirAbsorption, AttenuationUnit, BandKind, BandSet, BoxBound, ComputationMethod, DiffusionLaw,
@@ -350,6 +350,20 @@ impl UpstreamKind {
 /// Reads a `.proj` file.
 pub fn import_proj_file(path: &Path) -> Result<ProjImport> {
     import_proj(&read_bytes(path)?)
+}
+
+/// Upstream's name for a project nobody named (`projectname`'s default).
+pub const UPSTREAM_DEFAULT_NAME: &str = "New project";
+
+/// The name an imported project keeps: its file's stem when the `.proj` carries upstream's
+/// default name or none, else its own. `simpa import-proj` and the app's File › Open… both apply
+/// it, so the app's Save as writes the CLI's bytes (M11 `m11-r22-a3`).
+pub fn name_after_file(project: &mut Project, path: &Path) {
+    if (project.name.is_empty() || project.name == UPSTREAM_DEFAULT_NAME)
+        && let Some(stem) = path.file_stem()
+    {
+        project.name = stem.to_string_lossy().into_owned();
+    }
 }
 
 /// Reads a `.proj` archive held in memory. See the module docs.
@@ -708,10 +722,7 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
             )
         })?;
         let index = materials.len();
-        let mut m = default_material(MaterialId(ids.uuid("material", index)), n);
-        m.name = r.name.to_string();
-        m.color = Rgb(r.color[0], r.color[1], r.color[2]);
-        m.absorption = vec![F64::new(widen_f32(r.absorption)); n];
+        let mut m = library_material(r, MaterialId(ids.uuid("material", index)), n);
         m.solver_id = Some(idmat);
         materials.push(m);
         Ok(materials[index].id)
@@ -2774,6 +2785,21 @@ fn read_solvers(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_imported_project_takes_its_file_s_name_only_in_place_of_upstream_s_default() {
+        let file = Path::new("C:/projects/tutorial 1/tutorial_1.proj");
+        for (had, gets) in [
+            (UPSTREAM_DEFAULT_NAME, "tutorial_1"),
+            ("", "tutorial_1"),
+            ("Concert hall", "Concert hall"),
+            ("new project", "new project"),
+        ] {
+            let mut p = Project::new(had);
+            name_after_file(&mut p, file);
+            assert_eq!(p.name, gets, "a project named '{had}'");
+        }
+    }
 
     /// [`upstream_sort`] on ids given as text (`None`: no `wxid`), as the list comes out.
     fn sorted(ids: &[Option<&str>]) -> Vec<Option<String>> {

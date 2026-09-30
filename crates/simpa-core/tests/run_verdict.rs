@@ -783,13 +783,15 @@ fn result_unreadable() {
 #[test]
 fn every_verdict_code_is_exercised_above() {
     // The tests above cover every code of `codes::ALL` that `judge` gives; this keeps the list
-    // and the tests in step when a code is added. The first seven are the run manager's refusals,
-    // exercised in tests/run_manager.rs (mesh_parity also in crates/simpa/tests/cli_run.rs), and
-    // for the two SPPS location codes in tests/run_locate.rs, and the eighth its warning for a
-    // failed log write (the manager's unit tests).
+    // and the tests in step when a code is added. The first eight are the run manager's refusals,
+    // exercised in tests/run_manager.rs (solver_unverified by
+    // `a_run_asked_to_verify_its_solvers_checks_them_first`; mesh_parity also in
+    // crates/simpa/tests/cli_run.rs), and for the two SPPS location codes in tests/run_locate.rs,
+    // and the ninth its warning for a failed log write (the manager's unit tests).
     assert_eq!(
         ALL,
         [
+            SOLVER_UNVERIFIED,
             GEOMETRY_REFUSED,
             MESH_MISSING,
             MESH_PARITY,

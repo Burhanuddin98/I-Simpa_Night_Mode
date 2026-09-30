@@ -2,25 +2,49 @@
 // (ui/src/bindings, from the Rust types); schema values go out as JSON text and are read by the
 // core's exact reader, never by a serde_json-typed command argument.
 //
-// Only actions.ts calls the M10 commands, and only selftest.ts the M9 project commands
-// (tools/gates/m10.ps1 lints both). Every call is counted in `busyStore` for the `idle()` hook.
+// Only actions.ts calls the M10 and M11 commands, and only selftest.ts the M9 project commands
+// (tools/gates/m10.ps1 and m11.ps1 lint them). Every call is counted in `busyStore` for the
+// `idle()` hook; `run_start` answers at once, so a run in progress never holds `idle()`.
 import { Channel, invoke as tauriInvoke, type InvokeArgs } from '@tauri-apps/api/core';
 import type {
+  AppEvent,
   CmdError,
   EditOutcome,
   EventsProbeReport,
   FloatProbe,
+  LibraryMaterial,
   Prepared,
   ProjectInfo,
+  ResultsState,
   RunEventBatch,
+  RunStarted,
+  RunStreamBatch,
+  RunsView,
   SceneState,
+  SolversStatus,
   StartupInfo,
 } from './bindings/ipc';
 import type { Op } from './bindings/schema';
 import { opText } from './ops';
-import { busyStore } from './store';
+import { busyStore, type SolverName } from './store';
 
-export type { CmdError, EditOutcome, ProjectInfo, RunEventBatch, SceneState, StartupInfo };
+export type {
+  AppEvent,
+  CmdError,
+  EditOutcome,
+  LibraryMaterial,
+  ProjectInfo,
+  ResultsState,
+  RunEventBatch,
+  RunStarted,
+  RunStreamBatch,
+  RunsView,
+  SceneState,
+  SolversStatus,
+  StartupInfo,
+};
+export { Channel };
+export type { SolverName };
 
 /** A mesh file's length unit and vertical axis, as `model_import` names them. */
 export type Unit = 'm' | 'cm' | 'mm' | 'ft' | 'in';
@@ -81,4 +105,17 @@ export const backend = {
   editRedo: () => invoke<SceneState>('edit_redo'),
   /** The geometry as raw bytes (mesh.ts decodes them). */
   sceneMesh: () => invoke<ArrayBuffer>('scene_mesh'),
+
+  // M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.10). A run answers at once and reports
+  // through `onEvent`; nothing here returns a solver-computed number.
+  runStart: (solver: SolverName, onEvent: Channel<RunStreamBatch>) =>
+    invoke<RunStarted>('run_start', { solver, on_event: onEvent }),
+  runCancel: () => invoke<boolean>('run_cancel'),
+  runsList: () => invoke<RunsView>('runs_list'),
+  runResults: (run: string) => invoke<ResultsState>('run_results', { run }),
+  projImport: (path: string) => invoke<SceneState>('proj_import', { path }),
+  materialLibrary: () => invoke<LibraryMaterial[]>('material_library'),
+  solversStatus: () => invoke<SolversStatus>('solvers_status'),
+  appEvents: (onEvent: Channel<AppEvent>) => invoke<null>('app_events', { on_event: onEvent }),
+  appQuit: () => invoke<null>('app_quit'),
 };

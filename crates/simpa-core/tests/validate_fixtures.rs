@@ -147,6 +147,16 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
     add("material_unassigned", &|p| {
         p.surface_groups[0].material = MaterialId::from_u128(fixed(0x901));
     });
+    add("material_placeholder", &|p| {
+        // Upstream's placeholder for "no material chosen" (reference material 0 as an import
+        // leaves it) on the cube's one group (M11 PLAN.md 2.9, C5).
+        let n = p.bands.len();
+        let m = &mut p.materials[0];
+        m.name = "Default".to_string();
+        m.absorption = vec![F64::ZERO; n];
+        m.scattering = vec![F64::ZERO; n];
+        m.transmission_loss_db = None;
+    });
     add("material_value_out_of_range", &|p| {
         p.materials[0].absorption[2] = F64::new(1.2);
     });

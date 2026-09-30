@@ -517,6 +517,7 @@ fn run_options(a: &Args, default_root: PathBuf) -> Result<RunOptions, String> {
         loss_limit: loss_limit(a)?,
         cancel_after_ms: a.millis("cancel-after-ms")?,
         cancel_after_progress: progress(a)?,
+        verify: None,
     })
 }
 

@@ -12,6 +12,7 @@
   "directivity_file_missing.simpa": "directivity_file_missing",
   "fitting_parameters_invalid.simpa": "fitting_parameters_invalid",
   "material_diffusion_ignored.simpa": "material_diffusion_ignored",
+  "material_placeholder.simpa": "material_placeholder",
   "material_transmission_exceeds_absorption.simpa": "material_transmission_exceeds_absorption",
   "material_unassigned.simpa": "material_unassigned",
   "material_value_out_of_range.simpa": "material_value_out_of_range",

@@ -136,7 +136,9 @@ export function fileLabel(info: Pick<ProjectInfo, 'path' | 'name'>): string {
 const BLOCKERS: Record<string, string> = {
   GEOMETRY_REFUSED: 'the model check refused the geometry',
   MATERIALS_UNASSIGNED: 'some surface groups have no material yet',
-  M11_PENDING: 'running a solver is not built yet',
+  SOLVER_NOT_FOUND: 'a solver executable was not found (set SIMPA_SOLVERS_DIR to the solver build)',
+  SOLVER_UNVERIFIED: 'a solver executable is not the verified build (solvers/manifest.json)',
+  RUN_ACTIVE: 'a run is active: cancel it first',
 };
 
 /** One blocker as a line of text: its code, then what it means. */
@@ -145,9 +147,10 @@ export function blockerText(code: string): string {
   return why ? `${code}: ${why}` : code;
 }
 
-/** The Run button's tooltip: every blocker as text. */
+/** The Run button's tooltip: every blocker as text, or what Run does when there is none. */
 export function runTooltip(blockers: readonly string[] | null): string {
   if (blockers === null) return 'Run is disabled: open a project first';
+  if (blockers.length === 0) return 'Run the solver on the saved project (F5)';
   return ['Run is disabled:', ...blockers.map(blockerText)].join('\n');
 }
 

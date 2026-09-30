@@ -16,11 +16,12 @@ use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use simpa_core::faults::{self, Fault};
 use simpa_core::process::{self, CancelToken, Line, Outcome, Spec, Stream};
 use windows_sys::Win32::Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
 use windows_sys::Win32::System::Threading::{
-    OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
-    TerminateProcess, WaitForSingleObject,
+    BELOW_NORMAL_PRIORITY_CLASS, GetPriorityClass, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
 };
 
 /// Set in the environment of the re-run test binary that plays the parent process.
@@ -240,6 +241,41 @@ fn raw_bytes_split_on_lf_with_one_cr_stripped_and_lossy_utf8() {
     );
 }
 
+/// The children run below normal priority (M11 PLAN.md 2.9, C9): the desktop app stays usable
+/// while a solver takes every core. The class is read with `GetPriorityClass` on the child's own
+/// handle while it runs, and the child reads its own as well. Priority changes when a child runs,
+/// never what it computes.
+#[test]
+fn children_run_below_normal_priority() {
+    let spec = powershell(
+        "[Console]::Out.WriteLine('PIDS ' + $PID + ' 0'); \
+         [Console]::Out.WriteLine('CLASS ' + \
+         [System.Diagnostics.Process]::GetCurrentProcess().PriorityClass); \
+         Start-Sleep -Milliseconds 1500",
+        work_dir("priority"),
+    );
+    let mut class = None;
+    let mut own = None;
+    let mut procs = Vec::new();
+    let outcome = process::run(&spec, &CancelToken::new(), &mut |l| {
+        if let Some(ids) = pids(&l.text) {
+            let p = Proc::open_alive(ids[0]);
+            // SAFETY: the handle is open with PROCESS_QUERY_LIMITED_INFORMATION.
+            class = Some(unsafe { GetPriorityClass(p.handle.as_raw_handle()) });
+            // Held until the child has exited by itself, so dropping it ends nothing.
+            procs.push(p);
+        }
+        if let Some(c) = l.text.strip_prefix("CLASS ") {
+            own = Some(c.trim().to_string());
+        }
+    })
+    .expect("the child starts");
+    assert!(alive(&procs, 0).is_empty(), "the child outlived run()");
+    assert_eq!(outcome.exit_code, Some(0));
+    assert_eq!(class, Some(BELOW_NORMAL_PRIORITY_CLASS), "GetPriorityClass");
+    assert_eq!(own.as_deref(), Some("BelowNormal"), "as the child reads it");
+}
+
 #[test]
 fn exit_codes_are_raw_u32() {
     for (script, code) in [
@@ -251,6 +287,28 @@ fn exit_codes_are_raw_u32() {
         assert_eq!(outcome.exit_code, Some(code), "{script}");
         assert!(!outcome.cancelled);
     }
+}
+
+/// M11 review 2, m2: a cancel that arrives after the child has exited, but before the loop has
+/// looked at it again, keeps the child's exit code. The child prints `done`, runs a second more
+/// and exits 0; the line callback holds the loop for 3 s, so the exit happens inside it, and only
+/// then cancels. The run is still recorded cancelled; its exit code is 0, not `None` ("killed
+/// before it reported one"), which the Runs tab showed as "no exit code".
+#[test]
+fn a_cancel_after_the_exit_keeps_the_exit_code() {
+    let spec = cmd(
+        "echo done& ping -n 2 127.0.0.1 > nul& exit 0",
+        work_dir("exit_then_cancel"),
+    );
+    let token = CancelToken::new();
+    let outcome = process::run(&spec, &token, &mut |l| {
+        if l.text == "done" {
+            thread::sleep(Duration::from_secs(3));
+            token.cancel();
+        }
+    })
+    .unwrap();
+    assert_eq!((outcome.exit_code, outcome.cancelled), (Some(0), true));
 }
 
 #[test]
@@ -455,6 +513,80 @@ fn killing_the_parent_kills_the_tree() {
     assert!(
         left.is_empty(),
         "alive 2 s after the parent was killed (powershell, ping): {left:?}"
+    );
+}
+
+/// Not a test on its own: the parent for `killing_the_parent_in_the_spawn_window_kills_the_child`.
+/// With [`Fault::HoldInSpawnWindow`] the process layer stops once it has created the child,
+/// suspended, and before the child is in its own job, prints `SPAWN_WINDOW <pid>`, and waits.
+#[test]
+#[ignore = "helper process for killing_the_parent_in_the_spawn_window_kills_the_child"]
+fn helper_parent_held_in_the_spawn_window() {
+    if std::env::var_os(HELPER_ENV).is_none() {
+        return;
+    }
+    let spec = spec(
+        "ping.exe",
+        &["-n", "30", "127.0.0.1"],
+        work_dir("spawn_window"),
+    );
+    faults::with(Fault::HoldInSpawnWindow, || {
+        let _ = process::run(&spec, &CancelToken::new(), &mut |_| {});
+    });
+}
+
+/// The M11 review's B1 (review 2, lifecycle): `Stop-Process` on the process that called `run`,
+/// landing after `CreateProcessW` and before the child is assigned to its own job, left the child
+/// alive, suspended and outside every job, holding its image and its inherited handles. The
+/// window is 1 to 20 ms of every spawn; the fault holds it open so the kill lands in it every
+/// time. The child must be gone 2 s after its parent.
+#[test]
+fn killing_the_parent_in_the_spawn_window_kills_the_child() {
+    let exe = std::env::current_exe().unwrap();
+    let helper_root = work_dir("spawn_window_root");
+    let mut parent = Command::new(exe)
+        .args([
+            "helper_parent_held_in_the_spawn_window",
+            "--exact",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(HELPER_ENV, "1")
+        .env(scratch::ROOT_ENV, &helper_root)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+    let stdout = parent.stdout.take().unwrap();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let Ok(line) = line else { break };
+            let id = line
+                .find("SPAWN_WINDOW ")
+                .and_then(|i| line[i + 13..].trim().parse::<u32>().ok());
+            if let Some(id) = id {
+                let _ = tx.send(id);
+            }
+        }
+    });
+    let pid = match rx.recv_timeout(Duration::from_secs(60)) {
+        Ok(pid) => pid,
+        Err(e) => {
+            let _ = parent.kill();
+            panic!("the helper printed no SPAWN_WINDOW line: {e}");
+        }
+    };
+    let child = Proc::open_alive(pid);
+    // What Stop-Process does, with the child created and not yet in its own job.
+    parent.kill().unwrap();
+    parent.wait().unwrap();
+    let left = alive(std::slice::from_ref(&child), 2000);
+    assert!(
+        left.is_empty(),
+        "the child created in the spawn window is alive 2 s after its parent was killed: {left:?}"
     );
 }
 

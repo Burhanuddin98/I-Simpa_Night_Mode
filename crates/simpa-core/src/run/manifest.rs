@@ -19,6 +19,7 @@ use super::expect::normalize;
 use super::manager::{ExitClass, Stage};
 use super::stats::ParticleStats;
 use super::verdict::{Outputs, Verdict};
+use crate::bed::pe::SolverCheck;
 use crate::process::Outcome;
 use crate::schema::SolverKind;
 
@@ -139,6 +140,13 @@ pub struct RunManifest {
     pub solver: SolverKind,
     /// The solver executable, absolute, and its sha256.
     pub exe: FileRef,
+    /// The executables checked against the verified build (`solvers/manifest.json`) before the
+    /// run, when the caller asked for it (`RunOptions::verify`; the desktop app always does):
+    /// the solver, and with a mesh built in the run, `tetgen.exe` and `preprocess.exe`. `None`
+    /// when no check was asked for (the CLI, the bed, a manifest written before M11): absent from
+    /// the file, so those manifests are byte for byte what they were.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub solvers: Option<Vec<SolverCheck>>,
     /// The arguments after the program name: always `["config.xml"]` (contract Part B,
     /// "Launch").
     pub argv: Vec<String>,

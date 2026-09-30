@@ -63,10 +63,13 @@ mod reassign;
 mod stl;
 pub mod zip;
 
-pub use appconst::{REFERENCE_MATERIALS, REFERENCE_SPECTRA, ReferenceMaterial, ReferenceSpectrum};
+pub use appconst::{
+    REFERENCE_MATERIALS, REFERENCE_SPECTRA, ReferenceMaterial, ReferenceSpectrum,
+    reference_material,
+};
 pub use proj::{
-    ProjImport, ProjReport, UpstreamId, UpstreamKind, import_proj, import_proj_file,
-    import_proj_with_config,
+    ProjImport, ProjReport, UPSTREAM_DEFAULT_NAME, UpstreamId, UpstreamKind, import_proj,
+    import_proj_file, import_proj_with_config, name_after_file,
 };
 pub use reassign::{DEFAULT_REASSIGN_TOLERANCE_M, Reassigned, reassign};
 
@@ -523,6 +526,18 @@ pub(crate) fn default_material(id: MaterialId, n_bands: usize) -> Material {
         double_sided: true,
         solver_id: None,
     }
+}
+
+/// A reference material as a `.proj` import makes it, and as the app's material library adds it
+/// (M11, parity M1): its name, colour and `f32`-widened absorption ([`widen_f32`]) in each of
+/// `n_bands` bands; specular, no scattering, no transmission, double-sided, and no pinned solver
+/// id (a `.proj` import then pins upstream's id).
+pub fn library_material(r: &ReferenceMaterial, id: MaterialId, n_bands: usize) -> Material {
+    let mut m = default_material(id, n_bands);
+    m.name = r.name.to_string();
+    m.color = Rgb(r.color[0], r.color[1], r.color[2]);
+    m.absorption = vec![crate::schema::F64::new(widen_f32(r.absorption)); n_bands];
+    m
 }
 
 // ---------------------------------------------------------------------------------------------

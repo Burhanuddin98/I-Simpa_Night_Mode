@@ -1,21 +1,35 @@
 //! Windows: the child and everything it starts, in one Job Object. The crate's process `unsafe`
 //! is confined to this module.
 //!
-//! The child is created with `CREATE_SUSPENDED | CREATE_NO_WINDOW`, assigned to a fresh job with
+//! The child is created with `CREATE_SUSPENDED | CREATE_NO_WINDOW` at below-normal priority
+//! (`BELOW_NORMAL_PRIORITY_CLASS`: the desktop app must stay usable while a solver takes every
+//! core; priority changes when the child runs, never what it computes), assigned to a fresh job with
 //! `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, and only then resumed, so it cannot start a process
 //! outside the job. No breakaway flag is set, so its descendants cannot leave the job either.
 //! [`Job`] owns the only handle to the job: it is unnamed and not inheritable, so no child holds
 //! one. Closing it, by drop or by the kernel when this process dies, kills every process still
 //! in the job.
 //!
-//! One window is left: if this process dies between `CreateProcessW` and
-//! `AssignProcessToJobObject` (microseconds; nothing of ours that can fail runs in between), the
-//! child stays suspended outside any job. It never runs a user-mode instruction, but it is listed
-//! until something kills it. Closing that window needs `PROC_THREAD_ATTRIBUTE_JOB_LIST`, which
-//! `std::process::Command` cannot pass on stable Rust. None of the three children starts
-//! processes of its own: a grep of upstream `src/{spps,ctr,tetgen,lib_interface}` at 929a5c8 for
-//! `CreateProcess`, `ShellExecute`, `WinExec`, `system(`, `popen`, `_spawn`, `fork(`, `exec*`
-//! and `boost::process` finds nothing (the same grep finds `wxExecute` in `src/isimpa`).
+//! **The spawn window.** Between `CreateProcessW` and `AssignProcessToJobObject` the child exists
+//! in no job of its own. The M11 review measured that window at 1 to 4 ms for a warm image and
+//! about 20 ms for an image's first run (review 2, lifecycle B1), and a `Stop-Process` landing in
+//! it left the child alive: suspended, never run, but holding its image (which then cannot be
+//! replaced) and every handle it inherited. So before its first child this process puts itself in
+//! a job of its own ([`own_job`]), also `KILL_ON_JOB_CLOSE`, whose only handle it holds and never
+//! closes. Every child is then born inside that job, and inside its own job once assigned (nested
+//! jobs, Windows 8 and later). When this process dies, however it dies, the kernel closes that
+//! handle and kills whatever it started, the window included. `PROC_THREAD_ATTRIBUTE_JOB_LIST`
+//! would close the window per child, but `std::process::Command` cannot pass it on stable Rust.
+//! The job is joined at the first spawn, not at startup, so the app's WebView2 processes, started
+//! before any run, are not in it. Everything this process starts after that is in it and dies
+//! with it: a process meant to outlive it (M13's updater) must be started with
+//! `CREATE_BREAKAWAY_FROM_JOB`, which this job would first have to allow
+//! (`JOB_OBJECT_LIMIT_BREAKAWAY_OK`).
+//!
+//! None of the three children starts processes of its own: a grep of upstream
+//! `src/{spps,ctr,tetgen,lib_interface}` at 929a5c8 for `CreateProcess`, `ShellExecute`,
+//! `WinExec`, `system(`, `popen`, `_spawn`, `fork(`, `exec*` and `boost::process` finds nothing
+//! (the same grep finds `wxExecute` in `src/isimpa`).
 
 use std::ffi::c_void;
 use std::io;
@@ -24,6 +38,7 @@ use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::os::windows::process::CommandExt;
 use std::process::{Child, ChildStderr, ChildStdout, Command, ExitStatus};
 use std::ptr;
+use std::sync::OnceLock;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -41,8 +56,9 @@ use windows_sys::Win32::System::JobObjects::{
     SetInformationJobObject, TerminateJobObject,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_NO_WINDOW, CREATE_SUSPENDED, OpenProcess, OpenThread, PROCESS_QUERY_LIMITED_INFORMATION,
-    PROCESS_SYNCHRONIZE, ResumeThread, THREAD_SUSPEND_RESUME, WaitForSingleObject,
+    BELOW_NORMAL_PRIORITY_CLASS, CREATE_NO_WINDOW, CREATE_SUSPENDED, GetCurrentProcess,
+    OpenProcess, OpenThread, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, ResumeThread,
+    THREAD_SUSPEND_RESUME, WaitForSingleObject,
 };
 
 use super::Tree;
@@ -65,10 +81,14 @@ impl JobTree {
     /// Spawns `command` (stdout and stderr piped) suspended, puts it in a new job, then resumes
     /// it. On any failure after the spawn the child is killed before it has run.
     pub(super) fn spawn(mut command: Command) -> io::Result<(Self, ChildStdout, ChildStderr)> {
+        own_job()?;
         let job = Job::new()?;
         let mut child = command
-            .creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW)
+            .creation_flags(CREATE_SUSPENDED | CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS)
             .spawn()?;
+        if crate::faults::active() == Some(crate::faults::Fault::HoldInSpawnWindow) {
+            hold_in_spawn_window(child.id());
+        }
         if let Err(e) = job.assign(&child).and_then(|()| resume(child.id())) {
             let _ = child.kill();
             let _ = child.wait();
@@ -119,6 +139,30 @@ impl Tree for JobTree {
             thread::sleep(Duration::from_millis(1));
         }
         self.child.try_wait().map(drop)
+    }
+}
+
+/// This process's own job (see the module's "spawn window"), made and joined once. Its handle
+/// lives in a static that is never dropped, so it closes only when this process ends.
+static OWN_JOB: OnceLock<Result<Job, String>> = OnceLock::new();
+
+/// Puts this process in a `KILL_ON_JOB_CLOSE` job of its own, once; `Err` (every time) if that
+/// failed, and then no child is started: one outside every job would outlive a killed parent.
+fn own_job() -> io::Result<()> {
+    let joined = OWN_JOB.get_or_init(|| {
+        let job = Job::new().map_err(|e| e.to_string())?;
+        // SAFETY: the job handle is open with full access; `GetCurrentProcess` is a pseudo handle
+        // with full access to this process.
+        check(unsafe { AssignProcessToJobObject(job.raw(), GetCurrentProcess()) })
+            .map_err(|e| e.to_string())?;
+        Ok(job)
+    });
+    match joined {
+        Ok(_) => Ok(()),
+        Err(e) => Err(io::Error::other(format!(
+            "this process could not join a job of its own, so no child is started (a child \
+             outside every job would outlive a killed parent): {e}"
+        ))),
     }
 }
 
@@ -292,6 +336,17 @@ fn resume(pid: u32) -> io::Result<()> {
     Ok(())
 }
 
+/// [`crate::faults::Fault::HoldInSpawnWindow`]: tells the test which child was created, then
+/// waits to be killed with the child suspended and not yet in its own job.
+fn hold_in_spawn_window(pid: u32) {
+    use std::io::Write;
+    let mut out = io::stdout().lock();
+    let _ = writeln!(out, "SPAWN_WINDOW {pid}");
+    let _ = out.flush();
+    drop(out);
+    thread::sleep(Duration::from_secs(60));
+}
+
 /// Waits for `process` until `deadline`; true when it is signalled (has exited).
 fn wait(process: HANDLE, deadline: Instant) -> io::Result<bool> {
     let left = deadline.saturating_duration_since(Instant::now());
@@ -352,6 +407,29 @@ mod tests {
         tree.kill_all().unwrap();
         assert_eq!(tree.job.active_processes().unwrap(), 0);
         assert!(tree.wait_exit(Duration::ZERO).unwrap().is_some());
+    }
+
+    /// The spawn window (review 2, B1): the child is inside this process's own job from its
+    /// creation, before it is assigned to its own, so a killed parent takes it down.
+    #[test]
+    fn a_child_is_born_inside_this_processs_own_job() {
+        let (mut tree, _out, _err) = JobTree::spawn(ping(30)).unwrap();
+        let own = OWN_JOB.get().unwrap().as_ref().unwrap();
+        let mut inside = 0;
+        // SAFETY: both handles are open; `inside` outlives the call.
+        check(unsafe { IsProcessInJob(GetCurrentProcess(), own.raw(), &mut inside) }).unwrap();
+        assert_ne!(inside, 0, "this process is in its own job");
+        assert!(own.member(tree.child.id()).is_some(), "the child is in it");
+        assert!(tree.job.member(tree.child.id()).is_some(), "and in its own");
+        // A process started without JobTree is in it too: what makes the window safe.
+        let mut plain = ping(30).spawn().unwrap();
+        assert!(
+            own.member(plain.id()).is_some(),
+            "born inside, never assigned"
+        );
+        plain.kill().unwrap();
+        plain.wait().unwrap();
+        tree.kill_all().unwrap();
     }
 
     #[test]

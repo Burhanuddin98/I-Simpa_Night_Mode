@@ -807,3 +807,84 @@ fn every_kinds_pins_are_checked_by_the_validator() {
     p.surface_receivers[1].solver_id = Some(7);
     assert_eq!(pin_issues(&p), Vec::new());
 }
+
+/// `material_placeholder` (M11 PLAN.md 2.9, C5): upstream's placeholder for "no material chosen"
+/// on a surface group is refused, one issue per group, under the active variant only; a material
+/// that is merely named `Default` is a chosen one.
+#[test]
+fn the_placeholder_material_is_refused_per_group() {
+    use simpa_core::geometry::import::{ImportOptions, Unit, Up, import_file};
+    let placeholders = |p: &Project| -> Vec<Issue> {
+        validate::validate(p)
+            .into_iter()
+            .filter(|i| i.code == codes::MATERIAL_PLACEHOLDER)
+            .collect()
+    };
+    // (1) The corrected hall imported from PLY: all 10 groups on the placeholder.
+    let hall = import_file(
+        &repo("testdata/elmia_corrected.ply"),
+        &ImportOptions::new(Unit::Metre, Up::Z),
+    )
+    .unwrap()
+    .to_project("elmia_corrected");
+    let issues = placeholders(&hall);
+    assert_eq!(issues.len(), 10, "{issues:#?}");
+    for (i, issue) in issues.iter().enumerate() {
+        assert_eq!(issue.path, format!("/surface_groups/{i}/material"));
+        assert_eq!(issue.severity, Severity::Error);
+        assert!(validate::is_placeholder_material(&hall.materials[0]));
+    }
+
+    // (2) The box and the teaching room choose every material: none.
+    for rel in [
+        "tests/fixtures/rooms/tutorial1_box.simpa",
+        "tests/fixtures/ui/teaching_room.simpa",
+    ] {
+        let p = schema::load(&repo(rel)).unwrap();
+        assert_eq!(placeholders(&p), Vec::new(), "{rel}");
+    }
+
+    // (3) A variant that puts one group of the box on the placeholder: one issue, only while
+    // that variant is active.
+    let mut p = schema::load(&repo("tests/fixtures/rooms/tutorial1_box.simpa")).unwrap();
+    let n = p.bands.frequencies_hz.len();
+    let mut placeholder = p.materials[0].clone();
+    placeholder.id = MaterialId::from_u128(0x9001);
+    placeholder.solver_id = None;
+    placeholder.name = "Default".to_string();
+    placeholder.absorption = vec![F64::ZERO; n];
+    placeholder.scattering = vec![F64::ZERO; n];
+    placeholder.transmission_loss_db = None;
+    p.materials.push(placeholder.clone());
+    assert_eq!(placeholders(&p), Vec::new(), "unused, so not in the run");
+    let group = p.surface_groups[1].id;
+    p.variants.push(Variant {
+        id: VariantId::from_u128(0x9002),
+        name: "No choice".to_string(),
+        overrides: vec![MaterialOverride {
+            group,
+            material: placeholder.id,
+        }],
+    });
+    assert_eq!(placeholders(&p), Vec::new(), "the variant is not active");
+    p.active_variant = Some(VariantId::from_u128(0x9002));
+    let issues = placeholders(&p);
+    assert_eq!(issues.len(), 1, "{issues:#?}");
+    assert_eq!(issues[0].path, "/surface_groups/1/material");
+    p.active_variant = None;
+    assert_eq!(placeholders(&p), Vec::new());
+
+    // (4) Named `Default` with a real value: a chosen material.
+    let mut chosen = placeholder;
+    chosen.absorption = vec![F64::new(0.1); n];
+    assert!(!validate::is_placeholder_material(&chosen));
+    let mut scattering_only = chosen.clone();
+    scattering_only.absorption = vec![F64::ZERO; n];
+    scattering_only.scattering[0] = F64::new(0.2);
+    assert!(!validate::is_placeholder_material(&scattering_only));
+    let mut renamed = scattering_only;
+    renamed.scattering = vec![F64::ZERO; n];
+    assert!(validate::is_placeholder_material(&renamed));
+    renamed.name = "Default 2".to_string();
+    assert!(!validate::is_placeholder_material(&renamed));
+}

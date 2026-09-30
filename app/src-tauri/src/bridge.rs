@@ -122,6 +122,17 @@ fn import_error(e: &import::ImportError) -> CmdError {
     )
 }
 
+/// A `.proj` import's refusal: its own `proj_*` codes upper-cased (`PROJ_VOLUMES_UNSUPPORTED`),
+/// any other import error as `IMPORT_*`.
+fn proj_error(e: &import::ImportError) -> CmdError {
+    let code = e.code();
+    if code.starts_with("proj_") {
+        CmdError::new(code.to_ascii_uppercase(), e.to_string())
+    } else {
+        import_error(e)
+    }
+}
+
 fn no_project() -> CmdError {
     CmdError::new("NO_PROJECT", "no project is open")
 }
@@ -265,6 +276,19 @@ impl Session {
         })
     }
 
+    /// The project file this session was opened from or last saved to.
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// Why the project may not run, as `SceneState::run_blockers` has it, without taking the
+    /// pending Console lines. `None` with no project open.
+    pub fn project_blockers(&self) -> Option<Vec<String>> {
+        let p = self.project.as_ref()?;
+        let check = self.check.as_ref().map(|c| &c.summary);
+        Some(scene::run_blockers(p, check, &self.issues))
+    }
+
     /// The project in its canonical file form (`schema::to_json`).
     pub fn json(&self) -> CmdResult<String> {
         self.project
@@ -385,6 +409,13 @@ impl Session {
     /// Imports a mesh file as a new project named after the file. A geometry the check refuses
     /// is loaded, not rejected: its faces are highlighted and Run is blocked.
     pub fn model_import(&mut self, path: &Path, unit: &str, up: &str) -> CmdResult<SceneState> {
+        // An upstream project carries its own units: opened as a `.proj`, whatever was chosen.
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("proj"))
+        {
+            return self.proj_import(path);
+        }
         let u = Unit::from_symbol(unit).ok_or_else(|| {
             CmdError::new(
                 "IMPORT_UNIT",
@@ -411,6 +442,43 @@ impl Session {
         let report = scene::import_lines(&file, unit, up, &model.report, model.group_names.len());
         self.replace(model.to_project(&stem), None, file);
         self.lines.extend(report);
+        self.state()
+    }
+
+    /// Opens an upstream I-Simpa `.proj` as a new, unsaved project (`import_proj_file`: the same
+    /// file always gives the same project, byte for byte, so Save as gives what `simpa
+    /// import-proj` writes). The project is named after the file in place of upstream's default
+    /// name, by the CLI's own rule (`name_after_file`); the check's lines
+    /// call the model by the file's name. The import's notes become INFO lines. A refusal is an
+    /// error with its code, and the session is left as it was.
+    pub fn proj_import(&mut self, path: &Path) -> CmdResult<SceneState> {
+        let mut imported = import::import_proj_file(path).map_err(|e| proj_error(&e))?;
+        // The CLI's rule: upstream's default name gives way to the file's (M11 m11-r22-a3 found
+        // the app kept "New project" while `simpa import-proj` wrote "tutorial_1").
+        import::name_after_file(&mut imported.project, path);
+        let file = file_name(path);
+        let r = &imported.report;
+        let p = &imported.project;
+        let mut lines = vec![LogLine::new(
+            LineClass::Info,
+            format!(
+                "Imported {file}: {} faces, {} surface groups, {} materials, {} sources, {} point \
+                 receivers, {} surface receivers",
+                r.faces,
+                p.surface_groups.len(),
+                p.materials.len(),
+                p.sources.len(),
+                p.point_receivers.len(),
+                p.surface_receivers.len()
+            ),
+        )];
+        lines.extend(
+            r.notes
+                .iter()
+                .map(|n| LogLine::new(LineClass::Info, format!("Import: {n}"))),
+        );
+        self.replace(imported.project, None, file);
+        self.lines.extend(lines);
         self.state()
     }
 
@@ -654,7 +722,7 @@ mod tests {
 #[cfg(test)]
 mod m10_tests {
     use super::*;
-    use crate::scene::{CHECK_OK_PREFIX, GEOMETRY_REFUSED, M11_PENDING, MATERIALS_UNASSIGNED};
+    use crate::scene::{CHECK_OK_PREFIX, GEOMETRY_REFUSED, MATERIALS_UNASSIGNED};
     use simpa_core::schema::{EntityRef, MaterialQuantity, PointReceiverId, Vec3};
 
     fn repo(rel: &str) -> PathBuf {
@@ -953,7 +1021,23 @@ mod m10_tests {
         assert!(!st.run_blockers.contains(&GEOMETRY_REFUSED.to_string()));
         assert!(st.run_blockers.contains(&MATERIALS_UNASSIGNED.to_string()));
         assert!(st.run_blockers.contains(&"SOURCE_NONE".to_string()));
-        assert_eq!(st.run_blockers.last().unwrap(), M11_PENDING);
+        // The core's placeholder rule fires on all 10 groups, and its blocker is listed once.
+        assert_eq!(
+            st.issues
+                .iter()
+                .filter(|i| i.rule == "material_placeholder")
+                .count(),
+            10
+        );
+        assert_eq!(
+            st.run_blockers
+                .iter()
+                .filter(|b| *b == MATERIALS_UNASSIGNED)
+                .count(),
+            1,
+            "{:?}",
+            st.run_blockers
+        );
         assert!(st.groups.iter().all(|g| !g.assigned && g.faces > 0));
         let check = st.check.unwrap();
         assert_eq!(check.counts.faces, 7860);

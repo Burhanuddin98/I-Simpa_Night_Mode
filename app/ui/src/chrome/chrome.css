@@ -1,6 +1,7 @@
 /* The Concept B chrome regions (docs/design/concept-b-approved.dc.html): menu bar, step bar,
-   scene list, dock, properties panel, status bar and the import dialog. Owned by the scene
-   package; the tokens, the fields, the inline issues, the segmented control and the themed
+   scene list, properties panel, status bar and the import dialog. Owned by the project package
+   from M11 (the dock's rules are in features/dock/dock.css, the Run button's in
+   features/simulate/simulate.css); the tokens, the fields, the inline issues, the segmented control and the themed
    scrollbars are theme.css's (every scroll container takes its scrollbar colours from there). */
 
 /* Menu bar (design:28-44) */
@@ -125,35 +126,6 @@
   color: var(--text-2);
   margin-left: 18px;
 }
-.run-wrap {
-  display: flex;
-  margin-left: 6px;
-}
-.run {
-  height: 28px;
-  min-width: 118px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 12px;
-  border: none;
-  border-radius: 5px;
-  background: var(--red);
-  color: #fff;
-  font-weight: 600;
-  letter-spacing: 0.2px;
-}
-.run:disabled {
-  opacity: 0.45;
-}
-.run .key {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  font-weight: 400;
-  opacity: 0.8;
-}
-
 /* Step bar (design:46-65) */
 .stepbar {
   height: 44px;
@@ -433,122 +405,6 @@
 .issue-tag.warning .state,
 .issue-tag.warning .code {
   color: var(--warn);
-}
-
-/* Dock (design:175-275) */
-.dock {
-  height: 250px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border-top: 1px solid var(--line);
-}
-.dock-tabs {
-  height: 34px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: stretch;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--line);
-}
-.dock-tab {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 14px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-2);
-  font-size: 13px;
-  font-weight: 500;
-}
-.dock-tab[aria-selected='true'] {
-  border-bottom-color: var(--red);
-  color: var(--text);
-}
-.dock-tab .tab-badge {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--text-3);
-}
-.dock-body {
-  flex-grow: 1;
-  min-height: 0;
-  overflow-y: auto;
-  box-sizing: border-box;
-}
-.dock-empty {
-  padding: 16px;
-}
-.console {
-  padding: 8px 0;
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.console-empty {
-  padding: 4px 16px;
-}
-.console-line {
-  display: flex;
-  gap: 14px;
-  padding: 4px 16px;
-  user-select: text;
-}
-.console-line .time {
-  flex-shrink: 0;
-  color: var(--text-3);
-}
-.console-line .tag {
-  width: 40px;
-  flex-shrink: 0;
-}
-.console-line .text {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.console-line.FAIL {
-  background: rgba(224, 32, 46, 0.08);
-}
-.console-line.FAIL .tag {
-  color: var(--red-hi);
-}
-.console-line.FAIL .text {
-  color: var(--fail-text);
-}
-.console-line.WARN .tag {
-  color: var(--warn);
-}
-.console-line.INFO .tag {
-  color: var(--text-2);
-}
-.console-line.OK .tag {
-  color: var(--ok);
-}
-.runs {
-  padding: 6px 16px;
-}
-.runs-head {
-  display: flex;
-  height: 26px;
-  align-items: center;
-  font-size: 11.5px;
-  letter-spacing: 1.2px;
-  border-bottom: 1px solid var(--line);
-}
-.runs-head span:nth-child(1) {
-  width: 70px;
-}
-.runs-head span:nth-child(2) {
-  width: 170px;
-}
-.runs-head span:nth-child(3),
-.runs-head span:nth-child(4) {
-  width: 90px;
-}
-.runs-empty {
-  padding: 10px 0;
 }
 
 /* Properties (design:278-471) */
@@ -928,4 +784,101 @@
   background: var(--red);
   color: #fff;
   font-weight: 600;
+}
+
+/* M11, row 22 (A9): the save prompt, in the import dialog's frame. */
+.dialog.prompt {
+  width: 420px;
+}
+.dialog.prompt .dialog-file {
+  margin-bottom: 10px;
+}
+
+/* M11, row 22 (M26): a source's on/off switch (design:446-449). On: the red track with a white
+   knob on the right; off: the edge-grey track with a grey knob on the left. The state is also
+   text ("on"/"off" beside the switch, or "off" on the row), never colour alone. */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 22px;
+  padding: 0 2px;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.switch:disabled {
+  opacity: 0.6;
+}
+.switch-track {
+  width: 32px;
+  height: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 2px;
+  border-radius: 9px;
+  background: var(--edge);
+  box-sizing: border-box;
+}
+.switch-knob {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+.switch[aria-checked='true'] .switch-track {
+  justify-content: flex-end;
+  background: var(--red);
+}
+.switch[aria-checked='true'] .switch-knob {
+  background: #fff;
+}
+.switch-text {
+  width: 20px;
+  text-align: left;
+}
+.switch.compact .switch-track {
+  width: 26px;
+  height: 14px;
+  border-radius: 7px;
+}
+.switch.compact .switch-knob {
+  width: 10px;
+  height: 10px;
+}
+
+/* The switch sits beside its row's button (never inside it), over the row's right end. */
+.scene-line,
+.point-line {
+  position: relative;
+}
+.scene-line .scene-row {
+  padding-right: 40px;
+}
+.scene-line .switch {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+}
+.point-line .point-row {
+  padding-right: 64px;
+}
+.point-line .switch {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+}
+.row-detail.row-off,
+.point-state.off {
+  color: var(--text-2);
+}
+.scene-list .toggle-issues {
+  margin: 6px 8px 0;
 }

@@ -63,6 +63,12 @@
 .segmented.view button:disabled {
   opacity: 0.35;
 }
+/* Between the tools (modes) and Frame model (an action). */
+.tool-sep {
+  height: 1px;
+  margin: 2px 4px;
+  background: var(--edge);
+}
 .segmented.view button[aria-selected='true'] {
   background: var(--edge);
   color: var(--text);

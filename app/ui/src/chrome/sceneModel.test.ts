@@ -116,7 +116,7 @@ function scene(v: ProjectView, c: CheckSummary | null, assigned: number): SceneS
     groups: [],
     check: c,
     issues: [],
-    run_blockers: ['M11_PENDING'],
+    run_blockers: [],
     lines: [],
   };
 }
@@ -224,9 +224,11 @@ test('units and file label follow the saved path', () => {
 test('Run blockers read as text, each with its code', () => {
   assert.equal(blockerText('GEOMETRY_REFUSED'), 'GEOMETRY_REFUSED: the model check refused the geometry');
   assert.equal(blockerText('SOMETHING_NEW'), 'SOMETHING_NEW');
-  const tip = runTooltip(['GEOMETRY_REFUSED', 'M11_PENDING']);
-  assert.ok(tip.includes('GEOMETRY_REFUSED') && tip.includes('M11_PENDING'), tip);
+  const tip = runTooltip(['GEOMETRY_REFUSED', 'SOLVER_NOT_FOUND', 'RUN_ACTIVE']);
+  assert.ok(tip.includes('GEOMETRY_REFUSED') && tip.includes('SOLVER_NOT_FOUND') && tip.includes('RUN_ACTIVE'), tip);
+  assert.ok(!tip.includes('M11_PENDING'), 'Run is wired in M11');
   assert.match(runTooltip(null), /open a project/);
+  assert.match(runTooltip([]), /^Run the solver/);
 });
 
 const issue = (code: string, severity: 'error' | 'warning', path = '/x'): UiIssue => ({

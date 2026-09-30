@@ -420,12 +420,9 @@ fn import_proj_cmd(args: &[&str]) -> ExitCode {
         Ok(i) => i,
         Err(e) => return fail(&format!("{input}: {} ({e})", e.code())),
     };
-    // Name the project after its file rather than leaving the importer's placeholder.
-    if (imported.project.name.is_empty() || imported.project.name == "New project")
-        && let Some(stem) = Path::new(input).file_stem()
-    {
-        imported.project.name = stem.to_string_lossy().into_owned();
-    }
+    // Name the project after its file rather than leaving upstream's default name (the app's
+    // File › Open… applies the same rule).
+    simpa_core::geometry::import::name_after_file(&mut imported.project, Path::new(input));
     if let Err(e) = schema::save(&imported.project, Path::new(out)) {
         return fail(&format!("{out}: {e}"));
     }

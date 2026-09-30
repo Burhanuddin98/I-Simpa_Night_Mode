@@ -5,7 +5,14 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { ACOUSTIC_NUMBER, allConsoleLines, clickSelector, consoleLines, textOutsideInputsAndGeometry } from '../lib/dom.ts';
+import {
+  ACOUSTIC_NUMBER,
+  allConsoleLines,
+  clickSelector,
+  consoleLines,
+  PARAMETER_NUMBER,
+  textOutsideInputsAndGeometry,
+} from '../lib/dom.ts';
 import { compareFiles } from '../lib/files.ts';
 import { m10, waitForHooks } from '../lib/hooks.ts';
 import { env, type Op, type Vec3 } from '../lib/types.ts';
@@ -211,6 +218,11 @@ describe('M10 shell (foundation)', () => {
           const text = await textOutsideInputsAndGeometry();
           const m = text.match(ACOUSTIC_NUMBER);
           assert.equal(m, null, `step ${step}, tab ${tab}: "${m?.[0]}" in the text outside [data-input] and [data-geometry]`);
+          // M11 (PLAN.md 4.2 rule 2, M10 MINOR A-2): a parameter's name followed by a number,
+          // unit or none, anywhere on the page with nothing hidden. A tightening of m10-h.
+          const whole = await browser.execute(() => document.body.innerText);
+          const p = whole.match(PARAMETER_NUMBER);
+          assert.equal(p, null, `step ${step}, tab ${tab}: "${p?.[0]}" names a parameter with a number`);
           seen.push(`${step}/${tab}`);
         }
       }

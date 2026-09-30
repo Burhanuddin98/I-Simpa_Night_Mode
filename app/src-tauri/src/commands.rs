@@ -19,9 +19,13 @@ use tauri::{AppHandle, State};
 use crate::bench::{BenchStore, Prepared};
 use crate::bridge::{self, FloatProbe, ProjectInfo, Session};
 use crate::events::{
-    BATCH_PERIOD, BatchStats, Batcher, LineClass, RunEvent, RunEventBatch, Stream,
+    AppEvent, BATCH_PERIOD, BatchStats, Batcher, LineClass, RunEvent, RunEventBatch, Stream,
 };
 use crate::guard::{self, CmdError, CmdResult, lock};
+use crate::runs::{
+    self, LibraryMaterial, ResultsState, RunSlot, RunStarted, RunStreamBatch, RunsView,
+    SolversCache, SolversStatus,
+};
 use crate::scene::{EditOutcome, SceneState};
 use crate::selftest::Selftest;
 use crate::webview2::{self, WebviewInfo};
@@ -35,10 +39,36 @@ pub struct AppState {
     pub startup_error: Option<CmdError>,
     /// `--e2e`: the UI installs its test hooks (PLAN.md 2.5).
     pub e2e: bool,
+    // ---- M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.8) ----
+    /// The active run, if any.
+    pub run: Arc<Mutex<RunSlot>>,
+    /// The UI's app-event channel, registered once at boot (`app_events`).
+    pub ui_events: Arc<Mutex<Option<Channel<AppEvent>>>>,
+    /// The solver checks, by (path, size, modification time).
+    pub solvers: Arc<Mutex<SolversCache>>,
+    /// The first close request the UI has not answered yet.
+    pub close: Arc<Mutex<CloseState>>,
+}
+
+/// The oldest close request the UI was told of and has not acknowledged, and when. Requests
+/// while it is unanswered are held: a page busy with other work acknowledges late. Only once it
+/// has gone unanswered for [`CloseState::HUNG_UI`] does the next request close the window after
+/// all (the run is cancelled first). The UI acknowledges each request as soon as its page runs,
+/// by registering a fresh channel (`app_events`), and `app_quit` clears it too, so a live UI's
+/// save prompt is skipped only if its page stays blocked for 5 s and the user asks again.
+#[derive(Default)]
+pub struct CloseState {
+    pub requested: Option<Instant>,
+}
+
+impl CloseState {
+    pub const HUNG_UI: Duration = Duration::from_secs(5);
 }
 
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 pub struct StartupInfo {
+    /// This process's id: the M11 gate sends `WM_CLOSE` to its window and stops it by it.
+    pub pid: u32,
     pub selftest: bool,
     /// Started with `--e2e`: the UI installs its test hooks.
     pub e2e: bool,
@@ -57,6 +87,7 @@ pub async fn app_startup(state: State<'_, AppState>) -> CmdResult<StartupInfo> {
     let project_error = state.startup_error.clone();
     guard::blocking("app_startup", move || {
         Ok(StartupInfo {
+            pid: std::process::id(),
             selftest,
             e2e,
             project: lock(&session, "project")?.info(),
@@ -162,7 +193,15 @@ pub async fn run_events_probe(
                 format!("{lines} lines every {spacing_us} us: at most 100,000 lines and 10 s"),
             ));
         }
-        let batcher = Batcher::spawn(BATCH_PERIOD, move |batch| on_event.send(batch).is_ok());
+        let batcher = Batcher::spawn(BATCH_PERIOD, move |batch, events, last| {
+            on_event
+                .send(RunEventBatch {
+                    batch,
+                    events,
+                    last,
+                })
+                .is_ok()
+        });
         let start = Instant::now();
         let spacing = Duration::from_micros(u64::from(spacing_us));
         const CLASSES: [LineClass; 4] = [
@@ -290,9 +329,11 @@ pub async fn scene_state(state: State<'_, AppState>) -> CmdResult<Option<SceneSt
 /// A new empty project. The history is cleared.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn scene_new(state: State<'_, AppState>, name: String) -> CmdResult<SceneState> {
-    let session = state.session.clone();
+    let (session, slot) = (state.session.clone(), state.run.clone());
     guard::blocking("scene_new", move || {
-        lock(&session, "project")?.scene_new(&name)
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "New project")?;
+        s.scene_new(&name)
     })
     .await
 }
@@ -300,9 +341,11 @@ pub async fn scene_new(state: State<'_, AppState>, name: String) -> CmdResult<Sc
 /// Opens a `.simpa` file (`schema::load`), then runs the model check and the validator.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn scene_open(state: State<'_, AppState>, path: String) -> CmdResult<SceneState> {
-    let session = state.session.clone();
+    let (session, slot) = (state.session.clone(), state.run.clone());
     guard::blocking("scene_open", move || {
-        lock(&session, "project")?.scene_open(&PathBuf::from(path))
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Open")?;
+        s.scene_open(&PathBuf::from(path))
     })
     .await
 }
@@ -316,9 +359,11 @@ pub async fn model_import(
     unit: String,
     up: String,
 ) -> CmdResult<SceneState> {
-    let session = state.session.clone();
+    let (session, slot) = (state.session.clone(), state.run.clone());
     guard::blocking("model_import", move || {
-        lock(&session, "project")?.model_import(&PathBuf::from(path), &unit, &up)
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Import")?;
+        s.model_import(&PathBuf::from(path), &unit, &up)
     })
     .await
 }
@@ -367,6 +412,137 @@ pub async fn scene_mesh(state: State<'_, AppState>) -> CmdResult<Response> {
         Ok(Response::new(lock(&session, "project")?.mesh()?))
     })
     .await
+}
+
+// ---- M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.2) --------------------------------------
+
+/// Starts a run of the open project, saved and unblocked, with `solver` (`spps` or `tcr`), and
+/// returns at once. The run streams its events into `on_event`, batched, `last: true` at the end.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_start(
+    state: State<'_, AppState>,
+    solver: String,
+    on_event: Channel<RunStreamBatch>,
+) -> CmdResult<RunStarted> {
+    let (session, slot, solvers) = (
+        state.session.clone(),
+        state.run.clone(),
+        state.solvers.clone(),
+    );
+    guard::blocking("run_start", move || {
+        runs::start(&session, &slot, &solvers, &solver, on_event)
+    })
+    .await
+}
+
+/// Cancels the active run through its token; the core's process layer ends the Job Object.
+/// `true` when a run was active.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_cancel(state: State<'_, AppState>) -> CmdResult<bool> {
+    let slot = state.run.clone();
+    guard::blocking("run_cancel", move || Ok(lock(&slot, "run")?.cancel())).await
+}
+
+/// The open project's file, or why there is none.
+fn project_path(session: &Mutex<Session>) -> CmdResult<Option<PathBuf>> {
+    let s = lock(session, "project")?;
+    if s.info().is_none() {
+        return Err(CmdError::new("NO_PROJECT", "no project is open"));
+    }
+    Ok(s.path().map(std::path::Path::to_path_buf))
+}
+
+/// Every run of the open project, from the `run.json` files under `<project folder>/runs`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn runs_list(state: State<'_, AppState>) -> CmdResult<RunsView> {
+    let (session, slot) = (state.session.clone(), state.run.clone());
+    guard::blocking("runs_list", move || {
+        let Some(path) = project_path(&session)? else {
+            // Never saved: no runs root yet, so no runs.
+            return Ok(RunsView {
+                root: String::new(),
+                rows: Vec::new(),
+                other_projects: 0,
+                active: None,
+            });
+        };
+        let active = lock(&slot, "run")?.active_run().map(str::to_string);
+        runs::list(&runs::runs_root(&path), &path, active.as_deref())
+    })
+    .await
+}
+
+/// Whether the run `run` (a bare run-folder name) has results that verify. Never a value.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_results(state: State<'_, AppState>, run: String) -> CmdResult<ResultsState> {
+    let session = state.session.clone();
+    guard::blocking("run_results", move || {
+        let path = project_path(&session)?.ok_or_else(|| {
+            CmdError::new(
+                "RUN_NOT_FOUND",
+                format!("no run '{run}': the project has no runs"),
+            )
+        })?;
+        runs::results_state(&runs::runs_root(&path), &run)
+    })
+    .await
+}
+
+/// Opens an upstream I-Simpa `.proj` as a new, unsaved project.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn proj_import(state: State<'_, AppState>, path: String) -> CmdResult<SceneState> {
+    let (session, slot) = (state.session.clone(), state.run.clone());
+    guard::blocking("proj_import", move || {
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Open")?;
+        s.proj_import(&PathBuf::from(path))
+    })
+    .await
+}
+
+/// Upstream's reference materials but the placeholder, with the core's exact values.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn material_library() -> CmdResult<Vec<LibraryMaterial>> {
+    guard::blocking("material_library", || Ok(runs::material_library())).await
+}
+
+/// The four executables a run needs, found and checked against the verified build.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn solvers_status(state: State<'_, AppState>) -> CmdResult<SolversStatus> {
+    let solvers = state.solvers.clone();
+    guard::blocking("solvers_status", move || runs::solvers_status(&solvers)).await
+}
+
+/// Registers the UI's app-event channel (the close request). Until it is registered, a close
+/// request is let through. The UI registers a fresh channel as soon as a close request reaches
+/// it: that is its acknowledgement, so the request no longer counts as unanswered, and the next
+/// close goes to the UI (the save prompt) instead of closing past it. A hung UI acknowledges
+/// nothing, and its window closes on a request made once the first has gone unanswered for
+/// [`CloseState::HUNG_UI`].
+#[tauri::command(rename_all = "snake_case")]
+pub async fn app_events(state: State<'_, AppState>, on_event: Channel<AppEvent>) -> CmdResult<()> {
+    let (slot, close) = (state.ui_events.clone(), state.close.clone());
+    guard::blocking("app_events", move || {
+        *lock(&slot, "app events")? = Some(on_event);
+        lock(&close, "close")?.requested = None;
+        Ok(())
+    })
+    .await
+}
+
+/// The UI's answer to a close request, once the save prompt is dealt with: cancels any active
+/// run, waits up to 3 s for its `run.json`, then exits.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn app_quit(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
+    let (slot, close) = (state.run.clone(), state.close.clone());
+    guard::blocking("app_quit", move || {
+        runs::cancel_and_wait(&slot, runs::QUIT_WAIT);
+        lock(&close, "close")?.requested = None;
+        Ok(())
+    })
+    .await?;
+    app.exit(0);
+    Ok(())
 }
 
 /// The UI's self-test result as JSON text. Written to the `--selftest` path, then the app exits

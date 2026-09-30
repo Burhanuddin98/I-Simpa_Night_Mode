@@ -1,0 +1,307 @@
+/* The dock: tabs, Console and Runs (design:175-275). Owned by the dock package
+   (docs/investigations/2026-09-29-m11/PLAN.md 9.2). The tokens are theme.css's. */
+/* Dock (design:175-275) */
+.dock {
+  height: 250px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+.dock-tabs {
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: stretch;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+.dock-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+.dock-tab[aria-selected='true'] {
+  border-bottom-color: var(--red);
+  color: var(--text);
+}
+.dock-tab .tab-badge {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+/* The design's live badge colour (design:112). */
+.dock-tab .tab-badge.live {
+  color: var(--red-hi);
+}
+.dock-body {
+  flex-grow: 1;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.dock-empty {
+  padding: 16px;
+}
+
+/* Console (design:247-257). The tag column fits PROGRESS, the longest label. */
+.console {
+  padding: 8px 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.console-empty {
+  padding: 4px 16px;
+}
+.console-line,
+.console-counts {
+  display: flex;
+  gap: 14px;
+  padding: 4px 16px;
+  user-select: text;
+}
+.console-line .time,
+.console-counts .time {
+  width: 8ch;
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.console-line .tag,
+.console-counts .tag {
+  width: 8ch;
+  flex-shrink: 0;
+}
+.console-line .text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+/* Solver and TetGen text keeps its spaces: it is shown exactly as it was printed. */
+.console-line .verbatim {
+  white-space: pre-wrap;
+}
+.console-line.FAIL {
+  background: rgba(224, 32, 46, 0.08);
+}
+.console-line.FAIL .tag {
+  color: var(--red-hi);
+}
+.console-line.FAIL .text {
+  color: var(--fail-text);
+}
+.console-line.WARN .tag {
+  color: var(--warn);
+}
+.console-line.INFO .tag,
+.console-line.PROGRESS .tag {
+  color: var(--text-2);
+}
+.console-line.OK .tag {
+  color: var(--ok);
+}
+.console-line .note {
+  color: var(--text-3);
+}
+/* A run's counts: under its last line, in the text column. */
+.console-counts {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  padding-top: 0;
+  padding-bottom: 8px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.console-counts .who {
+  color: var(--text-2);
+}
+.console-counts .count .k {
+  color: var(--text-3);
+}
+.console-counts .count [data-count] {
+  color: var(--text);
+}
+.console-counts .count.FAIL .k {
+  color: var(--red-hi);
+}
+.console-counts .count.WARN .k {
+  color: var(--warn);
+}
+.console-counts .count.OK .k {
+  color: var(--ok);
+}
+/* A class with no lines stays grey: a red "FAIL 0" read as a failure (M11 review B.10). */
+.console-counts .count.zero .k {
+  color: var(--text-3);
+}
+.console-counts .counts-check.ok {
+  color: var(--ok);
+}
+.console-counts .counts-check.fail {
+  color: var(--fail-text);
+}
+.dock .flag {
+  font-weight: 600;
+  color: var(--red-hi);
+}
+
+/* Runs (design:259-274) */
+.runs {
+  padding: 6px 16px;
+}
+.runs-head {
+  display: flex;
+  height: 26px;
+  align-items: center;
+  font-size: 11.5px;
+  letter-spacing: 1.2px;
+  border-bottom: 1px solid var(--line);
+}
+.runs-head span:nth-child(1),
+.run-main .c-run {
+  width: 70px;
+  flex-shrink: 0;
+}
+.runs-head span:nth-child(2),
+.run-main .c-variant {
+  width: 170px;
+  flex-shrink: 0;
+}
+.runs-head span:nth-child(3),
+.runs-head span:nth-child(4),
+.run-main .c-solver,
+.run-main .c-status {
+  width: 90px;
+  flex-shrink: 0;
+}
+.runs-empty {
+  padding: 10px 0;
+}
+.run-row {
+  border-bottom: 1px solid var(--line-soft);
+  cursor: pointer;
+}
+.run-row:hover {
+  background: var(--raised);
+}
+.run-row.selected {
+  background: var(--red-wash);
+  box-shadow: inset 2px 0 0 var(--red);
+}
+.run-row:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+}
+/* Cells align to the first line of the Check column: a long reason wraps downward and the
+   run's number, variant, solver and status stay on its first line (a centred row put them
+   mid-way down a failed run's reasons, often below the visible part of the dock). */
+.run-main {
+  display: flex;
+  min-height: 32px;
+  align-items: flex-start;
+  font-size: 13px;
+}
+.run-main > [role='cell'] {
+  padding-top: 6px;
+  line-height: 1.45;
+}
+.run-main .c-run {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.run-main .c-variant {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 8px;
+  box-sizing: border-box;
+}
+.run-main .c-solver {
+  color: var(--text-2);
+}
+.run-main .c-status {
+  font-weight: 500;
+}
+.run-main .c-status.ok {
+  color: var(--ok);
+}
+.run-main .c-status.fail {
+  color: var(--red-hi);
+}
+.run-main .c-status.muted {
+  color: var(--text-2);
+}
+.run-main .c-status.warn {
+  color: var(--warn);
+}
+.run-main .c-status.live {
+  color: var(--text);
+}
+.run-main .c-check {
+  flex-grow: 1;
+  min-width: 0;
+  padding: 6px 0;
+  color: var(--text-3);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.dock .reason-code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.dock .reason-detail.withheld {
+  text-decoration: underline dotted;
+}
+.run-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 2px 0 10px 70px;
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.45;
+  cursor: default;
+  user-select: text;
+}
+.detail-line {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: baseline;
+}
+.detail-line .k {
+  width: 150px;
+  flex-shrink: 0;
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: 11.5px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.detail-line .mono,
+.detail-line .count {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.detail-line .band [data-diagnostic],
+.detail-line [data-manifest-count] {
+  color: var(--text);
+}
+.dock .verified.verified {
+  color: var(--ok);
+}
+.runs-foot {
+  padding: 10px 0 4px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

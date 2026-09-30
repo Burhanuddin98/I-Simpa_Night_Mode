@@ -12,6 +12,23 @@
 //!   computed from the committed files' bytes, not from this recipe's values, and never typed to
 //!   match what the UI produces.
 //!
+//!
+//! The M11 run fixtures (docs/investigations/2026-09-29-m11/PLAN.md, section 5):
+//! - `box_run.simpa`: the teaching room with a fixed SPPS seed, the first whose run lost no
+//!   particle in any band (measured, PROVENANCE.md): "the box" of gate (a).
+//! - `box_long.simpa`: the same with more particles, so that its solve lasts at least 60 s: the
+//!   run gate (d) closes the window on and kills.
+//! - `hall_run.simpa`: `testdata/elmia_corrected.ply` imported by the core, every group on the
+//!   library's "20% absorbing", the first source and two receivers of the hall fixture, SPPS
+//!   energetic with a million particles and a fixed seed: the run gates (b) and (c) measure and
+//!   cancel. Its grouping is the PLY's; the run tests responsiveness and cancel, not physics.
+//! - `tetgen_skips.bat`: a stand-in `tetgen.exe` that plays TetGen 1.6.0 skipping two
+//!   self-intersecting facets (it writes `scene_mesh_skipped.face` and exits 3). The verified
+//!   TetGen 1.5.0 never writes that file, and the geometry check keeps self-intersecting input
+//!   from reaching TetGen at all, so this is the one way a run can end `tetgen_skipped_facets`
+//!   for gate (e). It is named as the fake it is; everything the app shows of that run is read
+//!   from the core's real records.
+//!
 //! Regenerate with SIMPA_WRITE_FIXTURES=1; otherwise every committed file must equal its recipe.
 
 use std::path::PathBuf;
@@ -26,6 +43,23 @@ use simpa_core::schema::{
 use simpa_core::validate::validate;
 
 const ROOM: &str = "tests/fixtures/ui/teaching_room.simpa";
+const BOX_RUN: &str = "tests/fixtures/ui/box_run.simpa";
+const BOX_LONG: &str = "tests/fixtures/ui/box_long.simpa";
+const HALL_RUN: &str = "tests/fixtures/ui/hall_run.simpa";
+const TETGEN_SKIPS: &str = "tests/fixtures/ui/tetgen_skips.bat";
+
+/// The SPPS seed of `box_run.simpa`: the first of 1, 2, 3, ... whose run of the teaching room at
+/// 150,000 particles lost no particle in any of its 6 bands, with the verified solvers
+/// (PROVENANCE.md lists every seed tried and its losses).
+const BOX_SEED: u32 = 5;
+/// Particles per source of `box_long.simpa`: measured so that its solve lasts at least 60 s
+/// (PROVENANCE.md).
+const BOX_LONG_PARTICLES: u32 = 7_000_000;
+/// The hall's seed (any fixed value: it makes SPPS single-threaded and the run reproducible).
+const HALL_SEED: u32 = 1;
+const HALL_PARTICLES: u32 = 1_000_000;
+/// Upstream's reference material id of the library's "20% absorbing".
+const HALL_MATERIAL: u32 = 22;
 const TSV: &str = "tests/fixtures/ui/materials_6x6.tsv";
 const EXPECTED: &str = "tests/fixtures/ui/materials_6x6.expected.json";
 
@@ -266,13 +300,160 @@ fn read_tsv(bytes: &[u8]) -> Vec<Vec<f64>> {
         .collect()
 }
 
-/// One test, three steps in order: each later step reads the files the earlier ones committed,
+/// One test, the steps in order: each later step reads the files the earlier ones committed,
 /// and separate tests would run in parallel and race on them under SIMPA_WRITE_FIXTURES.
 #[test]
 fn ui_fixtures_match_their_recipes() {
     teaching_room_matches_its_recipe_and_passes_every_check();
     materials_tsv_matches_its_recipe();
     the_expected_project_is_the_core_s_output_for_the_committed_files();
+    the_run_fixtures_match_their_recipes();
+}
+
+/// The checks every run fixture passes: the M4 check is ok, and the validator finds no error
+/// (so no run blocker is the project's; the app adds only the solver and run-slot blockers).
+fn runnable(label: &str, p: &Project) {
+    let report = check(&p.geometry);
+    assert!(report.is_ok(), "{label}: {:?}", report.reasons);
+    let errors: Vec<_> = validate(p)
+        .into_iter()
+        .filter(|i| i.severity == simpa_core::validate::Severity::Error)
+        .collect();
+    assert!(errors.is_empty(), "{label}: {errors:#?}");
+    assert!(
+        !p.materials
+            .iter()
+            .any(simpa_core::validate::is_placeholder_material),
+        "{label}: no placeholder material"
+    );
+}
+
+/// The teaching room at `BOX_SEED`.
+fn box_run() -> Project {
+    let mut p = teaching_room();
+    p.solvers.spps.random_seed = BOX_SEED;
+    p
+}
+
+fn box_long() -> Project {
+    let mut p = box_run();
+    p.solvers.spps.particles_per_source = BOX_LONG_PARTICLES;
+    p
+}
+
+/// The corrected hall as the app would build it: the core's PLY import (m, z up), the library's
+/// "20% absorbing" on every group in place of the placeholder, the hall fixture's first source
+/// and first two receivers with nothing pinned, SPPS energetic at `HALL_PARTICLES` and
+/// `HALL_SEED`, the import's own 6 octave bands.
+fn hall_run() -> Project {
+    use simpa_core::geometry::import::{
+        ImportOptions, Unit, Up, import_file, library_material, reference_material,
+    };
+    let mut p = import_file(
+        &repo("testdata/elmia_corrected.ply"),
+        &ImportOptions::new(Unit::Metre, Up::Z),
+    )
+    .unwrap()
+    .to_project("elmia_corrected");
+    assert_eq!(p.bands, BandSet::default(), "octave bands, 125 Hz to 4 kHz");
+    let n = p.bands.len();
+    let reference = reference_material(HALL_MATERIAL).unwrap();
+    assert_eq!(reference.name, "20% absorbing");
+    let material = library_material(reference, MaterialId::from_u128(0x500), n);
+    p.materials = vec![material.clone()];
+    for g in &mut p.surface_groups {
+        g.material = material.id;
+    }
+    let hall = schema::load(&repo("tests/fixtures/rooms/elmia_corrected.simpa")).unwrap();
+    let mut source = hall.sources[0].clone();
+    source.solver_id = None;
+    source.id = SourceId::from_u128(0x600);
+    p.sources = vec![source];
+    p.point_receivers = hall.point_receivers[..2]
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let mut r = r.clone();
+            r.solver_id = None;
+            r.id = PointReceiverId::from_u128(0x700 + i as u128);
+            r
+        })
+        .collect();
+    p.solvers.spps.method = simpa_core::schema::ComputationMethod::Energetic;
+    p.solvers.spps.particles_per_source = HALL_PARTICLES;
+    p.solvers.spps.random_seed = HALL_SEED;
+    p.check_integrity().expect("the hall run is consistent");
+    p
+}
+
+/// TetGen 1.6.0 skipping two input facets as self-intersecting: `scene_mesh_skipped.face` with
+/// the rows `mesh_project.rs`'s fake writes (facets 8 and 9 of the scene), exit 3. CRLF, as
+/// `cmd.exe` reads a batch file; `(...)> file` so that no digit before `>` is read as a handle.
+fn tetgen_skips() -> String {
+    [
+        "@echo off",
+        "rem A stand-in for tetgen.exe, for the M11 gate's mesh-failure run (gate (e)) only:",
+        "rem it plays TetGen 1.6.0 skipping two self-intersecting facets. The verified",
+        "rem TetGen 1.5.0 never writes this file (docs/investigations/2026-09-29-m11/PLAN.md, 5).",
+        "(echo 2 1& echo 1 1 2 3 8& echo 2 1 3 4 9)> scene_mesh_skipped.face",
+        "exit /b 3",
+        "",
+    ]
+    .join("\r\n")
+}
+
+fn the_run_fixtures_match_their_recipes() {
+    let room = teaching_room();
+    for (rel, p) in [
+        (BOX_RUN, box_run()),
+        (BOX_LONG, box_long()),
+        (HALL_RUN, hall_run()),
+    ] {
+        check_or_write(rel, schema::to_json(&p).as_bytes());
+        let loaded = schema::load(&repo(rel)).unwrap();
+        assert_eq!(loaded, p, "{rel}");
+        runnable(rel, &p);
+    }
+    // The box differs from the teaching room in its seed only, and the long box from the box in
+    // its particle count only.
+    let (b, l) = (box_run(), box_long());
+    assert_ne!(room.solvers.spps.random_seed, b.solvers.spps.random_seed);
+    let mut back = b.clone();
+    back.solvers.spps.random_seed = room.solvers.spps.random_seed;
+    assert_eq!(back, room);
+    let mut back = l.clone();
+    back.solvers.spps.particles_per_source = b.solvers.spps.particles_per_source;
+    assert_eq!(back, b);
+    assert!(l.solvers.spps.particles_per_source > b.solvers.spps.particles_per_source);
+    // The hall: the PLY's 7,860 faces in 10 groups, closed, every group on "20% absorbing" with
+    // the f32-widened 0.2 a `.proj` import gives it.
+    let h = hall_run();
+    let report = check(&h.geometry);
+    assert_eq!(
+        (
+            report.counts.faces,
+            report.counts.open_edges,
+            h.surface_groups.len()
+        ),
+        (7860, 0, 10)
+    );
+    assert_eq!(h.materials.len(), 1);
+    assert_eq!(h.materials[0].name, "20% absorbing");
+    assert!(
+        h.materials[0].absorption.iter().all(|a| a.get() == 0.2),
+        "{:?}",
+        h.materials[0].absorption
+    );
+    assert_eq!((h.sources.len(), h.point_receivers.len()), (1, 2));
+
+    let bat = tetgen_skips();
+    check_or_write(TETGEN_SKIPS, bat.as_bytes());
+    assert!(bat.ends_with("exit /b 3\r\n"));
+    assert_eq!(
+        bat.matches("\r\n").count(),
+        bat.matches('\n').count(),
+        "CRLF only"
+    );
 }
 
 fn teaching_room_matches_its_recipe_and_passes_every_check() {

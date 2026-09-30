@@ -7,8 +7,12 @@
 // - The display never rounds without marking it (`≈`).
 // - Messages: the validator's issues on the cells, the checked apply's refusals, and the UI's own
 //   refusals, as "FAIL <CODE>: message" under the grid with the cells outlined.
+// - M11 (row 22): the Law column after the bands, one select per material (M5, `replace_material`,
+//   one undo step), and "+ From library" beside + Material (M1, LibraryMenu). The Law column is
+//   outside the cell cursor: the arrows, Tab, Ctrl+A, copy and paste still cover the bands only.
 //
-// It writes only through `actions.apply` with `ops`.
+// It writes only through `actions.apply` with `ops`, and `actions.setLaw` and
+// `actions.addFromLibrary`, which do the same.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import * as actions from '../../actions';
 import type { Material, Op } from '../../bindings/schema';
@@ -20,6 +24,8 @@ import { registerHook } from '../../testhooks';
 import { bandColumns, type BandColumn, type F64 } from './bands';
 import { boundsOf, clampCell, inRect, planFill, rectOf, type Cell } from './fill';
 import { dismiss, errorOf, IssueLines, lineOf, visibleRefusals, type Line } from './inline';
+import { changesLaw, LAWS, lawOf, lawState, lawTitle, lawValue, PER_BAND, SEMI_DIFFUSE_NOTE, usesLaw } from './law';
+import { LibraryMenu } from './LibraryMenu';
 import { newMaterial, nextSort, sortRows, transmissionText, usage, type Quantity, type SortState } from './model';
 import { planPaste } from './paste';
 import { displayValue, formatExact, ROUNDED_MARK, toTsv } from './tsv';
@@ -54,6 +60,11 @@ interface LocalIssue {
 const localStore = new Store<{ load: string; issues: LocalIssue[] }>({ load: '', issues: [] });
 
 const cellKey = (id: string, q: Quantity, band: number) => `${id}/${q}/${band}`;
+/** A material's law cell, keyed as an issue on the material's `reflection_law` field is. */
+const lawKey = (id: string) => `${id}/reflection_law`;
+/** A control of its own inside the grid (the Law select): the grid's keys and clipboard leave it alone. */
+const ownControl = (el: EventTarget | Element | null) =>
+  el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement;
 const QUANTITIES: readonly Quantity[] = ['absorption', 'scattering'];
 const ARROWS: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
 const EMPTY: readonly Material[] = [];
@@ -123,6 +134,23 @@ export function MaterialsGrid() {
     pendingRow.current = null;
     setUi({ cursor: { row: at, col: -1 }, extent: { row: at, col: -1 } });
   }, [rows]);
+  const rowsRef = useRef(rows);
+  useLayoutEffect(() => {
+    rowsRef.current = rows;
+  });
+
+  /** A row the library added (known only once its add resolved): focus it now if it is drawn,
+   * else when it is. */
+  const focusAdded = (id: string) => {
+    gridRef.current?.focus({ preventScroll: true });
+    const at = rowsRef.current.findIndex((m) => m.id === id);
+    if (at < 0) {
+      pendingRow.current = id;
+      return;
+    }
+    pendingRow.current = null;
+    setUi({ cursor: { row: at, col: -1 }, extent: { row: at, col: -1 } });
+  };
 
   // Keep the focused cell in view while the grid has focus.
   useEffect(() => {
@@ -219,6 +247,18 @@ export function MaterialsGrid() {
     run(removeMaterial(m.id), ROWS_KEY, [`${m.id}/`]);
   };
 
+  /** One law for every band of `m` (row 22, M5): one `replace_material`, one undo step; the same
+   * law again is no edit. */
+  const commitLaw = (m: Material, value: string) => {
+    attempt();
+    const law = lawOf(value);
+    if (!law || !changesLaw(m, law)) return;
+    actions.setLaw(m.id, law).catch((e: unknown) => {
+      const err = errorOf(e);
+      setLocal([{ code: err.code, message: err.message, cells: [lawKey(m.id)] }]);
+    });
+  };
+
   const copyText = () => {
     const lines: string[][] = [];
     for (let row = rect.r0; row <= rect.r1; row++) {
@@ -262,7 +302,7 @@ export function MaterialsGrid() {
   // ---- keys and mouse -------------------------------------------------------------------------
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (editing || e.target instanceof HTMLInputElement) return;
+    if (editing || ownControl(e.target)) return;
     const ctrl = e.ctrlKey || e.metaKey;
     const handled = () => {
       e.preventDefault();
@@ -408,7 +448,7 @@ export function MaterialsGrid() {
     const mine = (e: Event) => {
       const grid = gridRef.current;
       const active = document.activeElement;
-      if (!grid || active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return false;
+      if (!grid || ownControl(active)) return false;
       return grid.contains(active) || (e.target instanceof Node && grid.contains(e.target));
     };
     const onCopy = (e: ClipboardEvent) => {
@@ -547,6 +587,9 @@ export function MaterialsGrid() {
                     </th>
                   );
                 })}
+                <th className="mg-head mg-law" scope="col" data-part="law-head" title="Reflection law: the shape of the diffuse part of each reflection">
+                  Law
+                </th>
               </tr>
             </thead>
             <tbody data-input="">
@@ -600,6 +643,7 @@ export function MaterialsGrid() {
                         </td>
                       );
                     })}
+                    <LawCell material={m} frequencies={frequencies ?? []} issue={bad.get(lawKey(m.id))} onChoose={commitLaw} />
                   </tr>
                 );
               })}
@@ -612,6 +656,11 @@ export function MaterialsGrid() {
         <button type="button" data-action="add-material" onMouseDown={keepFocus} onClick={tool(addRow)}>
           + Material
         </button>
+        <LibraryMenu
+          onAttempt={attempt}
+          onAdded={focusAdded}
+          onFailed={(code, message) => setLocal([{ code, message, cells: [] }])}
+        />
         <button
           type="button"
           data-action="delete-material"
@@ -636,16 +685,64 @@ export function MaterialsGrid() {
       {anyRounded && (
         <div className="mg-note">{ROUNDED_MARK} rounded for display. The stored value, and what Ctrl+C copies, are exact.</div>
       )}
+      {materials.some((m) => usesLaw(m, 'semi_diffuse')) && (
+        <div className="mg-note" data-part="law-note">
+          {SEMI_DIFFUSE_NOTE}
+        </div>
+      )}
       <IssueLines lines={lines} part="grid-issues" />
       {focused && (
         <div className="mat-row" title="Transmission is read-only in this version">
           <span>
-            Transmission <span className="mg-of">· {focused.name}</span>
+            Transmission{' '}
+            <span className="mg-of" data-input="">
+              · {focused.name}
+            </span>
           </span>
           <span className="mono">{transmissionText(focused)}</span>
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * A material's reflection law (row 22, M5): a select of the seven laws, or "per band" for a law
+ * per band (only a `.proj` import makes one; each band's law is in the tooltip). Choosing a law
+ * sets it for every band. `[data-law=<material id>]`; outlined, with the FAIL line under the grid,
+ * when an issue or a refusal names the law.
+ */
+function LawCell(props: {
+  material: Material;
+  frequencies: readonly number[];
+  issue: string | undefined;
+  onChoose: (m: Material, value: string) => void;
+}) {
+  const { material: m, frequencies, issue, onChoose } = props;
+  const state = lawState(m);
+  return (
+    <td className={`mg-law-cell${issue ? ' bad' : ''}`} data-cell-issue={issue}>
+      <select
+        className="mg-law-select"
+        data-law={m.id}
+        data-law-state={state.kind}
+        aria-label={`${m.name}: reflection law`}
+        title={`${lawTitle(state, frequencies)}${issue ? `\nFAIL ${issue}` : ''}`}
+        value={lawValue(state)}
+        onChange={(e) => onChoose(m, e.target.value)}
+      >
+        {state.kind === 'per_band' && (
+          <option value={PER_BAND} disabled>
+            per band
+          </option>
+        )}
+        {LAWS.map((o) => (
+          <option key={o.law} value={o.law} title={o.note || undefined}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </td>
   );
 }
 

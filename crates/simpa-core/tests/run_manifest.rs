@@ -44,6 +44,7 @@ fn sample() -> RunManifest {
             path: r"C:\solvers\spps.exe".into(),
             sha256: sha256_bytes(b"exe"),
         },
+        solvers: None,
         argv: vec!["config.xml".into()],
         cwd: r"C:\runs\20260923-191500-123-spps\solve".into(),
         started: "2026-09-23T19:15:00.123+02:00".into(),
@@ -128,6 +129,33 @@ fn the_field_names_are_fixed() {
     assert_eq!(v["stage"], "solve");
     assert_eq!(v["exit_class"], 5);
     assert_eq!(v["particles"]["bands"][0]["total"], 10_000);
+}
+
+/// `solvers` (M11 C7): absent when no check was asked for, so a manifest without the key (every
+/// CLI and bed manifest, and those written before M11) reads as `None` and writes back byte for
+/// byte; present with the checks when the run verified its executables.
+#[test]
+fn the_solver_checks_are_written_only_when_made() {
+    let json = sample().to_json();
+    assert!(!json.contains("\"solvers\""), "{json}");
+    let back = RunManifest::from_json(&json).unwrap();
+    assert_eq!(back.solvers, None);
+    assert_eq!(back.to_json(), json);
+    let checked = RunManifest {
+        solvers: Some(vec![simpa_core::bed::pe::SolverCheck {
+            name: "spps.exe".into(),
+            path: r"C:\solvers\spps.exe".into(),
+            code_sha256: Some(sha256_bytes(b"code")),
+            raw_sha256: Some(sha256_bytes(b"exe")),
+            manifest_code_sha256: Some(sha256_bytes(b"code")),
+            matches: true,
+            detail: None,
+        }]),
+        ..sample()
+    };
+    let json = checked.to_json();
+    assert!(json.contains("\"solvers\": ["), "{json}");
+    assert_eq!(RunManifest::from_json(&json).unwrap(), checked);
 }
 
 #[test]

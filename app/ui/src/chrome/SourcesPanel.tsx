@@ -4,6 +4,10 @@
 // inline `[data-issue-code]` messages from the refusals and the validator; a source's emission,
 // read-only, inside `[data-input]` (PLAN.md 7.5, point 6). Then the sources and receivers with
 // + Source, + Receiver and Place in view; Del removes and F2 renames the selection.
+//
+// M11 (row 22, M26): each source in the list has its on/off switch (`[data-source-toggle]`, the
+// scene list's `SourceSwitch`, here with its state as text), and a disabled source reads "off"
+// in the list and in its editor's head. A refused switch is shown under the sources.
 import { useEffect, useRef, useState, type Ref } from 'react';
 import * as actions from '../actions';
 import type { PointReceiver, SceneState, Source, UiIssue } from '../bindings/ipc';
@@ -11,7 +15,7 @@ import { fieldKey, issuesByEntity, issuesForField } from '../issues';
 import { NOT_A_NUMBER, parseStrictDecimal } from '../numbers';
 import { moveReceiver, moveSource, rename } from '../ops';
 import { refusalStore, sceneStore, selectionStore, toolStore, useStore } from '../store';
-import { IssueTag } from './ScenePanel';
+import { IssueTag, SourceSwitch, toggleRefusals } from './ScenePanel';
 import {
   AXES,
   coord,
@@ -221,8 +225,9 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
   );
   const removeRefused = refusedFor(entityKey(kind, id));
   const errors = worstSeverity(scene.issues.filter((i) => i.entity?.kind === kind && i.entity.id === id)) === 'error';
-  const where = scene.check?.verdict === 'ok' && !errors ? ' · inside the room' : '';
   const source = kind === 'source' ? (point as Source) : null;
+  // A disabled source is not checked against the room (the validator reads enabled ones only).
+  const where = source && !source.enabled ? ' · off' : scene.check?.verdict === 'ok' && !errors ? ' · inside the room' : '';
 
   return (
     <>
@@ -299,11 +304,7 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
             <span>Directivity</span>
             <span>{directivityName(source.directivity)}</span>
           </div>
-          <div className="kv">
-            <span>State</span>
-            <span>{source.enabled ? 'on' : 'off'}</span>
-          </div>
-          <div className="hint">Read-only in this build.</div>
+          <div className="hint">Read-only in this build. The switch in the list below turns the source on or off.</div>
         </div>
       )}
     </>
@@ -313,7 +314,9 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
 function PointRow({ scene, kind, point, on }: { scene: SceneState; kind: Kind; point: Point; on: boolean }) {
   const issues = issuesByEntity(scene.issues).get(`${kind}:${point.id}`) ?? [];
   const [x, y, z] = point.position;
-  return (
+  const source = kind === 'source' ? (point as Source) : null;
+  const off = source !== null && !source.enabled;
+  const row = (
     <button
       className="point-row"
       data-point-row={`${kind}:${point.id}`}
@@ -324,12 +327,24 @@ function PointRow({ scene, kind, point, on }: { scene: SceneState; kind: Kind; p
       <span className="point-pos mono">
         ({coord(x, 2)}, {coord(y, 2)}, {coord(z, 2)})
       </span>
+      {off && (
+        <span className="point-state off" data-part="source-off">
+          off
+        </span>
+      )}
       {issues.length ? (
         <IssueTag issues={issues} />
       ) : (
-        <span className="point-state">{scene.check?.verdict === 'ok' ? 'inside' : ''}</span>
+        !off && <span className="point-state">{scene.check?.verdict === 'ok' ? 'inside' : ''}</span>
       )}
     </button>
+  );
+  if (!source) return row;
+  return (
+    <div className="point-line">
+      {row}
+      <SourceSwitch source={source} />
+    </div>
   );
 }
 
@@ -406,6 +421,7 @@ export function SourcesPanel() {
         ))}
         {!view.sources.length && <div className="empty">No sources yet.</div>}
         <Issues refused={refusals.get(fieldKey('source', 'new', 'position')) ?? []} current={[]} />
+        <Issues refused={toggleRefusals(refusals)} current={[]} />
       </div>
 
       <div className="props-section">

@@ -1,6 +1,18 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { assignMaterial, batch, moveReceiver, nextName, opText, setMaterialBand } from './ops.ts';
+import type { Material } from './bindings/schema.ts';
+import {
+  assignMaterial,
+  batch,
+  libraryMaterial,
+  moveReceiver,
+  nextName,
+  opText,
+  replaceMaterial,
+  setMaterialBand,
+  setSourceEnabled,
+  withLaw,
+} from './ops.ts';
 
 test('opText keeps the sign of -0 and writes it as -0.0', () => {
   const text = opText(moveReceiver('r', [-0, 0, 1.5]));
@@ -43,4 +55,31 @@ test('nextName takes the first free number', () => {
   assert.equal(nextName('R', ['R1', 'R2', 'R3']), 'R4');
   assert.equal(nextName('R', ['R1', 'R3']), 'R2');
   assert.equal(nextName('S', []), 'S1');
+});
+
+test('setSourceEnabled and replaceMaterial are the core ops', () => {
+  assert.equal(opText(setSourceEnabled('s', false)), '{"op":"set_source_enabled","id":"s","enabled":false}');
+  const m = libraryMaterial({ reference_id: 21, name: '30% absorbing', absorption: 0.3, color: '#b2b2b2' }, 'm1', 2);
+  assert.equal(
+    opText(replaceMaterial(m)),
+    '{"op":"replace_material","material":{"id":"m1","name":"30% absorbing","color":"#b2b2b2",' +
+      '"absorption":[0.3,0.3],"scattering":[0,0],"reflection_law":"specular",' +
+      '"transmission_loss_db":null,"double_sided":true,"solver_id":null}}',
+  );
+});
+
+test('a library material carries the core value in every band, nothing pinned', () => {
+  const m = libraryMaterial({ reference_id: 22, name: '20% absorbing', absorption: 0.2, color: '#cccccc' }, 'x', 6);
+  assert.deepEqual(m.absorption, [0.2, 0.2, 0.2, 0.2, 0.2, 0.2]);
+  assert.deepEqual(m.scattering, [0, 0, 0, 0, 0, 0]);
+  assert.equal(m.solver_id, null);
+  assert.equal(m.reflection_law, 'specular');
+});
+
+test('withLaw sets one law for every band, a per-band law included', () => {
+  const m = libraryMaterial({ reference_id: 22, name: 'x', absorption: 0.2, color: '#cccccc' }, 'x', 2);
+  const perBand: Material = { ...m, reflection_law: ['specular', 'lambert'] as unknown as Material['reflection_law'] };
+  assert.equal(withLaw(perBand, 'lambert').reflection_law, 'lambert');
+  assert.equal(withLaw(m, 'w2').reflection_law, 'w2');
+  assert.equal(m.reflection_law, 'specular', 'the input is not changed');
 });

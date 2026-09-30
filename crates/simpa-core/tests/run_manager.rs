@@ -28,6 +28,7 @@ fn options(label: &str, solver: SolverKind, exe: PathBuf) -> RunOptions {
         loss_limit: DEFAULT_LOSS_LIMIT,
         cancel_after_ms: None,
         cancel_after_progress: None,
+        verify: None,
     }
 }
 
@@ -49,7 +50,7 @@ fn folder(case: &str, opts: &RunOptions) -> (RunReport, Vec<Stage>, usize) {
         &mut |e: &RunEvent| match e {
             RunEvent::Stage(s) => stages.push(*s),
             RunEvent::SolverLine(_) => lines += 1,
-            RunEvent::MeshLine(_) => {}
+            RunEvent::MeshLine(_) | RunEvent::Started(_) => {}
         },
     )
     .unwrap_or_else(|e| panic!("{case}: {e}"));
@@ -588,5 +589,384 @@ fn a_project_meshed_through_preprocess_is_checked_by_the_mesher() {
     assert!(
         !m.verdict.codes().contains(&codes::GEOMETRY_REFUSED),
         "{m:#?}"
+    );
+}
+
+// ---- M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.9: C5, C6, C7) -------------------------
+
+/// What a run reported, owned: `Started`'s folder, stage names, and counts of the line events.
+#[derive(Debug, Default)]
+struct Events {
+    order: Vec<String>,
+    started: Vec<PathBuf>,
+}
+
+impl Events {
+    fn sink(&mut self) -> impl FnMut(&RunEvent) + '_ {
+        |e: &RunEvent| match e {
+            RunEvent::Started(dir) => {
+                self.order.push("started".into());
+                self.started.push(dir.to_path_buf());
+            }
+            RunEvent::Stage(s) => self.order.push(format!("stage {s:?}")),
+            RunEvent::MeshLine(_) => self.order.push("mesh line".into()),
+            RunEvent::SolverLine(_) => self.order.push("solver line".into()),
+        }
+    }
+
+    /// `Started` came first, once, and named the folder that holds `run.json`.
+    fn assert_started_first(&self, r: &RunReport, label: &str) {
+        assert_eq!(
+            self.order.first().map(String::as_str),
+            Some("started"),
+            "{label}: {:?}",
+            self.order
+        );
+        assert_eq!(self.started, std::slice::from_ref(&r.dir), "{label}");
+        assert!(self.started[0].join("run.json").is_file(), "{label}");
+        assert!(self.started[0].is_absolute(), "{label}");
+    }
+}
+
+/// A manifest of the verified build made from the files themselves: whatever build the tests
+/// run with, its own code sha256s are the "verified" ones.
+fn manifest_of(names: &[&str]) -> simpa_core::bed::pe::SolverManifest {
+    let mut code = std::collections::BTreeMap::new();
+    let mut raw = std::collections::BTreeMap::new();
+    for name in names {
+        let (c, r) = simpa_core::bed::pe::file_hashes(&solver_exe(name)).unwrap();
+        code.insert(name.to_string(), c);
+        raw.insert(name.to_string(), r);
+    }
+    simpa_core::bed::pe::SolverManifest {
+        code_sha256: code,
+        sha256: raw,
+    }
+}
+
+fn run_with_events(
+    file: &Path,
+    variant: Option<&str>,
+    mesh: &MeshChoice,
+    opts: &RunOptions,
+) -> (RunReport, Events) {
+    let mut events = Events::default();
+    let r = run_project(
+        file,
+        variant,
+        mesh,
+        opts,
+        &CancelToken::new(),
+        &mut events.sink(),
+    )
+    .unwrap_or_else(|e| panic!("{}: {e}", file.display()));
+    (r, events)
+}
+
+/// C6: `RunEvent::Started` is the first event of every run that gets a folder, refused at any
+/// stage, launched, or a fixture folder, and it names the folder `run.json` is written into.
+#[test]
+fn the_first_event_names_the_run_folder() {
+    let spps = options("m11-started", SolverKind::Spps, exe_for(SolverKind::Spps));
+    let box_ = fixture("rooms/tutorial1_box_seeded.simpa");
+    let empty = fresh_dir("m11-started-empty-mesh");
+    for (label, file, variant, mesh, stage) in [
+        (
+            "geometry",
+            fixture("geometry/two_boxes_interpenetrating.simpa"),
+            None,
+            tetgen(),
+            Stage::Geometry,
+        ),
+        (
+            "validate",
+            fixture("negative/schema/source_none.simpa"),
+            None,
+            tetgen(),
+            Stage::Validate,
+        ),
+        (
+            "mesh",
+            box_.clone(),
+            None,
+            MeshChoice::Reuse(empty.clone()),
+            Stage::Mesh,
+        ),
+        (
+            "export",
+            box_.clone(),
+            Some("no such variant"),
+            tetgen(),
+            Stage::Export,
+        ),
+    ] {
+        let (r, events) = run_with_events(&file, variant, &mesh, &spps);
+        assert_eq!(r.manifest.stage, stage, "{label}");
+        events.assert_started_first(&r, label);
+    }
+    // A launched run, OK.
+    let tcr = options("m11-started-tcr", SolverKind::Tcr, exe_for(SolverKind::Tcr));
+    let (r, events) = run_with_events(&box_, None, &tetgen(), &tcr);
+    assert_eq!(r.manifest.verdict.status, Status::Ok, "{:#?}", r.manifest);
+    events.assert_started_first(&r, "tcr ok");
+    assert!(events.order.iter().any(|e| e == "solver line"));
+    // A fixture folder.
+    let mut events = Events::default();
+    let r = run_folder(
+        &fixture("runs/spps_ok"),
+        &spps,
+        &CancelToken::new(),
+        &mut events.sink(),
+    )
+    .unwrap();
+    events.assert_started_first(&r, "run_folder");
+    // No folder, no event: a file that is not a project.
+    let mut events = Events::default();
+    let e = run_project(
+        &fixture("geometry/box.ply"),
+        None,
+        &tetgen(),
+        &spps,
+        &CancelToken::new(),
+        &mut events.sink(),
+    );
+    assert!(e.is_err());
+    assert!(events.order.is_empty(), "{:?}", events.order);
+}
+
+/// C7: with `verify`, the executables are checked first, stage `solvers`. The build's own hashes
+/// pass and are recorded; a wrong one refuses the run with `solver_unverified`, exit class 2,
+/// with nothing meshed or launched; without `verify` no `solvers` key is written.
+#[test]
+fn a_run_asked_to_verify_its_solvers_checks_them_first() {
+    let box_ = fixture("rooms/tutorial1_box_seeded.simpa");
+    let names = ["classicalTheory.exe", "tetgen.exe", "preprocess.exe"];
+
+    // (1) The build's own hashes: verified, recorded, and the run goes on to its verdict.
+    let mut opts = options("m11-verify-ok", SolverKind::Tcr, exe_for(SolverKind::Tcr));
+    opts.verify = Some(manifest_of(&names));
+    let (r, events) = run_with_events(&box_, None, &tetgen(), &opts);
+    let m = written(&r);
+    assert_eq!(m.verdict.status, Status::Ok, "{m:#?}");
+    assert_eq!(
+        events.order.get(1).map(String::as_str),
+        Some("stage Solvers"),
+        "{:?}",
+        events.order
+    );
+    let checks = m.solvers.as_ref().expect("the checks are recorded");
+    assert_eq!(
+        checks.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
+        names
+    );
+    assert!(checks.iter().all(|c| c.matches), "{checks:#?}");
+    assert!(read_text(&r.dir.join("run.json")).contains("\"solvers\": ["));
+
+    // (2) One wrong hash: refused at stage solvers, exit class 2, no mesh and no launch.
+    let mut wrong = manifest_of(&names);
+    wrong
+        .code_sha256
+        .insert("tetgen.exe".into(), "0".repeat(64));
+    let mut opts = options("m11-verify-bad", SolverKind::Tcr, exe_for(SolverKind::Tcr));
+    opts.verify = Some(wrong);
+    let (r, events) = run_with_events(&box_, None, &tetgen(), &opts);
+    assert_refused(
+        &r,
+        Stage::Solvers,
+        &[codes::SOLVER_UNVERIFIED],
+        ExitClass::Usage,
+    );
+    let m = written(&r);
+    assert_eq!(m.verdict.codes(), [codes::SOLVER_UNVERIFIED]);
+    assert!(m.verdict.reasons[0].detail.contains("tetgen.exe"), "{m:#?}");
+    assert!(!r.dir.join("mesh").exists(), "nothing was meshed");
+    assert!(!r.dir.join("solve").exists(), "nothing was exported");
+    assert_eq!(
+        events.order,
+        ["started", "stage Solvers"],
+        "no stage after the refusal"
+    );
+    let checks = m.solvers.as_ref().unwrap();
+    assert_eq!(
+        checks.iter().filter(|c| !c.matches).count(),
+        1,
+        "{checks:#?}"
+    );
+
+    // (3) No verify: no stage, and no key in the file.
+    let opts = options(
+        "m11-verify-none",
+        SolverKind::Spps,
+        exe_for(SolverKind::Spps),
+    );
+    let (r, events) = run_with_events(
+        &fixture("negative/schema/source_none.simpa"),
+        None,
+        &tetgen(),
+        &opts,
+    );
+    assert!(!events.order.iter().any(|e| e == "stage Solvers"));
+    assert_eq!(written(&r).solvers, None);
+    assert!(!read_text(&r.dir.join("run.json")).contains("\"solvers\""));
+}
+
+/// C5: the hall imported from PLY, every group on upstream's placeholder, with a source and a
+/// receiver: the run is refused at the validate stage with `material_placeholder`, exit class 2,
+/// and the solver is never launched.
+#[test]
+fn a_project_on_the_placeholder_material_is_refused_before_meshing() {
+    use simpa_core::geometry::import::{ImportOptions, Unit, Up, import_file};
+    let mut hall = import_file(
+        &repo_root().join("testdata/elmia_corrected.ply"),
+        &ImportOptions::new(Unit::Metre, Up::Z),
+    )
+    .unwrap()
+    .to_project("elmia_corrected");
+    let reference = simpa_core::schema::load(&fixture("rooms/elmia_corrected.simpa")).unwrap();
+    let mut source = reference.sources[0].clone();
+    source.solver_id = None;
+    let mut receiver = reference.point_receivers[0].clone();
+    receiver.solver_id = None;
+    hall.sources.push(source);
+    hall.point_receivers.push(receiver);
+    let dir = fresh_dir("m11-placeholder");
+    let file = dir.join("placeholder_hall.simpa");
+    simpa_core::schema::save(&hall, &file).unwrap();
+    // The placeholder is the only error: the control that the refusal is its.
+    let errors: Vec<&str> = simpa_core::validate::validate(&hall)
+        .iter()
+        .filter(|i| i.severity == simpa_core::validate::Severity::Error)
+        .map(|i| i.code)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    assert_eq!(errors, ["material_placeholder"]);
+
+    let opts = options(
+        "m11-placeholder-run",
+        SolverKind::Spps,
+        exe_for(SolverKind::Spps),
+    );
+    let r = project("placeholder", &file, &tetgen(), &opts);
+    assert_refused(
+        &r,
+        Stage::Validate,
+        &["material_placeholder"],
+        ExitClass::Usage,
+    );
+    let m = written(&r);
+    assert_eq!(m.verdict.codes(), ["material_placeholder"]);
+    assert!(
+        m.verdict.reasons[0].detail.contains("(and 9 more)"),
+        "one reason per code, the other nine groups counted: {}",
+        m.verdict.reasons[0].detail
+    );
+    assert!(!r.dir.join("mesh").exists(), "nothing was meshed");
+}
+
+/// C5 on every path a run takes: the run validates the materials it exports. `run_project`
+/// exports `variant`'s materials (`None`: the base project); the file's active variant is what
+/// the app shows and passes, but the CLI passes `--variant` as given, or nothing. So the rules
+/// must be judged under the variant exported, not the one the file has active (M11 review 2,
+/// core finding 1). An empty mesh folder stands in for the mesh: a run the validator lets through
+/// is refused at the mesh stage instead, and no solver is launched either way.
+#[test]
+fn the_materials_validated_are_the_materials_exported() {
+    use simpa_core::geometry::import::{REFERENCE_MATERIALS, library_material};
+    use simpa_core::schema::{MaterialId, Variant, VariantId};
+    let base = simpa_core::schema::load(&fixture("rooms/tutorial1_box_seeded.simpa")).unwrap();
+    let n = base.bands.frequencies_hz.len();
+    let placeholder = library_material(&REFERENCE_MATERIALS[0], MaterialId::from_u128(0xd0), n);
+    assert!(simpa_core::validate::is_placeholder_material(&placeholder));
+    let dir = fresh_dir("m11-variant-exported");
+    let empty = fresh_dir("m11-variant-exported-mesh");
+    let opts = options(
+        "m11-variant-exported-runs",
+        SolverKind::Tcr,
+        exe_for(SolverKind::Tcr),
+    );
+    let run = |file: &Path, variant: Option<&str>| {
+        run_project(
+            file,
+            variant,
+            &MeshChoice::Reuse(empty.clone()),
+            &opts,
+            &CancelToken::new(),
+            &mut |_: &RunEvent| {},
+        )
+        .unwrap()
+    };
+    let validates = |p: &simpa_core::schema::Project| {
+        !simpa_core::validate::has_errors(&simpa_core::validate::validate(p))
+    };
+
+    // (1) The base on the placeholder, the active variant "real" choosing every group's own
+    // material: what the app shows validates, but a run with no variant exports the base.
+    let mut p = base.clone();
+    p.materials.push(placeholder.clone());
+    let mut real = Variant {
+        id: VariantId::from_u128(0xd1),
+        name: "real".to_string(),
+        overrides: Vec::new(),
+    };
+    for g in &mut p.surface_groups {
+        real.set_override(g.id, Some(g.material));
+        g.material = placeholder.id;
+    }
+    p.variants.push(real);
+    p.active_variant = Some(VariantId::from_u128(0xd1));
+    assert!(validates(&p), "the control: the active variant validates");
+    let file = dir.join("base_placeholder.simpa");
+    simpa_core::schema::save(&p, &file).unwrap();
+    let r = run(&file, None);
+    assert_refused(
+        &r,
+        Stage::Validate,
+        &["material_placeholder"],
+        ExitClass::Usage,
+    );
+    // The control: the variant with the chosen materials passes the validator.
+    let r = run(&file, Some("real"));
+    assert_refused(&r, Stage::Mesh, &[codes::MESH_MISSING], ExitClass::Mesh);
+
+    // (2) The reverse: the base chooses every material, no variant is active, and the variant
+    // "cli" puts every group on the placeholder.
+    let mut p = base.clone();
+    p.materials.push(placeholder.clone());
+    let mut cli = Variant {
+        id: VariantId::from_u128(0xd2),
+        name: "cli".to_string(),
+        overrides: Vec::new(),
+    };
+    for g in &p.surface_groups {
+        cli.set_override(g.id, Some(placeholder.id));
+    }
+    p.variants.push(cli);
+    p.active_variant = None;
+    assert!(validates(&p), "the control: the base validates");
+    let file = dir.join("variant_placeholder.simpa");
+    simpa_core::schema::save(&p, &file).unwrap();
+    let r = run(&file, Some("cli"));
+    assert_refused(
+        &r,
+        Stage::Validate,
+        &["material_placeholder"],
+        ExitClass::Usage,
+    );
+    let r = run(&file, None);
+    assert_refused(&r, Stage::Mesh, &[codes::MESH_MISSING], ExitClass::Mesh);
+
+    // (3) A file whose active variant does not exist is still refused as it stands, whatever
+    // the run exports.
+    let mut p = base.clone();
+    p.active_variant = Some(VariantId::from_u128(0xd3));
+    let file = dir.join("active_dangling.simpa");
+    std::fs::write(&file, simpa_core::schema::to_json(&p)).unwrap();
+    let r = run(&file, None);
+    assert_refused(
+        &r,
+        Stage::Validate,
+        &["variant_reference_invalid"],
+        ExitClass::Usage,
     );
 }

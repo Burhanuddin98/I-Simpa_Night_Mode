@@ -34,6 +34,15 @@
     "allow-edit-apply",
     "allow-edit-undo",
     "allow-edit-redo",
-    "allow-scene-mesh"
+    "allow-scene-mesh",
+    "allow-run-start",
+    "allow-run-cancel",
+    "allow-runs-list",
+    "allow-run-results",
+    "allow-proj-import",
+    "allow-material-library",
+    "allow-solvers-status",
+    "allow-app-events",
+    "allow-app-quit"
   ]
 }

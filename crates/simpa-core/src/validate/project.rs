@@ -17,6 +17,7 @@ use crate::schema::{
 };
 
 pub(super) fn check(p: &Project, ctx: &Context, out: &mut Vec<Issue>) {
+    placeholders(p, out);
     materials(p, out);
     let triangles = geometry::triangles(&p.geometry);
     sources_and_receivers(p, &triangles, out);
@@ -88,6 +89,29 @@ fn materials_in_use(p: &Project) -> Vec<usize> {
     (0..p.materials.len())
         .filter(|&i| used.contains(&p.materials[i].id))
         .collect()
+}
+
+/// `material_placeholder`: one issue per surface group whose effective material under the active
+/// variant is upstream's placeholder ([`super::is_placeholder_material`]). A group with no
+/// material, or under a variant that does not exist, is `material_unassigned` or
+/// `variant_reference_invalid`, not this.
+fn placeholders(p: &Project, out: &mut Vec<Issue>) {
+    for (i, g) in p.surface_groups.iter().enumerate() {
+        let Some(m) = p.active_material(g.id).and_then(|m| p.material(m)) else {
+            continue;
+        };
+        if super::is_placeholder_material(m) {
+            out.push(issue(
+                MATERIAL_PLACEHOLDER,
+                format!("/surface_groups/{i}/material"),
+                format!(
+                    "surface group '{}' has material '{}', upstream's placeholder for no material \
+                     chosen (absorption and scattering 0 in every band): choose a material for it",
+                    g.name, m.name
+                ),
+            ));
+        }
+    }
 }
 
 fn materials(p: &Project, out: &mut Vec<Issue>) {

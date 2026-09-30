@@ -15,8 +15,11 @@ use simpa_core::schema::{Op, json_schema};
 use crate::bench::Prepared;
 use crate::bridge::{FloatProbe, ProjectInfo};
 use crate::commands::{EventsProbeReport, StartupInfo};
-use crate::events::RunEventBatch;
+use crate::events::{AppEvent, RunEventBatch};
 use crate::guard::CmdError;
+use crate::runs::{
+    LibraryMaterial, ResultsState, RunStarted, RunStreamBatch, RunsView, SolversStatus,
+};
 use crate::scene::{EditOutcome, SceneState};
 
 struct Dump {
@@ -81,6 +84,34 @@ fn dumps() -> Vec<Dump> {
                     "EditOutcome",
                     schema_for!(EditOutcome).to_value(),
                 ),
+                // M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.3).
+                (
+                    "run_started",
+                    "RunStarted",
+                    schema_for!(RunStarted).to_value(),
+                ),
+                (
+                    "run_stream_batch",
+                    "RunStreamBatch",
+                    schema_for!(RunStreamBatch).to_value(),
+                ),
+                ("runs_view", "RunsView", schema_for!(RunsView).to_value()),
+                (
+                    "results_state",
+                    "ResultsState",
+                    schema_for!(ResultsState).to_value(),
+                ),
+                (
+                    "library_material",
+                    "LibraryMaterial",
+                    schema_for!(LibraryMaterial).to_value(),
+                ),
+                (
+                    "solvers_status",
+                    "SolversStatus",
+                    schema_for!(SolversStatus).to_value(),
+                ),
+                ("app_event", "AppEvent", schema_for!(AppEvent).to_value()),
             ],
         },
     ]
@@ -241,6 +272,21 @@ mod tests {
             "Material",
             "Source",
             "PointReceiver",
+            "RunStarted",
+            "RunStreamBatch",
+            "RunStreamEvent",
+            "RunRow",
+            "RunStatusUi",
+            "ReasonUi",
+            "LossUi",
+            "BandLossUi",
+            "LineCounts",
+            "RunsView",
+            "ResultsState",
+            "LibraryMaterial",
+            "SolversStatus",
+            "SolverCheck",
+            "AppEvent",
         ] {
             assert!(defs.contains_key(name), "missing {name}");
         }

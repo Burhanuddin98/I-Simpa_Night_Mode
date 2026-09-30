@@ -2,7 +2,16 @@
 // PLAN.md 2.1. Only actions.ts writes the backend's truth (sceneStore, meshStore); the packages
 // read it and write only their own UI state (selection, tool, step).
 import { useSyncExternalStore } from 'react';
-import type { LineClass, SceneState, UiIssue } from './bindings/ipc';
+import type {
+  LibraryMaterial,
+  LineClass,
+  ResultsState,
+  RunLineClass,
+  RunsView,
+  SceneState,
+  SolversStatus,
+  UiIssue,
+} from './bindings/ipc';
 import type { SceneMesh } from './mesh';
 import type { StepKey } from './steps';
 
@@ -27,10 +36,30 @@ export function useStore<T>(store: Store<T>): T {
   return useSyncExternalStore(store.subscribe, store.get);
 }
 
+/** A Console line's class, as its text label: the core's line classes, PROGRESS included. */
+export type ConsoleTag = LineClass | 'PROGRESS';
+
+/**
+ * A part of a Console line: plain text, or a run diagnostic (M11 PLAN.md 3.4 rule 1) that the
+ * Console renders as a leaf `<span data-diagnostic=field data-run=run>`, so the no-acoustic-number
+ * check can prove it is the manifest's own value.
+ */
+export type LinePart =
+  | { text: string }
+  | { text: string; diagnostic: 'loss_pct' | 'loss_limit_pct' | 'elapsed_s' | 'progress_pct'; run: string };
+
 export interface ConsoleLine {
   time: string;
-  tag: LineClass;
+  tag: ConsoleTag;
   text: string;
+  /** Who wrote it: the app (default), a solver, or TetGen while a run meshes. */
+  source?: 'app' | 'solver' | 'mesh';
+  /** The run a solver or mesh line, or a run's app line, belongs to. */
+  run?: string;
+  /** Solver and TetGen text is verbatim: shown exactly as the program printed it. */
+  verbatim?: boolean;
+  /** `text` split into parts, when some are diagnostics. */
+  parts?: LinePart[];
 }
 
 export const consoleStore = new Store<ConsoleLine[]>([]);
@@ -73,12 +102,81 @@ export const importRequestStore = new Store<{ path: string } | null>(null);
  */
 export const viewportStore = new Store<{ live: boolean; drawnRev: number | null }>({ live: false, drawnRev: null });
 
+// ---- M11 (docs/investigations/2026-09-29-m11/PLAN.md 3.1) -------------------------------------
+
+export type SolverName = 'spps' | 'tcr';
+
+/** The run in progress: written only by the run actions in actions.ts. */
+export interface ActiveRun {
+  /** Which start of this page's this is: a run's stream and its `run_start` answer touch this
+   * store only while it still holds their run (M11 review 2, M3/E1). */
+  id: number;
+  /** The run folder's name, once the core has made it (the `started` event). */
+  run?: string;
+  solver: SolverName;
+  variant: string | null;
+  /** The stage the run is in: solvers, geometry, validate, mesh, export, pre_launch, solve. */
+  stage: string | null;
+  /** The last PROGRESS line's percentage. */
+  progress: number | null;
+  /** The last PROGRESS line's text after its `#`, exactly as the solver printed it. */
+  progressText: string;
+  startedAt: number;
+  status: 'starting' | 'running' | 'cancelling';
+}
+export const runStore = new Store<ActiveRun | null>(null);
+
+export type ClassCounts = Record<RunLineClass, number>;
+
+/**
+ * One run's solver lines as the stream delivered them: counts per class, the core's arrival
+ * indices received (so the e2e can prove none was lost or doubled), and the lines other than
+ * PROGRESS, which are counted, never rendered one by one (T15).
+ */
+/** A run's Console line before it is timed on arrival. */
+export type RunLine = Omit<ConsoleLine, 'time'>;
+
+export interface RunLog {
+  counts: ClassCounts;
+  seqs: Set<number>;
+  dupes: number;
+  lines: RunLine[];
+  /** The stream's own `seq`: the last one received, and whether one was ever skipped. */
+  lastEventSeq: number;
+  gaps: number;
+}
+export const runLinesStore = new Store<ReadonlyMap<string, RunLog>>(new Map());
+
+/** The Runs tab's rows; refreshed on open, save, import, a run's end, and the tab shown. */
+export const runsStore = new Store<RunsView | null>(null);
+/** The run the Results step shows (a Runs row click, the Simulate step's "Run n" link). */
+export const selectedRunStore = new Store<string | null>(null);
+/** Whether each run's results verify: never a value (M12 is the first that may show one). */
+export const resultsStore = new Store<ReadonlyMap<string, ResultsState>>(new Map());
+/** The solver the Simulate step runs: session state, not saved in the project. */
+export const solverStore = new Store<SolverName>('spps');
+/** The four executables, checked against the verified build (at boot and before each run). */
+export const solversStatusStore = new Store<SolversStatus | null>(null);
+
+export type PromptChoice = 'save' | 'discard' | 'cancel';
+/** The save prompt before New, Open and Exit (row 22, A9): open while set; the dialog answers. */
+export const promptStore = new Store<{ name: string; resolve: (choice: PromptChoice) => void } | null>(null);
+/** Upstream's reference materials, from the core (`material_library`), at boot. */
+export const libraryStore = new Store<LibraryMaterial[]>([]);
+
 function clock(): string {
   return new Date().toLocaleTimeString('en-GB', { hour12: false });
 }
 
-export function log(tag: LineClass, text: string): void {
-  consoleStore.set([...consoleStore.get(), { time: clock(), tag, text }]);
+export function log(tag: ConsoleTag, text: string, extra?: Omit<ConsoleLine, 'time' | 'tag' | 'text'>): void {
+  consoleStore.set([...consoleStore.get(), { time: clock(), tag, text, ...extra }]);
+}
+
+/** Appends ready-made lines (a run's batch) in one render. */
+export function appendLines(lines: readonly Omit<ConsoleLine, 'time'>[]): void {
+  if (lines.length === 0) return;
+  const time = clock();
+  consoleStore.set([...consoleStore.get(), ...lines.map((l) => ({ ...l, time }))]);
 }
 
 /** Appends several lines at once (one render). */

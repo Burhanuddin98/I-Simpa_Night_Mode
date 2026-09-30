@@ -2,11 +2,15 @@
 // the check chip, the marker labels and the axis gizmo. The drawing is engine.ts's; this
 // component is the DOM around it, and mounts the engine into it once (PLAN.md 6.1).
 // `data-part="viewport"` stays on the root for the M9 self-test.
+//
+// M11 (row 22, G42): Frame model at the foot of the tools, `data-tool="frame"`, the same
+// `frameModel` as View › Frame model and the Home key. An action, not a mode: it has no pressed
+// state and leaves the tool as it was.
 import { useEffect, useRef, type JSX } from 'react';
 import * as actions from '../../actions';
 import { MeasureTool, OrbitTool, ReceiverTool, SectionTool, SelectTool } from '../../chrome/icons';
 import { sceneStore, toolStore, useStore, type Tool } from '../../store';
-import { attachViewport, setView, viewportUi, type ViewMode } from './engine';
+import { attachViewport, frameModel, setView, viewportUi, type ViewMode } from './engine';
 import { VIEWPORT_LIBRARIES } from './libraries';
 import './viewport.css';
 
@@ -16,6 +20,14 @@ const SourceTool = () => (
     <circle cx="10" cy="7" r="2.2" fill="currentColor" />
     <circle cx="10" cy="7" r="4.6" stroke="currentColor" strokeWidth="1.2" opacity="0.55" />
     <path d="M10 11.6V17M7 17h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+/** Frame model: the model's box inside four corner marks, in the toolbar's line style. */
+const FrameTool = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <rect x="7" y="7" width="6" height="6" rx="0.5" stroke="currentColor" strokeWidth="1.4" />
   </svg>
 );
 
@@ -145,6 +157,17 @@ export function Viewport() {
             <Icon />
           </button>
         ))}
+        <span className="tool-sep" aria-hidden />
+        <button
+          className="tool"
+          data-tool="frame"
+          aria-label="Frame model"
+          title={ui.hasModel ? 'Frame model (Home)' : 'Frame model (Home): no model to frame'}
+          disabled={!ui.hasModel}
+          onClick={() => frameModel()}
+        >
+          <FrameTool />
+        </button>
       </div>
 
       <div

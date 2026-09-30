@@ -126,7 +126,8 @@ function GroupSection() {
                   <span className="dot" />
                 </span>
                 <span className="mat-swatch" style={{ background: m.color }} />
-                <span className="name" title={m.name}>
+                {/* A material's name is an input ("30% absorbing" is a name, not a result). */}
+                <span className="name" title={m.name} data-input="">
                   {m.name}
                 </span>
                 <span className={many ? 'mat-bars many' : 'mat-bars'} aria-hidden="true">
