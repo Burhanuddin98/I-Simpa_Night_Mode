@@ -225,7 +225,8 @@ pub fn seal_outside(from: &Path, seal: &Path) -> Result<(), String> {
 /// What a run's binding found: which records hold it, and its solver's outputs.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bound {
-    /// `run.json`, `seal`, or both.
+    /// The records it was held to, in this order: `run.json` (its outputs, when it records them;
+    /// never alone), `this process` (what this process made) and `seal`.
     pub by: Vec<&'static str>,
     /// The solver's outputs: every file under `solve/` that is not one of `run.json`'s inputs,
     /// as `(path under solve/, sha256)`, sorted by path.
