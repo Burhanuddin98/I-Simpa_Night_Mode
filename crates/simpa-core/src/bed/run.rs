@@ -811,15 +811,42 @@ pub fn into_reads(
     refuse_shared_outputs(&mut reads.atmospheric.spps);
 }
 
+/// One receiver's T30 over its bands as read, each value, its `mc_sd` and its source compared
+/// exactly (by their bits): what two seeds of a cell never share.
+type ReceiverT30<'a> = Vec<(Option<u64>, Option<u64>, &'a str)>;
+
+/// What one seed shares with the other seeds of its cell ([`refuse_shared_outputs`]).
+#[derive(Default)]
+struct Shared {
+    /// The seeds it shares with.
+    others: std::collections::BTreeSet<u32>,
+    /// The solver output files it shares, byte for byte.
+    files: Vec<String>,
+    /// Whether its whole set of outputs is another's.
+    all: bool,
+    /// The receivers, by their place in the read, at which it reads another's T30.
+    receivers: std::collections::BTreeSet<usize>,
+}
+
 /// Refuses, [`bind::SEEDS_IDENTICAL`], every seed of `seeds` that shares a solver output file
 /// byte for byte (the same path and sha256) with another, or whose outputs are all another's.
 /// A seed's own random walk makes every output file its own: in M8a's bed no output file of 8,490
 /// is any other seed's of the same cell. So a shared file is a seed's run filed under another,
 /// or a solver that ignores its seed.
+///
+/// And (M8b round 2, defence in depth: `VERIFY-adversarial-1.md` finding 1) every seed that reads
+/// the same T30 as another at any receiver, in every band, value, `mc_sd` and source alike, when
+/// at least one band has a value. Bytes changed where the reader does not look (a gabe's header
+/// lengths, its padding, what follows its last column) change a file's hash and not what is
+/// read, so a copied run made byte-different reads the same as its source. In M8a's bed, over its
+/// 1,845 pairs of seeds (40 cells and the atmospheric validation, 18 to 27 receiver-bands each),
+/// no two seeds read the same value in any one receiver-band. This is no defence against a copy
+/// whose numbers were changed too: the binding to a record from outside the bed folder is.
 fn refuse_shared_outputs(seeds: &mut std::collections::BTreeMap<u32, Result<SppsRead, String>>) {
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::collections::BTreeMap;
     let mut owners: BTreeMap<(&str, &str), Vec<u32>> = BTreeMap::new();
     let mut whole: BTreeMap<&str, Vec<u32>> = BTreeMap::new();
+    let mut read: BTreeMap<(usize, ReceiverT30), Vec<u32>> = BTreeMap::new();
     for (s, r) in seeds.iter() {
         let Ok(r) = r else { continue };
         for (path, sha) in &r.info.output_files {
@@ -828,39 +855,83 @@ fn refuse_shared_outputs(seeds: &mut std::collections::BTreeMap<u32, Result<Spps
         if let Some(d) = &r.info.outputs_sha256 {
             whole.entry(d).or_default().push(*s);
         }
+        for (i, bands) in r.t30.iter().enumerate() {
+            if bands.iter().all(|b| b.t.is_none()) {
+                continue;
+            }
+            let key: ReceiverT30 = bands
+                .iter()
+                .map(|b| {
+                    (
+                        b.t.map(f64::to_bits),
+                        b.mc_sd.map(f64::to_bits),
+                        b.source.as_str(),
+                    )
+                })
+                .collect();
+            read.entry((i, key)).or_default().push(*s);
+        }
     }
-    // Per seed: the seeds it shares with, the files shared, and whether it is all of them.
-    let mut shared: BTreeMap<u32, (BTreeSet<u32>, Vec<String>, bool)> = BTreeMap::new();
+    let mut shared: BTreeMap<u32, Shared> = BTreeMap::new();
     for ((path, _), ss) in owners.iter().filter(|(_, ss)| ss.len() > 1) {
         for s in ss {
             let e = shared.entry(*s).or_default();
-            e.0.extend(ss.iter().filter(|o| *o != s));
-            e.1.push((*path).to_string());
+            e.others.extend(ss.iter().filter(|o| *o != s));
+            e.files.push((*path).to_string());
         }
     }
     for ss in whole.values().filter(|ss| ss.len() > 1) {
         for s in ss {
             let e = shared.entry(*s).or_default();
-            e.0.extend(ss.iter().filter(|o| *o != s));
-            e.2 = true;
+            e.others.extend(ss.iter().filter(|o| *o != s));
+            e.all = true;
         }
     }
-    for (s, (others, files, all)) in shared {
+    for ((i, _), ss) in read.iter().filter(|(_, ss)| ss.len() > 1) {
+        for s in ss {
+            let e = shared.entry(*s).or_default();
+            e.others.extend(ss.iter().filter(|o| *o != s));
+            e.receivers.insert(*i);
+        }
+    }
+    for (
+        s,
+        Shared {
+            others,
+            files,
+            all,
+            receivers,
+        },
+    ) in shared
+    {
         let n = files.len();
         let mut named: Vec<String> = files.into_iter().take(3).collect();
         if n > named.len() {
             named.push(format!("and {} more", n - named.len()));
         }
+        let mut what = Vec::new();
+        if n > 0 || all {
+            what.push(format!(
+                "its solver outputs are theirs, byte for byte: {} ({})",
+                if all {
+                    "all of them".to_string()
+                } else {
+                    format!("{n} file(s)")
+                },
+                named.join(", ")
+            ));
+        }
+        if !receivers.is_empty() {
+            let receivers: Vec<usize> = receivers.into_iter().collect();
+            what.push(format!(
+                "it reads their T30, value for value in every band, at receiver(s) {receivers:?} \
+                 (their place in the read)"
+            ));
+        }
         let e = format!(
-            "{}: seed {s}'s solver outputs are seed(s) {others:?}'s, byte for byte: {} ({}): a \
-             seed's run must be its own",
+            "{}: seed {s} shares with seed(s) {others:?}: {}: a seed's run must be its own",
             bind::SEEDS_IDENTICAL,
-            if all {
-                "all of them".to_string()
-            } else {
-                format!("{n} file(s)")
-            },
-            named.join(", ")
+            what.join("; and ")
         );
         seeds.insert(s, Err(e));
     }

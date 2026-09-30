@@ -699,6 +699,106 @@ mod tests {
         assert_eq!(refused, 10, "{:#?}", cell.seeds);
     }
 
+    /// The small bed's plan on `seeds`, read through [`run::into_reads`] as a bed reads it, every
+    /// run its own (as [`as_run_of`] makes it) except that seed `to` reads seed `from`'s T30, value
+    /// for value, for each `(to, from)` of `copies`: at the receiver `at`, or at every receiver
+    /// when `None`. Its output files keep their own hashes, as a copy whose unread bytes were
+    /// changed would (`VERIFY-adversarial-1.md` 2b); then judged.
+    fn judged_with_read_copies(
+        seeds: &[u32],
+        copies: &[(u32, u32)],
+        at: Option<usize>,
+    ) -> report::Report {
+        let mut bed = small_bed();
+        bed.seeds = seeds.to_vec();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let (runs, _) = run::plan(&bed, None).unwrap();
+        let results: Vec<Result<run::Read, String>> = runs
+            .iter()
+            .map(|p| match &p.key {
+                run::RunKey::Cell { seed, .. } => {
+                    let mut r = as_run_of(p, spps(*seed, k, 0.0));
+                    if let Some((_, from)) = copies.iter().find(|(to, _)| to == seed) {
+                        let run::Read::Spps(s) = &mut r else {
+                            unreachable!()
+                        };
+                        let source = spps(*from, k, 0.0);
+                        match at {
+                            None => s.t30 = source.t30,
+                            Some(i) => s.t30[i] = source.t30[i].clone(),
+                        }
+                    }
+                    Ok(r)
+                }
+                run::RunKey::Tcr { id } => {
+                    let mut t = tcr_on(&bed, id, &OFF, 0.001);
+                    run::testing::as_if_read_from(&mut t.info, p, id);
+                    Ok(run::Read::Tcr(Box::new(t)))
+                }
+                _ => Err("not run here".into()),
+            })
+            .collect();
+        let mut rd = Reads::default();
+        run::into_reads(&mut rd, &runs, results, Some("not given".into()));
+        judge(&bed, &rd, &ts, &[])
+    }
+
+    /// M8b round 2, defence in depth (`VERIFY-adversarial-1.md` finding 1, U1): seed 3 carrying
+    /// seed 4's outputs with one unread padding byte changed in each file hashes as its own and
+    /// reads as seed 4's, and the bed passed. Two seeds that read the same T30 at a receiver, in
+    /// every band, are each refused `bed_seed_outputs_identical`, the receiver named, and the cell
+    /// is not judged; so is a copy of one receiver's.
+    #[test]
+    fn a_seed_reading_another_seeds_t30_does_not_pass_the_bed() {
+        let own = judged_with_read_copies(&[1, 2, 3], &[], None);
+        assert!(own.pass, "{:#?}", own.failures);
+        for (at, receivers) in [(None, "[0, 1, 2]"), (Some(1), "[1]")] {
+            let r = judged_with_read_copies(&[1, 2, 3], &[(3, 2)], at);
+            assert!(!r.pass, "{at:?}");
+            assert!(!r.preconditions.e2.holds);
+            let cell = &r.cells[0];
+            assert_eq!(cell.verdict, Verdict::NotJudged);
+            for s in &cell.seeds {
+                let e = s.error.as_deref().unwrap_or_default();
+                if s.seed == 1 {
+                    assert!(s.error.is_none(), "{e}");
+                } else {
+                    assert!(e.starts_with(bind::SEEDS_IDENTICAL), "seed {}: {e}", s.seed);
+                    assert!(e.contains("it reads their T30"), "{e}");
+                    assert!(e.contains(&format!("receiver(s) {receivers}")), "{e}");
+                    assert!(!e.contains("byte for byte"), "{e}");
+                }
+            }
+        }
+    }
+
+    /// M8b round 2, defence in depth (`VERIFY-adversarial-1.md` finding 1, U2): seeds 2 to 10
+    /// carrying seed 1's outputs, each file made byte-different, passed A, B and C on ten
+    /// identical seeds (B's spread 0.0). All ten are refused.
+    #[test]
+    fn ten_seeds_reading_one_seeds_t30_do_not_pass_the_bed() {
+        let seeds: Vec<u32> = (1..=10).collect();
+        let own = judged_with_read_copies(&seeds, &[], None);
+        assert!(own.pass, "{:#?}", own.failures);
+        let copies: Vec<(u32, u32)> = (2..=10).map(|s| (s, 1)).collect();
+        let r = judged_with_read_copies(&seeds, &copies, None);
+        assert!(!r.pass);
+        let cell = &r.cells[0];
+        assert_eq!(cell.verdict, Verdict::NotJudged);
+        let refused = cell
+            .seeds
+            .iter()
+            .filter(|s| {
+                s.error
+                    .as_deref()
+                    .is_some_and(|e| e.starts_with(bind::SEEDS_IDENTICAL))
+            })
+            .count();
+        assert_eq!(refused, 10, "{:#?}", cell.seeds);
+    }
+
     /// M8b, backlog row 42 (the tampered copy `tcr-edited-sha`): a TCR run of α 0.4's project,
     /// its `run.json`'s sha256 edited to α 0.2's plan, filed as α 0.2's. Through `into_reads` it
     /// is refused on the files it was read from; and judged without that refusal (as the bed
