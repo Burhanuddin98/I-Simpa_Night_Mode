@@ -1367,7 +1367,7 @@
       "description": "A material's reflection law: one law for every band, or one per band. The solvers read it per\nband (`type_surface/bfreq@loi`, `base_core_configuration.cpp:210-219`), and upstream's GUI\nkeeps one per band (the `loi` list of each row, `e_data_row_materiau.h:218`): tutorial 3's\nmaterial 100 is Lambert in the six octave bands and specular in the others.\n\nIn JSON: one law, `\"lambert\"`, or one per band in the band set's order,\n`[\"specular\", \"lambert\", ...]`. [`ReflectionLaws::from_bands`] gives the single spelling\nwhenever every band has the same law."
     },
     "ResultsState": {
-      "description": "Whether a run's results verify (`results::load`), never a value from them.",
+      "description": "Whether a run's results verify (`results::load`) and its solver build was verified\n(`results::solver_build`), never a value from them.",
       "properties": {
         "refusal": {
           "anyOf": [
@@ -1382,7 +1382,19 @@
         "run": {
           "type": "string"
         },
+        "unverified": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReasonUi"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Why results that load are still not verified: the solver build's reason\n(`results::solver_build`, backlog 38). `None` when verified, and when refused."
+        },
         "verified": {
+          "description": "The results load and the solver build was verified.",
           "type": "boolean"
         }
       },
@@ -1547,6 +1559,17 @@
             "string",
             "null"
           ]
+        },
+        "solver_build": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SolverBuildUi"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The solver build's verdict, the one the row shows (backlog 38): the core's\n(`results::solver_build`, the predicate the Results step and `simpa results` use too),\nnever worked out from `solvers` in the UI. `None` for a row with no `run.json` that reads."
         },
         "solvers": {
           "description": "The executables checked against the verified build before the run; `None` for a CLI run\nor one written before M11.",
@@ -1956,6 +1979,39 @@
         "lines"
       ],
       "type": "object"
+    },
+    "SolverBuildUi": {
+      "description": "A run's solver build, verified or not, with the reason's core and UI codes (backlog 38).",
+      "oneOf": [
+        {
+          "properties": {
+            "status": {
+              "const": "verified",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "reason": {
+              "$ref": "#/$defs/ReasonUi"
+            },
+            "status": {
+              "const": "unverified",
+              "type": "string"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "SolverCheck": {
       "description": "One executable checked against the manifest.",

@@ -32,9 +32,11 @@ const USAGE: &str = "usage:
       --cancel-after-ms cancels preprocess.exe or TetGen that long after it starts; each is
       stopped at its time limit (default 1 h for TetGen, 10 min for preprocess.exe).
   simpa mesh-verify <dir> [--json] [--room-id <n>] [--fittings <a,b,..>]   exit 4 when it fails
-  simpa run <project.simpa> --solver spps|tcr [--variant <v>] [--mesh <dir>] [--runs <root>]
-            [--loss-limit <f>] [--cancel-after-ms <n>] [--cancel-after-progress <p>]
+  simpa run <project.simpa> --solver spps|tcr [--variant <v> | --base] [--mesh <dir>]
+            [--runs <root>] [--loss-limit <f>] [--cancel-after-ms <n>] [--cancel-after-progress <p>]
             [--solver-exe <exe>] [--tetgen <exe>] [--preprocess <exe>] [--json]
+      run exports the file's active variant, as the app and simpa validate use it; --variant <v>
+      (an id or a name) exports another, --base the project's own materials; not both.
   simpa run-folder <dir> --solver spps|tcr [--runs <root>] [--solver-exe <exe>] [--loss-limit <f>]
             [--cancel-after-ms <n>] [--cancel-after-progress <p>] [--json]
       run and run-folder print each solver line on stderr as 'CLASS  text', and the run manifest

@@ -1956,6 +1956,23 @@
         ],
         "type": "object"
       },
+      "Reason": {
+        "additionalProperties": false,
+        "description": "One reason, or one recorded WARN line.",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "detail"
+        ],
+        "type": "object"
+      },
       "ReceiverBandReport": {
         "description": "One band of an SPPS point receiver.",
         "properties": {
@@ -2308,6 +2325,41 @@
           "receiver_crossing_s"
         ],
         "type": "object"
+      },
+      "SolverBuild": {
+        "description": "Whether a run's solver build was verified, decided from its manifest alone (backlog 38,\n`docs/investigations/2026-09-30-b38-39/PLAN.md` C5). Computed beside [`load`], never by it:\n`load`'s Ok or Err does not depend on it (C1).",
+        "oneOf": [
+          {
+            "description": "`solvers` is present and non-empty, every check matches, and one covers the solver the\nrun executed.",
+            "properties": {
+              "status": {
+                "const": "verified",
+                "type": "string"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "Anything else, with a reason whose code is one of [`build_codes::ALL`].",
+            "properties": {
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              },
+              "status": {
+                "const": "unverified",
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "reason"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "SolverKind": {
         "enum": [
@@ -3054,6 +3106,10 @@
       "solver": {
         "$ref": "#/$defs/SolverKind"
       },
+      "solver_build": {
+        "$ref": "#/$defs/SolverBuild",
+        "description": "Whether the run's solver build was verified (backlog 38, [`super::solver_build`]): it marks\nthe run and refuses nothing."
+      },
       "spps": {
         "anyOf": [
           {
@@ -3095,6 +3151,7 @@
       "run_folder",
       "solver",
       "status",
+      "solver_build",
       "started",
       "bands_hz"
     ],

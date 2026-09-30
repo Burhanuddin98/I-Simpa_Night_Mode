@@ -2636,3 +2636,32 @@ fn seed_spread(particles: u32) {
         }
     }
 }
+
+/// T38-6 (backlog 38, `docs/investigations/2026-09-30-b38-39/PLAN.md`): `simpa results` on
+/// T38-1's run, the committed TCR run folder whose `run.json` has no `solvers` key, prints the
+/// unverified verdict with its reason code, in text and in `--json`, and still exits 0: the
+/// verdict marks the run, it does not refuse it, and the exit codes 0/5/6 do not change (C6).
+#[test]
+fn t38_6_results_prints_the_unverified_solver_build_and_still_exits_0() {
+    let code = simpa_core::results::build_codes::UNRECORDED;
+    let folder = fixture(SEATS_TCR);
+
+    let text = results(&folder, false);
+    assert_eq!(text.code, 0, "{text:#?}");
+    assert!(
+        text.stdout
+            .lines()
+            .any(|l| l.contains(code) && l.to_ascii_lowercase().contains("unverified")),
+        "no line of the text names the unverified verdict and {code}:\n{}",
+        text.stdout
+    );
+
+    let js = results(&folder, true);
+    assert_eq!(js.code, 0, "{js:#?}");
+    json(&js);
+    assert!(
+        js.stdout.contains(code),
+        "the JSON does not carry {code}:\n{}",
+        js.stdout
+    );
+}

@@ -1,7 +1,8 @@
 // The M11 gate spec (docs/investigations/2026-09-29-m11/PLAN.md 4.1, 4.2): gate (a), (b), (c) and
-// (e), m11-h (no solver-computed acoustic number, the diagnostic allowance proven), and
-// m11-r22-default (the core refuses upstream's placeholder material at Run). One session; the
-// tests run in order and share the box run and the hall run.
+// (e), m11-b38 (a run with no solver record reads unverified, backlog 38), m11-h (no
+// solver-computed acoustic number, the diagnostic allowance proven), and m11-r22-default (the
+// core refuses upstream's placeholder material at Run). One session; the tests run in order and
+// share the box run and the hall run.
 //
 // Written by the foundation against the DOM contract of PLAN.md 3.6; the packages make it true:
 // the Run button's label and the Cancel button are the simulate package's, the Runs rows and the
@@ -327,6 +328,72 @@ describe('M11 gate', () => {
     const ok = await stateOf(boxRun, 'verified');
     console.log(`m11-e-results receipt: control, verified panel: ${JSON.stringify(ok)}`);
     assert.equal(ok.results, 0);
+  });
+
+  // Backlog 38 (docs/investigations/2026-09-30-b38-39/PLAN.md, T38-9): an OK run whose run.json
+  // records no solver check is marked unverified, not refused: its Results step reads `unverified`
+  // with SOLVER_BUILD_UNRECORDED, never "Results verified", and its Runs row says the same, both
+  // from the core's one predicate. The planted-loss run (m11.ps1) is such a run: `simpa run`
+  // records no check, as no run made before M11 did. m11-e-results' box run, an app run that
+  // records its checks, is the control that reads verified.
+  it('m11-b38: an OK run with no solver record reads unverified with SOLVER_BUILD_UNRECORDED, on its Results step and its Runs row', async () => {
+    const planted = runFolders(runsRootOf(LOSS()));
+    assert.equal(planted.length, 1, `the planted-loss project's runs: ${planted.join(', ')}`);
+    const run = planted[0];
+    const { m } = manifestOf(LOSS(), run);
+    assert.equal(m.verdict.status, 'OK', 'an OK run: only its solver build is unverified');
+    assert.equal(m.solvers ?? null, null, 'a command-line run records no solver check');
+    await m10.openProject(LOSS());
+    await m11.selectRun(run);
+    await clickSelector('[data-step="results"]');
+    const panel = '[data-props-step="results"]';
+    const el = await $(`${panel} [data-results-state]`);
+    await el.waitForExist({ timeout: 30_000, timeoutMsg: `no ${panel} [data-results-state]` });
+    await browser.waitUntil(async () => (await el.getAttribute('data-results-state')) === 'unverified', {
+      timeout: 30_000,
+      timeoutMsg: `the Results step of ${run} does not read unverified: ${await el.getAttribute('data-results-state')}`,
+    });
+    const r = await browser.execute((sel: string) => {
+      const p = document.querySelector(sel);
+      const copy = p?.cloneNode(true) as HTMLElement | undefined;
+      copy?.querySelectorAll('[data-run-label]').forEach((e) => e.remove());
+      return {
+        run: p?.querySelector('[data-results-state]')?.getAttribute('data-run') ?? null,
+        codes: [...(p?.querySelectorAll('[data-part="unverified"] [data-code]') ?? [])].map((e) => e.getAttribute('data-code')),
+        text: (p as HTMLElement | null)?.innerText ?? '',
+        unlabelled: copy?.textContent ?? '',
+        results: p?.querySelectorAll('[data-result]').length ?? -1,
+        titles: [...(copy?.querySelectorAll('[title]') ?? [])].map((e) => e.getAttribute('title') ?? ''),
+      };
+    }, panel);
+    console.log(`m11-b38 receipt: Results step: ${JSON.stringify(r)}`);
+    assert.equal(r.run, run);
+    assert.deepEqual(r.codes, ['SOLVER_BUILD_UNRECORDED'], 'the reason code is shown');
+    assert.ok(r.text.includes('solver_build_unrecorded'), `the core code is shown: ${r.text}`);
+    assert.ok(!r.text.includes('Results verified'), `an unverified run reads "Results verified": ${r.text}`);
+    assert.equal(r.results, 0, 'no [data-result] element');
+    assert.ok(!/\d/.test(r.unlabelled), `a digit on the Results step outside [data-run-label]: ${r.unlabelled}`);
+    const digitTip = r.titles.find((t) => /\d/.test(t));
+    assert.equal(digitTip, undefined, `a tooltip with a digit on the Results step: "${digitTip}"`);
+    // The backend's answer the panel shows: unverified is not refused (C6).
+    const st = await m11.resultsState(run);
+    console.log(`m11-b38 receipt: run_results ${JSON.stringify(st)}`);
+    assert.equal(st.verified, false);
+    assert.equal(st.refusal ?? null, null);
+    assert.equal(st.unverified?.code, 'solver_build_unrecorded');
+    // The Runs row of the same run (selected above, so its record is open): the same verdict.
+    await showTab('runs');
+    const row = await runRow(run);
+    await browser.waitUntil(async () => (await row.getAttribute('aria-selected')) === 'true', {
+      timeout: 10_000,
+      timeoutMsg: `the Runs row of ${run} is not selected`,
+    });
+    const mark = await row.$('[data-part="verified"]');
+    const verified = await mark.getAttribute('data-verified');
+    const code = await mark.getAttribute('data-build-code');
+    console.log(`m11-b38 receipt: Runs row: data-verified ${verified}, data-build-code ${code}`);
+    assert.equal(verified, 'unrecorded');
+    assert.equal(code, 'SOLVER_BUILD_UNRECORDED');
   });
 
   it('m11-h: no solver-computed acoustic number on any step or dock tab, and every diagnostic proven', async () => {

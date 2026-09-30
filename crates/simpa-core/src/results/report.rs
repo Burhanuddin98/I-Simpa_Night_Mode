@@ -16,7 +16,7 @@ use super::spps::{
     BandEnergy, ParticleFileSummary, PointReceiver, SourcePoint, SourceTotals, SppsResults,
 };
 use super::tcr::{self, MainBand, TcrResults};
-use super::{Refusal, RunResults, SolverResults, SurfaceFile, value_invalid};
+use super::{Refusal, RunResults, SolverBuild, SolverResults, SurfaceFile, value_invalid};
 use crate::params::decay::{self, Arrival, Onset};
 use crate::params::lambert::FreePaths;
 use crate::params::noise::{self, NoiseModel};
@@ -896,6 +896,9 @@ pub struct Report {
     pub solver: SolverKind,
     /// Always OK: any other run is refused.
     pub status: Status,
+    /// Whether the run's solver build was verified (backlog 38, [`super::solver_build`]): it marks
+    /// the run and refuses nothing.
+    pub solver_build: SolverBuild,
     /// `run.json`'s `started`.
     pub started: String,
     /// The computed bands, ascending.
@@ -1273,6 +1276,7 @@ pub fn report(r: &RunResults) -> Report {
         run_folder: r.folder.display().to_string(),
         solver: r.manifest.solver,
         status: r.manifest.verdict.status,
+        solver_build: super::solver_build(&r.manifest),
         started: r.manifest.started.clone(),
         bands_hz: r.bands_hz.clone(),
         spps,

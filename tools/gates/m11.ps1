@@ -79,7 +79,7 @@ $Spec = @($Spec | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() 
 # The test ids each spec file must pass (PLAN.md 4.1, 4.2).
 $specIds = [ordered]@{
     smoke    = @('m11-smoke')
-    gate     = @('m11-a', 'm11-b-ipc', 'm11-b-frames', 'm11-c', 'm11-e-row', 'm11-e-results', 'm11-h', 'm11-r22-default')
+    gate     = @('m11-a', 'm11-b-ipc', 'm11-b-frames', 'm11-c', 'm11-e-row', 'm11-e-results', 'm11-b38', 'm11-h', 'm11-r22-default')
     close    = @('m11-d-close')
     kill     = @('m11-d-kill')
     after    = @('m11-d-after')

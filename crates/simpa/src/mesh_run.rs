@@ -530,20 +530,25 @@ const RUN_VALUES: [&str; 6] = [
     "cancel-after-progress",
 ];
 
-/// `run <project> --solver spps|tcr [--variant <v>] [--mesh <dir>] [--runs <root>]
+/// `run <project> --solver spps|tcr [--variant <v> | --base] [--mesh <dir>] [--runs <root>]
 /// [--loss-limit <f>] [--cancel-after-ms <n>] [--cancel-after-progress <p>]
 /// [--solver-exe <exe>] [--tetgen <exe>] [--json]`. The runs root defaults to `runs` beside the
-/// project file.
+/// project file. The materials are the file's active variant's, as the app and `simpa validate`
+/// judge them (backlog 39); `--variant` (an id or a name) picks another, `--base` the project's
+/// own, and the two together are a usage error.
 pub fn run_cmd(args: &[&str]) -> ExitCode {
     let mut with_value = RUN_VALUES.to_vec();
     with_value.extend(["variant", "mesh", "tetgen", "preprocess"]);
-    let a = match Args::parse(args, &with_value, &["json"]) {
+    let a = match Args::parse(args, &with_value, &["json", "base"]) {
         Ok(a) => a,
         Err(e) => return usage_error(&e),
     };
     let [project] = a.positional.as_slice() else {
         return usage_error("run needs one project file");
     };
+    if a.switch("base") && a.value("variant").is_some() {
+        return usage_error("--base and --variant cannot be combined");
+    }
     let project = Path::new(project);
     let default_root = project.parent().unwrap_or(Path::new(".")).join("runs");
     let opts = match run_options(&a, default_root) {
@@ -561,9 +566,14 @@ pub fn run_cmd(args: &[&str]) -> ExitCode {
             Err(e) => return usage_error(&e),
         },
     };
+    let variant = match a.value("variant") {
+        Some(v) => Some(v.to_string()),
+        None if a.switch("base") => None,
+        None => active_variant(project),
+    };
     let report = manager::run_project(
         project,
-        a.value("variant"),
+        variant.as_deref(),
         &mesh,
         &opts,
         &CancelToken::new(),
@@ -576,6 +586,16 @@ pub fn run_cmd(args: &[&str]) -> ExitCode {
             exit(e.exit_class())
         }
     }
+}
+
+/// The file's active variant, by its id: what `simpa run` exports without `--variant` or
+/// `--base`. `None` when it has none, or when the file does not read, which the run manager then
+/// refuses as before.
+fn active_variant(project: &Path) -> Option<String> {
+    validate::read_project(project)
+        .ok()?
+        .active_variant
+        .map(|id| id.to_string())
 }
 
 /// `run-folder <dir> --solver spps|tcr [--runs <root>] [--solver-exe <exe>] [--loss-limit <f>]

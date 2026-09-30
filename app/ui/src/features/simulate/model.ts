@@ -405,12 +405,13 @@ export function lastRunView(row: RunRow, variants: readonly Pick<Variant, 'id' |
 
 // ---- the Results step (design:428-470; M11 shows its state, never a value) ------------------------
 
-export type ResultsStateName = 'none' | 'running' | 'checking' | 'verified' | 'refused' | 'error';
+export type ResultsStateName = 'none' | 'running' | 'checking' | 'verified' | 'unverified' | 'refused' | 'error';
 
 /**
  * What the Results step shows for the selected run: `none` (no run), `running` (not ended),
- * `checking` (asked, no answer yet), `verified` or `refused` (`run_results`'s answer), or
- * `error` (the question itself failed, e.g. `RUN_NOT_FOUND`).
+ * `checking` (asked, no answer yet), `verified`, `unverified` (the results load but the run's
+ * solver build was not verified, backlog 38) or `refused` (`run_results`'s answer), or `error`
+ * (the question itself failed, e.g. `RUN_NOT_FOUND`).
  */
 export function resultsStateName(
   selected: string | null,
@@ -420,6 +421,19 @@ export function resultsStateName(
 ): ResultsStateName {
   if (!selected) return 'none';
   if (row?.status === 'RUNNING') return 'running';
-  if (results) return results.verified ? 'verified' : 'refused';
+  if (results) {
+    if (results.verified) return 'verified';
+    return results.unverified && !results.refusal ? 'unverified' : 'refused';
+  }
   return errored ? 'error' : 'checking';
+}
+
+/**
+ * The codes the Results step shows for `results`: the refusal's, or the reason a run whose
+ * results load is still unverified (`ResultsState.unverified`, backlog 38); none for a verified
+ * run. The panel renders these, so what the step shows is what this returns.
+ */
+export function resultsCodes(results: ResultsState | null): ReasonUi[] {
+  if (results?.refusal) return [results.refusal];
+  return results?.unverified ? [results.unverified] : [];
 }

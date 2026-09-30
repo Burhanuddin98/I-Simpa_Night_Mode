@@ -5,7 +5,7 @@
 //
 // Every number a Runs row prints is a string Rust formatted from run.json (PLAN.md 2.3, T14), or
 // a count. The UI formats no float.
-import type { RunRow, RunStatusUi, SolverCheck } from '../../bindings/ipc.ts';
+import type { ReasonUi, RunRow, RunStatusUi, SolverCheck } from '../../bindings/ipc.ts';
 import { rowCounts } from '../../flow.ts';
 import type { ActiveRun, ClassCounts, ConsoleLine, RunLog } from '../../store.ts';
 
@@ -244,7 +244,11 @@ export function exitText(code: number | null | undefined): string {
   return `exit ${code}`;
 }
 
-/** Whether the run's executables were checked against the verified build before it (C7). */
+/**
+ * What a run's recorded checks say of themselves (C7): none recorded, all matching, or which
+ * failed. Not the build's verdict, which also needs a check of the solver the run executed: the
+ * Runs row shows the core's (`buildMark`).
+ */
 export interface SolversMark {
   kind: 'verified' | 'unverified' | 'unrecorded';
   /** Every checked file when verified; the files that failed otherwise. */
@@ -255,6 +259,30 @@ export function solversMark(checks: readonly SolverCheck[] | null | undefined): 
   if (!checks || checks.length === 0) return { kind: 'unrecorded', names: [] };
   const bad = checks.filter((c) => !c.matches).map((c) => c.name);
   return bad.length === 0 ? { kind: 'verified', names: checks.map((c) => c.name) } : { kind: 'unverified', names: bad };
+}
+
+/** The Runs row's mark for the run's solver build (backlog 38). */
+export interface BuildMark extends SolversMark {
+  /** The reason the build is not verified, as the backend gives it; null when verified. */
+  reason: ReasonUi | null;
+}
+
+/** The core's code for a run whose run.json records no check of its executables. */
+const BUILD_UNRECORDED = 'solver_build_unrecorded';
+
+/**
+ * The Runs row's mark for the solver build: the core's verdict as `runs_list` sends it
+ * (`RunRow.solver_build`, from `results::solver_build`, which the Results step's answer comes from
+ * too), never one worked out here from the checks (C5). `unrecorded` when the core says no check
+ * was recorded, or the row has no run.json that reads. The names, for the title, are the checked
+ * files, or the ones that failed (`solversMark`).
+ */
+export function buildMark(row: Pick<RunRow, 'solvers' | 'solver_build'>): BuildMark {
+  const names = solversMark(row.solvers).names;
+  const b = row.solver_build;
+  if (b?.status === 'verified') return { kind: 'verified', names, reason: null };
+  const reason = b?.status === 'unverified' ? b.reason : null;
+  return { kind: !reason || reason.code === BUILD_UNRECORDED ? 'unrecorded' : 'unverified', names, reason };
 }
 
 /** The file name of a path, either separator. */

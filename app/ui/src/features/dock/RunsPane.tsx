@@ -6,8 +6,8 @@
 // - Check: "Particles lost x.xx %", the worst band, then the limit; each reason as its UI code and
 //   core code (`data-reason-code`); the warnings; the solver time.
 // - A click selects the run (the Results step shows it). The selected row opens to show the
-//   per-band loss, the exe's sha256 and whether the solvers were verified, the mesh's sha256, the
-//   line counts, the exit code and the folder.
+//   per-band loss, the exe's sha256 and the solver build's verdict (the core's, `buildMark`,
+//   backlog 38), the mesh's sha256, the line counts, the exit code and the folder.
 //
 // Every number with a unit is a leaf diagnostic span holding Rust's string from run.json
 // (PLAN.md 2.3, 3.4 rule 1); a core detail that quotes one is left to run.json (model.detailView).
@@ -18,6 +18,7 @@ import { statusWord, WITHHELD_DETAIL } from '../../flow';
 import { type ActiveRun, runsStore, runStore, sceneStore, selectedRunStore, useStore } from '../../store';
 import {
   baseName,
+  buildMark,
   detailView,
   exitText,
   hasManifest,
@@ -25,7 +26,6 @@ import {
   progressPct,
   shortSha,
   solverLabel,
-  solversMark,
   stageLabel,
   statusTone,
   variantLabel,
@@ -120,7 +120,7 @@ function Check({ row, active }: { row: RunRow; active: ActiveRun | null }) {
 
 /** The selected row's detail: what a run's record holds beyond its verdict. */
 function Detail({ row, root }: { row: RunRow; root: string | null }) {
-  const mark = solversMark(row.solvers);
+  const mark = buildMark(row);
   const counts = row.lines;
   return (
     <div className="run-detail" data-part="detail">
@@ -154,13 +154,16 @@ function Detail({ row, root }: { row: RunRow; root: string | null }) {
           className={`verified ${mark.kind}`}
           data-part="verified"
           data-verified={mark.kind === 'verified' ? 'yes' : mark.kind === 'unverified' ? 'no' : 'unrecorded'}
+          data-build-code={mark.reason?.ui_code}
           title={mark.names.join(', ')}
         >
           {mark.kind === 'verified' && 'solvers verified against the manifest'}
-          {mark.kind === 'unverified' && (
+          {mark.kind === 'unverified' && mark.reason && (
             <>
               <span className="flag">FAIL</span>
-              {` solvers not verified: ${mark.names.join(', ')}`}
+              {' solver build not verified: '}
+              <span className="reason-code">{`${mark.reason.ui_code} (${mark.reason.code})`}</span>
+              <DetailText text={mark.reason.detail} />
             </>
           )}
           {mark.kind === 'unrecorded' && 'solver check not recorded (a command-line run, or one made before M11)'}

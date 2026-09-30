@@ -412,6 +412,108 @@ pub fn load(folder: &Path) -> Result<RunResults, Refusal> {
     })
 }
 
+/// The codes of a run whose solver build is not verified (backlog 38). "Unverified" marks a run;
+/// it does not refuse it, so none of these is a [`Refusal`] code and none changes an exit code.
+pub mod build_codes {
+    /// The manifest records no solver check: `solvers` is absent (a CLI or bed run, or one
+    /// written before M11) or an empty list.
+    pub const UNRECORDED: &str = "solver_build_unrecorded";
+    /// A recorded check does not match the verified build (`solvers/manifest.json`).
+    pub const MISMATCH: &str = "solver_build_mismatch";
+    /// Checks are recorded, but none covers the solver the run executed.
+    pub const UNCHECKED: &str = "solver_build_unchecked";
+
+    /// Every code.
+    pub const ALL: [&str; 3] = [UNRECORDED, MISMATCH, UNCHECKED];
+}
+
+/// Whether a run's solver build was verified, decided from its manifest alone (backlog 38,
+/// `docs/investigations/2026-09-30-b38-39/PLAN.md` C5). Computed beside [`load`], never by it:
+/// `load`'s Ok or Err does not depend on it (C1).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum SolverBuild {
+    /// `solvers` is present and non-empty, every check matches, and one covers the solver the
+    /// run executed.
+    Verified,
+    /// Anything else, with a reason whose code is one of [`build_codes::ALL`].
+    Unverified { reason: Reason },
+}
+
+impl SolverBuild {
+    /// Whether the build was verified.
+    pub fn is_verified(&self) -> bool {
+        matches!(self, SolverBuild::Verified)
+    }
+
+    /// The reason, when the build was not verified.
+    pub fn reason(&self) -> Option<&Reason> {
+        match self {
+            SolverBuild::Verified => None,
+            SolverBuild::Unverified { reason } => Some(reason),
+        }
+    }
+}
+
+/// The one predicate for "solver build verified" (PLAN C5): the app's Results verdict, the Runs
+/// row's solver status and `simpa results`' printed verdict all use it. Checks are matched by
+/// name, as `check_solvers` names them ([`solver_exe_name`], `tetgen.exe`, `preprocess.exe`):
+/// - no `solvers` record, or an empty one: [`build_codes::UNRECORDED`];
+/// - a check that does not match: [`build_codes::MISMATCH`];
+/// - no check names the solver the run executed: [`build_codes::UNCHECKED`];
+/// - otherwise verified.
+///
+/// [`solver_exe_name`]: crate::run::manager::solver_exe_name
+pub fn solver_build(m: &RunManifest) -> SolverBuild {
+    let unverified = |code: &str, detail: String| SolverBuild::Unverified {
+        reason: Reason::new(code, detail),
+    };
+    let checks = match m.solvers.as_deref() {
+        None => {
+            return unverified(
+                build_codes::UNRECORDED,
+                "run.json records no check of the executables against the verified build \
+                 (solvers/manifest.json): a command-line or bed run, or one made before the app \
+                 checked them"
+                    .into(),
+            );
+        }
+        Some([]) => {
+            return unverified(
+                build_codes::UNRECORDED,
+                "run.json's check of the executables lists none".into(),
+            );
+        }
+        Some(c) => c,
+    };
+    let names = |pick: fn(&crate::bed::pe::SolverCheck) -> bool| {
+        let picked: Vec<&str> = checks
+            .iter()
+            .filter(|c| pick(c))
+            .map(|c| c.name.as_str())
+            .collect();
+        picked.join(", ")
+    };
+    let bad = names(|c| !c.matches);
+    if !bad.is_empty() {
+        return unverified(
+            build_codes::MISMATCH,
+            format!("not the verified build (solvers/manifest.json): {bad}"),
+        );
+    }
+    let solver = crate::run::manager::solver_exe_name(m.solver);
+    if !checks.iter().any(|c| c.name == solver) {
+        return unverified(
+            build_codes::UNCHECKED,
+            format!(
+                "no check covers {solver}, the solver the run executed; checked: {}",
+                names(|_| true)
+            ),
+        );
+    }
+    SolverBuild::Verified
+}
+
 /// A path under `solve/` as the solver joins it, `/`-separated (the key of [`Outputs::files`]).
 pub(crate) fn key(path: &str) -> String {
     expect::normalize(path)

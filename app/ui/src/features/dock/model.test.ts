@@ -4,6 +4,7 @@ import type { RunRow } from '../../bindings/ipc.ts';
 import { emptyLog } from '../../flow.ts';
 import type { ActiveRun, ConsoleLine, RunLog } from '../../store.ts';
 import {
+  buildMark,
   consoleBadge,
   type ConsoleItem,
   consoleItems,
@@ -249,4 +250,48 @@ test('counts compare class by class', () => {
   const a = { PROGRESS: 1, INFO: 2, OK: 3, WARN: 4, FAIL: 5 };
   assert.equal(countsEqual(a, { ...a }), true);
   assert.equal(countsEqual(a, { ...a, WARN: 0 }), false);
+});
+
+// T38-8 (backlog 38, docs/investigations/2026-09-30-b38-39/PLAN.md): the Runs row's solver mark is
+// the core's verdict as runs_list sends it (`RunRow.solver_build`, from `results::solver_build`),
+// never one worked out here from the checks (C5). A run whose checks cover only TetGen, or that
+// records none, is not shown as verified.
+test('t38_8 the Runs row marks the solver build by the verdict runs_list sends, not by its checks', () => {
+  const check = (name: string, matches: boolean) => ({ name, path: `C:\\s\\${name}`, matches });
+  const reason = (code: string) => ({ code, ui_code: code.toUpperCase(), detail: '' });
+  const unchecked = reason('solver_build_unchecked');
+  const onlyTetgen = buildMark(
+    row(A, { solvers: [check('tetgen.exe', true)], solver_build: { status: 'unverified', reason: unchecked } }),
+  );
+  assert.notEqual(onlyTetgen.kind, 'verified', 'checks that cover only TetGen are not a verified build');
+  assert.deepEqual(onlyTetgen, { kind: 'unverified', names: ['tetgen.exe'], reason: unchecked });
+  // No record: unrecorded, with the core's code.
+  const unrecorded = reason('solver_build_unrecorded');
+  assert.deepEqual(buildMark(row(A, { solvers: null, solver_build: { status: 'unverified', reason: unrecorded } })), {
+    kind: 'unrecorded',
+    names: [],
+    reason: unrecorded,
+  });
+  // A row with no run.json that reads carries no verdict: nothing is recorded.
+  assert.deepEqual(buildMark(row(A, { status: 'INTERRUPTED', solvers: null, solver_build: null })), {
+    kind: 'unrecorded',
+    names: [],
+    reason: null,
+  });
+  // A failing check: unverified, naming the file that failed.
+  const mismatch = reason('solver_build_mismatch');
+  assert.deepEqual(
+    buildMark(
+      row(A, {
+        solvers: [check('spps.exe', true), check('tetgen.exe', false)],
+        solver_build: { status: 'unverified', reason: mismatch },
+      }),
+    ),
+    { kind: 'unverified', names: ['tetgen.exe'], reason: mismatch },
+  );
+  // Verified only when the core says so.
+  assert.deepEqual(
+    buildMark(row(A, { solvers: [check('spps.exe', true), check('tetgen.exe', true)], solver_build: { status: 'verified' } })),
+    { kind: 'verified', names: ['spps.exe', 'tetgen.exe'], reason: null },
+  );
 });

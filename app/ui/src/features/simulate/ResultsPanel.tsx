@@ -2,19 +2,22 @@
 // the Simulate step's "Run <n>" link, else the newest run). M11 shows only whether the run's
 // results verify (`run_results`), never a value: only M12 may show one (M11 PLAN.md 1.4, 3.3).
 //
-// `[data-results-state]` is `none`, `running`, `checking`, `verified`, `refused` or `error`. A
-// refusal reads "FAIL · Results refused" with its UI code and core code, then the codes of the
-// run's own reasons. There is no `[data-result]` element, and neither the panel's text nor its
-// tooltips hold a digit outside `[data-run-label]` ("Run <n> · <variant>"): a reason's detail may
-// hold numbers, even a solver-computed one (`results_value_invalid` quotes the value it refused),
-// so it is not shown here at all, not even in a title, which a user reads as surely as the text
-// (M11 review 2, app 4). The Runs tab shows it, withheld when it quotes a number with a unit.
+// `[data-results-state]` is `none`, `running`, `checking`, `verified`, `unverified`, `refused` or
+// `error`. A refusal reads "FAIL · Results refused" with its UI code and core code, then the codes
+// of the run's own reasons. A run whose results load but whose solver build was not verified
+// (backlog 38) reads "UNVERIFIED · Results unverified" with its reason's codes, never "Results
+// verified". The codes shown are `resultsCodes`'. There is no `[data-result]` element, and
+// neither the panel's text nor its tooltips hold a digit outside `[data-run-label]` ("Run <n> ·
+// <variant>"): a reason's detail may hold numbers, even a solver-computed one
+// (`results_value_invalid` quotes the value it refused), so it is not shown here at all, not even
+// in a title, which a user reads as surely as the text (M11 review 2, app 4). The Runs tab shows
+// it, withheld when it quotes a number with a unit.
 import { useEffect, useState } from 'react';
 import * as actions from '../../actions';
 import type { ReasonUi } from '../../bindings/ipc';
 import { resultsStore, runsStore, sceneStore, selectedRunStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
-import { resultsStateName, runVariantName, solverLabel } from './model';
+import { resultsCodes, resultsStateName, runVariantName, solverLabel } from './model';
 import './simulate.css';
 
 /** A reason's title on this step: where its detail is, never the detail. */
@@ -101,13 +104,26 @@ export function ResultsPanel() {
             </div>
           </>
         )}
+        {state === 'unverified' && (
+          <>
+            <div className="res-verdict warn">
+              <span className="res-label">UNVERIFIED</span>
+              Results unverified
+            </div>
+            <Codes reasons={resultsCodes(answer)} part="unverified" />
+            <div className="res-text">
+              The results load and re-check, but the solvers that made them were not verified against the manifest, so
+              they are marked unverified.
+            </div>
+          </>
+        )}
         {state === 'refused' && (
           <>
             <div className="res-verdict fail">
               <span className="res-label">FAIL</span>
               Results refused
             </div>
-            {answer?.refusal && <Codes reasons={[answer.refusal]} part="refusal" />}
+            <Codes reasons={resultsCodes(answer)} part="refusal" />
             {row && row.reasons.length > 0 && (
               <>
                 <div className="label res-section-label">The run’s reasons</div>

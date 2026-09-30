@@ -17,6 +17,7 @@ import {
   progressDisplay,
   progressFill,
   projectSettings,
+  resultsCodes,
   resultsStateName,
   runLabel,
   runningHead,
@@ -387,4 +388,25 @@ test('the Results step state: none, running, checking, verified, refused, error'
   assert.equal(resultsStateName('r', { status: 'OK' }, verified, false), 'verified');
   assert.equal(resultsStateName('r', { status: 'FAIL' }, refused, false), 'refused');
   assert.equal(resultsStateName('r', { status: 'OK' }, null, true), 'error');
+});
+
+// T38-7 (backlog 38, docs/investigations/2026-09-30-b38-39/PLAN.md): a run whose results load but
+// whose solver build was never verified (T38-1's run, `results_state` as T38-5 pins it) is marked
+// unverified with its reason code: never "Results verified", and not refused (C6).
+test('t38_7 the Results step shows an unverified solver build as unverified with its reason code', () => {
+  const reason = { code: 'solver_build_unrecorded', ui_code: 'SOLVER_BUILD_UNRECORDED', detail: '' };
+  const unverified = { run: 'r', verified: false, refusal: null, unverified: reason };
+  const state = resultsStateName('r', { status: 'OK' }, unverified, false);
+  assert.notEqual(state, 'verified', 'an unverified build never reads "Results verified"');
+  assert.equal(state, 'unverified', 'marked unverified, not refused (C6)');
+  assert.deepEqual(resultsCodes(unverified), [reason], 'the reason code is shown');
+  // A refusal is still a refusal, with its own code.
+  const refusal = { code: 'results_run_failed', ui_code: 'RESULTS_RUN_FAILED', detail: '' };
+  const refused = { run: 'r', verified: false, refusal, unverified: null };
+  assert.equal(resultsStateName('r', { status: 'FAIL' }, refused, false), 'refused');
+  assert.deepEqual(resultsCodes(refused), [refusal]);
+  // A verified run shows no code.
+  const verified = { run: 'r', verified: true, refusal: null, unverified: null };
+  assert.equal(resultsStateName('r', { status: 'OK' }, verified, false), 'verified');
+  assert.deepEqual(resultsCodes(verified), []);
 });

@@ -298,6 +298,20 @@ export type RunLineClass = 'PROGRESS' | 'INFO' | 'OK' | 'WARN' | 'FAIL';
  */
 export type LineSource = 'solver' | 'mesh';
 /**
+ * A run's solver build, verified or not, with the reason's core and UI codes (backlog 38).
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "SolverBuildUi".
+ */
+export type SolverBuildUi =
+  | {
+      status: 'verified';
+    }
+  | {
+      reason: ReasonUi;
+      status: 'unverified';
+    };
+/**
  * A run as the Runs tab lists it.
  *
  * This interface was referenced by `IpcBindings`'s JSON-Schema
@@ -925,7 +939,8 @@ export interface Prepared {
   token: number;
 }
 /**
- * Whether a run's results verify (`results::load`), never a value from them.
+ * Whether a run's results verify (`results::load`) and its solver build was verified
+ * (`results::solver_build`), never a value from them.
  *
  * This interface was referenced by `IpcBindings`'s JSON-Schema
  * via the `definition` "ResultsState".
@@ -933,6 +948,14 @@ export interface Prepared {
 export interface ResultsState {
   refusal?: ReasonUi | null;
   run: string;
+  /**
+   * Why results that load are still not verified: the solver build's reason
+   * (`results::solver_build`, backlog 38). `None` when verified, and when refused.
+   */
+  unverified?: ReasonUi | null;
+  /**
+   * The results load and the solver build was verified.
+   */
   verified: boolean;
 }
 /**
@@ -1050,6 +1073,12 @@ export interface RunRow {
    * `spps` or `tcr`.
    */
   solver?: string | null;
+  /**
+   * The solver build's verdict, the one the row shows (backlog 38): the core's
+   * (`results::solver_build`, the predicate the Results step and `simpa results` use too),
+   * never worked out from `solvers` in the UI. `None` for a row with no `run.json` that reads.
+   */
+  solver_build?: SolverBuildUi | null;
   /**
    * The executables checked against the verified build before the run; `None` for a CLI run
    * or one written before M11.
