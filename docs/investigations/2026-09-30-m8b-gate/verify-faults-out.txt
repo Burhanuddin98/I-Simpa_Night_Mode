@@ -1,0 +1,5 @@
+N2 (KuttruffFullVariance), alpha 0.4 gated cells: 80 runs read, 0 refused or not read
+  A Fail in 8 of 8 alpha 0.4 gated cells: ["6x10x3-a0.4-random-air-off A Some(Fail)", "6x10x3-a0.4-energetic-air-off A Some(Fail)", "6x10x3-a0.4-random-air-on A Some(Fail)", "6x10x3-a0.4-energetic-air-on A Some(Fail)", "5x4x3-a0.4-random-air-off A Some(Fail)", "5x4x3-a0.4-energetic-air-off A Some(Fail)", "5x4x3-a0.4-random-air-on A Some(Fail)", "5x4x3-a0.4-energetic-air-on A Some(Fail)"]
+N8 (TcrAnalyticPhysicalConstant), TCR runs: 20 runs read, 0 refused or not read
+  gated TCR runs 16: D bands 104, of them Fail 104; band problems 0
+exit 0
