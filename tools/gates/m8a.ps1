@@ -71,6 +71,22 @@ function SealSha256([string]$path) {
     $h = [Security.Cryptography.SHA256]::Create()
     try { return (($h.ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join '') } finally { $h.Dispose() }
 }
+# A path as the file system stores its names (their case), component by component: git's pathspecs
+# match case exactly, and a volume that ignores case finds the seal under any spelling.
+function StoredPath([string]$path) {
+    # Relative to this script's location ($repo), as Resolve-Path would take it; .NET's own current
+    # folder is not PowerShell's.
+    if (-not [IO.Path]::IsPathRooted($path)) { $path = Join-Path (Get-Location).ProviderPath $path }
+    $full = [IO.Path]::GetFullPath($path)
+    $root = [IO.Path]::GetPathRoot($full)
+    $out = $root
+    foreach ($part in @($full.Substring($root.Length).Split([IO.Path]::DirectorySeparatorChar) | Where-Object { $_ })) {
+        $hit = @([IO.Directory]::GetFileSystemEntries($out, $part))
+        if ($hit.Count -ne 1) { throw "${path}: no single '$part' under $out" }
+        $out = $hit[0]
+    }
+    return $out
+}
 $sealSha = $null
 if ($From) {
     # An earlier bed is read only against its committed seal: never on the word of the run.json files
@@ -82,8 +98,8 @@ if ($From) {
     }
     if (-not $Seal) { throw "no committed seal for $From (looked for beds\m8a-$(Split-Path -Leaf $From)\outputs-seal.json; or give -Seal): an earlier bed is read only against its committed seal, so a bed folder renamed or never sealed is refused" }
     if (-not (Test-Path -LiteralPath $Seal -PathType Leaf)) { throw "-Seal $Seal is not a file" }
-    $sealFull = (Resolve-Path -LiteralPath $Seal).Path
-    $repoFull = (Resolve-Path -LiteralPath $repo).Path.TrimEnd('\')
+    $sealFull = StoredPath $Seal
+    $repoFull = (StoredPath $repo).TrimEnd('\')
     if (-not $sealFull.StartsWith($repoFull + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "the seal $sealFull is not a file of this repository ($repoFull): the gate takes only a committed seal" }
     $sealRel = $sealFull.Substring($repoFull.Length + 1).Replace('\', '/')
     $tracked = @(git -C $repo ls-files -- $sealRel)

@@ -151,9 +151,15 @@ impl Seal {
         Ok(())
     }
 
-    /// Refuses a bed folder `from` that is not the one sealed.
+    /// Refuses a bed folder `from` that is not the one sealed. The name compared is the one the
+    /// file system stores for the folder `from` resolves to, not as `from` spells it: on a volume
+    /// that ignores case, `...\20260929t093134z` is the folder `20260929T093134Z`, and is taken;
+    /// a link named like the bed that resolves to another folder is not. The seal's content
+    /// binding, not this name, is what holds the runs: this refuses a seal given for another bed.
     pub fn for_bed(&self, from: &Path) -> Result<(), String> {
-        let name = from.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let stored = std::fs::canonicalize(from)
+            .map_err(|e| format!("the bed folder {}: {e}", from.display()))?;
+        let name = stored.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if name == self.bed {
             Ok(())
         } else {
@@ -756,8 +762,6 @@ mod tests {
             runs: [("runs/c/s1".to_string(), run)].into(),
         };
         assert_eq!(good.check(), Ok(()));
-        assert!(good.for_bed(Path::new("C:/x/20260929T093134Z")).is_ok());
-        assert!(good.for_bed(Path::new("C:/x/20260930T000000Z")).is_err());
         let with = |f: &dyn Fn(&mut Seal)| {
             let mut s = good.clone();
             f(&mut s);
@@ -788,6 +792,46 @@ mod tests {
             s.bytes -= 3;
         });
         assert!(no_run_json.is_err(), "{no_run_json:?}");
+    }
+
+    /// M8b round 2, `VERIFY-adversarial-1.md` finding 4: `for_bed` compared the name as `--from`
+    /// spelled it, so the M8a bed given as `...\20260929t093134z`, the same folder on Windows,
+    /// was refused with its own seal, and the gate failed. The name compared is the one the file
+    /// system stores; another folder, and one that is not there, are still refused.
+    #[test]
+    fn a_seal_is_for_its_bed_folder_by_the_name_the_file_system_stores() {
+        let (dir, _, _) = run_dir("for-bed");
+        let own = dir.parent().unwrap().parent().unwrap().parent().unwrap();
+        let bed = own.join("20260929T093134Z");
+        let other = own.join("20260930T000000Z");
+        std::fs::create_dir_all(&bed).unwrap();
+        std::fs::create_dir_all(&other).unwrap();
+        let seal = Seal::of_runs("20260929T093134Z", BTreeMap::new());
+        assert_eq!(seal.for_bed(&bed), Ok(()));
+        // The same folder, spelled in another case: taken where the volume ignores case.
+        #[cfg(windows)]
+        assert_eq!(seal.for_bed(&own.join("20260929t093134z")), Ok(()));
+        let e = seal.for_bed(&other).unwrap_err();
+        assert!(e.contains("the seal is of the bed 20260929T093134Z"), "{e}");
+        let e = seal.for_bed(&own.join("20260929T093134Y")).unwrap_err();
+        assert!(e.contains("the bed folder"), "{e}");
+        // A link named like the bed that resolves to another folder: refused.
+        #[cfg(windows)]
+        {
+            let links = own.join("links");
+            std::fs::create_dir_all(&links).unwrap();
+            let link = links.join("20260929T093134Z");
+            let made = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(&link)
+                .arg(&other)
+                .output()
+                .unwrap();
+            assert!(made.status.success(), "{made:?}");
+            let e = seal.for_bed(&link).unwrap_err();
+            assert!(e.contains("the seal is of the bed 20260929T093134Z"), "{e}");
+        }
+        done(&dir);
     }
 
     #[test]
