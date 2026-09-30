@@ -16,8 +16,9 @@ written, and the 6-hour bed was not rerun. Nothing was deleted.
 - The real M8a bed still passes:
   - All 433 of its runs are bound by the committed seal and matched to their plan.
   - Re-judged, it gives `report.json`'s verdicts with the same numbers. The one exception is D's
-    reference, which is now the plan's. It differs from the run's own by at most 2.2 × 10⁻¹⁶ relative,
-    and no verdict changes.
+    reference, which is now the plan's. It differs from the run's own by at most 2.6 × 10⁻¹⁶ relative
+    (2 ulp), and no verdict changes. *(Round 2, finding R3: this said 2.2 × 10⁻¹⁶, which 13 of 128
+    bands exceed.)*
 - Without the seal, 433 of 433 runs are refused `bed_run_unbound`.
 
 Receipts beside this file:
@@ -90,6 +91,9 @@ Line numbers are those of the code commit, `239c6f5`.
      another seed's at the same path, over the 41 groups of seeds (40 cells and the atmospheric
      validation), and 0 groups have two equal whole sets (`seed-identity-probe-out.txt`).
    - A future output that did not depend on the seed would be refused loudly, never accepted.
+   - *(Round 2, finding N1: it refused a valid bed. At 31,000 particles per source, two seeds wrote
+     the same `SPPS particle statistics.gabe`. Since `fbd346d`, only a receiver's file shared refuses
+     two seeds.)*
 
 4. **The seal of the M8a bed.** `bind.rs:40` `Seal`. `bind.rs:99` `Seal::load` checks it
    (`bind.rs:110`) before use:
@@ -254,8 +258,8 @@ Against `report.json`, both read with the crate's exact JSON reader:
 | Every seed's T30 array | – | Equal |
 | TCR | 868 | 164 differ, by at most 4.4 × 10⁻¹⁶ s. Those are D's reference (the plan's now) and D's deviation |
 
-- D's reference differs from the run's own analytic time by at most 2.2 × 10⁻¹⁶ relative over 128
-  bands. The volume enclosed by the scene equals the `.mbin`'s to rounding. Every D verdict is the
+- D's reference differs from the run's own analytic time by at most 2.6 × 10⁻¹⁶ relative (2 ulp) over
+  128 bands. *(Round 2, finding R3: this said 2.2 × 10⁻¹⁶.)* The volume enclosed by the scene equals the `.mbin`'s to rounding. Every D verdict is the
   same, and every `run_analytic_eyring_s` is `report.json`'s `analytic_eyring_s`.
 - The other differences are keys the M8a report does not have: step 1's `project_sha256` and
   `band_problems`, and this fix's new keys.
@@ -343,10 +347,12 @@ On this tree: `CARGO_TARGET_DIR=C:/tmp/nm-target`, `CARGO_BUILD_JOBS=16`, `CARGO
 - **A forged `run.json` for a new bed.**
   - A new bed's record is its runs' `run.json`, which is not signed. A hand-forged `run.json` whose
     `outputs` match forged files passes the binding.
-  - What stands after it: the plan binding, the seed rule, D against the plan, and for SPPS, E3 and C
-    against the independent transport.
+  - What stands after it: the plan binding and D against the plan. *(Round 2, finding A3: this also
+    named the seed rule and, for SPPS, E3 and C. They do not stand. A copied seed is real data of its
+    cell, so E3, A, B and C pass it, and one unread byte per file defeats the byte-level seed rule
+    (`VERIFY-adversarial-1.md`, U1 and U2).)*
   - A committed seal closes this for a bed used as evidence. Sealing each bed a gate judges is backlog
-    row 44.
+    row 44. *(Round 2 closes it for every bed: no run is bound by its `run.json` alone.)*
 - **`simpa results` and the app.**
   - `results::load` does not check `run.json`'s `outputs`. It still verifies the inputs and judges the
     outputs again by the verdict's signals.

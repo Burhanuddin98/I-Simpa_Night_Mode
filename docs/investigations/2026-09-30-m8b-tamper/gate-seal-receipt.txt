@@ -1,0 +1,114 @@
+tree: HEAD 277d785 and the working tree as it stands; the committed seal's sha256 (bytes as checked out) 762f3fbab431a01d9745a73ba55fa00674e41e0605ad8521c55122bd7c15e09d
+
+==== G1 fixed gate, -From a renamed bed folder
+args: -From C:\tmp\nm-judge-tamper\r2\gate\renamed\20260929T093134Y
+exit: 1 (0.3 s)
+no committed seal for C:\tmp\nm-judge-tamper\r2\gate\renamed\20260929T093134Y (looked for 
+beds\m8a-20260929T093134Y\outputs-seal.json; or give -Seal): an earlier bed is read only against its committed seal, 
+so a bed folder renamed or never sealed is refused
+At B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\tools\gates\m8a.ps1:99 char:23
++ ... ot $Seal) { throw "no committed seal for $From (looked for beds\m8a-$ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (no committed se...aled is refused:String) [], RuntimeException
+    + FullyQualifiedErrorId : no committed seal for C:\tmp\nm-judge-tamper\r2\gate\renamed\20260929T093134Y (looked fo 
+   r beds\m8a-20260929T093134Y\outputs-seal.json; or give -Seal): an earlier bed is read only against its committed s  
+  eal, so a bed folder renamed or never sealed is refused
+ 
+
+==== G2 fixed gate, -Seal a copy outside the repository
+args: -From C:\tmp\nm-m8a-bed\20260929T093134Z -Seal C:\tmp\nm-judge-tamper\r2\gate\seal-copy\outputs-seal.json
+exit: 1 (0.2 s)
+the seal C:\tmp\nm-judge-tamper\r2\gate\seal-copy\outputs-seal.json is not a file of this repository 
+(B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper): the gate takes only a committed seal
+At B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\tools\gates\m8a.ps1:103 char:94
++ ... oreCase)) { throw "the seal $sealFull is not a file of this repositor ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (the seal C:\tmp... committed seal:String) [], RuntimeException
+    + FullyQualifiedErrorId : the seal C:\tmp\nm-judge-tamper\r2\gate\seal-copy\outputs-seal.json is not a file of thi 
+   s repository (B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper): the gate takes only a committed seal
+ 
+
+==== G3 fixed gate, -Seal an untracked copy inside the repository
+args: -From C:\tmp\nm-m8a-bed\20260929T093134Z -Seal B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\target\r2-untracked-seal\outputs-seal.json
+exit: 1 (0.2 s)
+the seal target/r2-untracked-seal/outputs-seal.json is not tracked by git: the gate takes only a committed seal
+At B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\tools\gates\m8a.ps1:106 char:57
++ ... nt -ne 1) { throw "the seal $sealRel is not tracked by git: the gate  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (the seal target... committed seal:String) [], RuntimeException
+    + FullyQualifiedErrorId : the seal target/r2-untracked-seal/outputs-seal.json is not tracked by git: the gate take 
+   s only a committed seal
+ 
+
+==== G4 fixed gate, -From the M8a bed, its committed seal changed by one byte
+args: -From C:\tmp\nm-m8a-bed\20260929T093134Z
+exit: 1 (0.2 s)
+warning: in the working copy of 'beds/m8a-20260929T093134Z/outputs-seal.json', LF will be replaced by CRLF the next time Git touches it
+the seal beds/m8a-20260929T093134Z/outputs-seal.json differs from HEAD: the gate takes only a committed, unchanged seal
+At B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\tools\gates\m8a.ps1:108 char:32
++ ... DE -ne 0) { throw "the seal $sealRel differs from HEAD: the gate take ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (the seal beds/m... unchanged seal:String) [], RuntimeException
+    + FullyQualifiedErrorId : the seal beds/m8a-20260929T093134Z/outputs-seal.json differs from HEAD: the gate takes o 
+   nly a committed, unchanged seal
+ 
+
+G4 seal restored byte for byte: True
+
+==== G5 fixed gate, -From the M8a bed as named
+args: -From C:\tmp\nm-m8a-bed\20260929T093134Z
+exit: stopped (0.3 s)
+warning: in the working copy of 'beds/m8a-20260929T093134Z/outputs-seal.json', LF will be replaced by CRLF the next time Git touches it
+work: C:\tmp\nm-target\gates\m8a\20260930-081622
+solvers: C:/tmp/nm-m8a-solvers
+bed file: B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a.json
+upstream: B:\repos\I-Simpa-upstream
+seal: B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a-20260929T093134Z\outputs-seal.json (committed, unchanged from HEAD; sha256 762f3fbab431a01d9745a73ba55fa00674e41e0605ad8521c55122bd7c15e09d)
+
+==== G6 fixed gate, -From the M8a bed spelled in lower case
+args: -From C:\tmp\nm-m8a-bed\20260929t093134z
+exit: stopped (0.3 s)
+work: C:\tmp\nm-target\gates\m8a\20260930-081623
+solvers: C:/tmp/nm-m8a-solvers
+bed file: B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a.json
+upstream: B:\repos\I-Simpa-upstream
+seal: B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a-20260929T093134Z\outputs-seal.json (committed, unchanged from HEAD; sha256 762f3fbab431a01d9745a73ba55fa00674e41e0605ad8521c55122bd7c15e09d)
+
+==== G0 the gate before round 2 (4d79c7d), -From the renamed folder
+args: -From C:\tmp\nm-judge-tamper\r2\gate\renamed\20260929T093134Y
+exit: stopped (0.4 s)
+work: C:\tmp\nm-target\gates\m8a\20260930-081623
+solvers: C:/tmp/nm-m8a-solvers
+bed file: B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\beds\m8a.json
+upstream: B:\repos\I-Simpa-upstream
+seal: (none: runs without output hashes in run.json are refused)
+      code 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d, raw 1d9900db6cc260039c53963754d4df8de4370c7c6a65cfe998a66cb5720822e8
+PASS  E1 spps.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+      code fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234, raw c4a7bca35374af01405a879e649dc0e746f9267c6449e47969bb41e2f4add863
+PASS  E1 classicalTheory.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+      code d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f, raw ac68f014a3b2003dc6f88ca9b3dc53e5c193888868ab9029b636e89d5be8a8f9
+PASS  E1 tetgen.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+      code 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26, raw 34d9b87424f90af9999434d1c69747355d66eabf217f2cdb09448986649718d0
+PASS  E1 preprocess.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+
+G0 m8a.ps1 restored byte for byte: True
+
+==== G7 the gate of 0069cd2, -From the M8a bed spelled in lower case
+args: -From C:\tmp\nm-m8a-bed\20260929t093134z
+exit: 1 (0.2 s)
+the seal beds/m8a-20260929t093134z/outputs-seal.json is not tracked by git: the gate takes only a committed seal
+At B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\tools\gates\m8a.ps1:90 char:57
++ ... nt -ne 1) { throw "the seal $sealRel is not tracked by git: the gate  ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (the seal beds/m... committed seal:String) [], RuntimeException
+    + FullyQualifiedErrorId : the seal beds/m8a-20260929t093134z/outputs-seal.json is not tracked by git: the gate tak 
+   es only a committed seal
+ 
+
+G7 m8a.ps1 restored byte for byte: True
+
+written by this receipt, left in place:
+  C:\tmp\nm-judge-tamper\r2\gate\renamed\20260929T093134Y\runs (empty)
+  C:\tmp\nm-judge-tamper\r2\gate\seal-copy\outputs-seal.json
+  B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\target\r2-untracked-seal\outputs-seal.json (gitignored)
+and each gate run's work folder under C:\tmp\nm-target\gates\m8a\ that it printed as 'work:'

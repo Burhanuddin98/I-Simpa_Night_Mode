@@ -1,0 +1,6 @@
+groups 41, seed pairs 1845
+seeds per group: [10]
+receiver-band values per seed: [18, 21, 27]
+pairs whose whole T30 arrays are equal: 0
+receiver-bands where two seeds' T30 values are equal (text of the float): 0
+largest number of equal (t, mc_sd, source) in one pair: (0, None)

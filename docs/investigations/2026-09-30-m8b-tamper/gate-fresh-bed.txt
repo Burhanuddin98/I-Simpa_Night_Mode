@@ -1,0 +1,227 @@
+work: C:\tmp\nm-target\gates\m8a\20260930-083511
+solvers: C:/tmp/nm-m8a-solvers
+bed file: B:\repos\I-Simpa_Night_Mode\.claude\worktrees\m8b-tamper\docs\investigations\2026-09-30-m8b-tamper\fresh-seal-bed.json
+upstream: C:\tmp\nm-judge-tamper\r2\fresh\no-upstream
+      code 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d, raw 1d9900db6cc260039c53963754d4df8de4370c7c6a65cfe998a66cb5720822e8
+PASS  E1 spps.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+      code fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234, raw c4a7bca35374af01405a879e649dc0e746f9267c6449e47969bb41e2f4add863
+PASS  E1 classicalTheory.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+      code d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f, raw ac68f014a3b2003dc6f88ca9b3dc53e5c193888868ab9029b636e89d5be8a8f9
+PASS  E1 tetgen.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+      code 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26, raw 34d9b87424f90af9999434d1c69747355d66eabf217f2cdb09448986649718d0
+PASS  E1 preprocess.exe in SIMPA_SOLVERS_DIR has the code sha256 solvers/manifest.json lists
+PASS  E5 cargo test --release -p simpa-core --test params_kuttruff: Kuttruff within the bare 0.6 % of the committed transport T30s in M8's 8 cells
+      exit 8 after 57 s; C:\tmp\nm-judge-tamper\r2\gate-fresh\20260930T063554Z
+      simpa: bed: EXPLORATORY, the report cannot pass: the file is not M8a's matrix in its canonical form (simpa bed --canonical prints it)
+      simpa: bed: not run: C:\tmp\nm-judge-tamper\r2\fresh\no-upstream\src/isimpa/resources/doc/validation/atmospheric_absorption/Validation_atmospheric_absorption.proj: The system cannot find the path specified. (os error 3)
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 125 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 250 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 1000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 2000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 4000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 125 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 250 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 500 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 1000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 2000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 4000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 125 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 250 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 500 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 1000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 2000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 125 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 250 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 500 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 1000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 4000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 125 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 250 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 500 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 1000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 2000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 4000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R002, 250 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R002, 2000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 250 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 500 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 1000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 2000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 4000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 125 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 500 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 1000 Hz: T30 refused range_not_reached
+      FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 2000 Hz: T30 refused range_not_reached
+FAIL  simpa bed ran and exited 0 (0 only when report.pass is true; 8 not passed, 5 a run not OK)
+      simpa bed printed C:\tmp\nm-judge-tamper\r2\gate-fresh\20260930T063554Z\outputs-seal.json sha256 1d34dd3a5560306dfbf3326f93834796e6e0d4dd009d340fefa06675704a7844; the copy C:\tmp\nm-target\gates\m8a\20260930-083511\fresh-seal\outputs-seal.json has 1d34dd3a5560306dfbf3326f93834796e6e0d4dd009d340fefa06675704a7844 and 9 runs; meta.seal 
+PASS  simpa bed sealed the bed it ran: its seal, copied out of the bed folder, has the sha256 simpa bed printed
+PASS  report.json validates against its schema (simpa bed --schema, by a JSON Schema validator)
+FAIL  report.exploratory is false: the bed file is M8a's matrix (E7)
+      45 failures
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 125 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 250 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 1000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 2000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 4000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 125 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 250 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 500 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 1000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 2000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 4000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 125 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 250 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 500 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 1000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 2000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 125 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 250 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 500 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 1000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 4000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 125 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 250 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 500 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 1000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 2000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 4000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R002, 250 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R002, 2000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 250 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 500 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 1000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 2000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 4000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 125 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 500 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 1000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 2000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 125 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 250 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 1000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 2000 Hz: T30 refused range_not_reached
+      E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 4000 Hz: T30 refused range_not_reached
+      E7: the file is not M8a's matrix in its canonical form (simpa bed --canonical prints it)
+      5x4x3-a0.4-random-air-off: not judged: E6: seed 1, receiver R000, 125 Hz: T30 refused range_not_reached; seed 1, receiver R000, 250 Hz: T30 refused range_not_reached; seed 1, receiver R000, 1000 Hz: T30 refused range_not_reached; seed 1, receiver R000, 2000 Hz: T30 refused range_not_reached; seed 1, receiver R000, 4000 Hz: T30 refused range_not_reached; seed 1, receiver R001, 125 Hz: T30 refused range_not_reached; seed 1, receiver R001, 250 Hz: T30 refused range_not_reached; seed 1, receiver R001, 500 Hz: T30 refused range_not_reached; seed 1, receiver R001, 1000 Hz: T30 refused range_not_reached; seed 1, receiver R001, 2000 Hz: T30 refused range_not_reached; seed 1, receiver R001, 4000 Hz: T30 refused range_not_reached; seed 1, receiver R002, 125 Hz: T30 refused range_not_reached; seed 1, receiver R002, 250 Hz: T30 refused range_not_reached; seed 1, receiver R002, 500 Hz: T30 refused range_not_reached; seed 1, receiver R002, 1000 Hz: T30 refused range_not_reached; seed 1, receiver R002, 2000 Hz: T30 refused range_not_reached; seed 2, receiver R000, 125 Hz: T30 refused range_not_reached; seed 2, receiver R000, 250 Hz: T30 refused range_not_reached; seed 2, receiver R000, 500 Hz: T30 refused range_not_reached; seed 2, receiver R000, 1000 Hz: T30 refused range_not_reached; seed 2, receiver R000, 4000 Hz: T30 refused range_not_reached; seed 2, receiver R001, 125 Hz: T30 refused range_not_reached; seed 2, receiver R001, 250 Hz: T30 refused range_not_reached; seed 2, receiver R001, 500 Hz: T30 refused range_not_reached; seed 2, receiver R001, 1000 Hz: T30 refused range_not_reached; seed 2, receiver R001, 2000 Hz: T30 refused range_not_reached; seed 2, receiver R001, 4000 Hz: T30 refused range_not_reached; seed 2, receiver R002, 250 Hz: T30 refused range_not_reached; seed 2, receiver R002, 2000 Hz: T30 refused range_not_reached; seed 3, receiver R000, 250 Hz: T30 refused range_not_reached; seed 3, receiver R000, 500 Hz: T30 refused range_not_reached; seed 3, receiver R000, 1000 Hz: T30 refused range_not_reached; seed 3, receiver R000, 2000 Hz: T30 refused range_not_reached; seed 3, receiver R000, 4000 Hz: T30 refused range_not_reached; seed 3, receiver R001, 125 Hz: T30 refused range_not_reached; seed 3, receiver R001, 500 Hz: T30 refused range_not_reached; seed 3, receiver R001, 1000 Hz: T30 refused range_not_reached; seed 3, receiver R001, 2000 Hz: T30 refused range_not_reached; seed 3, receiver R002, 125 Hz: T30 refused range_not_reached; seed 3, receiver R002, 250 Hz: T30 refused range_not_reached; seed 3, receiver R002, 1000 Hz: T30 refused range_not_reached; seed 3, receiver R002, 2000 Hz: T30 refused range_not_reached; seed 3, receiver R002, 4000 Hz: T30 refused range_not_reached
+FAIL  report.pass is the JSON true
+      9 run.json read; 0 not the checked files
+PASS  E1 again, from the files: every run's run.json executable, and every mesh.json's TetGen, is the raw sha256 of the file checked
+      340 files, 10.5 MB under C:\tmp\nm-judge-tamper\r2\gate-fresh\20260930T063554Z; the report counted 337 files, 10.3 MB
+PASS  the bed's files: fewer than the 20,000 a bed may leave (B: is exFAT with 128 KB clusters)
+      2 cells; missing: 
+PASS  the decays and plots: tools/bed/m8a_plots.py writes decays/<cell>.npz, plots/<cell>.png and plots/summary.png
+      exit 2; simpa: bed refused before any run (E1): C:\tmp\nm-target\gates\m8a\20260930-083511\n1-solvers\spps.exe is not the verified build: code sha256 46c7df488d46f57c480ebdde6aa68c4bc350916e05c31609bb79f841a1a1e186 is not the verified build's 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d (solvers/manifest.json); 0 things written
+PASS  N1 says NO: a copy of spps.exe with one .text byte flipped: the bed refuses before any run (E1), exit 2, nothing written
+      | 5x4x3-a0.4-random-air-off: A None: 
+      | 
+      | thread 'n2_kuttruff_without_its_half_fails_a' (5060) panicked at crates\simpa\tests\bed_m8a.rs:188:5:
+      | the say-NO did not make A fail: ["5x4x3-a0.4-random-air-off: A None"]
+      | note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+      | test n2_kuttruff_without_its_half_fails_a ... FAILED
+      | 
+      | failures:
+      | 
+      | failures:
+      |     n2_kuttruff_without_its_half_fails_a
+      | 
+      | test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 1.41s
+      | 
+      | error: test failed, to rerun pass `-p simpa --test bed_m8a`
+      n2_kuttruff_without_its_half_fails_a did not run exactly once and pass
+      5x4x3-a0.4-random-air-off: A None:
+      the say-NO did not make A fail: ["5x4x3-a0.4-random-air-off: A None"]
+FAIL  N2 says NO: Kuttruff with its 1/2 dropped (through results::reference): A fails in every alpha 0.4 gated cell
+      | 5x4x3-a0.4-random-air-off: A None: 
+      | 
+      | thread 'n3_plain_eyring_as_the_reference_fails_a' (8968) panicked at crates\simpa\tests\bed_m8a.rs:188:5:
+      | the say-NO did not make A fail: ["5x4x3-a0.4-random-air-off: A None"]
+      | note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+      | test n3_plain_eyring_as_the_reference_fails_a ... FAILED
+      | 
+      | failures:
+      | 
+      | failures:
+      |     n3_plain_eyring_as_the_reference_fails_a
+      | 
+      | test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 1.39s
+      | 
+      | error: test failed, to rerun pass `-p simpa --test bed_m8a`
+      n3_plain_eyring_as_the_reference_fails_a did not run exactly once and pass
+      5x4x3-a0.4-random-air-off: A None:
+      the say-NO did not make A fail: ["5x4x3-a0.4-random-air-off: A None"]
+FAIL  N3 says NO: plain Eyring as A's reference: A fails in every alpha 0.4 gated cell
+      | 5x4x3-a0.4-random-air-off: C None: 
+      | 
+      | thread 'n4_a_transport_that_does_not_reflect_by_lamberts_law_fails_c' (18084) panicked at crates\simpa\tests\bed_m8a.rs:188:5:
+      | the say-NO did not make C fail: ["5x4x3-a0.4-random-air-off: C None"]
+      | note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+      | test n4_a_transport_that_does_not_reflect_by_lamberts_law_fails_c ... FAILED
+      | 
+      | failures:
+      | 
+      | failures:
+      |     n4_a_transport_that_does_not_reflect_by_lamberts_law_fails_c
+      | 
+      | test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 55.49s
+      | 
+      | error: test failed, to rerun pass `-p simpa --test bed_m8a`
+      n4_a_transport_that_does_not_reflect_by_lamberts_law_fails_c did not run exactly once and pass
+      uniform-reflection transport 1/2 5x4x3 α 0.2 air None: 28 s
+      uniform-reflection transport 2/2 5x4x3 α 0.4 air None: 25 s
+      5x4x3-a0.2-energetic-air-off: C Some(Fail): d +14.550 %, [+14.340, +14.759] %
+      5x4x3-a0.4-random-air-off: C None:
+      the say-NO did not make C fail: ["5x4x3-a0.4-random-air-off: C None"]
+FAIL  N4 says NO: the transport reflecting evenly over the hemisphere, traced again: C fails in every gated cell
+      | air-off transport 2/2 5x4x3 α 0.4 air None: 21 s
+      | 
+      | thread 'n7_the_transport_without_air_fails_c_in_every_air_on_cell' (18616) panicked at crates\simpa\tests\bed_m8a.rs:143:5:
+      | assertion failed: !cells.is_empty()
+      | note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+      | test n7_the_transport_without_air_fails_c_in_every_air_on_cell ... FAILED
+      | 
+      | failures:
+      | 
+      | failures:
+      |     n7_the_transport_without_air_fails_c_in_every_air_on_cell
+      | 
+      | test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 5 filtered out; finished in 45.75s
+      | 
+      | error: test failed, to rerun pass `-p simpa --test bed_m8a`
+      n7_the_transport_without_air_fails_c_in_every_air_on_cell did not run exactly once and pass
+      air-off transport 1/2 5x4x3 α 0.2 air None: 24 s
+      air-off transport 2/2 5x4x3 α 0.4 air None: 21 s
+FAIL  N7 says NO: the transport traced with the air off: C fails in every air-on gated cell
+      5x4x3-a0.2-tcr-air-off 125 Hz: D Fail, +1.230 %
+      5x4x3-a0.2-tcr-air-off 250 Hz: D Fail, +1.230 %
+      5x4x3-a0.2-tcr-air-off 500 Hz: D Fail, +1.230 %
+      5x4x3-a0.2-tcr-air-off 1000 Hz: D Fail, +1.230 %
+      5x4x3-a0.2-tcr-air-off 2000 Hz: D Fail, +1.230 %
+      5x4x3-a0.2-tcr-air-off 4000 Hz: D Fail, +1.230 %
+PASS  N8 says NO: TCR's analytic time with the physical K (through results::tcr): D fails in every band of every gated TCR run
+      run OK; cell not_judged, failed by E6
+PASS  N5 says NO: seed 10 of 5x4x3 alpha 0.4 random at 31,000 particles in its place: the cell does not pass
+      run OK; kuttruff_s refused: params_reference_not_applicable
+PASS  N6 says NO: walls of scattering 0: the bed refuses the cell (params_reference_not_applicable in every band, E3)
+      | failures:
+      | 
+      | ---- bed::file::tests::the_atmospheric_validation_imports_as_the_spec_saw_it stdout ----
+      | 
+      | thread 'bed::file::tests::the_atmospheric_validation_imports_as_the_spec_saw_it' (11164) panicked at crates\simpa-core\src\bed\file.rs:950:87:
+      | called `Result::unwrap()` on an `Err` value: "C:\\tmp\\nm-judge-tamper\\r2\\fresh\\no-upstream\\src/isimpa/resources/doc/validation/atmospheric_absorption/Validation_atmospheric_absorption.proj: The system cannot find the path specified. (os error 3)"
+      | note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+      | 
+      | 
+      | failures:
+      |     bed::file::tests::the_atmospheric_validation_imports_as_the_spec_saw_it
+      | 
+      | test result: FAILED. 45 passed; 1 failed; 1 ignored; 0 measured; 181 filtered out; finished in 4.99s
+      | 
+      | error: test failed, to rerun pass `-p simpa-core --lib`
+FAIL  the bed's unit tests: cargo test -p simpa-core --lib bed::
+PASS  the bed's binding on real runs of this build: cargo test -p simpa-core --test bed_binding
+PASS  clippy -D warnings (core and CLI)
+PASS  cargo fmt --check (core and CLI)
+
+work: C:\tmp\nm-target\gates\m8a\20260930-083511
+bed: C:\tmp\nm-judge-tamper\r2\gate-fresh\20260930T063554Z
+M8a FAILED: 8 of 25 checks failed, 17 passed: simpa bed ran and exited 0 (0 only when report.pass is true; 8 not passed, 5 a run not OK); report.exploratory is false: the bed file is M8a's matrix (E7); report.pass is the JSON true; N2 says NO: Kuttruff with its 1/2 dropped (through results::reference): A fails in every alpha 0.4 gated cell; N3 says NO: plain Eyring as A's reference: A fails in every alpha 0.4 gated cell; N4 says NO: the transport reflecting evenly over the hemisphere, traced again: C fails in every gated cell; N7 says NO: the transport traced with the air off: C fails in every air-on gated cell; the bed's unit tests: cargo test -p simpa-core --lib bed::

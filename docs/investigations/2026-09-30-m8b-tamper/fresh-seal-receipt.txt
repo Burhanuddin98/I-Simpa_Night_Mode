@@ -1,0 +1,196 @@
+tree: HEAD fbd346d; simpa.exe C:\tmp\nm-target\release\simpa.exe, sha256 b341ed761730f784ca163023044bd7268711e7590b3b06ab42f402be9521c371
+bed file: docs/investigations/2026-09-30-m8b-tamper\fresh-seal-bed.json, sha256 7c71e1969d984a82e05f264a1732ff0d97bc5b293f0979f14a1d5246f9b71f50
+
+==== F1 the bed run fresh
+simpa bed docs/investigations/2026-09-30-m8b-tamper\fresh-seal-bed.json --out C:\tmp\nm-judge-tamper\r2\fresh\made --jobs 4 --upstream C:\tmp\nm-judge-tamper\r2\fresh\no-upstream
+exit 8 (57 s)
+simpa: bed: EXPLORATORY, the report cannot pass: the file is not M8a's matrix in its canonical form (simpa bed --canonical prints it)
+E1 ok   spps.exe: code sha256 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d (C:\tmp\nm-m8a-solvers\spps.exe)
+E1 ok   classicalTheory.exe: code sha256 fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234 (C:\tmp\nm-m8a-solvers\classicalTheory.exe)
+E1 ok   tetgen.exe: code sha256 d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f (C:\tmp\nm-m8a-solvers\tetgen.exe)
+E1 ok   preprocess.exe: code sha256 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26 (C:\tmp\nm-m8a-solvers\preprocess.exe)
+simpa: bed: not run: C:\tmp\nm-judge-tamper\r2\fresh\no-upstream\src/isimpa/resources/doc/validation/atmospheric_absorption/Validation_atmospheric_absorption.proj: The system cannot find the path specified. (os error 3)
+[08:32:15] bed docs/investigations/2026-09-30-m8b-tamper\fresh-seal-bed.json: 9 runs, 4 at once, into C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z (NTFS; about 423 files)
+[08:32:22] 1/9 say-NO N6 seed 1: OK 6 s solver, 7 s
+[08:32:24] 2/9 5x4x3-a0.2-energetic-air-off seed 3: OK 7 s solver, 9 s
+[08:32:24] 3/9 5x4x3-a0.2-energetic-air-off seed 1: OK 7 s solver, 9 s
+[08:32:24] 4/9 5x4x3-a0.2-energetic-air-off seed 2: OK 7 s solver, 9 s
+[08:32:25] 5/9 5x4x3-a0.4-random-air-off seed 1: OK 1 s solver, 2 s
+[08:32:25] 6/9 5x4x3-a0.2-tcr-air-off: OK, 0 s
+[08:32:26] 7/9 5x4x3-a0.4-random-air-off seed 2: OK 0 s solver, 2 s
+[08:32:26] 8/9 5x4x3-a0.4-random-air-off seed 3: OK 0 s solver, 2 s
+[08:32:26] 9/9 say-NO N5 seed 10: OK 1 s solver, 2 s
+[08:32:51] transport 1/2 5x4x3 α 0.2 air None: 25 s
+[08:33:13] transport 2/2 5x4x3 α 0.4 air None: 22 s
+seal: C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z\outputs-seal.json sha256 35044391d4a71b971cb3f47949dfbbbee56bb0d2529a5bb54c68120498128ebf (9 runs, 335 files)
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R002, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R002, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 1000 Hz: T30 refused range_not_reached
+
+stamp C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z
+seal C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z\outputs-seal.json: printed sha256 35044391d4a71b971cb3f47949dfbbbee56bb0d2529a5bb54c68120498128ebf, file 35044391d4a71b971cb3f47949dfbbbee56bb0d2529a5bb54c68120498128ebf; bed 20260930T063215Z; 9 runs, 335 files, 9382139 bytes; provenance {'runs_planned_first': '9', 'runs_sealed': '9'}
+report.json sha256 e9adae86c796f52b0c48e082a25d663aa12792e84434f31c5f247275e7ce7146, the seal's e9adae86c796f52b0c48e082a25d663aa12792e84434f31c5f247275e7ce7146
+fresh reads: 9; bound_by ['run.json and this process']; errors 0
+the seal against the bed folder, re-hashed by Python: 0 differences
+
+==== F2 re-read against the copied seal
+simpa bed docs/investigations/2026-09-30-m8b-tamper\fresh-seal-bed.json --out C:\tmp\nm-judge-tamper\r2\fresh\reread --jobs 4 --upstream C:\tmp\nm-judge-tamper\r2\fresh\no-upstream --from C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z --seal C:\tmp\nm-judge-tamper\r2\fresh\seal-copy\outputs-seal.json
+exit 8 (50 s)
+simpa: bed: EXPLORATORY, the report cannot pass: the file is not M8a's matrix in its canonical form (simpa bed --canonical prints it)
+E1 ok   spps.exe: code sha256 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d (C:\tmp\nm-m8a-solvers\spps.exe)
+E1 ok   classicalTheory.exe: code sha256 fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234 (C:\tmp\nm-m8a-solvers\classicalTheory.exe)
+E1 ok   tetgen.exe: code sha256 d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f (C:\tmp\nm-m8a-solvers\tetgen.exe)
+E1 ok   preprocess.exe: code sha256 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26 (C:\tmp\nm-m8a-solvers\preprocess.exe)
+simpa: bed: not run: C:\tmp\nm-judge-tamper\r2\fresh\no-upstream\src/isimpa/resources/doc/validation/atmospheric_absorption/Validation_atmospheric_absorption.proj: The system cannot find the path specified. (os error 3)
+[08:33:13] bed docs/investigations/2026-09-30-m8b-tamper\fresh-seal-bed.json: 9 runs, 4 at once, into C:\tmp\nm-judge-tamper\r2\fresh\reread\20260930T063313Z (NTFS; about 0 files)
+[08:33:13] reading 9 runs from C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z, held to the seal C:\tmp\nm-judge-tamper\r2\fresh\seal-copy\outputs-seal.json
+[08:33:41] transport 1/2 5x4x3 α 0.2 air None: 25 s
+[08:34:02] transport 2/2 5x4x3 α 0.4 air None: 22 s
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R000, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R001, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R002, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 2, receiver R002, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R000, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R001, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 3, receiver R002, 4000 Hz: T30 refused range_not_reached
+FAIL  E7: the file is not M8a's matrix in its canonical form (simpa bed --canonical prints it)
+FAIL  5x4x3-a0.4-random-air-off: not judged: E6: seed 1, receiver R000, 125 Hz: T30 refused range_not_reached; seed 1, receiver R000, 250 Hz: T30 refused range_not_reached; seed 1, receiver R000, 1000 Hz: T30 refused range_not_reached; seed 1, receiver R000, 2000 Hz: T30 refused range_not_reached; seed 1, receiver R000, 4000 Hz: T30 refused range_not_reached; seed 1, receiver R001, 125 Hz: T30 refused range_not_reached; seed 1, receiver R001, 250 Hz: T30 refused range_not_reached; seed 1, receiver R001, 500 Hz: T30 refused range_not_reached; seed 1, receiver R001, 1000 Hz: T30 refused range_not_reached; seed 1, receiver R001, 2000 Hz: T30 refused range_not_reached; seed 1, receiver R001, 4000 Hz: T30 refused range_not_reached; seed 1, receiver R002, 125 Hz: T30 refused range_not_reached; seed 1, receiver R002, 250 Hz: T30 refused range_not_reached; seed 1, receiver R002, 500 Hz: T30 refused range_not_reached; seed 1, receiver R002, 1000 Hz: T30 refused range_not_reached; seed 1, receiver R002, 2000 Hz: T30 refused range_not_reached; seed 2, receiver R000, 125 Hz: T30 refused range_not_reached; seed 2, receiver R000, 250 Hz: T30 refused range_not_reached; seed 2, receiver R000, 500 Hz: T30 refused range_not_reached; seed 2, receiver R000, 1000 Hz: T30 refused range_not_reached; seed 2, receiver R000, 4000 Hz: T30 refused range_not_reached; seed 2, receiver R001, 125 Hz: T30 refused range_not_reached; seed 2, receiver R001, 250 Hz: T30 refused range_not_reached; seed 2, receiver R001, 500 Hz: T30 refused range_not_reached; seed 2, receiver R001, 1000 Hz: T30 refused range_not_reached; seed 2, receiver R001, 2000 Hz: T30 refused range_not_reached; seed 2, receiver R001, 4000 Hz: T30 refused range_not_reached; seed 2, receiver R002, 250 Hz: T30 refused range_not_reached; seed 2, receiver R002, 2000 Hz: T30 refused range_not_reached; seed 3, receiver R000, 250 Hz: T30 refused range_not_reached; seed 3, receiver R000, 500 Hz: T30 refused range_not_reached; seed 3, receiver R000, 1000 Hz: T30 refused range_not_reached; seed 3, receiver R000, 2000 Hz: T30 refused range_not_reached; seed 3, receiver R000, 4000 Hz: T30 refused range_not_reached; seed 3, receiver R001, 125 Hz: T30 refused range_not_reached; seed 3, receiver R001, 500 Hz: T30 refused range_not_reached; seed 3, receiver R001, 1000 Hz: T30 refused range_not_reached; seed 3, receiver R001, 2000 Hz: T30 refused range_not_reached; seed 3, receiver R002, 125 Hz: T30 refused range_not_reached; seed 3, receiver R002, 250 Hz: T30 refused range_not_reached; seed 3, receiver R002, 1000 Hz: T30 refused range_not_reached; seed 3, receiver R002, 2000 Hz: T30 refused range_not_reached; seed 3, receiver R002, 4000 Hz: T30 refused range_not_reached
+[08:34:02] bed NOT PASSED: gated cells {"NotJudged": 1, "Pass": 1}, reported cells {}, 45 failures, 2 files, 1.5 MB; C:\tmp\nm-judge-tamper\r2\fresh\reread\20260930T063313Z\report.json
+
+re-read: 9 reads; bound_by ['run.json and seal']; errors 0; meta.seal_sha256 35044391d4a71b971cb3f47949dfbbbee56bb0d2529a5bb54c68120498128ebf (the copy's 35044391d4a71b971cb3f47949dfbbbee56bb0d2529a5bb54c68120498128ebf); verdicts equal True; every seed's T30 equal True; cells equal as a whole True
+
+==== F3 the seal inside the bed folder
+simpa bed docs/investigations/2026-09-30-m8b-tamper\fresh-seal-bed.json --out C:\tmp\nm-judge-tamper\r2\fresh\inside --from C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z --seal C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z\outputs-seal.json
+exit 2 (0 s)
+simpa: bed: EXPLORATORY, the report cannot pass: the file is not M8a's matrix in its canonical form (simpa bed --canonical prints it)
+E1 ok   spps.exe: code sha256 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d (C:\tmp\nm-m8a-solvers\spps.exe)
+E1 ok   classicalTheory.exe: code sha256 fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234 (C:\tmp\nm-m8a-solvers\classicalTheory.exe)
+E1 ok   tetgen.exe: code sha256 d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f (C:\tmp\nm-m8a-solvers\tetgen.exe)
+E1 ok   preprocess.exe: code sha256 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26 (C:\tmp\nm-m8a-solvers\preprocess.exe)
+simpa: bed refused: --seal the seal C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z\outputs-seal.json is inside the bed folder C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z it would hold: an edit of the bed can edit it too. Give a copy committed outside it (beds/<bed>-<stamp>/outputs-seal.json)
+
+F3 wrote: nothing
+
+==== F4 --from with no --seal
+simpa bed docs/investigations/2026-09-30-m8b-tamper\fresh-seal-bed.json --out C:\tmp\nm-judge-tamper\r2\fresh\noseal --from C:\tmp\nm-judge-tamper\r2\fresh\made\20260930T063215Z
+exit 2 (0 s)
+simpa: --from needs --seal <file>: an earlier bed's runs are read only against its committed seal (beds/<bed>-<stamp>/outputs-seal.json), never on the word of the run.json in the folder being judged
+
+F5 tampered copy C:\tmp\nm-judge-tamper\r2\fresh\tampered\20260930T063215Z: seed 2's Punctual receiver intensity.gabe byte 17 changed, record forged; seed 3 carrying seed 1's 20 solver outputs, gabes changed, record forged
+==== F5 the tampered copy against the seal
+simpa bed docs/investigations/2026-09-30-m8b-tamper\fresh-seal-bed.json --out C:\tmp\nm-judge-tamper\r2\fresh\tampered-read --jobs 4 --upstream C:\tmp\nm-judge-tamper\r2\fresh\no-upstream --from C:\tmp\nm-judge-tamper\r2\fresh\tampered\20260930T063215Z --seal C:\tmp\nm-judge-tamper\r2\fresh\seal-copy\outputs-seal.json
+exit 5 (49 s)
+simpa: bed: EXPLORATORY, the report cannot pass: the file is not M8a's matrix in its canonical form (simpa bed --canonical prints it)
+E1 ok   spps.exe: code sha256 550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d (C:\tmp\nm-m8a-solvers\spps.exe)
+E1 ok   classicalTheory.exe: code sha256 fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234 (C:\tmp\nm-m8a-solvers\classicalTheory.exe)
+E1 ok   tetgen.exe: code sha256 d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f (C:\tmp\nm-m8a-solvers\tetgen.exe)
+E1 ok   preprocess.exe: code sha256 7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26 (C:\tmp\nm-m8a-solvers\preprocess.exe)
+simpa: bed: not run: C:\tmp\nm-judge-tamper\r2\fresh\no-upstream\src/isimpa/resources/doc/validation/atmospheric_absorption/Validation_atmospheric_absorption.proj: The system cannot find the path specified. (os error 3)
+[08:34:03] bed docs/investigations/2026-09-30-m8b-tamper\fresh-seal-bed.json: 9 runs, 4 at once, into C:\tmp\nm-judge-tamper\r2\fresh\tampered-read\20260930T063403Z (NTFS; about 0 files)
+[08:34:03] reading 9 runs from C:\tmp\nm-judge-tamper\r2\fresh\tampered\20260930T063215Z, held to the seal C:\tmp\nm-judge-tamper\r2\fresh\seal-copy\outputs-seal.json
+[08:34:30] transport 1/2 5x4x3 α 0.2 air None: 25 s
+[08:34:52] transport 2/2 5x4x3 α 0.4 air None: 22 s
+FAIL  E2: 5x4x3-a0.4-random-air-off: seed 2: bed_run_files_changed: C:\tmp\nm-judge-tamper\r2\fresh\tampered\20260930T063215Z\runs\5x4x3-a0.4-random-air-off\s2: 2 difference(s) from what the run.json and seal record: 20260930-083224-856-spps/run.json has 9920 bytes of sha256 ebcc0ad4cc2f, the seal 9920 bytes of sha256 c6782ccd842c; 20260930-083224-856-spps/solve/Punctual receivers/R000/Punctual receiver intensity.gabe has 127535 bytes of sha256 435a36bef220, the seal 127535 bytes of sha256 2afc508c14f9
+FAIL  E2: 5x4x3-a0.4-random-air-off: seed 3: bed_run_files_changed: C:\tmp\nm-judge-tamper\r2\fresh\tampered\20260930T063215Z\runs\5x4x3-a0.4-random-air-off\s3: 21 difference(s) from what the run.json and seal record: 20260930-083224-933-spps/run.json has 9930 bytes of sha256 05eb8a4d8246, the seal 9930 bytes of sha256 8b9c268d1f4e; 20260930-083224-933-spps/solve/Intensity animation/1000 Hz/Intensity.rpi has 39233 bytes of sha256 374af2f21fb6, the seal 39233 bytes of sha256 dbda7cf178c5; 20260930-083224-933-spps/solve/Intensity animation/125 Hz/Intensity.rpi has 39233 bytes of sha256 35d632f6f2ed, the seal 39233 bytes of sha256 4dc6fc63c011; 20260930-083224-933-spps/solve/Intensity animation/2000 Hz/Intensity.rpi has 39233 bytes of sha256 9ecdb8bfdb3a, the seal 39233 bytes of sha256 e2c19131e222; 20260930-083224-933-spps/solve/Intensity animation/250 Hz/Intensity.rpi has 39233 bytes of sha256 6e0d49b9be34, the seal 39233 bytes of sha256 c8e6c4c8cf28; 20260930-083224-933-spps/solve/Intensity animation/4000 Hz/Intensity.rpi has 39233 bytes of sha256 3f9eaa257d51, the seal 39233 bytes of sha256 e8eda7732d1a; and 15 more
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R000, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 2000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R001, 4000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 125 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 250 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 500 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 1000 Hz: T30 refused range_not_reached
+FAIL  E6: 5x4x3-a0.4-random-air-off: seed 1, receiver R002, 2000 Hz: T30 refused range_not_reached
+FAIL  E7: the file is not M8a's matrix in its canonical form (simpa bed --canonical prints it)
+FAIL  5x4x3-a0.4-random-air-off: not judged: E2: seed 2: bed_run_files_changed: C:\tmp\nm-judge-tamper\r2\fresh\tampered\20260930T063215Z\runs\5x4x3-a0.4-random-air-off\s2: 2 difference(s) from what the run.json and seal record: 20260930-083224-856-spps/run.json has 9920 bytes of sha256 ebcc0ad4cc2f, the seal 9920 bytes of sha256 c6782ccd842c; 20260930-083224-856-spps/solve/Punctual receivers/R000/Punctual receiver intensity.gabe has 127535 bytes of sha256 435a36bef220, the seal 127535 bytes of sha256 2afc508c14f9; seed 3: bed_run_files_changed: C:\tmp\nm-judge-tamper\r2\fresh\tampered\20260930T063215Z\runs\5x4x3-a0.4-random-air-off\s3: 21 difference(s) from what the run.json and seal record: 20260930-083224-933-spps/run.json has 9930 bytes of sha256 05eb8a4d8246, the seal 9930 bytes of sha256 8b9c268d1f4e; 20260930-083224-933-spps/solve/Intensity animation/1000 Hz/Intensity.rpi has 39233 bytes of sha256 374af2f21fb6, the seal 39233 bytes of sha256 dbda7cf178c5; 20260930-083224-933-spps/solve/Intensity animation/125 Hz/Intensity.rpi has 39233 bytes of sha256 35d632f6f2ed, the seal 39233 bytes of sha256 4dc6fc63c011; 20260930-083224-933-spps/solve/Intensity animation/2000 Hz/Intensity.rpi has 39233 bytes of sha256 9ecdb8bfdb3a, the seal 39233 bytes of sha256 e2c19131e222; 20260930-083224-933-spps/solve/Intensity animation/250 Hz/Intensity.rpi has 39233 bytes of sha256 6e0d49b9be34, the seal 39233 bytes of sha256 c8e6c4c8cf28; 20260930-083224-933-spps/solve/Intensity animation/4000 Hz/Intensity.rpi has 39233 bytes of sha256 3f9eaa257d51, the seal 39233 bytes of sha256 e8eda7732d1a; and 15 more
+FAIL  5x4x3-a0.4-random-air-off: not judged: E6: seed 1, receiver R000, 125 Hz: T30 refused range_not_reached; seed 1, receiver R000, 250 Hz: T30 refused range_not_reached; seed 1, receiver R000, 1000 Hz: T30 refused range_not_reached; seed 1, receiver R000, 2000 Hz: T30 refused range_not_reached; seed 1, receiver R000, 4000 Hz: T30 refused range_not_reached; seed 1, receiver R001, 125 Hz: T30 refused range_not_reached; seed 1, receiver R001, 250 Hz: T30 refused range_not_reached; seed 1, receiver R001, 500 Hz: T30 refused range_not_reached; seed 1, receiver R001, 1000 Hz: T30 refused range_not_reached; seed 1, receiver R001, 2000 Hz: T30 refused range_not_reached; seed 1, receiver R001, 4000 Hz: T30 refused range_not_reached; seed 1, receiver R002, 125 Hz: T30 refused range_not_reached; seed 1, receiver R002, 250 Hz: T30 refused range_not_reached; seed 1, receiver R002, 500 Hz: T30 refused range_not_reached; seed 1, receiver R002, 1000 Hz: T30 refused range_not_reached; seed 1, receiver R002, 2000 Hz: T30 refused range_not_reached
+[08:34:52] bed NOT PASSED: gated cells {"NotJudged": 1, "Pass": 1}, reported cells {}, 21 failures, 2 files, 1.3 MB; C:\tmp\nm-judge-tamper\r2\fresh\tampered-read\20260930T063403Z\report.json
+
+F5 cell 5x4x3-a0.4-random-air-off: verdict not_judged
+  seed 1: read
+  seed 2: bed_run_files_changed: C:\tmp\nm-judge-tamper\r2\fresh\tampered\20260930T063215Z\runs\5x4x3-a0.4-random-air-off\s2: 2 difference(s) from what the run.json and seal record: 20260930-083224-856-spps/run.json has 9920 bytes of sha256 ebcc0ad4cc2f, the seal 9920 bytes of sha256 c6782ccd842c; 20260930-08
+  seed 3: bed_run_files_changed: C:\tmp\nm-judge-tamper\r2\fresh\tampered\20260930T063215Z\runs\5x4x3-a0.4-random-air-off\s3: 21 difference(s) from what the run.json and seal record: 20260930-083224-933-spps/run.json has 9930 bytes of sha256 05eb8a4d8246, the seal 9930 bytes of sha256 8b9c268d1f4e; 20260930-0
+F5 pass False
+
+written under C:\tmp\nm-judge-tamper\r2\fresh, left in place

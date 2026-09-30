@@ -1,0 +1,337 @@
+==== f2-commitA: a run its seal does not name is refused (read_folder, at commit A)
+tree: HEAD 4d79c7d and the working tree as it stands
+revert in crates/simpa-core/src/bed/run.rs:
+--- fixed
++++ reverted
+@@ -351,3 +351,3 @@
+     let sealed = match seal {
+-        Some(s) => Some(s.run(&p.key).ok_or_else(|| unsealed(folder, s, &p.key))?),
++        Some(s) => s.run(&p.key),
+         None => None,
+command: cargo test -p simpa-core --test bed_binding -- --exact a_run_its_seal_does_not_name_is_refused
+--- with the revert: exit 101 (14 s)
+test a_run_its_seal_does_not_name_is_refused ... FAILED
+failures:
+thread 'a_run_its_seal_does_not_name_is_refused' (13596) panicked at crates\simpa-core\tests\bed_binding.rs:114:49:
+called `Result::unwrap_err()` on an `Ok` value: Tcr(TcrRead { info: RunInfo { folder: "C:/tmp/nm-target\\tmp\\bed_binding\\unnamed-8032-0-1790747473652153700\\20260930T000000Z\\runs\\5x4x3-a0.2-tcr-air-off\\s1\\20260930-075113-740-tcr", status: "OK", reasons: [], exit_class: 0, solver_wall_s: Some(0.0154979), solver_cpu_s: None, exe: "C:\\tmp\\nm-m8a-solvers\\classicalTheory.exe", exe_sha256: "c4a7bca35374af01405a879e649dc0e746f9267c6449e47969bb41e2f4add863", project_sha256: Some("5bf9fc96a43396ae84bb068595e0e72e1cf8d7a8a5852a5c664a1f93b028209b"), tetgen_sha256: Some("ac68f014a3b2003dc6f88ca9b3dc53e5c193888868ab9029b636e89d5be8a8f9"), files: 22, bytes: 39715, bound_by: Some("run.json"), outputs_sha256: Some("11e0149a47c16e50e7cb0a4493d2b2642c788f7467af7cadce533d502c88dcee"), output_files: [("Main results.gabe", "faf4a6a976e2a278427aa19c09bb5a59eb856355de0629e517233f3744203a95"), ("Punctual receivers/R000.gabe", "72080acec6e0eda37aceb6017e3f4a0c4f67277b98e9a99087b85be9677c8ce2"), ("Punctual receivers/R001.gabe", "a989a4caabc55a494f1305f248100fb2c297171fc5b7c33449a027adf313c894"), ("Punctual receivers/R002.gabe", "b676b31c83f54af3c578e0cf4992acf3788a7626ccbed96e7b27d5ea96a213fa")], on_disk: Some(OnDisk { project_sha256: Some("5bf9fc96a43396ae84bb068595e0e72e1cf8d7a8a5852a5c664a1f93b028209b"), config_sha256: Some("582812028b844de83dbf676e6af311d2a615c8daf451637dfe8fa76940909100"), scene_sha256: Some("92d8e5c0269a00718b98e7a2cd19c83b262cdf84312789b5c8303d981c05d1fd"), mbin_sha256: Some("f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), run_mesh_input_hash: Some("e6e8127de7bd462ef370fab8de72994d"), run_mbin_sha256: Some("f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), mesh_json_input_hash: Some("e6e8127de7bd462ef370fab8de72994d"), mesh_json_mbin_sha256: Some("f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), mesh_check: Some([]) }) }, bands: [TcrBand { freq_hz: 125, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 250, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 500, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 1000, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 2000, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 4000, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }] })
+failures:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+error: test failed, to rerun pass `-p simpa-core --test bed_binding`
+--- restored byte for byte: True
+--- after the restore: exit 0 (14 s)
+test a_run_its_seal_does_not_name_is_refused ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+==== f1-bind: run.json alone binds nothing (bind)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa-core/src/bed/bind.rs:
+--- fixed
++++ reverted
+@@ -296,3 +296,3 @@
+         .ok_or_else(|| format!("{}: no run folder name", folder.display()))?;
+-    if made.is_none() && sealed.is_none() {
++    if made.is_none() && sealed.is_none() && outputs.is_none() {
+         return Err(format!(
+command: cargo test -p simpa-core --lib -- --exact bed::bind::tests::a_run_bound_only_by_its_own_run_json_is_refused
+--- with the revert: exit 101 (25 s)
+test bed::bind::tests::a_run_bound_only_by_its_own_run_json_is_refused ... FAILED
+failures:
+thread 'bed::bind::tests::a_run_bound_only_by_its_own_run_json_is_refused' (16128) panicked at crates\simpa-core\src\bed\bind.rs:487:83:
+called `Result::unwrap_err()` on an `Ok` value: Bound { by: ["run.json"], outputs: [("Punctual receivers/R000/Sound level.recp", "1ea7ad119cf5e275415ba3dd4642e1ee181fc99041bae962b2d32553d679c119"), ("SPPS particle statistics.gabe", "21b638c94046e3ab02c13033d6f13985879998a0740ddad85d946965a6ca1c17")], outputs_sha256: "0e866eb2ea746fa8fb29f57996b44fd205c71e030cd23ecaae8c6ba4fcd79547" }
+failures:
+    bed::bind::tests::a_run_bound_only_by_its_own_run_json_is_refused
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 227 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p simpa-core --lib`
+--- restored byte for byte: True
+--- after the restore: exit 0 (24 s)
+test bed::bind::tests::a_run_bound_only_by_its_own_run_json_is_refused ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 227 filtered out; finished in 0.01s
+
+==== f1-fresh: a run this process made is bound to what it made, from memory (read_fresh)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa-core/src/bed/run.rs:
+--- fixed
++++ reverted
+@@ -443,3 +443,9 @@
+ pub fn read_fresh(dir: &Path, report: &manager::RunReport, p: &Planned) -> Result<Read, String> {
+-    let made = made_record(p, report)?;
++    let made = made_record(
++        p,
++        &manager::RunReport {
++            dir: report.dir.clone(),
++            manifest: read::manifest_of(&report.dir)?,
++        },
++    )?;
+     let mut r = read_folder(dir, &report.dir, p, Some(&made), None)?;
+command: cargo test -p simpa-core --test bed_binding -- --exact a_run_this_process_made_is_bound_to_what_it_made_not_to_its_run_json
+--- with the revert: exit 101 (14 s)
+test a_run_this_process_made_is_bound_to_what_it_made_not_to_its_run_json ... FAILED
+failures:
+thread 'a_run_this_process_made_is_bound_to_what_it_made_not_to_its_run_json' (10908) panicked at crates\simpa-core\tests\bed_binding.rs:187:48:
+called `Result::unwrap_err()` on an `Ok` value: Tcr(TcrRead { info: RunInfo { folder: "C:\\tmp\\nm-target\\tmp\\bed_binding\\made-8116-0-1790750464729338700\\20260930T000000Z\\runs\\5x4x3-a0.2-tcr-air-off\\s1\\20260930-084104-819-tcr", status: "OK", reasons: [], exit_class: 0, solver_wall_s: Some(0.0153133), solver_cpu_s: None, exe: "C:\\tmp\\nm-m8a-solvers\\classicalTheory.exe", exe_sha256: "c4a7bca35374af01405a879e649dc0e746f9267c6449e47969bb41e2f4add863", project_sha256: Some("5bf9fc96a43396ae84bb068595e0e72e1cf8d7a8a5852a5c664a1f93b028209b"), tetgen_sha256: Some("ac68f014a3b2003dc6f88ca9b3dc53e5c193888868ab9029b636e89d5be8a8f9"), files: 22, bytes: 39714, bound_by: Some("run.json and this process"), outputs_sha256: Some("b6c0f41fc08135a6fe43dbe49f46718275304dbb8c65fc53028c9bceb8cc81c6"), output_files: [("Main results.gabe", "edc1fd6b6e0d9e41b6205444137eefc1a8514c6ae36931f67ca9f0e8bd8560e7"), ("Punctual receivers/R000.gabe", "72080acec6e0eda37aceb6017e3f4a0c4f67277b98e9a99087b85be9677c8ce2"), ("Punctual receivers/R001.gabe", "a989a4caabc55a494f1305f248100fb2c297171fc5b7c33449a027adf313c894"), ("Punctual receivers/R002.gabe", "b676b31c83f54af3c578e0cf4992acf3788a7626ccbed96e7b27d5ea96a213fa")], on_disk: Some(OnDisk { project_sha256: Some("5bf9fc96a43396ae84bb068595e0e72e1cf8d7a8a5852a5c664a1f93b028209b"), config_sha256: Some("582812028b844de83dbf676e6af311d2a615c8daf451637dfe8fa76940909100"), scene_sha256: Some("92d8e5c0269a00718b98e7a2cd19c83b262cdf84312789b5c8303d981c05d1fd"), mbin_sha256: Some("f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), run_mesh_input_hash: Some("e6e8127de7bd462ef370fab8de72994d"), run_mbin_sha256: Some("f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), mesh_json_input_hash: Some("e6e8127de7bd462ef370fab8de72994d"), mesh_json_mbin_sha256: Some("f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), mesh_check: Some([]) }), made: Some(SealedRun { run_folder: "20260930-084104-819-tcr", files: [SealedFile("20260930-084104-819-tcr/mesh/mesh.cbin", 680, "92d8e5c0269a00718b98e7a2cd19c83b262cdf84312789b5c8303d981c05d1fd"), SealedFile("20260930-084104-819-tcr/mesh/mesh.json", 3272, "30e382db2095d54eaf32d2d4aa06fdd8cdada2bcb48d665564a6fe404dab9a83"), SealedFile("20260930-084104-819-tcr/mesh/scene_mesh.1.edge", 889, "178a55fe8fd3bc11d6817f76396c518747622f5db945d5a53ada36a48231e93a"), SealedFile("20260930-084104-819-tcr/mesh/scene_mesh.1.ele", 1949, "c3b5d3bf75b29c59a2d9d8686134d2a37853b010e911e8bd56abb09a6abb5460"), SealedFile("20260930-084104-819-tcr/mesh/scene_mesh.1.face", 1519, "d927da12e2c83946d91fb63a14aea54bdf239255a075c81d0f3a54d1f5af0dd6"), SealedFile("20260930-084104-819-tcr/mesh/scene_mesh.1.neigh", 1652, "fa6ab8f42f5cce227dc6b6c4b70bdb3ab53cffb921d11219d003f6339caf8afb"), SealedFile("20260930-084104-819-tcr/mesh/scene_mesh.1.node", 962, "840a53dafc84899cc4f14634aa3e11cb725c05d8ed386f04888c25087c16b2fe"), SealedFile("20260930-084104-819-tcr/mesh/scene_mesh.poly", 463, "981cc5a6460b2ffe1de4c95b5baf2d4508f528ef7a0d9799ab1beabce6832935"), SealedFile("20260930-084104-819-tcr/mesh/scene_mesh.var", 48, "f1b75d893103989c1b4ec13d388f59acafb9e370d2c66c40b0ff2128690e64a2"), SealedFile("20260930-084104-819-tcr/mesh/tetgen.stderr.txt", 0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"), SealedFile("20260930-084104-819-tcr/mesh/tetgen.stdout.txt", 830, "3703a35159d8d96e7d18bcb37703105b43bb6f4dbc8eab8f29f02ff04a3440ad"), SealedFile("20260930-084104-819-tcr/mesh/tetramesh.mbin", 5208, "f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), SealedFile("20260930-084104-819-tcr/run.json", 5277, "3a74eab0414f5007a2513fe35c2b435f7220d62643cf8b8e5d513ebc7c17281e"), SealedFile("20260930-084104-819-tcr/solve/Main results.gabe", 2523, "edc1fd6b6e0d9e41b6205444137eefc1a8514c6ae36931f67ca9f0e8bd8560e7"), SealedFile("20260930-084104-819-tcr/solve/Punctual receivers/R000.gabe", 1587, "72080acec6e0eda37aceb6017e3f4a0c4f67277b98e9a99087b85be9677c8ce2"), SealedFile("20260930-084104-819-tcr/solve/Punctual receivers/R001.gabe", 1587, "a989a4caabc55a494f1305f248100fb2c297171fc5b7c33449a027adf313c894"), SealedFile("20260930-084104-819-tcr/solve/Punctual receivers/R002.gabe", 1587, "b676b31c83f54af3c578e0cf4992acf3788a7626ccbed96e7b27d5ea96a213fa"), SealedFile("20260930-084104-819-tcr/solve/config.xml", 3535, "a8aca0ca6237065ffe1c77431458be29ff9d2c7e5d7f9f3555aa092b5ee8563f"), SealedFile("20260930-084104-819-tcr/solve/mesh.cbin", 680, "92d8e5c0269a00718b98e7a2cd19c83b262cdf84312789b5c8303d981c05d1fd"), SealedFile("20260930-084104-819-tcr/solve/tetramesh.mbin", 5208, "f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), SealedFile("20260930-084104-819-tcr/solver.stderr.txt", 0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"), SealedFile("20260930-084104-819-tcr/solver.stdout.txt", 258, "828e21c1b59c9d337382a38ff66369d9280c0cb7a0c88b723d90f8848b1c4f06"), SealedFile("project.simpa", 4720, "5bf9fc96a43396ae84bb068595e0e72e1cf8d7a8a5852a5c664a1f93b028209b")] }) }, bands: [TcrBand { freq_hz: 125, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 250, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 500, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 1000, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 2000, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 4000, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }] })
+failures:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.21s
+error: test failed, to rerun pass `-p simpa-core --test bed_binding`
+--- restored byte for byte: True
+--- after the restore: exit 0 (14 s)
+test a_run_this_process_made_is_bound_to_what_it_made_not_to_its_run_json ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.20s
+
+==== f1-cli: --from without --seal is refused (parse)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa/src/bed_cmd.rs:
+--- fixed
++++ reverted
+@@ -171,10 +171,3 @@
+         }
+-        (Some(_), None) => {
+-            return Err(
+-                "--from needs --seal <file>: an earlier bed's runs are read only against \
+-                        its committed seal (beds/<bed>-<stamp>/outputs-seal.json), never on the \
+-                        word of the run.json in the folder being judged"
+-                    .into(),
+-            );
+-        }
++        (Some(f), None) => Some((f, PathBuf::new())),
+     };
+command: cargo test -p simpa --bin simpa -- --exact bed_cmd::tests::from_without_a_seal_is_refused
+--- with the revert: exit 101 (13 s)
+test bed_cmd::tests::from_without_a_seal_is_refused ... FAILED
+failures:
+thread 'bed_cmd::tests::from_without_a_seal_is_refused' (15676) panicked at crates\simpa\src\bed_cmd.rs:639:14:
+called `Option::unwrap()` on a `None` value
+failures:
+    bed_cmd::tests::from_without_a_seal_is_refused
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p simpa --bin simpa`
+--- restored byte for byte: True
+--- after the restore: exit 0 (1 s)
+test bed_cmd::tests::from_without_a_seal_is_refused ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+
+==== f1-outside: a seal inside the bed folder it would hold is refused (seal_outside)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa-core/src/bed/bind.rs:
+--- fixed
++++ reverted
+@@ -212,3 +212,3 @@
+     let (bed, file) = (resolve(from)?, resolve(seal)?);
+-    if file.starts_with(&bed) {
++    if false && file.starts_with(&bed) {
+         Err(format!(
+command: cargo test --no-fail-fast -p simpa-core --lib --test bed_binding -- a_seal_inside_its_bed_folder_is_refused the_seal_of_a_bed_this_process_ran_holds_its_runs_for_a_re_read
+--- with the revert: exit 101 (25 s)
+test bed::bind::tests::a_seal_inside_its_bed_folder_is_refused ... FAILED
+failures:
+thread 'bed::bind::tests::a_seal_inside_its_bed_folder_is_refused' (23488) panicked at crates\simpa-core\src\bed\bind.rs:725:13:
+assertion `left == right` failed: C:\Users\Burhan\AppData\Local\Temp\simpa-bed-bind-inside-15172-0\runs\c\s1\outputs-seal.json: Ok(())
+  left: false
+ right: true
+failures:
+    bed::bind::tests::a_seal_inside_its_bed_folder_is_refused
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 227 filtered out; finished in 0.00s
+test the_seal_of_a_bed_this_process_ran_holds_its_runs_for_a_re_read ... FAILED
+failures:
+thread 'the_seal_of_a_bed_this_process_ran_holds_its_runs_for_a_re_read' (23540) panicked at crates\simpa-core\tests\bed_binding.rs:219:48:
+called `Result::unwrap_err()` on an `Ok` value: ()
+failures:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.21s
+error: test failed, to rerun pass `-p simpa-core --lib`
+error: test failed, to rerun pass `-p simpa-core --test bed_binding`
+error: 2 targets failed:
+--- restored byte for byte: True
+--- after the restore: exit 0 (25 s)
+test bed::bind::tests::a_seal_inside_its_bed_folder_is_refused ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 227 filtered out; finished in 0.01s
+test the_seal_of_a_bed_this_process_ran_holds_its_runs_for_a_re_read ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.24s
+
+==== f2-final-a: a run its seal does not name is refused (read_in's check alone reverted: bind's rule still refuses it, by another message)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa-core/src/bed/run.rs:
+--- fixed
++++ reverted
+@@ -339,6 +339,4 @@
+     // to nothing the bed did not itself leave, and is not read on its own run.json's word.
+-    let sealed = seal
+-        .run(&p.key)
+-        .ok_or_else(|| unsealed(&folder, seal, &p.key))?;
+-    read_folder(dir, &folder, p, None, Some(sealed))
++    let sealed = seal.run(&p.key);
++    read_folder(dir, &folder, p, None, sealed)
+ }
+command: cargo test -p simpa-core --test bed_binding -- --exact a_run_its_seal_does_not_name_is_refused
+--- with the revert: exit 101 (14 s)
+test a_run_its_seal_does_not_name_is_refused ... FAILED
+failures:
+thread 'a_run_its_seal_does_not_name_is_refused' (17656) panicked at crates\simpa-core\tests\bed_binding.rs:161:5:
+bed_run_unbound: C:/tmp/nm-target\tmp\bed_binding\unnamed-13132-0-1790750556200977300\20260930T000000Z\runs\5x4x3-a0.2-tcr-air-off\s1\20260930-084236-289-tcr: this process did not make it and no seal names it, so its files are bound to nothing outside the folder being judged (its run.json's output hashes, recorded, are in that folder and bind nothing on their own), and it is not judged
+failures:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.21s
+error: test failed, to rerun pass `-p simpa-core --test bed_binding`
+--- restored byte for byte: True
+--- after the restore: exit 0 (14 s)
+test a_run_its_seal_does_not_name_is_refused ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.21s
+
+==== f2-final-b: a run its seal does not name is refused (read_in's check and bind's rule both reverted: accepted on run.json)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa-core/src/bed/run.rs:
+--- fixed
++++ reverted
+@@ -339,6 +339,4 @@
+     // to nothing the bed did not itself leave, and is not read on its own run.json's word.
+-    let sealed = seal
+-        .run(&p.key)
+-        .ok_or_else(|| unsealed(&folder, seal, &p.key))?;
+-    read_folder(dir, &folder, p, None, Some(sealed))
++    let sealed = seal.run(&p.key);
++    read_folder(dir, &folder, p, None, sealed)
+ }
+revert in crates/simpa-core/src/bed/bind.rs:
+--- fixed
++++ reverted
+@@ -296,3 +296,3 @@
+         .ok_or_else(|| format!("{}: no run folder name", folder.display()))?;
+-    if made.is_none() && sealed.is_none() {
++    if made.is_none() && sealed.is_none() && outputs.is_none() {
+         return Err(format!(
+command: cargo test -p simpa-core --test bed_binding -- --exact a_run_its_seal_does_not_name_is_refused
+--- with the revert: exit 101 (14 s)
+test a_run_its_seal_does_not_name_is_refused ... FAILED
+failures:
+thread 'a_run_its_seal_does_not_name_is_refused' (23028) panicked at crates\simpa-core\tests\bed_binding.rs:159:43:
+called `Result::unwrap_err()` on an `Ok` value: Tcr(TcrRead { info: RunInfo { folder: "C:/tmp/nm-target\\tmp\\bed_binding\\unnamed-22852-0-1790750583907701900\\20260930T000000Z\\runs\\5x4x3-a0.2-tcr-air-off\\s1\\20260930-084303-996-tcr", status: "OK", reasons: [], exit_class: 0, solver_wall_s: Some(0.0155249), solver_cpu_s: None, exe: "C:\\tmp\\nm-m8a-solvers\\classicalTheory.exe", exe_sha256: "c4a7bca35374af01405a879e649dc0e746f9267c6449e47969bb41e2f4add863", project_sha256: Some("5bf9fc96a43396ae84bb068595e0e72e1cf8d7a8a5852a5c664a1f93b028209b"), tetgen_sha256: Some("ac68f014a3b2003dc6f88ca9b3dc53e5c193888868ab9029b636e89d5be8a8f9"), files: 22, bytes: 39741, bound_by: Some("run.json"), outputs_sha256: Some("11e0149a47c16e50e7cb0a4493d2b2642c788f7467af7cadce533d502c88dcee"), output_files: [("Main results.gabe", "faf4a6a976e2a278427aa19c09bb5a59eb856355de0629e517233f3744203a95"), ("Punctual receivers/R000.gabe", "72080acec6e0eda37aceb6017e3f4a0c4f67277b98e9a99087b85be9677c8ce2"), ("Punctual receivers/R001.gabe", "a989a4caabc55a494f1305f248100fb2c297171fc5b7c33449a027adf313c894"), ("Punctual receivers/R002.gabe", "b676b31c83f54af3c578e0cf4992acf3788a7626ccbed96e7b27d5ea96a213fa")], on_disk: Some(OnDisk { project_sha256: Some("5bf9fc96a43396ae84bb068595e0e72e1cf8d7a8a5852a5c664a1f93b028209b"), config_sha256: Some("582812028b844de83dbf676e6af311d2a615c8daf451637dfe8fa76940909100"), scene_sha256: Some("92d8e5c0269a00718b98e7a2cd19c83b262cdf84312789b5c8303d981c05d1fd"), mbin_sha256: Some("f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), run_mesh_input_hash: Some("e6e8127de7bd462ef370fab8de72994d"), run_mbin_sha256: Some("f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), mesh_json_input_hash: Some("e6e8127de7bd462ef370fab8de72994d"), mesh_json_mbin_sha256: Some("f76f3fb6b1b8f546b620a23414e6e9f6e2a4327982d77202a7faff3106e6675f"), mesh_check: Some([]) }), made: None }, bands: [TcrBand { freq_hz: 125, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 250, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 500, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 1000, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 2000, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }, TcrBand { freq_hz: 4000, sabine_s: 0.520212709903717, eyring_s: 0.46625834703445435, analytic_sabine_s: Some(0.5202127582056727), analytic_eyring_s: Some(0.4662583831877741), analytic_refused: None, air_m_per_metre: None }] })
+failures:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.21s
+error: test failed, to rerun pass `-p simpa-core --test bed_binding`
+--- restored byte for byte: True
+--- after the restore: exit 0 (14 s)
+test a_run_its_seal_does_not_name_is_refused ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.21s
+
+==== d1-reads: two seeds that read the same T30 at a receiver are refused (refuse_shared_outputs)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa-core/src/bed/run.rs:
+--- fixed
++++ reverted
+@@ -883,3 +883,3 @@
+                 .collect();
+-            read.entry((i, key)).or_default().push(*s);
++            let _ = (i, key);
+         }
+command: cargo test -p simpa-core --lib -- --exact bed::tests::a_seed_reading_another_seeds_t30_does_not_pass_the_bed bed::tests::ten_seeds_reading_one_seeds_t30_do_not_pass_the_bed
+--- with the revert: exit 101 (24 s)
+test bed::tests::a_seed_reading_another_seeds_t30_does_not_pass_the_bed ... FAILED
+test bed::tests::ten_seeds_reading_one_seeds_t30_do_not_pass_the_bed ... FAILED
+failures:
+thread 'bed::tests::a_seed_reading_another_seeds_t30_does_not_pass_the_bed' (12152) panicked at crates\simpa-core\src\bed.rs:854:13:
+None
+thread 'bed::tests::ten_seeds_reading_one_seeds_t30_do_not_pass_the_bed' (7484) panicked at crates\simpa-core\src\bed.rs:882:9:
+assertion failed: !r.pass
+failures:
+    bed::tests::a_seed_reading_another_seeds_t30_does_not_pass_the_bed
+    bed::tests::ten_seeds_reading_one_seeds_t30_do_not_pass_the_bed
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 226 filtered out; finished in 0.04s
+error: test failed, to rerun pass `-p simpa-core --lib`
+--- restored byte for byte: True
+--- after the restore: exit 0 (24 s)
+test bed::tests::a_seed_reading_another_seeds_t30_does_not_pass_the_bed ... ok
+test bed::tests::ten_seeds_reading_one_seeds_t30_do_not_pass_the_bed ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 226 filtered out; finished in 0.04s
+
+==== f4-case: a seal is for its bed folder by the name the file system stores (for_bed)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa-core/src/bed/bind.rs:
+--- fixed
++++ reverted
+@@ -159,5 +159,3 @@
+     pub fn for_bed(&self, from: &Path) -> Result<(), String> {
+-        let stored = std::fs::canonicalize(from)
+-            .map_err(|e| format!("the bed folder {}: {e}", from.display()))?;
+-        let name = stored.file_name().and_then(|n| n.to_str()).unwrap_or("");
++        let name = from.file_name().and_then(|n| n.to_str()).unwrap_or("");
+         if name == self.bed {
+command: cargo test -p simpa-core --lib -- --exact bed::bind::tests::a_seal_is_for_its_bed_folder_by_the_name_the_file_system_stores
+--- with the revert: exit 101 (25 s)
+test bed::bind::tests::a_seal_is_for_its_bed_folder_by_the_name_the_file_system_stores ... FAILED
+failures:
+thread 'bed::bind::tests::a_seal_is_for_its_bed_folder_by_the_name_the_file_system_stores' (14084) panicked at crates\simpa-core\src\bed\bind.rs:811:9:
+assertion `left == right` failed
+  left: Err("the seal is of the bed 20260929T093134Z, not of C:\\Users\\Burhan\\AppData\\Local\\Temp\\simpa-bed-bind-for-bed-14540-0\\20260929t093134z")
+ right: Ok(())
+failures:
+    bed::bind::tests::a_seal_is_for_its_bed_folder_by_the_name_the_file_system_stores
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 227 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p simpa-core --lib`
+--- restored byte for byte: True
+--- after the restore: exit 0 (24 s)
+test bed::bind::tests::a_seal_is_for_its_bed_folder_by_the_name_the_file_system_stores ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 227 filtered out; finished in 0.02s
+
+==== f8-git: meta.git_commit is the work tree's when the bed started (git_meta)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa/src/bed_cmd.rs:
+--- fixed
++++ reverted
+@@ -109,3 +109,4 @@
+ fn git_meta(start: (Option<String>, Option<bool>), end: (Option<String>, Option<bool>)) -> GitMeta {
+-    (start.0, start.1, end.0, end.1)
++    let _ = start;
++    (end.0.clone(), end.1, end.0, end.1)
+ }
+command: cargo test -p simpa --bin simpa -- --exact bed_cmd::tests::the_work_tree_is_recorded_as_it_was_when_the_bed_started
+--- with the revert: exit 101 (13 s)
+test bed_cmd::tests::the_work_tree_is_recorded_as_it_was_when_the_bed_started ... FAILED
+failures:
+thread 'bed_cmd::tests::the_work_tree_is_recorded_as_it_was_when_the_bed_started' (2484) panicked at crates\simpa\src\bed_cmd.rs:624:9:
+assertion `left == right` failed
+  left: (Some("a3280e9"), Some(false), Some("a3280e9"), Some(false))
+ right: (Some("dd5c683"), Some(false), Some("a3280e9"), Some(false))
+failures:
+    bed_cmd::tests::the_work_tree_is_recorded_as_it_was_when_the_bed_started
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+error: test failed, to rerun pass `-p simpa --bin simpa`
+--- restored byte for byte: True
+--- after the restore: exit 0 (1 s)
+test bed_cmd::tests::the_work_tree_is_recorded_as_it_was_when_the_bed_started ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.03s
+
+==== r2-receivers: only a receiver's file shared by two seeds refuses them (refuse_shared_outputs)
+tree: HEAD fbd346d and the working tree as it stands
+revert in crates/simpa-core/src/bed/run.rs:
+--- fixed
++++ reverted
+@@ -862,3 +862,3 @@
+         for (path, sha) in &r.info.output_files {
+-            if is_receiver_file(path) {
++            if true || is_receiver_file(path) {
+                 owners.entry((path, sha)).or_default().push(*s);
+command: cargo test --no-fail-fast -p simpa-core --lib --test bed_binding -- only_a_receivers_file_shared_by_two_seeds_refuses_them seeds_whose_particle_statistics_coincide_are_not_refused
+--- with the revert: exit 101 (32 s)
+test bed::tests::only_a_receivers_file_shared_by_two_seeds_refuses_them ... FAILED
+failures:
+thread 'bed::tests::only_a_receivers_file_shared_by_two_seeds_refuses_them' (14368) panicked at crates\simpa-core\src\bed.rs:762:9:
+[
+    "E2: 5x4x3-a0.2-energetic-air-off: seed 2: bed_seed_outputs_identical: seed 2 shares with seed(s) {3}: its solver outputs are theirs, byte for byte: 1 file(s) (SPPS particle statistics.gabe): a seed's run must be its own",
+    "E2: 5x4x3-a0.2-energetic-air-off: seed 3: bed_seed_outputs_identical: seed 3 shares with seed(s) {2}: its solver outputs are theirs, byte for byte: 1 file(s) (SPPS particle statistics.gabe): a seed's run must be its own",
+    "5x4x3-a0.2-energetic-air-off: not judged: E2: seed 2: bed_seed_outputs_identical: seed 2 shares with seed(s) {3}: its solver outputs are theirs, byte for byte: 1 file(s) (SPPS particle statistics.gabe): a seed's run must be its own; seed 3: bed_seed_outputs_identical: seed 3 shares with seed(s) {2}: its solver outputs are theirs, byte for byte: 1 file(s) (SPPS particle statistics.gabe): a seed's run must be its own",
+failures:
+    bed::tests::only_a_receivers_file_shared_by_two_seeds_refuses_them
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 227 filtered out; finished in 0.01s
+test seeds_whose_particle_statistics_coincide_are_not_refused ... FAILED
+failures:
+thread 'seeds_whose_particle_statistics_coincide_are_not_refused' (3980) panicked at crates\simpa-core\tests\bed_binding.rs:292:13:
+seed 1: bed_seed_outputs_identical: seed 1 shares with seed(s) {2}: its solver outputs are theirs, byte for byte: 1 file(s) (SPPS particle statistics.gabe): a seed's run must be its own
+failures:
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 3 filtered out; finished in 7.15s
+error: test failed, to rerun pass `-p simpa-core --lib`
+error: test failed, to rerun pass `-p simpa-core --test bed_binding`
+error: 2 targets failed:
+--- restored byte for byte: True
+--- after the restore: exit 0 (32 s)
+test bed::tests::only_a_receivers_file_shared_by_two_seeds_refuses_them ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 227 filtered out; finished in 0.03s
+test seeds_whose_particle_statistics_coincide_are_not_refused ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 7.29s
+
