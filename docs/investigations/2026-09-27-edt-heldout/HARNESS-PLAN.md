@@ -1,6 +1,7 @@
 # M8b EDT held-out test: plan for the harness
 
-Draft, 2026-10-01 02:00, branch `m8b-edt`, revised the same night for the crucible's five findings (section 8).
+Draft, 2026-10-01 02:00, branch `m8b-edt`, revised the same night for the crucible's five findings and, at 04:40,
+for three found by step 3's test writer (section 8).
 It plans the code that will run `PREREG.md`'s test. Building it produces no test data. One step, taken as soon as
 the rooms and the solver driver exist, times one run in a stand-in room that is not a held-out room.
 
@@ -59,14 +60,15 @@ This section is the draft of `ADDENDUM-A1.md`. Following the noise-calibration p
 |---|---|---|---|---|
 | F1 | box 3.4 × 2.9 × 2.5 (24.7 m³) | 0.15, Lambert 1 | 0.48-0.44 | small room (V ≤ 30 m³) |
 | F2 | box 17 × 12.5 × 8 (1,700 m³) | 0.08, Lambert 1 | 3.63-2.26 (3.46 at 500 Hz, 3.33 at 1 kHz) | T60 ≥ 2.5 s; longest T60 |
-| F3 | main 9 × 7 × 4, a 0.2 m partition with a 2.0 × 2.5 m doorway, chamber 6 × 7 × 4 | main room 0.40, its partition face included; chamber, doorway reveals and the partition's chamber face 0.04; Lambert 1 | late 2.16-1.59, early 0.31-0.29 | non-uniform absorption, double slope, coupled |
+| F3 | main 9 × 7 × 4, a 0.2 m partition with a 2.0 × 2.5 m doorway, chamber 6 × 7 × 4 | main room 0.40, its partition face included; chamber, doorway reveals and the partition's chamber face 0.04; Lambert 1 | late 2.11-1.56, early 0.30-0.29 (the main room by the same formula, its doorway also at α = 1) | non-uniform absorption, double slope, coupled |
 | F4 | L: arm 16 × 5 × 3.5, plus arm x 11-16, y 5-15, h 3.5 | 0.12, Lambert 1 | 1.20-1.00 | L-shaped; blocked receiver |
 | F5 | box 14 × 9.5 × 6 | 0.20, scattering **0.2** | 1.05-0.89 | mostly specular, like real finishes |
 | F6 | box 24 × 5.5 × 3.2 | 0.30, Lambert 1 | 0.42-0.39 | long room at high absorption, where the noise model failed (noise-cal V4-E1/E4); the 50k runs |
-| F7 | box 3.8 × 3.3 × 2.4 (30.1 m³) | 0.45, Lambert 1 | about 0.14 at 500 Hz (Eyring; `rooms.py` writes the bands) | small dead room. Added 2026-10-01 02:40, before any data: none of F1-F6 is the kind of room where 13 of the method's 19 real-seed wrong-silent rows sit (C-R3, 5 × 4 × 3, α 0.4). Sorted, it is 18-24 % off C-R3 on every axis. Its source and receivers follow P5 and P7 as F1's do, scaled to its box; `rooms.py` writes them and T10 checks them |
+| F7 | box 3.8 × 3.3 × 2.4 (30.1 m³) | 0.45, Lambert 1 | about 0.14 at 500 Hz (Eyring; `rooms.py` writes the bands) | small dead room. Added 2026-10-01 02:40, before any data: none of F1-F6 is the kind of room where 13 of the method's 19 real-seed wrong-silent rows sit (C-R3, 5 × 4 × 3, α 0.4). Sorted, it is 18-24 % off C-R3 on every axis. Its source and receivers are F1's scaled per axis (× 3.8/3.4, 3.3/2.9, 2.4/2.5), except the one receiver that scaling puts 0.576 m under the ceiling, which is lowered to 1.80 m. They are listed below, to the millimetre; `rooms.py` writes them and T10 checks them |
 
 Sources and receivers, with distance in metres (near < 2, far > 10). Every point is at least 0.6 m from every
-surface, and this has been checked. A receiver is blocked when its straight segment to the source leaves the room.
+surface, and this has been checked. F1 and F7 have points at exactly 0.6 m, so a check of this allows 1e-9. A
+receiver is blocked when its straight segment to the source leaves the room.
 
 ```
 F1 src (0.8,0.8,1.3)   near (1.6,1.2,1.2) .90 (2.0,0.9,1.5) 1.22 (1.3,2.1,1.1) 1.41 (2.4,1.6,0.9) 1.83
@@ -86,6 +88,9 @@ F5 src (3.0,4.75,1.6)  near (4.3,5.2,1.3) 1.41 (2.4,3.2,1.4) 1.67 (3.5,6.4,1.8) 
 F6 src (2.0,2.75,1.5)  near (3.3,3.2,1.2) 1.41 (2.6,1.3,1.6) 1.57 (1.0,3.9,1.3) 1.54
                        mid  (6.0,2.0,1.4) 4.07 (9.5,4.5,1.8) 7.71 (11.0,1.5,1.2) 9.09
                        far  (16.0,3.0,1.3) 14.00 (22.5,2.2,1.6) 20.51
+F7 src (0.894,0.910,1.248)  near (1.788,1.366,1.152) 1.01 (2.235,1.024,1.440) 1.36 (1.453,2.390,1.056) 1.59
+                            mid  (2.682,1.821,0.864) 2.04 (3.018,2.503,1.536) 2.67 (3.129,2.162,1.152) 2.56
+                                 (2.906,2.617,0.672) 2.70 (3.129,1.366,1.800) 2.35
 ```
 
 | # | Parameter | Fixed as | Reason | Call |
@@ -104,7 +109,7 @@ F6 src (2.0,2.75,1.5)  near (3.3,3.2,1.2) 1.41 (2.6,1.3,1.6) 1.57 (1.0,3.9,1.3) 
 | P11 | Energetic mode | Added, on Burhan's word (2026-10-01 02:23, "include the energetic mode, as long as its verified"): the same 72 tested runs in Energetic mode. The truth runs serve both modes, since the expectations match above energetic's −50 dB kill. Energetic is scored as its own set: EDT is shown for energetic runs only if energetic passes H1-H6 on its own, and Random's verdict does not depend on it. M8a measured energetic at 18× random's time on one room (`HANDOFF-2026-10-01.md:59-60`) | Which modes the verdict covers is a claim users read | **B**, decided |
 | P12 | Seeds | 150k: 1101-1103 (1 ms), 1201-1203 (2 ms), 1501-1503 (5 ms). 50k: 2101-2103, 2201-2203, 2501-2503. Truth: 9001-9004. Probe: 9999, reserved | No two runs share a random stream. The truth is independent of every tested row | T |
 | P13 | The matrix | 7 rooms × 3 steps × 3 seeds at 150k, plus F6 × 3 × 3 at 50k: 72 tested runs in each mode (P11), so 144, and 6,912 rows (8 receivers × 6 bands × 144). Truth: 7 rooms × K = 4, so 28 runs, shared by both modes | :28-32 and :34 | T |
-| P14 | Solver build | `solvers/manifest.json`: upstream `929a5c8e`, spps.exe code sha256 `550485c6…`. Checked before every run as M8a's E1 does (`tools/gates/m8a.ps1:8-9`, `solvers/pe-fingerprint.ps1`), and each report's `solver_build` must read verified (backlog 38, `results/report.rs:899-901`) | "Upstream SPPS" names no build (:20). This is the verified one | T |
+| P14 | Solver build | `solvers/manifest.json`: upstream `929a5c8e`, spps.exe code sha256 `550485c6…`. Checked before every run as M8a's E1 does (`tools/gates/m8a.ps1:8-9`, `solvers/pe-fingerprint.ps1`), and each report's `solver_build` must read verified (backlog 38, `results/report.rs:899-901`). No CLI or bed report can read verified until backlog 54's CLI half is built (decision row 33; `mesh_run.rs:520` passes no manifest), so the truth and tested runs wait for it. The probes run no `simpa results` (section 7), so only the check before the run applies to them | "Upstream SPPS" names no build (:20). This is the verified one | T |
 
 ### 2.4 Truth
 
@@ -112,7 +117,7 @@ F6 src (2.0,2.75,1.5)  near (3.3,3.2,1.2) 1.41 (2.6,1.3,1.6) 1.57 (1.0,3.9,1.3) 
 |---|---|---|---|---|
 | P15 | Truth function | Definition A: the ISM truth `truth_ideal` (`target/agents/followup-design/skeptic-gf3/attack_ism.py:55-77`, with `rerun/mirror.py:20, 109-146`). Direct sound is a step at t_arr, and reflections sit where the ball records them. For SPPS, the K references are summed. Bins overlapping [t_arr − R/c, t_arr + R/c) count as direct and the rest as reflected. A blocked receiver gets direct = 0, with t at the start of its first bin with energy (the critique's occluded truth, `critique/scan_i1_occluded.py:1-4, 20`). ISM-fresh uses the image-source split, as the corpus did. Synth-fresh uses `critique/synth.py` `truth_edt`, which is the same definition in closed form | t1, z3, ISM and the critique all use Definition A (EVAL.md:16-19). The real set's truth, the edt3 midpoint, is the shipped calculator's own reading and is not independent (EVAL.md:18) | T |
 | P16 | References | K = 4. 1,000,000 particles per band at 0.1 ms. Method, air, bands and R as the tested runs | The minimum the PREREG allows. The 1 % screen guards precision | T |
-| P17 | Reference run length | min(6.5 s, max(3.0 s, t_arr,max + 2 × the design T60 maximum)), rounded up to 0.1 s: F1 3.0, F2 6.5, F3 4.4, F4 3.0, F5 3.0, F6 3.0. F2's 6.5 s is 65,000 steps, under the 65,536 limit (`validate.rs:287`) | Reaches −60 dB with margin. In Random mode particles die when absorbed, so a longer run should add little cost; the probe measures it | T |
+| P17 | Reference run length | min(6.5 s, max(3.0 s, t_arr,max + 2 × the design T60 maximum)), rounded up to 0.1 s: F1 3.0, F2 6.5, F3 4.3, F4 3.0, F5 3.0, F6 3.0. F2's 6.5 s is 65,000 steps, under the 65,536 limit (`validate.rs:287`) | Reaches −60 dB with margin. In Random mode particles die when absorbed, so a longer run should add little cost; the probe measures it | T |
 | P18 | "Reached −60 dB" | Per receiver-band, the summed reference's energy in its last 10 % must be ≤ 10⁻⁶ of its total. Otherwise the row is excluded as `truth_truncated` and counted | A check that runs after the data, fixed before it | T |
 | P19 | Truth uncertainty | u = SD(ddof 1) of the K individual EDTs, ÷ √K, ÷ the summed truth's EDT. If u > 0.01 the row is excluded as `truth_uncertain`, and a NaN truth as `truth_nan`; both are counted | :35 says "spread". The SD is the standard choice | T |
 
@@ -264,7 +269,8 @@ before most of the code is written.
 - **Recorded** by the driver's probe mode, in `PROBE.md` beside this file: the wall time, `run.json`
   `outcome.elapsed_ms` and verdict, spps.exe's peak working set (polled), the output size (a stat of each file;
   no file is opened), stderr lines by class, and the exe hashes.
-- **Kept apart.** `simpa results` is not run on it. The reader refuses seed 9999 and folders outside the data root
+- **Kept apart.** `simpa results` is not run on it, so P14's report check has nothing to read, while the check
+  before the run applies. The reader refuses seed 9999 and folders outside the data root
   (T13). It is not one of the K references and never becomes one. The folder goes on
   `session-logs/TO-DELETE-<date>.md` for its disk space, for deletion after 07:00.
 - **What it gives Burhan.** The time of one run with F2's cost drivers, and the peak memory, which decides how many
@@ -311,3 +317,19 @@ with the two choices for P10.
   driver's run path with their guards, and ahead of the generators, scorer and attack kit. These do not wait for
   Burhan's answer: the PREREG needs them whatever the number is (H1, H5, H6), and the number decides when and where
   the SPPS truth runs go, not whether the noise-free sets are needed. If he stops M8b, the build stops at once.
+
+### 8.1 Step 3's findings and their disposition
+
+The test writer found these at 04:16, before any data. The main session checked each again before changing the plan.
+
+- **F3's design T60 did not follow P5: corrected.** The chamber, with its doorway at α = 1, gives 2.11-1.56 s,
+  not 2.16-1.59. This was recomputed with `ism.py`'s `m_energy` and c = 343.2, and F1, F2 and F4-F7 match
+  their rows. F3's reference run (P17) is therefore 4.3 s, not 4.4. The early figure is now the main room by the
+  same formula.
+- **F7's scaled receivers broke 2.2's 0.6 m clearance: corrected.** One point landed 0.576 m under the ceiling
+  and is lowered to 1.80 m. F7's points are now listed with the others: 3 near and 5 mid, because scaling moves
+  one of F1's near receivers out to 2.04 m.
+- **P14's report check cannot pass today: recorded, guard unchanged.** No CLI or bed run records its solver build
+  (backlog 54), so every real run's report reads `solver_build_unrecorded`. The guard stays as written, and the
+  truth and tested runs wait for backlog 54's CLI half, which Burhan decided on 2026-10-01 (decision row 33). The
+  probes are not affected.
