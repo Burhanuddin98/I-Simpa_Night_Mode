@@ -111,3 +111,68 @@ FAILED tests/test_r2_plan_guards.py::test_t35_runner_limits_and_paths - Faile...
 5 failed in 0.07s
 ```
 
+## Batch 3, 2026-10-02 01:03: T36, T37, T39-T43 (tests/test_r2_fresh_sets.py, test_r2_dry.py, test_r2_attack.py, test_r2_logging.py, test_r2_freeze.py, test_r2_run_order.py)
+
+Result: 8 failed (T41 has two tests). expected_dry_2.json was committed first (ddda75b). Stubs: dry/run_dry2.py, m8b/freeze2.py. Every failure is a missing function, keyword or name, or a stub, as the plan's 'each module starts as a stub' says.
+
+```
+FFFFFFFF                                                                 [100%]
+================================== FAILURES ===================================
+E   NotImplementedError: run_dry2.run_d2p
+dry\run_dry2.py:5: NotImplementedError: run_dry2.run_d2p
+E   TypeError: draw() got an unexpected keyword argument 'b1'. Did you mean 'a1'?
+tests\test_r2_plan_guards.py:73: TypeError: draw() got an unexpected keyword argument 'b1'. Did you mean 'a1'?
+E   TypeError: draw() got an unexpected keyword argument 'b1'. Did you mean 'a1'?
+tests\test_r2_plan_guards.py:73: TypeError: draw() got an unexpected keyword argument 'b1'. Did you mean 'a1'?
+E   TypeError: build_sandbox() got an unexpected keyword argument 'sentinel'
+tests\test_r2_attack.py:32: TypeError: build_sandbox() got an unexpected keyword argument 'sentinel'
+E   TypeError: 'NoneType' object is not callable
+tests\test_r2_logging.py:22: TypeError: 'NoneType' object is not callable
+E   TypeError: rows_for_scoring() got an unexpected keyword argument 'on_receiver'
+tests\test_r2_logging.py:54: TypeError: rows_for_scoring() got an unexpected keyword argument 'on_receiver'
+E   NotImplementedError: freeze2.inventory
+m8b\freeze2.py:5: NotImplementedError: freeze2.inventory
+E   AttributeError: <module 'm8b.driver' from 'B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m8b-edt\\docs\\investigations\\2026-09-27-edt-heldout\\\m8b\\driver.py'> has no attribute 'b1_committed'
+tests\test_r2_run_order.py:22: AttributeError: <module 'm8b.driver' from 'B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m8b-edt\\docs\\investigations\\2026-09-27-edt-heldout\\\m8b\\driver.py'> has no attribute 'b1_committed'
+=========================== short test summary info ===========================
+FAILED tests/test_r2_dry.py::test_t39_dry_run_equals_expected_dry_2 - NotImpl...
+FAILED tests/test_r2_fresh_sets.py::test_t36_ism_fresh_2 - TypeError: draw() ...
+FAILED tests/test_r2_fresh_sets.py::test_t37_synth_fresh_2 - TypeError: draw(...
+FAILED tests/test_r2_attack.py::test_t40_attack_round_2 - TypeError: build_sa...
+FAILED tests/test_r2_logging.py::test_t41_ism_rooms_log_start_before_done_and_one_line_per_receiver
+FAILED tests/test_r2_logging.py::test_t41_rows_for_scoring_calls_back_once_per_receiver
+FAILED tests/test_r2_freeze.py::test_t42_inventory_is_complete_and_check_catches_a_change
+FAILED tests/test_r2_run_order.py::test_t43_scorer_run_order - AttributeError...
+8 failed in 0.13s
+```
+
+## Coverage
+
+| Test | File | Recorded failing in | Control that passed before |
+|---|---|---|---|
+| T23 | test_r2_scorer.py | batch 1 | |
+| T24 | test_r2_scorer.py | batch 1 | |
+| T25 | test_r2_scorer.py | batch 1 | |
+| T26 | test_r2_scorer.py | batch 1 | |
+| T27 | test_r2_scorer.py | batch 1 | |
+| T28 | test_r2_scorer.py | batch 1 | |
+| T29 | test_r2_scorer.py | | yes: passed before and must after (planned control, plan section 6) |
+| T30 | test_r2_scorer.py | batch 1 | |
+| T31 | test_r2_scorer.py | batch 1 | |
+| T32 | test_r2_corpus_rooms.py | batch 2 | |
+| T33 | test_r2_corpus_rooms.py | batch 2 | |
+| T34 | test_r2_plan_guards.py | batch 2 | |
+| T35 | test_r2_plan_guards.py (two tests) | batch 2 | |
+| T36 | test_r2_fresh_sets.py | batch 3 | |
+| T37 | test_r2_fresh_sets.py | batch 3 | |
+| T38 | test_r2_scorer.py | batch 1 | |
+| T39 | test_r2_dry.py | batch 3 | |
+| T40 | test_r2_attack.py | batch 3 | |
+| T41 | test_r2_logging.py (two tests) | batch 3 | |
+| T42 | test_r2_freeze.py | batch 3 | |
+| T43 | test_r2_run_order.py | batch 3 | |
+
+T29 is the only test of T23-T43 that did not fail first, and it is a control by design: its claim (no radius filter in
+H1, H2, H3, H5) is true of round 1's scorer already and must stay true after H4 gains its filter. T29 was shown able to
+fail by reading it against the H4 code path: it plants a wrong-silent row at R = 1.4 m in each of the four criteria, so a
+radius filter added to any of them makes it fail.
