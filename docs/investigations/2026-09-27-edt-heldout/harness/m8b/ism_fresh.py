@@ -2,8 +2,9 @@
 generator, target/agents/followup-design/skeptic-gf3/ism.py (sha256 a7c9d41e...), copied by text,
 with the series built as target/agents/followup-design/spec/eval_ism.py:59-88 builds them.
 
-STUB (HARNESS-PLAN.md section 6, step 3): every function returns None and BOUNDS is empty. Tests
-T6, T13, T16 and T22 hold the contract below.
+STUB (HARNESS-PLAN.md section 6, step 3): every function returns None and BOUNDS is empty, except
+that draw() runs its held-out guard first (step 4, for T13). Tests T6, T13, T16 and T22 hold the
+contract below.
 
 Contract:
 - A room is a dict with 'dims_m' [Lx, Ly, Lz], 'alpha_walls' [x0, x1, y0, y1, floor, ceiling]
@@ -27,6 +28,8 @@ Contract:
 - BOUNDS: {quantity: (lo, hi)} in weak_spots.json's vocabulary, for every quantity this set draws
   (P21, P22): its ranges, widened where P33 needs it. 'alpha_walls' bounds each wall's value.
 """
+from . import driver
+
 C = 343.20001220703125              # attack_ism.py:28
 DT_FINE = 2e-5                      # attack_ism.py:30
 BANDS_HZ = (125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000)
@@ -42,4 +45,5 @@ def make_row(room, rec, R, F, step_ms, image_time_s=None, run_s=None):
 
 
 def draw(seed, *, a1=None):
+    driver.require_not_heldout(seed, a1)
     return None

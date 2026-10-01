@@ -2,8 +2,9 @@
 generator, docs/investigations/2026-09-27-edt-simplify/critique/synth.py (hash pinned as
 corpus.SYNTH_SHA256_LF), noise-free (PREREG.md:55).
 
-STUB (HARNESS-PLAN.md section 6, step 3): every function returns None and BOUNDS is empty. Tests
-T13, T15 and T22 hold the contract below.
+STUB (HARNESS-PLAN.md section 6, step 3): every function returns None and BOUNDS is empty, except
+that draw() runs its held-out guard first (step 4, for T13). Tests T13, T15 and T22 hold the contract
+below.
 
 Contract:
 - draw(seed, *, a1=None) -> [spec]: calls driver.require_not_heldout(seed, a1) first. 500 rows for
@@ -22,6 +23,8 @@ Contract:
 - BOUNDS: {quantity: (lo, hi)} in weak_spots.json's vocabulary, for every quantity this set draws
   (P24): its ranges, widened where P33 needs it.
 """
+from . import driver
+
 C = 343.2                           # critique/synth.py:15
 RATIOS = (1.5, 5.0)
 STEPS_MS = (1.0, 2.0, 5.0, 10.0)
@@ -31,6 +34,7 @@ BOUNDS = {}
 
 
 def draw(seed, *, a1=None):
+    driver.require_not_heldout(seed, a1)
     return None
 
 
