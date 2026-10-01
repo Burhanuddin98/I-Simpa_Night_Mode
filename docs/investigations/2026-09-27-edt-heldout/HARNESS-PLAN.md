@@ -60,7 +60,7 @@ This section is the draft of `ADDENDUM-A1.md`. Following the noise-calibration p
 |---|---|---|---|---|
 | F1 | box 3.4 × 2.9 × 2.5 (24.7 m³) | 0.15, Lambert 1 | 0.48-0.44 | small room (V ≤ 30 m³) |
 | F2 | box 17 × 12.5 × 8 (1,700 m³) | 0.08, Lambert 1 | 3.63-2.26 (3.46 at 500 Hz, 3.33 at 1 kHz) | T60 ≥ 2.5 s; longest T60 |
-| F3 | main 9 × 7 × 4, a 0.2 m partition with a 2.0 × 2.5 m doorway, chamber 6 × 7 × 4 | main room 0.40, its partition face included; chamber, doorway reveals and the partition's chamber face 0.04; Lambert 1 | late 2.11-1.56, early 0.30-0.29 (the main room by the same formula, its doorway also at α = 1) | non-uniform absorption, double slope, coupled |
+| F3 | main 9 × 7 × 4, a 0.2 m partition with a 2.0 × 2.5 m doorway at y 2.9-4.9, z 0-2.5 (as `rooms.py` builds it, so that the far receivers are through and blocked as listed below), chamber 6 × 7 × 4 | main room 0.40, its partition face included; chamber, doorway reveals and the partition's chamber face 0.04; Lambert 1 | late 2.11-1.56, early 0.30-0.29 (the main room by the same formula, its doorway also at α = 1) | non-uniform absorption, double slope, coupled |
 | F4 | L: arm 16 × 5 × 3.5, plus arm x 11-16, y 5-15, h 3.5 | 0.12, Lambert 1 | 1.20-1.00 | L-shaped; blocked receiver |
 | F5 | box 14 × 9.5 × 6 | 0.20, scattering **0.2** | 1.05-0.89 | mostly specular, like real finishes |
 | F6 | box 24 × 5.5 × 3.2 | 0.30, Lambert 1 | 0.42-0.39 | long room at high absorption, where the noise model failed (noise-cal V4-E1/E4); the 50k runs |
@@ -338,13 +338,14 @@ The red check (`RED.md`, 05:24) fixed four tests and raised the following. Each 
 and all of them are settled before A1:
 
 - **The method's pin held on one machine's git settings only: fixed** (`00e793e`). PREREG's sha256 `462c37cf…`
-  is the committed text checked out with CRLF line ends. `../.gitattributes` now keeps `frozen/` in that form on
-  every checkout. The frozen file and PREREG.md are unchanged.
+  is the committed text checked out with CRLF line ends. The `.gitattributes` beside this file now keeps `frozen/`
+  in that form on every checkout. The frozen file and PREREG.md are unchanged.
 - **Synth-fresh near DRR 9.54 dB: open, for decision before A1.** The synth truth (P15) is NaN for every DRR
   above 10·log10(9) = 9.54 dB, because the direct sound alone takes the level past −10 dB. That was 61 of 4,000
-  dev rows, excluded as `truth_nan` (P27). Just below the edge the truth is finite but very large: 28 s at
-  9.50 dB for a 1 s decay. PREREG fixes the range at up to +10 dB (:39). How those rows bear on H1 has not been
-  examined.
+  dev rows, excluded as `truth_nan` (P27). Below the edge the truth is finite but can be very large, and the
+  reflection gap sets how large: for a 1 s decay, 28 s at 9.50 dB with a 5 ms gap, 13.3 s already at 9.0 dB
+  with a 40 ms gap, and 1.0 s with no gap (the second red check, `RED.md`). PREREG fixes the range at up to
+  +10 dB (:39). How those rows bear on H1 has not been examined.
 - **P3's figures: corrected from `rooms.py` in step 4.** P3 now gives the five fresh boxes, F7 included, and
   their clearances, 17.1-31.25 %, in place of four at 18-44 %. The lowest is F5's 17.1 % against z3's box055, as
   the writer measured, so F5 is still fresh.
