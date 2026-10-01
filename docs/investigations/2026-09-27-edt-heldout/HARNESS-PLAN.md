@@ -391,3 +391,12 @@ These settle section 8.1's open points before A1. Each is built and tested befor
   held-out ISM-fresh row (its default stays False so T6's bit-exact reproduction holds), and
   `truth.split_borderline` must be applied by the SPPS-fresh row builder when it is written. Each gets a test
   that fails if the held-out path skips it.
+- **The first-reflection gap in every room, not only boxes (Jarvis 12:01, audit of `03470f9`, which blocked on
+  F3 and F4).** The gap that call 3 tests is a lower bound, taken the same way in every room: mirror the source
+  in the plane of every face of the room's own mesh, take the shortest image-to-receiver distance, subtract the
+  direct distance, divide by C. No visibility test. Any reflection, specular or diffuse, off a face is at least
+  as long as the path through that face's plane, so the true first reflection can only come later; an extra
+  plane (a doorway's wall) only shortens the bound. Erring short sends more rows to the borderline check,
+  which only removes rows already within the split's bound of the 5 % line; erring long could let a split
+  error score as wrong-silent. In a box the bound equals the box formula, which a test pins. A room whose
+  geometry cannot be read raises; nothing falls back to the first box.
