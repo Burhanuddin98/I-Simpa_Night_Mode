@@ -26,6 +26,14 @@ pub fn stub() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_simpa-stub-solver"))
 }
 
+/// The stub `preprocess.exe` cargo built for these tests (`cli_run.rs`,
+/// `a_run_whose_preprocess_gives_up_records_the_warning`): a real PE binary that always gives up,
+/// so it can be registered by its own code sha256 in a `SIMPA_SOLVER_MANIFEST` override and still
+/// verify (backlog 54's CLI half checks `--preprocess` too).
+pub fn stub_preprocess() -> PathBuf {
+    PathBuf::from(env!("CARGO_BIN_EXE_simpa-stub-preprocess"))
+}
+
 /// A fresh, empty folder for one test under `target/tmp/cli/`, never reused: removed when the
 /// test passes, kept (and named in its output) when it fails (`scratch_files`).
 pub fn scratch(label: &str) -> PathBuf {
@@ -43,9 +51,22 @@ pub struct Out {
 
 /// Runs `simpa <args>` to completion.
 pub fn simpa_run<S: AsRef<std::ffi::OsStr>>(args: &[S]) -> Out {
+    simpa_run_env(args, &[])
+}
+
+/// `simpa_run`, with extra environment variables set on the child (a test-only lever such as
+/// `SIMPA_SOLVER_MANIFEST`; never unset anything the test's own environment already has).
+pub fn simpa_run_env<S: AsRef<std::ffi::OsStr>>(
+    args: &[S],
+    env: &[(&str, &std::ffi::OsStr)],
+) -> Out {
     let t0 = std::time::Instant::now();
-    let out = Command::new(simpa())
-        .args(args)
+    let mut cmd = Command::new(simpa());
+    cmd.args(args);
+    for (k, v) in env {
+        cmd.env(k, v);
+    }
+    let out = cmd
         .output()
         .unwrap_or_else(|e| panic!("{}: {e}", simpa().display()));
     Out {
@@ -94,4 +115,25 @@ pub fn private_copy(exe: &Path, dir: &Path, name: &str) -> PathBuf {
     let copy = dir.join(name);
     std::fs::copy(exe, &copy).unwrap();
     copy
+}
+
+/// A copy of the embedded `solvers/manifest.json` with `name`'s entry (for example
+/// `"spps.exe"`, `"classicalTheory.exe"` or `"preprocess.exe"`, the names `check_solvers` looks
+/// up, never the stand-in's own file name) replaced by `exe`'s own code and raw sha256
+/// (`simpa_core::bed::pe::file_hashes`, the same Rust fingerprint `check_solvers` uses): a
+/// `SIMPA_SOLVER_MANIFEST` override a cargo-built stand-in (`stub()`, `stub_preprocess()`)
+/// verifies against, for a scenario the real verified build cannot produce. Every other
+/// executable's entry is untouched, so the real verified build used alongside a stand-in still
+/// verifies too. Written once per `dir` per call; a second call with the same `dir` overwrites it.
+pub fn manifest_with(dir: &Path, name: &str, exe: &Path) -> PathBuf {
+    // `parse_json`, not `serde_json::from_str`: the committed file opens with a BOM.
+    let mut v: serde_json::Value =
+        simpa_core::schema::parse_json(simpa_core::bed::SOLVER_MANIFEST).unwrap();
+    let (code, raw) =
+        simpa_core::bed::pe::file_hashes(exe).unwrap_or_else(|e| panic!("{}: {e}", exe.display()));
+    v["code_sha256"][name] = serde_json::Value::String(code);
+    v["sha256"][name] = serde_json::Value::String(raw);
+    let path = dir.join(format!("manifest-with-{}.json", name.replace('.', "-")));
+    std::fs::write(&path, serde_json::to_string_pretty(&v).unwrap()).unwrap();
+    path
 }

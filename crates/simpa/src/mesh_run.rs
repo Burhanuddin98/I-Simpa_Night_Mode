@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use simpa_core::bed::SOLVER_MANIFEST;
+use simpa_core::bed::pe::SolverManifest;
 use simpa_core::mesh::{
     self, Markers, MeshManifest, MeshStatus, MeshTools, Mesher, PreprocessProgram, TetgenMesher,
     Timeouts, verify,
@@ -507,7 +509,29 @@ fn print_report(r: &RunReport, json: bool) -> ExitCode {
     exit(m.exit_class)
 }
 
-/// The options `run` and `run-folder` share.
+/// The verified build, `solvers/manifest.json` as this binary was compiled with it (the same
+/// manifest the app embeds and checks against, `app/src-tauri/src/runs.rs`'s `manifest()`), or
+/// `$SIMPA_SOLVER_MANIFEST`'s file when set: a test lever beside `$SIMPA_SOLVERS_DIR` and
+/// `$SIMPA_TETGEN160` (`crates/simpa-core/tests/common/paths.rs`), never a flag, and never a way
+/// to skip verification: a build is still checked against whichever manifest this resolves to.
+/// Only a test needs it, to register a cargo-built stand-in's own code sha256 for a scenario the
+/// real verified build cannot produce deterministically (`cli_run.rs`,
+/// `a_run_whose_preprocess_gives_up_records_the_warning`).
+fn solver_manifest() -> Result<SolverManifest, String> {
+    if let Some(p) = std::env::var_os("SIMPA_SOLVER_MANIFEST") {
+        let p = PathBuf::from(p);
+        let text = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
+        return SolverManifest::parse(&text).map_err(|e| format!("{}: {e}", p.display()));
+    }
+    SolverManifest::parse(SOLVER_MANIFEST)
+        .map_err(|e| format!("the embedded solvers/manifest.json does not read: {e}"))
+}
+
+/// The options `run` and `run-folder` share. `verify` is always asked by default (decision row 33,
+/// backlog 54's CLI half): the app always asks, and now so does the CLI, with no opt-out, since
+/// the app has none either. A build that is not the verified one is refused before anything runs
+/// (`solver_unverified`, exit class 2), and the checks that found so are recorded in `run.json`'s
+/// `solvers`, so `simpa results` can read a matching run as verified.
 fn run_options(a: &Args, default_root: PathBuf) -> Result<RunOptions, String> {
     let solver = solver_of(a)?;
     Ok(RunOptions {
@@ -517,7 +541,7 @@ fn run_options(a: &Args, default_root: PathBuf) -> Result<RunOptions, String> {
         loss_limit: loss_limit(a)?,
         cancel_after_ms: a.millis("cancel-after-ms")?,
         cancel_after_progress: progress(a)?,
-        verify: None,
+        verify: Some(solver_manifest()?),
     })
 }
 
