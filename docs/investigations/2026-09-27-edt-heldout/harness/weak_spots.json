@@ -25852,6 +25852,43 @@
    "source": "C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/97f2c13c-beea-4d4b-b842-603feb756e57/scratchpad/edtsimp/wrappers.py",
    "checked": false,
    "why": "outside the worktree and target/: recorded, not read"
+  },
+  "m8b/_ism.py": {
+   "source": "target/agents/followup-design/skeptic-gf3/ism.py",
+   "checked": true,
+   "hashes": [
+    "sha256",
+    "sha256_lf"
+   ]
+  },
+  "m8b/_mirror.py": {
+   "source": "target/agents/followup-design/skeptic-gf3/rerun/mirror.py",
+   "checked": true,
+   "hashes": [
+    "sha256",
+    "sha256_lf"
+   ]
+  },
+  "m8b/_truth_ideal.py": {
+   "source": "target/agents/followup-design/skeptic-gf3/attack_ism.py",
+   "checked": true,
+   "hashes": [
+    "sha256",
+    "sha256_lf"
+   ]
+  },
+  "m8b/ism_fresh.py make_row": {
+   "source": "target/agents/followup-design/spec/eval_ism.py",
+   "checked": true,
+   "hashes": [
+    "sha256",
+    "sha256_lf"
+   ]
+  },
+  "m8b/ism_fresh.py make_row (the corpus's rows)": {
+   "source": "C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/97f2c13c-beea-4d4b-b842-603feb756e57/scratchpad/edtsimp/loaders.py",
+   "checked": false,
+   "why": "outside the worktree and target/: recorded, not read"
   }
  },
  "sources": [
@@ -25933,6 +25970,20 @@
    "bytes": 5340,
    "sha256": "a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747",
    "sha256_lf": "a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747"
+  },
+  {
+   "root": "checkout",
+   "path": "target/agents/followup-design/skeptic-gf3/rerun/mirror.py",
+   "bytes": 15831,
+   "sha256": "c5603d5ba863e9f61086c3897106982161de2e431e65010731c6317f80791f85",
+   "sha256_lf": "887053431f0d07e43d9beb8028816f5aabec44c917006d585bed3dbae40efac8"
+  },
+  {
+   "root": "checkout",
+   "path": "target/agents/followup-design/spec/eval_ism.py",
+   "bytes": 4539,
+   "sha256": "86f1ef70fd58c68bf6f14dc67fef6547adabad266028d5e1b3368e0f96936bb1",
+   "sha256_lf": "86f1ef70fd58c68bf6f14dc67fef6547adabad266028d5e1b3368e0f96936bb1"
   },
   {
    "root": "checkout",
@@ -26693,9 +26744,9 @@
   {
    "root": "worktree",
    "path": "docs/investigations/2026-09-27-edt-heldout/harness/m8b/provenance.json",
-   "bytes": 10030,
-   "sha256": "b785555f97fdb1408d7ca69cdc4abb5d0a574374a970862bf6e3c290e418ee62",
-   "sha256_lf": "b785555f97fdb1408d7ca69cdc4abb5d0a574374a970862bf6e3c290e418ee62"
+   "bytes": 14872,
+   "sha256": "a72ec594de85e7988968e941739639e151314719220a92c842e109fe69f0a69b",
+   "sha256_lf": "a72ec594de85e7988968e941739639e151314719220a92c842e109fe69f0a69b"
   },
   {
    "root": "worktree",
@@ -26803,18 +26854,18 @@
    "real+seeds": 2.5,
    "scan1": 3.1,
    "scan4": 0.2,
-   "scan2b": 5.5,
-   "scan3": 0.3,
-   "scan2": 6.1,
+   "scan2b": 5.3,
+   "scan3": 0.2,
+   "scan2": 5.9,
    "scan5": 0.1,
    "noise_probe": 0.1,
    "ablate": 1.9,
-   "z3+z3grid": 102.5,
-   "z3_worker_seconds": 577.9
+   "z3+z3grid": 106.2,
+   "z3_worker_seconds": 609.4
   },
   "python": "3.13.13",
   "numpy": "2.5.2",
   "platform": "Windows-11-10.0.26200-SP0",
-  "at": "2026-10-01T07:26:27+0200"
+  "at": "2026-10-01T08:05:29+0200"
  }
 }
