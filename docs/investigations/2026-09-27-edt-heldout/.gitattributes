@@ -1,0 +1,4 @@
+# PREREG.md:8 pins frozen/method.py as sha256 462c37cf..., which is its committed LF text checked out with
+# CRLF line ends (core.autocrlf=true on Grace). This keeps every checkout in that form, whatever the local
+# git settings, so the hash check never voids a run on a machine that would check it out as LF.
+frozen/** text eol=crlf
