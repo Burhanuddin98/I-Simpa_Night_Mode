@@ -105,7 +105,7 @@ F7 src (0.894,0.910,1.248)  near (1.788,1.366,1.152) 1.01 (2.235,1.024,1.440) 1.
 |---|---|---|---|---|
 | P8 | Settings the PREREG does not name | The default of a freshly imported project: Random, air on, R 0.31 m, trans_epsilon 5, octave bands 125 Hz-4 kHz, 150,000 particles per source per band (`schema/model.rs:962-973`, `schema/bands.rs:124-131`) | The test then measures what users get | T |
 | P9 | Exceptions to the defaults | `random_seed` non-zero, so runs are reproducible with disjoint streams (it forces one thread, `model.rs:926`). Surface and receiver intersection files off. No fittings | Intersection files cost disk at 1M particles and do not touch the histograms | T |
-| P10 | Run length of the tested runs | Raised before the test, on Burhan's word (2026-10-01 02:23, "raise the default"). The rule is chosen after the dead-room probe (section 7.1): a fixed default (5.0 s was proposed) if a longer run costs a dead room little, or a default set from the room's predicted reverberation time if it does not. The product default changes in its own step, with its tests and gates, before A1 is committed, and the test takes it | The default is what users see. Burhan decided the direction; the rule goes back to him with the probe's numbers | **B**, decided in part |
+| P10 | Run length of the tested runs | Raised before the test, on Burhan's word (2026-10-01 02:23, "raise the default"), and set from each room's predicted reverberation time (08:05, decision row 35). The dead-room probe would have allowed a fixed default (`PROBE.md`: a 10 s run cost P0b no more time than a 2 s run); Burhan chose the room-based rule instead. Its formula (the prediction, a margin, a floor and a cap) is a technical call made in the product step, which changes the default with its own tests and gates before A1 is committed, and the test takes it | The default is what users see | **B**, decided |
 | P11 | Energetic mode | Added, on Burhan's word (2026-10-01 02:23, "include the energetic mode, as long as its verified"): the same 72 tested runs in Energetic mode. The truth runs serve both modes, since the expectations match above energetic's −50 dB kill. Energetic is scored as its own set: EDT is shown for energetic runs only if energetic passes H1-H6 on its own, and Random's verdict does not depend on it. M8a measured energetic at 18× random's time on one room (`HANDOFF-2026-10-01.md:59-60`) | Which modes the verdict covers is a claim users read | **B**, decided |
 | P12 | Seeds | 150k: 1101-1103 (1 ms), 1201-1203 (2 ms), 1501-1503 (5 ms). 50k: 2101-2103, 2201-2203, 2501-2503. Truth: 9001-9004. Probe: 9999, reserved | No two runs share a random stream. The truth is independent of every tested row | T |
 | P13 | The matrix | 7 rooms × 3 steps × 3 seeds at 150k, plus F6 × 3 × 3 at 50k: 72 tested runs in each mode (P11), so 144, and 6,912 rows (8 receivers × 6 bands × 144). Truth: 7 rooms × K = 4, so 28 runs, shared by both modes | :28-32 and :34 | T |
@@ -349,3 +349,12 @@ and all of them are settled before A1:
 - **P3's figures: corrected from `rooms.py` in step 4.** P3 now gives the five fresh boxes, F7 included, and
   their clearances, 17.1-31.25 %, in place of four at 18-44 %. The lowest is F5's 17.1 % against z3's box055, as
   the writer measured, so F5 is still fresh.
+
+Step 6's truth check (08:03) raised one more:
+
+- **P15's split close to the direct sound: open, for decision before A1.** On all 944 finite corpus
+  receiver-bands, the split rule is off the image-source split by more than 0.3 % on 181, and by at most 2.08 %
+  (at 20 kHz). In 125 Hz-4 kHz it is off by more than 0.3 % on 49 of 477, and by at most 1.20 %. Every one of
+  these rows has its first reflection within 2R/c = 1.81 ms of the direct sound. With a longer gap, the split
+  is within 0.017 %. The wrong-silent line is 5 %, so a row near it can be misjudged. `truth.py`'s docstring
+  gives the figures.
