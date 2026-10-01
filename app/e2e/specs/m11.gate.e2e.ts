@@ -333,16 +333,18 @@ describe('M11 gate', () => {
   // Backlog 38 (docs/investigations/2026-09-30-b38-39/PLAN.md, T38-9): an OK run whose run.json
   // records no solver check is marked unverified, not refused: its Results step reads `unverified`
   // with SOLVER_BUILD_UNRECORDED, never "Results verified", and its Runs row says the same, both
-  // from the core's one predicate. The planted-loss run (m11.ps1) is such a run: `simpa run`
-  // records no check, as no run made before M11 did. m11-e-results' box run, an app run that
-  // records its checks, is the control that reads verified.
+  // from the core's one predicate. The planted-loss run (m11.ps1) is such a run: plant-loss.ts
+  // clears its `solvers` key after confirming it verified (backlog 54's CLI half checks by
+  // default now, so a fresh `simpa run` no longer leaves it unrecorded on its own; this plants
+  // that absence deliberately, the way a pre-M11 fixture has it). m11-e-results' box run, an app
+  // run that records its checks, is the control that reads verified.
   it('m11-b38: an OK run with no solver record reads unverified with SOLVER_BUILD_UNRECORDED, on its Results step and its Runs row', async () => {
     const planted = runFolders(runsRootOf(LOSS()));
     assert.equal(planted.length, 1, `the planted-loss project's runs: ${planted.join(', ')}`);
     const run = planted[0];
     const { m } = manifestOf(LOSS(), run);
     assert.equal(m.verdict.status, 'OK', 'an OK run: only its solver build is unverified');
-    assert.equal(m.solvers ?? null, null, 'a command-line run records no solver check');
+    assert.equal(m.solvers ?? null, null, 'plant-loss.ts clears the solvers key it confirmed matched');
     await m10.openProject(LOSS());
     await m11.selectRun(run);
     await clickSelector('[data-step="results"]');

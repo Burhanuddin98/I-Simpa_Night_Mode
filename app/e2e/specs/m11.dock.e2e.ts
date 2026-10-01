@@ -446,9 +446,16 @@ describe('M11 dock', () => {
     assert.equal(await count(`${sel} [data-reason-code]`), m.verdict.reasons.length, 'every reason is listed');
     await $(sel).click();
     await browser.waitUntil(async () => (await attrOf(sel, 'aria-selected')) === 'true', { timeout: 10_000 });
-    // A command-line run: its solvers were not checked by the app, and the row says so.
-    assert.equal(m.solvers, undefined);
-    assert.equal(await attrOf(`${sel} [data-part="verified"]`, 'data-verified'), 'unrecorded');
+    // A command-line run, refused before it reached the solver: backlog 54's CLI half checks by
+    // default, so its solvers key is recorded and matching (the stand-in tetgen.exe verifies
+    // through m11.ps1's SIMPA_SOLVER_MANIFEST override, under the name `tetgen.exe`), and the row
+    // says so.
+    assert.ok(Array.isArray(m.solvers) && m.solvers.length > 0, 'solvers is recorded');
+    assert.ok(
+      (m.solvers as { matches: boolean }[]).every((c) => c.matches),
+      `every check matches: ${JSON.stringify(m.solvers)}`,
+    );
+    assert.equal(await attrOf(`${sel} [data-part="verified"]`, 'data-verified'), 'yes');
     assert.equal(await textOf(`${sel} [data-part="exe-sha"]`), m.exe.sha256.slice(0, 12));
     assert.equal(await count(`${sel} [data-part="loss"], ${sel} [data-part="bands"]`), 0, 'no particle statistics');
     assert.equal(await textOf(`${sel} [data-part="exit"]`), 'no exit code');

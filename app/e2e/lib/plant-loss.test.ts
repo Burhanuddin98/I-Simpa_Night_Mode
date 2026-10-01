@@ -23,6 +23,9 @@ function boxRun(): Record<string, unknown> {
     manifest_version: 1,
     solver: 'spps',
     exe: { path: 'C:\\w\\solvers\\spps.exe', sha256: '1d9900db' },
+    // Backlog 54's CLI half: a default `simpa run` now records this, matching, before plantLoss
+    // clears it to plant SOLVER_BUILD_UNRECORDED for m11-b38 (the box run's own shape, trimmed).
+    solvers: [{ name: 'spps.exe', path: 'C:\\w\\solvers\\spps.exe', matches: true }],
     outcome: { exit_code: 0, cancelled: false, elapsed_ms: 1511.0962 },
     lines: { progress: 9999, info: 2, ok: 1, warn: 0, fail: 0, unclassified: 0 },
     particles: {
@@ -75,8 +78,30 @@ test('the planted table is the plan, and each band still sums to its total', () 
     assert.equal(b.absorbed_by_materials, o.absorbed_by_materials - moved);
     assert.equal(b.absorbed_by_atmosphere, o.absorbed_by_atmosphere);
   }
-  const strip = (m: Record<string, unknown>) => ({ ...m, particles: null });
+  // solvers is deliberately cleared (m11-b38's fixture, backlog 54's CLI half); every other
+  // field, particles aside, is untouched.
+  assert.equal((after as Record<string, unknown>).solvers, undefined);
+  assert.notEqual(before.solvers, undefined);
+  const strip = (m: Record<string, unknown>) => {
+    const { particles: _particles, solvers: _solvers, ...rest } = m;
+    return rest;
+  };
   assert.deepEqual(strip(JSON.parse(plantLoss(JSON.stringify(before)))), strip(before));
+});
+
+test('a run whose solver build is not verified is refused, not planted', () => {
+  for (const [name, change] of [
+    ['no solvers key', (m: Record<string, unknown>) => delete m.solvers],
+    ['an empty solvers list', (m: Record<string, unknown>) => (m.solvers = [])],
+    [
+      'a mismatching check',
+      (m: Record<string, unknown>) => (m.solvers = [{ name: 'spps.exe', path: 'x', matches: false }]),
+    ],
+  ] as [string, (m: Record<string, unknown>) => void][]) {
+    const m = boxRun();
+    change(m);
+    assert.throws(() => plantLoss(JSON.stringify(m)), /plantLoss/, name);
+  }
 });
 
 test('a run the plan was not worked for is refused, not planted', () => {

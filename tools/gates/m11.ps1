@@ -406,7 +406,9 @@ Check "build: npx tauri build --no-bundle (custom protocol, ui/dist embedded) an
     try { $code = Native 'npx --no-install tauri build --no-bundle' $log } finally { Pop-Location }
     Tail $log 4
     $fresh = (Test-Path $exe) -and (Get-Item $exe).LastWriteTime -ge $t0.AddSeconds(-1)
-    $cli = Native 'cargo build -q --release -p simpa --bin simpa' (Join-Path $work 'simpa-build.log')
+    # simpa-stub-tetgen-skips: gate (e)'s stand-in tetgen.exe (below), built alongside simpa.exe
+    # so it is a real PE file backlog 54's default verification can be pointed at.
+    $cli = Native 'cargo build -q --release -p simpa --bin simpa --bin simpa-stub-tetgen-skips' (Join-Path $work 'simpa-build.log')
     Note "exit $code in $([math]::Round(((Get-Date) - $t0).TotalSeconds, 1)) s; app.exe rebuilt: $fresh; simpa.exe build exit $cli"
     $script:built = $code -eq 0 -and $fresh -and $cli -eq 0
     $script:built
@@ -491,10 +493,24 @@ Check "harness: the projects copied to C: (runs never land on B:), and the mesh-
     # The Interrupted control of the dock spec: a run folder with no run.json.
     New-Item -ItemType Directory -Force (Join-Path $projects 'long\runs\20260101-000000-000-spps\solve') | Out-Null
     # Gate (e)'s run: the core's real run manager with the stand-in TetGen (PLAN.md 5, F3).
+    # simpa-stub-tetgen-skips.exe plays what tetgen_skips.bat used to (same bytes, same exit 3;
+    # `crates/simpa-core/tests/ui_fixtures.rs`'s `tetgen_skips` is still the committed recipe for
+    # what it writes). Backlog 54's CLI half made `simpa run` verify every executable it launches
+    # by default, and a `.bat` is refused outright, before the mesh stage this gate means to
+    # reach, as not a PE file; the stub is real PE, so a manifest that knows its own code sha256
+    # under `tetgen.exe`, the name `simpa run` looks it up by, lets it verify like the real one.
     $env:SIMPA_SOLVERS_DIR = $privateSolvers
+    $tetgenSkips = Join-Path $target 'release\simpa-stub-tetgen-skips.exe'
+    $manifest = Get-Content (Join-Path $repo 'solvers\manifest.json') -Raw | ConvertFrom-Json
+    $manifest.code_sha256.'tetgen.exe' = Get-CodeSha256 $tetgenSkips
+    $manifest.sha256.'tetgen.exe' = (Get-FileHash -LiteralPath $tetgenSkips -Algorithm SHA256).Hash.ToLower()
+    $meshfailManifest = Join-Path $work 'meshfail-manifest.json'
+    $manifest | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8 $meshfailManifest
+    $env:SIMPA_SOLVER_MANIFEST = $meshfailManifest
     $log = Join-Path $work 'meshfail-run.json'
     $mf = Join-Path $projects 'meshfail'
-    $code = Native "`"$simpa`" run `"$mf\box_run.simpa`" --solver spps --tetgen `"$fx\tetgen_skips.bat`" --runs `"$mf\runs`" --json" $log
+    $code = Native "`"$simpa`" run `"$mf\box_run.simpa`" --solver spps --tetgen `"$tetgenSkips`" --runs `"$mf\runs`" --json" $log
+    Remove-Item Env:\SIMPA_SOLVER_MANIFEST -ErrorAction SilentlyContinue
     $m = Get-Content $log -Raw | ConvertFrom-Json
     $codes = @($m.verdict.reasons | ForEach-Object { $_.code })
     Note "mesh-failure run: exit $code, stage $($m.stage), status $($m.verdict.status), reasons $($codes -join ', ')"
