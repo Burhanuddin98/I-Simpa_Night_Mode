@@ -1,5 +1,5 @@
 {
- "_doc": "Every piece of code in m8b that came from a file outside it, with the source's sha256 (raw bytes as read; sha256_lf with CRLF read as LF) and the lines copied or re-typed. Written by hand-run one-off scripts on 2026-10-01 (C:/tmp/m8b-edt/write_provenance.py, then scratch/add_provenance.py for the second attempt's constructions); corpus.py checks the _z3echo.py copy against its source, and every entry's source hash against the file as it is, on every run (check_provenance).",
+ "_doc": "Every piece of code in m8b that came from a file outside it, with the source's sha256 (raw bytes as read; sha256_lf with CRLF read as LF) and the lines copied or re-typed. Written by hand-run one-off scripts on 2026-10-01 (C:/tmp/m8b-edt/write_provenance.py, then scratch/add_provenance.py for the second attempt's constructions); corpus.py checks the _z3echo.py copy against its source, and every entry's source hash against the file as it is, on every run (check_provenance). Step 6 added the upstream port's copy and upstream.py's two re-typed pieces with C:/tmp/m8b-edt/step6-upstream/add_provenance.py; upstream.port() checks the copy's own hash before it runs any of it.",
  "m8b/_z3echo.py": {
   "source": "target/agents/z3-hunt/judge/judge.py",
   "source_sha256": "1898400582323f1b4ddba8b802c6d60b0c6ba707586156af58fb0afac7e431fc",
@@ -213,5 +213,57 @@
    ]
   ],
   "how": "load_real's field access re-typed: report['spps'], receiver_radius_m / speed_of_sound_m_s as the half-width, time_step_s as dt, then for each band of the first point receiver every point receiver's energy_pa2 (as float64) and arrival_s. T14 holds it to the same lines, re-typed in the test"
+ },
+ "m8b/_upstream_edt.py": {
+  "source": "target/agents/upstream-edt/uphunt_upstream_edt.py",
+  "source_sha256": "57f391e6cb09ded8a408462fbabc7aacd93743a3fa46cc28deeef3f7a319f282",
+  "source_sha256_lf": "57f391e6cb09ded8a408462fbabc7aacd93743a3fa46cc28deeef3f7a319f282",
+  "line_ranges": [
+   [
+    1,
+    247
+   ]
+  ],
+  "how": "byte for byte, the whole file: 10,777 bytes, 247 lines, LF with no CR, in the source as in the copy. upstream.port() executes it only after its bytes, any CRLF made LF, hash to the source's sha256 (P32), and T4 checks the same",
+  "copy_sha256": "57f391e6cb09ded8a408462fbabc7aacd93743a3fa46cc28deeef3f7a319f282"
+ },
+ "m8b/upstream.py edt_table": {
+  "source": "target/agents/upstream-edt/uphunt_oracle.py",
+  "source_sha256": "ebe38d3d43f827eefc937803f0d3e466e9a7bec7845364068b1d2ce0f9cc1e29",
+  "source_sha256_lf": "ebe38d3d43f827eefc937803f0d3e466e9a7bec7845364068b1d2ce0f9cc1e29",
+  "line_ranges": [
+   [
+    14,
+    14
+   ],
+   [
+    18,
+    18
+   ],
+   [
+    20,
+    21
+   ],
+   [
+    26,
+    26
+   ],
+   [
+    45,
+    50
+   ]
+  ],
+  "how": "re-typed: read_gabe of the 'Sound level.recp', column 0's labels through time_table_from_labels, its float band columns, then compute_tr_param_table(0, 10, tt, tab), the loop's 'EDT (s)' pass. The row labels are the band columns' own, then 'Global' and 'Average', as upstream's projet_calculation.cpp:888, 901-902 writes them. T4 holds the result to oracle.json bit for bit"
+ },
+ "m8b/upstream.py analyse": {
+  "source": "C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/97f2c13c-beea-4d4b-b842-603feb756e57/scratchpad/edtsimp/wrappers.py",
+  "source_sha256": "745910f21e766f1b0e8eee1bfb50333f785ce0e272173e46cca4ec454668c470",
+  "line_ranges": [
+   [
+    42,
+    62
+   ]
+  ],
+  "how": "analyse_upstream re-typed: the bins as float64 then float32, the port's edt(kind='point') at float(dt), the refusals empty_or_bad_dt and nan_or_nonpositive, and an ok row as a point range with reason point_value_no_range. The defensive except (55-58) is left out: it never fired on the corpus (0 of the 5,897 upstream rows in the scratchpad's results_*.pkl), so an exception from the port is raised, not scored as a refusal. On the corpus inputs it gives those 5,897 logged results exactly (C:/tmp/m8b-edt/step6-upstream/check_upstream.json)"
  }
 }
