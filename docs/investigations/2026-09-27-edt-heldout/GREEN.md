@@ -312,3 +312,27 @@ this `GREEN.md` section.
 - Control B (expected implausible): implausible, implausible, implausible. **3 of 3.** Each judge computed
   V of about 2.77e9 m^3, still 2.77e8 m^3 at the -10 dB end, above the 1e8 m^3 ceiling.
 - Section 5 item 3's D4 bar is met: both controls called 3 of 3 before any real class is judged.
+
+## Step 8 review
+
+Reviewer verdict (`C:\tmp\m8b-edt\step8-review.md`, worktree HEAD `a70bae7`): **NO BLOCKER**, 0 MAJOR,
+2 MINOR. Both MINORs fixed in this step's commit:
+
+- MINOR 1 (`driver.py:359`, the F-room guard keyed to `room in rooms.NAMES` rather than an explicit
+  allowlist): `driver.launch()` now refuses any room outside `driver.ROOM_ALLOWLIST` (`rooms.NAMES`
+  plus `rooms.PROBES`, i.e. the F-rooms and P0/P0b) with `Refused('unknown_room', ...)`, checked
+  before the seed's held-out/A1 logic and before anything is written.
+- MINOR 2 (section 5 item 5's "C: keeps >= 8 GB free" checked by hand only): `driver.launch()` now
+  calls `driver.check_free_space()` before writing anything, refusing with
+  `Refused('low_disk_space', ...)` if the drive holding the run's output folder, or C:, has less than
+  `driver.MIN_FREE_BYTES` (8 GB, a named constant) free.
+
+New tests, monkeypatched so no solver runs, in `tests/test_driver_guards.py`: an unlisted room is
+refused, low free space (mocked, both the output drive's and C:'s branches) is refused, and the
+normal path still reaches the `subprocess.run` call (itself mocked). Each new refusal test was
+checked to fail without its fix (temporarily reverted, never committed) before being restored.
+
+Suite re-run: `pytest tests/ -q` -> `53 passed in 210.15s` (GREEN.md's D4 count of 45 plus the 4
+PHYSICS.md/gap tests the step-8 review already accounted for, plus these 4 new guard tests).
+
+Full review: `C:\tmp\m8b-edt\step8-review.md`.

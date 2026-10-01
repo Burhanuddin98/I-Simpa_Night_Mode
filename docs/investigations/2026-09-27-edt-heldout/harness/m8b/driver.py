@@ -8,8 +8,9 @@ launch a run of the test before ADDENDUM-A1.md is committed.
 
 Contract:
 - Refused(RuntimeError) carries `code`, one of: 'reserved_seed', 'heldout_before_a1',
-  'outside_data_root', 'solver_unverified', 'solver_build_unverified'; and, for the probe mode only,
-  'not_a_probe' (a probe name, room or folder that is not section 7's).
+  'outside_data_root', 'solver_unverified', 'solver_build_unverified', 'unknown_room',
+  'low_disk_space'; and, for the probe mode only, 'not_a_probe' (a probe name, room or folder that
+  is not section 7's).
 - plan() -> [run], opening no file: 144 tested runs (P13: 7 rooms x 3 steps x 3 seeds at 150k
   plus F6 x 3 x 3 at 50k, in each of P11's two modes) and 28 truth runs (7 rooms x K = 4, Random,
   1,000,000 particles, 0.1 ms, P17's length). A run is a dict with 'run_id', 'room', 'kind'
@@ -27,13 +28,16 @@ Contract:
 - launch(run, *, project, run_dir, solvers_dir, data_root=DATA_ROOT, launch_log=LAUNCH_LOG,
   simpa_exe=None, a1=None): the guards first, in this order, each raising Refused before anything
   is written or launched: the seed ('reserved_seed' for RESERVED_SEEDS, then require_not_heldout),
+  the room ('unknown_room' unless run['room'] is one of the explicit allowlist ROOM_ALLOWLIST,
+  i.e. rooms.NAMES (the F-rooms) plus rooms.PROBES (P0, P0b) -- launch() never runs anything else),
   the folder ('outside_data_root' unless run_dir lies inside data_root), the solvers
-  ('solver_unverified' unless check_solvers verifies them). Then <run_dir>/project.simpa is
-  written, one line appended to launch_log, `simpa run <project> --solver spps --runs <run_dir>
-  --json` run with its stderr kept and classed, and <run_dir>/report.json written from
-  `simpa results <run folder> --json`. (Added in step 4, after those three: a run of a held-out
-  room, F1-F7, is refused before A1 whatever its seed, also as 'heldout_before_a1', so that no
-  histogram of a held-out room exists before the freeze; P0 and P0b are not held out.)
+  ('solver_unverified' unless check_solvers verifies them), the freeze (a run of a held-out room,
+  F1-F7, is refused before A1 whatever its seed, as 'heldout_before_a1', so that no histogram of a
+  held-out room exists before the freeze; P0 and P0b are not held out), and free disk space
+  ('low_disk_space' unless both the drive holding run_dir and C: have at least MIN_FREE_BYTES free,
+  section 5 item 5). Then <run_dir>/project.simpa is written, one line appended to launch_log,
+  `simpa run <project> --solver spps --runs <run_dir> --json` run with its stderr kept and classed,
+  and <run_dir>/report.json written from `simpa results <run folder> --json`.
 - read_run(run_dir, *, data_root=DATA_ROOT) -> series_from_report(<run_dir>/report.json), after
   refusing a folder outside data_root ('outside_data_root'), a run whose <run_dir>/project.simpa
   has a reserved random_seed ('reserved_seed'), and a report whose solver_build status is not
@@ -124,6 +128,9 @@ LINE_CLASSES = ('PROGRESS', 'INFO', 'OK', 'WARN', 'FAIL')
 TESTED_DURATION_S = 10.0          # P10, decision row 36: fixed for now; the room-based rule is backlog 57
 TRUTH_TIME_STEP_S = 1e-4          # P16
 TRUTH_PARTICLES = 1_000_000       # P16
+
+ROOM_ALLOWLIST = frozenset(rooms.NAMES) | frozenset(rooms.PROBES)   # the only rooms launch() ever runs
+MIN_FREE_BYTES = 8 * 1024 ** 3    # section 5 item 5: the run folder's drive and C: both keep >= 8 GB free
 
 # Sections 7 and 7.1: the probes, each in its stand-in room with its reserved seed
 PROBE_RUNS = {
@@ -344,12 +351,36 @@ def _run_folder(manifest_text):
     return m, (str(Path(cwd).parent) if cwd else None)
 
 
+def _drive_root(path):
+    """The drive letter of path (resolved, need not exist) as a root path shutil.disk_usage accepts,
+    e.g. 'B:\\'. Falls back to 'C:\\' when path carries no drive (a relative path, or a non-Windows
+    path in a test)."""
+    drive = Path(path).resolve().drive
+    return (drive or 'C:') + '\\'
+
+
+def check_free_space(run_dir, min_free=MIN_FREE_BYTES):
+    """Section 5 item 5: the drive that would hold run_dir, and C: (where the solver and Python both
+    also write), each need at least min_free bytes free. Returns {'out_root', 'out_free_bytes',
+    'c_free_bytes'}. Raises Refused('low_disk_space') and touches nothing on disk otherwise."""
+    out_root = _drive_root(run_dir)
+    out_free = shutil.disk_usage(out_root).free
+    c_free = shutil.disk_usage('C:\\').free
+    if out_free < min_free:
+        raise Refused('low_disk_space', '%s has %d bytes free, below the %d byte floor' % (out_root, out_free, min_free))
+    if c_free < min_free:
+        raise Refused('low_disk_space', 'C:\\ has %d bytes free, below the %d byte floor' % (c_free, min_free))
+    return dict(out_root=out_root, out_free_bytes=out_free, c_free_bytes=c_free)
+
+
 def launch(run, *, project, run_dir, solvers_dir, data_root=DATA_ROOT, launch_log=LAUNCH_LOG,
            simpa_exe=None, a1=None):
     """One SPPS run, after the guards (see the module docstring). Returns launch.json's record."""
     seed = operator.index(run['random_seed'])
     if seed in RESERVED_SEEDS:
         raise Refused('reserved_seed', 'seed %d is reserved for the probes (P12, section 7)' % seed)
+    if run['room'] not in ROOM_ALLOWLIST:
+        raise Refused('unknown_room', '%r is not in the allowlist (%s)' % (run['room'], sorted(ROOM_ALLOWLIST)))
     require_not_heldout(seed, a1)
     if not inside(run_dir, data_root):
         raise Refused('outside_data_root', '%s is not inside %s' % (run_dir, data_root))
@@ -359,6 +390,7 @@ def launch(run, *, project, run_dir, solvers_dir, data_root=DATA_ROOT, launch_lo
     if run['room'] in rooms.NAMES and not (a1_committed() if a1 is None else a1):
         raise Refused('heldout_before_a1', 'room %s is held out: no run of it, whatever its seed, before ADDENDUM-A1.md '
                                            'is committed (P1, P4)' % run['room'])
+    check_free_space(run_dir)
 
     room_project = _read_project(project)
     if room_project.get('name') != run['room']:
