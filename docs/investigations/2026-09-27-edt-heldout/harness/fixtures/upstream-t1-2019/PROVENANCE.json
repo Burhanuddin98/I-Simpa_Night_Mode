@@ -1,0 +1,27 @@
+{
+ "_doc": "T4's fixtures (HARNESS-PLAN.md section 3, upstream.py: upstream's 2019 tutorial-1 .gabe files and oracle.json become fixtures). Copied on 2026-10-01 from the main checkout's gitignored target/. The three GABE files are byte copies (binary: git does not convert them). oracle.json is text and is kept with LF, as this folder keeps text (../../.gitattributes): sha256 is the file as committed, source_sha256 the CRLF original. tests/test_upstream.py pins the same hashes.",
+ "Sound level.recp": {
+  "source": "target/agents/t3-fix-import-scratch/t1/instance2/report/SPPS/2019-06-07_11h58m41s/Punctual receivers/Receiver 1/Sound level.recp",
+  "source_sha256": "521c81891d5ede31e34beffe5f7f2915875bb8e888160e76a8ccbdf7f2a37afc",
+  "sha256": "521c81891d5ede31e34beffe5f7f2915875bb8e888160e76a8ccbdf7f2a37afc",
+  "what": "the receiver's per-band energy series that upstream's GUI read (uphunt_oracle.py:14); the port's input"
+ },
+ "Acoustic parameters.gabe": {
+  "source": "target/agents/t3-fix-import-scratch/t1/instance2/report/SPPS/2019-06-07_11h58m41s/Punctual receivers/Receiver 1/Acoustic parameters.gabe",
+  "source_sha256": "c960c782ef0564dda11d6903b82915e9d0e95282b11068e1195719ae0fcb2b22",
+  "sha256": "c960c782ef0564dda11d6903b82915e9d0e95282b11068e1195719ae0fcb2b22",
+  "what": "upstream's own EDT (s) column, written by its GUI on the upstream author's machine in 2019"
+ },
+ "Schroeder curves.gabe": {
+  "source": "target/agents/t3-fix-import-scratch/t1/instance2/report/SPPS/2019-06-07_11h58m41s/Punctual receivers/Receiver 1/Schroeder curves.gabe",
+  "source_sha256": "0068370b838dcbba15a33ec1d3d8bd104b0c096d680a5267e26ccfbba105adcb",
+  "sha256": "0068370b838dcbba15a33ec1d3d8bd104b0c096d680a5267e26ccfbba105adcb",
+  "what": "upstream's Schroeder curves for the same receiver (uphunt_oracle.py:29-43)"
+ },
+ "oracle.json": {
+  "source": "target/agents/upstream-edt/oracle.json",
+  "source_sha256": "713832b2f4aceb538d90654217d530e316f12c0f3b9f27d9b0688a9f091819bd",
+  "sha256": "35a767ed33154d8e0df2796c57df03717cbda880b8f9f81457b0085195f002bc",
+  "what": "uphunt_oracle.py's record: for 'EDT (s)', 29 rows (27 bands, Global, Average), each with upstream's value and the port's; 24 of 29 bit-identical, max relative difference 6.0e-6"
+ }
+}
