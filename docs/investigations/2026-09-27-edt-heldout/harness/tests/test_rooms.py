@@ -1,14 +1,14 @@
 """T10-T11 (HARNESS-PLAN.md section 4): SPPS-fresh's rooms, the probes' stand-ins, and the nine projects.
 
-Expected values are HARNESS-PLAN.md 2.2's, checked in scratch on 2026-10-01 before this file was
-written: every listed distance rounds to its value, every listed class holds, and every listed point
-is at least 0.6 m from every surface (three of F1's at exactly 0.6 m). Three places where the plan
-does not agree with itself are held to its rules, not its numbers, and flagged in the step-3 report:
-- F3's design T60 (P5: its chamber, the doorway at alpha 1) is 2.11-1.56 s, not the table's
-  2.16-1.59; T10 checks P5, not the table's F3 numbers.
-- F7's points are F1's scaled per axis ("scaled to its box"); scaling puts F1's (2.8, 1.2, 1.9),
-  0.6 m below the ceiling, 0.576 m below F7's, and moves F1's (2.4, 1.6, 0.9) from near (1.83 m) to
-  mid (2.04 m). T10 checks the scaling and F1's clearance scaled with it.
+Expected values are HARNESS-PLAN.md 2.2's as corrected at 04:40 (section 8.1, commit 40dfc1d),
+checked in scratch on 2026-10-01: every listed distance rounds to its value, every listed class holds,
+and every listed point is at least 0.6 m from every surface (F1 and F7 have points at exactly 0.6 m,
+so the check allows 1e-9, as 2.2 says).
+- F3's design T60 is P5's for its chamber with the doorway at alpha 1: 2.11-1.56 s.
+- F7's points are F1's scaled per axis (x 3.8/3.4, 3.3/2.9, 2.4/2.5), except the receiver scaling
+  puts 0.576 m under the ceiling, lowered to z = 1.80 m. The plan lists them to the millimetre; T10
+  holds them to that rule exactly and to the listing within 0.5 mm. Scaling moves one of F1's near
+  receivers to 2.04 m, so F7 has 3 near and 5 mid.
 - P0b's dimensions are not given; T10 checks what section 7 asks of them.
 """
 import json
@@ -48,15 +48,20 @@ PLAN_POINTS = {
                               ((1.0, 3.9, 1.3), 1.54, 'near', False), ((6.0, 2.0, 1.4), 4.07, 'mid', False),
                               ((9.5, 4.5, 1.8), 7.71, 'mid', False), ((11.0, 1.5, 1.2), 9.09, 'mid', False),
                               ((16.0, 3.0, 1.3), 14.00, 'far', False), ((22.5, 2.2, 1.6), 20.51, 'far', False)]),
+    'F7': ((0.894, 0.910, 1.248), [((1.788, 1.366, 1.152), 1.01, 'near', False), ((2.235, 1.024, 1.440), 1.36, 'near', False),
+                                   ((1.453, 2.390, 1.056), 1.59, 'near', False), ((2.682, 1.821, 0.864), 2.04, 'mid', False),
+                                   ((3.018, 2.503, 1.536), 2.67, 'mid', False), ((3.129, 2.162, 1.152), 2.56, 'mid', False),
+                                   ((2.906, 2.617, 0.672), 2.70, 'mid', False), ((3.129, 1.366, 1.800), 2.35, 'mid', False)]),
 }
+F7_LOWERED_Z = 1.80                 # 2.2 and 8.1: F1's (2.8, 1.2, 1.9) scaled lands 0.576 m under F7's ceiling
 BOX_DIMS = {'F1': (3.4, 2.9, 2.5), 'F2': (17.0, 12.5, 8.0), 'F5': (14.0, 9.5, 6.0), 'F6': (24.0, 5.5, 3.2),
             'F7': (3.8, 3.3, 2.4), 'P0': (18.9, 9.5, 9.46)}
 F4_BOXES = {((0.0, 0.0, 0.0), (16.0, 5.0, 3.5)), ((11.0, 5.0, 0.0), (16.0, 15.0, 3.5))}
 ALPHA = {'F1': (0.15, 1.0), 'F2': (0.08, 1.0), 'F4': (0.12, 1.0), 'F5': (0.20, 0.2), 'F6': (0.30, 1.0),
          'F7': (0.45, 1.0), 'P0': (0.08, 1.0)}
 T60_TABLE = {'F1': {125: 0.48, 4000: 0.44}, 'F2': {125: 3.63, 500: 3.46, 1000: 3.33, 4000: 2.26},
-             'F4': {125: 1.20, 4000: 1.00}, 'F5': {125: 1.05, 4000: 0.89}, 'F6': {125: 0.42, 4000: 0.39},
-             'F7': {500: 0.14}, 'P0': {500: 3.46}}
+             'F3': {125: 2.11, 4000: 1.56}, 'F4': {125: 1.20, 4000: 1.00}, 'F5': {125: 1.05, 4000: 0.89},
+             'F6': {125: 0.42, 4000: 0.39}, 'F7': {500: 0.14}, 'P0': {500: 3.46}}
 
 
 def box_set(boxes):
@@ -143,24 +148,25 @@ def test_t10_rooms_meet_p3_p5_and_section_2_2(corpus_rooms, target_root):
     assert 248.5 <= f3m[0.40][1] <= 249.9, 'main room and its partition face at 0.40: 249 m2 (+0.4 if the doorway floor)'
     assert 183.9 <= f3m[0.04][1] <= 185.3, 'chamber, its partition face and the doorway reveals at 0.04: 184.4-184.8 m2'
 
-    # -- sources and receivers: 2.2's table; F7 is F1's scaled per axis (flagged in the docstring)
+    # -- sources and receivers: 2.2's listing; F7's by its rule exactly and its listing to the millimetre
     f7 = [b / a for a, b in zip(BOX_DIMS['F1'], BOX_DIMS['F7'])]
-    plan = dict(PLAN_POINTS)
-    plan['F7'] = (scaled([PLAN_POINTS['F1'][0]], f7)[0],
-                  [(p, None, klass(math.dist(p, scaled([PLAN_POINTS['F1'][0]], f7)[0])), False)
-                   for p in scaled([r[0] for r in PLAN_POINTS['F1'][1]], f7)])
+    f7_src = scaled([PLAN_POINTS['F1'][0]], f7)[0]
+    f7_recs = scaled([r[0] for r in PLAN_POINTS['F1'][1]], f7)
+    f7_recs[7] = (f7_recs[7][0], f7_recs[7][1], F7_LOWERED_Z)
     for name in NAMES:
-        src, recs = plan[name]
+        src, recs = PLAN_POINTS[name]
         room = R[name]
-        assert close(room['source_m'], src), name
-        for r, (p, listed, cls, blocked) in zip(room['receivers'], recs):
+        exact_src, exact = (f7_src, f7_recs) if name == 'F7' else (src, [r[0] for r in recs])
+        listing = 0.0005 + 1e-9 if name == 'F7' else 1e-9
+        assert close(room['source_m'], exact_src), name
+        assert all(abs(a - b) <= listing for a, b in zip(room['source_m'], src)), name
+        for r, p, (q, listed, cls, blocked) in zip(room['receivers'], exact, recs):
             assert close(r['position_m'], p), (name, r['name'])
-            if listed is not None:
-                assert round(r['d_m'], 2) == listed, (name, r['name'], r['d_m'])
+            assert all(abs(a - b) <= listing for a, b in zip(r['position_m'], q)), (name, r['name'])
+            assert round(r['d_m'], 2) == listed, (name, r['name'], r['d_m'])
             assert r['class'] == cls and r['blocked'] == blocked, (name, r['name'])
-        floor = 0.6 if name != 'F7' else 0.6 * min(1.0, *f7)
         for p in [room['source_m']] + [r['position_m'] for r in room['receivers']]:
-            assert unions[name].clearance(p) >= floor - 1e-9, (name, p, unions[name].clearance(p))
+            assert unions[name].clearance(p) >= 0.6 - 1e-9, (name, p, unions[name].clearance(p))
         classes = {r['class'] for r in room['receivers']}
         assert {'near', 'mid'} <= classes, name
         if name in ('F2', 'F3', 'F4', 'F5', 'F6'):
@@ -211,7 +217,7 @@ def test_t10_rooms_meet_p3_p5_and_section_2_2(corpus_rooms, target_root):
         assert close(P['source_m'], scaled([F['source_m']], f)[0])
         for rp, rf in zip(P['receivers'], F['receivers']):
             assert close(rp['position_m'], scaled([rf['position_m']], f)[0]), (probe, rp['name'])
-        floor = 0.6 * min(1.0, *f) * (min(1.0, *f7) if ref == 'F7' else 1.0)
+        floor = 0.6 * min(1.0, *f)                  # 2.2's 0.6 m, scaled with the room
         for p in [P['source_m']] + [r['position_m'] for r in P['receivers']]:
             assert unions[probe].clearance(p) >= floor - 1e-9, (probe, p)
     assert sorted_dims(R['P0']) == sorted(BOX_DIMS['P0'], reverse=True)

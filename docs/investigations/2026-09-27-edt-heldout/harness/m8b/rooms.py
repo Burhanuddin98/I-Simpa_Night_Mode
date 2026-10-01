@@ -21,7 +21,8 @@ Contract:
     design_t60_s: {band_hz: P5's Eyring T60 with ISO 9613-1 air} for BANDS_HZ. F3's is its
       chamber's, with the doorway counted at alpha 1 (the late slope);
     role: the row of 2.2 the room fills.
-  F7's source and receivers are F1's scaled per axis to F7's box. P0 and P0b are boxes: P0 has
+  F7's source and receivers are F1's scaled per axis to F7's box, except the receiver that scaling
+  puts 0.576 m under the ceiling, which is lowered to z = 1.80 m (2.2, 8.1). P0 and P0b are boxes: P0 has
   F2's V, S and alpha within 1 %, every axis more than 10 % off F2's, and F2's source and
   receivers scaled per axis; P0b stands to F7 the same way.
 - near_duplicate(a, b) -> bool: P3's rule, for two rooms of this form or of corpus_rooms.json's.

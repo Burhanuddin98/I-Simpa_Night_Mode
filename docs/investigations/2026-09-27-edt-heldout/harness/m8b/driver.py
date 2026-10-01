@@ -39,10 +39,11 @@ Contract:
   sha256 ea4d4c09...).
 - probe(...): section 7's probe mode. It records PROBE.md's numbers and opens no output file.
 
-Open for step 4: as built at e5d1c56, `simpa run` records no solver check in run.json
+P14 and the CLI (HARNESS-PLAN.md 8.1): `simpa run` records no solver check in run.json
 (crates/simpa/src/mesh_run.rs:520 sets `verify: None`), and results::solver_build reads such a run
-'solver_build_unrecorded' (crates/simpa-core/src/results.rs:467-514). Every CLI run's report is
-then unverified, and P14's guard as written refuses every run.
+'solver_build_unrecorded' (crates/simpa-core/src/results.rs:467-514). The guard stays as written:
+the truth and tested runs wait for backlog 54's CLI half. The probes run no `simpa results`, so only
+check_solvers before the run applies to them.
 """
 from pathlib import Path
 

@@ -3,10 +3,11 @@
 No test here can launch a solver: every launch() call names a project and a simpa.exe that do not
 exist, so a guard that fails cannot start a run. Nothing is written under C:\\tmp\\m8b-edt\\heldout.
 
-P14 against the CLI, open for step 4: as built at e5d1c56, `simpa run` records no solver check in
-run.json (crates/simpa/src/mesh_run.rs:520, `verify: None`) and results::solver_build reads such a
-run 'solver_build_unrecorded'. T13 holds the guard as P14 states it; until the CLI records its
-check, that guard refuses every real run.
+P14 against the CLI (HARNESS-PLAN.md 8.1): `simpa run` records no solver check in run.json
+(crates/simpa/src/mesh_run.rs:520, `verify: None`), so results::solver_build reads every CLI run
+'solver_build_unrecorded'. T13 holds the guard as P14 states it. The truth and tested runs wait for
+backlog 54's CLI half (decision row 33); the probes run no `simpa results`, so only the check before
+the run applies to them.
 """
 import collections
 import glob
@@ -26,7 +27,7 @@ NAMES = ('F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7')
 SEEDS = {(1.0, 150000): (1101, 1102, 1103), (2.0, 150000): (1201, 1202, 1203), (5.0, 150000): (1501, 1502, 1503),
          (1.0, 50000): (2101, 2102, 2103), (2.0, 50000): (2201, 2202, 2203), (5.0, 50000): (2501, 2502, 2503)}   # P12
 TRUTH_SEEDS = (9001, 9002, 9003, 9004)
-P17_LISTED = {'F1': 3.0, 'F2': 6.5, 'F4': 3.0, 'F5': 3.0, 'F6': 3.0}     # F3's 4.4 rests on the table's 2.16 s
+P17_LISTED = {'F1': 3.0, 'F2': 6.5, 'F3': 4.3, 'F4': 3.0, 'F5': 3.0, 'F6': 3.0}     # P17 as corrected (8.1)
 EXES = ('spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe')
 DEV_SEED = 4242
 
