@@ -80,7 +80,7 @@ test('the planted table is the plan, and each band still sums to its total', () 
   }
   // solvers is deliberately cleared (m11-b38's fixture, backlog 54's CLI half); every other
   // field, particles aside, is untouched.
-  assert.equal((after as Record<string, unknown>).solvers, undefined);
+  assert.equal(after.solvers, undefined);
   assert.notEqual(before.solvers, undefined);
   const strip = (m: Record<string, unknown>) => {
     const { particles: _particles, solvers: _solvers, ...rest } = m;
