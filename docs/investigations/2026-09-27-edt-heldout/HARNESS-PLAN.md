@@ -358,3 +358,23 @@ Step 6's truth check (08:03) raised one more:
   these rows has its first reflection within 2R/c = 1.81 ms of the direct sound. With a longer gap, the split
   is within 0.017 %. The wrong-silent line is 5 %, so a row near it can be misjudged. `truth.py`'s docstring
   gives the figures.
+
+### 8.2 Calls on the open points (Jarvis, 2026-10-01 10:31; technical calls under decision row 13, Burhan may overrule)
+
+These settle section 8.1's open points before A1. Each is built and tested before A1 is committed.
+
+- **The synth edge at DRR 9.54 dB: no change.** NaN truths stay excluded and counted as `truth_nan` (P27). The
+  finite rows just below the edge stay in. They test whether the method refuses or widens an ill-conditioned
+  case, and a refusal is never wrong (PREREG :62).
+- **Sources inside the receiver ball (d < R) in Synth-fresh: excluded, with the reason recorded.** The generator
+  drops the direct sound there (`synth.ball_atoms` floors rho), so the histogram does not hold the row's truth.
+  Scan 1's weak spot at d 0.17 m was the generator's: the method read its histogram within 0.1 %. P33 gains this
+  exception: a weak spot whose own histogram does not hold its truth does not bind a bound. Draws redraw while
+  d < R + 0.2 m, as P24 first said.
+- **P15's split close to the direct sound: borderline rows do not decide.** When a row's first reflection falls
+  within 2R/c of the direct sound, and its error is within the split's measured bound of the 5 % line (1.2 % in
+  125 Hz-4 kHz, 2.1 % above), it is reported apart as `truth_split_borderline` and leaves the H1-H3 and H5
+  counts, counted by reason (as P27's exclusions are).
+- **ISM-fresh truths flagged truncated: kept when converged.** A truth that P18's 10 % test calls truncated
+  is kept if lengthening its image set 1.5 times moves it by less than 1e-3 relative. Step 6 measured
+  1.3e-5 at 1.5 times and 1.6e-4 at 2 times. Otherwise it is excluded as `truth_truncated`, as before.
