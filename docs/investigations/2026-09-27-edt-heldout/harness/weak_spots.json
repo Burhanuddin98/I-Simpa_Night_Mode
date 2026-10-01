@@ -25826,6 +25826,11 @@
    "hashes": [
     "sha256_lf"
    ]
+  },
+  "m8b/driver.py series_from_report": {
+   "source": "C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/97f2c13c-beea-4d4b-b842-603feb756e57/scratchpad/edtsimp/loaders.py",
+   "checked": false,
+   "why": "outside the worktree and target/: recorded, not read"
   }
  },
  "sources": [
@@ -26653,9 +26658,9 @@
   {
    "root": "worktree",
    "path": "docs/investigations/2026-09-27-edt-heldout/harness/m8b/provenance.json",
-   "bytes": 6866,
-   "sha256": "08f07841de4483a04f03543d9c94856d0ae87f49b00cc7f0b34d62eacd8229bd",
-   "sha256_lf": "08f07841de4483a04f03543d9c94856d0ae87f49b00cc7f0b34d62eacd8229bd"
+   "bytes": 7500,
+   "sha256": "0c5a0266b51b45d56114ad185839d4f2e2b8f8a14e3778259a7907e79d81f547",
+   "sha256_lf": "0c5a0266b51b45d56114ad185839d4f2e2b8f8a14e3778259a7907e79d81f547"
   },
   {
    "root": "worktree",
@@ -26761,20 +26766,20 @@
    "t1": 0.1,
    "ism": 0.1,
    "real+seeds": 2.5,
-   "scan1": 3.3,
+   "scan1": 3.1,
    "scan4": 0.2,
-   "scan2b": 5.7,
+   "scan2b": 5.5,
    "scan3": 0.3,
-   "scan2": 6.4,
+   "scan2": 6.1,
    "scan5": 0.1,
    "noise_probe": 0.1,
-   "ablate": 2.0,
-   "z3+z3grid": 109.4,
-   "z3_worker_seconds": 638.0
+   "ablate": 1.9,
+   "z3+z3grid": 102.1,
+   "z3_worker_seconds": 577.4
   },
   "python": "3.13.13",
   "numpy": "2.5.2",
   "platform": "Windows-11-10.0.26200-SP0",
-  "at": "2026-10-01T03:50:01+0200"
+  "at": "2026-10-01T06:24:28+0200"
  }
 }
