@@ -332,6 +332,21 @@ def weak_class(status, edt, truth):
     return None
 
 
+def histogram_holds_truth(q):
+    """HARNESS-PLAN.md 8.2, second call: False when a synth row's source sits inside the receiver
+    ball (d_m < R_m > 0). synth.ball_atoms floors rho there (rho = C tau, negative before t = 0), so
+    the generator's own histogram does not hold the row's truth (what the method actually read): on
+    the one corpus row this ever binds, scan1's d 0.17 m case, the method's edt is within 0.1 % of the
+    truth of what its histogram holds, not of the row's own (formula) truth, 3.3244 s against 3.0003 s
+    (HARNESS-PLAN.md 8.2's second call; synth_fresh.py's module docstring). A row this is False for is
+    not counted as a weak spot of the method for d_m or d_minus_R_m: those two quantities are blanked
+    to None in its weak_spots.json record (row_record, scan1), so T22b does not require a fresh set's
+    bound to reach them, while the row itself stays in weak_spots.json (575 rows, T22a), unabridged in
+    every other field, as the record of the generator's own defect that it is."""
+    d, R = q.get('d_m'), q.get('R_m')
+    return d is None or R is None or not (R > 0) or d >= R
+
+
 def clean(x):
     """JSON-safe: numpy scalars to Python, non-finite floats to None."""
     if isinstance(x, dict):
@@ -1036,6 +1051,12 @@ def scan1(ctx):
         extra = dict(runs=runs, rows_in_early_run=c['n_early'])
         if 'scan_i12' not in c['runs']:
             extra['early_run_truth'] = ref_early[c['early_index']]['truth']       # the first run's own, not kept
+        if not histogram_holds_truth(q):
+            # HARNESS-PLAN.md 8.2, second call: the generator's own defect (d < R), not the method's.
+            # The row stays in weak_spots.json (575 rows, T22a) but does not bind d_m or d_minus_R_m.
+            extra['generator_defect'] = ('d_m < R_m: synth.ball_atoms floors rho and the generator '
+                                         'drops the direct sound; this row does not bind a bound (P33)')
+            q = dict(q, d_m=None, d_minus_R_m=None)
         weak.append(row_record('scan1', 'scan1|V%g|T%g|d%g|gap%g|%gms|ph%g' % (c['V'], c['T60'], c['d'], c['gap_ms'],
                                                                               c['dt_ms'], c['phase']),
                                r, c['truth'], q, has_room=False, noise=False, truth_kind='independent (synth.truth_edt)',
@@ -1682,7 +1703,11 @@ def build_weak_spots(target, workers=8, z3=True):
                   method='frozen/method.py, sha256 %s, Z = 2' % FROZEN_SHA256,
                   binding='P33: Synth-fresh is bound by every row; ISM-fresh by the rows with has_room true. A quantity '
                           'binds unless the PREREG fixes its range, the row\'s step lies outside the set\'s steps, or the '
-                          'value is outside PHYSICS.md\'s limits. Scans carry V only as V_formula_m3, a formula parameter.'),
+                          'value is outside PHYSICS.md\'s limits. Scans carry V only as V_formula_m3, a formula parameter. '
+                          'HARNESS-PLAN.md 8.2\'s second call: a row whose own histogram does not hold its truth '
+                          '(d_m < R_m, a synth generator defect, not the method\'s) does not bind d_m or d_minus_R_m; '
+                          'such a row keeps its place and every other field, with those two quantities null '
+                          '(corpus.histogram_holds_truth).'),
         quantities=QUANTITY_DOC,
         sets=sets,
         counts={'%s/%s' % k: v for k, v in sorted(counts.items())},

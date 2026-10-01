@@ -15,9 +15,13 @@ final/eval_final.txt shows for the frozen method and for upstream
 Contract:
 - A scored row is a dict: 'set' ('spps', 'ism', 'synth' or 'attack'), 'id', the method's
   'status', 'edt', 'edt_lo', 'edt_hi', 'reason', the row's 'truth' (float or None) and
-  'truth_status' ('ok', 'truth_truncated', 'truth_uncertain' or 'truth_nan'; P18, P19), and the
-  fields the H's group by: 'room', 'd_m', 'step_ms', 'band_hz', 'particles', 'seed', 'family',
-  'design_t60_s'.
+  'truth_status' ('ok', 'truth_truncated', 'truth_uncertain', 'truth_nan' or
+  'truth_split_borderline'; P18, P19, HARNESS-PLAN.md 8.2's third call), and the fields the H's
+  group by: 'room', 'd_m', 'step_ms', 'band_hz', 'particles', 'seed', 'family', 'design_t60_s'.
+  'truth_split_borderline' is set by whatever builds a set's rows, from truth.split_borderline(...)
+  once the method's edt is known (truth.py), and the scorer treats it exactly as the other three
+  truth_status exclusions: left out of every truth-based count (P27), kept in the ok and usable
+  shares and in H4.
 - classify(row) -> dict(ok, usable, has_truth, wrong_silent, covered): ok is status 'ok'; usable is
   'ok' or 'wide'; has_truth is truth_status 'ok' with a finite truth. wrong_silent is None without
   a truth, False for a row that is not ok, else |edt/truth - 1| > JND judged exactly (21/20 is 5 %
@@ -98,9 +102,10 @@ Where the contract is silent:
   t_arrival and a copy of its meta, in the order frozen, Z = 3, upstream. An exception from a method
   stops the evaluation: no row is turned into a refusal. out_dir is made only when everything has
   been computed, and the three files are written into it with LF line ends.
-- HARNESS-PLAN.md 8.1 leaves open how the Synth-fresh rows just under DRR 9.54 dB bear on H1. The
-  scorer applies P27 as written and decides nothing there: a NaN truth is excluded as truth_nan, and
-  every finite truth is scored, however large.
+- HARNESS-PLAN.md 8.2's first call settles 8.1's open point on the Synth-fresh rows just under DRR
+  9.54 dB: no change here. The scorer applies P27 as written: a NaN truth is excluded as truth_nan,
+  and every finite truth below the edge is scored, however large; the rows test whether the method
+  refuses or widens an ill-conditioned case, and a refusal is never wrong (PREREG.md:62).
 """
 import datetime
 import json
@@ -123,7 +128,8 @@ COVER_TOL = 1e-9
 SETS = ('spps', 'ism', 'synth', 'attack')
 MODES = ('random', 'energetic')                     # P11; driver.MODES
 STATUSES = ('ok', 'wide', 'refused')                # frozen/method.py:24, 90; upstream.analyse
-TRUTH_STATUSES = ('ok', 'truth_truncated', 'truth_uncertain', 'truth_nan')    # P18, P19
+TRUTH_STATUSES = ('ok', 'truth_truncated', 'truth_uncertain', 'truth_nan',
+                  'truth_split_borderline')                                  # P18, P19; HARNESS-PLAN.md 8.2, 3rd call
 H_IDS = ('H1', 'H2', 'H3', 'H4', 'H5', 'H6')
 H1_SETS = ('ism', 'synth')                          # PREREG.md:55
 H3_SETS = ('spps', 'ism', 'synth')                  # PREREG.md:57

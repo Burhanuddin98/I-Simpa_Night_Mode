@@ -5,7 +5,7 @@
   "wrong_silent": "status ok and |edt/truth - 1| > 0.05",
   "near_miss": "status ok and 0.025 < |edt/truth - 1| <= 0.05",
   "method": "frozen/method.py, sha256 462c37cf159d4d9bd8abadd8261f975fa47ace66f0d4cb4b1e6f4234c77fdf6e, Z = 2",
-  "binding": "P33: Synth-fresh is bound by every row; ISM-fresh by the rows with has_room true. A quantity binds unless the PREREG fixes its range, the row's step lies outside the set's steps, or the value is outside PHYSICS.md's limits. Scans carry V only as V_formula_m3, a formula parameter."
+  "binding": "P33: Synth-fresh is bound by every row; ISM-fresh by the rows with has_room true. A quantity binds unless the PREREG fixes its range, the row's step lies outside the set's steps, or the value is outside PHYSICS.md's limits. Scans carry V only as V_formula_m3, a formula parameter. HARNESS-PLAN.md 8.2's second call: a row whose own histogram does not hold its truth (d_m < R_m, a synth generator defect, not the method's) does not bind d_m or d_minus_R_m; such a row keeps its place and every other field, with those two quantities null (corpus.histogram_holds_truth)."
  },
  "quantities": {
   "step_ms": "time step of the histogram the method read",
@@ -19036,9 +19036,9 @@
    "q": {
     "t60_s": 3.0,
     "step_ms": 10.0,
-    "d_m": 0.1716,
+    "d_m": null,
     "R_m": 0.31,
-    "d_minus_R_m": -0.1384,
+    "d_minus_R_m": null,
     "gap_ms": 10.0,
     "delay_ms": 0.0,
     "run_s": 6.01,
@@ -19053,7 +19053,8 @@
     "early_run"
    ],
    "rows_in_early_run": 5,
-   "early_run_truth": 3.006262614919026
+   "early_run_truth": 3.006262614919026,
+   "generator_defect": "d_m < R_m: synth.ball_atoms floors rho and the generator drops the direct sound; this row does not bind a bound (P33)"
   },
   {
    "set": "scan1",
@@ -19072,9 +19073,9 @@
    "q": {
     "t60_s": 3.0,
     "step_ms": 10.0,
-    "d_m": 0.1716,
+    "d_m": null,
     "R_m": 0.31,
-    "d_minus_R_m": -0.1384,
+    "d_minus_R_m": null,
     "gap_ms": 5.0,
     "delay_ms": 0.0,
     "run_s": 6.01,
@@ -19089,7 +19090,8 @@
     "early_run"
    ],
    "rows_in_early_run": 5,
-   "early_run_truth": 3.001618341646357
+   "early_run_truth": 3.001618341646357,
+   "generator_defect": "d_m < R_m: synth.ball_atoms floors rho and the generator drops the direct sound; this row does not bind a bound (P33)"
   },
   {
    "set": "scan3",
@@ -26854,18 +26856,14 @@
    "real+seeds": 2.5,
    "scan1": 3.1,
    "scan4": 0.2,
-   "scan2b": 5.3,
+   "scan2b": 5.5,
    "scan3": 0.2,
-   "scan2": 5.9,
+   "scan2": 6.1,
    "scan5": 0.1,
    "noise_probe": 0.1,
    "ablate": 1.9,
-   "z3+z3grid": 106.2,
-   "z3_worker_seconds": 609.4
-  },
-  "python": "3.13.13",
-  "numpy": "2.5.2",
-  "platform": "Windows-11-10.0.26200-SP0",
-  "at": "2026-10-01T08:05:29+0200"
+   "z3+z3grid": 101.8,
+   "z3_worker_seconds": 577.5
+  }
  }
 }

@@ -23,32 +23,42 @@ Contract:
 - BOUNDS: {quantity: (lo, hi)} in weak_spots.json's vocabulary, for every quantity this set draws
   (P24): its ranges, widened where P33 needs it.
 
-The bounds (BOUNDS, P24 as the plan now states it). P23 and P24's ranges stand except three, which
-P33 widens because weak_spots.json holds a binding value outside them, each exactly to that value:
-- d from 0.4-30 m to 0.1716-30.8022 m, and d - R from P24's d >= R + 0.2 m down to -0.1384 m: scan
-  1's rows as the critique first ran it (target's critique/scan_i12.json, no d cutoff), which put
-  the arrival 0.05 or 0.95 of a step past the start of a step (scan1|V200|T3|d0.7|gap{5,10}|10ms|
-  ph0.05: d 0.1716 m with R 0.31 m; scan1|V20000|T0.3|d30|gap{5,10}|5ms|ph0.95: d 30.8022 m);
+The bounds (BOUNDS, P24 as the plan now states it, revised by HARNESS-PLAN.md 8.2's second call).
+P23 and P24's ranges stand except two, which P33 widens because weak_spots.json holds a binding
+value outside them, each exactly to that value:
+- d's top, 30 m to 30.8022 m: scan 1's row as the critique first ran it (target's
+  critique/scan_i12.json, no d cutoff), which put the arrival 0.95 of a step past the start of a
+  step (scan1|V20000|T0.3|d30|gap{5,10}|5ms|ph0.95: d 30.8022 m);
 - the delay from 60 ms to 60.00000284984708 ms: z3's dis-012, dis-016 and dis-029, delayed 60 steps
   of their float32 1 ms step (corpus.py _z3_quantities: delay_ms = steps * dt * 1e3).
-The PREREG fixes none of these ranges (PREREG.md:37-41 fixes the ratios, the DRR, the steps and the
-run lengths), and the product accepts every value: PHYSICS.md's hard limits (P25) are what the
-product accepts, T60 0.1-10 s and DRR -40 to +30 dB, and crates/simpa-core/src/validate/project.rs
-has no rule on a receiver's distance from a source and takes any finite delay >= 0 that starts
-before the run ends. Every other binding weak-spot value lies inside P24's ranges (T60 0.125-3.0 s,
-R 0.31-1.49 m, gap 0-10 ms; no weak row carries a late share), so no other bound moves. d - R's top
-is what d's top and R's bottom give, 30.8022 - 0.1 m.
+d - R's floor (P24's d >= R + 0.2 m) and d's floor (P24's 0.4 m) do NOT move, as 8.2's second call
+settles: the one weak-spot row that used to widen them, scan1|V200|T3|d0.7|gap{5,10}|10ms|ph0.05
+(d 0.1716 m, R 0.31 m, so d - R = -0.1384 m), is the generator's own defect, not the method's (see
+"What d < R costs" below), and P33 gains the exception that such a row does not bind a bound: a weak
+spot whose own histogram does not hold its truth is not evidence the fresh set must reach there.
+Draws therefore redraw while d < R + 0.2 m, as P24 first said. weak_spots.json still lists both rows
+(575 rows, T22a; corpus.histogram_holds_truth), with every other field as before, but their d_m and
+d_minus_R_m are now null: they no longer constrain D_M or D_MINUS_R_MIN_M (corpus.py scan1, P33),
+not merely left wide of them. The PREREG fixes none of these ranges (PREREG.md:37-41
+fixes the ratios, the DRR, the steps and the run lengths), and the product accepts every value:
+PHYSICS.md's hard limits (P25) are what the product accepts, T60 0.1-10 s and DRR -40 to +30 dB, and
+crates/simpa-core/src/validate/project.rs has no rule on a receiver's distance from a source and
+takes any finite delay >= 0 that starts before the run ends. Every other binding weak-spot value
+lies inside P24's ranges (T60 0.125-3.0 s, R 0.31-1.49 m, gap 0-10 ms; no weak row carries a late
+share), so no other bound moves. d - R's top is what d's top and R's bottom give, 30.8022 - 0.1 m.
 
 What d < R costs (C:/tmp/m8b-edt/step6-synth/check_synth.py, dev seeds only, the frozen method not
 run): when the ball holds the source, synth.ball_atoms puts nearly all of the direct sound before
 t = 0, where synth.histogram drops it. It divides each atom's weight by max(rho, 1e-9) with
 rho = C tau, which is negative before t = 0, so an atom there weighs about 1e8 times one after it.
-Scan 1's weak row that sets d - R's bottom keeps 1.5e-7 of its direct sound, and its logged EDT,
-3.0003 s, is within 0.1 % of the truth of what its histogram holds (3.0034 s; the row's own truth
-is 3.3244 s). In 20 dev draws 11.45 rows per draw have d < R; 227 of those 229 keep under 0.03 % of
-their direct sound (the other 2 lie within half an atom's spacing, R / 400, of d = R, and keep all
-of it), and on 2.85 rows per draw the truth of what the histogram holds is more than 5 % off the
-row's truth. Every row with d >= R keeps its whole direct sound.
+Scan 1's weak row that used to set d - R's bottom keeps 1.5e-7 of its direct sound, and its logged
+EDT, 3.0003 s, is within 0.1 % of the truth of what its histogram holds (3.0034 s; the row's own
+truth is 3.3244 s). In 20 dev draws 11.45 rows per draw have d < R; 227 of those 229 keep under
+0.03 % of their direct sound (the other 2 lie within half an atom's spacing, R / 400, of d = R, and
+keep all of it), and on 2.85 rows per draw the truth of what the histogram holds is more than 5 % off
+the row's truth. Every row with d >= R keeps its whole direct sound. HARNESS-PLAN.md 8.2's second
+call reads this as the generator's defect, not the method's, and excludes d < R by redrawing, with
+each redraw's reason recorded (draw(..., rejections=...), reason 'd_near_source').
 
 Where the contract is silent:
 - generator() executes critique/synth.py only from bytes whose sha256, with any CRLF made LF, is
@@ -58,10 +68,15 @@ Where the contract is silent:
 - The draw: np.random.default_rng(SeedSequence(seed)), the cells in the order of RATIOS then
   STEPS_MS, and in each cell first a permutation that marks exactly 250 rows delayed, then for each
   row, in this order: T60 (log-uniform), late share, DRR, R (log-uniform), d (redrawn alone while
-  d - R < -0.1384 m), gap, the delay (delayed rows only) and f. Each uniform value is clipped to its
-  range, so no rounding takes it outside. A delayed row's delay is drawn on (0, 60.00000284984708]
-  ms, never 0, so 'delay_ms' == 0 marks exactly the undelayed half. Ids are
-  'synth|<ratio>|<step>ms|<index in its cell>'. Every number is a Python float or int.
+  d - R < D_MINUS_R_MIN_M, i.e. d < R + 0.2 m, P24 as 8.2's second call restates it), gap, the delay
+  (delayed rows only) and f. Each uniform value is clipped to its range, so no rounding takes it
+  outside. A delayed row's delay is drawn on (0, 60.00000284984708] ms, never 0, so 'delay_ms' == 0
+  marks exactly the undelayed half. Ids are 'synth|<ratio>|<step>ms|<index in its cell>'. Every
+  number is a Python float or int.
+- draw(seed, *, a1=None, rejections=None): when the caller passes a dict for rejections, draw()
+  counts each d-redraw into it under the reason 'd_near_source' (rejections[reason] =
+  rejections.get(reason, 0) + 1); rejections is left untouched when None (the default), so the
+  bare-list contract above holds unchanged for every existing caller.
 - make_spec(**params) builds a spec from the drawn values, with dt = step_ms * 1e-3 and every
   derived field computed as the contract writes it; draw() and twin() use it, and so can the
   attack kit.
@@ -95,8 +110,10 @@ T60_S = (0.1, 10.0)                 # P24, log-uniform: PHYSICS.md's T60 limit (
 LATE_SHARE_DB = (-20.0, -3.0)       # P23
 DRR_DB = (-20.0, 10.0)              # PREREG.md:39
 R_M = (0.1, 1.5)                    # P24, log-uniform
-D_M = (0.1716, 30.8022)             # P24's 0.4-30 m, widened by P33: scan 1, first run
-D_MINUS_R_MIN_M = -0.1384           # P24's d >= R + 0.2 m, widened by P33: scan 1, first run
+D_M = (0.4, 30.8022)                # P24's 0.4-30 m; top widened by P33: scan 1, first run
+D_MINUS_R_MIN_M = 0.2               # P24's d >= R + 0.2 m, as 8.2's second call restates it (not
+                                     # widened: the one weak-spot row that justified -0.1384 m is the
+                                     # generator's own defect, not the method's, and no longer binds)
 GAP_MS = (0.0, 40.0)                # P24
 DELAY_MS = (0.0, 60.00000284984708)  # P24's 60 ms, widened by P33: z3, 60 steps of a float32 1 ms step
 RUN_OVER_T60 = (0.3, 3.0)           # PREREG.md:41
@@ -165,7 +182,7 @@ def _log_uniform(rng, box):
     return min(max(math.exp(math.log(lo) + (math.log(hi) - math.log(lo)) * rng.random()), lo), hi)
 
 
-def draw(seed, *, a1=None):
+def draw(seed, *, a1=None, rejections=None):
     driver.require_not_heldout(seed, a1)
     rng = np.random.default_rng(np.random.SeedSequence(operator.index(seed)))
     assert DELAY_MS[0] == 0.0
@@ -179,7 +196,9 @@ def draw(seed, *, a1=None):
                 drr = _uniform(rng, DRR_DB)
                 R = _log_uniform(rng, R_M)
                 d = _uniform(rng, D_M)
-                while d - R < D_MINUS_R_MIN_M:
+                while d - R < D_MINUS_R_MIN_M:                    # HARNESS-PLAN.md 8.2, second call:
+                    if rejections is not None:                    # the source inside the receiver ball
+                        rejections['d_near_source'] = rejections.get('d_near_source', 0) + 1
                     d = _uniform(rng, D_M)
                 gap = _uniform(rng, GAP_MS)
                 delay = DELAY_MS[1] * (1.0 - rng.random()) if delayed[i] else 0.0      # (0, max]

@@ -52,6 +52,19 @@ sound. Where it arrives sooner, part of that reflection lies in the direct windo
 direct: 181 rows are off by more than 0.3 % and 36 by more than 1 %, at most 2.08 % (20 kHz); at
 125 Hz-4 kHz, 49 of 477 by more than 0.3 %, at most 1.20 %. T7's six rows are within 0.3 %.
 (C:/tmp/m8b-edt/step6-truth/check_truth_b2.json, 2026-10-01.)
+
+HARNESS-PLAN.md 8.2's third call (P15's split close to the direct sound, 8.1's second open point):
+a row whose first reflection falls within 2R/c of the direct sound is scored on a truth the split may
+move by up to the figures just above, 1.20 % in 125 Hz-4 kHz or 2.08 % (rounded up to 2.1 %) above.
+Such a row's wrong-silent verdict is not trusted when its own error already sits close enough to the
+5 % line that the split's own slop could move it across: split_borderline(...) below is that test, to
+be read by whatever builds a set's rows (the SPPS-fresh row-builder, once written) once the method's
+edt is known, so that a borderline row's truth_status is set to 'truth_split_borderline' in place of
+'ok' before scoring. It does not touch verdict() or assess(), whose status vocabulary and behaviour on
+every existing caller (T9) are unchanged: a row that split_borderline flags is still 'ok' as far as
+verdict() is concerned, and becomes 'truth_split_borderline' only in the row the scorer is given,
+exactly as P27 already excludes 'truth_nan', 'truth_truncated' and 'truth_uncertain' rows from every
+truth-based count while keeping them in the ok and usable shares and in H4.
 """
 import json
 import math
@@ -65,6 +78,10 @@ from .corpus import VoidRun, sha256_bytes  # one VoidRun for the harness
 
 U_MAX = 0.01            # P19
 TRUNC_SHARE = 1e-6      # P18
+JND = 0.05                              # PREREG.md:48; HARNESS-PLAN.md 8.2, third call
+SPLIT_BORDERLINE_BAND_MAX_HZ = 4000.0   # 125 Hz-4 kHz against above (8 kHz, 16 kHz, 20 kHz)
+SPLIT_BORDERLINE_BOUND_LOW = 0.012      # 1.2 % in 125 Hz-4 kHz (step 6, 8.1's measured figure)
+SPLIT_BORDERLINE_BOUND_HIGH = 0.021     # 2.1 % above (step 6 measured 2.08 %, rounded up)
 
 HERE = Path(__file__).resolve().parent
 MIRROR_COPY = HERE / '_mirror.py'
@@ -206,6 +223,36 @@ def verdict(truth, u, share):
     if not _number(u) <= U_MAX:
         return 'truth_uncertain'
     return 'ok'
+
+
+def split_borderline_bound(band_hz):
+    """HARNESS-PLAN.md 8.2, third call: the split's measured bound of the 5 % line, by band (step 6,
+    8.1's second open point): 1.2 % in 125 Hz-4 kHz, 2.1 % above."""
+    b = _number(band_hz)
+    if not math.isfinite(b):
+        raise ValueError('band_hz must be a finite number, not %r' % (band_hz,))
+    return SPLIT_BORDERLINE_BOUND_LOW if b <= SPLIT_BORDERLINE_BAND_MAX_HZ else SPLIT_BORDERLINE_BOUND_HIGH
+
+
+def split_borderline(edt, truth, gap_s, h, band_hz):
+    """HARNESS-PLAN.md 8.2, third call (P15): True when a row's first reflection falls within 2R/c
+    (2 * h) of the direct sound, and its error against truth is within the split's measured bound of
+    the 5 % line (JND) for its band (split_borderline_bound). Such a row's wrong-silent verdict is not
+    trusted: the scorer reports it apart as 'truth_split_borderline' (P27), decided by none of
+    H1-H3 or H5. gap_s is the time from the direct arrival to the first reflection (as corpus.py's
+    'gap_ms' quantity, in seconds); edt and truth are the method's reading and the row's truth. False
+    whenever a value needed is None or not finite, or h is not positive, or truth is not positive:
+    the row is then judged exactly as P28 and P33 already do, with no borderline exception."""
+    g, hh = _number(gap_s), _number(h)
+    if not (math.isfinite(g) and math.isfinite(hh) and hh > 0):
+        return False
+    if not g < 2.0 * hh:
+        return False
+    e, t = _number(edt), _number(truth)
+    if not (math.isfinite(e) and math.isfinite(t) and t > 0):
+        return False
+    err = abs(e / t - 1.0)
+    return abs(err - JND) <= split_borderline_bound(band_hz)
 
 
 def assess(refs, dt, t_arr, h, blocked=False):

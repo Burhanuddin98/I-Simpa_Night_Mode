@@ -110,6 +110,21 @@ Added to the contract here; no test reads it:
   image set at 0.02 ms with continuous air), and 'truth_status', truth.verdict(truth_edt, 0.0,
   share): 'truth_nan', 'truth_truncated' (P22: the truncation check as P18) or 'ok'. The image set
   is one exact series, so P19's u has nothing to measure and is passed as 0.
+- HARNESS-PLAN.md 8.2's fourth call: make_row(..., retry_truncated=True) gives a row P18 calls
+  truth_truncated one retry, its image set IMAGE_RETRY_FACTOR (1.5) times as long. If the retried
+  truth moves by less than IMAGE_RETRY_REL_TOL (1e-3) relative, the row is kept: truth_edt and
+  truth_share are the retried values and truth_status is 'ok' unconditionally (convergence is 8.2's
+  stated criterion; P18's share test on the longer series does not get to re-decide, since a
+  slow-decaying box's tail can still formally exceed TRUNC_SHARE while the truth itself has already
+  converged). The dict then carries 'truth_truncated_retry' (dict with image_time_s, truth_edt,
+  truth_share and moved_rel) as a receipt. Otherwise the row stays truth_truncated at its original
+  image set, and 'truth_truncated_retry' still carries the receipt (what the retry found, for the
+  record) with truth_edt, truth_share and truth_status unchanged. A row that is not truth_truncated,
+  or for which retry_truncated is left at its default False, carries no 'truth_truncated_retry' key
+  and costs one echogram, as before: retry_truncated defaults to False so that T6's bit-for-bit
+  reproduction of the corpus's own (pre-8.2) truth_edt values is unaffected by this call; whatever
+  builds ISM-fresh's rows for real (draw()/row_specs(), once the driver's matrix is built) is expected
+  to pass retry_truncated=True, as 8.2 fixes it going forward.
 - row_specs(D) -> the set's rows in a fixed order (room, receiver, band, step), 3,888 for a whole
   draw (P22), each with an 'id' ('ismf|<room>|r<receiver>|<band>|<step>ms') and the fields the
   scorer groups by. n_images, image_time, farthest, design_t60s and in_class are the rules above.
@@ -145,7 +160,17 @@ On one 1.5 times longer (2 times is over 8e7 images), the corridor relative's fa
 the exclusion protects. Separately, 2 of the 15 near receivers
 sampled (d 0.54 and 0.65 m, in absorbing rooms) read truth_nan in every band: the direct sound alone
 takes the level past -10 dB, as in Synth-fresh above DRR 9.54 dB. P22 and P18 are the plan's and are
-applied as written; what to do about either is the plan owner's.
+applied as written; HARNESS-PLAN.md 8.2's fourth call now also says what to do about a truncated row:
+retry it at 1.5 times the image set and keep it if the truth moves by under 1e-3 relative (above).
+
+What the retry gives, on the two rooms already measured against P18 (above): "step 6 measured 1.3e-5
+at 1.5 times and 1.6e-4 at 2 times" (HARNESS-PLAN.md 8.2) for the two dev rooms with the longest
+design T60, whose truth moved 1.3e-5 and 1.6e-4 relative on an image set 2 times longer; both pass
+IMAGE_RETRY_REL_TOL (1e-3) comfortably at either factor, and 8.2 fixes the cheaper one, 1.5. The
+corridor relative's far receiver is a harder case: its truth was still measured moving +0.8 % at
+125 Hz on an image set 1.5 times longer (only +0.3 % at 1 kHz), so that particular row's retry does
+not converge at 1e-3 and it stays truth_truncated, exactly as 8.2's call intends for a row whose
+truth is still moving.
 
 Cost: one echogram (one make_row call) took 2-91 s on the dev rooms' receivers, and 141 s for the
 smallest ball in the dev room with the most images (7.8e7), at a peak working set of 7.6 GB, all of
@@ -194,6 +219,8 @@ IMAGE_RUN_FACTOR = 1.2
 IMAGE_T60_FACTOR = 1.1
 BATCH = 64
 POSITION_CAP = 1 << 20
+IMAGE_RETRY_FACTOR = 1.5            # HARNESS-PLAN.md 8.2, fourth call: a truncated row's one retry
+IMAGE_RETRY_REL_TOL = 1e-3          # kept if the retried truth moves by less than this, relative
 
 D_TOP_M = math.hypot(*(L[1] - SRC_WALL_M - (R_M[0] + REC_CLEAR_M) for L in (L1_M, L2_M, L3_M)))
 BOUNDS = {
@@ -251,7 +278,7 @@ def _box(room):
     return L, [(a[0], a[1]), (a[2], a[3]), (a[4], a[5])], src
 
 
-def make_row(room, rec, R, F, step_ms, image_time_s=None, run_s=None):
+def make_row(room, rec, R, F, step_ms, image_time_s=None, run_s=None, retry_truncated=False):
     ism = generator()
     L, alpha, src = _box(room)
     rec = tuple(float(x) for x in rec)
@@ -288,8 +315,31 @@ def make_row(room, rec, R, F, step_ms, image_time_s=None, run_s=None):
         vb = vc[:n * k].reshape(n, k).sum(1)
     # P22: the truncation check as P18, on the truth's own series (added to the contract here).
     share = truth.last10_share(direct * ac + refl * ac)
-    return dict(bins=np.asarray(vb, dtype=np.float64), dt=float(dt), t_arrival=float(t), half_width=h,
-                truth_edt=float(truth_edt), truth_share=share, truth_status=truth.verdict(float(truth_edt), 0.0, share))
+    truth_status = truth.verdict(float(truth_edt), 0.0, share)
+    out = dict(bins=np.asarray(vb, dtype=np.float64), dt=float(dt), t_arrival=float(t), half_width=h,
+              truth_edt=float(truth_edt), truth_share=share, truth_status=truth_status)
+    if truth_status == 'truth_truncated' and retry_truncated:
+        # HARNESS-PLAN.md 8.2, fourth call: one retry at IMAGE_RETRY_FACTOR times the image set; kept
+        # (truth_status 'ok') if the truth moves by under IMAGE_RETRY_REL_TOL relative.
+        T2 = IMAGE_RETRY_FACTOR * float(T)
+        direct2, refl2 = ism.echogram(L, src, rec, R, alpha, C * T2, dl)
+        ac2 = ism.air_factor(len(direct2), dl, m, C, None)
+        truth_edt2 = float(truth.truth_ideal(direct2 * ac2, refl2 * ac2, t, DT_FINE)[0])
+        share2 = truth.last10_share(direct2 * ac2 + refl2 * ac2)
+        if math.isfinite(truth_edt) and truth_edt != 0 and math.isfinite(truth_edt2):
+            moved = abs(truth_edt2 / truth_edt - 1.0)
+        else:
+            moved = float('inf')
+        out['truth_truncated_retry'] = dict(image_time_s=T2, truth_edt=truth_edt2 if math.isfinite(truth_edt2) else None,
+                                            truth_share=share2, moved_rel=moved if math.isfinite(moved) else None)
+        if moved < IMAGE_RETRY_REL_TOL:
+            # Convergence is the kept criterion 8.2's fourth call states; P18's share test on the
+            # longer image set does not re-decide (a row can converge while still formally over
+            # TRUNC_SHARE, as a slow-decaying box's tail can be, and is kept all the same).
+            out['truth_edt'] = truth_edt2
+            out['truth_share'] = share2
+            out['truth_status'] = 'ok'
+    return out
 
 
 # ---- the draw (P21, P22) -------------------------------------------------------------------------------
