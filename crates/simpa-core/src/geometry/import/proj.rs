@@ -2707,7 +2707,9 @@ fn read_solvers(
             // `duree_simulation` gets upstream's actual 2 s, not Night Mode's 10 s
             // (decision row 36, `docs/decision-log.md`).
             sp.duration_s = F64::new(2.0);
-            notes.push(format!("{what}: no `duree_simulation`, upstream's default kept"));
+            notes.push(format!(
+                "{what}: no `duree_simulation`, upstream's default kept"
+            ));
         }
     }
     real!("pasdetemps", sp.time_step_s);

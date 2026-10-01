@@ -13,8 +13,8 @@ fn a_new_project_writes_duree_simulation_as_ten() {
     } else {
         std::path::PathBuf::from("/runs/default_duration")
     };
-    let xml = write(&p, SolverKind::Spps, None, &workdir)
-        .unwrap_or_else(|e| panic!("{}: {e}", e.code()));
+    let xml =
+        write(&p, SolverKind::Spps, None, &workdir).unwrap_or_else(|e| panic!("{}: {e}", e.code()));
     let doc = roxmltree::Document::parse(&xml).expect("well-formed config.xml");
     let sim = doc
         .descendants()
