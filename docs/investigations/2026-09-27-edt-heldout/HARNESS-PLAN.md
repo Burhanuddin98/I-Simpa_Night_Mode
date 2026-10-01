@@ -400,3 +400,10 @@ These settle section 8.1's open points before A1. Each is built and tested befor
   which only removes rows already within the split's bound of the 5 % line; erring long could let a split
   error score as wrong-silent. In a box the bound equals the box formula, which a test pins. A room whose
   geometry cannot be read raises; nothing falls back to the first box.
+  *Amended 12:14 (`ff85de8` gave negative gaps: F3 rec1 -0.55 ms, F4 rec7 -9.92 ms).* A face counts only when
+  the source and the receiver both lie in front of it (on the side its normal points to, inside the room). Any
+  reflection off a face, specular or diffuse, arrives from and leaves to its front side, so the bound stays a
+  lower bound, and for two points on the same side the mirror path is never shorter than the direct one, so the
+  gap is never negative. A receiver with no direct line to the source has no direct sound to split from; it
+  takes whatever status the harness already gives a blocked receiver (D2 plants one), and the gap is not
+  computed for it.
