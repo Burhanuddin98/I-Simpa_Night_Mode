@@ -2,9 +2,9 @@
 guards, the solver check, the report reader and the probe mode.
 
 The run path, its guards, the solver check, the reader and the probe mode were built in section 6,
-step 4 (T13, T14). plan() is still a stub that returns None: the matrix is step 6's, with P10 and P11
-as Burhan sets them (T12). Nothing here may launch a run of the test before ADDENDUM-A1.md is
-committed.
+step 4 (T13, T14). plan() (section 6, step 6; T12) lists the matrix, with P10 fixed at 10 s for now
+(decision row 36) and P11's two modes; it opens no file and launches nothing. Nothing here may
+launch a run of the test before ADDENDUM-A1.md is committed.
 
 Contract:
 - Refused(RuntimeError) carries `code`, one of: 'reserved_seed', 'heldout_before_a1',
@@ -83,6 +83,7 @@ import datetime
 import hashlib
 import importlib.util
 import json
+import math
 import operator
 import os
 import shutil
@@ -120,6 +121,10 @@ HELDOUT_SEEDS = frozenset([s for seeds in TESTED_SEEDS.values() for s in seeds] 
 MODES = ('random', 'energetic')
 LINE_CLASSES = ('PROGRESS', 'INFO', 'OK', 'WARN', 'FAIL')
 
+TESTED_DURATION_S = 10.0          # P10, decision row 36: fixed for now; the room-based rule is backlog 57
+TRUTH_TIME_STEP_S = 1e-4          # P16
+TRUTH_PARTICLES = 1_000_000       # P16
+
 # Sections 7 and 7.1: the probes, each in its stand-in room with its reserved seed
 PROBE_RUNS = {
     'P0': dict(room='P0', mode='random', particles_per_source=1_000_000, time_step_s=1e-4, duration_s=6.5,
@@ -143,8 +148,38 @@ class Refused(RuntimeError):
         self.code = code
 
 
+def truth_duration_s(room):
+    """P17: min(6.5, max(3.0, t_arr,max + 2 x the design T60 maximum)), rounded up to 0.1 s (1e-9
+    allowed). t_arr,max is the room's farthest receiver's straight-line distance / C."""
+    t_arr = max(r['d_m'] for r in room['receivers']) / corpus.C_SPPS
+    t60 = max(float(v) for v in room['design_t60_s'].values())
+    x = min(6.5, max(3.0, t_arr + 2.0 * t60))
+    return math.ceil(x * 10 - 1e-9) / 10
+
+
 def plan():
-    return None
+    """P12, P13: the 144 tested runs (72 per mode: every room x 3 steps x 3 seeds at 150k, plus F6's
+    extra 3 x 3 at 50k) and the 28 truth runs (every room x P12's 4 truth seeds), opening no file."""
+    R = rooms.rooms()
+    runs = []
+    for mode in MODES:
+        for room_name in rooms.NAMES:
+            for (step_ms, particles), seeds in TESTED_SEEDS.items():
+                if particles != 150000 and not (particles == 50000 and room_name == 'F6'):
+                    continue
+                for seed in seeds:
+                    runs.append(dict(
+                        run_id='tested-%s-%s-%sms-%dk-%d' % (room_name, mode, step_ms, particles // 1000, seed),
+                        room=room_name, kind='tested', mode=mode, time_step_s=step_ms / 1.0e3,
+                        particles_per_source=particles, random_seed=seed, duration_s=TESTED_DURATION_S))
+    for room_name in rooms.NAMES:
+        duration = truth_duration_s(R[room_name])
+        for seed in TRUTH_SEEDS:
+            runs.append(dict(
+                run_id='truth-%s-%d' % (room_name, seed),
+                room=room_name, kind='truth', mode='random', time_step_s=TRUTH_TIME_STEP_S,
+                particles_per_source=TRUTH_PARTICLES, random_seed=seed, duration_s=duration))
+    return runs
 
 
 # ---- guards -------------------------------------------------------------------------------------------
