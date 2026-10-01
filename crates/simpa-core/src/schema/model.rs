@@ -956,12 +956,15 @@ pub struct SppsSettings {
 }
 
 impl SppsSettings {
-    /// Upstream's GUI defaults (`e_core_sppscore.h`, `e_core_core_config.h`).
+    /// Upstream's GUI defaults (`e_core_sppscore.h`, `e_core_core_config.h`), except
+    /// `duration_s`: Night Mode's own new-project default, a fixed 10 s, not upstream's 2 s
+    /// (decision row 36, `docs/decision-log.md`). An imported legacy project with no
+    /// `duree_simulation` still keeps upstream's actual 2 s (`geometry::import::proj::read_solvers`).
     pub fn for_bands(n_bands: usize) -> Self {
         SppsSettings {
             particles_per_source: 150_000,
             particles_saved: 0,
-            duration_s: F64::new(2.0),
+            duration_s: F64::new(10.0),
             time_step_s: F64::new(0.01),
             random_seed: 0,
             method: ComputationMethod::Random,

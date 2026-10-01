@@ -2699,7 +2699,17 @@ fn read_solvers(
     }
     count!("nbparticules", sp.particles_per_source);
     count!("nbparticules_rendu", sp.particles_saved);
-    real!("duree_simulation", sp.duration_s);
+    match opt_prop_real(conf, "duree_simulation", what)? {
+        Some(v) => sp.duration_s = F64::new(v),
+        None => {
+            // Upstream's own GUI default (`e_core_sppscore.h`), kept independent of
+            // `SppsSettings::for_bands`'s new-project default: a legacy project with no
+            // `duree_simulation` gets upstream's actual 2 s, not Night Mode's 10 s
+            // (decision row 36, `docs/decision-log.md`).
+            sp.duration_s = F64::new(2.0);
+            notes.push(format!("{what}: no `duree_simulation`, upstream's default kept"));
+        }
+    }
     real!("pasdetemps", sp.time_step_s);
     count!("random_seed", sp.random_seed);
     flag!("abs_atmo_calc", sp.air_absorption);
@@ -2785,6 +2795,44 @@ fn read_solvers(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A legacy `.proj` whose SPPS `<configuration>` has no `duree_simulation` must keep
+    /// upstream's own GUI default (2 s), not Night Mode's own new-project default (10 s, decision
+    /// row 36): the note's "upstream's default kept" must stay true. Every other element and
+    /// attribute `read_solvers` needs is optional except the three container elements and one
+    /// band switch per band, each present here but otherwise empty.
+    #[test]
+    fn a_missing_duree_simulation_keeps_upstream_s_actual_default_not_night_mode_s() {
+        let xml = r#"<core>
+  <spps>
+    <configuration/>
+    <mesh_conf/>
+    <core_conf_bfreq>
+      <p name="125" value="1"/>
+      <p name="250" value="1"/>
+      <p name="500" value="1"/>
+      <p name="1000" value="1"/>
+      <p name="2000" value="1"/>
+      <p name="4000" value="1"/>
+    </core_conf_bfreq>
+  </spps>
+</core>"#;
+        let doc = Document::parse(xml).unwrap();
+        let bands = BandSet::default();
+        let mut notes = Vec::new();
+        let s = read_solvers(doc.root_element(), &bands, &mut notes).unwrap();
+        assert_eq!(
+            s.spps.duration_s.get(),
+            2.0,
+            "upstream's actual GUI default, not Night Mode's 10 s new-project default"
+        );
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("no `duree_simulation`, upstream's default kept")),
+            "{notes:?}"
+        );
+    }
 
     #[test]
     fn an_imported_project_takes_its_file_s_name_only_in_place_of_upstream_s_default() {

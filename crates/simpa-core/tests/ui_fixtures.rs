@@ -126,6 +126,12 @@ fn teaching_room() -> Project {
     p.id = ProjectId::from_u128(0x1);
     p.description =
         "Concept B's teaching room (crates/simpa-core/tests/ui_fixtures.rs).".to_string();
+    // Pinned to its historical 2 s, not left to track `SppsSettings::for_bands`'s new-project
+    // default (now 10 s, decision row 36, `docs/decision-log.md`): this fixture, and
+    // `box_run.simpa`, `box_long.simpa` and `hall_run.simpa` built from it, are each a specific
+    // measured run (fixed seeds, particle counts, named gates); letting them silently follow the
+    // default would change their numbers and invalidate what each gate measured.
+    p.solvers.spps.duration_s = F64::new(2.0);
     assert_eq!(p.bands, BandSet::default(), "octave bands, 125 Hz to 4 kHz");
     let n = p.bands.len();
     p.geometry.vertices = [
@@ -382,6 +388,10 @@ fn hall_run() -> Project {
     p.solvers.spps.method = simpa_core::schema::ComputationMethod::Energetic;
     p.solvers.spps.particles_per_source = HALL_PARTICLES;
     p.solvers.spps.random_seed = HALL_SEED;
+    // Pinned to its historical 2 s for the same reason as `teaching_room`'s: `import_file`'s
+    // project (`ImportedModel::to_project`) also starts from `Project::new`'s new-project
+    // default, now 10 s (decision row 36).
+    p.solvers.spps.duration_s = F64::new(2.0);
     p.check_integrity().expect("the hall run is consistent");
     p
 }
