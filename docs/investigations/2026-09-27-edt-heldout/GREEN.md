@@ -185,6 +185,13 @@ subgroups `expected_dry.json` does name match it exactly, value for value; the m
 subgroup table omitted the tenth, zero-`n_ok_truth` one, which is a count the table itself fixes and
 this run computes differently — reported here, not corrected in either file.
 
+**Ruling (Jarvis, 13:13).** The harness is right and the expectation was wrong, on a field that decides
+nothing. PREREG's H3 (:57) defines the subgroups as room × distance class × step and judges only those with
+≥ 20 ok rows, so a subgroup with rows but no ok row exists and is not judged. `n_subgroups` counts it; the
+fields that decide, H3's pass, `n_judged` and `n_failing`, matched. `expected_dry.json` stays as committed,
+because it is the before-the-fact record, and this erratum is the correction. Section 5 item 3 is met with
+it: 162 of 163 values matched, and the one that did not is explained here with receipts.
+
 ### Suite
 
 ```
