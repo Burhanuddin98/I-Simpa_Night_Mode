@@ -173,6 +173,6 @@ FAILED tests/test_r2_run_order.py::test_t43_scorer_run_order - AttributeError...
 | T43 | test_r2_run_order.py | batch 3 | |
 
 T29 is the only test of T23-T43 that did not fail first, and it is a control by design: its claim (no radius filter in
-H1, H2, H3, H5) is true of round 1's scorer already and must stay true after H4 gains its filter. T29 was shown able to
-fail by reading it against the H4 code path: it plants a wrong-silent row at R = 1.4 m in each of the four criteria, so a
-radius filter added to any of them makes it fail.
+H1, H2, H3, H5) is true of round 1's scorer already and must stay true after H4 gains its filter. T29 was shown able to fail by a mutant (01:03): a pytest plugin that makes `score.tally` drop rows with R_m above 1.0 m
+(a radius filter where there must be none) turns it into `assert (True is False)` at tests/test_r2_scorer.py:205
+(H1 counting the R = 1.4 m wrong-silent row), `1 failed, 9 deselected`.
