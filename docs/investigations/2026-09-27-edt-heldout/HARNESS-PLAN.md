@@ -333,3 +333,17 @@ The test writer found these at 04:16, before any data. The main session checked 
   (backlog 54), so every real run's report reads `solver_build_unrecorded`. The guard stays as written, and the
   truth and tested runs wait for backlog 54's CLI half, which Burhan decided on 2026-10-01 (decision row 33). The
   probes are not affected.
+
+The red check (`RED.md`, 05:24) fixed four tests and raised the following. Each stays open until it is settled,
+and all of them are settled before A1:
+
+- **The method's pin held on one machine's git settings only: fixed** (`00e793e`). PREREG's sha256 `462c37cf…`
+  is the committed text checked out with CRLF line ends. `../.gitattributes` now keeps `frozen/` in that form on
+  every checkout. The frozen file and PREREG.md are unchanged.
+- **Synth-fresh near DRR 9.54 dB: open, for decision before A1.** The synth truth (P15) is NaN for every DRR
+  above 10·log10(9) = 9.54 dB, because the direct sound alone takes the level past −10 dB. That was 61 of 4,000
+  dev rows, excluded as `truth_nan` (P27). Just below the edge the truth is finite but very large: 28 s at
+  9.50 dB for a 1 s decay. PREREG fixes the range at up to +10 dB (:39). How those rows bear on H1 has not been
+  examined.
+- **P3's figures: open, to be corrected from `rooms.py` in step 4.** The writer measured F5 clearing z3's box055 by
+  17.1 %, under P3's stated 18 %, so F5 is still fresh. P3 also speaks of four fresh boxes, and F7 makes five.
