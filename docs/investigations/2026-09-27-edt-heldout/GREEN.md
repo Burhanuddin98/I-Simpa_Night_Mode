@@ -296,3 +296,11 @@ C:\tmp\m8b-edt\venv\Scripts\python.exe -m pytest tests/ -q
 Result: `45 passed in 210.78s`. No file under `tests/`, `m8b/`, `PREREG.md`, `frozen/` or
 `expected_dry.json` was touched by this step; the only new files are `harness/dry/run_d4.py` and
 this `GREEN.md` section.
+
+### D4 judge panel, first run (13:22, six independent sonnet judges, prompts from `ad00063`)
+
+- Control A (F2's settings at 1 ms, expected plausible): plausible, plausible, plausible. 3 of 3, as required.
+- Control B (DRR +30 dB at 30 m, T60 10 s, expected implausible): plausible, plausible, plausible. **0 of 3:
+  the panel failed the control.** Every judge's reason was that both values sit on the inclusive edge of
+  PHYSICS.md's input limits; PHYSICS.md gave them nothing else to judge by. Fix: HARNESS-PLAN.md 8.2's last
+  bullet (the diffuse-field consistency check). The panel is re-run after it.

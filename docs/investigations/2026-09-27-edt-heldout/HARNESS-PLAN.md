@@ -411,3 +411,15 @@ These settle section 8.1's open points before A1. Each is built and tested befor
   gap is never negative. A receiver with no direct line to the source has no direct sound to split from; it
   takes whatever status the harness already gives a blocked receiver (D2 plants one), and the gap is not
   computed for it.
+- **PHYSICS.md gains the diffuse-field consistency check (Jarvis 13:25; D4's judge panel, first run).** With
+  only the product's input limits in PHYSICS.md, all three judges called control B (DRR +30 dB at 30 m, T60
+  10 s) plausible, because both values sit on the inclusive edge of the limits; control A was 3 of 3
+  plausible. The panel could not tell an impossible room from a real one. PHYSICS.md gains: the critical
+  distance r_c = 0.057 sqrt(V / T60) (m, V in m^3, omnidirectional source), DRR(d) = 20 log10(r_c / d), so
+  a class's (T60, DRR, d) implies V = T60 (d / 0.057)^2 10^(DRR / 10); allowing +/-10 dB for fields that are
+  not diffuse (coupled, long or specular rooms), a class is physically implausible only if every instance's
+  implied volume exceeds 1e8 m^3 even at the -10 dB end (about eight times the largest enclosed building)
+  or is smaller than a room that holds its own source-receiver distance even at the +10 dB end. The bound is
+  set wide on purpose: a judge that calls a real attack implausible lets H6 pass falsely, which is the worse
+  error. Control B implies 2.8e9 m^3 (2.8e8 at -10 dB): implausible. Control A implies at most 1.4e5 m^3:
+  plausible. D4's panel is re-run on the regenerated prompts and must give 3 of 3 on both.
