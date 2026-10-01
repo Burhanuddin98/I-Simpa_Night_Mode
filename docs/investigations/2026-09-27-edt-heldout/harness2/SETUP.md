@@ -1,4 +1,20 @@
-# M8b harness: build, solver folder, Python and the corpus files
+# M8b harness, round 2 (harness2/): build, solver folder, Python and the corpus files
+
+**Round 2.** This folder is round 1's `harness/` copied (commit `b7aff7d`) and edited in place for round 2 (`../HARNESS-PLAN-2.md`
+section 9 M5). Everything below is round 1's setup record and still holds (same simpa build, same solver folder, same venv,
+Python 3.13.13 and numpy 2.5.2); the round-2 changes are in `../GREEN-2.md`. Run from this folder:
+
+```
+set PYTHONDONTWRITEBYTECODE=1 & C:\tmp\m8b-edt\venv\Scripts\python.exe -m pytest        # tests T1-T22 as adapted, T23-T43
+C:\tmp\m8b-edt\venv\Scripts\python.exe dry\run_dry2.py C:\tmp\m8b-edt\dry-r2           # D2' against ..\expected_dry_2.json
+C:\tmp\m8b-edt\venv\Scripts\python.exe dry\smoke_run1.py C:\tmp\m8b-edt\smoke-run1     # the scorer on run 1's inputs against v21_zsweep.txt
+```
+
+Round 2's folders: room projects `C:\tmp\m8b-edt\round2-rooms`, run folders `B:\data\m8b-edt\round2\heldout`, results
+`B:\data\m8b-edt\round2\results`, attack sandbox `C:\tmp\m8b-edt\attack2`. Nothing exists there yet.
+
+---
+# (round 1's SETUP.md follows)
 
 Steps 1 and 2 of `../HARNESS-PLAN.md` section 6, 2026-10-01, on Grace. No solver ran and no held-out data was made.
 

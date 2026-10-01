@@ -60,6 +60,12 @@ def test_t42_inventory_is_complete_and_check_catches_a_change(tmp_path):
     assert sorted(freeze2.check(mini, root=root)) == ['harness2/m8b/a.py', 'harness2/m8b/b.py']
     # the facts B1 records
     f = freeze2.facts()
-    for k in ('python', 'numpy', 'git_commit', 'git_tree', 'solver_manifest_sha256', 'simpa_exe_sha256', 'round2_rows_exist'):
+    for k in ('python', 'numpy', 'git_commit', 'git_tree', 'solver_manifest_sha256', 'spps_code_sha256', 'simpa_exe_sha256',
+              'round2_rows_exist'):
         assert k in f, k
-    assert f['round2_rows_exist'] is False
+    assert isinstance(f['round2_rows_exist'], bool)
+    assert freeze2.facts(round2_paths=[tmp_path / 'nothing-here'])['round2_rows_exist'] is False
+    (tmp_path / 'some-run').mkdir()
+    assert freeze2.facts(round2_paths=[tmp_path / 'some-run'])['round2_rows_exist'] is False        # an empty folder holds nothing
+    (tmp_path / 'some-run' / 'x').write_text('a row', encoding='utf-8')
+    assert freeze2.facts(round2_paths=[tmp_path / 'some-run'])['round2_rows_exist'] is True

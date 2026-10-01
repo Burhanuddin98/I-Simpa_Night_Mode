@@ -1,39 +1,41 @@
-"""SPPS runs (HARNESS-PLAN.md P8-P17, sections 3 and 7): the matrix and its plan-only mode, the
-guards, the solver check, the report reader and the probe mode.
+"""SPPS runs, round 2 (HARNESS-PLAN-2.md sections 1-3, 7 and 9; round 1's HARNESS-PLAN.md P8-P17, sections 3 and 7):
+the matrix and its plan-only mode, the guards, the solver check, the report reader and the probe mode.
 
-The run path, its guards, the solver check, the reader and the probe mode were built in section 6,
-step 4 (T13, T14). plan() (section 6, step 6; T12) lists the matrix, with P10 fixed at 10 s for now
-(decision row 36) and P11's two modes; it opens no file and launches nothing. Nothing here may
-launch a run of the test before ADDENDUM-A1.md is committed.
+This is round 1's driver edited in place for round 2 (section 9 M5): the rooms are the G rooms (rooms2), the seeds
+are round2.py's, the freeze is ADDENDUM-B1.md, and round 1's seeds, rooms and folders are refused for good
+(round1_seed, unknown_room, round1_root). Nothing here may launch a run of the test before ADDENDUM-B1.md is committed.
 
 Contract:
-- Refused(RuntimeError) carries `code`, one of: 'reserved_seed', 'heldout_before_a1',
-  'outside_data_root', 'solver_unverified', 'solver_build_unverified', 'unknown_room',
-  'low_disk_space'; and, for the probe mode only, 'not_a_probe' (a probe name, room or folder that
-  is not section 7's).
+- Refused(RuntimeError) carries `code`, one of: 'reserved_seed', 'round1_seed', 'heldout_before_b1',
+  'outside_data_root', 'round1_root', 'solver_unverified', 'solver_build_unverified', 'unknown_room',
+  'low_disk_space', 'attack_before_sentinel' (attack.build_sandbox), 'run_folders_incomplete' and
+  'pin_mismatch' (score_heldout.preflight); and, for the probe mode only, 'not_a_probe' (a probe name, room
+  or folder that is not section 7's).
 - plan() -> [run], opening no file: 144 tested runs (P13: 7 rooms x 3 steps x 3 seeds at 150k
-  plus F6 x 3 x 3 at 50k, in each of P11's two modes) and 28 truth runs (7 rooms x K = 4, Random,
-  1,000,000 particles, 0.1 ms, P17's length). A run is a dict with 'run_id', 'room', 'kind'
+  plus G6 x 3 x 3 at 50k, in each of P11's two modes) and 28 truth runs (7 rooms x K = 4, Random,
+  1,000,000 particles, 0.1 ms, P17's length). The rooms are rooms2.NAMES, the seeds round2's. A run is a dict with 'run_id', 'room', 'kind'
   ('tested' or 'truth'), 'mode' ('random' or 'energetic'), 'time_step_s', 'particles_per_source',
   'random_seed' (P12) and 'duration_s' (P10 for tested runs: the room project's own; P17 for truth).
-- a1_committed(repo=None) -> bool: ADDENDUM-A1.md is committed on the branch's HEAD.
-- heldout_seed(seed) -> bool: P12's tested and truth seeds, Synth-fresh's 2026100101 and
-  ISM-fresh's 2026100102.
-- require_not_heldout(seed, a1=None): Refused('heldout_before_a1') for a held-out seed while A1 is
-  not committed (a1 None: ask a1_committed()). Synth-fresh and ISM-fresh call it too.
+- b1_committed(repo=None) -> bool: ADDENDUM-B1.md is committed on the branch's HEAD and the working copy is HEAD's.
+- heldout_seed(seed) -> bool: round 2's tested and truth seeds (section 3), Synth-fresh-2's 2026100202,
+  ISM-fresh-2's 2026100201 and the attack's 2026100203.
+- require_not_heldout(seed, b1=None): Refused('round1_seed') for any of round 1's seeds, whatever B1 says, and
+  Refused('heldout_before_b1') for a round-2 held-out seed while B1 is not committed (b1 None: ask
+  b1_committed()). Synth-fresh-2 and ISM-fresh-2 call it too.
 - check_solvers(solvers_dir, manifest=None) -> {'verified': bool, 'checks': [{'name', 'path',
   'code_sha256', 'expected', 'matches'}]}: spps.exe, classicalTheory.exe, tetgen.exe and
   preprocess.exe by code sha256 (tools/fixture-gen/pe_fingerprint.py) against
   solvers/manifest.json, as M8a's E1 does (tools/gates/m8a.ps1:8-9).
 - launch(run, *, project, run_dir, solvers_dir, data_root=DATA_ROOT, launch_log=LAUNCH_LOG,
-  simpa_exe=None, a1=None): the guards first, in this order, each raising Refused before anything
-  is written or launched: the seed ('reserved_seed' for RESERVED_SEEDS, then require_not_heldout),
-  the room ('unknown_room' unless run['room'] is one of the explicit allowlist ROOM_ALLOWLIST,
-  i.e. rooms.NAMES (the F-rooms) plus rooms.PROBES (P0, P0b) -- launch() never runs anything else),
-  the folder ('outside_data_root' unless run_dir lies inside data_root), the solvers
-  ('solver_unverified' unless check_solvers verifies them), the freeze (a run of a held-out room,
-  F1-F7, is refused before A1 whatever its seed, as 'heldout_before_a1', so that no histogram of a
-  held-out room exists before the freeze; P0 and P0b are not held out), and free disk space
+  simpa_exe=None, b1=None): the guards first, in this order, each raising Refused before anything
+  is written or launched: the seed ('reserved_seed' for RESERVED_SEEDS, then require_not_heldout: round 1's seeds and
+  the round-2 seeds before B1), the room ('unknown_room' unless run['room'] is one of the explicit
+  allowlist ROOM_ALLOWLIST, i.e. rooms2.NAMES (the G rooms) plus rooms.PROBES (P0, P0b) -- launch() never
+  runs anything else, an F room included), the root ('round1_root' when data_root is, holds or lies inside
+  one of round 1's folders), the folder ('outside_data_root' unless run_dir lies inside data_root), the
+  solvers ('solver_unverified' unless check_solvers verifies them), the freeze (a run of a G room is
+  refused before B1 whatever its seed, as 'heldout_before_b1', so that no histogram of a held-out room
+  exists before the freeze; P0 and P0b are not held out), and free disk space
   ('low_disk_space' unless both the drive holding run_dir and C: have at least MIN_FREE_BYTES free,
   section 5 item 5). Then <run_dir>/project.simpa is written, one line appended to launch_log,
   `simpa run <project> --solver spps --runs <run_dir> --json` run with its stderr kept and classed,
@@ -99,29 +101,29 @@ from pathlib import Path
 
 import numpy as np
 
-from . import corpus, rooms
+from . import corpus, rooms, rooms2, round2
 
-SCRATCH = Path(r'C:\tmp\m8b-edt')
-DATA_ROOT = SCRATCH / 'heldout'
+SCRATCH = round2.SCRATCH
+DATA_ROOT = round2.DATA_ROOT
 PROBE_ROOT = SCRATCH / 'probe'
-LAUNCH_LOG = SCRATCH / 'launch.log'
-RESERVED_SEEDS = (9998, 9999)
+LAUNCH_LOG = round2.LAUNCH_LOG
+RESERVED_SEEDS = round2.RESERVED_SEEDS
+ROUND1_SEEDS = frozenset(round2.ROUND1_SEEDS)
+ROUND1_ROOTS = round2.ROUND1_ROOTS
 
 DEFAULT_SIMPA = Path(r'C:\tmp\nm-target\release\simpa.exe')
 DEFAULT_SOLVERS = Path(r'C:\tmp\nm-m8a-solvers')
 MANIFEST = corpus.REPO / 'solvers' / 'manifest.json'
 PE_FINGERPRINT = corpus.REPO / 'tools' / 'fixture-gen' / 'pe_fingerprint.py'
-ADDENDUM = 'docs/investigations/2026-09-27-edt-heldout/ADDENDUM-A1.md'     # relative to the repo
+ADDENDUM = round2.ADDENDUM                                                    # ADDENDUM-B1.md, relative to the repo
 EXES = ('spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe')
 
-# P12: the tested runs' seeds by (step ms, particles), the truth's, and the generators' (P21, P24)
-TESTED_SEEDS = {(1.0, 150000): (1101, 1102, 1103), (2.0, 150000): (1201, 1202, 1203),
-                (5.0, 150000): (1501, 1502, 1503), (1.0, 50000): (2101, 2102, 2103),
-                (2.0, 50000): (2201, 2202, 2203), (5.0, 50000): (2501, 2502, 2503)}
-TRUTH_SEEDS = (9001, 9002, 9003, 9004)
-SYNTH_SEED, ISM_SEED = 2026100101, 2026100102
+# Section 3: round 2's tested runs' seeds by (step ms, particles), the truth's, and the generators' and the attack's
+TESTED_SEEDS = round2.TESTED_SEEDS
+TRUTH_SEEDS = round2.TRUTH_SEEDS
+SYNTH_SEED, ISM_SEED, ATTACK_SEED = round2.SYNTH_SEED, round2.ISM_SEED, round2.ATTACK_SEED
 HELDOUT_SEEDS = frozenset([s for seeds in TESTED_SEEDS.values() for s in seeds] + list(TRUTH_SEEDS)
-                          + [SYNTH_SEED, ISM_SEED])
+                          + [SYNTH_SEED, ISM_SEED, ATTACK_SEED])
 MODES = ('random', 'energetic')
 LINE_CLASSES = ('PROGRESS', 'INFO', 'OK', 'WARN', 'FAIL')
 
@@ -129,7 +131,8 @@ TESTED_DURATION_S = 10.0          # P10, decision row 36: fixed for now; the roo
 TRUTH_TIME_STEP_S = 1e-4          # P16
 TRUTH_PARTICLES = 1_000_000       # P16
 
-ROOM_ALLOWLIST = frozenset(rooms.NAMES) | frozenset(rooms.PROBES)   # the only rooms launch() ever runs
+HELDOUT_ROOMS = frozenset(rooms2.NAMES)                          # the G rooms: no run of them before B1
+ROOM_ALLOWLIST = HELDOUT_ROOMS | frozenset(rooms.PROBES)         # the only rooms launch() ever runs
 MIN_FREE_BYTES = 8 * 1024 ** 3    # section 5 item 5: the run folder's drive and C: both keep >= 8 GB free
 
 # Sections 7 and 7.1: the probes, each in its stand-in room with its reserved seed
@@ -165,21 +168,21 @@ def truth_duration_s(room):
 
 
 def plan():
-    """P12, P13: the 144 tested runs (72 per mode: every room x 3 steps x 3 seeds at 150k, plus F6's
-    extra 3 x 3 at 50k) and the 28 truth runs (every room x P12's 4 truth seeds), opening no file."""
-    R = rooms.rooms()
+    """Section 3, P13: the 144 tested runs (72 per mode: every G room x 3 steps x 3 seeds at 150k, plus G6's
+    extra 3 x 3 at 50k) and the 28 truth runs (every room x the 4 truth seeds 9101-9104), opening no file."""
+    R = rooms2.rooms()
     runs = []
     for mode in MODES:
-        for room_name in rooms.NAMES:
+        for room_name in rooms2.NAMES:
             for (step_ms, particles), seeds in TESTED_SEEDS.items():
-                if particles != 150000 and not (particles == 50000 and room_name == 'F6'):
+                if particles != 150000 and not (particles == 50000 and room_name == 'G6'):
                     continue
                 for seed in seeds:
                     runs.append(dict(
                         run_id='tested-%s-%s-%sms-%dk-%d' % (room_name, mode, step_ms, particles // 1000, seed),
                         room=room_name, kind='tested', mode=mode, time_step_s=step_ms / 1.0e3,
                         particles_per_source=particles, random_seed=seed, duration_s=TESTED_DURATION_S))
-    for room_name in rooms.NAMES:
+    for room_name in rooms2.NAMES:
         duration = truth_duration_s(R[room_name])
         for seed in TRUTH_SEEDS:
             runs.append(dict(
@@ -190,9 +193,10 @@ def plan():
 
 
 # ---- guards -------------------------------------------------------------------------------------------
-def a1_committed(repo=None):
-    """True only when HEAD holds ADDENDUM-A1.md and the working copy of it is HEAD's (git diff --quiet).
-    Anything else, git failing included, is False: the held-out seeds stay refused."""
+def b1_committed(repo=None):
+    """True only when HEAD holds ADDENDUM-B1.md and the working copy of it is HEAD's (git diff --quiet HEAD, which
+    sees a staged but uncommitted file as a difference). Anything else, git failing included, is False: the
+    round-2 seeds and G rooms stay refused."""
     repo = Path(repo) if repo else corpus.REPO
     try:
         r = subprocess.run(['git', '-C', str(repo), 'cat-file', '-e', 'HEAD:' + ADDENDUM], capture_output=True,
@@ -210,13 +214,15 @@ def heldout_seed(seed):
     return operator.index(seed) in HELDOUT_SEEDS
 
 
-def require_not_heldout(seed, a1=None):
+def require_not_heldout(seed, b1=None):
+    seed = operator.index(seed)
+    if seed in ROUND1_SEEDS:
+        raise Refused('round1_seed', 'seed %d belongs to round 1 (P12, P21, P24) and is never used again' % seed)
     if heldout_seed(seed):
-        if a1 is None:
-            a1 = a1_committed()
-        if not a1:
-            raise Refused('heldout_before_a1', 'seed %d is held out (P12, P21, P24) and ADDENDUM-A1.md is not '
-                                               'committed' % operator.index(seed))
+        if b1 is None:
+            b1 = b1_committed()
+        if not b1:
+            raise Refused('heldout_before_b1', 'seed %d is held out (section 3) and ADDENDUM-B1.md is not committed' % seed)
 
 
 def _norm(p):
@@ -226,6 +232,11 @@ def _norm(p):
 def inside(path, root):
     """Whether path lies strictly inside root, both resolved (junctions and symlinks followed)."""
     return _norm(root) in _norm(path).parents
+
+
+def overlaps_round1(path):
+    """Whether path is, holds or lies inside one of round 1's folders (round2.ROUND1_ROOTS)."""
+    return any(_norm(path) == _norm(r) or inside(path, r) or inside(r, path) for r in ROUND1_ROOTS)
 
 
 def _load_pe_fingerprint():
@@ -374,21 +385,23 @@ def check_free_space(run_dir, min_free=MIN_FREE_BYTES):
 
 
 def launch(run, *, project, run_dir, solvers_dir, data_root=DATA_ROOT, launch_log=LAUNCH_LOG,
-           simpa_exe=None, a1=None):
+           simpa_exe=None, b1=None):
     """One SPPS run, after the guards (see the module docstring). Returns launch.json's record."""
     seed = operator.index(run['random_seed'])
     if seed in RESERVED_SEEDS:
         raise Refused('reserved_seed', 'seed %d is reserved for the probes (P12, section 7)' % seed)
+    require_not_heldout(seed, b1)                                        # round 1's seeds, and round 2's before B1
     if run['room'] not in ROOM_ALLOWLIST:
         raise Refused('unknown_room', '%r is not in the allowlist (%s)' % (run['room'], sorted(ROOM_ALLOWLIST)))
-    require_not_heldout(seed, a1)
+    if overlaps_round1(data_root) or overlaps_round1(run_dir):
+        raise Refused('round1_root', "%s is, holds or lies inside one of round 1's folders (%s)" % (data_root, ROUND1_ROOTS))
     if not inside(run_dir, data_root):
         raise Refused('outside_data_root', '%s is not inside %s' % (run_dir, data_root))
     check = check_solvers(solvers_dir)
     if not check['verified']:
         raise Refused('solver_unverified', '%s: %s' % (solvers_dir, [c['name'] for c in check['checks'] if not c['matches']]))
-    if run['room'] in rooms.NAMES and not (a1_committed() if a1 is None else a1):
-        raise Refused('heldout_before_a1', 'room %s is held out: no run of it, whatever its seed, before ADDENDUM-A1.md '
+    if run['room'] in HELDOUT_ROOMS and not (b1_committed() if b1 is None else b1):
+        raise Refused('heldout_before_b1', 'room %s is held out: no run of it, whatever its seed, before ADDENDUM-B1.md '
                                            'is committed (P1, P4)' % run['room'])
     check_free_space(run_dir)
 

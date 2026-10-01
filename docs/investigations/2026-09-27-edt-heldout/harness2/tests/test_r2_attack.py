@@ -39,7 +39,8 @@ def test_t40_attack_round_2(tmp_path, monkeypatch):
     assert (sb / 'method.py').read_bytes() == FROZEN2.read_bytes()
     assert hashlib.sha256((sb / 'method.py').read_bytes()).hexdigest() == FROZEN2_SHA256
     iface = (sb / 'INTERFACE.md').read_text(encoding='utf-8')
-    assert set(re.findall(r'^- `([a-z_]+)`', iface, re.M)) == reasons, 'INTERFACE.md names every refusal, and only those'
+    section = iface.split('## Refusal reasons')[1]
+    assert set(re.findall(r'^- `([a-z_]+)`', section, re.M)) == reasons, 'INTERFACE.md names every refusal, and only those'
     assert 'receiver_too_large' in iface and 'wrong-silent' in iface and 'never' in iface
     assert "'ok'" in iface and "'wide'" in iface and "'refused'" in iface
     # a changed file voids the build and writes nothing

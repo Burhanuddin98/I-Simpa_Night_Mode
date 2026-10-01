@@ -59,7 +59,9 @@ INVESTIGATION = HARNESS.parent                          # docs/investigations/20
 REPO = INVESTIGATION.parents[2]                         # the worktree
 SIMPLIFY = REPO / 'docs' / 'investigations' / '2026-09-27-edt-simplify'
 FROZEN = INVESTIGATION / 'frozen' / 'method.py'
-FROZEN_SHA256 = '462c37cf159d4d9bd8abadd8261f975fa47ace66f0d4cb4b1e6f4234c77fdf6e'   # PREREG.md:8
+FROZEN_SHA256 = '462c37cf159d4d9bd8abadd8261f975fa47ace66f0d4cb4b1e6f4234c77fdf6e'   # PREREG.md:8 (round 1: a control here)
+FROZEN2 = INVESTIGATION / 'frozen2' / 'method.py'       # round 2's method, v2.1 (PREREG-2.md, amendment 1: Z = 2.5)
+FROZEN2_SHA256 = '029d90ac5e8f6a634a51a7ffce136cbd4c0b7ea3d3ad8a18b78fd8240ff224a0'   # LF bytes; also in ../frozen2.sha256
 SYNTH = SIMPLIFY / 'critique' / 'synth.py'
 # critique/synth.py with its line ends as git stores them (\n): the same bytes as target/'s original.
 SYNTH_SHA256_LF = '3399262fc310059918465d3ed4b0c963da33e39bc9428721fbddb7907fe1bc11'

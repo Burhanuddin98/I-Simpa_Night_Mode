@@ -130,7 +130,6 @@ def _build(monkeypatch, tmp_path, *, edt, truth_val, split_result):
         _write_run(p, s, _report(bins))
         refs.append(p)
 
-    monkeypatch.setattr(spps_rows.rooms_mod, 'rooms', _fake_room)
     monkeypatch.setattr(spps_rows.method, 'load', lambda path=None: _FakeMethod(edt))
 
     def fake_assess(refs_, dt, t_arr, h, blocked=False):
@@ -145,7 +144,7 @@ def _build(monkeypatch, tmp_path, *, edt, truth_val, split_result):
     monkeypatch.setattr(spps_rows.truth, 'split_borderline', fake_split)
 
     rows = spps_rows.rows_from_runs('FakeRoom', tested, refs, mode='random', particles=150000, seed=1101,
-                                    data_root=tmp_path)
+                                    data_root=tmp_path, geometry=_fake_room()['FakeRoom'])
     return rows, calls
 
 
@@ -185,7 +184,6 @@ def test_spps_rows_skips_split_borderline_when_truth_is_not_ok(monkeypatch, tmp_
         p = tmp_path / ('ref%d' % i)
         _write_run(p, s, _report(bins))
         refs.append(p)
-    monkeypatch.setattr(spps_rows.rooms_mod, 'rooms', _fake_room)
     monkeypatch.setattr(spps_rows.method, 'load', lambda path=None: _FakeMethod(1.1))
 
     def fake_assess_truncated(refs_, dt, t_arr, h, blocked=False):
@@ -197,6 +195,6 @@ def test_spps_rows_skips_split_borderline_when_truth_is_not_ok(monkeypatch, tmp_
                         lambda *a, **k: calls.append(1) or True)
 
     rows = spps_rows.rows_from_runs('FakeRoom', tested, refs, mode='random', particles=150000, seed=1101,
-                                    data_root=tmp_path)
+                                    data_root=tmp_path, geometry=_fake_room()['FakeRoom'])
     assert rows[0]['truth_status'] == 'truth_truncated'
     assert calls == [], 'split_borderline must not be consulted for a row assess() already excluded'

@@ -1,22 +1,32 @@
-"""The M8b EDT held-out scoring run: H1-H5 on the three fresh sets (PREREG.md:55-60), not H6.
+"""The M8b EDT held-out scoring run, round 2: H1-H5 on the three fresh sets (PREREG-2.md), not H6.
 
 Assembles the inputs of SPPS-fresh (Random and Energetic, P11), ISM-fresh and Synth-fresh from the
-harness's own functions only, hands them to score.evaluate (the frozen method, the Z = 3 side
-report that decides nothing, and upstream's port, all hash-checked there), and writes every row and
-every count. No physics, no threshold and no seed is defined here: each one is the harness's, which
-takes it from ADDENDUM-A1.md.
+harness's own functions only, hands them to score.evaluate (round 2's method, Z = 2.5, and upstream's
+port, both hash-checked there), and writes every row and every count. No physics, no threshold and no
+seed is defined here: each one is the harness's, which takes it from ADDENDUM-B1.md.
+
+No-swap rule (HARNESS-PLAN-2.md section 9 M2, written before any round-2 run): every G room is scored whatever its truth
+runs show. A designed feature that misses on the truth runs (G2 truth T30 under 2.5 s at 1 kHz, G7 truth T30 over 0.25 s, G3
+not double-sloped) is reported as missing in RESULTS.md and VERDICT-2.md. No room is swapped, redesigned or dropped after any
+truth run exists, and nothing in this scorer can do so: it scores the rows of the 172 planned runs and no others.
+
+The run order is enforced before anything is read: preflight() refuses (driver.Refused) without B1 committed, on
+round 1's folders or results, with any of the 172 run folders missing or partial, and when a fresh draw of ISM-fresh-2,
+Synth-fresh-2 or the G rooms differs from preview_pin.json (section 9 M3). --dry skips it: planted and dev inputs only.
 
 Where each set's rows come from:
 - SPPS-fresh: driver.plan()'s 144 tested runs (72 Random, 72 Energetic) and its 28 truth runs, folders
   <data_root>/<run_id>, read through spps_rows.rows_from_runs (which reads them with driver.read_run).
-  Each tested run's references are its room's four truth runs, seeds driver.TRUTH_SEEDS. A run folder
+  Each tested run's references are its room's four truth runs, seeds driver.TRUTH_SEEDS (9101-9104). A run folder
   named *.partial-* is never looked at: the plan's exact run_id folder is. An 'id' gets '|<mode>' added,
   because score.evaluate refuses one id twice in a set and the two modes' runs share rows_from_runs's id.
-- ISM-fresh: ism_fresh.draw(driver.ISM_SEED) (P21, P22), rows by ism_fresh.rows_for_scoring, which
+- ISM-fresh-2: ism_fresh.draw(driver.ISM_SEED) (P21, P22), rows by ism_fresh.rows_for_scoring, which
   builds every row with retry_truncated=True (8.2's fourth call). It is called once per room, in worker
   processes, and each worker memoises the generator's echogram (a pure function of its arguments, and
   make_row only reads the arrays it gets) so the 27 band-and-step rows of one receiver share one image
-  sum instead of repeating it. The workers are few because one large echogram took 7.6 GB (8.2).
+  sum instead of repeating it. The workers are few because one large echogram took 7.6 GB (8.2). P34: each
+  worker logs 'ism room <id> start: <images> images, pid <pid>' before any work, and 'ism room <id> receiver
+  k/n (<s> s)' after each receiver, so a room that takes an hour is visible from its first minute.
 - Synth-fresh: synth_fresh.draw(driver.SYNTH_SEED) (P24, P33), histogram(spec) and truth(spec) per
   spec, 'family' the rate ratio (P23).
 
@@ -32,9 +42,9 @@ Outputs under --out (never overwritten: a non-empty folder is refused):
 non-held-out seed and a few rows for ISM and Synth. It never reads B:\\data\\m8b-edt\\heldout and
 never draws a held-out seed.
 
-Usage, from harness/ (venv as SETUP.md says):
-    C:\\tmp\\m8b-edt\\venv\\Scripts\\python.exe -m m8b.score_heldout --dry --out C:\\tmp\\m8b-edt\\dry\\score_heldout
-    C:\\tmp\\m8b-edt\\venv\\Scripts\\python.exe -m m8b.score_heldout --out B:\\data\\m8b-edt\\results\\run1
+Usage, from harness2/ (venv as SETUP.md says):
+    C:\\tmp\\m8b-edt\\venv\\Scripts\\python.exe -m m8b.score_heldout --dry --out C:\\tmp\\m8b-edt\\dry\\score_heldout2
+    C:\\tmp\\m8b-edt\\venv\\Scripts\\python.exe -m m8b.score_heldout --out B:\\data\\m8b-edt\\round2\\results\\run2
 """
 import argparse
 import csv
@@ -42,22 +52,36 @@ import datetime
 import gzip
 import json
 import multiprocessing
+import os
 import pickle
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
 import numpy as np
 
-from . import corpus, driver, ism_fresh, rooms as rooms_mod, score, spps_rows, synth_fresh
+from . import corpus, corpus2, driver, ism_fresh, rooms as rooms_mod, rooms2, round2, run_heldout, score, spps_rows, synth_fresh
 
-DATA_ROOT = Path(r'B:\data\m8b-edt\heldout')
-PROGRESS_LOG = Path(r'C:\tmp\m8b-edt\progress.log')
+DATA_ROOT = round2.DATA_ROOT
+RESULTS_ROOT = round2.RESULTS_ROOT
+PROGRESS_LOG = round2.PROGRESS_LOG
 DRY_SEED = 20261001                     # not in driver.HELDOUT_SEEDS
 DRY_ISM_RECEIVERS = 3
 DRY_SYNTH_PER_CELL = 6
-ISM_WORKERS = 2                         # 7.6 GB for one large echogram (8.2); Grace has 32 GB
+ISM_WORKERS = round2.ISM_WORKERS        # 7.6 GB for one large echogram (8.2); Grace has 32 GB
+
+
+# One lock for every writer of the log. On Windows an append from two handles is not atomic (the CRT seeks to the end,
+# then writes), so P34's lines from two worker processes, and the parent's, can overwrite one another: T41 lost a line
+# to it with threads. In the real run the lock is a multiprocessing lock made by _make_pool and handed to each worker.
+_LOCK = threading.Lock()
+
+
+def _init_worker(lock):
+    global _LOCK
+    _LOCK = lock
 
 
 class Log:
@@ -67,9 +91,31 @@ class Log:
 
     def __call__(self, msg):
         line = '%s score: %s\n' % (datetime.datetime.now().strftime('%H:%M'), msg)
-        with open(self.path, 'a', encoding='utf-8') as f:
-            f.write(line)
+        with _LOCK:
+            with open(self.path, 'a', encoding='utf-8') as f:
+                f.write(line)
         print(line, end='', flush=True)
+
+
+# ---- the run order (HARNESS-PLAN-2.md section 7) -----------------------------------------------------------------
+def preflight(*, data_root, out, pin=True):
+    """Everything that must hold before a row is read: B1 committed, no round-1 folder as the data root or the output,
+    all 172 planned run folders complete (a missing or partial one is named), and, when pin is True, a fresh draw of
+    ISM-fresh-2, Synth-fresh-2 and the G rooms equal to preview_pin.json. Raises driver.Refused; returns None."""
+    if not driver.b1_committed():
+        raise driver.Refused('heldout_before_b1', 'ADDENDUM-B1.md is not committed: nothing of round 2 is scored before the freeze')
+    for what, path in (('data root', data_root), ('output folder', out)):
+        if driver.overlaps_round1(path):
+            raise driver.Refused('round1_root', 'the %s %s is, holds or lies inside one of round 1\'s folders: round 1 is never '
+                                                're-scored' % (what, path))
+    bad = [r['run_id'] for r in driver.plan() if run_heldout.run_status(Path(data_root) / r['run_id']) != 'complete']
+    if bad:
+        raise driver.Refused('run_folders_incomplete', '%d of the 172 planned run folders under %s are missing or partial, the first '
+                                                       '%s' % (len(bad), data_root, bad[0]))
+    if pin:
+        differs = corpus2.check_pin()
+        if differs:
+            raise driver.Refused('pin_mismatch', 'a fresh draw differs from preview_pin.json: %s' % differs)
 
 
 # ---- SPPS-fresh --------------------------------------------------------------------------------------
@@ -114,16 +160,14 @@ def build_spps(data_root, log):
 
 
 def build_spps_dry(log):
-    from dry import build_d2                                   # planted fixture, harness/dry/
+    from dry import build_d2                                   # planted fixture, harness2/dry/
     manifest = build_d2.build()
-    rooms_mod.rooms = lambda: manifest['room']
-    spps_rows.rooms_mod.rooms = lambda: manifest['room']
     rows = []
     for dirs in manifest['tested'].values():
         for tdir in dirs:
             seed = int(Path(tdir).name.rsplit('seed', 1)[1])
             rows.extend(spps_rows.rows_from_runs('mock_d2', tdir, manifest['refs'], mode='random', particles=0,
-                                                 seed=seed, data_root=build_d2.OUT))
+                                                 seed=seed, data_root=build_d2.OUT, geometry=manifest['room']['mock_d2']))
     for r in rows:
         r['id'] += '|random'
     # the same rows as an Energetic set, so the two-mode path is exercised
@@ -149,16 +193,30 @@ def _memoise_echogram():
     ism._m8b_memo = True
 
 
+def _make_pool(workers):
+    global _LOCK
+    ctx = multiprocessing.get_context('spawn')
+    _LOCK = ctx.Lock()                                  # the parent's lines share it with the workers' (see Log)
+    return ctx.Pool(workers, initializer=_init_worker, initargs=(_LOCK,))
+
+
 def _ism_room(arg):
-    D_room, = arg
+    """One room in a worker. P34: a line before any work (id, image count, pid), a line after each receiver, so a room
+    that takes an hour is visible from its first minute (round 1 logged only when a room finished)."""
+    D_room, log_path = arg
+    room = D_room['rooms'][0]
+    log = Log(log_path)
+    images = room.get('images', ism_fresh.n_images(room['dims_m'], 343.2 * room['image_time_s']))
+    log('ism room %s start: %d images, pid %d' % (room['id'], images, os.getpid()))
     _memoise_echogram()
     t0 = time.monotonic()
-    rows = ism_fresh.rows_for_scoring(D_room)
-    return D_room['rooms'][0]['id'], rows, time.monotonic() - t0
+    rows = ism_fresh.rows_for_scoring(D_room, on_receiver=lambda k, n, secs: log(
+        'ism room %s receiver %d/%d (%.0f s)' % (room['id'], k, n, secs)))
+    return room['id'], rows, time.monotonic() - t0
 
 
 def build_ism(D, log, workers):
-    tasks = [(dict(D, rooms=[room]),) for room in D['rooms']]
+    tasks = [(dict(D, rooms=[room]), log.path) for room in D['rooms']]
     # largest image sets first, so the heavy rooms never wait behind the light ones
     tasks.sort(key=lambda t: -ism_fresh.n_images(t[0]['rooms'][0]['dims_m'], 343.2 * t[0]['rooms'][0]['image_time_s']))
     by_room = {}
@@ -166,7 +224,7 @@ def build_ism(D, log, workers):
         results = map(_ism_room, tasks)
         pool = None
     else:
-        pool = multiprocessing.get_context('spawn').Pool(workers)
+        pool = _make_pool(workers)
         results = pool.imap_unordered(_ism_room, tasks)
     try:
         for rid, rows, secs in results:
@@ -187,7 +245,7 @@ def build_synth(specs):
         rows.append(dict(set='synth', id=s['id'], bins=synth_fresh.histogram(s), dt=s['dt'],
                          t_arrival=s['t_arrival'], meta=dict(half_width=s['half_width']),
                          truth=synth_fresh.truth(s), truth_status='ok', family=s['ratio'],
-                         step_ms=s['step_ms']))
+                         step_ms=s['step_ms'], R_m=s['R_m']))
     return rows
 
 
@@ -198,7 +256,7 @@ def _dump(path, obj):
 
 
 CSV_FIELDS = ('set', 'id', 'mode', 'room', 'd_m', 'step_ms', 'band_hz', 'particles', 'seed', 'family',
-              'design_t60_s', 'truth', 'truth_status', 'excluded_as')
+              'design_t60_s', 'R_m', 'truth', 'truth_status', 'excluded_as')
 RES_FIELDS = ('status', 'edt', 'edt_lo', 'edt_hi', 'reason', 'err', 'ok', 'usable', 'has_truth', 'wrong_silent',
               'covered')
 
@@ -214,14 +272,14 @@ def write_rows_csv(score_dir, path):
 
 def counts_of(summary, extra):
     """Every count the summary holds, regrouped: tables and exclusions per label and instance, the
-    criteria per instance and mode. H6 is left out: the attacker round is a separate step."""
+    criteria per mode. H6 is left out: the attacker round is a separate step."""
     crit = {}
     for inst, per_mode in summary['criteria'].items():
         crit[inst] = {}
         for mode, c in per_mode.items():
             crit[inst][mode] = {h: c[h] for h in ('H1', 'H2', 'H3', 'H4', 'H5')}
     return dict(inputs=summary['inputs'], tables={k: v for k, v in summary['tables'].items() if k != 'attack'},
-                criteria=crit, method=summary['method'], z3=summary['z3'], upstream=summary['upstream'],
+                criteria=crit, method=summary['method'], upstream=summary['upstream'],
                 generated=summary['generated'], **extra)
 
 
@@ -233,17 +291,30 @@ def _pf(ok):
     return 'pass' if ok else 'FAIL'
 
 
+def _h4_line(p):
+    return ('H4 **%s**: n = %d rows (%d in the filter, %d refused as receiver_too_large = %s, which leave the denominator); '
+            'usable %d of %d = %s (target >= 90 %%); ok share %s (reported, not gated); other refusals %s.' % (
+                _pf(p['pass']), p['n'], p['n_before'], p['n_receiver_too_large'], _p(p['n_receiver_too_large'], p['n_before']),
+                p['n_usable'], p['n'], _p(p['n_usable'], p['n']), _p(p['n_ok'], p['n']), p['refused'] or 'none'))
+
+
 def results_md(summary, extra, run_name, script_commit, dry):
     c = summary['criteria']
     T = summary['tables']
-    L = ['# M8b EDT held-out test: RESULTS (H1-H5)%s' % (' [DRY RUN: planted and dev inputs, not the held-out data]' if dry else ''),
+    Z = summary['method']['Z']
+    L = ['# M8b EDT held-out test, round 2: RESULTS (H1-H5)%s' % (' [DRY RUN: planted and dev inputs, not the held-out data]' if dry else ''),
          '',
-         'Run `%s`, scored by `harness/m8b/score_heldout.py` at commit `%s`. Frozen method sha256 `%s` (Z = 2), checked '
-         'before anything ran. H6 (the attacker round) is not part of this run. Z = 3 is a side report and decides '
-         'nothing (PREREG.md:11). Wrong-silent is |edt/truth - 1| > 5%% on an ok row with a truth; refusals are '
-         'never wrong (PREREG.md:62).' % (run_name, script_commit, summary['method']['sha256']), '']
+         'Run `%s`, scored by `harness2/m8b/score_heldout.py` at commit `%s`. Method: frozen2/method.py (v2.1) sha256 `%s`, Z = %g, '
+         'checked before anything ran. H6 (the attacker round) is not part of this run. No secondary Z is reported (PREREG-2.md). '
+         'Wrong-silent is |edt/truth - 1| > 5%% on an ok row with a truth, at every receiver radius; refusals are never wrong '
+         '(PREREG.md:62).' % (run_name, script_commit, summary['method']['sha256'], Z),
+         '',
+         '**Features that miss.** Every G room is scored whatever its truth shows (PREREG-2 / HARNESS-PLAN-2.md section 9 M2). A '
+         'designed feature that a truth run does not confirm (G2 truth T30 under 2.5 s at 1 kHz, G7 truth T30 over 0.25 s, G3 not '
+         'double-sloped) is reported here and in VERDICT-2.md as missing; no room is swapped, redesigned or dropped. The truth '
+         'features checked: %s.' % (extra.get('features', 'not checked in this run')), '']
     for mode in ('random', 'energetic'):
-        L += ['## SPPS-fresh, %s (frozen, Z = 2)' % mode.capitalize(), '']
+        L += ['## SPPS-fresh-2, %s (frozen, Z = %g)' % (mode.capitalize(), Z), '']
         h2, h3, h4, h5 = (c['frozen'][mode][h] for h in ('H2', 'H3', 'H4', 'H5'))
         L.append('- H2 **%s**: coverage %s of %s usable rows with a truth = %s (target >= 90 %%); wrong-silent %s of %s ok '
                  'rows with a truth = %s (target <= 3 %%).' % (
@@ -251,46 +322,40 @@ def results_md(summary, extra, run_name, script_commit, dry):
                      h2['n_wrong_silent'], h2['n_ok_truth'], _p(h2['n_wrong_silent'], h2['n_ok_truth'], 2)))
         sp = {k: g for k, g in h3['subgroups'].items() if k.startswith('spps|')}
         sp_fail = {k: g for k, g in sp.items() if not g['pass']}
-        L.append('- H3 **%s** (all sets in this criterion: %d failing subgroups of %d judged): SPPS-fresh subgroups: %d, '
+        L.append('- H3 **%s** (all sets in this criterion: %d failing subgroups of %d judged): SPPS-fresh-2 subgroups: %d, '
                  'judged %d, failing %d.' % (_pf(h3['pass']), h3['n_failing'], h3['n_judged'], len(sp),
                                             sum(g['judged'] for g in sp.values()), len(sp_fail)))
         for k, g in sorted(sp_fail.items()):
             L.append('  - `%s`: %d of %d ok rows wrong-silent (%s)' % (k, g['n_wrong_silent'], g['n_ok_truth'],
                                                                      _p(g['n_wrong_silent'], g['n_ok_truth'])))
-        p4 = h4['per_set']['spps']
-        L.append('- H4 **%s**: usable %d of %d rows at 1 ms and design T60 <= 3 s = %s (target >= 90 %%); ok share %s; '
-                 'refused by reason %s.' % (_pf(p4['pass']), p4['n_usable'], p4['n'], _p(p4['n_usable'], p4['n']),
-                                           _p(p4['n_ok'], p4['n']), p4['refused'] or 'none'))
+        L.append('- ' + _h4_line(h4['per_set']['spps']))
         p5 = h5['per_set']['spps']
         L.append('- H5 **%s**: wrong-silent, ours %d against upstream %d, on %d rows with a truth.' % (
             _pf(p5['pass']), p5['n_wrong_silent'], p5['n_wrong_silent_upstream'], p5['n_eligible']))
         L.append('')
     h1, h3r, h4r, h5r = (c['frozen']['random'][h] for h in ('H1', 'H3', 'H4', 'H5'))
-    L += ['## ISM-fresh (frozen, Z = 2)', '']
+    L += ['## ISM-fresh-2 (frozen, Z = %g)' % Z, '']
     p = h1['per_set']['ism']
-    L.append('- H1 **%s**: wrong-silent %d of %d ok rows with a truth = %s (target <= 0.5 %%).' % (
+    L.append('- H1 **%s**: wrong-silent %d of %d ok rows with a truth = %s (target <= 0.5 %%), every receiver radius.' % (
         _pf(p['pass']), p['n_wrong_silent'], p['n_ok_truth'], _p(p['n_wrong_silent'], p['n_ok_truth'], 2)))
     sub = {k: g for k, g in h3r['subgroups'].items() if k.startswith('ism|')}
     bad = {k: g for k, g in sub.items() if not g['pass']}
-    L.append('- H3 **%s**: ISM-fresh subgroups %d, judged %d, failing %d.' % (
+    L.append('- H3 **%s**: ISM-fresh-2 subgroups %d, judged %d, failing %d.' % (
         _pf(not bad), len(sub), sum(g['judged'] for g in sub.values()), len(bad)))
     for k, g in sorted(bad.items()):
         L.append('  - `%s`: %d of %d ok rows wrong-silent (%s)' % (k, g['n_wrong_silent'], g['n_ok_truth'],
                                                                  _p(g['n_wrong_silent'], g['n_ok_truth'])))
-    p = h4r['per_set']['ism']
-    L.append('- H4 **%s**: usable %d of %d rows at 1 ms and design T60 <= 3 s = %s (target >= 90 %%); ok share %s; '
-             'refused by reason %s.' % (_pf(p['pass']), p['n_usable'], p['n'], _p(p['n_usable'], p['n']),
-                                       _p(p['n_ok'], p['n']), p['refused'] or 'none'))
+    L.append('- ' + _h4_line(h4r['per_set']['ism']))
     p = h5r['per_set']['ism']
     L.append('- H5 **%s**: wrong-silent, ours %d against upstream %d, on %d rows with a truth.' % (
         _pf(p['pass']), p['n_wrong_silent'], p['n_wrong_silent_upstream'], p['n_eligible']))
-    L += ['', '## Synth-fresh (frozen, Z = 2)', '']
+    L += ['', '## Synth-fresh-2 (frozen, Z = %g)' % Z, '']
     p = h1['per_set']['synth']
-    L.append('- H1 **%s**: wrong-silent %d of %d ok rows with a truth = %s (target <= 0.5 %%).' % (
+    L.append('- H1 **%s**: wrong-silent %d of %d ok rows with a truth = %s (target <= 0.5 %%), every receiver radius.' % (
         _pf(p['pass']), p['n_wrong_silent'], p['n_ok_truth'], _p(p['n_wrong_silent'], p['n_ok_truth'], 2)))
     sub = {k: g for k, g in h3r['subgroups'].items() if k.startswith('synth|')}
     bad = {k: g for k, g in sub.items() if not g['pass']}
-    L.append('- H3 **%s**: Synth-fresh subgroups (family x step) %d, judged %d, failing %d.' % (
+    L.append('- H3 **%s**: Synth-fresh-2 subgroups (family x step) %d, judged %d, failing %d.' % (
         _pf(not bad), len(sub), sum(g['judged'] for g in sub.values()), len(bad)))
     for k, g in sorted(bad.items()):
         L.append('  - `%s`: %d of %d ok rows wrong-silent (%s)' % (k, g['n_wrong_silent'], g['n_ok_truth'],
@@ -298,8 +363,15 @@ def results_md(summary, extra, run_name, script_commit, dry):
     p = h5r['per_set']['synth']
     L.append('- H5 **%s**: wrong-silent, ours %d against upstream %d, on %d rows with a truth.' % (
         _pf(p['pass']), p['n_wrong_silent'], p['n_wrong_silent_upstream'], p['n_eligible']))
+    L += ['', '## H4 n, by set (the rows left in the denominator; the scorer prints it for every set and mode)', '',
+          '| Mode | Set | n before | receiver_too_large | n | usable | ok |', '|---|---|---|---|---|---|---|']
+    for mode in ('random', 'energetic'):
+        for st, q in c['frozen'][mode]['H4']['per_set'].items():
+            L.append('| %s | %s | %d | %d (%s) | %d | %s | %s |' % (mode, score.NAMES[st], q['n_before'], q['n_receiver_too_large'],
+                                                                   _p(q['n_receiver_too_large'], q['n_before']), q['n'],
+                                                                   _p(q['n_usable'], q['n']), _p(q['n_ok'], q['n'])))
     L += ['', '## Rows, usable and ok shares, exclusions and refusals, by set and instance', '',
-          'Each cell: frozen (Z = 2) / Z = 3 (not deciding) / upstream.', '',
+          'Each cell: frozen (Z = %g) / upstream.' % Z, '',
           '| Set | rows | usable | ok | wrong-silent of ok with truth | truth outside range | benefit / regress vs upstream (frozen) |',
           '|---|---|---|---|---|---|---|']
     for lab in ('spps-random', 'spps-energetic', 'ism', 'synth'):
@@ -317,21 +389,18 @@ def results_md(summary, extra, run_name, script_commit, dry):
         e = T[lab]['frozen']['excluded']
         L.append('| %s | %d | %d | %d | %d | %d |' % (score.NAMES[lab], e.get('truth_split_borderline', 0),
                  e.get('truth_truncated', 0), e.get('truth_nan', 0), e.get('truth_uncertain', 0), sum(e.values())))
-    L += ['', '### Refusals, by reason and set (frozen / Z = 3 / upstream)', '']
+    L += ['', '### Refusals, by reason and set (frozen / upstream)', '']
     for lab in ('spps-random', 'spps-energetic', 'ism', 'synth'):
         L.append('- %s: %s' % (score.NAMES[lab], ' / '.join(score._counts(T[lab][i]['refused']) for i in score.INSTANCES)))
-    L += ['', '## Z = 3 side report (not deciding, PREREG.md:11)', '']
-    z = c['z3']
-    for mode in ('random', 'energetic'):
-        zz = z[mode]
-        L.append('- SPPS %s: H2 %s (coverage %s, wrong-silent %s); H3 %s (%d failing); H4 %s; H5 %s. ISM H1 %s, Synth H1 %s.' % (
-            mode, _pf(zz['H2']['pass']), _p(zz['H2']['n_covered'], zz['H2']['n_usable_truth']),
-            _p(zz['H2']['n_wrong_silent'], zz['H2']['n_ok_truth'], 2), _pf(zz['H3']['pass']), zz['H3']['n_failing'],
-            _pf(zz['H4']['pass']), _pf(zz['H5']['pass']), _pf(zz['H1']['per_set']['ism']['pass']),
-            _pf(zz['H1']['per_set']['synth']['pass'])))
+    L += ['', '### receiver_too_large over all radii, by set and radius class (frozen)', '',
+          '| Set | R <= 0.5 m | 0.5-1.0 m | R > 1.0 m |', '|---|---|---|---|']
+    for lab in ('spps-random', 'spps-energetic', 'ism', 'synth'):
+        t = T[lab]['rtl_by_r_class']
+        L.append('| %s | %s |' % (score.NAMES[lab], ' | '.join('%d of %d (%s)' % (
+            t[k]['n_receiver_too_large'], t[k]['n_rows'], _p(t[k]['n_receiver_too_large'], t[k]['n_rows'])) for k in score.R_CLASSES)))
     L += ['', '## The draws', '',
-          '- ISM-fresh rejections by reason (seed %s): %s' % (extra['ism_seed'], extra['ism_rejections']),
-          '- Synth-fresh rejections by reason (seed %s): %s' % (extra['synth_seed'], extra['synth_rejections']),
+          '- ISM-fresh-2 rejections by reason (seed %s): %s' % (extra['ism_seed'], extra['ism_rejections']),
+          '- Synth-fresh-2 rejections by reason (seed %s): %s' % (extra['synth_seed'], extra['synth_rejections']),
           '- Rows built: %s.' % extra['rows_built'], '',
           '## score.evaluate\'s own report', '']
     return '\n'.join(L) + '\n'
@@ -356,6 +425,11 @@ def main(argv=None):
     ap.add_argument('--ism-workers', type=int, default=ISM_WORKERS)
     a = ap.parse_args(argv)
     out = Path(a.out)
+    if not a.dry:
+        try:
+            preflight(data_root=Path(a.data_root), out=out)          # before anything is created, read or computed
+        except driver.Refused as e:
+            sys.exit('score_heldout refused: %s' % e)
     if out.exists() and any(out.iterdir()):
         sys.exit('%s exists and is not empty: a results folder is never reused' % out)
     out.mkdir(parents=True, exist_ok=True)
@@ -399,7 +473,7 @@ def main(argv=None):
     _dump(out / 'inputs_synth.pkl.gz', synth)
 
     inputs = spps + ism + synth
-    log('evaluate start: %d rows (frozen, Z = 3, upstream)' % len(inputs))
+    log('evaluate start: %d rows (frozen, upstream)' % len(inputs))
     summary = score.evaluate(inputs, out_dir=out / 'score')
     log('evaluate done')
     write_rows_csv(out / 'score', out / 'rows.csv.gz')

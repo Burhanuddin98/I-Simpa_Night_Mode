@@ -1,0 +1,43 @@
+{
+ "schema": "m8b.preview_pin/1",
+ "note": "Made before B1 and before any round-2 solver run, histogram, echogram or method call: the ISM-fresh-2 draw (rooms, relatives, receivers, image counts, rejections), the Synth-fresh-2 specs (parameters) and the G rooms (geometry, materials, source, receivers, design T60s). B1 records this file; the scorer draws again and refuses to run if any hash differs (corpus2.check_pin).",
+ "seeds": {
+  "ism_fresh_2": 2026100201,
+  "synth_fresh_2": 2026100202,
+  "attack": 2026100203
+ },
+ "corpus_rooms_2_sha256": "5b9b0fba148f7ce3f013eb84b3755ac2b7acd78b657d63c935d3fcf2e8b7fdcc",
+ "ism_fresh_2": {
+  "seed": 2026100201,
+  "n_rooms": 12,
+  "rejections": {
+   "relative_near_duplicate": 21,
+   "relative_over_image_cap": 0,
+   "drawn_V_outside": 0,
+   "drawn_t60_125_outside": 0,
+   "drawn_near_duplicate": 2,
+   "drawn_over_image_cap": 0,
+   "receiver_R_no_room": 0,
+   "receiver_position_outside_class": 1073,
+   "receiver_R_position_cap": 0
+  },
+  "sha256": "e41d47e7abc6882dd61e4163b58489d3cc5c5ccf443e687c4b20645530004977"
+ },
+ "synth_fresh_2": {
+  "seed": 2026100202,
+  "n_specs": 4000,
+  "sha256": "9b40146923569d1c330b859a5b13e44c7656f390b2dae8edf6b9d451e3edcb0b"
+ },
+ "g_rooms": {
+  "names": [
+   "G1",
+   "G2",
+   "G3",
+   "G4",
+   "G5",
+   "G6",
+   "G7"
+  ],
+  "sha256": "57a4e0e2d3eeba5408a94335c16d795911e0deb8143bb46b6b6bdf5e5f68735b"
+ }
+}

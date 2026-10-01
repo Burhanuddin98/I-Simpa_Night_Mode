@@ -92,7 +92,7 @@ def test_t37_synth_fresh_2():
     again = synth_fresh.preview_draw(2026100202)
     assert canon(again) == canon(specs), 'reproducible from the seed'
     # no spec equals, or lies within P3's 10 % of, one of round 1's, parameter by parameter, in its own cell (m5)
-    old = synth_fresh.preview_draw(2026100101)
+    old = synth_fresh._draw(2026100101)                # round 1's record, read through the unguarded draw
     assert len(old) == 4000
     key = lambda s: tuple(s[k] for k in ('ratio', 'step_ms', 't60_s', 'late_share_db', 'drr_db', 'R_m', 'd_m', 'gap_ms',
                                          'delay_ms', 'run_over_t60'))

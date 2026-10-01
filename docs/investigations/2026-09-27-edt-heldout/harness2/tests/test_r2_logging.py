@@ -2,6 +2,9 @@
 each receiver. Round 1 logged only when a room finished: first line at 20:05 for a job started at 19:13.
 Fake workers only: nothing here builds an echogram.
 """
+import multiprocessing.pool
+import threading
+
 import numpy as np
 
 from m8b import ism_fresh, score_heldout
@@ -16,7 +19,10 @@ def test_t41_ism_rooms_log_start_before_done_and_one_line_per_receiver(tmp_path,
     rooms = [room('rel:t1', 12345), room('drawn:1', 67890), room('drawn:2', 24680)]
     D = dict(seed=1, rooms=rooms, rejections={}, corpus_rooms_sha256='x')
 
+    barrier = threading.Barrier(3)          # three workers: every room has started before any can finish
+
     def fake_rows(Droom, on_receiver=None):
+        barrier.wait(timeout=30)
         n = len(Droom['rooms'][0]['receivers'])
         for k in range(1, n + 1):
             on_receiver(k, n, 0.25 * k)
@@ -24,8 +30,9 @@ def test_t41_ism_rooms_log_start_before_done_and_one_line_per_receiver(tmp_path,
 
     monkeypatch.setattr(ism_fresh, 'rows_for_scoring', fake_rows)
     monkeypatch.setattr(score_heldout, '_memoise_echogram', lambda: None)
+    monkeypatch.setattr(score_heldout, '_make_pool', lambda n: multiprocessing.pool.ThreadPool(n))
     log = score_heldout.Log(tmp_path / 'p.log')
-    rows = score_heldout.build_ism(D, log, workers=1)
+    rows = score_heldout.build_ism(D, log, workers=3)
     assert len(rows) == 9
     lines = (tmp_path / 'p.log').read_text(encoding='utf-8').splitlines()
     starts = [i for i, l in enumerate(lines) if 'ism room' in l and ' start' in l]

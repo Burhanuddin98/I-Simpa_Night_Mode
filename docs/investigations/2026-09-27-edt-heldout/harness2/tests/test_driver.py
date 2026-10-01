@@ -1,4 +1,5 @@
-"""T12-T14 (HARNESS-PLAN.md section 4): the driver's plan-only mode, its guards, and its reader.
+"""T12-T14 as round 2 reads them (HARNESS-PLAN-2.md sections 3 and 6; round 1's version: ../../harness/tests/test_driver.py):
+the driver's plan-only mode, its guards, and its reader. T34 and T35 (test_r2_plan_guards.py) hold round 2's new guards.
 
 No test here can launch a solver: every launch() call names a project and a simpa.exe that do not
 exist, so a guard that fails cannot start a run. Nothing is written under C:\\tmp\\m8b-edt\\heldout.
@@ -21,13 +22,13 @@ from pathlib import Path
 import numpy as np
 from conftest import REPO, SCRATCH
 
-from m8b import driver, ism_fresh, rooms, synth_fresh
+from m8b import driver, ism_fresh, rooms2, synth_fresh
 
-NAMES = ('F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7')
-SEEDS = {(1.0, 150000): (1101, 1102, 1103), (2.0, 150000): (1201, 1202, 1203), (5.0, 150000): (1501, 1502, 1503),
-         (1.0, 50000): (2101, 2102, 2103), (2.0, 50000): (2201, 2202, 2203), (5.0, 50000): (2501, 2502, 2503)}   # P12
-TRUTH_SEEDS = (9001, 9002, 9003, 9004)
-P17_LISTED = {'F1': 3.0, 'F2': 6.5, 'F3': 4.3, 'F4': 3.0, 'F5': 3.0, 'F6': 3.0}     # P17 as corrected (8.1)
+NAMES = ('G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7')
+SEEDS = {(1.0, 150000): (3101, 3102, 3103), (2.0, 150000): (3201, 3202, 3203), (5.0, 150000): (3501, 3502, 3503),
+         (1.0, 50000): (4101, 4102, 4103), (2.0, 50000): (4201, 4202, 4203), (5.0, 50000): (4501, 4502, 4503)}   # section 3
+TRUTH_SEEDS = (9101, 9102, 9103, 9104)
+P17_LISTED = {'G1': 3.0, 'G2': 5.9, 'G3': 3.9, 'G4': 3.0, 'G5': 3.0, 'G6': 3.0, 'G7': 3.0}     # P17 on the G rooms
 EXES = ('spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe')
 DEV_SEED = 4242
 
@@ -47,7 +48,7 @@ def test_t12_plan_only_lists_the_matrix_with_p12_seeds():
     runs = driver.plan()
     assert runs is not None, 'driver.plan() returned nothing'
     assert sorted(p.name for p in SCRATCH.iterdir()) == before, 'plan-only created something under %s' % SCRATCH
-    R = rooms.rooms()
+    R = rooms2.rooms()
     assert R is not None
     tested = [r for r in runs if r['kind'] == 'tested']
     truth = [r for r in runs if r['kind'] == 'truth']
@@ -61,7 +62,7 @@ def test_t12_plan_only_lists_the_matrix_with_p12_seeds():
     for mode in ('random', 'energetic'):
         for room in NAMES:
             rs = [r for r in tested if r['mode'] == mode and r['room'] == room]
-            want = {(step, n, s) for (step, n), seeds in SEEDS.items() for s in seeds if n == 150000 or room == 'F6'}
+            want = {(step, n, s) for (step, n), seeds in SEEDS.items() for s in seeds if n == 150000 or room == 'G6'}
             got = {(round(r['time_step_s'] * 1e3, 9), r['particles_per_source'], r['random_seed']) for r in rs}
             assert got == want and len(rs) == len(want), (mode, room)
             assert len({r['random_seed'] for r in rs}) == len(rs), 'a seed repeats in %s %s' % (room, mode)
@@ -102,7 +103,7 @@ def flip_text_byte(src, dst):
 
 
 def dev_run(seed=DEV_SEED, run_id='t13'):
-    return dict(run_id=run_id, room='F1', kind='dev', mode='random', time_step_s=0.001,
+    return dict(run_id=run_id, room='G1', kind='dev', mode='random', time_step_s=0.001,
                 particles_per_source=1000, random_seed=seed, duration_s=0.1)
 
 
@@ -137,7 +138,7 @@ def refused(code, fn, *a, **k):
 def test_t13_guards_refuse_before_anything_runs(tmp_path, solvers_dir, target_root):
     """T13: a flipped spps.exe is refused before any run; a report whose solver_build is unverified is
     refused; seed 9999, or a folder outside the data root, is refused; a held-out seed (SPPS, ISM or
-    Synth) is refused while ADDENDUM-A1.md is not committed."""
+    Synth) is refused while ADDENDUM-B1.md is not committed."""
     root = tmp_path / 'data'
     root.mkdir()
     log = tmp_path / 'launch.log'
@@ -163,20 +164,19 @@ def test_t13_guards_refuse_before_anything_runs(tmp_path, solvers_dir, target_ro
     refused('reserved_seed', driver.launch, dev_run(9999), run_dir=root / 'b', solvers_dir=solvers_dir, data_root=root, **nothing)
     refused('reserved_seed', driver.launch, dev_run(9998), run_dir=root / 'b', solvers_dir=solvers_dir, data_root=root, **nothing)
 
-    # held-out seeds before A1 (P12's, Synth-fresh's and ISM-fresh's)
-    assert driver.a1_committed() is False, 'ADDENDUM-A1.md is not committed yet: update T13 when it is'
+    # held-out seeds before B1 (section 3's, Synth-fresh-2's and ISM-fresh-2's)
     heldout = [s for seeds in SEEDS.values() for s in seeds] + list(TRUTH_SEEDS)
-    for s in heldout + [2026100101, 2026100102]:
+    for s in heldout + [2026100201, 2026100202, 2026100203]:
         assert driver.heldout_seed(s) is True, s
-    for s in (DEV_SEED, 9999, 9998, 7, 20261001):
+    for s in (DEV_SEED, 9999, 9998, 7, 20261001, 1101, 2026100101):         # round 1's seeds are refused by T35, not held out here
         assert driver.heldout_seed(s) is False, s
     for s in heldout:
-        refused('heldout_before_a1', driver.launch, dev_run(s), run_dir=root / ('h%d' % s), solvers_dir=solvers_dir,
-                data_root=root, a1=False, **nothing)
-    refused('heldout_before_a1', driver.require_not_heldout, 1101, a1=False)
-    driver.require_not_heldout(1101, a1=True)                  # after A1 the seed is allowed
-    refused('heldout_before_a1', synth_fresh.draw, 2026100101, a1=False)
-    refused('heldout_before_a1', ism_fresh.draw, 2026100102, a1=False)
+        refused('heldout_before_b1', driver.launch, dev_run(s), run_dir=root / ('h%d' % s), solvers_dir=solvers_dir,
+                data_root=root, b1=False, **nothing)
+    refused('heldout_before_b1', driver.require_not_heldout, 3101, b1=False)
+    driver.require_not_heldout(3101, b1=True)                  # after B1 the seed is allowed
+    refused('heldout_before_b1', synth_fresh.draw, 2026100202, b1=False)
+    refused('heldout_before_b1', ism_fresh.draw, 2026100201, b1=False)
     assert not log.exists() or log.read_text(encoding='utf-8') == '', 'a refused launch wrote the launch log'
     assert sorted(p.name for p in root.iterdir()) == [], 'a refused launch wrote under the data root'
 

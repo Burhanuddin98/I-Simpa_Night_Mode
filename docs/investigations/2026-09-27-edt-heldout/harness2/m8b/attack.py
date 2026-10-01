@@ -1,5 +1,12 @@
-"""The attack kit (HARNESS-PLAN.md P25, P26; PREREG.md:42, :60): the sandbox, the class schema, the
-draws, the judges' prompt and the panel rule.
+"""The attack kit, round 2 (HARNESS-PLAN-2.md section 5; round 1's HARNESS-PLAN.md P25, P26; PREREG-2.md H6): the sandbox, the
+class schema, the draws, the judges' prompt and the panel rule.
+
+Round 2 differs from round 1 in these places only: the sandbox holds frozen2/method.py (checked against
+corpus.FROZEN2_SHA256, VoidRun on a mismatch) in C:\\tmp\\m8b-edt\\attack2; build_sandbox refuses until the sentinel seat's
+SENTINEL.md exists (driver.Refused 'attack_before_sentinel'); INTERFACE.md lists the statuses and every refusal reason the
+file can give, read from the file, and says a refusal is never wrong-silent; and the draws are seeded by the class AND the
+attack seed 2026100203, so they are not round 1's draws of the same class (section 9 m5). physics_md, judge_prompt,
+validate_class, panel and generators_py are round 1's text, and B1 hashes this file.
 
 Built in HARNESS-PLAN.md section 6, step 6 (the attack-kit step): validate_class, class_sha256,
 draws, physics_md, build_sandbox and judge_prompt. parse_vote and panel were built earlier, with
@@ -17,12 +24,13 @@ Contract:
   DRR -40 to +30 dB) and what the product accepts.
 - class_sha256(cls) -> str: the sha256 of the class's canonical JSON (keys sorted), so the same
   class written in another key order has the same hash.
-- draws(cls, n=DRAWS) -> [instance]: n instances seeded by class_sha256(cls) alone, each inside
+- draws(cls, n=DRAWS) -> [instance]: n instances seeded by class_sha256(cls) and ATTACK_SEED, each inside
   the class's box: a dict with a value for every name in cls['params'], and 'R_m', 'run_over_t60'
   and 'step_ms'. The harness computes their truth itself (P26).
 - physics_md() -> str: PHYSICS.md (SPPS histogram physics and the hard limits).
-- build_sandbox(dest) -> [path]: writes exactly SANDBOX_FILES into dest, no folder: method.py
-  (frozen/method.py, byte for byte), INTERFACE.md, PHYSICS.md and generators.py (the synth, ISM
+- build_sandbox(dest, *, sentinel=None) -> [path]: refuses (driver.Refused 'attack_before_sentinel') while the sentinel
+  file (default round2.SENTINEL) does not exist; writes exactly SANDBOX_FILES into dest, no folder: method.py
+  (frozen2/method.py, byte for byte), INTERFACE.md, PHYSICS.md and generators.py (the synth, ISM
   and compound-Poisson generators with the product's source delay, importing nothing from the
   harness or target/).
 - judge_prompt(class_files) -> str: for {file name: JSON text}, the judge's instructions, every
@@ -43,13 +51,16 @@ judges apart, and the harness gives it one vote per judge.
 """
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import numpy as np
 
-from .corpus import FROZEN, FROZEN_SHA256, VoidRun, sha256_bytes
+from . import driver, round2
+from .corpus import FROZEN2, FROZEN2_SHA256, VoidRun, sha256_bytes
 
-SANDBOX = Path(r'C:\tmp\m8b-edt\attack')
+SANDBOX = round2.ATTACK_SANDBOX
+ATTACK_SEED = driver.ATTACK_SEED
 SANDBOX_FILES = ('INTERFACE.md', 'PHYSICS.md', 'generators.py', 'method.py')
 LIMITS = {'t60_s': (0.1, 10.0), 'drr_db': (-40.0, 30.0)}     # P25, PHYSICS.md's hard limits
 MAX_CLASSES = 30
@@ -126,10 +137,10 @@ def _uniform(rng, box):
 
 
 def draws(cls, n=DRAWS):
-    """n instances seeded by class_sha256(cls) alone: a fixed draw order (params by sorted name, then
-    R_m, run_over_t60 and, for compound-Poisson noise, particles_per_source) so a class written in
-    another key order, which hashes the same, draws the same instances."""
-    rng = np.random.default_rng(np.random.SeedSequence(int(class_sha256(cls), 16)))
+    """n instances seeded by class_sha256(cls) and ATTACK_SEED (round 2): a fixed draw order (params by sorted
+    name, then R_m, run_over_t60 and, for compound-Poisson noise, particles_per_source) so a class written in
+    another key order, which hashes the same, draws the same instances, and not round 1's instances of it."""
+    rng = np.random.default_rng(np.random.SeedSequence([int(class_sha256(cls), 16), ATTACK_SEED]))
     params = cls['params']
     names = sorted(params)
     noise = cls.get('noise') or {}
@@ -194,8 +205,35 @@ def physics_md():
     )
 
 
-def interface_md():
-    return (
+REASON_MEANING = {
+    'no_energy': 'the bins hold no energy (or fewer than 4 bins, or a non-positive step)',
+    'no_energy_after_arrival': 'no energy is recorded at or after the arrival',
+    'run_too_short': 'the run ends before the decay has fallen 10 dB, or the unrecorded tail is over 2 % of the energy at -10 dB',
+    'direct_only': 'the decay reaches -10 dB inside the direct sound',
+    'step_too_coarse': 'fewer than 8 steps between the ball\'s back and -10 dB',
+    'not_decaying': 'the fitted slope does not fall',
+    'too_few_particles': 'nothing is recorded after -10 dB',
+    'not_decaying_at_run_end': 'the energy is not falling at the end of the run, so the unrecorded tail is unbounded',
+    'receiver_too_large': 'the ball\'s half-crossing time h = R / c is above 0.01 of the fitted EDT, so the fit cannot see '
+                          'the first h of the decay',
+}
+
+
+def refusal_reasons(method_bytes):
+    """Every reason frozen2/method.py can refuse with, in the order the file first names them: the quoted
+    words on the lines that call _refuse( (the definition line excluded)."""
+    out = []
+    for line in method_bytes.decode('utf-8').splitlines():
+        if '_refuse(' in line and not line.lstrip().startswith('def '):
+            for w in re.findall(r"'([a-z_]+)'", line):
+                if w not in out:
+                    out.append(w)
+    return out
+
+
+def interface_md(reasons=None):
+    reasons = refusal_reasons(FROZEN2.read_bytes()) if reasons is None else list(reasons)
+    lines = [
         "# INTERFACE.md\n\n"
         "`method.py` exposes one entry point:\n\n"
         "    analyse(bins, dt, t_arrival, meta=None)\n\n"
@@ -206,8 +244,18 @@ def interface_md():
         "  speed of sound c, seconds (default 0.31 / 343.2 m / (m/s)).\n\n"
         "It returns a dict with `edt`, `edt_lo`, `edt_hi`, `status` and `reason`. Nothing else in\n"
         "`method.py` is a public interface: read it for what it does with the arguments above, not for\n"
-        "a second entry point.\n"
-    )
+        "a second entry point.\n\n"
+        "## Statuses\n\n"
+        "- status 'ok': an EDT with a shown range inside the 5 % just-noticeable difference.\n"
+        "- status 'wide': an EDT whose shown range is wider than that; it is usable, not confident.\n"
+        "- status 'refused': `edt`, `edt_lo` and `edt_hi` are None and `reason` is one of the following.\n\n"
+        "## Refusal reasons\n"]
+    for r in reasons:
+        lines.append('- `%s`: %s' % (r, REASON_MEANING.get(r, 'see method.py')))
+    lines.append(
+        "\nA refusal is never wrong-silent: the method said it would not answer, and says why. Only a status 'ok' row\n"
+        "that is more than 5 % from the true EDT is wrong-silent.\n")
+    return '\n'.join(lines)
 
 
 def _synth_generators_source():
@@ -395,11 +443,15 @@ def generators_py():
     )
 
 
-def build_sandbox(dest):
-    data = FROZEN.read_bytes()
-    if sha256_bytes(data) != FROZEN_SHA256:
-        raise VoidRun('frozen/method.py has sha256 %s, not %s: nothing was written to the sandbox'
-                      % (sha256_bytes(data), FROZEN_SHA256))
+def build_sandbox(dest, *, sentinel=None):
+    sentinel = Path(round2.SENTINEL if sentinel is None else sentinel)
+    if not sentinel.is_file():
+        raise driver.Refused('attack_before_sentinel', '%s does not exist: the attack waits for the sentinel seat\'s recount '
+                                                       '(HARNESS-PLAN-2.md section 7)' % sentinel)
+    data = Path(FROZEN2).read_bytes()
+    if sha256_bytes(data) != FROZEN2_SHA256:
+        raise VoidRun('frozen2/method.py has sha256 %s, not %s: nothing was written to the sandbox'
+                      % (sha256_bytes(data), FROZEN2_SHA256))
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     for name in dest.iterdir():     # the sandbox holds exactly SANDBOX_FILES, never a leftover
@@ -408,7 +460,7 @@ def build_sandbox(dest):
                 raise VoidRun('%s is not a sandbox file' % name)
             name.unlink()
     (dest / 'method.py').write_bytes(data)
-    (dest / 'INTERFACE.md').write_text(interface_md(), encoding='utf-8')
+    (dest / 'INTERFACE.md').write_text(interface_md(refusal_reasons(data)), encoding='utf-8')
     (dest / 'PHYSICS.md').write_text(physics_md(), encoding='utf-8')
     (dest / 'generators.py').write_text(generators_py(), encoding='utf-8')
     return [dest / name for name in SANDBOX_FILES]

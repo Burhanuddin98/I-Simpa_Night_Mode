@@ -1,4 +1,4 @@
-"""m8b/run_heldout.py: the queue runner for the 172 held-out runs (../../HARNESS-PLAN.md P10-P17).
+"""m8b/run_heldout.py as round 2 reads it: the queue runner for the 172 held-out runs (../../HARNESS-PLAN-2.md P10-P17, P35).
 
 No solver is run and no project is meshed anywhere here: every driver.launch, driver.check_solvers,
 rooms.write_projects and rooms.mesh_projects call is monkeypatched to a recorder. Every folder a test
@@ -12,14 +12,14 @@ import json
 import threading
 import time
 
-from m8b import driver, rooms, run_heldout as rh
+from m8b import driver, rooms2, run_heldout as rh
 
 
-DEV_RUN = dict(run_id='dev-run', room='F1', kind='tested', mode='random', time_step_s=0.001,
+DEV_RUN = dict(run_id='dev-run', room='G1', kind='tested', mode='random', time_step_s=0.001,
                particles_per_source=1000, random_seed=4242, duration_s=0.1)
 
 
-def make_run(run_id, room='F1', kind='tested', mode='random'):
+def make_run(run_id, room='G1', kind='tested', mode='random'):
     return dict(DEV_RUN, run_id=run_id, room=room, kind=kind, mode=mode)
 
 
@@ -31,10 +31,10 @@ def test_ordered_runs_is_truth_then_tested_random_then_tested_energetic():
     assert kinds_modes[:28] == [('truth', 'random')] * 28, 'the first 28 must all be truth runs'
     assert kinds_modes[28:100] == [('tested', 'random')] * 72, 'then all 72 tested Random runs'
     assert kinds_modes[100:172] == [('tested', 'energetic')] * 72, 'then all 72 tested Energetic runs'
-    assert runs[0]['run_id'] == 'truth-F1-9001'
+    assert runs[0]['run_id'] == 'truth-G1-9101'
     assert runs[27]['kind'] == 'truth' and runs[28]['kind'] == 'tested' and runs[28]['mode'] == 'random'
     assert runs[99]['mode'] == 'random' and runs[100]['mode'] == 'energetic'
-    assert runs[-1]['run_id'] == 'tested-F7-energetic-5.0ms-150k-1503'
+    assert runs[-1]['run_id'] == 'tested-G7-energetic-5.0ms-150k-3503'
     # no run dropped or duplicated by the filter-and-concatenate
     assert sorted(r['run_id'] for r in runs) == sorted(r['run_id'] for r in driver.plan())
 
@@ -49,7 +49,7 @@ def test_group_of_matches_ordered_runs_groups():
 def test_project_paths_are_under_rooms_root_never_under_data_root(tmp_path):
     rooms_root = tmp_path / 'rooms-root'
     paths = rh.project_paths(rooms_root)
-    assert set(paths) == set(rooms.NAMES)
+    assert set(paths) == set(rooms2.NAMES)
     for name, p in paths.items():
         assert p == rooms_root / 'projects' / ('%s.simpa' % name)
         assert str(rooms_root) in str(p)
@@ -132,7 +132,7 @@ def test_do_run_moves_partial_aside_then_calls_launch(tmp_path, monkeypatch):
     progress_log = tmp_path / 'progress.log'
     calls = []
 
-    def fake_launch(run, *, project, run_dir, solvers_dir, data_root, launch_log, simpa_exe, a1=None):
+    def fake_launch(run, *, project, run_dir, solvers_dir, data_root, launch_log, simpa_exe, b1=None):
         calls.append(run_dir)
         return dict(run_exit=0, results_exit=0)
 
@@ -191,7 +191,7 @@ def test_run_queue_respects_the_workers_cap(tmp_path, monkeypatch):
     lock = threading.Lock()
     calls = []
 
-    def fake_launch(run, *, project, run_dir, solvers_dir, data_root, launch_log, simpa_exe, a1=None):
+    def fake_launch(run, *, project, run_dir, solvers_dir, data_root, launch_log, simpa_exe, b1=None):
         with lock:
             state['active'] += 1
             state['peak'] = max(state['peak'], state['active'])
@@ -218,7 +218,7 @@ def test_run_queue_honours_the_stop_file(tmp_path, monkeypatch):
     stop_file = tmp_path / 'STOP'
     calls = []
 
-    def fake_launch(run, *, project, run_dir, solvers_dir, data_root, launch_log, simpa_exe, a1=None):
+    def fake_launch(run, *, project, run_dir, solvers_dir, data_root, launch_log, simpa_exe, b1=None):
         calls.append(run['run_id'])
         if len(calls) == 2:
             stop_file.write_text('stop', encoding='utf-8')
@@ -270,16 +270,16 @@ def test_run_queue_writes_a_summary_line(tmp_path, monkeypatch):
 def test_ensure_rooms_skips_rebuild_when_the_record_already_verifies(tmp_path, monkeypatch):
     rooms_root = tmp_path / 'rooms-root'
     rooms_root.mkdir()
-    projects = {n: str(rooms_root / 'projects' / ('%s.simpa' % n)) for n in rooms.NAMES}
-    mesh = {n: dict(mesh_exit=0, verify_exit=0) for n in rooms.NAMES}
+    projects = {n: str(rooms_root / 'projects' / ('%s.simpa' % n)) for n in rooms2.NAMES}
+    mesh = {n: dict(mesh_exit=0, verify_exit=0) for n in rooms2.NAMES}
     (rooms_root / 'rooms.json').write_text(json.dumps(dict(projects=projects, mesh=mesh)), encoding='utf-8')
 
     def must_not_be_called(*a, **k):
         raise AssertionError('a verified record must not trigger a rebuild')
 
     monkeypatch.setattr(driver, 'check_solvers', must_not_be_called)
-    monkeypatch.setattr(rooms, 'write_projects', must_not_be_called)
-    monkeypatch.setattr(rooms, 'mesh_projects', must_not_be_called)
+    monkeypatch.setattr(rooms2, 'write_projects', must_not_be_called)
+    monkeypatch.setattr(rooms2, 'mesh_projects', must_not_be_called)
     got = rh.ensure_rooms(rooms_root, tmp_path / 'simpa.exe', tmp_path / 'solvers')
     assert {n: str(p) for n, p in got.items()} == projects
 
@@ -297,14 +297,14 @@ def test_ensure_rooms_builds_and_meshes_once_when_no_record(tmp_path, monkeypatc
         return {n: dict(mesh_exit=0, verify_exit=0, tetrahedra=1) for n in written}
 
     monkeypatch.setattr(driver, 'check_solvers', lambda solvers_dir: dict(verified=True, checks=[]))
-    monkeypatch.setattr(rooms, 'write_projects', fake_write_projects)
-    monkeypatch.setattr(rooms, 'mesh_projects', fake_mesh_projects)
+    monkeypatch.setattr(rooms2, 'write_projects', fake_write_projects)
+    monkeypatch.setattr(rooms2, 'mesh_projects', fake_mesh_projects)
     got = rh.ensure_rooms(rooms_root, tmp_path / 'simpa.exe', tmp_path / 'solvers')
-    assert set(got) == set(rooms.NAMES)
-    assert len(write_calls) == 1 and set(write_calls[0][2]) == set(rooms.NAMES)
+    assert set(got) == set(rooms2.NAMES)
+    assert len(write_calls) == 1 and set(write_calls[0][2]) == set(rooms2.NAMES)
     assert len(mesh_calls) == 1
     record = json.loads((rooms_root / 'rooms.json').read_text(encoding='utf-8'))
-    assert set(record['mesh']) == set(rooms.NAMES)
+    assert set(record['mesh']) == set(rooms2.NAMES)
 
     # a second call reads the record back and rebuilds nothing
     got2 = rh.ensure_rooms(rooms_root, tmp_path / 'simpa.exe', tmp_path / 'solvers')
@@ -315,15 +315,15 @@ def test_ensure_rooms_builds_and_meshes_once_when_no_record(tmp_path, monkeypatc
 def test_ensure_rooms_raises_and_writes_no_record_when_mesh_fails(tmp_path, monkeypatch):
     rooms_root = tmp_path / 'rooms-root'
     monkeypatch.setattr(driver, 'check_solvers', lambda solvers_dir: dict(verified=True, checks=[]))
-    monkeypatch.setattr(rooms, 'write_projects',
+    monkeypatch.setattr(rooms2, 'write_projects',
                         lambda out_dir, simpa_exe, names=None: {n: out_dir / ('%s.simpa' % n) for n in names})
-    monkeypatch.setattr(rooms, 'mesh_projects', lambda written, out_dir, simpa_exe, solvers_dir:
-                        {n: dict(mesh_exit=0, verify_exit=(1 if n == 'F3' else 0)) for n in written})
+    monkeypatch.setattr(rooms2, 'mesh_projects', lambda written, out_dir, simpa_exe, solvers_dir:
+                        {n: dict(mesh_exit=0, verify_exit=(1 if n == 'G3' else 0)) for n in written})
     try:
         rh.ensure_rooms(rooms_root, tmp_path / 'simpa.exe', tmp_path / 'solvers')
-        raise AssertionError('F3 failing mesh-verify must raise')
+        raise AssertionError('G3 failing mesh-verify must raise')
     except RuntimeError as e:
-        assert 'F3' in str(e)
+        assert 'G3' in str(e)
     assert not (rooms_root / 'rooms.json').exists(), 'a failed build must not be recorded as done'
 
 
@@ -334,7 +334,7 @@ def test_ensure_rooms_raises_when_solvers_unverified(tmp_path, monkeypatch):
     def must_not_be_called(*a, **k):
         raise AssertionError('an unverified solver folder must stop before any project is written')
 
-    monkeypatch.setattr(rooms, 'write_projects', must_not_be_called)
+    monkeypatch.setattr(rooms2, 'write_projects', must_not_be_called)
     try:
         rh.ensure_rooms(rooms_root, tmp_path / 'simpa.exe', tmp_path / 'solvers')
         raise AssertionError('unverified solvers must raise')
@@ -353,7 +353,7 @@ def test_print_dry_run_lists_projects_and_runs_without_touching_disk(tmp_path):
     text = buf.getvalue()
     assert not data_root.exists() and not rooms_root.exists(), 'a dry run must create nothing'
     assert 'Runs (172): 28 truth, 144 tested (72 random, 72 energetic)' in text
-    assert 'first run: truth-F1-9001' in text
-    assert 'last run:  tested-F7-energetic-5.0ms-150k-1503' in text
-    for name in rooms.NAMES:
+    assert 'first run: truth-G1-9101' in text
+    assert 'last run:  tested-G7-energetic-5.0ms-150k-3503' in text
+    for name in rooms2.NAMES:
         assert ('%s -> %s' % (name, projects[name])) in text

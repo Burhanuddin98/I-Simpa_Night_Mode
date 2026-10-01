@@ -22,9 +22,9 @@ import math
 
 import pytest
 
-from m8b import corpus, rooms, spps_rows
+from m8b import corpus, rooms, rooms2, spps_rows
 
-R = rooms.rooms()
+R = dict(rooms.rooms(), **rooms2.rooms())      # round 2: the G rooms join the F rooms and the probes
 
 
 def _single_box_gap(lo, hi, source_m, rec_m):
@@ -62,7 +62,7 @@ def test_box_rooms_match_first_order_d1_to_1e12_relative():
             old = _single_box_gap(lo, hi, room['source_m'], rec['position_m'])
             assert new == pytest.approx(old, rel=1e-12, abs=1e-15), (name, idx, new, old)
             checked += 1
-    assert checked == 7 * 8, 'expected 7 box rooms (F1 F2 F5 F6 F7 P0 P0b) x 8 receivers'
+    assert checked == 12 * 8, 'expected 12 box rooms (F1 F2 F5 F6 F7 P0 P0b G1 G2 G5 G6 G7) x 8 receivers'
 
 
 def test_box_room_every_wall_fronts_every_source_and_receiver():
@@ -88,7 +88,7 @@ def test_box_room_every_wall_fronts_every_source_and_receiver():
             for p in points:
                 assert sign * (coord - p[ax]) > 0, (name, ax, coord, sign, p)
         checked_rooms += 1
-    assert checked_rooms == 7
+    assert checked_rooms == 12                    # F1 F2 F5 F6 F7 P0 P0b and G1 G2 G5 G6 G7
 
 
 # ---- (2) every receiver of every room: gap >= 0, and it is not boxes[0] alone ---------------------
@@ -250,7 +250,6 @@ def test_blocked_receiver_skips_gap_and_split_borderline(monkeypatch, tmp_path):
         _write_run(p, s, _report(2, bins))
         refs.append(p)
 
-    monkeypatch.setattr(spps_rows.rooms_mod, 'rooms', _fake_two_receiver_room)
     monkeypatch.setattr(spps_rows.method, 'load', lambda path=None: _FakeMethod())
 
     def fake_assess(refs_, dt, t_arr, h, blocked=False):
@@ -270,7 +269,7 @@ def test_blocked_receiver_skips_gap_and_split_borderline(monkeypatch, tmp_path):
     monkeypatch.setattr(spps_rows, '_gap_s', spy_gap_s)
 
     rows = spps_rows.rows_from_runs('FakeRoom', tested, refs, mode='random', particles=150000, seed=1101,
-                                    data_root=tmp_path)
+                                    data_root=tmp_path, geometry=_fake_two_receiver_room()['FakeRoom'])
     assert len(rows) == 2
     assert gap_calls == [0], '_gap_s must be called only for the unblocked receiver (R000, index 0)'
     assert len(split_calls) == 1, 'split_borderline must be consulted only for the unblocked receiver'

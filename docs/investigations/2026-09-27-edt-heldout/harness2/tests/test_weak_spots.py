@@ -15,11 +15,12 @@ P33's binding rule, as this test applies it:
   product refuses appears in a weak row).
 - A bound may be wider than P21-P24's ranges, never narrower.
 """
+import hashlib
 import json
 
 from conftest import HARNESS
 
-from m8b import corpus, ism_fresh, synth_fresh
+from m8b import ism_fresh, synth_fresh
 
 SYNTH_OPEN = ('t60_s', 'late_share_db', 'R_m', 'd_m', 'd_minus_R_m', 'gap_ms', 'delay_ms')              # P23, P24
 ISM_OPEN = ('L1_m', 'L2_m', 'L3_m', 'V_m3', 'alpha_walls', 't60_design_125_s', 'R_m', 'd_m', 'd_minus_R_m',
@@ -31,18 +32,17 @@ PLAN = {'synth': {'t60_s': (0.1, 10.0), 'late_share_db': (-20.0, -3.0), 'R_m': (
 PHYSICS = {'t60_s': (0.1, 10.0), 't60_design_125_s': (0.1, 10.0), 'drr_db': (-40.0, 30.0)}
 
 
-def test_t22a_weak_spots_json_reproduces_from_its_sources(tmp_path, target_root):
-    """T22, first half: corpus.py, run again on its sources, writes weak_spots.json byte for byte as
-    committed, its `generated` block (versions and timings) aside."""
-    committed = (HARNESS / 'weak_spots.json').read_bytes().replace(b'\r\n', b'\n')
-    old = json.loads(committed)
-    new = corpus.build_weak_spots(target_root, workers=8)
-    assert list(new)[-1] == 'generated' and list(old)[-1] == 'generated'
-    new['generated'] = old['generated']
-    out = tmp_path / 'weak_spots.json'
-    corpus.write_json(out, new)
-    assert out.read_bytes() == committed, 'weak_spots.json no longer reproduces from its sources'
-    assert len(new['rows']) == 575
+def test_t22a_weak_spots_json_is_round_1s_unchanged():
+    """T22, first half, as round 2 reads it (HARNESS-PLAN-2.md P33: weak_spots.json is NOT regenerated, so the ranges of
+    P21-P24 are exactly round 1's). Round 1's test rebuilt the file from its sources and compared bytes; that rebuild
+    cannot be repeated here, because the file records the path of every source it read, harness sources included, and in
+    harness2/ those paths are harness2's. So the control is the file itself: sha256 c75d5321... and equal, byte for
+    byte, to round 1's copy under ../../harness/, which T22 round 1 held to its sources."""
+    mine = (HARNESS / 'weak_spots.json').read_bytes()
+    theirs = (HARNESS.parent / 'harness' / 'weak_spots.json').read_bytes()
+    assert mine == theirs
+    assert hashlib.sha256(mine).hexdigest() == 'c75d53212f4114e785369668e50d81143bc09882c06d6cab2a9c792b730da9b8'
+    assert len(json.loads(mine)['rows']) == 575
 
 
 def test_t22b_every_binding_weak_spot_lies_inside_the_fresh_sets_bounds():

@@ -2,7 +2,7 @@
 import copy
 import json
 
-from conftest import FROZEN
+from conftest import FROZEN2
 
 from m8b import attack
 
@@ -51,11 +51,13 @@ def test_t17_attack_bounds_draws_sandbox_and_blind_judges(tmp_path):
     assert json.dumps(attack.draws(changed), sort_keys=True) != json.dumps(d1, sort_keys=True)
 
     dest = tmp_path / 'attack'
-    attack.build_sandbox(dest)
+    sentinel = tmp_path / 'SENTINEL.md'
+    sentinel.write_text('recounted\n', encoding='utf-8')
+    attack.build_sandbox(dest, sentinel=sentinel)
     assert dest.is_dir() and sorted(p.name for p in dest.iterdir()) == sorted(attack.SANDBOX_FILES)
     assert sorted(attack.SANDBOX_FILES) == ['INTERFACE.md', 'PHYSICS.md', 'generators.py', 'method.py']
     assert all(p.is_file() for p in dest.iterdir())
-    assert (dest / 'method.py').read_bytes() == FROZEN.read_bytes()
+    assert (dest / 'method.py').read_bytes() == FROZEN2.read_bytes()
     phys = (dest / 'PHYSICS.md').read_text(encoding='utf-8')
     assert phys == attack.physics_md()
     assert 'T60' in phys and '0.1' in phys and '10' in phys and 'DRR' in phys and '30' in phys

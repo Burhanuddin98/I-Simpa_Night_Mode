@@ -162,7 +162,7 @@ def test_call3_split_borderline_detection():
     def row(id_, ts, truth_val=1.0, edt=1.0):
         return dict(set='spps', id=id_, status='ok', edt=edt, edt_lo=edt, edt_hi=edt, reason='',
                    truth=truth_val, truth_status=ts, room='F1', d_m=1.5, step_ms=1.0, band_hz=500,
-                   particles=150000, seed=1, family=None, design_t60_s=1.0)
+                   particles=150000, seed=1, family=None, design_t60_s=1.0, R_m=0.31)
 
     rows = [row('a', 'ok'), row('b', 'ok'), row('c', 'truth_split_borderline'), row('d', 'truth_split_borderline')]
     t = score.tally(rows)

@@ -1,4 +1,4 @@
-"""ISM-fresh (HARNESS-PLAN.md P20-P22, P33): specular boxes through the corpus's validated image-source
+"""ISM-fresh-2 (HARNESS-PLAN-2.md sections 2 and 3; round 1's HARNESS-PLAN.md P20-P22, P33): specular boxes through the corpus's validated image-source
 generator, target/agents/followup-design/skeptic-gf3/ism.py (sha256 a7c9d41e...), copied by text,
 with the series built as target/agents/followup-design/spec/eval_ism.py:59-88 builds them.
 
@@ -27,8 +27,12 @@ Contract:
   its last bin with energy (the scratchpad's edtsimp/loaders.py:270-281). Otherwise the series is
   run_s long (P22: 2.0 s). truth_edt: truth.truth_ideal of the direct and reflected series at
   0.02 ms with continuous air (P20), element 0.
-- draw(seed, *, a1=None) -> dict(seed, rooms, rejections): calls driver.require_not_heldout(seed, a1)
-  first. 12 rooms (P21): four relatives, one of each corpus ISM room (t1, corridor, dead, deader),
+- draw(seed, *, b1=None) -> dict(seed, rooms, rejections): calls driver.require_not_heldout(seed, b1)
+  first (round 1's seed 2026100102 is refused for good, round 2's 2026100201 before B1), then draws against
+  corpus_rooms_2.json, so every room is P3-fresh against round 1's relatives and rooms too (the list holds them).
+  preview_draw(seed) is the same draw with no B1 gate, for geometry only (preview_pin.json, section 9 M3; the
+  tests): it builds no echogram. _draw(seed, corpus_path) is the draw with no guard: corpus2 reproduces round 1's
+  draw through it, against round 1's list. 12 rooms (P21): four relatives, one of each corpus ISM room (t1, corridor, dead, deader),
   each dimension times its own factor from U[1.12, 1.33], each wall's alpha times its own factor
   from U[0.9, 1.1], the source scaled with the room; and eight drawn rooms. Every room fresh per
   P3 and at most MAX_IMAGES images; rejections counted by reason. A room dict also carries 'id',
@@ -190,6 +194,7 @@ import itertools
 import json
 import math
 import operator
+import time
 from pathlib import Path
 
 import numpy as np
@@ -203,7 +208,7 @@ BANDS_HZ = (125, 250, 500, 1000, 2000, 4000, 8000, 16000, 20000)
 STEPS_MS = (1.0, 2.0, 5.0)
 RUN_S = 2.0
 MAX_IMAGES = 1e8
-HELDOUT_SEED = 2026100102           # P21
+HELDOUT_SEED = 2026100201           # section 3 (round 1: 2026100102)
 
 # P21: the rooms.
 PARENTS = ('t1', 'corridor', 'dead', 'deader')      # one relative of each corpus ISM room
@@ -255,7 +260,8 @@ HERE = Path(__file__).resolve().parent
 GENERATOR = HERE / '_ism.py'
 ISM_SOURCE = 'target/agents/followup-design/skeptic-gf3/ism.py'
 ISM_SHA256 = 'a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747'    # P20
-CORPUS_ROOMS = corpus.HARNESS / 'corpus_rooms.json'
+CORPUS_ROOMS = corpus.HARNESS / 'corpus_rooms_2.json'              # round 2's list: round 1's 119 plus everything round 1 made
+CORPUS_ROOMS_ROUND1 = corpus.HARNESS / 'corpus_rooms.json'         # round 1's list, byte-identical (corpus2 asserts it)
 
 _LOADED = {}        # resolved path -> the module executed from that path's checked bytes
 
@@ -504,10 +510,19 @@ def _drawn(rng, i, corpus_rooms, rej):
         return room
 
 
-def draw(seed, *, a1=None):
-    driver.require_not_heldout(seed, a1)
+def draw(seed, *, b1=None):
+    driver.require_not_heldout(seed, b1)
+    return _draw(seed, CORPUS_ROOMS)
+
+
+def preview_draw(seed):
+    driver.require_not_heldout(seed, True)         # round 1's seeds only are refused; this makes geometry, not data
+    return _draw(seed, CORPUS_ROOMS)
+
+
+def _draw(seed, corpus_path):
     rng = np.random.default_rng(np.random.SeedSequence(operator.index(seed)))
-    data = CORPUS_ROOMS.read_bytes()
+    data = Path(corpus_path).read_bytes()
     corpus_rooms = json.loads(data)
     parents = {r['id'].split(':', 1)[1]: r for r in corpus_rooms['rooms'] if r['set'] == 'ism'}
     if sorted(parents) != sorted(PARENTS):
@@ -533,13 +548,16 @@ def row_specs(D):
     return out
 
 
-def rows_for_scoring(D):
+def rows_for_scoring(D, on_receiver=None):
     """HARNESS-PLAN.md 8.2's fourth call, wired (step 7b): row_specs(D) built for real, one make_row
     call per spec, retry_truncated always True so no row built through this function can reach the
     scorer still truth_truncated for want of the retry. Returns score.evaluate's 'ism' input dicts
-    (ROW_FIELDS the scorer reads via .get, so an absent one is simply None there)."""
+    (ROW_FIELDS the scorer reads via .get, so an absent one is simply None there), each with the receiver's R_m.
+    on_receiver(k, n, seconds), when given (P34), is called after the last row of each receiver: k receivers of
+    this room are done of n, seconds since the call began. It logs; it cannot change a row."""
     rooms_by_id = {r['id']: r for r in D['rooms']}
     out = []
+    t0 = time.monotonic()
     for spec in row_specs(D):
         room = rooms_by_id[spec['room']]
         row = make_row(room, spec['position_m'], spec['R_m'], spec['band_hz'], spec['step_ms'],
@@ -547,8 +565,10 @@ def rows_for_scoring(D):
         d = dict(set='ism', id=spec['id'], bins=row['bins'], dt=row['dt'], t_arrival=row['t_arrival'],
                  meta=dict(half_width=row['half_width']), truth=row['truth_edt'], truth_status=row['truth_status'],
                  room=spec['room'], d_m=spec['d_m'], step_ms=spec['step_ms'], band_hz=spec['band_hz'],
-                 design_t60_s=spec['design_t60_s'], seed=D['seed'])
+                 design_t60_s=spec['design_t60_s'], seed=D['seed'], R_m=spec['R_m'])
         if 'truth_truncated_retry' in row:
             d['truth_truncated_retry'] = row['truth_truncated_retry']
         out.append(d)
+        if on_receiver is not None and spec['band_hz'] == BANDS_HZ[-1] and spec['step_ms'] == STEPS_MS[-1]:
+            on_receiver(spec['receiver'] + 1, len(room['receivers']), time.monotonic() - t0)
     return out

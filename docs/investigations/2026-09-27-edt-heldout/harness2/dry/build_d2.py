@@ -1,4 +1,8 @@
-"""Step 7c part 2: builds D2's fake SPPS run folders (HARNESS-PLAN.md section 5 item 3; the task's
+"""Round 2 note: harness2's copy of round 1's builder. The plan is unchanged; build(out=None) takes the folder to build
+in (run_dry2 gives it pytest's tmp_path on C:), every file it writes is text, and the receiver radius it plants,
+R_M = 0.31 m, is the R_m every row carries in round 2.
+
+Step 7c part 2: builds D2's fake SPPS run folders (HARNESS-PLAN.md section 5 item 3; the task's
 D2 bullet) in the `simpa results` schema, exactly as ../expected_dry.json's "plant" key fixes them:
 one mock room (id 'mock_d2'), 8 receivers, 6 bands, 3 steps, 3 seeds, K = 4 references at 0.1 ms.
 
@@ -218,23 +222,24 @@ def _write_run(path, seed, report):
     (path / 'report.json').write_text(json.dumps(report), encoding='utf-8')
 
 
-def build():
-    OUT.mkdir(parents=True, exist_ok=True)
-    manifest = {'room': room_geom(), 'tested': {}, 'refs': []}
+def build(out=None):
+    base = Path(out) if out is not None else OUT
+    base.mkdir(parents=True, exist_ok=True)
+    manifest = {'room': room_geom(), 'tested': {}, 'refs': [], 'out': str(base)}
 
     for ref_seed in REF_SEEDS:
-        p = OUT / 'refs' / ('seed%d' % ref_seed)
+        p = base / 'refs' / ('seed%d' % ref_seed)
         _write_run(p, ref_seed, _report(1.0e-4, ref_seed, kind='ref'))
         manifest['refs'].append(str(p))
 
     for step_ms, seeds in TEST_SEEDS.items():
         dt = step_ms / 1.0e3
         for seed in seeds:
-            p = OUT / 'tested' / ('%gms-seed%d' % (step_ms, seed))
+            p = base / 'tested' / ('%gms-seed%d' % (step_ms, seed))
             _write_run(p, seed, _report(dt, seed, kind='tested'))
             manifest['tested'].setdefault('%g' % step_ms, []).append(str(p))
 
-    (OUT / 'manifest.json').write_text(json.dumps(manifest, indent=1), encoding='utf-8')
+    (base / 'manifest.json').write_text(json.dumps(manifest, indent=1), encoding='utf-8')
     return manifest
 
 

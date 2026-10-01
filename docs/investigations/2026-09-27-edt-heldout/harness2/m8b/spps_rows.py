@@ -1,4 +1,4 @@
-"""SPPS-fresh rows (HARNESS-PLAN.md P13-P19, P27; step 7b wires 8.2's third call into this builder,
+"""SPPS-fresh-2 rows (HARNESS-PLAN-2.md section 4; round 1's HARNESS-PLAN.md P13-P19, P27; step 7b wired 8.2's third call into this builder,
 which did not exist before step 7b: the driver's matrix execution and row assembly are future work,
 per section 8.1, so this module is what that future caller is expected to use).
 
@@ -21,7 +21,10 @@ known geometry (rooms.rooms()), into score.evaluate's 'spps' input dicts:
 
 Contract:
 - rows_from_runs(room_name, tested_dir, reference_dirs, *, mode, particles, seed, data_root=None,
-  method_path=None) -> [dict, ...]: one row per (point receiver, band) of the tested run's report
+  method_path=None, geometry=None) -> [dict, ...]: round 2: the room's geometry is rooms2.rooms()[room_name] (a G room)
+  unless `geometry` hands in a room of the same form (the dry run's mock room); the method is frozen2's (method.load)
+  and its analyse decides the split-borderline test; every row also carries 'R_m', the ball's radius in metres,
+  half_width x C_SPPS rounded to 1e-9 (0.31 for the product default): one row per (point receiver, band) of the tested run's report
   (driver.series_from_report's own grouping). reference_dirs must be exactly 4 run folders (P16);
   each is read once (driver.read_run), then every row's references are the four reports' series at
   its own (label, band_hz) pair. A receiver-band missing from any of the four references is a
@@ -72,7 +75,7 @@ Where the contract is silent:
 """
 import math
 
-from . import corpus, driver, method, rooms as rooms_mod, truth
+from . import corpus, driver, method, rooms as rooms_mod, rooms2, truth
 
 K_REFS = 4                              # P16
 
@@ -140,14 +143,14 @@ def _receiver_index(label):
 
 
 def rows_from_runs(room_name, tested_dir, reference_dirs, *, mode, particles, seed, data_root=None,
-                   method_path=None):
+                   method_path=None, geometry=None):
     reference_dirs = list(reference_dirs)
     if len(reference_dirs) != K_REFS:
         raise ValueError('P16: exactly %d references, not %d' % (K_REFS, len(reference_dirs)))
     kw = {} if data_root is None else dict(data_root=data_root)
     tested = driver.read_run(tested_dir, **kw)
     refs = [driver.read_run(p, **kw) for p in reference_dirs]
-    geom = rooms_mod.rooms()[room_name]
+    geom = rooms2.rooms()[room_name] if geometry is None else geometry
     m = method.load(method_path)
     out = []
     for t in tested:
@@ -181,5 +184,6 @@ def rows_from_runs(room_name, tested_dir, reference_dirs, *, mode, particles, se
                         meta=dict(half_width=t['half_width']), truth=a['truth'], truth_status=truth_status,
                         room=room_name, d_m=rec_geom['d_m'], step_ms=t['dt'] * 1e3, band_hz=t['band_hz'],
                         design_t60_s=t60.get(t['band_hz'], t60.get(str(t['band_hz']))),
-                        mode=mode, particles=particles, seed=seed))
+                        mode=mode, particles=particles, seed=seed,
+                        R_m=round(t['half_width'] * corpus.C_SPPS, 9)))
     return out

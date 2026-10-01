@@ -1,4 +1,4 @@
-"""Synth-fresh (HARNESS-PLAN.md P23, P24, P33): double slopes through the critique's committed
+"""Synth-fresh-2 (HARNESS-PLAN-2.md section 3; round 1's HARNESS-PLAN.md P23, P24, P33): double slopes through the critique's committed
 generator, docs/investigations/2026-09-27-edt-simplify/critique/synth.py (hash pinned as
 corpus.SYNTH_SHA256_LF), noise-free (PREREG.md:55).
 
@@ -7,7 +7,8 @@ target/: the generator is a committed file run through its hash gate, and the dr
 text, so provenance.json has no entry for this file. Tests T13, T15 and T22 hold the contract below.
 
 Contract:
-- draw(seed, *, a1=None) -> [spec]: calls driver.require_not_heldout(seed, a1) first. 500 rows for
+- draw(seed, *, b1=None) -> [spec]: calls driver.require_not_heldout(seed, b1) first (round 1's seed 2026100101 is
+  refused for good, round 2's 2026100202 before B1). 500 rows for
   each rate ratio in RATIOS and step in STEPS_MS, 4,000 in all. A spec is a dict with 'id',
   'ratio', 'step_ms', 'dt' (s), 't60_s' (of k1), 'k' [k1, k2 = k1 / ratio], 'A' [1, E2 * k2] with
   E2 = E1 * 10 ** (late_share_db / 10) and E1 = 1 / k1 (scan_i4.py:20-23), 'late_share_db',
@@ -73,7 +74,10 @@ Where the contract is silent:
   outside. A delayed row's delay is drawn on (0, 60.00000284984708] ms, never 0, so 'delay_ms' == 0
   marks exactly the undelayed half. Ids are 'synth|<ratio>|<step>ms|<index in its cell>'. Every
   number is a Python float or int.
-- draw(seed, *, a1=None, rejections=None): when the caller passes a dict for rejections, draw()
+- preview_draw(seed, rejections=None): the same draw for a round-2 seed with no B1 gate, for the parameters only
+  (preview_pin.json, section 9 M3; the tests). It makes no histogram and no truth. Round 1's seed is refused.
+  _draw(seed, rejections=None) is the draw with no guard at all: corpus2 reads round 1's record through it.
+- draw(seed, *, b1=None, rejections=None): when the caller passes a dict for rejections, draw()
   counts each d-redraw into it under the reason 'd_near_source' (rejections[reason] =
   rejections.get(reason, 0) + 1); rejections is left untouched when None (the default), so the
   bare-list contract above holds unchanged for every existing caller.
@@ -104,7 +108,7 @@ C = 343.2                           # critique/synth.py:15
 RATIOS = (1.5, 5.0)
 STEPS_MS = (1.0, 2.0, 5.0, 10.0)
 ROWS_PER_CELL = 500
-HELDOUT_SEED = 2026100101           # P24
+HELDOUT_SEED = 2026100202           # section 3 (round 1: 2026100101)
 
 T60_S = (0.1, 10.0)                 # P24, log-uniform: PHYSICS.md's T60 limit (P25)
 LATE_SHARE_DB = (-20.0, -3.0)       # P23
@@ -182,8 +186,17 @@ def _log_uniform(rng, box):
     return min(max(math.exp(math.log(lo) + (math.log(hi) - math.log(lo)) * rng.random()), lo), hi)
 
 
-def draw(seed, *, a1=None, rejections=None):
-    driver.require_not_heldout(seed, a1)
+def draw(seed, *, b1=None, rejections=None):
+    driver.require_not_heldout(seed, b1)
+    return _draw(seed, rejections)
+
+
+def preview_draw(seed, rejections=None):
+    driver.require_not_heldout(seed, True)         # round 1's seeds only are refused; this makes parameters, not data
+    return _draw(seed, rejections)
+
+
+def _draw(seed, rejections=None):
     rng = np.random.default_rng(np.random.SeedSequence(operator.index(seed)))
     assert DELAY_MS[0] == 0.0
     rows = []

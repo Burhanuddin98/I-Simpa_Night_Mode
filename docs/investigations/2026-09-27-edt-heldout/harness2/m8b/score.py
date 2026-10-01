@@ -1,5 +1,25 @@
-"""The scorer (HARNESS-PLAN.md P27-P32; PREREG.md:44-63): definitions, exclusions, H1-H6, and the
-evaluation run that writes REPORT.md (plain words first), summary.json and rows.jsonl.
+"""The scorer, round 2 (HARNESS-PLAN-2.md sections 4 and 9; PREREG-2.md; round 1's HARNESS-PLAN.md P27-P32): definitions,
+exclusions, H1-H6, and the evaluation run that writes REPORT.md (plain words first), summary.json and rows.jsonl.
+
+Round 2 differs from round 1 in exactly these places (harness2/ is round 1's scorer edited in place; round 1's file is
+under ../harness/ and is never run again):
+- the method is frozen2/method.py (v2.1, Z = 2.5) and there is no Z = 3 instance: evaluate runs two instances, frozen and
+  upstream, and summary has no 'z3' key;
+- every SPPS and ISM row carries R_m, the receiver radius in metres (the SPPS ball's 0.31 m, ISM's drawn R); _check_inputs
+  refuses such a row without it;
+- H4 (PREREG-2.md): a row is in H4 when its step is 1 ms, its design T60 is at most 3.0 s and R_m is at most 0.5 m; rows
+  the method refused as receiver_too_large leave the denominator and are reported by count, share and set (n_before,
+  n_receiver_too_large, share_receiver_too_large, with n the rows left); usable is at least 90 % of those left, SPPS-fresh
+  and ISM-fresh each; the ok share is reported, not gated; nothing left fails (P27);
+- H1, H2, H3 and H5 have no radius filter: a wrong-silent row counts at any R_m (T29);
+- the refusal table: rtl_by_r_class(rows) counts receiver_too_large over all radii in three classes (<= 0.5, 0.5-1.0,
+  > 1.0 m), per set and per SPPS mode, in summary['tables'][label]['rtl_by_r_class'] and in REPORT.md.
+The scorer prints H4's n per set (REPORT.md, RESULTS.md).
+
+No-swap rule (HARNESS-PLAN-2.md section 9 M2, written before any round-2 run): every G room is scored whatever its truth
+runs show. A designed feature that misses on the truth runs (G2 truth T30 under 2.5 s at 1 kHz, G7 truth T30 over 0.25 s, G3
+not double-sloped) is reported as missing in RESULTS.md and VERDICT-2.md. No room is swapped, redesigned or dropped after any
+truth run exists, and nothing in this scorer can do so: it scores the rows of the 172 planned runs and no others.
 
 Built in section 6, step 6 (T18-T21). The score semantics are critique/common.py:18-26's (a row is
 ok, wide or refused; its error is edt / truth - 1), with PREREG's definitions judged exactly and
@@ -31,6 +51,8 @@ Contract:
   'excluded' {truth_status: count} for the rows without a truth, 'refused' {reason: count},
   'n_ok_truth', 'n_wrong_silent', 'wrong_silent_share', 'n_usable_truth', 'n_covered', 'coverage'.
   A share whose denominator is 0 is None.
+- rtl_by_r_class(rows) -> {'<=0.5', '0.5-1.0', '>1.0': dict(n_rows, n_receiver_too_large, share)}: R_m 0.5 is in the first
+  class and 1.0 in the second; a row with no R_m is refused (ValueError).
 - h1(rows_by_set), h2(rows), h3(rows), h4(rows_by_set), h5(frozen_by_set, upstream_by_set),
   h6(classes) -> dict with 'pass' (bool) and the counts behind it. A ratio whose denominator is 0
   fails its criterion (P27).
@@ -43,9 +65,10 @@ Contract:
     particles and seed. A subgroup with >= 20 ok rows with a truth fails above 10 % wrong-silent.
     Returns 'subgroups' {key: dict(n_ok_truth, n_wrong_silent, judged, pass)}, key (set, room,
     class, step_ms) or (set, family, step_ms).
-  - h4: each of 'spps' and 'ism' separately (P30): rows at step_ms 1 whose design_t60_s <= 3.0,
-    usable >= 90 %; the ok share is reported. Rows without a truth stay in (P27). Returns
-    'per_set' {set: dict(n, usable_share, ok_share, pass)}.
+  - h4: each of 'spps' and 'ism' separately (P30'): rows at step_ms 1 whose design_t60_s <= 3.0 and whose R_m <= 0.5 m,
+    less those refused as receiver_too_large; usable >= 90 % of the rest; the ok share is reported. Rows without a truth
+    stay in (P27). Returns 'per_set' {set: dict(n_before, n_receiver_too_large, share_receiver_too_large, n, n_usable,
+    n_ok, usable_share, ok_share, refused, pass)}.
   - h5: each of 'spps', 'ism', 'synth' and 'attack' (P31): on the rows with a truth that both
     methods have (paired by id), the method's wrong-silent count strictly below upstream's; 0
     against 0 fails, and so does a set with no rows.
@@ -53,8 +76,8 @@ Contract:
     are wrong-silent; implausible only when attack.panel(votes) says so; fails when a
     reproducible class is plausible.
 - evaluate(inputs, *, method_path=None, out_dir) -> summary dict: checks the method file's sha256
-  first (method.load; VoidRun before anything is computed or written, PREREG.md:10), runs it, the
-  Z = 3 instance and upstream on every input ({'set', 'id', 'bins', 'dt', 't_arrival', 'meta',
+  first (method.load; VoidRun before anything is computed or written, PREREG-2.md), runs it and
+  upstream on every input ({'set', 'id', 'bins', 'dt', 't_arrival', 'meta',
   'truth', 'truth_status', and the grouping fields}), and writes REPORT.md, summary.json and
   rows.jsonl into out_dir. summary['method'] = {'path', 'sha256', 'verified': True}.
 
@@ -66,10 +89,9 @@ Added to the contract here; no test reads it, and a later step that feeds evalua
 - An Attack input is one draw (P26) and carries 'class_id'. evaluate(..., votes=None) takes the
   panel's raw votes as {class_id: [vote, vote, vote]}; a class without votes counts as plausible
   (P26: a missing answer counts as plausible).
-- The h's return more counts than the contract names, and evaluate's summary also holds the Z = 3
-  instance and the port it checked ('z3', 'upstream'), the truth function of each set (PREREG.md:34:
-  the evaluator names it), the tables per set and instance, the criteria for both instances and
-  both modes, and the verdict. Z = 3's criteria are reported and decide nothing (P32).
+- The h's return more counts than the contract names, and evaluate's summary also holds the port it
+  checked ('upstream'), the truth function of each set (PREREG.md:34: the evaluator names it), the tables
+  per set and instance, the criteria for the frozen instance and both modes, and the verdict.
 
 Where the contract is silent:
 - classify refuses (ValueError) a status other than ok, wide and refused, a truth_status other than
@@ -94,12 +116,12 @@ Where the contract is silent:
   whole number from 0 to n_draws, or whose id repeats. With no class at all it fails: P27's reason,
   that a set which answers nothing cannot pass, holds for the attack set, as H5 already applies it.
 - evaluate checks, in this order and before anything is computed or written: the method file
-  (method.load, then method.load_z3), the upstream port (upstream.port), then every input (its set,
+  (method.load), the upstream port (upstream.port), then every input (its set,
   a (set, id) no other input has, 'bins', a positive 'dt', 't_arrival' present, a step_ms equal to
   dt in ms to 1e-6, its truth as classify reads it, and the fields its H's need: an SPPS mode, the
   H3 subgroup, H4's design T60, and for the attack set exactly 20 draws per class and no vote for a
   class with no draw). Each instance then runs once on every input, with the input's bins, dt,
-  t_arrival and a copy of its meta, in the order frozen, Z = 3, upstream. An exception from a method
+  t_arrival and a copy of its meta, in the order frozen, upstream. An exception from a method
   stops the evaluation: no row is turned into a refusal. out_dir is made only when everything has
   been computed, and the three files are written into it with LF line ends.
 - HARNESS-PLAN.md 8.2's first call settles 8.1's open point on the Synth-fresh rows just under DRR
@@ -121,6 +143,7 @@ import numpy as np
 
 from . import attack, method, upstream
 from .corpus import clean
+from .round2 import H4_R_MAX_M, H4_REFUSAL as H4_RTL
 
 JND = 0.05
 COVER_TOL = 1e-9
@@ -142,22 +165,25 @@ H3_MIN_OK = 20                                      # PREREG.md:57; P29: ok rows
 H3_WRONG_MAX = Fraction(10, 100)
 H4_STEP_MS = 1.0                                    # PREREG.md:58, P30
 H4_T60_MAX_S = 3.0
+R_CLASSES = ('<=0.5', '0.5-1.0', '>1.0')             # the refusal table's radius classes, metres
+R_TOL = 1e-9
 H4_USABLE_MIN = Fraction(90, 100)
 NEAR_M, FAR_M = 2.0, 10.0                           # PREREG.md:57, P29
 _JND = Fraction(repr(JND))                          # 1/20, the decimal PREREG.md:48 states
 
 # A scored row's fields that come from its input: the contract's, P11's mode and P26's class.
 ROW_FIELDS = ('set', 'id', 'mode', 'class_id', 'truth', 'truth_status', 'room', 'd_m', 'step_ms', 'band_hz',
-              'particles', 'seed', 'family', 'design_t60_s')
-INSTANCES = ('frozen', 'z3', 'upstream')
+              'particles', 'seed', 'family', 'design_t60_s', 'R_m')
+INSTANCES = ('frozen', 'upstream')
 LABELS = ('spps-random', 'spps-energetic', 'ism', 'synth', 'attack')
 NAMES = {'spps': 'SPPS-fresh', 'spps-random': 'SPPS-fresh, Random', 'spps-energetic': 'SPPS-fresh, Energetic',
          'ism': 'ISM-fresh', 'synth': 'Synth-fresh', 'attack': 'Attack'}
-H_TEXT = {                                          # PREREG.md:55-60, word for word
-    'H1': 'Noise-free sets (ISM-fresh, Synth-fresh): wrong-silent ≤ 0.5 % of ok rows, on each set',
-    'H2': 'SPPS-fresh: coverage ≥ 90 % of usable rows, and wrong-silent ≤ 3 % of ok rows',
-    'H3': 'No subgroup with ≥ 20 ok rows has wrong-silent > 10 %',
-    'H4': 'At a 1 ms step and T60 ≤ 3 s, usable ≥ 90 % of rows (SPPS-fresh and ISM-fresh)',
+H_TEXT = {                                          # PREREG-2.md, the pass criteria
+    'H1': 'Noise-free sets (ISM-fresh-2, Synth-fresh-2): wrong-silent ≤ 0.5 % of ok rows, on each set, every receiver radius',
+    'H2': 'SPPS-fresh-2: coverage ≥ 90 % of usable rows, and wrong-silent ≤ 3 % of ok rows',
+    'H3': 'No subgroup with ≥ 20 ok rows has wrong-silent > 10 %, every receiver radius',
+    'H4': 'At a 1 ms step, design T60 ≤ 3 s and receiver radius ≤ 0.5 m, usable ≥ 90 % of the rows not refused as receiver_too_large '
+          '(SPPS-fresh and ISM-fresh)',
     'H5': "Wrong-silent count strictly lower than upstream's on every fresh set",
     'H6': 'Attack: no reproducible class of physically plausible SPPS inputs (≥ 5 instances) gives wrong-silent',
 }
@@ -388,15 +414,26 @@ def h3(rows):
             'n_failing': sum(not g['pass'] for g in groups.values())}
 
 
+def _r_m(row):
+    r = _number(row.get('R_m'))
+    if r is None or not (math.isfinite(r) and r > 0):
+        raise ValueError('row %r: R_m %r, which H4 and the refusal table need' % (row.get('id'), row.get('R_m')))
+    return r
+
+
 def _in_h4(row):
-    """P30's filter: at 1 ms, with the band's design T60 at most 3.0 s."""
+    """P30': at 1 ms, with the band's design T60 at most 3.0 s and the receiver radius at most 0.5 m (1e-9 allowed)."""
     if _step(row) != H4_STEP_MS:
         return False
     t60 = _number(row.get('design_t60_s'))
     if t60 is None or not (math.isfinite(t60) and t60 > 0):
         raise ValueError('row %r at 1 ms: design_t60_s %r, which H4 filters on (P30)'
                          % (row.get('id'), row.get('design_t60_s')))
-    return t60 <= H4_T60_MAX_S
+    return t60 <= H4_T60_MAX_S and _r_m(row) <= H4_R_MAX_M + R_TOL
+
+
+def _is_rtl(row):
+    return row.get('status') == 'refused' and row.get('reason') == H4_RTL
 
 
 def h4(rows_by_set):
@@ -404,14 +441,34 @@ def h4(rows_by_set):
     for s in H4_SETS:
         rows = _rows_of(rows_by_set, s)
         _one_mode(rows)
-        sel = [r for r in rows if _in_h4(r)]
+        before = [r for r in rows if _in_h4(r)]
+        sel = [r for r in before if not _is_rtl(r)]            # a refusal as receiver_too_large leaves the denominator
         cs = [classify(r) for r in sel]
         n, n_usable, n_ok = len(sel), sum(c['usable'] for c in cs), sum(c['ok'] for c in cs)
-        per[s] = {'n': n, 'n_usable': n_usable, 'n_ok': n_ok, 'usable_share': _share(n_usable, n),
+        per[s] = {'n_before': len(before), 'n_receiver_too_large': len(before) - n,
+                  'share_receiver_too_large': _share(len(before) - n, len(before)),
+                  'n': n, 'n_usable': n_usable, 'n_ok': n_ok, 'usable_share': _share(n_usable, n),
                   'ok_share': _share(n_ok, n),
                   'refused': dict(Counter(_reason(r) for r in sel if r['status'] == 'refused')),
                   'pass': _at_least(n_usable, n, H4_USABLE_MIN)}
     return {'pass': all(p['pass'] for p in per.values()), 'per_set': per}
+
+
+def r_class(r_m):
+    """The refusal table's radius class: R_m 0.5 is in the first class and 1.0 in the second (1e-9 allowed)."""
+    return R_CLASSES[0] if r_m <= H4_R_MAX_M + R_TOL else R_CLASSES[1] if r_m <= 1.0 + R_TOL else R_CLASSES[2]
+
+
+def rtl_by_r_class(rows):
+    """receiver_too_large over all radii: per radius class, the rows, the ones refused as receiver_too_large and their share."""
+    out = {c: {'n_rows': 0, 'n_receiver_too_large': 0} for c in R_CLASSES}
+    for r in rows:
+        t = out[r_class(_r_m(r))]
+        t['n_rows'] += 1
+        t['n_receiver_too_large'] += _is_rtl(r)
+    for t in out.values():
+        t['share'] = _share(t['n_receiver_too_large'], t['n_rows'])
+    return out
 
 
 def _by_id(rows, s, who):
@@ -514,6 +571,7 @@ def _check_inputs(inputs, votes):
         if s in H3_SETS:
             subgroup(x)
         if s in H4_SETS:
+            _r_m(x)                       # round 2: every SPPS and ISM row carries its receiver radius
             _in_h4(x)
         if s == 'attack':
             if x.get('class_id') is None:
@@ -577,13 +635,12 @@ def _jsonable(x):
 
 
 def evaluate(inputs, *, method_path=None, out_dir, votes=None):
-    frozen = method.load(method_path)       # VoidRun before anything is computed or written (PREREG.md:10)
-    z3 = method.load_z3(method_path)        # the same check, then Z = 3.0 on this instance only (P32)
+    frozen = method.load(method_path)       # VoidRun before anything is computed or written (PREREG-2.md)
     port = upstream.port()                  # VoidRun unless the copy is the validated port (P32)
     inputs = list(inputs)
     draws = _check_inputs(inputs, votes)
 
-    runs = (('frozen', frozen.analyse), ('z3', z3.analyse), ('upstream', upstream.analyse))
+    runs = (('frozen', frozen.analyse), ('upstream', upstream.analyse))
     scored = {name: [] for name, _ in runs}
     for x in inputs:
         base = {k: x.get(k) for k in ROW_FIELDS}
@@ -597,22 +654,19 @@ def evaluate(inputs, *, method_path=None, out_dir, votes=None):
     tables = {}
     for lab in LABELS:
         t = {name: tally(by_label[name][lab]) for name in INSTANCES}
-        t['versus_upstream'] = {name: _versus(by_label[name][lab], by_label['upstream'][lab]) for name in ('frozen', 'z3')}
+        t['versus_upstream'] = {'frozen': _versus(by_label['frozen'][lab], by_label['upstream'][lab])}
+        t['rtl_by_r_class'] = rtl_by_r_class([r for r in by_label['frozen'][lab] if r.get('R_m') is not None])
         tables[lab] = t
-    crit = {}
-    for name in ('frozen', 'z3'):
-        classes = []
-        for cid in sorted(draws, key=str):
-            rows = [r for r in by_label[name]['attack'] if r['class_id'] == cid]
-            classes.append({'id': cid, 'n_draws': len(rows), 'votes': (votes or {}).get(cid),
-                            'n_wrong_silent': sum(bool(classify(r)['wrong_silent']) for r in rows)})
-        crit[name] = {mode: criteria(by_label[name], by_label['upstream'], classes, mode) for mode in MODES}
+    classes = []
+    for cid in sorted(draws, key=str):
+        rows = [r for r in by_label['frozen']['attack'] if r['class_id'] == cid]
+        classes.append({'id': cid, 'n_draws': len(rows), 'votes': (votes or {}).get(cid),
+                        'n_wrong_silent': sum(bool(classify(r)['wrong_silent']) for r in rows)})
+    crit = {'frozen': {mode: criteria(by_label['frozen'], by_label['upstream'], classes, mode) for mode in MODES}}
     summary = {
-        'schema': 'm8b.score/1',
+        'schema': 'm8b.score/2',
         'method': {'path': str(frozen.checked_path), 'sha256': frozen.checked_sha256, 'verified': True,
                    'Z': float(frozen.Z)},
-        'z3': {'path': str(z3.checked_path), 'sha256': z3.checked_sha256, 'verified': True, 'Z': float(z3.Z),
-               'decides': False},
         'upstream': {'path': str(port.checked_path), 'sha256': port.checked_sha256, 'verified': True,
                      'source': upstream.UPSTREAM_SOURCE},
         'truth_functions': TRUTH_FUNCTIONS,
@@ -620,7 +674,7 @@ def evaluate(inputs, *, method_path=None, out_dir, votes=None):
                    'attack_classes': len(draws), 'voted_classes': len(votes or {})},
         'tables': tables,
         'criteria': crit,
-        'verdict': {'decided_by': 'the frozen method (Z = 2) in Random mode (PREREG.md:51-60, P11)',
+        'verdict': {'decided_by': 'the frozen method (v2.1, Z = %g) in Random mode (PREREG-2.md, P11)' % float(frozen.Z),
                     'pass': crit['frozen']['random']['pass'],
                     'failing': crit['frozen']['random']['failing'],
                     'energetic_pass': crit['frozen']['energetic']['pass'],
@@ -690,8 +744,9 @@ def _why(h, r):
                                      for k, g in bad[:5]) + ('; ...' if len(bad) > 5 else '')
         return text
     if h == 'H4':
-        return '; '.join('%s: %s of %s rows usable (%s), ok %s' % (
-            NAMES[s], _n(p['n_usable']), _n(p['n']), _pct(p['n_usable'], p['n']), _pct(p['n_ok'], p['n']))
+        return '; '.join('%s: n = %s (%s in the filter, %s refused as receiver_too_large), %s of %s rows usable (%s), ok %s' % (
+            NAMES[s], _n(p['n']), _n(p['n_before']), _n(p['n_receiver_too_large']), _n(p['n_usable']), _n(p['n']),
+            _pct(p['n_usable'], p['n']), _pct(p['n_ok'], p['n']))
             for s, p in r['per_set'].items())
     if h == 'H5':
         return '; '.join("%s: %s against upstream's %s on %s rows with a truth" % (
@@ -702,22 +757,19 @@ def _why(h, r):
 
 
 def _plain(s):
-    cf, cz = s['criteria']['frozen'], s['criteria']['z3']
+    cf = s['criteria']['frozen']
     per = s['inputs']['per_set']
     out = []
     r = cf['random']
     if r['pass']:
-        out.append('In Random mode, the mode the PREREG\'s verdict is about, the frozen EDT method **passes**: '
-                   'it meets all six criteria, H1-H6.')
+        out.append('In Random mode, the mode the PREREG-2\'s verdict is about, the round-2 EDT method (v2.1, Z = %g) **passes**: '
+                   'it meets all six criteria, H1-H6.' % s['method']['Z'])
     else:
-        out.append('In Random mode, the mode the PREREG\'s verdict is about, the frozen EDT method **fails**: it '
-                   'misses %s of the six criteria (%s).' % (len(r['failing']), ', '.join(r['failing'])))
+        out.append('In Random mode, the mode the PREREG-2\'s verdict is about, the round-2 EDT method (v2.1, Z = %g) **fails**: it '
+                   'misses %s of the six criteria (%s).' % (s['method']['Z'], len(r['failing']), ', '.join(r['failing'])))
     e = cf['energetic']
     out.append('In Energetic mode, scored as its own set, which decides only whether EDT is shown for energetic '
                'runs (P11), it %s%s.' % (_pass(e['pass']), '' if e['pass'] else ' (%s)' % ', '.join(e['failing'])))
-    out.append('With Z = 3, which is reported and decides nothing (PREREG.md:11), it would %s in Random mode and %s '
-               'in Energetic mode.' % ('pass' if cz['random']['pass'] else 'fail',
-                                       'pass' if cz['energetic']['pass'] else 'fail'))
     tot = {k: sum(s['tables'][lab]['frozen'][k] for lab in LABELS) for k in ('n', 'n_ok_truth', 'n_wrong_silent')}
     up = {k: sum(s['tables'][lab]['upstream'][k] for lab in LABELS) for k in ('n_ok_truth', 'n_wrong_silent')}
     out.append('Over all %s rows, it gave a confident value (ok) with a known truth on %s, and was more than 5 %% '
@@ -726,6 +778,9 @@ def _plain(s):
                    _n(tot['n']), _n(tot['n_ok_truth']), _n(tot['n_wrong_silent']),
                    _pct(tot['n_wrong_silent'], tot['n_ok_truth'], 2), _n(up['n_wrong_silent']), _n(up['n_ok_truth']),
                    _pct(up['n_wrong_silent'], up['n_ok_truth'], 2)))
+    rtl = {lab: s['tables'][lab]['frozen']['refused'].get(H4_RTL, 0) for lab in LABELS}
+    out.append('It refused %s rows as receiver_too_large (the ball is too large for the room\'s decay): %s.'
+               % (_n(sum(rtl.values())), ', '.join('%s %s' % (NAMES[lab], _n(v)) for lab, v in rtl.items())))
     excl = Counter()
     for lab in LABELS:
         excl.update(s['tables'][lab]['frozen']['excluded'])
@@ -736,39 +791,35 @@ def _plain(s):
     if empty:
         out.append('No rows were given for %s, so every criterion that needs them fails: a set that answers '
                    'nothing cannot pass (P27).' % ', '.join(empty))
-    out.append('The method file was checked before anything ran: sha256 %s, as PREREG.md:8 pins it.'
+    out.append('The method file was checked before anything ran: sha256 %s, as PREREG-2.md pins it.'
                % s['method']['sha256'])
     return ' '.join(out)
 
 
 def report_md(s):
     """REPORT.md from a summary (summary.json's content): plain words first, then the tables."""
-    cf, cz = s['criteria']['frozen'], s['criteria']['z3']
-    L = ['# M8b EDT held-out test: the scorer\'s report', '', '**In plain words.** ' + _plain(s), '',
+    cf = s['criteria']['frozen']
+    L = ['# M8b EDT held-out test, round 2: the scorer\'s report', '', '**In plain words.** ' + _plain(s), '',
          '**What each criterion found** (the frozen method, Random mode; Energetic where it differs):', '']
     for h in H_IDS:
         line = '- **%s %s.** %s. %s.' % (h, _pass(cf['random'][h]['pass']), H_TEXT[h], _why(h, cf['random'][h]))
         if h in ('H2', 'H3', 'H4', 'H5'):
             line += ' Energetic: %s; %s.' % (_pass(cf['energetic'][h]['pass']), _why(h, cf['energetic'][h]))
         L.append(line)
-    L += ['', '## Criteria (PREREG.md:51-60)', '',
-          '| | Criterion | Random | Energetic | Z = 3, Random | Z = 3, Energetic |', '|---|---|---|---|---|---|']
+    L += ['', '## Criteria (PREREG-2.md)', '',
+          '| | Criterion | Random | Energetic |', '|---|---|---|---|']
     for h in H_IDS:
-        L.append('| %s | %s | %s | %s | %s | %s |' % (h, H_TEXT[h], _pass(cf['random'][h]['pass']),
-                                                     _pass(cf['energetic'][h]['pass']), _pass(cz['random'][h]['pass']),
-                                                     _pass(cz['energetic'][h]['pass'])))
-    L.append('| | **All six** | **%s** | **%s** | %s | %s |' % (
-        _pass(cf['random']['pass']), _pass(cf['energetic']['pass']), _pass(cz['random']['pass']),
-        _pass(cz['energetic']['pass'])))
-    L += ['', 'Z = 3 is reported and decides nothing (PREREG.md:11, P32). Energetic decides only whether EDT is '
-              'shown for energetic runs (P11); H1 and H6 hold no SPPS row and are the same for both modes.', '',
+        L.append('| %s | %s | %s | %s |' % (h, H_TEXT[h], _pass(cf['random'][h]['pass']), _pass(cf['energetic'][h]['pass'])))
+    L.append('| | **All six** | **%s** | **%s** |' % (_pass(cf['random']['pass']), _pass(cf['energetic']['pass'])))
+    L += ['', 'Energetic decides only whether EDT is shown for energetic runs (P11); H1 and H6 hold no SPPS row and are the '
+              'same for both modes.', '',
           '## Each set (FINAL.md section 3)', '',
-          'Each cell reads frozen (Z = 2) · Z = 3 · upstream, except benefit/regress, which reads frozen · Z = 3. '
-          'Wrong-silent: ok and more than 5 % off, of the ok rows with a truth. Truth outside the range: of the '
+          'Each cell reads frozen (Z = %g) · upstream, except benefit/regress, which is the method\'s. '
+          'Wrong-silent: ok and more than 5 %% off, of the ok rows with a truth. Truth outside the range: of the '
           'usable rows with a truth (P28\'s tolerance). Error: |edt / truth - 1| over usable rows with a truth. '
           'Half-width: (edt_hi - edt_lo) / (2 edt) over usable rows. Benefit/regress against upstream: rows with a '
-          'truth on which only the method, or only upstream, is ok and within 5 %. Without a truth: rows left out '
-          'of every count that needs one (P27).', '',
+          'truth on which only the method, or only upstream, is ok and within 5 %%. Without a truth: rows left out '
+          'of every count that needs one (P27).' % s['method']['Z'], '',
           '| Set | rows | usable | ok | wrong-silent | truth outside range | median error | p95 error | '
           'median half-width | benefit/regress | without a truth |', '|---|---|---|---|---|---|---|---|---|---|---|']
     for lab in LABELS:
@@ -784,61 +835,68 @@ def report_md(s):
             ' · '.join(_fmt_rel(x['med_abs_err']) for x in f),
             ' · '.join(_fmt_rel(x['p95_abs_err']) for x in f),
             ' · '.join(_fmt_rel(x['med_half_width']) for x in f),
-            ' · '.join('%s/%s' % (_n(v[name]['benefit']), _n(v[name]['regress'])) for name in ('frozen', 'z3')),
+            '%s/%s' % (_n(v['frozen']['benefit']), _n(v['frozen']['regress'])),
             _counts(f[0]['excluded'])))
-    L += ['', '## H3: subgroups over 10 % wrong-silent (PREREG.md:57, P29)', '']
+    L += ['', '## H3: subgroups over 10 % wrong-silent (PREREG-2.md, P29)', '']
     any_bad = False
-    for name, crit in (('frozen', cf), ('Z = 3', cz)):
-        for mode in MODES:
-            g = crit[mode]['H3']
-            bad = [(k, x) for k, x in g['subgroups'].items() if not x['pass']]
-            L.append('- %s, %s: %s subgroups, %s judged, %s over 10 %%.' % (
-                name, mode, _n(g['n_subgroups']), _n(g['n_judged']), _n(g['n_failing'])))
-            for k, x in bad:
-                any_bad = True
-                L.append('  - `%s`: %s of %s ok rows with a truth wrong-silent (%s)' % (
-                    k, _n(x['n_wrong_silent']), _n(x['n_ok_truth']), _pct(x['n_wrong_silent'], x['n_ok_truth'])))
+    for mode in MODES:
+        g = cf[mode]['H3']
+        bad = [(k, x) for k, x in g['subgroups'].items() if not x['pass']]
+        L.append('- frozen, %s: %s subgroups, %s judged, %s over 10 %%.' % (
+            mode, _n(g['n_subgroups']), _n(g['n_judged']), _n(g['n_failing'])))
+        for k, x in bad:
+            any_bad = True
+            L.append('  - `%s`: %s of %s ok rows with a truth wrong-silent (%s)' % (
+                k, _n(x['n_wrong_silent']), _n(x['n_ok_truth']), _pct(x['n_wrong_silent'], x['n_ok_truth'])))
     if not any_bad:
         L.append('- No judged subgroup is over 10 %.')
-    L += ['', '## H4: at 1 ms and design T60 ≤ 3 s (P30)', '', '| Instance, mode | Set | rows | usable | ok | refused |',
-          '|---|---|---|---|---|---|']
-    for name, crit in (('frozen', cf), ('Z = 3', cz)):
-        for mode in MODES:
-            for st, p in crit[mode]['H4']['per_set'].items():
-                L.append('| %s, %s | %s | %s | %s | %s | %s |' % (name, mode, NAMES[st], _n(p['n']), _pct(p['n_usable'], p['n']),
-                                                              _pct(p['n_ok'], p['n']), _counts(p['refused'])))
+    L += ['', '## H4: at 1 ms, design T60 ≤ 3 s and receiver radius ≤ 0.5 m (PREREG-2.md, P30\')', '',
+          'n is the rows left in the denominator: the rows in the filter (n before) less those refused as receiver_too_large, '
+          'which are counted beside it.', '',
+          '| Mode | Set | n before | receiver_too_large (count, share) | n | usable | ok | other refusals |',
+          '|---|---|---|---|---|---|---|---|']
+    for mode in MODES:
+        for st, p in cf[mode]['H4']['per_set'].items():
+            L.append('| %s | %s | %s | %s (%s) | %s | %s | %s | %s |' % (
+                mode, NAMES[st], _n(p['n_before']), _n(p['n_receiver_too_large']),
+                _pct(p['n_receiver_too_large'], p['n_before']), _n(p['n']), _pct(p['n_usable'], p['n']),
+                _pct(p['n_ok'], p['n']), _counts(p['refused'])))
     L += ['', "## H5: wrong-silent against upstream's on the same rows (P31)", '',
-          '| Instance, mode | Set | rows with a truth | method | upstream | |', '|---|---|---|---|---|---|']
-    for name, crit in (('frozen', cf), ('Z = 3', cz)):
-        for mode in MODES:
-            for st, p in crit[mode]['H5']['per_set'].items():
-                L.append('| %s, %s | %s | %s | %s | %s | %s |' % (
-                    name, mode, NAMES[st], _n(p['n_eligible']), _n(p['n_wrong_silent']),
-                    _n(p['n_wrong_silent_upstream']), _pass(p['pass'])))
+          '| Mode | Set | rows with a truth | method | upstream | |', '|---|---|---|---|---|---|']
+    for mode in MODES:
+        for st, p in cf[mode]['H5']['per_set'].items():
+            L.append('| %s | %s | %s | %s | %s | %s |' % (
+                mode, NAMES[st], _n(p['n_eligible']), _n(p['n_wrong_silent']),
+                _n(p['n_wrong_silent_upstream']), _pass(p['pass'])))
     L += ['', '## H6: the attack classes (P26)', '']
     h6r = cf['random']['H6']
     if not h6r['classes']:
         L.append('No attack class was scored, so H6 fails (P27).')
     for c in h6r['classes']:
-        z = next(x for x in cz['random']['H6']['classes'] if x['id'] == c['id'])
         a = c['agreement']
-        L.append('- `%s`: %s of %s draws wrong-silent (Z = 3: %s), %s; panel: %s (%s implausible, %s plausible, '
+        L.append('- `%s`: %s of %s draws wrong-silent, %s; panel: %s (%s implausible, %s plausible, '
                  '%s unreadable, %s missing); %s.' % (
-                     c['id'], _n(c['n_wrong_silent']), _n(c['n_draws']), _n(z['n_wrong_silent']),
+                     c['id'], _n(c['n_wrong_silent']), _n(c['n_draws']),
                      'reproducible' if c['reproducible'] else 'not reproducible', c['panel'], a['implausible'],
                      a['plausible'], a['unreadable'], a['missing'], _pass(c['pass'])))
         for i, (v, why) in enumerate(zip(c['votes'], c['reasons']), 1):
             L.append('  - judge %d: %s. %s' % (i, v or 'no readable vote (counts as plausible)', why or ''))
-    L += ['', '## Refusals, by reason and set (PREREG.md:62-63)', '',
-          'Refusals are never counted as wrong. Each cell reads frozen (Z = 2) · Z = 3 · upstream.', '']
+    L += ['', '## Refusals, by reason and set (PREREG-2.md)', '',
+          'Refusals are never counted as wrong. Each cell reads frozen (Z = %g) · upstream.' % s['method']['Z'], '']
     for lab in LABELS:
         t = s['tables'][lab]
         L.append('- %s: %s' % (NAMES[lab], ' · '.join(_counts(t[name]['refused']) for name in INSTANCES)))
+    L += ['', '### receiver_too_large over all radii, by set and radius class (frozen)', '',
+          'Count of rows refused as receiver_too_large, of the set\'s rows in the class (share). Energetic is its own set (P11).', '',
+          '| Set | R <= 0.5 m | 0.5-1.0 m | R > 1.0 m |', '|---|---|---|---|']
+    for lab in LABELS:
+        t = s['tables'][lab]['rtl_by_r_class']
+        L.append('| %s | %s |' % (NAMES[lab], ' | '.join('%s of %s (%s)' % (_n(t[c]['n_receiver_too_large']), _n(t[c]['n_rows']),
+                                                                             _pct(t[c]['n_receiver_too_large'], t[c]['n_rows']))
+                                                          for c in R_CLASSES)))
     L += ['', '## The run', '',
-          '- Method: `%s`, sha256 `%s`, checked before anything ran (PREREG.md:10), Z = %g.' % (
+          '- Method: `%s`, sha256 `%s`, checked before anything ran (PREREG-2.md), Z = %g.' % (
               s['method']['path'], s['method']['sha256'], s['method']['Z']),
-          '- Z = 3 instance: the same file, sha256 `%s`, with Z = %g set after import (P32).' % (
-              s['z3']['sha256'], s['z3']['Z']),
           '- Upstream: the port `%s`, sha256 `%s` (`%s`, P32).' % (
               s['upstream']['path'], s['upstream']['sha256'], s['upstream']['source']),
           '- Inputs: %s rows; %s. Attack classes: %s, with votes for %s.' % (

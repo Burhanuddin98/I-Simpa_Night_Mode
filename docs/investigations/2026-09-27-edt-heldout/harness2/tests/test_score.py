@@ -2,7 +2,7 @@
 import json
 import math
 
-from conftest import FROZEN, FROZEN_SHA256
+from conftest import FROZEN2, FROZEN2_SHA256
 
 from m8b import attack, score
 from m8b.corpus import VoidRun
@@ -13,7 +13,7 @@ def row(status='ok', edt=1.0, lo=None, hi=None, truth=1.0, ts='ok', reason='', *
     hi = edt if hi is None and edt is not None else hi
     r = dict(set='spps', id='r', status=status, edt=edt, edt_lo=lo, edt_hi=hi, reason=reason,
              truth=truth, truth_status=ts, room='F1', d_m=1.5, step_ms=1.0, band_hz=500, particles=150000,
-             seed=1, family=None, design_t60_s=1.0)
+             seed=1, family=None, design_t60_s=1.0, R_m=0.31)
     r.update(k)
     return r
 
@@ -189,8 +189,8 @@ def test_t20_h3_h4_h5_h6():
 def test_t21_scorer_voids_the_evaluation_when_the_method_hash_differs(tmp_path, synth):
     """T21: the scorer checks the method file's hash before it computes or writes anything; a mismatch
     voids the evaluation (PREREG.md:10). The frozen file's run records the hash it checked."""
-    data = FROZEN.read_bytes()
-    i = data.index(b'Z = 2.0') + len(b'Z = ')
+    data = FROZEN2.read_bytes()
+    i = data.index(b'Z = 2.5') + len(b'Z = ')
     bad = tmp_path / 'method.py'
     bad.write_bytes(data[:i] + b'3' + data[i + 1:])
     k = 6 * math.log(10) / 0.8
@@ -208,8 +208,8 @@ def test_t21_scorer_voids_the_evaluation_when_the_method_hash_differs(tmp_path, 
         raise AssertionError('the evaluation ran with a method file whose hash differs')
     assert not out.exists() or not any(out.iterdir()), 'a void evaluation wrote something'
     ok = tmp_path / 'ok'
-    s = score.evaluate(inputs, method_path=FROZEN, out_dir=ok)
-    assert s['method']['sha256'] == FROZEN_SHA256 and s['method']['verified'] is True
+    s = score.evaluate(inputs, method_path=FROZEN2, out_dir=ok)
+    assert s['method']['sha256'] == FROZEN2_SHA256 and s['method']['verified'] is True
     for name in ('REPORT.md', 'summary.json', 'rows.jsonl'):
         assert (ok / name).is_file(), name
-    assert json.loads((ok / 'summary.json').read_text(encoding='utf-8'))['method']['sha256'] == FROZEN_SHA256
+    assert json.loads((ok / 'summary.json').read_text(encoding='utf-8'))['method']['sha256'] == FROZEN2_SHA256
