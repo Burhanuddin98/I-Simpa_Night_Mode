@@ -1,0 +1,206 @@
+{
+ "_doc": "Every piece of code in m8b that came from a file outside it, with the source's sha256 (raw bytes as read; sha256_lf with CRLF read as LF) and the lines copied or re-typed. Written by hand-run one-off scripts on 2026-10-01 (C:/tmp/m8b-edt/write_provenance.py, then scratch/add_provenance.py for the second attempt's constructions); corpus.py checks the _z3echo.py copy against its source, and every entry's source hash against the file as it is, on every run (check_provenance).",
+ "m8b/_z3echo.py": {
+  "source": "target/agents/z3-hunt/judge/judge.py",
+  "source_sha256": "1898400582323f1b4ddba8b802c6d60b0c6ba707586156af58fb0afac7e431fc",
+  "source_sha256_lf": "ac2f931dec49699d64d136000e34b4b1d10d91bd9c12ee30c55c26e0134b198b",
+  "line_ranges": [
+   [
+    57,
+    57
+   ],
+   [
+    61,
+    62
+   ],
+   [
+    80,
+    435
+   ]
+  ],
+  "how": "verbatim; ranges joined by two blank lines; the module-level imports of composite, skeptic-gf3/ism.py and skeptic-twostep/synth.py left out (these lines use none of them)",
+  "copy_body_sha256_lf": "11f0b55dcf18c418594fe8bf34bb774f2496db814f3b7a3fd306560da7b55903"
+ },
+ "m8b/corpus.py iso9613_db_per_m, m_energy": {
+  "source": "target/agents/followup-design/skeptic-gf3/ism.py",
+  "source_sha256": "a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747",
+  "line_ranges": [
+   [
+    25,
+    44
+   ]
+  ],
+  "how": "verbatim"
+ },
+ "m8b/corpus.py score": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/common.py",
+  "source_sha256_lf": "bfe886c4b356c8bda63636efeb829deeffc5f7f747d86e8c1684916ab746374c",
+  "line_ranges": [
+   [
+    18,
+    26
+   ]
+  ],
+  "how": "verbatim body, docstring shortened"
+ },
+ "m8b/corpus.py scan1, scan4_occluded, scan2b, scan3_noise, set_real_and_seeds (seeds)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/final/run_scans.py",
+  "source_sha256_lf": "741321a928c0b713f743c629bc8020cd46a144ce304a5b302485ac3f8cb2fcf6",
+  "line_ranges": [
+   [
+    25,
+    57
+   ],
+   [
+    59,
+    79
+   ],
+   [
+    81,
+    121
+   ],
+   [
+    123,
+    159
+   ],
+   [
+    161,
+    215
+   ]
+  ],
+  "how": "the same loops in the same order with the frozen method only (LeanBand and printing dropped); checked by reproducing the 'final' tallies of final/scans_all.json"
+ },
+ "m8b/corpus.py scan2": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i4.py",
+  "source_sha256_lf": "1cf3b923d2fd5026c0d6d0280440be0965fd7ce025aef6339ecda713a3603ae3",
+  "line_ranges": [
+   [
+    11,
+    31
+   ]
+  ],
+  "how": "the same loop with the frozen method in place of common.run_all's candidates"
+ },
+ "m8b/corpus.py scan5": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_misc.py",
+  "source_sha256_lf": "c780fa5b798737e5a3dd511fd5bd3ebf4b33ae0326460d2ff6f3739690c187da",
+  "line_ranges": [
+   [
+    13,
+    48
+   ]
+  ],
+  "how": "(a) and (b) with the frozen method; (c) has no truth"
+ },
+ "m8b/corpus.py z3_group_key, Z3GRID_MS, _z3_task (z3grid)": {
+  "source": "target/agents/edt-band/eval_run.py",
+  "source_sha256": "657b94a3ecbc02f988302bb2331ccf2d737390634d5543e51cc3b13d022d662c",
+  "line_ranges": [
+   [
+    384,
+    455
+   ]
+  ],
+  "how": "z3_job's construction of the z3grid rows and its truth, z3_tasks' grouping"
+ },
+ "m8b/corpus.py _z3_task (z3), set_real_and_seeds (real), set_t1, set_ism": {
+  "source": "C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/97f2c13c-beea-4d4b-b842-603feb756e57/scratchpad/edtsimp/loaders.py",
+  "source_sha256": "ea4d4c0939eb96ebc3da40a6fd280134854f8b0fd6c0696be2baf855f70fd0b5",
+  "line_ranges": [
+   [
+    25,
+    57
+   ],
+   [
+    64,
+    118
+   ],
+   [
+    121,
+    223
+   ]
+  ],
+  "how": "load_t1, load_z3 and load_real's inputs to the method (bins, dt, t_arrival, half_width), as run_eval_final.py fed them; the ISM rows are read from final/dev/ism_rows.pkl as run_eval_final.py read them"
+ },
+ "m8b/corpus.py scan1 (scan_i12 and early_run)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i12.py",
+  "source_sha256_lf": "65acb17c4cc7c2a45d69dbdfdacbe95ed205ae93e4ef48a1ad291ae432c019fe",
+  "line_ranges": [
+   [
+    15,
+    41
+   ]
+  ],
+  "how": "the grid, its truth and its histogram as scan_i12.py builds them, scored with the frozen method; the dedup and the d >= 0.6 m cutoff kept for the scan_i12 run and dropped for the early run (which target's scan_i12.json shows); both checked row by row against their outputs"
+ },
+ "m8b/corpus.py scan2b (scan_i4b form)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i4b.py",
+  "source_sha256_lf": "bc67d134e991a74a136060864b0239f2b23a489e8088c35d95ad3a051efdb58f",
+  "line_ranges": [
+   [
+    11,
+    37
+   ]
+  ],
+  "how": "the same rows as run_scans.py's scan 2b, the method called with no meta as common.run_all calls it"
+ },
+ "m8b/corpus.py set_real_and_seeds (real_seeds.py's no-meta call)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/real_seeds.py",
+  "source_sha256_lf": "ba435121de39c4fec7c2675392c004a385caee350f52e13f8cefded3e716eb12",
+  "line_ranges": [
+   [
+    17,
+    61
+   ]
+  ],
+  "how": "the seeds scan's rows with the method called with no meta (lines 41 and 46); a row whose result differs from run_scans.py's is scored both ways"
+ },
+ "m8b/corpus.py noise_probe": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/noise_probe.py",
+  "source_sha256_lf": "668c7648fcde71e927dbb83ff953308cce25e0917e9b932ff7e53f8a04d7ab6c",
+  "line_ranges": [
+   [
+    14,
+    33
+   ]
+  ],
+  "how": "the configurations, the generator seed (11) and the draws in their order, the method called with no meta"
+ },
+ "m8b/corpus.py noise_probe (truth)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i5.py",
+  "source_sha256_lf": "c0144245d525142d9959747727311b5ec25c6e562e7a6341eea8cbc9905bfa62",
+  "line_ranges": [
+   [
+    22,
+    35
+   ]
+  ],
+  "how": "noise_probe.py kept no truth: scan_i5.py's for the same configuration (lines 28-29)"
+ },
+ "m8b/corpus.py ablate_rows": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/ablate.py",
+  "source_sha256_lf": "57f7cdcf7ff115626dc0e4cfcbbea113e3906409b7cf287ee0d009c17060791d",
+  "line_ranges": [
+   [
+    19,
+    45
+   ],
+   [
+    92,
+    92
+   ]
+  ],
+  "how": "gen_rows' grid and blocked rows, the method called with no meta (line 92); its t1 rows are the t1 set"
+ },
+ "m8b/corpus.py ablate_rows (truth)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i1_occluded.py",
+  "source_sha256_lf": "bff6ae541ed76303e6a931d4f35c02b0f69a7af232967a84ff01c66cb9184da7",
+  "line_ranges": [
+   [
+    19,
+    22
+   ]
+  ],
+  "how": "ablate.py kept no truth: scan_i12.py's for the grid rows (the infinite run's Definition-A EDT) and scan_i1_occluded.py's 0 dB at the first arrival for the blocked rows"
+ }
+}

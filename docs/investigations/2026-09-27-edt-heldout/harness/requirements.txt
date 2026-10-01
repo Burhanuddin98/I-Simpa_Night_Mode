@@ -1,0 +1,10 @@
+# The M8b harness's Python environment (HARNESS-PLAN.md section 3: numpy and pytest), exactly as built
+# on Grace on 2026-10-01 at C:\tmp\m8b-edt\venv: python -m venv from C:\Program Files\Python313,
+# Python 3.13.13. The same versions as Grace's system Python. `pip freeze --all`, pip itself left out.
+colorama==0.4.6
+iniconfig==2.3.0
+numpy==2.5.2
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+pytest==9.1.1
