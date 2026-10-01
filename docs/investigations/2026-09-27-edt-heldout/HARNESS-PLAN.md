@@ -4,7 +4,7 @@ Draft, 2026-10-01 02:00, branch `m8b-edt`, revised the same night for the crucib
 It plans the code that will run `PREREG.md`'s test. Building it produces no test data. One step, taken as soon as
 the rooms and the solver driver exist, times one run in a stand-in room that is not a held-out room.
 
-**In plain words.** The test needs code that does not exist yet: six new rooms, a driver for the solver runs,
+**In plain words.** The test needs code that does not exist yet: seven new rooms, a driver for the solver runs,
 two noise-free generators, a kit for the attacker, and a scorer for H1-H6. This plan builds that code with its
 tests written first. As soon as the rooms and the driver work, it times one 1M-particle, 0.1 ms run in a
 stand-in for the slowest room, so that Burhan can decide on the long stretch with a measured number while the
@@ -63,6 +63,7 @@ This section is the draft of `ADDENDUM-A1.md`. Following the noise-calibration p
 | F4 | L: arm 16 × 5 × 3.5, plus arm x 11-16, y 5-15, h 3.5 | 0.12, Lambert 1 | 1.20-1.00 | L-shaped; blocked receiver |
 | F5 | box 14 × 9.5 × 6 | 0.20, scattering **0.2** | 1.05-0.89 | mostly specular, like real finishes |
 | F6 | box 24 × 5.5 × 3.2 | 0.30, Lambert 1 | 0.42-0.39 | long room at high absorption, where the noise model failed (noise-cal V4-E1/E4); the 50k runs |
+| F7 | box 3.8 × 3.3 × 2.4 (30.1 m³) | 0.45, Lambert 1 | about 0.14 at 500 Hz (Eyring; `rooms.py` writes the bands) | small dead room. Added 2026-10-01 02:40, before any data: none of F1-F6 is the kind of room where 13 of the method's 19 real-seed wrong-silent rows sit (C-R3, 5 × 4 × 3, α 0.4). Sorted, it is 18-24 % off C-R3 on every axis. Its source and receivers follow P5 and P7 as F1's do, scaled to its box; `rooms.py` writes them and T10 checks them |
 
 Sources and receivers, with distance in metres (near < 2, far > 10). Every point is at least 0.6 m from every
 surface, and this has been checked. A receiver is blocked when its straight segment to the source leaves the room.
@@ -99,10 +100,10 @@ F6 src (2.0,2.75,1.5)  near (3.3,3.2,1.2) 1.41 (2.6,1.3,1.6) 1.57 (1.0,3.9,1.3) 
 |---|---|---|---|---|
 | P8 | Settings the PREREG does not name | The default of a freshly imported project: Random, air on, R 0.31 m, trans_epsilon 5, octave bands 125 Hz-4 kHz, 150,000 particles per source per band (`schema/model.rs:962-973`, `schema/bands.rs:124-131`) | The test then measures what users get | T |
 | P9 | Exceptions to the defaults | `random_seed` non-zero, so runs are reproducible with disjoint streams (it forces one thread, `model.rs:926`). Surface and receiver intersection files off. No fittings | Intersection files cost disk at 1M particles and do not touch the histograms | T |
-| P10 | Run length of the tested runs | The product default when A1 is committed: 2.0 s today (`model.rs:964`). If Burhan changes the default first (FINAL.md §5, call 2), the test takes the new one | The default is what users see, and it is his call | **B** |
-| P11 | Energetic mode | Not in the matrix. Burhan is offered the same 63 runs in Energetic mode: the truth runs serve both methods, since the expectations match above energetic's −50 dB kill. M8a measured energetic at 18× random's time on one room (`HANDOFF-2026-10-01.md:59-60`). Recommended: add it, because users can choose it and the tuned-on corpus held both | Which modes the verdict covers is a claim users read | **B** |
+| P10 | Run length of the tested runs | Raised before the test, on Burhan's word (2026-10-01 02:23, "raise the default"). The rule is chosen after the dead-room probe (section 7.1): a fixed default (5.0 s was proposed) if a longer run costs a dead room little, or a default set from the room's predicted reverberation time if it does not. The product default changes in its own step, with its tests and gates, before A1 is committed, and the test takes it | The default is what users see. Burhan decided the direction; the rule goes back to him with the probe's numbers | **B**, decided in part |
+| P11 | Energetic mode | Added, on Burhan's word (2026-10-01 02:23, "include the energetic mode, as long as its verified"): the same 72 tested runs in Energetic mode. The truth runs serve both modes, since the expectations match above energetic's −50 dB kill. Energetic is scored as its own set: EDT is shown for energetic runs only if energetic passes H1-H6 on its own, and Random's verdict does not depend on it. M8a measured energetic at 18× random's time on one room (`HANDOFF-2026-10-01.md:59-60`) | Which modes the verdict covers is a claim users read | **B**, decided |
 | P12 | Seeds | 150k: 1101-1103 (1 ms), 1201-1203 (2 ms), 1501-1503 (5 ms). 50k: 2101-2103, 2201-2203, 2501-2503. Truth: 9001-9004. Probe: 9999, reserved | No two runs share a random stream. The truth is independent of every tested row | T |
-| P13 | The matrix | 6 rooms × 3 steps × 3 seeds at 150k, plus F6 × 3 × 3 at 50k: 63 tested runs and 3,024 rows (8 receivers × 6 bands). Truth: 6 rooms × K = 4, so 24 runs | :28-32 and :34 | T |
+| P13 | The matrix | 7 rooms × 3 steps × 3 seeds at 150k, plus F6 × 3 × 3 at 50k: 72 tested runs in each mode (P11), so 144, and 6,912 rows (8 receivers × 6 bands × 144). Truth: 7 rooms × K = 4, so 28 runs, shared by both modes | :28-32 and :34 | T |
 | P14 | Solver build | `solvers/manifest.json`: upstream `929a5c8e`, spps.exe code sha256 `550485c6…`. Checked before every run as M8a's E1 does (`tools/gates/m8a.ps1:8-9`, `solvers/pe-fingerprint.ps1`), and each report's `solver_build` must read verified (backlog 38, `results/report.rs:899-901`) | "Upstream SPPS" names no build (:20). This is the verified one | T |
 
 ### 2.4 Truth
@@ -157,7 +158,7 @@ leaked 368k temp files there.
 | `method.py` | sha256 gate, loading, the Z = 3 instance | `critique/common.py:6-7` loader |
 | `upstream.py` | P32 | `uphunt_upstream_edt.py` copied. Upstream's 2019 tutorial-1 `.gabe` files and `oracle.json` become fixtures (`uphunt_oracle.py`). The wrapper is the old evaluator's |
 | `truth.py` | P15-P19 | `truth_ideal` (attack_ism.py `3fb8a84b…`), plus `line`, `integral` and `MIN_REGRESSION_BINS` (mirror.py `c5603d5b…`), copied |
-| `rooms.py` | P3, P5, P7, F1-F6, and P0 for the probe (section 7). Writes the seven projects and the design T60s | The material, source and receiver prototypes from `tests/fixtures/rooms/tutorial1_box.simpa`, handled as `bed/file.rs:700-782` does. Canonical JSON edits and `simpa validate` exit 0, as `tools/fixture-gen/mkrooms.py:13-18` does. `simpa import` |
+| `rooms.py` | P3, P5, P7, F1-F7, and P0 and P0b for the probes (section 7). Writes the nine projects and the design T60s | The material, source and receiver prototypes from `tests/fixtures/rooms/tutorial1_box.simpa`, handled as `bed/file.rs:700-782` does. Canonical JSON edits and `simpa validate` exit 0, as `tools/fixture-gen/mkrooms.py:13-18` does. `simpa import` |
 | `driver.py` | The matrix and a plan-only mode. A pool of jobs. `simpa run … --json`, then `simpa results … --json` into `report.json`, with stderr kept and classed. The solver check (P14). A reader for bins (`energy_pa2`), `arrival_s`, R/c and dt. A probe mode that records section 7's numbers and opens no output file. Guards: held-out seeds refused before A1 is committed, seed 9999 refused, folders outside the data root refused | The `simpa bed --jobs` model. M8a's E1 and N1 (`m8a.ps1:8-9, 16`). The old real loader's field access. `run.json` `outcome.elapsed_ms` |
 | `ism_fresh.py` | P20-P22, P33 | `ism.py` copied (`a7c9d41e…`) and `eval_ism.py:59-88` |
 | `synth_fresh.py` | P23, P24, P33 | `critique/synth.py`, committed, with its hash pinned |
@@ -181,9 +182,9 @@ in `RED.md`, as backlog 38-39 did. A control passes both before and after.
 | T7 | Split rule: echograms from the corpus rooms t1 and corridor, summed and rebinned to 0.1 ms, read by P15 agree with `truth_ideal` on the true split within 0.3 % | fails |
 | T8 | Blocked rule: the occluded synth construction, read by P15, agrees within 0.3 % with `truth_edt(t_arr + gap, 0, …)` | fails |
 | T9 | Four planted references give u as P19 defines it. Rows above 1 % are excluded, and a last-10 % share above 1e-6 gives `truth_truncated` | fails |
-| T10 | The six rooms meet P3, P5 and 2.2: their features, V, design T60s, distance classes, clearance and blocked flags. F2 is the longest by design. P3 holds against every corpus room, and each corpus room's recorded kind matches its source. P0 has F2's V, S and α within 1 %, differs from F2 by more than 10 % on every axis, and its source and receivers are F2's scaled per axis | fails |
+| T10 | The seven rooms meet P3, P5 and 2.2: their features, V, design T60s, distance classes, clearance and blocked flags. F2 is the longest by design. P3 holds against every corpus room, and each corpus room's recorded kind matches its source. P0 has F2's V, S and α within 1 %, differs from F2 by more than 10 % on every axis, and its source and receivers are F2's scaled per axis. P0b stands to F7 in the same way | fails |
 | T11 | Each project passes `simpa validate` (exit 0) and `simpa check`. Its settings match P8-P12. Its duration equals a freshly imported project's | fails |
-| T12 | Plan-only lists exactly 63 tested and 24 truth runs with P12's seeds. No seed repeats, and 9999 is absent | fails |
+| T12 | Plan-only lists exactly 144 tested runs (72 in each mode) and 28 truth runs with P12's seeds. No seed repeats, and 9999 and 9998 are absent | fails |
 | T13 | Guards: a flipped spps.exe is refused before any run; a report whose `solver_build` is unverified is refused; seed 9999, or a folder outside the data root, is refused; a held-out seed (SPPS, ISM or Synth) before A1 is committed is refused | fails |
 | T14 | The reader returns, for 3 corpus noise-cal `report.json` files, exactly the old loader's `energy_pa2`, `arrival_s`, R/c and dt | fails |
 | T15 | Synth-fresh: 500 rows per family × step, ratios of 1.5 and 5 only, the ranges of P24, a delayed row equal to its undelayed twin shifted by whole steps. Reproducible from a dev seed | fails |
@@ -219,7 +220,7 @@ This bar is about the harness, not the EDT result. Items 4 and 5, with T10, T11 
 
    Every count and every H verdict must equal `expected_dry.json`. The hash check must be recorded, and each
    planted fault must land in its own counter.
-4. **Rooms.** All seven projects, F1-F6 and P0, mesh: `simpa mesh` exits 0 and `simpa mesh-verify` exits 0. This is TetGen only.
+4. **Rooms.** All nine projects, F1-F7, P0 and P0b, mesh: `simpa mesh` exits 0 and `simpa mesh-verify` exits 0. This is TetGen only.
 5. **Nothing leaked.** The driver's launch log is empty before the probe and holds only the probe's line after it,
    and nothing exists under `C:\tmp\m8b-edt\heldout\`. The count of files on B: outside `harness/` is unchanged.
    C: keeps at least 8 GB free.
@@ -274,6 +275,19 @@ before most of the code is written.
 
 **Not in this plan:** any held-out row of the four sets, the attacker session, committing A1, and row 15's ×1000
 calibration (the verdict settles it, `HANDOFF-2026-10-01.md:63-65`).
+
+### 7.1 The dead-room probe (P0b), for the run-length rule
+
+Burhan asked at 02:37 why the run cannot simply go on until the sound has died. SPPS runs for the duration it is
+given, but a particle stops being traced once it is absorbed (Random) or falls below −50 dB (Energetic). If a
+longer duration then costs a dead room almost nothing, a generous fixed default behaves like a run that ends when
+the sound dies. If it does cost, the default should come from the room's predicted reverberation time instead.
+
+P0b answers this before P10's rule is chosen. It is a stand-in for F7: the same V, S and α within 1 %, more than
+10 % off F7 on every axis, never scored, with seed 9998. It runs twice in Random mode at 150k particles and 1 ms,
+once with a 2 s duration and once with 10 s, and once more each way in Energetic mode. The driver records wall
+time, elapsed_ms and output size for each, as for P0, in `PROBE.md`. The numbers go to Burhan with P0's, together
+with the two choices for P10.
 
 ## 8. Crucible findings and their disposition
 
