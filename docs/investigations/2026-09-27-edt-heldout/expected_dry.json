@@ -11,7 +11,7 @@
       "value": 1980,
       "derivation": "itertools.product((0.5,1,2,4,8), (1,2,10), (0.15,0.2,0.25,0.3,0.35,0.4,0.5,0.6,0.8,1.0,1.5), ('single','double-20','double-15','double-10'), (-12,-6,-3)) = 5*3*11*4*3 = 1980, with no row dropped by the len(b)<4 filter (scan_i4b.py:28-29; corpus.py:1143-1144). Matches FINAL.md:55 'I4 truncation, 1,980 rows' and harness/weak_spots.json's committed sets.scan2b.n_rows = 1980 exactly."
     },
-    "plan_text_discrepancy": "HARNESS-PLAN.md section 5 item 3 says 'D1: 2,000 rows'. The only ratio-3 construction that exists anywhere in the repo or the critique is this 1,980-row grid; nothing produces exactly 2,000. Read as the plan's own rounding of 1,980, not a different, unspecified 2,000-row draw (no 'ratio=3' option exists in m8b/synth_fresh.py, whose RATIOS constant is hard-coded to (1.5, 5.0), synth_fresh.py:104). Flagged here rather than silently resolved; if the intent was a genuine new seeded 2,000-row draw at ratio 3, every number below this note would need to be recomputed, not merely rescaled.",
+    "plan_amendment": "HARNESS-PLAN.md section 5 item 3 originally said 'D1: 2,000 rows'; amended at commit 4c6f03a ('Plan 5.3: D1 is scan 2b's 1,980 ratio-3 rows, whose counts were published before the harness') to read D1 as scan 2b's 1,980 rows, on the grounds that an expectation fixed by a document older than the code under test (FINAL.md:55, published before this harness existed) is the stronger check. Accepted; this file's numbers below are exactly that 1,980-row construction, no rescaling.",
     "status_tally_frozen_method": {
       "n": 1980,
       "n_ok": 794,
@@ -52,8 +52,12 @@
     "H2": {"applicable": false, "reason": "H2 is SPPS-fresh only (score.py:34-40); D1 carries no 'spps' rows."},
     "H4": {"applicable": false, "reason": "H4_SETS = ('spps','ism') (score.py:136); D1 carries neither."},
     "H5": {
-      "pass": null,
-      "reason": "H5 needs upstream.analyse's own wrong-silent count on the same 1,980 rows, paired by id (score.py:433-454). FINAL.md's 'Critique's scans' table (section 3) has no upstream column for any scan, only 'graft·LeanBand' -- unlike the EVAL.md t1/z3/real/ISM table, which does carry an upstream column. No existing document gives upstream's result on this construction, and computing it requires running upstream.analyse, which the task forbids. Left null, not guessed."
+      "set": "synth",
+      "n_eligible": 1980,
+      "n_wrong_silent_frozen": 0,
+      "n_wrong_silent_upstream": 1085,
+      "pass": true,
+      "derivation": "No existing document gives upstream's result on scan2b (FINAL.md's scans table has no upstream column). Computed by running the validated port directly (target/agents/upstream-edt/uphunt_upstream_edt.py, edt(series, dt, kind='point'), sha256 57f391e6... per corpus.py's pin) on the same 1,980 rows, reconstructed bit-for-bit from the same construction as row_count/status_tally above (critique/synth.py's histogram/truth_edt, ratio 3, meta half_width=0 i.e. the 'point' kind). Upstream never refuses (status finite on all 1,980, matching FINAL.md's 'upstream never refuses'); of these, 1,085 are wrong-silent (|edt/truth-1|>0.05), vs the frozen method's 0 (all 1,980 have a finite positive truth, so n_eligible for h5's pairing, score.py:433-454, is the full 1,980; frozen's refused rows contribute wrong_silent=False, not excluded from pairing, score.py classify()). 0 < 1085 -> H5 'synth' passes. Script and exact grid: this task's own session, target/agents/edt-simplify/ as cwd, critique/synth.py + target/agents/upstream-edt/uphunt_upstream_edt.py imported directly, no harness code involved."
     },
     "H6": {"applicable": false, "reason": "attack-only (score.py:137)."}
   },
@@ -173,25 +177,32 @@
       "derivation": "P30's filter is step_ms==1 and design_t60_s<=3.0 (score.py:391-399); every row has design_t60_s=1.0<=3.0 by the plant, so all rows at step=1ms qualify: near 54 + mid 54 + far 36 = 144. H4 does not need a truth (score.py docstring 'rows without a truth stay in'), only usable status; every row is 'ok' by construction, so usable_share = 144/144 = 100% >= H4_USABLE_MIN 90% (score.py:145) -> pass."
     },
     "H1": {"applicable": false, "reason": "H1_SETS = ('ism','synth') (score.py:134); D2 carries only 'spps' rows."},
-    "H5": {"pass": null, "reason": "needs upstream.analyse's wrong-silent count on the same 432 fake histograms, paired by id (score.py:433-454); no plant fixes upstream's behaviour on this mock and running upstream.analyse is forbidden for this task. Left null, not guessed."},
+    "H5": {"pass": null, "reason": "the port (target/agents/upstream-edt/uphunt_upstream_edt.py edt(series,dt)) takes a real energy-bins array, and D2's plant only fixes truth-side quantities (T60s for the disagreeing references, zero/short bin lengths described but not materialised) and the frozen-method-stand-in's reported edt (exact, or 1.08x truth) -- it was never given concrete numeric bins arrays for its 297 baseline rows, since those were specified only as 'edt = truth exactly' at the score level. Materialising real bins for all 432 rows (single-slope + ratio-3 synth histograms with compound-Poisson noise, per D2's own construction text) to feed the port would mean building the mock itself, which the coordinator's second-pass instruction explicitly says to avoid for D2 ('leave D2's H5 null with that reason'). Left null."},
     "H6": {"applicable": false, "reason": "attack-only (score.py:137)."}
   },
 
   "D3": {
     "label": "ISM on the corpus rooms t1 and corridor, through score.py as the (restricted) 'ism' set",
     "identification_of_the_construction": "HARNESS-PLAN.md section 5 item 3 names D3 'ISM on the corpus rooms t1 and corridor'. The ISM corpus (attack_ism.py's ROOMS, res_ism.pkl, 1,920 rows total, FINAL.md's 'ISM 1,920 (independent)' row and this worktree's committed harness/corpus_rooms.json) has exactly 4 rooms: t1, corridor, dead, deader (corpus_rooms.json rooms[] with set='ism': ids 'ism:t1','ism:corridor','ism:dead','ism:deader'; also confirmed by tests/test_fresh_sets.py:T16's parent-room list ['corridor','dead','deader','t1']). D3 restricts the existing 1,920-row ISM corpus set to just the t1 and corridor rooms' rows, run through score.py as 'ism' inputs.",
-    "note_on_naming": "PREREG.md's own corpus text (PREREG.md:17) names 'the ISM sample (rooms dead and corridor)' without mentioning t1 there, while the fuller 4-room list (t1, corridor, dead, deader) is what the ISM generator's own ROOMS dict and this worktree's ism_fresh.py/corpus.py treat as the full ISM corpus. Noted, not resolved here; does not change that t1 and corridor are both members of the 1,920-row ISM corpus either way.",
+    "note_on_naming": "PREREG.md's own corpus text (PREREG.md:17) names 'the ISM sample (rooms dead and corridor)' without mentioning t1 there, while D3's own line (HARNESS-PLAN.md section 5 item 3) says 'ISM on the corpus rooms t1 and corridor'. D3 follows the plan (t1 and corridor), per the coordinator's second-pass instruction; this is simply recorded, nothing below is changed by it. t1 and corridor are both members of the 4-room, 1,920-row ISM corpus either way (attack_ism.py ROOMS, target/agents/followup-design/skeptic-gf3/attack_ism.py:217-222; corpus_rooms.json's 4 ism: entries).",
+    "per_room_data_source": "the 4-room aggregate in harness/weak_spots.json carries no per-room split. Read instead, read-only, from the main repo (not the worktree, per the coordinator's instruction): target/agents/edt-simplify/final/res_ism.pkl (the logged frozen-method result for all 1,920 rows, id format 'ism|<room>|(<rec_xyz>)|<band>|<step>ms') and target/agents/edt-simplify/final/dev/ism_rows.pkl (the 1,920 inputs: bins, dt, t_arrival, truth_edt), joined by id; room-of-origin and receiver position are parsed directly from each id string, and each room's source position and absorption come from target/agents/followup-design/skeptic-gf3/attack_ism.py:217-222 ROOMS = {'t1': ((6.0,10.0,3.0), [(0.2,0.2),(0.2,0.2),(0.1,0.3)], (3.0,5.0,1.8), 0.9), 'corridor': ((20.0,4.0,3.0), [(0.05,0.05),(0.05,0.05),(0.6,0.05)], (5.03,1.97,1.53), 0.9), ...}. design_t60_s per band uses harness/m8b/corpus.py:255-263 design_t60(dims, alpha6, F) (P5's Eyring-with-air formula), imported directly as a pure function -- not score.py, spps_rows.py or ism_fresh.py, and not run on any held-out input.",
     "row_count_for_t1_and_corridor": {
-      "value": null,
-      "reason": "harness/weak_spots.json's committed 'ism' entry gives only the AGGREGATE across all 4 rooms (n_rows=1920, status={'ok':871,'refused':317,'wide':732}); it carries no per-room row count or per-room status breakdown, and attack_ism.py itself (which would state each room's receiver grid) lives under the gitignored target/ tree, not present in this worktree and not under docs/investigations/2026-09-27-edt-simplify/. No existing document in scope gives the t1+corridor subset's row count. Left null rather than assuming an even 1920/4 split (the four rooms differ in size: t1 6x10x3 m, corridor 20x4x3 m, dead/deader 5x4x3 m each, corpus_rooms.json, so an even split is not a safe inference)."
+      "t1": 624, "corridor": 696, "total": 1320,
+      "derivation": "counted directly off res_ism.pkl's 1,920 entries, grouped by the room token in each id ('ism|t1|...' / 'ism|corridor|...'); 624+696=1320 (and, as a cross-check, +324 dead +276 deader = 1920, matching weak_spots.json's aggregate n_rows exactly)."
     },
     "status_tally_t1_and_corridor": {
-      "n_ok": null, "n_refused": null, "n_wide": null,
-      "reason": "same as row_count_for_t1_and_corridor: only the 4-room aggregate is receipted."
+      "t1": {"n_ok": 482, "n_wide": 132, "n_refused": 10},
+      "corridor": {"n_ok": 183, "n_wide": 281, "n_refused": 232},
+      "combined": {"n_ok": 665, "n_wide": 413, "n_refused": 242, "n": 1320},
+      "derivation": "status counted per room from res_ism.pkl's 'status' field (482+132+10=624; 183+281+232=696). Cross-check: summing all 4 rooms' ok counts (t1 482 + corridor 183 + dead 201 + deader 5 = 871) matches weak_spots.json's aggregate ism.status.ok=871 exactly, same for wide (132+281+112+207=732) and refused (10+232+11+64=317)."
+    },
+    "truth_nan_exclusions": {
+      "t1": 4, "corridor": 8, "total": 12,
+      "derivation": "rows whose ism_rows.pkl truth_edt is not a finite positive number (score.py's truth_nan exclusion, score.py:189-193): 4 in t1, 8 in corridor, all already counted within each room's n_refused above (every one of the 12 has status='refused' in res_ism.pkl, so this is a sub-count, not an addition). n_ok_truth therefore still equals n_ok exactly in both rooms (verified below)."
     },
     "n_wrong_silent": {
       "value": 0,
-      "derivation": "harness/weak_spots.json's 'ism' entry gives n_wrong_silent=0 for the FULL 1,920-row (4-room) set; a subset's wrong-silent count is a non-negative part of that sum, so it cannot exceed 0, hence it is exactly 0 for the t1+corridor subset too. Independently corroborated by FINAL.md's EVAL.md-sourced table: 'ISM 1,920 (independent) | ... | wrong-silent **0**·3·781·0 |' (the bolded 0 is the frozen/graft method's count)."
+      "derivation": "computed directly from res_ism.pkl, per room: t1 0, corridor 0 (status=='ok' and |edt/truth-1|>0.05, on all 624+696 rows). Also holds by the weaker decomposition argument (weak_spots.json's 'ism' n_wrong_silent=0 for the full 4-room set, so every subset is 0 too), and by FINAL.md's EVAL.md-sourced table: 'ISM 1,920 (independent) | ... | wrong-silent **0**·3·781·0 |' (bolded 0 = frozen/graft)."
     },
     "n_near_miss": {
       "value": 0,
@@ -200,25 +211,49 @@
     "H1": {
       "set": "ism",
       "n_wrong_silent": 0,
-      "n_ok_truth": null,
-      "pass": null,
-      "derivation": "numerator is certain (0, see n_wrong_silent above). Denominator (n_ok_truth for just t1+corridor) is not available (see row_count_for_t1_and_corridor): the global 'ism' set has 871 'ok' rows over 4 rooms, so n_ok_truth>0 for a 2-room subset is highly likely but not established by any document in scope, and score.h1's bar is 'b>0 and share<=0.5%' (score.py:304-305,318) -- if n_ok_truth is 0 the criterion fails outright rather than passing vacuously. Reported as: pass is true if n_ok_truth>0 (which the 0 numerator then clears trivially, 0/N<=0.5% for any N>0), else the criterion fails on an empty denominator; which of the two holds is not derivable here, so 'pass' is left null rather than assumed."
+      "n_ok_truth": 665,
+      "share": 0.0,
+      "pass": true,
+      "derivation": "n_ok_truth = n_ok summed over both rooms (482 + 183 = 665; every 'ok' row in both rooms carries a finite positive truth -- confirmed directly, not inferred: summing truth-present-and-ok rows per room via ism_rows.pkl's truth_edt gives 482 and 183 exactly, matching n_ok, so none of the 12 truth_nan exclusions is an 'ok' row). 0/665 = 0% <= H1_WRONG_MAX 0.5% (score.py:138), denominator nonzero -> pass."
     },
     "H3": {
       "set": "ism",
-      "subgroup_key": "(ism, room in {t1, corridor}, distance_class, step_ms)",
-      "n_wrong_silent_every_subgroup": 0,
-      "judged": null,
-      "pass": null,
-      "derivation": "the same non-negative-decomposition argument as n_wrong_silent applies to every possible finer subgroup of the t1+corridor rows: since the whole 4-room set's wrong-silent total is 0, every subgroup restricted to t1 and/or corridor also has wrong-silent count 0 n (0 is a sum of non-negative subgroup counts, so each is 0). Whether any such subgroup clears H3_MIN_OK=20 ok-with-truth rows (score.py:141) to be 'judged' is not derivable without a per-room, per-distance-class, per-step row count, which is not available (see row_count_for_t1_and_corridor). If every subgroup that is judged necessarily passes (0% <= 10%), so H3 cannot fail on these rows regardless of which subgroups turn out to be judged; it is reported as pass=null only because 'no subgroup reaches the 20-row bar' is formally possible from available information (in which case H3 passes vacuously, PREREG.md's own reading per score.py:384 'not g[\"judged\"] or ...'), not because a failure is plausible."
+      "subgroup_key": "(ism, room, distance_class, step_ms)",
+      "distance_classification": "near d<2.0, mid 2.0<=d<=10.0, far d>10.0 (score.py:146, NEAR_M/FAR_M), d = dist(room's source position per attack_ism.py:217-222, receiver position parsed from the row id).",
+      "subgroups": {
+        "t1|mid|1.0": {"n_ok_truth": 233, "n_wrong_silent": 0, "judged": true, "pass": true},
+        "t1|mid|2.0": {"n_ok_truth": 196, "n_wrong_silent": 0, "judged": true, "pass": true},
+        "t1|near|1.0": {"n_ok_truth": 28, "n_wrong_silent": 0, "judged": true, "pass": true},
+        "t1|near|2.0": {"n_ok_truth": 25, "n_wrong_silent": 0, "judged": true, "pass": true},
+        "corridor|far|1.0": {"n_ok_truth": 55, "n_wrong_silent": 0, "judged": true, "pass": true},
+        "corridor|far|2.0": {"n_ok_truth": 28, "n_wrong_silent": 0, "judged": true, "pass": true},
+        "corridor|mid|1.0": {"n_ok_truth": 63, "n_wrong_silent": 0, "judged": true, "pass": true},
+        "corridor|mid|2.0": {"n_ok_truth": 34, "n_wrong_silent": 0, "judged": true, "pass": true},
+        "corridor|near|1.0": {"n_ok_truth": 3, "n_wrong_silent": 0, "judged": false, "pass": true}
+      },
+      "n_subgroups": 9, "n_judged": 8, "n_failing": 0,
+      "pass": true,
+      "derivation": "t1's receivers (ism_rows.pkl, room='t1') are all 'mid' or 'near' of source (3.0,5.0,1.8) -- no 'far' receiver in the t1 sample at all (consistent with t1 being only 6x10x3 m, a 10 m diagonal of about 11.4 m, leaving little room for d>10 past a central source); corridor (20x4x3 m, source (5.03,1.97,1.53)) reaches 'far' readily but has only 3 'near' rows (steps 1,2ms x 6 bands, but only 1ms has any near receiver registered -- the sample is a stratified ~1-in-3 draw of 535 registered receivers, EVAL.md:21, not a uniform grid, so an uneven per-class count across the 2 rooms is expected, not an error). Every subgroup's n_wrong_silent is 0 (checked directly per the n_wrong_silent derivation above: 0 wrong in both rooms at every band/step/receiver). 8 of 9 subgroups clear H3_MIN_OK=20 (score.py:141) and all 8 trivially pass (0%<=10%); corridor|near|1.0 (n=3) is not judged and passes vacuously (score.py:385, 'not g[\"judged\"] or ...'). H3 passes overall."
     },
     "H4": {
       "set": "ism",
-      "pass": null,
-      "reason": "P30's filter needs each row's design_t60_s at 1 ms (score.py:391-399), which requires per-room per-band T60 and row counts not available for the t1+corridor subset alone (see row_count_for_t1_and_corridor)."
+      "per_room": {
+        "t1": {"n": 312, "n_usable": 308, "n_ok": 261, "usable_share": 0.9872},
+        "corridor": {"n": 348, "n_usable": 234, "n_ok": 121, "usable_share": 0.6724}
+      },
+      "n": 660, "n_usable": 542, "usable_share": 0.8212,
+      "pass": false,
+      "derivation": "P30's filter is step_ms==1 and design_t60_s<=3.0 (score.py:391-399), pooled across every room given to the 'ism' set (h4 does not subgroup by room, score.py:402-414) -- here just t1+corridor. design_t60_s per (room,band) via harness/m8b/corpus.py:255-263 design_t60(dims, alpha6, F) on each room's dims/alpha from attack_ism.py:217-222; every one of the 6 bands x both rooms comes out <=3.0 s (t1 and corridor are both small/mid absorptive rooms), so the filter keeps every row at step=1ms: t1 312 (=624/2, since the sample is split 1ms/2ms), corridor 348 (=696/2). usable = ok+wide. t1 308/312=98.72% alone clears H4_USABLE_MIN 90% (score.py:145), but corridor's 234/348=67.24% does not (corridor has far more 'refused' rows, 232 of 696, mostly at distance/band combinations the frozen method's I4 tail check rejects at the corridor's long T60). Pooled: 542/660=82.12% < 90% -> H4 'ism' fails for the t1+corridor subset (note this is a property of D3's restricted 2-room input, not necessarily of the full 4-room ISM-fresh set, which the PREREG's actual H4 gate will run on different, fresh rooms)."
     },
     "H2": {"applicable": false, "reason": "H2 is SPPS-fresh only (score.py:34-40); D3 carries 'ism' rows, not 'spps'."},
-    "H5": {"pass": null, "reason": "needs upstream.analyse's wrong-silent count on the same rows, paired by id; not given by any document in scope and forbidden to compute here by running the pipeline."},
+    "H5": {
+      "set": "ism",
+      "n_eligible": 1308,
+      "n_wrong_silent_frozen": 0,
+      "n_wrong_silent_upstream": 609,
+      "pass": true,
+      "derivation": "computed by running the validated port directly (target/agents/upstream-edt/uphunt_upstream_edt.py edt(bins, dt, kind='point')) on the SAME real bins already logged in ism_rows.pkl for t1+corridor (1,320 rows), no reconstruction needed. n_eligible (score.py's has_truth pairing, score.py:433-454) is 1,308, not 1,320: the 12 truth_nan rows noted above have no truth to pair on and are excluded from h5 too, exactly as from H1/H3. Upstream never refuses on these (status finite for all 1,308). Upstream wrong-silent = 609 (46.6%), frozen = 0. 0 < 609 -> H5 'ism' passes."
+    },
     "H6": {"applicable": false, "reason": "attack-only (score.py:137)."}
   }
 }
