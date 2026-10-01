@@ -45,14 +45,30 @@ Where the contract is silent:
   bound taken the same way in every room, not only boxes -- mirror the source in the plane of every
   boundary face of the room's own geometry (rooms_mod._Grid's faces: the quads rooms.py meshes,
   obj_text writes and the solver sees), take the shortest image-to-receiver distance, subtract the
-  direct distance, divide by C. No visibility test. In a box room this equals corpus.first_order_d1
-  exactly, since a box's boundary faces are its six walls (tests/test_gap_all_rooms.py pins the
+  direct distance, divide by C. *Amended 12:14 (HARNESS-PLAN.md 8.2, audit of `ff85de8`, which gave
+  negative gaps: F3 rec1 -0.55 ms, F4 rec7 -9.92 ms)*: a face counts only when the source and the
+  receiver both lie strictly in front of it (the side its inward normal points to, i.e. the side the
+  owning box's air is on). Mirroring across a face neither point actually fronts is not a real
+  reflection off that surface (both ends would have to pass back through the solid the face bounds to
+  reach it), and can give an image closer than the direct path, which is how the gap went negative.
+  With front-side filtering the gap is never negative (tests/test_gap_all_rooms.py checks every
+  receiver of every room). In a box room every one of the six walls fronts every interior point (the
+  room's own 0.6 m clearance, rooms.py's CLEARANCE_M), so no face is ever filtered out there and the
+  result still equals corpus.first_order_d1 exactly (tests/test_gap_all_rooms.py pins the
   equivalence). F3 and F4 are multi-box ('non-box' kind, rooms.py:268): a receiver in F3's chamber or
-  behind F4's corner no longer gets the main box's gap.
+  behind F4's corner no longer gets the main box's gap, and a face on the far side of a partition from
+  the source (e.g. the chamber's own near wall, when the source is in the main room) is excluded
+  rather than used to mirror a path that was never physically possible.
 - split_borderline is evaluated only when both assess()'s truth_status is 'ok' and the tested run's
   own frozen-method analysis (method.load(method_path).analyse) is itself status 'ok' (a finite edt):
   a row that is not ok has no wrong-silent verdict to protect (score.classify: wrong_silent is False,
-  never computed, for a row that is not ok), so 8.2's third call has nothing to flag there.
+  never computed, for a row that is not ok), so 8.2's third call has nothing to flag there. A blocked
+  receiver (rooms.rooms()'s 'blocked': its straight segment to the source leaves the room) has no
+  direct sound to split from, so 8.2's third call is not applied to it either, even when assess()'s
+  own status (already computed with blocked=True, the critique's occluded truth) comes back 'ok': that
+  status is what the harness already gives such a receiver, and rows_from_runs leaves it exactly as
+  assess() gave it, the same way it already leaves truth_nan/truth_truncated/truth_uncertain rows
+  alone. _gap_s itself is not called for a blocked receiver's row.
 """
 import math
 
@@ -62,19 +78,28 @@ K_REFS = 4                              # P16
 
 
 def _gap_s(room_geom, idx):
-    """HARNESS-PLAN.md 8.2's last call: the first-reflection gap, as a lower bound taken the same way
-    in every room, not only boxes (audit of 03470f9, which read 'boxes'[0] alone, silently wrong for
-    F3 and F4's chamber/corner receivers). Mirror the source in the plane of every boundary face of
-    the room's own geometry (rooms_mod._Grid's faces, built from this room's 'boxes' and
-    'box_materials' exactly as rooms.py meshes and obj_text writes them -- the geometry the solver
-    sees), take the shortest image-to-receiver distance, subtract the direct distance, divide by C.
-    No visibility test: any reflection off a face, specular or diffuse, is at least as long as the
-    path through that face's plane. In a box room this equals corpus.first_order_d1 exactly, since a
-    box's boundary faces are its six walls. Raises ValueError if the room's geometry cannot be read
-    into boundary faces; never falls back to the first box. 'box_materials' only labels which box a
-    face bounds (rooms.py:270) and does not affect which faces are boundary faces, so a room dict that
-    omits it (as rooms.rooms() never does, but a hand-built one may) gets placeholder per-box labels
-    instead of being treated as unreadable; a missing 'boxes', 'source_m' or receiver position is."""
+    """HARNESS-PLAN.md 8.2's last call (*amended 12:14*): the first-reflection gap, as a lower bound
+    taken the same way in every room, not only boxes (audit of 03470f9, which read 'boxes'[0] alone,
+    silently wrong for F3 and F4's chamber/corner receivers). Mirror the source in the plane of every
+    boundary face of the room's own geometry (rooms_mod._Grid's faces, built from this room's 'boxes'
+    and 'box_materials' exactly as rooms.py meshes and obj_text writes them -- the geometry the solver
+    sees) that the source and the receiver are BOTH strictly in front of (on the side the face's
+    inward normal points to, where the owning box's air is: a _Grid face's 'sign' is +1 when the air
+    is on the lower side of its coordinate, -1 when it is on the higher side, so the inward normal's
+    component on that axis is -sign; a point is in front when -sign * (point[ax] - coord) > 0, i.e.
+    sign * (coord - point[ax]) > 0). A face neither point fronts is not a reflection either of them
+    can actually make off it (audit of `ff85de8`, which mirrored across every face unconditionally and
+    gave negative gaps: F3 rec1 -0.55 ms, F4 rec7 -9.92 ms, both from mirroring across a partition face
+    on the far side from the source). Take the shortest image-to-receiver distance over the faces that
+    qualify, subtract the direct distance, divide by C. In a box room every point is more than 0 m
+    (rooms.py's 0.6 m clearance) inside every one of the box's six walls, so every wall fronts every
+    source and receiver there and none is ever filtered out: the result still equals
+    corpus.first_order_d1 exactly. Raises ValueError if the room's geometry cannot be read into
+    boundary faces, or if no face fronts both the source and this receiver; never falls back to the
+    first box. 'box_materials' only labels which box a face bounds (rooms.py:270) and does not affect
+    which faces are boundary faces, so a room dict that omits it (as rooms.rooms() never does, but a
+    hand-built one may) gets placeholder per-box labels instead of being treated as unreadable; a
+    missing 'boxes', 'source_m' or receiver position is."""
     try:
         boxes = room_geom['boxes']
         src = room_geom['source_m']
@@ -95,10 +120,15 @@ def _gap_s(room_geom, idx):
         raise ValueError('room %r: geometry has no boundary faces' % room_geom.get('name'))
     d = math.dist(src, rec)
     best = math.inf
-    for ax, coord, _sign, _u, _v, _mat in grid.faces:
+    for ax, coord, sign, _u, _v, _mat in grid.faces:
+        if sign * (coord - src[ax]) <= 0 or sign * (coord - rec[ax]) <= 0:
+            continue                    # neither the source nor the receiver can reflect off this face
         img = list(src)
         img[ax] = 2 * coord - src[ax]
         best = min(best, math.dist(img, rec))
+    if not math.isfinite(best):
+        raise ValueError('room %r, receiver %d: no boundary face fronts both the source and the '
+                         'receiver' % (room_geom.get('name'), idx))
     return (best - d) / corpus.C_SPPS
 
 
@@ -132,12 +162,16 @@ def rows_from_runs(room_name, tested_dir, reference_dirs, *, mode, particles, se
         a = truth.assess([s['energy_pa2'] for s in matched], ref0['dt'], ref0['arrival_s'], ref0['half_width'],
                          blocked=rec_geom['blocked'])
         truth_status = a['status']
-        if truth_status == 'ok':
+        # HARNESS-PLAN.md 8.2's last call, amended 12:14: a blocked receiver has no direct sound to
+        # split from, so the third call is not applied to it; its truth_status stays exactly what
+        # assess() gave (already computed with blocked=True above), the status the harness already
+        # gives such a receiver, and _gap_s is not called for it.
+        if truth_status == 'ok' and not rec_geom['blocked']:
             res = m.analyse(t['energy_pa2'], t['dt'], t['arrival_s'], dict(half_width=t['half_width']))
             if res['status'] == 'ok':
                 gap_s = _gap_s(geom, idx)
-                # HARNESS-PLAN.md 8.2's third call, wired: every otherwise-'ok' row is tested, not just
-                # the ones a caller remembers to check.
+                # HARNESS-PLAN.md 8.2's third call, wired: every otherwise-'ok', unblocked row is
+                # tested, not just the ones a caller remembers to check.
                 if truth.split_borderline(res['edt'], a['truth'], gap_s, t['half_width'], t['band_hz']):
                     truth_status = 'truth_split_borderline'
         t60 = geom['design_t60_s']
