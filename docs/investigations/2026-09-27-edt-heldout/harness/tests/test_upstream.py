@@ -22,7 +22,7 @@ def f32_bits(x):
 
 
 def test_t04_upstream_copy_hash_and_oracle_bit_for_bit():
-    """T4: the copy is the port (sha256 57f391e6... in its source's CRLF form) and reproduces
+    """T4: the copy is the port (sha256 57f391e6..., its source's own LF bytes) and reproduces
     oracle.json's EDT for every band, the Global row and the Average, bit for bit; against upstream's
     own 'Acoustic parameters.gabe' it is bit-identical exactly where oracle.json says so (24 of 29)."""
     for name, want in FIXTURE_SHA256.items():
@@ -34,7 +34,7 @@ def test_t04_upstream_copy_hash_and_oracle_bit_for_bit():
     assert upstream.UPSTREAM_SHA256 == PORT_SHA256
     assert upstream.COPY.is_file(), 'no copy of the port at %s' % upstream.COPY
     lf = upstream.COPY.read_bytes().replace(b'\r\n', b'\n')
-    assert sha256_bytes(lf.replace(b'\n', b'\r\n')) == PORT_SHA256, 'the copy is not the port, line ends aside'
+    assert sha256_bytes(lf) == PORT_SHA256, 'the copy is not the port, line ends aside'
 
     oracle = json.loads((FIX / 'oracle.json').read_text(encoding='utf-8'))['params']['EDT (s)']
     rows = upstream.edt_table(FIX / 'Sound level.recp')

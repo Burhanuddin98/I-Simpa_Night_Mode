@@ -127,7 +127,8 @@ def test_t09_planted_references_uncertainty_and_exclusions(synth):
         assert rel(res['truth'], truth.read(total, dt, t_arr, h)) <= 1e-12
         for e, r in zip(res['edts'], refs):
             assert rel(e, truth.read(r, dt, t_arr, h)) <= 1e-12
-        assert rel(res['u'], statistics.stdev(res['edts']) / math.sqrt(4) / res['truth']) <= 1e-12
+        assert math.isclose(res['u'], statistics.stdev(res['edts']) / math.sqrt(4) / res['truth'],
+                            rel_tol=1e-12, abs_tol=0.0)
         return total
 
     refs, exact = planted((0.800, 0.802, 0.798, 0.801), 2.0)

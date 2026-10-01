@@ -6,8 +6,8 @@ STUB (HARNESS-PLAN.md section 6, step 3): COPY does not exist yet and every func
 None. Tests T4 and T5 hold the contract below.
 
 Contract:
-- COPY: m8b/_upstream_edt.py, the port's text. Its source is CRLF throughout and this folder
-  keeps LF (../.gitattributes), so the copy's bytes with every LF made CRLF hash to
+- COPY: m8b/_upstream_edt.py, the port's text. Its source is LF throughout, as this folder
+  keeps (../.gitattributes), so the copy's bytes, with any CRLF made LF, hash to
   UPSTREAM_SHA256. provenance.json records the source and its hashes.
 - port(): the copy as a module, executed only after that hash is checked (VoidRun otherwise).
 - edt_table(recp_path): [(row label, numpy.float32 EDT in s)] for every band of a 'Sound level.recp',

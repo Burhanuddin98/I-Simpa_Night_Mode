@@ -91,7 +91,8 @@ def test_t15_synth_fresh_draws_p24(synth):
         assert np.allclose(b[s:], bt, rtol=1e-9, atol=1e-12 * float(np.max(bt))), r['id']
     for r in rows[:3] + delayed[:3]:
         want = synth.truth_edt(r['t_arrival'], r['Ed'], r['gap_ms'] * 1e-3, r['A'], r['k'])
-        assert rel(synth_fresh.truth(r), want) <= 1e-12
+        got = synth_fresh.truth(r)   # NaN above DRR 9.54 dB on both sides (RED.md defect 3)
+        assert got is not None and ((math.isnan(want) and math.isnan(got)) or rel(got, want) <= 1e-12), r['id']
     assert canon(synth_fresh.draw(DEV_SEED)) == canon(rows), 'not reproducible from its seed'
     assert canon(synth_fresh.draw(DEV_SEED + 1)) != canon(rows)
 
