@@ -1,4 +1,4 @@
-# pytest's settings for T1-T22 (../HARNESS-PLAN.md section 4). Not a package build file: the harness is
+# pytest's settings for harness2: T1-T22 copied from round 1, T23-T43 from ../HARNESS-PLAN-2.md section 6 (round 2). Not a package build file: the harness is
 # run from this folder, never installed. (A pytest.ini would be dropped by the repo's `*.ini` ignore.)
 # Run from this folder with the venv and no bytecode:
 #   set PYTHONDONTWRITEBYTECODE=1 & C:\tmp\m8b-edt\venv\Scripts\python.exe -m pytest
@@ -7,4 +7,4 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-p no:cacheprovider --basetemp=C:/tmp/m8b-edt/pytest-tmp -ra"
+addopts = "-p no:cacheprovider --basetemp=C:/tmp/m8b-edt/pytest-tmp2 -ra"

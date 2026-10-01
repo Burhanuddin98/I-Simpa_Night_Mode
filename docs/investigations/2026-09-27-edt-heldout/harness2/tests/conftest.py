@@ -1,4 +1,4 @@
-"""Shared paths, references and helpers for T1-T22 (../../HARNESS-PLAN.md section 4).
+"""Shared paths, references and helpers for harness2: T1-T22 as adapted, T23-T43 (../../HARNESS-PLAN-2.md section 6).
 
 Every test writes only under pytest's basetemp, C:\\tmp\\m8b-edt\\pytest-tmp (../pyproject.toml),
 never on B:. Corpus inputs come from the main checkout's gitignored target/ (corpus.find_target_root) and
@@ -28,8 +28,10 @@ from m8b import corpus  # noqa: E402
 HARNESS = corpus.HARNESS
 INVESTIGATION = corpus.INVESTIGATION
 REPO = corpus.REPO
-FROZEN = corpus.FROZEN
+FROZEN = corpus.FROZEN                                   # round 1's file: a control here, never the method under test
 FROZEN_SHA256 = corpus.FROZEN_SHA256                     # PREREG.md:8
+FROZEN2 = INVESTIGATION / 'frozen2' / 'method.py'        # round 2's method (PREREG-2.md, amendment 1: Z = 2.5)
+FROZEN2_SHA256 = '029d90ac5e8f6a634a51a7ffce136cbd4c0b7ea3d3ad8a18b78fd8240ff224a0'   # HARNESS-PLAN-2.md section 4, LF bytes
 SCRATCH = Path(r'C:\tmp\m8b-edt')
 MIN_FREE_C = 8 * 1024 ** 3                               # the task's floor for C:
 
