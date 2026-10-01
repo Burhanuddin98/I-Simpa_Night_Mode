@@ -14,11 +14,11 @@ as its verified"), and the attacker round at 08:05 ("Keep it", row 35). Z = 3 is
 
 ## State at the freeze (checked when this file was written)
 
-- No held-out row exists: `C:	mp\m8b-edt\heldout\` does not exist.
+- No held-out row exists: `C:\tmp\m8b-edt\heldout\` does not exist.
 - The harness: 53 of 53 tests pass; the step 8 review found no blocker (`GREEN.md`, `3ddaa64`).
 - The product the test runs: the default SPPS run length is 10 s (`ccf28f4`, gated), and `simpa run` checks its solver
   build by default, with an override manifest never reading verified (`0694037`, `a116c98`, gated, reviewed SHIP).
-- Hashes, sha256 of the bytes as committed in this tree:
+- Hashes, sha256 of the working-tree bytes at the freeze (`frozen/method.py` in its pinned CRLF form, `00e793e`):
 
 | File | sha256 |
 |---|---|
@@ -28,23 +28,23 @@ as its verified"), and the attacker round at 08:05 ("Keep it", row 35). Z = 3 is
 | `expected_dry.json` | `00552fafcf34a828c385c4e08bb3fe0eff627034ddd9ccd9b4ddf0483bdede79` |
 | `harness/corpus_rooms.json` | `dc3d0b2c0b8be0f69c7927f0c749a88dad76cc791edae2474f09cb1fd44da882` |
 | `harness/weak_spots.json` | `c75d53212f4114e785369668e50d81143bc09882c06d6cab2a9c792b730da9b8` |
-| `harness/m8b\__init__.py` | `202f941d5b47e33892782e341c57d31845493d770dd7536f2e0ce3cab0d3d6db` |
-| `harness/m8b\_ism.py` | `a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747` |
-| `harness/m8b\_mirror.py` | `9824f4bb1d0e4f24554f31efc7749a20ba243bf8ef971e4f88d82ad5b4ebad79` |
-| `harness/m8b\_truth_ideal.py` | `2a37e532855df11e61bfc402ef2637c3e3acc2c372f29aa22e5e8991c72c6f3e` |
-| `harness/m8b\_upstream_edt.py` | `57f391e6cb09ded8a408462fbabc7aacd93743a3fa46cc28deeef3f7a319f282` |
-| `harness/m8b\_z3echo.py` | `5fff8405ed0b485d87a8c9fc5097d343b7c56c29232da0f44ebd698a51e16c4e` |
-| `harness/m8b\attack.py` | `728d0926549fefd1c56db333b978c196d8a15c4695f247c6897c3b708d3608de` |
-| `harness/m8b\corpus.py` | `c6754dc73f4a94bf3766548f77ce85627a10c2c75fea077995b0c6d39badb3c3` |
-| `harness/m8b\driver.py` | `16fbc37fd919bbb7d83237e36ec33a2fbc50306fcf4cf581c72939ce8cffe70e` |
-| `harness/m8b\ism_fresh.py` | `ca78892d9746db3b0ad1982e1111c7b90049114f9bfbbc79200ee194d7ceb9a3` |
-| `harness/m8b\method.py` | `19e61dd02408413e0f4db0f147ba4a303f885575a4b0d48170ad4d220256cd86` |
-| `harness/m8b\rooms.py` | `ab9ea71374b2ce9e9fc8118a5f3233ee0ee07da45a6c8e7f50eed67acecbe603` |
-| `harness/m8b\score.py` | `29520a017d414a34e5ecf1a68b168adfb5d2bdfa769ca3eac55bbe24426249e4` |
-| `harness/m8b\spps_rows.py` | `63357373443552a6989a437d229ad26e8f3d28385557cbfe211347d72ec18546` |
-| `harness/m8b\synth_fresh.py` | `1d9470be0510c3c54b156a3d88360e4cb924048d85a2d230eb44ca1962e9a243` |
-| `harness/m8b\truth.py` | `412cb9ece0cf36b3d5f2ca143235898d978c5d155d2b6c5f72244efacc47af90` |
-| `harness/m8b\upstream.py` | `76ea8c3209d608a83ab36c33618debdca79dff3a015f516ca2dd0539ff155781` |
+| `harness/m8b/__init__.py` | `202f941d5b47e33892782e341c57d31845493d770dd7536f2e0ce3cab0d3d6db` |
+| `harness/m8b/_ism.py` | `a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747` |
+| `harness/m8b/_mirror.py` | `9824f4bb1d0e4f24554f31efc7749a20ba243bf8ef971e4f88d82ad5b4ebad79` |
+| `harness/m8b/_truth_ideal.py` | `2a37e532855df11e61bfc402ef2637c3e3acc2c372f29aa22e5e8991c72c6f3e` |
+| `harness/m8b/_upstream_edt.py` | `57f391e6cb09ded8a408462fbabc7aacd93743a3fa46cc28deeef3f7a319f282` |
+| `harness/m8b/_z3echo.py` | `5fff8405ed0b485d87a8c9fc5097d343b7c56c29232da0f44ebd698a51e16c4e` |
+| `harness/m8b/attack.py` | `728d0926549fefd1c56db333b978c196d8a15c4695f247c6897c3b708d3608de` |
+| `harness/m8b/corpus.py` | `c6754dc73f4a94bf3766548f77ce85627a10c2c75fea077995b0c6d39badb3c3` |
+| `harness/m8b/driver.py` | `16fbc37fd919bbb7d83237e36ec33a2fbc50306fcf4cf581c72939ce8cffe70e` |
+| `harness/m8b/ism_fresh.py` | `ca78892d9746db3b0ad1982e1111c7b90049114f9bfbbc79200ee194d7ceb9a3` |
+| `harness/m8b/method.py` | `19e61dd02408413e0f4db0f147ba4a303f885575a4b0d48170ad4d220256cd86` |
+| `harness/m8b/rooms.py` | `ab9ea71374b2ce9e9fc8118a5f3233ee0ee07da45a6c8e7f50eed67acecbe603` |
+| `harness/m8b/score.py` | `29520a017d414a34e5ecf1a68b168adfb5d2bdfa769ca3eac55bbe24426249e4` |
+| `harness/m8b/spps_rows.py` | `63357373443552a6989a437d229ad26e8f3d28385557cbfe211347d72ec18546` |
+| `harness/m8b/synth_fresh.py` | `1d9470be0510c3c54b156a3d88360e4cb924048d85a2d230eb44ca1962e9a243` |
+| `harness/m8b/truth.py` | `412cb9ece0cf36b3d5f2ca143235898d978c5d155d2b6c5f72244efacc47af90` |
+| `harness/m8b/upstream.py` | `76ea8c3209d608a83ab36c33618debdca79dff3a015f516ca2dd0539ff155781` |
 
 ## The fixed parameters: HARNESS-PLAN.md section 2, verbatim
 
