@@ -57,3 +57,62 @@ then tripped the e2e tsconfig's stricter checking (`npm run typecheck` only cove
 `19384d8` touch only tests, the gate script and `app/e2e/`. No change to
 `crates/simpa-core/src/run/manager.rs`, `crates/simpa-core/src/results.rs` or `bed/run.rs`
 (backlog 54's second half, deliberately left open).
+
+## M8b: the override manifest never reads verified (2026-10-01, `a116c98`)
+
+Coordinator's finding on the record above: `$SIMPA_SOLVER_MANIFEST` (`mesh_run.rs:520-526`) lets a
+test register a cargo-built stand-in's own code sha256 so the default verification this step added
+does not block it. The doc comment called it "never a way to skip verification", but it was: a
+manifest holding the *running* executable's own hash makes every check match trivially, and nothing
+in `run.json` said the checks were made against that override rather than the embedded
+`solvers/manifest.json`. `results::solver_build` had no way to tell the two apart, so an override
+run could read VERIFIED in `simpa results` and the app's Runs row and Results step.
+
+**Fix.** `run.json` now records which manifest a run's `solvers` checks were made against:
+`solver_manifest: {"source": "embedded" | "override", "sha256": "<the manifest file's own
+sha256>"}`, present exactly when `solvers` is (`SolverManifest::parse`'s new `source` argument,
+`crates/simpa-core/src/bed/pe.rs`; `Record::manifest()`, `run/manager.rs`, reads it off
+`RunOptions::verify` so every caller that already supplies a manifest gets it for free).
+`results::solver_build` (`results.rs`) checks `solver_manifest.source` before it ever compares the
+checks: `override` is unverified with a new code, `solver_manifest_override`, whatever the checks
+say. The app's `manifest()` (`app/src-tauri/src/runs.rs`) never reads
+`$SIMPA_SOLVER_MANIFEST` — confirmed, not just asserted — so every app run's source is `embedded` by
+construction. The CLI keeps the env lever itself: `cli_run`'s `a_run_whose_preprocess_gives_up_...`
+test, `run_folder_fixtures.rs`'s `stub_*` cases and the M11 gate's own forced mesh failure
+(`tools/gates/m11.ps1` gate "the mesh-failure run") all still need a run to *proceed* under a
+stand-in, and still do; none of them asserted "verified" except one.
+
+**The hole, caught by the gate itself.** `app/e2e/specs/m11.dock.e2e.ts`'s `m11-dock-meshfail`
+drives exactly this scenario — the gate's own forced mesh failure, checked against an override
+manifest built from `simpa-stub-tetgen-skips.exe`'s own hash — and asserted
+`data-verified="yes"`. That assertion was the hole this fix closes: it now asserts `"no"`, the row's
+`data-build-code="SOLVER_MANIFEST_OVERRIDE"`, and the reason text naming
+`solver_manifest_override`, after first pinning that the run's `solver_manifest.source` really is
+`override`. No other test (`cli_run.rs`, `run_folder_fixtures.rs`) asserted a build verdict at all,
+so none needed changing — they test that the run proceeds, not that it reads verified.
+
+New Rust coverage: `results_solver_build.rs`'s `t54_override_...` (every check matching, checked
+against an override, still unverified with the new code; the identical checks against the embedded
+manifest, or no `solver_manifest` recorded at all, still verify — the marker is what changed, not
+the checks) and `run_manifest.rs`'s `the_solver_manifest_is_written_only_alongside_a_check` (the
+field round-trips, absent exactly when `solvers` is). New TS coverage:
+`dock/model.test.ts`'s extension of `t38_8` (the Runs row's `buildMark` never reads `verified` for
+an override run even when every check matches, and buckets it `unverified`, not `unrecorded`).
+`docs/solver-contract.md`'s solver-build table gets a row for the new code (held to it by
+`reason_codes_docs.rs`'s `the_solver_build_codes_are_held_to_the_tables`, which found it missing on
+the first run).
+
+| Gate | Commit | Time | Result |
+|---|---|---|---|
+| `m11.ps1`, bare | `a116c98` | 17:15-17:27 | FAILED, 6 checks: two real bugs in the new `m11.dock.e2e.ts` assertions (`solver_manifest` missing from the spec's own local `Manifest` interface; `textOf`'s possibly-null result passed where `assert.ok`'s message wants `string \| Error \| undefined`) — fixed; the rest (`msedgedriver` not matching the WebView2 runtime, the e2e connection refusals and the `m11-focus` window-count that cascade from it) was environment drift since the 15:39-16:39 record above, unrelated to this change |
+| `m11.ps1 -FetchDriver`, retry | `a116c98` | 17:37-17:50 | **PASSED**, exit 0; core crates 790 passed, 0 failed, 31 ignored (572 s); e2e 32 of 32 required, 0 failures; `m11-dock-meshfail` confirmed: `data-verified="no"`, `SOLVER_MANIFEST_OVERRIDE`, the detail text naming `solver_manifest_override`; m11-focus PASS (14 sessions, 0 unexpected foreground changes); 0 files left on B: |
+| `m10.ps1 -SolversDir C:\tmp\nm-m8a-solvers`, `SIMPA_TETGEN160=C:\tmp\nm-m10-solvers\build\src\tetgen\Release\tetgen.exe` | `a116c98` | 17:50-18:00 | **PASSED**, exit 0; 27 e2e tests, 13 required, 0 failures |
+| `m9.ps1 -TargetDir C:\tmp\nm-target` | `a116c98` | 18:00-18:01 | **PASSED**, exit 0; every lettered check (a)-(h) and the two lint checks PASS |
+
+Before the gate, `cargo test -p simpa-core -p simpa` (`SIMPA_SOLVERS_DIR`, `SIMPA_UPSTREAM` and
+`SIMPA_TETGEN160` all set, matching what the gates themselves export): 905 passed, 0 failed.
+`cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings` both clean.
+`npm run typecheck` and `npm test` (146 of 146) clean in `app/`; `node --test "e2e/lib/*.test.ts"`
+(43 of 43) clean, covering `plant-loss.ts`'s own new line (it now clears `solver_manifest` beside
+`solvers` when it plants `SOLVER_BUILD_UNRECORDED`, so the planted run never carries a
+`solver_manifest` with nothing in `solvers` to go with it).
