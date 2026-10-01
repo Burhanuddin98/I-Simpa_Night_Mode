@@ -130,6 +130,16 @@ Added to the contract here; no test reads it:
   scorer groups by. n_images, image_time, farthest, design_t60s and in_class are the rules above.
 - make_row computes the room's echogram on every call. One per receiver serves all 27 of its rows,
   so the step that makes the 3,888 rows needs 144 echograms, not 3,888.
+- rows_for_scoring(D) -> row_specs(D) turned into score.evaluate's 'ism' input dicts (step 7b, wiring
+  HARNESS-PLAN.md 8.2's fourth call into the path that builds real rows): for every spec, one
+  make_row(room, rec, R, F, step_ms, run_s=RUN_S, retry_truncated=True) call, with retry_truncated
+  hard-coded True in this function's body (not a parameter of rows_for_scoring, so no caller of this
+  function can build an ISM-fresh row that skips the retry). Each returned dict carries 'set'='ism',
+  the spec's 'id'/'room'/'d_m'/'step_ms'/'band_hz'/'design_t60_s', 'seed' (D['seed']), 'bins', 'dt',
+  't_arrival', 'meta'={'half_width'}, 'truth'=make_row's truth_edt, 'truth_status', and, when the row
+  was ever flagged truncated, 'truth_truncated_retry' (make_row's own receipt, kept for the record).
+  make_row's default stays False (T6 reproduces the corpus's bit-exact truth through it); only this
+  function, and whatever calls it to build a real held-out draw's rows, passes True.
 
 What the draw gives, on dev seeds only (C:/tmp/m8b-edt/step6-ism/check_ism.py and its
 check_ism-*.json, 2026-10-01: 400 draws, seeds 20261001-20261400, 4,800 rooms; the frozen method never
@@ -520,4 +530,25 @@ def row_specs(D):
                                     distance_class=x['class'], band_hz=band, step_ms=step, run_s=RUN_S,
                                     image_time_s=room['image_time_s'],
                                     design_t60_s=t60[band] if band in t60 else t60[str(band)]))
+    return out
+
+
+def rows_for_scoring(D):
+    """HARNESS-PLAN.md 8.2's fourth call, wired (step 7b): row_specs(D) built for real, one make_row
+    call per spec, retry_truncated always True so no row built through this function can reach the
+    scorer still truth_truncated for want of the retry. Returns score.evaluate's 'ism' input dicts
+    (ROW_FIELDS the scorer reads via .get, so an absent one is simply None there)."""
+    rooms_by_id = {r['id']: r for r in D['rooms']}
+    out = []
+    for spec in row_specs(D):
+        room = rooms_by_id[spec['room']]
+        row = make_row(room, spec['position_m'], spec['R_m'], spec['band_hz'], spec['step_ms'],
+                       run_s=spec['run_s'], retry_truncated=True)
+        d = dict(set='ism', id=spec['id'], bins=row['bins'], dt=row['dt'], t_arrival=row['t_arrival'],
+                 meta=dict(half_width=row['half_width']), truth=row['truth_edt'], truth_status=row['truth_status'],
+                 room=spec['room'], d_m=spec['d_m'], step_ms=spec['step_ms'], band_hz=spec['band_hz'],
+                 design_t60_s=spec['design_t60_s'], seed=D['seed'])
+        if 'truth_truncated_retry' in row:
+            d['truth_truncated_retry'] = row['truth_truncated_retry']
+        out.append(d)
     return out
