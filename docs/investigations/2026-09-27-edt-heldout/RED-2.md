@@ -54,3 +54,60 @@ FAILED tests/test_r2_scorer.py::test_t38_dead_room_is_refused_by_round_2_and_wro
 9 failed, 1 passed in 23.08s
 ```
 
+## Batch 2, 2026-10-02 00:58: T32-T35 (tests/test_r2_corpus_rooms.py, tests/test_r2_plan_guards.py)
+
+Result: 5 failed. rooms2, corpus2, freeze2 and round2 exist only as stubs (NotImplementedError / missing names); the run list lines the dry run of the unchanged runner printed (172 F-room runs) are dropped from the block below. Nothing was created on B: (T35 checks).
+
+```
+FFFFF                                                                    [100%]
+================================== FAILURES ===================================
+E   FileNotFoundError: [Errno 2] No such file or directory: 'B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m8b-edt\\docs\\investigations\\2026-09-27-edt-heldout\\\corpus_rooms_2.json'
+C:\Program Files\Python313\Lib\pathlib\_local.py:537: FileNotFoundError: [Errno 2] No such file or directory: 'B:\\repos\\I-Simpa_Night_Mode\\.claude\\worktrees\\m8b-edt\\docs\\investigations\\2026-09-27-edt-heldout\\\corpus_rooms_2.json'
+E   NotImplementedError: rooms2.rooms
+m8b\rooms2.py:6: NotImplementedError: rooms2.rooms
+E   AssertionError: assert ({'F1', 'F2', ...5', 'F6', ...} == {'G1', 'G2', ...5', 'G6', ...}
+      
+      Extra items in the left set:
+      'F5'
+      'F2'
+      'F6'
+      'F3'
+      'F1'...
+      
+      ...Full output truncated (11 lines hidden), use '-vv' to show)
+tests\test_r2_plan_guards.py:35: AssertionError: assert ({'F1', 'F2', ...5', 'F6', ...} == {'G1', 'G2', ...5', 'G6', ...}
+E   AssertionError: 3101
+    assert False is True
+     +  where False = <function heldout_seed at 0x00000295C75D6B60>(3101)
+     +    where <function heldout_seed at 0x00000295C75D6B60> = driver.heldout_seed
+tests\test_r2_plan_guards.py:88: AssertionError: 3101
+E   Failed: DID NOT RAISE SystemExit
+---------------------------- Captured stdout call -----------------------------
+M8b held-out queue runner -- dry run (nothing launched, nothing built, nothing read)
+data_root: B:\data\m8b-edt\heldout
+rooms_root: C:\tmp\m8b-edt\heldout-rooms
+
+Projects (7), built once under rooms_root (never under data_root: rooms.py refuses B:):
+  F1 -> C:\tmp\m8b-edt\heldout-rooms\projects\F1.simpa
+  F2 -> C:\tmp\m8b-edt\heldout-rooms\projects\F2.simpa
+  F3 -> C:\tmp\m8b-edt\heldout-rooms\projects\F3.simpa
+  F4 -> C:\tmp\m8b-edt\heldout-rooms\projects\F4.simpa
+  F5 -> C:\tmp\m8b-edt\heldout-rooms\projects\F5.simpa
+  F6 -> C:\tmp\m8b-edt\heldout-rooms\projects\F6.simpa
+  F7 -> C:\tmp\m8b-edt\heldout-rooms\projects\F7.simpa
+
+Runs (172): 28 truth, 144 tested (72 random, 72 energetic)
+Order (all truth runs, then tested Random, then tested Energetic):
+
+first run: truth-F1-9001
+last run:  tested-F7-energetic-5.0ms-150k-1503
+tests\test_r2_plan_guards.py:142: Failed: DID NOT RAISE SystemExit
+=========================== short test summary info ===========================
+FAILED tests/test_r2_corpus_rooms.py::test_t32_corpus_rooms_2_is_the_widened_list_and_rebuilds_byte_for_byte
+FAILED tests/test_r2_corpus_rooms.py::test_t33_g_rooms_meet_the_plan - NotImp...
+FAILED tests/test_r2_plan_guards.py::test_t34_plan_is_the_round_2_matrix_with_the_round_2_seeds
+FAILED tests/test_r2_plan_guards.py::test_t35_guards_for_round_2 - AssertionE...
+FAILED tests/test_r2_plan_guards.py::test_t35_runner_limits_and_paths - Faile...
+5 failed in 0.07s
+```
+

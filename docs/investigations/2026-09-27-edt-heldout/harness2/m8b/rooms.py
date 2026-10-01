@@ -102,6 +102,7 @@ _PLAN = {
                       ((9.0, _D['y0'], _D['z0']), (9.2, _D['y0'] + _D['width'], _D['z0'] + _D['height']), 'chamber'),
                       ((9.2, 0.0, 0.0), (15.2, 7.0, 4.0), 'chamber')],
                materials={'main': (0.40, 1.0), 'chamber': (0.04, 1.0)},
+               coupled=True, doorway_area_m2=_D['width'] * _D['height'],
                role='non-uniform absorption, double slope, coupled',
                source=(2.5, 3.5, 1.5),
                receivers=[(3.8, 3.9, 1.2), (2.0, 5.0, 1.4), (3.2, 2.0, 1.7), (6.5, 2.0, 1.2),
@@ -277,9 +278,9 @@ def _build(name, spec, points):
         'receivers': recs,
         'role': spec['role'],
     }
-    if name == 'F3':
+    if spec.get('coupled'):
         # P5: the chamber, its doorway counted at alpha 1 (the late slope); the main room the same way (early)
-        door = DOORWAY['width'] * DOORWAY['height']
+        door = spec['doorway_area_m2']
         (mlo, mhi, _), _, (clo, chi, _) = boxes
         a_main, a_chamber = mats['main']['absorption'], mats['chamber']['absorption']
         room['design_t60_s'] = {f: eyring(_box_volume(clo, chi), [(_box_area(clo, chi) - door, a_chamber), (door, 1.0)], f)
@@ -604,16 +605,17 @@ def project_from_import(room, imported, template=None):
     return P, changed
 
 
-def write_projects(out_dir, simpa_exe, names=None):
+def write_projects(out_dir, simpa_exe, names=None, room_dict=None):
     """The nine projects (or those in names) under out_dir (never on B:), each checked: `simpa
     validate` exit 0, `simpa check` exit 0, and `simpa repair` giving back the same bytes (the
-    canonical layout). Raises RuntimeError on any failure. Returns {name: path}."""
+    canonical layout). Raises RuntimeError on any failure. Returns {name: path}. room_dict: the rooms to write
+    when they are not this module's own (round 2's G rooms come from rooms2)."""
     out = _not_on_b(out_dir)
     imp = out / 'import'
     imp.mkdir(parents=True, exist_ok=True)
     template = _template()
     written = {}
-    R = rooms()
+    R = rooms() if room_dict is None else room_dict
     for name in (NAMES + PROBES if names is None else names):
         room = R[name]
         obj = imp / ('%s.obj' % name)
