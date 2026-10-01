@@ -201,3 +201,98 @@ C:\tmp\m8b-edt\venv\Scripts\python.exe -m pytest tests/ -q
 ```
 Result: `45 passed in 209.98s`. No file under `tests/`, `m8b/`, `PREREG.md`, `frozen/` or
 `expected_dry.json` was touched by this step.
+
+## D4
+
+Receipts for section 6 step 7d of `HARNESS-PLAN.md` (D4: the attack kit's setup and mechanical half
+only, HARNESS-PLAN.md section 5 item 3's D4 bullet; P25, P26; PREREG.md:60). Run 2026-10-01 from
+`harness/`, same venv (`C:\tmp\m8b-edt\venv`, Python 3.13.13). New file: `dry/run_d4.py`. No file
+under `tests/`, `m8b/`, `PREREG.md`, `frozen/` or `expected_dry.json` was touched by this step; the
+frozen method was not run (`m8b.method` is not imported by `run_d4.py`); nothing was written under
+`C:\tmp\m8b-edt\heldout\`.
+
+Command:
+```
+cd docs/investigations/2026-09-27-edt-heldout/harness
+set PYTHONDONTWRITEBYTECODE=1
+C:\tmp\m8b-edt\venv\Scripts\python.exe dry\run_d4.py
+```
+
+### Part 1: two hand-written classes, run against a stub, not the frozen method
+
+`STUB_CLASS_WRONG` and `STUB_CLASS_RIGHT` (`dry/run_d4.py`) are both valid `m8b.attack` classes
+(`validate_class` passes both; `PHYSICS.md`'s hard limits are respected), identical except for
+`params.ratio`: `[5.0, 5.0]` for `STUB_CLASS_WRONG`, `[1.5, 1.5]` for `STUB_CLASS_RIGHT` (the two
+ratios Synth-fresh itself draws, P23). Each was drawn with `attack.draws(cls, n=10)` — the harness's
+own draw, seeded by `attack.class_sha256(cls)` alone, per P26 — well over the "≥ 5 instances" asked
+for. Each instance was turned into a spec with `synth_fresh.make_spec(id=..., **instance)` (the
+instance dict's keys match `make_spec`'s kwargs exactly) and scored two ways: `synth_fresh.truth(spec)`
+(the harness's own truth, P15/P26 — not read from any corpus file) and `stub_method(spec, truth)`, a
+hand-written stand-in that is **not** `frozen/method.py` and imports nothing from `m8b.method`. Its
+whole behaviour: `edt = truth * 1.5` (status `ok`) when `spec['ratio'] >= 3.0`, else `edt = truth`
+exactly (status `ok`) — a deliberate bug keyed only on the class's own ratio, built so that one class
+reproduces wrong-silent (PREREG.md:48, `|edt/truth − 1| > 0.05`) on every draw and the other never
+does, by construction.
+
+| Class | ratio | sha256 (12) | n drawn | n wrong-silent | Reproducible (≥ 5 of n, P26/`attack.REPRODUCIBLE`) |
+|---|---|---|---|---|---|
+| `STUB_CLASS_WRONG` | 5.0 | `2e087f66ae1d` | 10 | 10 | **yes** |
+| `STUB_CLASS_RIGHT` | 1.5 | `5c2dd2bb7ab4` | 10 | 0 | no |
+
+**Result: exactly the class built to (`STUB_CLASS_WRONG`, ratio ≥ 3.0) reproduced wrong-silent; the
+other did not reproduce a single wrong-silent draw.** Full per-draw rows (id, ratio, truth, edt,
+wrong_silent) at `C:\tmp\m8b-edt\dry\D4\stub_results.json`. `run_d4.py` asserts both outcomes itself
+(`result_wrong['reproducible_wrong_silent'] is True`, `result_right[...] is False`, plus the 10/10 and
+0/10 counts exactly) and raised nothing, so the script's own exit (not just this reading of its
+printed output) confirms the split.
+
+### Part 2: the two control classes for the judge panel
+
+Written through `attack.judge_prompt`, one class per prompt file, each under a neutral internal name
+(`control_a.json` / `control_b.json` — the only name a judge ever sees, as the dict key
+`judge_prompt` turns into the prompt's section header) that gives no hint of the expected verdict.
+Both pass `validate_class`. Neither was judged: `attack.panel` and `attack.parse_vote` are not called
+anywhere in `run_d4.py`, and no judge subagent was dispatched by this step.
+
+- **CONTROL_A — F2's settings at a 1 ms step (expected plausible).** F2 is `HARNESS-PLAN.md` 2.2's
+  box 17 × 12.5 × 8 m (S = 897 m²), α = 0.08, design T60 2.26-3.63 s, with receivers from 1.34 m
+  (nearest) to 15.07 m (farthest). Carried into the attack schema's `synth` generator (the schema has
+  no room-geometry fields) via the same diffuse-field relation CONTROL_B's own implausibility
+  rationale rests on (`HARNESS-PLAN.md` line 227's "diffuse-field DRR needs a room of about 3e9 m³"):
+  room constant Rc = S·α/(1−α) = 897 × 0.08 / 0.92 = 78.0 m², DRR(dB) = 10·log10(Rc / (16π·d²)). At
+  F2's own near/far receivers this gives −21.7 dB (far, 15.07 m) to −0.6 dB (near, 1.34 m) —
+  `run_d4.py`'s `_f2_drr_db`. `t60_s` is F2's own design-T60 range; `ratio = 1.0` (F2's absorption is
+  uniform, so a single slope); `step_ms = 1.0` as asked; `run_over_t60` is P10's fixed 10 s default
+  run over that T60 range (2.75-4.43); `R_m = 0.31` m and `noise.particles_per_source = 150000` are
+  P8's product defaults. sha256 (12): `35c919d0db8d`.
+- **CONTROL_B — DRR +30 dB at 30 m, T60 10 s (expected implausible).** `t60_s = drr_db = d_m` fixed
+  exactly at the plan's own numbers (10.0 s, +30.0 dB, 30.0 m); both `t60_s` and `drr_db` sit exactly
+  on `PHYSICS.md`'s hard-limit boundary (≤ 10 s, ≤ +30 dB) and so pass `validate_class` — the point
+  being that this configuration is within the product's accepted bounds yet is not a measurement any
+  real room could give (the same diffuse-field relation above, solved for d = 30 m and DRR = +30 dB,
+  needs Rc ≈ 2.85 × 10⁸ m², i.e. a room of order 10⁹ m³ for any ordinary α). sha256 (12): `4d15ef5fc0bd`.
+
+| Control | Expected verdict | Prompt file |
+|---|---|---|
+| CONTROL_A (F2 @ 1 ms) | plausible | `C:\tmp\m8b-edt\dry\D4\judge_prompt_f2_1ms.md` |
+| CONTROL_B (DRR +30 dB @ 30 m, T60 10 s) | implausible | `C:\tmp\m8b-edt\dry\D4\judge_prompt_drr30_30m.md` |
+
+Both prompt files were read back and checked by hand: neither contains a result field (`edt`,
+`status`, `wrong_silent`, …), neither contains the word "plausible"/"implausible" anywhere outside
+the panel's own instructions (which ask the judge for exactly that word, same for both files), and
+the class's internal name (`control_a.json`/`control_b.json`) carries no hint either way. The full
+class JSON for both, plus their sha256, is also at `C:\tmp\m8b-edt\dry\D4\controls.json`.
+
+**Judge panel: pending.** Three independent judges per control are dispatched by the coordinator, not
+by this step.
+
+### Suite (D4)
+
+```
+cd docs/investigations/2026-09-27-edt-heldout/harness
+set PYTHONDONTWRITEBYTECODE=1
+C:\tmp\m8b-edt\venv\Scripts\python.exe -m pytest tests/ -q
+```
+Result: `45 passed in 210.78s`. No file under `tests/`, `m8b/`, `PREREG.md`, `frozen/` or
+`expected_dry.json` was touched by this step; the only new files are `harness/dry/run_d4.py` and
+this `GREEN.md` section.
