@@ -236,7 +236,7 @@ before most of the code is written.
    build (`C:\tmp\nm-target\target\solvers\bin`, checked against the manifest).
 2. `corpus.py` writes `corpus_rooms.json` and `weak_spots.json` from their sources, with their hashes.
 3. Write the stubs and T1-T22. The independent red check produces `RED.md`. Commit.
-4. Rooms with meshing, then the driver's run path and its guards, until T10, T11 and T13 are green and the seven
+4. Rooms with meshing, then the driver's run path and its guards, until T10, T11 and T13 are green and the nine
    projects mesh. Commit.
 5. **The timing probe** (section 7). Its numbers go to Burhan in the next 15-minute update, in plain words,
    with P10, P11 and the question of the long stretch (`HANDOFF-2026-10-01.md:61`).
@@ -270,7 +270,7 @@ before most of the code is written.
 - **What it gives Burhan.** The time of one run with F2's cost drivers, and the peak memory, which decides how many
   runs fit at once. F2 has the longest design T60, and in Random mode the cost follows how long particles live, so
   F2 should be the slowest room, and P0 should time as F2 does (same volume, area, absorption and settings).
-  Neither is measured. If both hold, 24 × that time bounds the single-thread truth time. The report gives no
+  Neither is measured. If both hold, 28 × that time bounds the single-thread truth time. The report gives no
   projection beyond that arithmetic.
 
 **Not in this plan:** any held-out row of the four sets, the attacker session, committing A1, and row 15's ×1000
