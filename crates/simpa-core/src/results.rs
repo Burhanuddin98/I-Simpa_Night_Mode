@@ -422,9 +422,15 @@ pub mod build_codes {
     pub const MISMATCH: &str = "solver_build_mismatch";
     /// Checks are recorded, but none covers the solver the run executed.
     pub const UNCHECKED: &str = "solver_build_unchecked";
+    /// The checks were made against `$SIMPA_SOLVER_MANIFEST`'s override
+    /// (`run.json`'s `solver_manifest.source`), not the embedded verified build
+    /// (`solvers/manifest.json`): a test-only lever that lets a run proceed against a stand-in
+    /// (`crates/simpa/src/mesh_run.rs::solver_manifest`), never a way to read verified — a
+    /// manifest holding the running executable's own hash would otherwise match trivially.
+    pub const OVERRIDE: &str = "solver_manifest_override";
 
     /// Every code.
-    pub const ALL: [&str; 3] = [UNRECORDED, MISMATCH, UNCHECKED];
+    pub const ALL: [&str; 4] = [UNRECORDED, MISMATCH, UNCHECKED, OVERRIDE];
 }
 
 /// Whether a run's solver build was verified, decided from its manifest alone (backlog 38,
@@ -459,6 +465,9 @@ impl SolverBuild {
 /// row's solver status and `simpa results`' printed verdict all use it. Checks are matched by
 /// name, as `check_solvers` names them ([`solver_exe_name`], `tetgen.exe`, `preprocess.exe`):
 /// - no `solvers` record, or an empty one: [`build_codes::UNRECORDED`];
+/// - `solver_manifest.source` is `override` (M8b): [`build_codes::OVERRIDE`], whatever the checks
+///   say — a manifest made of `$SIMPA_SOLVER_MANIFEST`'s file can hold the running executable's
+///   own hash, so "every check matches" proves nothing about the verified build;
 /// - a check that does not match: [`build_codes::MISMATCH`];
 /// - no check names the solver the run executed: [`build_codes::UNCHECKED`];
 /// - otherwise verified.
@@ -486,6 +495,17 @@ pub fn solver_build(m: &RunManifest) -> SolverBuild {
         }
         Some(c) => c,
     };
+    if m.solver_manifest
+        .as_ref()
+        .is_some_and(|sm| sm.source == crate::bed::pe::ManifestSource::Override)
+    {
+        return unverified(
+            build_codes::OVERRIDE,
+            "the checks were made against $SIMPA_SOLVER_MANIFEST's override, not the embedded \
+             verified build (solvers/manifest.json): a test run, never verified"
+                .into(),
+        );
+    }
     let names = |pick: fn(&crate::bed::pe::SolverCheck) -> bool| {
         let picked: Vec<&str> = checks
             .iter()

@@ -14,6 +14,8 @@ export interface Manifest {
   solver: string;
   exe: { path: string; sha256: string };
   solvers?: { name: string; path: string; matches: boolean }[] | null;
+  /** Present exactly when `solvers` is (M8b): which manifest the checks were made against. */
+  solver_manifest?: { source: 'embedded' | 'override'; sha256: string } | null;
   outcome: { exit_code: number | null; cancelled: boolean; elapsed_ms: number } | null;
   lines: { progress: number; info: number; ok: number; warn: number; fail: number; unclassified: number };
   files: { total: number; expected: number; present: number };

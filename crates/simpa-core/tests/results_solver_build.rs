@@ -9,10 +9,10 @@
 
 mod common;
 
-use simpa_core::bed::pe::SolverCheck;
+use simpa_core::bed::pe::{ManifestSource, SolverCheck};
 use simpa_core::results::{self, SolverBuild, build_codes};
-use simpa_core::run::RunManifest;
 use simpa_core::run::manager::{TETGEN_EXE_NAME, solver_exe_name};
+use simpa_core::run::{RunManifest, SolverManifestRecord};
 
 const SPPS: &str = "results/seats_spps";
 const TCR: &str = "results/seats_tcr";
@@ -139,4 +139,48 @@ fn t38_4_every_recorded_check_matching_verifies_the_build() {
         assert!(b.is_verified());
         assert!(b.reason().is_none());
     }
+}
+
+/// T54-override (M8b): `$SIMPA_SOLVER_MANIFEST` lets a run proceed against a stand-in whose own
+/// hash the override manifest holds, so its checks all match trivially. That must never read as
+/// verified: `solver_manifest.source == override` forces `solver_manifest_override`, whatever the
+/// checks say, and the embedded source (or no record at all) is unaffected.
+#[test]
+fn t54_override_a_run_checked_against_the_override_manifest_never_verifies() {
+    let base = tcr_manifest();
+    let solver = solver_exe_name(base.solver);
+    // Every check matches, the solver's among them (T38-4's exact verified case) -- but the
+    // manifest they were checked against was the override, so this must still be unverified.
+    let m = RunManifest {
+        solvers: Some(vec![check(solver, true), check(TETGEN_EXE_NAME, true)]),
+        solver_manifest: Some(SolverManifestRecord {
+            source: ManifestSource::Override,
+            sha256: "d".repeat(64),
+        }),
+        ..base.clone()
+    };
+    let b = results::solver_build(&m);
+    assert!(!b.is_verified(), "an override run must never verify: {b:?}");
+    assert_eq!(
+        unverified_code("override, all matching", &b),
+        build_codes::OVERRIDE
+    );
+
+    // The same checks, recorded against the embedded manifest (or no `solver_manifest` at all,
+    // the M11-era shape): still verified. The override marker, not the checks, is what changed.
+    let embedded = RunManifest {
+        solvers: Some(vec![check(solver, true), check(TETGEN_EXE_NAME, true)]),
+        solver_manifest: Some(SolverManifestRecord {
+            source: ManifestSource::Embedded,
+            sha256: "d".repeat(64),
+        }),
+        ..base.clone()
+    };
+    assert_eq!(results::solver_build(&embedded), SolverBuild::Verified);
+    let no_record = RunManifest {
+        solvers: Some(vec![check(solver, true), check(TETGEN_EXE_NAME, true)]),
+        solver_manifest: None,
+        ..base
+    };
+    assert_eq!(results::solver_build(&no_record), SolverBuild::Verified);
 }

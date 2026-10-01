@@ -72,6 +72,10 @@ export function plantLoss(text: string): string {
     throw why(`solvers is ${JSON.stringify(m.solvers)}, want every check matching before it is cleared`);
   }
   delete m.solvers;
+  // solver_manifest (M8b) is recorded exactly when solvers is: cleared alongside it, so the
+  // planted run reads SOLVER_BUILD_UNRECORDED cleanly, not a solver_manifest left dangling with
+  // no solvers to go with it.
+  delete m.solver_manifest;
   const bands = m.particles?.bands ?? [];
   const freqs = bands.map((b) => b.freq_hz).join(',');
   if (freqs !== '125,250,500,1000,2000,4000') throw why(`the bands are ${freqs}`);

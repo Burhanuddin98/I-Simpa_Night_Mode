@@ -50,6 +50,7 @@ interface Manifest {
   stage: string;
   exe: { path: string; sha256: string };
   solvers?: { name: string; matches: boolean }[];
+  solver_manifest?: { source: 'embedded' | 'override'; sha256: string } | null;
   mesh: { mbin_sha256: string } | null;
   outcome: { exit_code: number | null; cancelled: boolean; elapsed_ms: number } | null;
   lines: Record<'progress' | 'info' | 'ok' | 'warn' | 'fail' | 'unclassified', number>;
@@ -448,14 +449,21 @@ describe('M11 dock', () => {
     await browser.waitUntil(async () => (await attrOf(sel, 'aria-selected')) === 'true', { timeout: 10_000 });
     // A command-line run, refused before it reached the solver: backlog 54's CLI half checks by
     // default, so its solvers key is recorded and matching (the stand-in tetgen.exe verifies
-    // through m11.ps1's SIMPA_SOLVER_MANIFEST override, under the name `tetgen.exe`), and the row
-    // says so.
+    // through m11.ps1's SIMPA_SOLVER_MANIFEST override, under the name `tetgen.exe`). But that
+    // override registers the stand-in's own code sha256, so "every check matches" proves nothing:
+    // M8b's fix makes `solver_manifest.source: "override"` force unverified regardless, so the
+    // row must read 'no', never 'yes' (the hole a wrong "verified" would otherwise reach a user
+    // through).
     assert.ok(Array.isArray(m.solvers) && m.solvers.length > 0, 'solvers is recorded');
     assert.ok(
       (m.solvers as { matches: boolean }[]).every((c) => c.matches),
       `every check matches: ${JSON.stringify(m.solvers)}`,
     );
-    assert.equal(await attrOf(`${sel} [data-part="verified"]`, 'data-verified'), 'yes');
+    assert.equal(m.solver_manifest?.source, 'override', 'the run was checked against the override manifest');
+    assert.equal(await attrOf(`${sel} [data-part="verified"]`, 'data-verified'), 'no');
+    assert.equal(await attrOf(`${sel} [data-part="verified"]`, 'data-build-code'), 'SOLVER_MANIFEST_OVERRIDE');
+    const verifiedText = await textOf(`${sel} [data-part="verified"]`);
+    assert.ok(verifiedText?.includes('solver_manifest_override'), verifiedText ?? undefined);
     assert.equal(await textOf(`${sel} [data-part="exe-sha"]`), m.exe.sha256.slice(0, 12));
     assert.equal(await count(`${sel} [data-part="loss"], ${sel} [data-part="bands"]`), 0, 'no particle statistics');
     assert.equal(await textOf(`${sel} [data-part="exit"]`), 'no exit code');

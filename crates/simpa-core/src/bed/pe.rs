@@ -211,16 +211,38 @@ pub fn flip_text_byte(bytes: &[u8]) -> Result<Vec<u8>, PeError> {
     Ok(d)
 }
 
+/// Where a [`SolverManifest`] was read from: the embedded verified build
+/// (`solvers/manifest.json`, compiled into the binary), or `$SIMPA_SOLVER_MANIFEST`'s file, a
+/// test-only override (`crates/simpa/src/mesh_run.rs::solver_manifest`). Recorded in `run.json`
+/// (`SolverManifestRecord`) so [`crate::results::solver_build`] can read an override run as
+/// unverified (`solver_manifest_override`) whatever its checks say: a manifest holding the
+/// running executable's own hash must never read as the verified build.
+#[derive(
+    Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum ManifestSource {
+    Embedded,
+    Override,
+}
+
 /// The executables the verified build lists, by file name: their code sha256 and raw sha256.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SolverManifest {
     pub code_sha256: BTreeMap<String, String>,
     pub sha256: BTreeMap<String, String>,
+    /// Where this manifest came from.
+    pub source: ManifestSource,
+    /// This manifest file's own sha256 (`\n` line ends, so a checkout's conversion does not
+    /// change it for the embedded one).
+    pub file_sha256: String,
 }
 
 impl SolverManifest {
-    /// Reads `solvers/manifest.json`'s text.
-    pub fn parse(text: &str) -> Result<SolverManifest, String> {
+    /// Reads a manifest's text (`solvers/manifest.json`'s shape): `source` says where `text` came
+    /// from, recorded alongside the checks so a run made under an override can never read
+    /// verified.
+    pub fn parse(text: &str, source: ManifestSource) -> Result<SolverManifest, String> {
         let v = crate::schema::parse_json(text).map_err(|e| e.to_string())?;
         let map = |key: &str| -> Result<BTreeMap<String, String>, String> {
             v.get(key)
@@ -237,6 +259,8 @@ impl SolverManifest {
         Ok(SolverManifest {
             code_sha256: map("code_sha256")?,
             sha256: map("sha256")?,
+            source,
+            file_sha256: sha256_hex(text.replace("\r\n", "\n").as_bytes()),
         })
     }
 }
@@ -394,6 +418,8 @@ pub(crate) mod tests {
         let manifest = SolverManifest {
             code_sha256: [("spps.exe".to_string(), code.clone())].into(),
             sha256: Default::default(),
+            source: ManifestSource::Embedded,
+            file_sha256: String::new(),
         };
         let ok = check_solvers(&[("spps.exe", &path)], &manifest);
         assert!(ok[0].matches, "{ok:?}");
@@ -411,7 +437,8 @@ pub(crate) mod tests {
 
     #[test]
     fn the_embedded_manifest_lists_the_four_executables() {
-        let m = SolverManifest::parse(crate::bed::SOLVER_MANIFEST).unwrap();
+        let m =
+            SolverManifest::parse(crate::bed::SOLVER_MANIFEST, ManifestSource::Embedded).unwrap();
         for name in crate::bed::SOLVER_EXES {
             let h = &m.code_sha256[name];
             assert_eq!(h.len(), 64, "{name}");

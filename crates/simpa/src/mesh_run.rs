@@ -9,7 +9,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use simpa_core::bed::SOLVER_MANIFEST;
-use simpa_core::bed::pe::SolverManifest;
+use simpa_core::bed::pe::{ManifestSource, SolverManifest};
 use simpa_core::mesh::{
     self, Markers, MeshManifest, MeshStatus, MeshTools, Mesher, PreprocessProgram, TetgenMesher,
     Timeouts, verify,
@@ -517,13 +517,21 @@ fn print_report(r: &RunReport, json: bool) -> ExitCode {
 /// Only a test needs it, to register a cargo-built stand-in's own code sha256 for a scenario the
 /// real verified build cannot produce deterministically (`cli_run.rs`,
 /// `a_run_whose_preprocess_gives_up_records_the_warning`).
+///
+/// Nor is it a way to make a run *read* verified: the override's own source is recorded in
+/// `run.json` (`solvers.source`, `SolverManifest::parse`'s `source` argument), and
+/// `results::solver_build` reads any run checked against it as unverified
+/// (`solver_manifest_override`) even when every check matches — which an override trivially can,
+/// since it may hold the running executable's own hash. Only the embedded manifest, compiled into
+/// this binary from `solvers/manifest.json`, can make a run read verified.
 fn solver_manifest() -> Result<SolverManifest, String> {
     if let Some(p) = std::env::var_os("SIMPA_SOLVER_MANIFEST") {
         let p = PathBuf::from(p);
         let text = std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?;
-        return SolverManifest::parse(&text).map_err(|e| format!("{}: {e}", p.display()));
+        return SolverManifest::parse(&text, ManifestSource::Override)
+            .map_err(|e| format!("{}: {e}", p.display()));
     }
-    SolverManifest::parse(SOLVER_MANIFEST)
+    SolverManifest::parse(SOLVER_MANIFEST, ManifestSource::Embedded)
         .map_err(|e| format!("the embedded solvers/manifest.json does not read: {e}"))
 }
 

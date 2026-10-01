@@ -170,13 +170,14 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let manifest = match pe::SolverManifest::parse(bed::SOLVER_MANIFEST) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("simpa: bed refused: solvers/manifest.json: {e}");
-            return ExitCode::from(2);
-        }
-    };
+    let manifest =
+        match pe::SolverManifest::parse(bed::SOLVER_MANIFEST, pe::ManifestSource::Embedded) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("simpa: bed refused: solvers/manifest.json: {e}");
+                return ExitCode::from(2);
+            }
+        };
     let solvers = pe::check_solvers(&exes.list(), &manifest);
     for s in &solvers {
         eprintln!(

@@ -733,16 +733,18 @@ solver run that did not succeed (`docs/results.md`, "Verified runs only").
 
 `core::results::solver_build` says whether the solver build that made a run was verified, from
 its `run.json` alone (backlog 38): the executables' checks (`solvers`) must be recorded, every one
-must match the verified build (`solvers/manifest.json`), and one must name the solver the run
-executed, as `check_solvers` names them (`spps.exe`, `classicalTheory.exe`). Otherwise the run is
-marked unverified with one of these codes. None is a refusal: `results::load` reads the run as
-before, `simpa results` still exits 0 and prints the verdict (a line of the text, `solver_build`
-in `--json`), and the app's Results step reads "Results unverified", never "Results verified".
-The Runs tab shows the same verdict, from the same function.
+must match the verified build (`solvers/manifest.json`), the checks must have been made against
+that embedded manifest and not a test override (`solver_manifest.source`, M8b), and one must name
+the solver the run executed, as `check_solvers` names them (`spps.exe`, `classicalTheory.exe`).
+Otherwise the run is marked unverified with one of these codes. None is a refusal: `results::load`
+reads the run as before, `simpa results` still exits 0 and prints the verdict (a line of the text,
+`solver_build` in `--json`), and the app's Results step reads "Results unverified", never "Results
+verified". The Runs tab shows the same verdict, from the same function.
 
 | Code | Unverified when | Exit |
 |---|---|---|
 | `solver_build_unrecorded` | `run.json` records no check of the executables (no `solvers` key: a `simpa run` or `simpa run-folder` run, a bed run, or one written before M11), or an empty list | 0 |
+| `solver_manifest_override` | the checks were made against `$SIMPA_SOLVER_MANIFEST`'s file (`run.json`'s `solver_manifest.source` is `override`), not the embedded verified build — a test-only lever (`mesh_run.rs::solver_manifest`) that lets a run proceed against a cargo-built stand-in registered by its own code sha256, so its checks match trivially and prove nothing about the verified build. Checked before `solver_build_mismatch`/`solver_build_unchecked`, so an override run is never read as verified even when every check matches | 0 |
 | `solver_build_mismatch` | a recorded check does not match the verified build | 0 |
 | `solver_build_unchecked` | the checks are recorded and match, but none names the solver the run executed | 0 |
 

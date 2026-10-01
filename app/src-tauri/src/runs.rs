@@ -21,7 +21,7 @@ use std::time::{Duration, Instant, SystemTime};
 use schemars::JsonSchema;
 use serde::Serialize;
 use simpa_core::bed::SOLVER_MANIFEST;
-use simpa_core::bed::pe::{SolverCheck, SolverManifest, check_solvers};
+use simpa_core::bed::pe::{ManifestSource, SolverCheck, SolverManifest, check_solvers};
 use simpa_core::geometry::import::{REFERENCE_MATERIALS, library_material};
 use simpa_core::mesh;
 use simpa_core::process::{self, CancelToken};
@@ -742,9 +742,11 @@ pub fn material_library() -> Vec<LibraryMaterial> {
         .collect()
 }
 
-/// The verified build, as this app was compiled with it.
+/// The verified build, as this app was compiled with it. Never `$SIMPA_SOLVER_MANIFEST`: the app
+/// has no override lever, unlike the CLI (`mesh_run.rs::solver_manifest`) — every app run's
+/// `solver_manifest.source` is `embedded`.
 fn manifest() -> CmdResult<SolverManifest> {
-    SolverManifest::parse(SOLVER_MANIFEST).map_err(|e| {
+    SolverManifest::parse(SOLVER_MANIFEST, ManifestSource::Embedded).map_err(|e| {
         CmdError::new(
             "SOLVER_UNVERIFIED",
             format!("the embedded solvers/manifest.json does not read: {e}"),
