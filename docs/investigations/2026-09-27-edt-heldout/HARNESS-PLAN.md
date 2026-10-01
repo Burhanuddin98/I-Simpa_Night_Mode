@@ -376,5 +376,18 @@ These settle section 8.1's open points before A1. Each is built and tested befor
   125 Hz-4 kHz, 2.1 % above), it is reported apart as `truth_split_borderline` and leaves the H1-H3 and H5
   counts, counted by reason (as P27's exclusions are).
 - **ISM-fresh truths flagged truncated: kept when converged.** A truth that P18's 10 % test calls truncated
-  is kept if lengthening its image set 1.5 times moves it by less than 1e-3 relative. Step 6 measured
-  1.3e-5 at 1.5 times and 1.6e-4 at 2 times. Otherwise it is excluded as `truth_truncated`, as before.
+  is kept if lengthening its image set 1.5 times moves it by less than 1e-3 relative. Otherwise it is excluded
+  as `truth_truncated`, as before.
+  *Corrected 11:30 (the 10:31 text misquoted step 6; audit of `7481a67`).* Step 6 measured both small moves at
+  **2 times**, not 1.5: 1.3e-5 and 1.6e-4 relative, in the two dev rooms with the longest design T60. Extending
+  an image set only adds tail energy, so the 1.5-times move is bounded by the 2-times move there; that is
+  inferred, not measured. The one row measured at 1.5 times, the corridor relative's far receiver, moved
+  +0.8 % at 125 Hz (+0.3 % at 1 kHz) and stays excluded, which is right: its truth is about 1 % low
+  (`harness/m8b/ism_fresh.py` docstring). 2 times is not used because the corridor reaches over 8e7 images
+  there (step 6: one 7.8e7-image echogram took 1,113 s at 7.6 GB). Consequence, accepted and counted: the
+  corridor relative's rows at 125 Hz-4 kHz leave ISM-fresh as `truth_truncated` in most draws.
+- **Wiring owed before step 7's dry runs pass (audit of `7481a67`).** Calls 3 and 4 exist as functions with
+  tests but no real row reaches them yet. `make_row(..., retry_truncated=True)` must be what builds every
+  held-out ISM-fresh row (its default stays False so T6's bit-exact reproduction holds), and
+  `truth.split_borderline` must be applied by the SPPS-fresh row builder when it is written. Each gets a test
+  that fails if the held-out path skips it.
