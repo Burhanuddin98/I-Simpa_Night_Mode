@@ -78,3 +78,11 @@ Refusals are never counted as wrong (`PREREG.md`:62). Every refusal is reported 
 
 The criteria are a technical call; the rulings above are Burhan's. If round 2 fails, the fix and a third fresh set
 follow the same rule, and Burhan decides whether EDT ships in v1 at all.
+
+## Amendment 1, 2026-10-02 00:26, before any round-2 data
+
+Z changes from 3 to **2.5**. Burhan, 2026-10-02 00:24, verbatim: "Z = 2.5", choosing from a table of v2.1 at Z = 2,
+2.5 and 3 on run1 (DEV, `target/agents/edt-v21/v21_zsweep.txt`). His Z = 3 at 00:08 was chosen against v2, whose noise
+term was still 1.5-1.9x too small; v2.1 corrected it, so Z = 3 stacked caution on an already calibrated range. Where
+this file says Z = 3 above, read Z = 2.5. Nothing else changes. The over-caution on clean decays that remains is
+v1.1 backlog item 58, not a v1 change.
