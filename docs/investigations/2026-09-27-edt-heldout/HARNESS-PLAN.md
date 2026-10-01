@@ -212,6 +212,10 @@ This bar is about the harness, not the EDT result. Items 4 and 5, with T10, T11 
    wrong-silent counts are 0/0/1/0 and its refusals 0/2/40/160 at 1/2/5/10 ms, as FINAL.md:55.
 3. **Dry run on synthetic input.** The expected table, `expected_dry.json`, is committed first.
    - D1: 2,000 rows of the critique's ratio-3 family, dev seeds, the full pipeline.
+     *Amended 12:41 (Jarvis; 7c's expectation writer, `73a0ca9`).* No ratio-3 construction in the repo gives
+     2,000 rows; the critique's ratio-3 scan (scan 2b) gives 1,980, with counts already published before the
+     harness existed (`FINAL.md:55`, `harness/weak_spots.json` "scan2b"). D1 is those 1,980 rows: an
+     expectation fixed by a document older than the code under test is the stronger check.
    - D2: fake SPPS run folders in the `simpa results` schema: one mock room, 8 receivers, 6 bands, 3 steps,
      3 seeds and K = 4 references at 0.1 ms, built from single-slope and ratio-3 synth histograms with
      compound-Poisson noise. It plants
