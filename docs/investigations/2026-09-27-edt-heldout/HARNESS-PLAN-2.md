@@ -211,3 +211,22 @@ Sequential total forecast ~4-4.5 h to RESULTS, then the sentinel and the attack 
 
 1. **G8, a deeper dead room?** G7 (T60 0.18 s) sits above the refusal edge for R = 0.31 m (EDT about 0.09 s), so `receiver_too_large` is exercised on SPPS only if something is deader. PREREG-2 asks for one dead room. Recommended default: **no G8**; the refusal is exercised over R up to 1.5 m by ISM-fresh-2 and Synth-fresh-2. (A G8 at T60 about 0.08 s costs ~3 min of runs and lengthens the matrix to 8 rooms.)
 2. **Go-ahead.** Freeze (B1), runs and scoring follow without a stop, as 10:59 on 10-01 ruled for round 1 ("keep building ... finish the work"). Recommended default: **yes, no stop** until the verdict, with progress lines to `progress.log`.
+
+## 9. Crucible resolutions (2026-10-02 00:45, before any build; these override the sections above)
+
+Crucible on this plan: SOUND-WITH-FIXES, 0 blockers, 5 majors, 5 minors. Resolved as follows (technical calls).
+
+| # | Finding | Resolution |
+|---|---|---|
+| M1 | G2 designed at exactly 3.00 s at 1 kHz, H4's edge (`score.py:399`) | G2 is redesigned (absorption only, geometry kept if P3 still clears) to a design T60 at 1 kHz in **[2.6, 2.9] s**: >= 2.5 as PREREG-2 needs, clearly inside H4. Recompute its per-band T60, P17 run length and P3 clearance; T33 asserts the band. |
+| M2 | Features confirmed on truth runs are "reported, not gated", with no rule for a miss | Written now: every G room is scored whatever its truth shows. A feature that misses on the truth runs (G2 T30 < 2.5 s, G7 T30 > 0.25 s, G3 not double-sloped) is reported as missing in RESULTS.md and VERDICT.md. No room is swapped, redesigned or dropped after any truth run exists. |
+| M3 | Seeds and G-room designs previewed but not pinned until B1 | Pinned at the commit of this section: the seeds of section 3 and the G-room table of section 2 (with M1's G2 change as its only permitted edit) are final. `corpus2.py` writes `preview_pin.json` (sha256 of the canonical JSON of the ISM-fresh-2 draw, the Synth-fresh-2 specs and the G-room geometry + receivers) during the build; B1 records it and the runner refuses if a fresh draw differs. |
+| M4 | B1's hand-written hash list is wrong (19 not 22 modules; tests, fixtures, dry inputs unhashed) | B1 hashes **every file under `harness2/` and `frozen2/`** (glob, sorted, LF-normalised bytes as committed), plus PREREG-2.md, HARNESS-PLAN-2.md and `preview_pin.json`. No hand list. |
+| M5 | `round_` arguments and CONFIG[1]/[2] dual paths are heavy and can leak round 1 into round 2 | **Dropped.** `harness/` stays exactly as committed (round 1's record; never re-run). Round 2 is `harness2/`, a copy of `harness/` edited in place for round 2 only: no `round_` argument, no CONFIG table. Round 1's tests that still apply are copied into `harness2/tests` and adapted; T23-T43 are added. No separate RED subagent: the builder writes each test, runs it, records it failing, then implements. |
+| m1 | T23 compares the file to a constant derived from it | T23 also asserts `FROZEN2_SHA256` equals the value recorded in this repo's `frozen2.sha256` file, committed before B1. |
+| m2 | `ROW_FIELDS`, `H_TEXT`, `INSTANCES` are module constants | Moot under M5: harness2 sets them for round 2 only. |
+| m3 | "H4 on ISM leaves about 27 rows" | Not so: the preview has 80 of 144 ISM receivers at R <= 0.5 m, so about 720 rows at 1 ms before the T60 filter (run1 DEV: 716). The scorer prints H4's n per set. |
+| m4 | G7 cannot fire `receiver_too_large` at R = 0.31 m | Known and stated in PREREG-2 (the refusal starts below EDT ~0.09 s). G7 tests the dead-room regime for wrong-silent on SPPS; the refusal is tested by ISM-fresh-2 and Synth-fresh-2 across radii. |
+| m5 | Attack class draws may repeat round 1's | The attack draws take a new seed, 2026100203; T37 checks freshness of Synth specs by P3-style tolerance, not exact equality. |
+
+Open questions 1 and 2 are taken at their defaults (no G8; freeze to verdict without a stop), per Burhan's 2026-10-01 10:59 "keep building and building and finish the work".
