@@ -304,3 +304,11 @@ this `GREEN.md` section.
   the panel failed the control.** Every judge's reason was that both values sit on the inclusive edge of
   PHYSICS.md's input limits; PHYSICS.md gave them nothing else to judge by. Fix: HARNESS-PLAN.md 8.2's last
   bullet (the diffuse-field consistency check). The panel is re-run after it.
+
+### D4 judge panel, second run (13:33, six fresh independent sonnet judges, prompts regenerated at `62ccca9`)
+
+- Control A (expected plausible): plausible, plausible, plausible. **3 of 3.** Each judge computed the implied
+  volumes (about 8.4 m^3 and 2.2e5 m^3 at the box's corners) and found both inside the bounds.
+- Control B (expected implausible): implausible, implausible, implausible. **3 of 3.** Each judge computed
+  V of about 2.77e9 m^3, still 2.77e8 m^3 at the -10 dB end, above the 1e8 m^3 ceiling.
+- Section 5 item 3's D4 bar is met: both controls called 3 of 3 before any real class is judged.
