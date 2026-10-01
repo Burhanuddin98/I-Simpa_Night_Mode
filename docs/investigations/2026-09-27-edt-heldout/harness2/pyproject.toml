@@ -1,0 +1,10 @@
+# pytest's settings for T1-T22 (../HARNESS-PLAN.md section 4). Not a package build file: the harness is
+# run from this folder, never installed. (A pytest.ini would be dropped by the repo's `*.ini` ignore.)
+# Run from this folder with the venv and no bytecode:
+#   set PYTHONDONTWRITEBYTECODE=1 & C:\tmp\m8b-edt\venv\Scripts\python.exe -m pytest
+# Every test writes under basetemp on C: (cleared at each session start, so one session at a time),
+# and no cache folder is written beside the sources: B: is exFAT with 128 KB clusters.
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider --basetemp=C:/tmp/m8b-edt/pytest-tmp -ra"

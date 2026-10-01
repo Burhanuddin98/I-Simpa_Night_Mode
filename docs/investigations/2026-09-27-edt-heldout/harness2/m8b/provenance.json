@@ -1,0 +1,349 @@
+{
+ "_doc": "Every piece of code in m8b that came from a file outside it, with the source's sha256 (raw bytes as read; sha256_lf with CRLF read as LF) and the lines copied or re-typed. Written by hand-run one-off scripts on 2026-10-01 (C:/tmp/m8b-edt/write_provenance.py, then scratch/add_provenance.py for the second attempt's constructions); corpus.py checks the _z3echo.py copy against its source, and every entry's source hash against the file as it is, on every run (check_provenance). Step 6 added the upstream port's copy and upstream.py's two re-typed pieces with C:/tmp/m8b-edt/step6-upstream/add_provenance.py; upstream.port() checks the copy's own hash before it runs any of it. Step 6 (truth) added the three text copies the truth and ISM-fresh run (m8b/_ism.py, m8b/_mirror.py, m8b/_truth_ideal.py) and make_row's re-typed construction with C:/tmp/m8b-edt/step6-truth/add_provenance.py; truth.copies() and ism_fresh.generator() check each copy's own hash before they run any of it, and truth.check_copies() checks the two partial copies against their source lines.",
+ "m8b/_z3echo.py": {
+  "source": "target/agents/z3-hunt/judge/judge.py",
+  "source_sha256": "1898400582323f1b4ddba8b802c6d60b0c6ba707586156af58fb0afac7e431fc",
+  "source_sha256_lf": "ac2f931dec49699d64d136000e34b4b1d10d91bd9c12ee30c55c26e0134b198b",
+  "line_ranges": [
+   [
+    57,
+    57
+   ],
+   [
+    61,
+    62
+   ],
+   [
+    80,
+    435
+   ]
+  ],
+  "how": "verbatim; ranges joined by two blank lines; the module-level imports of composite, skeptic-gf3/ism.py and skeptic-twostep/synth.py left out (these lines use none of them)",
+  "copy_body_sha256_lf": "11f0b55dcf18c418594fe8bf34bb774f2496db814f3b7a3fd306560da7b55903"
+ },
+ "m8b/corpus.py iso9613_db_per_m, m_energy": {
+  "source": "target/agents/followup-design/skeptic-gf3/ism.py",
+  "source_sha256": "a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747",
+  "line_ranges": [
+   [
+    25,
+    44
+   ]
+  ],
+  "how": "verbatim"
+ },
+ "m8b/corpus.py score": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/common.py",
+  "source_sha256_lf": "bfe886c4b356c8bda63636efeb829deeffc5f7f747d86e8c1684916ab746374c",
+  "line_ranges": [
+   [
+    18,
+    26
+   ]
+  ],
+  "how": "verbatim body, docstring shortened"
+ },
+ "m8b/corpus.py scan1, scan4_occluded, scan2b, scan3_noise, set_real_and_seeds (seeds)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/final/run_scans.py",
+  "source_sha256_lf": "741321a928c0b713f743c629bc8020cd46a144ce304a5b302485ac3f8cb2fcf6",
+  "line_ranges": [
+   [
+    25,
+    57
+   ],
+   [
+    59,
+    79
+   ],
+   [
+    81,
+    121
+   ],
+   [
+    123,
+    159
+   ],
+   [
+    161,
+    215
+   ]
+  ],
+  "how": "the same loops in the same order with the frozen method only (LeanBand and printing dropped); checked by reproducing the 'final' tallies of final/scans_all.json"
+ },
+ "m8b/corpus.py scan2": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i4.py",
+  "source_sha256_lf": "1cf3b923d2fd5026c0d6d0280440be0965fd7ce025aef6339ecda713a3603ae3",
+  "line_ranges": [
+   [
+    11,
+    31
+   ]
+  ],
+  "how": "the same loop with the frozen method in place of common.run_all's candidates"
+ },
+ "m8b/corpus.py scan5": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_misc.py",
+  "source_sha256_lf": "c780fa5b798737e5a3dd511fd5bd3ebf4b33ae0326460d2ff6f3739690c187da",
+  "line_ranges": [
+   [
+    13,
+    48
+   ]
+  ],
+  "how": "(a) and (b) with the frozen method; (c) has no truth"
+ },
+ "m8b/corpus.py z3_group_key, Z3GRID_MS, _z3_task (z3grid)": {
+  "source": "target/agents/edt-band/eval_run.py",
+  "source_sha256": "657b94a3ecbc02f988302bb2331ccf2d737390634d5543e51cc3b13d022d662c",
+  "line_ranges": [
+   [
+    384,
+    455
+   ]
+  ],
+  "how": "z3_job's construction of the z3grid rows and its truth, z3_tasks' grouping"
+ },
+ "m8b/corpus.py _z3_task (z3), set_real_and_seeds (real), set_t1, set_ism": {
+  "source": "C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/97f2c13c-beea-4d4b-b842-603feb756e57/scratchpad/edtsimp/loaders.py",
+  "source_sha256": "ea4d4c0939eb96ebc3da40a6fd280134854f8b0fd6c0696be2baf855f70fd0b5",
+  "line_ranges": [
+   [
+    25,
+    57
+   ],
+   [
+    64,
+    118
+   ],
+   [
+    121,
+    223
+   ]
+  ],
+  "how": "load_t1, load_z3 and load_real's inputs to the method (bins, dt, t_arrival, half_width), as run_eval_final.py fed them; the ISM rows are read from final/dev/ism_rows.pkl as run_eval_final.py read them"
+ },
+ "m8b/corpus.py scan1 (scan_i12 and early_run)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i12.py",
+  "source_sha256_lf": "65acb17c4cc7c2a45d69dbdfdacbe95ed205ae93e4ef48a1ad291ae432c019fe",
+  "line_ranges": [
+   [
+    15,
+    41
+   ]
+  ],
+  "how": "the grid, its truth and its histogram as scan_i12.py builds them, scored with the frozen method; the dedup and the d >= 0.6 m cutoff kept for the scan_i12 run and dropped for the early run (which target's scan_i12.json shows); both checked row by row against their outputs"
+ },
+ "m8b/corpus.py scan2b (scan_i4b form)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i4b.py",
+  "source_sha256_lf": "bc67d134e991a74a136060864b0239f2b23a489e8088c35d95ad3a051efdb58f",
+  "line_ranges": [
+   [
+    11,
+    37
+   ]
+  ],
+  "how": "the same rows as run_scans.py's scan 2b, the method called with no meta as common.run_all calls it"
+ },
+ "m8b/corpus.py set_real_and_seeds (real_seeds.py's no-meta call)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/real_seeds.py",
+  "source_sha256_lf": "ba435121de39c4fec7c2675392c004a385caee350f52e13f8cefded3e716eb12",
+  "line_ranges": [
+   [
+    17,
+    61
+   ]
+  ],
+  "how": "the seeds scan's rows with the method called with no meta (lines 41 and 46); a row whose result differs from run_scans.py's is scored both ways"
+ },
+ "m8b/corpus.py noise_probe": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/noise_probe.py",
+  "source_sha256_lf": "668c7648fcde71e927dbb83ff953308cce25e0917e9b932ff7e53f8a04d7ab6c",
+  "line_ranges": [
+   [
+    14,
+    33
+   ]
+  ],
+  "how": "the configurations, the generator seed (11) and the draws in their order, the method called with no meta"
+ },
+ "m8b/corpus.py noise_probe (truth)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i5.py",
+  "source_sha256_lf": "c0144245d525142d9959747727311b5ec25c6e562e7a6341eea8cbc9905bfa62",
+  "line_ranges": [
+   [
+    22,
+    35
+   ]
+  ],
+  "how": "noise_probe.py kept no truth: scan_i5.py's for the same configuration (lines 28-29)"
+ },
+ "m8b/corpus.py ablate_rows": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/ablate.py",
+  "source_sha256_lf": "57f7cdcf7ff115626dc0e4cfcbbea113e3906409b7cf287ee0d009c17060791d",
+  "line_ranges": [
+   [
+    19,
+    45
+   ],
+   [
+    92,
+    92
+   ]
+  ],
+  "how": "gen_rows' grid and blocked rows, the method called with no meta (line 92); its t1 rows are the t1 set"
+ },
+ "m8b/corpus.py ablate_rows (truth)": {
+  "source": "docs/investigations/2026-09-27-edt-simplify/critique/scan_i1_occluded.py",
+  "source_sha256_lf": "bff6ae541ed76303e6a931d4f35c02b0f69a7af232967a84ff01c66cb9184da7",
+  "line_ranges": [
+   [
+    19,
+    22
+   ]
+  ],
+  "how": "ablate.py kept no truth: scan_i12.py's for the grid rows (the infinite run's Definition-A EDT) and scan_i1_occluded.py's 0 dB at the first arrival for the blocked rows"
+ },
+ "m8b/driver.py series_from_report": {
+  "source": "C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/97f2c13c-beea-4d4b-b842-603feb756e57/scratchpad/edtsimp/loaders.py",
+  "source_sha256": "ea4d4c0939eb96ebc3da40a6fd280134854f8b0fd6c0696be2baf855f70fd0b5",
+  "line_ranges": [
+   [
+    159,
+    181
+   ]
+  ],
+  "how": "load_real's field access re-typed: report['spps'], receiver_radius_m / speed_of_sound_m_s as the half-width, time_step_s as dt, then for each band of the first point receiver every point receiver's energy_pa2 (as float64) and arrival_s. T14 holds it to the same lines, re-typed in the test"
+ },
+ "m8b/_upstream_edt.py": {
+  "source": "target/agents/upstream-edt/uphunt_upstream_edt.py",
+  "source_sha256": "57f391e6cb09ded8a408462fbabc7aacd93743a3fa46cc28deeef3f7a319f282",
+  "source_sha256_lf": "57f391e6cb09ded8a408462fbabc7aacd93743a3fa46cc28deeef3f7a319f282",
+  "line_ranges": [
+   [
+    1,
+    247
+   ]
+  ],
+  "how": "byte for byte, the whole file: 10,777 bytes, 247 lines, LF with no CR, in the source as in the copy. upstream.port() executes it only after its bytes, any CRLF made LF, hash to the source's sha256 (P32), and T4 checks the same",
+  "copy_sha256": "57f391e6cb09ded8a408462fbabc7aacd93743a3fa46cc28deeef3f7a319f282"
+ },
+ "m8b/upstream.py edt_table": {
+  "source": "target/agents/upstream-edt/uphunt_oracle.py",
+  "source_sha256": "ebe38d3d43f827eefc937803f0d3e466e9a7bec7845364068b1d2ce0f9cc1e29",
+  "source_sha256_lf": "ebe38d3d43f827eefc937803f0d3e466e9a7bec7845364068b1d2ce0f9cc1e29",
+  "line_ranges": [
+   [
+    14,
+    14
+   ],
+   [
+    18,
+    18
+   ],
+   [
+    20,
+    21
+   ],
+   [
+    26,
+    26
+   ],
+   [
+    45,
+    50
+   ]
+  ],
+  "how": "re-typed: read_gabe of the 'Sound level.recp', column 0's labels through time_table_from_labels, its float band columns, then compute_tr_param_table(0, 10, tt, tab), the loop's 'EDT (s)' pass. The row labels are the band columns' own, then 'Global' and 'Average', as upstream's projet_calculation.cpp:888, 901-902 writes them. T4 holds the result to oracle.json bit for bit"
+ },
+ "m8b/upstream.py analyse": {
+  "source": "C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/97f2c13c-beea-4d4b-b842-603feb756e57/scratchpad/edtsimp/wrappers.py",
+  "source_sha256": "745910f21e766f1b0e8eee1bfb50333f785ce0e272173e46cca4ec454668c470",
+  "line_ranges": [
+   [
+    42,
+    62
+   ]
+  ],
+  "how": "analyse_upstream re-typed: the bins as float64 then float32, the port's edt(kind='point') at float(dt), the refusals empty_or_bad_dt and nan_or_nonpositive, and an ok row as a point range with reason point_value_no_range. The defensive except (55-58) is left out: it never fired on the corpus (0 of the 5,897 upstream rows in the scratchpad's results_*.pkl), so an exception from the port is raised, not scored as a refusal. On the corpus inputs it gives those 5,897 logged results exactly (C:/tmp/m8b-edt/step6-upstream/check_upstream.json)"
+ },
+ "m8b/_ism.py": {
+  "source": "target/agents/followup-design/skeptic-gf3/ism.py",
+  "source_sha256": "a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747",
+  "source_sha256_lf": "a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747",
+  "line_ranges": [
+   [
+    1,
+    113
+   ]
+  ],
+  "how": "byte for byte, the whole file: 5,340 bytes, 113 lines, LF with no CR, in the source as in the copy. ism_fresh.generator() executes it only after its bytes, any CRLF made LF, hash to the source's sha256 (P20)",
+  "copy_sha256": "a7c9d41ec61dd119a14583faaa98d4a88c98e897a0cf4a8d69c6d151d2cef747"
+ },
+ "m8b/_mirror.py": {
+  "source": "target/agents/followup-design/skeptic-gf3/rerun/mirror.py",
+  "source_sha256": "c5603d5ba863e9f61086c3897106982161de2e431e65010731c6317f80791f85",
+  "source_sha256_lf": "887053431f0d07e43d9beb8028816f5aabec44c917006d585bed3dbae40efac8",
+  "line_ranges": [
+   [
+    20,
+    20
+   ],
+   [
+    109,
+    146
+   ]
+  ],
+  "how": "verbatim below the marker, CRLF made LF, the ranges joined by two blank lines: MIN_REGRESSION_BINS, line and integral, which the truth_ideal copy calls (P15). Above the marker, a docstring and import math, which these lines use. truth.copies() executes it only after the whole file hashes to copy_sha256, which truth.py pins; truth.check_copies() compares the body with these lines",
+  "copy_sha256": "9824f4bb1d0e4f24554f31efc7749a20ba243bf8ef971e4f88d82ad5b4ebad79",
+  "copy_body_sha256_lf": "51c6e8b83d405b6f6a08670d859d0d6d8ee90240fb4c15c4af1c392d58697d28"
+ },
+ "m8b/_truth_ideal.py": {
+  "source": "target/agents/followup-design/skeptic-gf3/attack_ism.py",
+  "source_sha256": "3fb8a84b9eb42569f9aa3dfb4693e76e098b70e0f1e2c14664b5d35da495652a",
+  "source_sha256_lf": "17cfe57f1f70b64f8bd0a26a361c91e12d8c77ce9b5741e02eb66b9621d25529",
+  "line_ranges": [
+   [
+    55,
+    77
+   ]
+  ],
+  "how": "verbatim below the marker, CRLF made LF: truth_ideal, the corpus's Definition-A truth (P15). Above the marker, a docstring and the imports these lines use (math, numpy as np). Its M, mirror.py in the source (attack_ism.py:25), is the checked m8b/_mirror.py, which truth.copies() puts in the namespace before it executes this file, only after the whole file hashes to copy_sha256, which truth.py pins; truth.check_copies() compares the body with these lines",
+  "copy_sha256": "2a37e532855df11e61bfc402ef2637c3e3acc2c372f29aa22e5e8991c72c6f3e",
+  "copy_body_sha256_lf": "c3bc7c0d229415e0c567fd770a0d3d26c0516bf8e7495544646c496285c8e898"
+ },
+ "m8b/ism_fresh.py make_row": {
+  "source": "target/agents/followup-design/spec/eval_ism.py",
+  "source_sha256": "86f1ef70fd58c68bf6f14dc67fef6547adabad266028d5e1b3368e0f96936bb1",
+  "source_sha256_lf": "86f1ef70fd58c68bf6f14dc67fef6547adabad266028d5e1b3368e0f96936bb1",
+  "line_ranges": [
+   [
+    64,
+    71
+   ],
+   [
+    78,
+    86
+   ]
+  ],
+  "how": "re-typed: d, t = d / c, h = R / c, the path bin c * DT_F and ism.echogram over the image set (64-71); per band m_energy, and per step k = round(step / DT_F) fine bins, air per step (air_factor at k * DT_F), the fine bins summed in whole steps (AI.rebin, attack_ism.py:80-82) and the series cut after its last bin with energy (78-86)"
+ },
+ "m8b/ism_fresh.py make_row (the corpus's rows)": {
+  "source": "C:/Users/Burhan/AppData/Local/Temp/claude/b--repos-I-Simpa-Night-Mode/97f2c13c-beea-4d4b-b842-603feb756e57/scratchpad/edtsimp/loaders.py",
+  "source_sha256": "ea4d4c0939eb96ebc3da40a6fd280134854f8b0fd6c0696be2baf855f70fd0b5",
+  "line_ranges": [
+   [
+    245,
+    252
+   ],
+   [
+    261,
+    268
+   ],
+   [
+    271,
+    282
+   ]
+  ],
+  "how": "re-typed: load_ism's construction of final/dev/ism_rows.pkl, in the same operations and order: the echogram (245-252); the truth, truth_ideal of the direct and reflected series with continuous air at 0.02 ms, element 0, as eval_common.truth_from_split takes it (261-268); the series and its cut, dt = k * DT_F (271-282). Its except, which made a row without a truth, is left out: an exception is raised. T6 holds make_row to these rows to 1e-9. On the corpus's own inputs it gives all 1,920 rows of final/dev/ism_rows.pkl bit for bit, bins, truth, dt, t_arrival and R/c: 1,872 from the positions in their ids, and the 48 rows of the 4 near-source receivers (attack_ism.py:239-243) from their positions as grid() computes them, which the ids round to 4 decimals (C:/tmp/m8b-edt/step6-truth/check_truth_b2.json, check_truth_b3-run1.txt)"
+ }
+}
