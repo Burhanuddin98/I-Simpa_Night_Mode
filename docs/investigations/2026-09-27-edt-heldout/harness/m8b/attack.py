@@ -146,6 +146,14 @@ def draws(cls, n=DRAWS):
     return out
 
 
+def implied_volume_m3(t60_s, drr_db, d_m):
+    """PHYSICS.md's diffuse-field consistency check, read in reverse: the room volume a diffuse
+    field at t60_s would need, to produce drr_db at distance d_m, from r_c = 0.057 sqrt(V / T60)
+    and DRR(d) = 20 log10(r_c / d). Pure arithmetic; it does not judge a class, only computes the
+    number PHYSICS.md's prose and the judge panel both reason about."""
+    return t60_s * (d_m / 0.057) ** 2 * 10 ** (drr_db / 10.0)
+
+
 # ================================================================================================
 # The sandbox (P25): PHYSICS.md, INTERFACE.md, generators.py and the frozen method, byte for byte.
 # ================================================================================================
@@ -168,7 +176,21 @@ def physics_md():
         "- T60 (the reverberant decay's own time constant): 0.1 to 10 seconds.\n"
         "- DRR (direct-to-reverberant energy ratio, dB): -40 to +30 dB.\n\n"
         "A configuration outside either range is not one the product accepts, whatever its other\n"
-        "parameters: it describes no measurement the solver can produce.\n"
+        "parameters: it describes no measurement the solver can produce.\n\n"
+        "## Diffuse-field consistency\n\n"
+        "A diffuse sound field's critical distance, r_c = 0.057 sqrt(V / T60) (m, V the room volume\n"
+        "in m^3, T60 in seconds, an omnidirectional source), is the distance at which direct and\n"
+        "reverberant energy are equal; its direct-to-reverberant ratio at distance d is\n"
+        "DRR(d) = 20 log10(r_c / d) dB. Read in reverse, a class's own (T60, DRR, d) implies the room\n"
+        "volume a diffuse field at that T60 would need to produce that DRR at that distance:\n"
+        "V = T60 (d / 0.057)^2 10^(DRR / 10). Real rooms are not always diffuse (coupled spaces, long\n"
+        "rooms, specular geometry), so a class's implied volume carries a +/-10 dB allowance before it\n"
+        "is judged. A class is physically implausible on this ground only when every one of its\n"
+        "instances fails in the same direction: its implied volume exceeds 1e8 m^3 (about eight times\n"
+        "the largest enclosed building on Earth) even at the -10 dB end of the allowance, or its\n"
+        "implied volume is too small to hold its own source-receiver distance -- a room cannot be\n"
+        "smaller than the straight-line path inside it, so V < d^3 -- even at the +10 dB end of the\n"
+        "allowance, the end most generous to the class.\n"
     )
 
 
