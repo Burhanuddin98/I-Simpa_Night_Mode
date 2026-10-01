@@ -31,7 +31,9 @@ Contract:
   ('solver_unverified' unless check_solvers verifies them). Then <run_dir>/project.simpa is
   written, one line appended to launch_log, `simpa run <project> --solver spps --runs <run_dir>
   --json` run with its stderr kept and classed, and <run_dir>/report.json written from
-  `simpa results <run folder> --json`.
+  `simpa results <run folder> --json`. (Added in step 4, after those three: a run of a held-out
+  room, F1-F7, is refused before A1 whatever its seed, also as 'heldout_before_a1', so that no
+  histogram of a held-out room exists before the freeze; P0 and P0b are not held out.)
 - read_run(run_dir, *, data_root=DATA_ROOT) -> series_from_report(<run_dir>/report.json), after
   refusing a folder outside data_root ('outside_data_root'), a run whose <run_dir>/project.simpa
   has a reserved random_seed ('reserved_seed'), and a report whose solver_build status is not
@@ -71,7 +73,10 @@ never runs `simpa results`. Seeds 9999 (P0) and 9998 (P0b) are reserved: launch(
 refuse them.
 
     python -m m8b.driver probe P0 [P0b-random-2s ...] [--simpa <exe>] [--solvers <dir>]
+                               [--probe-root <dir>] [--launch-log <file>]
     python -m m8b.driver check-solvers [--solvers <dir>]
+The probe command writes P0's and P0b's room projects under <probe-root>/rooms first, then runs the
+named probes one after another and prints one line for each.
 """
 import ctypes
 import datetime
@@ -316,6 +321,9 @@ def launch(run, *, project, run_dir, solvers_dir, data_root=DATA_ROOT, launch_lo
     check = check_solvers(solvers_dir)
     if not check['verified']:
         raise Refused('solver_unverified', '%s: %s' % (solvers_dir, [c['name'] for c in check['checks'] if not c['matches']]))
+    if run['room'] in rooms.NAMES and not (a1_committed() if a1 is None else a1):
+        raise Refused('heldout_before_a1', 'room %s is held out: no run of it, whatever its seed, before ADDENDUM-A1.md '
+                                           'is committed (P1, P4)' % run['room'])
 
     room_project = _read_project(project)
     if room_project.get('name') != run['room']:
@@ -388,11 +396,14 @@ def series_from_report(report):
 class _Watch:
     """Polls the process tree under one pid for the peak working set and peak private bytes of the
     processes with the watched names (Windows: a Toolhelp snapshot, then GetProcessMemoryInfo on a
-    handle kept open, so the counters can be read once more after the process ends)."""
+    handle kept open, so the counters can be read once more after the process ends). It polls every
+    poll_s until a process of the first name appears, then every slow_s: the peaks are the OS's own
+    running maxima, so later polls only look for new processes."""
 
-    def __init__(self, root_pid, names, poll_s):
-        self.root, self.names, self.poll_s = root_pid, {n.lower() for n in names}, poll_s
-        self.seen = {}                 # pid -> dict(name, handle, peak_ws, peak_private, polls)
+    def __init__(self, root_pid, names, poll_s, slow_s=2.0):
+        self.root, self.names, self.poll_s, self.slow_s = root_pid, {n.lower() for n in names}, poll_s, slow_s
+        self.primary = names[0].lower()
+        self.seen = {}                 # pid -> dict(name, handle, peak_ws, peak_private, reads)
         self.polls = 0
         self.error = None
         self._stop = threading.Event()
@@ -482,7 +493,8 @@ class _Watch:
         try:
             while not self._stop.is_set():
                 self.poll()
-                self._stop.wait(self.poll_s)
+                seen = any(i['name'].lower() == self.primary for i in self.seen.values())
+                self._stop.wait(self.slow_s if seen else self.poll_s)
         except Exception as e:                       # recorded, never fatal to the run
             self.error = repr(e)
 
@@ -499,7 +511,8 @@ class _Watch:
             info['handle'] = None
             out.append(dict(pid=pid, name=info['name'], peak_working_set_bytes=info['peak_ws'],
                             peak_private_bytes=info['peak_private'], reads=info['reads'], read_after_exit=after))
-        return dict(supported=True, poll_s=self.poll_s, polls=self.polls, processes=out, error=self.error)
+        return dict(supported=True, poll_s=self.poll_s, slow_s=self.slow_s, polls=self.polls, processes=out,
+                    error=self.error)
 
 
 def output_size(folder):
@@ -525,7 +538,7 @@ def output_size(folder):
 
 
 def probe(name, *, project, simpa_exe=None, solvers_dir=DEFAULT_SOLVERS, probe_root=PROBE_ROOT,
-          launch_log=LAUNCH_LOG, data_root=DATA_ROOT, poll_s=0.5, watch=('spps.exe', 'tetgen.exe')):
+          launch_log=LAUNCH_LOG, data_root=DATA_ROOT, poll_s=0.1, watch=('spps.exe', 'tetgen.exe')):
     """One probe of sections 7 and 7.1 (see the module docstring). Returns its record."""
     if name not in PROBE_RUNS:
         raise Refused('not_a_probe', '%r is not one of %s' % (name, sorted(PROBE_RUNS)))
@@ -608,6 +621,7 @@ def main(argv=None):
     pr.add_argument('--simpa', type=Path, default=Path(os.environ.get('M8B_SIMPA_EXE', DEFAULT_SIMPA)))
     pr.add_argument('--solvers', type=Path, default=Path(os.environ.get('SIMPA_SOLVERS_DIR', DEFAULT_SOLVERS)))
     pr.add_argument('--probe-root', type=Path, default=PROBE_ROOT)
+    pr.add_argument('--launch-log', type=Path, default=LAUNCH_LOG)
     a = ap.parse_args(argv)
     if a.cmd == 'check-solvers':
         r = check_solvers(a.solvers)
@@ -616,7 +630,7 @@ def main(argv=None):
     written = rooms.write_projects(a.probe_root / 'rooms', a.simpa, names=sorted({PROBE_RUNS[n]['room'] for n in a.names}))
     for n in a.names:
         rec = probe(n, project=written[PROBE_RUNS[n]['room']], simpa_exe=a.simpa, solvers_dir=a.solvers,
-                    probe_root=a.probe_root)
+                    probe_root=a.probe_root, launch_log=a.launch_log)
         o = rec.get('outcome') or {}
         print('%s: exit %s, verdict %s, wall %.1f s, elapsed_ms %s, spps peak working set %s bytes, output %s bytes in %s files'
               % (n, rec['exit'], (rec.get('verdict') or {}).get('status'), rec['wall_s'], o.get('elapsed_ms'),
