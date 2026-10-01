@@ -176,3 +176,12 @@ T29 is the only test of T23-T43 that did not fail first, and it is a control by 
 H1, H2, H3, H5) is true of round 1's scorer already and must stay true after H4 gains its filter. T29 was shown able to fail by a mutant (01:03): a pytest plugin that makes `score.tally` drop rows with R_m above 1.0 m
 (a radius filter where there must be none) turns it into `assert (True is False)` at tests/test_r2_scorer.py:205
 (H1 counting the R = 1.4 m wrong-silent row), `1 failed, 9 deselected`.
+
+## Audit fixes (round 2 closing, 2026-10-02): tests written first
+
+`tests/test_r2_features.py`, written before `m8b/features.py` and before the R_m change; both are recorded failing.
+
+| Test | Covers | Recorded failing |
+|---|---|---|
+| T44 (seven tests) | audit fix 1: the P6 truth-feature report: ISO T30, G2 (>= 2.5 s), G7 (<= 0.25 s), G3 (T30/EDT >= 1.25 at half the receivers), each met on one planted truth and missed on another; 1 kHz only; unreadable truth is "missed"; RESULTS.md text; `from_runs` reads only G2, G3, G7 truth runs | `ImportError: cannot import name 'features' from 'm8b'`: the whole file fails at collection |
+| T46 | audit fix 3: a missing R_m on a Synth or attack row (and through `evaluate`) is a ValueError | with the features import removed so the file loads: `Failed: DID NOT RAISE` at the first `_check_inputs` (tests/_t46_tmp.py:129, a temporary copy, deleted); the seven T44 tests fail with NameError in the same copy |

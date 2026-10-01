@@ -27,7 +27,9 @@ reproduces them exactly.
 
 - Built from HEAD `610e691` into `C:\tmp\nm-target`: `cargo build --release -p simpa`, with `CARGO_TARGET_DIR=C:\tmp\nm-target`,
   `CARGO_INCREMENTAL=0` and `CARGO_BUILD_JOBS=16`. It exited 0 after 22.8 s, at 02:42:55.
-- `C:\tmp\nm-target\release\simpa.exe`, 8,135,168 bytes, sha256 `cfe8caff70527eceb1acae3db2951f44714baddfe8213b9208c8657408c9d50d`.
+- `C:\tmp\nm-target\release\simpa.exe`, 8,204,800 bytes, sha256 `6a1656ed92efe2b4fa7229a77814a6e56f9b6e56b69166e01655a0c53e2c19f5`.
+  (Recorded 2026-10-02 in place of `cfe8caff...`, the hash of the first build at HEAD `610e691`: the exe on disk was rebuilt since,
+  and `6a1656ed...` is what round 1 also ran; computed from the file.)
   `simpa --version` prints `simpa 0.1.0 (solvers from upstream 929a5c8)`.
 - Checked again at 03:21. The same build from the same HEAD left `simpa.exe` untouched, with the same time and hash.
   `C:\tmp\nm-target` is the cargo target that every worktree shares, so a step that uses the exe checks this hash first.

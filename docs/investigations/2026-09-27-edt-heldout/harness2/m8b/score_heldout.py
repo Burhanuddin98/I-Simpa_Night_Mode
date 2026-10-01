@@ -62,7 +62,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import corpus, corpus2, driver, ism_fresh, rooms as rooms_mod, rooms2, round2, run_heldout, score, spps_rows, synth_fresh
+from . import corpus, corpus2, driver, features, ism_fresh, rooms as rooms_mod, rooms2, round2, run_heldout, score, spps_rows, synth_fresh
 
 DATA_ROOT = round2.DATA_ROOT
 RESULTS_ROOT = round2.RESULTS_ROOT
@@ -472,6 +472,12 @@ def main(argv=None):
     log('synth done: %d rows' % len(synth))
     _dump(out / 'inputs_synth.pkl.gz', synth)
 
+    if a.dry:
+        feature_rows, feature_text = [], 'not checked in this dry run (no truth runs of G2, G3, G7 exist)'
+    else:
+        feature_rows = features.from_runs(Path(a.data_root))        # reads the truth reports only; decides nothing (M2)
+        feature_text = features.format_features(feature_rows)
+        log('features: ' + feature_text)
     inputs = spps + ism + synth
     log('evaluate start: %d rows (frozen, upstream)' % len(inputs))
     summary = score.evaluate(inputs, out_dir=out / 'score')
@@ -483,7 +489,7 @@ def main(argv=None):
                  rows_built=dict(spps=len(spps), ism=len(ism), synth=len(synth)),
                  ism_rooms=[dict(id=r['id'], kind=r['kind'], parent=r['parent'], dims_m=r['dims_m'],
                                  alpha_walls=r['alpha_walls'], design_t60_s=r['design_t60_s']) for r in D['rooms']],
-                 elapsed_s=round(time.monotonic() - t0))
+                 features=feature_text, feature_rows=feature_rows, elapsed_s=round(time.monotonic() - t0))
     counts = counts_of(summary, extra)
     (out / 'counts.json').write_text(json.dumps(counts, indent=1, allow_nan=False, default=str) + '\n',
                                      encoding='utf-8', newline='\n')

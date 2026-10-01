@@ -570,8 +570,8 @@ def _check_inputs(inputs, votes):
             raise ValueError('input %r: SPPS-fresh mode %r is not one of %s (P11)' % (x['id'], x.get('mode'), MODES))
         if s in H3_SETS:
             subgroup(x)
+        _r_m(x)                           # every row of every set carries its receiver radius (R_m); none is skipped
         if s in H4_SETS:
-            _r_m(x)                       # round 2: every SPPS and ISM row carries its receiver radius
             _in_h4(x)
         if s == 'attack':
             if x.get('class_id') is None:
@@ -655,7 +655,7 @@ def evaluate(inputs, *, method_path=None, out_dir, votes=None):
     for lab in LABELS:
         t = {name: tally(by_label[name][lab]) for name in INSTANCES}
         t['versus_upstream'] = {'frozen': _versus(by_label['frozen'][lab], by_label['upstream'][lab])}
-        t['rtl_by_r_class'] = rtl_by_r_class([r for r in by_label['frozen'][lab] if r.get('R_m') is not None])
+        t['rtl_by_r_class'] = rtl_by_r_class(by_label['frozen'][lab])
         tables[lab] = t
     classes = []
     for cid in sorted(draws, key=str):

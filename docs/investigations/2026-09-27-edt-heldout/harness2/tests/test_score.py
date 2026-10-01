@@ -198,7 +198,7 @@ def test_t21_scorer_voids_the_evaluation_when_the_method_hash_differs(tmp_path, 
     Ed = (1 / k) * 10 ** (-0.3)
     bins = synth.histogram(1e-3, 2.0, 0.02, h, Ed, 0.002, [1.0], [k])
     inputs = [dict(set='synth', id='t21', bins=bins, dt=1e-3, t_arrival=0.02, meta={'half_width': h},
-                   truth=synth.truth_edt(0.02, Ed, 0.002, [1.0], [k]), truth_status='ok', family=1.5, step_ms=1.0)]
+                   truth=synth.truth_edt(0.02, Ed, 0.002, [1.0], [k]), truth_status='ok', family=1.5, step_ms=1.0, R_m=0.31)]
     out = tmp_path / 'void'
     try:
         score.evaluate(inputs, method_path=bad, out_dir=out)
