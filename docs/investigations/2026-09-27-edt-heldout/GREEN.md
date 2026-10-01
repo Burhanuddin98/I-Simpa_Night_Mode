@@ -336,3 +336,13 @@ Suite re-run: `pytest tests/ -q` -> `53 passed in 210.15s` (GREEN.md's D4 count 
 PHYSICS.md/gap tests the step-8 review already accounted for, plus these 4 new guard tests).
 
 Full review: `C:\tmp\m8b-edt\step8-review.md`.
+
+### After A1 (18:22)
+
+- `harness/m8b/run_heldout.py` (`fb8e47d`): the queue runner. Run folders go to `B:\data\m8b-edt\heldout` (Burhan,
+  18:07: outputs belong on B:); the room projects and meshes go to `C:\tmp\m8b-edt\heldout-rooms`, because the frozen
+  `rooms.write_projects` refuses B:. Dry run: 7 projects, 28 truth runs, 144 tested runs
+  (`C:\tmp\m8b-edt\run-heldout-dryrun.txt`).
+- T13's held-out-seed case now fails, as it must: it asserts a held-out seed is refused while A1 is uncommitted, and A1
+  is committed (`23cc585`). Its premise expired with the freeze; the guard behaves correctly. The frozen test is left
+  as it is. Suite: 73 passed, T13 that one case.
