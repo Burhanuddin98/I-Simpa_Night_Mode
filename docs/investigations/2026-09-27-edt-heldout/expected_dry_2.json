@@ -1,0 +1,322 @@
+{
+ "schema": "m8b.expected_dry/2",
+ "written": "2026-10-02, before D2' is executed (HARNESS-PLAN-2.md section 6, T39). Values are arithmetic on the plant above (round 1's D2 plant, whose own numbers were read off before it ran, plus one dead-room row); none is read from a run of round 2's scorer or of frozen2/method.py on this data.",
+ "scope": "D2' only. D1 and D3 of round 1 take their expected counts from round 1's method (weak_spots.json status tallies of frozen/method.py), which do not hold for frozen2/method.py, so they are not re-run as dry runs here; D4 (the attack-panel dry run) needs a judge panel and no attacker is run before the review. The scorer's end-to-end check on run 1's inputs against target/agents/edt-v21/v21_zsweep.txt is a separate smoke test recorded in GREEN-2.md.",
+ "D2p": {
+  "label": "D2': round 1's D2 plant unchanged (432 tested rows of one mock room, K = 4 references at 0.1 ms) plus ONE planted dead-room row that round 2's method must refuse as receiver_too_large; rows carry R_m = 0.31 m; the room's geometry is handed to spps_rows.rows_from_runs as the new geometry= argument (the G-room path), not by patching",
+  "construction_overview": "432 tested ('spps' set) rows = 1 room * 8 receivers * 6 bands * 3 steps * 3 seeds. Truth is built per receiver-band (48 cells = 8 receivers * 6 bands) from K=4 references at 0.1 ms, each cell's truth shared by the 9 tested rows (3 steps * 3 seeds) drawn from that receiver-band. All five planted faults below are placed on disjoint rows by construction: no row carries more than one fault, so each fault's own counter is exact and uncontaminated by another. ROUND 2's addition: 1 extra 'spps' row (433 in all), id 'spps|mock_d2|R099|1000|1ms|seed999|random', Random mode, room mock_d2, d_m 4.4833 (mid), step 1 ms, band 1000 Hz, design T60 1.0 s, R_m 0.31 m, built from the corpus ISM generator (ism_fresh.make_row) in a 6 x 5 x 3 m box at alpha 0.65, source (1, 1, 1.2), receiver (4.5, 3.8, 1.3), 0.31 m ball, 1 ms steps, 0.6 s run: a dead room (EDT about 0.087 s, h = R/c = 0.9 ms, so h / EDT is above K_BALL = 0.01). It is not a fault of round 1's list: it sits on its own cell (R099, 1000 Hz, seed 999), which no fault of the plant uses.",
+  "plant": {
+   "room_id": "mock_d2",
+   "bands_hz": [
+    125,
+    250,
+    500,
+    1000,
+    2000,
+    4000
+   ],
+   "design_t60_s": {
+    "all_bands": 1.0,
+    "note": "uniform and <= H4's 3.0 s ceiling by construction; not load-bearing for any fault, chosen only so H4's filter includes every 1 ms row cleanly"
+   },
+   "steps_ms": [
+    1.0,
+    2.0,
+    5.0
+   ],
+   "test_seeds": {
+    "1.0": [
+     111,
+     112,
+     113
+    ],
+    "2.0": [
+     211,
+     212,
+     213
+    ],
+    "5.0": [
+     511,
+     512,
+     513
+    ]
+   },
+   "reference_seeds_0_1ms": [
+    9011,
+    9012,
+    9013,
+    9014
+   ],
+   "receivers": [
+    {
+     "id": "r1",
+     "class": "near",
+     "d_m": 1.2
+    },
+    {
+     "id": "r2",
+     "class": "near",
+     "d_m": 1.5
+    },
+    {
+     "id": "r3",
+     "class": "near",
+     "d_m": 1.8
+    },
+    {
+     "id": "r4",
+     "class": "mid",
+     "d_m": 3.5
+    },
+    {
+     "id": "r5",
+     "class": "mid",
+     "d_m": 5.0
+    },
+    {
+     "id": "r6",
+     "class": "mid",
+     "d_m": 7.0
+    },
+    {
+     "id": "r7",
+     "class": "far",
+     "d_m": 12.0,
+     "blocked": false
+    },
+    {
+     "id": "r8",
+     "class": "far",
+     "d_m": 15.0,
+     "blocked": true
+    }
+   ],
+   "baseline": "every (receiver, band, step, seed) cell not named by a fault below: single-slope T60 = 1.000 s references and tested runs, noise negligible, frozen-method-stand-in status 'ok' with edt = truth exactly (0 % error, comfortably covered under any positive half-width).",
+   "faults": [
+    {
+     "id": "disagreeing_references",
+     "receiver": "r1",
+     "band_hz": 125,
+     "mechanism": "the 4 references at r1/125Hz are single-slope, noise-free, with T60 = [0.95, 0.98, 1.02, 1.05] s respectively (not the shared 1.000 s baseline). P19's 'individual EDTs' are each reference's own truth_ideal read on that one reference alone (P15's truth definition applied per-reference, not the method's fitted output), which for a clean single-slope exponential equals its T60 to numerical precision -- so u is computed directly from the chosen T60 list, with no method or solver run needed.",
+     "u_percent": 2.199,
+     "u_derivation": "mean T60 = 1.000 s; deviations -0.05,-0.02,+0.02,+0.05; sample variance (ddof=1) = (0.0025+0.0004+0.0004+0.0025)/3 = 0.0019333; SD = 0.043970; u = SD / sqrt(4) / 1.000 = 0.043970/2 = 0.021985 = 2.199 %, which is > P19's 1 % bar with a 2.2x margin (robust to the summed truth differing slightly from the plain mean of the 4 T60s).",
+     "truth_status": "truth_uncertain",
+     "rows_affected": 9,
+     "rows_derivation": "r1 x 125 Hz x 3 steps x 3 seeds = 9 (one fixed receiver-band cell, shared truth across all step/seed draws at that cell)."
+    },
+    {
+     "id": "truncated_reference",
+     "receiver": "r2",
+     "band_hz": 250,
+     "reference_seed_truncated": 9012,
+     "mechanism": "every (receiver,band) cell in every one of the 4 fake reference report.json files carries a full-length bins array reaching past -60 dB (P17/P18 margin), EXCEPT reference seed 9012's array for r2/250Hz specifically, which is cut to 0.3 x the room's design T60 (1.0 s), i.e. 0.3 s of bins only. Since this is a hand-built fixture (not a real solver run), per-cell array length is a free choice and needs no run to realise. At 0.3 T60 only 0.3*60 = 18 dB of the decay has played out for that one reference, so roughly 10^(-1.8) ~= 1.6 % of that single reference's own initial energy still lies in the unrecorded tail; relative to the 4-reference SUM (this reference contributing about 1/4 of the total initial energy), that is on the order of 0.4 % of the summed total -- many orders of magnitude over P18's 1e-6 threshold, so the exceedance does not depend on exact noise realisation.",
+     "truth_status": "truth_truncated",
+     "rows_affected": 9,
+     "rows_derivation": "r2 x 250 Hz x 3 steps x 3 seeds = 9."
+    },
+    {
+     "id": "nan_truth",
+     "receiver": "r3",
+     "band_hz": 500,
+     "mechanism": "all 4 reference report.json files carry an all-zero bins array for r3/500Hz (zero recorded energy in every bin, every reference). A truth computation driven entirely by zero energy has no slope to fit (0/0 in the Schroeder/EDT division), so the truth builder flags this cell directly as truth_status='truth_nan' per score.py's contract (score.py:182-194, a truth_status already not 'ok' is passed through regardless of the 'truth' field's numeric value), independent of which exact numerical NaN-producing code path realises it.",
+     "truth_status": "truth_nan",
+     "rows_affected": 9,
+     "rows_derivation": "r3 x 500 Hz x 3 steps x 3 seeds = 9."
+    },
+    {
+     "id": "blocked_receiver",
+     "receiver": "r8",
+     "mechanism": "r8 (far class, d_m=15.0) has no direct line of sight to the source in every band. Per P15, a blocked receiver's direct energy is 0 and t is the start of its first bin with energy; per method.py's I2 fix (FINAL.md section 3 item 1), a blocked path (t_arrival None, or the first-energy convention) is handled, not refused. r8's truth therefore stays finite, positive and truth_status='ok' for all of its rows -- this fault does NOT exclude rows from truth-based counts, unlike the three above; its own counter is the row count carrying the occluded-truth / t_arrival=None construction.",
+     "truth_status": "ok",
+     "edt_correct": true,
+     "rows_affected": 54,
+     "rows_derivation": "r8 x all 6 bands x 3 steps x 3 seeds = 54 (whole receiver, not one band)."
+    },
+    {
+     "id": "method_multiplies_by_1.08",
+     "subgroup": {
+      "distance_class": "mid",
+      "step_ms": 2.0
+     },
+     "receivers_in_subgroup": [
+      "r4",
+      "r5",
+      "r6"
+     ],
+     "mechanism": "for every row of the (mid, step=2 ms) H3 subgroup, the stand-in method's reported edt is fixed at 1.08 x truth (status 'ok', a narrow shown range that does not reach back to truth), a direct construction choice for this dry run, not a physics claim -- |1.08 - 1| = 8 % > the 5 % JND (score.py JND=0.05) for every row in the subgroup regardless of each row's own truth value, so every row with a truth in this subgroup is wrong-silent by construction, deterministically.",
+     "truth_status": "ok",
+     "rows_affected": 54,
+     "rows_derivation": "3 receivers (r4,r5,r6) x 6 bands x 3 seeds at step=2ms = 54; none of these rows coincide with r1/r2/r3 (near class) or r8 (far class), so none carries a second fault."
+    }
+   ],
+   "disjointness_check": "near-class faults sit on r1,r2,r3 (one band each, 9 rows apiece = 27 rows total); blocked sits on r8 (far class, 54 rows); the 1.08 multiplier sits on r4,r5,r6 at step=2ms (mid class, 54 rows). Classes near/mid/far are disjoint by construction (score.py distance_class, NEAR_M=2.0, FAR_M=10.0, score.py:146), and within near class the three single-band faults occupy different bands (125/250/500 Hz) on different receivers, so none of the 5 fault row-sets intersects another: 27 + 54 + 54 = 135 faulted rows out of 432, 297 untouched baseline rows.",
+   "round2_additions": {
+    "R_m": "every row carries R_m = 0.31 m (the product default; rows_from_runs reads it from the report as half_width x c)",
+    "dead_room_row": {
+     "id": "spps|mock_d2|R099|1000|1ms|seed999|random",
+     "room": "mock_d2",
+     "step_ms": 1.0,
+     "band_hz": 1000,
+     "d_m": 4.483314773547883,
+     "design_t60_s": 1.0,
+     "R_m": 0.31,
+     "mode": "random",
+     "seed": 999,
+     "truth_status": "ok",
+     "mechanism": "the histogram of a 6 x 5 x 3 m box at alpha 0.65 (ISM generator, truth from Definition A, EDT about 0.087 s) read through a 0.31 m ball at 1 ms: the unseen first h = 0.9 ms of the decay is more than 1 % of the EDT, so frozen2's analyse() returns status 'refused', reason 'receiver_too_large' (T38 holds the same plant at 0.1 ms and in a 5 x 4 x 2.6 m box).",
+     "rows_affected": 1
+    }
+   }
+  },
+  "status_tally": {
+   "n": 433,
+   "n_ok": 432,
+   "n_usable": 432,
+   "n_refused": 1,
+   "n_wide": 0,
+   "refused_by_reason": {
+    "receiver_too_large": 1
+   },
+   "derivation": "the 432 plant rows are single-slope exact exponentials, status 'ok' for each (as round 1: no refusal or 'wide' is planted among them); the one dead-room row is refused as receiver_too_large; 432 + 1 = 433."
+  },
+  "truth_exclusions": {
+   "truth_uncertain": 9,
+   "truth_truncated": 9,
+   "truth_nan": 9,
+   "total_excluded": 27,
+   "n_ok_truth": 405,
+   "derivation": "432 - (9+9+9) = 405; see plant.faults for each 9-row count. The dead-room row has truth_status 'ok' (its truth is finite) and is refused, so it is neither an exclusion nor an ok row with a truth: n_ok_truth stays 405."
+  },
+  "n_wrong_silent": {
+   "value": 54,
+   "derivation": "exactly the (mid, step=2ms) subgroup's 54 rows (plant.faults[4]); no other row is wrong (baseline rows are exact, r8's occluded-truth rows are exact, and the three truth-excluded cells' rows are not counted toward wrong-silent at all since they have no usable truth, score.py classify(): wrong_silent is None/False without has_truth). The refused dead-room row is never wrong-silent."
+  },
+  "H2": {
+   "set": "spps",
+   "n_usable_truth": 405,
+   "n_covered": 351,
+   "coverage": 0.8667,
+   "n_ok_truth": 405,
+   "n_wrong_silent": 54,
+   "wrong_silent_share": 0.1333,
+   "coverage_pass": false,
+   "wrong_silent_pass": false,
+   "pass": false,
+   "derivation": "n_usable_truth = n_ok_truth = 405 (all usable rows are 'ok' here, none 'wide'). n_covered = 405 - 54 = 351: by construction every correct (0 % error) row is covered (edt=truth sits inside any positive-half-width range) and every 1.08x row is designed with a narrow range that excludes truth (that is what 'wrong-silent', ok-and->5%-off, means operationally), so covered rows = n_ok_truth - n_wrong_silent exactly. coverage 351/405 = 86.67 % < H2_COVERAGE_MIN 90 % (score.py:139) -> coverage_pass false. wrong_silent_share 54/405 = 13.33 % > H2_WRONG_MAX 3 % (score.py:140) -> wrong_silent_pass false. Both fail -> H2 fails. The refused dead-room row is not usable, so it enters neither n_usable_truth nor n_covered: H2's numbers and verdict are round 1's."
+  },
+  "H3": {
+   "set": "spps",
+   "subgroup_key": "(spps, mock_d2, distance_class, step_ms)",
+   "n_subgroups": 9,
+   "subgroups": {
+    "near|1.0": {
+     "n_ok_truth": 45,
+     "n_wrong_silent": 0,
+     "judged": true,
+     "pass": true
+    },
+    "near|2.0": {
+     "n_ok_truth": 45,
+     "n_wrong_silent": 0,
+     "judged": true,
+     "pass": true
+    },
+    "near|5.0": {
+     "n_ok_truth": 45,
+     "n_wrong_silent": 0,
+     "judged": true,
+     "pass": true
+    },
+    "mid|1.0": {
+     "n_ok_truth": 54,
+     "n_wrong_silent": 0,
+     "judged": true,
+     "pass": true
+    },
+    "mid|2.0": {
+     "n_ok_truth": 54,
+     "n_wrong_silent": 54,
+     "judged": true,
+     "pass": false
+    },
+    "mid|5.0": {
+     "n_ok_truth": 54,
+     "n_wrong_silent": 0,
+     "judged": true,
+     "pass": true
+    },
+    "far|1.0": {
+     "n_ok_truth": 36,
+     "n_wrong_silent": 0,
+     "judged": true,
+     "pass": true
+    },
+    "far|2.0": {
+     "n_ok_truth": 36,
+     "n_wrong_silent": 0,
+     "judged": true,
+     "pass": true
+    },
+    "far|5.0": {
+     "n_ok_truth": 36,
+     "n_wrong_silent": 0,
+     "judged": true,
+     "pass": true
+    }
+   },
+   "n_judged": 9,
+   "n_failing": 1,
+   "pass": false,
+   "derivation": "near: 3 receivers x 6 bands x 3 seeds = 54 rows per step, minus 3 excluded rows per step from each of r1(125Hz)/r2(250Hz)/r3(500Hz) (9 excluded total per step / 3 steps = 3 each) = 54-9 = 45 n_ok_truth, 0 wrong (no fault at step != the mid/2ms subgroup). mid: 3 receivers x 6 bands x 3 seeds = 54 rows per step, no exclusions on mid receivers; at step=2ms all 54 are the planted wrong-silent rows, at step=1 and 5ms all 54 are correct. far: 2 receivers x 6 bands x 3 seeds = 36 rows per step (r7 correct, r8 occluded-truth but still finite/ok/correct), 0 wrong at every step. All 9 subgroups clear H3_MIN_OK=20 (score.py:141), so all are judged; only mid|2.0 exceeds H3_WRONG_MAX 10 % (54/54=100%), so H3 fails overall. The dead-room row sits in subgroup mid|1.0 as a refused row: it adds no ok row with a truth, so n_ok_truth (54) and the verdicts are round 1's."
+  },
+  "H4": {
+   "set": "spps",
+   "n_before": 145,
+   "n_receiver_too_large": 1,
+   "share_receiver_too_large": 0.006896551724137931,
+   "n": 144,
+   "n_usable": 144,
+   "n_ok": 144,
+   "usable_share": 1.0,
+   "ok_share": 1.0,
+   "refused": {},
+   "pass": true,
+   "derivation": "H4's filter is step_ms == 1, design_t60_s <= 3.0 and R_m <= 0.5 (PREREG-2): every row has T60 1.0 s and R_m 0.31, so the 144 plant rows at 1 ms (near 54, mid 54, far 36) plus the dead-room row = 145 are in it. The dead-room row is refused as receiver_too_large, so it leaves the denominator and is counted: n_before 145, n_receiver_too_large 1, share 1/145. The remaining 144 are all 'ok': usable 144 of 144, ok share 1.0; other refusals in the denominator: none. 100 % >= 90 %: H4 passes."
+  },
+  "H1": {
+   "applicable": false,
+   "reason": "H1_SETS = ('ism','synth') (score.py:134); D2 carries only 'spps' rows."
+  },
+  "H5": {
+   "n_paired": 433,
+   "n_eligible": 406,
+   "n_wrong_silent_frozen": 54,
+   "n_wrong_silent_upstream": null,
+   "pass": null,
+   "reason": "upstream is scored on the same ids (433 paired, none left over). Eligible rows are those with a truth: 405 plant rows + the dead-room row (truth 'ok') = 406; the frozen method is wrong-silent on the same 54 rows as round 1 and on none else. Upstream's own count depends on the port's output on bins the plant does not fix by hand, so it is not asserted (as round 1's D2 left it null); the pairing counts are."
+  },
+  "H6": {
+   "applicable": false,
+   "reason": "attack-only (score.py:137)."
+  },
+  "rtl_by_r_class": {
+   "<=0.5": {
+    "n_rows": 433,
+    "n_receiver_too_large": 1
+   },
+   "0.5-1.0": {
+    "n_rows": 0,
+    "n_receiver_too_large": 0
+   },
+   ">1.0": {
+    "n_rows": 0,
+    "n_receiver_too_large": 0
+   },
+   "derivation": "every row has R_m 0.31 m, in the first class; the one refusal is in it."
+  },
+  "rows_per_instance": {
+   "frozen": 433,
+   "upstream": 433
+  }
+ }
+}
