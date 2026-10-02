@@ -492,7 +492,8 @@ impl fmt::Display for NotEvaluable {
             ),
             NotEvaluable::NoAWeight { freq_hz } => write!(
                 f,
-                "no_a_weight: the {freq_hz} Hz band has no A-weighting pinned; dB(A) sums the                  octave bands 125 Hz to 8 kHz only"
+                "no_a_weight: the {freq_hz} Hz band has no A-weighting pinned; dB(A) sums the \
+                 octave bands 125 Hz to 8 kHz only"
             ),
         }
     }
