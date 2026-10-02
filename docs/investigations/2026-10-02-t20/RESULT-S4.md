@@ -42,7 +42,7 @@
     mean of 0.410 s, so R000 sits 2.9 % below the mean.
   - Scaling T20 the same way puts the transport's R000 T20 near 0.393 s. The product reads 0.382 s there, about
     -2.8 %: inside the 5 % JND, outside energetic mode's narrow shown range (mc_sd about 0.002 s).
-  - This is an estimate, not a measurement. It points the same way as EDT's energetic failure at a far receiver
-    (VERDICT-2, H3, G4).
+  - This is an estimate, not a measurement. R000 is the receiver nearest the source (2.8 m); the far one is R002
+    (14.0 m). It is therefore not the same case as EDT's energetic failure at G4's far receiver (VERDICT-2, H3).
   - **Owed:** per-receiver transport T20 in the twin, and coverage scored per receiver. Part 3 carries it, and T20
     is not done without it.

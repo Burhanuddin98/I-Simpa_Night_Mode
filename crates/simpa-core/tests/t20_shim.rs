@@ -86,9 +86,9 @@ fn one(r: &Row) -> Value {
                           "decay_arrival": null, "span_s": null});
         }
     };
-    let arrival = r.arrival.map_or(Arrival::Detected, |t| {
-        Arrival::spread(t, r.half_width)
-    });
+    let arrival = r
+        .arrival
+        .map_or(Arrival::Detected, |t| Arrival::spread(t, r.half_width));
     let p = decay::evaluate(&series, arrival);
     let decay_arrival = match p.decay_arrival {
         Arrival::Known { .. } => "known",

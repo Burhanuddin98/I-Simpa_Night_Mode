@@ -248,6 +248,7 @@ mod tests {
                 room_t20: Some(h.room_t),
                 room_t20_se: Some(h.room_se),
                 t20_error: None,
+                receivers_t20: vec![Some([t * T20_RATIO, h.se * T20_SE_RATIO]); 3],
             }),
         );
         ts
