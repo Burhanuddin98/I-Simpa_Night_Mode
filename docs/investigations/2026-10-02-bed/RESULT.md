@@ -101,3 +101,33 @@ range propagation). Not scored end-to-end here beyond SPL (assay finding: the G 
   bracketed (backlog 64); the T30 stand-in range uncalibrated (backlog 65); the G3 T30 range (±87 %).
 - G and dB(A) end-to-end against set C's absolute ISM level.
 - STI (no product code yet), then the Simulate settings editor (PQ3), then M12.
+
+## STI (ADDENDUM-2 to -5), 2026-10-02 21:30 to 2026-10-03 00:08
+
+Product STI `e298a31` (IEC 60268-16:2011 ed. 4; male shown, female computed; masking from band k-1), against an
+independent Python reference written from the standard by another agent (`9b695a9`, hash-pinned, reproduces Annex M's
+worked example to its printed precision). New projects compute 125 Hz-8 kHz (`d2c3e6b`, decision 43). Tolerance
+0.03 STI (not a limen: ed. 4 repeatability 0.02, rating bands 0.04). Two sentinel rounds.
+
+| Set | Rows | Result |
+|---|---|---|
+| A exact inputs (S1 closed forms + S2 ISM, 7 bands) | 24,236 answered by both | product = reference to 1e-13 in every row: **PASS**. 528 S1 rows answered by the product on series shorter than half the true T (length judged on the cut series' T) |
+| B7 seven rooms, defaults, seeds 4301-4303 | 336 (both sexes) | 0 wrong-silent, max diff 0.0092, all answered: **PASS** |
+| C7 boxes vs exact ISM, seeds 4301-4303 (frozen rules) | 36 | 0 wrong-silent where answered (max 0.0008), but **FAIL on answer rate**: S-live male 0/9 (1 particle of 150,000 alive at 10 s refused the band); Mixed unscored (the reference's own 1.5x cut failed the 1.6 s length rule; ADDENDUM-4) |
+
+**Build H** (`8c241b2`, `18f43e1`; tests first; 1053 passed): a band with particles alive at the end is answered when
+the unseen energy, moved to its worst case through every m(F), the speech level and the masking, cannot move STI by
+more than 0.003; the length check takes T per band as the larger of T30/T20/EDT and the decay at the response's end
+(refusing an end within 60 dB of the loudest window that is not decaying); backlog 66 and 67 closed. Re-read with
+build H: C7 24 → 36 of 36 answered, B7 336 → 336, no answered value moved (360 rows, max change 0). Set A S1:
+product-only answers 528 → 0; 168 more short double slopes now refused (the stricter direction).
+
+**Fresh C7 draw** (seeds 4401-4403, after build H; ADDENDUM-5 written before it): 6 runs exit 0 (two with one
+particle alive at 250 Hz, answered). Frozen ADDENDUM-3 scoring: 18 scored (S-live), 0 wrong-silent, max 0.00097, S-live
+9/9 per sex. **ADDENDUM-5 scoring: 36/36 answered and scored, 0 wrong-silent, max diff 0.00225, 9/9 every room and
+sex: PASS.** Deviation: ADDENDUM-5 asks for the reference tail extended to 10 s by its fit; the scorer padded with
+zeros after the fitted tail's first T60 (the skipped energy is at most 1e-6 of the tail's, argued, not measured).
+
+**Not done:** STI's Monte Carlo noise is not modelled (`mc_sd` null; every value is scored against the tolerance
+instead, and none failed); several sources at one receiver are refused; directional sources treated as omni; the
+60 dB end gate is a stated choice (40 dB would refuse 24 of the 168).
