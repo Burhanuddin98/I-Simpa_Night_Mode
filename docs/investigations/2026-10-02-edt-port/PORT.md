@@ -137,7 +137,7 @@ additive). No other reader of `edt_s` prints or exports it: the UI and Tauri app
 **Finding 3 (MAJOR), full parity was not reproducible from the tree.** The scratch fixture came from
 `make_fixture.py --per-stratum 100000` and an untracked `EDT_FIXTURE_DIR`. Now an ignored test,
 `tests/edt_port.rs::full_parity_from_the_round2_inputs`, runs `tools/edt_port/make_fixture.py --per-stratum 1000000`
-on `B:\data\m8b-edtound2esults` (`inputs_{spps,ism,synth}.pkl.gz`, `rows.csv.gz`) into scratch (the script checks
+on `B:/data/m8b-edt/round2/results` (`inputs_{spps,ism,synth}.pkl.gz`, `rows.csv.gz`) into scratch (the script checks
 frozen2's sha256 and that frozen2's own output equals `rows.csv.gz`, then the Rust port is compared on every row); it
 prints SKIPPED and passes when the inputs are absent. Command, from the repo root:
 
