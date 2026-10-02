@@ -46,12 +46,12 @@ fn fixture() -> Vec<Row> {
             match v["enc"].as_str().unwrap() {
                 "dense" => {
                     assert_eq!(len, 8 * n);
-                    for (i, c) in raw.chunks_exact(8).enumerate() {
-                        bins[i] = f64::from_le_bytes(c.try_into().unwrap());
+                    for (i, c) in raw.as_chunks::<8>().0.iter().enumerate() {
+                        bins[i] = f64::from_le_bytes(*c);
                     }
                 }
                 _ => {
-                    for c in raw.chunks_exact(12) {
+                    for c in raw.as_chunks::<12>().0 {
                         let i = u32::from_le_bytes(c[..4].try_into().unwrap()) as usize;
                         bins[i] = f64::from_le_bytes(c[4..].try_into().unwrap());
                     }
