@@ -25,7 +25,11 @@ struct Row {
 }
 
 fn fixture() -> Vec<Row> {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/edt_parity");
+    // EDT_FIXTURE_DIR points the run at a larger scratch fixture (every round-2 row).
+    let dir = std::env::var_os("EDT_FIXTURE_DIR").map_or_else(
+        || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/edt_parity"),
+        PathBuf::from,
+    );
     let blob = std::fs::read(dir.join("bins.bin")).expect("bins.bin");
     let manifest = std::fs::read_to_string(dir.join("manifest.jsonl")).expect("manifest.jsonl");
     manifest
@@ -65,7 +69,11 @@ fn fixture() -> Vec<Row> {
                 bins,
                 status: e["status"].as_str().unwrap().into(),
                 reason: e["reason"].as_str().unwrap().into(),
-                edt: [e["edt"].as_f64(), e["edt_lo"].as_f64(), e["edt_hi"].as_f64()],
+                edt: [
+                    e["edt"].as_f64(),
+                    e["edt_lo"].as_f64(),
+                    e["edt_hi"].as_f64(),
+                ],
             }
         })
         .collect()
@@ -124,7 +132,12 @@ fn every_fixture_row_equals_frozen2_in_status_reason_and_values() {
         bad.len(),
         &bad[..bad.len().min(10)]
     );
-    println!("PARITY: {} rows, max rel diff {:e} ({})", rows.len(), worst.0, worst.1);
+    println!(
+        "PARITY: {} rows, max rel diff {:e} ({})",
+        rows.len(),
+        worst.0,
+        worst.1
+    );
 }
 
 #[test]
@@ -152,12 +165,16 @@ fn the_fixture_covers_every_status_set_mode_and_step_of_round_2() {
     for set in ["ism", "synth"] {
         for step in [1.0, 2.0, 5.0] {
             assert!(
-                rows.iter().any(|r| r.set == set && (r.step_ms - step).abs() < 1e-3),
+                rows.iter()
+                    .any(|r| r.set == set && (r.step_ms - step).abs() < 1e-3),
                 "{set} {step} ms"
             );
         }
     }
-    assert!(rows.iter().any(|r| r.set == "synth" && (r.step_ms - 10.0).abs() < 1e-3));
+    assert!(
+        rows.iter()
+            .any(|r| r.set == "synth" && (r.step_ms - 10.0).abs() < 1e-3)
+    );
 }
 
 #[test]

@@ -91,6 +91,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--results', default=r'B:\data\m8b-edt\round2\results')
     ap.add_argument('--out', default=str(ROOT / 'testdata/edt_parity'))
+    ap.add_argument('--per-stratum', type=int, default=PER_STRATUM, help='the committed fixture uses the default; a large value draws every round-2 row (a scratch check, not for commit)')
     a = ap.parse_args()
     m, sha = load_frozen2()
     res = Path(a.results)
@@ -109,7 +110,7 @@ def main():
     chosen = []
     for key in sorted(strata, key=str):
         rows = sorted(strata[key], key=lambda r: r['id'])
-        chosen += rnd.sample(rows, min(PER_STRATUM, len(rows)))
+        chosen += rnd.sample(rows, min(a.per_stratum, len(rows)))
     # frozen2 run now vs rows.csv: every chosen row, exact
     for r in chosen:
         o, c = run(m, r), csv_rows[r['id']]
