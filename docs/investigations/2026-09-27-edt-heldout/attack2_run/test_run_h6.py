@@ -113,6 +113,9 @@ def test_noise_reproducible_and_mean_converges():
     assert np.allclose(d_part + r_part, clean, rtol=1e-12, atol=0)
     for blk in np.array_split(np.arange(len(clean)), 10):
         var = (w_dir * d_part[blk].sum() + w_rev * r_part[blk].sum()) / reps
+        if var == 0:                                                # before the emission: no counts, no noise
+            assert mean[blk].sum() == clean[blk].sum() == 0
+            continue
         z = (mean[blk].sum() - clean[blk].sum()) / math.sqrt(var)
         assert abs(z) < 4.5, z
     z = (mean.sum() - clean.sum()) / math.sqrt((w_dir * d_part.sum() + w_rev * r_part.sum()) / reps)
