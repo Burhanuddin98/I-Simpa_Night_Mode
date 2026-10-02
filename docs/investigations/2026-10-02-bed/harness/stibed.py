@@ -53,6 +53,7 @@ TOL, AGREE, SHARE_MIN = 0.03, 0.01, 0.99
 U_MAX, ANSWERED_MIN = 0.01, 0.80
 TRUTH_SEEDS, TESTED_SEEDS = (9301, 9302), (4301, 4302, 4303)
 DT_FINE = t20p2.DT_FINE
+PAD = False
 
 
 def sha(p):
@@ -326,6 +327,17 @@ def leading_bin(arr, dt):
     return int(math.floor((arr['time_s'] - arr['half_width_s']) / dt))
 
 
+def exclusion(value, u, tail_ok):
+    """A row is excluded for its truth only when the product answered (ADDENDUM-4 item 1): a refusal counts as not
+    answered, whatever the truth; an answered row is excluded when the truth's tail did not settle, or its uncertainty
+    is unknown or above 0.01."""
+    if value is None:
+        return None
+    if not tail_ok:
+        return 'truth_truncated'
+    return 'truth_uncertain' if (u is None or u > U_MAX) else None
+
+
 def score_bc(rows, rooms):
     """ADDENDUM-2 sets B and C: wrong-silent = answered and |product - reference| > 0.03; pass: none, and answered in
     >= 80 % of each room's receivers (per sex, over rows not excluded; ADDENDUM-3 item 12)."""
@@ -414,7 +426,7 @@ def set_b7(out, say):
                     u = abs(r1 - r2) / 2 if r1 is not None and r2 is not None else None
                     rows.append(dict(room=room, label=label, seed=seed, sex=sex, product=v, product_code=code,
                                      reference=ref, reference_refusal=why, u=u, reference_own_levels=own,
-                                     excluded='truth_uncertain' if (u is None or u > U_MAX) else None,
+                                     excluded=exclusion(v, u, True),
                                      noise=pr['sti']['noise'][:5]))
         say('room %s: %d rows' % (room, sum(1 for r in rows if r['room'] == room)))
     return rows, score_bc(rows, rooms), info
@@ -469,9 +481,9 @@ def set_c7(out, say, workers):
     data = DATA['c7']
     allruns = scorebc.runs(data)
     rooms = list(run_c.ROOMS)
-    cache = out / 'references'
+    cache = OUT_ROOT / 'c7' / 'references'           # shared by the frozen and the padded scoring
     cache.mkdir(parents=True, exist_ok=True)
-    rows, info, refs, ctx = [], {}, {}, {}
+    rows, info, refs, ctx, rc_dt = [], {}, {}, {}, {}
     for room in rooms:
         need = [('tested', room, s) for s in TESTED_SEEDS]
         bad = [k for k in need if k not in allruns or allruns[k]['run_exit'] != 0 or not allruns[k]['run_folder']]
@@ -482,6 +494,7 @@ def set_c7(out, say, workers):
         L, a6, src, recs = run_c.geometry(room)
         rep0 = reps[need[0]]
         c, R = rep0['spps']['speed_of_sound_m_s'], rep0['spps']['receiver_radius_m']
+        rc_dt[room] = rep0['spps']['time_step_s']
         atm = scorebc.atmosphere(allruns[need[0]]['run_folder'])
         rc = {k: receivers(reps[k]) for k in need}
         for label, pr in rc[need[0]].items():
@@ -500,6 +513,11 @@ def set_c7(out, say, workers):
             ok_tail = bool(np.all(ref['tail_ok']))
             for seed in TESTED_SEEDS:
                 pr = rc[('tested', room, seed)][label]
+                d_full, d_cut = ref['d_full'], ref['d_cut']
+                if PAD:      # ADDENDUM-4 item 2 (post hoc): zeros to the tested run's length from its arrival bin
+                    b0 = pr['_bands'][1000]
+                    run_len = (len(b0['energy_pa2']) - leading_bin(b0['arrival'], rc_dt[room])) * rc_dt[room]
+                    d_full, d_cut = np.maximum(d_full, run_len), np.maximum(d_cut, run_len)
                 spr = [pr['_bands'][f]['source_power_rho_c'] for f in BANDS]
                 own_tr = [transfer_db(t * s / (4.0 / 3.0 * math.pi * R ** 3), s)
                           for t, s in zip(ref['total_per_unit_power'], spr)]
@@ -510,13 +528,12 @@ def set_c7(out, say, workers):
                         full = cut = own = None
                         why = 'no_product_levels'
                     else:
-                        full, why = ref_sti(ref['m_full'], ref['d_full'], sex, L_s, L_n, float(ref['t60'].max()))
-                        cut, _ = ref_sti(ref['m_cut'], ref['d_cut'], sex, L_s, L_n, float(ref['t60'].max()))
-                        own, _ = ref_sti(ref['m_full'], ref['d_full'], sex, SPEECH[sex] + np.asarray(own_tr), L_n,
+                        full, why = ref_sti(ref['m_full'], d_full, sex, L_s, L_n, float(ref['t60'].max()))
+                        cut, _ = ref_sti(ref['m_cut'], d_cut, sex, L_s, L_n, float(ref['t60'].max()))
+                        own, _ = ref_sti(ref['m_full'], d_full, sex, SPEECH[sex] + np.asarray(own_tr), L_n,
                                          float(ref['t60'].max()))
                     u = abs(full - cut) if full is not None and cut is not None else None
-                    ex_ = ('truth_truncated' if not ok_tail else
-                           'truth_uncertain' if (u is None or u > U_MAX) else None)
+                    ex_ = exclusion(v, u, ok_tail)
                     rows.append(dict(room=room, label=label, seed=seed, sex=sex, product=v, product_code=code,
                                      reference=full, reference_refusal=why, u=u, reference_own_levels=own,
                                      excluded=ex_, noise=pr['sti']['noise'][:5]))
@@ -530,8 +547,12 @@ def main():
     ap.add_argument('--out')
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--smoke', type=int, default=0)
+    ap.add_argument('--pad', action='store_true', help='c7 only, ADDENDUM-4 item 2 (post hoc): the reference '
+                    'series padded with zeros to the length of the tested run; default out STI/c7-padded')
     a = ap.parse_args()
-    out = Path(a.out) if a.out else OUT_ROOT / a.set
+    global PAD
+    PAD = a.pad
+    out = Path(a.out) if a.out else OUT_ROOT / (a.set + ('-padded' if a.pad else ''))
     if a.smoke:
         out = out / 'smoke'
     out.mkdir(parents=True, exist_ok=True)
@@ -550,7 +571,7 @@ def main():
                   shim=sha(REPO / 'crates' / 'simpa-core' / 'tests' / 'bed_shim.rs'),
                   sti_rs=sha(REPO / 'crates' / 'simpa-core' / 'src' / 'params' / 'sti.rs'), simpa=str(SIMPA),
                   simpa_version=ver)
-    mode = 'SMOKE' if a.smoke else 'SCORED'
+    mode = 'SMOKE' if a.smoke else ('POST-HOC (ADDENDUM-4 item 2)' if a.pad else 'SCORED')
     say('%s %s -> %s; %s' % (mode, a.set, out, json.dumps(hashes)))
     info = None
     if a.set.startswith('a-'):
@@ -563,7 +584,7 @@ def main():
         for r in rows:
             f.write(json.dumps(r, default=str) + '\n')
     res = dict(mode=mode, set=a.set, hashes=hashes, score=sc, solver_stderr=info,
-               pass_=sc['all']['pass_'] if mode == 'SCORED' else None)
+               pass_=sc['all']['pass_'] if not a.smoke else None)
     (out / 'summary.json').write_text(json.dumps(res, indent=1, default=str), encoding='utf-8')
     x = sc['all']
     say('%s %s: %s' % (mode, a.set, json.dumps({k: x.get(k) for k in (
