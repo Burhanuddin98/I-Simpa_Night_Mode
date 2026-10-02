@@ -249,7 +249,8 @@ limens). A consumer that shows a value shows its range beside it, and marks a `w
 resamples that gave one does not bound those that did not) or when there is no standard deviation, and
 every refusal not about noise, `noise_uncalibrated` and `noise_unknown` included. `status`, `lo` and
 `hi` are absent from every other value (TCR's, the reference's, `curvature.percent`). The curvature
-is still refused with a T20 or T30 that `params` refused for noise. A refusal for
+is still refused with a T20 or T30 that `params` refused for noise, **even though that T20 or T30 is now
+shown `wide`**: a consumer will see both values beside a `monte_carlo_noise` curvature. A refusal for
 `monte_carlo_noise` carries `particle_count`, the particles per source that would bring the value
 within its limit, or why none is named: `{"count": "named", "factor", "margin", "particles"}`
 (`factor` times the run's particles, `(margin·sd/limit)²`, and that many per source rounded up to

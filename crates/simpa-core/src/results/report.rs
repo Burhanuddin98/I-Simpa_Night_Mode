@@ -2426,11 +2426,9 @@ mod tests {
         );
         // Wide: the range is past the 5 % limen.
         assert!(half / value > 0.05, "{half} / {value}");
-        // The curvature still needs T20 and T30 as judged: refused with them, not computed from
-        // a wide pair.
-        if e.parameters.t30_s.status() == Some(RangeStatus::Wide) {
-            assert!(e.curvature.percent.refusal().is_some());
-        }
+        // The curvature still needs T20 and T30 as judged: with T20 wide it is refused, not
+        // computed from a wide value.
+        assert!(e.curvature.percent.refusal().is_some());
     }
 
     #[test]
