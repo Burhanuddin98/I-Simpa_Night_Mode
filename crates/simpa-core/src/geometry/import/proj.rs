@@ -2712,7 +2712,17 @@ fn read_solvers(
             ));
         }
     }
-    real!("pasdetemps", sp.time_step_s);
+    match opt_prop_real(conf, "pasdetemps", what)? {
+        Some(v) => sp.time_step_s = F64::new(v),
+        None => {
+            // Upstream's own GUI default (`e_core_core_config.h:74`), kept independent of
+            // `SppsSettings::for_bands`'s new-project default: a legacy project with no
+            // `pasdetemps` gets upstream's actual 10 ms, not Night Mode's 1 ms (decision row 11,
+            // `docs/decision-log.md`).
+            sp.time_step_s = F64::new(0.01);
+            notes.push(format!("{what}: no `pasdetemps`, upstream's default kept"));
+        }
+    }
     count!("random_seed", sp.random_seed);
     flag!("abs_atmo_calc", sp.air_absorption);
     flag!("enc_calc", sp.fittings);
@@ -2945,6 +2955,50 @@ mod tests {
             notes
                 .iter()
                 .any(|n| n.contains("no `trans_epsilon`, upstream's default kept")),
+            "{notes:?}"
+        );
+    }
+
+    /// Decision-log row 11: a new project steps at 1 ms, but an imported `.proj` keeps the
+    /// file's own `pasdetemps`, and one with none keeps upstream's actual default, 10 ms
+    /// (`e_core_core_config.h:74`), so the note "upstream's default kept" stays true.
+    #[test]
+    fn an_imported_project_keeps_its_own_time_step_not_night_mode_s_default() {
+        let parse = |configuration: &str| {
+            let xml = format!(
+                r#"<core>
+  <spps>
+    <configuration>{configuration}</configuration>
+    <mesh_conf/>
+    <core_conf_bfreq>
+      <p name="125" value="1"/>
+      <p name="250" value="1"/>
+      <p name="500" value="1"/>
+      <p name="1000" value="1"/>
+      <p name="2000" value="1"/>
+      <p name="4000" value="1"/>
+    </core_conf_bfreq>
+  </spps>
+</core>"#
+            );
+            let doc = Document::parse(&xml).unwrap();
+            let mut notes = Vec::new();
+            let s = read_solvers(doc.root_element(), &BandSet::default(), &mut notes).unwrap();
+            (s.spps.time_step_s.get(), notes)
+        };
+        assert_eq!(
+            Project::new("new").solvers.spps.time_step_s.get(),
+            0.001,
+            "a new project's default, which an import must not take"
+        );
+        let (dt, _) = parse(r#"<p name="pasdetemps" value="0.002"/>"#);
+        assert_eq!(dt, widen_f32(0.002), "the file's own step, as the GUI's float holds it");
+        let (dt, notes) = parse("");
+        assert_eq!(dt, 0.01, "upstream's actual default");
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("no `pasdetemps`, upstream's default kept")),
             "{notes:?}"
         );
     }

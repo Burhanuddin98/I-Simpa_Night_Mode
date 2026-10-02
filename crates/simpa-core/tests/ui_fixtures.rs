@@ -137,6 +137,8 @@ fn teaching_room() -> Project {
     p.solvers.spps.method = simpa_core::schema::ComputationMethod::Random;
     // And to upstream's trans_epsilon 5: the default is 7 since decision row 41.
     p.solvers.spps.extinction_exponent = F64::new(5.0);
+    // And to upstream's 10 ms step: the default is 1 ms since decision row 11 reached the code.
+    p.solvers.spps.time_step_s = F64::new(0.01);
     assert_eq!(p.bands, BandSet::default(), "octave bands, 125 Hz to 4 kHz");
     let n = p.bands.len();
     p.geometry.vertices = [
@@ -400,6 +402,8 @@ fn hall_run() -> Project {
     // And to upstream's trans_epsilon 5, not the default 7 (decision row 41): the gates time
     // this run, and a later floor makes every particle live 7/5 as long.
     p.solvers.spps.extinction_exponent = F64::new(5.0);
+    // And to upstream's 10 ms step (decision row 11 made 1 ms the default).
+    p.solvers.spps.time_step_s = F64::new(0.01);
     p.check_integrity().expect("the hall run is consistent");
     p
 }
