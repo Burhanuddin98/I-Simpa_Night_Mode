@@ -132,6 +132,9 @@ fn teaching_room() -> Project {
     // measured run (fixed seeds, particle counts, named gates); letting them silently follow the
     // default would change their numbers and invalidate what each gate measured.
     p.solvers.spps.duration_s = F64::new(2.0);
+    // Pinned to random for the same reason: the new-project default is energetic since
+    // decision row 38, and these measured runs were made in random mode.
+    p.solvers.spps.method = simpa_core::schema::ComputationMethod::Random;
     assert_eq!(p.bands, BandSet::default(), "octave bands, 125 Hz to 4 kHz");
     let n = p.bands.len();
     p.geometry.vertices = [

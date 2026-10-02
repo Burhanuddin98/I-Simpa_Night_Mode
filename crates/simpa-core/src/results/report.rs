@@ -148,18 +148,24 @@ pub struct EdtReport {
     /// included** (rounded up to the next whole step); absent when not computed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arrival_s: Option<f64>,
-    /// Whether the method has passed its held-out test for this run's computation method:
-    /// a single band of a random run yes (`docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md`, H1-H6), energetic no
-    /// (H3 failed), and an aggregate never (the test read single bands).
+    /// Whether the method has passed its held-out test for what this EDT was read from: a single
+    /// band, in either mode, with a receiver up to 1 m that the direct sound reached
+    /// (`docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md`; energetic mode's one H3
+    /// failure was a receiver with no direct sound, decision-log row 38), and an aggregate never
+    /// (the test read single bands).
     pub validated: bool,
     /// Why `validated` is false.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub validation_note: Option<String>,
 }
 
-/// The note an energetic run's EDT carries.
-pub const EDT_NOT_YET_VALIDATED: &str = "not yet validated: EDT v2.1 passed its held-out test \
-for random-mode runs only; energetic mode failed H3 (VERDICT-2, 2026-10-02)";
+/// The note an EDT carries, in every mode, when no direct sound reached the receiver
+/// ([`edt::Outcome::no_direct_path`]): energetic mode's only failure in the held-out test was
+/// such a receiver (VERDICT-2 H3, G4 R007), read 5-9 % low in both modes (decision-log row 38).
+/// Burhan's wording (2026-10-02 15:41): EDT does not need line of sight; its start time does.
+pub const EDT_NO_DIRECT_PATH_NOT_VALIDATED: &str = "not yet validated: start time uncertain, no \
+direct path from the source (the first arrival is estimated from the first recorded hit; \
+VERDICT-2 H3, G4 R007)";
 
 /// The note a summed-bands (broadband) aggregate's EDT carries in every mode: the held-out test
 /// read single bands only.
@@ -1164,14 +1170,12 @@ fn edt_report(
         t_arrival,
         Some(s.receiver_crossing_s() / 2.0),
     );
-    // The held-out test read single bands of Random runs with receivers up to 1 m; outside any
-    // of these the EDT is not validated, and the note names every reason that applies.
+    // The held-out test passed single bands with receivers up to 1 m that the direct sound
+    // reached, in either mode; outside any of these the EDT is not validated, and the note names
+    // every reason that applies.
     let reasons: Vec<&str> = [
         (broadband, EDT_BROADBAND_NOT_VALIDATED),
-        (
-            !edt::validated_for(s.computation_method),
-            EDT_NOT_YET_VALIDATED,
-        ),
+        (o.no_direct_path, EDT_NO_DIRECT_PATH_NOT_VALIDATED),
         (
             s.receiver_radius_m > edt::VALIDATED_MAX_RADIUS_M,
             EDT_LARGE_RECEIVER_NOT_VALIDATED,
@@ -2126,37 +2130,102 @@ mod tests {
         );
     }
 
+    /// A receiver the direct sound never reaches: nothing until `onset_s` after the geometric
+    /// arrival `arrival_s`, then the reverberant decay of `t60` s, with [`decay`]'s scatter.
+    fn blocked(n: usize, arrival_s: f64, onset_s: f64, t60: f64) -> Vec<f64> {
+        let first = arrival_s + onset_s;
+        let mut seed = 12345u64;
+        (0..n)
+            .map(|k| {
+                seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                let jitter = 0.9 + 0.2 * ((seed >> 33) as f64 / f64::from(1u32 << 31));
+                let t = (k as f64 + 0.5) * f64::from(DT);
+                if t < first {
+                    0.0
+                } else {
+                    1e-2 * jitter * 10f64.powf(-6.0 * (t - first) / t60)
+                }
+            })
+            .collect()
+    }
+
+    /// Decision-log row 38: energetic mode's one held-out failure was G4's blocked far receiver,
+    /// so the mode itself no longer marks EDT; a single band with line of sight is validated in
+    /// either mode, with the same value and range.
     #[test]
-    fn energetic_runs_mark_edt_not_yet_validated_and_random_runs_do_not() {
-        let arrival_s = DISTANCE_M / C;
-        let bins = decay(1500, arrival_s, 0.6);
+    fn a_single_band_with_line_of_sight_is_validated_in_either_mode() {
+        let bins = decay(1500, DISTANCE_M / C, 0.6);
         let random = band_edt(&edt_run(0, 0.0, bins.clone()));
-        assert!(random.validated);
-        assert_eq!(random.validation_note, None);
         let energetic = band_edt(&edt_run(1, 0.0, bins.clone()));
-        assert!(!energetic.validated);
-        assert_eq!(
-            energetic.validation_note.as_deref(),
-            Some(EDT_NOT_YET_VALIDATED)
-        );
-        // Only the marker differs: the value is the method's either way.
+        for (name, e) in [("random", &random), ("energetic", &energetic)] {
+            assert_ne!(e.status, edt::Status::Refused, "{name}: {e:?}");
+            assert!(e.validated, "{name}: {e:?}");
+            assert_eq!(e.validation_note, None, "{name}");
+        }
         assert_eq!(random.value_s, energetic.value_s);
-        // The marker is on every EDT of an energetic run, the aggregate's too, and in the JSON.
+        assert_eq!((random.lo_s, random.hi_s), (energetic.lo_s, energetic.hi_s));
         let s = edt_run(1, 0.0, bins);
         let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
-        let agg = rep
-            .aggregate
-            .parameters
-            .edt
-            .as_ref()
-            .expect("aggregate EDT");
-        assert!(!agg.validated);
+        assert!(rep.bands[0].parameters.edt_validated);
         let json = serde_json::to_value(&rep).unwrap();
-        assert_eq!(json["bands"][0]["parameters"]["edt"]["validated"], false);
-        assert_eq!(
-            json["bands"][0]["parameters"]["edt"]["validation_note"],
-            EDT_NOT_YET_VALIDATED
+        assert_eq!(json["bands"][0]["parameters"]["edt"]["validated"], true);
+        assert!(json["bands"][0]["parameters"]["edt"]["validation_note"].is_null());
+    }
+
+    /// Decision-log row 38: with no direct sound the method puts 0 dB at the run's first recorded
+    /// energy, which read EDT 5-9 % low at G4 R007 in both modes, so such a receiver's EDT is
+    /// not validated in either mode. The value is still the method's, shown with its range.
+    #[test]
+    fn a_receiver_the_direct_sound_never_reached_is_not_validated_in_either_mode() {
+        let arrival_s = DISTANCE_M / C;
+        let h = RADIUS_M / C;
+        let bins = blocked(1500, arrival_s, 0.010, 0.6);
+        // The series is what the branch reads: nothing from the ball's front to one step past
+        // its back, energy after.
+        let o = edt::analyse(&bins, f64::from(DT), Some(arrival_s), Some(h));
+        assert!(o.no_direct_path, "{o:?}");
+        assert_ne!(o.status, edt::Status::Refused, "{o:?}");
+        let seen = edt::analyse(
+            &decay(1500, arrival_s, 0.6),
+            f64::from(DT),
+            Some(arrival_s),
+            Some(h),
         );
+        assert!(!seen.no_direct_path, "line of sight: {seen:?}");
+        for method in [0, 1] {
+            let s = edt_run(method, 0.0, bins.clone());
+            let e = band_edt(&s);
+            assert!(!e.validated, "mode {method}: {e:?}");
+            assert_eq!(
+                e.validation_note.as_deref(),
+                Some(EDT_NO_DIRECT_PATH_NOT_VALIDATED),
+                "mode {method}"
+            );
+            assert_eq!(e.value_s, o.edt, "mode {method}: the method's value");
+            let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+            assert!(!rep.bands[0].parameters.edt_validated, "mode {method}");
+            // The aggregate names both of its reasons.
+            let agg = rep
+                .aggregate
+                .parameters
+                .edt
+                .as_ref()
+                .expect("aggregate EDT");
+            let note = agg.validation_note.as_deref().expect("a note");
+            assert!(note.contains(EDT_BROADBAND_NOT_VALIDATED), "{note}");
+            assert!(note.contains(EDT_NO_DIRECT_PATH_NOT_VALIDATED), "{note}");
+            let json = serde_json::to_value(&rep).unwrap();
+            assert_eq!(
+                json["bands"][0]["parameters"]["edt"]["validation_note"],
+                EDT_NO_DIRECT_PATH_NOT_VALIDATED
+            );
+        }
+        // No arrival to measure from (a celerity gradient): the method anchors at the first
+        // energy by design, and its blocked-path branch is not what ran.
+        let none = edt::analyse(&bins, f64::from(DT), None, Some(h));
+        assert!(!none.no_direct_path, "{none:?}");
     }
     /// Decision 37 (1): a receiver over 1 m is outside what the held-out test passed (Synth
     /// spheres over 1 m read 5-7 % low, VERDICT-2 ruling 1), so its EDT is not validated in any
@@ -2176,8 +2245,17 @@ mod tests {
             big.validation_note.as_deref(),
             Some(EDT_LARGE_RECEIVER_NOT_VALIDATED)
         );
-        let both = at(1, 1.5).validation_note.expect("a note");
-        assert!(both.contains(EDT_NOT_YET_VALIDATED), "{both}");
+        // Decision-log row 38: the mode is no longer a reason, so an energetic run's large
+        // receiver carries the radius note alone.
+        assert_eq!(
+            at(1, 1.5).validation_note.as_deref(),
+            Some(EDT_LARGE_RECEIVER_NOT_VALIDATED)
+        );
+        // Several reasons: each is named.
+        let mut s = edt_run(1, 0.0, blocked(1500, DISTANCE_M / C, 0.010, 0.6));
+        s.receiver_radius_m = 1.5;
+        let both = band_edt(&s).validation_note.expect("a note");
+        assert!(both.contains(EDT_NO_DIRECT_PATH_NOT_VALIDATED), "{both}");
         assert!(both.contains(EDT_LARGE_RECEIVER_NOT_VALIDATED), "{both}");
         // The marker beside edt_s follows it.
         let mut s = edt_run(0, 0.0, bins.clone());
@@ -2204,12 +2282,11 @@ mod tests {
             assert!(!agg.validated, "mode {method}");
             let note = agg.validation_note.as_deref().expect("a note");
             assert!(note.contains("broadband EDT is not covered by the held-out test"));
-            if method == 0 {
-                // A single Random band keeps its own validation, and says nothing of broadband.
-                let band = rep.bands[0].parameters.edt.as_ref().unwrap();
-                assert!(band.validated);
-                assert_eq!(band.validation_note, None);
-            }
+            // A single band keeps its own validation in either mode (decision-log row 38), and
+            // says nothing of broadband.
+            let band = rep.bands[0].parameters.edt.as_ref().unwrap();
+            assert!(band.validated, "mode {method}");
+            assert_eq!(band.validation_note, None, "mode {method}");
             let json = serde_json::to_value(&rep).unwrap();
             assert_eq!(json["aggregate"]["parameters"]["edt"]["validated"], false);
             for src in json["per_source"].as_array().into_iter().flatten() {
@@ -2220,7 +2297,8 @@ mod tests {
 
     /// Finding 2 (assay): `edt_s` is a bare number, so the marker rides beside it as
     /// `edt_validated`, on every Parameters that holds an EDT; true only where the held-out test
-    /// covered it (a single band of a Random run).
+    /// covered it (a single band the direct sound reached, in either mode since decision-log
+    /// row 38).
     #[test]
     fn edt_s_carries_its_marker_beside_it_on_every_surface() {
         let bins = decay(1500, DISTANCE_M / C, 0.6);
@@ -2232,7 +2310,7 @@ mod tests {
         let band = |j: &Value| j["bands"][0]["parameters"]["edt_validated"].clone();
         let agg = |j: &Value| j["aggregate"]["parameters"]["edt_validated"].clone();
         assert_eq!(marker(0, &band), true, "Random band");
-        assert_eq!(marker(1, &band), false, "Energetic band");
+        assert_eq!(marker(1, &band), true, "Energetic band");
         assert_eq!(marker(0, &agg), false, "Random aggregate");
         assert_eq!(marker(1, &agg), false, "Energetic aggregate");
         // Never true without an EDT object: TCR's refusal and the several-sources refusal.

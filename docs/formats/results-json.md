@@ -266,12 +266,16 @@ holds `method` (`"edt_v2.1"`), `status` (`ok`: the range is inside 5 %; `wide`: 
 decision-log row 9; `refused`), `value_s`, `lo_s`, `hi_s` (absent when refused), `reason` (a
 refusal code, or the method's detail `hw=…;fit=…;noise=…;tail=…;n=…`), `arrival_s` (what the method
 was given: the source's emission delay included, rounded up to the next whole step; absent when not
-computed), `validated` and `validation_note`. **`validated` is true only for a single band of a
-random-mode run with a receiver radius up to 1 m**, what the held-out test covered (VERDICT-2, H1-H6;
-decision-log row 37). It is false for energetic runs (H3 failed), for receivers over 1 m (5-7 % low in
-the test, VERDICT-2 ruling 1), and for **every aggregate (summed-bands, broadband) EDT whatever the mode**
-("broadband EDT is not covered by the held-out test"); `validation_note` names every reason that applies,
-joined by `; `.
+computed), `validated` and `validation_note`. **`validated` is true only for a single band, in either
+computation mode, with a receiver radius up to 1 m and a direct path from the source**, what the
+held-out test covered (VERDICT-2, H1-H6; decision-log rows 37 and 38). It is false for receivers over
+1 m (5-7 % low in the test, VERDICT-2 ruling 1); for a receiver with no direct path, "start time
+uncertain, no direct path from the source (the first arrival is estimated from the first recorded hit;
+VERDICT-2 H3, G4 R007)": energetic mode's only failure in the test, 5-9 % low in both modes, and flagged
+whenever the method finds no energy from the receiver ball's front to one step past its back, which a
+run with too few particles can also give; and for **every aggregate (summed-bands, broadband) EDT
+whatever the mode** ("broadband EDT is not covered by the held-out test"). `validation_note` names
+every reason that applies, joined by `; `.
 
 **The marker rule (decision-log row 20).** Only tested numbers are shown as validated; every EDT that is not
 validated carries "not yet validated" on every surface that prints or exports it. `edt_s` stays a bare

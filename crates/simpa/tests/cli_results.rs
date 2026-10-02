@@ -318,7 +318,8 @@ fn text_mode_prints_the_unvalidated_banner_and_a_row_per_band_and_receiver() {
 }
 
 /// Finding 2 (assay): an EDT that is not validated is marked in the text table too, in its own
-/// cell and with a legend; a validated one (a single band of a Random run) is not.
+/// cell and with a legend; a validated one (a single band with its direct sound, in either mode)
+/// is not.
 #[test]
 fn text_mode_marks_every_edt_that_is_not_validated() {
     let rep = json(&results(&fixture(SEATS_SPPS), true));
@@ -412,13 +413,14 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
                         // M8b: EDT is EDT v2.1's, which judges its own noise and gives a value
                         // with its range wherever it can (decision-log row 9), whatever the
                         // run's particles; the calibration's domain does not gate it. Counted
-                        // apart; every EDT agrees with its `edt` object, and an energetic
-                        // run's carries the not-yet-validated marker.
+                        // apart; every EDT agrees with its `edt` object.
                         let e = &b["parameters"]["edt"];
                         assert_eq!(e["method"], "edt_v2.1", "{run}");
-                        // A band's EDT is validated for Random only; the summed-bands aggregate's never.
+                        // A band's EDT is validated in either mode (decision-log row 38): every
+                        // band of these runs had its direct sound and a 0.31 m receiver. The
+                        // summed-bands aggregate's never is.
                         let single = !std::ptr::eq(b, &r["aggregate"]);
-                        let want = single && method == Method::Random;
+                        let want = single;
                         assert_eq!(e["validated"], want, "{run}: {e}");
                         assert_eq!(
                             b["parameters"]["edt_validated"], want,

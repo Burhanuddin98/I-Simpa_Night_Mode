@@ -2736,9 +2736,16 @@ fn read_solvers(
                 format!("{what}: computation method {other}"),
             ));
         }
-        None => notes.push(format!(
-            "{what}: no `computation_method`, upstream's default kept"
-        )),
+        None => {
+            // Upstream's own GUI default (`e_core_sppscore.h`), kept independent of
+            // `SppsSettings::for_bands`'s new-project default: a legacy project with no
+            // `computation_method` gets upstream's random, not Night Mode's energetic
+            // (decision row 38, `docs/decision-log.md`).
+            sp.method = ComputationMethod::Random;
+            notes.push(format!(
+                "{what}: no `computation_method`, upstream's default kept"
+            ));
+        }
     }
     match opt_prop_choice(conf, "surf_receiv_method", what)? {
         Some(0) => sp.sound_map = SoundMapQuantity::Intensity,
@@ -2832,6 +2839,56 @@ mod tests {
             notes
                 .iter()
                 .any(|n| n.contains("no `duree_simulation`, upstream's default kept")),
+            "{notes:?}"
+        );
+    }
+
+    /// Decision-log row 38: a new project computes in energetic mode, but an imported `.proj`
+    /// keeps the file's own computation method, and one with none keeps upstream's actual
+    /// default, random (`e_core_sppscore.h`), so the note "upstream's default kept" stays true.
+    #[test]
+    fn an_imported_project_keeps_its_own_computation_method_not_night_mode_s_default() {
+        let parse = |configuration: &str| {
+            let xml = format!(
+                r#"<core>
+  <spps>
+    <configuration>{configuration}</configuration>
+    <mesh_conf/>
+    <core_conf_bfreq>
+      <p name="125" value="1"/>
+      <p name="250" value="1"/>
+      <p name="500" value="1"/>
+      <p name="1000" value="1"/>
+      <p name="2000" value="1"/>
+      <p name="4000" value="1"/>
+    </core_conf_bfreq>
+  </spps>
+</core>"#
+            );
+            let doc = Document::parse(&xml).unwrap();
+            let mut notes = Vec::new();
+            let s = read_solvers(doc.root_element(), &BandSet::default(), &mut notes).unwrap();
+            (s.spps.method, notes)
+        };
+        assert_eq!(
+            Project::new("new").solvers.spps.method,
+            ComputationMethod::Energetic,
+            "a new project's default, which an import must not take"
+        );
+        let (m, _) = parse(r#"<p name="computation_method" choice="0"/>"#);
+        assert_eq!(
+            m,
+            ComputationMethod::Random,
+            "random in the file stays random"
+        );
+        let (m, _) = parse(r#"<p name="computation_method" choice="1"/>"#);
+        assert_eq!(m, ComputationMethod::Energetic);
+        let (m, notes) = parse("");
+        assert_eq!(m, ComputationMethod::Random, "upstream's actual default");
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("no `computation_method`, upstream's default kept")),
             "{notes:?}"
         );
     }

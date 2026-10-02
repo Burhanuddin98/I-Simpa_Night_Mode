@@ -1,7 +1,9 @@
 //! EDT v2.1 for SPPS receiver histograms: a line-for-line port of
 //! `docs/investigations/2026-09-27-edt-heldout/frozen2/method.py` (sha256 `029d90ac...`, Z = 2.5),
 //! the method whose held-out verdict is `VERDICT-2.md`: Random-mode runs pass H1-H6; Energetic
-//! mode fails H3, so its EDT is "not yet validated" ([`validated_for`]).
+//! mode fails H3 only at G4's blocked far receiver (R007), where no direct sound arrives and the
+//! method puts 0 dB at the first recorded hit, in both modes ([`Outcome::no_direct_path`],
+//! decision-log row 38). That, not the mode, is what makes an EDT "not yet validated".
 //!
 //! **Do not tune this file.** It is the frozen method in Rust, shown equal to the Python on
 //! round 2's inputs by `tests/edt_port.rs`. A change of method is a change of `frozen2`, a new
@@ -79,6 +81,15 @@ pub struct Outcome {
     /// A refusal's code (one of [`REFUSAL_REASONS`]), or for `ok` and `wide` frozen2's own
     /// detail string `hw=…;fit=…;noise=…;tail=…;n=…`.
     pub reason: String,
+    /// frozen2's own blocked-path branch was taken (I1/I2 below): an arrival was given, and the
+    /// first energy at or after the ball's front came more than one step after the ball's back,
+    /// so 0 dB sits at that first recorded hit instead of at the direct sound. It is the product's
+    /// only sign that a receiver has no direct path from the source (`SppsResults::arrival_s` is
+    /// the straight-line time, walls or not), and it is also set when too few particles reached
+    /// the receiver for any to arrive with the direct sound. False for a refusal before the arrival
+    /// is placed, and without an arrival (a celerity gradient). Not part of frozen2's return
+    /// value; it changes no number.
+    pub no_direct_path: bool,
 }
 
 impl Outcome {
@@ -86,13 +97,6 @@ impl Outcome {
     pub fn refusal(&self) -> Option<&str> {
         (self.status == Status::Refused).then_some(self.reason.as_str())
     }
-}
-
-/// Whether EDT from a run of `computation_method` (0 random, 1 energetic) is validated:
-/// Random passes VERDICT-2's H1-H6, Energetic fails H3 (`G4 far 1 ms`, `G4 far 2 ms`) and is
-/// "not yet validated" until Burhan rules (VERDICT-2, ruling 2; default P11).
-pub fn validated_for(computation_method: i32) -> bool {
-    computation_method == 0
 }
 
 /// The largest receiver radius whose EDT counts as validated (decision 37, 2026-10-02). Round 2
@@ -107,6 +111,7 @@ fn refuse(why: &str) -> Outcome {
         edt_hi: None,
         status: Status::Refused,
         reason: why.to_string(),
+        no_direct_path: false,
     }
 }
 
@@ -182,6 +187,7 @@ pub fn analyse(bins: &[f64], dt: f64, t_arrival: Option<f64>, half_width: Option
     // I1/I2: 0 dB at the FRONT of the ball's direct sound; first fitted sample after its BACK
     let mut k0: usize;
     let mut t_start: f64;
+    let mut no_direct_path = false;
     match t_arrival {
         None => {
             k0 = b.iter().position(|&x| x > 0.0).expect("energy");
@@ -199,9 +205,15 @@ pub fn analyse(bins: &[f64], dt: f64, t_arrival: Option<f64>, half_width: Option
                 // blocked path: 0 dB at the first arrival
                 k0 = k_on;
                 t_start = (k_on + 1) as f64 * dt;
+                no_direct_path = true;
             }
         }
     }
+    // Every outcome from here on carries where 0 dB was put; the method is unchanged.
+    let refuse = |why: &str| Outcome {
+        no_direct_path,
+        ..refuse(why)
+    };
     let m0 = n - k0;
     let level = |i: usize| 10.0 * (s[k0 + i].max(1e-300) / s[k0]).log10();
     let t_at = |i: usize| (k0 + i) as f64 * dt;
@@ -319,5 +331,6 @@ pub fn analyse(bins: &[f64], dt: f64, t_arrival: Option<f64>, half_width: Option
             sci1(u / s10),
             t.len()
         ),
+        no_direct_path,
     }
 }

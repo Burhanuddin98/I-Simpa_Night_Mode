@@ -1588,6 +1588,9 @@ fn cube_project() -> Project {
     solvers.spps.duration_s = F64::new(1.0);
     solvers.spps.time_step_s = F64::new(0.002);
     solvers.spps.random_seed = 1;
+    // Pinned: cube.simpa was written in random mode, upstream's default, before the new-project
+    // default became energetic (decision row 38); its consumers' expectations were made with it.
+    solvers.spps.method = ComputationMethod::Random;
     Project {
         format_version: FORMAT_VERSION,
         id: ProjectId::from_u128(id(1)),
