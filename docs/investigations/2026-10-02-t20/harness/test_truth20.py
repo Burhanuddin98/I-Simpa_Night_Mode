@@ -92,3 +92,27 @@ def test_score_j4_counts_refusals_and_truncation_makes_inconclusive():
     assert not sc['J4']['pass_'] and sc['J4']['share'] == 0.8
     rows += [_row(0.31, 1, 1.0, 1.0, status='truth_truncated') for _ in range(20)]
     assert t20p2.score(rows, False)['inconclusive_truncation']
+
+
+def test_tail_extension_is_exact_on_an_exponential_and_restores_the_truth():
+    T, t = 1.3, 0.004
+    k = 6 * math.log(10) / T
+    n_long = int(round(4 * T / DT))
+    e = np.arange(n_long + 1) * DT
+    refl = np.where(e[1:] > t, (np.exp(-k * (np.maximum(e[:-1], t) - t)) - np.exp(-k * (e[1:] - t))) / k, 0.0)
+    direct = np.zeros(n_long)
+    direct[int(t / DT)] = 0.2 / k
+    full = truth20.t20(direct, refl, t, DT)[0]
+    n_cut = int(round(0.6 * T / DT))            # cut at -36 dB: the bare cut is biased
+    bare = truth20.t20(direct[:n_cut], refl[:n_cut], t, DT)[0]
+    tail, info = t20p2.extend(direct + refl, n_cut)
+    assert info['ok'] and abs(info['t60'] / T - 1) < 1e-9, info
+    ext = t20p2.truth_ext(direct, refl, n_cut, tail, t)[0]
+    assert abs(bare / full - 1) > 1e-3
+    assert abs(ext / full - 1) < 1e-6, (ext, full)
+
+
+def test_short_variant_scores_j1a_only():
+    rows = [_row(0.31, 1, 1.0, 1.0) for _ in range(10)]
+    sc = t20p2.score(rows, False, j1a_only=True)
+    assert 'J1a' in sc and 'J1b' not in sc and 'J4' not in sc

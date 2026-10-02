@@ -11,7 +11,7 @@ Outputs go to OUT_DIR/s1 or OUT_DIR/s2: rows.csv, summary.json, run.log, shim/ (
 --smoke N computes N rows spread over the set and labels everything SMOKE (no verdict). --sayno-only computes the
 rows the say-NO checks need (S1: 1 ms; S2: units with d <= 3 m) and stops after them.
 
-S1 is NOT ruled (see S1_READING): the full S1 run refuses unless --s1-provisional is given.
+Where the PREREG did not fix a point, ../ADDENDUM-1.md rules (S1_READING; S2's `extend`).
 """
 import sys
 
@@ -63,18 +63,19 @@ ECHO_FACTOR, CUT_FACTOR = 2.5, 1.5
 # ---- S1 -------------------------------------------------------------------------------------------------------------
 S1_SEED = 20261002
 S1_DRAWS = 400
-# The PREREG does not fix these; each is a reading for Burhan to rule on before the scored S1 run.
-S1_READING = {
-    'slopes': 'synth_fresh draws double slopes only (RATIOS 1.5, 5); no single-slope rows are made',
+D_MIN_M = 0.7                        # ADDENDUM-1 item 2: d < 0.7 m redrawn
+S1_READING = {                       # ADDENDUM-1 items 1-3
+    'slopes': 'double slope only (synth_fresh RATIOS 1.5, 5); single exponentials are say-NO (e)',
     'cells': '400 draws = 200 per ratio, half of each delayed, in synth_fresh._draw\'s per-row order; '
-             'the drawn R is consumed from the stream and replaced by the PREREG grid; every draw is run at every '
-             'step and grid R',
-    'd_floor': 'd is redrawn while d - max(drawn R, 0.5 m) < 0.2 m (the generator\'s own d >= R + 0.2 m, at the '
-               'largest grid R), counted as d_near_source',
-    'run': 'product series: the generator\'s own run, t_arrival + f * T60 (f in 0.3-3); truth: the ball\'s fine '
-           'echogram to 2.5 x the slow slope\'s T60 (ratio * T60), converged against its cut at 1.5 x',
+             'the drawn R is consumed from the stream and not used; the R grid gives the half-width; every draw '
+             'is run at every step and grid R',
+    'd_floor': 'd redrawn while d < 0.7 m, counted as d_near_source',
+    'variants': 'long: the truth\'s series, to 2.5 x the slow slope\'s T60 (ratio * T60), read by the product too; '
+                'J1-a, J1-b, J4. short: the generator\'s own run, t_arrival + f * T60 (f in 0.3-3); J1-a only. '
+                'Truth converged against its cut at 1.5 x',
     'complete': 'EnergySeries::new (not complete), early reverberation unresolved, no floor, no lost share',
 }
+VARIANTS = ('long', 'short')
 
 
 def s1_draws():
@@ -92,7 +93,7 @@ def s1_draws():
             drr = sf._uniform(rng, sf.DRR_DB)
             R = sf._log_uniform(rng, sf.R_M)
             d = sf._uniform(rng, sf.D_M)
-            while d - max(R, max(RADII)) < sf.D_MINUS_R_MIN_M:
+            while d < D_MIN_M:
                 rej['d_near_source'] = rej.get('d_near_source', 0) + 1
                 d = sf._uniform(rng, sf.D_M)
             gap = sf._uniform(rng, sf.GAP_MS)
@@ -103,11 +104,13 @@ def s1_draws():
     return out, rej
 
 
-def s1_spec(p, R, step_ms):
-    return synth_fresh.make_spec(id='s1|%s|R%g|%gms' % (p['draw'], R, step_ms), ratio=p['ratio'], step_ms=step_ms,
-                                 t60_s=p['t60_s'], late_share_db=p['late_share_db'], drr_db=p['drr_db'], R_m=R,
-                                 d_m=p['d_m'], gap_ms=p['gap_ms'], delay_ms=p['delay_ms'],
-                                 run_over_t60=p['run_over_t60'])
+def s1_spec(p, R, step_ms, variant='short'):
+    """long: run_s = t_arrival + 2.5 x ratio x T60, the truth's series (s1_fine) after the emission's empty steps."""
+    f = ECHO_FACTOR * p['ratio'] if variant == 'long' else p['run_over_t60']
+    return synth_fresh.make_spec(id='s1|%s|R%g|%gms|%s' % (p['draw'], R, step_ms, variant), ratio=p['ratio'],
+                                 step_ms=step_ms, t60_s=p['t60_s'], late_share_db=p['late_share_db'],
+                                 drr_db=p['drr_db'], R_m=R, d_m=p['d_m'], gap_ms=p['gap_ms'], delay_ms=p['delay_ms'],
+                                 run_over_t60=f)
 
 
 def s1_fine(spec):
@@ -124,7 +127,7 @@ def s1_fine(spec):
 
 def s1_unit(job):
     """One (draw, R): its truths, and the product's series at each step asked for."""
-    p, R, steps, planted = job
+    p, R, steps, variants, planted = job
     t0 = time.time()
     spec1 = s1_spec(p, R, steps[0])
     direct, refl, t, n_cut = s1_fine(spec1)
@@ -132,12 +135,12 @@ def s1_unit(job):
     tc, _ = truth20.t20(direct[:n_cut], refl[:n_cut], t, DT_FINE)
     plant_a = truth20.t20(direct, refl, t, DT_FINE, top_db=0.0, bottom_db=-20.0)[0] if planted else None
     rows = []
-    for step_ms in steps:
-        spec = s1_spec(p, R, step_ms)
-        rows.append(dict(set='S1', id=spec['id'], unit=p['draw'], ratio=p['ratio'], R=R, step_ms=step_ms,
-                         t60=p['t60_s'], t60_slow=p['t60_s'] * p['ratio'], d=p['d_m'], delay_ms=p['delay_ms'],
-                         drr_db=p['drr_db'], late_share_db=p['late_share_db'], gap_ms=p['gap_ms'],
-                         run_over_t60=p['run_over_t60'], dt=spec['dt'], arrival=spec['t_arrival'],
+    for step_ms, variant in ((s, v) for s in steps for v in variants):
+        spec = s1_spec(p, R, step_ms, variant)
+        rows.append(dict(set='S1', id=spec['id'], unit=p['draw'], variant=variant, ratio=p['ratio'], R=R,
+                         step_ms=step_ms, t60=p['t60_s'], t60_slow=p['t60_s'] * p['ratio'], d=p['d_m'],
+                         delay_ms=p['delay_ms'], drr_db=p['drr_db'], late_share_db=p['late_share_db'],
+                         gap_ms=p['gap_ms'], run_over_t60=spec['run_over_t60'], dt=spec['dt'], arrival=spec['t_arrival'],
                          half_width=spec['half_width'], truth=tr, truth_why=why, truth_cut=tc,
                          truth_point=tr, planted_a=plant_a, double_slope=True,
                          bins=synth_fresh.histogram(spec)))
@@ -233,15 +236,21 @@ def s2_unit(job):
         m = ism.m_energy(float(F))
         ac = ism.air_factor(nb, dl, m, C, None)                     # continuous air for the truths (make_row)
         b_d, b_r, p_d, p_r = bd * ac, br * ac, pd * ac, pr * ac
-        tb, why = truth20.t20(b_d, b_r, t, DT_FINE)
-        tbc, _ = truth20.t20(b_d[:n_cut], b_r[:n_cut], t, DT_FINE)
-        tp, _ = truth20.t20(p_d, p_r, t, DT_FINE)
-        tpc, _ = truth20.t20(p_d[:n_cut], p_r[:n_cut], t, DT_FINE)
-        t_refl = truth20.t20(b_d, b_r, t, DT_FINE, anchor='reflected')[0] if u['d'] <= 3.0 else None
+        # ADDENDUM-1 item 4: each cut extended by its own fitted tail; truth and product read the 2.5 x one.
+        tail_b, fit_b = extend(b_d + b_r, nb)
+        tail_bc, fit_bc = extend(b_d + b_r, n_cut)
+        tail_p, fit_p = extend(p_d + p_r, nb)
+        tail_pc, fit_pc = extend(p_d + p_r, n_cut)
+        tb, why = truth_ext(b_d, b_r, nb, tail_b, t)
+        tbc, _ = truth_ext(b_d, b_r, n_cut, tail_bc, t)
+        tp, _ = truth_ext(p_d, p_r, nb, tail_p, t)
+        tpc, _ = truth_ext(p_d, p_r, n_cut, tail_pc, t)
+        t_refl = truth_ext(b_d, b_r, nb, tail_b, t, anchor='reflected')[0] if u['d'] <= 3.0 else None
         for step_ms in steps:
             k = int(round(step_ms * 1e-3 / DT_FINE))
             vc = (bd + br) * ism.air_factor(nb, dl, m, C, k * DT_FINE)   # air per step for the product (make_row)
-            n = nb // k
+            vc = np.concatenate([vc, tail_b])
+            n = len(vc) // k
             vb = vc[:n * k].reshape(n, k).sum(1)
             nz = np.nonzero(vb > 0)[0]
             vb = vb[:int(nz[-1]) + 1]
@@ -249,8 +258,79 @@ def s2_unit(job):
                              rec_i=u['rec_i'], R=u['R'], band_hz=F, step_ms=step_ms, t60=u['t60'], d=u['d'],
                              dt=k * DT_FINE, arrival=t, half_width=u['R'] / C, truth=tb, truth_why=why,
                              truth_cut=tbc, truth_point=tp, truth_point_cut=tpc, truth_reflected_anchor=t_refl,
+                             tail_t60=fit_b['t60'], tail_t60_cut=fit_bc['t60'], tail_share=fit_b['share'],
+                             tail_fit_ok=all(f['ok'] for f in (fit_b, fit_bc, fit_p, fit_pc)),
                              bins=vb))
     return rows, time.time() - t0, nb
+
+
+TAIL_FIT_DB = 10.0       # ADDENDUM-1 item 4: the last 10 dB of the cut series' Schroeder curve
+TAIL_DEPTH_DB = 60.0     # the tail runs to 60 dB below the energy at the cut
+
+
+def extend(e, n):
+    """The fitted exponential tail of the series e[:n] (ADDENDUM-1 item 4), as fine bins after bin n.
+
+    A Schroeder curve of a cut series falls to -inf at the cut, so "its last 10 dB" is read on the curve the tail
+    completes: S(t) = (energy of e[:n] after t) + M, M the tail's energy. The fit is least squares of 10 lg S on time
+    over the edges where S is within 10 dB of S at the cut (= M), and M is the fitted line's value at the cut: a fixed
+    point: a root in x = 10 lg M of f(x) = (the fitted line's level at the cut) - x, which is positive for a
+    negligible tail (the line through the curve's dive lies above its end) and negative for a dominant one (the
+    curve is convex, the line ends below it); the largest root is taken (below). Exact for an exponential (its tail is the curve's own continuation).
+    The tail is M's exponential at the fitted rate, integrated per fine bin, for as long as the energy takes to fall
+    60 dB (one fitted T60). Returns (tail, info); info['ok'] False when no root is found, or the slope is not negative, and the row is then counted truth_truncated.
+    """
+    e = np.asarray(e[:n], float)
+    dt = DT_FINE
+    S = np.concatenate([np.cumsum(e[::-1])[::-1], [0.0]])
+    tt = np.arange(n + 1) * dt
+    T = n * dt
+
+    def fit(x):
+        L = 10 * np.log10(S + 10 ** (x / 10))
+        w = L <= x + TAIL_FIT_DB
+        s1, s0 = np.polyfit(tt[w], L[w], 1)
+        return s0 + s1 * T - x, s1
+
+    # f can change sign more than once on a structured late echogram (a fit on the dive alone gives a spurious
+    # root at a negligible tail); the root taken is the largest, found scanning down from 100 dB above the total in
+    # 5 dB steps to 100 dB below the last bin's energy, then bisected to 1e-10 dB.
+    top, bottom = 10 * math.log10(S[0]) + 100.0, 10 * math.log10(S[n - 1]) - 100.0
+    ok = fit(top)[0] < 0
+    hi = top
+    lo = None
+    while ok and hi - 5.0 >= bottom:
+        if fit(hi - 5.0)[0] > 0:
+            lo = hi - 5.0
+            break
+        hi -= 5.0
+    ok = ok and lo is not None
+    if ok:
+        while hi - lo > 1e-10:
+            mid = 0.5 * (lo + hi)
+            if fit(mid)[0] > 0:
+                lo = mid
+            else:
+                hi = mid
+    else:
+        lo = hi = top
+    x = 0.5 * (lo + hi)
+    s1 = fit(x)[1]
+    k = -s1 * math.log(10) / 10
+    M = 10 ** (x / 10)
+    ok = bool(ok and k > 0)
+    t60 = 6 * math.log(10) / k if k > 0 else float('nan')
+    nt = int(math.ceil(TAIL_DEPTH_DB / 10 * math.log(10) / k / dt)) if ok else 0
+    j = np.arange(nt + 1) * dt
+    tail = M * -np.diff(np.exp(-k * j)) if ok else np.zeros(0)
+    return tail, dict(ok=bool(ok), t60=t60, share=M / (S[0] + M) if ok else float('nan'))
+
+
+def truth_ext(direct, refl, n, tail, t, anchor='total'):
+    """truth20.t20 on the series cut at n with its tail appended to the reflected part."""
+    r = np.concatenate([refl[:n], tail])
+    d = np.concatenate([direct[:n], np.zeros(len(tail))])
+    return truth20.t20(d, r, t, DT_FINE, anchor=anchor)
 
 
 # ---- the shim -------------------------------------------------------------------------------------------------------
@@ -285,6 +365,8 @@ def run_shim(entries, folder, say):
 
 # ---- scoring --------------------------------------------------------------------------------------------------------
 def truth_status(r):
+    if r.get('tail_fit_ok') is False:          # S2: a tail fit that did not settle cannot show convergence
+        return 'truth_truncated'
     for k in ('truth', 'truth_cut'):
         if not math.isfinite(r[k]):
             return 'truth_nan'
@@ -297,7 +379,8 @@ def j1b_share(rows, value='t20', step=1):
     return (ok / len(a) if a else float('nan')), ok, len(a)
 
 
-def score(rows, s2):
+def score(rows, s2, j1a_only=False):
+    """j1a_only: S1's short variant (ADDENDUM-1 item 3), J1-a and the refusals only."""
     scored = [r for r in rows if r['status'] == 'ok']
     out = dict(rows=len(rows), status={s: sum(1 for r in rows if r['status'] == s)
                                        for s in sorted({r['status'] for r in rows})})
@@ -314,6 +397,14 @@ def score(rows, s2):
                                                worst=max((abs(r['t20'] / r['truth'] - 1) for r in a), default=None),
                                                wrong_ids=[r['id'] for r in w][:20])
     out['J1a'] = dict(cells=cells, pass_=all(c['share'] <= J1A_MAX for c in cells.values()))
+    ref = {}
+    for r in rows:
+        if r['t20'] is None:
+            key = '%s|%s|%gms' % (r['reason'], r['status'], r['step_ms'])
+            ref[key] = ref.get(key, 0) + 1
+    out['refusals_by_reason_status_step'] = dict(sorted(ref.items()))
+    if j1a_only:
+        return out
     j1b = {}
     for s in STEPS_MS:
         sh, ok, n = j1b_share(rows, step=s)
@@ -323,12 +414,6 @@ def score(rows, s2):
     ans = sum(1 for r in g if r['t20'] is not None)
     out['J4'] = dict(rows=len(g), answered=ans, share=(ans / len(g)) if g else float('nan'),
                      pass_=bool(g and ans / len(g) >= J4_MIN))
-    ref = {}
-    for r in rows:
-        if r['t20'] is None:
-            key = '%s|%s|%gms' % (r['reason'], r['status'], r['step_ms'])
-            ref[key] = ref.get(key, 0) + 1
-    out['refusals_by_reason_status_step'] = dict(sorted(ref.items()))
     if s2:
         units = {}
         for r in rows:
@@ -366,6 +451,8 @@ def say_no_e():
 
 def say_no(rows, shim_late, s2, say):
     res = {'e': say_no_e()}
+    if not s2:      # S1: the long variant, which J1-b is scored on (ADDENDUM-1 item 3)
+        rows = [r for r in rows if r['variant'] == 'long']
     ok = [r for r in rows if r['status'] == 'ok']
     planted = [dict(r, t20_planted=(r['t20'] * 1.02 if r['t20'] is not None else None)) for r in ok]
     sh, n_ok, n = j1b_share(planted, value='t20_planted')
@@ -401,11 +488,8 @@ def main():
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--smoke', type=int, default=0)
     ap.add_argument('--sayno-only', action='store_true')
-    ap.add_argument('--s1-provisional', action='store_true')
     a = ap.parse_args()
     s2 = a.set == 's2'
-    if not s2 and not (a.smoke or a.sayno_only or a.s1_provisional):
-        sys.exit('S1 is not ruled (S1_READING in t20p2.py): pass --s1-provisional once Burhan has ruled')
     out = Path(a.out) / a.set
     if a.smoke:
         out = out / 'smoke'
@@ -430,12 +514,16 @@ def main():
         t60s = [p['t60_s'] for p in draws]
         meta = dict(d_rejections=rej, t60_realised=[min(t60s), max(t60s)], reading=S1_READING)
         steps = (1,) if a.sayno_only else STEPS_MS
-        allrows = [(p, R, s) for p in draws for R in RADII for s in steps]
+        variants = ('long',) if a.sayno_only else VARIANTS
+        allrows = [(p, R, s, v) for p in draws for R in RADII for s in steps for v in variants]
         pick = [allrows[i] for i in spread(a.smoke, len(allrows))] if a.smoke else allrows
         byunit = {}
-        for p, R, s in pick:
-            byunit.setdefault((p['draw'], R), (p, R, []))[2].append(s)
-        jobs = [(p, R, tuple(ss), True) for p, R, ss in byunit.values()]
+        for p, R, s, v in pick:
+            e = byunit.setdefault((p['draw'], R), (p, R, set(), set()))
+            e[2].add(s)
+            e[3].add(v)
+        jobs = [(p, R, tuple(sorted(ss)), tuple(v for v in VARIANTS if v in vv), True)
+                for p, R, ss, vv in byunit.values()]
         fn = s1_unit
     else:
         units, meta = s2_units()
@@ -467,15 +555,15 @@ def main():
                 u = units[i]
                 keep.add('s2|%s|rec%d|R%g|%dHz|%gms' % (u['room'], u['rec_i'], u['R'], F, s))
         else:
-            for p, R, s in pick:
-                keep.add('s1|%s|R%g|%gms' % (p['draw'], R, s))
+            for p, R, s, v in pick:
+                keep.add('s1|%s|R%g|%gms|%s' % (p['draw'], R, s, v))
         rows = [r for r in rows if r['id'] in keep]
     say('rows built: %d in %.1f s' % (len(rows), time.time() - t0))
     entries = [(r['id'], r['dt'], r['arrival'], r['half_width'], r['bins']) for r in rows]
     late = []
     if not s2:      # say-NO (d): the arrival one step late, 1 ms rows
         late = [(r['id'] + '|late', r['dt'], r['arrival'] + r['dt'], r['half_width'], r['bins'])
-                for r in rows if r['step_ms'] == 1]
+                for r in rows if r['step_ms'] == 1 and r['variant'] == 'long']
     shim = run_shim(entries + late, out / 'shim', say)
     for r in rows:
         s = shim[r['id']]
@@ -489,18 +577,25 @@ def main():
     summary = dict(mode=mode, set=a.set, hashes=hashes, meta=meta, say_no=sn, timing=timing,
                    seconds_total=time.time() - t0)
     if not a.sayno_only:
-        sc = score(rows, s2)
-        summary['score'] = sc
+        if s2:
+            sc = score(rows, True)
+            summary['score'] = sc
+            gates = {g: sc[g]['pass_'] for g in ('J1a', 'J1b', 'J4', 'J1c')}
+        else:
+            sc = score([r for r in rows if r['variant'] == 'long'], False)
+            sh = score([r for r in rows if r['variant'] == 'short'], False, j1a_only=True)
+            summary['score'] = dict(long=sc, short=sh)
+            gates = {'J1a_long': sc['J1a']['pass_'], 'J1a_short': sh['J1a']['pass_'], 'J1b_long': sc['J1b']['pass_'],
+                     'J4_long': sc['J4']['pass_']}
         if mode == 'SCORED':
-            gates = ['J1a', 'J1b', 'J4'] + (['J1c'] if s2 else [])
             if not sn['all_pass']:
                 v = 'INCONCLUSIVE (say-NO)'
             elif sc['inconclusive_truncation']:
                 v = 'INCONCLUSIVE (truth_truncated > 10 %)'
             else:
-                v = 'PASS' if all(sc[g]['pass_'] for g in gates) else 'FAIL'
+                v = 'PASS' if all(gates.values()) else 'FAIL'
             summary['verdict'] = v
-            say('VERDICT %s %s' % (v, json.dumps({g: sc[g]['pass_'] for g in gates})))
+            say('VERDICT %s %s' % (v, json.dumps(gates)))
     keys = sorted({k for r in rows for k in r if k != 'bins'})
     with open(out / 'rows.csv', 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=keys + ['n_bins'])
