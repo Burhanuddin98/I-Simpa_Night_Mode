@@ -2847,7 +2847,7 @@ mod tests {
   </spps>
 </core>"#;
         let doc = Document::parse(xml).unwrap();
-        let bands = BandSet::default();
+        let bands = BandSet::octaves_125_to_4000();
         let mut notes = Vec::new();
         let s = read_solvers(doc.root_element(), &bands, &mut notes).unwrap();
         assert_eq!(
@@ -2887,7 +2887,7 @@ mod tests {
             );
             let doc = Document::parse(&xml).unwrap();
             let mut notes = Vec::new();
-            let s = read_solvers(doc.root_element(), &BandSet::default(), &mut notes).unwrap();
+            let s = read_solvers(doc.root_element(), &BandSet::octaves_125_to_4000(), &mut notes).unwrap();
             (s.spps.method, notes)
         };
         assert_eq!(
@@ -2937,7 +2937,7 @@ mod tests {
             );
             let doc = Document::parse(&xml).unwrap();
             let mut notes = Vec::new();
-            let s = read_solvers(doc.root_element(), &BandSet::default(), &mut notes).unwrap();
+            let s = read_solvers(doc.root_element(), &BandSet::octaves_125_to_4000(), &mut notes).unwrap();
             (s.spps.extinction_exponent.get(), notes)
         };
         assert_eq!(
@@ -2983,7 +2983,7 @@ mod tests {
             );
             let doc = Document::parse(&xml).unwrap();
             let mut notes = Vec::new();
-            let s = read_solvers(doc.root_element(), &BandSet::default(), &mut notes).unwrap();
+            let s = read_solvers(doc.root_element(), &BandSet::octaves_125_to_4000(), &mut notes).unwrap();
             (s.spps.time_step_s.get(), notes)
         };
         assert_eq!(

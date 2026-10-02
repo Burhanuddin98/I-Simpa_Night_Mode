@@ -1556,7 +1556,9 @@ fn cube_project() -> Project {
     let mut id_mats: Vec<u32> = model.faces.iter().map(|f| f.id_mat).collect();
     id_mats.sort_unstable();
     id_mats.dedup();
-    let bands = BandSet::default();
+    // Pinned to the 6 octaves 125 Hz to 4 kHz it was written with: the new-project default is
+    // 125 Hz to 8 kHz since decision row 43.
+    let bands = BandSet::octaves_125_to_4000();
     let n = bands.len();
     let materials: Vec<Material> = id_mats
         .iter()
@@ -1700,7 +1702,7 @@ fn cube_fixture_loads_resaves_identically_and_matches_cube_cbin() {
     assert!(inside(p.sources[0].position));
     assert_eq!(p.point_receivers.len(), 1);
     assert!(inside(p.point_receivers[0].position));
-    assert_eq!(p.bands, BandSet::default());
+    assert_eq!(p.bands, BandSet::octaves_125_to_4000());
     assert!(p.solvers.spps.particles_per_source <= 2000);
 }
 

@@ -121,12 +121,24 @@ impl BandSet {
     }
 }
 
-impl Default for BandSet {
-    /// Octave bands 125 Hz to 4 kHz.
-    fn default() -> Self {
+impl BandSet {
+    /// Octave bands 125 Hz to 4 kHz: the new-project default before decision-log row 43, which
+    /// the measured-run fixtures made with it stay pinned to.
+    pub fn octaves_125_to_4000() -> Self {
         BandSet {
             kind: BandKind::Octave,
             frequencies_hz: vec![125, 250, 500, 1000, 2000, 4000],
+        }
+    }
+}
+
+impl Default for BandSet {
+    /// Octave bands 125 Hz to 8 kHz, a new project's (decision-log row 43): STI (IEC 60268-16)
+    /// needs the seven octaves 125 Hz to 8 kHz. An import keeps its own bands.
+    fn default() -> Self {
+        BandSet {
+            kind: BandKind::Octave,
+            frequencies_hz: vec![125, 250, 500, 1000, 2000, 4000, 8000],
         }
     }
 }
