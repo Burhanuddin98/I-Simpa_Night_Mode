@@ -2736,7 +2736,9 @@ fn read_solvers(
             // `trans_epsilon` gets upstream's actual 5, not Night Mode's 7 (decision row 41,
             // `docs/decision-log.md`).
             sp.extinction_exponent = F64::new(5.0);
-            notes.push(format!("{what}: no `trans_epsilon`, upstream's default kept"));
+            notes.push(format!(
+                "{what}: no `trans_epsilon`, upstream's default kept"
+            ));
         }
     }
     real!("rayon_recepteurp", sp.receiver_radius_m);
@@ -2887,7 +2889,12 @@ mod tests {
             );
             let doc = Document::parse(&xml).unwrap();
             let mut notes = Vec::new();
-            let s = read_solvers(doc.root_element(), &BandSet::octaves_125_to_4000(), &mut notes).unwrap();
+            let s = read_solvers(
+                doc.root_element(),
+                &BandSet::octaves_125_to_4000(),
+                &mut notes,
+            )
+            .unwrap();
             (s.spps.method, notes)
         };
         assert_eq!(
@@ -2937,7 +2944,12 @@ mod tests {
             );
             let doc = Document::parse(&xml).unwrap();
             let mut notes = Vec::new();
-            let s = read_solvers(doc.root_element(), &BandSet::octaves_125_to_4000(), &mut notes).unwrap();
+            let s = read_solvers(
+                doc.root_element(),
+                &BandSet::octaves_125_to_4000(),
+                &mut notes,
+            )
+            .unwrap();
             (s.spps.extinction_exponent.get(), notes)
         };
         assert_eq!(
@@ -2983,7 +2995,12 @@ mod tests {
             );
             let doc = Document::parse(&xml).unwrap();
             let mut notes = Vec::new();
-            let s = read_solvers(doc.root_element(), &BandSet::octaves_125_to_4000(), &mut notes).unwrap();
+            let s = read_solvers(
+                doc.root_element(),
+                &BandSet::octaves_125_to_4000(),
+                &mut notes,
+            )
+            .unwrap();
             (s.spps.time_step_s.get(), notes)
         };
         assert_eq!(
@@ -2992,7 +3009,11 @@ mod tests {
             "a new project's default, which an import must not take"
         );
         let (dt, _) = parse(r#"<p name="pasdetemps" value="0.002"/>"#);
-        assert_eq!(dt, widen_f32(0.002), "the file's own step, as the GUI's float holds it");
+        assert_eq!(
+            dt,
+            widen_f32(0.002),
+            "the file's own step, as the GUI's float holds it"
+        );
         let (dt, notes) = parse("");
         assert_eq!(dt, 0.01, "upstream's actual default");
         assert!(

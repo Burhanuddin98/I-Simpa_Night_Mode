@@ -143,7 +143,11 @@ fn teaching_room() -> Project {
     p.solvers.spps.extinction_exponent = F64::new(5.0);
     // And to upstream's 10 ms step: the default is 1 ms since decision row 11 reached the code.
     p.solvers.spps.time_step_s = F64::new(0.01);
-    assert_eq!(p.bands, BandSet::octaves_125_to_4000(), "octave bands, 125 Hz to 4 kHz");
+    assert_eq!(
+        p.bands,
+        BandSet::octaves_125_to_4000(),
+        "octave bands, 125 Hz to 4 kHz"
+    );
     let n = p.bands.len();
     p.geometry.vertices = [
         [0.0, 0.0, 0.0],
@@ -376,7 +380,11 @@ fn hall_run() -> Project {
     // mesh takes the new-project default, 125 Hz to 8 kHz since decision row 43.
     p.bands = BandSet::octaves_125_to_4000();
     p.solvers = simpa_core::schema::SolverSettings::for_bands(p.bands.len());
-    assert_eq!(p.bands, BandSet::octaves_125_to_4000(), "octave bands, 125 Hz to 4 kHz");
+    assert_eq!(
+        p.bands,
+        BandSet::octaves_125_to_4000(),
+        "octave bands, 125 Hz to 4 kHz"
+    );
     let n = p.bands.len();
     let reference = reference_material(HALL_MATERIAL).unwrap();
     assert_eq!(reference.name, "20% absorbing");

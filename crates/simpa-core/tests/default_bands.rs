@@ -15,7 +15,10 @@ fn a_new_project_computes_the_octaves_125_hz_to_8_khz() {
         "decision row 43: seven octaves, 8 kHz included"
     );
     assert_eq!(p.bands, BandSet::default());
-    assert_eq!(p.bands, BandSet::range(BandKind::Octave, 125, 8000).unwrap());
+    assert_eq!(
+        p.bands,
+        BandSet::range(BandKind::Octave, 125, 8000).unwrap()
+    );
     // Every per-band setting follows the band count.
     assert_eq!(p.solvers, SolverSettings::for_bands(7));
     assert_eq!(p.solvers.spps.bands_computed.len(), 7);
