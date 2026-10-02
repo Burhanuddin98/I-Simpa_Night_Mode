@@ -18,6 +18,7 @@ use super::spps::{
 use super::tcr::{self, MainBand, TcrResults};
 use super::{Refusal, RunResults, SolverBuild, SolverResults, SurfaceFile, value_invalid};
 use crate::params::decay::{self, Arrival, Onset};
+use crate::params::edt;
 use crate::params::lambert::FreePaths;
 use crate::params::noise::{self, NoiseModel};
 use crate::params::{self, EnergySeries, NotEvaluable, ParamError, Quantity};
@@ -42,8 +43,10 @@ use crate::schema::SolverKind;
 /// labelled and not validated; seeds (`monte_carlo.seed`, the transport's) are hex strings; and
 /// every `mc_sd` is calibrated against SPPS's own seed-to-seed spread per computation method
 /// (`monte_carlo.method` and `.calibration`, `noise_model.method` and `.particles`), and a
-/// refusal for noise carries `particle_count`.
-pub const REPORT_VERSION: u32 = 5;
+/// refusal for noise carries `particle_count`. 6 (M8b): `edt_s` is EDT v2.1 (`params::edt`), the
+/// held-out-tested method, on the raw histogram: a value with its guaranteed range, or refused
+/// `edt_refused`; SPPS parameters carry `edt` (status, range, reason, validated).
+pub const REPORT_VERSION: u32 = 6;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -119,6 +122,45 @@ impl Evaluated {
     }
 }
 
+/// EDT as EDT v2.1 ([`edt`]) read it from the band's raw histogram: the value with its
+/// guaranteed range, or the reason it declined. `Parameters::edt_s` carries the same value, or the
+/// refusal as `edt_refused`.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct EdtReport {
+    /// [`edt::METHOD`].
+    pub method: String,
+    /// `ok` (the range is inside the 5 % JND), `wide` (shown with its range, decision-log row 9)
+    /// or `refused`.
+    pub status: edt::Status,
+    /// The value, s; absent when refused.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_s: Option<f64>,
+    /// The range's lower end, s; absent when refused.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lo_s: Option<f64>,
+    /// The range's upper end, s; absent when refused.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hi_s: Option<f64>,
+    /// A refusal's code (`params::edt::REFUSAL_REASONS`), or the method's own detail
+    /// (`hw=…;fit=…;noise=…;tail=…;n=…`).
+    pub reason: String,
+    /// The direct sound's arrival the method was given, s, **the source's emission delay
+    /// included** (rounded up to the next whole step); absent when not computed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arrival_s: Option<f64>,
+    /// Whether the method has passed its held-out test for this run's computation method:
+    /// random yes (`docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md`, H1-H6), energetic no
+    /// (H3 failed).
+    pub validated: bool,
+    /// Why `validated` is false.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation_note: Option<String>,
+}
+
+/// The note an energetic run's EDT carries.
+pub const EDT_NOT_YET_VALIDATED: &str = "not yet validated: EDT v2.1 passed its held-out test \
+for random-mode runs only; energetic mode failed H3 (VERDICT-2, 2026-10-02)";
+
 /// The eight parameters of one band (or of the aggregate).
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct Parameters {
@@ -138,6 +180,10 @@ pub struct Parameters {
     pub d50: Evaluated,
     /// s.
     pub ts_s: Evaluated,
+    /// EDT's status, range and validation (below `edt_s`'s value). Absent where EDT is not
+    /// computed from a histogram: TCR, and the several-sources refusal.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edt: Option<EdtReport>,
 }
 
 impl Parameters {
@@ -163,6 +209,7 @@ impl Parameters {
         };
         let refuse = |q: Quantity| Evaluated::refused(params::not_evaluable(q, why()));
         self.edt_s = refuse(Quantity::Edt);
+        self.edt = None;
         self.t20_s = refuse(Quantity::T20);
         self.t30_s = refuse(Quantity::T30);
         self.c50_db = refuse(Quantity::Clarity { te_s: 0.05 });
@@ -191,6 +238,7 @@ impl Parameters {
             c80_db: refuse(Quantity::Clarity { te_s: 0.08 }),
             d50: refuse(Quantity::Definition { te_s: 0.05 }),
             ts_s: refuse(Quantity::CentreTime),
+            edt: None,
         }
     }
 }
@@ -280,6 +328,7 @@ fn evaluated(
             c80_db: Evaluated::of_estimate(p.c80_db),
             d50: Evaluated::of_estimate(p.d50),
             ts_s: Evaluated::of_estimate(p.ts_s),
+            edt: None,
         },
         curvature: CurvatureReport::of(p.curvature_percent),
         crossings_per_particle: p.crossings_per_particle,
@@ -1716,6 +1765,7 @@ mod tests {
             c80_db: v(),
             d50: v(),
             ts_s: v(),
+            edt: None,
         };
         p.several_sources(&["A", "B"]);
         assert_eq!(p.spl_db.value(), Some(1.0));
@@ -1792,6 +1842,191 @@ mod tests {
                 value: 0.62,
                 mc_sd: Some(5e-5)
             }
+        );
+    }
+
+    // --- EDT v2.1 (M8b port; docs/investigations/2026-10-02-edt-port/PORT.md) --------------------
+
+    use crate::results::spps::{ReceiverBand, SourceTotals, emission_s};
+    use crate::run::stats::BandStats;
+
+    const DT: f32 = 0.001;
+    const C: f64 = 343.2;
+    const RADIUS_M: f64 = 0.31;
+    const DISTANCE_M: f64 = 3.432; // 10 ms from the source
+
+    /// A decay of `t60` s from `arrival_s`, the direct sound in the bin it falls in, with a
+    /// deterministic ragged scatter standing in for the hits' noise.
+    fn decay(n: usize, arrival_s: f64, t60: f64) -> Vec<f64> {
+        let dt = f64::from(DT);
+        let mut seed = 12345u64;
+        (0..n)
+            .map(|k| {
+                seed = seed
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                let jitter = 0.9 + 0.2 * ((seed >> 33) as f64 / f64::from(1u32 << 31));
+                let t = (k as f64 + 0.5) * dt;
+                let direct = if (arrival_s / dt).floor() as usize == k {
+                    1.0
+                } else {
+                    0.0
+                };
+                if t < arrival_s {
+                    0.0
+                } else {
+                    direct + 1e-2 * jitter * 10f64.powf(-6.0 * (t - arrival_s) / t60)
+                }
+            })
+            .collect()
+    }
+
+    /// One source (delayed by `delay_s`) and one receiver, one band, `bins` as the receiver's
+    /// series.
+    fn edt_run(method: i32, delay_s: f32, bins: Vec<f64>) -> SppsResults {
+        let n = bins.len();
+        SppsResults {
+            time_step_s: f64::from(DT),
+            duration_s: n as f64 * f64::from(DT),
+            steps: n,
+            speed_of_sound_m_s: C,
+            receiver_radius_m: RADIUS_M,
+            celerity_gradient: false,
+            computation_method: method,
+            particles_per_source: 100_000,
+            trans_epsilon: 5.0,
+            echogram_per_source: false,
+            sources: vec![SourcePoint {
+                name: "S".into(),
+                position_m: Some([0.0, 0.0, 0.0]),
+                emission_s: emission_s(delay_s, DT),
+                band_power_w: vec![1.0],
+                balloon: false,
+            }],
+            point_receivers: vec![PointReceiver {
+                label: "R".into(),
+                folder: "Punctual receivers/R".into(),
+                position_m: Some([DISTANCE_M, 0.0, 0.0]),
+                bands: vec![ReceiverBand {
+                    freq_hz: 500,
+                    energy: bins.clone(),
+                    lateral_cos2: Ok(vec![0.0; n]),
+                    lateral_abs_cos: Ok(vec![0.0; n]),
+                    intensity: Default::default(),
+                    source_power_rho_c: 2.0,
+                    background_noise_db: 0.0,
+                }],
+                by_source: vec![SourceTotals {
+                    source: "S".into(),
+                    energy: vec![bins.iter().sum()],
+                }],
+                echograms: Vec::new(),
+            }],
+            total_energy: Vec::new(),
+            particles: ParticleStats {
+                bands: vec![BandStats {
+                    freq_hz: 500,
+                    absorbed_by_atmosphere: 0,
+                    absorbed_by_materials: 100_000,
+                    absorbed_by_fittings: 0,
+                    lost_by_infinite_loops: 0,
+                    lost_by_meshing_problems: 0,
+                    remaining: 0,
+                    total: 100_000,
+                }],
+            },
+            surfaces: Vec::new(),
+            particle_files: Vec::new(),
+            reference: Box::new(Reference::NotComputed {
+                why: "a unit test's run".into(),
+            }),
+        }
+    }
+
+    fn band_edt(s: &SppsResults) -> EdtReport {
+        let rep = receiver_report(&[500], s, &s.point_receivers[0]);
+        rep.bands[0].parameters.edt.clone().expect("an EDT report")
+    }
+
+    #[test]
+    fn the_method_gets_the_arrival_with_the_source_delay_rounded_up_to_the_next_whole_step() {
+        let h = RADIUS_M / C;
+        let direct_s = DISTANCE_M / C;
+        // 15.3 steps of delay: the particles start at step 16.
+        let delay_s = 0.0153f32;
+        let arrival_s = emission_s(delay_s, DT) + direct_s;
+        assert!((arrival_s - (0.016 + direct_s)).abs() < 1e-6);
+        let bins = decay(1500, arrival_s, 0.6);
+        let s = edt_run(0, delay_s, bins.clone());
+        let r = receiver_report(&[500], &s, &s.point_receivers[0]);
+        assert_eq!(r.arrival_s, Some(arrival_s));
+        let got = r.bands[0].parameters.edt.clone().unwrap();
+        assert_eq!(got.arrival_s, Some(arrival_s));
+
+        let with_delay = edt::analyse(&bins, f64::from(DT), Some(arrival_s), Some(h));
+        let delay_dropped = edt::analyse(&bins, f64::from(DT), Some(direct_s), Some(h));
+        let delay_unrounded =
+            edt::analyse(&bins, f64::from(DT), Some(f64::from(delay_s) + direct_s), Some(h));
+        // The test has power only where dropping or not rounding the delay changes the answer.
+        assert_ne!(with_delay, delay_dropped, "this series cannot tell a dropped delay");
+        assert_ne!(with_delay, delay_unrounded, "this series cannot tell an unrounded delay");
+        assert_eq!(got.value_s, with_delay.edt);
+        assert_eq!(got.lo_s, with_delay.edt_lo);
+        assert_eq!(got.hi_s, with_delay.edt_hi);
+        assert_eq!(got.reason, with_delay.reason);
+        assert_ne!(got.reason, delay_dropped.reason);
+        assert_ne!(got.reason, delay_unrounded.reason);
+    }
+
+    #[test]
+    fn edt_s_is_the_methods_value_or_its_refusal_as_edt_refused() {
+        let arrival_s = emission_s(0.0, DT) + DISTANCE_M / C;
+        // A decay the run covers: a value, in `edt_s` and in `edt`.
+        let s = edt_run(0, 0.0, decay(1500, arrival_s, 0.6));
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let p = &rep.bands[0].parameters;
+        let e = p.edt.as_ref().unwrap();
+        assert_ne!(e.status, edt::Status::Refused, "{e:?}");
+        assert_eq!(p.edt_s.value(), e.value_s);
+        assert!(e.lo_s.unwrap() < e.value_s.unwrap() && e.value_s.unwrap() < e.hi_s.unwrap());
+        // A run that ends before the decay does: refused, with the method's reason.
+        let s = edt_run(0, 0.0, decay(60, arrival_s, 0.6));
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let p = &rep.bands[0].parameters;
+        let e = p.edt.as_ref().unwrap();
+        assert_eq!(e.status, edt::Status::Refused);
+        assert_eq!(e.value_s, None);
+        let why = p.edt_s.refusal().expect("refused").error.not_evaluable().cloned();
+        assert_eq!(
+            why,
+            Some(NotEvaluable::EdtRefused {
+                reason: e.reason.clone()
+            })
+        );
+    }
+
+    #[test]
+    fn energetic_runs_mark_edt_not_yet_validated_and_random_runs_do_not() {
+        let arrival_s = DISTANCE_M / C;
+        let bins = decay(1500, arrival_s, 0.6);
+        let random = band_edt(&edt_run(0, 0.0, bins.clone()));
+        assert!(random.validated);
+        assert_eq!(random.validation_note, None);
+        let energetic = band_edt(&edt_run(1, 0.0, bins.clone()));
+        assert!(!energetic.validated);
+        assert_eq!(energetic.validation_note.as_deref(), Some(EDT_NOT_YET_VALIDATED));
+        // Only the marker differs: the value is the method's either way.
+        assert_eq!(random.value_s, energetic.value_s);
+        // The marker is on every EDT of an energetic run, the aggregate's too, and in the JSON.
+        let s = edt_run(1, 0.0, bins);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let agg = rep.aggregate.parameters.edt.as_ref().expect("aggregate EDT");
+        assert!(!agg.validated);
+        let json = serde_json::to_value(&rep).unwrap();
+        assert_eq!(json["bands"][0]["parameters"]["edt"]["validated"], false);
+        assert_eq!(
+            json["bands"][0]["parameters"]["edt"]["validation_note"],
+            EDT_NOT_YET_VALIDATED
         );
     }
 }

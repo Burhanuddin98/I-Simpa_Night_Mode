@@ -306,6 +306,10 @@ pub enum NotEvaluable {
         /// The solver, and where its own values for the receiver are.
         detail: String,
     },
+    /// EDT v2.1 ([`edt`]) refused: the histogram is outside the method's premises. Made by
+    /// `core::results`, which runs the method on the raw histogram; `reason` is one of
+    /// [`edt::REFUSAL_REASONS`].
+    EdtRefused { reason: String },
 }
 
 impl fmt::Display for NotEvaluable {
@@ -522,6 +526,21 @@ impl fmt::Display for NotEvaluable {
             NotEvaluable::NoTimeSeries { detail } => {
                 write!(f, "no_time_series: the solver wrote none: {detail}")
             }
+            NotEvaluable::EdtRefused { reason } => write!(
+                f,
+                "edt_refused: {reason}: {}",
+                match reason.as_str() {
+                    "no_energy" | "no_energy_after_arrival" => "no energy to read a decay from",
+                    "run_too_short" | "not_decaying_at_run_end" =>
+                        "the run ends before the decay does; run longer",
+                    "direct_only" | "step_too_coarse" => "too few time steps between the direct \
+                         sound and -10 dB; use a finer time step",
+                    "too_few_particles" => "too few hits after -10 dB; use more particles",
+                    "receiver_too_large" =>
+                        "the receiver ball hides the start of the decay; use a smaller radius",
+                    _ => "outside the method's premises",
+                }
+            ),
         }
     }
 }
