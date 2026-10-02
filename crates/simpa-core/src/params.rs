@@ -533,7 +533,8 @@ impl fmt::Display for NotEvaluable {
                     "no_energy" | "no_energy_after_arrival" => "no energy to read a decay from",
                     "run_too_short" | "not_decaying_at_run_end" =>
                         "the run ends before the decay does; run longer",
-                    "direct_only" | "step_too_coarse" => "too few time steps between the direct \
+                    "direct_only" | "step_too_coarse" =>
+                        "too few time steps between the direct \
                          sound and -10 dB; use a finer time step",
                     "too_few_particles" => "too few hits after -10 dB; use more particles",
                     "receiver_too_large" =>

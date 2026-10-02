@@ -86,7 +86,8 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 5,               // 2: mc_sd, noise, floor, lost-share and per-source fields;
+  "results_version": 6,               // 6: edt_s is EDT v2.1 (params::edt) and bands carry `edt`;
+                                      // 2: mc_sd, noise, floor, lost-share and per-source fields;
                                       // 3: TCR receivers carry parameters and an aggregate;
                                       // 4: lost_follows_decay; an arrival outside the onset
                                       //    bin refuses C50, C80, D50 and Ts only; bands carry
@@ -251,8 +252,22 @@ radius squared and do not fall with more particles, so the radius must shrink to
 multiple of the run's); the text output shows `NE(uncal:<count>)` or `NE(uncal:R<=<s>x)`. `code` is a row of `docs/solver-contract.md`, "Parameter refusals"; `error` is the typed
 refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `early_unresolved`,
 `range_too_short`, `not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`,
-`monte_carlo_noise`, `noise_unknown`, `noise_uncalibrated`, `several_sources`, `no_time_series` for
-`params_not_evaluable` (`docs/params.md`).
+`monte_carlo_noise`, `noise_unknown`, `noise_uncalibrated`, `several_sources`, `no_time_series`,
+`edt_refused` (EDT only: `reason` is one of `no_energy`, `no_energy_after_arrival`, `run_too_short`,
+`direct_only`, `step_too_coarse`, `not_decaying`, `too_few_particles`, `not_decaying_at_run_end`,
+`receiver_too_large`) for `params_not_evaluable` (`docs/params.md`).
+
+**EDT (results version 6).** `edt_s` is EDT v2.1 (`params::edt`, ported from
+`docs/investigations/2026-09-27-edt-heldout/frozen2/method.py` and shown equal to it,
+`docs/investigations/2026-10-02-edt-port/PORT.md`), read from the raw histogram: `{"value": …,
+"mc_sd": null}` for `ok` and `wide`, or refused `edt_refused`. Wherever a histogram gave it (every SPPS
+band, aggregate and per-source band; absent for TCR and for `several_sources`), `parameters.edt`
+holds `method` (`"edt_v2.1"`), `status` (`ok`: the range is inside 5 %; `wide`: shown with its range,
+decision-log row 9; `refused`), `value_s`, `lo_s`, `hi_s` (absent when refused), `reason` (a
+refusal code, or the method's detail `hw=…;fit=…;noise=…;tail=…;n=…`), `arrival_s` (what the method
+was given: the source's emission delay included, rounded up to the next whole step; absent when not
+computed), `validated` and `validation_note`. **`validated` is true for random-mode runs and false
+for energetic ones** (VERDICT-2: H3 failed), whose EDT is "not yet validated"; the note says so.
 
 #### `curvature` and `decay_curve`
 

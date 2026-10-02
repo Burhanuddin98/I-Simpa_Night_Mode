@@ -350,7 +350,7 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
                 "{run} {q}"
             );
         }
-        let (mut values, mut noise, mut outside) = (0, 0, 0);
+        let (mut values, mut noise, mut outside, mut edt_values) = (0, 0, 0, 0);
         for r in rep["spps"]["point_receivers"].as_array().unwrap() {
             let bands = r["bands"].as_array().unwrap();
             assert_eq!(bands.len(), 2);
@@ -363,6 +363,30 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
                     let p = &b["parameters"][q];
                     let ok = p["value"].is_f64() || p["not_evaluable"]["code"].is_string();
                     assert!(ok, "{run} {} {q}: {p}", r["label"]);
+                    if q == "edt_s" {
+                        // M8b: EDT is EDT v2.1's, which judges its own noise and gives a value
+                        // with its range wherever it can (decision-log row 9), whatever the
+                        // run's particles; the calibration's domain does not gate it. Counted
+                        // apart; every EDT agrees with its `edt` object, and an energetic
+                        // run's carries the not-yet-validated marker.
+                        let e = &b["parameters"]["edt"];
+                        assert_eq!(e["method"], "edt_v2.1", "{run}");
+                        assert_eq!(e["validated"], method == Method::Random, "{run}: {e}");
+                        assert_eq!(e["validation_note"].is_string(), method != Method::Random);
+                        if p["value"].is_f64() {
+                            assert_eq!(p["value"], e["value_s"], "{run}: {p} {e}");
+                            assert!(e["status"] == "ok" || e["status"] == "wide", "{run}: {e}");
+                            assert!(e["lo_s"].as_f64() < e["value_s"].as_f64(), "{run}: {e}");
+                            assert!(e["value_s"].as_f64() < e["hi_s"].as_f64(), "{run}: {e}");
+                            edt_values += 1;
+                        } else {
+                            let why = &p["not_evaluable"]["error"]["why"];
+                            assert_eq!(why["why"], "edt_refused", "{run}: {p}");
+                            assert_eq!(why["reason"], e["reason"], "{run}: {p}");
+                            assert_eq!(e["status"], "refused", "{run}: {e}");
+                        }
+                        continue;
+                    }
                     values += usize::from(p["value"].is_f64());
                     let why = &p["not_evaluable"]["error"]["why"];
                     // No SPPS receiver is refused for having no series.
@@ -391,11 +415,15 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
         }
         println!(
             "{run}: {values} values, {noise} refused for noise above the limit, {outside} \
-             outside the calibration"
+             outside the calibration, {edt_values} EDT values"
         );
         if run == SEATS_SPPS {
             assert_eq!(values, 0, "{run}");
             assert!(outside > 20, "{run}: {outside}");
+            assert!(
+                edt_values > 0,
+                "{run}: EDT v2.1 answers the 2,000-particle run"
+            );
         } else {
             assert!(values > 0, "{run}: the SPPS run has values");
         }

@@ -1072,6 +1072,7 @@ fn aggregate_model(models: &[&NoiseModel]) -> NoiseModel {
 
 /// The aggregate of `series` (one per band, `bands_hz`), with its noise model from `models`.
 fn aggregate_report(
+    s: &SppsResults,
     bands_hz: &[i32],
     series: &[Result<EnergySeries, ParamError>],
     models: &[NoiseModel],
@@ -1097,6 +1098,7 @@ fn aggregate_report(
         }
     });
     let mut e = evaluated(&aggregate, arrival, &aggregate_model(&used));
+    e.set_edt(edt_report(s, &aggregate, arrival));
     if contributing.len() > 1 {
         e.several_sources(contributing);
     }
@@ -1117,6 +1119,75 @@ fn known_arrival(s: &SppsResults, t: Option<f64>) -> Arrival {
     t.map_or(Arrival::Detected, |t| {
         Arrival::spread(t, s.receiver_crossing_s() / 2.0)
     })
+}
+
+/// The direct sound's arrival `a` holds, s; `None` when it is to be detected.
+fn arrival_time(a: Arrival) -> Option<f64> {
+    match a {
+        Arrival::Known { time_s, .. } => Some(time_s),
+        Arrival::Detected => None,
+    }
+}
+
+/// EDT v2.1 ([`edt`]) on `series`' histogram as the solver wrote it, with `arrival`'s time, which
+/// is `SppsResults::arrival_from`'s: the source's emission delay included, rounded up to the next
+/// whole step (`spps::emission_s`). Without that delay the method reads the decay from before
+/// the sound has left the source (VERDICT-2, "A port requirement from the attack"). `None` when
+/// the series itself is refused: every parameter then carries that refusal.
+fn edt_report(
+    s: &SppsResults,
+    series: &Result<EnergySeries, ParamError>,
+    arrival: Arrival,
+) -> Option<EdtReport> {
+    let bins = series.as_ref().ok()?.values();
+    let t_arrival = arrival_time(arrival);
+    let o = edt::analyse(
+        bins,
+        s.time_step_s,
+        t_arrival,
+        Some(s.receiver_crossing_s() / 2.0),
+    );
+    let validated = edt::validated_for(s.computation_method);
+    Some(EdtReport {
+        method: edt::METHOD.into(),
+        status: o.status,
+        value_s: o.edt,
+        lo_s: o.edt_lo,
+        hi_s: o.edt_hi,
+        reason: o.reason,
+        arrival_s: t_arrival,
+        validated,
+        validation_note: (!validated).then(|| EDT_NOT_YET_VALIDATED.to_string()),
+    })
+}
+
+impl EdtReport {
+    /// `Parameters::edt_s`: the value, or the refusal as `edt_refused`.
+    fn evaluated(&self) -> Evaluated {
+        match self.value_s {
+            Some(value) if self.status != edt::Status::Refused => {
+                Evaluated::Value { value, mc_sd: None }
+            }
+            _ => Evaluated::refused(params::not_evaluable(
+                Quantity::Edt,
+                NotEvaluable::EdtRefused {
+                    reason: self.reason.clone(),
+                },
+            )),
+        }
+    }
+}
+
+impl Evaluation {
+    /// EDT is the port's ([`edt_report`]); the old estimate stays in `params` for the noise
+    /// calibration's own evidence and does not reach the report. `None` leaves what the series'
+    /// refusal gave.
+    fn set_edt(&mut self, r: Option<EdtReport>) {
+        if let Some(r) = &r {
+            self.parameters.edt_s = r.evaluated();
+        }
+        self.parameters.edt = r;
+    }
 }
 
 fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> SppsReceiverReport {
@@ -1148,6 +1219,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
         };
         let se = series_of(s, i, b.freq_hz, &b.energy, arrival);
         let mut e = evaluated(&se, arrival, &model);
+        e.set_edt(edt_report(s, &se, arrival));
         if contributing.len() > 1 {
             e.several_sources(&contributing);
         }
@@ -1183,7 +1255,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
         series.push(se);
         models.push(model);
     }
-    let aggregate = aggregate_report(bands_hz, &series, &models, arrival, &all_contributing);
+    let aggregate = aggregate_report(s, bands_hz, &series, &models, arrival, &all_contributing);
     let per_source = r
         .echograms
         .iter()
@@ -1208,7 +1280,8 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                 .zip(&series)
                 .zip(&models)
                 .map(|(((b, energy), se), model)| {
-                    let e = evaluated(se, arrival, model);
+                    let mut e = evaluated(se, arrival, model);
+                    e.set_edt(edt_report(s, se, arrival));
                     let total_pa2: f64 = energy.iter().sum();
                     SourceBandReport {
                         freq_hz: b.freq_hz,
@@ -1231,7 +1304,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                 file: e.file.clone(),
                 arrival_s,
                 bands,
-                aggregate: aggregate_report(bands_hz, &series, &models, arrival, &name),
+                aggregate: aggregate_report(s, bands_hz, &series, &models, arrival, &name),
             }
         })
         .collect();
@@ -1867,15 +1940,20 @@ mod tests {
                     .wrapping_add(1442695040888963407);
                 let jitter = 0.9 + 0.2 * ((seed >> 33) as f64 / f64::from(1u32 << 31));
                 let t = (k as f64 + 0.5) * dt;
-                let direct = if (arrival_s / dt).floor() as usize == k {
-                    1.0
-                } else {
+                // The direct sound crosses the ball over [arrival - h, arrival + h].
+                let h = RADIUS_M / C;
+                let lo = (k as f64 * dt).max(arrival_s - h);
+                let hi = ((k as f64 + 1.0) * dt).min(arrival_s + h);
+                let direct = (hi - lo).max(0.0) / (2.0 * h);
+                if t < arrival_s - h {
                     0.0
-                };
-                if t < arrival_s {
-                    0.0
                 } else {
-                    direct + 1e-2 * jitter * 10f64.powf(-6.0 * (t - arrival_s) / t60)
+                    direct
+                        + if t >= arrival_s {
+                            1e-2 * jitter * 10f64.powf(-6.0 * (t - arrival_s) / t60)
+                        } else {
+                            0.0
+                        }
                 }
             })
             .collect()
@@ -1965,17 +2043,18 @@ mod tests {
 
         let with_delay = edt::analyse(&bins, f64::from(DT), Some(arrival_s), Some(h));
         let delay_dropped = edt::analyse(&bins, f64::from(DT), Some(direct_s), Some(h));
-        let delay_unrounded =
-            edt::analyse(&bins, f64::from(DT), Some(f64::from(delay_s) + direct_s), Some(h));
-        // The test has power only where dropping or not rounding the delay changes the answer.
-        assert_ne!(with_delay, delay_dropped, "this series cannot tell a dropped delay");
-        assert_ne!(with_delay, delay_unrounded, "this series cannot tell an unrounded delay");
+        // The test has power only where dropping the delay changes the answer.
+        assert_ne!(
+            with_delay, delay_dropped,
+            "this series cannot tell a dropped delay"
+        );
+        // Rounded up, not the delay as written (0.7 ms apart: the arrival itself says so).
+        assert_ne!(r.arrival_s, Some(f64::from(delay_s) + direct_s));
         assert_eq!(got.value_s, with_delay.edt);
         assert_eq!(got.lo_s, with_delay.edt_lo);
         assert_eq!(got.hi_s, with_delay.edt_hi);
         assert_eq!(got.reason, with_delay.reason);
         assert_ne!(got.reason, delay_dropped.reason);
-        assert_ne!(got.reason, delay_unrounded.reason);
     }
 
     #[test]
@@ -1996,7 +2075,13 @@ mod tests {
         let e = p.edt.as_ref().unwrap();
         assert_eq!(e.status, edt::Status::Refused);
         assert_eq!(e.value_s, None);
-        let why = p.edt_s.refusal().expect("refused").error.not_evaluable().cloned();
+        let why = p
+            .edt_s
+            .refusal()
+            .expect("refused")
+            .error
+            .not_evaluable()
+            .cloned();
         assert_eq!(
             why,
             Some(NotEvaluable::EdtRefused {
@@ -2014,13 +2099,21 @@ mod tests {
         assert_eq!(random.validation_note, None);
         let energetic = band_edt(&edt_run(1, 0.0, bins.clone()));
         assert!(!energetic.validated);
-        assert_eq!(energetic.validation_note.as_deref(), Some(EDT_NOT_YET_VALIDATED));
+        assert_eq!(
+            energetic.validation_note.as_deref(),
+            Some(EDT_NOT_YET_VALIDATED)
+        );
         // Only the marker differs: the value is the method's either way.
         assert_eq!(random.value_s, energetic.value_s);
         // The marker is on every EDT of an energetic run, the aggregate's too, and in the JSON.
         let s = edt_run(1, 0.0, bins);
         let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
-        let agg = rep.aggregate.parameters.edt.as_ref().expect("aggregate EDT");
+        let agg = rep
+            .aggregate
+            .parameters
+            .edt
+            .as_ref()
+            .expect("aggregate EDT");
         assert!(!agg.validated);
         let json = serde_json::to_value(&rep).unwrap();
         assert_eq!(json["bands"][0]["parameters"]["edt"]["validated"], false);

@@ -410,6 +410,73 @@
         ],
         "type": "object"
       },
+      "EdtReport": {
+        "description": "EDT as EDT v2.1 ([`edt`]) read it from the band's raw histogram: the value with its\nguaranteed range, or the reason it declined. `Parameters::edt_s` carries the same value, or the\nrefusal as `edt_refused`.",
+        "properties": {
+          "arrival_s": {
+            "description": "The direct sound's arrival the method was given, s, **the source's emission delay\nincluded** (rounded up to the next whole step); absent when not computed.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "hi_s": {
+            "description": "The range's upper end, s; absent when refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lo_s": {
+            "description": "The range's lower end, s; absent when refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "method": {
+            "description": "[`edt::METHOD`].",
+            "type": "string"
+          },
+          "reason": {
+            "description": "A refusal's code (`params::edt::REFUSAL_REASONS`), or the method's own detail\n(`hw=…;fit=…;noise=…;tail=…;n=…`).",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/Status2",
+            "description": "`ok` (the range is inside the 5 % JND), `wide` (shown with its range, decision-log row 9)\nor `refused`."
+          },
+          "validated": {
+            "description": "Whether the method has passed its held-out test for this run's computation method:\nrandom yes (`docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md`, H1-H6), energetic no\n(H3 failed).",
+            "type": "boolean"
+          },
+          "validation_note": {
+            "description": "Why `validated` is false.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value_s": {
+            "description": "The value, s; absent when refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "method",
+          "status",
+          "reason",
+          "validated"
+        ],
+        "type": "object"
+      },
       "Entry": {
         "description": "One quantity's calibration under one method (and, for energetic T20 and T30, one kind of\nband).",
         "properties": {
@@ -1241,6 +1308,23 @@
               "detail"
             ],
             "type": "object"
+          },
+          {
+            "description": "EDT v2.1 ([`edt`]) refused: the histogram is outside the method's premises. Made by\n`core::results`, which runs the method on the raw histogram; `reason` is one of\n[`edt::REFUSAL_REASONS`].",
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "why": {
+                "const": "edt_refused",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "reason"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -1558,6 +1642,17 @@
           "d50": {
             "$ref": "#/$defs/Evaluated",
             "description": "A fraction, 0 to 1 (shown as a percentage)."
+          },
+          "edt": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/EdtReport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "EDT's status, range and validation (below `edt_s`'s value). Absent where EDT is not\ncomputed from a histogram: TCR, and the several-sources refusal."
           },
           "edt_s": {
             "$ref": "#/$defs/Evaluated",
@@ -2753,6 +2848,26 @@
           "CANCELLED"
         ],
         "type": "string"
+      },
+      "Status2": {
+        "description": "What the method says about the value.",
+        "oneOf": [
+          {
+            "const": "ok",
+            "description": "The range is inside the 5 % JND.",
+            "type": "string"
+          },
+          {
+            "const": "wide",
+            "description": "A value with a range wider than the JND: shown with its range (decision-log row 9).",
+            "type": "string"
+          },
+          {
+            "const": "refused",
+            "description": "No value; `reason` says why.",
+            "type": "string"
+          }
+        ]
       },
       "Structure": {
         "description": "How a series' resamples are drawn, per quantity ([`calibration::Entry::structure`]).",
