@@ -267,9 +267,11 @@ decision-log row 9; `refused`), `value_s`, `lo_s`, `hi_s` (absent when refused),
 refusal code, or the method's detail `hw=…;fit=…;noise=…;tail=…;n=…`), `arrival_s` (what the method
 was given: the source's emission delay included, rounded up to the next whole step; absent when not
 computed), `validated` and `validation_note`. **`validated` is true only for a single band of a
-random-mode run**, the one thing the held-out test covered (VERDICT-2, H1-H6). It is false for energetic
-runs (H3 failed) and for **every aggregate (summed-bands, broadband) EDT whatever the mode** ("broadband
-EDT is not covered by the held-out test"); `validation_note` says which.
+random-mode run with a receiver radius up to 1 m**, what the held-out test covered (VERDICT-2, H1-H6;
+decision-log row 37). It is false for energetic runs (H3 failed), for receivers over 1 m (5-7 % low in
+the test, VERDICT-2 ruling 1), and for **every aggregate (summed-bands, broadband) EDT whatever the mode**
+("broadband EDT is not covered by the held-out test"); `validation_note` names every reason that applies,
+joined by `; `.
 
 **The marker rule (decision-log row 20).** Only tested numbers are shown as validated; every EDT that is not
 validated carries "not yet validated" on every surface that prints or exports it. `edt_s` stays a bare

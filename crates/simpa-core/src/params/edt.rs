@@ -95,6 +95,11 @@ pub fn validated_for(computation_method: i32) -> bool {
     computation_method == 0
 }
 
+/// The largest receiver radius whose EDT counts as validated (decision 37, 2026-10-02). Round 2
+/// passed with radii pooled, but split by radius the Synth spheres over 1 m read 5-7 % low in 5
+/// of 290 `ok` rows (VERDICT-2, ruling 1). A marker, not a change of method.
+pub const VALIDATED_MAX_RADIUS_M: f64 = 1.0;
+
 fn refuse(why: &str) -> Outcome {
     Outcome {
         edt: None,

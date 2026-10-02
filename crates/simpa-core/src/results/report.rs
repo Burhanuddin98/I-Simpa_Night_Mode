@@ -165,6 +165,10 @@ for random-mode runs only; energetic mode failed H3 (VERDICT-2, 2026-10-02)";
 /// read single bands only.
 pub const EDT_BROADBAND_NOT_VALIDATED: &str = "not yet validated: broadband EDT is not covered by the held-out test (VERDICT-2 tested single bands only)";
 
+/// The note an EDT carries when the receiver is larger than [`edt::VALIDATED_MAX_RADIUS_M`], in
+/// every mode (decision 37).
+pub const EDT_LARGE_RECEIVER_NOT_VALIDATED: &str = "not yet validated: receivers over 1 m read EDT up to 7 % low in the held-out test (VERDICT-2, ruling 1)";
+
 /// The eight parameters of one band (or of the aggregate).
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
 pub struct Parameters {
@@ -1160,13 +1164,23 @@ fn edt_report(
         t_arrival,
         Some(s.receiver_crossing_s() / 2.0),
     );
-    // The held-out test read single bands: a summed-bands EDT is never validated.
-    let validated = !broadband && edt::validated_for(s.computation_method);
-    let note = if broadband {
-        EDT_BROADBAND_NOT_VALIDATED
-    } else {
-        EDT_NOT_YET_VALIDATED
-    };
+    // The held-out test read single bands of Random runs with receivers up to 1 m; outside any
+    // of these the EDT is not validated, and the note names every reason that applies.
+    let reasons: Vec<&str> = [
+        (broadband, EDT_BROADBAND_NOT_VALIDATED),
+        (
+            !edt::validated_for(s.computation_method),
+            EDT_NOT_YET_VALIDATED,
+        ),
+        (
+            s.receiver_radius_m > edt::VALIDATED_MAX_RADIUS_M,
+            EDT_LARGE_RECEIVER_NOT_VALIDATED,
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(applies, note)| applies.then_some(note))
+    .collect();
+    let validated = reasons.is_empty();
     Some(EdtReport {
         method: edt::METHOD.into(),
         status: o.status,
@@ -1176,7 +1190,7 @@ fn edt_report(
         reason: o.reason,
         arrival_s: t_arrival,
         validated,
-        validation_note: (!validated).then(|| note.to_string()),
+        validation_note: (!validated).then(|| reasons.join("; ")),
     })
 }
 
@@ -2144,6 +2158,31 @@ mod tests {
             EDT_NOT_YET_VALIDATED
         );
     }
+    /// Decision 37 (1): a receiver over 1 m is outside what the held-out test passed (Synth
+    /// spheres over 1 m read 5-7 % low, VERDICT-2 ruling 1), so its EDT is not validated in any
+    /// mode, and a run with several reasons names each of them.
+    #[test]
+    fn a_receiver_over_one_metre_marks_edt_not_validated() {
+        let bins = decay(1500, DISTANCE_M / C, 0.6);
+        let at = |method: i32, radius_m: f64| {
+            let mut s = edt_run(method, 0.0, bins.clone());
+            s.receiver_radius_m = radius_m;
+            band_edt(&s)
+        };
+        assert!(at(0, 1.0).validated, "1 m is inside");
+        let big = at(0, 1.01);
+        assert!(!big.validated, "over 1 m");
+        assert_eq!(big.validation_note.as_deref(), Some(EDT_LARGE_RECEIVER_NOT_VALIDATED));
+        let both = at(1, 1.5).validation_note.expect("a note");
+        assert!(both.contains(EDT_NOT_YET_VALIDATED), "{both}");
+        assert!(both.contains(EDT_LARGE_RECEIVER_NOT_VALIDATED), "{both}");
+        // The marker beside edt_s follows it.
+        let mut s = edt_run(0, 0.0, bins.clone());
+        s.receiver_radius_m = 1.5;
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        assert!(!rep.bands[0].parameters.edt_validated);
+    }
+
     /// Finding 1 (assay): the summed-bands EDT was never in the held-out test, which read single
     /// bands, so it is "not yet validated" in every mode, Random included.
     #[test]

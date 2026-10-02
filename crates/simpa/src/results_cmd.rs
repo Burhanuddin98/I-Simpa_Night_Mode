@@ -242,7 +242,7 @@ fn text(rep: &Report) -> String {
             let _ = writeln!(
                 s,
                 "
-* EDT not yet validated: EDT v2.1 passed its held-out test for single bands of                  random-mode runs only; energetic mode and the broadband aggregate have not                  (JSON: parameters.edt_validated, parameters.edt.validation_note)"
+* EDT not yet validated: EDT v2.1 passed its held-out test for single bands of                  random-mode runs with receivers up to 1 m only; energetic mode, larger receivers and the broadband aggregate have not                  (JSON: parameters.edt_validated, parameters.edt.validation_note)"
             );
         }
         match &sp.reference {
