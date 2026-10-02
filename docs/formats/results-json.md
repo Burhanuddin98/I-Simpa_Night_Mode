@@ -87,7 +87,12 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 8,               // 8: bands carry g_db (sound strength G) and
+  "results_version": 9,               // 9: a value refused for its resamples alone is
+                                      //    shown wide from its stand-ins, with
+                                      //    refused_resamples; a C50, C80 or D50 whose bin
+                                      //    straddling te can move it past its limit is
+                                      //    wide, with straddle [lo, hi];
+                                      // 8: bands carry g_db (sound strength G) and
                                       //    aggregates dba (the A-weighted level); nothing
                                       //    else changes;
                                       // 7: the eight parameters' values carry status (ok |
@@ -272,6 +277,26 @@ own): `√Σ (wᵢ·sdᵢ)²`, `wᵢ` band `i`'s share of the weighted energy; `
 octave centres (it is listed in `unweighted_hz`, a third-octave run for instance): no other
 weighting is pinned.
 
+**Two more `wide` values (results version 9; the bed's findings, `docs/investigations/2026-10-02-bed/`).**
+- **`refused_resamples`: shown from its stand-ins.** A value `params` refused `monte_carlo_noise`
+  because more than 10 of its 200 resamples refused it, which at most 10 refuse when the same
+  resamples are judged with their decay range on the series itself (`params::noise`, "The
+  stand-ins"; on the bed's G2 every T30 was refused so, its resamples ending in a few whole deposits
+  above -35 dB), is shown: `"status": "wide"` always, `refused_resamples` how many refused it as
+  judged, `mc_sd` the judged standard deviation (the stand-ins' when the judged resamples gave none),
+  and `lo`/`hi` = `value ∓ 2.5·sd`, `sd` the larger of the stand-ins' calibrated one and `mc_sd`. The
+  curvature stays refused with it. A value whose stand-ins also refuse it more than 10 times stays
+  refused.
+- **`straddle`: the bin straddling te.** A C50, C80 or D50 whose bin straddling its window edge te,
+  taken wholly late and wholly early, moves it by more than its limit (0.1 dB, 0.005;
+  `params::decay::Straddle`) is `"wide"` with `straddle: [lo, hi]`, the value with that bin each way,
+  and `lo`/`hi` covering it: `min(straddle[0], value) − 2.5·mc_sd` to `max(straddle[1], value) +
+  2.5·mc_sd`. At a step of 10 ms that is most C and D; at 1 ms, the bands whose straddling bin holds a
+  strong reflection.
+
+Both fields are absent from every other value. With either, `lo`/`hi` are no longer `value ∓
+2.5·mc_sd`, and `status` is `wide` whatever their width.
+
 **The range (results version 7; decision-log rows 37 (3) and 39 (3)).** Every value of the eight
 parameters of an SPPS band, aggregate or per-source band carries `status`, `lo` and `hi`: the range
 `value ± 2.5·mc_sd` (`params::noise::RANGE_Z`, EDT's Z) and `"ok"` when its half-width is within the
@@ -284,8 +309,8 @@ with the value and `mc_sd` the refusal carried** (always `wide`: its half-width 
 limens). A consumer that shows a value shows its range beside it, and marks a `wide` one. Still refused:
 `monte_carlo_noise` when more than 10 of the 200 resamples refuse the value (the spread of the
 resamples that gave one does not bound those that did not) or when there is no standard deviation, and
-every refusal not about noise, `noise_uncalibrated` and `noise_unknown` included. `status`, `lo` and
-`hi` are absent from every other value (TCR's, the reference's, `curvature.percent`). The curvature
+every refusal not about noise, `noise_uncalibrated` and `noise_unknown` included (but see version 9's
+stand-ins, next). `status`, `lo` and `hi` are absent from every other value (TCR's, the reference's, `curvature.percent`). The curvature
 is still refused with a T20 or T30 that `params` refused for noise, **even though that T20 or T30 is now
 shown `wide`**: a consumer will see both values beside a `monte_carlo_noise` curvature. A refusal for
 `monte_carlo_noise` carries `particle_count`, the particles per source that would bring the value

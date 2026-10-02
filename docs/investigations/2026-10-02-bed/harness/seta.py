@@ -214,6 +214,13 @@ def score_metric(rows, m):
     within = sum(1 for f, _ in fr if f <= WITHIN)
     beyond = [(f, i) for f, i in fr if f > 1.0]
     worst = max(fr) if fr else (None, None)
+    # Build F (shim m_status): an answered row is `ok` or `wide`; an `ok` row beyond 1/10 limen is what
+    # must not exist. Rows from a shim before build F carry no status and count as `ok`.
+    st_of = {r['id']: (r.get(m + '_status') or 'ok') for r in ans}
+    ok_beyond = sorted(((f, i) for f, i in fr if f > WITHIN and st_of[i] == 'ok'), reverse=True)
+    wide = [r for r in ans if st_of[r['id']] == 'wide']
+    in_bracket = [r for r in wide if r.get(m + '_lo') is not None and r.get(m + '_hi') is not None
+                  and r[m + '_lo'] <= r['truth_' + m] <= r[m + '_hi']]
     refusals = {}
     for r in ok:
         if r[m] is None:
@@ -223,7 +230,9 @@ def score_metric(rows, m):
                worst_frac_limen=worst[0], worst_id=worst[1],
                within_tenth=within, within_tenth_share=within / len(ans) if ans else None,
                beyond_limen=len(beyond), beyond_ids=[i for _, i in sorted(beyond, reverse=True)[:10]],
-               refusals=dict(sorted(refusals.items())))
+               refusals=dict(sorted(refusals.items())),
+               ok_rows=len(ans) - len(wide), wide_rows=len(wide), wide_truth_in_bracket=len(in_bracket),
+               ok_beyond_tenth=len(ok_beyond), ok_beyond_tenth_ids=[i for _, i in ok_beyond[:10]])
     out['pass_'] = bool(ans and out['within_tenth_share'] >= SHARE_MIN and not beyond)
     return out
 
@@ -307,6 +316,10 @@ def main():
         r['decay_arrival'], r['cdts_arrival'] = s['decay_arrival'], s['arrival']
         for m in METRICS:
             r[m], r[m + '_code'] = s[m], s[m + '_code']
+            r[m + '_status'] = s.get(m + '_status')
+            for k in ('_lo', '_hi'):
+                if m + k in s:
+                    r[m + k] = s[m + k]
         r['n_bins'] = len(r['bins'])
     keys = ('slope', 'variant', 'step_ms') if not s2 else ('step_ms', 'band_hz', 'R')
     sc = score(rows, keys)
@@ -322,6 +335,10 @@ def main():
     say('%s: %s' % (mode, json.dumps({m: (sc[m]['all']['answered_share'], sc[m]['all']['worst_frac_limen'],
                                           sc[m]['all']['within_tenth_share'], sc[m]['all']['beyond_limen'])
                                       for m in METRICS})))
+    say('build F ok/wide: %s' % json.dumps({m: dict(ok=sc[m]['all']['ok_rows'], wide=sc[m]['all']['wide_rows'],
+                                                   wide_truth_in_bracket=sc[m]['all']['wide_truth_in_bracket'],
+                                                   ok_beyond_tenth=sc[m]['all']['ok_beyond_tenth'])
+                                            for m in METRICS}))
     say('done: %s' % (out / 'summary.json'))
 
 
@@ -335,7 +352,7 @@ def summary(root):
         sets[s] = json.loads((root / s / 'summary.json').read_text(encoding='utf-8'))
         for r in rr:
             for k in list(r):
-                if k in METRICS or k.startswith('truth_') or k.startswith('u_'):
+                if k in METRICS or k.startswith('truth_') or k.startswith('u_') or k.endswith(('_lo', '_hi')):
                     r[k] = float(r[k]) if r[k] not in ('', 'None') else None
             r['tail_fit_ok'] = {'True': True, 'False': False}.get(r.get('tail_fit_ok'))
             rows.append(r)

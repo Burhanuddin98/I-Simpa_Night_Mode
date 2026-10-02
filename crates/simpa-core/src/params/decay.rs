@@ -385,12 +385,16 @@ pub fn decay_time(
 /// refused as `params_bad_time_step`; a given arrival that does not fit the onset bin
 /// ([`Arrival::Known`]) as `params_bad_arrival`.
 pub fn clarity_db(series: &EnergySeries, arrival: Arrival, te_s: f64) -> Result<f64, ParamError> {
-    Analysis::new(series, arrival).clarity_db(te_s)
+    Analysis::new(series, arrival)
+        .clarity_db(te_s)
+        .map(|(v, _)| v)
 }
 
 /// D_te as a fraction, `te` in seconds (D50: 0.05). Refused as [`clarity_db`] is.
 pub fn definition(series: &EnergySeries, arrival: Arrival, te_s: f64) -> Result<f64, ParamError> {
-    Analysis::new(series, arrival).definition(te_s)
+    Analysis::new(series, arrival)
+        .definition(te_s)
+        .map(|(v, _)| v)
 }
 
 /// The centre time Ts from the arrival, s. A given arrival that does not fit the onset bin is
@@ -533,6 +537,30 @@ pub struct BandParameters {
     pub d50: Result<f64, ParamError>,
     pub ts_s: Result<f64, ParamError>,
     pub curvature: Result<Curvature, ParamError>,
+    /// C50's [`Straddle`]: `Some` exactly when `c50_db` is a value.
+    pub c50_straddle: Option<Straddle>,
+    /// C80's [`Straddle`].
+    pub c80_straddle: Option<Straddle>,
+    /// D50's [`Straddle`].
+    pub d50_straddle: Option<Straddle>,
+}
+
+/// C50, C80 or D50 with the bin that straddles its window edge `te` wholly late (`lo`) and wholly
+/// early (`hi`): Theorem-CD (`docs/investigations/2026-09-27-edt-simplify/FINAL.md` section 2;
+/// `docs/params.md`, "The bin straddling te"). Every other bin lies wholly on one side of the edge,
+/// so whatever the energy does inside that bin, the quantity lies between the two; the value, from
+/// the curve's in-bin decay, lies between them too. A strong reflection in that bin is what the
+/// in-bin decay gets wrong (the bed's set A: 0.50 dB at 10 ms). With the edge on a bin edge both
+/// are the value. Taken over every arrival and reading the value is read from: the lowest and
+/// highest.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct Straddle {
+    pub lo: f64,
+    pub hi: f64,
+    /// `lo` or `hi` lies further from the value than the quantity's limit ([`limits`]): the value
+    /// is then not known to within it, and is shown with the bracket, `wide`
+    /// (`params::noise::shown_with`).
+    pub beyond_limit: bool,
 }
 
 /// Every parameter of one band's series.
@@ -553,6 +581,13 @@ pub fn evaluate(series: &EnergySeries, arrival: Arrival) -> BandParameters {
             other => other.clone(),
         }),
     };
+    let split = |r: Result<(f64, Straddle), ParamError>| match r {
+        Ok((v, s)) => (Ok(v), Some(s)),
+        Err(e) => (Err(e), None),
+    };
+    let (c50_db, c50_straddle) = split(a.clarity_db(0.05));
+    let (c80_db, c80_straddle) = split(a.clarity_db(0.08));
+    let (d50, d50_straddle) = split(a.definition(0.05));
     BandParameters {
         onset: a.onset,
         arrival: a.arrival,
@@ -562,11 +597,14 @@ pub fn evaluate(series: &EnergySeries, arrival: Arrival) -> BandParameters {
         edt: a.decay_time(DecayRange::Edt),
         t20,
         t30,
-        c50_db: a.clarity_db(0.05),
-        c80_db: a.clarity_db(0.08),
-        d50: a.definition(0.05),
+        c50_db,
+        c80_db,
+        d50,
         ts_s: a.centre_time_s(),
         curvature,
+        c50_straddle,
+        c80_straddle,
+        d50_straddle,
     }
 }
 
@@ -740,6 +778,22 @@ impl Curve {
             Some((m, mu)) => m * (-mu * (u - self.end())).exp(),
             None => 0.0,
         }
+    }
+
+    /// `S(u)` with the piece `u` falls strictly inside taken wholly before `u` and wholly after:
+    /// `(S at the piece's end, S at its start)`, its energy all early and all late (Theorem-CD,
+    /// [`Straddle`]). On a piece's edge, at or before 0 and past the pieces, `S(u)` twice.
+    fn bracket_at(&self, u: f64) -> (f64, f64) {
+        if u > 0.0
+            && let Some(p) = self.pieces.iter().find(|p| u <= p.u1)
+        {
+            let tol = 1e-9 * (p.u1 - p.u0);
+            if u > p.u0 + tol && u < p.u1 - tol {
+                return (p.s1, p.s0);
+            }
+        }
+        let s = self.at(u);
+        (s, s)
     }
 
     /// `∫₀^∞ S du`, which is `∫ u·E du`: the direct sound, at `u = 0`, adds nothing.
@@ -1246,6 +1300,7 @@ impl<'a> Analysis<'a> {
         };
         if let Some(reached) = reached
             && reached > range.bottom_db()
+            && !self.series.range_judged_on_its_series()
         {
             return Err(not_evaluable(
                 q,
@@ -1354,7 +1409,28 @@ impl<'a> Analysis<'a> {
         (curve.top - curve.at(te_s), curve.top)
     }
 
-    fn clarity_db(&self, te_s: f64) -> Result<f64, ParamError> {
+    /// The value's [`Straddle`]: `f(S(te), S(0))` with the bin straddling `te` wholly early and
+    /// wholly late, on every arrival's curve and reading the value is read from.
+    fn straddle(&self, te_s: f64, value: f64, limit: f64, f: impl Fn(f64, f64) -> f64) -> Straddle {
+        let (mut lo, mut hi) = (value, value);
+        for v in &self.views {
+            for c in std::iter::once(&v.plain).chain(v.later.iter().map(|l| &l.plain)) {
+                let (early, late) = c.bracket_at(te_s);
+                for s in [early, late] {
+                    let x = f(s, c.top);
+                    lo = lo.min(x);
+                    hi = hi.max(x);
+                }
+            }
+        }
+        Straddle {
+            lo,
+            hi,
+            beyond_limit: (value - lo).max(hi - value) > limit,
+        }
+    }
+
+    fn clarity_db(&self, te_s: f64) -> Result<(f64, Straddle), ParamError> {
         let q = Quantity::Clarity { te_s };
         self.arrival_ok()?;
         self.check_window(q, te_s)?;
@@ -1369,7 +1445,9 @@ impl<'a> Analysis<'a> {
             missing: v.with_missing.as_ref().map(c),
         };
         for v in &self.views {
-            if v.plain.at(te_s) <= 0.0 {
+            // With the bin straddling te wholly early nothing may be left after te: C has no
+            // bound then (Theorem-CD).
+            if v.plain.at(te_s) <= 0.0 || v.plain.bracket_at(te_s).0 <= 0.0 {
                 return Err(not_evaluable(
                     q,
                     NotEvaluable::EmptyWindow {
@@ -1386,10 +1464,14 @@ impl<'a> Analysis<'a> {
                 .map(|v| following::clarity_db(s, v.plain.top / v.plain.at(te_s)))
                 .fold(0.0, f64::max)
         });
-        self.settle(q, &pairs, limits::CLARITY_DB, absolute, follows)
+        let value = self.settle(q, &pairs, limits::CLARITY_DB, absolute, follows)?;
+        let straddle = self.straddle(te_s, value, limits::CLARITY_DB, |s, top| {
+            10.0 * ((top - s) / s).log10()
+        });
+        Ok((value, straddle))
     }
 
-    fn definition(&self, te_s: f64) -> Result<f64, ParamError> {
+    fn definition(&self, te_s: f64) -> Result<(f64, Straddle), ParamError> {
         let q = Quantity::Definition { te_s };
         self.arrival_ok()?;
         self.check_window(q, te_s)?;
@@ -1415,7 +1497,9 @@ impl<'a> Analysis<'a> {
                 .map(|p| following::definition(s, p.cont.plain))
                 .fold(0.0, f64::max)
         });
-        self.settle(q, &pairs, limits::DEFINITION, absolute, follows)
+        let value = self.settle(q, &pairs, limits::DEFINITION, absolute, follows)?;
+        let straddle = self.straddle(te_s, value, limits::DEFINITION, |s, top| (top - s) / top);
+        Ok((value, straddle))
     }
 
     fn centre_time_s(&self) -> Result<f64, ParamError> {

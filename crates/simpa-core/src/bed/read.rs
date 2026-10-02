@@ -13,7 +13,9 @@
 //! Since results version 7 a value refused for its standard deviation alone is shown instead,
 //! `wide`, with the same value and `mc_sd` (decision-log row 37 (3)): such a value is read as the
 //! refusal it was, `monte_carlo_noise` (`params::noise::over_limit`), so the numbers and sources
-//! the bed reads, and its verdicts, do not change.
+//! the bed reads, and its verdicts, do not change. Since version 9 a value refused for its
+//! resamples alone can be shown from its stand-ins, `wide`, with `refused_resamples` and the judged
+//! `mc_sd` (`params::noise`, "The stand-ins"): read as that refusal too.
 
 use std::path::{Path, PathBuf};
 
@@ -155,13 +157,18 @@ impl T30 {
                 value,
                 mc_sd,
                 status,
+                refused_resamples,
                 ..
             } => T30 {
                 t: Some(*value),
                 mc_sd: *mc_sd,
-                // Shown `wide` where `params::noise::evaluate` refused it for its noise: read
-                // as that refusal. T20 and T30 share their limit.
+                // Shown `wide` where `params::noise::evaluate` refused it for its noise, or for its
+                // resamples (shown from its stand-ins): read as that refusal. T20 and T30 share
+                // their limit.
                 source: match (status, mc_sd) {
+                    (Some(RangeStatus::Wide), Some(_)) if refused_resamples.is_some() => {
+                        "monte_carlo_noise"
+                    }
                     (Some(RangeStatus::Wide), Some(sd))
                         if noise::over_limit(T30_INDEX, *value, *sd) =>
                     {
@@ -631,7 +638,25 @@ mod tests {
                 }),
             );
             assert!(shown.refusal().is_some());
-            assert_eq!(read(&shown), read(&refused_as(resampled)));
+            assert_eq!(read(&shown), read(&refused_as(resampled.clone())));
+            // Shown from its stand-ins (results version 9): read as the same refusal, the same
+            // value and judged standard deviation.
+            let stand_in = Evaluated::of_parameter_with(
+                i,
+                Err(ParamError::NotEvaluable {
+                    quantity: q,
+                    why: resampled.clone(),
+                }),
+                &noise::Widen {
+                    straddle: None,
+                    stand_in: Some(noise::StandIn {
+                        sd: 0.03,
+                        refused_resamples: 40,
+                    }),
+                },
+            );
+            assert_eq!(stand_in.status(), Some(RangeStatus::Wide));
+            assert_eq!(read(&stand_in), read(&refused_as(resampled)));
         }
     }
 }

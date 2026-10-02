@@ -16,7 +16,10 @@
 //! `arrival` ("known" or "detected", what C, D and Ts were measured from), and for each metric
 //! `m` of `t20`, `t30`, `ts`, `c50`, `c80`, `d50`, `spl`: `m` (the value: s, s, s, dB, dB, a
 //! fraction, dB re (20 µPa)² on the bins' own units) or null, and `m_code` (the refusal's
-//! `ParamError::code`, with a `NotEvaluable`'s tag after a colon) or null.
+//! `ParamError::code`, with a `NotEvaluable`'s tag after a colon) or null. Since build F also
+//! `m_status`, the status a noise-free value is shown with: `wide` for a C50, C80 or D50 whose bin
+//! straddling te can move it beyond its limit (`decay::Straddle`), `ok` for every other value, null
+//! for a refusal; and for C50, C80 and D50 `m_lo`, `m_hi`, that bracket (null when refused).
 //!
 //! ```text
 //! BED_SHIM_DIR=<dir> cargo test -p simpa-core --test bed_shim --release -- --ignored --nocapture
@@ -85,11 +88,25 @@ fn put(m: &mut Map<String, Value>, name: &str, r: Result<f64, &ParamError>) {
         Ok(v) => {
             m.insert(name.into(), json!(v));
             m.insert(format!("{name}_code"), Value::Null);
+            m.insert(format!("{name}_status"), json!("ok"));
         }
         Err(e) => {
             m.insert(name.into(), Value::Null);
             m.insert(format!("{name}_code"), json!(code(e)));
+            m.insert(format!("{name}_status"), Value::Null);
         }
+    }
+}
+
+/// `m_status`, `m_lo` and `m_hi` from C50's, C80's or D50's straddle bracket.
+fn put_straddle(m: &mut Map<String, Value>, name: &str, s: Option<decay::Straddle>) {
+    let (lo, hi) = s.map_or((Value::Null, Value::Null), |s| (json!(s.lo), json!(s.hi)));
+    m.insert(format!("{name}_lo"), lo);
+    m.insert(format!("{name}_hi"), hi);
+    if let Some(s) = s
+        && s.beyond_limit
+    {
+        m.insert(format!("{name}_status"), json!("wide"));
     }
 }
 
@@ -117,6 +134,9 @@ fn one(r: &Row) -> Value {
             for name in METRICS {
                 put(&mut m, name, Err(&e));
             }
+            for name in ["c50", "c80", "d50"] {
+                put_straddle(&mut m, name, None);
+            }
             return Value::Object(m);
         }
     };
@@ -133,6 +153,9 @@ fn one(r: &Row) -> Value {
     put(&mut m, "c80", p.c80_db.as_ref().copied());
     put(&mut m, "d50", p.d50.as_ref().copied());
     put(&mut m, "spl", p.spl_db.as_ref().copied());
+    put_straddle(&mut m, "c50", p.c50_straddle);
+    put_straddle(&mut m, "c80", p.c80_straddle);
+    put_straddle(&mut m, "d50", p.d50_straddle);
     Value::Object(m)
 }
 
@@ -199,4 +222,9 @@ fn the_shim_reads_a_pure_exponential() {
     near("ts", ts, 1e-4);
     near("spl", spl, 0.01);
     assert_eq!(v["arrival"], "known");
+    // At 1 ms the bins straddling 50 and 80 ms hold under 2 % of the late energy (T60 1 s): ok.
+    for name in ["t20", "c50", "c80", "d50", "spl"] {
+        assert_eq!(v[format!("{name}_status")], "ok", "{name}: {v}");
+    }
+    assert!(v["c50_lo"].as_f64().unwrap() <= v["c50"].as_f64().unwrap());
 }

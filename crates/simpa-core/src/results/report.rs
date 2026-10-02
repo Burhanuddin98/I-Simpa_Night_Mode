@@ -52,8 +52,13 @@ use crate::schema::SolverKind;
 /// `hi`, its range (`params::noise::range`; EDT's from `edt`), `ok` or `wide`; a value refused
 /// `monte_carlo_noise` for its standard deviation alone is shown so, `wide`, instead of refused.
 /// 8 (M8b): bands, a source's bands and TCR's bands carry `g_db`, sound strength G; aggregates
-/// carry `dba`, the A-weighted level of the bands' SPL. No other field changes.
-pub const REPORT_VERSION: u32 = 8;
+/// carry `dba`, the A-weighted level of the bands' SPL. No other field changes. 9 (M8b, the bed's
+/// findings): a value refused `monte_carlo_noise` for its resamples alone, which its stand-ins
+/// resample within the allowed refusals, is shown `wide` with `refused_resamples` and the
+/// stand-ins' range (`params::noise`, "The stand-ins"); a C50, C80 or D50 whose bin straddling te
+/// can move it beyond its limit is `wide` with `straddle` and a range covering it
+/// (`params::decay::Straddle`).
+pub const REPORT_VERSION: u32 = 9;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -71,7 +76,8 @@ pub enum Evaluated {
         /// the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
         /// for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
         /// is shown with its range rather than refused; a consumer that shows the value shows the
-        /// range beside it. Absent for every other value.
+        /// range beside it. Also `wide`, whatever the range's width, with `refused_resamples` or
+        /// `straddle` (results version 9). Absent for every other value.
         #[serde(skip_serializing_if = "Option::is_none")]
         status: Option<noise::RangeStatus>,
         /// The range's lower end, in the same unit: `value − 2.5·mc_sd`
@@ -82,6 +88,20 @@ pub enum Evaluated {
         /// `status`.
         #[serde(skip_serializing_if = "Option::is_none")]
         hi: Option<f64>,
+        /// Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because
+        /// more than 10 of its 200 resamples refused it, but which at most 10 refuse when the same
+        /// resamples are judged with their decay range on the series (the stand-ins,
+        /// `params::noise`, "The stand-ins"): how many refused it as judged. Shown `wide`, `mc_sd`
+        /// the judged standard deviation (the stand-ins' when the judged resamples gave none), and
+        /// `lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        refused_resamples: Option<usize>,
+        /// Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,
+        /// moves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the
+        /// value with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,
+        /// widened by `2.5·mc_sd` each way.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        straddle: Option<[f64; 2]>,
     },
     /// `core::params` refused it.
     NotEvaluable { not_evaluable: Refused },
@@ -117,6 +137,8 @@ impl Evaluated {
             status: None,
             lo: None,
             hi: None,
+            refused_resamples: None,
+            straddle: None,
         }
     }
 
@@ -141,13 +163,24 @@ impl Evaluated {
     /// (`params::noise::shown`): a value with its standard deviation and its range, `ok` or `wide`,
     /// a refusal for its standard deviation alone included; any other refusal as it is.
     pub fn of_parameter(i: usize, r: Result<noise::Estimate, ParamError>) -> Self {
-        match noise::shown(i, r) {
+        Self::of_parameter_with(i, r, &noise::Widen::default())
+    }
+
+    /// [`Evaluated::of_parameter`] with what widens its range (`params::noise::shown_with`).
+    pub fn of_parameter_with(
+        i: usize,
+        r: Result<noise::Estimate, ParamError>,
+        w: &noise::Widen,
+    ) -> Self {
+        match noise::shown_with(i, r, w) {
             Ok(s) => Evaluated::Value {
                 value: s.value,
                 mc_sd: Some(s.sd),
                 status: Some(s.status),
                 lo: Some(s.lo),
                 hi: Some(s.hi),
+                refused_resamples: s.refused_resamples,
+                straddle: s.straddle.map(|(lo, hi)| [lo, hi]),
             },
             Err(e) => Self::refused(e),
         }
@@ -397,14 +430,14 @@ fn evaluated(
     let p = noise::evaluate(series, arrival, model);
     Evaluation {
         parameters: Parameters {
-            spl_db: Evaluated::of_parameter(0, p.spl_db),
-            edt_s: Evaluated::of_parameter(1, p.edt_s),
-            t20_s: Evaluated::of_parameter(2, p.t20_s),
-            t30_s: Evaluated::of_parameter(3, p.t30_s),
-            c50_db: Evaluated::of_parameter(4, p.c50_db),
-            c80_db: Evaluated::of_parameter(5, p.c80_db),
-            d50: Evaluated::of_parameter(6, p.d50),
-            ts_s: Evaluated::of_parameter(7, p.ts_s),
+            spl_db: Evaluated::of_parameter_with(0, p.spl_db, &p.widen[0]),
+            edt_s: Evaluated::of_parameter_with(1, p.edt_s, &p.widen[1]),
+            t20_s: Evaluated::of_parameter_with(2, p.t20_s, &p.widen[2]),
+            t30_s: Evaluated::of_parameter_with(3, p.t30_s, &p.widen[3]),
+            c50_db: Evaluated::of_parameter_with(4, p.c50_db, &p.widen[4]),
+            c80_db: Evaluated::of_parameter_with(5, p.c80_db, &p.widen[5]),
+            d50: Evaluated::of_parameter_with(6, p.d50, &p.widen[6]),
+            ts_s: Evaluated::of_parameter_with(7, p.ts_s, &p.widen[7]),
             edt: None,
             edt_validated: false,
         },
@@ -563,6 +596,8 @@ fn strength(spl: &Evaluated, power_rho_c: f64) -> Evaluated {
         status,
         lo,
         hi,
+        refused_resamples,
+        straddle,
     } = spl
     else {
         return spl.clone();
@@ -574,6 +609,8 @@ fn strength(spl: &Evaluated, power_rho_c: f64) -> Evaluated {
             status: *status,
             lo: lo.map(|x| x - free),
             hi: hi.map(|x| x - free),
+            refused_resamples: *refused_resamples,
+            straddle: straddle.map(|[a, b]| [a - free, b - free]),
         },
         Err(e) => Evaluated::refused(e),
     }
@@ -613,6 +650,8 @@ fn dba_report(bands: &[(i32, &Evaluated)]) -> DbaReport {
                         status: Some(r.status),
                         lo: Some(r.lo),
                         hi: Some(r.hi),
+                        refused_resamples: None,
+                        straddle: None,
                     }
                 }
                 Ok((value, None)) => Evaluated::bare(value, None),
@@ -1431,6 +1470,8 @@ impl EdtReport {
                 }),
                 lo: self.lo_s,
                 hi: self.hi_s,
+                refused_resamples: None,
+                straddle: None,
             },
             _ => Evaluated::refused(params::not_evaluable(
                 Quantity::Edt,
@@ -2608,6 +2649,8 @@ mod tests {
                 status: Some(RangeStatus::Wide),
                 lo: Some(value - half),
                 hi: Some(value + half),
+                refused_resamples: None,
+                straddle: None,
             },
             "deposit {d}"
         );
@@ -2629,10 +2672,14 @@ mod tests {
                 status,
                 lo,
                 hi,
+                refused_resamples: None,
+                straddle,
             } = q
             else {
                 panic!("{name}: {q:?}")
             };
+            // From an arrival at 0 every window edge is a bin edge: no bin straddles te.
+            assert_eq!(*straddle, None, "{name}");
             assert_eq!(*status, Some(RangeStatus::Ok), "{name}: {q:?}");
             assert_eq!(*lo, Some(value - 2.5 * sd), "{name}");
             assert_eq!(*hi, Some(value + 2.5 * sd), "{name}");
@@ -2736,6 +2783,123 @@ mod tests {
         assert_eq!(*status, Some(want));
     }
 
+    // --- The bed's findings: T30's stand-ins, the bin straddling te (results version 9) ----------
+
+    /// A deposit at which `noise::evaluate` refuses T30 for its resamples (more than 10 of 200
+    /// fall short of -35 dB, their last bins a few whole deposits) and its stand-ins give it, with
+    /// that evaluation. The bed's G2 refused T30 so at every receiver-band.
+    fn t30_refused_by_its_resamples() -> (f64, noise::Parameters) {
+        for d in [1e-3, 2e-3, 3e-3, 4e-3, 6e-3, 8e-3] {
+            let p = noise::evaluate(&Ok(exponential(200)), Arrival::at(0.0), &random_model(d));
+            if let Err(e) = &p.t30_s
+                && let Some(NotEvaluable::MonteCarloNoise {
+                    refused_resamples, ..
+                }) = e.not_evaluable()
+                && *refused_resamples > noise::REFUSED_RESAMPLES_ALLOWED
+                && p.widen[3].stand_in.is_some()
+            {
+                return (d, p);
+            }
+        }
+        panic!("no deposit tried refuses T30 for its resamples with stand-ins that give it");
+    }
+
+    #[test]
+    fn t30_refused_by_its_resamples_alone_is_shown_wide_from_its_stand_ins() {
+        let (d, p) = t30_refused_by_its_resamples();
+        let Some(NotEvaluable::MonteCarloNoise {
+            value,
+            sd,
+            refused_resamples,
+            ..
+        }) = p.t30_s.as_ref().unwrap_err().not_evaluable().cloned()
+        else {
+            unreachable!()
+        };
+        let st = p.widen[3].stand_in.unwrap();
+        assert_eq!(st.refused_resamples, refused_resamples);
+        if let Some(sd) = sd {
+            assert!(st.sd >= sd, "{st:?} {sd}");
+        }
+        let e = evaluated(&Ok(exponential(200)), Arrival::at(0.0), &random_model(d));
+        let half = 2.5 * st.sd;
+        assert_eq!(
+            e.parameters.t30_s,
+            Evaluated::Value {
+                value,
+                mc_sd: Some(sd.unwrap_or(st.sd)),
+                status: Some(RangeStatus::Wide),
+                lo: Some(value - half),
+                hi: Some(value + half),
+                refused_resamples: Some(refused_resamples),
+                straddle: None,
+            },
+            "deposit {d}"
+        );
+        // The judgement is the resamples' as judged: the curvature still refuses with T30.
+        assert!(e.curvature.percent.refusal().is_some());
+        let j = serde_json::to_value(&e.parameters).unwrap();
+        assert_eq!(j["t30_s"]["refused_resamples"], refused_resamples);
+        assert!(
+            j["t20_s"].get("refused_resamples").is_none(),
+            "{}",
+            j["t20_s"]
+        );
+        // Says no: without its stand-ins the same refusal is shown as it was, refused.
+        assert!(
+            Evaluated::of_parameter(3, p.t30_s.clone())
+                .refusal()
+                .is_some()
+        );
+    }
+
+    /// The bed's `s2|B26|rec1|R0.1|8000Hz|10ms` in miniature (`tests/params_straddle.rs`): C50 from
+    /// the in-bin decay is 0.48 dB off the truth; shown `wide` with a range that holds it.
+    #[test]
+    fn c50_whose_straddling_bin_can_move_it_beyond_its_limit_is_wide_with_the_bracket() {
+        let (ta, k, direct, t_r, refl) = (0.0311, 6.0 * std::f64::consts::LN_10, 0.3, 0.087, 0.3);
+        let energy = |a: f64, b: f64| {
+            let rev = |t: f64| 1.0 - (-k * (t - ta).max(0.0)).exp();
+            let mut e = rev(b) - rev(a);
+            if (a..b).contains(&ta) {
+                e += direct;
+            }
+            if (a..b).contains(&t_r) {
+                e += refl;
+            }
+            e
+        };
+        let dt = 0.01;
+        let bins: Vec<f64> = (0..300)
+            .map(|i| energy(i as f64 * dt, (i + 1) as f64 * dt))
+            .collect();
+        let early = energy(0.0, ta + 0.05);
+        let truth = 10.0 * (early / (1.0 + direct + refl - early)).log10();
+        let s = EnergySeries::complete(dt, bins).unwrap();
+        let e = evaluated(&Ok(s), Arrival::at(ta), &random_model(1e-12));
+        let Evaluated::Value {
+            value,
+            status,
+            lo: Some(lo),
+            hi: Some(hi),
+            straddle: Some([s_lo, s_hi]),
+            mc_sd: Some(sd),
+            ..
+        } = e.parameters.c50_db
+        else {
+            panic!("{:?}", e.parameters.c50_db)
+        };
+        assert!((value - truth).abs() > 0.1, "{value} vs {truth}");
+        assert_eq!(status, Some(RangeStatus::Wide));
+        assert!(s_lo <= truth && truth <= s_hi, "{truth} [{s_lo}, {s_hi}]");
+        assert!(lo <= s_lo - 2.5 * sd + 1e-12 && hi >= s_hi + 2.5 * sd - 1e-12);
+        // Without it the same value would have been ok: its noise is nothing.
+        assert!(2.5 * sd < 1.0);
+        let j = serde_json::to_value(&e.parameters).unwrap();
+        assert_eq!(j["c50_db"]["straddle"][0].as_f64(), Some(s_lo));
+        assert_eq!(j["c50_db"]["status"], "wide");
+    }
+
     // --- G and dB(A) (M8b; PLAN.md "SPL (and dB(A), G on top)") ---------------------------------
 
     use crate::params::decay::P_REF_SQUARED;
@@ -2751,6 +2915,8 @@ mod tests {
             status: Some(s.status),
             lo: Some(s.lo),
             hi: Some(s.hi),
+            refused_resamples: None,
+            straddle: None,
         }
     }
 
@@ -2766,6 +2932,7 @@ mod tests {
             status,
             lo,
             hi,
+            ..
         } = g
         else {
             panic!("{g:?}")

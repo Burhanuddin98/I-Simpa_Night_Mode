@@ -70,7 +70,23 @@
 //! **The range** (decision-log rows 37 (3) and 39 (3)). The product shows each value with its range,
 //! `value ± RANGE_Z·sd`, `ok` within the quantity's difference limen ([`jnd`]) and `wide` outside it
 //! ([`shown`]); a value refused here for its standard deviation alone is shown so, `wide`, rather
-//! than refused. Every other refusal stands.
+//! than refused. Two more are shown `wide` with a range that covers what they are not known to
+//! within ([`Widen`], [`shown_with`]):
+//! - **The stand-ins.** A value refused because more than [`REFUSED_RESAMPLES_ALLOWED`] resamples
+//!   refuse it, where the resamples refused it only because their own curve fell short of the
+//!   range's bottom that the series itself passed (T30 on a long energetic run, whose model
+//!   resamples end in a few whole deposits: `range_not_reached` in up to 198 of 200 on the bed's
+//!   G2). Its resamples are drawn again, each judged with its range on the series
+//!   ([`EnergySeries::with_range_judged_on_its_series`]); when at most the allowed number refuse
+//!   it then, its range is `value ± RANGE_Z·sd` with `sd` the larger of their calibrated standard
+//!   deviation and the judged one (theirs alone when the judged resamples gave none). Never `ok`:
+//!   the judgement, the calibration and the refusal's particle count are those of the resamples as
+//!   judged, and stay as they were.
+//! - **The bin straddling te** (C50, C80, D50; [`decay::Straddle`]): when that bin wholly early or
+//!   wholly late moves the value beyond its limit, the range covers both, widened by
+//!   `RANGE_Z·sd`.
+//!
+//! Every other refusal stands.
 
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -677,6 +693,28 @@ pub struct Estimate {
     pub sd: f64,
 }
 
+/// What widens a shown value's range beyond `value ± RANGE_Z·sd` ([module docs](self), "The
+/// range"), per quantity.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Widen {
+    /// C50, C80, D50: the value with the bin straddling te wholly late and wholly early, `(lo,
+    /// hi)`, when either lies beyond the quantity's limit from it ([`decay::Straddle`]).
+    pub straddle: Option<(f64, f64)>,
+    /// A value refused for its resamples alone, drawn again as stand-ins.
+    pub stand_in: Option<StandIn>,
+}
+
+/// A value refused because more than [`REFUSED_RESAMPLES_ALLOWED`] resamples refused it, drawn
+/// again with each resample's range judged on the series ([module docs](self), "The stand-ins").
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StandIn {
+    /// The larger of the stand-ins' calibrated standard deviation and the judged one (the
+    /// stand-ins' alone when fewer than two resamples gave one as judged), in the quantity's unit.
+    pub sd: f64,
+    /// How many resamples refused it as judged.
+    pub refused_resamples: usize,
+}
+
 /// SPL, EDT, T20, T30, C50, C80, D50 and Ts of one series, each with its noise or its refusal.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parameters {
@@ -703,6 +741,8 @@ pub struct Parameters {
     /// ([`NoiseModel::multi_crossing`]); `None` when the model is unknown or no run's, or the
     /// series is refused.
     pub crossings_per_particle: Option<f64>,
+    /// What widens each of the eight's shown range, in [`QUANTITY_NAMES`]' order ([`shown_with`]).
+    pub widen: [Widen; 8],
 }
 
 /// The eight quantities in [`Parameters`]' order, with their limits: `(quantity, limit,
@@ -756,11 +796,15 @@ pub enum RangeStatus {
 pub struct Shown {
     pub value: f64,
     pub sd: f64,
-    /// `value − RANGE_Z·sd`.
+    /// `value − RANGE_Z·sd`, or lower ([`shown_with`]).
     pub lo: f64,
-    /// `value + RANGE_Z·sd`.
+    /// `value + RANGE_Z·sd`, or higher.
     pub hi: f64,
     pub status: RangeStatus,
+    /// Shown from its stand-ins ([`StandIn`]): how many resamples refused it as judged.
+    pub refused_resamples: Option<usize>,
+    /// The bracket of the bin straddling te, when it made the value `wide` ([`Widen::straddle`]).
+    pub straddle: Option<(f64, f64)>,
 }
 
 /// Quantity `i`'s value `value` with standard deviation `sd`, shown with its range.
@@ -782,6 +826,8 @@ pub fn range(i: usize, value: f64, sd: f64) -> Shown {
         } else {
             RangeStatus::Wide
         },
+        refused_resamples: None,
+        straddle: None,
     }
 }
 
@@ -810,14 +856,47 @@ pub fn shown_noise(e: &ParamError) -> Option<(f64, f64)> {
 
 /// Quantity `i`'s value or refusal from [`evaluate`], as the product shows it: a value, or a
 /// refusal for its noise alone ([`shown_noise`]), with its range; any other refusal as it is.
+/// [`shown_with`] with nothing to widen it.
 pub fn shown(i: usize, r: Result<Estimate, ParamError>) -> Result<Shown, ParamError> {
-    match r {
-        Ok(e) => Ok(range(i, e.value, e.sd)),
-        Err(e) => match shown_noise(&e) {
-            Some((value, sd)) => Ok(range(i, value, sd)),
-            None => Err(e),
+    shown_with(i, r, &Widen::default())
+}
+
+/// [`shown`], with what [`evaluate`] found widens quantity `i`'s range (`Parameters::widen`): a
+/// refusal for its resamples alone is shown from its stand-ins, `wide`, with the judged standard
+/// deviation and the stand-ins' range; a straddle bracket beyond the limit makes the value `wide`
+/// with a range from `lo − RANGE_Z·sd` to `hi + RANGE_Z·sd` ([module docs](self), "The range").
+pub fn shown_with(
+    i: usize,
+    r: Result<Estimate, ParamError>,
+    w: &Widen,
+) -> Result<Shown, ParamError> {
+    let mut s = match r {
+        Ok(e) => range(i, e.value, e.sd),
+        Err(e) => match (shown_noise(&e), w.stand_in, e.not_evaluable()) {
+            (Some((value, sd)), _, _) => range(i, value, sd),
+            (None, Some(st), Some(NotEvaluable::MonteCarloNoise { value, sd, .. }))
+                if value.is_finite() && st.sd.is_finite() =>
+            {
+                let r = range(i, *value, st.sd);
+                Shown {
+                    // The judged one; with none, the stand-ins'.
+                    sd: sd.unwrap_or(st.sd),
+                    status: RangeStatus::Wide,
+                    refused_resamples: Some(st.refused_resamples),
+                    ..r
+                }
+            }
+            _ => return Err(e),
         },
+    };
+    if let Some((lo, hi)) = w.straddle {
+        let half = (s.value - s.lo).max(s.hi - s.value);
+        s.lo = lo.min(s.value) - half;
+        s.hi = hi.max(s.value) + half;
+        s.status = RangeStatus::Wide;
+        s.straddle = Some((lo, hi));
     }
+    Ok(s)
 }
 
 /// Whether [`judge_one`] refuses quantity `i`'s `value` for its calibrated standard deviation
@@ -836,7 +915,32 @@ fn values(
     series: &EnergySeries,
     arrival: Arrival,
 ) -> ([Result<f64, ParamError>; 8], Onset, Arrival) {
+    let (v, onset, arrival, _) = values_and_straddles(series, arrival);
+    (v, onset, arrival)
+}
+
+/// [`values_and_straddles`]' result.
+type ValuesAndStraddles = (
+    [Result<f64, ParamError>; 8],
+    Onset,
+    Arrival,
+    [Option<decay::Straddle>; 8],
+);
+
+/// [`values`], with C50's, C80's and D50's [`decay::Straddle`] in [`QUANTITIES`]' order (`None`
+/// for the rest).
+fn values_and_straddles(series: &EnergySeries, arrival: Arrival) -> ValuesAndStraddles {
     let p = decay::evaluate(series, arrival);
+    let straddles = [
+        None,
+        None,
+        None,
+        None,
+        p.c50_straddle,
+        p.c80_straddle,
+        p.d50_straddle,
+        None,
+    ];
     (
         [
             p.spl_db,
@@ -850,15 +954,19 @@ fn values(
         ],
         p.onset,
         p.decay_arrival,
+        straddles,
     )
 }
 
 /// Resamples of `series` drawn with each bin's mean deposit `deposits`: each one's eight values,
-/// `None` where the resample refuses the quantity.
+/// `None` where the resample refuses the quantity. `stand_in`: each with its decay ranges judged
+/// on the series ([`EnergySeries::with_range_judged_on_its_series`]; [module docs](self), "The
+/// stand-ins"); the same draws either way.
 fn resamples_with(
     series: &EnergySeries,
     arrival: Arrival,
     deposits: &[f64],
+    stand_in: bool,
 ) -> Vec<[Option<f64>; 8]> {
     let mut rng = Rng::new(SEED);
     let mut samples = Vec::with_capacity(RESAMPLES);
@@ -871,8 +979,13 @@ fn resamples_with(
         // stand-ins, not for its own noise.) Its early reverberation is read as the series' is,
         // so that the resamples give the value the series gives.
         let resampled = EnergySeries::complete(series.dt(), drawn).map(|s| {
-            if series.early_reverberation_unresolved() {
+            let s = if series.early_reverberation_unresolved() {
                 s.with_early_reverberation_unresolved()
+            } else {
+                s
+            };
+            if stand_in {
+                s.with_range_judged_on_its_series()
             } else {
                 s
             }
@@ -893,7 +1006,8 @@ struct Resampler<'a> {
     series: &'a EnergySeries,
     arrival: Arrival,
     model: &'a NoiseModel,
-    drawn: Vec<((Structure, u32), Samples)>,
+    /// Keyed by structure, multiple and whether they are stand-ins.
+    drawn: Vec<((Structure, u32, bool), Samples)>,
 }
 
 impl<'a> Resampler<'a> {
@@ -909,14 +1023,19 @@ impl<'a> Resampler<'a> {
     /// The resamples under structure `st` at `multiple` times the run's particles; empty for an
     /// unknown model.
     fn get(&mut self, st: Structure, multiple: u32) -> &[[Option<f64>; 8]] {
-        let key = (st, multiple);
+        self.get_as(st, multiple, false)
+    }
+
+    /// [`Resampler::get`], as stand-ins when `stand_in` ([`resamples_with`]).
+    fn get_as(&mut self, st: Structure, multiple: u32, stand_in: bool) -> &[[Option<f64>; 8]] {
+        let key = (st, multiple, stand_in);
         let at = match self.drawn.iter().position(|(k, _)| *k == key) {
             Some(i) => i,
             None => {
                 let samples = self
                     .model
                     .deposits(self.series, st, multiple)
-                    .map(|d| resamples_with(self.series, self.arrival, &d))
+                    .map(|d| resamples_with(self.series, self.arrival, &d, stand_in))
                     .unwrap_or_default();
                 self.drawn.push((key, samples));
                 self.drawn.len() - 1
@@ -928,7 +1047,22 @@ impl<'a> Resampler<'a> {
     /// Quantity `i`'s standard deviation over the resamples of structure `st` at `multiple`, before
     /// calibration and in its unit, with how many refused it.
     fn spread(&mut self, st: Structure, multiple: u32, i: usize) -> (Option<f64>, usize) {
-        let got: Vec<f64> = self.get(st, multiple).iter().filter_map(|s| s[i]).collect();
+        self.spread_as(st, multiple, i, false)
+    }
+
+    /// [`Resampler::spread`], over stand-ins when `stand_in`.
+    fn spread_as(
+        &mut self,
+        st: Structure,
+        multiple: u32,
+        i: usize,
+        stand_in: bool,
+    ) -> (Option<f64>, usize) {
+        let got: Vec<f64> = self
+            .get_as(st, multiple, stand_in)
+            .iter()
+            .filter_map(|s| s[i])
+            .collect();
         let refused = if got.is_empty() && self.model.structure(i).is_none() {
             RESAMPLES
         } else {
@@ -997,10 +1131,11 @@ pub fn evaluate(
                 ts_s: r(),
                 curvature_percent: r(),
                 crossings_per_particle: None,
+                widen: [Widen::default(); 8],
             };
         }
     };
-    let (base, onset, decay_arrival) = values(series, arrival);
+    let (base, onset, decay_arrival, straddles) = values_and_straddles(series, arrival);
     let mut resampler = Resampler::new(series, arrival, model);
     let n = model.multi_crossing(series);
     let mut out: Vec<Result<Estimate, ParamError>> = Vec::with_capacity(8);
@@ -1013,6 +1148,31 @@ pub fn evaluate(
             })
         }));
     }
+    // What widens each shown range ([module docs](self), "The range").
+    let widen: [Widen; 8] = std::array::from_fn(|i| Widen {
+        straddle: straddles[i]
+            .filter(|s| s.beyond_limit)
+            .map(|s| (s.lo, s.hi)),
+        stand_in: match out[i].as_ref().err().and_then(ParamError::not_evaluable) {
+            Some(NotEvaluable::MonteCarloNoise {
+                sd,
+                refused_resamples,
+                ..
+            }) if *refused_resamples > REFUSED_RESAMPLES_ALLOWED => {
+                let st = model.structure(i).unwrap_or(Structure::Constant);
+                let (raw, refused) = resampler.spread_as(st, 1, i, true);
+                let factor = calibrated_factor(model, i, n).unwrap_or(1.0);
+                match raw {
+                    Some(raw) if refused <= REFUSED_RESAMPLES_ALLOWED => Some(StandIn {
+                        sd: sd.map_or(raw * factor, |sd| (raw * factor).max(sd)),
+                        refused_resamples: *refused_resamples,
+                    }),
+                    _ => None,
+                }
+            }
+            _ => None,
+        },
+    });
     // The curvature of the reported T20 and T30, with its spread over the resamples giving both
     // (T30's structure's: energetic T20 and T30 share theirs).
     let curvature_percent = match (&out[2], &out[3]) {
@@ -1058,6 +1218,7 @@ pub fn evaluate(
         ts_s: next(),
         curvature_percent,
         crossings_per_particle: n,
+        widen,
     }
 }
 
@@ -2053,5 +2214,76 @@ mod tests {
             m.contains("0.7, above its limit of 0.5 in the quantity's unit"),
             "{m}"
         );
+    }
+
+    // --- What widens a shown range: the stand-ins and the straddling bin (results version 9) ---
+
+    #[test]
+    fn a_widened_range_is_wide_and_covers_what_widens_it() {
+        let resampled = |sd: Option<f64>| {
+            not_evaluable(
+                Quantity::T30,
+                NotEvaluable::MonteCarloNoise {
+                    value: 2.8,
+                    sd,
+                    limit: limits::DECAY_RELATIVE,
+                    resamples: RESAMPLES,
+                    refused_resamples: 49,
+                    particle_count: ParticleCount::ScalingNotConfirmed,
+                },
+            )
+        };
+        let w = Widen {
+            straddle: None,
+            stand_in: Some(StandIn {
+                sd: 0.02,
+                refused_resamples: 49,
+            }),
+        };
+        // Refused for its resamples, shown from its stand-ins: wide however narrow (2.5 · 0.02
+        // is 1.8 % of the value, inside the 5 % limen), the judged sd beside the stand-ins' range.
+        let s = shown_with(3, Err(resampled(Some(0.0144))), &w).unwrap();
+        assert_eq!((s.value, s.sd, s.status), (2.8, 0.0144, RangeStatus::Wide));
+        assert_eq!((s.lo, s.hi), (2.8 - 0.05, 2.8 + 0.05));
+        assert_eq!(s.refused_resamples, Some(49));
+        // No judged sd: the stand-ins' stands in.
+        assert_eq!(shown_with(3, Err(resampled(None)), &w).unwrap().sd, 0.02);
+        // Says no: without stand-ins it stays refused; and stand-ins never show a refusal not
+        // about noise.
+        assert!(shown_with(3, Err(resampled(Some(0.0144))), &Widen::default()).is_err());
+        let short = not_evaluable(
+            Quantity::T30,
+            NotEvaluable::RangeNotReached {
+                needed_db: -35.0,
+                reached_db: -30.0,
+            },
+        );
+        assert_eq!(shown_with(3, Err(short.clone()), &w), Err(short));
+        // A straddle bracket: wide, covering it widened by 2.5 sd; the value stays.
+        let w = Widen {
+            straddle: Some((1.9, 2.7)),
+            stand_in: None,
+        };
+        let s = shown_with(
+            4,
+            Ok(Estimate {
+                value: 2.4,
+                sd: 0.1,
+            }),
+            &w,
+        )
+        .unwrap();
+        assert_eq!((s.value, s.status), (2.4, RangeStatus::Wide));
+        assert!(
+            (s.lo - 1.65).abs() < 1e-12 && (s.hi - 2.95).abs() < 1e-12,
+            "{s:?}"
+        );
+        assert_eq!(s.straddle, Some((1.9, 2.7)));
+        // Nothing to widen: as `shown`.
+        let e = Ok(Estimate {
+            value: 2.4,
+            sd: 0.1,
+        });
+        assert_eq!(shown_with(4, e.clone(), &Widen::default()), shown(4, e));
     }
 }

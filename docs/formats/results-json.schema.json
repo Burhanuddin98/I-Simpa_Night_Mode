@@ -610,6 +610,15 @@
                   "null"
                 ]
               },
+              "refused_resamples": {
+                "description": "Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because\nmore than 10 of its 200 resamples refused it, but which at most 10 refuse when the same\nresamples are judged with their decay range on the series (the stand-ins,\n`params::noise`, \"The stand-ins\"): how many refused it as judged. Shown `wide`, `mc_sd`\nthe judged standard deviation (the stand-ins' when the judged resamples gave none), and\n`lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.",
+                "format": "uint",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
               "status": {
                 "anyOf": [
                   {
@@ -619,7 +628,20 @@
                     "type": "null"
                   }
                 ],
-                "description": "One of the eight parameters of an SPPS band, aggregate or per-source band\n(decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within\nthe quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB\nfor SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value\nis shown with its range rather than refused; a consumer that shows the value shows the\nrange beside it. Absent for every other value."
+                "description": "One of the eight parameters of an SPPS band, aggregate or per-source band\n(decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within\nthe quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB\nfor SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value\nis shown with its range rather than refused; a consumer that shows the value shows the\nrange beside it. Also `wide`, whatever the range's width, with `refused_resamples` or\n`straddle` (results version 9). Absent for every other value."
+              },
+              "straddle": {
+                "description": "Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,\nmoves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the\nvalue with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,\nwidened by `2.5·mc_sd` each way.",
+                "items": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": [
+                  "array",
+                  "null"
+                ]
               },
               "value": {
                 "format": "double",

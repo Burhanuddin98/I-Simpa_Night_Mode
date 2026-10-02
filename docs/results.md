@@ -507,6 +507,16 @@ Receiver 1, at 150,000 particles (`cli_results.rs`, `tutorial1_parameters_beside
 5–22 % and T30 is refused for its noise or its range everywhere. Before the M7 rule, on the 2019
 run, T30 came out at 2.40 s at 1.6 kHz where TCR's Sabine time is 0.66 s.
 
+**Results version 9 (build F, 2026-10-02).** Two more values are shown `wide` instead of refused or
+`ok` (`docs/formats/results-json.md`, "Two more `wide` values"). A value refused only because more
+than 10 resamples fell short of a decay range the series itself passed is shown from its stand-ins,
+`refused_resamples` beside it (`docs/params.md`, "The stand-ins"): re-read without new solves, the
+bed's tested-G2-4101 T30 went from 48 refused to 48 `wide`, tested-G4-4101 from 18 `ok` and 30
+refused to 18 `ok` and 30 `wide`, the high-count truth inside every range. A C50, C80 or D50 whose
+bin straddling te can move it past its limit is `wide` with `straddle` (`docs/params.md`, "The bin
+straddling te"): on the same two runs at 1 ms, C50 `ok` went from 36 to 31 (G2) and from 42 to 8
+(G4, its short decays), D50 from 47 to 45 and 42 to 21, C80 from 46 to 46 and 42 to 27.
+
 ### Several sources, and the echogram per source
 
 With more than one source, the `.recp` adds every source's particles into one series

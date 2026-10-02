@@ -852,6 +852,9 @@ pub struct EnergySeries {
     /// How the reverberation ran before the first bin wholly after the direct sound is not known
     /// ([`EnergySeries::with_early_reverberation_unresolved`]).
     early_unresolved: bool,
+    /// A resample standing in for another run of a series whose decay ranges were judged
+    /// ([`EnergySeries::with_range_judged_on_its_series`]).
+    range_judged: bool,
 }
 
 impl EnergySeries {
@@ -886,6 +889,7 @@ impl EnergySeries {
             lost_share: None,
             lost_follows_decay: false,
             early_unresolved: false,
+            range_judged: false,
         })
     }
 
@@ -907,6 +911,22 @@ impl EnergySeries {
     /// Whether [`EnergySeries::with_early_reverberation_unresolved`] was set.
     pub fn early_reverberation_unresolved(&self) -> bool {
         self.early_unresolved
+    }
+
+    /// A resample that stands in for another run of a series whose decay ranges were judged on the
+    /// series itself (`params::noise`, "The stand-ins"): [`decay`] does not refuse its EDT, T20 or
+    /// T30 `range_not_reached` again, and fits the part of the range its curve covers. A resample
+    /// drawn from the model ends in a few whole deposits, so its last bin with energy can sit above
+    /// a range's bottom that the series itself passed: what refuses it there is the stand-in's
+    /// ragged end, not the value's spread.
+    pub fn with_range_judged_on_its_series(mut self) -> Self {
+        self.range_judged = true;
+        self
+    }
+
+    /// Whether [`EnergySeries::with_range_judged_on_its_series`] was set.
+    pub fn range_judged_on_its_series(&self) -> bool {
+        self.range_judged
     }
 
     /// The series of a solver that lost some particles mid-path, whose unfinished paths can have

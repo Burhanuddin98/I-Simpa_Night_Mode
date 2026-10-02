@@ -216,7 +216,8 @@ wherever in its bin `t_a` falls: gate (a) and its direct-sound cases meet every 
 
 **What it assumes, and where it can be wrong.** Inside a bin, energy arrives as a smooth decay
 would bring it. A strong reflection inside the bin that a window edge falls in can put up to that
-bin's energy on the wrong side of the edge. In the onset bin, what the next bin's decay does not
+bin's energy on the wrong side of the edge: for C50, C80 and D50 that bin's bracket is now reported
+(next section, "The bin straddling te"). In the onset bin, what the next bin's decay does not
 explain is taken as the direct sound, at `t_a`. A direct sound spread over two bins is handled
 with its spread (above). The reverberation's own start is bounded for a solver that declares it
 unresolved (next).
@@ -608,7 +609,27 @@ in four pre-registered rounds; every number is in
   with its range, `value ± 2.5·sd`, marked `wide`, instead of refusing it
   (`params::noise::shown`); and every value it gives is marked `ok` when that range is within the
   limen (twice the table's numbers) and `wide` when not. A refusal by the resamples, or with no
-  standard deviation, stays a refusal (`docs/formats/results-json.md`, "The range").
+  standard deviation, stays a refusal (`docs/formats/results-json.md`, "The range"), unless its
+  stand-ins give it (next).
+
+  **The stand-ins (results version 9; `params::noise`, "The stand-ins").** The bed's G2 (T60 2 to
+  3 s, energetic, 150,000 particles, 1 ms, 10 s) answered T30 at 1 of 144 receiver-bands over its
+  three seeds; in tested-G2-4101 all 48 were refused because more than 10 resamples refused them,
+  and all 6,685 resample refusals were `range_not_reached`, near -34.5 dB at the nearest receiver:
+  a resample drawn from the model ends in a few whole deposits, one deposit there about 1/4,000 of
+  the band's total (4,210 crossings at 500 Hz), so the resample's last bin with energy sits
+  above -35 dB although the series itself passed it. That is a tail judgement made again on the
+  stand-in's ragged end, which the resamples are otherwise spared (above). So a value refused for
+  its resamples alone has them drawn again, the same draws, each judged with its decay range on the
+  series (`EnergySeries::with_range_judged_on_its_series`: the stand-in fits the part of the range
+  its curve covers); when at most 10 refuse it then, it is shown `wide` with `refused_resamples`,
+  its range `value ± 2.5·sd`, `sd` the larger of the stand-ins' calibrated standard deviation and
+  the judged one. The judgement, the calibration, the refusal's particle count and the curvature
+  are untouched: they are the resamples' as judged. Never `ok`, however narrow: the calibration
+  was not measured on stand-ins. **Measured** (build F, the bed's tested-G2-4101 and
+  tested-G4-4101 against the mean of their two high-count truth runs): T30 on G2 went from 0 ok,
+  0 wide, 48 refused to 0, 48, 0; on G4 from 18, 0, 30 to 18, 30, 0; the truth inside the shown
+  range at 48 of 48 receiver-bands in each; the stand-ins' half-width 1.2 to 4.8 % of the value.
 - **The particle count a refusal names** (`particle_count`): SPPS's spread falls as `1/√N` or
   faster on every one of twelve pairs of cells that differ only in `N` (5,000 against 50,000 up to
   150,000 against 15,000,000; no pair showed it falling slower by more than two standard errors,
@@ -763,6 +784,42 @@ How they are evaluated, all from the curve `S(u)`:
     energy differs from the first bin's by the threshold, in Pa², so the start of that bin.
   - **Its Ts is not measured from the onset.** Line 432 weights by the absolute time label, so
     upstream's Ts includes the propagation delay `r/c` and half a bin more.
+
+### The bin straddling te (Theorem-CD; results version 9)
+
+Only one bin is ambiguous for `C_te` and `D_te`: the one the window edge `t_a + te` falls inside.
+Every other bin lies wholly before or wholly after the edge, so whatever its energy does inside it,
+the quantity lies between the value with that bin **wholly late** and **wholly early**
+(`docs/investigations/2026-09-27-edt-simplify/FINAL.md` section 2). `decay::Straddle` reports that
+bracket for C50, C80 and D50, from every arrival and reading the value is read from; the value, from
+the in-bin decay, lies inside it. When either end lies further from the value than the limit (0.1
+dB for C, 0.005 for D50), the value is not known to within the limit, and the report shows it
+`wide`, with `straddle` and a range covering the bracket (`params::noise::shown_with`). It is never
+refused for it (decision-log row 37 (3): every metric shows a range). A window edge on a bin edge
+has no bracket.
+- **Why.** The bed's set A fed the product exact noise-free echograms
+  (`crates/simpa-core/tests/bed_shim.rs`): C50 and D50 came back answered with no mark up to
+  0.50 dB and 0.054 off, against limits of 0.1 dB and 0.005, in 179 of 189 misses at 10 ms and 10
+  at 1 ms. In `s2|B26|rec1|R0.1|8000Hz|10ms` the edge, 84.1 ms, falls 41 % into its bin and the bin
+  holds a strong reflection after it: the in-bin decay put a share of it early and read C50 2.589 dB
+  against the truth 2.086. The bracket is 2.059 to 3.310 dB. The existing straddle handling was
+  only the in-bin model, exact for a smooth decay and assumed everywhere; nothing bounded it.
+- **Says no** (`tests/params_straddle.rs`): an exponential plus a reflection in the straddling bin
+  at 10 ms is answered 0.48 dB off by the in-bin model and is now `wide` with the truth inside the
+  bracket; a smooth decay at 1 ms keeps C50, C80 and D50 `ok` (the bin holds 0.35 % of the late
+  energy).
+- **Measured** (build F, set A re-run through the shim: S1 whole, `B:\data\m8b-bed\A-buildF\s1`; S2's
+  committed bins re-read, `A-buildF\s2-shim`). Rows answered `ok` beyond 1/10 limen, before → after:
+  S2 C50 189 → 0, C80 47 → 0, D50 176 → 0; S1 C50 45 → 12, C80 24 → 12, D50 24 → 3. Answered
+  share unchanged (`wide` is answered). The 27 left in S1 are all the `short` variant at 1 ms, a
+  double slope cut early: the tail's single exponential under-bounds it, a truncation miss, not the
+  straddling bin. Of the `wide` rows the truth lies inside the bracket in 98 to 99 %; outside it in
+  S1 only `short` rows, in S2 18 C50, 12 C80 and 18 D50 rows, not yet examined (the bracket takes
+  no account of the tail or the arrival's spread).
+- **The cost.** At a step of 10 ms the straddling bin holds `1 − e^{−13.8·dt/T60}` of the late
+  energy, 7 % at T60 2 s, about 0.3 dB of C: most C and D at 10 ms are `wide`. At 1 ms they are
+  `ok` unless that bin holds a strong reflection. Ts has no single straddling bin (every bin's
+  arrangement moves it, by up to a bin's width in all); it is not bracketed (`docs/v1.1-backlog.md`).
 
 ### Upstream's GUI reproduced on tutorial 1 (measured)
 
