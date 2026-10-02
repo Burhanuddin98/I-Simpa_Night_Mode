@@ -45,8 +45,11 @@ use crate::schema::SolverKind;
 /// (`monte_carlo.method` and `.calibration`, `noise_model.method` and `.particles`), and a
 /// refusal for noise carries `particle_count`. 6 (M8b): `edt_s` is EDT v2.1 (`params::edt`), the
 /// held-out-tested method, on the raw histogram: a value with its guaranteed range, or refused
-/// `edt_refused`; SPPS parameters carry `edt` (status, range, reason, validated).
-pub const REPORT_VERSION: u32 = 6;
+/// `edt_refused`; SPPS parameters carry `edt` (status, range, reason, validated). 7 (M8b,
+/// decision-log rows 37 (3) and 39 (3)): a value of the eight parameters carries `status`, `lo` and
+/// `hi`, its range (`params::noise::range`; EDT's from `edt`), `ok` or `wide`; a value refused
+/// `monte_carlo_noise` for its standard deviation alone is shown so, `wide`, instead of refused.
+pub const REPORT_VERSION: u32 = 7;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -59,6 +62,22 @@ pub enum Evaluated {
         /// `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
         /// analytic references.
         mc_sd: Option<f64>,
+        /// One of the eight parameters of an SPPS band, aggregate or per-source band
+        /// (decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within
+        /// the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
+        /// for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
+        /// is shown with its range rather than refused; a consumer that shows the value shows the
+        /// range beside it. Absent for every other value.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        status: Option<noise::RangeStatus>,
+        /// The range's lower end, in the same unit: `value − 2.5·mc_sd`
+        /// (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        lo: Option<f64>,
+        /// The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
+        /// `status`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        hi: Option<f64>,
     },
     /// `core::params` refused it.
     NotEvaluable { not_evaluable: Refused },
@@ -86,22 +105,55 @@ impl Evaluated {
         }
     }
 
+    /// A value with no range.
+    pub fn bare(value: f64, mc_sd: Option<f64>) -> Self {
+        Evaluated::Value {
+            value,
+            mc_sd,
+            status: None,
+            lo: None,
+            hi: None,
+        }
+    }
+
     /// A value that is not from a Monte-Carlo histogram, or its refusal.
     fn of(r: Result<f64, ParamError>) -> Self {
         match r {
-            Ok(value) => Evaluated::Value { value, mc_sd: None },
+            Ok(value) => Evaluated::bare(value, None),
             Err(e) => Self::refused(e),
         }
     }
 
-    /// A Monte-Carlo value with its standard deviation, or its refusal.
+    /// A Monte-Carlo value with its standard deviation and no range, or its refusal: the
+    /// curvature, which has no limen.
     fn of_estimate(r: Result<noise::Estimate, ParamError>) -> Self {
         match r {
-            Ok(e) => Evaluated::Value {
-                value: e.value,
-                mc_sd: Some(e.sd),
+            Ok(e) => Evaluated::bare(e.value, Some(e.sd)),
+            Err(e) => Self::refused(e),
+        }
+    }
+
+    /// Parameter `i` (`params::noise::QUANTITY_NAMES`) as the product shows it
+    /// (`params::noise::shown`): a value with its standard deviation and its range, `ok` or `wide`,
+    /// a refusal for its standard deviation alone included; any other refusal as it is.
+    pub fn of_parameter(i: usize, r: Result<noise::Estimate, ParamError>) -> Self {
+        match noise::shown(i, r) {
+            Ok(s) => Evaluated::Value {
+                value: s.value,
+                mc_sd: Some(s.sd),
+                status: Some(s.status),
+                lo: Some(s.lo),
+                hi: Some(s.hi),
             },
             Err(e) => Self::refused(e),
+        }
+    }
+
+    /// The range's status, for a value that has one.
+    pub fn status(&self) -> Option<noise::RangeStatus> {
+        match self {
+            Evaluated::Value { status, .. } => *status,
+            Evaluated::NotEvaluable { .. } => None,
         }
     }
 
@@ -341,14 +393,14 @@ fn evaluated(
     let p = noise::evaluate(series, arrival, model);
     Evaluation {
         parameters: Parameters {
-            spl_db: Evaluated::of_estimate(p.spl_db),
-            edt_s: Evaluated::of_estimate(p.edt_s),
-            t20_s: Evaluated::of_estimate(p.t20_s),
-            t30_s: Evaluated::of_estimate(p.t30_s),
-            c50_db: Evaluated::of_estimate(p.c50_db),
-            c80_db: Evaluated::of_estimate(p.c80_db),
-            d50: Evaluated::of_estimate(p.d50),
-            ts_s: Evaluated::of_estimate(p.ts_s),
+            spl_db: Evaluated::of_parameter(0, p.spl_db),
+            edt_s: Evaluated::of_parameter(1, p.edt_s),
+            t20_s: Evaluated::of_parameter(2, p.t20_s),
+            t30_s: Evaluated::of_parameter(3, p.t30_s),
+            c50_db: Evaluated::of_parameter(4, p.c50_db),
+            c80_db: Evaluated::of_parameter(5, p.c80_db),
+            d50: Evaluated::of_parameter(6, p.d50),
+            ts_s: Evaluated::of_parameter(7, p.ts_s),
             edt: None,
             edt_validated: false,
         },
@@ -802,10 +854,7 @@ impl ReferenceReport {
                         uniform_absorption: b.uniform_absorption,
                         eyring_s: Evaluated::of(b.eyring_s.clone()),
                         kuttruff_s: match &b.kuttruff_s {
-                            Ok((value, sd)) => Evaluated::Value {
-                                value: *value,
-                                mc_sd: Some(*sd),
-                            },
+                            Ok((value, sd)) => Evaluated::bare(*value, Some(*sd)),
                             Err(e) => Evaluated::refused(e.clone()),
                         },
                     })
@@ -1199,12 +1248,21 @@ fn edt_report(
 }
 
 impl EdtReport {
-    /// `Parameters::edt_s`: the value, or the refusal as `edt_refused`.
+    /// `Parameters::edt_s`: the value with the method's range and status, or the refusal as
+    /// `edt_refused`.
     fn evaluated(&self) -> Evaluated {
         match self.value_s {
-            Some(value) if self.status != edt::Status::Refused => {
-                Evaluated::Value { value, mc_sd: None }
-            }
+            Some(value) if self.status != edt::Status::Refused => Evaluated::Value {
+                value,
+                mc_sd: None,
+                status: Some(if self.status == edt::Status::Ok {
+                    noise::RangeStatus::Ok
+                } else {
+                    noise::RangeStatus::Wide
+                }),
+                lo: self.lo_s,
+                hi: self.hi_s,
+            },
             _ => Evaluated::refused(params::not_evaluable(
                 Quantity::Edt,
                 NotEvaluable::EdtRefused {
@@ -1949,13 +2007,7 @@ mod tests {
         let ReferenceReport::Computed { bands, .. } = ReferenceReport::of(&r) else {
             panic!("computed");
         };
-        assert_eq!(
-            bands[0].kuttruff_s,
-            Evaluated::Value {
-                value: 0.62,
-                mc_sd: Some(5e-5)
-            }
-        );
+        assert_eq!(bands[0].kuttruff_s, Evaluated::bare(0.62, Some(5e-5)));
     }
 
     // --- EDT v2.1 (M8b port; docs/investigations/2026-10-02-edt-port/PORT.md) --------------------
@@ -2319,5 +2371,183 @@ mod tests {
         let mut p = tcr;
         p.several_sources(&["A", "B"]);
         assert!(!p.edt_validated);
+    }
+
+    // --- A noise-limited value shows its range (decision-log rows 37 (3), 39 (3)) ----------------
+
+    use crate::params::noise::RangeStatus;
+
+    /// A clean exponential decay, 0.46 dB per 10 ms bin over 1 s (T60 about 1.3 s): T20 and T30
+    /// reach their ranges, and its noise is whatever the model's deposit makes it.
+    fn exponential(bins: i32) -> EnergySeries {
+        EnergySeries::new(0.01, (0..bins).map(|k| 0.9f64.powi(k)).collect()).unwrap()
+    }
+
+    fn random_model(deposit: f64) -> NoiseModel {
+        NoiseModel::crossings(deposit, noise::Method::Random, None).unwrap()
+    }
+
+    /// The first deposit at which `noise::evaluate` refuses T20 for its standard deviation alone
+    /// (what a 150 k random-mode run did to every T20 in RESULT-3B), with that refusal's value and
+    /// standard deviation.
+    fn noisy_t20() -> (f64, f64, f64) {
+        for d in [1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3] {
+            let p = noise::evaluate(&Ok(exponential(100)), Arrival::at(0.0), &random_model(d));
+            if let Err(e) = &p.t20_s
+                && let Some(NotEvaluable::MonteCarloNoise {
+                    value,
+                    sd: Some(sd),
+                    refused_resamples,
+                    ..
+                }) = e.not_evaluable()
+                && *refused_resamples <= noise::REFUSED_RESAMPLES_ALLOWED
+            {
+                return (d, *value, *sd);
+            }
+        }
+        panic!("no deposit tried refuses T20 for its standard deviation alone");
+    }
+
+    #[test]
+    fn a_band_refused_for_its_noise_shows_its_value_and_range_marked_wide() {
+        let (d, value, sd) = noisy_t20();
+        let e = evaluated(&Ok(exponential(100)), Arrival::at(0.0), &random_model(d));
+        let half = 2.5 * sd;
+        assert_eq!(
+            e.parameters.t20_s,
+            Evaluated::Value {
+                value,
+                mc_sd: Some(sd),
+                status: Some(RangeStatus::Wide),
+                lo: Some(value - half),
+                hi: Some(value + half),
+            },
+            "deposit {d}"
+        );
+        // Wide: the range is past the 5 % limen.
+        assert!(half / value > 0.05, "{half} / {value}");
+        // The curvature still needs T20 and T30 as judged: refused with them, not computed from
+        // a wide pair.
+        if e.parameters.t30_s.status() == Some(RangeStatus::Wide) {
+            assert!(e.curvature.percent.refusal().is_some());
+        }
+    }
+
+    #[test]
+    fn a_quiet_band_shows_every_value_ok_with_its_range() {
+        // 200 bins, 92 dB: no unseen tail moves T30.
+        let e = evaluated(&Ok(exponential(200)), Arrival::at(0.0), &random_model(1e-9));
+        for (i, (name, q)) in e.parameters.named().into_iter().enumerate() {
+            let Evaluated::Value {
+                value,
+                mc_sd: Some(sd),
+                status,
+                lo,
+                hi,
+            } = q
+            else {
+                panic!("{name}: {q:?}")
+            };
+            assert_eq!(*status, Some(RangeStatus::Ok), "{name}: {q:?}");
+            assert_eq!(*lo, Some(value - 2.5 * sd), "{name}");
+            assert_eq!(*hi, Some(value + 2.5 * sd), "{name}");
+            assert!(2.5 * sd <= noise::jnd(i) * if noise::relative(i) { value.abs() } else { 1.0 });
+        }
+    }
+
+    #[test]
+    fn a_refusal_not_about_noise_stays_a_refusal_however_noisy_the_band() {
+        let (d, _, _) = noisy_t20();
+        // 30 bins decay 13.7 dB: T20 needs 25.
+        let e = evaluated(&Ok(exponential(30)), Arrival::at(0.0), &random_model(d));
+        for q in [&e.parameters.t20_s, &e.parameters.t30_s] {
+            let r = q.refusal().unwrap_or_else(|| panic!("{q:?}"));
+            assert!(
+                matches!(
+                    r.error.not_evaluable(),
+                    Some(NotEvaluable::RangeNotReached { .. })
+                ),
+                "{}",
+                r.message
+            );
+            assert_eq!(q.status(), None);
+        }
+        // A series refused outright refuses all eight.
+        let e = evaluated(
+            &Err(ParamError::NoEnergy),
+            Arrival::at(0.0),
+            &random_model(d),
+        );
+        for (name, q) in e.parameters.named() {
+            assert!(q.refusal().is_some(), "{name}");
+        }
+        // A model with no noise estimate refuses, noise_unknown: nothing bounds it.
+        let unknown = NoiseModel::Unknown {
+            detail: "a balloon".into(),
+        };
+        let e = evaluated(&Ok(exponential(100)), Arrival::at(0.0), &unknown);
+        assert!(matches!(
+            e.parameters.t20_s.refusal().unwrap().error.not_evaluable(),
+            Some(NotEvaluable::NoiseUnknown { .. })
+        ));
+    }
+
+    /// The JSON: `status`, `lo` and `hi` beside `value` and `mc_sd`; a consumer reading them can
+    /// tell `ok` from `wide` and re-derive both from `value` and `mc_sd`; a value with no range
+    /// prints as before.
+    #[test]
+    fn the_json_carries_status_and_range_beside_the_value() {
+        let (d, value, sd) = noisy_t20();
+        let e = evaluated(&Ok(exponential(100)), Arrival::at(0.0), &random_model(d));
+        let j = serde_json::to_value(&e.parameters).unwrap();
+        let t20 = &j["t20_s"];
+        assert_eq!(t20["status"], "wide");
+        assert_eq!(t20["value"].as_f64(), Some(value));
+        assert_eq!(t20["mc_sd"].as_f64(), Some(sd));
+        assert_eq!(t20["lo"].as_f64(), Some(value - 2.5 * sd));
+        assert_eq!(t20["hi"].as_f64(), Some(value + 2.5 * sd));
+        assert!(t20.get("not_evaluable").is_none());
+        for (i, name) in noise::QUANTITY_NAMES.iter().enumerate().skip(2) {
+            let q = &j[*name];
+            let Some(v) = q["value"].as_f64() else {
+                continue;
+            };
+            let s = q["mc_sd"].as_f64().unwrap();
+            let unit = if noise::relative(i) { v.abs() } else { 1.0 };
+            let want = if 2.5 * s <= noise::jnd(i) * unit {
+                "ok"
+            } else {
+                "wide"
+            };
+            assert_eq!(q["status"], want, "{name}: {q}");
+        }
+        // A value with no range prints as it always did.
+        assert_eq!(
+            serde_json::to_value(Evaluated::bare(0.6, None)).unwrap(),
+            serde_json::json!({"value": 0.6, "mc_sd": null})
+        );
+        // The schema names both statuses.
+        let schema = serde_json::to_string(&report_schema()).unwrap();
+        assert!(schema.contains("\"wide\""), "{schema}");
+    }
+
+    /// EDT's value carries the method's own status and range.
+    #[test]
+    fn edt_s_carries_the_methods_status_and_range() {
+        let bins = decay(1500, DISTANCE_M / C, 0.6);
+        let s = edt_run(0, 0.0, bins);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let p = &rep.bands[0].parameters;
+        let edt = p.edt.as_ref().unwrap();
+        let Evaluated::Value { status, lo, hi, .. } = &p.edt_s else {
+            panic!("{:?}", p.edt_s)
+        };
+        assert_eq!(*lo, edt.lo_s);
+        assert_eq!(*hi, edt.hi_s);
+        let want = match edt.status {
+            edt::Status::Ok => RangeStatus::Ok,
+            _ => RangeStatus::Wide,
+        };
+        assert_eq!(*status, Some(want));
     }
 }

@@ -9,11 +9,17 @@
 //! there is one): a seed's own noise refusal does not refuse the batch (D6). Any other refusal is
 //! kept as its reason, and makes the cell not judged (E6, SB-3). T20 is read from
 //! `parameters.t20_s` by the same rules, for its own gate C (the T20 twin).
+//!
+//! Since results version 7 a value refused for its standard deviation alone is shown instead,
+//! `wide`, with the same value and `mc_sd` (decision-log row 37 (3)): such a value is read as the
+//! refusal it was, `monte_carlo_noise` (`params::noise::over_limit`), so the numbers and sources
+//! the bed reads, and its verdicts, do not change.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::params::noise::{self, RangeStatus};
 use crate::params::{NotEvaluable, ParamError};
 use crate::results::report::{Evaluated, ReferenceReport, Report};
 use crate::run::manager::{MESH_DIR, SOLVE_DIR};
@@ -130,6 +136,9 @@ pub struct T30 {
 /// rules for T30 (the T20 twin of gate C).
 pub type T20 = T30;
 
+/// T30's index in `params::noise::QUANTITY_NAMES` (T20's, 2, has the same limit).
+const T30_INDEX: usize = 3;
+
 /// The sources of a judged value.
 pub const JUDGED_SOURCES: [&str; 3] = ["value", "monte_carlo_noise", "noise_uncalibrated"];
 
@@ -142,10 +151,25 @@ impl T30 {
     /// Reads `t30_s`.
     pub fn of(e: &Evaluated) -> T30 {
         match e {
-            Evaluated::Value { value, mc_sd } => T30 {
+            Evaluated::Value {
+                value,
+                mc_sd,
+                status,
+                ..
+            } => T30 {
                 t: Some(*value),
                 mc_sd: *mc_sd,
-                source: "value".into(),
+                // Shown `wide` where `params::noise::evaluate` refused it for its noise: read
+                // as that refusal. T20 and T30 share their limit.
+                source: match (status, mc_sd) {
+                    (Some(RangeStatus::Wide), Some(sd))
+                        if noise::over_limit(T30_INDEX, *value, *sd) =>
+                    {
+                        "monte_carlo_noise"
+                    }
+                    _ => "value",
+                }
+                .into(),
             },
             Evaluated::NotEvaluable { not_evaluable: r } => match &r.error {
                 ParamError::NotEvaluable {
@@ -473,10 +497,7 @@ mod tests {
 
     #[test]
     fn every_seeds_value_is_read_refused_for_noise_or_not() {
-        let v = T30::of(&Evaluated::Value {
-            value: 1.2,
-            mc_sd: Some(0.01),
-        });
+        let v = T30::of(&Evaluated::bare(1.2, Some(0.01)));
         assert!(v.judged() && v.t == Some(1.2) && v.mc_sd == Some(0.01));
         let noise = T30::of(&refused(NotEvaluable::MonteCarloNoise {
             value: 1.3,
@@ -547,5 +568,70 @@ mod tests {
         assert!(!short.judged());
         assert_eq!(short.t, None);
         assert_eq!(short.source, "range_not_reached");
+    }
+
+    /// Results version 7 shows a value refused for its standard deviation alone, `wide`, with the
+    /// same value and `mc_sd` (decision-log row 37 (3)). The bed reads it exactly as it read the
+    /// refusal: the same number, standard deviation and source, so its verdicts do not move. A
+    /// value `params` gave stays `value`, `wide` or not.
+    #[test]
+    fn a_noise_refusal_shown_wide_is_read_as_the_refusal_it_was() {
+        for (q, i, refused_as, read) in [
+            (
+                Quantity::T30,
+                3,
+                refused as fn(NotEvaluable) -> Evaluated,
+                T30::of as fn(&Evaluated) -> T30,
+            ),
+            (Quantity::T20, 2, refused_t20, T20::of),
+        ] {
+            let why = NotEvaluable::MonteCarloNoise {
+                value: 1.3,
+                sd: Some(0.05),
+                limit: 0.025,
+                resamples: 200,
+                refused_resamples: 0,
+                particle_count: ParticleCount::NoStandardDeviation,
+            };
+            let before = read(&refused_as(why.clone()));
+            let shown =
+                Evaluated::of_parameter(i, Err(ParamError::NotEvaluable { quantity: q, why }));
+            assert_eq!(shown.status(), Some(RangeStatus::Wide), "{q}");
+            assert_eq!(read(&shown), before, "{q}");
+            assert_eq!(before.source, "monte_carlo_noise");
+            // A value params gave within its limit (2.2 % of it) is shown wide (2.5 · 2.2 % > 5 %)
+            // and read as a value, as it was.
+            let given = Evaluated::of_parameter(
+                i,
+                Ok(crate::params::noise::Estimate {
+                    value: 1.0,
+                    sd: 0.022,
+                }),
+            );
+            assert_eq!(given.status(), Some(RangeStatus::Wide));
+            let r = read(&given);
+            assert_eq!(
+                (r.t, r.mc_sd, r.source.as_str()),
+                (Some(1.0), Some(0.022), "value")
+            );
+            // A refusal by its resamples is still a refusal, read as before.
+            let resampled = NotEvaluable::MonteCarloNoise {
+                value: 1.3,
+                sd: Some(0.01),
+                limit: 0.025,
+                resamples: 200,
+                refused_resamples: 40,
+                particle_count: ParticleCount::NoStandardDeviation,
+            };
+            let shown = Evaluated::of_parameter(
+                i,
+                Err(ParamError::NotEvaluable {
+                    quantity: q,
+                    why: resampled.clone(),
+                }),
+            );
+            assert!(shown.refusal().is_some());
+            assert_eq!(read(&shown), read(&refused_as(resampled)));
+        }
     }
 }

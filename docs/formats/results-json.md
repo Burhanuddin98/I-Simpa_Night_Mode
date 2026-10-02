@@ -86,7 +86,11 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 6,               // 6: edt_s is EDT v2.1 (params::edt) and bands carry `edt`;
+  "results_version": 7,               // 7: the eight parameters' values carry status (ok |
+                                      //    wide), lo and hi, their range; a value refused
+                                      //    monte_carlo_noise for its standard deviation alone
+                                      //    is shown, wide, instead (decision-log row 37 (3));
+                                      // 6: edt_s is EDT v2.1 (params::edt) and bands carry `edt`;
                                       // 2: mc_sd, noise, floor, lost-share and per-source fields;
                                       // 3: TCR receivers carry parameters and an aggregate;
                                       // 4: lost_follows_decay; an arrival outside the onset
@@ -216,20 +220,36 @@ A point receiver:
 exactly one of:
 
 ```
-{"value": 64.3876, "mc_sd": 0.041}
+{"value": 64.3876, "mc_sd": 0.041, "status": "ok", "lo": 64.2851, "hi": 64.4901}
+{"value": 0.83, "mc_sd": 0.099, "status": "wide", "lo": 0.5825, "hi": 1.0775}
 {"not_evaluable": {"code": "params_not_evaluable",
                    "message": "params_not_evaluable: T20: monte_carlo_noise: ...",
                    "error": {"kind": "not_evaluable", "quantity": {"quantity": "t20"},
-                             "why": {"why": "monte_carlo_noise", "value": 0.83, "sd": 0.099,
-                                     "limit": 0.025, "resamples": 200, "refused_resamples": 3,
-                                     "particle_count": {"count": "named", "factor": 22.1,
-                                                        "margin": 1.4,
-                                                        "particles": 3400000}}}}}
+                             "why": {"why": "monte_carlo_noise", "value": 0.83, "sd": 0.009,
+                                     "limit": 0.025, "resamples": 200, "refused_resamples": 31,
+                                     "particle_count": {"count": "resampled", "multiple": 4,
+                                                        "margin": 1.3,
+                                                        "particles": 600000}}}}}
 ```
 
 `mc_sd` is the value's estimated Monte-Carlo standard deviation in its unit, calibrated against
-SPPS's own seed-to-seed spread (`monte_carlo.calibration`); every SPPS value carries one, and no
-value is reported whose standard deviation exceeds the run's `monte_carlo` limits. A refusal for
+SPPS's own seed-to-seed spread (`monte_carlo.calibration`); every SPPS value carries one.
+
+**The range (results version 7; decision-log rows 37 (3) and 39 (3)).** Every value of the eight
+parameters of an SPPS band, aggregate or per-source band carries `status`, `lo` and `hi`: the range
+`value ± 2.5·mc_sd` (`params::noise::RANGE_Z`, EDT's Z) and `"ok"` when its half-width is within the
+quantity's difference limen, `"wide"` when it is not. The limens are ISO 3382-1 Table A.1 as this
+project carries them, twice the `monte_carlo` limits (`params::noise::jnd`): 5 % of the value for EDT,
+T20 and T30; 1 dB for SPL, C50 and C80; 0.05 for D50; 10 ms for Ts. EDT's are the method's own
+(`lo` = `edt.lo_s`, `hi` = `edt.hi_s`, `status` = `edt.status`; `mc_sd` stays `null`). **A value whose
+standard deviation alone is above its `monte_carlo` limit is no longer refused: it is shown, `wide`,
+with the value and `mc_sd` the refusal carried** (always `wide`: its half-width is at least 1.25
+limens). A consumer that shows a value shows its range beside it, and marks a `wide` one. Still refused:
+`monte_carlo_noise` when more than 10 of the 200 resamples refuse the value (the spread of the
+resamples that gave one does not bound those that did not) or when there is no standard deviation, and
+every refusal not about noise, `noise_uncalibrated` and `noise_unknown` included. `status`, `lo` and
+`hi` are absent from every other value (TCR's, the reference's, `curvature.percent`). The curvature
+is still refused with a T20 or T30 that `params` refused for noise. A refusal for
 `monte_carlo_noise` carries `particle_count`, the particles per source that would bring the value
 within its limit, or why none is named: `{"count": "named", "factor", "margin", "particles"}`
 (`factor` times the run's particles, `(margin·sd/limit)²`, and that many per source rounded up to
@@ -260,7 +280,8 @@ refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `early
 **EDT (results version 6).** `edt_s` is EDT v2.1 (`params::edt`, ported from
 `docs/investigations/2026-09-27-edt-heldout/frozen2/method.py` and shown equal to it,
 `docs/investigations/2026-10-02-edt-port/PORT.md`), read from the raw histogram: `{"value": …,
-"mc_sd": null}` for `ok` and `wide`, or refused `edt_refused`. Wherever a histogram gave it (every SPPS
+"mc_sd": null, "status", "lo", "hi"}` for `ok` and `wide` (version 7: the method's status and range),
+or refused `edt_refused`. Wherever a histogram gave it (every SPPS
 band, aggregate and per-source band; absent for TCR and for `several_sources`), `parameters.edt`
 holds `method` (`"edt_v2.1"`), `status` (`ok`: the range is inside 5 %; `wide`: shown with its range,
 decision-log row 9; `refused`), `value_s`, `lo_s`, `hi_s` (absent when refused), `reason` (a
@@ -278,11 +299,15 @@ whatever the mode** ("broadband EDT is not covered by the held-out test"). `vali
 every reason that applies, joined by `; `.
 
 **The marker rule (decision-log row 20).** Only tested numbers are shown as validated; every EDT that is not
-validated carries "not yet validated" on every surface that prints or exports it. `edt_s` stays a bare
-`{"value", "mc_sd"}` because consumers read it, so its marker rides beside it: `parameters.edt_validated`
+validated carries "not yet validated" on every surface that prints or exports it. `edt_s` stays a value
+(`{"value", "mc_sd", "status", "lo", "hi"}`) because consumers read it, so its marker rides beside it: `parameters.edt_validated`
 (boolean, present on every `parameters`; true only where `edt.validated` is true, false where there is no `edt`
 object). A consumer that shows or exports `edt_s` reads `edt_validated` and marks the value when it is false.
 `simpa results` marks such a cell with `*` after the value and prints a legend; a refusal has no value to mark.
+
+**The text output (version 7).** `simpa results` prints a value with a range as `<value>±<h>`, `h` the
+larger side's half-width rounded up at the shown precision (never shown narrower than it is), and
+`<value>±<h>w` when `status` is `wide`, with a legend; EDT's `*` follows (`1.23±0.07w*`).
 
 #### `curvature` and `decay_curve`
 

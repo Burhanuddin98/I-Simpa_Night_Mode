@@ -13,6 +13,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 
+use simpa_core::params::noise::RangeStatus;
 use simpa_core::results::report::{self, Evaluated, ReferenceReport, RefusalReport, Report};
 use simpa_core::results::{self, SolverBuild};
 
@@ -83,13 +84,34 @@ pub fn results_cmd(args: &[&str]) -> ExitCode {
     }
 }
 
-/// A value to its precision, or `NE(<why>)` for a refusal; for a refusal for its Monte-Carlo
+/// A value to its precision, with its range as `±<half-width>` when it has one (decision-log row
+/// 37 (3)), the half-width the larger side's, rounded up, so that the range is never shown
+/// narrower than it is, and `w` after it when the range is wider than the quantity's difference
+/// limen (`status` `wide`); or `NE(<why>)` for a refusal; for a refusal for its Monte-Carlo
 /// noise, `NE(noise:<count>)` with the particles per source that would bring it within its limit
 /// ([`particles`]), or `NE(noise)` when none can be named; for a run outside the noise model's
 /// calibration, `NE(uncal:<count>)` with the particles per source that reach it, or
 /// `NE(uncal:R<=<s>x)` with the most the receiver radius may be as a multiple of the run's.
 fn cell(e: &Evaluated, digits: usize, scale: f64) -> String {
     match e {
+        Evaluated::Value {
+            value,
+            status,
+            lo: Some(lo),
+            hi: Some(hi),
+            ..
+        } => {
+            let step = 10f64.powi(-(digits as i32));
+            let half = (hi - value).max(value - lo) * scale.abs();
+            // Rounded up, past a last-digit error of the subtraction.
+            let half = ((half / step - 1e-6).ceil() * step).max(0.0);
+            let wide = if *status == Some(RangeStatus::Wide) {
+                "w"
+            } else {
+                ""
+            };
+            format!("{:.*}±{half:.*}{wide}", digits, value * scale, digits)
+        }
         Evaluated::Value { value, .. } => format!("{:.*}", digits, value * scale),
         Evaluated::NotEvaluable { not_evaluable: r } => {
             let error = serde_json::to_value(&r.error).unwrap_or_default();
@@ -190,11 +212,16 @@ fn text(rep: &Report) -> String {
     if let Some(sp) = &rep.spps {
         let _ = writeln!(
             s,
-            "NE(<why>): not evaluable, and why. NE(noise:<count>): refused for its Monte-Carlo \
-             noise; <count> particles per source would bring it within its limit (NE(noise): \
-             no count is named, the JSON says why). NE(uncal:<count>) or NE(uncal:R<=<s>x): \
-             the run is outside what the noise model was calibrated on; run <count> particles \
-             per source, or make the receiver radius at most <s> times this run's."
+            "<value>±<h>: the value and its range, 2.5 Monte-Carlo standard deviations either \
+             side (EDT: the method's own range). <value>±<h>w: the range is wider than the \
+             just-noticeable difference (5 % for EDT, T20 and T30; 1 dB for SPL, C50 and C80; \
+             0.05 for D50; 10 ms for Ts), shown with its range instead of refused (JSON: status \
+             \"wide\", lo, hi). NE(<why>): not evaluable, and why. NE(noise:<count>): refused \
+             for its Monte-Carlo noise; <count> particles per source would bring it within its \
+             limit (NE(noise): no count is named, the JSON says why). NE(uncal:<count>) or \
+             NE(uncal:R<=<s>x): the run is outside what the noise model was calibrated on; run \
+             <count> particles per source, or make the receiver radius at most <s> times this \
+             run's."
         );
         let mut edt_marked = false;
         for r in &sp.point_receivers {
@@ -204,7 +231,7 @@ fn text(rep: &Report) -> String {
             let _ = writeln!(s, "\nreceiver {:?}, arrival {arrival}", r.label);
             let _ = writeln!(
                 s,
-                "{:>8} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
+                "{:>8} {:>11} {:>12} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}",
                 "band", "SPL dB", "EDT s", "T20 s", "T30 s", "C50 dB", "C80 dB", "D50 %", "Ts ms"
             );
             let rows = r
@@ -226,7 +253,7 @@ fn text(rep: &Report) -> String {
                 edt_marked |= edt.ends_with('*');
                 let _ = writeln!(
                     s,
-                    "{label:>8} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
+                    "{label:>8} {:>11} {:>12} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}",
                     cell(&p.spl_db, 1, 1.0),
                     edt,
                     cell(&p.t20_s, 2, 1.0),
@@ -331,18 +358,22 @@ mod tests {
     use super::*;
     use simpa_core::params::{NotEvaluable, ParamError, ParticleCount, Quantity};
 
-    fn noise(count: ParticleCount) -> Evaluated {
-        let e = ParamError::NotEvaluable {
+    fn noise_error(count: ParticleCount, value: f64, sd: f64) -> ParamError {
+        ParamError::NotEvaluable {
             quantity: Quantity::T20,
             why: NotEvaluable::MonteCarloNoise {
-                value: 0.8,
-                sd: Some(0.05),
+                value,
+                sd: Some(sd),
                 limit: 0.025,
                 resamples: 200,
                 refused_resamples: 0,
                 particle_count: count,
             },
-        };
+        }
+    }
+
+    fn noise(count: ParticleCount) -> Evaluated {
+        let e = noise_error(count, 0.8, 0.05);
         // The text output reads a refusal as the report holds it.
         Evaluated::NotEvaluable {
             not_evaluable: report::Refused {
@@ -386,6 +417,45 @@ mod tests {
         ] {
             assert_eq!(cell(&noise(c), 2, 1.0), "NE(noise)");
         }
+    }
+
+    /// Decision-log row 37 (3): a value shows its range; a range wider than the difference limen
+    /// is marked `w`; a value with no range prints as before; a refusal stays `NE(...)`.
+    #[test]
+    fn a_value_shows_its_range_and_a_wide_one_is_marked() {
+        use simpa_core::params::noise::Estimate;
+        let shown =
+            |i: usize, value: f64, sd: f64| Evaluated::of_parameter(i, Ok(Estimate { value, sd }));
+        // T20 of 0.33 s with 6 % noise (RESULT-3B's random-mode T20s): refused before, now
+        // 0.33 ± 2.5 · 0.02, wide.
+        let wide = Evaluated::of_parameter(
+            2,
+            Err(noise_error(ParticleCount::ScalingNotConfirmed, 0.33, 0.02)),
+        );
+        assert_eq!(cell(&wide, 2, 1.0), "0.33±0.05w");
+        assert_eq!(cell(&shown(2, 1.5, 0.01), 2, 1.0), "1.50±0.03");
+        // Never narrower than it is: 2.5 · 0.0042 = 0.0105 shows 0.02, not 0.01.
+        assert_eq!(cell(&shown(2, 1.5, 0.0042), 2, 1.0), "1.50±0.02");
+        // Scaled with the value: D50 in %, Ts in ms.
+        assert_eq!(cell(&shown(6, 0.4, 0.012), 1, 100.0), "40.0±3.0");
+        assert_eq!(cell(&shown(6, 0.4, 0.024), 1, 100.0), "40.0±6.0w");
+        assert_eq!(cell(&shown(7, 0.08, 0.001), 1, 1000.0), "80.0±2.5");
+        // A value with no range, and a refusal by its resamples, print as before.
+        assert_eq!(cell(&Evaluated::bare(0.6, None), 3, 1.0), "0.600");
+        let mut resampled = noise_error(ParticleCount::NoStandardDeviation, 0.33, 0.002);
+        if let ParamError::NotEvaluable {
+            why: NotEvaluable::MonteCarloNoise {
+                refused_resamples, ..
+            },
+            ..
+        } = &mut resampled
+        {
+            *refused_resamples = 40;
+        }
+        assert_eq!(
+            cell(&Evaluated::of_parameter(2, Err(resampled)), 2, 1.0),
+            "NE(noise)"
+        );
     }
 
     #[test]

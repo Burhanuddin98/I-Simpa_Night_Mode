@@ -421,70 +421,7 @@ impl fmt::Display for NotEvaluable {
                 }
                 write!(f, "; the limit is {limit}. Use a finer time step")
             }
-            NotEvaluable::MonteCarloNoise {
-                value,
-                sd,
-                limit,
-                resamples,
-                refused_resamples,
-                particle_count,
-            } => {
-                write!(f, "monte_carlo_noise: {value} from the series, ")?;
-                match sd {
-                    Some(sd) => write!(
-                        f,
-                        "standard deviation {sd} (calibrated) over {resamples} resamples"
-                    )?,
-                    None => write!(f, "no standard deviation from {resamples} resamples")?,
-                }
-                write!(
-                    f,
-                    ", {refused_resamples} of which refuse it; the limit is {limit}."
-                )?;
-                match particle_count {
-                    ParticleCount::Named {
-                        particles: Some(n), ..
-                    } => write!(
-                        f,
-                        " Run at least {n} particles per source to bring it within its limit"
-                    ),
-                    ParticleCount::Named { factor, .. } => write!(
-                        f,
-                        " Run at least {factor:.3} times the particles to bring it within its limit"
-                    ),
-                    ParticleCount::Resampled {
-                        particles: Some(n), ..
-                    } => write!(
-                        f,
-                        " Run at least {n} particles per source: there its resamples would refuse \
-                         it seldom enough and its noise would be within its limit"
-                    ),
-                    ParticleCount::Resampled { multiple, .. } => write!(
-                        f,
-                        " Run at least {multiple} times the particles: there its resamples would \
-                         refuse it seldom enough and its noise would be within its limit"
-                    ),
-                    ParticleCount::BeyondResampled { multiple } => write!(
-                        f,
-                        " No particle count is named: at {multiple} times the particles its \
-                         resamples would still refuse it, or its noise would still be above its \
-                         limit, so more particles may not help"
-                    ),
-                    ParticleCount::ResampledNotConfirmed => write!(
-                        f,
-                        " No particle count is named: for this quantity the counts its resamples                          named were not borne out at a higher count"
-                    ),
-                    ParticleCount::ScalingNotConfirmed => write!(
-                        f,
-                        " No particle count is named: the calibration did not confirm that this \
-                         quantity's spread falls as 1/√N in this computation method"
-                    ),
-                    ParticleCount::NoStandardDeviation => write!(
-                        f,
-                        " With no standard deviation, no particle count can be named"
-                    ),
-                }
-            }
+            NotEvaluable::MonteCarloNoise { .. } => self.fmt_noise(f, None),
             NotEvaluable::NoiseUnknown { value, detail } => write!(
                 f,
                 "noise_unknown: {value} from the series, but its Monte-Carlo noise cannot be \
@@ -541,6 +478,111 @@ impl fmt::Display for NotEvaluable {
                         "the receiver ball hides the start of the decay; use a smaller radius",
                     _ => "outside the method's premises",
                 }
+            ),
+        }
+    }
+}
+
+impl NotEvaluable {
+    /// `monte_carlo_noise` in words, naming the quantity that was compared with the limit
+    /// (backlog 60: the old text printed a decay time's standard deviation in seconds beside its
+    /// relative limit, "sd 0.013 ... limit 0.025", and read as refusing a value within it).
+    /// `relative`: whether the limit is relative to the value (the decay times, and the curvature,
+    /// which carries their refusal); `None` when the quantity is not known.
+    fn fmt_noise(&self, f: &mut fmt::Formatter<'_>, relative: Option<bool>) -> fmt::Result {
+        let NotEvaluable::MonteCarloNoise {
+            value,
+            sd,
+            limit,
+            resamples,
+            refused_resamples,
+            particle_count,
+        } = self
+        else {
+            unreachable!("monte_carlo_noise only")
+        };
+        write!(f, "monte_carlo_noise: {value} from the series; ")?;
+        let limit_text = match relative {
+            Some(true) => format!("{} % of the value", 100.0 * limit),
+            Some(false) => format!("{limit} in the quantity's unit"),
+            None => format!("{limit} (relative to the value for EDT, T20 and T30)"),
+        };
+        match (sd, relative) {
+            (Some(sd), Some(rel)) => {
+                let measure = if rel { sd / value.abs() } else { *sd };
+                write!(f, "its calibrated standard deviation is {sd}")?;
+                if rel {
+                    write!(f, ", {:.2} % of the value", 100.0 * measure)?;
+                }
+                let side = if measure <= *limit { "within" } else { "above" };
+                write!(f, ", {side} its limit of {limit_text}")?;
+            }
+            (Some(sd), None) => write!(
+                f,
+                "its calibrated standard deviation is {sd}; the limit is {limit_text}"
+            )?,
+            (None, _) => write!(
+                f,
+                "it has no standard deviation: fewer than two of the {resamples} resamples \
+                     give a value (the limit is {limit_text})"
+            )?,
+        }
+        let allowed = noise::REFUSED_RESAMPLES_ALLOWED;
+        if *refused_resamples > allowed {
+            write!(
+                f,
+                "; {refused_resamples} of the {resamples} resamples refuse it, more than the \
+                     {allowed} allowed."
+            )?;
+        } else {
+            write!(
+                f,
+                "; {refused_resamples} of the {resamples} resamples refuse it (at most \
+                     {allowed} may)."
+            )?;
+        }
+        match particle_count {
+            ParticleCount::Named {
+                particles: Some(n), ..
+            } => write!(
+                f,
+                " Run at least {n} particles per source to bring it within its limit"
+            ),
+            ParticleCount::Named { factor, .. } => write!(
+                f,
+                " Run at least {factor:.3} times the particles to bring it within its limit"
+            ),
+            ParticleCount::Resampled {
+                particles: Some(n), ..
+            } => write!(
+                f,
+                " Run at least {n} particles per source: there its resamples would refuse \
+                         it seldom enough and its noise would be within its limit"
+            ),
+            ParticleCount::Resampled { multiple, .. } => write!(
+                f,
+                " Run at least {multiple} times the particles: there its resamples would \
+                         refuse it seldom enough and its noise would be within its limit"
+            ),
+            ParticleCount::BeyondResampled { multiple } => write!(
+                f,
+                " No particle count is named: at {multiple} times the particles its \
+                         resamples would still refuse it, or its noise would still be above its \
+                         limit, so more particles may not help"
+            ),
+            ParticleCount::ResampledNotConfirmed => write!(
+                f,
+                " No particle count is named: for this quantity the counts its resamples named \
+                 were not borne out at a higher count"
+            ),
+            ParticleCount::ScalingNotConfirmed => write!(
+                f,
+                " No particle count is named: the calibration did not confirm that this \
+                         quantity's spread falls as 1/√N in this computation method"
+            ),
+            ParticleCount::NoStandardDeviation => write!(
+                f,
+                " With no standard deviation, no particle count can be named"
             ),
         }
     }
@@ -669,6 +711,19 @@ impl fmt::Display for ParamError {
             ParamError::NoEnergy => write!(f, "every value is zero"),
             ParamError::BadArrival { time_s, detail } => {
                 write!(f, "the arrival at {time_s} s: {detail}")
+            }
+            ParamError::NotEvaluable {
+                quantity,
+                why: why @ NotEvaluable::MonteCarloNoise { .. },
+            } => {
+                write!(f, "{quantity}: ")?;
+                why.fmt_noise(
+                    f,
+                    Some(matches!(
+                        quantity,
+                        Quantity::Edt | Quantity::T20 | Quantity::T30 | Quantity::Curvature
+                    )),
+                )
             }
             ParamError::NotEvaluable { quantity, why } => write!(f, "{quantity}: {why}"),
             ParamError::SeriesMismatch { detail } => write!(f, "{detail}"),

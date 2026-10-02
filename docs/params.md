@@ -545,6 +545,13 @@ in four pre-registered rounds; every number is in
   more than 10 resamples can refuse T30 (α 0.2 to 0.4 below about a million particles) although
   its calibrated noise is within the limit; the value is then refused naming the count at which
   the resamples clear (below).
+
+  **What the report shows (results version 7, decision-log row 37 (3)).** `params` still judges
+  and refuses as above, but `core::results` shows a value refused for its standard deviation alone
+  with its range, `value ± 2.5·sd`, marked `wide`, instead of refusing it
+  (`params::noise::shown`); and every value it gives is marked `ok` when that range is within the
+  limen (twice the table's numbers) and `wide` when not. A refusal by the resamples, or with no
+  standard deviation, stays a refusal (`docs/formats/results-json.md`, "The range").
 - **The particle count a refusal names** (`particle_count`): SPPS's spread falls as `1/√N` or
   faster on every one of twelve pairs of cells that differ only in `N` (5,000 against 50,000 up to
   150,000 against 15,000,000; no pair showed it falling slower by more than two standard errors,

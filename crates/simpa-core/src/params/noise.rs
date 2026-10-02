@@ -66,6 +66,11 @@
 //! the limit (none when no multiple tried clears it). A value whose noise has no model
 //! ([`NoiseModel::Unknown`]) is refused as `noise_unknown`. No value is ever reported with noise
 //! nothing bounds.
+//!
+//! **The range** (decision-log rows 37 (3) and 39 (3)). The product shows each value with its range,
+//! `value ± RANGE_Z·sd`, `ok` within the quantity's difference limen ([`jnd`]) and `wide` outside it
+//! ([`shown`]); a value refused here for its standard deviation alone is shown so, `wide`, rather
+//! than refused. Every other refusal stands.
 
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -720,6 +725,108 @@ const QUANTITIES: [(Quantity, f64, bool); 8] = [
 /// Whether quantity `i` ([`QUANTITY_NAMES`]) has a relative standard deviation (the decay times).
 pub fn relative(i: usize) -> bool {
     QUANTITIES[i].2
+}
+
+/// How many standard deviations a shown range spans on either side of its value: EDT's `Z`
+/// (`params::edt::Z`, Burhan's), for every quantity (decision-log row 37 (3)).
+pub const RANGE_Z: f64 = super::edt::Z;
+
+/// Quantity `i`'s difference limen ([`QUANTITY_NAMES`]' order), in its unit and relative for the
+/// decay times: twice its [`limits`] entry, which is half the limen (ISO 3382-1 Table A.1 as this
+/// project carries it: EDT's 5 % for EDT, T20 and T30, C80's 1 dB for C50 and C80, 0.05 for D50,
+/// 10 ms for Ts, and the 1 dB quoted for G for SPL).
+pub fn jnd(i: usize) -> f64 {
+    2.0 * QUANTITIES[i].1
+}
+
+/// What a shown value's range says (decision-log rows 37 (3) and 39 (3)), as EDT's does
+/// (`params::edt::Status`): `ok` when its half-width, [`RANGE_Z`] standard deviations, is within
+/// the quantity's [`jnd`], `wide` otherwise.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RangeStatus {
+    /// The range is inside the difference limen.
+    Ok,
+    /// The range is wider than the difference limen: the value is shown with it, not refused.
+    Wide,
+}
+
+/// A value as the product shows it: with its calibrated standard deviation and its range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Shown {
+    pub value: f64,
+    pub sd: f64,
+    /// `value − RANGE_Z·sd`.
+    pub lo: f64,
+    /// `value + RANGE_Z·sd`.
+    pub hi: f64,
+    pub status: RangeStatus,
+}
+
+/// Quantity `i`'s value `value` with standard deviation `sd`, shown with its range.
+pub fn range(i: usize, value: f64, sd: f64) -> Shown {
+    let half = RANGE_Z * sd;
+    let measure = if relative(i) {
+        half / value.abs()
+    } else {
+        half
+    };
+    Shown {
+        value,
+        sd,
+        lo: value - half,
+        hi: value + half,
+        // A NaN is wide.
+        status: if measure <= jnd(i) {
+            RangeStatus::Ok
+        } else {
+            RangeStatus::Wide
+        },
+    }
+}
+
+/// The value and standard deviation of a refusal for noise that the product shows with its range
+/// instead (decision-log row 37 (3)): `monte_carlo_noise` with a standard deviation, refused for it
+/// alone. `None` for every other refusal: those without a standard deviation, those that more
+/// than [`REFUSED_RESAMPLES_ALLOWED`] resamples refuse (the standard deviation of the resamples
+/// that gave a value does not bound the spread of those that gave none), and every refusal not
+/// about noise (`noise_uncalibrated` and `noise_unknown` included: nothing bounds their noise).
+pub fn shown_noise(e: &ParamError) -> Option<(f64, f64)> {
+    match e.not_evaluable()? {
+        NotEvaluable::MonteCarloNoise {
+            value,
+            sd: Some(sd),
+            refused_resamples,
+            ..
+        } if *refused_resamples <= REFUSED_RESAMPLES_ALLOWED
+            && value.is_finite()
+            && sd.is_finite() =>
+        {
+            Some((*value, *sd))
+        }
+        _ => None,
+    }
+}
+
+/// Quantity `i`'s value or refusal from [`evaluate`], as the product shows it: a value, or a
+/// refusal for its noise alone ([`shown_noise`]), with its range; any other refusal as it is.
+pub fn shown(i: usize, r: Result<Estimate, ParamError>) -> Result<Shown, ParamError> {
+    match r {
+        Ok(e) => Ok(range(i, e.value, e.sd)),
+        Err(e) => match shown_noise(&e) {
+            Some((value, sd)) => Ok(range(i, value, sd)),
+            None => Err(e),
+        },
+    }
+}
+
+/// Whether [`judge_one`] refuses quantity `i`'s `value` for its calibrated standard deviation
+/// `sd` alone: it is above the quantity's limit (relative for the decay times), or not a number.
+/// What tells a shown `wide` value that [`evaluate`] refused from one it gave.
+pub fn over_limit(i: usize, value: f64, sd: f64) -> bool {
+    let (_, limit, relative) = QUANTITIES[i];
+    let m = if relative { sd / value.abs() } else { sd };
+    m.is_nan() || m > limit
 }
 
 /// The eight values of `decay` on one series, in [`QUANTITIES`]' order. A given arrival that does
@@ -1780,5 +1887,171 @@ mod tests {
         assert_eq!(round_up_two_digits(99.2), 100);
         assert_eq!(round_up_two_digits(7.1), 8);
         assert_eq!(round_up_two_digits(0.0), 0);
+    }
+
+    // --- A noise-limited value shows its range (decision-log rows 37 (3), 39 (3)) ----------------
+
+    #[test]
+    fn the_shown_range_takes_edts_z_and_the_limens_the_limits_halve() {
+        assert_eq!(RANGE_Z, 2.5);
+        // SPL, EDT, T20, T30, C50, C80, D50, Ts: 1 dB, 5 %, 5 %, 5 %, 1 dB, 1 dB, 0.05, 10 ms.
+        let want = [1.0, 0.05, 0.05, 0.05, 1.0, 1.0, 0.05, 0.01];
+        for (i, w) in want.iter().enumerate() {
+            assert!((jnd(i) - w).abs() < 1e-15, "{}", QUANTITY_NAMES[i]);
+        }
+        assert_eq!(jnd(2), super::super::edt::JND);
+    }
+
+    #[test]
+    fn a_range_is_ok_inside_the_limen_and_wide_outside() {
+        // T20, relative: 2.5 · 0.009 / 0.5 = 4.5 %, inside the 5 % limen; 2.5 · 0.0101 / 0.5 is not.
+        let r = range(2, 0.5, 0.009);
+        assert_eq!(r.status, RangeStatus::Ok, "{r:?}");
+        assert!((r.lo - (0.5 - 0.0225)).abs() < 1e-15 && (r.hi - 0.5225).abs() < 1e-15);
+        assert_eq!(range(2, 0.5, 0.0101).status, RangeStatus::Wide);
+        // C80, dB: half-width 2.5 · 0.3 = 0.75 dB is inside 1 dB; 2.5 · 0.5 = 1.25 is not.
+        assert_eq!(range(5, -2.0, 0.3).status, RangeStatus::Ok);
+        assert_eq!(range(5, -2.0, 0.5).status, RangeStatus::Wide);
+        // Ts, s: 10 ms.
+        assert_eq!(range(7, 0.08, 0.0038).status, RangeStatus::Ok);
+        assert_eq!(range(7, 0.08, 0.0042).status, RangeStatus::Wide);
+        // D50: 0.05.
+        assert_eq!(range(6, 0.4, 0.019).status, RangeStatus::Ok);
+        assert_eq!(range(6, 0.4, 0.021).status, RangeStatus::Wide);
+        // Says no: a NaN standard deviation is never ok.
+        assert_eq!(range(2, 0.5, f64::NAN).status, RangeStatus::Wide);
+    }
+
+    #[test]
+    fn only_a_refusal_for_its_standard_deviation_is_shown_instead() {
+        let noise = |sd: Option<f64>, refused_resamples: usize| {
+            not_evaluable(
+                Quantity::T20,
+                NotEvaluable::MonteCarloNoise {
+                    value: 0.33,
+                    sd,
+                    limit: limits::DECAY_RELATIVE,
+                    resamples: RESAMPLES,
+                    refused_resamples,
+                    particle_count: ParticleCount::ScalingNotConfirmed,
+                },
+            )
+        };
+        // Refused for its standard deviation (6 % of the value): shown, wide, with that value.
+        let s = shown(2, Err(noise(Some(0.02), 0))).unwrap();
+        assert_eq!((s.value, s.sd, s.status), (0.33, 0.02, RangeStatus::Wide));
+        assert!(over_limit(2, s.value, s.sd));
+        let s = shown(2, Err(noise(Some(0.02), REFUSED_RESAMPLES_ALLOWED))).unwrap();
+        assert_eq!(s.status, RangeStatus::Wide);
+        // Too many resamples refuse it, or there is no standard deviation: still refused.
+        for e in [
+            noise(Some(0.002), REFUSED_RESAMPLES_ALLOWED + 1),
+            noise(None, 0),
+            noise(Some(f64::NAN), 0),
+        ] {
+            // (A NaN is never equal to itself: compared as text.)
+            let got = shown(2, Err(e.clone())).unwrap_err();
+            assert_eq!(format!("{got:?}"), format!("{e:?}"));
+        }
+        // Refusals not about noise stay refusals, those that carry a value included.
+        for why in [
+            NotEvaluable::RangeNotReached {
+                needed_db: -25.0,
+                reached_db: -21.0,
+            },
+            NotEvaluable::NoiseUnknown {
+                value: 0.33,
+                detail: "x".into(),
+            },
+            NotEvaluable::NoiseUncalibrated {
+                value: 0.33,
+                particles: 2_000,
+                crossings_per_particle: 1.0,
+                min_particles: 50_000,
+                max_crossings_per_particle: 2.0,
+                particles_at_least: Some(50_000),
+                receiver_radius_scale_at_most: None,
+            },
+        ] {
+            let e = not_evaluable(Quantity::T20, why);
+            assert_eq!(shown(2, Err(e.clone())), Err(e));
+        }
+        assert_eq!(
+            shown(2, Err(ParamError::NoEnergy)),
+            Err(ParamError::NoEnergy)
+        );
+        // A value judged quiet stays a value; one within the old limit may still be wide
+        // (2.5 · 2.2 % > 5 %), and over_limit tells it from a refused one.
+        let s = shown(
+            2,
+            Ok(Estimate {
+                value: 1.0,
+                sd: 0.022,
+            }),
+        )
+        .unwrap();
+        assert_eq!(s.status, RangeStatus::Wide);
+        assert!(!over_limit(2, 1.0, 0.022));
+        assert_eq!(
+            shown(
+                2,
+                Ok(Estimate {
+                    value: 1.0,
+                    sd: 0.01
+                })
+            )
+            .unwrap()
+            .status,
+            RangeStatus::Ok
+        );
+    }
+
+    /// Backlog 60: the message states the quantity actually compared with the limit. It printed
+    /// "standard deviation 0.013 ... the limit is 0.025" for a T20 of 0.33 s, a standard deviation
+    /// in seconds beside a relative limit, and read as refusing a value within it.
+    #[test]
+    fn a_noise_refusal_says_what_it_compared_with_its_limit() {
+        let t20 = |sd: f64, refused_resamples: usize| {
+            not_evaluable(
+                Quantity::T20,
+                NotEvaluable::MonteCarloNoise {
+                    value: 0.33,
+                    sd: Some(sd),
+                    limit: limits::DECAY_RELATIVE,
+                    resamples: RESAMPLES,
+                    refused_resamples,
+                    particle_count: ParticleCount::ScalingNotConfirmed,
+                },
+            )
+            .to_string()
+        };
+        let m = t20(0.013, 0);
+        assert!(m.contains("3.94 % of the value"), "{m}");
+        assert!(m.contains("above its limit of 2.5 % of the value"), "{m}");
+        assert!(!m.contains("limit is 0.025"), "{m}");
+        // Refused for its resamples, its standard deviation within the limit: says so.
+        let m = t20(0.005, 15);
+        assert!(m.contains("within its limit of 2.5 % of the value"), "{m}");
+        assert!(
+            m.contains("15 of the 200 resamples refuse it, more than the 10 allowed"),
+            "{m}"
+        );
+        // An absolute quantity's limit is in its unit.
+        let m = not_evaluable(
+            Quantity::Clarity { te_s: 0.08 },
+            NotEvaluable::MonteCarloNoise {
+                value: -1.0,
+                sd: Some(0.7),
+                limit: limits::CLARITY_DB,
+                resamples: RESAMPLES,
+                refused_resamples: 0,
+                particle_count: ParticleCount::NoStandardDeviation,
+            },
+        )
+        .to_string();
+        assert!(
+            m.contains("0.7, above its limit of 0.5 in the quantity's unit"),
+            "{m}"
+        );
     }
 }

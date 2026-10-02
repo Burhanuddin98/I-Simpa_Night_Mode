@@ -23,9 +23,10 @@ use serde::Serialize;
 pub const METHOD: &str = "edt_v2.1";
 
 /// ISO 3382-1 Annex A. Status `ok` iff the shown half-width is inside it.
-const JND: f64 = 0.05;
-/// Burhan, 2026-10-02 00:24 (PREREG-2 amendment 1).
-const Z: f64 = 2.5;
+pub const JND: f64 = 0.05;
+/// Burhan, 2026-10-02 00:24 (PREREG-2 amendment 1). Every other shown range takes it too
+/// (`params::noise::RANGE_Z`, decision-log row 37 (3)).
+pub const Z: f64 = 2.5;
 /// Schroeder samples between the ball's back and -10 dB.
 const MIN_POINTS: usize = 8;
 /// Refuse if the extrapolated unrecorded tail exceeds 2 % of S(t_-10dB).

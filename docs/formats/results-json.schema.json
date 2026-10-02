@@ -536,6 +536,22 @@
           {
             "description": "In the quantity's unit (the field name says it).",
             "properties": {
+              "hi": {
+                "description": "The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with\n`status`.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lo": {
+                "description": "The range's lower end, in the same unit: `value − 2.5·mc_sd`\n(`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "mc_sd": {
                 "description": "The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);\n`null` for a value that does not come from a Monte-Carlo histogram, such as TCR's\nanalytic references.",
                 "format": "double",
@@ -543,6 +559,17 @@
                   "number",
                   "null"
                 ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RangeStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "One of the eight parameters of an SPPS band, aggregate or per-source band\n(decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within\nthe quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB\nfor SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value\nis shown with its range rather than refused; a consumer that shows the value shows the\nrange beside it. Absent for every other value."
               },
               "value": {
                 "format": "double",
@@ -2055,6 +2082,21 @@
           "resampled_confirmed"
         ],
         "type": "object"
+      },
+      "RangeStatus": {
+        "description": "What a shown value's range says (decision-log rows 37 (3) and 39 (3)), as EDT's does\n(`params::edt::Status`): `ok` when its half-width, [`RANGE_Z`] standard deviations, is within\nthe quantity's [`jnd`], `wide` otherwise.",
+        "oneOf": [
+          {
+            "const": "ok",
+            "description": "The range is inside the difference limen.",
+            "type": "string"
+          },
+          {
+            "const": "wide",
+            "description": "The range is wider than the difference limen: the value is shown with it, not refused.",
+            "type": "string"
+          }
+        ]
       },
       "Reason": {
         "additionalProperties": false,
