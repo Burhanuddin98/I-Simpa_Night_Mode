@@ -120,6 +120,18 @@ fn cell(e: &Evaluated, digits: usize, scale: f64) -> String {
     }
 }
 
+/// The EDT cell: [`cell`], and a `*` after a value that is not validated (`Parameters::edt_validated`,
+/// decision-log row 20), so that no printed EDT is read as a tested number. A refusal has no value
+/// to mark.
+fn edt_cell(p: &report::Parameters) -> String {
+    let c = cell(&p.edt_s, 2, 1.0);
+    if p.edt_s.value().is_some() && !p.edt_validated {
+        format!("{c}*")
+    } else {
+        c
+    }
+}
+
 /// A particle count in few characters: `150k`, `2.4M`, `1.3G`.
 fn particles(n: u64) -> String {
     let n = n as f64;
@@ -184,6 +196,7 @@ fn text(rep: &Report) -> String {
              the run is outside what the noise model was calibrated on; run <count> particles \
              per source, or make the receiver radius at most <s> times this run's."
         );
+        let mut edt_marked = false;
         for r in &sp.point_receivers {
             let arrival = r
                 .arrival_s
@@ -209,11 +222,13 @@ fn text(rep: &Report) -> String {
                         )])
                 }));
             for (label, p) in rows {
+                let edt = edt_cell(p);
+                edt_marked |= edt.ends_with('*');
                 let _ = writeln!(
                     s,
                     "{label:>8} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9} {:>9}",
                     cell(&p.spl_db, 1, 1.0),
-                    cell(&p.edt_s, 2, 1.0),
+                    edt,
                     cell(&p.t20_s, 2, 1.0),
                     cell(&p.t30_s, 2, 1.0),
                     cell(&p.c50_db, 1, 1.0),
@@ -222,6 +237,13 @@ fn text(rep: &Report) -> String {
                     cell(&p.ts_s, 1, 1000.0),
                 );
             }
+        }
+        if edt_marked {
+            let _ = writeln!(
+                s,
+                "
+* EDT not yet validated: EDT v2.1 passed its held-out test for single bands of                  random-mode runs only; energetic mode and the broadband aggregate have not                  (JSON: parameters.edt_validated, parameters.edt.validation_note)"
+            );
         }
         match &sp.reference {
             ReferenceReport::Computed {

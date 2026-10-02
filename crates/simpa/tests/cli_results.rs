@@ -317,6 +317,51 @@ fn text_mode_prints_the_unvalidated_banner_and_a_row_per_band_and_receiver() {
     assert!(o.stdout.contains("TR Sab s"), "{}", o.stdout);
 }
 
+/// Finding 2 (assay): an EDT that is not validated is marked in the text table too, in its own
+/// cell and with a legend; a validated one (a single band of a Random run) is not.
+#[test]
+fn text_mode_marks_every_edt_that_is_not_validated() {
+    let rep = json(&results(&fixture(SEATS_SPPS), true));
+    let o = results(&fixture(SEATS_SPPS), false);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let (mut marked, mut plain) = (0, 0);
+    for line in o.stdout.lines() {
+        let t: Vec<&str> = line.split_whitespace().collect();
+        // A band row is "<f> Hz <spl> <edt> ..."; the aggregate row "aggregate <spl> <edt> ...".
+        let edt = match t.as_slice() {
+            [f, "Hz", _, edt, ..] if f.parse::<u32>().is_ok() => *edt,
+            ["aggregate", _, edt, ..] => *edt,
+            _ => continue,
+        };
+        let is_aggregate = t[0] == "aggregate";
+        if edt.starts_with("NE(") {
+            assert!(!edt.ends_with('*'), "{line}");
+        } else if is_aggregate {
+            assert!(edt.ends_with('*'), "an unvalidated EDT unmarked: {line}");
+            marked += 1;
+        } else {
+            assert!(!edt.ends_with('*'), "a validated EDT marked: {line}");
+            plain += 1;
+        }
+    }
+    assert!(marked > 0, "no marked aggregate EDT: {}", o.stdout);
+    // The JSON says the same beside `edt_s`.
+    for r in rep["spps"]["point_receivers"].as_array().unwrap() {
+        let a = &r["aggregate"]["parameters"];
+        assert_eq!(a["edt_validated"], false);
+        for b in r["bands"].as_array().unwrap() {
+            let p = &b["parameters"];
+            assert_eq!(p["edt_validated"], p["edt"]["validated"]);
+        }
+    }
+    assert!(
+        o.stdout.contains("* EDT not yet validated"),
+        "no legend: {}",
+        o.stdout
+    );
+    let _ = plain;
+}
+
 const EIGHT: [&str; 8] = [
     "spl_db", "edt_s", "t20_s", "t30_s", "c50_db", "c80_db", "d50", "ts_s",
 ];
@@ -371,8 +416,15 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
                         // run's carries the not-yet-validated marker.
                         let e = &b["parameters"]["edt"];
                         assert_eq!(e["method"], "edt_v2.1", "{run}");
-                        assert_eq!(e["validated"], method == Method::Random, "{run}: {e}");
-                        assert_eq!(e["validation_note"].is_string(), method != Method::Random);
+                        // A band's EDT is validated for Random only; the summed-bands aggregate's never.
+                        let single = !std::ptr::eq(b, &r["aggregate"]);
+                        let want = single && method == Method::Random;
+                        assert_eq!(e["validated"], want, "{run}: {e}");
+                        assert_eq!(
+                            b["parameters"]["edt_validated"], want,
+                            "{run}: edt_validated beside edt_s"
+                        );
+                        assert_eq!(e["validation_note"].is_string(), !want);
                         if p["value"].is_f64() {
                             assert_eq!(p["value"], e["value_s"], "{run}: {p} {e}");
                             assert!(e["status"] == "ok" || e["status"] == "wide", "{run}: {e}");

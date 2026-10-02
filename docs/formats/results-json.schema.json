@@ -1658,6 +1658,10 @@
             "$ref": "#/$defs/Evaluated",
             "description": "s."
           },
+          "edt_validated": {
+            "description": "Whether `edt_s` is a tested number: `edt.validated`, and false where there is no `edt`.\n`edt_s` itself stays a bare value for the consumers that read it, so this is its marker:\na consumer that prints or exports `edt_s` carries \"not yet validated\" wherever this is false\n(decision-log row 20).",
+            "type": "boolean"
+          },
           "spl_db": {
             "$ref": "#/$defs/Evaluated",
             "description": "dB re 20 µPa."
@@ -1683,7 +1687,8 @@
           "c50_db",
           "c80_db",
           "d50",
-          "ts_s"
+          "ts_s",
+          "edt_validated"
         ],
         "type": "object"
       },

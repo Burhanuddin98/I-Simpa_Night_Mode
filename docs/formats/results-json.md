@@ -266,8 +266,17 @@ holds `method` (`"edt_v2.1"`), `status` (`ok`: the range is inside 5 %; `wide`: 
 decision-log row 9; `refused`), `value_s`, `lo_s`, `hi_s` (absent when refused), `reason` (a
 refusal code, or the method's detail `hw=…;fit=…;noise=…;tail=…;n=…`), `arrival_s` (what the method
 was given: the source's emission delay included, rounded up to the next whole step; absent when not
-computed), `validated` and `validation_note`. **`validated` is true for random-mode runs and false
-for energetic ones** (VERDICT-2: H3 failed), whose EDT is "not yet validated"; the note says so.
+computed), `validated` and `validation_note`. **`validated` is true only for a single band of a
+random-mode run**, the one thing the held-out test covered (VERDICT-2, H1-H6). It is false for energetic
+runs (H3 failed) and for **every aggregate (summed-bands, broadband) EDT whatever the mode** ("broadband
+EDT is not covered by the held-out test"); `validation_note` says which.
+
+**The marker rule (decision-log row 20).** Only tested numbers are shown as validated; every EDT that is not
+validated carries "not yet validated" on every surface that prints or exports it. `edt_s` stays a bare
+`{"value", "mc_sd"}` because consumers read it, so its marker rides beside it: `parameters.edt_validated`
+(boolean, present on every `parameters`; true only where `edt.validated` is true, false where there is no `edt`
+object). A consumer that shows or exports `edt_s` reads `edt_validated` and marks the value when it is false.
+`simpa results` marks such a cell with `*` after the value and prints a legend; a refusal has no value to mark.
 
 #### `curvature` and `decay_curve`
 

@@ -49,8 +49,7 @@ its sha256 equals `frozen2.sha256` and the value above, runs it on every row, an
 **Tolerance:** 1e-9 relative. Reason: float order of operations. numpy sums with its own unrolled/pairwise order and
 takes `log10` from the C library; Rust sums left to right. Each operation is correctly rounded either way, so the values
 agree to a few ulps. Measured: 1.5e-15 on the 575-row fixture; **3.6e-14 over every one of the 14,800 round-2 rows
-plus the 24 crafted** (a scratch fixture, `--per-stratum 100000`, 112 MB, not committed; run with
-`EDT_FIXTURE_DIR=<dir> cargo test -p simpa-core --test edt_port`). Statuses and reasons (including frozen2's
+plus the 24 crafted** (a scratch fixture, 112 MB, not committed; reproducible from the tree, section 6). Statuses and reasons (including frozen2's
 `hw=...;fit=...;noise=...;tail=...;n=...` strings, character for character) are identical on all of them.
 
 **Delay test.** The test builds an SPPS run whose source has `delay = 0.0153 s` at `dt = 1 ms` (15.3 steps, so the
@@ -92,9 +91,9 @@ The value is still computed and shown (with the marker), not suppressed: VERDICT
   bootstrap, and `bed`, `m8_evidence.rs` and `noise_calibration.rs` measure it). It no longer reaches the results JSON.
   `report::parameters()` (public, used by those evidence tests) still returns the old `edt_s`.
 - **Aggregates:** the port is applied to the summed-bands histogram too; frozen2 was tested on single bands only, so the
-  aggregate's EDT is outside what H1-H6 covered (the aggregate is already labelled "never show as the room's value").
+  aggregate's EDT is outside what H1-H6 covered and is `validated: false` in every mode (section 6, finding 1).
 
-## 5. Gates
+## 5. Gates (of `9f47fe3`, superseded by section 7)
 
 (recorded below)
 
@@ -111,3 +110,43 @@ Run on Grace, 2026-10-02, after the last code commit (`9f47fe3`), solvers `C:\tm
 - M9 (inside m11, "prior gate: m9.ps1 in full prints M9 PASSED"): **PASS**, bindings regenerate to the same blobs.
 - msedgedriver matched WebView2; `-FetchDriver` was not needed.
 - Pre-existing, left alone: `app/src-tauri/Cargo.toml` shows modified in the worktree (line endings only); not committed.
+
+## 6. Audit findings closed (test first)
+
+Each test was written and run red against the tree at `b84295e`, then the fix made it green.
+
+**Finding 1 (BLOCKER), the summed-bands EDT read `validated: true` for Random runs.** The held-out test read single bands
+only. Red: `report.rs::the_aggregate_edt_is_not_validated_whatever_the_mode` failed at `mode 0` (Random aggregate
+`validated == true`). Fix: `edt_report(.., broadband)`; every aggregate (the receiver's and each per-source one) is
+`validated: false` with `validation_note` = "not yet validated: broadband EDT is not covered by the held-out test
+(VERDICT-2 tested single bands only)" (`EDT_BROADBAND_NOT_VALIDATED`), Random or Energetic. A single Random band is
+unchanged (true, no note). `cli_results.rs::every_band_of_the_committed_runs_...` now expects `validated` false on the
+aggregate.
+
+**Finding 2 (MAJOR), `edt_s` and the CLI table showed an unvalidated EDT unmarked.** Rule, documented in
+`docs/formats/results-json.md` (EDT paragraph): every surface that prints or exports an EDT that is not validated carries
+the marker. Schema: `parameters.edt_validated` (boolean, on every `parameters`; true only where `edt.validated` is true;
+false where there is no `edt` object, i.e. TCR and several-sources). `edt_s` is unchanged (`{"value","mc_sd"}`), so
+consumers that read it keep working; the marker rides beside it. CLI: an unvalidated EDT value gets a `*` after it
+(`edt_cell`), refusals are not marked, and a legend line "* EDT not yet validated ..." prints when any cell is marked.
+Red: `report.rs::edt_s_carries_its_marker_beside_it_on_every_surface` (Random band `edt_validated` null, not true) and
+`cli_results.rs::text_mode_marks_every_edt_that_is_not_validated` ("an unvalidated EDT unmarked: aggregate ... 0.74").
+`docs/formats/results-json.schema.json` regenerated (`results_version` stays 6: the branch is unmerged and the field is
+additive). No other reader of `edt_s` prints or exports it: the UI and Tauri app do not read the results JSON (section 1).
+
+**Finding 3 (MAJOR), full parity was not reproducible from the tree.** The scratch fixture came from
+`make_fixture.py --per-stratum 100000` and an untracked `EDT_FIXTURE_DIR`. Now an ignored test,
+`tests/edt_port.rs::full_parity_from_the_round2_inputs`, runs `tools/edt_port/make_fixture.py --per-stratum 1000000`
+on `B:\data\m8b-edtound2esults` (`inputs_{spps,ism,synth}.pkl.gz`, `rows.csv.gz`) into scratch (the script checks
+frozen2's sha256 and that frozen2's own output equals `rows.csv.gz`, then the Rust port is compared on every row); it
+prints SKIPPED and passes when the inputs are absent. Command, from the repo root:
+
+    cargo test -p simpa-core --test edt_port --release -- --ignored --nocapture full_parity
+
+(env `EDT_ROUND2_DIR`, `EDT_FULL_SCRATCH`, `PYTHON` override the results folder, scratch folder and interpreter; Python
+needs numpy.) **Run 2026-10-02: 14,824 rows (14,800 round 2 + 24 crafted), max rel diff 3.6e-14 (`synth|5|1ms|205`),
+statuses and reasons identical on all rows** (23.7 s).
+
+## 7. Gates after the audit fixes
+
+(recorded below)

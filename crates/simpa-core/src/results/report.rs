@@ -149,8 +149,8 @@ pub struct EdtReport {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arrival_s: Option<f64>,
     /// Whether the method has passed its held-out test for this run's computation method:
-    /// random yes (`docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md`, H1-H6), energetic no
-    /// (H3 failed).
+    /// a single band of a random run yes (`docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md`, H1-H6), energetic no
+    /// (H3 failed), and an aggregate never (the test read single bands).
     pub validated: bool,
     /// Why `validated` is false.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -160,6 +160,10 @@ pub struct EdtReport {
 /// The note an energetic run's EDT carries.
 pub const EDT_NOT_YET_VALIDATED: &str = "not yet validated: EDT v2.1 passed its held-out test \
 for random-mode runs only; energetic mode failed H3 (VERDICT-2, 2026-10-02)";
+
+/// The note a summed-bands (broadband) aggregate's EDT carries in every mode: the held-out test
+/// read single bands only.
+pub const EDT_BROADBAND_NOT_VALIDATED: &str = "not yet validated: broadband EDT is not covered by the held-out test (VERDICT-2 tested single bands only)";
 
 /// The eight parameters of one band (or of the aggregate).
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -184,6 +188,11 @@ pub struct Parameters {
     /// computed from a histogram: TCR, and the several-sources refusal.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edt: Option<EdtReport>,
+    /// Whether `edt_s` is a tested number: `edt.validated`, and false where there is no `edt`.
+    /// `edt_s` itself stays a bare value for the consumers that read it, so this is its marker:
+    /// a consumer that prints or exports `edt_s` carries "not yet validated" wherever this is false
+    /// (decision-log row 20).
+    pub edt_validated: bool,
 }
 
 impl Parameters {
@@ -210,6 +219,7 @@ impl Parameters {
         let refuse = |q: Quantity| Evaluated::refused(params::not_evaluable(q, why()));
         self.edt_s = refuse(Quantity::Edt);
         self.edt = None;
+        self.edt_validated = false;
         self.t20_s = refuse(Quantity::T20);
         self.t30_s = refuse(Quantity::T30);
         self.c50_db = refuse(Quantity::Clarity { te_s: 0.05 });
@@ -239,6 +249,7 @@ impl Parameters {
             d50: refuse(Quantity::Definition { te_s: 0.05 }),
             ts_s: refuse(Quantity::CentreTime),
             edt: None,
+            edt_validated: false,
         }
     }
 }
@@ -329,6 +340,7 @@ fn evaluated(
             d50: Evaluated::of_estimate(p.d50),
             ts_s: Evaluated::of_estimate(p.ts_s),
             edt: None,
+            edt_validated: false,
         },
         curvature: CurvatureReport::of(p.curvature_percent),
         crossings_per_particle: p.crossings_per_particle,
@@ -1098,7 +1110,7 @@ fn aggregate_report(
         }
     });
     let mut e = evaluated(&aggregate, arrival, &aggregate_model(&used));
-    e.set_edt(edt_report(s, &aggregate, arrival));
+    e.set_edt(edt_report(s, &aggregate, arrival, true));
     if contributing.len() > 1 {
         e.several_sources(contributing);
     }
@@ -1138,6 +1150,7 @@ fn edt_report(
     s: &SppsResults,
     series: &Result<EnergySeries, ParamError>,
     arrival: Arrival,
+    broadband: bool,
 ) -> Option<EdtReport> {
     let bins = series.as_ref().ok()?.values();
     let t_arrival = arrival_time(arrival);
@@ -1147,7 +1160,13 @@ fn edt_report(
         t_arrival,
         Some(s.receiver_crossing_s() / 2.0),
     );
-    let validated = edt::validated_for(s.computation_method);
+    // The held-out test read single bands: a summed-bands EDT is never validated.
+    let validated = !broadband && edt::validated_for(s.computation_method);
+    let note = if broadband {
+        EDT_BROADBAND_NOT_VALIDATED
+    } else {
+        EDT_NOT_YET_VALIDATED
+    };
     Some(EdtReport {
         method: edt::METHOD.into(),
         status: o.status,
@@ -1157,7 +1176,7 @@ fn edt_report(
         reason: o.reason,
         arrival_s: t_arrival,
         validated,
-        validation_note: (!validated).then(|| EDT_NOT_YET_VALIDATED.to_string()),
+        validation_note: (!validated).then(|| note.to_string()),
     })
 }
 
@@ -1186,6 +1205,7 @@ impl Evaluation {
         if let Some(r) = &r {
             self.parameters.edt_s = r.evaluated();
         }
+        self.parameters.edt_validated = r.as_ref().is_some_and(|r| r.validated);
         self.parameters.edt = r;
     }
 }
@@ -1219,7 +1239,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
         };
         let se = series_of(s, i, b.freq_hz, &b.energy, arrival);
         let mut e = evaluated(&se, arrival, &model);
-        e.set_edt(edt_report(s, &se, arrival));
+        e.set_edt(edt_report(s, &se, arrival, false));
         if contributing.len() > 1 {
             e.several_sources(&contributing);
         }
@@ -1281,7 +1301,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                 .zip(&models)
                 .map(|(((b, energy), se), model)| {
                     let mut e = evaluated(se, arrival, model);
-                    e.set_edt(edt_report(s, se, arrival));
+                    e.set_edt(edt_report(s, se, arrival, false));
                     let total_pa2: f64 = energy.iter().sum();
                     SourceBandReport {
                         freq_hz: b.freq_hz,
@@ -1714,6 +1734,7 @@ impl serde::ser::SerializeStructVariant for &mut Finder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
 
     #[derive(Serialize)]
     struct Inner {
@@ -1839,6 +1860,7 @@ mod tests {
             d50: v(),
             ts_s: v(),
             edt: None,
+            edt_validated: false,
         };
         p.several_sources(&["A", "B"]);
         assert_eq!(p.spl_db.value(), Some(1.0));
@@ -2121,5 +2143,61 @@ mod tests {
             json["bands"][0]["parameters"]["edt"]["validation_note"],
             EDT_NOT_YET_VALIDATED
         );
+    }
+    /// Finding 1 (assay): the summed-bands EDT was never in the held-out test, which read single
+    /// bands, so it is "not yet validated" in every mode, Random included.
+    #[test]
+    fn the_aggregate_edt_is_not_validated_whatever_the_mode() {
+        let arrival_s = DISTANCE_M / C;
+        let bins = decay(1500, arrival_s, 0.6);
+        for method in [0, 1] {
+            let s = edt_run(method, 0.0, bins.clone());
+            let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+            let agg = rep
+                .aggregate
+                .parameters
+                .edt
+                .as_ref()
+                .expect("aggregate EDT");
+            assert!(!agg.validated, "mode {method}");
+            let note = agg.validation_note.as_deref().expect("a note");
+            assert!(note.contains("broadband EDT is not covered by the held-out test"));
+            if method == 0 {
+                // A single Random band keeps its own validation, and says nothing of broadband.
+                let band = rep.bands[0].parameters.edt.as_ref().unwrap();
+                assert!(band.validated);
+                assert_eq!(band.validation_note, None);
+            }
+            let json = serde_json::to_value(&rep).unwrap();
+            assert_eq!(json["aggregate"]["parameters"]["edt"]["validated"], false);
+            for src in json["per_source"].as_array().into_iter().flatten() {
+                assert_eq!(src["aggregate"]["parameters"]["edt"]["validated"], false);
+            }
+        }
+    }
+
+    /// Finding 2 (assay): `edt_s` is a bare number, so the marker rides beside it as
+    /// `edt_validated`, on every Parameters that holds an EDT; true only where the held-out test
+    /// covered it (a single band of a Random run).
+    #[test]
+    fn edt_s_carries_its_marker_beside_it_on_every_surface() {
+        let bins = decay(1500, DISTANCE_M / C, 0.6);
+        let marker = |method: i32, at: &dyn Fn(&Value) -> Value| {
+            let s = edt_run(method, 0.0, bins.clone());
+            let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+            at(&serde_json::to_value(&rep).unwrap())
+        };
+        let band = |j: &Value| j["bands"][0]["parameters"]["edt_validated"].clone();
+        let agg = |j: &Value| j["aggregate"]["parameters"]["edt_validated"].clone();
+        assert_eq!(marker(0, &band), true, "Random band");
+        assert_eq!(marker(1, &band), false, "Energetic band");
+        assert_eq!(marker(0, &agg), false, "Random aggregate");
+        assert_eq!(marker(1, &agg), false, "Energetic aggregate");
+        // Never true without an EDT object: TCR's refusal and the several-sources refusal.
+        let tcr = Parameters::no_time_series("x");
+        assert!(!tcr.edt_validated);
+        let mut p = tcr;
+        p.several_sources(&["A", "B"]);
+        assert!(!p.edt_validated);
     }
 }

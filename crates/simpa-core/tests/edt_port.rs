@@ -26,10 +26,13 @@ struct Row {
 
 fn fixture() -> Vec<Row> {
     // EDT_FIXTURE_DIR points the run at a larger scratch fixture (every round-2 row).
-    let dir = std::env::var_os("EDT_FIXTURE_DIR").map_or_else(
+    load(&std::env::var_os("EDT_FIXTURE_DIR").map_or_else(
         || PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/edt_parity"),
         PathBuf::from,
-    );
+    ))
+}
+
+fn load(dir: &std::path::Path) -> Vec<Row> {
     let blob = std::fs::read(dir.join("bins.bin")).expect("bins.bin");
     let manifest = std::fs::read_to_string(dir.join("manifest.jsonl")).expect("manifest.jsonl");
     manifest
@@ -97,9 +100,15 @@ const TOLERANCE: f64 = 1e-9;
 fn every_fixture_row_equals_frozen2_in_status_reason_and_values() {
     let rows = fixture();
     assert!(rows.len() >= 500, "{} rows", rows.len());
+    parity(&rows);
+}
+
+/// Every row's status and reason equal frozen2's exactly and every value is within [`TOLERANCE`];
+/// prints the worst relative difference.
+fn parity(rows: &[Row]) {
     let mut worst: (f64, String) = (0.0, String::new());
     let mut bad = Vec::new();
-    for r in &rows {
+    for r in rows {
         let o = edt::analyse(&r.bins, r.dt, r.t_arrival, r.half_width);
         if status_name(o.status) != r.status || o.reason != r.reason {
             bad.push(format!(
@@ -138,6 +147,67 @@ fn every_fixture_row_equals_frozen2_in_status_reason_and_values() {
         worst.0,
         worst.1
     );
+}
+
+/// Full parity, every one of round 2's 14,800 rows plus the crafted ones, from the round-2 inputs
+/// themselves (`B:/data/m8b-edt/round2/results`: `inputs_{spps,ism,synth}.pkl.gz`, `rows.csv.gz`).
+/// Not part of the default run: it needs those files, Python with numpy, and ~110 MB of scratch.
+/// `tools/edt_port/make_fixture.py --per-stratum 1000000` draws every row into a scratch fixture
+/// (after checking frozen2's sha256 and that its own output equals `rows.csv.gz`), then the same
+/// comparison as above runs on it. Skips, printing why, when the inputs are not there.
+///
+/// ```text
+/// cargo test -p simpa-core --test edt_port --release -- --ignored --nocapture full_parity
+/// ```
+///
+/// Env: `EDT_ROUND2_DIR` (the results folder), `EDT_FULL_SCRATCH` (the scratch folder, kept when
+/// set, else a temp folder removed after), `PYTHON` (default `python`).
+#[test]
+#[ignore = "needs B:/data/m8b-edt/round2/results; run with --ignored"]
+fn full_parity_from_the_round2_inputs() {
+    let results = std::env::var_os("EDT_ROUND2_DIR").map_or_else(
+        || PathBuf::from("B:/data/m8b-edt/round2/results"),
+        PathBuf::from,
+    );
+    let have = |n: &str| results.join(n).is_file();
+    if !(have("rows.csv.gz")
+        && ["spps", "ism", "synth"]
+            .iter()
+            .all(|k| have(&format!("inputs_{k}.pkl.gz"))))
+    {
+        println!("SKIPPED: no round-2 inputs in {}", results.display());
+        return;
+    }
+    let kept = std::env::var_os("EDT_FULL_SCRATCH").map(PathBuf::from);
+    let out = kept
+        .clone()
+        .unwrap_or_else(|| std::env::temp_dir().join("edt_full_parity"));
+    let script =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tools/edt_port/make_fixture.py");
+    let status = std::process::Command::new(std::env::var_os("PYTHON").unwrap_or("python".into()))
+        .arg(&script)
+        .arg("--results")
+        .arg(&results)
+        .arg("--out")
+        .arg(&out)
+        .args(["--per-stratum", "1000000"])
+        .status()
+        .expect("python runs make_fixture.py");
+    assert!(status.success(), "make_fixture.py failed: {status}");
+    let rows = load(&out);
+    assert!(
+        rows.len() >= 14_800,
+        "{} rows, not every round-2 row",
+        rows.len()
+    );
+    parity(&rows);
+    println!(
+        "FULL PARITY: {} rows, statuses and reasons identical",
+        rows.len()
+    );
+    if kept.is_none() {
+        let _ = std::fs::remove_dir_all(&out);
+    }
 }
 
 #[test]
