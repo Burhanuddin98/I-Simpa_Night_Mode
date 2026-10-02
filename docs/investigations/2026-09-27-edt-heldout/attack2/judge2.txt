@@ -1,0 +1,11 @@
+c01.json: {"verdict": "plausible", "reasons": "T60 0.5-2 s and DRR 3-5.5 dB are within hard limits, and the implied diffuse volume is far below 1e8 m^3 and far above d^3."}
+c02.json: {"verdict": "plausible", "reasons": "T60 1-3 s and DRR 3-6 dB are within hard limits, and the implied volume neither exceeds 1e8 m^3 nor falls below d^3."}
+c03.json: {"verdict": "plausible", "reasons": "T60 0.4-1.5 s and DRR 2.5-5 dB are within hard limits, and the implied volume is in a physically reasonable range."}
+c04.json: {"verdict": "plausible", "reasons": "Parameters are within hard limits and diffuse-field consistent; the compound-Poisson noise with 3e6-3e7 particles per source is a valid Random-mode setting."}
+c05.json: {"verdict": "plausible", "reasons": "Parameters are within hard limits and diffuse-field consistent; the noise setting of 3e7-3e8 particles per source is valid."}
+c06.json: {"verdict": "plausible", "reasons": "T60 0.4-1.5 s and DRR 3-6 dB are within limits, and the implied volume is neither above 1e8 m^3 nor below d^3."}
+c07.json: {"verdict": "plausible", "reasons": "Parameters are within hard limits and diffuse-field consistent; a 0.2 ms step with 2-8 ms delay is a valid setup."}
+c08.json: {"verdict": "plausible", "reasons": "T60 0.5-1.5 s and DRR 2-5 dB are within limits and the implied volume is reasonable; the 0.25 ms step and 2-10 ms delay are fine."}
+c09.json: {"verdict": "plausible", "reasons": "Parameters are within hard limits and diffuse-field consistent; a 0.5-3 ms delay rounded to a 0.1 ms step is valid."}
+c10.json: {"verdict": "plausible", "reasons": "T60 and DRR are within hard limits and the implied volume is reasonable; the run length of 1.2-1.6 times T60 is not restricted by PHYSICS.md."}
+c11.json: {"verdict": "plausible", "reasons": "T60 and DRR are within hard limits and the implied volume is reasonable; the longer run of 2.5-5 times T60 is not restricted by PHYSICS.md."}

@@ -1,0 +1,11 @@
+c01.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, and the implied volume (about 31 to 1e4 m^3 even at the extreme ends) is neither above 1e8 m^3 nor below d^3."}
+c02.json: {"verdict": "plausible", "reasons": "T60 1-3 s and DRR 3-6 dB are within limits, and the implied volume fails neither diffuse-field bound."}
+c03.json: {"verdict": "plausible", "reasons": "T60 0.4-1.5 s and DRR 2.5-5 dB are within limits, and the implied volume fails neither diffuse-field bound."}
+c04.json: {"verdict": "plausible", "reasons": "T60 and DRR are within limits, the diffuse-field volume check passes, and the compound-Poisson particle counts are a valid noise setting."}
+c05.json: {"verdict": "plausible", "reasons": "T60 and DRR are within limits, the diffuse-field volume check passes, and the higher particle counts only lower the counting noise."}
+c06.json: {"verdict": "plausible", "reasons": "T60 0.4-1.5 s and DRR 3-6 dB are within limits, and the implied volume fails neither diffuse-field bound."}
+c07.json: {"verdict": "plausible", "reasons": "T60 and DRR are within limits, the volume check passes, and a 0.2 ms step with 2-8 ms source delays is a valid setting."}
+c08.json: {"verdict": "plausible", "reasons": "T60 and DRR (2-5 dB) are within limits, the volume check passes, and a 0.25 ms step with 2-10 ms delays is valid."}
+c09.json: {"verdict": "plausible", "reasons": "T60 and DRR are within limits, the volume check passes, and a 0.5-3 ms source delay is a valid start offset."}
+c10.json: {"verdict": "plausible", "reasons": "T60 and DRR are within limits, the volume check passes, and a run length of 1.2-1.6 times T60 is a valid setting."}
+c11.json: {"verdict": "plausible", "reasons": "T60 and DRR are within limits, the volume check passes, and a run length of 2.5-5 times T60 is a valid setting."}
