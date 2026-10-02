@@ -633,6 +633,8 @@ fn the_unseen_energy_bounds_the_sti_and_refuses_only_beyond_its_limit() {
     );
     assert!(e.to_string().contains("can move the STI"), "{e}");
     assert!(e.to_string().contains(&UNSEEN_LIMIT.to_string()), "{e}");
+    // The share is an estimate, and the refusal does not dress it as a proof.
+    assert!(e.to_string().contains("heuristic, not a proof"), "{e}");
     // A share that is not a number makes the band unusable.
     assert!(with(f64::NAN).male.is_err());
 }
@@ -666,4 +668,115 @@ fn the_end_of_a_response_says_whether_it_has_ended_or_how_it_still_decays() {
     ));
     // Fewer than two bins from `from`: nothing to read.
     assert_eq!(end_decay(&[1.0], dt, 0), None);
+}
+
+/// Table A.1 steps down by 0.2 dB at 100 dB, so band k-1's masking is not monotone in its level:
+/// when its given and lifted levels straddle 100 dB, the masking is highest just below 100 dB and
+/// lowest at 100 dB, neither of them an end. Male 125 Hz (MTF 0, so its own MTI stays 0 at both
+/// ends and every β term with it vanishes; 500 Hz likewise) at 99.95 dB, lifted by 0.06 dB to
+/// 100.01 dB; the only thing its lack moves is the masking of 250 Hz. The STI at 99.9999 dB and at
+/// 100.001 dB, both levels the lack allows, must lie within the range.
+#[test]
+fn the_unseen_energy_bound_holds_when_band_k_minus_1_straddles_the_100_db_step() {
+    let band = |f: i32, m: f64, speech: f64| LevelBand {
+        freq_hz: f,
+        mtf: [m; 14],
+        speech_db: Some(speech),
+        noise_db: None,
+    };
+    let levels = |l125: f64| {
+        vec![
+            band(125, 0.0, l125),
+            band(250, 0.5, 99.95),
+            band(500, 0.0, 70.0),
+            band(1000, 0.5, 70.0),
+            band(2000, 0.5, 70.0),
+            band(4000, 0.5, 70.0),
+            band(8000, 0.5, 70.0),
+        ]
+    };
+    let x = 10f64.powf(0.006) - 1.0;
+    let lack = |f: i32| if f == 125 { x } else { 0.0 };
+    let (lo, hi) = sti_unseen_range(&levels(99.95), Gender::Male, &lack).unwrap();
+    let below = sti(&levels(99.9999), Gender::Male).unwrap().value;
+    let at = sti(&levels(100.001), Gender::Male).unwrap().value;
+    assert!(lo <= below + 1e-12, "{lo} <= {below} (just below 100 dB)");
+    assert!(at <= hi + 1e-12, "{at} <= {hi} (at 100 dB)");
+}
+
+/// `n` bins: an exponential decay `e^{-13.8·t/T}` for the first `dense` bins, then the windows of
+/// `w` bins from there on each holding `counts[j]` deposits of `d`, spread evenly: a particle
+/// series whose tail is sparse.
+fn sparse_tail(t60: f64, dt: f64, dense: usize, w: usize, counts: &[usize], d: f64) -> Vec<f64> {
+    let mut e = exponential(t60, dt, dense);
+    for &c in counts {
+        let start = e.len();
+        e.resize(start + w, 0.0);
+        for j in 0..c {
+            e[start + ((j as f64 + 0.5) * w as f64 / c as f64) as usize] += d;
+        }
+    }
+    e
+}
+
+/// A 3 s decay cut at 2.4 s whose last four windows (a tenth each) are sparse particle deposits of
+/// one window-9 energy each, the decay expecting 27, 9, 3 and 1: drawn 27, 9, 2, 2 (Poisson
+/// chances 0.42 and 0.26). The last window is 40 dB below the loudest and no louder than the one
+/// before only by count noise: it decays at its end, read over the span its noise resolves.
+#[test]
+fn a_decay_whose_sparse_tail_ties_its_last_two_windows_by_count_noise_still_decays() {
+    let dt = 1e-3;
+    let w = 240;
+    let d = (0..w)
+        .map(|i| (-13.8 * (9 * w + i) as f64 * dt / 3.0).exp())
+        .sum::<f64>();
+    let e = sparse_tail(3.0, dt, 6 * w, w, &[27, 9, 2, 2], d);
+    assert_eq!(e.len(), 10 * w);
+    match end_decay(&e, dt, 0).unwrap() {
+        EndDecay::Decaying { t_s, drop_db } => {
+            assert!((2.7..6.0).contains(&t_s), "{t_s}");
+            assert!((35.0..END_DECAY_DB).contains(&drop_db), "{drop_db}");
+        }
+        other => panic!("{other:?}"),
+    }
+    // Through a receiver: 2.4 s is at least half of it, answered.
+    let bands: Vec<Band> = OCTAVES_HZ
+        .iter()
+        .map(|&f| Band {
+            freq: f,
+            energy: e.clone(),
+            unusable: None,
+            t: Some(3.0),
+        })
+        .collect();
+    let r = receiver(&bands, dt, true);
+    assert!(r.male.is_ok(), "{:?}", r.male);
+}
+
+/// A 1 s decay cut short by a plateau of sparse deposits 45 dB down (5, 4, 6, 5, 5 per window):
+/// the end ties by count noise, but over the span its noise resolves it is all but flat, and the
+/// run is far shorter than half what that span decays at. Refused, as a series cut while it does
+/// not decay must be.
+#[test]
+fn a_noisy_plateau_at_the_end_still_refuses() {
+    let dt = 1e-3;
+    let w = 200;
+    let d = 68.0 * 10f64.powf(-4.5) / 5.0;
+    let e = sparse_tail(1.0, dt, 5 * w, w, &[5, 4, 6, 5, 5], d);
+    match end_decay(&e, dt, 0).unwrap() {
+        EndDecay::Decaying { t_s, .. } => assert!(t_s > 2.0 * 2.0, "{t_s}"),
+        EndDecay::NotDecaying { .. } => {}
+        EndDecay::Ended => panic!("ended"),
+    }
+    let bands: Vec<Band> = OCTAVES_HZ
+        .iter()
+        .map(|&f| Band {
+            freq: f,
+            energy: e.clone(),
+            unusable: None,
+            t: Some(1.0),
+        })
+        .collect();
+    let r = receiver(&bands, dt, true);
+    assert!(r.male.is_err() && r.female.is_err(), "{:?}", r.male);
 }

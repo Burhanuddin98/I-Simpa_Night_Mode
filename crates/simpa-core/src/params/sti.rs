@@ -62,6 +62,12 @@ pub const UNSEEN_LIMIT: f64 = 0.003;
 /// still decaying, and the decay its end shows is one the length check must meet.
 pub const END_DECAY_DB: f64 = 60.0;
 
+/// How many standard deviations of the windows' own count noise a difference between two windows
+/// at a response's end must exceed to be read as a change of level ([`end_decay`]): 2, a one-sided
+/// chance of about 2.3% that noise alone reads as one. A series with no scatter in its windows (a
+/// noise-free one) has no margin: any rise or tie at its end is not decaying.
+pub const END_NOISE_SIGMAS: f64 = 2.0;
+
 /// The distance the speech level is given at, m (Annex J.3).
 pub const SPEECH_DISTANCE_M: f64 = 1.0;
 
@@ -270,7 +276,9 @@ pub fn sti(bands: &[LevelBand], gender: Gender) -> Result<StiValue, ParamError> 
 /// at 0.63 Hz as at every modulation frequency; the band's speech level rises by at most
 /// `10·lg(1 + x)`, which raises its own correction factor and band k+1's masking. Each `MTI_k` is
 /// then taken at both ends, and `Σα·MTI − Σβ·√(MTI·MTI)` bounded term by term: its lowest with
-/// every `α` term low and every `β` term high, its highest the other way. Refused as [`sti`] is.
+/// every `α` term low and every `β` term high, its highest the other way. The range is exact for
+/// the shares it is given; the shares a run gives are estimates ([`ReceiverBand::unseen_share`]).
+/// Refused as [`sti`] is.
 pub fn sti_unseen_range(
     bands: &[LevelBand],
     gender: Gender,
@@ -332,13 +340,6 @@ fn mtis(
             unseen(f)
         }
     };
-    let masking = |i_prev: f64| {
-        if i_prev > 0.0 {
-            i_prev * 10f64.powf(masking_db(10.0 * i_prev.log10()) / 10.0)
-        } else {
-            0.0
-        }
-    };
     let mut mti = Vec::with_capacity(gender.bands_hz().len());
     for &f in gender.bands_hz() {
         let k = octave_index(f).expect("an octave of OCTAVES_HZ");
@@ -349,25 +350,26 @@ fn mtis(
         let i_rt = 10f64.powf(RECEPTION_THRESHOLD_DB[k] / 10.0);
         // Masking by band k-1's total level, speech and noise (Table A.1); 125 Hz is not masked,
         // and a band k-1 not given (female's 125 Hz, when the run has none) masks nothing. Band
-        // k-1's unseen energy can raise its speech level; the masking is taken at both ends of
-        // that, since Table A.1 steps down by 0.2 dB at 100 dB.
-        let (am_given, am_lifted) = match k.checked_sub(1).and_then(|p| find(OCTAVES_HZ[p])) {
+        // k-1's unseen energy can raise its speech level; the masking is taken at its least and
+        // most over that range ([`masking_range`]).
+        let (am_given, am_least, am_most) = match k.checked_sub(1).and_then(|p| find(OCTAVES_HZ[p]))
+        {
             Some(prev) => {
                 let i_noise = intensity(prev.noise_db);
                 let i_speech = intensity(prev.speech_db);
-                (
-                    masking(i_speech + i_noise),
-                    masking(i_speech * (1.0 + lack(prev.freq_hz)) + i_noise),
-                )
+                let given = i_speech + i_noise;
+                let (least, most) =
+                    masking_range(given, i_speech * (1.0 + lack(prev.freq_hz)) + i_noise);
+                (masking_intensity(given), least, most)
             }
-            None => (0.0, 0.0),
+            None => (0.0, 0.0, 0.0),
         };
         let factor = match reading {
             Reading::Given => i_s / (i_s + i_n + am_given + i_rt),
-            Reading::Lowest => i_s / (i_s + i_n + am_given.max(am_lifted) + i_rt),
+            Reading::Lowest => i_s / (i_s + i_n + am_most + i_rt),
             Reading::Highest => {
                 let lifted = i_s * (1.0 + x);
-                lifted / (lifted + i_n + am_given.min(am_lifted) + i_rt)
+                lifted / (lifted + i_n + am_least + i_rt)
             }
         };
         let sum: f64 = b
@@ -385,6 +387,41 @@ fn mtis(
         mti.push((f, sum / MODULATION_HZ.len() as f64));
     }
     mti
+}
+
+/// `I_am`, the masking intensity band k-1 at total intensity `i_prev` puts on band k (Table A.1):
+/// `I_{k-1}·10^{amdB/10}`, 0 for no level.
+fn masking_intensity(i_prev: f64) -> f64 {
+    if i_prev > 0.0 {
+        i_prev * 10f64.powf(masking_db(10.0 * i_prev.log10()) / 10.0)
+    } else {
+        0.0
+    }
+}
+
+/// The least and the most masking intensity ([`masking_intensity`]) band k-1 can put on band k
+/// while its total intensity lies anywhere from `i_given` to `i_lifted` (`i_lifted ≥ i_given`).
+/// `I_am` rises with the level everywhere but at 100 dB, where Table A.1 steps down from −9.8 to
+/// −10 dB: across that step it is most just below 100 dB and least at 100 dB, neither of them an
+/// end, so a range straddling 100 dB takes both.
+fn masking_range(i_given: f64, i_lifted: f64) -> (f64, f64) {
+    let (a, b) = (masking_intensity(i_given), masking_intensity(i_lifted));
+    let (mut least, mut most) = (a.min(b), a.max(b));
+    let level = |i: f64| {
+        if i > 0.0 {
+            10.0 * i.log10()
+        } else {
+            f64::NEG_INFINITY
+        }
+    };
+    const STEP_DB: f64 = 100.0;
+    if level(i_given) < STEP_DB && level(i_lifted) >= STEP_DB {
+        let at_step = 10f64.powf(STEP_DB / 10.0);
+        // The limit from below, 0.5·100 − 59.8 = −9.8 dB, and the value at 100 dB, −10 dB.
+        most = most.max(at_step * 10f64.powf((0.5 * STEP_DB - 59.8) / 10.0));
+        least = least.min(at_step * 10f64.powf(masking_db(STEP_DB) / 10.0));
+    }
+    (least, most)
 }
 
 /// `Σ α_k·plus_k − Σ β_k·√(minus_k·minus_{k+1})` (A.5.6, Table A.3), untruncated: `plus` and
@@ -409,9 +446,12 @@ pub enum EndDecay {
     /// [`END_DECAY_DB`] below its loudest.
     Ended,
     /// Still within [`END_DECAY_DB`] of its loudest at its end, and decaying there with this
-    /// reverberation time, s; `drop_db` is how far the last window lies below the loudest.
+    /// reverberation time, s, read over the shortest span its noise resolves; `drop_db` is how far
+    /// the last window lies below the loudest.
     Decaying { t_s: f64, drop_db: f64 },
-    /// Still within [`END_DECAY_DB`] of its loudest at its end, and not decaying there.
+    /// Still within [`END_DECAY_DB`] of its loudest at its end, and not decaying there: its last
+    /// window level with or above the one before beyond their count noise (any tie, for a
+    /// noise-free series), or no earlier window louder than it beyond that noise.
     NotDecaying { drop_db: f64 },
 }
 
@@ -420,8 +460,16 @@ pub enum EndDecay {
 /// bins from `from` to the series' end, at least 1; but they end at the series' end, not at its
 /// last bin with energy, so that a response that has ended shows it. The level of the last window
 /// is compared with the loudest `w`-bin window from `from` on; within [`END_DECAY_DB`] of it, the
-/// two last windows give the decay rate at the end, `T = 60·w·dt / (10·lg(w₁/w₂))`. `None` when
-/// fewer than two bins follow `from`.
+/// decay rate at the end is read against the series' own count noise ([`window_variance`],
+/// [`END_NOISE_SIGMAS`] `= z`): when the last window `w₂` exceeds the one before, `w₁`, by at
+/// least `z·σ(w₁ − w₂)`, the response is not decaying; otherwise the rate is read over `k`
+/// windows, `T = 60·k·w·dt / (10·lg(a_k/w₂))`, `a_k` the nearest earlier window that exceeds `w₂`
+/// by more than `z·σ(a_k − w₂)`, and none is not decaying. A noise-free series reads as it did
+/// before the margin: `k = 1` whenever `w₁ > w₂`, not decaying otherwise. Sparse late particles
+/// can tie or swap the last two windows by count noise alone, 40 to 55 dB down, which a strict
+/// `w₂ ≥ w₁` read as not decaying; a series cut short (a window empty or [`END_DECAY_DB`] down
+/// still counts as ended) or flat at its end is read as before. `None` when fewer than two bins
+/// follow `from`.
 pub fn end_decay(energy: &[f64], dt: f64, from: usize) -> Option<EndDecay> {
     let v = energy.get(from..)?;
     let n = v.len();
@@ -435,22 +483,53 @@ pub fn end_decay(energy: &[f64], dt: f64, from: usize) -> Option<EndDecay> {
         acc += v[j] - v[j - w];
         loudest = loudest.max(acc);
     }
-    let w2: f64 = v[n - w..].iter().sum();
-    let w1: f64 = v[n - 2 * w..n - w].iter().sum();
+    // The window of `w` bins ending `k` windows before the series' end: its sum, and the
+    // variance of that sum from its own scatter ([`window_variance`]).
+    let window = |k: usize| {
+        let s = &v[n - (k + 1) * w..n - k * w];
+        (s.iter().sum::<f64>(), window_variance(s))
+    };
+    let (w2, var2) = window(0);
     if w2 <= 0.0 {
         return Some(EndDecay::Ended);
     }
     let drop_db = 10.0 * (loudest / w2).log10();
-    Some(if drop_db >= END_DECAY_DB {
-        EndDecay::Ended
-    } else if w2 >= w1 {
-        EndDecay::NotDecaying { drop_db }
-    } else {
-        EndDecay::Decaying {
-            t_s: 60.0 * w as f64 * dt / (10.0 * (w1 / w2).log10()),
-            drop_db,
+    if drop_db >= END_DECAY_DB {
+        return Some(EndDecay::Ended);
+    }
+    let (w1, var1) = window(1);
+    let z = END_NOISE_SIGMAS;
+    // Level or rising at the end beyond what its own noise explains: not decaying.
+    if w2 - w1 >= z * (var1 + var2).sqrt() {
+        return Some(EndDecay::NotDecaying { drop_db });
+    }
+    // The decay over the shortest span ending at the series' end that its noise resolves: the
+    // nearest earlier window louder than the last by more than `z` of their difference's noise.
+    // A noise-free series resolves at the window before the last, as it always has.
+    for k in 1..n / w {
+        let (a, var_a) = window(k);
+        if a - w2 > z * (var_a + var2).sqrt() {
+            return Some(EndDecay::Decaying {
+                t_s: 60.0 * (k * w) as f64 * dt / (10.0 * (a / w2).log10()),
+                drop_db,
+            });
         }
-    })
+    }
+    Some(EndDecay::NotDecaying { drop_db })
+}
+
+/// The variance of the sum of the bins `s`, from their own scatter: `|s|` times the bins'
+/// variance, estimated from successive differences, `Σ(v_i − v_{i−1})² / (2·(|s| − 1))` (the
+/// von Neumann estimate, which a smooth decay over the window barely enters, where the scatter
+/// about the window's mean would count the decay itself as noise). Bins of a particle series hold
+/// independent counts of deposits; a window of sparse deposits of one size gives, for `c` of them
+/// isolated, about `c·d²`, the Poisson variance. 0 for a window of one bin.
+fn window_variance(s: &[f64]) -> f64 {
+    if s.len() < 2 {
+        return 0.0;
+    }
+    let ss: f64 = s.windows(2).map(|p| (p[1] - p[0]).powi(2)).sum();
+    s.len() as f64 * ss / (2.0 * (s.len() - 1) as f64)
 }
 
 /// One octave band of a receiver, as [`receiver_sti`] takes it.
@@ -474,12 +553,13 @@ pub struct ReceiverBand<'a> {
     /// Why the band's series cannot be read honestly (refused, or not complete with nothing to
     /// bound what it lacks), if it cannot.
     pub unusable: Option<String>,
-    /// The most energy the band's series can lack, as a share of what it holds from `from` on: what
-    /// the particles alive at the run's end can still bring, what the solver's floor dropped, and
-    /// what lost particles took (`results::report` bounds each as the decay quantities do). 0 for
-    /// none. STI is refused when it can move the value by more than [`UNSEEN_LIMIT`]
-    /// ([`sti_unseen_range`]); a share that is not a finite number of at least 0 makes the band
-    /// unusable.
+    /// An estimate of the most energy the band's series can lack, as a share of what it holds from
+    /// `from` on: what the particles alive at the run's end can still bring, what the solver's
+    /// floor dropped, and what lost particles took (`results::report` estimates each as the decay
+    /// quantities do; the alive particles' part assumes they bring no more per unit of energy than
+    /// the particles alive over the decay did, a heuristic, not a proof). 0 for none. STI is
+    /// refused when it can move the value by more than [`UNSEEN_LIMIT`] ([`sti_unseen_range`]); a
+    /// share that is not a finite number of at least 0 makes the band unusable.
     pub unseen_share: f64,
 }
 
@@ -710,9 +790,12 @@ pub fn receiver_sti(dt: f64, bands: &[ReceiverBand<'_>], octave: bool) -> Receiv
                     freq_hz: worst,
                     detail: format!(
                         "the energy its series can lack (particles alive when the run ended, \
-                         dropped at the solver's floor, or lost), at most {:.3e} of what it holds \
-                         from the direct sound on, can move the STI by up to {moves:.4}, more \
-                         than {UNSEEN_LIMIT} (1/10 of the 0.03 STI is held to)",
+                         dropped at the solver's floor, or lost), estimated at up to {:.3e} of \
+                         what it holds from the direct sound on, can move the STI by up to \
+                         {moves:.4}, more than {UNSEEN_LIMIT} (1/10 of the 0.03 STI is held \
+                         to); the estimate is a heuristic, not a proof: it assumes particles \
+                         alive at the end bring no more per unit of their energy than those \
+                         alive over the decay did",
                         lack(worst)
                     ),
                 });

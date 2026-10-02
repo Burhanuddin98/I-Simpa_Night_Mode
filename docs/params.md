@@ -951,7 +951,9 @@ Per octave band k from 125 Hz to 8 kHz, for each speech:
    reception threshold's (Table A.2: 46, 27, 12, 6.5, 7.5, 8, 12 dB SPL), and
    `I_am,k = I_{k-1}·10^{amdB/10}`, the masking by **band k-1's** total level, speech plus noise
    (Table A.1: `0.5L − 65` below 63 dB, `1.8L − 146.9` to 67, `0.5L − 59.8` to 100, −10 from 100;
-   as printed, the table steps by 0.2 dB at 100 dB though its note 2 calls the scheme continuous).
+   as printed, the table steps by 0.2 dB at 100 dB though its note 2 calls the scheme continuous;
+   the unseen-energy range below takes the masking just below and at 100 dB when band k-1's level
+   may lie either side of it, since there neither end of the range is the extreme).
    125 Hz is not masked. Female speech has no 125 Hz level, so band 250 Hz is masked by 125 Hz's
    noise alone when the run has that band. The noise factor of cl. 6.1, `(1 + 10^{-SNR/10})^-1`,
    is the same factor as the noise in this denominator (A.5.3 note 2; Annex M applies the two
@@ -991,15 +993,28 @@ response (cl. 8.3).
   9,600 S1 cases the reference answers are now refused, all short double slopes at a rate ratio
   of 5). Shorter: `params_series_too_short`. A band with none of the three decay times, or whose
   response is within 60 dB of its loudest at its end and not decaying there, is refused
-  `band_refused`.
+  `band_refused`. **Count noise at the end** (`sti::END_NOISE_SIGMAS`, 2): sparse late particles
+  can tie or swap the last two windows 40 to 55 dB down by chance, which a strict `W₂ ≥ W₁` read
+  as not decaying. Each window's sum carries a variance from its own scatter, `|s|·Σ(v_i −
+  v_{i−1})²/(2(|s| − 1))` (successive differences, which a smooth decay barely enters; about
+  `c·d²` for `c` isolated deposits of `d`, the Poisson variance). The end is not decaying when
+  `W₂ − W₁ ≥ 2σ`; otherwise its rate is read over `k` windows, `T = 60·k·w·dt / (10·lg(A_k/W₂))`,
+  `A_k` the nearest earlier window more than `2σ` above `W₂`, and none found is not decaying. A
+  noise-free series reads exactly as before (`k = 1` when `W₁ > W₂`, any tie not decaying); an
+  empty last window or one 60 dB down is still ended; a noisy plateau reads a long `T` over the
+  span that resolves it and is refused for length (`tests/params_sti.rs`).
 - **What a series can lack** (`ReceiverBand::unseen_share`, `sti::sti_unseen_range`). The decay
-  quantities bound the energy the solver did not record and refuse what it can move beyond its
+  quantities estimate the energy the solver did not record and refuse what it can move beyond its
   limit; STI does the same with three parts, as a share `x` of the band's energy from the direct
   sound on: the particles still alive when the run ended, in a band not complete (their energy is
-  the room table's at the last step, `alive_end`, and what they bring per unit of it is taken as
-  at most what the particles alive brought per unit of theirs over the decay above the floor,
-  `params::floor_alive_share`: `alive_end/share`); the floor's dropped energy
-  (`10^{floor/10}/share`); and the lost particles' share. Energy `X = x·ΣE` arriving at any time
+  the room table's at the last step, `alive_end`); the floor's dropped energy
+  (`10^{floor/10}/share`); and the lost particles' share. **The alive particles' part is a
+  heuristic, not a proof:** it assumes a particle alive at the end brings no more per unit of its
+  energy than the particles alive brought per unit of theirs over the decay above the floor
+  (`params::floor_alive_share`), giving `alive_end/share`. Nothing guarantees that: a particle
+  alive late in a coupled space, or near the receiver, can bring more per unit than the average
+  did. The range below is exact for the `x` it is given; `x` itself is that estimate, and the
+  refusal says so. Energy `X = x·ΣE` arriving at any time
   changes the Schroeder sum by a phasor of modulus at most `X`, so each `m(F)` lies in
   `[(m − x)/(1 + x), (m + x)/(1 + x)]`, at 0.63 Hz, where tail energy matters most, as at every
   modulation frequency; the band's speech level rises by at most `10·lg(1 + x)` (its own factor up,

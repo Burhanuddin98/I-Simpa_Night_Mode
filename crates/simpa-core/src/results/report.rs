@@ -1311,15 +1311,18 @@ fn series_of(
     }
 }
 
-/// The most energy band `index`'s series (`freq_hz`, `energy`) can lack, as a share of what it
-/// holds from bin `from` on, for STI (`sti::ReceiverBand::unseen_share`), bounded as the decay
-/// quantities bound it (`series_of`); `None` when nothing bounds it. Three parts, summed:
+/// An estimate of the most energy band `index`'s series (`freq_hz`, `energy`) can lack, as a share
+/// of what it holds from bin `from` on, for STI (`sti::ReceiverBand::unseen_share`), taken as the
+/// decay quantities take it (`series_of`); `None` when there is nothing to estimate it from. Three
+/// parts, summed:
 /// - **Particles alive at the run's end**, when the band is not complete
 ///   ([`SppsResults::band_complete`]): the room table at the last step holds their energy, a
-///   share `alive_end` of the emitted. What a particle brings per unit of its energy is taken to be
-///   at most what the particles alive brought per unit of theirs over the decay above the floor,
-///   as the floor's bound takes it (`params::floor_alive_share` from `from`): at most
-///   `alive_end / share` of the energy from `from` on.
+///   share `alive_end` of the emitted. **A heuristic, not a proof:** what a particle alive at the
+///   end will still bring per unit of its energy is assumed to be no more than what the particles
+///   alive brought per unit of theirs over the decay above the floor, as the floor's estimate
+///   assumes (`params::floor_alive_share` from `from`), giving `alive_end / share` of the energy
+///   from `from` on. Nothing guarantees it: a particle alive late in a coupled space, or near the
+///   receiver, can bring more per unit than the average did.
 /// - **The floor**, `10^{floor/10} / share` (`EnergySeries::with_solver_floor`).
 /// - **Lost particles**, their share (`SppsResults::lost_share_following_decay` in energetic mode,
 ///   `SppsResults::lost_share` otherwise).
