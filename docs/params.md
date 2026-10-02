@@ -993,16 +993,17 @@ response (cl. 8.3).
   9,600 S1 cases the reference answers are now refused, all short double slopes at a rate ratio
   of 5). Shorter: `params_series_too_short`. A band with none of the three decay times, or whose
   response is within 60 dB of its loudest at its end and not decaying there, is refused
-  `band_refused`. **Count noise at the end** (`sti::END_NOISE_SIGMAS`, 2): sparse late particles
-  can tie or swap the last two windows 40 to 55 dB down by chance, which a strict `W₂ ≥ W₁` read
-  as not decaying. Each window's sum carries a variance from its own scatter, `|s|·Σ(v_i −
-  v_{i−1})²/(2(|s| − 1))` (successive differences, which a smooth decay barely enters; about
-  `c·d²` for `c` isolated deposits of `d`, the Poisson variance). The end is not decaying when
-  `W₂ − W₁ ≥ 2σ`; otherwise its rate is read over `k` windows, `T = 60·k·w·dt / (10·lg(A_k/W₂))`,
-  `A_k` the nearest earlier window more than `2σ` above `W₂`, and none found is not decaying. A
-  noise-free series reads exactly as before (`k = 1` when `W₁ > W₂`, any tie not decaying); an
-  empty last window or one 60 dB down is still ended; a noisy plateau reads a long `T` over the
-  span that resolves it and is refused for length (`tests/params_sti.rs`).
+  `band_refused`. **The end check is strict:** the end is not decaying whenever `W₂ ≥ W₁`, count
+  noise or not. Sparse late particles can tie or swap the last two windows 40 to 55 dB down by
+  chance, and such a band is then refused though it decays; that costs answers, never a wrong
+  number. A noise margin (`86e42f7`: not decaying only when `W₂ − W₁ ≥ 2σ` of the windows' own
+  scatter, the rate otherwise read back to the nearest window `2σ` louder) was tried and withdrawn
+  before release: it accepts a decay followed by a flat or slower tail (read as the last decaying
+  stretch's rate), a stray late deposit after an empty window (`W₁ = 0`, `W₂ = d`, `σ ≈ d`), and,
+  testing several windows at 2σ each, more than its stated 2.3 % of noise-only ends. A
+  noise-tolerant check that refuses all three is backlog 68 (`docs/v1.1-backlog.md`); the two
+  must-refuse cases are tests in `tests/params_sti.rs`, and the tie it would recover is an ignored
+  one there.
 - **What a series can lack** (`ReceiverBand::unseen_share`, `sti::sti_unseen_range`). The decay
   quantities estimate the energy the solver did not record and refuse what it can move beyond its
   limit; STI does the same with three parts, as a share `x` of the band's energy from the direct

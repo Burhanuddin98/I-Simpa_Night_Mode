@@ -62,12 +62,6 @@ pub const UNSEEN_LIMIT: f64 = 0.003;
 /// still decaying, and the decay its end shows is one the length check must meet.
 pub const END_DECAY_DB: f64 = 60.0;
 
-/// How many standard deviations of the windows' own count noise a difference between two windows
-/// at a response's end must exceed to be read as a change of level ([`end_decay`]): 2, a one-sided
-/// chance of about 2.3% that noise alone reads as one. A series with no scatter in its windows (a
-/// noise-free one) has no margin: any rise or tie at its end is not decaying.
-pub const END_NOISE_SIGMAS: f64 = 2.0;
-
 /// The distance the speech level is given at, m (Annex J.3).
 pub const SPEECH_DISTANCE_M: f64 = 1.0;
 
@@ -446,12 +440,9 @@ pub enum EndDecay {
     /// [`END_DECAY_DB`] below its loudest.
     Ended,
     /// Still within [`END_DECAY_DB`] of its loudest at its end, and decaying there with this
-    /// reverberation time, s, read over the shortest span its noise resolves; `drop_db` is how far
-    /// the last window lies below the loudest.
+    /// reverberation time, s; `drop_db` is how far the last window lies below the loudest.
     Decaying { t_s: f64, drop_db: f64 },
-    /// Still within [`END_DECAY_DB`] of its loudest at its end, and not decaying there: its last
-    /// window level with or above the one before beyond their count noise (any tie, for a
-    /// noise-free series), or no earlier window louder than it beyond that noise.
+    /// Still within [`END_DECAY_DB`] of its loudest at its end, and not decaying there.
     NotDecaying { drop_db: f64 },
 }
 
@@ -460,16 +451,11 @@ pub enum EndDecay {
 /// bins from `from` to the series' end, at least 1; but they end at the series' end, not at its
 /// last bin with energy, so that a response that has ended shows it. The level of the last window
 /// is compared with the loudest `w`-bin window from `from` on; within [`END_DECAY_DB`] of it, the
-/// decay rate at the end is read against the series' own count noise ([`window_variance`],
-/// [`END_NOISE_SIGMAS`] `= z`): when the last window `w₂` exceeds the one before, `w₁`, by at
-/// least `z·σ(w₁ − w₂)`, the response is not decaying; otherwise the rate is read over `k`
-/// windows, `T = 60·k·w·dt / (10·lg(a_k/w₂))`, `a_k` the nearest earlier window that exceeds `w₂`
-/// by more than `z·σ(a_k − w₂)`, and none is not decaying. A noise-free series reads as it did
-/// before the margin: `k = 1` whenever `w₁ > w₂`, not decaying otherwise. Sparse late particles
-/// can tie or swap the last two windows by count noise alone, 40 to 55 dB down, which a strict
-/// `w₂ ≥ w₁` read as not decaying; a series cut short (a window empty or [`END_DECAY_DB`] down
-/// still counts as ended) or flat at its end is read as before. `None` when fewer than two bins
-/// follow `from`.
+/// two last windows give the decay rate at the end, `T = 60·w·dt / (10·lg(w₁/w₂))`, and `w₂ ≥ w₁`
+/// is not decaying. The rule is strict on purpose: sparse late particles can tie or swap the last
+/// two windows by count noise alone and be refused, but a noise margin that can also accept a flat
+/// tail after a decay, or a stray deposit after an empty window, would let a wrong STI through
+/// (backlog 68). `None` when fewer than two bins follow `from`.
 pub fn end_decay(energy: &[f64], dt: f64, from: usize) -> Option<EndDecay> {
     let v = energy.get(from..)?;
     let n = v.len();
@@ -483,53 +469,22 @@ pub fn end_decay(energy: &[f64], dt: f64, from: usize) -> Option<EndDecay> {
         acc += v[j] - v[j - w];
         loudest = loudest.max(acc);
     }
-    // The window of `w` bins ending `k` windows before the series' end: its sum, and the
-    // variance of that sum from its own scatter ([`window_variance`]).
-    let window = |k: usize| {
-        let s = &v[n - (k + 1) * w..n - k * w];
-        (s.iter().sum::<f64>(), window_variance(s))
-    };
-    let (w2, var2) = window(0);
+    let w2: f64 = v[n - w..].iter().sum();
+    let w1: f64 = v[n - 2 * w..n - w].iter().sum();
     if w2 <= 0.0 {
         return Some(EndDecay::Ended);
     }
     let drop_db = 10.0 * (loudest / w2).log10();
-    if drop_db >= END_DECAY_DB {
-        return Some(EndDecay::Ended);
-    }
-    let (w1, var1) = window(1);
-    let z = END_NOISE_SIGMAS;
-    // Level or rising at the end beyond what its own noise explains: not decaying.
-    if w2 - w1 >= z * (var1 + var2).sqrt() {
-        return Some(EndDecay::NotDecaying { drop_db });
-    }
-    // The decay over the shortest span ending at the series' end that its noise resolves: the
-    // nearest earlier window louder than the last by more than `z` of their difference's noise.
-    // A noise-free series resolves at the window before the last, as it always has.
-    for k in 1..n / w {
-        let (a, var_a) = window(k);
-        if a - w2 > z * (var_a + var2).sqrt() {
-            return Some(EndDecay::Decaying {
-                t_s: 60.0 * (k * w) as f64 * dt / (10.0 * (a / w2).log10()),
-                drop_db,
-            });
+    Some(if drop_db >= END_DECAY_DB {
+        EndDecay::Ended
+    } else if w2 >= w1 {
+        EndDecay::NotDecaying { drop_db }
+    } else {
+        EndDecay::Decaying {
+            t_s: 60.0 * w as f64 * dt / (10.0 * (w1 / w2).log10()),
+            drop_db,
         }
-    }
-    Some(EndDecay::NotDecaying { drop_db })
-}
-
-/// The variance of the sum of the bins `s`, from their own scatter: `|s|` times the bins'
-/// variance, estimated from successive differences, `Σ(v_i − v_{i−1})² / (2·(|s| − 1))` (the
-/// von Neumann estimate, which a smooth decay over the window barely enters, where the scatter
-/// about the window's mean would count the decay itself as noise). Bins of a particle series hold
-/// independent counts of deposits; a window of sparse deposits of one size gives, for `c` of them
-/// isolated, about `c·d²`, the Poisson variance. 0 for a window of one bin.
-fn window_variance(s: &[f64]) -> f64 {
-    if s.len() < 2 {
-        return 0.0;
-    }
-    let ss: f64 = s.windows(2).map(|p| (p[1] - p[0]).powi(2)).sum();
-    s.len() as f64 * ss / (2.0 * (s.len() - 1) as f64)
+    })
 }
 
 /// One octave band of a receiver, as [`receiver_sti`] takes it.
