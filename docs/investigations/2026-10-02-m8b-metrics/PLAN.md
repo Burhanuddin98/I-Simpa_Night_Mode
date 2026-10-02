@@ -14,9 +14,9 @@ top of SPL. EDT is being tested now. This plan covers the other seven, in four g
 M8a bed, whose 433 runs are still on disk. **C50, C80, D50 and Ts** are tested together against the exact echogram of a box
 (image sources), closed-form decays and long high-particle SPPS truths, the same way EDT is. **SPL** is tested against the
 same exact echogram and against M8a's runs, with a fresh absolute scale; dB(A) and G follow as unit tests. **STI** goes last: the
-product has no STI code yet, upstream's has bugs, and the standard's text is not in the repo. The riskiest piece is STI, then the
-early-energy group (the product may refuse too often, as EDT's first round did). What Burhan must choose is in the last section;
-the ones that block work are 1 (the standards) and 3 (what "passes" means).
+product has no STI code yet and upstream's has bugs. Every definition is checked against ISO 3382-1:2009 and IEC 60268-16:2011
+(`STANDARDS-CHECK.md`). The riskiest piece is STI, then the early-energy group (the product may refuse too often, as EDT's first
+round did). What Burhan must choose is in the last section; the one that blocks work is 3 (what "passes" means).
 
 ## What is reused from the EDT work
 
@@ -38,7 +38,7 @@ lives in `docs/investigations/2026-10-02-m8b-metrics/harness3/`, importing `harn
 
 | Item | Rule (technical call, Jarvis; Burhan may overrule) |
 |---|---|
-| Limens | ISO 3382-1 Annex A as commonly stated, **not read** (`params.md` "Sources": paywalled): EDT/T 5 %, C 1 dB, D 0.05, Ts 10 ms, G/SPL 1 dB; STI 0.03 (IEC 60268-16, as commonly stated). The product's own refusal limit is 1/10 of each (`decay.rs:62-84`) |
+| Limens | ISO 3382-1 Table A.1, p. 12: EDT 5 %, C80 1 dB, D50 0.05, Ts 10 ms, G 1 dB. Carried over by this plan, not by the standard: T20/T30 5 % (from EDT), C50 1 dB (from C80), SPL 1 dB (from G). STI 0.03 is this plan's tolerance: IEC 60268-16:2011 states no JND, gives a repeatability of 0.02 for full STI (Annex E) and rating bands 0.04 wide (Annex F). The product's own refusal limit is 1/10 of each (`decay.rs:62-84`). Receipts: `STANDARDS-CHECK.md` |
 | answered | value with no refusal; usable = answered |
 | wrong-silent | answered and `|value - truth|` beyond the limen |
 | covered | truth within value +/- 2.5 `mc_sd` + 1/10 limen (2.5 is Burhan's Z for EDT, 2026-10-02 00:24) |
@@ -49,8 +49,8 @@ lives in `docs/investigations/2026-10-02-m8b-metrics/harness3/`, importing `harn
 
 ### T20
 
-1. **Definition.** ISO 3382-1 Annex A (not read), -5 to -25 dB, least squares on the Schroeder curve, `T = -60/slope`
-   (`params.md` "Decay times"). Tolerance: 5 % limen, bed cross-check 0.5-1 % (below).
+1. **Definition.** ISO 3382-1 cl. 6, p. 8: -5 to -25 dB, least squares on the Schroeder curve, `T = -60/slope`
+   (extrapolated); 0 dB is the total Schroeder integral (Eq. 1), not the direct peak (`params.md` "Decay times"). Tolerance: 5 % limen, bed cross-check 0.5-1 % (below).
 2. **Product / upstream.** `decay.rs:395` `decay_time(.., DecayRange::T20)`, fit over time on the log-linear curve, refusals
    `range_too_short`, `range_not_reached`, `truncated`, `unresolved`, noise (`noise.rs`, T20 is in the four calibration rounds).
    Upstream `Compute_TR_Param(5, 25)` (`projet_calculation.cpp:190-219`) fits from the first bin, so a pre-arrival silence is fitted:
@@ -72,8 +72,9 @@ lives in `docs/investigations/2026-10-02-m8b-metrics/harness3/`, importing `harn
 
 ### C50, C80, D50
 
-1. **Definition.** ISO 3382-1 (as commonly stated): `C_te = 10 lg(E[0,te] / E[te,inf))`, `D50 = E[0,50 ms] / E[0,inf)`, time zero at the
-   direct sound (`params.md` 671-690). Limens 1 dB and 0.05; test uses them, product limits 0.1 dB and 0.005
+1. **Definition.** ISO 3382-1 A.2.3, Eqs. A.10-A.12: `C_te = 10 lg(E[0,te] / E[te,inf))`, `D50 = E[0,50 ms] / E[0,inf)`,
+   `C50 = 10 lg(D50/(1-D50))`, time zero at the direct sound (A.2.1, A.3.4) (`params.md` 671-690). Arrival inside a bin, finite
+   receiver and tail handling are not in the standard; they are this plan's rules. Limens 1 dB and 0.05; test uses them, product limits 0.1 dB and 0.005
    (`decay.rs:62-84`; `2026-09-25-cd-limits/`).
 2. **Product / upstream.** `decay.rs:1382` `clarity_db`, `:1417` `definition` on one continuous Schroeder curve, arrival `Known` from
    d/c with half-width R/c (`report.rs:1074-1075`) or `Detected` (both onset-bin ends computed, refused `unresolved`), tail and missing
@@ -102,7 +103,7 @@ lives in `docs/investigations/2026-10-02-m8b-metrics/harness3/`, importing `harn
 
 ### Ts
 
-1. **Definition.** ISO 3382-1 (as commonly stated): `Ts = int(t E)/int(E)` from the arrival, `= int S du / S(0)` (`params.md` 671-690).
+1. **Definition.** ISO 3382-1 A.2.3, Eq. A.13: `Ts = int(t E)/int(E)` from the arrival, `= int S du / S(0)` (`params.md` 671-690).
    Limen 10 ms (product limit min(1 ms, 0.5 % of Ts)).
 2. **Product / upstream.** `decay.rs:1446`. Upstream `Compute_TS_Param` `:418-447` weights by the **absolute** bin label
    (`:432`): Ts includes d/c (13 ms at tutorial 1) and half a bin: -13 ms and -5 ms against ours (`params.md` 728). Both exceed the 10 ms limen
@@ -117,9 +118,12 @@ lives in `docs/investigations/2026-10-02-m8b-metrics/harness3/`, importing `harn
 ### SPL (and dB(A), G on top)
 
 1. **Definition.** `SPL = 10 lg(sum_k B_k / p0^2)`, `p0 = 20 uPa` (`params.md` 746-758): the steady-state level of a source emitting continuously, over
-   every bin; the solver's own energy, `rho c` as SPPS computes it (413.25 at 20 C). Limen 1 dB (ISO 3382-1 G, as commonly stated); product limit 0.1 dB.
+   every bin; the solver's own energy, `rho c` as SPPS computes it (413.25 at 20 C). ISO 3382-1 does not define SPL; this is the plan's own.
+   Limen 1 dB (carried over from G, Table A.1); product limit 0.1 dB.
    **dB(A)**: octave-band levels plus the A corrections of IEC 61672-1 (125 Hz -16.1, 250 -8.6, 500 -3.2, 1 k 0, 2 k +1.2, 4 k +1.0, 8 k -1.1), energy sum.
-   **G**: ISO 3382-1 `G = SPL - SPL_free(10 m)` for the same source, so `rho c` cancels: `G = SPL - [Lw + 10 lg(rho c / (4 pi 100 p0^2 W))]`.
+   **G**: ISO 3382-1 A.2.1, Eqs. A.1-A.3: `G = SPL - SPL_free(10 m)` for the same source, so `rho c` cancels: `G = SPL - [Lw + 10 lg(rho c / (4 pi 100 p0^2 W))]`.
+   The standard's `G = Lp - Lw + 31 dB` (Eq. A.9) assumes rho c ≈ 400; at 413.25 the exact constant is 30.85 dB, 0.15 dB from 31, above the
+   product's 0.1 dB limit. G is tested against the exact form; the "31" form is reported with its rho c.
 2. **Product / upstream.** `decay.rs:422` `spl_db`, `:1480`; M7 gate (c) holds the *direct field* to the exact free field (mean of 12 receiver-bands
    within 4 sd, seed spread 0.004 dB, `results.md` 509-582). **No dB(A), no G in Rust.** Upstream `dB_Sum_Param` `:220-240`; `dBa_Sum_Param` `:262-300`
    applies the **third-octave** table (`appconfig.cpp:106`, correct values) at nominal frequencies, and sums with the global row; surface
@@ -143,25 +147,26 @@ lives in `docs/investigations/2026-10-02-m8b-metrics/harness3/`, importing `harn
 
 ### STI
 
-1. **Definition.** IEC 60268-16 ed. 5 (not in the repo, not read; ed. 4 is what upstream cites): the modulation transfer function from the squared impulse
-   response (Schroeder), `m(F) = |int h^2 e^{-j2 pi F t}| / int h^2 * (1 + 10^{-SNR/10})^-1`, 14 modulation frequencies 0.63-12.5 Hz, seven
-   octave bands 125-8000 Hz, `SNR_eff` clipped to +/-15 dB, `TI = (SNR+15)/30`, `MTI` = mean over F, `STI = sum alpha_k MTI_k - sum beta_k sqrt(MTI_k MTI_k+1)`,
-   gender weights, auditory masking from the lower band and the absolute reception threshold. **Clause numbers, weights and thresholds must be
-   pinned against the licensed text** (decision 1). Limen 0.03 (commonly stated).
+1. **Definition.** IEC 60268-16:2011 (edition 4, the one upstream cites; edition 5 not read): the modulation transfer function from the squared
+   impulse response (cl. 6.1), `m(F) = |int h^2 e^{-j2 pi F t}| / int h^2 * (1 + 10^{-SNR/10})^-1`, 14 modulation frequencies 0.63-12.5 Hz (A.2.2), seven
+   octave bands 125-8000 Hz, `SNR_eff` clipped to +/-15 dB, `TI = (SNR+15)/30`, `MTI` = mean over F, `STI = sum alpha_k MTI_k - sum beta_k sqrt(MTI_k MTI_k+1)`
+   (A.5.3-A.5.5). Masking of band k by band k-1's level (Table A.1; 125 Hz unmasked), absolute reception threshold (Table A.2), weights (Table A.3),
+   speech spectrum (Table A.4): values pinned in `STANDARDS-CHECK.md`. IR at least 1.6 s and at least T/2 (cl. 6.2b, 8.3a). Tolerance 0.03 (see Limens).
 2. **Product / upstream.** **No STI in the product.** Upstream `Compute_STI_Param` `:586-790`: `if(gen='F')` at `:748` is an assignment, always true, so
    the male branch is dead and every STI uses female weights (callers pass 'M', `:947`, `:1206`); the speech level is the source's own band level, not
    the standard's speech spectrum ("TODO: compensation for speaker spectrum", `:584`); noise is an NC curve only; the masking term at `:693-703`
-   uses band k's own level (the standard as I recall it uses the lower band's: **unverified**); `Iamk[0] = 0`; float32 sums. The weights
-   in the code match ed. 4's female column as I recall it; ed. 5 not compared.
+   uses band k's own level, where the standard uses band k-1's (Table A.1): a second upstream bug; `Iamk[0] = 0` (correct: 125 Hz is unmasked);
+   float32 sums. Whether upstream's weights equal Table A.3's female column, and whether it sums a 125 Hz term the female set does not have, is
+   checked against `STANDARDS-CHECK.md` when the port is written.
 3. **Reference.** (a) Known answers: `m = 1/sqrt(1 + (2 pi F T / 13.8)^2)` for an exponential decay (exact), `STI(m=1)` at the limit = `sum alpha - sum beta = 1`
-   (male, as I recall it), `m = 0` gives 0; (b) an **independent Python implementation written from the licensed text**, hash-pinned, not from upstream, fed Synth
+   (both sexes, Table A.3), `m = 0` gives 0; (b) an **independent Python implementation written from the standard's text**, hash-pinned, not from upstream, fed Synth
    closed forms, the ISM ball echograms and SPPS K = 4 truths; (c) an upstream **bug-compatible port** as the H5 comparator (the f32 `params_upstream_gui.rs` style);
    (d) a sensitivity scan: STI vs SPL error +/-1 dB (masking depends on level) to prove SPL's limen is enough. Cannot cover: a measured room (v1.1 item 2, BRAS), STIPA.
 4. **Failure modes.** Run too short: the lowest F is 0.63 Hz (period 1.6 s), so a truncated tail lowers m at the low end; same tail refusal as EDT. Count noise: adds
    energy-response modulation at every F, biasing `m` up where the true m is small (reverberant rooms, high F): a bias, not just spread; test with seed replicates, debias
    if resolved. Coarse step: m is nearly step-insensitive (sinc(pi 12.5 dt) = 0.9998 at 1 ms, 0.990 at 10 ms) - to be measured, cheap. Level dependence: masking uses
    absolute levels, so SPL must pass first. Direct sound (DRR drives STI): M7 gate (c). Bands: 8 kHz octave must be in the run (7-band requirement), air on. Ball: negligible.
-   Needs a decision on what level and spectrum the "speech" is (decision 6). A range is not needed; a plain tolerance on `STI` with the noise `mc_sd` suffices.
+   Speech: Table A.4 spectrum at 60 dB(A) at 1 m (J.3), male shown, female computed (A.3.5 note 1); settled by the standard. A range is not needed; a plain tolerance on `STI` with the noise `mc_sd` suffices.
 5. **Test.** S1 (closed forms, J1 at 0.01 = 1/3 limen, hand-checked cases), S2 (ISM ball echograms, J1), S3 (SPPS-fresh, J2-J4), S5 (specular boxes), the sensitivity
    scan, and the bug-compatible port. Reused: all of the EDT sets. New: the product's STI code (failing-first), the independent implementation, the port.
 
@@ -218,12 +223,12 @@ EDT round 2 must finish first on the SPPS data (the scorer reads its outputs aft
 
 | # | Decision | Default | Trade-off |
 |---|---|---|---|
-| 1 | Obtain the standards: IEC 60268-16 ed. 5 (STI), ISO 3382-1:2009, IEC 61672-1 | Yes for IEC 60268-16, recommended for ISO 3382-1 | Without the text every definition is "as commonly stated" and STI's weights, masking and thresholds cannot be verified; costs money and a day |
+| 1 | The standards | **Closed 2026-10-02:** Burhan supplied ISO 3382-1:2009 and IEC 60268-16:2011 (ed. 4); every definition checked, `STANDARDS-CHECK.md` | IEC 61672-1 not in hand: dB(A) uses the published A-weighting values, cross-checked against upstream's table |
 | 2 | Limens as the pass line (C 1 dB, D 0.05, Ts 10 ms, SPL/G 1 dB, T 5 %, STI 0.03) | The limen, with 1/10 limen reported | A consultant's tolerance may be tighter than a limen; tighter pass lines mean more refusals |
 | 3 | "Passes": value or refusal, as proposed, versus EDT-style "show the range always" for every metric | Value with refusal; range only where noise-limited | A range for all is consistent with EDT (row 9) but clutters C/D and SPL, which are tight by construction |
 | 4 | "Answers often enough" threshold for C, D, Ts and STI | 90 % at 1 ms, T60 <= 3 s, R <= 0.5 m (EDT's H4) | Lower accepts more refusals (honest, annoying); higher forces a bracket rule |
 | 5 | Ball versus point receiver | Test against the ball; report ball-vs-point; refuse above 1/10 limen | Point truth is what ISO describes but is not what the solver measures |
-| 6 | STI's speech spectrum, level, noise and gender | Standard speech spectrum; male and female both computed, male shown; NC curve as background noise | Upstream uses the source's own band level; the standard's spectrum is correct but needs a new input |
+| 6 | STI's speech spectrum, level, noise and gender | **Settled by IEC 60268-16:2011:** Table A.4 spectrum, 60 dB(A) at 1 m, male shown, female computed; NC curve as background noise | Upstream uses the source's own band level; the standard's spectrum needs a new input |
 | 7 | Reuse round-2's rooms and truths for the other metrics | Yes | Cross-contamination if a later fix is tuned on them; fresh draws cost another ~28 truth runs (2 h 13 min single core) |
 | 8 | Barron-Lee revised theory | Reported only | As a gate it needs a ~1 dB tolerance and tests the theory, not the solver |
 | 9 | SPL on surface-receiver maps (upstream's 1e-12 reference) | Include in M8b: one ISM patch test and a unit test | Excluded means M12 maps show an untested number or are hidden |
@@ -243,14 +248,14 @@ Burhan's are marked **B** and wait for him (he is asleep; nothing is built past 
 
 | # | Finding | Resolution |
 |---|---|---|
-| B1 | Every definition and limen is "as commonly stated, not read"; STI's independent reference needs the licensed text | **Decision 1 becomes a gate, not a default (B).** No metric's PREREG freezes until ISO 3382-1:2009 is in hand and each limen and definition is quoted with its clause. STI work does not start until IEC 60268-16 ed. 5 is in hand; dB(A) waits for IEC 61672-1's weighting table. Harness building and failing-first tests for T20, SPL and C/D/Ts may proceed before the texts arrive. |
+| B1 | Every definition and limen was "as commonly stated, not read" | **Closed 2026-10-02.** Each definition and limen now cites its clause (`STANDARDS-CHECK.md`); every PREREG cites them. STI is built to edition 4. |
 | B2 | J1/J2 allow 0.5 % / 3 % wrong-silent on metrics that show no range, so a shown value can be silently wrong | **Decision 3 is escalated (B), with a recommendation: every noise-limited metric gets a range, as EDT has (row 9, "show the range always"), so wrong-silent keeps its meaning.** Without a range, the only honest criterion is zero rows beyond the limen, which noise makes unreachable. J5 (strictly below upstream) is a necessary condition only; every J must hold, so it never passes a metric alone. |
 | B3 | T20 and SPL's bed is the Lambert transport the solver shares a model with; SPL's 0.25 dB is from seed spread | **Primary references must be independent of SPPS's model:** the ISM exact echogram on the new specular-box bed (decision 11 is now required, not optional) and the Synth closed forms. The Lambert transport becomes a secondary, reported comparison. SPL's pass line is the limen (1 dB) or a fraction of it, not seed spread; absolute SPL is checked against the ISM energy, which shares no normalisation code with the product. |
 | M1 | Round-2 EDT rooms reused for later groups, while a failed group's fix is tuned on them | **Decision 7's default flips to "No": each group that can fail gets its own fresh draw** (about 28 truth runs each, 2 h 13 min single-core per the plan's own figure). Round-2 rooms may serve as DEV data after the EDT verdict, never as acceptance data. |
 | M2 | Ball-vs-point difference is reported, not gated | The point-receiver truth is computable from the ISM generator. For R <= 0.5 m, the ball-vs-point difference on ISM rows is gated at 1/10 limen (else the product refuses); above it the product refuses. It counts toward the pass, not only the report. |
 | M3 | J4 restricts answers-often-enough to easy cells; C/D refusal outside is unbounded, the 50/80 ms straddle bin at 5 ms has no floor | J4 stays at the product's default step (1 ms, row 11) and realistic radii (PREREG-2's precedent), and the refusal rate at 2 and 5 ms is reported per metric. A 5 ms step is refused for C50/D50 by design if the straddle bin exceeds 1/10 limen; that refusal is reported, never hidden. |
 | M4 | Maps, multi-source sums, per-band vs broadband, G's reference, A-weighting octave vs third-octave | **Decision 9's default is "include" (maps are in M12).** G is defined against ISO 3382-1's free-field 10 m reference with the source's Lw; A-weighting follows IEC 61672-1's table at the band resolution the product computes, tested against upstream's third-octave sum on the same input. Multi-source energy sums get a unit test (incoherent addition). |
-| M5 | STI masking, speech spectrum and gender rest on recollection | Covered by B1's gate and decision 6 (B). The independent Python reference is written from the standard's text by a different agent than the product's code. |
+| M5 | STI masking, speech spectrum and gender rest on recollection | Closed: pinned from the text (masking corrected to band k-1). The independent Python reference is written from the standard's text by a different agent than the product's code. |
 | m | Minors | 8 kHz octave air and bins checked in the shim tests; scattering walls covered by SPPS truths (the ISM bed is specular only); T20's "no shelf" claim checked on M8a's decays before the PREREG; the cost forecast adds the ISM echogram recompute for STI; Barron-Lee stays reported, and row 18's classical-vs-Barron choice is put to Burhan (B). The optional attacker round stays optional. |
 
-**For Burhan in the morning:** (1) buy ISO 3382-1:2009 and IEC 60268-16 ed. 5 (and IEC 61672-1), the gate for every freeze; (2) ranges for every noise-limited metric, as EDT, or another criterion; (3) decision 6 (STI spectrum and gender); (4) row 18's classical-vs-Barron choice. Everything else above proceeds on these defaults.
+**Open for Burhan:** (1) ranges for every noise-limited metric, as EDT, or another criterion; (2) row 18's classical-vs-Barron choice. Everything else above proceeds on these defaults.

@@ -160,3 +160,11 @@ Grace, 2026-10-02, tree at `2a8dfe8`, solvers `C:\tmp\nm-m8a-solvers`, `SIMPA_TE
 - `tools/gates/m10.ps1 -SolversDir C:\tmp\nm-m8a-solvers`: first run FAILED 1 check,
   `winproc::tests::dropping_the_tree_kills_the_child` (a 2 s wait on a killed child, timing under load; passes alone, three
   times, and is nothing the audit fixes touch); rerun **M10 PASSED**.
+
+## 8. Against ISO 3382-1 (read 2026-10-02)
+
+v2.1 deviates from ISO 3382-1 A.2.2 in one place. The standard fits EDT from 0 dB to -10 dB. v2.1 fits from the
+ball's back, `t_arrival + R/c`, to -10 dB, and refuses `receiver_too_large` when the ball is large enough for that
+to matter. Time zero (A.2.1), the 0 dB anchor, the -10 dB end and the least-squares fit all match. `frozen2/method.py`
+line 15 calls the fit "ISO 0/-10 dB OLS"; that line is frozen and is wrong on the start. The 5 % limen matches
+Table A.1. Receipt: `../2026-10-02-m8b-metrics/STANDARDS-CHECK.md`.
