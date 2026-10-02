@@ -295,7 +295,11 @@ def extend(e, n):
     # f can change sign more than once on a structured late echogram (a fit on the dive alone gives a spurious
     # root at a negligible tail); the root taken is the largest, found scanning down from 100 dB above the total in
     # 5 dB steps to 100 dB below the last bin's energy, then bisected to 1e-10 dB.
-    top, bottom = 10 * math.log10(S[0]) + 100.0, 10 * math.log10(S[n - 1]) - 100.0
+    # The scan's floor is the smallest positive S: a point echogram's last fine bins can be empty (S = 0 there).
+    pos = S[:n][S[:n] > 0]
+    if len(pos) == 0:
+        return np.zeros(0), dict(ok=False, t60=float('nan'), share=float('nan'))
+    top, bottom = 10 * math.log10(S[0]) + 100.0, 10 * math.log10(pos.min()) - 100.0
     ok = fit(top)[0] < 0
     hi = top
     lo = None

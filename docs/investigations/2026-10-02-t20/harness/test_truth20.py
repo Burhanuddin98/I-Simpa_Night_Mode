@@ -112,6 +112,18 @@ def test_tail_extension_is_exact_on_an_exponential_and_restores_the_truth():
     assert abs(ext / full - 1) < 1e-6, (ext, full)
 
 
+def test_tail_extension_survives_empty_last_bins():
+    # A point echogram's last fine bins can be empty (S2 crash at B00, 2026-10-02 11:45: log10(0)).
+    T = 0.8
+    k = 6 * math.log(10) / T
+    n = int(round(1.0 * T / DT))
+    e = np.exp(-k * np.arange(n) * DT) * DT
+    e[1::7] = 0.0
+    e[-5:] = 0.0
+    tail, info = t20p2.extend(e, n)
+    assert info['ok'] and abs(info['t60'] / T - 1) < 0.02, info
+
+
 def test_short_variant_scores_j1a_only():
     rows = [_row(0.31, 1, 1.0, 1.0) for _ in range(10)]
     sc = t20p2.score(rows, False, j1a_only=True)
