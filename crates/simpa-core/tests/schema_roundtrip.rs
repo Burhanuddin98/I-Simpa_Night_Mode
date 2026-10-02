@@ -1591,6 +1591,8 @@ fn cube_project() -> Project {
     // Pinned: cube.simpa was written in random mode, upstream's default, before the new-project
     // default became energetic (decision row 38); its consumers' expectations were made with it.
     solvers.spps.method = ComputationMethod::Random;
+    // And to upstream's trans_epsilon 5, for the same reason (decision row 41 made 7 the default).
+    solvers.spps.extinction_exponent = F64::new(5.0);
     Project {
         format_version: FORMAT_VERSION,
         id: ProjectId::from_u128(id(1)),

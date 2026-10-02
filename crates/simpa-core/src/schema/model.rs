@@ -960,9 +960,13 @@ impl SppsSettings {
     /// `duration_s`: Night Mode's own new-project default, a fixed 10 s, not upstream's 2 s
     /// (decision row 36, `docs/decision-log.md`), and `method`: energetic, not upstream's random
     /// (decision row 38: random mode kills particles by chance, so its decays run out of
-    /// particles long before T20 and T30 can be read). An imported legacy project with no
-    /// `duree_simulation` or `computation_method` still keeps upstream's actual 2 s and random
-    /// (`geometry::import::proj::read_solvers`); a `config.xml` always names its own method.
+    /// particles long before T20 and T30 can be read), and `extinction_exponent`: 7, not
+    /// upstream's 5 (decision row 41: at 5 energetic particles are dropped before the floor
+    /// clears T30 in most rooms, and T30 reads about 0.4 % short where it answers;
+    /// `docs/investigations/2026-10-02-eps-cost/RESULT.md`). An imported legacy project with no
+    /// `duree_simulation`, `computation_method` or `trans_epsilon` still keeps upstream's actual
+    /// 2 s, random and 5 (`geometry::import::proj::read_solvers`); a `config.xml` always names
+    /// its own method and exponent.
     pub fn for_bands(n_bands: usize) -> Self {
         SppsSettings {
             particles_per_source: 150_000,
@@ -975,7 +979,7 @@ impl SppsSettings {
             fittings: true,
             direct_field_only: false,
             transmission: true,
-            extinction_exponent: F64::new(5.0),
+            extinction_exponent: F64::new(7.0),
             receiver_radius_m: F64::new(0.31),
             sound_map: SoundMapQuantity::Intensity,
             sound_maps_per_band: true,

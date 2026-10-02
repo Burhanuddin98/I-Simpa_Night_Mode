@@ -135,6 +135,8 @@ fn teaching_room() -> Project {
     // Pinned to random for the same reason: the new-project default is energetic since
     // decision row 38, and these measured runs were made in random mode.
     p.solvers.spps.method = simpa_core::schema::ComputationMethod::Random;
+    // And to upstream's trans_epsilon 5: the default is 7 since decision row 41.
+    p.solvers.spps.extinction_exponent = F64::new(5.0);
     assert_eq!(p.bands, BandSet::default(), "octave bands, 125 Hz to 4 kHz");
     let n = p.bands.len();
     p.geometry.vertices = [
@@ -395,6 +397,9 @@ fn hall_run() -> Project {
     // project (`ImportedModel::to_project`) also starts from `Project::new`'s new-project
     // default, now 10 s (decision row 36).
     p.solvers.spps.duration_s = F64::new(2.0);
+    // And to upstream's trans_epsilon 5, not the default 7 (decision row 41): the gates time
+    // this run, and a later floor makes every particle live 7/5 as long.
+    p.solvers.spps.extinction_exponent = F64::new(5.0);
     p.check_integrity().expect("the hall run is consistent");
     p
 }

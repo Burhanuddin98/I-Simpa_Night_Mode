@@ -2718,7 +2718,17 @@ fn read_solvers(
     flag!("enc_calc", sp.fittings);
     flag!("direct_calc", sp.direct_field_only);
     flag!("trans_calc", sp.transmission);
-    real!("trans_epsilon", sp.extinction_exponent);
+    match opt_prop_real(conf, "trans_epsilon", what)? {
+        Some(v) => sp.extinction_exponent = F64::new(v),
+        None => {
+            // Upstream's own GUI default (`e_core_sppscore.h`), kept independent of
+            // `SppsSettings::for_bands`'s new-project default: a legacy project with no
+            // `trans_epsilon` gets upstream's actual 5, not Night Mode's 7 (decision row 41,
+            // `docs/decision-log.md`).
+            sp.extinction_exponent = F64::new(5.0);
+            notes.push(format!("{what}: no `trans_epsilon`, upstream's default kept"));
+        }
+    }
     real!("rayon_recepteurp", sp.receiver_radius_m);
     flag!("output_recs_byfreq", sp.sound_maps_per_band);
     flag!("output_recp_bysource", sp.echogram_per_source);
@@ -2889,6 +2899,52 @@ mod tests {
             notes
                 .iter()
                 .any(|n| n.contains("no `computation_method`, upstream's default kept")),
+            "{notes:?}"
+        );
+    }
+
+    /// Decision-log row 41: a new project drops energetic particles at 10^-7, but an imported
+    /// `.proj` keeps the file's own `trans_epsilon`, and one with none keeps upstream's actual
+    /// default, 5 (`e_core_sppscore.h`), so the note "upstream's default kept" stays true.
+    #[test]
+    fn an_imported_project_keeps_its_own_trans_epsilon_not_night_mode_s_default() {
+        let parse = |configuration: &str| {
+            let xml = format!(
+                r#"<core>
+  <spps>
+    <configuration>{configuration}</configuration>
+    <mesh_conf/>
+    <core_conf_bfreq>
+      <p name="125" value="1"/>
+      <p name="250" value="1"/>
+      <p name="500" value="1"/>
+      <p name="1000" value="1"/>
+      <p name="2000" value="1"/>
+      <p name="4000" value="1"/>
+    </core_conf_bfreq>
+  </spps>
+</core>"#
+            );
+            let doc = Document::parse(&xml).unwrap();
+            let mut notes = Vec::new();
+            let s = read_solvers(doc.root_element(), &BandSet::default(), &mut notes).unwrap();
+            (s.spps.extinction_exponent.get(), notes)
+        };
+        assert_eq!(
+            Project::new("new").solvers.spps.extinction_exponent.get(),
+            7.0,
+            "a new project's default, which an import must not take"
+        );
+        let (e, _) = parse(r#"<p name="trans_epsilon" value="5"/>"#);
+        assert_eq!(e, 5.0, "5 in the file stays 5");
+        let (e, _) = parse(r#"<p name="trans_epsilon" value="9"/>"#);
+        assert_eq!(e, 9.0);
+        let (e, notes) = parse("");
+        assert_eq!(e, 5.0, "upstream's actual default");
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("no `trans_epsilon`, upstream's default kept")),
             "{notes:?}"
         );
     }
