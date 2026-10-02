@@ -1,0 +1,4 @@
+a5d2c46f7bc6583de049533ce0362d21b82bfabd121544f1fa715ced924f4970  sti_reference.py
+
+SHA-256 of the exact bytes (LF line endings; .gitattributes here disables EOL conversion).
+Verify: sha256sum sti_reference.py
