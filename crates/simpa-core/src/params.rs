@@ -775,6 +775,46 @@ pub struct SolverFloor {
     pub alive_share: f64,
 }
 
+/// The share alive the floor's bound divides by ([`SolverFloor::alive_share`]) when the share of
+/// the emitted energy alive is known bin by bin: `alive[k]` at the end of bin `k`, and `values`
+/// the series, its onset at `from`. The bound takes what a dropped particle would still have
+/// brought, per unit of its energy, to be what the particles alive bring per unit of theirs:
+/// `S(k + 1) / alive[k]`. At the arrival that is `S(from) / alive[from]`, and in a room where every
+/// particle decays alike it stays so; in coupled rooms it grows as the particles left gather in
+/// the slow room, where the ones the floor drops are (`docs/params.md`, "A series that ended at its
+/// floor"). So the share is the smallest `alive[k] · S(from) / S(k + 1)` from `from` on, over the
+/// bins where the decay is still above the floor, `S(k + 1) ≥ 10^{floor_db/10} · S(from)`, and
+/// never more than `alive[from]`. `None` when `alive[from]` is not a positive number or
+/// `S(from)` is 0.
+pub fn floor_alive_share(values: &[f64], alive: &[f64], from: usize, floor_db: f64) -> Option<f64> {
+    let first = *alive.get(from)?;
+    if !(first.is_finite() && first > 0.0) {
+        return None;
+    }
+    // Backward sums from `from`: s[j] = S(from + j).
+    let tail = values.get(from..)?;
+    let mut s = vec![0.0; tail.len() + 1];
+    for j in (0..tail.len()).rev() {
+        s[j] = s[j + 1] + tail[j];
+    }
+    let s0 = s[0];
+    if s0 <= 0.0 {
+        return None;
+    }
+    let above = 10f64.powf(floor_db / 10.0) * s0;
+    let mut share = first;
+    for (j, &a) in alive.iter().enumerate().skip(from) {
+        let after = s.get(j - from + 1).copied().unwrap_or(0.0);
+        if after < above || after <= 0.0 {
+            break;
+        }
+        if a.is_finite() && a > 0.0 {
+            share = share.min(a * s0 / after);
+        }
+    }
+    Some(share)
+}
+
 /// One band's energy histogram: bin `k` holds the energy that arrived in `[k·dt, (k+1)·dt)`,
 /// in Pa² as SPPS writes a `.recp` value (`docs/params.md`, "The input").
 #[derive(Clone, Debug, PartialEq)]

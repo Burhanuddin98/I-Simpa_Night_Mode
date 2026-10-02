@@ -23,7 +23,7 @@
 //!   blanket refusal.
 
 use simpa_core::params::decay::{self, Arrival, DecayRange, limits};
-use simpa_core::params::{EnergySeries, NotEvaluable, codes};
+use simpa_core::params::{self, EnergySeries, NotEvaluable, codes};
 
 const C: f64 = 343.2;
 const V: f64 = 180.0;
@@ -569,6 +569,223 @@ fn nothing_a_series_ended_at_the_floor_accepts_is_further_than_its_limit_from_th
     assert!(ended >= 80, "{ended}");
     assert!(wrong.is_empty(), "{wrong:#?}");
     assert!(caught > 50, "{caught}");
+}
+
+// Coupled rooms (B2 assay): the floor's bound takes a dropped particle's future to be an average
+// particle's at the arrival, which holds when every particle decays alike. In two coupled rooms it
+// does not: late in the run the particles left are those in the slow room, and a particle dropped
+// there would still have brought far more than an average one. The model: two rooms, a particle
+// reflecting 100 times a second (with probability 0.1 per 1 ms step), losing `m` tenths of a dB at
+// each reflection in the room it is in, and passing to the other room at a reflection with
+// probability `p`. The source is in room A. Its energy is held on a 0.1 dB grid, so the expected
+// histogram, with and without the drop at −50 dB, is computed exactly by stepping the distribution
+// of (room, level). A bin in which fewer than one particle in 10⁵ is still kept is empty, as a
+// finite run's would be. The reference is the same without the drop, run to −150 dB.
+
+/// A coupled pair of rooms: the loss per reflection in tenths of a dB, the chance of passing to
+/// the other room at a reflection, and the room the receiver is in (0 = A, the source's).
+#[derive(Clone, Copy, Debug)]
+struct Coupled {
+    m: [usize; 2],
+    p: [f64; 2],
+    receiver: usize,
+}
+
+/// Reflections per 1 ms step.
+const COUPLED_Q: f64 = 0.1;
+/// Levels to the floor: 500 tenths of a dB, −50 dB, `trans_epsilon` 5.
+const COUPLED_FLOOR: usize = 500;
+
+/// The receiver's expected histogram in 10 ms bins (`DT`), `bins` long: with the drop at −50 dB
+/// per particle (and empty once fewer than 10⁻⁵ of the particles are kept), or without. With it,
+/// also the share of the emitted energy alive at the end of each bin, SPPS's room table over its
+/// sources' power (`results::spps::SppsResults::alive_share`).
+fn coupled(c: Coupled, drop: bool, bins: usize) -> (Vec<f64>, Vec<f64>) {
+    let sub = (DT / 0.001).round() as usize;
+    let level = |k: usize| 10f64.powf(-(k as f64) / 100.0);
+    let mut out = vec![0.0; bins];
+    if !drop {
+        // The expected energy in each room: the sum over levels, exactly.
+        let a = [level(c.m[0]), level(c.m[1])];
+        let mut e = [1.0, 0.0];
+        for bin in out.iter_mut() {
+            for _ in 0..sub {
+                let stay =
+                    |r: usize| (1.0 - COUPLED_Q) * e[r] + COUPLED_Q * (1.0 - c.p[r]) * a[r] * e[r];
+                let come = |r: usize| COUPLED_Q * c.p[1 - r] * a[1 - r] * e[1 - r];
+                e = [stay(0) + come(0), stay(1) + come(1)];
+                *bin += e[c.receiver] * 0.001;
+            }
+        }
+        return (out, Vec::new());
+    }
+    let energy: Vec<f64> = (0..COUPLED_FLOOR).map(level).collect();
+    let mut p = [vec![0.0; COUPLED_FLOOR], vec![0.0; COUPLED_FLOOR]];
+    p[0][0] = 1.0;
+    let mut alive = vec![0.0; bins];
+    for (bin, held) in out.iter_mut().zip(alive.iter_mut()) {
+        for _ in 0..sub {
+            let mut next = [vec![0.0; COUPLED_FLOOR], vec![0.0; COUPLED_FLOOR]];
+            for r in 0..2 {
+                for k in 0..COUPLED_FLOOR {
+                    let x = p[r][k];
+                    if x == 0.0 {
+                        continue;
+                    }
+                    next[r][k] += (1.0 - COUPLED_Q) * x;
+                    let k2 = k + c.m[r];
+                    // At or below 10^-5 of its start: dropped (`CalculationCore.cpp:305`).
+                    if k2 >= COUPLED_FLOOR {
+                        continue;
+                    }
+                    next[r][k2] += COUPLED_Q * (1.0 - c.p[r]) * x;
+                    next[1 - r][k2] += COUPLED_Q * c.p[r] * x;
+                }
+            }
+            p = next;
+            let at: f64 = p[c.receiver].iter().zip(&energy).map(|(x, e)| x * e).sum();
+            *bin += at * 0.001;
+        }
+        let kept: f64 = p.iter().flatten().sum();
+        if kept < 1e-5 {
+            *bin = 0.0;
+            break;
+        }
+        *held = p
+            .iter()
+            .map(|q| q.iter().zip(&energy).map(|(x, e)| x * e).sum::<f64>())
+            .sum();
+    }
+    (out, alive)
+}
+
+/// How far below the fast decay's start the slow one starts, dB: the reference's level from
+/// −70 to −90 dB fitted with a line and continued back to 0 s.
+fn slow_intercept_db(reference: &[f64]) -> f64 {
+    let top = reference.iter().copied().fold(0.0, f64::max);
+    let pts: Vec<(f64, f64)> = reference
+        .iter()
+        .enumerate()
+        .map(|(k, &e)| (k as f64 * DT, 10.0 * (e / top).log10()))
+        .filter(|&(_, l)| (-90.0..=-70.0).contains(&l))
+        .collect();
+    let n = pts.len() as f64;
+    let (mt, ml) = pts
+        .iter()
+        .fold((0.0, 0.0), |(a, b), &(t, l)| (a + t / n, b + l / n));
+    let (sxy, sxx) = pts.iter().fold((0.0, 0.0), |(a, b), &(t, l)| {
+        (a + (t - mt) * (l - ml), b + (t - mt) * (t - mt))
+    });
+    ml - sxy / sxx * mt
+}
+
+/// The coupled cases: the fast room A at T60 0.5 s (1.2 dB a reflection), the slow room B 2 to 12
+/// times slower, a passage between them from rare to frequent, the receiver in either room.
+fn coupled_cases() -> Vec<Coupled> {
+    let mut cases = Vec::new();
+    for mb in [6, 4, 3, 2, 1] {
+        for p in [0.002, 0.005, 0.01, 0.02, 0.03, 0.05, 0.1] {
+            for receiver in [0, 1] {
+                cases.push(Coupled {
+                    m: [12, mb],
+                    p: [p, p],
+                    receiver,
+                });
+            }
+        }
+    }
+    cases
+}
+
+/// One coupled case's five quantities against the reference's, with the floor dividing by
+/// `share`: how far each accepted one is off (`!` past its limit), `[reason]` for a refusal; and
+/// how many were accepted past their limit and accepted at all.
+fn judge(
+    want: &[(&str, Result<f64, String>)],
+    cliff: &[f64],
+    share: f64,
+) -> (String, usize, usize) {
+    let got = values(
+        &EnergySeries::complete(DT, cliff.to_vec())
+            .unwrap()
+            .with_solver_floor(-50.0, share)
+            .unwrap(),
+        0.0,
+    );
+    let (mut line, mut wrong, mut accepted) = (String::new(), 0, 0);
+    for ((name, w), (_, f)) in want.iter().zip(&got) {
+        if !matches!(*name, "T20" | "T30" | "SPL" | "C80" | "Ts") {
+            continue;
+        }
+        let Ok(w) = w else { continue };
+        match f {
+            Ok(f) => {
+                accepted += 1;
+                line += &match *name {
+                    "T20" | "T30" => format!(" {name} {:+.2}%", 100.0 * (f / w - 1.0)),
+                    "Ts" => format!(" {name} {:+.4}s", f - w),
+                    _ => format!(" {name} {:+.3}dB", f - w),
+                };
+                if !within(name, *f, *w) {
+                    line += "!";
+                    wrong += 1;
+                }
+            }
+            Err(e) => line += &format!(" {name} [{}]", e.split(':').nth(2).unwrap_or("?").trim()),
+        }
+    }
+    (line, wrong, accepted)
+}
+
+#[test]
+fn a_coupled_room_ended_at_the_floor_is_bounded_by_its_slowest_particles() {
+    let (mut ended, mut in_band) = (0, 0);
+    let (mut wrong_at_arrival, mut wrong, mut accepted) = (0, 0, 0);
+    for c in coupled_cases() {
+        let (reference, _) = coupled(c, false, 3_000);
+        let slow = slow_intercept_db(&reference);
+        let want = values(&EnergySeries::complete(DT, reference).unwrap(), 0.0);
+        let (cliff, alive) = coupled(c, true, 1_500);
+        let end = cliff.iter().rposition(|&e| e > 0.0).unwrap() + 1;
+        assert!(end < cliff.len(), "{c:?}: not ended in 15 s");
+        ended += 1;
+        if c.receiver == 0 && (-20.0..=-5.0).contains(&slow) {
+            in_band += 1;
+        }
+        // The bound as it was: the share alive at the end of the arrival's bin.
+        let (line0, w0, _) = judge(&want, &cliff, alive[0]);
+        wrong_at_arrival += w0;
+        if w0 > 0 {
+            println!("{c:?} with the share at the arrival:{line0}");
+        }
+        // As `results` gives it: the smallest over the decay above the floor.
+        let share = params::floor_alive_share(&cliff, &alive, 0, -50.0).unwrap();
+        assert!(share <= alive[0]);
+        let (line, w, a) = judge(&want, &cliff, share);
+        wrong += w;
+        accepted += a;
+        println!(
+            "T60 B/A {:>4.1}, p {:<5}, receiver {}, slow {slow:>6.1} dB, ends {:.2} s, share \
+             {:>5.1} dB (arrival {:>5.1}):{line}",
+            12.0 / c.m[1] as f64,
+            c.p[0],
+            ["A", "B"][c.receiver],
+            end as f64 * DT,
+            10.0 * share.log10(),
+            10.0 * alive[0].log10(),
+        );
+    }
+    println!(
+        "{ended} coupled cases ended at the floor, {in_band} with the receiver in the source's \
+         room and the slow decay starting 5 to 20 dB below: {accepted} values accepted, {wrong} \
+         past their limit; with the share at the arrival, {wrong_at_arrival} past their limit"
+    );
+    assert!(in_band >= 10, "{in_band}");
+    // Says no: the bound as it was accepts values past their limit here.
+    assert!(wrong_at_arrival >= 10, "{wrong_at_arrival}");
+    assert_eq!(wrong, 0);
+    // And it is not a blanket refusal.
+    assert!(accepted >= 150, "{accepted}");
 }
 
 /// Round 2's G5 (specular low hall, energetic, 150,000 particles, 1 ms, 10 s): two receiver-bands

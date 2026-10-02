@@ -1052,13 +1052,21 @@ fn series_of(
         Arrival::Detected => decay::onset(&base).index,
     };
     let base = match s.floor_db() {
-        // Nothing known alive: the smallest share, so that nothing bounds what was dropped.
-        Some(floor) => base.with_solver_floor(
-            floor,
-            s.alive_share(index, bin)
-                .filter(|a| *a > 0.0)
-                .unwrap_or(f64::MIN_POSITIVE),
-        )?,
+        // The share alive the floor divides by: the smallest over the decay above the floor, from
+        // the room table bin by bin (`params::floor_alive_share`: in coupled rooms the particles
+        // the floor drops bring more per unit of energy than those alive at the arrival). Nothing
+        // known alive: the smallest share, so that nothing bounds what was dropped.
+        Some(floor) => {
+            let alive: Vec<f64> = (0..energy.len())
+                .map(|k| s.alive_share(index, k).unwrap_or(f64::NAN))
+                .collect();
+            base.with_solver_floor(
+                floor,
+                params::floor_alive_share(energy, &alive, bin, floor)
+                    .filter(|a| *a > 0.0)
+                    .unwrap_or(f64::MIN_POSITIVE),
+            )?
+        }
         None => base,
     };
     // Energetic mode: what the lost particles would still have brought follows the decay.

@@ -374,7 +374,10 @@ gets from the arrival on:
   have brought is, on average, what that much energy brings from any particle alive then. From
   the arrival on, the receiver gets `S(onset)` from the `alive_share` of the emitted energy the
   room still held then, so the dropped particles together would have brought at most
-  `10^{floor/10} / alive_share · S(onset)`;
+  `10^{floor/10} / alive_share · S(onset)`. Since 2026-10-02 `core::results` gives the smallest
+  share over the decay rather than the one at the arrival (`params::floor_alive_share`, "A series
+  that ended at its floor", below): in coupled rooms the particles the floor drops bring more per
+  unit of energy than those alive at the arrival;
 - a lost particle would have brought what an average particle alive at the arrival brings, so `n`
   of `N` lost take at most `n / (N · alive_share)` of `S(onset)` (`core::results` computes it,
   `docs/results.md`, "Lost particles");
@@ -435,6 +438,34 @@ move (`tests/params_floor.rs`: on the reviewer's model, the 108 cases whose hist
 claimed complete, accept 528 values, none further from the model without the drop than its limit,
 and refuse 259 the series alone gets wrong; G5's own series, `tests/fixtures/params/
 g5_energetic_ended.json`, answers T20 with the value its refusal carried).
+
+**What it assumes, and the guard** (B2 assay, 2026-10-02). The floor's bound takes what a dropped
+particle would still have brought, per unit of its energy, to be what the particles alive bring
+per unit of theirs. Taken at the arrival only, that holds where every particle decays alike: one
+exponential, as the reviewer's model and a diffuse room. In coupled rooms it does not. The
+particles left late are those in the slow room, and each dropped there would still have brought
+far more than an average particle at the arrival, so the bound at the arrival is short, and since
+completeness drops the tail check, nothing else catches it. (Before completeness the tail check
+caught nothing here either: a cliff's last window falls steeply.) So `core::results` takes the
+share alive the floor divides by as the smallest `alive(k)·S(onset)/S(k + 1)` from the arrival
+on, `alive(k)` from SPPS's room table at the end of bin `k`, over the bins where the decay is still
+above the floor, `S(k + 1) ≥ 10^{floor/10}·S(onset)` (`params::floor_alive_share`); never more
+than the share at the arrival, so it only ever refuses more. In the room-per-particle limit (the
+slow room's particles gathering late) the ratio tends to what a slow-room particle brings per unit
+of energy, which is what a dropped one brings. **Tested** (`tests/params_floor.rs::
+a_coupled_room_ended_at_the_floor_is_bounded_by_its_slowest_particles`) on two coupled rooms, the
+source's at T60 0.5 s and the other 2, 3, 4, 6 and 12 times slower (the last a near plateau ended
+by the drop), passage at 0.2 to 10 % of reflections, the receiver in either room, the expected
+histogram with and without the drop at −50 dB computed exactly over (room, level): 70 cases end
+at the floor; with the share at the arrival 18 values of T20, T30, SPL, C80 and Ts are accepted
+past their limit (T30 up to 1.9 % short, T20 0.5 %, all with the receiver in the slow room); with
+the guard 257 are accepted, none past its limit. **What it costs** on round 2 (1 ms, 150,000
+particles): the bound rises by a median 0.2 dB (at most 0.5) in G1, 2.4 dB (at most 10.5) in G5,
+whose specular low hall decays unevenly, and up to 10.6 dB in G3, the coupled room. T20 answered
+in G5's three seeds: 138 of 144 (144 with the share at the arrival, 102 before completeness); in
+G3 seed 3102, 34 of 48 (47); G1 unchanged. No value that is answered moves. **Not covered:** a
+room whose slowest particles never dominate the room table above the floor, and the limit of
+the room-table ratio itself, which is a measured average, not a bound.
 
 ## Monte-Carlo noise
 
