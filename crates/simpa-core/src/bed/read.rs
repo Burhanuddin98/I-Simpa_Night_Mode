@@ -7,7 +7,8 @@
 //! value (with its `mc_sd`); or, refused `params_not_evaluable` for `monte_carlo_noise` or
 //! `noise_uncalibrated`, the refusal's own value ("the value from the series", and its `sd` when
 //! there is one): a seed's own noise refusal does not refuse the batch (D6). Any other refusal is
-//! kept as its reason, and makes the cell not judged (E6, SB-3).
+//! kept as its reason, and makes the cell not judged (E6, SB-3). T20 is read from
+//! `parameters.t20_s` by the same rules, for its own gate C (the T20 twin).
 
 use std::path::{Path, PathBuf};
 
@@ -124,6 +125,10 @@ pub struct T30 {
     /// the refusal's reason (`truncated`, `missing_moves`, ...) or its code, and is not.
     pub source: String,
 }
+
+/// One seed's T20 in one receiver-band, read from `parameters.t20_s` by exactly section 4's
+/// rules for T30 (the T20 twin of gate C).
+pub type T20 = T30;
 
 /// The sources of a judged value.
 pub const JUDGED_SOURCES: [&str; 3] = ["value", "monte_carlo_noise", "noise_uncalibrated"];
@@ -288,6 +293,8 @@ pub struct SppsRead {
     pub reference: Reference,
     /// `[receiver][band]`.
     pub curves: Vec<Vec<Option<Curve>>>,
+    /// `[receiver][band]`: `parameters.t20_s`, by section 4's rules.
+    pub t20: Vec<Vec<T20>>,
 }
 
 /// One band of a TCR run: TCR's own times and `core::params`' analytic ones (TCR's 0.163).
@@ -344,6 +351,7 @@ pub fn read_spps(folder: &Path, receivers: Option<usize>) -> Result<SppsRead, St
         None => s.point_receivers.iter().collect(),
     };
     let mut t30 = Vec::with_capacity(picked.len());
+    let mut t20 = Vec::with_capacity(picked.len());
     let mut curves = Vec::with_capacity(picked.len());
     for r in picked {
         let name = &r.label;
@@ -359,6 +367,12 @@ pub fn read_spps(folder: &Path, receivers: Option<usize>) -> Result<SppsRead, St
             r.bands
                 .iter()
                 .map(|b| T30::of(&b.parameters.t30_s))
+                .collect(),
+        );
+        t20.push(
+            r.bands
+                .iter()
+                .map(|b| T20::of(&b.parameters.t20_s))
                 .collect(),
         );
         curves.push(
@@ -384,6 +398,7 @@ pub fn read_spps(folder: &Path, receivers: Option<usize>) -> Result<SppsRead, St
         t30,
         reference: Reference::of(&s.reference),
         curves,
+        t20,
     })
 }
 
@@ -493,5 +508,44 @@ mod tests {
         assert!(!truncated.judged());
         assert_eq!(truncated.source, "truncated");
         assert_eq!(truncated.t, None);
+    }
+
+    fn refused_t20(why: NotEvaluable) -> Evaluated {
+        let e = ParamError::NotEvaluable {
+            quantity: Quantity::T20,
+            why,
+        };
+        Evaluated::NotEvaluable {
+            not_evaluable: Refused {
+                code: e.code().to_string(),
+                message: e.to_string(),
+                error: e,
+            },
+        }
+    }
+
+    /// `parameters.t20_s` is read by section 4's rules, as `t30_s` is: a noise refusal keeps its
+    /// value from the series; `range_not_reached` (or any other refusal) keeps none, and names
+    /// its reason.
+    #[test]
+    fn t20_is_read_by_section_4s_rules() {
+        let noise = T20::of(&refused_t20(NotEvaluable::MonteCarloNoise {
+            value: 0.47,
+            sd: Some(0.02),
+            limit: 0.025,
+            resamples: 200,
+            refused_resamples: 0,
+            particle_count: ParticleCount::NoStandardDeviation,
+        }));
+        assert!(noise.judged());
+        assert_eq!((noise.t, noise.mc_sd), (Some(0.47), Some(0.02)));
+        assert_eq!(noise.source, "monte_carlo_noise");
+        let short = T20::of(&refused_t20(NotEvaluable::RangeNotReached {
+            needed_db: -25.0,
+            reached_db: -21.3,
+        }));
+        assert!(!short.judged());
+        assert_eq!(short.t, None);
+        assert_eq!(short.source, "range_not_reached");
     }
 }

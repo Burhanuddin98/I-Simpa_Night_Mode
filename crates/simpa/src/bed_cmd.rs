@@ -390,6 +390,26 @@ pub fn bed_cmd(args: &[&str]) -> ExitCode {
         bytes as f64 / 1e6,
         report_path.display()
     );
+    // T20's gate C: its own verdict, which neither `report.pass` nor the exit code reads.
+    for f in &rep.t20.failures {
+        eprintln!("T20   {f}");
+    }
+    eprintln!(
+        "[{}] T20 gate C (its own verdict, not report.pass): {}: gated cells {:?}, {} failures{}",
+        now(),
+        if rep.t20.pass { "PASS" } else { "NOT PASSED" },
+        rep.t20.verdicts,
+        rep.t20.failures.len(),
+        if rep.t20.needs_extension.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "; INCONCLUSIVE, not extended (seeds {:?} not run for T20): {}",
+                bed.extension_seeds,
+                rep.t20.needs_extension.join(", ")
+            )
+        }
+    );
     if o.json {
         print!("{summary_text}");
     } else {

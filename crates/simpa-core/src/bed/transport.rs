@@ -9,6 +9,9 @@
 //! `transport_t30` with the settings of the bed file, so in the eight air-off gated cells it must
 //! reproduce [`HIGH`] to 10⁻⁹ s (E4): the transport is deterministic, and a difference is a
 //! changed transport, not noise.
+//!
+//! **Its T20**, for C's T20 twin, is read the same way over −5 to −25 dB from the same traced
+//! energy, after the T30 (no ray more); E4 holds the T30 fields alone.
 
 use std::collections::BTreeMap;
 
@@ -139,6 +142,20 @@ pub struct TransportT30 {
     #[serde(skip)]
     #[schemars(skip)]
     pub curves: Vec<(f64, Vec<[f64; 2]>)>,
+    /// The receivers' T20 (−5 to −25 dB), read from the same traced energy as `t` (no ray more):
+    /// the mean over replicas of the receivers' mean, and its standard error. `None`, with
+    /// `t20_error`, when a replica's T20 is refused; the T30 fields do not depend on it.
+    #[serde(default)]
+    pub t20: Option<f64>,
+    #[serde(default)]
+    pub t20_se: Option<f64>,
+    /// The room energy's T20 and its standard error, reported.
+    #[serde(default)]
+    pub room_t20: Option<f64>,
+    #[serde(default)]
+    pub room_t20_se: Option<f64>,
+    #[serde(default)]
+    pub t20_error: Option<String>,
 }
 
 /// Mean and standard error of the mean, as `params_kuttruff.rs` computes them.
@@ -216,6 +233,19 @@ pub fn t30(
         .collect();
     let (t, se) = mean_se(&means);
     let room_t30 = d.room_t30()?;
+    // T20 from the same `d`, after every T30 above: its refusal leaves them as they are.
+    let t20 = (|| -> Result<(f64, f64, f64, f64), ParamError> {
+        let mut per_receiver = Vec::new();
+        for (i, a) in arrivals.iter().enumerate() {
+            per_receiver.push(d.receiver_t20(i, *a)?.values);
+        }
+        let means: Vec<f64> = (0..settings.replicas as usize)
+            .map(|k| per_receiver.iter().map(|v| v[k]).sum::<f64>() / n)
+            .collect();
+        let (t, se) = mean_se(&means);
+        let room = d.room_t20()?;
+        Ok((t, se, room.mean, room.se))
+    })();
     let curves = arrivals
         .iter()
         .enumerate()
@@ -247,6 +277,11 @@ pub fn t30(
         room_se: room_t30.se,
         receivers,
         curves,
+        t20: t20.as_ref().ok().map(|x| x.0),
+        t20_se: t20.as_ref().ok().map(|x| x.1),
+        room_t20: t20.as_ref().ok().map(|x| x.2),
+        room_t20_se: t20.as_ref().ok().map(|x| x.3),
+        t20_error: t20.err().map(|e| e.to_string()),
     })
 }
 
@@ -335,6 +370,32 @@ mod tests {
             let off = (bad.room_t - h.room_t) / bad.room_se.hypot(h.room_se);
             assert!(off.abs() > 4.0, "{off}");
         }
+    }
+
+    /// The T20 twin is traced in the same pass as the T30 (no ray more): the same rays, so both
+    /// are there, the room's and the receivers', and in a diffuse box at α 0.4 they are close
+    /// (T20 and T30 differ only by the decay's curvature).
+    #[test]
+    fn the_transport_carries_t20_beside_t30_from_the_same_rays() {
+        let bed = BedFile::m8a();
+        let room = bed.room("5x4x3").unwrap();
+        let rays = bed.transport.rays_per_replica(0.4) / 64;
+        let a = t30(room, 0.4, None, &bed.transport, Some(rays)).unwrap();
+        assert_eq!(a.t20_error, None);
+        let (t20, se20) = (a.t20.unwrap(), a.t20_se.unwrap());
+        let (room20, room_se20) = (a.room_t20.unwrap(), a.room_t20_se.unwrap());
+        assert!(se20 > 0.0 && room_se20 > 0.0);
+        assert!((t20 / a.t - 1.0).abs() < 0.03, "{t20} {}", a.t);
+        assert!(
+            (room20 / a.room_t - 1.0).abs() < 0.03,
+            "{room20} {}",
+            a.room_t
+        );
+        assert_ne!(t20, a.t);
+        // The T30 fields are what they were: the same function at the same rays gives the same
+        // T30 whatever else it computes (the low-count test above holds them to HIGH).
+        let b = t30(room, 0.4, None, &bed.transport, Some(rays)).unwrap();
+        assert_eq!(a, b);
     }
 
     /// E4 before the bed runs: at the bed's own settings, the transport is the committed

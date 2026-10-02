@@ -749,6 +749,7 @@ mod tests {
                 bands: vec![],
             },
             curves: vec![],
+            t20: vec![],
         }))
     }
 

@@ -2172,7 +2172,10 @@ mod tests {
         assert!(at(0, 1.0).validated, "1 m is inside");
         let big = at(0, 1.01);
         assert!(!big.validated, "over 1 m");
-        assert_eq!(big.validation_note.as_deref(), Some(EDT_LARGE_RECEIVER_NOT_VALIDATED));
+        assert_eq!(
+            big.validation_note.as_deref(),
+            Some(EDT_LARGE_RECEIVER_NOT_VALIDATED)
+        );
         let both = at(1, 1.5).validation_note.expect("a note");
         assert!(both.contains(EDT_NOT_YET_VALIDATED), "{both}");
         assert!(both.contains(EDT_LARGE_RECEIVER_NOT_VALIDATED), "{both}");

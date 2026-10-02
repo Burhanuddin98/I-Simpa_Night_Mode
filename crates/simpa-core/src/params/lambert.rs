@@ -1206,29 +1206,35 @@ impl Decay {
     /// The T30 of the room's energy, read through `params::decay` as a series from `t = 0` (the
     /// start of the source), over the replicas. Refused as `params::decay` refuses one replica's.
     pub fn room_t30(&self) -> Result<OverReplicas, ParamError> {
-        self.over_replicas(|r| &r.room)
+        self.over_replicas(|r| &r.room, Arrival::at(0.0), DecayRange::T30)
     }
 
     /// The T30 of receiver `i`, over the replicas, with the direct sound at `arrival` (the
     /// distance from the source over `c`, spread over `R/c`).
     pub fn receiver_t30(&self, i: usize, arrival: Arrival) -> Result<OverReplicas, ParamError> {
-        let mut values = Vec::with_capacity(self.replicas.len());
-        for r in &self.replicas {
-            let s = EnergySeries::new(self.time_step_s, r.receivers[i].clone())?;
-            values.push(decay::decay_time(&s, arrival, DecayRange::T30)?.t_s);
-        }
-        let (mean, se) = mean_se(&values);
-        Ok(OverReplicas { mean, se, values })
+        self.over_replicas(|r| &r.receivers[i], arrival, DecayRange::T30)
+    }
+
+    /// [`Decay::room_t30`]'s twin over −5 to −25 dB, from the same traced energy.
+    pub fn room_t20(&self) -> Result<OverReplicas, ParamError> {
+        self.over_replicas(|r| &r.room, Arrival::at(0.0), DecayRange::T20)
+    }
+
+    /// [`Decay::receiver_t30`]'s twin over −5 to −25 dB, from the same traced energy.
+    pub fn receiver_t20(&self, i: usize, arrival: Arrival) -> Result<OverReplicas, ParamError> {
+        self.over_replicas(|r| &r.receivers[i], arrival, DecayRange::T20)
     }
 
     fn over_replicas(
         &self,
         series: impl Fn(&DecayReplica) -> &Vec<f64>,
+        arrival: Arrival,
+        range: DecayRange,
     ) -> Result<OverReplicas, ParamError> {
         let mut values = Vec::with_capacity(self.replicas.len());
         for r in &self.replicas {
             let s = EnergySeries::new(self.time_step_s, series(r).clone())?;
-            values.push(decay::decay_time(&s, Arrival::at(0.0), DecayRange::T30)?.t_s);
+            values.push(decay::decay_time(&s, arrival, range)?.t_s);
         }
         let (mean, se) = mean_se(&values);
         Ok(OverReplicas { mean, se, values })
@@ -1360,6 +1366,59 @@ pub fn decay(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A [`Decay`] of two identical replicas whose room and receiver energy per 1 ms bin, for
+    /// 8 s, is `a1·e^(−13.8·t/t1) + a2·e^(−13.8·t/t2)` (13.8 = 6 ln 10: `t1`, `t2` are the
+    /// slopes' decay times).
+    fn two_slopes(a1: f64, t1: f64, a2: f64, t2: f64) -> Decay {
+        let dt = 0.001;
+        let k = 6.0 * std::f64::consts::LN_10;
+        let e: Vec<f64> = (0..8000)
+            .map(|i| {
+                let t = (i as f64 + 0.5) * dt;
+                a1 * (-k * t / t1).exp() + a2 * (-k * t / t2).exp()
+            })
+            .collect();
+        let r = DecayReplica {
+            room: e.clone(),
+            receivers: vec![e],
+        };
+        Decay {
+            time_step_s: dt,
+            replicas: vec![r.clone(), r],
+        }
+    }
+
+    /// The transport's T20 is the T30's twin, from the same traced energy: on one exponential
+    /// they are the same decay time; on a double slope (a fast decay, then a slower one 11 dB
+    /// down in the Schroeder curve) T20 sits on the fast part and T30 reaches further into the
+    /// slow one, so T20 < T30.
+    #[test]
+    fn t20_is_t30_on_one_exponential_and_shorter_on_a_double_slope() {
+        let one = two_slopes(1.0, 1.0, 0.0, 1.0);
+        let a = Arrival::at(0.0);
+        let (t20, t30) = (
+            one.receiver_t20(0, a).unwrap(),
+            one.receiver_t30(0, a).unwrap(),
+        );
+        assert!((t20.mean - 1.0).abs() < 1e-3, "{t20:?}");
+        assert!((t20.mean / t30.mean - 1.0).abs() < 1e-4, "{t20:?} {t30:?}");
+        let (r20, r30) = (one.room_t20().unwrap(), one.room_t30().unwrap());
+        assert!((r20.mean / r30.mean - 1.0).abs() < 1e-4, "{r20:?} {r30:?}");
+        assert_eq!(t20.values.len(), 2);
+
+        let double = two_slopes(1.0, 0.5, 0.01, 2.0);
+        let (t20, t30) = (
+            double.receiver_t20(0, a).unwrap(),
+            double.receiver_t30(0, a).unwrap(),
+        );
+        assert!(t20.mean < t30.mean, "{t20:?} {t30:?}");
+        assert!(t30.mean / t20.mean > 1.1, "{t20:?} {t30:?}");
+        // Both between the two slopes' times.
+        assert!(t20.mean > 0.5 && t30.mean < 2.0, "{t20:?} {t30:?}");
+        let (r20, r30) = (double.room_t20().unwrap(), double.room_t30().unwrap());
+        assert!(r20.mean < r30.mean, "{r20:?} {r30:?}");
+    }
 
     /// The literal of [`FreePaths`]' `compile_fail` example, character for character: it compiles
     /// here, inside the module, so the example fails outside it only because the fields are
