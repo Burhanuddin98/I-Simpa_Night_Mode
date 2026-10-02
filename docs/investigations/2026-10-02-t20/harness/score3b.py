@@ -1,4 +1,4 @@
-"""T20 part 3b: round 2's SPPS rooms G1-G7 (../PREREG-3B.md, frozen). Scores the product's `parameters.t20_s`
+"""T20 part 3b: round 2's SPPS rooms G1-G7 (../PREREG-3B.md, frozen; ../ADDENDUM-3B-1.md). Scores the product's `parameters.t20_s`
 on round 2's 144 tested runs against the K = 4 truth runs of each room.
 
   python -B score3b.py --out OUT_DIR [--simpa EXE] [--solvers DIR] [--data-root DIR] [--only RUN_ID]
@@ -12,14 +12,18 @@ Truth: truth20.t20 (-5/-25 dB, 0 dB the total energy, the direct sound included)
 truth histograms, bin by bin to the shortest; the direct sound split as round 2 split it (truth.split: the bins
 overlapping [t_arr - h, t_arr + h), t_arr and h = R/c from the first truth run's report; a blocked receiver has no
 direct sound and t is its first bin with energy). Truth se: statistics.stdev of the 4 single-run T20s / sqrt(4). A
-row whose se / truth exceeds 0.5 %, or whose truth has no fit, leaves the denominators and is counted.
+row whose se / truth exceeds the rule's limit, or whose truth has no fit, leaves the denominators and is counted.
 Value: `simpa results --json <run folder>` (the frozen build), spps.point_receivers[r].bands[b].parameters.t20_s.
 Only an Evaluated::Value ({value, mc_sd}) is answered; any refusal, noise refusals included, is unanswered and
 counted by its `why` (the bed's reading, bed/read.rs), else its `code`.
-Covered: |truth - value| <= Z*mc_sd + 0.005*value (Z = 2.5; no mc_sd: the 0.5 % term alone, counted). Wrong-silent:
-answered, not covered, |value/truth - 1| > 5 %.
-J2 per mode: coverage >= 90 % and wrong-silent <= 3 % of answered rows. J3 per mode: no room x receiver x step with
->= 20 answered rows has wrong-silent > 10 %. J4 per mode: >= 90 % of rows answered at 1 ms, design T60 <= 3.2 s,
+Two rules, every row scored under both (ADDENDUM-3B-1 item 1):
+- gated: truth-se limit 1.0 %; covered |truth - value| <= Z*sqrt(mc_sd^2 + se^2) + 0.005*value. More than 25 % of
+  rows excluded at this limit makes the verdict INCONCLUSIVE.
+- prereg (PREREG-3B as written, reported beside it): limit 0.5 %; covered |truth - value| <= Z*mc_sd + 0.005*value.
+Z = 2.5; no mc_sd: its term is 0, counted. Wrong-silent (both): answered, not covered, |value/truth - 1| > 5 %.
+J2 per mode: coverage >= 90 % and wrong-silent <= 3 % of answered rows. J3 per mode (ADDENDUM-3B-1 item 2): no
+room x step (receivers pooled) with >= 20 answered rows has wrong-silent > 10 %; the worst room x receiver x step
+is reported. J4 per mode: >= 90 % of rows answered at 1 ms, design T60 <= 3.2 s,
 R <= 0.5 m (every row in that filter, truth-excluded ones included: answering does not depend on the truth).
 --only RUN_ID scores that one tested run against its room's truths and labels everything SMOKE (no verdict).
 """
@@ -57,7 +61,12 @@ DATA_ROOT = round2.DATA_ROOT                                            # B:\dat
 Z = 2.5
 Z_SENSITIVITY = (2.0, 3.0)
 JND = 0.05
-TOL = 0.005                     # 1/10 JND: the covered allowance and the truth-se limit
+TOL = 0.005                     # 1/10 JND: the covered allowance (and PREREG-3B's truth-se limit)
+# ADDENDUM-3B-1 item 1: the gated rule (truth-se limit 1.0 %, both uncertainties in the range) and PREREG-3B's
+# original rule (se <= 0.5 %, the product's mc_sd alone), scored side by side on every row.
+GATED = dict(name='gated', se_limit=0.010, truth_se_in_range=True)
+PREREG_RULE = dict(name='prereg', se_limit=0.005, truth_se_in_range=False)
+INCONCLUSIVE_EXCLUDED = 0.25    # ADDENDUM-3B-1: > 25 % of rows excluded at the 1.0 % limit -> INCONCLUSIVE
 K = 4
 J2_COVERAGE = 0.90
 J2_WRONG_SILENT = 0.03
@@ -228,8 +237,10 @@ def product_t20(folder, simpa, solvers):
 
 
 # ---- the rows -------------------------------------------------------------------------------------------------------
-def covered(value, mc_sd, truth, z=Z):
-    return abs(truth - value) <= z * (mc_sd or 0.0) + TOL * value
+def covered(value, mc_sd, truth, z=Z, truth_se=None):
+    """|truth - value| <= z*sqrt(mc_sd^2 + truth_se^2) + 0.5 %*value; truth_se None: PREREG-3B's z*mc_sd."""
+    sd = math.hypot(mc_sd or 0.0, truth_se or 0.0)
+    return abs(truth - value) <= z * sd + TOL * value
 
 
 def make_rows(run, prod, truths, geom):
@@ -257,24 +268,25 @@ def make_rows(run, prod, truths, geom):
     return rows
 
 
-def classify(row, z=Z):
+def classify(row, z=Z, rule=GATED):
     """Adds `status` (excluded_truth_nan / excluded_truth_uncertain / unanswered / answered) and, for answered rows,
-    err, covered, wrong_silent, wide and covered at each sensitivity Z."""
+    err, covered, wrong_silent, wide and covered at each sensitivity Z, under `rule` (GATED or PREREG_RULE)."""
     t, se = row['truth'], row['truth_se']
+    rse = se if rule['truth_se_in_range'] else None
     if t is None or not math.isfinite(t) or not t > 0:
         row['status'] = 'excluded_truth_nan'
-    elif se is None or not math.isfinite(se) or se / t > TOL:
+    elif se is None or not math.isfinite(se) or se / t > rule['se_limit']:
         row['status'] = 'excluded_truth_uncertain'
     elif row['value'] is None:
         row['status'] = 'unanswered'
     else:
         row['status'] = 'answered'
         row['err'] = row['value'] / t - 1.0
-        row['covered'] = covered(row['value'], row['mc_sd'], t, z)
+        row['covered'] = covered(row['value'], row['mc_sd'], t, z, rse)
         row['wrong_silent'] = (not row['covered']) and abs(row['err']) > JND
         row['wide'] = row['covered'] and abs(row['err']) > JND
         for zz in Z_SENSITIVITY:
-            row['covered_z%g' % zz] = covered(row['value'], row['mc_sd'], t, zz)
+            row['covered_z%g' % zz] = covered(row['value'], row['mc_sd'], t, zz, rse)
     return row
 
 
@@ -316,8 +328,9 @@ def tally(rows):
     return out
 
 
-def score(rows, z=Z, smoke=False):
-    rows = [classify(r, z) for r in rows]
+def score_rule(rows, z=Z, smoke=False, rule=GATED):
+    """One rule's score of every row (copies; the caller's rows are not changed)."""
+    rows = [classify(dict(r), z, rule) for r in rows]
     status_counts = {}
     for r in rows:
         status_counts[r['status']] = status_counts.get(r['status'], 0) + 1
@@ -331,22 +344,33 @@ def score(rows, z=Z, smoke=False):
         t['holds'] = t['coverage_ok'] and t['wrong_silent_ok']
         j2[mode] = t
 
-    subgroups, groups = [], {}
+    # J3 (ADDENDUM-3B-1 item 2): room x step per mode, receivers pooled; room x receiver x step reported only.
+    subgroups, groups, fine_groups = [], {}, {}
     for r in rows:
-        groups.setdefault((r['mode'], r['room'], r['receiver'], r['step_ms']), []).append(r)
-    for (mode, room, rec, step), sub in sorted(groups.items()):
+        groups.setdefault((r['mode'], r['room'], r['step_ms']), []).append(r)
+        fine_groups.setdefault((r['mode'], r['room'], r['receiver'], r['step_ms']), []).append(r)
+    for (mode, room, step), sub in sorted(groups.items()):
         t = tally(sub)
-        t.update(mode=mode, room=room, receiver=rec, step_ms=step)
+        t.update(mode=mode, room=room, step_ms=step)
         t['j3_applies'] = t['answered'] >= J3_MIN_ROWS
         t['j3_breach'] = t['j3_applies'] and t['wrong_silent_rate'] > J3_WRONG_SILENT
         subgroups.append(t)
+    fine = []
+    for (mode, room, rec, step), sub in sorted(fine_groups.items()):
+        t = tally(sub)
+        t.update(mode=mode, room=room, receiver=rec, step_ms=step)
+        fine.append(t)
     j3 = {}
     for mode in modes:
         ss = [s for s in subgroups if s['mode'] == mode]
-        br = ['%s %s %gms' % (s['room'], s['receiver'], s['step_ms']) for s in ss if s['j3_breach']]
+        br = ['%s %gms' % (s['room'], s['step_ms']) for s in ss if s['j3_breach']]
+        ff = [f for f in fine if f['mode'] == mode and f['answered']]
+        worst = max(ff, key=lambda f: (f['wrong_silent_rate'], f['wrong_silent']), default=None)
         j3[mode] = dict(holds=not br, breaches=br, subgroups=len(ss), subgroups_applying=sum(s['j3_applies'] for s in ss),
-                        applying_rooms=sorted({s['room'] for s in ss if s['j3_applies']}),
-                        worst_wrong_silent_rate_any_size=max((s.get('wrong_silent_rate', 0.0) for s in ss), default=None))
+                        worst_room_step=max((s.get('wrong_silent_rate', 0.0) for s in ss), default=None),
+                        worst_room_receiver_step=None if worst is None else {
+                            k: worst[k] for k in ('room', 'receiver', 'step_ms', 'answered', 'wrong_silent',
+                                                  'wrong_silent_rate')})
 
     j4 = {}
     for mode in modes:
@@ -386,24 +410,55 @@ def score(rows, z=Z, smoke=False):
     excl = [r for r in rows if r['status'].startswith('excluded')]
     truth_se_rel = [r['truth_se'] / r['truth'] for r in rows
                     if r['truth'] and math.isfinite(r['truth']) and r['truth_se'] is not None and math.isfinite(r['truth_se'])]
-    passed = None if smoke else (bool(modes) and all(j2[m]['holds'] and j3[m]['holds'] and j4[m]['holds'] for m in modes))
+    holds = bool(modes) and all(j2[m]['holds'] and j3[m]['holds'] and j4[m]['holds'] for m in modes)
+    excluded_share = len(excl) / len(rows) if rows else None
+    inconclusive = bool(rows) and excluded_share > INCONCLUSIVE_EXCLUDED
+    verdict = 'SMOKE' if smoke else 'INCONCLUSIVE' if inconclusive else 'PASS' if holds else 'FAIL'
     return dict(
-        prereg='docs/investigations/2026-10-02-t20/PREREG-3B.md', smoke=smoke, z=z,
+        prereg='docs/investigations/2026-10-02-t20/PREREG-3B.md',
+        addendum='docs/investigations/2026-10-02-t20/ADDENDUM-3B-1.md', rule=rule, smoke=smoke, z=z,
+        verdict=verdict, criteria_hold=holds, excluded_share=excluded_share, inconclusive=inconclusive,
         rows=len(rows), status_counts=status_counts,
         unanswered_by_code=_codes([r for r in rows if r['status'] == 'unanswered']),
         excluded=dict(count=len(excl), answered_among_them=sum(r['value'] is not None for r in excl),
                       by_room={room: sum(r['room'] == room for r in excl) for room in sorted({r['room'] for r in excl})}),
         truth_se_rel=dict(max=max(truth_se_rel, default=None),
                           median=statistics.median(truth_se_rel) if truth_se_rel else None),
-        overall=tally(rows), j2=j2, j3=j3, j4=j4, passed=passed,
+        overall=tally(rows), j2=j2, j3=j3, j4=j4,
         per_room=per_room, per_step=per_step,
-        wide_rows=wide, wrong_silent_rows=wrong, subgroups=subgroups,
+        wide_rows=wide, wrong_silent_rows=wrong, subgroups=subgroups, subgroups_room_receiver_step=fine,
     ), rows
+
+
+ORIG_FIELDS = ('status', 'err', 'covered', 'wrong_silent', 'wide', 'covered_z2', 'covered_z3')
+
+
+def score(rows, z=Z, smoke=False):
+    """The gated score (ADDENDUM-3B-1) with PREREG-3B's original rule beside it, under 'prereg_rule'. Rows carry
+    the gated fields plus the original rule's as <field>_prereg."""
+    gated, g_rows = score_rule(rows, z, smoke, GATED)
+    orig, o_rows = score_rule(rows, z, smoke, PREREG_RULE)
+    for g, o in zip(g_rows, o_rows):
+        for k in ORIG_FIELDS:
+            g[k + '_prereg'] = o.get(k)
+    gated['prereg_rule'] = orig
+    return gated, g_rows
 
 
 CSV_FIELDS = ['run_id', 'room', 'mode', 'step_ms', 'particles', 'seed', 'receiver', 'freq_hz', 'blocked',
               'design_t60_s', 'R_m', 'source', 'value', 'mc_sd', 'truth', 'truth_se', 'truth_why', 'truth_singles',
-              'truth_last10', 'status', 'err', 'covered', 'wrong_silent', 'wide', 'covered_z2', 'covered_z3']
+              'truth_last10', 'status', 'err', 'covered', 'wrong_silent', 'wide', 'covered_z2', 'covered_z3'] + \
+             [k + '_prereg' for k in ORIG_FIELDS]
+
+
+def _brief(s):
+    b = {k: s[k] for k in ('verdict', 'excluded_share', 'rows', 'status_counts', 'unanswered_by_code', 'excluded',
+                           'truth_se_rel')}
+    b['j2'] = {m: {k: v for k, v in t.items() if k != 'unanswered_by_code'} for m, t in s['j2'].items()}
+    b['j3'] = s['j3']
+    b['j4'] = {m: {k: t[k] for k in ('rows', 'answered', 'share', 'holds', 'refusals_by_code')}
+               for m, t in s['j4'].items()}
+    return b
 
 
 def main(argv=None):
@@ -479,13 +534,7 @@ def main(argv=None):
         w = csv.DictWriter(f, fieldnames=list(truths_out[0]) if truths_out else ['room'])
         w.writeheader()
         w.writerows(truths_out)
-    brief = {k: summary[k] for k in ('smoke', 'rows', 'status_counts', 'unanswered_by_code', 'excluded',
-                                     'truth_se_rel', 'passed')}
-    brief['j2'] = {m: {k: v for k, v in t.items() if k != 'unanswered_by_code'} for m, t in summary['j2'].items()}
-    brief['j3'] = summary['j3']
-    brief['j4'] = {m: {k: t[k] for k in ('rows', 'answered', 'share', 'holds', 'refusals_by_code')}
-                   for m, t in summary['j4'].items()}
-    print(json.dumps(brief, indent=2))
+    print(json.dumps({'gated': _brief(summary), 'prereg_rule': _brief(summary['prereg_rule'])}, indent=2))
     log('done in %.1f s' % (time.time() - t0), fh)
     fh.close()
     return 0

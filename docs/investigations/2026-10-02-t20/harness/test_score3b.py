@@ -51,7 +51,9 @@ def test_planted_bias_fails_j2_and_j3():
     planted = [dict(r, value=1.06) if r['receiver'] == 'R000' and i % 4 == 0 else dict(r) for i, r in enumerate(rows)]
     s, _ = score3b.score(planted)
     assert s['j2']['random']['wrong_silent'] == 50 and not s['j2']['random']['holds']
-    assert s['j3']['random']['breaches'] == ['G1 R000 1ms']
+    assert s['j3']['random']['breaches'] == ['G1 1ms']          # room x step, receivers pooled
+    assert s['j3']['random']['worst_room_receiver_step']['receiver'] == 'R000'
+    assert s['j3']['random']['worst_room_receiver_step']['wrong_silent_rate'] == 0.5
 
 
 # ---- 2. a refusal counts as unanswered, by code -----------------------------------------------------------------------
@@ -89,15 +91,62 @@ def test_product_reader_maps_every_receiver_band():
 
 
 # ---- 3. the truth's standard error excludes at 0.5 % ------------------------------------------------------------------
-def test_truth_se_exclusion_at_half_a_percent():
-    assert score3b.classify(row(1.0, 0.002, truth_se=0.0049))['status'] == 'answered'
-    assert score3b.classify(row(1.0, 0.002, truth_se=0.005))['status'] == 'answered'      # exactly 0.5 % is kept
-    assert score3b.classify(row(1.0, 0.002, truth_se=0.0051))['status'] == 'excluded_truth_uncertain'
+def test_truth_se_exclusion_at_one_percent_gated_and_half_a_percent_prereg():
+    G, P = score3b.GATED, score3b.PREREG_RULE
+    assert score3b.classify(row(1.0, 0.002, truth_se=0.0099), rule=G)['status'] == 'answered'
+    assert score3b.classify(row(1.0, 0.002, truth_se=0.010), rule=G)['status'] == 'answered'     # 1.0 % is kept
+    assert score3b.classify(row(1.0, 0.002, truth_se=0.0101), rule=G)['status'] == 'excluded_truth_uncertain'
+    assert score3b.classify(row(1.0, 0.002, truth_se=0.005), rule=P)['status'] == 'answered'     # 0.5 % is kept
+    assert score3b.classify(row(1.0, 0.002, truth_se=0.0051), rule=P)['status'] == 'excluded_truth_uncertain'
     assert score3b.classify(row(1.0, 0.002, truth=float('nan')))['status'] == 'excluded_truth_nan'
-    s, _ = score3b.score([row(1.0, 0.002, truth_se=0.006), row(None, None, source='truncated', truth_se=0.006)]
-                         + [row(1.0, 0.002)] * 3)
-    assert s['excluded']['count'] == 2 and s['j2']['random']['answered'] == 3
-    assert s['j4']['random']['rows'] == 5           # J4 keeps the truth-excluded rows: answering needs no truth
+    rows = [row(1.0, 0.002, truth_se=0.006), row(None, None, source='truncated', truth_se=0.006)] + [row(1.0, 0.002)] * 8
+    s, out = score3b.score(rows)
+    assert s['excluded']['count'] == 0 and s['j2']['random']['answered'] == 9
+    assert s['prereg_rule']['excluded']['count'] == 2 and s['prereg_rule']['j2']['random']['answered'] == 8
+    assert out[0]['status'] == 'answered' and out[0]['status_prereg'] == 'excluded_truth_uncertain'
+    assert s['prereg_rule']['j4']['random']['rows'] == 10   # J4 keeps truth-excluded rows: answering needs no truth
+
+
+def test_a_row_covered_only_thanks_to_the_truth_se():
+    # |err| 3 %: mc_sd 0.005 alone gives 2.5*0.005 + 0.5 % = 1.75 %; with se 0.009, 2.5*hypot = 2.57 % + 0.52 %
+    r = row(1.03, 0.005, truth_se=0.009)
+    g = score3b.classify(dict(r), rule=score3b.GATED)
+    assert g['covered'] and not g['wrong_silent']
+    assert not score3b.covered(1.03, 0.005, 1.0)                       # mc_sd alone: not covered
+    s, out = score3b.score([r] + [row(1.0, 0.002)] * 9)
+    assert out[0]['covered'] and out[0]['status_prereg'] == 'excluded_truth_uncertain'
+    # within the prereg's se limit too, the original rule leaves it uncovered and the gated rule covers it
+    r = row(1.02, 0.005, truth_se=0.005)          # 2 %: 1.76 % prereg half-width, 2.28 % gated
+    s, out = score3b.score([r])
+    assert out[0]['covered'] and out[0]['covered_prereg'] is False
+    # a 6 % row stays wrong-silent under the gated rule when both uncertainties are tight
+    g = score3b.classify(row(1.06, 0.002, truth_se=0.004), rule=score3b.GATED)
+    assert g['wrong_silent']
+
+
+def test_more_than_a_quarter_excluded_is_inconclusive():
+    good = [row(1.0, 0.002, room='G%d' % (1 + i % 7)) for i in range(75)]
+    noisy = [row(1.0, 0.002, truth_se=0.02) for _ in range(25)]
+    s, _ = score3b.score(good + noisy)
+    assert s['excluded_share'] == 0.25 and s['verdict'] == 'PASS'                 # exactly 25 %: not more
+    s, _ = score3b.score(good + noisy + [row(1.0, 0.002, truth_se=0.02)])
+    assert s['excluded_share'] > 0.25 and s['inconclusive'] and s['verdict'] == 'INCONCLUSIVE'
+    assert s['criteria_hold']                                                   # the J's held; the set did not
+    s, _ = score3b.score(good + noisy, smoke=True)
+    assert s['verdict'] == 'SMOKE'
+
+
+def test_j3_pools_receivers_within_room_and_step():
+    # 8 receivers x 3 rows: 24 in the room x step, 3 per receiver; 3 wrong-silent at one receiver = 12.5 % > 10 %
+    rows = [row(1.0, 0.002, rec='R%03d' % i) for i in range(8) for _ in range(3)]
+    for k in range(3):
+        rows[k]['value'] = 1.06
+    s, _ = score3b.score(rows)
+    assert s['j3']['random']['subgroups_applying'] == 1 and s['j3']['random']['breaches'] == ['G1 1ms']
+    w = s['j3']['random']['worst_room_receiver_step']
+    assert (w['receiver'], w['answered'], w['wrong_silent']) == ('R000', 3, 3)
+    s, _ = score3b.score(rows[:19])                     # 19 answered rows: J3 does not apply
+    assert s['j3']['random']['subgroups_applying'] == 0 and s['j3']['random']['holds']
 
 
 def test_truth_se_is_stdev_of_singles_over_two():
