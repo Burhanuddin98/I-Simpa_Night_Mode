@@ -450,7 +450,7 @@
             "description": "`ok` (the range is inside the 5 % JND), `wide` (shown with its range, decision-log row 9)\nor `refused`."
           },
           "validated": {
-            "description": "Whether the method has passed its held-out test for this run's computation method:\nrandom yes (`docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md`, H1-H6), energetic no\n(H3 failed).",
+            "description": "Whether the method has passed its held-out test for this run's computation method:\na single band of a random run yes (`docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md`, H1-H6), energetic no\n(H3 failed), and an aggregate never (the test read single bands).",
             "type": "boolean"
           },
           "validation_note": {
