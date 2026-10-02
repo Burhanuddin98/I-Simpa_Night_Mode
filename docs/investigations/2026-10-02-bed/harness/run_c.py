@@ -7,6 +7,9 @@ source at SRC_FRAC and three receivers at REC_FRACS of it, every material scatte
 Solvers and simpa: run_b.py's. 4 runs at a time. With --wait the runs start only once set B's run.out.log has a line
 starting `exit` (set B holds the machine's four solver slots until then).
 Usage: python run_c.py [outdir] [--wait]   (default B:\\data\\m8b-bed\\C); a finished run (done.json) is skipped.
+--sti (../ADDENDUM-2-STI.md, set C7): the same boxes with the seven octaves 125 Hz-8 kHz (bands7.py: checked to
+differ from the 6-band project by the added band only, then `simpa validate`d), the STI build (e298a31), seeds
+4301-4303; default outdir B:\\data\\m8b-bed\\C7.
 """
 import importlib.util
 import json
@@ -18,14 +21,17 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import bands7
+
+STI = '--sti' in sys.argv
 HERE = Path(__file__).resolve().parent
 BVP = HERE.parents[1] / '2026-10-02-edt-ball-vs-point' / 'run.py'
-SIMPA = r"C:\tmp\nm-target-f\release\simpa.exe"
+SIMPA = r"C:\tmp\nm-target-g\release\simpa.exe" if STI else r"C:\tmp\nm-target-f\release\simpa.exe"
 SOLV = r"C:\tmp\nm-m8a-solvers"
 TEMPLATE = Path(r"B:\data\m8b-edt\round2\heldout\tested-G1-energetic-1.0ms-150k-3101\project.simpa")
 B_LOG = Path(r"B:\data\m8b-bed\B\run.out.log")
 ROOMS = ('S-live', 'Mixed')
-SEEDS = (4101, 4102, 4103)
+SEEDS = (4301, 4302, 4303) if STI else (4101, 4102, 4103)
 TESTED = dict(particles_per_source=150_000, time_step_s=0.001, duration_s=10.0, extinction_exponent=7.0,
               method='energetic')
 WORKERS = 4
@@ -105,7 +111,17 @@ def one(out, name, seed):
         return json.loads((d / 'done.json').read_text())
     d.mkdir(parents=True, exist_ok=True)
     proj = d / 'project.simpa'
-    proj.write_text(json.dumps(project(name, seed), indent=2), encoding='utf-8')
+    p = project(name, seed)
+    if STI:
+        p7 = bands7.to_seven(p)
+        diff = bands7.check(p, p7)
+        assert not diff, (name, diff)
+        p = p7
+    proj.write_text(json.dumps(p, indent=2), encoding='utf-8')
+    if STI:
+        code, v = bands7.validate(SIMPA, proj)
+        (d / 'simpa-validate.json').write_text(json.dumps(v, indent=1) if not isinstance(v, str) else v)
+        assert code == 0, (rid, v)
     cmd = [SIMPA, "run", str(proj), "--solver", "spps", "--runs", str(d), "--json",
            "--solver-exe", rf"{SOLV}\spps.exe", "--tetgen", rf"{SOLV}\tetgen.exe",
            "--preprocess", rf"{SOLV}\preprocess.exe"]
@@ -133,7 +149,7 @@ def b_finished():
 
 if __name__ == '__main__':
     args = [a for a in sys.argv[1:] if not a.startswith('--')]
-    out = Path(args[0] if args else r'B:\data\m8b-bed\C')
+    out = Path(args[0] if args else (r'B:\data\m8b-bed\C7' if STI else r'B:\data\m8b-bed\C'))
     if '--wait' in sys.argv:
         while not b_finished():
             time.sleep(30)
