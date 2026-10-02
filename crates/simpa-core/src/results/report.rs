@@ -417,8 +417,9 @@ fn evaluated(
 pub struct ReceiverBandReport {
     pub freq_hz: i32,
     /// SPPS's statistics show that at most one particle in a million was still alive when the
-    /// steps ran out (random mode, `trans_epsilon` above 0: `spps::SppsResults::band_complete`),
-    /// so the series is given to `params` as complete and no tail after its end is bounded.
+    /// steps ran out in random mode, none in energetic mode (`trans_epsilon` above 0:
+    /// `spps::SppsResults::band_complete`), so the series is given to `params` as complete and no
+    /// tail after its end is bounded; in energetic mode its floor still is (`floor_db`).
     /// Otherwise `params` bounds that tail. **Lost particles, and those few left alive, do not
     /// make a band incomplete:** the energy their unfinished paths would have brought is bounded
     /// separately, `lost_share`.

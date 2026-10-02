@@ -278,10 +278,12 @@ extrapolation. Instead each parameter carries a bound:
    - Fewer than 2 bins from the onset to the last with energy: `params_series_too_short`.
    - **A series known to be complete** (`EnergySeries::complete`; `Tail::Complete`) has no tail:
      nothing is estimated, added or refused for it. Its caller must hold evidence that no energy
-     arrives after the last bin; `core::results` claims it only for SPPS in random mode when the
-     run's statistics count at most one particle in a million remaining at the end
-     (`results::spps::REMAINING_UNFINISHED_SHARE`), those few bounded with the lost ones as
-     unfinished paths (`docs/results.md`, "Complete series"). A decay time still needs the curve to reach the bottom of its range before the
+     arrives after the last bin, but what is bounded otherwise; `core::results` claims it only
+     from SPPS's statistics: in random mode when they count at most one particle in a million
+     remaining at the end (`results::spps::REMAINING_UNFINISHED_SHARE`), those few bounded with
+     the lost ones as unfinished paths; in energetic mode when they count none, every particle
+     dropped at the floor, absorbed or lost, what the floor dropped bounded as missing energy
+     ("A series that ended at its floor", below; `docs/results.md`, "Complete series"). A decay time still needs the curve to reach the bottom of its range before the
      last bin with energy, inside which the curve has no shape: otherwise `range_not_reached`,
      with the level at the start of that bin. Added by M7 piece B, with its tests in
      `tests/params_complete.rs`: without it, random-mode runs were refused wholesale for a tail
@@ -416,6 +418,23 @@ T30 wrong from the series alone, and their share refuses it; one lost particle m
 **What it assumes:** that a dropped or lost particle's future is, on average, an alive particle's.
 In a diffuse room that holds; a particle lost where it would have crossed the receiver more than
 most is not covered.
+
+**A series that ended at its floor** (2026-10-02). A floor keeps a series' completeness, as a lost
+share does (`EnergySeries::with_solver_floor`): when SPPS's statistics count no particle alive at
+the end of an energetic run, nothing arrives after the last bin but what the floor dropped and the
+lost took, and both are bounded here. Such a series has no tail estimate. Before, it had one, read
+from its last `2w` bins, which hold the last few particles above the floor, not a decay. In round
+2's G5 (energetic, 150,000 particles, 1 ms, 10 s; `docs/investigations/2026-10-02-t20/
+RESULT-3B.md`) every band's series ended 1.4 to 2.5 s into the run with every particle dropped; the
+two windows sat 55 to 85 dB below `S(onset)`, with 0 to 23 of their 150 to 250 bins holding energy,
+read as "not decaying" at random, and refused T20 `truncated` in 42 of 144 receiver-bands at 1 ms,
+with T30, SPL and the clarity measures. The say-no is kept: a run with any particle still alive is
+not complete, and its tail is bounded from the series as before; a decay that stops falling while
+particles are alive is refused `truncated`; and the floor's own bound still refuses what it can
+move (`tests/params_floor.rs`: on the reviewer's model, the 108 cases whose histogram ends empty,
+claimed complete, accept 528 values, none further from the model without the drop than its limit,
+and refuse 259 the series alone gets wrong; G5's own series, `tests/fixtures/params/
+g5_energetic_ended.json`, answers T20 with the value its refusal carried).
 
 ## Monte-Carlo noise
 

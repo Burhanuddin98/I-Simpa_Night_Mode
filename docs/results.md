@@ -290,19 +290,28 @@ arrival with the cap counted in the direct sound, which is exact on the syntheti
   seed 1, both receivers, 125 Hz and 4 kHz checked).
 
 **Complete series.** When SPPS's own statistics show that nothing arrives after a band's last
-bin, but what unfinished paths would have brought, the series is given to `params` as complete
-(`EnergySeries::complete`, `tests/params_complete.rs`): SPPS in random mode with `trans_epsilon`
-above 0, and at most one particle in a million remaining at the end of the calculation
-(`spps::REMAINING_UNFINISHED_SHARE`). A particle counts as remaining only when the time steps run
+bin, but what unfinished paths or the floor would have brought, the series is given to `params` as
+complete (`EnergySeries::complete`, `tests/params_complete.rs`): SPPS with `trans_epsilon` above 0,
+and at the end of the calculation at most one particle in a million remaining in random mode
+(`spps::REMAINING_UNFINISHED_SHARE`), none in energetic mode. A particle counts as remaining only when the time steps run
 out while it is alive (`spps/CalculationCore.cpp:49, 88-92`), and in random mode a particle is
 absorbed whole, never dwindles (`CalculationCore.cpp:62-67, 147-155, 288-300`). `trans_epsilon` 0
 drops every particle at its first surface in random mode too (`CalculationCore.cpp:305`).
 Energetic mode drops a particle once its energy falls below `10^-trans_epsilon` of its start
-(`sppsNantes.cpp:75`), energy no histogram holds, so it never claims completeness: `params` bounds
-its tail and its floor. The JSON reports the claim per band (`complete`); `SppsResults::
-band_complete`'s unit tests say no for energetic mode, more than one particle in a million
-remaining, and `trans_epsilon` 0 or NaN, and the committed energetic run (below) is refused
-completeness with every particle accounted for.
+(`sppsNantes.cpp:75`), counted as absorbed, not remaining (`CalculationCore.cpp:57-60, 88-107,
+305-310`). With none remaining, the histogram holds every path up to its drop, absorption or loss;
+what the dropped would still have brought is the floor's missing energy, which `params` bounds
+(`docs/params.md`, "A series that ended at its floor"), and the lost ones' share follows the decay
+("Lost particles", below). A remaining particle's energy is bounded by neither, so in energetic
+mode one is enough to leave the band incomplete, its tail bounded from the series. **Until
+2026-10-02 energetic mode never claimed completeness**, and the tail of a series that had ended at
+its floor was estimated from its last few particles, which read as "not decaying" at random: in
+round 2's G5 (150,000 particles, 1 ms, 10 s), 42 of 144 receiver-bands refused T20 `truncated`,
+every band of all three seeds having ended 1.4 to 2.5 s in with no particle remaining. The JSON
+reports the claim per band (`complete`); `SppsResults::band_complete`'s unit tests say no for a
+particle remaining in energetic mode, more than one in a million in random mode, and
+`trans_epsilon` 0 or NaN; the committed energetic run (below), every particle accounted for, is
+complete, and its floor still refuses T30 in all four receiver-bands.
 
 **The few left alive** (M7 follow-ups, second review). The first rule was "none remaining". At
 M8's counts SPPS leaves about one particle in 10⁸ to 10⁹ alive at the end in the 6×10×3 m room,

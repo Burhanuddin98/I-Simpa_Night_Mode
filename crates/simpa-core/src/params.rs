@@ -903,9 +903,11 @@ impl EnergySeries {
     /// `-10·trans_epsilon`. `alive_share` is the share of the emitted energy the room still held
     /// when the direct sound arrived ([`SolverFloor`]). What the dropped particles would still
     /// have brought is bounded, `10^{floor_db/10}/alive_share` of `S(onset)`, and every quantity it
-    /// could move beyond its limit is refused (`docs/params.md`, "Missing energy"). A floor means
-    /// energy is missing, so the series is no longer complete. Refused, `params_bad_noise_input`,
-    /// when `floor_db` is not a finite number or `alive_share` not a finite positive one.
+    /// could move beyond its limit is refused (`docs/params.md`, "Missing energy"). The series
+    /// keeps its completeness, as with a lost share: a complete series with a floor is one that
+    /// ended at it, nothing arriving after its end but what the floor dropped. Refused,
+    /// `params_bad_noise_input`, when `floor_db` is not a finite number or `alive_share` not a
+    /// finite positive one.
     pub fn with_solver_floor(
         mut self,
         floor_db: f64,
@@ -927,7 +929,6 @@ impl EnergySeries {
             db: floor_db,
             alive_share,
         });
-        self.complete = false;
         Ok(self)
     }
 
@@ -939,10 +940,12 @@ impl EnergySeries {
     /// A series whose caller knows that no energy arrives after its last bin, refused as
     /// [`EnergySeries::new`]. Its tail is [`decay::Tail::Complete`]: nothing is estimated, added
     /// or refused for the energy after the end (`docs/params.md`, "Truncation"). `core::results`
-    /// claims it for SPPS in random mode when the run's statistics count at most one particle in a
-    /// million remaining at the end of the calculation (`results::spps::REMAINING_UNFINISHED_SHARE`;
-    /// those few are bounded with the lost ones, as unfinished paths); the claim changes numbers,
-    /// so it needs such evidence.
+    /// claims it for SPPS when the run's statistics show that nothing was alive at the end of the
+    /// calculation but what is bounded otherwise: in random mode at most one particle in a million
+    /// remaining (`results::spps::REMAINING_UNFINISHED_SHARE`; those few are bounded with the lost
+    /// ones, as unfinished paths), in energetic mode none, every particle dropped at the floor
+    /// ([`EnergySeries::with_solver_floor`], which bounds what it dropped), absorbed or lost. The
+    /// claim changes numbers, so it needs such evidence.
     pub fn complete(dt: f64, values: Vec<f64>) -> Result<Self, ParamError> {
         let mut s = Self::new(dt, values)?;
         s.complete = true;

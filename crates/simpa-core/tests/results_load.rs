@@ -246,30 +246,26 @@ fn solver_rho_c() -> f64 {
 }
 
 #[test]
-fn the_energetic_run_is_never_complete_and_its_floor_refuses_the_decay_times() {
+fn the_energetic_run_ended_at_its_floor_and_its_floor_refuses_the_decay_times() {
     let r = load(ENERGETIC);
     let s = r.spps().unwrap();
     assert_eq!(s.computation_method, 1);
     assert_eq!(s.trans_epsilon, 3.0);
     assert_eq!(s.floor_db(), Some(-30.0));
-    // Every particle was dropped, absorbed or lost before the end, and still no band is complete:
-    // the drop is energy the histogram never holds. In at least one band none was lost either,
-    // so energetic mode alone is what refuses the claim there.
-    let mut isolated = 0;
+    // Every particle was dropped, absorbed or lost before the end, so every band is complete:
+    // nothing arrives after its end but what the floor dropped, which the floor bounds. Before
+    // 2026-10-02 energetic mode was never complete, and Seat2's 500 Hz T30 was refused for a
+    // tail read from its last particles, "not decaying" (`docs/results.md`, "Complete series").
     for b in &s.particles.bands {
         println!("{} Hz: {b:?}", b.freq_hz);
         assert_eq!(b.remaining, 0, "{} Hz", b.freq_hz);
-        assert!(!s.band_complete(b.freq_hz), "{} Hz", b.freq_hz);
-        if b.lost() == 0 {
-            isolated += 1;
-        }
+        assert!(s.band_complete(b.freq_hz), "{} Hz", b.freq_hz);
     }
-    assert!(isolated >= 1);
     let rep = serde_json::to_value(results::report(&r)).unwrap();
     let mut floor = 0;
     for p in rep["spps"]["point_receivers"].as_array().unwrap() {
         for b in p["bands"].as_array().unwrap() {
-            assert_eq!(b["complete"], false);
+            assert_eq!(b["complete"], true);
             assert_eq!(b["floor_db"], -30.0);
             let t30 = &b["parameters"]["t30_s"]["not_evaluable"];
             assert!(
@@ -285,9 +281,8 @@ fn the_energetic_run_is_never_complete_and_its_floor_refuses_the_decay_times() {
             println!("{} {} Hz: T30 {}", p["label"], b["freq_hz"], t30["message"]);
         }
     }
-    // Three of the four receiver-bands give the floor as the reason; Seat2 at 500 Hz is refused
-    // earlier, its tail not decaying.
-    assert!(floor >= 3, "{floor}");
+    // The floor refuses every receiver-band's T30: the say-no stands without the tail.
+    assert_eq!(floor, 4, "{floor}");
 }
 
 #[test]

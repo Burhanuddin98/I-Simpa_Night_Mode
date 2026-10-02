@@ -2128,7 +2128,7 @@
             "type": "number"
           },
           "complete": {
-            "description": "SPPS's statistics show that at most one particle in a million was still alive when the\nsteps ran out (random mode, `trans_epsilon` above 0: `spps::SppsResults::band_complete`),\nso the series is given to `params` as complete and no tail after its end is bounded.\nOtherwise `params` bounds that tail. **Lost particles, and those few left alive, do not\nmake a band incomplete:** the energy their unfinished paths would have brought is bounded\nseparately, `lost_share`.",
+            "description": "SPPS's statistics show that at most one particle in a million was still alive when the\nsteps ran out in random mode, none in energetic mode (`trans_epsilon` above 0:\n`spps::SppsResults::band_complete`), so the series is given to `params` as complete and no\ntail after its end is bounded; in energetic mode its floor still is (`floor_db`).\nOtherwise `params` bounds that tail. **Lost particles, and those few left alive, do not\nmake a band incomplete:** the energy their unfinished paths would have brought is bounded\nseparately, `lost_share`.",
             "type": "boolean"
           },
           "contributing_sources": {

@@ -310,9 +310,339 @@ fn a_floor_that_is_not_a_number_is_refused() {
             codes::BAD_NOISE_INPUT
         );
     }
-    // A floor means energy is missing: the series is no longer complete.
+    // A floor keeps a series' completeness, as a lost share does: nothing arrives after its end
+    // but what the floor dropped, and that is bounded as missing energy. A series not known to be
+    // complete stays incomplete.
     let c = EnergySeries::complete(DT, vec![1.0, 0.5, 0.25]).unwrap();
-    assert!(!c.with_solver_floor(-50.0, 1.0).unwrap().is_complete());
+    let c = c.with_solver_floor(-50.0, 1.0).unwrap();
+    assert!(c.is_complete());
+    assert_eq!(c.floor().map(|f| f.db), Some(-50.0));
+    assert!(!s.with_solver_floor(-50.0, 1.0).unwrap().is_complete());
+}
+
+// A series that ended at the floor: SPPS in energetic mode with every particle dropped, absorbed or
+// lost before the steps ran out (`results::spps::SppsResults::band_complete`). The histogram's
+// last bins then hold the last few particles above the floor, not a decay, and the tail estimate
+// read from them said "not decaying" at random (round 2's G5, `docs/investigations/
+// 2026-10-02-t20/RESULT-3B.md`, "Run length in G5"). Nothing arrives after such a series' end but
+// what the floor dropped, which the floor bounds.
+
+/// 1 ms bins, as round 2's runs.
+const DT_FINE: f64 = 0.001;
+
+/// A decay of `t60` s in 1 ms bins of 10 s, from 1 at bin 0, down to `until_db` and zero after.
+fn decay_to(t60: f64, until_db: f64) -> Vec<f64> {
+    let per_bin = 10f64.powf(-6.0 * DT_FINE / t60);
+    let mut v = vec![0.0; 10_000];
+    let mut e: f64 = 1.0;
+    for b in v.iter_mut() {
+        if 10.0 * e.log10() < until_db {
+            break;
+        }
+        *b = e;
+        e *= per_bin;
+    }
+    v
+}
+
+/// [`decay_to`] at 1 s down to −51 dB, then the last particles above the floor: a few bins 66 to
+/// 76 dB down, more of them late than early, as in G5's die-off; then nothing for the rest of
+/// the 10 s run. `first_window_empty` leaves the first of the tail estimate's two windows empty,
+/// as at G5 R000 250 Hz.
+fn ended_with_stragglers(first_window_empty: bool) -> Vec<f64> {
+    let mut v = decay_to(1.0, -51.0);
+    let mut put = |k: usize, db: f64| v[k] = 10f64.powf(db / 10.0);
+    put(960, -70.0);
+    put(1_020, -72.0);
+    if !first_window_empty {
+        put(1_200, -76.0);
+    }
+    put(1_300, -66.0);
+    put(1_350, -70.0);
+    put(1_399, -68.0);
+    v
+}
+
+fn t(series: &EnergySeries, range: DecayRange) -> Result<f64, simpa_core::params::ParamError> {
+    decay::decay_time(series, Arrival::Detected, range).map(|f| f.t_s)
+}
+
+fn why(e: &simpa_core::params::ParamError) -> &NotEvaluable {
+    e.not_evaluable()
+        .unwrap_or_else(|| panic!("not a not-evaluable refusal: {e}"))
+}
+
+#[test]
+fn a_decay_that_ended_at_the_floor_is_not_refused_for_its_last_particles() {
+    // The same decay without the stragglers, its tail bounded from the series: exact for an
+    // exponential, so T20 is answered.
+    let clean = EnergySeries::new(DT_FINE, decay_to(1.0, -51.0)).unwrap();
+    let want = t(&clean, DecayRange::T20).unwrap();
+    assert!((want / 1.0 - 1.0).abs() < limits::DECAY_RELATIVE, "{want}");
+    for first_window_empty in [true, false] {
+        let v = ended_with_stragglers(first_window_empty);
+        // The defect: bounded from its last windows, the stragglers read as not decaying.
+        let open = EnergySeries::new(DT_FINE, v.clone())
+            .unwrap()
+            .with_solver_floor(-50.0, 1.0)
+            .unwrap();
+        assert_eq!(decay::tail(&open).unwrap(), decay::Tail::Unbounded);
+        let e = t(&open, DecayRange::T20).unwrap_err();
+        assert!(
+            matches!(
+                why(&e),
+                NotEvaluable::Truncated {
+                    with_tail: None,
+                    ..
+                }
+            ),
+            "{e}"
+        );
+        // Ended at the floor: answered, from the same series, so the same value as the
+        // refusal carried; and within 1e-4 of the decay without the stragglers.
+        let ended = EnergySeries::complete(DT_FINE, v)
+            .unwrap()
+            .with_solver_floor(-50.0, 1.0)
+            .unwrap();
+        let got = t(&ended, DecayRange::T20).unwrap_or_else(|e| panic!("{e}"));
+        let NotEvaluable::Truncated { value, .. } = why(&e) else {
+            unreachable!()
+        };
+        assert_eq!(got, *value);
+        assert!((got / want - 1.0).abs() < 1e-4, "{got} vs {want}");
+        // T30 and SPL are not refused for a tail either; the floor may still refuse them.
+        for (name, r) in [
+            ("T30", t(&ended, DecayRange::T30).map(|_| ())),
+            ("SPL", decay::spl_db(&ended).map(|_| ())),
+        ] {
+            if let Err(e) = r {
+                assert!(
+                    !matches!(why(&e), NotEvaluable::Truncated { .. }),
+                    "{name}: {e}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_run_cut_while_still_decaying_is_still_refused() {
+    // Cut at −15 dB, particles still alive: not complete, its tail bounded from the series. T20
+    // never reaches its range with the tail added; SPL is truncated.
+    let cut = EnergySeries::new(DT_FINE, decay_to(1.0, -15.0))
+        .unwrap()
+        .with_solver_floor(-50.0, 1.0)
+        .unwrap();
+    let e = t(&cut, DecayRange::T20).unwrap_err();
+    let NotEvaluable::RangeNotReached { reached_db, .. } = why(&e) else {
+        panic!("{e}")
+    };
+    assert!((reached_db + 15.0).abs() < 0.1, "{reached_db}");
+    let e = decay::spl_db(&cut).unwrap_err();
+    assert!(
+        matches!(
+            why(&e),
+            NotEvaluable::Truncated {
+                with_tail: Some(_),
+                ..
+            }
+        ),
+        "{e}"
+    );
+    // Cut at −30 dB: T20 reaches its range, and the tail moves it: truncated.
+    let cut = EnergySeries::new(DT_FINE, decay_to(1.0, -30.0))
+        .unwrap()
+        .with_solver_floor(-50.0, 1.0)
+        .unwrap();
+    let e = t(&cut, DecayRange::T20).unwrap_err();
+    assert!(
+        matches!(
+            why(&e),
+            NotEvaluable::Truncated {
+                with_tail: Some(_),
+                ..
+            }
+        ),
+        "{e}"
+    );
+    // A series that ended at its floor, every particle dropped, but the floor only 15 dB down:
+    // refused, by the floor or, deeper than the last bin, for the range. (Completeness is the caller's claim, and `results` makes it only
+    // from SPPS's statistics; a decay that stops at −15 dB with a −50 dB floor and no particle
+    // left cannot come from SPPS, and is not this module's to catch.)
+    let ended = EnergySeries::complete(DT_FINE, decay_to(1.0, -15.0))
+        .unwrap()
+        .with_solver_floor(-15.0, 1.0)
+        .unwrap();
+    for range in [DecayRange::T20, DecayRange::T30] {
+        let e = t(&ended, range).unwrap_err();
+        assert!(
+            matches!(
+                why(&e),
+                NotEvaluable::MissingNotCleared {
+                    floor_db: Some(_),
+                    ..
+                } | NotEvaluable::RangeNotReached { .. }
+            ),
+            "{range:?}: {e}"
+        );
+    }
+}
+
+#[test]
+fn a_decay_that_stops_falling_before_the_run_ends_is_still_refused() {
+    // A coupled room's late plateau: down 20 dB at 1 s, then level to the end of the run, with
+    // particles still alive at the end (not complete). The tail is unbounded: refused.
+    let mut v = decay_to(1.0, -20.0);
+    let last = v.iter().rposition(|&e| e > 0.0).unwrap();
+    let level = v[last];
+    for b in &mut v[last..] {
+        *b = level;
+    }
+    let plateau = EnergySeries::new(DT_FINE, v)
+        .unwrap()
+        .with_solver_floor(-50.0, 1.0)
+        .unwrap();
+    for range in [DecayRange::T20, DecayRange::T30] {
+        let e = t(&plateau, range).unwrap_err();
+        assert!(
+            matches!(
+                why(&e),
+                NotEvaluable::Truncated {
+                    with_tail: None,
+                    ..
+                }
+            ),
+            "{range:?}: {e}"
+        );
+    }
+}
+
+#[test]
+fn nothing_a_series_ended_at_the_floor_accepts_is_further_than_its_limit_from_the_reference() {
+    // The cliff model's histograms end in empty bins once fewer than one particle in 10⁵ is kept:
+    // every particle dropped, as a run that ended at its floor. Claimed complete, with the floor.
+    let mut wrong = Vec::new();
+    let (mut ended, mut accepted, mut caught) = (0, 0, 0);
+    for alpha in [0.05, 0.1, 0.2, 0.4, 0.7, 0.9] {
+        for r in [2.0, 8.0] {
+            let (reference, t_a) = histogram(alpha, None, r, duration(alpha));
+            let want = values(&EnergySeries::new(DT, reference).unwrap(), t_a);
+            for eps in [1.0, 2.0, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0, 7.0] {
+                let (cliff, _) = histogram(alpha, Some(eps), r, duration(alpha));
+                if *cliff.last().unwrap() != 0.0 {
+                    continue;
+                }
+                ended += 1;
+                let plain = values(&EnergySeries::new(DT, cliff.clone()).unwrap(), t_a);
+                let floored = values(
+                    &EnergySeries::complete(DT, cliff)
+                        .unwrap()
+                        .with_solver_floor(-10.0 * eps, alive(alpha, t_a))
+                        .unwrap(),
+                    t_a,
+                );
+                for (((name, w), (_, p)), (_, f)) in want.iter().zip(&plain).zip(&floored) {
+                    let Ok(w) = w else { continue };
+                    match f {
+                        Ok(f) => {
+                            accepted += 1;
+                            if !within(name, *f, *w) {
+                                wrong.push(format!("α {alpha} ε {eps} r {r}: {name} {f} vs {w}"));
+                            }
+                        }
+                        Err(_) => {
+                            if let Ok(p) = p
+                                && !within(name, *p, *w)
+                            {
+                                caught += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    println!(
+        "{ended} cases ended at the floor: {accepted} values accepted, {caught} refused that \
+         would have been wrong"
+    );
+    assert!(ended >= 80, "{ended}");
+    assert!(wrong.is_empty(), "{wrong:#?}");
+    assert!(caught > 50, "{caught}");
+}
+
+/// Round 2's G5 (specular low hall, energetic, 150,000 particles, 1 ms, 10 s): two receiver-bands
+/// refused T20 `truncated`, "not decaying at its end", whose series end 1.97 and 2.08 s into the
+/// run with every particle dropped (`tests/fixtures/params/g5_energetic_ended.json`).
+#[test]
+fn round_2s_g5_ended_at_its_floor_answers_t20_with_the_value_its_refusal_carried() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/params/g5_energetic_ended.json");
+    let fixture: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    for row in fixture["rows"].as_array().unwrap() {
+        let id = row["id"].as_str().unwrap();
+        let f = |k: &str| row[k].as_f64().unwrap();
+        let mut bins: Vec<f64> = row["bins"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|x| x.as_f64().unwrap())
+            .collect();
+        bins.resize(row["steps"].as_u64().unwrap() as usize, 0.0);
+        // As `results::report` builds an SPPS band's series.
+        let build = |complete: bool| {
+            let s = if complete {
+                EnergySeries::complete(f("dt"), bins.clone())
+            } else {
+                EnergySeries::new(f("dt"), bins.clone())
+            };
+            s.unwrap()
+                .with_early_reverberation_unresolved()
+                .with_solver_floor(f("floor_db"), f("alive_share"))
+                .unwrap()
+                .with_lost_share_following_decay(f("lost_share_following_decay"))
+                .unwrap()
+        };
+        let arrival = Arrival::spread(f("arrival_s"), f("half_width_s"));
+        let before = decay::evaluate(&build(false), arrival);
+        let after = decay::evaluate(&build(true), arrival);
+        for (name, b, a, reported) in [
+            ("T20", &before.t20, &after.t20, f("reported_t20_s")),
+            ("T30", &before.t30, &after.t30, f("reported_t30_s")),
+        ] {
+            let e = b.as_ref().unwrap_err();
+            let NotEvaluable::Truncated {
+                value,
+                with_tail: None,
+                ..
+            } = why(e)
+            else {
+                panic!("{id} {name} before: {e}")
+            };
+            // The fixture rebuilt here gives the value the run's report carried.
+            assert!((value / reported - 1.0).abs() < 1e-12, "{id} {name}");
+            match a {
+                Ok(fit) => {
+                    println!("{id} {name}: {} s (refused before)", fit.t_s);
+                    assert_eq!(fit.t_s, *value, "{id} {name}");
+                }
+                // The floor may refuse T30; a tail may not.
+                Err(e) => {
+                    println!("{id} {name}: {e}");
+                    assert!(name == "T30", "{id} {name}: {e}");
+                    assert!(
+                        matches!(
+                            why(e),
+                            NotEvaluable::MissingMoves { .. }
+                                | NotEvaluable::MissingNotCleared { .. }
+                        ),
+                        "{id} {name}: {e}"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[test]
