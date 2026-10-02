@@ -969,24 +969,62 @@ STANDARDS-CHECK.md). The report states the weighting and that the MTF is from a 
 response (cl. 8.3).
 
 - **Noise.** The receiver's background noise per band (the `.gap`), when it has one. A receiver
-  without one is written 0 dB in every band (`config_xml::write`); a `.gap` that reads 0 dB in
-  every band is taken as no noise, and the report says "none".
-- **Run length** (cl. 6.2 b, 8.3 a): the response from the direct sound must be at least 1.6 s
-  and at least half the reverberation time, taken per band as its T30, else T20, else EDT, the
-  longest over the speech's bands. Shorter: `params_series_too_short`. A band with none of the
-  three is refused `band_refused`.
+  without one is written 0 dB in every band (`config_xml::write`), so a band at 0 dB is no noise,
+  also when other bands have some (backlog 67); a `.gap` that reads 0 dB in every band is taken as
+  no noise, and the report says "none". Female speech is refused (`band_refused`, 125 Hz) when the
+  run's 125 Hz band cannot be read and the receiver has noise in it: that noise masks 250 Hz
+  (Table A.1), and 250 Hz is not taken unmasked (backlog 66).
+- **Run length** (cl. 6.2 b, 8.3 a: "the duration of the impulse response shall not be less than
+  half the reverberation time and at least 1,6 s to ensure a reliable calculation of the
+  modulation indices for the lowest modulation frequency of 0,63 Hz"): the response from the
+  direct sound must be at least 1.6 s and at least half the reverberation time, the longest over
+  the speech's bands. A band's reverberation time is the larger of its T30 (else T20, else EDT)
+  and **the decay its response's end shows** (`sti::end_decay`): two windows of a tenth of the
+  response each, ending at the series' end, give the decay rate there, unless the last window is
+  empty or at least 60 dB below the loudest window (the response has decayed through a whole
+  reverberation time's range and ended). Why: a response cut while it still decays has its own
+  Schroeder curve bent down by the cut, so the T30 read from it is short, and the T/2 rule passes
+  a response shorter than half the true T (the STI bed's set A, S1 short double slopes: T30 read
+  6.34 s against 8.26 s true; 528 answers the reference refused). The end's decay is what goes on
+  past the cut and what sets `m` at 0.63 Hz; for a double slope it is the late slope, so this is
+  stricter than the room's T30 there (set A: no answer below half the true T30 remains; 168 of
+  9,600 S1 cases the reference answers are now refused, all short double slopes at a rate ratio
+  of 5). Shorter: `params_series_too_short`. A band with none of the three decay times, or whose
+  response is within 60 dB of its loudest at its end and not decaying there, is refused
+  `band_refused`.
+- **What a series can lack** (`ReceiverBand::unseen_share`, `sti::sti_unseen_range`). The decay
+  quantities bound the energy the solver did not record and refuse what it can move beyond its
+  limit; STI does the same with three parts, as a share `x` of the band's energy from the direct
+  sound on: the particles still alive when the run ended, in a band not complete (their energy is
+  the room table's at the last step, `alive_end`, and what they bring per unit of it is taken as
+  at most what the particles alive brought per unit of theirs over the decay above the floor,
+  `params::floor_alive_share`: `alive_end/share`); the floor's dropped energy
+  (`10^{floor/10}/share`); and the lost particles' share. Energy `X = x·ΣE` arriving at any time
+  changes the Schroeder sum by a phasor of modulus at most `X`, so each `m(F)` lies in
+  `[(m − x)/(1 + x), (m + x)/(1 + x)]`, at 0.63 Hz, where tail energy matters most, as at every
+  modulation frequency; the band's speech level rises by at most `10·lg(1 + x)` (its own factor up,
+  band k+1's masking up). The STI is bounded term by term over those ranges, and refused
+  (`band_refused`, naming the band with the largest share) when either end lies more than
+  **0.003** from the value: 1/10 of the 0.03 the STI bed holds STI to (IEC 60268-16 gives no
+  limen). Until build H a band with one particle alive at the end refused STI outright (the bed's
+  set C7, S-live: one particle of 150,000 alive at 10 s refused male STI at every receiver).
 - **Uncertainty: not modelled.** STI is shown as a bare value, `mc_sd` null, no range; the report's
   `monte_carlo` says so. The plan (PLAN.md, "STI", item 4) expects count noise to bias `m` up where
   it is small; that is not yet measured.
 - **Refused** (`params_not_evaluable`, quantity `sti`): `band_missing` (an octave the speech needs
   is not in the run: a run of the old 6-band default refuses for 8 kHz), `band_refused` (an octave
-  it needs is in the run but its series is refused or not complete, its SPL is refused, or no
-  source emits in it), `not_octave_bands` (a third-octave run: the band kind is read from
+  it needs is in the run but its series is refused, or not complete with nothing to bound what
+  its particles alive at the end bring, or what it can lack moves the STI by more than 0.003, its
+  SPL is refused, or no source emits in it), `not_octave_bands` (a third-octave run: the band kind is read from
   `freq_enum` as the importer reads it), `several_sources` (STI is one talker's).
 - Tests: `tests/params_sti.rs` (the exponential decay's closed form `1/√(1 + (2πF·T/13.8)²)` to
   1e-6; m = 1 at a high level gives 1.000 for both speeches, m = 0 gives 0; masking from band k-1
-  and not k; 125 Hz unmasked; female without 125 Hz; the truncation; every refusal) and
-  `results::report`'s unit tests (the report's shape, the noise label, several sources).
+  and not k; 125 Hz unmasked; female without 125 Hz; the truncation; every refusal; set A's S1
+  short double slope re-created, refused for length; the unseen-energy bound held by energy added
+  after the end at 40 delays across a 0.63 Hz period; the end-decay windows; female refused for an
+  unreadable noisy 125 Hz band) and `results::report`'s unit tests (the report's shape, the noise
+  label, several sources, one particle alive at the end answered and many refused, a 0 dB band no
+  noise).
 
 ## ISO 9613-1: air attenuation
 

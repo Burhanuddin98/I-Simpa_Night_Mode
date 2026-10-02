@@ -54,6 +54,8 @@ U_MAX, ANSWERED_MIN = 0.01, 0.80
 TRUTH_SEEDS, TESTED_SEEDS = (9301, 9302), (4301, 4302, 4303)
 DT_FINE = t20p2.DT_FINE
 PAD = False
+REFERENCES = None                      # --references: C7's cached references, never recomputed (CACHE_ONLY)
+CACHE_ONLY = False
 
 
 def sha(p):
@@ -439,6 +441,8 @@ def c7_reference(room, label, rec, L, a6, src, R, c, atm, cache, say):
     if f.exists():
         z = np.load(f)
         return {k: z[k] for k in z.files}
+    if CACHE_ONLY:
+        raise RuntimeError('%s: no cached reference, and --references forbids computing one' % f)
     import scorebc
     ism = ism_fresh.generator()
     t0 = time.time()
@@ -481,7 +485,7 @@ def set_c7(out, say, workers):
     data = DATA['c7']
     allruns = scorebc.runs(data)
     rooms = list(run_c.ROOMS)
-    cache = OUT_ROOT / 'c7' / 'references'           # shared by the frozen and the padded scoring
+    cache = REFERENCES or OUT_ROOT / 'c7' / 'references'   # shared by the frozen and the padded scoring
     cache.mkdir(parents=True, exist_ok=True)
     rows, info, refs, ctx, rc_dt = [], {}, {}, {}, {}
     for room in rooms:
@@ -542,6 +546,7 @@ def set_c7(out, say, workers):
 
 
 def main():
+    global PAD, SIMPA, TESTED_SEEDS, REFERENCES, CACHE_ONLY
     ap = argparse.ArgumentParser()
     ap.add_argument('set', choices=('a-s1', 'a-s2', 'b7', 'c7'))
     ap.add_argument('--out')
@@ -549,9 +554,19 @@ def main():
     ap.add_argument('--smoke', type=int, default=0)
     ap.add_argument('--pad', action='store_true', help='c7 only, ADDENDUM-4 item 2 (post hoc): the reference '
                     'series padded with zeros to the length of the tested run; default out STI/c7-padded')
+    ap.add_argument('--simpa', help='the simpa.exe whose `results --json` is scored (default %s)' % SIMPA)
+    ap.add_argument('--seeds', help='b7/c7: the tested seeds, comma-separated (default %s); a fresh draw is '
+                    'scored by the same rules' % ','.join(map(str, TESTED_SEEDS)))
+    ap.add_argument('--references', help='c7: the folder of cached references to read; a missing one is an '
+                    'error, never computed')
     a = ap.parse_args()
-    global PAD
     PAD = a.pad
+    if a.simpa:
+        SIMPA = Path(a.simpa)
+    if a.seeds:
+        TESTED_SEEDS = tuple(int(s) for s in a.seeds.split(','))
+    if a.references:
+        REFERENCES, CACHE_ONLY = Path(a.references), True
     out = Path(a.out) if a.out else OUT_ROOT / (a.set + ('-padded' if a.pad else ''))
     if a.smoke:
         out = out / 'smoke'
@@ -570,7 +585,8 @@ def main():
                   addendum3=sha(BED / 'ADDENDUM-3.md'), stibed=sha(__file__),
                   shim=sha(REPO / 'crates' / 'simpa-core' / 'tests' / 'bed_shim.rs'),
                   sti_rs=sha(REPO / 'crates' / 'simpa-core' / 'src' / 'params' / 'sti.rs'), simpa=str(SIMPA),
-                  simpa_version=ver)
+                  simpa_version=ver, tested_seeds=list(TESTED_SEEDS),
+                  references=str(REFERENCES) if REFERENCES else None)
     mode = 'SMOKE' if a.smoke else ('POST-HOC (ADDENDUM-4 item 2)' if a.pad else 'SCORED')
     say('%s %s -> %s; %s' % (mode, a.set, out, json.dumps(hashes)))
     info = None

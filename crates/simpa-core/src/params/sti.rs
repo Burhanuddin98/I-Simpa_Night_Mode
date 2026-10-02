@@ -51,6 +51,17 @@ pub const SPEECH_LEVEL_DBA_AT_1M: f64 = 60.0;
 /// modulation frequency, 0.63 Hz. The response must also be at least half the reverberation time.
 pub const MIN_RESPONSE_S: f64 = 1.6;
 
+/// How far the energy a band's series may lack ([`ReceiverBand::unseen_share`]) may move the STI
+/// before it is refused: 1/10 of 0.03, the tolerance the STI bed holds it to (IEC 60268-16:2011
+/// gives no limen; edition 4's repeatability is 0.02 and its rating bands are 0.04 wide), the same
+/// tenth the decay quantities hold their unknowns to (`decay::limits`).
+pub const UNSEEN_LIMIT: f64 = 0.003;
+
+/// A response whose level at its end lies this far below its loudest stretch has decayed through a
+/// whole reverberation time's range, dB ([`end_decay`]); one that has not is taken as cut while
+/// still decaying, and the decay its end shows is one the length check must meet.
+pub const END_DECAY_DB: f64 = 60.0;
+
 /// The distance the speech level is given at, m (Annex J.3).
 pub const SPEECH_DISTANCE_M: f64 = 1.0;
 
@@ -241,10 +252,49 @@ fn transmission_index(m: f64) -> f64 {
 /// `params_not_evaluable` (`band_missing`) when a band the speech needs is not in `bands`, or has
 /// no speech level.
 pub fn sti(bands: &[LevelBand], gender: Gender) -> Result<StiValue, ParamError> {
+    check_bands(bands, gender)?;
+    let mti = mtis(bands, gender, &|_| 0.0, Reading::Given);
+    let raw = combine(&mti, &mti, gender);
+    Ok(StiValue {
+        value: raw.min(1.0),
+        untruncated: raw,
+        mti,
+    })
+}
+
+/// The lowest and highest STI (each truncated at 1.0) that `bands` can give when each band's
+/// series may lack energy, `unseen(freq_hz)` of what it holds from the direct sound on (0 for
+/// none): energy the solver did not record (particles alive at the run's end, dropped at its
+/// floor, or lost), arriving at any time. Such an addition `X = x·Σ E` changes the Schroeder sum
+/// by a phasor of modulus at most `X`, so every `m(F)` lies in `[(m − x)/(1 + x), (m + x)/(1 + x)]`,
+/// at 0.63 Hz as at every modulation frequency; the band's speech level rises by at most
+/// `10·lg(1 + x)`, which raises its own correction factor and band k+1's masking. Each `MTI_k` is
+/// then taken at both ends, and `Σα·MTI − Σβ·√(MTI·MTI)` bounded term by term: its lowest with
+/// every `α` term low and every `β` term high, its highest the other way. Refused as [`sti`] is.
+pub fn sti_unseen_range(
+    bands: &[LevelBand],
+    gender: Gender,
+    unseen: &dyn Fn(i32) -> f64,
+) -> Result<(f64, f64), ParamError> {
+    check_bands(bands, gender)?;
+    let lo = mtis(bands, gender, unseen, Reading::Lowest);
+    let hi = mtis(bands, gender, unseen, Reading::Highest);
+    Ok((
+        combine(&lo, &hi, gender).min(1.0),
+        combine(&hi, &lo, gender).min(1.0),
+    ))
+}
+
+/// `band_missing` when a band `gender`'s speech needs is not in `bands`, or has no speech level.
+fn check_bands(bands: &[LevelBand], gender: Gender) -> Result<(), ParamError> {
     let needed = gender.bands_hz();
-    let find = |f: i32| bands.iter().find(|b| b.freq_hz == f);
     for &f in needed {
-        if find(f).and_then(|b| b.speech_db).is_none() {
+        if bands
+            .iter()
+            .find(|b| b.freq_hz == f)
+            .and_then(|b| b.speech_db)
+            .is_none()
+        {
             return Err(not_evaluable(
                 Quantity::Sti,
                 NotEvaluable::BandMissing {
@@ -254,43 +304,152 @@ pub fn sti(bands: &[LevelBand], gender: Gender) -> Result<StiValue, ParamError> 
             ));
         }
     }
-    let mut mti = Vec::with_capacity(needed.len());
-    for &f in needed {
+    Ok(())
+}
+
+/// How [`mtis`] reads the bands: as given, or at the lowest or highest the energy each band's
+/// series may lack can take its MTI ([`sti_unseen_range`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reading {
+    Given,
+    Lowest,
+    Highest,
+}
+
+/// `(freq_hz, MTI_k)` of every band `gender`'s speech needs, ascending, read as `reading` says.
+/// The bands are checked ([`check_bands`]).
+fn mtis(
+    bands: &[LevelBand],
+    gender: Gender,
+    unseen: &dyn Fn(i32) -> f64,
+    reading: Reading,
+) -> Vec<(i32, f64)> {
+    let find = |f: i32| bands.iter().find(|b| b.freq_hz == f);
+    let lack = |f: i32| {
+        if reading == Reading::Given {
+            0.0
+        } else {
+            unseen(f)
+        }
+    };
+    let masking = |i_prev: f64| {
+        if i_prev > 0.0 {
+            i_prev * 10f64.powf(masking_db(10.0 * i_prev.log10()) / 10.0)
+        } else {
+            0.0
+        }
+    };
+    let mut mti = Vec::with_capacity(gender.bands_hz().len());
+    for &f in gender.bands_hz() {
         let k = octave_index(f).expect("an octave of OCTAVES_HZ");
-        let b = find(f).expect("checked above");
+        let b = find(f).expect("checked by check_bands");
+        let x = lack(f);
         let i_s = intensity(b.speech_db);
         let i_n = intensity(b.noise_db);
         let i_rt = 10f64.powf(RECEPTION_THRESHOLD_DB[k] / 10.0);
         // Masking by band k-1's total level, speech and noise (Table A.1); 125 Hz is not masked,
-        // and a band k-1 not given (female's 125 Hz, when the run has none) masks nothing.
-        let i_am = match k.checked_sub(1).and_then(|p| find(OCTAVES_HZ[p])) {
+        // and a band k-1 not given (female's 125 Hz, when the run has none) masks nothing. Band
+        // k-1's unseen energy can raise its speech level; the masking is taken at both ends of
+        // that, since Table A.1 steps down by 0.2 dB at 100 dB.
+        let (am_given, am_lifted) = match k.checked_sub(1).and_then(|p| find(OCTAVES_HZ[p])) {
             Some(prev) => {
-                let i_prev = intensity(prev.speech_db) + intensity(prev.noise_db);
-                if i_prev > 0.0 {
-                    i_prev * 10f64.powf(masking_db(10.0 * i_prev.log10()) / 10.0)
-                } else {
-                    0.0
-                }
+                let i_noise = intensity(prev.noise_db);
+                let i_speech = intensity(prev.speech_db);
+                (
+                    masking(i_speech + i_noise),
+                    masking(i_speech * (1.0 + lack(prev.freq_hz)) + i_noise),
+                )
             }
-            None => 0.0,
+            None => (0.0, 0.0),
         };
-        let factor = i_s / (i_s + i_n + i_am + i_rt);
-        let sum: f64 = b.mtf.iter().map(|m| transmission_index(m * factor)).sum();
+        let factor = match reading {
+            Reading::Given => i_s / (i_s + i_n + am_given + i_rt),
+            Reading::Lowest => i_s / (i_s + i_n + am_given.max(am_lifted) + i_rt),
+            Reading::Highest => {
+                let lifted = i_s * (1.0 + x);
+                lifted / (lifted + i_n + am_given.min(am_lifted) + i_rt)
+            }
+        };
+        let sum: f64 = b
+            .mtf
+            .iter()
+            .map(|&m| {
+                let m = match reading {
+                    Reading::Given => m,
+                    Reading::Lowest => ((m - x) / (1.0 + x)).max(0.0),
+                    Reading::Highest => ((m + x) / (1.0 + x)).min(1.0),
+                };
+                transmission_index(m * factor)
+            })
+            .sum();
         mti.push((f, sum / MODULATION_HZ.len() as f64));
     }
+    mti
+}
+
+/// `Σ α_k·plus_k − Σ β_k·√(minus_k·minus_{k+1})` (A.5.6, Table A.3), untruncated: `plus` and
+/// `minus` the same MTIs for the STI itself, opposite ends of their ranges for its bounds.
+fn combine(plus: &[(i32, f64)], minus: &[(i32, f64)], gender: Gender) -> f64 {
     let (alpha, beta) = (gender.alpha(), gender.beta());
     let mut raw = 0.0;
-    for (j, &(f, m)) in mti.iter().enumerate() {
+    for (j, &(f, m)) in plus.iter().enumerate() {
         let k = octave_index(f).expect("an octave");
         raw += alpha[k].expect("a band of this speech") * m;
-        if let Some(&(_, next)) = mti.get(j + 1) {
-            raw -= beta[k].expect("a pair of this speech") * (m * next).sqrt();
+        if let (Some(&(_, a)), Some(&(_, b))) = (minus.get(j), minus.get(j + 1)) {
+            raw -= beta[k].expect("a pair of this speech") * (a * b).sqrt();
         }
     }
-    Ok(StiValue {
-        value: raw.min(1.0),
-        untruncated: raw,
-        mti,
+    raw
+}
+
+/// What the end of a band's response shows about its decay ([`end_decay`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum EndDecay {
+    /// The response has ended: its last window holds nothing, or lies at least
+    /// [`END_DECAY_DB`] below its loudest.
+    Ended,
+    /// Still within [`END_DECAY_DB`] of its loudest at its end, and decaying there with this
+    /// reverberation time, s; `drop_db` is how far the last window lies below the loudest.
+    Decaying { t_s: f64, drop_db: f64 },
+    /// Still within [`END_DECAY_DB`] of its loudest at its end, and not decaying there.
+    NotDecaying { drop_db: f64 },
+}
+
+/// The decay at the end of a band's response, `energy` from bin `from` on, for cl. 6.2 b and
+/// 8.3 a's length rule. The windows are the tail estimate's (`decay::tail`): `w`, a tenth of the
+/// bins from `from` to the series' end, at least 1; but they end at the series' end, not at its
+/// last bin with energy, so that a response that has ended shows it. The level of the last window
+/// is compared with the loudest `w`-bin window from `from` on; within [`END_DECAY_DB`] of it, the
+/// two last windows give the decay rate at the end, `T = 60·w·dt / (10·lg(w₁/w₂))`. `None` when
+/// fewer than two bins follow `from`.
+pub fn end_decay(energy: &[f64], dt: f64, from: usize) -> Option<EndDecay> {
+    let v = energy.get(from..)?;
+    let n = v.len();
+    if n < 2 {
+        return None;
+    }
+    let w = (n / 10).max(1);
+    let mut acc: f64 = v[..w].iter().sum();
+    let mut loudest = acc;
+    for j in w..n {
+        acc += v[j] - v[j - w];
+        loudest = loudest.max(acc);
+    }
+    let w2: f64 = v[n - w..].iter().sum();
+    let w1: f64 = v[n - 2 * w..n - w].iter().sum();
+    if w2 <= 0.0 {
+        return Some(EndDecay::Ended);
+    }
+    let drop_db = 10.0 * (loudest / w2).log10();
+    Some(if drop_db >= END_DECAY_DB {
+        EndDecay::Ended
+    } else if w2 >= w1 {
+        EndDecay::NotDecaying { drop_db }
+    } else {
+        EndDecay::Decaying {
+            t_s: 60.0 * w as f64 * dt / (10.0 * (w1 / w2).log10()),
+            drop_db,
+        }
     })
 }
 
@@ -312,8 +471,16 @@ pub struct ReceiverBand<'a> {
     /// The band's reverberation time, s, that the run's length is checked against (cl. 8.3 a);
     /// `None` when the band has none.
     pub reverberation_s: Option<f64>,
-    /// Why the band's series cannot be read honestly (refused, or not complete), if it cannot.
+    /// Why the band's series cannot be read honestly (refused, or not complete with nothing to
+    /// bound what it lacks), if it cannot.
     pub unusable: Option<String>,
+    /// The most energy the band's series can lack, as a share of what it holds from `from` on: what
+    /// the particles alive at the run's end can still bring, what the solver's floor dropped, and
+    /// what lost particles took (`results::report` bounds each as the decay quantities do). 0 for
+    /// none. STI is refused when it can move the value by more than [`UNSEEN_LIMIT`]
+    /// ([`sti_unseen_range`]); a share that is not a finite number of at least 0 makes the band
+    /// unusable.
+    pub unseen_share: f64,
 }
 
 /// What [`receiver_sti`] read from one band.
@@ -354,10 +521,14 @@ pub struct ReceiverSti {
 /// third-octave band at 125 Hz is not the octave STI needs). Each speech is refused
 /// `params_not_evaluable` when the bands are not octaves (`not_octave_bands`), when a band it
 /// needs is not in the run (`band_missing`), or cannot be read (`band_refused`: its series is
-/// refused or not complete, its SPL is refused, no source emits in it, or it has no reverberation
-/// time to check the run's length against); and `params_series_too_short` when the response,
-/// from the arrival, is shorter than [`MIN_RESPONSE_S`] or half the longest reverberation time of
-/// its bands (cl. 6.2 b, 8.3 a).
+/// refused or not complete with nothing to bound what it lacks, its SPL is refused, no source
+/// emits in it, it has no reverberation time to check the run's length against, its response is
+/// not decaying at its end, or what its series can lack moves the STI by more than
+/// [`UNSEEN_LIMIT`]); and `params_series_too_short` when the response, from the arrival, is
+/// shorter than [`MIN_RESPONSE_S`] or half the longest reverberation time of its bands (cl. 6.2 b,
+/// 8.3 a), each band's taken as the larger of its T30 (else T20, else EDT) and the decay time its
+/// response's end shows ([`end_decay`]). Female speech is also refused when the run's 125 Hz band
+/// cannot be read and the receiver has noise in it: that noise masks 250 Hz (Table A.1).
 pub fn receiver_sti(dt: f64, bands: &[ReceiverBand<'_>], octave: bool) -> ReceiverSti {
     // What each octave band of the run gives: its MTF and transfer, or why it gives none.
     struct Read {
@@ -366,6 +537,8 @@ pub fn receiver_sti(dt: f64, bands: &[ReceiverBand<'_>], octave: bool) -> Receiv
         got: Result<([f64; 14], f64), String>,
         noise_db: Option<f64>,
         reverberation_s: Option<f64>,
+        end: Option<EndDecay>,
+        unseen_share: f64,
         length_s: f64,
     }
     let mut read: Vec<Read> = Vec::new();
@@ -376,6 +549,12 @@ pub fn receiver_sti(dt: f64, bands: &[ReceiverBand<'_>], octave: bool) -> Receiv
         let got = (|| {
             if let Some(why) = &b.unusable {
                 return Err(why.clone());
+            }
+            if !(b.unseen_share.is_finite() && b.unseen_share >= 0.0) {
+                return Err(format!(
+                    "nothing bounds the energy its series can lack (share {})",
+                    b.unseen_share
+                ));
             }
             let spl = b
                 .spl_db
@@ -392,6 +571,8 @@ pub fn receiver_sti(dt: f64, bands: &[ReceiverBand<'_>], octave: bool) -> Receiv
             got,
             noise_db: b.noise_db,
             reverberation_s: b.reverberation_s,
+            end: end_decay(b.energy, dt, b.from),
+            unseen_share: b.unseen_share,
             length_s: b.energy.len().saturating_sub(b.from) as f64 * dt,
         });
     }
@@ -425,10 +606,35 @@ pub fn receiver_sti(dt: f64, bands: &[ReceiverBand<'_>], octave: bool) -> Receiv
                 });
             }
         }
+        // A band k-1 outside the speech (female's 125 Hz) masks band k with its noise: when it
+        // cannot be read and has noise, band k cannot be masked honestly (backlog 66).
+        for r in &used {
+            let Some(prev) =
+                r.k.checked_sub(1)
+                    .and_then(|p| read.iter().find(|q| q.k == p))
+            else {
+                continue;
+            };
+            if let (false, Err(detail), Some(_)) =
+                (needed.contains(&prev.freq_hz), &prev.got, prev.noise_db)
+            {
+                return refuse(NotEvaluable::BandRefused {
+                    freq_hz: prev.freq_hz,
+                    detail: format!(
+                        "{detail}; its background noise masks the {} Hz band (IEC 60268-16:2011 \
+                         Table A.1), which is not taken unmasked",
+                        r.freq_hz
+                    ),
+                });
+            }
+        }
+        // The length (cl. 6.2 b, 8.3 a): each band's reverberation time is the larger of its T30
+        // (else T20, else EDT) and the decay its response's end shows, since a response cut while
+        // it still decays bends its own Schroeder curve down and reads a T30 too short.
         let mut longest: f64 = 0.0;
         for r in &used {
-            match r.reverberation_s {
-                Some(t) if t.is_finite() && t > 0.0 => longest = longest.max(t),
+            let t = match r.reverberation_s {
+                Some(t) if t.is_finite() && t > 0.0 => t,
                 _ => {
                     return refuse(NotEvaluable::BandRefused {
                         freq_hz: r.freq_hz,
@@ -437,7 +643,22 @@ pub fn receiver_sti(dt: f64, bands: &[ReceiverBand<'_>], octave: bool) -> Receiv
                             .into(),
                     });
                 }
-            }
+            };
+            let t = match r.end {
+                Some(EndDecay::Decaying { t_s, .. }) => t.max(t_s),
+                Some(EndDecay::NotDecaying { drop_db }) => {
+                    return refuse(NotEvaluable::BandRefused {
+                        freq_hz: r.freq_hz,
+                        detail: format!(
+                            "its response is not decaying at its end, {drop_db:.1} dB below its \
+                             loudest (less than {END_DECAY_DB} dB): no reverberation time says \
+                             how long it must be (IEC 60268-16:2011 cl. 6.2 b, 8.3 a)"
+                        ),
+                    });
+                }
+                Some(EndDecay::Ended) | None => t,
+            };
+            longest = longest.max(t);
         }
         let needed_s = MIN_RESPONSE_S.max(longest / 2.0);
         let available_s = used
@@ -448,7 +669,8 @@ pub fn receiver_sti(dt: f64, bands: &[ReceiverBand<'_>], octave: bool) -> Receiv
             return Err(ParamError::SeriesTooShort {
                 what: format!(
                     "STI (IEC 60268-16:2011 cl. 6.2 b, 8.3 a: at least {MIN_RESPONSE_S} s and half \
-                     the reverberation time, {longest:.3} s, from the direct sound)"
+                     the reverberation time, {longest:.3} s, the larger of each band's T30, T20 or \
+                     EDT and the decay its response's end shows, from the direct sound)"
                 ),
                 needed_s,
                 available_s,
@@ -468,7 +690,35 @@ pub fn receiver_sti(dt: f64, bands: &[ReceiverBand<'_>], octave: bool) -> Receiv
                 })
             })
             .collect();
-        sti(&levels, gender)
+        let value = sti(&levels, gender)?;
+        // What the series can lack (particles alive at the end, dropped at the floor, lost),
+        // bounded to its worst effect on the STI.
+        let lack = |f: i32| {
+            read.iter()
+                .find(|r| r.freq_hz == f)
+                .map_or(0.0, |r| r.unseen_share)
+        };
+        if levels.iter().any(|b| lack(b.freq_hz) > 0.0) {
+            let (lo, hi) = sti_unseen_range(&levels, gender, &lack)?;
+            let moves = (value.value - lo).max(hi - value.value);
+            if moves > UNSEEN_LIMIT {
+                let worst = *needed
+                    .iter()
+                    .max_by(|a, b| lack(**a).total_cmp(&lack(**b)))
+                    .expect("a speech has bands");
+                return refuse(NotEvaluable::BandRefused {
+                    freq_hz: worst,
+                    detail: format!(
+                        "the energy its series can lack (particles alive when the run ended, \
+                         dropped at the solver's floor, or lost), at most {:.3e} of what it holds \
+                         from the direct sound on, can move the STI by up to {moves:.4}, more \
+                         than {UNSEEN_LIMIT} (1/10 of the 0.03 STI is held to)",
+                        lack(worst)
+                    ),
+                });
+            }
+        }
+        Ok(value)
     };
     let male = evaluate(Gender::Male);
     let female = evaluate(Gender::Female);

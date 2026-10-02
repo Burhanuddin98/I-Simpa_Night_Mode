@@ -337,6 +337,7 @@ fn bed_shim_sti() {
                 noise_db: b.noise_db,
                 reverberation_s: b.reverberation_s,
                 unusable: b.unusable.clone(),
+                unseen_share: 0.0,
             })
             .collect();
         let r = sti::receiver_sti(dt, &inputs, true);

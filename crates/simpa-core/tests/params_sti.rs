@@ -3,7 +3,8 @@
 //! without 125 Hz, the truncation at 1.0 (Table A.3, note), and the refusals of cl. 8.3.
 
 use simpa_core::params::sti::{
-    Gender, LevelBand, MODULATION_HZ, OCTAVES_HZ, ReceiverBand, masking_db, mtf, receiver_sti, sti,
+    END_DECAY_DB, EndDecay, Gender, LevelBand, MODULATION_HZ, OCTAVES_HZ, ReceiverBand,
+    UNSEEN_LIMIT, end_decay, masking_db, mtf, receiver_sti, sti, sti_unseen_range,
 };
 use simpa_core::params::{NotEvaluable, ParamError, codes, level};
 
@@ -276,6 +277,7 @@ fn receiver(bands: &[Band], dt: f64, octave: bool) -> simpa_core::params::sti::R
             noise_db: None,
             reverberation_s: b.t,
             unusable: b.unusable.clone(),
+            unseen_share: 0.0,
         })
         .collect();
     receiver_sti(dt, &rb, octave)
@@ -347,12 +349,15 @@ fn a_short_response_refuses() {
     let e = r.male.unwrap_err();
     assert_eq!(e.code(), codes::SERIES_TOO_SHORT, "{e}");
     assert!(matches!(e, ParamError::SeriesTooShort { needed_s, .. } if needed_s == 1.6));
-    // Longer than 1.6 s, shorter than T/2 (T = 5 s: 2.5 s needed).
+    // Longer than 1.6 s, shorter than T/2 (T = 5 s: 2.5 s needed). The series still decays at its
+    // end, so the decay its end shows counts too: with `exponential`'s 13.8 that is
+    // 5·6·ln 10/13.8 = 5.006 s.
+    let t_end = 5.0 * 6.0 * 10f64.ln() / 13.8;
     let r = receiver(&room(&OCTAVES_HZ, 5.0, dt, 2.0), dt, true);
     let e = r.female.unwrap_err();
     assert!(
         matches!(e, ParamError::SeriesTooShort { needed_s, available_s, .. }
-            if (needed_s - 2.5).abs() < 1e-12 && (available_s - 2.0).abs() < 1e-9),
+            if (needed_s - t_end / 2.0).abs() < 1e-9 && (available_s - 2.0).abs() < 1e-9),
         "{e}"
     );
     // Long enough for both.
@@ -421,6 +426,7 @@ fn background_noise_lowers_the_sti() {
                 noise_db: noise,
                 reverberation_s: b.t,
                 unusable: None,
+                unseen_share: 0.0,
             })
             .collect();
         receiver_sti(dt, &rb, true).male.unwrap().value
@@ -428,4 +434,236 @@ fn background_noise_lowers_the_sti() {
     let quiet = with(None);
     let noisy = with(Some(50.0));
     assert!(noisy < quiet - 0.05, "{quiet} then {noisy}");
+}
+
+// --- build H: the STI bed's findings (docs/investigations/2026-10-02-bed/ADDENDUM-4.md) ----------
+
+/// Set A's S1 row `s1|1.5|042|double|R0.1|1ms|short` re-created: a double-slope decay (T60 8.08 s
+/// and 12.12 s, the late slope 18.9 dB down, DRR −16.3 dB, a 38.3 ms gap) cut 3.28 s after its
+/// arrival, `synth_fresh.py`'s closed form integrated over 1 ms bins. Its reverberation time is
+/// 8.26 s, so cl. 8.3 a needs 4.13 s; the product read T30 6.34 s on the cut series, which it was
+/// told is complete (the shim's claim, ADDENDUM-3 item 6), and answered.
+#[test]
+fn a_series_cut_while_it_still_decays_refuses_for_length_whatever_t_it_reads() {
+    use simpa_core::params::EnergySeries;
+    use simpa_core::params::decay::{self, Arrival};
+    let dt = 1e-3;
+    let (t_arr, hw, gap) = (0.099_740_423, 0.1 / 343.2, 0.038_308_512);
+    let (a, k) = ([1.0, 0.008_540_111], [1.709_725_006, 1.139_816_671]);
+    let ed = 0.013_899_316;
+    let series = |n: usize| -> Vec<f64> {
+        let t0 = t_arr + gap;
+        (0..n)
+            .map(|i| {
+                let (lo, hi) = (i as f64 * dt, (i + 1) as f64 * dt);
+                let direct = if (t_arr / dt).floor() as usize == i {
+                    ed
+                } else {
+                    0.0
+                };
+                let rev: f64 = if hi <= t0 {
+                    0.0
+                } else {
+                    let lo = lo.max(t0);
+                    (0..2)
+                        .map(|j| {
+                            a[j] / k[j] * ((-k[j] * (lo - t0)).exp() - (-k[j] * (hi - t0)).exp())
+                        })
+                        .sum()
+                };
+                direct + rev
+            })
+            .collect()
+    };
+    let t_of = |bins: &[f64]| {
+        let p = decay::evaluate(
+            &EnergySeries::complete(dt, bins.to_vec()).unwrap(),
+            Arrival::spread(t_arr, hw),
+        );
+        p.t30.as_ref().map(|x| x.t_s).unwrap()
+    };
+    // The true reverberation time, on the decay run to 2.5 times its slow T60.
+    let truth = t_of(&series(30_400));
+    assert!((truth - 8.26).abs() < 0.02, "{truth}");
+    let cut = series(3379);
+    let from = ((t_arr - hw) / dt).floor() as usize;
+    let length_s = (cut.len() - from) as f64 * dt;
+    assert!(length_s < truth / 2.0, "{length_s} vs {truth}");
+    // The cut series reads a T30 short enough to pass the T/2 rule: the defect.
+    let read = t_of(&cut);
+    assert!(read / 2.0 < length_s && read < 6.5, "{read}");
+    let bands: Vec<ReceiverBand> = OCTAVES_HZ
+        .iter()
+        .map(|&f| ReceiverBand {
+            freq_hz: f,
+            energy: &cut,
+            from,
+            spl_db: Ok(70.0),
+            power_rho_c: power_for(70.0),
+            noise_db: None,
+            reverberation_s: Some(read),
+            unusable: None,
+            unseen_share: 0.0,
+        })
+        .collect();
+    let r = receiver_sti(dt, &bands, true);
+    for s in [&r.male, &r.female] {
+        let e = s.as_ref().unwrap_err();
+        assert_eq!(e.code(), codes::SERIES_TOO_SHORT, "{e}");
+        let ParamError::SeriesTooShort { needed_s, .. } = e else {
+            unreachable!()
+        };
+        // What its end decays at, not the T30 the cut bends down.
+        assert!(
+            *needed_s > length_s && *needed_s >= truth / 2.0 - 0.1,
+            "{e}"
+        );
+    }
+}
+
+/// Backlog 66: female speech has no 125 Hz band, but 125 Hz's noise masks 250 Hz (Table A.1).
+/// A noisy receiver whose 125 Hz band cannot be read must not give female STI with 250 Hz
+/// unmasked.
+#[test]
+fn a_noisy_receiver_whose_125_hz_band_cannot_be_read_refuses_female_speech() {
+    let dt = 1e-3;
+    let mut bands = room(&OCTAVES_HZ, 1.0, dt, 3.0);
+    bands[0].unusable = Some("its series is refused".into());
+    let with = |noise: Option<f64>| {
+        let rb: Vec<ReceiverBand> = bands
+            .iter()
+            .map(|b| ReceiverBand {
+                freq_hz: b.freq,
+                energy: &b.energy,
+                from: 0,
+                spl_db: Ok(70.0),
+                power_rho_c: power_for(70.0),
+                noise_db: noise,
+                reverberation_s: b.t,
+                unusable: b.unusable.clone(),
+                unseen_share: 0.0,
+            })
+            .collect();
+        receiver_sti(dt, &rb, true)
+    };
+    let e = with(Some(55.0)).female.unwrap_err();
+    assert!(
+        matches!(
+            e.not_evaluable(),
+            Some(NotEvaluable::BandRefused { freq_hz: 125, .. })
+        ),
+        "{e}"
+    );
+    assert!(e.to_string().contains("250 Hz"), "{e}");
+    // Without noise 125 Hz masks nothing in female speech: answered.
+    assert!(with(None).female.is_ok());
+}
+
+/// The energy a band's series can lack, `x` of what it holds, bounds the STI between the ends
+/// `sti_unseen_range` gives: checked by adding `x` of it after the end of the 250 Hz band (which
+/// also masks 500 Hz) at 40 delays across a period of 0.63 Hz, its speech level raised with it.
+#[test]
+fn the_unseen_energy_bounds_the_sti_and_refuses_only_beyond_its_limit() {
+    let dt = 1e-3;
+    let t60 = 1.2;
+    let base = exponential(t60, dt, 3000);
+    let total: f64 = base.iter().sum();
+    let levels = |extra: Option<(usize, f64)>| -> Vec<LevelBand> {
+        OCTAVES_HZ
+            .iter()
+            .map(|&f| {
+                let mut e = base.clone();
+                let mut transfer = 0.0;
+                if let (250, Some((at, x))) = (f, extra) {
+                    e.resize(at + 1, 0.0);
+                    e[at] += x * total;
+                    transfer = 10.0 * (1.0 + x).log10();
+                }
+                LevelBand {
+                    freq_hz: f,
+                    mtf: mtf(&e, dt, 0).unwrap(),
+                    speech_db: Gender::Male.speech_db(f, 10.0 + transfer),
+                    noise_db: Some(30.0),
+                }
+            })
+            .collect()
+    };
+    for x in [1e-4, 1e-3, 1e-2, 0.1] {
+        let lack = |f: i32| if f == 250 { x } else { 0.0 };
+        let (lo, hi) = sti_unseen_range(&levels(None), Gender::Male, &lack).unwrap();
+        let given = sti(&levels(None), Gender::Male).unwrap().value;
+        assert!(lo <= given && given <= hi, "{lo} {given} {hi}");
+        for j in 0..40 {
+            let at = 3000 + (f64::from(j) * 1.587 / 40.0 / dt) as usize;
+            let v = sti(&levels(Some((at, x))), Gender::Male).unwrap().value;
+            assert!(
+                lo - 1e-12 <= v && v <= hi + 1e-12,
+                "x {x}, bin {at}: {lo} <= {v} <= {hi}"
+            );
+        }
+    }
+    // Through a receiver: a negligible share gives the same STI, a large one refuses.
+    let bands = room(&OCTAVES_HZ, t60, dt, 3.0);
+    let with = |x: f64| {
+        let rb: Vec<ReceiverBand> = bands
+            .iter()
+            .map(|b| ReceiverBand {
+                freq_hz: b.freq,
+                energy: &b.energy,
+                from: 0,
+                spl_db: Ok(70.0),
+                power_rho_c: power_for(70.0),
+                noise_db: None,
+                reverberation_s: b.t,
+                unusable: None,
+                unseen_share: if b.freq == 250 { x } else { 0.0 },
+            })
+            .collect();
+        receiver_sti(dt, &rb, true)
+    };
+    let clean = with(0.0).male.unwrap().value;
+    assert_eq!(with(1e-6).male.unwrap().value, clean);
+    let e = with(0.05).male.unwrap_err();
+    assert!(
+        matches!(
+            e.not_evaluable(),
+            Some(NotEvaluable::BandRefused { freq_hz: 250, .. })
+        ),
+        "{e}"
+    );
+    assert!(e.to_string().contains("can move the STI"), "{e}");
+    assert!(e.to_string().contains(&UNSEEN_LIMIT.to_string()), "{e}");
+    // A share that is not a number makes the band unusable.
+    assert!(with(f64::NAN).male.is_err());
+}
+
+#[test]
+fn the_end_of_a_response_says_whether_it_has_ended_or_how_it_still_decays() {
+    let dt = 1e-3;
+    // Cut 2 s into a 2 s decay: decaying there at its own T60.
+    match end_decay(&exponential(2.0, dt, 2000), dt, 0).unwrap() {
+        EndDecay::Decaying { t_s, drop_db } => {
+            assert!((t_s - 2.0 * 6.0 * 10f64.ln() / 13.8).abs() < 1e-6, "{t_s}");
+            assert!(drop_db < END_DECAY_DB, "{drop_db}");
+        }
+        other => panic!("{other:?}"),
+    }
+    // Run to 3 T60: more than 60 dB down, ended.
+    assert_eq!(
+        end_decay(&exponential(1.0, dt, 3000), dt, 0),
+        Some(EndDecay::Ended)
+    );
+    // Nothing in its last window: ended.
+    let mut e = exponential(5.0, dt, 1000);
+    e.resize(3000, 0.0);
+    assert_eq!(end_decay(&e, dt, 0), Some(EndDecay::Ended));
+    // Flat at its end: not decaying.
+    let mut e = exponential(1.0, dt, 1000);
+    e.extend(std::iter::repeat_n(1e-3, 1000));
+    assert!(matches!(
+        end_decay(&e, dt, 0),
+        Some(EndDecay::NotDecaying { .. })
+    ));
+    // Fewer than two bins from `from`: nothing to read.
+    assert_eq!(end_decay(&[1.0], dt, 0), None);
 }

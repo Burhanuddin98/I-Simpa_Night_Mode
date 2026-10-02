@@ -1311,6 +1311,58 @@ fn series_of(
     }
 }
 
+/// The most energy band `index`'s series (`freq_hz`, `energy`) can lack, as a share of what it
+/// holds from bin `from` on, for STI (`sti::ReceiverBand::unseen_share`), bounded as the decay
+/// quantities bound it (`series_of`); `None` when nothing bounds it. Three parts, summed:
+/// - **Particles alive at the run's end**, when the band is not complete
+///   ([`SppsResults::band_complete`]): the room table at the last step holds their energy, a
+///   share `alive_end` of the emitted. What a particle brings per unit of its energy is taken to be
+///   at most what the particles alive brought per unit of theirs over the decay above the floor,
+///   as the floor's bound takes it (`params::floor_alive_share` from `from`): at most
+///   `alive_end / share` of the energy from `from` on.
+/// - **The floor**, `10^{floor/10} / share` (`EnergySeries::with_solver_floor`).
+/// - **Lost particles**, their share (`SppsResults::lost_share_following_decay` in energetic mode,
+///   `SppsResults::lost_share` otherwise).
+///
+/// A run whose `trans_epsilon` is not above 0 drops every particle at its first surface: `None`.
+fn sti_unseen_share(
+    s: &SppsResults,
+    index: usize,
+    freq_hz: i32,
+    energy: &[f64],
+    from: usize,
+) -> Option<f64> {
+    if s.trans_epsilon.is_nan() || s.trans_epsilon <= 0.0 {
+        return None;
+    }
+    let floor = s.floor_db();
+    let share = || {
+        let alive: Vec<f64> = (0..energy.len())
+            .map(|k| s.alive_share(index, k).unwrap_or(f64::NAN))
+            .collect();
+        params::floor_alive_share(energy, &alive, from, floor.unwrap_or(f64::NEG_INFINITY))
+            .filter(|a| a.is_finite() && *a > 0.0)
+    };
+    let mut x = 0.0;
+    if !s.band_complete(freq_hz) {
+        let end = s.alive_share(index, energy.len().checked_sub(1)?)?;
+        if !(end.is_finite() && end >= 0.0) {
+            return None;
+        }
+        if end > 0.0 {
+            x += end / share()?;
+        }
+    }
+    if let Some(db) = floor {
+        x += 10f64.powf(db / 10.0) / share()?;
+    }
+    match s.lost_share_following_decay(freq_hz) {
+        Some(l) => x += l,
+        None => x += s.lost_share(index, freq_hz, from).unwrap_or(0.0),
+    }
+    x.is_finite().then_some(x)
+}
+
 /// The receiver crossings behind `total` under `model`.
 fn crossings(model: &NoiseModel, total: f64) -> Option<f64> {
     match model {
@@ -1613,8 +1665,6 @@ fn receiver_report(
 ) -> SppsReceiverReport {
     let arrival_s = s.arrival_s(r);
     let arrival = known_arrival(s, arrival_s);
-    // A receiver with no background noise is written 0 dB in every band (`config_xml::write`).
-    let noise = r.bands.iter().any(|b| b.background_noise_db != 0.0);
     let mut sti_inputs: Vec<sti::ReceiverBand<'_>> = Vec::with_capacity(r.bands.len());
     let mut series: Vec<Result<EnergySeries, ParamError>> = Vec::with_capacity(r.bands.len());
     let mut models = Vec::with_capacity(r.bands.len());
@@ -1648,21 +1698,25 @@ fn receiver_report(
         }
         let total_pa2: f64 = b.energy.iter().sum();
         let g_db = strength(&e.parameters.spl_db, b.source_power_rho_c);
+        // The bin of the direct sound's leading edge (nothing reaches the receiver before it), or
+        // the onset bin when the arrival is not known.
+        let from = match arrival {
+            Arrival::Known {
+                time_s,
+                half_width_s,
+            } => ((time_s - half_width_s) / s.time_step_s).floor().max(0.0) as usize,
+            Arrival::Detected => e.onset.map_or(0, |o| o.index),
+        };
+        let unseen = sti_unseen_share(s, i, b.freq_hz, &b.energy, from);
         sti_inputs.push(sti::ReceiverBand {
             freq_hz: b.freq_hz,
             energy: &b.energy,
-            // The bin of the direct sound's leading edge (nothing reaches the receiver before
-            // it), or the onset bin when the arrival is not known.
-            from: match arrival {
-                Arrival::Known {
-                    time_s,
-                    half_width_s,
-                } => ((time_s - half_width_s) / s.time_step_s).floor().max(0.0) as usize,
-                Arrival::Detected => e.onset.map_or(0, |o| o.index),
-            },
+            from,
             spl_db: value_or_why(&e.parameters.spl_db),
             power_rho_c: b.source_power_rho_c,
-            noise_db: noise.then_some(b.background_noise_db),
+            // A receiver with noise in some bands is written 0 dB in the others: no noise there
+            // (backlog 67).
+            noise_db: (b.background_noise_db != 0.0).then_some(b.background_noise_db),
             reverberation_s: [
                 &e.parameters.t30_s,
                 &e.parameters.t20_s,
@@ -1670,15 +1724,21 @@ fn receiver_report(
             ]
             .into_iter()
             .find_map(Evaluated::value),
-            unusable: match &se {
-                Err(err) => Some(format!("its series is refused: {err}")),
-                Ok(_) if !s.band_complete(b.freq_hz) => Some(
+            unusable: match (&se, unseen) {
+                (Err(err), _) => Some(format!("its series is refused: {err}")),
+                (Ok(_), None) if !s.band_complete(b.freq_hz) => Some(
                     "its series is not complete: particles were still alive when the run \
-                     ended, and nothing bounds what the tail after it would change"
+                     ended, and nothing bounds what they would still bring"
                         .into(),
                 ),
-                Ok(_) => None,
+                (Ok(_), None) => Some(
+                    "nothing bounds the energy its series lacks (dropped at the solver's floor, \
+                     or lost)"
+                        .into(),
+                ),
+                (Ok(_), Some(_)) => None,
             },
+            unseen_share: unseen.unwrap_or(0.0),
         });
         bands.push(ReceiverBandReport {
             freq_hz: b.freq_hz,
@@ -3436,6 +3496,80 @@ mod tests {
         // What the bands it has gave is still reported.
         assert_eq!(rep.sti.bands.len(), 6);
         assert!(rep.sti.bands.iter().all(|b| b.mtf.is_some()));
+    }
+
+    /// [`octave_run`] in energetic mode (floor −50 dB), its room table the decay's own to the
+    /// series' end, with `remaining` particles of the 125 Hz band alive at the end holding
+    /// `end_share` of the emitted energy.
+    fn energetic_octave_run(freqs: &[i32], remaining: u32, end_share: f64) -> SppsResults {
+        let n = 3000;
+        let mut s = octave_run(freqs, decay(n, DISTANCE_M / C, 1.0), 0.0);
+        s.computation_method = 1;
+        let power = s.point_receivers[0].bands[0].source_power_rho_c;
+        let dt = f64::from(DT);
+        for e in &mut s.total_energy {
+            e.energy = (0..n)
+                .map(|k| power * 10f64.powf(-6.0 * k as f64 * dt))
+                .collect();
+        }
+        s.total_energy[0].energy[n - 1] = power * end_share;
+        s.particles.bands[0].remaining = remaining;
+        s.particles.bands[0].absorbed_by_materials -= remaining;
+        s
+    }
+
+    /// The STI bed's set C7 (ADDENDUM-4): one particle of 150,000 alive at 10 s left the 125 Hz band
+    /// incomplete and refused male STI at every receiver, although the energy it can still bring is
+    /// bounded and negligible. STI now refuses only when that energy can move it by more than
+    /// [`sti::UNSEEN_LIMIT`].
+    #[test]
+    fn a_band_with_particles_alive_at_the_end_gives_sti_when_what_they_carry_cannot_move_it() {
+        let octaves = [125, 250, 500, 1000, 2000, 4000, 8000];
+        let ended = energetic_octave_run(&octaves, 0, 0.0);
+        let want = receiver_report(&octaves, &ended, &ended.point_receivers[0], true)
+            .sti
+            .male
+            .value()
+            .expect("male STI of the complete run");
+        // One particle alive at the end, holding 1e-12 of the emitted energy: the same STI.
+        let one = energetic_octave_run(&octaves, 1, 1e-12);
+        assert!(!one.band_complete(125));
+        let rep = receiver_report(&octaves, &one, &one.point_receivers[0], true);
+        assert_eq!(rep.sti.male.value(), Some(want), "{:?}", rep.sti.male);
+        // Particles alive at the end holding half of it: refused, saying why.
+        let half = energetic_octave_run(&octaves, 1, 0.5);
+        let rep = receiver_report(&octaves, &half, &half.point_receivers[0], true);
+        let r = rep.sti.male.refusal().expect("refused");
+        assert!(
+            matches!(
+                r.error.not_evaluable(),
+                Some(NotEvaluable::BandRefused { freq_hz: 125, .. })
+            ),
+            "{}",
+            r.message
+        );
+        assert!(r.message.contains("can move the STI"), "{}", r.message);
+        // Female speech has no 125 Hz band, and the receiver no noise: answered.
+        assert!(rep.sti.female.value().is_some());
+    }
+
+    /// Backlog 67: a receiver with noise in some bands is written 0 dB in the others, which is no
+    /// noise, not 0 dB SPL of it.
+    #[test]
+    fn a_band_at_0_db_noise_contributes_no_noise_to_sti() {
+        let octaves = [125, 250, 500, 1000, 2000, 4000, 8000];
+        let mut s = octave_run(&octaves, decay(3000, DISTANCE_M / C, 1.0), 0.0);
+        s.point_receivers[0].bands[3].background_noise_db = 40.0;
+        let rep = receiver_report(&octaves, &s, &s.point_receivers[0], true);
+        assert_eq!(rep.sti.noise, STI_NOISE_RECEIVER);
+        for b in &rep.sti.bands {
+            assert_eq!(
+                b.noise_db,
+                (b.freq_hz == 1000).then_some(40.0),
+                "{}",
+                b.freq_hz
+            );
+        }
     }
 
     #[test]

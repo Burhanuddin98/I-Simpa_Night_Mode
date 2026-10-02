@@ -32,6 +32,12 @@ TEMPLATE = Path(r"B:\data\m8b-edt\round2\heldout\tested-G1-energetic-1.0ms-150k-
 B_LOG = Path(r"B:\data\m8b-bed\B\run.out.log")
 ROOMS = ('S-live', 'Mixed')
 SEEDS = (4301, 4302, 4303) if STI else (4101, 4102, 4103)
+# --seeds=A,B,C (a fresh draw, ADDENDUM-2-STI.md: a fix is tested on seeds 4401-4403) and --simpa=PATH (the build
+# under test); with --seeds the run list is written to runs-<first>-<last>.json, so that runs.json is never replaced.
+OPT = dict(a[2:].split('=', 1) for a in sys.argv[1:] if a.startswith('--') and '=' in a)
+if 'seeds' in OPT:
+    SEEDS = tuple(int(s) for s in OPT['seeds'].split(','))
+SIMPA = OPT.get('simpa', SIMPA)
 TESTED = dict(particles_per_source=150_000, time_step_s=0.001, duration_s=10.0, extinction_exponent=7.0,
               method='energetic')
 WORKERS = 4
@@ -158,6 +164,7 @@ if __name__ == '__main__':
     jobs = [(n, s) for s in SEEDS for n in ROOMS]
     with ThreadPoolExecutor(WORKERS) as ex:
         res = list(ex.map(lambda j: one(out, *j), jobs))
-    (out / 'runs.json').write_text(json.dumps(res, indent=1))
+    name = 'runs-%d-%d.json' % (SEEDS[0], SEEDS[-1]) if 'seeds' in OPT else 'runs.json'
+    (out / name).write_text(json.dumps(res, indent=1))
     bad = [o for o in res if o['run_exit'] != 0]
     print('exit %d' % len(bad), flush=True)
