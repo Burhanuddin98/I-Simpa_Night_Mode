@@ -126,7 +126,7 @@ fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
 
 /// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
 /// typed `error`.
-const NULLABLE: [&str; 27] = [
+const NULLABLE: [&str; 34] = [
     ".crossings_per_particle",
     ".lambert_walls",
     ".uniform_lambert_walls",
@@ -154,6 +154,15 @@ const NULLABLE: [&str; 27] = [
     ".with_missing",
     ".low",
     ".high",
+    // STI's bands (results version 10): a band that cannot be read has no MTF or transfer, female
+    // speech has no 125 Hz, a refused speech has no MTI, and no noise is `null`.
+    ".mtf",
+    ".transfer_db",
+    ".speech_male_db",
+    ".speech_female_db",
+    ".noise_db",
+    ".mti_male",
+    ".mti_female",
 ];
 
 #[test]

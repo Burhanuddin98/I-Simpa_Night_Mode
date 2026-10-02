@@ -15,6 +15,7 @@
 //!   `γ²` of a room from its geometry alone, and its decay, for M8's reference and cross-check.
 //! - [`din18041`]: the group-A target reverberation times.
 //! - [`level`]: sound strength G and the A-weighted level, over SPL.
+//! - [`sti`]: the speech transmission index (IEC 60268-16:2011) from a receiver's octave bands.
 //!
 //! Everything is a pure function. A value that cannot be computed honestly is a typed
 //! [`ParamError`] with a stable code, never a number and never a warning. Nothing here is shown
@@ -33,6 +34,7 @@ pub mod lambert;
 pub mod level;
 pub mod noise;
 pub mod room;
+pub mod sti;
 
 /// The refusal codes. Each is a row of `docs/solver-contract.md`, Part B, "Parameter refusals"
 /// (`tests/reason_codes_docs.rs`).
@@ -110,6 +112,8 @@ pub enum Quantity {
     Strength,
     /// The A-weighted level, dB(A) ([`level`]).
     AWeighted,
+    /// The speech transmission index ([`sti`]).
+    Sti,
 }
 
 impl fmt::Display for Quantity {
@@ -125,6 +129,7 @@ impl fmt::Display for Quantity {
             Quantity::Curvature => write!(f, "curvature"),
             Quantity::Strength => write!(f, "G"),
             Quantity::AWeighted => write!(f, "dB(A)"),
+            Quantity::Sti => write!(f, "STI"),
         }
     }
 }
@@ -321,6 +326,15 @@ pub enum NotEvaluable {
     /// A band summed into the A-weighted level has no A-weighting pinned here: it is not an octave
     /// centre from 125 Hz to 8 kHz ([`level::A_WEIGHTS_DB`]). Made by [`level::a_weighted`].
     NoAWeight { freq_hz: i32 },
+    /// STI ([`sti`]): an octave band the speech needs (125 Hz to 8 kHz; female 250 Hz to 8 kHz,
+    /// IEC 60268-16:2011 Tables A.3 and A.4) is not among the run's bands.
+    BandMissing { freq_hz: i32, needed_hz: Vec<i32> },
+    /// STI ([`sti`]): an octave band the speech needs is in the run but cannot be read: its
+    /// series is refused or not complete, its SPL is refused, no source emits in it, or it has no
+    /// reverberation time to check the run's length against.
+    BandRefused { freq_hz: i32, detail: String },
+    /// STI ([`sti`]): the run's bands are not octave bands, which IEC 60268-16 defines it on.
+    NotOctaveBands { bands_hz: Vec<i32> },
 }
 
 impl fmt::Display for NotEvaluable {
@@ -494,6 +508,21 @@ impl fmt::Display for NotEvaluable {
                 f,
                 "no_a_weight: the {freq_hz} Hz band has no A-weighting pinned; dB(A) sums the \
                  octave bands 125 Hz to 8 kHz only"
+            ),
+            NotEvaluable::BandMissing { freq_hz, needed_hz } => write!(
+                f,
+                "band_missing: the {freq_hz} Hz octave is not in the run; this STI needs the \
+                 octaves {needed_hz:?} Hz (IEC 60268-16:2011 Table A.3). Compute the octave \
+                 bands 125 Hz to 8 kHz"
+            ),
+            NotEvaluable::BandRefused { freq_hz, detail } => write!(
+                f,
+                "band_refused: the {freq_hz} Hz band cannot be used: {detail}"
+            ),
+            NotEvaluable::NotOctaveBands { bands_hz } => write!(
+                f,
+                "not_octave_bands: the run's bands {bands_hz:?} Hz are not octave bands, which \
+                 IEC 60268-16 defines STI on"
             ),
         }
     }

@@ -1,6 +1,6 @@
 //! The JSON `simpa results --json` prints: a [`RunResults`] and, per point receiver and band,
 //! `core::params`' SPL, EDT, T20, T30, C50, C80, D50 and Ts, with G beside them and dB(A) per
-//! receiver (`params::level`), each a value with its estimated
+//! receiver (`params::level`), and STI per receiver (`params::sti`), each a value with its estimated
 //! Monte-Carlo standard deviation, or the reason it is not evaluable (for a TCR receiver every
 //! one, `no_time_series`: TCR writes no series to compute them from). The shape is documented in
 //! `docs/formats/results-json.md` and generated as a JSON Schema by [`report_schema`]
@@ -23,6 +23,7 @@ use crate::params::edt;
 use crate::params::lambert::FreePaths;
 use crate::params::level;
 use crate::params::noise::{self, NoiseModel};
+use crate::params::sti;
 use crate::params::{self, EnergySeries, NotEvaluable, ParamError, Quantity};
 use crate::run::stats::ParticleStats;
 use crate::run::verdict::Status;
@@ -57,8 +58,11 @@ use crate::schema::SolverKind;
 /// resample within the allowed refusals, is shown `wide` with `refused_resamples` and the
 /// stand-ins' range (`params::noise`, "The stand-ins"); a C50, C80 or D50 whose bin straddling te
 /// can move it beyond its limit is `wide` with `straddle` and a range covering it
-/// (`params::decay::Straddle`).
-pub const REPORT_VERSION: u32 = 9;
+/// (`params::decay::Straddle`). 10 (M8b): a new project computes the octaves 125 Hz to 8 kHz
+/// (decision-log row 43), and an SPPS point receiver carries `sti`, the speech transmission index
+/// (IEC 60268-16:2011, `params::sti`): male (shown) and female, the MTF and MTI per band, or
+/// refused. No other field changes.
+pub const REPORT_VERSION: u32 = 10;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -586,6 +590,62 @@ pub struct DbaReport {
     pub unweighted_hz: Vec<i32>,
 }
 
+/// The label of [`StiReport`]'s method.
+pub const STI_METHOD: &str = "IEC 60268-16:2011 (edition 4), indirect method: per octave 125 Hz \
+to 8 kHz, the MTF by the Schroeder equation (cl. 6.1) from the band's predicted energy response, \
+from the direct sound's arrival, at the 14 modulation frequencies 0.63-12.5 Hz (A.2.2); the speech \
+spectrum of Table A.4 at 60 dB(A) at 1 m on axis (J.3), carried to the receiver by the band's SPL \
+less the source's free-field level at 1 m; masking by band k-1's level (Table A.1; 125 Hz \
+unmasked), the reception threshold (Table A.2) and the background noise in the correction \
+(A.5.3); SNR_eff within +/-15 dB, TI, MTI, and the weights of Table A.3; truncated at 1.0";
+
+/// The weighting [`StiReport`] shows, with what cl. 8.3 asks a predicted STI to state.
+pub const STI_WEIGHTING: &str = "male (IEC 60268-16:2011 Table A.3; A.3.4: male speech assesses \
+a channel), female computed beside it; calculated from an MTF derived from a predicted impulse \
+response (cl. 8.3)";
+
+/// [`StiReport::noise`] when the receiver has a background noise.
+pub const STI_NOISE_RECEIVER: &str = "the receiver's background noise per band (the .gap), in the \
+correction's denominator (A.5.3 note 2) and in band k-1's masking level (Table A.1)";
+
+/// [`StiReport::noise`] when it has none.
+pub const STI_NOISE_NONE: &str = "none: the receiver has no background noise (0 dB in every band \
+of the .gap, as config.xml writes a receiver without one), so no noise term is applied";
+
+/// [`StiReport::monte_carlo`]: STI has no noise model yet.
+pub const STI_NOISE_NOT_MODELLED: &str = "not modelled: STI carries no Monte-Carlo standard \
+deviation or range; its noise is not estimated";
+
+/// The speech transmission index at a point receiver (`params::sti`): an aggregate of its octave
+/// bands 125 Hz to 8 kHz, not a band.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct StiReport {
+    /// [`STI_METHOD`].
+    pub method: String,
+    /// [`STI_WEIGHTING`]: male is the value shown, and the STI is from a predicted response.
+    pub weighting: String,
+    /// The speech whose STI is shown: male.
+    pub shown: sti::Gender,
+    /// Male speech's STI, 0 to 1, with no `mc_sd` (`monte_carlo`); or why it is refused: a band
+    /// 125 Hz to 8 kHz missing (`band_missing`) or unreadable (`band_refused`), bands that are not
+    /// octaves (`not_octave_bands`), several sources (`several_sources`), or a response shorter
+    /// than 1.6 s or half the reverberation time (`params_series_too_short`).
+    pub male: Evaluated,
+    /// Female speech's, refused as male's but needing 250 Hz to 8 kHz only.
+    pub female: Evaluated,
+    /// The test speech level, dB(A) at 1 m on axis (J.3).
+    pub speech_level_dba_at_1m: f64,
+    /// The noise applied: [`STI_NOISE_RECEIVER`] or [`STI_NOISE_NONE`].
+    pub noise: String,
+    /// [`STI_NOISE_NOT_MODELLED`].
+    pub monte_carlo: String,
+    /// The modulation frequencies, Hz, the order of every band's `mtf`.
+    pub modulation_hz: Vec<f64>,
+    /// One per octave band of the run from 125 Hz to 8 kHz: the room's MTF, the transfer, the
+    /// speech and noise levels, and each speech's MTI.
+    pub bands: Vec<sti::BandSti>,
+}
+
 /// Sound strength G of a band ([`ReceiverBandReport::g_db`]): `spl` less the free field's level at
 /// 10 m of the sources whose power times `ρc` is `power_rho_c` (`params::level`). A refused SPL
 /// refuses G with the same refusal; a value keeps SPL's standard deviation, status and range.
@@ -725,6 +785,8 @@ pub struct SppsReceiverReport {
     pub arrival_s: Option<f64>,
     pub bands: Vec<ReceiverBandReport>,
     pub aggregate: AggregateReport,
+    /// The speech transmission index at the receiver (results version 10).
+    pub sti: StiReport,
     /// Each source's total per band, Pa² (`.recps`), in `config.xml`'s order.
     pub by_source: Vec<SourceTotals>,
     /// Each source's own echogram and its parameters, when `output_recp_bysource` is on; empty
@@ -1496,9 +1558,64 @@ impl Evaluation {
     }
 }
 
-fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> SppsReceiverReport {
+/// [`StiReport`] of a receiver's bands, refused `several_sources` when `contributing` names more
+/// than one source: STI is a talker's, one source's.
+fn sti_report(
+    s: &SppsResults,
+    inputs: &[sti::ReceiverBand<'_>],
+    octave: bool,
+    contributing: &[&str],
+) -> StiReport {
+    let r = sti::receiver_sti(s.time_step_s, inputs, octave);
+    let shown = |v: Result<sti::StiValue, ParamError>| match v {
+        _ if contributing.len() > 1 => Evaluated::refused(params::not_evaluable(
+            Quantity::Sti,
+            NotEvaluable::SeveralSources {
+                sources: contributing.iter().map(|c| c.to_string()).collect(),
+            },
+        )),
+        Ok(v) => Evaluated::bare(v.value, None),
+        Err(e) => Evaluated::refused(e),
+    };
+    let noisy = inputs.iter().any(|b| b.noise_db.is_some());
+    StiReport {
+        method: STI_METHOD.into(),
+        weighting: STI_WEIGHTING.into(),
+        shown: sti::Gender::Male,
+        male: shown(r.male),
+        female: shown(r.female),
+        speech_level_dba_at_1m: sti::SPEECH_LEVEL_DBA_AT_1M,
+        noise: if noisy {
+            STI_NOISE_RECEIVER
+        } else {
+            STI_NOISE_NONE
+        }
+        .into(),
+        monte_carlo: STI_NOISE_NOT_MODELLED.into(),
+        modulation_hz: sti::MODULATION_HZ.to_vec(),
+        bands: r.bands,
+    }
+}
+
+/// The value of an evaluated quantity, or its refusal in words.
+fn value_or_why(e: &Evaluated) -> Result<f64, String> {
+    match e {
+        Evaluated::Value { value, .. } => Ok(*value),
+        Evaluated::NotEvaluable { not_evaluable } => Err(not_evaluable.message.clone()),
+    }
+}
+
+fn receiver_report(
+    bands_hz: &[i32],
+    s: &SppsResults,
+    r: &PointReceiver,
+    octave: bool,
+) -> SppsReceiverReport {
     let arrival_s = s.arrival_s(r);
     let arrival = known_arrival(s, arrival_s);
+    // A receiver with no background noise is written 0 dB in every band (`config_xml::write`).
+    let noise = r.bands.iter().any(|b| b.background_noise_db != 0.0);
+    let mut sti_inputs: Vec<sti::ReceiverBand<'_>> = Vec::with_capacity(r.bands.len());
     let mut series: Vec<Result<EnergySeries, ParamError>> = Vec::with_capacity(r.bands.len());
     let mut models = Vec::with_capacity(r.bands.len());
     let mut all_contributing: Vec<&str> = Vec::new();
@@ -1531,6 +1648,38 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
         }
         let total_pa2: f64 = b.energy.iter().sum();
         let g_db = strength(&e.parameters.spl_db, b.source_power_rho_c);
+        sti_inputs.push(sti::ReceiverBand {
+            freq_hz: b.freq_hz,
+            energy: &b.energy,
+            // The bin of the direct sound's leading edge (nothing reaches the receiver before
+            // it), or the onset bin when the arrival is not known.
+            from: match arrival {
+                Arrival::Known {
+                    time_s,
+                    half_width_s,
+                } => ((time_s - half_width_s) / s.time_step_s).floor().max(0.0) as usize,
+                Arrival::Detected => e.onset.map_or(0, |o| o.index),
+            },
+            spl_db: value_or_why(&e.parameters.spl_db),
+            power_rho_c: b.source_power_rho_c,
+            noise_db: noise.then_some(b.background_noise_db),
+            reverberation_s: [
+                &e.parameters.t30_s,
+                &e.parameters.t20_s,
+                &e.parameters.edt_s,
+            ]
+            .into_iter()
+            .find_map(Evaluated::value),
+            unusable: match &se {
+                Err(err) => Some(format!("its series is refused: {err}")),
+                Ok(_) if !s.band_complete(b.freq_hz) => Some(
+                    "its series is not complete: particles were still alive when the run \
+                     ended, and nothing bounds what the tail after it would change"
+                        .into(),
+                ),
+                Ok(_) => None,
+            },
+        });
         bands.push(ReceiverBandReport {
             freq_hz: b.freq_hz,
             complete: s.band_complete(b.freq_hz),
@@ -1564,6 +1713,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
         models.push(model);
     }
     let dba = dba_of(bands.iter().map(|b| (b.freq_hz, &b.parameters)));
+    let sti = sti_report(s, &sti_inputs, octave, &all_contributing);
     let aggregate = aggregate_report(
         s,
         bands_hz,
@@ -1639,12 +1789,14 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
         arrival_s,
         bands,
         aggregate,
+        sti,
         by_source: r.by_source.clone(),
         per_source,
     }
 }
 
-fn spps_report(bands_hz: &[i32], s: &SppsResults) -> SppsReport {
+/// `octave`: whether the run's bands are octave bands (STI is defined on octaves).
+fn spps_report(bands_hz: &[i32], s: &SppsResults, octave: bool) -> SppsReport {
     SppsReport {
         time_step_s: s.time_step_s,
         duration_s: s.duration_s,
@@ -1664,7 +1816,7 @@ fn spps_report(bands_hz: &[i32], s: &SppsResults) -> SppsReport {
         point_receivers: s
             .point_receivers
             .iter()
-            .map(|r| receiver_report(bands_hz, s, r))
+            .map(|r| receiver_report(bands_hz, s, r, octave))
             .collect(),
         surfaces: s.surfaces.iter().map(SurfaceSummary::of).collect(),
         particle_files: s.particle_files.clone(),
@@ -1713,7 +1865,18 @@ fn tcr_report(t: &TcrResults) -> TcrReport {
 /// not finite.
 pub fn report(r: &RunResults) -> Report {
     let (spps, tcr) = match &r.data {
-        SolverResults::Spps(s) => (Some(spps_report(&r.bands_hz, s)), None),
+        SolverResults::Spps(s) => {
+            // Octave bands when every `freq_enum` item is an octave nominal, as
+            // `config_xml::import` reads the band kind.
+            let octave = r.expectation.bands.iter().all(|b| {
+                u32::try_from(b.freq_hz).is_ok_and(|f| {
+                    crate::schema::BandKind::Octave
+                        .nominal_frequencies()
+                        .contains(&f)
+                })
+            });
+            (Some(spps_report(&r.bands_hz, s, octave)), None)
+        }
         SolverResults::Tcr(t) => (None, Some(tcr_report(t))),
     };
     Report {
@@ -2342,7 +2505,7 @@ mod tests {
     }
 
     fn band_edt(s: &SppsResults) -> EdtReport {
-        let rep = receiver_report(&[500], s, &s.point_receivers[0]);
+        let rep = receiver_report(&[500], s, &s.point_receivers[0], true);
         rep.bands[0].parameters.edt.clone().expect("an EDT report")
     }
 
@@ -2356,7 +2519,7 @@ mod tests {
         assert!((arrival_s - (0.016 + direct_s)).abs() < 1e-6);
         let bins = decay(1500, arrival_s, 0.6);
         let s = edt_run(0, delay_s, bins.clone());
-        let r = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let r = receiver_report(&[500], &s, &s.point_receivers[0], true);
         assert_eq!(r.arrival_s, Some(arrival_s));
         let got = r.bands[0].parameters.edt.clone().unwrap();
         assert_eq!(got.arrival_s, Some(arrival_s));
@@ -2382,7 +2545,7 @@ mod tests {
         let arrival_s = emission_s(0.0, DT) + DISTANCE_M / C;
         // A decay the run covers: a value, in `edt_s` and in `edt`.
         let s = edt_run(0, 0.0, decay(1500, arrival_s, 0.6));
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
         let p = &rep.bands[0].parameters;
         let e = p.edt.as_ref().unwrap();
         assert_ne!(e.status, edt::Status::Refused, "{e:?}");
@@ -2390,7 +2553,7 @@ mod tests {
         assert!(e.lo_s.unwrap() < e.value_s.unwrap() && e.value_s.unwrap() < e.hi_s.unwrap());
         // A run that ends before the decay does: refused, with the method's reason.
         let s = edt_run(0, 0.0, decay(60, arrival_s, 0.6));
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
         let p = &rep.bands[0].parameters;
         let e = p.edt.as_ref().unwrap();
         assert_eq!(e.status, edt::Status::Refused);
@@ -2447,7 +2610,7 @@ mod tests {
         assert_eq!(random.value_s, energetic.value_s);
         assert_eq!((random.lo_s, random.hi_s), (energetic.lo_s, energetic.hi_s));
         let s = edt_run(1, 0.0, bins);
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
         assert!(rep.bands[0].parameters.edt_validated);
         let json = serde_json::to_value(&rep).unwrap();
         assert_eq!(json["bands"][0]["parameters"]["edt"]["validated"], true);
@@ -2484,7 +2647,7 @@ mod tests {
                 "mode {method}"
             );
             assert_eq!(e.value_s, o.edt, "mode {method}: the method's value");
-            let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+            let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
             assert!(!rep.bands[0].parameters.edt_validated, "mode {method}");
             // The aggregate names both of its reasons.
             let agg = rep
@@ -2540,7 +2703,7 @@ mod tests {
         // The marker beside edt_s follows it.
         let mut s = edt_run(0, 0.0, bins.clone());
         s.receiver_radius_m = 1.5;
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
         assert!(!rep.bands[0].parameters.edt_validated);
     }
 
@@ -2552,7 +2715,7 @@ mod tests {
         let bins = decay(1500, arrival_s, 0.6);
         for method in [0, 1] {
             let s = edt_run(method, 0.0, bins.clone());
-            let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+            let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
             let agg = rep
                 .aggregate
                 .parameters
@@ -2584,7 +2747,7 @@ mod tests {
         let bins = decay(1500, DISTANCE_M / C, 0.6);
         let marker = |method: i32, at: &dyn Fn(&Value) -> Value| {
             let s = edt_run(method, 0.0, bins.clone());
-            let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+            let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
             at(&serde_json::to_value(&rep).unwrap())
         };
         let band = |j: &Value| j["bands"][0]["parameters"]["edt_validated"].clone();
@@ -2768,7 +2931,7 @@ mod tests {
     fn edt_s_carries_the_methods_status_and_range() {
         let bins = decay(1500, DISTANCE_M / C, 0.6);
         let s = edt_run(0, 0.0, bins);
-        let rep = receiver_report(&[500], &s, &s.point_receivers[0]);
+        let rep = receiver_report(&[500], &s, &s.point_receivers[0], true);
         let p = &rep.bands[0].parameters;
         let edt = p.edt.as_ref().unwrap();
         let Evaluated::Value { status, lo, hi, .. } = &p.edt_s else {
@@ -3094,7 +3257,7 @@ mod tests {
     #[test]
     fn several_sources_g_sums_their_energies_against_their_free_fields_summed() {
         let s = two_source_run();
-        let rep = receiver_report(&[500, 1000], &s, &s.point_receivers[0]);
+        let rep = receiver_report(&[500, 1000], &s, &s.point_receivers[0], true);
         let free = |p: f64| level::free_field_pa2(p, 10.0);
         let rho_c = 413.25;
         for (i, b) in rep.bands.iter().enumerate() {
@@ -3170,5 +3333,123 @@ mod tests {
         assert_eq!(rep.bands[0].g_db.refusal(), Some(&spl));
         let d = rep.aggregate.dba.level_db.refusal().unwrap();
         assert_eq!((d.code.as_str(), &d.error), (spl.code.as_str(), &spl.error));
+    }
+
+    // --- STI (results version 10) ---------------------------------------------------------------
+
+    /// [`edt_run`] in random mode (no floor to bound) with its one band copied onto every octave
+    /// of `freqs`.
+    fn octave_run(freqs: &[i32], bins: Vec<f64>, noise_db: f64) -> SppsResults {
+        let mut s = edt_run(0, 0.0, bins);
+        let band = s.point_receivers[0].bands[0].clone();
+        let stats = s.particles.bands[0];
+        s.point_receivers[0].bands = freqs
+            .iter()
+            .map(|&f| ReceiverBand {
+                freq_hz: f,
+                background_noise_db: noise_db,
+                ..band.clone()
+            })
+            .collect();
+        s.particles.bands = freqs
+            .iter()
+            .map(|&f| BandStats {
+                freq_hz: f,
+                ..stats
+            })
+            .collect();
+        s.sources[0].band_power_w = vec![1.0; freqs.len()];
+        s.point_receivers[0].by_source[0].energy = vec![1.0; freqs.len()];
+        // The room table, whose lifetimes the noise model needs (as `two_source_run`'s).
+        s.total_energy = freqs
+            .iter()
+            .map(|&f| BandEnergy {
+                freq_hz: f,
+                energy: (0..1500)
+                    .map(|k| 2.0 * 10f64.powf(-6.0 * k as f64 * f64::from(DT) / 1.0))
+                    .collect(),
+            })
+            .collect();
+        s
+    }
+
+    #[test]
+    fn a_receiver_with_the_seven_octaves_carries_sti_male_shown_and_female_beside_it() {
+        let octaves = [125, 250, 500, 1000, 2000, 4000, 8000];
+        let s = octave_run(&octaves, decay(3000, DISTANCE_M / C, 1.0), 0.0);
+        let rep = receiver_report(&octaves, &s, &s.point_receivers[0], true);
+        let sti = &rep.sti;
+        assert_eq!(sti.shown, sti::Gender::Male);
+        assert!(
+            sti.weighting.contains("predicted impulse response"),
+            "{}",
+            sti.weighting
+        );
+        assert!(sti.weighting.contains("male"));
+        assert_eq!(sti.noise, STI_NOISE_NONE);
+        assert_eq!(sti.monte_carlo, STI_NOISE_NOT_MODELLED);
+        assert_eq!(sti.speech_level_dba_at_1m, 60.0);
+        let male = sti.male.value().unwrap_or_else(|| panic!("{:?}", sti.male));
+        let female = sti.female.value().expect("a female STI");
+        assert!((0.0..=1.0).contains(&male) && (0.0..=1.0).contains(&female));
+        // No Monte-Carlo range: a bare value.
+        assert_eq!(sti.male, Evaluated::bare(male, None));
+        assert_eq!(sti.bands.len(), 7);
+        assert!(
+            sti.bands
+                .iter()
+                .all(|b| b.mtf.as_ref().is_some_and(|m| m.len() == 14))
+        );
+        assert_eq!(sti.bands[0].mti_female, None);
+        assert!(
+            sti.bands
+                .iter()
+                .all(|b| b.mti_male.is_some() && b.noise_db.is_none())
+        );
+        // The same with a background noise of 45 dB in every band: lower, and said so.
+        let noisy = octave_run(&octaves, decay(3000, DISTANCE_M / C, 1.0), 45.0);
+        let rep = receiver_report(&octaves, &noisy, &noisy.point_receivers[0], true);
+        assert_eq!(rep.sti.noise, STI_NOISE_RECEIVER);
+        assert!(rep.sti.male.value().unwrap() < male - 0.01);
+        // Third-octave bands refuse.
+        let rep = receiver_report(&octaves, &s, &s.point_receivers[0], false);
+        assert!(matches!(
+            rep.sti.male.refusal().unwrap().error.not_evaluable(),
+            Some(NotEvaluable::NotOctaveBands { .. })
+        ));
+    }
+
+    #[test]
+    fn a_run_without_the_seven_octaves_refuses_sti_naming_the_band() {
+        let six = [125, 250, 500, 1000, 2000, 4000];
+        let s = octave_run(&six, decay(3000, DISTANCE_M / C, 1.0), 0.0);
+        let rep = receiver_report(&six, &s, &s.point_receivers[0], true);
+        for e in [&rep.sti.male, &rep.sti.female] {
+            let r = e.refusal().expect("refused");
+            assert_eq!(r.code, crate::params::codes::NOT_EVALUABLE);
+            assert!(
+                r.message.contains("STI: band_missing: the 8000 Hz octave"),
+                "{}",
+                r.message
+            );
+        }
+        // What the bands it has gave is still reported.
+        assert_eq!(rep.sti.bands.len(), 6);
+        assert!(rep.sti.bands.iter().all(|b| b.mtf.is_some()));
+    }
+
+    #[test]
+    fn several_sources_refuse_sti() {
+        let s = two_source_run();
+        let rep = receiver_report(&[500, 1000], &s, &s.point_receivers[0], true);
+        for e in [&rep.sti.male, &rep.sti.female] {
+            assert!(
+                matches!(
+                    e.refusal().unwrap().error.not_evaluable(),
+                    Some(NotEvaluable::SeveralSources { .. })
+                ),
+                "{e:?}"
+            );
+        }
     }
 }

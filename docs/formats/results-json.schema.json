@@ -342,6 +342,78 @@
         ],
         "type": "object"
       },
+      "BandSti": {
+        "description": "What [`receiver_sti`] read from one band.",
+        "properties": {
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "mtf": {
+            "description": "The room's MTF at [`MODULATION_HZ`], before the level corrections; `null` when the band\ncannot give one.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "mti_female": {
+            "description": "`MTI_k` of female speech; `null` at 125 Hz, or when the female STI is refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mti_male": {
+            "description": "`MTI_k` of male speech; `null` when the male STI is refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "noise_db": {
+            "description": "The background noise applied, dB SPL; `null` for none.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "speech_female_db": {
+            "description": "The female speech level at the receiver, dB SPL; `null` at 125 Hz, which female speech has\nnot.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "speech_male_db": {
+            "description": "The male speech level at the receiver, dB SPL (Table A.4 at 60 dB(A) at 1 m, plus\n`transfer_db`).",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "transfer_db": {
+            "description": "The band's SPL less the same sources' free-field level at 1 m, dB: what carries the speech\nfrom 1 m on axis to the receiver. `null` when the band cannot give one.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "freq_hz"
+        ],
+        "type": "object"
+      },
       "CurvatureReport": {
         "description": "The curvature of a decay (`params::decay::curvature`), for M8 and M12 to decide what a curved\ndecay may show: its value with its Monte-Carlo standard deviation, and the flag.",
         "properties": {
@@ -771,6 +843,14 @@
           "settings"
         ],
         "type": "object"
+      },
+      "Gender": {
+        "description": "The talker: male or female speech (A.3.4, A.3.5).",
+        "enum": [
+          "male",
+          "female"
+        ],
+        "type": "string"
       },
       "MainBand": {
         "description": "One band row of `Main results.gabe`.",
@@ -1440,6 +1520,75 @@
             "required": [
               "why",
               "freq_hz"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "STI ([`sti`]): an octave band the speech needs (125 Hz to 8 kHz; female 250 Hz to 8 kHz,\nIEC 60268-16:2011 Tables A.3 and A.4) is not among the run's bands.",
+            "properties": {
+              "freq_hz": {
+                "format": "int32",
+                "type": "integer"
+              },
+              "needed_hz": {
+                "items": {
+                  "format": "int32",
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "why": {
+                "const": "band_missing",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "freq_hz",
+              "needed_hz"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "STI ([`sti`]): an octave band the speech needs is in the run but cannot be read: its\nseries is refused or not complete, its SPL is refused, no source emits in it, or it has no\nreverberation time to check the run's length against.",
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "freq_hz": {
+                "format": "int32",
+                "type": "integer"
+              },
+              "why": {
+                "const": "band_refused",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "freq_hz",
+              "detail"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "STI ([`sti`]): the run's bands are not octave bands, which IEC 60268-16 defines it on.",
+            "properties": {
+              "bands_hz": {
+                "items": {
+                  "format": "int32",
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "why": {
+                "const": "not_octave_bands",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "bands_hz"
             ],
             "type": "object"
           }
@@ -2113,6 +2262,19 @@
             "properties": {
               "quantity": {
                 "const": "a_weighted",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The speech transmission index ([`sti`]).",
+            "properties": {
+              "quantity": {
+                "const": "sti",
                 "type": "string"
               }
             },
@@ -2883,6 +3045,10 @@
               "array",
               "null"
             ]
+          },
+          "sti": {
+            "$ref": "#/$defs/StiReport",
+            "description": "The speech transmission index at the receiver (results version 10)."
           }
         },
         "required": [
@@ -2890,6 +3056,7 @@
           "folder",
           "bands",
           "aggregate",
+          "sti",
           "by_source",
           "per_source"
         ],
@@ -3041,6 +3208,72 @@
             "type": "string"
           }
         ]
+      },
+      "StiReport": {
+        "description": "The speech transmission index at a point receiver (`params::sti`): an aggregate of its octave\nbands 125 Hz to 8 kHz, not a band.",
+        "properties": {
+          "bands": {
+            "description": "One per octave band of the run from 125 Hz to 8 kHz: the room's MTF, the transfer, the\nspeech and noise levels, and each speech's MTI.",
+            "items": {
+              "$ref": "#/$defs/BandSti"
+            },
+            "type": "array"
+          },
+          "female": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Female speech's, refused as male's but needing 250 Hz to 8 kHz only."
+          },
+          "male": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Male speech's STI, 0 to 1, with no `mc_sd` (`monte_carlo`); or why it is refused: a band\n125 Hz to 8 kHz missing (`band_missing`) or unreadable (`band_refused`), bands that are not\noctaves (`not_octave_bands`), several sources (`several_sources`), or a response shorter\nthan 1.6 s or half the reverberation time (`params_series_too_short`)."
+          },
+          "method": {
+            "description": "[`STI_METHOD`].",
+            "type": "string"
+          },
+          "modulation_hz": {
+            "description": "The modulation frequencies, Hz, the order of every band's `mtf`.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "monte_carlo": {
+            "description": "[`STI_NOISE_NOT_MODELLED`].",
+            "type": "string"
+          },
+          "noise": {
+            "description": "The noise applied: [`STI_NOISE_RECEIVER`] or [`STI_NOISE_NONE`].",
+            "type": "string"
+          },
+          "shown": {
+            "$ref": "#/$defs/Gender",
+            "description": "The speech whose STI is shown: male."
+          },
+          "speech_level_dba_at_1m": {
+            "description": "The test speech level, dB(A) at 1 m on axis (J.3).",
+            "format": "double",
+            "type": "number"
+          },
+          "weighting": {
+            "description": "[`STI_WEIGHTING`]: male is the value shown, and the STI is from a predicted response.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "weighting",
+          "shown",
+          "male",
+          "female",
+          "speech_level_dba_at_1m",
+          "noise",
+          "monte_carlo",
+          "modulation_hz",
+          "bands"
+        ],
+        "type": "object"
       },
       "Structure": {
         "description": "How a series' resamples are drawn, per quantity ([`calibration::Entry::structure`]).",

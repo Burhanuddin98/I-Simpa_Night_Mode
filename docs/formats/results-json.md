@@ -2,8 +2,8 @@
 
 The JSON the Results screen (M12) reads: a verified run's results and, per point receiver and
 band, `core::params`' eight parameters, each a value or the reason it has none (for every TCR
-receiver, all eight refused `no_time_series`), with sound strength G per band (`g_db`) and the
-A-weighted level per receiver (`aggregate.dba`). Written by `core::results::report`
+receiver, all eight refused `no_time_series`), with sound strength G per band (`g_db`), the
+A-weighted level per receiver (`aggregate.dba`) and STI per SPPS receiver (`sti`). Written by `core::results::report`
 (`crates/simpa-core/src/results/report.rs`); what is read and refused is `docs/results.md`.
 
 **The JSON Schema is `docs/formats/results-json.schema.json`**, generated from the same Rust types
@@ -87,7 +87,11 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 9,               // 9: a value refused for its resamples alone is
+  "results_version": 10,              // 10: SPPS point receivers carry sti, the speech
+                                      //    transmission index (IEC 60268-16:2011): male
+                                      //    (shown) and female, MTF and MTI per band; a
+                                      //    new project computes 125 Hz to 8 kHz;
+                                      // 9: a value refused for its resamples alone is
                                       //    shown wide from its stand-ins, with
                                       //    refused_resamples; a C50, C80 or D50 whose bin
                                       //    straddling te can move it past its limit is
@@ -222,6 +226,7 @@ A point receiver:
 | `arrival_s` | the direct sound's arrival at the centre, which every onset-relative parameter is measured from, the direct sound spread over `±receiver_crossing_s/2` about it; `null` when not computed, and the parameters then detect it. When it lies before a band's onset bin, or after it with the leading edge of its spread at or after the bin's end, C50, C80, D50 and Ts are refused `params_bad_arrival`; SPL, EDT, T20 and T30 are not |
 | `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that unfinished particles can have taken, or `null` when there are none); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …, "method": "random" | "energetic", "particles": …, "run": {"particles", "least_deposit", "lifetime_cv2", "lambert_walls", "uniform_absorption", "mean_absorption", "bands", "receiver_crossing_s"}}`, the mean deposit in Pa², the particles per source, and what the calibration's correction, domain and structure take from the run: the least of the contributing sources' deposits, the spread of the particles' lifetimes from the band's room table, whether every face is Lambert with scattering 1 in the band, whether every face has the same absorption, the faces' mean absorption, the bands summed, and `2R/c`, the roughness structure's shortest block; or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `crossings_per_particle` (`n`, the crossings of the receiver per particle as the calibration measures them, which its correction and domain take, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters`; `g_db` (sound strength G, below); `curvature` and `decay_curve` (below) |
 | `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `crossings_per_particle` (the aggregate's own `n`: its bands' particles together, at the least deposit of any band and the largest lifetime spread; `null` for TCR), `parameters`, `dba` (the A-weighted level of the bands' SPL, below: a sum of band levels, not of the summed series), `curvature`, `decay_curve`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
+| `sti` | the speech transmission index at the receiver (results version 10, below): `method`, `weighting`, `shown` (`"male"`), `male`, `female`, `speech_level_dba_at_1m`, `noise`, `monte_carlo`, `modulation_hz`, `bands[]` |
 | `by_source[]` | `source` and its `energy` per band, Pa² |
 | `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `arrival`, `decay_arrival`, `noise_model`, `crossings`, `crossings_per_particle`, `energy_pa2`, `total_pa2`, `onset`, `parameters`, `g_db` (against that source's own free field), `curvature`, `decay_curve`) and `aggregate` (with that source's `dba`): the parameters of that source–receiver pair. Empty otherwise |
 
@@ -276,6 +281,48 @@ own): `√Σ (wᵢ·sdᵢ)²`, `wᵢ` band `i`'s share of the weighted energy; `
 (its `message` names the band); and `no_a_weight` when a computed band is not one of the seven
 octave centres (it is listed in `unweighted_hz`, a third-octave run for instance): no other
 weighting is pinned.
+
+**STI, `sti` (results version 10).** On every SPPS point receiver (not TCR's, which has no
+series; not per source), IEC 60268-16:2011 (edition 4) from the predicted energy response
+(`params::sti`; `docs/params.md`, "STI"):
+
+```
+{"method": "IEC 60268-16:2011 (edition 4), indirect method: ...",
+ "weighting": "male (IEC 60268-16:2011 Table A.3; ...), female computed beside it; calculated from an MTF derived from a predicted impulse response (cl. 8.3)",
+ "shown": "male",
+ "male": {"value": 0.612, "mc_sd": null},
+ "female": {"value": 0.634, "mc_sd": null},
+ "speech_level_dba_at_1m": 60.0,
+ "noise": "none: the receiver has no background noise (...), so no noise term is applied",
+ "monte_carlo": "not modelled: STI carries no Monte-Carlo standard deviation or range; ...",
+ "modulation_hz": [0.63, 0.8, 1.0, 1.25, 1.6, 2.0, 2.5, 3.15, 4.0, 5.0, 6.3, 8.0, 10.0, 12.5],
+ "bands": [{"freq_hz": 125, "mtf": [0.97, ...], "transfer_db": -6.1,
+            "speech_male_db": 56.8, "speech_female_db": null, "noise_db": null,
+            "mti_male": 0.71, "mti_female": null}, ...]}
+```
+
+- **`male` is the value shown** (A.3.4: male speech assesses a channel), `female` beside it; both
+  are 0 to 1, truncated at 1.0 (Table A.3's note), and a value is `{"value", "mc_sd": null}` with no
+  `status` or range: **STI's Monte-Carlo noise is not modelled** (`monte_carlo` says so). A consumer
+  that shows STI shows `weighting` with it: cl. 8.3 asks a predicted STI to say it is predicted and
+  which weighting it carries.
+- `bands[]`: one per octave of the run from 125 Hz to 8 kHz, ascending: `mtf`, the room's
+  modulation transfer at `modulation_hz`, before the level corrections; `transfer_db`, the band's SPL
+  less the same sources' free-field level at 1 m; the speech level at the receiver for each speech
+  (Table A.4 at `speech_level_dba_at_1m` plus `transfer_db`; female has no 125 Hz); `noise_db`, the
+  background noise applied; and each speech's `MTI_k` (`null` when that speech's STI is refused).
+  `mtf` and `transfer_db` are `null` for a band that cannot be read.
+- `noise` names the noise applied: the receiver's background noise per band when it has one, or
+  none (a receiver without one is written 0 dB in every band, and is read as having none).
+- **Refused** (each speech on its own, `params_not_evaluable` with `quantity` `sti`, unless said):
+  `band_missing` (an octave the speech needs is not in the run: 125 Hz to 8 kHz, female 250 Hz to
+  8 kHz; with `freq_hz` and `needed_hz`: a run of the old 6-band default refuses for 8 kHz),
+  `band_refused` (an octave it needs cannot be read: its series is refused or not complete, its SPL
+  is refused, no source emits in it, or it has no T30, T20 or EDT to check the run's length
+  against; with `freq_hz` and `detail`), `not_octave_bands` (a third-octave run), `several_sources`
+  (more than one source reaches the receiver: STI is one talker's), and `params_series_too_short`
+  when the response from the direct sound is shorter than 1.6 s or half the longest reverberation
+  time of its bands (cl. 6.2 b, 8.3 a).
 
 **Two more `wide` values (results version 9; the bed's findings, `docs/investigations/2026-10-02-bed/`).**
 - **`refused_resamples`: shown from its stand-ins.** A value `params` refused `monte_carlo_noise`
@@ -338,7 +385,8 @@ refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `early
 `monte_carlo_noise`, `noise_unknown`, `noise_uncalibrated`, `several_sources`, `no_time_series`,
 `edt_refused` (EDT only: `reason` is one of `no_energy`, `no_energy_after_arrival`, `run_too_short`,
 `direct_only`, `step_too_coarse`, `not_decaying`, `too_few_particles`, `not_decaying_at_run_end`,
-`receiver_too_large`), `no_a_weight` (dB(A) only, with the band) for `params_not_evaluable`
+`receiver_too_large`), `no_a_weight` (dB(A) only, with the band), `band_missing`, `band_refused`,
+`not_octave_bands` (STI only, results version 10) for `params_not_evaluable`
 (`docs/params.md`).
 
 **EDT (results version 6).** `edt_s` is EDT v2.1 (`params::edt`, ported from

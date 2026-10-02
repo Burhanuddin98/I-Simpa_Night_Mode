@@ -921,6 +921,73 @@ Only the computed bands are summed, and the report names them (`aggregate.dba.ba
   third-octave table, which upstream's `dBa_Sum_Param` applies (`projet_calculation.cpp:262-300`,
   `appconfig.cpp:106`) and the plan has not yet checked against the standard.
 
+## STI
+
+The speech transmission index, IEC 60268-16:2011 (edition 4, read as BS EN 60268-16:2011; edition
+5 not read), from a predicted response as cl. 8.3 asks (`params::sti`; tables pinned in
+`docs/investigations/2026-10-02-m8b-metrics/STANDARDS-CHECK.md`). Written from the standard's
+text, **not ported from upstream's `Compute_STI_Param`**, which masks band k by its own level and
+whose `if(gen='F')` is an assignment, so every STI it gives carries female weights.
+
+Per octave band k from 125 Hz to 8 kHz, for each speech:
+
+1. **MTF** (cl. 6.1, the Schroeder equation): `m_k(F) = |Σ_i E_i·e^{-j2πF·t_i}| / Σ_i E_i` over the
+   band's energy series from the bin of the direct sound's leading edge (`arrival − R/c`; the onset
+   bin when the arrival is not known), at the 14 modulation frequencies 0.63 to 12.5 Hz (A.2.2).
+   Each bin's energy is placed at its start: a shift of every `t_i` does not change the modulus, and
+   spreading each bin over its width would multiply every `m` by `sinc(πF·dt)`, 0.9997 at 12.5 Hz
+   and 1 ms, which is left out. The energy series is the band's intensity response, `h²` of cl. 6.1.
+2. **Speech level at the receiver.** Table A.4's spectrum (male 125 Hz to 8 kHz: +2.9, +2.9, −0.8,
+   −6.8, −12.8, −18.8, −24.8 dB; female 250 Hz to 8 kHz: +5.3, −1.9, −9.1, −15.8, −16.7, −18.0)
+   at 60 dB(A) at 1 m on the talker's axis (J.3), plus the room's transfer: the band's SPL at the
+   receiver less the same sources' free-field level at 1 m, `W·ρc/(4π·1 m²)` over `p₀²`
+   (`params::sti::free_field_level_at_db`, G's free field moved from 10 m; `ρc` and `p₀²` cancel
+   as in G). The table's levels are used as printed; A-weighted with `params::level`'s octave
+   weights they sum to 60.05 dB(A) (male) and 59.88 dB(A) (female), not exactly 60.
+   The free field is an omni source's, as G's: a directional source's on-axis level is not
+   modelled.
+3. **Corrections** (A.3, A.5.3): `m'_k(F) = m_k(F)·I_k / (I_k + I_n,k + I_am,k + I_rt,k)`, `I` the
+   intensities `10^(L/10)`: `I_k` the speech's, `I_n,k` the background noise's, `I_rt,k` the
+   reception threshold's (Table A.2: 46, 27, 12, 6.5, 7.5, 8, 12 dB SPL), and
+   `I_am,k = I_{k-1}·10^{amdB/10}`, the masking by **band k-1's** total level, speech plus noise
+   (Table A.1: `0.5L − 65` below 63 dB, `1.8L − 146.9` to 67, `0.5L − 59.8` to 100, −10 from 100;
+   as printed, the table steps by 0.2 dB at 100 dB though its note 2 calls the scheme continuous).
+   125 Hz is not masked. Female speech has no 125 Hz level, so band 250 Hz is masked by 125 Hz's
+   noise alone when the run has that band. The noise factor of cl. 6.1, `(1 + 10^{-SNR/10})^-1`,
+   is the same factor as the noise in this denominator (A.5.3 note 2; Annex M applies the two
+   steps and they multiply to this): it is applied once, here.
+4. `SNR_eff = 10·lg(m'/(1 − m'))` within ±15 dB (A.5.4), `TI = (SNR_eff + 15)/30` (A.5.5),
+   `MTI_k` the mean of the 14, and `STI = Σ α_k·MTI_k − Σ β_k·√(MTI_k·MTI_{k+1})` (A.5.6) with
+   Table A.3's factors (male α 0.085, 0.127, 0.230, 0.233, 0.309, 0.224, 0.173, β 0.085, 0.078,
+   0.065, 0.011, 0.047, 0.095; female from 250 Hz α 0.117, 0.223, 0.216, 0.328, 0.250, 0.194,
+   β 0.099, 0.066, 0.062, 0.025, 0.076; `Σα − Σβ` = 1 for both). Truncated at 1.0: Table A.3's
+   note names male, where the 250 Hz band at TI 0 and every other at 1 gives 1.036. The female
+   factors give 0.982 in that corner; the same truncation is applied to female as a guard.
+
+**Male is shown, female computed** (A.3.4: male speech assesses a channel; settled by the standard,
+STANDARDS-CHECK.md). The report states the weighting and that the MTF is from a predicted
+response (cl. 8.3).
+
+- **Noise.** The receiver's background noise per band (the `.gap`), when it has one. A receiver
+  without one is written 0 dB in every band (`config_xml::write`); a `.gap` that reads 0 dB in
+  every band is taken as no noise, and the report says "none".
+- **Run length** (cl. 6.2 b, 8.3 a): the response from the direct sound must be at least 1.6 s
+  and at least half the reverberation time, taken per band as its T30, else T20, else EDT, the
+  longest over the speech's bands. Shorter: `params_series_too_short`. A band with none of the
+  three is refused `band_refused`.
+- **Uncertainty: not modelled.** STI is shown as a bare value, `mc_sd` null, no range; the report's
+  `monte_carlo` says so. The plan (PLAN.md, "STI", item 4) expects count noise to bias `m` up where
+  it is small; that is not yet measured.
+- **Refused** (`params_not_evaluable`, quantity `sti`): `band_missing` (an octave the speech needs
+  is not in the run: a run of the old 6-band default refuses for 8 kHz), `band_refused` (an octave
+  it needs is in the run but its series is refused or not complete, its SPL is refused, or no
+  source emits in it), `not_octave_bands` (a third-octave run: the band kind is read from
+  `freq_enum` as the importer reads it), `several_sources` (STI is one talker's).
+- Tests: `tests/params_sti.rs` (the exponential decay's closed form `1/√(1 + (2πF·T/13.8)²)` to
+  1e-6; m = 1 at a high level gives 1.000 for both speeches, m = 0 gives 0; masking from band k-1
+  and not k; 125 Hz unmasked; female without 125 Hz; the truncation; every refusal) and
+  `results::report`'s unit tests (the report's shape, the noise label, several sources).
+
 ## ISO 9613-1: air attenuation
 
 **The equations, from the standard's own page 3**, α in dB/m, `p_r = 101.325 kPa`,
@@ -1485,7 +1552,9 @@ and one of:
   parameter of a TCR receiver, which has steady-state levels and no series
   (`docs/formats/results-json.md`, "`tcr`");
 - `no_a_weight`, with the band: dB(A) over a band that is not an octave centre from 125 Hz to
-  8 kHz, the only bands whose A-weighting is pinned ("A-weighted level").
+  8 kHz, the only bands whose A-weighting is pinned ("A-weighted level");
+- `band_missing`, `band_refused` and `not_octave_bands`, with the band: STI without an octave it
+  needs, with one it cannot read, or over third-octave bands ("STI").
 
 `params_bad_noise_input` refuses a floor, a share alive or lost, a mean or least deposit, a
 lifetime spread, a particle count or a band count that is not a finite number in its domain.
