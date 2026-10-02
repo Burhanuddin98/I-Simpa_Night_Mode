@@ -11,7 +11,8 @@ from pathlib import Path
 SIMPA = r"C:\tmp\nm-target-b2\release\simpa.exe"
 SOLV = r"C:\tmp\nm-m8a-solvers"
 R2 = Path(r"B:\data\m8b-edt\round2\heldout")
-OUT = Path(sys.argv[1] if len(sys.argv) > 1 else r"B:\data\m8b-bed\B")
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+OUT = Path(ARGS[0] if ARGS else r"B:\data\m8b-bed\B")
 ROOMS = [f"G{i}" for i in range(1, 8)]
 TESTED = dict(particles_per_source=150_000, time_step_s=0.001, duration_s=10.0, extinction_exponent=7.0)
 TRUTH = dict(particles_per_source=1_000_000, time_step_s=0.0005, duration_s=10.0, extinction_exponent=9.0)
@@ -50,8 +51,12 @@ def one(kind, room, seed):
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
-    jobs = [("truth", r, s) for s in (9201, 9202) for r in ROOMS] + \
-           [("tested", r, s) for s in (4101, 4102, 4103) for r in ROOMS]
+    # --fresh: only tested runs at seeds 4201-4203 (the fresh draw after build F); truths reused.
+    if "--fresh" in sys.argv:
+        jobs = [("tested", r, s) for s in (4201, 4202, 4203) for r in ROOMS]
+    else:
+        jobs = [("truth", r, s) for s in (9201, 9202) for r in ROOMS] + \
+               [("tested", r, s) for s in (4101, 4102, 4103) for r in ROOMS]
     with ThreadPoolExecutor(WORKERS) as ex:
         out = list(ex.map(lambda j: one(*j), jobs))
     (OUT / "runs.json").write_text(json.dumps(out, indent=1))

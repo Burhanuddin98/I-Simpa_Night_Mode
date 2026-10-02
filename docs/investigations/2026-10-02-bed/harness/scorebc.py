@@ -350,7 +350,12 @@ def main():
     ap.add_argument('--data')
     ap.add_argument('--out')
     ap.add_argument('--simpa')
+    ap.add_argument('--seeds', help='tested seeds, comma-separated (default 4101,4102,4103; the fresh draw '
+                                    'after build F is 4201,4202,4203)')
     a = ap.parse_args()
+    if a.seeds:
+        global TESTED_SEEDS
+        TESTED_SEEDS = tuple(int(s) for s in a.seeds.split(','))
     data = Path(a.data) if a.data else DATA[a.set]
     out = Path(a.out) if a.out else OUT[a.set]
     if a.dry:
