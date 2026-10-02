@@ -35,8 +35,9 @@ pub const P_REF_SQUARED: f64 = 20e-6 * 20e-6;
 
 /// The reference SPL divides the energy by: [`P_REF_SQUARED`], or in a test build the one a
 /// [`crate::faults::Fault::LevelReference`] sets, so that gate M7(c)'s say-NO runs through this
-/// code path.
-fn level_reference_pa2() -> f64 {
+/// code path. G's free field (`params::level`) divides by the same, so that G does not depend on
+/// it.
+pub(crate) fn level_reference_pa2() -> f64 {
     match crate::faults::active() {
         Some(crate::faults::Fault::LevelReference { pa2 }) => pa2,
         _ => P_REF_SQUARED,

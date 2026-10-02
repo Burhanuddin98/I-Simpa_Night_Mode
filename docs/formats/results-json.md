@@ -2,7 +2,8 @@
 
 The JSON the Results screen (M12) reads: a verified run's results and, per point receiver and
 band, `core::params`' eight parameters, each a value or the reason it has none (for every TCR
-receiver, all eight refused `no_time_series`). Written by `core::results::report`
+receiver, all eight refused `no_time_series`), with sound strength G per band (`g_db`) and the
+A-weighted level per receiver (`aggregate.dba`). Written by `core::results::report`
 (`crates/simpa-core/src/results/report.rs`); what is read and refused is `docs/results.md`.
 
 **The JSON Schema is `docs/formats/results-json.schema.json`**, generated from the same Rust types
@@ -86,7 +87,10 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 7,               // 7: the eight parameters' values carry status (ok |
+  "results_version": 8,               // 8: bands carry g_db (sound strength G) and
+                                      //    aggregates dba (the A-weighted level); nothing
+                                      //    else changes;
+                                      // 7: the eight parameters' values carry status (ok |
                                       //    wide), lo and hi, their range; a value refused
                                       //    monte_carlo_noise for its standard deviation alone
                                       //    is shown, wide, instead (decision-log row 37 (3));
@@ -211,10 +215,10 @@ A point receiver:
 | `label`, `folder` | the folder's name, which is exactly one `config.xml` label, and its path under `solve/` |
 | `position_m` | as SPPS stores it; `null` when not read |
 | `arrival_s` | the direct sound's arrival at the centre, which every onset-relative parameter is measured from, the direct sound spread over `±receiver_crossing_s/2` about it; `null` when not computed, and the parameters then detect it. When it lies before a band's onset bin, or after it with the leading edge of its spread at or after the bin's end, C50, C80, D50 and Ts are refused `params_bad_arrival`; SPL, EDT, T20 and T30 are not |
-| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that unfinished particles can have taken, or `null` when there are none); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …, "method": "random" | "energetic", "particles": …, "run": {"particles", "least_deposit", "lifetime_cv2", "lambert_walls", "uniform_absorption", "mean_absorption", "bands", "receiver_crossing_s"}}`, the mean deposit in Pa², the particles per source, and what the calibration's correction, domain and structure take from the run: the least of the contributing sources' deposits, the spread of the particles' lifetimes from the band's room table, whether every face is Lambert with scattering 1 in the band, whether every face has the same absorption, the faces' mean absorption, the bands summed, and `2R/c`, the roughness structure's shortest block; or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `crossings_per_particle` (`n`, the crossings of the receiver per particle as the calibration measures them, which its correction and domain take, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters`; `curvature` and `decay_curve` (below) |
-| `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `crossings_per_particle` (the aggregate's own `n`: its bands' particles together, at the least deposit of any band and the largest lifetime spread; `null` for TCR), `parameters`, `curvature`, `decay_curve`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
+| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that unfinished particles can have taken, or `null` when there are none); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …, "method": "random" | "energetic", "particles": …, "run": {"particles", "least_deposit", "lifetime_cv2", "lambert_walls", "uniform_absorption", "mean_absorption", "bands", "receiver_crossing_s"}}`, the mean deposit in Pa², the particles per source, and what the calibration's correction, domain and structure take from the run: the least of the contributing sources' deposits, the spread of the particles' lifetimes from the band's room table, whether every face is Lambert with scattering 1 in the band, whether every face has the same absorption, the faces' mean absorption, the bands summed, and `2R/c`, the roughness structure's shortest block; or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `crossings_per_particle` (`n`, the crossings of the receiver per particle as the calibration measures them, which its correction and domain take, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters`; `g_db` (sound strength G, below); `curvature` and `decay_curve` (below) |
+| `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `crossings_per_particle` (the aggregate's own `n`: its bands' particles together, at the least deposit of any band and the largest lifetime spread; `null` for TCR), `parameters`, `dba` (the A-weighted level of the bands' SPL, below: a sum of band levels, not of the summed series), `curvature`, `decay_curve`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
 | `by_source[]` | `source` and its `energy` per band, Pa² |
-| `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `arrival`, `decay_arrival`, `noise_model`, `crossings`, `crossings_per_particle`, `energy_pa2`, `total_pa2`, `onset`, `parameters`, `curvature`, `decay_curve`) and `aggregate`: the parameters of that source–receiver pair. Empty otherwise |
+| `per_source[]` | with `echogram_per_source`, one per source in `config.xml`'s order: `source`, `file`, `arrival_s` (from that source alone), `bands[]` (`freq_hz`, `arrival`, `decay_arrival`, `noise_model`, `crossings`, `crossings_per_particle`, `energy_pa2`, `total_pa2`, `onset`, `parameters`, `g_db` (against that source's own free field), `curvature`, `decay_curve`) and `aggregate` (with that source's `dba`): the parameters of that source–receiver pair. Empty otherwise |
 
 `parameters` holds `spl_db`, `edt_s`, `t20_s`, `t30_s`, `c50_db`, `c80_db`, `d50` and `ts_s`, each
 exactly one of:
@@ -234,6 +238,39 @@ exactly one of:
 
 `mc_sd` is the value's estimated Monte-Carlo standard deviation in its unit, calibrated against
 SPPS's own seed-to-seed spread (`monte_carlo.calibration`); every SPPS value carries one.
+
+**Sound strength G, `g_db` (results version 8).** Beside `parameters` on every band (SPPS, a
+source's, TCR's), the same shape as a parameter: `spl_db` less the level of the free field at 10 m
+of the same sources, `G = 10·lg(Σ B_k / (source_power_rho_c/(4π·100 m²)))` (ISO 3382-1:2009 A.2.1,
+Eqs. A.1-A.3; `params::level`). `source_power_rho_c` is SPPS's own sources' power times `ρc`, the
+`ρc` of the deposits SPL sums, so `ρc` cancels: G is **not** the standard's `Lp − Lw + 31 dB`
+(Eq. A.9), which assumes `ρc ≈ 400` and reads 0.15 dB high at SPPS's 413.25 (exact constant
+30.85 dB). With several sources a band's G is every source's energy at the receiver against every
+source's free field at 10 m, both summed; a source's own (`per_source[].bands[].g_db`) takes the
+band's `source_power_rho_c` times that source's share of `band_power_w`. G is SPL less a constant:
+it carries SPL's `mc_sd`, `status` and range shifted by that constant, and where SPL is refused G
+is refused with the same refusal (TCR's `no_time_series` included). A band no source emits in is
+refused `params_no_energy`.
+
+**The A-weighted level, `aggregate.dba` (results version 8).** On every aggregate (a receiver's,
+a source's, TCR's):
+
+```
+{"method": "energy sum over the computed octave bands of SPL plus the IEC 61672-1 A-weighting at the octave centre",
+ "level_db": {"value": 71.2, "mc_sd": 0.03, "status": "ok", "lo": 71.125, "hi": 71.275},
+ "bands_hz": [500, 1000], "weights_db": [-3.2, 0.0], "unweighted_hz": []}
+```
+
+`level_db = 10·lg Σ 10^((spl_db + A)/10)` over `bands_hz`, every computed band, with the
+IEC 61672-1 A-weighting at the octave centres, `weights_db` (125 Hz −16.1, 250 −8.6, 500 −3.2,
+1 k 0, 2 k +1.2, 4 k +1.0, 8 k −1.1 dB). Only the bands computed are summed: a run of 500 Hz and
+1 kHz gives the A-weighted level of those two bands, not a broadband one. Its `mc_sd` is the
+bands' propagated to first order, the bands independent (SPPS runs each band's particles on its
+own): `√Σ (wᵢ·sdᵢ)²`, `wᵢ` band `i`'s share of the weighted energy; `status` and range as SPL's
+(±2.5 `mc_sd`, `ok` within 1 dB). Refused when any band's `spl_db` is, with that band's refusal
+(its `message` names the band); and `no_a_weight` when a computed band is not one of the seven
+octave centres (it is listed in `unweighted_hz`, a third-octave run for instance): no other
+weighting is pinned.
 
 **The range (results version 7; decision-log rows 37 (3) and 39 (3)).** Every value of the eight
 parameters of an SPPS band, aggregate or per-source band carries `status`, `lo` and `hi`: the range
@@ -276,7 +313,8 @@ refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `early
 `monte_carlo_noise`, `noise_unknown`, `noise_uncalibrated`, `several_sources`, `no_time_series`,
 `edt_refused` (EDT only: `reason` is one of `no_energy`, `no_energy_after_arrival`, `run_too_short`,
 `direct_only`, `step_too_coarse`, `not_decaying`, `too_few_particles`, `not_decaying_at_run_end`,
-`receiver_too_large`) for `params_not_evaluable` (`docs/params.md`).
+`receiver_too_large`), `no_a_weight` (dB(A) only, with the band) for `params_not_evaluable`
+(`docs/params.md`).
 
 **EDT (results version 6).** `edt_s` is EDT v2.1 (`params::edt`, ported from
 `docs/investigations/2026-09-27-edt-heldout/frozen2/method.py` and shown equal to it,
@@ -355,7 +393,7 @@ come from the code that gives the numbers, not from a second implementation.
 |---|---|
 | `bands[]` | per computed band: `freq_hz`, and for `sabine` and `eyring` each `absorption_area_m2`, `reverberation_time_s`, `level_db`, as TCR wrote them |
 | `global` | `aggregate` (the label), `sabine_level_db`, `eyring_level_db` |
-| `point_receivers[]` | `label`, `file`; `bands[]`, per band `freq_hz`, `direct_db`, `total_sabine_db`, `total_eyring_db` (TCR's own levels), `parameters`, `curvature` (refused `no_time_series`) and `decay_curve` (`null`); `global` (the `Global` row, each column's energetic sum over the bands, **an aggregate**, labelled: `aggregate`, `direct_db`, `total_sabine_db`, `total_eyring_db`; a value that is not finite is refused, `results_value_invalid`); `aggregate` (SPPS's shape, labelled `"none: TCR writes no series to sum"`, `bands_hz` empty) |
+| `point_receivers[]` | `label`, `file`; `bands[]`, per band `freq_hz`, `direct_db`, `total_sabine_db`, `total_eyring_db` (TCR's own levels), `parameters`, `g_db` and `curvature` (refused `no_time_series`) and `decay_curve` (`null`); `global` (the `Global` row, each column's energetic sum over the bands, **an aggregate**, labelled: `aggregate`, `direct_db`, `total_sabine_db`, `total_eyring_db`; a value that is not finite is refused, `results_value_invalid`); `aggregate` (SPPS's shape, labelled `"none: TCR writes no series to sum"`, `bands_hz` empty, `dba` refused `no_time_series`) |
 | `surfaces[]` | as for SPPS, with `field` one of `Direct field`, `Total field (Sabine)`, `Total field (Eyring)` |
 | `analytic` | `core::params`' Sabine and Eyring times on the run's own inputs: `{"status": "computed", "volume_m3", "area_m2", "bands": [{"freq_hz", "air_m_per_metre", "sabine_s", "eyring_s"}]}`, the two times as `{"value": …, "mc_sd": null}` or `{"not_evaluable": …}`; or `{"status": "not_computed", "why": …}` |
 

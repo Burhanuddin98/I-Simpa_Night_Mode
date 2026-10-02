@@ -106,6 +106,10 @@
             "$ref": "#/$defs/CurvatureReport",
             "description": "As for a band."
           },
+          "dba": {
+            "$ref": "#/$defs/DbaReport",
+            "description": "The A-weighted level of the receiver's (or the source's) bands, from their SPL."
+          },
           "decay_curve": {
             "anyOf": [
               {
@@ -125,6 +129,7 @@
           "aggregate",
           "bands_hz",
           "parameters",
+          "dba",
           "curvature"
         ],
         "type": "object"
@@ -360,6 +365,51 @@
         "required": [
           "percent",
           "limit_percent"
+        ],
+        "type": "object"
+      },
+      "DbaReport": {
+        "description": "The A-weighted level of a receiver's computed bands (`params::level::a_weighted`): the energy\nsum of each band's SPL plus its A-weighting. An aggregate of band levels, not of a series.",
+        "properties": {
+          "bands_hz": {
+            "description": "The bands summed (when refused, the bands it would have summed): every computed band\nwith an A-weighting pinned.",
+            "items": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "level_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "dB(A) re 20 µPa. Its `mc_sd` is the bands' propagated to first order, the bands\nindependent (SPPS runs each band's particles on its own): `√Σ (wᵢ·sdᵢ)²`, `wᵢ` band `i`'s\nshare of the weighted energy; `status` and range as SPL's (±2.5 `mc_sd`, `ok` within 1 dB).\nRefused, with that band's refusal, when any band's SPL is; `no_a_weight` when a band is not\nan octave centre from 125 Hz to 8 kHz, the bands whose weighting is pinned."
+          },
+          "method": {
+            "description": "[`DBA_METHOD`].",
+            "type": "string"
+          },
+          "unweighted_hz": {
+            "description": "The computed bands with no A-weighting pinned (not an octave centre from 125 Hz to 8 kHz):\nwhen there is one, `level_db` is refused `no_a_weight`. Usually empty.",
+            "items": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "weights_db": {
+            "description": "Their A-weighting, dB, in `bands_hz`' order.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "method",
+          "level_db",
+          "bands_hz",
+          "weights_db",
+          "unweighted_hz"
         ],
         "type": "object"
       },
@@ -1352,6 +1402,24 @@
               "reason"
             ],
             "type": "object"
+          },
+          {
+            "description": "A band summed into the A-weighted level has no A-weighting pinned here: it is not an octave\ncentre from 125 Hz to 8 kHz ([`level::A_WEIGHTS_DB`]). Made by [`level::a_weighted`].",
+            "properties": {
+              "freq_hz": {
+                "format": "int32",
+                "type": "integer"
+              },
+              "why": {
+                "const": "no_a_weight",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "freq_hz"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -2004,6 +2072,32 @@
               "quantity"
             ],
             "type": "object"
+          },
+          {
+            "description": "Sound strength G ([`level`]).",
+            "properties": {
+              "quantity": {
+                "const": "strength",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The A-weighted level, dB(A) ([`level`]).",
+            "properties": {
+              "quantity": {
+                "const": "a_weighted",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -2204,6 +2298,10 @@
             "format": "int32",
             "type": "integer"
           },
+          "g_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Sound strength G, dB ([`strength`]): `parameters.spl_db` less the free field's level at\n10 m of the same sources, `source_power_rho_c` over `4π·100 m²` against the same `p₀²`, so\nSPPS's `ρc` cancels (ISO 3382-1:2009 A.2.1, Eqs. A.1-A.3; not Eq. A.9's `+31 dB`, which\nassumes `ρc ≈ 400`). With several sources, every source's energy at the receiver against\nevery source's free field, both summed. SPL's `mc_sd`, `status` and range, shifted by the\nsame constant; refused as SPL is."
+          },
           "lost_follows_decay": {
             "description": "Energetic mode: what the lost particles would still have brought falls with the decay, so\n`lost_share` bounds the energy from every time on, not a lump added at the end.",
             "type": "boolean"
@@ -2258,6 +2356,7 @@
           "source_power_rho_c",
           "background_noise_db",
           "parameters",
+          "g_db",
           "curvature"
         ],
         "type": "object"
@@ -2570,6 +2669,10 @@
             "format": "int32",
             "type": "integer"
           },
+          "g_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "As for the receiver's band, against this source's own free field at 10 m: the band's\n`source_power_rho_c` times this source's share of the sources' power in the band."
+          },
           "noise_model": {
             "$ref": "#/$defs/NoiseModel"
           },
@@ -2598,6 +2701,7 @@
           "energy_pa2",
           "total_pa2",
           "parameters",
+          "g_db",
           "curvature"
         ],
         "type": "object"
@@ -3079,6 +3183,10 @@
             "format": "int32",
             "type": "integer"
           },
+          "g_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Sound strength G, refused as SPL is (`no_time_series`)."
+          },
           "parameters": {
             "$ref": "#/$defs/Parameters",
             "description": "TCR writes steady-state levels, not an energy time series, so `core::params` has nothing\nto compute from: each of the eight is `params_not_evaluable`, `no_time_series`. Its SPL\ntoo, because TCR gives two totals, Sabine's and Eyring's, and neither is `params`' SPL of a\nseries; they are `total_sabine_db` and `total_eyring_db`."
@@ -3098,6 +3206,7 @@
           "total_sabine_db",
           "total_eyring_db",
           "parameters",
+          "g_db",
           "curvature"
         ],
         "type": "object"

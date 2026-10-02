@@ -1,5 +1,6 @@
 //! The JSON `simpa results --json` prints: a [`RunResults`] and, per point receiver and band,
-//! `core::params`' SPL, EDT, T20, T30, C50, C80, D50 and Ts, each a value with its estimated
+//! `core::params`' SPL, EDT, T20, T30, C50, C80, D50 and Ts, with G beside them and dB(A) per
+//! receiver (`params::level`), each a value with its estimated
 //! Monte-Carlo standard deviation, or the reason it is not evaluable (for a TCR receiver every
 //! one, `no_time_series`: TCR writes no series to compute them from). The shape is documented in
 //! `docs/formats/results-json.md` and generated as a JSON Schema by [`report_schema`]
@@ -20,6 +21,7 @@ use super::{Refusal, RunResults, SolverBuild, SolverResults, SurfaceFile, value_
 use crate::params::decay::{self, Arrival, Onset};
 use crate::params::edt;
 use crate::params::lambert::FreePaths;
+use crate::params::level;
 use crate::params::noise::{self, NoiseModel};
 use crate::params::{self, EnergySeries, NotEvaluable, ParamError, Quantity};
 use crate::run::stats::ParticleStats;
@@ -49,7 +51,9 @@ use crate::schema::SolverKind;
 /// decision-log rows 37 (3) and 39 (3)): a value of the eight parameters carries `status`, `lo` and
 /// `hi`, its range (`params::noise::range`; EDT's from `edt`), `ok` or `wide`; a value refused
 /// `monte_carlo_noise` for its standard deviation alone is shown so, `wide`, instead of refused.
-pub const REPORT_VERSION: u32 = 7;
+/// 8 (M8b): bands, a source's bands and TCR's bands carry `g_db`, sound strength G; aggregates
+/// carry `dba`, the A-weighted level of the bands' SPL. No other field changes.
+pub const REPORT_VERSION: u32 = 8;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -479,6 +483,13 @@ pub struct ReceiverBandReport {
     /// The first bin within 20 dB of the largest; `null` when the series is refused.
     pub onset: Option<Onset>,
     pub parameters: Parameters,
+    /// Sound strength G, dB ([`strength`]): `parameters.spl_db` less the free field's level at
+    /// 10 m of the same sources, `source_power_rho_c` over `4π·100 m²` against the same `p₀²`, so
+    /// SPPS's `ρc` cancels (ISO 3382-1:2009 A.2.1, Eqs. A.1-A.3; not Eq. A.9's `+31 dB`, which
+    /// assumes `ρc ≈ 400`). With several sources, every source's energy at the receiver against
+    /// every source's free field, both summed. SPL's `mc_sd`, `status` and range, shifted by the
+    /// same constant; refused as SPL is.
+    pub g_db: Evaluated,
     /// T20 against T30: the curved-decay flag.
     pub curvature: CurvatureReport,
     /// The Schroeder curve EDT, T20 and T30 were fitted to, thinned for display
@@ -509,10 +520,117 @@ pub struct AggregateReport {
     /// deposit of any band, with the largest lifetime spread of any); `null` for TCR.
     pub crossings_per_particle: Option<f64>,
     pub parameters: Parameters,
+    /// The A-weighted level of the receiver's (or the source's) bands, from their SPL.
+    pub dba: DbaReport,
     /// As for a band.
     pub curvature: CurvatureReport,
     /// As for a band.
     pub decay_curve: Option<decay::DecayCurve>,
+}
+
+/// The label of [`DbaReport`]'s sum.
+pub const DBA_METHOD: &str = "energy sum over the computed octave bands of SPL plus the IEC 61672-1 A-weighting at the octave centre";
+
+/// The A-weighted level of a receiver's computed bands (`params::level::a_weighted`): the energy
+/// sum of each band's SPL plus its A-weighting. An aggregate of band levels, not of a series.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct DbaReport {
+    /// [`DBA_METHOD`].
+    pub method: String,
+    /// dB(A) re 20 µPa. Its `mc_sd` is the bands' propagated to first order, the bands
+    /// independent (SPPS runs each band's particles on its own): `√Σ (wᵢ·sdᵢ)²`, `wᵢ` band `i`'s
+    /// share of the weighted energy; `status` and range as SPL's (±2.5 `mc_sd`, `ok` within 1 dB).
+    /// Refused, with that band's refusal, when any band's SPL is; `no_a_weight` when a band is not
+    /// an octave centre from 125 Hz to 8 kHz, the bands whose weighting is pinned.
+    pub level_db: Evaluated,
+    /// The bands summed (when refused, the bands it would have summed): every computed band
+    /// with an A-weighting pinned.
+    pub bands_hz: Vec<i32>,
+    /// Their A-weighting, dB, in `bands_hz`' order.
+    pub weights_db: Vec<f64>,
+    /// The computed bands with no A-weighting pinned (not an octave centre from 125 Hz to 8 kHz):
+    /// when there is one, `level_db` is refused `no_a_weight`. Usually empty.
+    pub unweighted_hz: Vec<i32>,
+}
+
+/// Sound strength G of a band ([`ReceiverBandReport::g_db`]): `spl` less the free field's level at
+/// 10 m of the sources whose power times `ρc` is `power_rho_c` (`params::level`). A refused SPL
+/// refuses G with the same refusal; a value keeps SPL's standard deviation, status and range.
+fn strength(spl: &Evaluated, power_rho_c: f64) -> Evaluated {
+    let Evaluated::Value {
+        value,
+        mc_sd,
+        status,
+        lo,
+        hi,
+    } = spl
+    else {
+        return spl.clone();
+    };
+    match level::free_field_level_db(power_rho_c) {
+        Ok(free) => Evaluated::Value {
+            value: value - free,
+            mc_sd: *mc_sd,
+            status: *status,
+            lo: lo.map(|x| x - free),
+            hi: hi.map(|x| x - free),
+        },
+        Err(e) => Evaluated::refused(e),
+    }
+}
+
+/// [`DbaReport`] of `bands`, `(freq_hz, SPL)`: refused with the first refused band's refusal,
+/// its message naming the band; otherwise `params::level::a_weighted`, with SPL's range and
+/// status on the propagated standard deviation when every band has one.
+fn dba_report(bands: &[(i32, &Evaluated)]) -> DbaReport {
+    let weighted: Vec<(i32, f64)> = bands
+        .iter()
+        .filter_map(|(f, _)| level::a_weight_db(*f).map(|w| (*f, w)))
+        .collect();
+    let refused = bands.iter().find_map(|(f, e)| e.refusal().map(|r| (f, r)));
+    let level_db = match refused {
+        Some((f, r)) => Evaluated::NotEvaluable {
+            not_evaluable: Refused {
+                code: r.code.clone(),
+                message: format!("SPL at {f} Hz is refused: {}", r.message),
+                error: r.error.clone(),
+            },
+        },
+        None => {
+            let levels: Vec<(i32, f64, Option<f64>)> = bands
+                .iter()
+                .filter_map(|(f, e)| match e {
+                    Evaluated::Value { value, mc_sd, .. } => Some((*f, *value, *mc_sd)),
+                    Evaluated::NotEvaluable { .. } => None,
+                })
+                .collect();
+            match level::a_weighted(&levels) {
+                Ok((value, Some(sd))) => {
+                    let r = noise::range(0, value, sd);
+                    Evaluated::Value {
+                        value,
+                        mc_sd: Some(sd),
+                        status: Some(r.status),
+                        lo: Some(r.lo),
+                        hi: Some(r.hi),
+                    }
+                }
+                Ok((value, None)) => Evaluated::bare(value, None),
+                Err(e) => Evaluated::refused(e),
+            }
+        }
+    };
+    DbaReport {
+        method: DBA_METHOD.into(),
+        level_db,
+        bands_hz: weighted.iter().map(|(f, _)| *f).collect(),
+        weights_db: weighted.iter().map(|(_, w)| *w).collect(),
+        unweighted_hz: bands
+            .iter()
+            .map(|(f, _)| *f)
+            .filter(|f| level::a_weight_db(*f).is_none())
+            .collect(),
+    }
 }
 
 /// One source's own echogram at a receiver, one band.
@@ -532,6 +650,9 @@ pub struct SourceBandReport {
     pub total_pa2: f64,
     pub onset: Option<Onset>,
     pub parameters: Parameters,
+    /// As for the receiver's band, against this source's own free field at 10 m: the band's
+    /// `source_power_rho_c` times this source's share of the sources' power in the band.
+    pub g_db: Evaluated,
     /// As for the receiver's band.
     pub curvature: CurvatureReport,
     /// As for the receiver's band.
@@ -925,6 +1046,8 @@ pub struct TcrReceiverBandReport {
     /// too, because TCR gives two totals, Sabine's and Eyring's, and neither is `params`' SPL of a
     /// series; they are `total_sabine_db` and `total_eyring_db`.
     pub parameters: Parameters,
+    /// Sound strength G, refused as SPL is (`no_time_series`).
+    pub g_db: Evaluated,
     /// Refused as the parameters are.
     pub curvature: CurvatureReport,
     /// Always `null`: no series, no curve.
@@ -970,6 +1093,8 @@ impl TcrReceiverReport {
                     direct_db: b.direct_db,
                     total_sabine_db: b.total_sabine_db,
                     total_eyring_db: b.total_eyring_db,
+                    // Refused as SPL is: `strength` of a refusal is that refusal.
+                    g_db: strength(&parameters.spl_db, f64::NAN),
                     parameters: parameters.clone(),
                     curvature: curvature.clone(),
                     decay_curve: None,
@@ -985,6 +1110,12 @@ impl TcrReceiverReport {
                 aggregate: AGGREGATE_NO_SERIES.into(),
                 bands_hz: Vec::new(),
                 crossings_per_particle: None,
+                dba: dba_report(
+                    &r.bands
+                        .iter()
+                        .map(|b| (b.freq_hz, &parameters.spl_db))
+                        .collect::<Vec<_>>(),
+                ),
                 parameters,
                 curvature,
                 decay_curve: None,
@@ -1158,6 +1289,7 @@ fn aggregate_report(
     models: &[NoiseModel],
     arrival: Arrival,
     contributing: &[&str],
+    dba: DbaReport,
 ) -> AggregateReport {
     let mut valid = Vec::new();
     let mut summed = Vec::new();
@@ -1187,9 +1319,37 @@ fn aggregate_report(
         bands_hz: valid,
         crossings_per_particle: e.crossings_per_particle,
         parameters: e.parameters,
+        dba,
         curvature: e.curvature,
         decay_curve: e.decay_curve,
     }
+}
+
+/// Source `name`'s power in band `index` times `ρc`: `total_rho_c`, the `.gap`'s sources' power
+/// times `ρc`, times its share of the sources' power in the band (as [`SppsResults::mean_deposit`]
+/// takes it). 0 when no source emits in the band; NaN when the source's power is not known, which
+/// G refuses.
+fn source_power_rho_c(s: &SppsResults, index: usize, total_rho_c: f64, name: &str) -> f64 {
+    let total: f64 = s
+        .sources
+        .iter()
+        .filter_map(|x| x.band_power_w.get(index))
+        .sum();
+    match s
+        .sources
+        .iter()
+        .find(|x| x.name == name)
+        .and_then(|x| x.band_power_w.get(index))
+    {
+        Some(w) if total > 0.0 => total_rho_c * w / total,
+        Some(_) => 0.0,
+        None => f64::NAN,
+    }
+}
+
+/// [`dba_report`] of band reports' SPL.
+fn dba_of<'a>(bands: impl Iterator<Item = (i32, &'a Parameters)>) -> DbaReport {
+    dba_report(&bands.map(|(f, p)| (f, &p.spl_db)).collect::<Vec<_>>())
 }
 
 /// The arrival `params` measures from: at the receiver's centre, `t`, with the direct sound spread
@@ -1329,6 +1489,7 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             e.several_sources(&contributing);
         }
         let total_pa2: f64 = b.energy.iter().sum();
+        let g_db = strength(&e.parameters.spl_db, b.source_power_rho_c);
         bands.push(ReceiverBandReport {
             freq_hz: b.freq_hz,
             complete: s.band_complete(b.freq_hz),
@@ -1354,13 +1515,23 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             background_noise_db: b.background_noise_db,
             onset: e.onset,
             parameters: e.parameters,
+            g_db,
             curvature: e.curvature,
             decay_curve: e.decay_curve,
         });
         series.push(se);
         models.push(model);
     }
-    let aggregate = aggregate_report(s, bands_hz, &series, &models, arrival, &all_contributing);
+    let dba = dba_of(bands.iter().map(|b| (b.freq_hz, &b.parameters)));
+    let aggregate = aggregate_report(
+        s,
+        bands_hz,
+        &series,
+        &models,
+        arrival,
+        &all_contributing,
+        dba,
+    );
     let per_source = r
         .echograms
         .iter()
@@ -1378,16 +1549,21 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
             let models: Vec<NoiseModel> = (0..r.bands.len())
                 .map(|i| s.noise_model(i, &name))
                 .collect();
-            let bands = r
+            let bands: Vec<SourceBandReport> = r
                 .bands
                 .iter()
                 .zip(&e.energy)
                 .zip(&series)
                 .zip(&models)
-                .map(|(((b, energy), se), model)| {
+                .enumerate()
+                .map(|(i, (((b, energy), se), model))| {
                     let mut e = evaluated(se, arrival, model);
                     e.set_edt(edt_report(s, se, arrival, false));
                     let total_pa2: f64 = energy.iter().sum();
+                    let g_db = strength(
+                        &e.parameters.spl_db,
+                        source_power_rho_c(s, i, b.source_power_rho_c, name[0]),
+                    );
                     SourceBandReport {
                         freq_hz: b.freq_hz,
                         arrival,
@@ -1399,17 +1575,19 @@ fn receiver_report(bands_hz: &[i32], s: &SppsResults, r: &PointReceiver) -> Spps
                         total_pa2,
                         onset: e.onset,
                         parameters: e.parameters,
+                        g_db,
                         curvature: e.curvature,
                         decay_curve: e.decay_curve,
                     }
                 })
                 .collect();
+            let dba = dba_of(bands.iter().map(|b| (b.freq_hz, &b.parameters)));
             SourceReceiverReport {
                 source: e.source.clone(),
                 file: e.file.clone(),
                 arrival_s,
                 bands,
-                aggregate: aggregate_report(s, bands_hz, &series, &models, arrival, &name),
+                aggregate: aggregate_report(s, bands_hz, &series, &models, arrival, &name, dba),
             }
         })
         .collect();
@@ -2556,5 +2734,274 @@ mod tests {
             _ => RangeStatus::Wide,
         };
         assert_eq!(*status, Some(want));
+    }
+
+    // --- G and dB(A) (M8b; PLAN.md "SPL (and dB(A), G on top)") ---------------------------------
+
+    use crate::params::decay::P_REF_SQUARED;
+    use crate::params::level;
+    use crate::results::spps::SourceEchogram;
+
+    /// SPL's value with a range, as `params::noise::shown` gives it.
+    fn spl_value(value: f64, sd: f64) -> Evaluated {
+        let s = noise::range(0, value, sd);
+        Evaluated::Value {
+            value,
+            mc_sd: Some(sd),
+            status: Some(s.status),
+            lo: Some(s.lo),
+            hi: Some(s.hi),
+        }
+    }
+
+    #[test]
+    fn g_is_spl_less_the_free_field_at_ten_metres_with_the_same_range() {
+        // A band whose energy is exactly the free field at 10 m of its sources: G is 0.
+        let power_rho_c = 2.0 * 413.25;
+        let free = 10.0 * (level::free_field_pa2(power_rho_c, 10.0) / P_REF_SQUARED).log10();
+        let g = strength(&spl_value(free, 0.3), power_rho_c);
+        let Evaluated::Value {
+            value,
+            mc_sd,
+            status,
+            lo,
+            hi,
+        } = g
+        else {
+            panic!("{g:?}")
+        };
+        assert!(value.abs() < 1e-9, "{value}");
+        // SPL minus a constant: the same standard deviation, status and range width.
+        assert_eq!(mc_sd, Some(0.3));
+        assert_eq!(status, Some(RangeStatus::Ok));
+        assert!((lo.unwrap() - (value - 0.75)).abs() < 1e-9);
+        assert!((hi.unwrap() - (value + 0.75)).abs() < 1e-9);
+        // A wide SPL gives a wide G.
+        assert_eq!(
+            strength(&spl_value(free, 1.0), power_rho_c).status(),
+            Some(RangeStatus::Wide)
+        );
+        // A bare SPL gives a bare G.
+        let bare = strength(&Evaluated::bare(free + 3.0, None), power_rho_c);
+        assert!((bare.value().unwrap() - 3.0).abs() < 1e-9);
+        assert_eq!(bare.status(), None);
+    }
+
+    #[test]
+    fn a_refused_spl_refuses_g_with_the_same_reason_and_no_power_refuses_g() {
+        let spl = Evaluated::refused(ParamError::NoEnergy);
+        assert_eq!(strength(&spl, 826.5), spl);
+        let noisy = Evaluated::refused(params::not_evaluable(
+            Quantity::Spl,
+            NotEvaluable::SeveralSources {
+                sources: vec!["x".into()],
+            },
+        ));
+        assert_eq!(strength(&noisy, 826.5), noisy);
+        // No source emits in the band.
+        assert_eq!(
+            strength(&spl_value(70.0, 0.1), 0.0).refusal().unwrap().code,
+            crate::params::codes::NO_ENERGY
+        );
+    }
+
+    #[test]
+    fn dba_sums_the_computed_bands_with_their_weights_and_says_which() {
+        let a = spl_value(70.0, 0.2);
+        let b = spl_value(65.0, 0.4);
+        let d = dba_report(&[(1000, &a), (2000, &b)]);
+        assert_eq!(d.bands_hz, vec![1000, 2000]);
+        assert_eq!(d.weights_db, vec![0.0, 1.2]);
+        assert!(d.unweighted_hz.is_empty());
+        let (want, sd) =
+            level::a_weighted(&[(1000, 70.0, Some(0.2)), (2000, 65.0, Some(0.4))]).unwrap();
+        assert_eq!(d.level_db, spl_value(want, sd.unwrap()));
+        // A single band: its SPL plus its weight.
+        let one = dba_report(&[(125, &a)]);
+        assert!((one.level_db.value().unwrap() - (70.0 - 16.1)).abs() < 1e-9);
+        assert!(d.method.contains("IEC 61672-1"));
+    }
+
+    #[test]
+    fn dba_is_refused_when_any_band_spl_is_refused_or_has_no_weight() {
+        let ok = spl_value(70.0, 0.2);
+        let refused = Evaluated::refused(params::not_evaluable(
+            Quantity::Spl,
+            NotEvaluable::NoTimeSeries {
+                detail: "TCR".into(),
+            },
+        ));
+        let d = dba_report(&[(500, &ok), (1000, &refused)]);
+        let r = d.level_db.refusal().expect("refused");
+        let spl = refused.refusal().unwrap();
+        assert_eq!(r.code, spl.code);
+        assert_eq!(r.error, spl.error);
+        assert!(r.message.contains("1000 Hz"), "{}", r.message);
+        // The bands it would have summed are still named.
+        assert_eq!(d.bands_hz, vec![500, 1000]);
+        // A third-octave band has no pinned weight.
+        let d = dba_report(&[(500, &ok), (630, &ok)]);
+        assert_eq!((d.bands_hz, d.weights_db), (vec![500], vec![-3.2]));
+        assert_eq!(d.unweighted_hz, vec![630]);
+        assert_eq!(
+            d.level_db.refusal().unwrap().error,
+            params::not_evaluable(
+                Quantity::AWeighted,
+                NotEvaluable::NoAWeight { freq_hz: 630 }
+            )
+        );
+    }
+
+    /// Two sources, 1 W and 3 W in each of two bands, the second bringing half the first's energy
+    /// to the receiver, echograms on.
+    fn two_source_run() -> SppsResults {
+        let bins = decay(1500, DISTANCE_M / C, 0.6);
+        let mut s = edt_run(0, 0.0, bins.clone());
+        let rho_c = 413.25;
+        s.sources[0].band_power_w = vec![1.0, 1.0];
+        let second = SourcePoint {
+            name: "T".into(),
+            band_power_w: vec![3.0, 3.0],
+            ..s.sources[0].clone()
+        };
+        s.sources.push(second);
+        s.echogram_per_source = true;
+        let half: Vec<f64> = bins.iter().map(|e| 0.5 * e).collect();
+        let sum: Vec<f64> = bins.iter().zip(&half).map(|(a, b)| a + b).collect();
+        let total: f64 = bins.iter().sum();
+        let r = &mut s.point_receivers[0];
+        let band = r.bands[0].clone();
+        r.bands = [500, 1000]
+            .into_iter()
+            .map(|f| ReceiverBand {
+                freq_hz: f,
+                energy: sum.clone(),
+                source_power_rho_c: 4.0 * rho_c,
+                ..band.clone()
+            })
+            .collect();
+        r.by_source = vec![
+            SourceTotals {
+                source: "S".into(),
+                energy: vec![total, total],
+            },
+            SourceTotals {
+                source: "T".into(),
+                energy: vec![0.5 * total, 0.5 * total],
+            },
+        ];
+        r.echograms = vec![
+            SourceEchogram {
+                source: "S".into(),
+                file: "S/x.recp".into(),
+                energy: vec![bins.clone(), bins.clone()],
+            },
+            SourceEchogram {
+                source: "T".into(),
+                file: "T/x.recp".into(),
+                energy: vec![half.clone(), half],
+            },
+        ];
+        // The room table, the particles' lifetimes the noise model's correction needs: the room's
+        // energy falling 60 dB in 0.6 s from the sources' power times rho c.
+        s.total_energy = [500, 1000]
+            .into_iter()
+            .map(|f| BandEnergy {
+                freq_hz: f,
+                energy: (0..1500)
+                    .map(|k| 4.0 * rho_c * 10f64.powf(-6.0 * k as f64 * f64::from(DT) / 0.6))
+                    .collect(),
+            })
+            .collect();
+        let stats = s.particles.bands[0].clone();
+        s.particles.bands = [500, 1000]
+            .into_iter()
+            .map(|f| BandStats {
+                freq_hz: f,
+                ..stats.clone()
+            })
+            .collect();
+        s
+    }
+
+    #[test]
+    fn several_sources_g_sums_their_energies_against_their_free_fields_summed() {
+        let s = two_source_run();
+        let rep = receiver_report(&[500, 1000], &s, &s.point_receivers[0]);
+        let free = |p: f64| level::free_field_pa2(p, 10.0);
+        let rho_c = 413.25;
+        for (i, b) in rep.bands.iter().enumerate() {
+            let spl = b
+                .parameters
+                .spl_db
+                .value()
+                .unwrap_or_else(|| panic!("{:?}", b.parameters.spl_db));
+            // The receiver's G: both sources' energy against both free fields, 1 W + 3 W.
+            let want = 10.0 * (b.total_pa2 / free(4.0 * rho_c)).log10();
+            let g = b.g_db.value().expect("G");
+            assert!((g - want).abs() < 1e-6, "band {i}: {g} vs {want}");
+            assert!((spl - g - 10.0 * (free(4.0 * rho_c) / P_REF_SQUARED).log10()).abs() < 1e-9);
+            // Each source's own G: its energy against its own free field.
+            for (ps, w) in rep.per_source.iter().zip([1.0, 3.0]) {
+                let sb = &ps.bands[i];
+                let want = 10.0 * (sb.total_pa2 / free(w * rho_c)).log10();
+                let g = sb.g_db.value().expect("source G");
+                assert!(
+                    (g - want).abs() < 1e-6,
+                    "{} band {i}: {g} vs {want}",
+                    ps.source
+                );
+            }
+        }
+        // S is 1 W and brings 2/3 of the energy, T 3 W and 1/3: T's G is 10 lg 6 lower.
+        let gs = rep.per_source[0].bands[0].g_db.value().unwrap();
+        let gt = rep.per_source[1].bands[0].g_db.value().unwrap();
+        assert!((gs - gt - 10.0 * 6f64.log10()).abs() < 1e-6, "{gs} {gt}");
+        // dB(A) per receiver, and per source, over the two bands.
+        let d = &rep.aggregate.dba;
+        assert_eq!(d.bands_hz, vec![500, 1000]);
+        let l: Vec<f64> = rep
+            .bands
+            .iter()
+            .map(|b| b.parameters.spl_db.value().unwrap())
+            .collect();
+        let (want, _) = level::a_weighted(&[(500, l[0], None), (1000, l[1], None)]).unwrap();
+        assert!((d.level_db.value().unwrap() - want).abs() < 1e-9);
+        assert!(rep.per_source[1].aggregate.dba.level_db.value().is_some());
+        // The JSON names them.
+        let j = serde_json::to_value(&rep).unwrap();
+        assert!(
+            j["bands"][0]["g_db"]["value"].is_number(),
+            "{}",
+            j["bands"][0]["g_db"]
+        );
+        assert!(j["aggregate"]["dba"]["level_db"]["value"].is_number());
+        assert_eq!(
+            j["aggregate"]["dba"]["bands_hz"],
+            serde_json::json!([500, 1000])
+        );
+        assert!(j["per_source"][0]["bands"][0]["g_db"]["value"].is_number());
+    }
+
+    #[test]
+    fn a_tcr_receiver_refuses_g_and_dba_as_its_spl() {
+        let r = tcr::PointReceiver {
+            label: "R".into(),
+            file: "R.gabe".into(),
+            bands: vec![tcr::ReceiverBand {
+                freq_hz: 1000,
+                direct_db: 60.0,
+                total_sabine_db: 70.0,
+                total_eyring_db: 69.0,
+            }],
+            global_direct_db: 60.0,
+            global_total_sabine_db: 70.0,
+            global_total_eyring_db: 69.0,
+        };
+        let rep = TcrReceiverReport::of(&r);
+        let spl = rep.bands[0].parameters.spl_db.refusal().unwrap().clone();
+        assert_eq!(rep.bands[0].g_db.refusal(), Some(&spl));
+        let d = rep.aggregate.dba.level_db.refusal().unwrap();
+        assert_eq!((d.code.as_str(), &d.error), (spl.code.as_str(), &spl.error));
     }
 }

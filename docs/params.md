@@ -822,6 +822,48 @@ this code path (M7 follow-ups): a test-only seam replaces `p₀²` by 10⁻¹²,
 either way, and the level box's report computed again with it misses the gate in all 12
 receiver-bands (`docs/results.md`, "Level calibration").
 
+## Sound strength G
+
+ISO 3382-1:2009 A.2.1, Eqs. A.1-A.3 (read in the standard, `docs/investigations/2026-10-02-m8b-metrics/STANDARDS-CHECK.md`):
+G is the level at the receiver less the level the same source gives in a free field at 10 m.
+`params::level::free_field_level_db` is that free field, `W·ρc/(4π·100 m²)` over the same
+reference SPL divides by, so
+
+`G = SPL − 10·lg( W·ρc / (4π·100 m²·p₀²) ) = 10·lg( Σ_k B_k · 4π·100 m² / (W·ρc) )`.
+
+`W·ρc` is the `.gap`'s column 2, the sources' power in the band times SPPS's `ρ` and `c`
+(`reportmanager.cpp:807-816`), the same `ρ` and `c` the deposits `B_k` carry
+(`spps/sppsInitialisation.cpp:86`), so `ρc` cancels and neither SPPS's `ρc` nor `p₀²` can move G.
+**Not the standard's `G = Lp − Lw + 31 dB`** (Eq. A.9): its 31 dB is
+`10·lg(4π·100·p₀²/(ρc·10⁻¹² W))` at `ρc ≈ 400`; at SPPS's 413.25 (20 °C, 101 325 Pa) it is
+30.85 dB (`params::level::iso_constant_db`), and the shortcut would read 0.15 dB high, above the
+product's 0.1 dB limit (`tests`: `g_uses_the_exact_rho_c_constant_not_the_standards_31`).
+
+- **Several sources.** A band's G is every source's energy at the receiver against every source's
+  free field at 10 m, both summed (`source_power_rho_c` is already the sum): the strength of the
+  sources together. A source's own G (`per_source`) takes its share of the band's power,
+  `band_power_w`, as the noise model's mean deposit does.
+- **Uncertainty.** G is SPL less a constant: it carries SPL's `mc_sd`, `status` and range, shifted.
+- **Refused** as SPL is, with the same refusal; `params_no_energy` when no source emits in the
+  band, `params_bad_energy` when the power is negative or not a number.
+- Upstream's GUI computes no G. The Barron-Lee revised theory's G is not computed here
+  (PLAN.md: reported by the bed only).
+
+## A-weighted level
+
+`L_A = 10·lg Σ_i 10^((SPL_i + A_i)/10)` over the computed bands, `A_i` IEC 61672-1's A-weighting
+at the octave centres as the plan pins it (`params::level::A_WEIGHTS_DB`: 125 Hz −16.1, 250 −8.6,
+500 −3.2, 1 k 0, 2 k +1.2, 4 k +1.0, 8 k −1.1 dB; IEC 61672-1 itself is not in hand, STANDARDS-CHECK.md).
+Only the computed bands are summed, and the report names them (`aggregate.dba.bands_hz`).
+
+- **Uncertainty**, to first order with the bands independent (SPPS runs each band's particles on
+  its own): `∂L_A/∂SPL_i = w_i`, band `i`'s share of the weighted energy, so
+  `sd_A = √Σ (w_i·sd_i)²`, at most the largest band's. Range and status as SPL's.
+- **Refused** when any band's SPL is, with that band's refusal; `no_a_weight` when a computed band
+  has no weight pinned (63 Hz, 16 kHz, any third-octave band): a third-octave sum would need the
+  third-octave table, which upstream's `dBa_Sum_Param` applies (`projet_calculation.cpp:262-300`,
+  `appconfig.cpp:106`) and the plan has not yet checked against the standard.
+
 ## ISO 9613-1: air attenuation
 
 **The equations, from the standard's own page 3**, α in dB/m, `p_r = 101.325 kPa`,
@@ -1384,7 +1426,9 @@ and one of:
   (`docs/results.md`, "Several sources");
 - `no_time_series`, with where the solver's own values are: made by `core::results` for every
   parameter of a TCR receiver, which has steady-state levels and no series
-  (`docs/formats/results-json.md`, "`tcr`").
+  (`docs/formats/results-json.md`, "`tcr`");
+- `no_a_weight`, with the band: dB(A) over a band that is not an octave centre from 125 Hz to
+  8 kHz, the only bands whose A-weighting is pinned ("A-weighted level").
 
 `params_bad_noise_input` refuses a floor, a share alive or lost, a mean or least deposit, a
 lifetime spread, a particle count or a band count that is not a finite number in its domain.

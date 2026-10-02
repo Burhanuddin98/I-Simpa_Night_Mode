@@ -14,6 +14,7 @@
 //! - [`lambert`]: a diffuse (Lambert) ray transport written from scratch: the mean free path and
 //!   `γ²` of a room from its geometry alone, and its decay, for M8's reference and cross-check.
 //! - [`din18041`]: the group-A target reverberation times.
+//! - [`level`]: sound strength G and the A-weighted level, over SPL.
 //!
 //! Everything is a pure function. A value that cannot be computed honestly is a typed
 //! [`ParamError`] with a stable code, never a number and never a warning. Nothing here is shown
@@ -29,6 +30,7 @@ pub mod decay;
 pub mod din18041;
 pub mod edt;
 pub mod lambert;
+pub mod level;
 pub mod noise;
 pub mod room;
 
@@ -104,6 +106,10 @@ pub enum Quantity {
     CentreTime,
     /// `100·(T30/T20 − 1)`.
     Curvature,
+    /// Sound strength G ([`level`]).
+    Strength,
+    /// The A-weighted level, dB(A) ([`level`]).
+    AWeighted,
 }
 
 impl fmt::Display for Quantity {
@@ -117,6 +123,8 @@ impl fmt::Display for Quantity {
             Quantity::Definition { te_s } => write!(f, "D{}", ms(*te_s)),
             Quantity::CentreTime => write!(f, "Ts"),
             Quantity::Curvature => write!(f, "curvature"),
+            Quantity::Strength => write!(f, "G"),
+            Quantity::AWeighted => write!(f, "dB(A)"),
         }
     }
 }
@@ -310,6 +318,9 @@ pub enum NotEvaluable {
     /// `core::results`, which runs the method on the raw histogram; `reason` is one of
     /// [`edt::REFUSAL_REASONS`].
     EdtRefused { reason: String },
+    /// A band summed into the A-weighted level has no A-weighting pinned here: it is not an octave
+    /// centre from 125 Hz to 8 kHz ([`level::A_WEIGHTS_DB`]). Made by [`level::a_weighted`].
+    NoAWeight { freq_hz: i32 },
 }
 
 impl fmt::Display for NotEvaluable {
@@ -478,6 +489,10 @@ impl fmt::Display for NotEvaluable {
                         "the receiver ball hides the start of the decay; use a smaller radius",
                     _ => "outside the method's premises",
                 }
+            ),
+            NotEvaluable::NoAWeight { freq_hz } => write!(
+                f,
+                "no_a_weight: the {freq_hz} Hz band has no A-weighting pinned; dB(A) sums the                  octave bands 125 Hz to 8 kHz only"
             ),
         }
     }
