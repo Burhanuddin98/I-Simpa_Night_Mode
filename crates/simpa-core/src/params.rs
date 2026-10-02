@@ -27,6 +27,7 @@ use serde::Serialize;
 pub mod air;
 pub mod decay;
 pub mod din18041;
+pub mod edt;
 pub mod lambert;
 pub mod noise;
 pub mod room;
