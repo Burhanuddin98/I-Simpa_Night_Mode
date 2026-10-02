@@ -8,7 +8,7 @@ import json, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-SIMPA = r"C:\tmp\nm-target-b2\release\simpa.exe"
+SIMPA = r"C:\tmp\nm-target-f\release\simpa.exe"
 SOLV = r"C:\tmp\nm-m8a-solvers"
 R2 = Path(r"B:\data\m8b-edt\round2\heldout")
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]

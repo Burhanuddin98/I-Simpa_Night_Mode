@@ -20,7 +20,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BVP = HERE.parents[1] / '2026-10-02-edt-ball-vs-point' / 'run.py'
-SIMPA = r"C:\tmp\nm-target-b2\release\simpa.exe"
+SIMPA = r"C:\tmp\nm-target-f\release\simpa.exe"
 SOLV = r"C:\tmp\nm-m8a-solvers"
 TEMPLATE = Path(r"B:\data\m8b-edt\round2\heldout\tested-G1-energetic-1.0ms-150k-3101\project.simpa")
 B_LOG = Path(r"B:\data\m8b-bed\B\run.out.log")
