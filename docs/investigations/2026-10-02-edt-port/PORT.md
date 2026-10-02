@@ -149,9 +149,7 @@ statuses and reasons identical on all rows** (23.7 s).
 
 ## 7. Gates after the audit fixes
 
-Grace, 2026-10-02, tree at `2a8dfe8`, solvers `C:	mp
-m-m8a-solvers`, `SIMPA_TETGEN160=C:	mp
-m-m10-solversuild\src	etgen\Release	etgen.exe`
+Grace, 2026-10-02, tree at `2a8dfe8`, solvers `C:\tmp\nm-m8a-solvers`, `SIMPA_TETGEN160=C:\tmp\nm-m10-solvers\build\src\tetgen\Release\tetgen.exe`
 (`-ExecutionPolicy Bypass` on the `powershell` command: the machine's policy refuses an unsigned `-File`; msedgedriver matched, no `-FetchDriver`).
 
 - `cargo test` (simpa-core, simpa), inside m11 and m10, `--no-fail-fast`: **pass**.
@@ -159,7 +157,6 @@ m-m10-solversuild\src	etgen\Release	etgen.exe`
   `the_committed_schema_is_the_one_results_schema_prints`: I had regenerated the schema before editing the doc comment on
   `EdtReport::validated`, which the schema carries as a description; regenerated in `2a8dfe8`, rerun passes.
 - M9 (inside m11): **PASS**.
-- `tools/gates/m10.ps1 -SolversDir C:	mp
-m-m8a-solvers`: first run FAILED 1 check,
+- `tools/gates/m10.ps1 -SolversDir C:\tmp\nm-m8a-solvers`: first run FAILED 1 check,
   `winproc::tests::dropping_the_tree_kills_the_child` (a 2 s wait on a killed child, timing under load; passes alone, three
   times, and is nothing the audit fixes touch); rerun **M10 PASSED**.
