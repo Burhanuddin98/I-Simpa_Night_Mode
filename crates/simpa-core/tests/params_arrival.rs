@@ -18,13 +18,15 @@
 //!
 //! **Now.** Given the spread, the curve is the histogram's own from the first bin wholly after the
 //! direct sound; before it, the decay is continued back to the arrival and the rest is the direct
-//! sound, at the arrival. A given arrival outside the onset bin refuses C50, C80, D50 and Ts only
-//! (`params_bad_arrival`); the decay times come from the arrival when the onset bin holds the
-//! leading edge of its spread, and otherwise as if no arrival were given.
+//! sound, at the arrival. An arrival after the onset bin is taken from when the onset bin holds the
+//! leading edge of its spread, for every quantity (until 2026-10-02 C50, C80, D50 and Ts refused
+//! it, `params_bad_arrival`); any other misfit refuses those four only, and the decay times come
+//! as if no arrival were given.
 //!
 //! Every check says no:
 //! - the spread given as 0 (an impulse), on the same series: EDT and Ts miss their bounds;
-//! - the arrival outside the onset bin: C80 refused; inside it, the same geometry gives C80;
+//! - the arrival after the onset bin given as an impulse, with no leading edge in the onset bin:
+//!   C80 refused; with its spread, the same series gives C80 exactly;
 //! - the decay 1 % off: T30 misses gate (a)'s bound;
 //! - the decay times taken as if no arrival were given, which the first fix proposed: EDT misses
 //!   its bound where the onset bin holds only the cap.
@@ -159,12 +161,9 @@ fn a_spread_direct_sound_meets_every_bound_from_its_arrival_and_spread() {
                     }
                     assert!(dev[1].is_some() && dev[2].is_some(), "{case}: {p:?}");
                     if after_onset_bin(&s, t_a) {
-                        // Only the cap of the ball reached the onset bin: C, D and Ts refused.
+                        // Only the cap of the ball reached the onset bin: C, D and Ts are measured
+                        // from the arrival all the same, with the cap counted in the direct sound.
                         after += 1;
-                        for r in [&p.c50_db, &p.c80_db, &p.d50, &p.ts_s] {
-                            assert_eq!(r.as_ref().unwrap_err().code(), codes::BAD_ARRIVAL);
-                        }
-                        continue;
                     }
                     for j in 3..7 {
                         let d = dev[j].unwrap_or_else(|| panic!("{case}: {j} refused {p:?}"));
@@ -243,7 +242,7 @@ fn cap_in_the_bin_before(t: f64, direct: f64) -> (EnergySeries, f64) {
 }
 
 #[test]
-fn an_arrival_after_the_onset_bin_gives_t30_and_refuses_c80() {
+fn an_arrival_after_the_onset_bin_within_its_spread_gives_t30_and_c80() {
     for t in TS {
         for direct in DIRECTS {
             let (s, t_a) = cap_in_the_bin_before(t, direct);
@@ -257,16 +256,19 @@ fn an_arrival_after_the_onset_bin_gives_t30_and_refuses_c80() {
             );
             edt_or_its_short_range(&p, dev[0]);
             assert!(dev[2].unwrap().abs() <= 0.005, "T {t}, D/R {direct}: {p:?}");
-            assert_eq!(p.c80_db.unwrap_err().code(), codes::BAD_ARRIVAL);
+            assert!(dev[4].unwrap().abs() <= 0.01, "T {t}, D/R {direct}: {p:?}");
             assert_eq!(p.decay_arrival, Arrival::spread(t_a, RADIUS / C));
+            // Says no: the same r/c as an impulse, its leading edge after the onset bin.
+            let q = evaluate(&s, Arrival::at(t_a));
+            assert_eq!(q.c80_db.unwrap_err().code(), codes::BAD_ARRIVAL);
 
             // Says no: 1 % off in T, T30 misses the bound.
             let (off, _) = cap_in_the_bin_before(1.01 * t, direct);
             let q = evaluate(&off, Arrival::spread(t_a, RADIUS / C));
             assert!(deviations(&q, t, direct)[2].unwrap().abs() > 0.005);
 
-            // Says no: the arrival 0.3 of the way into its bin, where the whole ball's crossing
-            // lies in one bin, gives C80 within its bound.
+            // And the arrival 0.3 of the way into its bin, where the whole ball's crossing lies in
+            // one bin, gives C80 within its bound too.
             let r = distance(0.01, 0.3);
             let inside = spps_like(t, 0.01, r, direct);
             let q = evaluate(&inside, Arrival::spread(r / C, RADIUS / C));
@@ -309,4 +311,97 @@ fn decay_times_taken_as_if_no_arrival_were_given_miss_where_only_the_cap_is_in_t
         100.0 * worst
     );
     assert!(accepted_outside > 0);
+}
+
+/// Each phase of `r/c` in its bin that puts the leading edge of the ball's crossing, `(r − R)/c`,
+/// in the bin before: `n` of them spread evenly over the first `R/c` of the bin.
+fn leading_edge_in_the_bin_before(dt: f64, n: usize) -> Vec<f64> {
+    let h = RADIUS / C;
+    (0..n)
+        .map(|i| (i as f64 + 0.5) / n as f64 * (h / dt).min(1.0))
+        .collect()
+}
+
+#[test]
+fn c_d_and_ts_from_an_arrival_after_the_onset_bin_within_its_spread_are_exact() {
+    // The onset bin holds only the leading edge of the direct sound, which a receiver ball starts
+    // to catch R/c before its centre; r/c lies in the next bin. The decay times have been measured
+    // from the arrival and its spread there; C50, C80, D50 and Ts must be too, exact against the
+    // closed forms (time zero at r/c, every part of the direct sound early), within the module's
+    // own limits (1/10 of each limen).
+    use simpa_core::params::decay::limits;
+    let h = RADIUS / C;
+    let mut after = 0;
+    let mut cases = 0;
+    // Worst |error| as a fraction of each limit: C50, C80, D50, Ts.
+    let mut worst = [0.0f64; 4];
+    for dt in DTS {
+        for t in TS {
+            for direct in DIRECTS {
+                for f in leading_edge_in_the_bin_before(dt, 8) {
+                    let r = distance(dt, f);
+                    let s = spps_like(t, dt, r, direct);
+                    let t_a = r / C;
+                    let o = onset(&s);
+                    cases += 1;
+                    if !after_onset_bin(&s, t_a) {
+                        // The cap fell more than 20 dB below the largest bin: r/c is in the onset
+                        // bin, the case the spread test above already covers.
+                        continue;
+                    }
+                    after += 1;
+                    assert!(
+                        o.bin_end_s > t_a - h,
+                        "dt {dt}, f {f}: not the leading-edge case"
+                    );
+                    let p = evaluate(&s, Arrival::spread(t_a, h));
+                    let case = format!("dt {dt}, T {t}, D/R {direct}, offset {f}");
+                    let c = closed(t, direct);
+                    let ts_limit = limits::CENTRE_TIME_S.min(limits::CENTRE_TIME_RELATIVE * c[3]);
+                    let checks = [
+                        (&p.c50_db, c[0], limits::CLARITY_DB),
+                        (&p.c80_db, c[1], limits::CLARITY_DB),
+                        (&p.d50, c[2], limits::DEFINITION),
+                        (&p.ts_s, c[3], ts_limit),
+                    ];
+                    for (j, (got, exact, limit)) in checks.into_iter().enumerate() {
+                        let got = got
+                            .as_ref()
+                            .unwrap_or_else(|e| panic!("{case}: quantity {j} refused: {e}"));
+                        let e = (got - exact).abs() / limit;
+                        assert!(e <= 1.0, "{case}: quantity {j} {got} vs {exact}");
+                        worst[j] = worst[j].max(e);
+                    }
+                    assert_eq!(p.arrival, Arrival::spread(t_a, h), "{case}");
+                    assert_eq!(p.decay_arrival, Arrival::spread(t_a, h), "{case}");
+
+                    // Still refused: the leading edge after the onset bin (here a quarter of a bin
+                    // after its end, and two bins after), or the arrival before the onset bin.
+                    let mut wrong = vec![o.bin_end_s + h + 0.25 * dt, o.bin_end_s + h + 2.0 * dt];
+                    if o.bin_start_s >= dt {
+                        wrong.push(o.bin_start_s - 0.5 * dt);
+                    }
+                    for w in wrong {
+                        let q = evaluate(&s, Arrival::spread(w, h));
+                        for r in [&q.c50_db, &q.c80_db, &q.d50, &q.ts_s] {
+                            let e = r.as_ref().unwrap_err();
+                            assert_eq!(e.code(), codes::BAD_ARRIVAL, "{case}, given {w}: {e}");
+                        }
+                        assert_eq!(q.decay_arrival, Arrival::Detected, "{case}, given {w}");
+                    }
+                    // Says no: the same r/c as an impulse has no leading edge before it, and is
+                    // refused.
+                    let q = evaluate(&s, Arrival::at(t_a));
+                    assert_eq!(q.c80_db.unwrap_err().code(), codes::BAD_ARRIVAL, "{case}");
+                }
+            }
+        }
+    }
+    println!(
+        "{cases} cases, {after} with r/c after the onset bin; worst as a fraction of the limit: \
+         C50 {:.1e}, C80 {:.1e}, D50 {:.1e}, Ts {:.1e}",
+        worst[0], worst[1], worst[2], worst[3]
+    );
+    // Both steps must put the leading edge in the onset bin in some case.
+    assert!(after >= 2 * TS.len(), "only {after} leading-edge cases");
 }

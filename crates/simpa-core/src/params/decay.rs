@@ -109,9 +109,11 @@ pub enum Arrival {
     /// Not given: somewhere in the onset bin. Each quantity is computed with the arrival at both
     /// ends of the bin, and refused as `unresolved` when the two differ by more than its limit.
     Detected,
-    /// Given, such as the source–receiver distance over the speed of sound. For C50, C80, D50 and
-    /// Ts it must lie in the onset bin; otherwise those four are refused, `params_bad_arrival`.
-    /// The decay times are computed whatever the arrival ([`evaluate`]).
+    /// Given, such as the source–receiver distance over the speed of sound. It must lie in the
+    /// onset bin, or after it with the onset bin holding the leading edge of its spread
+    /// (`(k₀+1)·dt > time_s − half_width_s`); otherwise C50, C80, D50 and Ts are refused,
+    /// `params_bad_arrival`, and the decay times are computed as if no arrival were given
+    /// ([`evaluate`]).
     Known {
         time_s: f64,
         /// The direct sound reaches the receiver over `[time_s − half_width_s, time_s +
@@ -167,10 +169,15 @@ impl Arrival {
                 o.bin_start_s, o.bin_end_s
             ));
         }
-        if time_s >= o.bin_end_s {
+        // After the onset bin is accepted when the onset bin reaches into the direct sound's
+        // spread: it then holds the leading edge, which a receiver ball catches `R/c` before the
+        // centre, and the curve from `Start::known` counts it in the direct sound. With the leading
+        // edge at or after the bin's end, energy within 20 dB of the largest bin came before it.
+        if o.bin_end_s <= time_s - half_width_s {
             return bad(format!(
-                "after the onset bin [{}, {}) s: energy within {ONSET_THRESHOLD_DB} dB of the \
-                 largest bin arrived before it",
+                "after the onset bin [{}, {}) s by more than the direct sound's half-width \
+                 {half_width_s} s: energy within {ONSET_THRESHOLD_DB} dB of the largest bin \
+                 arrived before the direct sound",
                 o.bin_start_s, o.bin_end_s
             ));
         }
@@ -220,33 +227,6 @@ impl Start {
             top_bin: o.index,
             exact_bin: o.index + 1,
         })
-    }
-}
-
-/// What the decay times are measured from when a given arrival does not fit the onset bin
-/// (`docs/params.md`, "Direct-arrival detection"). They do not depend on where time starts, only
-/// on where in the histogram the direct sound is taken to be:
-/// - the arrival after the onset bin, with the onset bin reaching into the direct sound's spread
-///   (`(k₀+1)·dt > t − h`): the onset bin holds the leading part of the direct sound, which a
-///   receiver ball starts to catch `R/c` before its centre. The curve is read from the arrival,
-///   with everything from the onset bin up to it counted in the direct sound;
-/// - any other misfit (the arrival before the onset bin, so more than 20 dB below the largest
-///   bin; after it by more than the spread; not a time): as if no arrival were given, from the two
-///   ends of the onset bin ([`Arrival::Detected`]).
-fn decay_starts(arrival: Arrival, o: Onset, dt: f64) -> Vec<Start> {
-    match arrival {
-        Arrival::Known {
-            time_s,
-            half_width_s,
-        } if time_s.is_finite()
-            && half_width_s.is_finite()
-            && half_width_s >= 0.0
-            && time_s >= o.bin_end_s
-            && o.bin_end_s > time_s - half_width_s =>
-        {
-            vec![Start::known(time_s, half_width_s, o.index, dt)]
-        }
-        _ => Start::detected(o).to_vec(),
     }
 }
 
@@ -401,8 +381,8 @@ pub fn decay_time(
 }
 
 /// C_te in dB, `te` in seconds (C50: 0.05, C80: 0.08). A `te` that is not a positive number is
-/// refused as `params_bad_time_step`; a given arrival outside the onset bin as
-/// `params_bad_arrival`.
+/// refused as `params_bad_time_step`; a given arrival that does not fit the onset bin
+/// ([`Arrival::Known`]) as `params_bad_arrival`.
 pub fn clarity_db(series: &EnergySeries, arrival: Arrival, te_s: f64) -> Result<f64, ParamError> {
     Analysis::new(series, arrival).clarity_db(te_s)
 }
@@ -412,8 +392,8 @@ pub fn definition(series: &EnergySeries, arrival: Arrival, te_s: f64) -> Result<
     Analysis::new(series, arrival).definition(te_s)
 }
 
-/// The centre time Ts from the arrival, s. A given arrival outside the onset bin is refused,
-/// `params_bad_arrival`.
+/// The centre time Ts from the arrival, s. A given arrival that does not fit the onset bin is
+/// refused, `params_bad_arrival`.
 pub fn centre_time_s(series: &EnergySeries, arrival: Arrival) -> Result<f64, ParamError> {
     Analysis::new(series, arrival).centre_time_s()
 }
@@ -533,13 +513,13 @@ pub fn curvature(t20: &DecayFit, t30: &DecayFit) -> Curvature {
 pub struct BandParameters {
     pub onset: Onset,
     /// The arrival C50, C80, D50 and Ts are measured from: the given one, or
-    /// [`Arrival::Detected`]. When a given arrival does not fit the onset bin those four are
+    /// [`Arrival::Detected`]. When a given arrival does not fit the onset bin (lies neither in it
+    /// nor after it with the onset bin holding the leading edge of its spread) those four are
     /// refused, `params_bad_arrival`, and this is the arrival as given.
     pub arrival: Arrival,
-    /// What EDT, T20 and T30 are measured from: `arrival` when it fits the onset bin, or follows
-    /// it within the direct sound's spread; otherwise [`Arrival::Detected`] (`docs/params.md`,
-    /// "Direct-arrival detection"). Decay times are never refused `params_bad_arrival`; measured
-    /// as detected, they can be refused `unresolved`.
+    /// What EDT, T20 and T30 are measured from: `arrival` when it fits the onset bin; otherwise
+    /// [`Arrival::Detected`] (`docs/params.md`, "Direct-arrival detection"). Decay times are never
+    /// refused `params_bad_arrival`; measured as detected, they can be refused `unresolved`.
     pub decay_arrival: Arrival,
     pub tail: Result<Tail, ParamError>,
     pub spl_db: Result<f64, ParamError>,
@@ -556,12 +536,11 @@ pub struct BandParameters {
 
 /// Every parameter of one band's series.
 ///
-/// **A given arrival that does not fit the onset bin** refuses C50, C80, D50 and Ts only,
-/// `params_bad_arrival`: they are measured from the arrival. SPL does not depend on it, and EDT,
-/// T20 and T30 do not depend on where time starts, only on where in the histogram the direct
-/// sound is taken to be: they are computed from the arrival when it follows the onset bin within
-/// the direct sound's spread, and otherwise as if no arrival were given (`BandParameters::
-/// decay_arrival`).
+/// **A given arrival that does not fit the onset bin** (lies neither in it nor after it with the
+/// onset bin holding the leading edge of its spread, [`Arrival::Known`]) refuses C50, C80, D50
+/// and Ts only, `params_bad_arrival`: they are measured from the arrival. SPL does not depend on
+/// it, and EDT, T20 and T30 do not depend on where time starts: they are computed as if no
+/// arrival were given (`BandParameters::decay_arrival`).
 pub fn evaluate(series: &EnergySeries, arrival: Arrival) -> BandParameters {
     let a = Analysis::new(series, arrival);
     let t20 = a.decay_time(DecayRange::T20);
@@ -944,7 +923,8 @@ struct Analysis<'a> {
     arrival: Arrival,
     /// A given arrival that does not fit the onset bin: C50, C80, D50 and Ts are refused with it.
     arrival_error: Option<ParamError>,
-    /// What the decay times are measured from ([`decay_starts`]).
+    /// What the decay times are measured from: `arrival`, or [`Arrival::Detected`] when the given
+    /// one does not fit.
     decay_arrival: Arrival,
     tail: Result<Tail, ParamError>,
     /// `Some` when energy is missing from the series.
@@ -994,9 +974,9 @@ impl<'a> Analysis<'a> {
             Ok(Tail::Complete) => Some(None),
             _ => None,
         };
-        // Where the curves start: for C, D and Ts the given arrival, which must fit the onset bin,
-        // or the two ends of the onset bin; for the decay times the same when it fits, and
-        // otherwise `decay_starts`.
+        // Where the curves start: the given arrival when it fits ([`Arrival::check`]), or the two
+        // ends of the onset bin; for C, D and Ts nothing when it does not fit, and for the decay
+        // times, which do not depend on where time starts, the two ends of the onset bin.
         let starts = match (arrival, &arrival_error) {
             (_, Some(_)) => Vec::new(),
             (
@@ -1009,13 +989,7 @@ impl<'a> Analysis<'a> {
             (Arrival::Detected, None) => Start::detected(onset).to_vec(),
         };
         let (decay_arrival, decay_start_list) = if arrival_error.is_some() {
-            let s = decay_starts(given, onset, dt);
-            let a = if s.len() == 1 {
-                given
-            } else {
-                Arrival::Detected
-            };
-            (a, Some(s))
+            (Arrival::Detected, Some(Start::detected(onset).to_vec()))
         } else {
             (arrival, None)
         };

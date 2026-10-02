@@ -97,23 +97,29 @@ the receiver. It must never be shown as "the room's T30".
   - `Arrival::Known { time_s, half_width_s }`: the time is given, such as the source–receiver
     distance over the speed of sound, with the direct sound spread over `t_a ± half_width_s`
     (a receiver ball of radius `R` crossed at `c`: `R/c`; 0 for an impulse, `Arrival::at`; see
-    "The direct sound's spread" below). For **C50, C80, D50 and Ts** it must lie in the onset
-    bin, or those four are refused as `params_bad_arrival`: before the bin, the direct sound is
-    more than 20 dB below the strongest arrival and its time does not place the onset; after it,
-    energy within 20 dB of the maximum came before the direct sound's centre. A time a rounding
-    step (10⁻⁹ dt) before the bin is taken as its start. A half-width that is not a finite time
-    of at least 0 is refused the same way.
+    "The direct sound's spread" below). It **fits the onset bin** when it lies in it, or after it
+    with the onset bin reaching into its spread (`(k₀+1)·dt > t_a − half_width_s`: the onset bin
+    holds the leading edge of the direct sound, which a receiver ball starts to catch `R/c`
+    before its centre, and the curve counts it in the direct sound). Every onset-relative
+    parameter is then measured from it. Otherwise **C50, C80, D50 and Ts** are refused as
+    `params_bad_arrival`: before the bin, the direct sound is more than 20 dB below the strongest
+    arrival and its time does not place the onset; after it by more than the spread, energy
+    within 20 dB of the maximum came before the direct sound. A time a rounding step (10⁻⁹ dt)
+    before the bin is taken as its start. A half-width that is not a finite time of at least 0 is
+    refused the same way. Until 2026-10-02 C, D and Ts refused any arrival after the onset bin,
+    spread or not, while the decay times took it: at the 1 ms step that refused them in 24 to 48
+    of 48 receiver-bands per room on M8's energetic runs. On the leading-edge cases of
+    `params_arrival.rs::c_d_and_ts_from_an_arrival_after_the_onset_bin_within_its_spread_are_exact`
+    (`dt` 10 and 1 ms, `T` 0.3 to 3 s, `D/R` 0.12 to 3) they are exact to 2·10⁻¹¹ of their limits.
   - **SPL, EDT, T20 and T30 are never refused `params_bad_arrival`** (M7 follow-up; they had
     been, T30 included, although decay times do not depend on where time starts). SPL does not
     use the arrival. The decay times depend only on where in the histogram the direct sound is
     taken to be, and `BandParameters::decay_arrival` says what they were measured from: the given
-    arrival when it fits the onset bin, or when it follows the onset bin and the onset bin reaches
-    into its spread (`(k₀+1)·dt > t_a − half_width_s`: the onset bin holds the leading edge of the
-    direct sound, which a receiver ball starts to catch `R/c` before its centre); otherwise
-    (before the onset bin, after it by more than the spread, or not a time) as if no arrival were
-    given, `Arrival::Detected`, **where they can still be refused `unresolved`** when the two ends
-    of the onset bin give values further apart than their limit. No such receiver was seen on
-    tutorial 1 (`docs/results.md`, "The arrival": none had `r/c` before the onset bin).
+    arrival when it fits the onset bin; otherwise (before the onset bin, after it by more than the
+    spread, or not a time) as if no arrival were given, `Arrival::Detected`, **where they can
+    still be refused `unresolved`** when the two ends of the onset bin give values further apart
+    than their limit. No such receiver was seen on tutorial 1 (`docs/results.md`, "The arrival":
+    none had `r/c` before the onset bin).
   - `Arrival::Detected`: not given. Every onset-relative parameter is computed with the arrival
     at **both ends of the onset bin**. The value reported is the mean of the two; when either end
     lies further from it than the parameter's limit (the truncation table below), the parameter is
@@ -175,8 +181,9 @@ bin it is that bin's decay continued back, and the rest, up to the top, is the d
 below the 20 dB rule, but it is the direct sound all the same. With `h = 0` this is the model
 above, unchanged. On the same 720 cases every quantity is exact to 3·10⁻¹³, except EDT where the
 direct sound's step leaves under 2 bins of its 10 dB range (`D/R` = 3, 6 dB, at `T` = 0.3 s:
-`range_too_short`, 40 cases), and C50, C80, D50 and Ts where `r/c` lies after the onset bin
-(`params_bad_arrival`, 324 cases). Says no: the same series with `h = 0`, above.
+`range_too_short`, 40 cases). In 324 of them `r/c` lies after the onset bin, which holds only the
+leading edge; C50, C80, D50 and Ts are exact there too (until 2026-10-02 refused,
+`params_bad_arrival`). Says no: the same series with `h = 0`, above.
 
 **What it assumes:** the reverberation continued back to the arrival as the first bin after the
 direct sound decays. The second review found this wrong for real runs, and it was: see "The early

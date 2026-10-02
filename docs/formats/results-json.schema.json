@@ -227,7 +227,7 @@
             "type": "object"
           },
           {
-            "description": "Given, such as the source–receiver distance over the speed of sound. For C50, C80, D50 and\nTs it must lie in the onset bin; otherwise those four are refused, `params_bad_arrival`.\nThe decay times are computed whatever the arrival ([`evaluate`]).",
+            "description": "Given, such as the source–receiver distance over the speed of sound. It must lie in the\nonset bin, or after it with the onset bin holding the leading edge of its spread\n(`(k₀+1)·dt > time_s − half_width_s`); otherwise C50, C80, D50 and Ts are refused,\n`params_bad_arrival`, and the decay times are computed as if no arrival were given\n([`evaluate`]).",
             "properties": {
               "arrival": {
                 "const": "known",
