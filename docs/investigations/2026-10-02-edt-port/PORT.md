@@ -97,3 +97,17 @@ The value is still computed and shown (with the marker), not suppressed: VERDICT
 ## 5. Gates
 
 (recorded below)
+
+Run on Grace, 2026-10-02, after the last code commit (`9f47fe3`), solvers `C:\tmp\nm-m8a-solvers`,
+`SIMPA_TETGEN160=C:\tmp\nm-m10-solvers\build\src\tetgen\Release\tetgen.exe`; `npm ci` in `app/` first (0 vulnerabilities).
+
+- `cargo test` (simpa-core, simpa; inside m10 and m11, `--no-fail-fast`, 4 threads, solvers present): **pass**.
+  Run by hand before that, without the gate's solver staging, 8 solver-running tests of `cli_results.rs` fail with exit 2;
+  they fail identically on the commit before the wiring, so that was the missing staging, not the port.
+- `tools/gates/m11.ps1`: first run **FAILED 1 check**: `core crates: clippy -D warnings`, two `chunks_exact` lints in my
+  new `tests/edt_port.rs`. Fixed in `9f47fe3`. Rerun: **M11 PASSED** (it ran m10 `-SkipCore` and m9 in full, both PASS,
+  e2e 0 failures, focus judge PASS).
+- `tools/gates/m10.ps1 -SolversDir C:\tmp\nm-m8a-solvers`: **M10 PASSED**.
+- M9 (inside m11, "prior gate: m9.ps1 in full prints M9 PASSED"): **PASS**, bindings regenerate to the same blobs.
+- msedgedriver matched WebView2; `-FetchDriver` was not needed.
+- Pre-existing, left alone: `app/src-tauri/Cargo.toml` shows modified in the worktree (line endings only); not committed.
