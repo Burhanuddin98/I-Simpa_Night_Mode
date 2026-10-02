@@ -188,8 +188,13 @@ mod tests {
             curves: vec![vec![None; n]; 3],
             t20: Vec::new(),
         };
-        // T20 as T30, against a transport whose T20 is its T30 ([`transports`]).
+        // T20 is not T30: 3 % higher, its own spread, against a transport whose T20 is
+        // `T20_RATIO` times its T30 ([`transports`]), so a T20 gate that read T30 would FAIL.
         read.t20 = read.t30.clone();
+        for t in read.t20.iter_mut().flatten() {
+            t.t = t.t.map(|x| x * T20_RATIO);
+            t.mc_sd = Some(0.002);
+        }
         read
     }
 
@@ -214,6 +219,10 @@ mod tests {
         }
     }
 
+    /// The transport's T20 over its T30, and its T20 se over its T30 se: deliberately unlike 1.
+    const T20_RATIO: f64 = 1.03;
+    const T20_SE_RATIO: f64 = 2.0;
+
     fn transports(bed: &BedFile, t: f64) -> Transports {
         let h = transport::high("5x4x3", 0.2).unwrap();
         let mut ts = Transports::default();
@@ -234,8 +243,8 @@ mod tests {
                 room_se: h.room_se,
                 receivers: vec![[t, h.se]; 3],
                 curves: vec![],
-                t20: Some(t),
-                t20_se: Some(h.se),
+                t20: Some(t * T20_RATIO),
+                t20_se: Some(h.se * T20_SE_RATIO),
                 room_t20: Some(h.room_t),
                 room_t20_se: Some(h.room_se),
                 t20_error: None,
@@ -632,7 +641,7 @@ mod tests {
         let judged = |d: f64, e: &[f64]| {
             judge(
                 &bed,
-                &with_t20(base.clone(), k, h.t, d, &seeds, e),
+                &with_t20(base.clone(), k, h.t * T20_RATIO, d, &seeds, e),
                 &ts,
                 &[],
             )
@@ -697,9 +706,16 @@ mod tests {
         // T30's C, which passed, stays on its three.
         let ext: Vec<u32> = bed.extension_seeds.clone();
         let more = with_t20(
-            with_t20(base.clone(), k, h.t, 0.004, &seeds, &[0.0, 0.001, -0.001]),
+            with_t20(
+                base.clone(),
+                k,
+                h.t * T20_RATIO,
+                0.004,
+                &seeds,
+                &[0.0, 0.001, -0.001],
+            ),
             k,
-            h.t,
+            h.t * T20_RATIO,
             0.001,
             &ext,
             &[
@@ -730,7 +746,7 @@ mod tests {
         let good = with_t20(
             reads(k, &[0.0, 0.0005, -0.0005], 0.001),
             k,
-            h.t,
+            h.t * T20_RATIO,
             0.001,
             &[1, 2, 3],
             &[0.0, 0.0005, -0.0005],
@@ -746,7 +762,7 @@ mod tests {
             .as_mut()
             .unwrap()
             .t20[0][0] = T30 {
-            t: Some(h.t * (1.0 + 0.001 - 0.0005)),
+            t: Some(h.t * T20_RATIO * (1.0 + 0.001 - 0.0005)),
             mc_sd: Some(0.01),
             source: "monte_carlo_noise".into(),
         };
@@ -755,6 +771,11 @@ mod tests {
         assert!(t.e6.holds, "{:?}", t.e6);
         assert_eq!(t.verdict, Verdict::Pass);
         assert_eq!(t.sources.get("monte_carlo_noise"), Some(&1));
+        // The refusal's sd is kept in the cell's T20 record, not dropped with the refusal.
+        let kept = &t.seeds.iter().find(|x| x.seed == 3).unwrap().t20[0][0];
+        assert_eq!(kept.mc_sd, Some(0.01), "{kept:?}");
+        assert_eq!(kept.source, "monte_carlo_noise");
+        assert_eq!(kept.t, Some(h.t * T20_RATIO * (1.0 + 0.001 - 0.0005)));
         // `range_not_reached` at seed 2, R001, 1000 Hz: not judged, named; T30 unmoved.
         let mut short = good.clone();
         short
@@ -784,6 +805,151 @@ mod tests {
         );
         assert!(r.pass && r.preconditions.e6.holds, "{:#?}", r.failures);
         assert_eq!(r.cells[0].verdict, Verdict::Pass);
+    }
+
+    /// T20's gate reads T20's transport value and se, and T20's own reads and refusals, never
+    /// T30's. The fixture makes them differ (transport T20 3 % over T30, its se twice as big;
+    /// seed T20s 3 % over T30s), so a gate that read T30 anywhere moves a number asserted here.
+    #[test]
+    fn t20_gate_reads_t20s_transport_and_refusals_never_t30s() {
+        let bed = small_bed();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let seeds = [1, 2, 3];
+        let e = [0.0, 0.0005, -0.0005];
+        let base = with_t20(
+            reads(k, &[0.0, 0.0005, -0.0005], 0.001),
+            k,
+            h.t * T20_RATIO,
+            0.001,
+            &seeds,
+            &e,
+        );
+        let r = judge(&bed, &base, &ts, &[]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        let c = t.c.as_ref().unwrap();
+        // The transport's T20 and se, per band, are T20's.
+        assert!(
+            t.transport_t20_s
+                .iter()
+                .all(|x| (x.unwrap() - h.t * T20_RATIO).abs() < 1e-12),
+            "{:?}",
+            t.transport_t20_s
+        );
+        assert!(
+            t.transport_t20_se_s
+                .iter()
+                .all(|x| (x.unwrap() - h.se * T20_SE_RATIO).abs() < 1e-12),
+            "{:?}",
+            t.transport_t20_se_s
+        );
+        // C's d is against T20's transport (+0.1 %), not T30's (it would be +3.1 %); its
+        // transport se is T20's se over T20's time, not T30's.
+        assert!((c.interval.mean - 0.001).abs() < 1e-9, "{c:?}");
+        assert_eq!(c.verdict, Verdict::Pass, "{c:?}");
+        let want = h.se * T20_SE_RATIO / (h.t * T20_RATIO);
+        assert!((c.se_transport - want).abs() < 1e-12, "{c:?} vs {want}");
+        // T30's own C is unmoved by any of it, on T30's transport.
+        let c30 = r.cells[0].c.as_ref().unwrap();
+        assert!(
+            (c30.se_transport - h.se / h.t).abs() < 1e-12,
+            "{:?}",
+            c30.se_transport
+        );
+
+        // Every T30 receiver-band refused for range in every seed: T30 is not judged, T20,
+        // read from its own field, still is, with the same numbers.
+        let mut t30_refused = base.clone();
+        for run in t30_refused.spps.get_mut(CELL).unwrap().values_mut() {
+            for t in run.as_mut().unwrap().t30.iter_mut().flatten() {
+                *t = T30 {
+                    t: None,
+                    mc_sd: None,
+                    source: "range_not_reached".into(),
+                };
+            }
+        }
+        let r = judge(&bed, &t30_refused, &ts, &[]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        assert!(t.e6.holds, "{:?}", t.e6);
+        assert_eq!(t.verdict, Verdict::Pass, "{:#?}", r.t20.failures);
+        assert!((t.c.as_ref().unwrap().interval.mean - 0.001).abs() < 1e-9);
+        assert_ne!(r.cells[0].verdict, Verdict::Pass);
+
+        // The converse: T20 refused everywhere, T30 intact: T20 is not judged, and does not
+        // borrow T30's values.
+        let mut t20_refused = base.clone();
+        for run in t20_refused.spps.get_mut(CELL).unwrap().values_mut() {
+            for t in run.as_mut().unwrap().t20.iter_mut().flatten() {
+                *t = T30 {
+                    t: None,
+                    mc_sd: None,
+                    source: "range_not_reached".into(),
+                };
+            }
+        }
+        let r = judge(&bed, &t20_refused, &ts, &[]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        assert!(!t.e6.holds && t.c.is_none());
+        assert_eq!(t.verdict, Verdict::NotJudged);
+        assert!(r.pass, "{:#?}", r.failures);
+    }
+
+    /// E1 on T20's own extension runs: a seed 11 to 20 run of another spps.exe fails T20, which
+    /// T30 (not extended) never sees.
+    #[test]
+    fn t20_e1_covers_t20s_extension_runs() {
+        let bed = small_bed();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let ext: Vec<u32> = bed.extension_seeds.clone();
+        let mut more = with_t20(
+            with_t20(
+                reads(k, &[0.0, 0.0005, -0.0005], 0.001),
+                k,
+                h.t * T20_RATIO,
+                0.004,
+                &[1, 2, 3],
+                &[0.0, 0.001, -0.001],
+            ),
+            k,
+            h.t * T20_RATIO,
+            0.001,
+            &ext,
+            &[
+                0.0, 0.0005, -0.0005, 0.0, 0.0005, -0.0005, 0.0, 0.0005, -0.0005, 0.0,
+            ],
+        );
+        let r = judge(&bed, &more, &ts, &[]);
+        assert!(
+            r.t20.pass && r.pass,
+            "{:#?}{:#?}",
+            r.t20.failures,
+            r.failures
+        );
+        more.spps
+            .get_mut(CELL)
+            .unwrap()
+            .get_mut(&ext[0])
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .info
+            .exe_sha256 = "other".into();
+        let r = judge(&bed, &more, &ts, &[]);
+        assert!(!r.t20.pass);
+        assert!(
+            r.t20
+                .failures
+                .iter()
+                .any(|f| f.starts_with(CELL) && f.contains("T20 E1")),
+            "{:#?}",
+            r.t20.failures
+        );
+        // T30 did not extend: its own verdict and E1 do not see that run.
+        assert!(r.pass && r.preconditions.e1.holds, "{:#?}", r.failures);
     }
 
     #[test]
