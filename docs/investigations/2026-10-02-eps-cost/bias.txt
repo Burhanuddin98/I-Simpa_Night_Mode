@@ -1,0 +1,50 @@
+metric   | pair A eps5->eps7 (same seed)          | pair B eps5 seed 3101->3102 (control)
+         |   n  mean%   mean z  |z|>2.5           |   n  mean%   mean z  |z|>2.5
+edt_s    |  336  +0.15   +0.00    0.0%            |  336  +0.14   +0.00    0.0%
+t20_s    |  300  +0.04   +0.07    0.0%            |  298  -0.02   +0.00    0.0%
+t30_s    |  122  +0.55   +0.44    0.0%            |  115  +0.06   +0.06    0.9%
+ts_s     |   67  -0.30   -0.04    0.0%            |   67  -0.28   -0.07    0.0%
+c50_db   |   67  +0.86   +0.07    0.0%            |   67  +0.38   +0.03    0.0%
+c80_db   |   67  +2.01   +0.04    0.0%            |   67  +1.74   +0.07    0.0%
+d50      |   67  +0.75   +0.07    0.0%            |   67  +0.46   +0.03    0.0%
+spl_db   |  336  +0.05   +0.02    0.0%            |  336  +0.04   +0.04    0.0%
+
+WALL TIME (s, 4 runs at a time) and ratio to eps5
+  G1:  21.9  26.2  30.8   x1.20 x1.40
+  G2:  54.1  64.3  75.3   x1.19 x1.39
+  G3:  19.0  23.2  28.3   x1.22 x1.49
+  G4:  21.2  24.5  28.8   x1.16 x1.36
+  G5:  20.7  24.4  27.9   x1.18 x1.35
+  G6:  13.9  16.7  20.0   x1.20 x1.43
+  G7:   8.4  10.1  12.2   x1.20 x1.45
+  all: 159.2 189.5 223.2   x1.19 x1.40
+
+REFUSALS by metric:reason (EDT..SPL only)
+  G1 eps5            {'c50_db:monte_carlo_noise': 6, 'c50_db:params_bad_arrival': 24, 'c80_db:monte_carlo_noise': 6, 'c80_db:params_bad_arrival': 24, 'd50:monte_carlo_noise': 6, 'd50:params_bad_arrival': 24, 'ts_s:monte_carlo_noise': 6, 'ts_s:params_bad_arrival': 24}
+  G1 eps6            {'c50_db:monte_carlo_noise': 6, 'c50_db:params_bad_arrival': 24, 'c80_db:monte_carlo_noise': 6, 'c80_db:params_bad_arrival': 24, 'd50:monte_carlo_noise': 6, 'd50:params_bad_arrival': 24, 'ts_s:monte_carlo_noise': 6, 'ts_s:params_bad_arrival': 24}
+  G1 eps7            {'c50_db:monte_carlo_noise': 6, 'c50_db:params_bad_arrival': 24, 'c80_db:monte_carlo_noise': 6, 'c80_db:params_bad_arrival': 24, 'd50:monte_carlo_noise': 6, 'd50:params_bad_arrival': 24, 'ts_s:monte_carlo_noise': 6, 'ts_s:params_bad_arrival': 24}
+  G1 eps5 seed3102   {'c50_db:monte_carlo_noise': 6, 'c50_db:params_bad_arrival': 24, 'c80_db:monte_carlo_noise': 6, 'c80_db:params_bad_arrival': 24, 'd50:monte_carlo_noise': 6, 'd50:params_bad_arrival': 24, 'ts_s:monte_carlo_noise': 6, 'ts_s:params_bad_arrival': 24}
+  G2 eps5            {'c50_db:monte_carlo_noise': 1, 'c50_db:params_bad_arrival': 40, 'c80_db:monte_carlo_noise': 1, 'c80_db:params_bad_arrival': 40, 'd50:monte_carlo_noise': 1, 'd50:params_bad_arrival': 40, 't20_s:monte_carlo_noise': 1, 't30_s:missing_moves': 6, 't30_s:monte_carlo_noise': 42, 'ts_s:monte_carlo_noise': 1, 'ts_s:params_bad_arrival': 40}
+  G2 eps6            {'c50_db:monte_carlo_noise': 1, 'c50_db:params_bad_arrival': 40, 'c80_db:monte_carlo_noise': 1, 'c80_db:params_bad_arrival': 40, 'd50:monte_carlo_noise': 1, 'd50:params_bad_arrival': 40, 't20_s:monte_carlo_noise': 1, 't30_s:monte_carlo_noise': 48, 'ts_s:monte_carlo_noise': 1, 'ts_s:params_bad_arrival': 40}
+  G2 eps7            {'c50_db:monte_carlo_noise': 1, 'c50_db:params_bad_arrival': 40, 'c80_db:monte_carlo_noise': 1, 'c80_db:params_bad_arrival': 40, 'd50:monte_carlo_noise': 1, 'd50:params_bad_arrival': 40, 't20_s:monte_carlo_noise': 1, 't30_s:monte_carlo_noise': 48, 'ts_s:monte_carlo_noise': 1, 'ts_s:params_bad_arrival': 40}
+  G2 eps5 seed3102   {'c50_db:params_bad_arrival': 41, 'c80_db:params_bad_arrival': 41, 'd50:params_bad_arrival': 41, 't20_s:monte_carlo_noise': 1, 't30_s:missing_moves': 6, 't30_s:monte_carlo_noise': 42, 'ts_s:params_bad_arrival': 41}
+  G3 eps5            {'c50_db:params_bad_arrival': 36, 'c80_db:params_bad_arrival': 36, 'd50:params_bad_arrival': 36, 't20_s:missing_moves': 15, 't30_s:missing_moves': 37, 't30_s:missing_not_cleared': 11, 'ts_s:params_bad_arrival': 36}
+  G3 eps6            {'c50_db:params_bad_arrival': 36, 'c80_db:params_bad_arrival': 36, 'd50:params_bad_arrival': 36, 't30_s:missing_moves': 12, 'ts_s:params_bad_arrival': 36}
+  G3 eps7            {'c50_db:params_bad_arrival': 36, 'c80_db:params_bad_arrival': 36, 'd50:params_bad_arrival': 36, 'ts_s:params_bad_arrival': 36}
+  G3 eps5 seed3102   {'c50_db:params_bad_arrival': 36, 'c80_db:params_bad_arrival': 36, 'd50:params_bad_arrival': 36, 't20_s:missing_moves': 14, 't30_s:missing_moves': 35, 't30_s:missing_not_cleared': 12, 'ts_s:params_bad_arrival': 36}
+  G4 eps5            {'c50_db:monte_carlo_noise': 3, 'c50_db:params_bad_arrival': 36, 'c80_db:monte_carlo_noise': 3, 'c80_db:params_bad_arrival': 36, 'd50:monte_carlo_noise': 3, 'd50:params_bad_arrival': 36, 't20_s:missing_moves': 6, 't30_s:missing_moves': 23, 't30_s:monte_carlo_noise': 7, 'ts_s:monte_carlo_noise': 3, 'ts_s:params_bad_arrival': 36}
+  G4 eps6            {'c50_db:monte_carlo_noise': 2, 'c50_db:params_bad_arrival': 36, 'c80_db:monte_carlo_noise': 2, 'c80_db:params_bad_arrival': 36, 'd50:monte_carlo_noise': 2, 'd50:params_bad_arrival': 36, 't20_s:monte_carlo_noise': 6, 't30_s:monte_carlo_noise': 30, 'ts_s:monte_carlo_noise': 2, 'ts_s:params_bad_arrival': 36}
+  G4 eps7            {'c50_db:monte_carlo_noise': 4, 'c50_db:params_bad_arrival': 36, 'c80_db:monte_carlo_noise': 4, 'c80_db:params_bad_arrival': 36, 'd50:monte_carlo_noise': 4, 'd50:params_bad_arrival': 36, 't20_s:monte_carlo_noise': 6, 't30_s:monte_carlo_noise': 30, 'ts_s:monte_carlo_noise': 4, 'ts_s:params_bad_arrival': 36}
+  G4 eps5 seed3102   {'c50_db:monte_carlo_noise': 4, 'c50_db:params_bad_arrival': 36, 'c80_db:monte_carlo_noise': 4, 'c80_db:params_bad_arrival': 36, 'd50:monte_carlo_noise': 4, 'd50:params_bad_arrival': 36, 't20_s:missing_moves': 6, 't30_s:missing_moves': 24, 't30_s:monte_carlo_noise': 6, 'ts_s:monte_carlo_noise': 4, 'ts_s:params_bad_arrival': 36}
+  G5 eps5            {'c50_db:monte_carlo_noise': 6, 'c50_db:params_bad_arrival': 30, 'c80_db:monte_carlo_noise': 6, 'c80_db:params_bad_arrival': 30, 'd50:monte_carlo_noise': 6, 'd50:params_bad_arrival': 30, 't20_s:missing_moves': 4, 't30_s:missing_moves': 34, 'ts_s:monte_carlo_noise': 6, 'ts_s:params_bad_arrival': 30}
+  G5 eps6            {'c50_db:monte_carlo_noise': 6, 'c50_db:params_bad_arrival': 30, 'c80_db:monte_carlo_noise': 6, 'c80_db:params_bad_arrival': 30, 'd50:monte_carlo_noise': 6, 'd50:params_bad_arrival': 30, 't30_s:missing_moves': 2, 'ts_s:monte_carlo_noise': 6, 'ts_s:params_bad_arrival': 30}
+  G5 eps7            {'c50_db:monte_carlo_noise': 6, 'c50_db:params_bad_arrival': 30, 'c80_db:monte_carlo_noise': 6, 'c80_db:params_bad_arrival': 30, 'd50:monte_carlo_noise': 6, 'd50:params_bad_arrival': 30, 'ts_s:monte_carlo_noise': 6, 'ts_s:params_bad_arrival': 30}
+  G5 eps5 seed3102   {'c50_db:monte_carlo_noise': 6, 'c50_db:params_bad_arrival': 30, 'c80_db:monte_carlo_noise': 6, 'c80_db:params_bad_arrival': 30, 'd50:monte_carlo_noise': 6, 'd50:params_bad_arrival': 30, 't20_s:missing_moves': 2, 't30_s:missing_moves': 36, 'ts_s:monte_carlo_noise': 6, 'ts_s:params_bad_arrival': 30}
+  G6 eps5            {'c50_db:monte_carlo_noise': 7, 'c50_db:params_bad_arrival': 26, 'c80_db:monte_carlo_noise': 7, 'c80_db:params_bad_arrival': 26, 'd50:monte_carlo_noise': 7, 'd50:params_bad_arrival': 26, 't20_s:missing_moves': 10, 't30_s:missing_moves': 23, 't30_s:missing_not_cleared': 6, 'ts_s:monte_carlo_noise': 7, 'ts_s:params_bad_arrival': 26}
+  G6 eps6            {'c50_db:monte_carlo_noise': 9, 'c50_db:params_bad_arrival': 27, 'c80_db:monte_carlo_noise': 9, 'c80_db:params_bad_arrival': 27, 'd50:monte_carlo_noise': 9, 'd50:params_bad_arrival': 27, 't30_s:missing_moves': 6, 'ts_s:monte_carlo_noise': 9, 'ts_s:params_bad_arrival': 27}
+  G6 eps7            {'c50_db:monte_carlo_noise': 7, 'c50_db:params_bad_arrival': 29, 'c80_db:monte_carlo_noise': 7, 'c80_db:params_bad_arrival': 29, 'd50:monte_carlo_noise': 7, 'd50:params_bad_arrival': 29, 't30_s:missing_moves': 1, 'ts_s:monte_carlo_noise': 7, 'ts_s:params_bad_arrival': 29}
+  G6 eps5 seed3102   {'c50_db:monte_carlo_noise': 5, 'c50_db:params_bad_arrival': 28, 'c80_db:monte_carlo_noise': 5, 'c80_db:params_bad_arrival': 28, 'd50:monte_carlo_noise': 5, 'd50:params_bad_arrival': 28, 't20_s:missing_moves': 7, 't30_s:missing_moves': 24, 't30_s:missing_not_cleared': 6, 'ts_s:monte_carlo_noise': 5, 'ts_s:params_bad_arrival': 28}
+  G7 eps5            {'c50_db:params_bad_arrival': 48, 'c80_db:params_bad_arrival': 48, 'd50:params_bad_arrival': 48, 't30_s:missing_moves': 25, 'ts_s:params_bad_arrival': 48}
+  G7 eps6            {'c50_db:params_bad_arrival': 48, 'c80_db:params_bad_arrival': 48, 'd50:params_bad_arrival': 48, 'ts_s:params_bad_arrival': 48}
+  G7 eps7            {'c50_db:params_bad_arrival': 48, 'c80_db:params_bad_arrival': 48, 'd50:params_bad_arrival': 48, 'ts_s:params_bad_arrival': 48}
+  G7 eps5 seed3102   {'c50_db:params_bad_arrival': 48, 'c80_db:params_bad_arrival': 48, 'd50:params_bad_arrival': 48, 't30_s:missing_moves': 24, 'ts_s:params_bad_arrival': 48}
