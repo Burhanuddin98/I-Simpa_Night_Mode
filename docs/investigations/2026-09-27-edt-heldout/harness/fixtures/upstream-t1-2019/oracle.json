@@ -1,0 +1,1087 @@
+{
+ "run": "B:/repos/I-Simpa_Night_Mode/target/agents/t3-fix-import-scratch/t1/instance2/report/SPPS/2019-06-07_11h58m41s/Punctual receivers/Receiver 1",
+ "n_steps": 200,
+ "dt_labels": [
+  "10.0 ms",
+  "20.0 ms",
+  "30.0 ms"
+ ],
+ "bands": [
+  "50 Hz",
+  "63 Hz",
+  "80 Hz",
+  "100 Hz",
+  "125 Hz",
+  "160 Hz",
+  "200 Hz",
+  "250 Hz",
+  "315 Hz",
+  "400 Hz",
+  "500 Hz",
+  "630 Hz",
+  "800 Hz",
+  "1000 Hz",
+  "1250 Hz",
+  "1600 Hz",
+  "2000 Hz",
+  "2500 Hz",
+  "3150 Hz",
+  "4000 Hz",
+  "5000 Hz",
+  "6300 Hz",
+  "8000 Hz",
+  "10000 Hz",
+  "12500 Hz",
+  "16000 Hz",
+  "20000 Hz"
+ ],
+ "params": {
+  "EDT (s)": {
+   "rows": [
+    {
+     "row": "50 Hz",
+     "upstream_file": 0.7448301315307617,
+     "port": 0.7448301315307617,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "63 Hz",
+     "upstream_file": 0.7151210308074951,
+     "port": 0.7151226997375488,
+     "abs_diff": 1.6689300537109375e-06,
+     "bit_identical": false
+    },
+    {
+     "row": "80 Hz",
+     "upstream_file": 0.7327383756637573,
+     "port": 0.7327383756637573,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "100 Hz",
+     "upstream_file": 0.708850085735321,
+     "port": 0.708850085735321,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "125 Hz",
+     "upstream_file": 0.7111366987228394,
+     "port": 0.7111366987228394,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "160 Hz",
+     "upstream_file": 0.7155184149742126,
+     "port": 0.7155184149742126,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "200 Hz",
+     "upstream_file": 0.7331477403640747,
+     "port": 0.7331477403640747,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "250 Hz",
+     "upstream_file": 0.7187435626983643,
+     "port": 0.7187435626983643,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "315 Hz",
+     "upstream_file": 0.7478840351104736,
+     "port": 0.7478840351104736,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "400 Hz",
+     "upstream_file": 0.7068958282470703,
+     "port": 0.7068958282470703,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "500 Hz",
+     "upstream_file": 0.7013455033302307,
+     "port": 0.7013455033302307,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "630 Hz",
+     "upstream_file": 0.721234142780304,
+     "port": 0.721234142780304,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "800 Hz",
+     "upstream_file": 0.71794193983078,
+     "port": 0.71794193983078,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "1000 Hz",
+     "upstream_file": 0.6891826391220093,
+     "port": 0.6891826391220093,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "1250 Hz",
+     "upstream_file": 0.6760412454605103,
+     "port": 0.6760412454605103,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "1600 Hz",
+     "upstream_file": 0.681977391242981,
+     "port": 0.681977391242981,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "2000 Hz",
+     "upstream_file": 0.6666510105133057,
+     "port": 0.6666510105133057,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "2500 Hz",
+     "upstream_file": 0.6774153113365173,
+     "port": 0.6774193644523621,
+     "abs_diff": 4.0531158447265625e-06,
+     "bit_identical": false
+    },
+    {
+     "row": "3150 Hz",
+     "upstream_file": 0.6508921980857849,
+     "port": 0.6508885025978088,
+     "abs_diff": 3.6954879760742188e-06,
+     "bit_identical": false
+    },
+    {
+     "row": "4000 Hz",
+     "upstream_file": 0.6379507780075073,
+     "port": 0.6379489898681641,
+     "abs_diff": 1.7881393432617188e-06,
+     "bit_identical": false
+    },
+    {
+     "row": "5000 Hz",
+     "upstream_file": 0.5754789113998413,
+     "port": 0.5754789113998413,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "6300 Hz",
+     "upstream_file": 0.5704491138458252,
+     "port": 0.5704491138458252,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "8000 Hz",
+     "upstream_file": 0.5008664131164551,
+     "port": 0.5008664131164551,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "10000 Hz",
+     "upstream_file": 0.41798022389411926,
+     "port": 0.41798022389411926,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "12500 Hz",
+     "upstream_file": 0.3583522140979767,
+     "port": 0.3583522140979767,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "16000 Hz",
+     "upstream_file": 0.31222814321517944,
+     "port": 0.3122275173664093,
+     "abs_diff": 6.258487701416016e-07,
+     "bit_identical": false
+    },
+    {
+     "row": "20000 Hz",
+     "upstream_file": 0.25552424788475037,
+     "port": 0.25552424788475037,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "Global",
+     "upstream_file": 0.5277876853942871,
+     "port": 0.5277876853942871,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "Average",
+     "upstream_file": 0.6313472390174866,
+     "port": 0.6313472390174866,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    }
+   ],
+   "max_abs_diff_s": 4.0531158447265625e-06,
+   "max_rel_diff": 5.9832067225151775e-06,
+   "bit_identical": 24,
+   "n": 29
+  },
+  "RT-15 (s)": {
+   "rows": [
+    {
+     "row": "50 Hz",
+     "upstream_file": 0.7555726766586304,
+     "port": 0.7555718421936035,
+     "abs_diff": 8.344650268554688e-07,
+     "bit_identical": false
+    },
+    {
+     "row": "63 Hz",
+     "upstream_file": 0.8622041344642639,
+     "port": 0.8622033596038818,
+     "abs_diff": 7.748603820800781e-07,
+     "bit_identical": false
+    },
+    {
+     "row": "80 Hz",
+     "upstream_file": 0.8238587975502014,
+     "port": 0.823857307434082,
+     "abs_diff": 1.4901161193847656e-06,
+     "bit_identical": false
+    },
+    {
+     "row": "100 Hz",
+     "upstream_file": 0.8053983449935913,
+     "port": 0.8053975105285645,
+     "abs_diff": 8.344650268554688e-07,
+     "bit_identical": false
+    },
+    {
+     "row": "125 Hz",
+     "upstream_file": 0.7482576966285706,
+     "port": 0.7482576966285706,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "160 Hz",
+     "upstream_file": 0.9946455359458923,
+     "port": 0.994642972946167,
+     "abs_diff": 2.562999725341797e-06,
+     "bit_identical": false
+    },
+    {
+     "row": "200 Hz",
+     "upstream_file": 0.7605913281440735,
+     "port": 0.7605913281440735,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "250 Hz",
+     "upstream_file": 0.9662159085273743,
+     "port": 0.9662159085273743,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "315 Hz",
+     "upstream_file": 0.8819937705993652,
+     "port": 0.8819937705993652,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "400 Hz",
+     "upstream_file": 0.8429562449455261,
+     "port": 0.8429562449455261,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "500 Hz",
+     "upstream_file": 0.8202893137931824,
+     "port": 0.8202914595603943,
+     "abs_diff": 2.1457672119140625e-06,
+     "bit_identical": false
+    },
+    {
+     "row": "630 Hz",
+     "upstream_file": 0.8822500705718994,
+     "port": 0.8822500705718994,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "800 Hz",
+     "upstream_file": 0.7881462574005127,
+     "port": 0.7881462574005127,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "1000 Hz",
+     "upstream_file": 0.777592122554779,
+     "port": 0.777592122554779,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "1250 Hz",
+     "upstream_file": 0.7908057570457458,
+     "port": 0.7908057570457458,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "1600 Hz",
+     "upstream_file": 0.7940891981124878,
+     "port": 0.7940891981124878,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "2000 Hz",
+     "upstream_file": 0.7679557204246521,
+     "port": 0.7679557204246521,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "2500 Hz",
+     "upstream_file": 0.7121448516845703,
+     "port": 0.7121448516845703,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "3150 Hz",
+     "upstream_file": 0.7262501120567322,
+     "port": 0.7262517809867859,
+     "abs_diff": 1.6689300537109375e-06,
+     "bit_identical": false
+    },
+    {
+     "row": "4000 Hz",
+     "upstream_file": 0.7611181139945984,
+     "port": 0.7611181139945984,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "5000 Hz",
+     "upstream_file": 0.7017562985420227,
+     "port": 0.7017562985420227,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "6300 Hz",
+     "upstream_file": 0.570728063583374,
+     "port": 0.570728063583374,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "8000 Hz",
+     "upstream_file": 0.4389132559299469,
+     "port": 0.4389132559299469,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "10000 Hz",
+     "upstream_file": 0.4446162283420563,
+     "port": 0.4446162283420563,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "12500 Hz",
+     "upstream_file": 0.31125226616859436,
+     "port": 0.3112531900405884,
+     "abs_diff": 9.238719940185547e-07,
+     "bit_identical": false
+    },
+    {
+     "row": "16000 Hz",
+     "upstream_file": 0.29461368918418884,
+     "port": 0.29461368918418884,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "20000 Hz",
+     "upstream_file": 0.23606456816196442,
+     "port": 0.23606456816196442,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "Global",
+     "upstream_file": 0.6400529146194458,
+     "port": 0.6400529146194458,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "Average",
+     "upstream_file": 0.7133437395095825,
+     "port": 0.7133435606956482,
+     "abs_diff": 1.7881393432617188e-07,
+     "bit_identical": false
+    }
+   ],
+   "max_abs_diff_s": 2.562999725341797e-06,
+   "max_rel_diff": 2.968241823220197e-06,
+   "bit_identical": 20,
+   "n": 29
+  },
+  "RT-30 (s)": {
+   "rows": [
+    {
+     "row": "50 Hz",
+     "upstream_file": 1.0829229354858398,
+     "port": 1.0829229354858398,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "63 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "80 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "100 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "125 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "160 Hz",
+     "upstream_file": 1.0104172229766846,
+     "port": 1.010416865348816,
+     "abs_diff": 3.5762786865234375e-07,
+     "bit_identical": false
+    },
+    {
+     "row": "200 Hz",
+     "upstream_file": 1.362333059310913,
+     "port": 1.3623325824737549,
+     "abs_diff": 4.76837158203125e-07,
+     "bit_identical": false
+    },
+    {
+     "row": "250 Hz",
+     "upstream_file": 0.8426074981689453,
+     "port": 0.8426074981689453,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "315 Hz",
+     "upstream_file": 0.9225841760635376,
+     "port": 0.9225841760635376,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "400 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "500 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "630 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "800 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "1000 Hz",
+     "upstream_file": 0.9652224779129028,
+     "port": 0.9652224779129028,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "1250 Hz",
+     "upstream_file": 0.7725931406021118,
+     "port": 0.7725931406021118,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "1600 Hz",
+     "upstream_file": 2.422743320465088,
+     "port": 2.4227404594421387,
+     "abs_diff": 2.86102294921875e-06,
+     "bit_identical": false
+    },
+    {
+     "row": "2000 Hz",
+     "upstream_file": 0.9252217411994934,
+     "port": 0.9252217411994934,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "2500 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "3150 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "4000 Hz",
+     "upstream_file": 0.6742680072784424,
+     "port": 0.6742674112319946,
+     "abs_diff": 5.960464477539062e-07,
+     "bit_identical": false
+    },
+    {
+     "row": "5000 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "6300 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "8000 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "10000 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "12500 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "16000 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "20000 Hz",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    },
+    {
+     "row": "Global",
+     "upstream_file": 0.7526676058769226,
+     "port": 0.7526676058769226,
+     "abs_diff": 0.0,
+     "bit_identical": true
+    },
+    {
+     "row": "Average",
+     "upstream_file": NaN,
+     "port": NaN,
+     "abs_diff": null,
+     "bit_identical": true
+    }
+   ],
+   "max_abs_diff_s": 2.86102294921875e-06,
+   "max_rel_diff": 1.1809022132380775e-06,
+   "bit_identical": 25,
+   "n": 29
+  }
+ },
+ "schroeder": {
+  "cells": 5600,
+  "finite": 1457,
+  "max_abs_diff_db": 7.62939453125e-06,
+  "not_bit_identical": 419,
+  "same_nonfinite_pattern": true
+ },
+ "edt_details": [
+  {
+   "band": "50 Hz",
+   "edt": 0.7448301315307617,
+   "i_start": 0,
+   "i_end": 14,
+   "n_fit": 15,
+   "slope_db_per_ms": -0.08055528253316879,
+   "t_start_ms": 10.0,
+   "t_end_ms": 150.0,
+   "reached": true,
+   "L0_db": 35.942264556884766,
+   "L_end_rel_db": -10.833600997924805,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "63 Hz",
+   "edt": 0.7151226997375488,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08390168845653534,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 36.91400909423828,
+   "L_end_rel_db": -10.35614013671875,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "80 Hz",
+   "edt": 0.7327383756637573,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08188461512327194,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 38.00012969970703,
+   "L_end_rel_db": -10.146915435791016,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "100 Hz",
+   "edt": 0.708850085735321,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.0846441313624382,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 38.832786560058594,
+   "L_end_rel_db": -10.444475173950195,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "125 Hz",
+   "edt": 0.7111366987228394,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08437196165323257,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 39.90800476074219,
+   "L_end_rel_db": -10.473913192749023,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "160 Hz",
+   "edt": 0.7155184149742126,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.0838552787899971,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 40.747833251953125,
+   "L_end_rel_db": -10.250930786132812,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "200 Hz",
+   "edt": 0.7331477403640747,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08183889091014862,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 41.876583099365234,
+   "L_end_rel_db": -10.064826965332031,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "250 Hz",
+   "edt": 0.7187435626983643,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08347900211811066,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 42.94551086425781,
+   "L_end_rel_db": -10.106094360351562,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "315 Hz",
+   "edt": 0.7478840351104736,
+   "i_start": 0,
+   "i_end": 14,
+   "n_fit": 15,
+   "slope_db_per_ms": -0.0802263393998146,
+   "t_start_ms": 10.0,
+   "t_end_ms": 150.0,
+   "reached": true,
+   "L0_db": 43.86722183227539,
+   "L_end_rel_db": -10.677215576171875,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "400 Hz",
+   "edt": 0.7068958282470703,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08487813919782639,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 44.87240219116211,
+   "L_end_rel_db": -10.44869613647461,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "500 Hz",
+   "edt": 0.7013455033302307,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08554984629154205,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 45.82606887817383,
+   "L_end_rel_db": -10.540462493896484,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "630 Hz",
+   "edt": 0.721234142780304,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08319073915481567,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 46.83049774169922,
+   "L_end_rel_db": -10.157379150390625,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "800 Hz",
+   "edt": 0.71794193983078,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08357221633195877,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 48.033695220947266,
+   "L_end_rel_db": -10.205196380615234,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "1000 Hz",
+   "edt": 0.6891826391220093,
+   "i_start": 0,
+   "i_end": 13,
+   "n_fit": 14,
+   "slope_db_per_ms": -0.08705965429544449,
+   "t_start_ms": 10.0,
+   "t_end_ms": 140.0,
+   "reached": true,
+   "L0_db": 48.66312026977539,
+   "L_end_rel_db": -10.61056900024414,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "1250 Hz",
+   "edt": 0.6760412454605103,
+   "i_start": 0,
+   "i_end": 12,
+   "n_fit": 13,
+   "slope_db_per_ms": -0.08875197917222977,
+   "t_start_ms": 10.0,
+   "t_end_ms": 130.0,
+   "reached": true,
+   "L0_db": 49.65930938720703,
+   "L_end_rel_db": -10.076271057128906,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "1600 Hz",
+   "edt": 0.681977391242981,
+   "i_start": 0,
+   "i_end": 12,
+   "n_fit": 13,
+   "slope_db_per_ms": -0.08797945082187653,
+   "t_start_ms": 10.0,
+   "t_end_ms": 130.0,
+   "reached": true,
+   "L0_db": 50.76579666137695,
+   "L_end_rel_db": -10.00115966796875,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "2000 Hz",
+   "edt": 0.6666510105133057,
+   "i_start": 0,
+   "i_end": 12,
+   "n_fit": 13,
+   "slope_db_per_ms": -0.09000211209058762,
+   "t_start_ms": 10.0,
+   "t_end_ms": 130.0,
+   "reached": true,
+   "L0_db": 51.73447036743164,
+   "L_end_rel_db": -10.283023834228516,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "2500 Hz",
+   "edt": 0.6774193644523621,
+   "i_start": 0,
+   "i_end": 12,
+   "n_fit": 13,
+   "slope_db_per_ms": -0.08857142925262451,
+   "t_start_ms": 10.0,
+   "t_end_ms": 130.0,
+   "reached": true,
+   "L0_db": 52.65984344482422,
+   "L_end_rel_db": -10.174118041992188,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "3150 Hz",
+   "edt": 0.6508885025978088,
+   "i_start": 0,
+   "i_end": 12,
+   "n_fit": 13,
+   "slope_db_per_ms": -0.09218169003725052,
+   "t_start_ms": 10.0,
+   "t_end_ms": 130.0,
+   "reached": true,
+   "L0_db": 53.528533935546875,
+   "L_end_rel_db": -10.303760528564453,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "4000 Hz",
+   "edt": 0.6379489898681641,
+   "i_start": 0,
+   "i_end": 12,
+   "n_fit": 13,
+   "slope_db_per_ms": -0.09405140578746796,
+   "t_start_ms": 10.0,
+   "t_end_ms": 130.0,
+   "reached": true,
+   "L0_db": 54.39323425292969,
+   "L_end_rel_db": -10.71237564086914,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "5000 Hz",
+   "edt": 0.5754789113998413,
+   "i_start": 0,
+   "i_end": 11,
+   "n_fit": 12,
+   "slope_db_per_ms": -0.10426099598407745,
+   "t_start_ms": 10.0,
+   "t_end_ms": 120.0,
+   "reached": true,
+   "L0_db": 54.996089935302734,
+   "L_end_rel_db": -10.630836486816406,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "6300 Hz",
+   "edt": 0.5704491138458252,
+   "i_start": 0,
+   "i_end": 11,
+   "n_fit": 12,
+   "slope_db_per_ms": -0.1051802858710289,
+   "t_start_ms": 10.0,
+   "t_end_ms": 120.0,
+   "reached": true,
+   "L0_db": 55.521827697753906,
+   "L_end_rel_db": -11.138050079345703,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "8000 Hz",
+   "edt": 0.5008664131164551,
+   "i_start": 0,
+   "i_end": 9,
+   "n_fit": 10,
+   "slope_db_per_ms": -0.11979242414236069,
+   "t_start_ms": 10.0,
+   "t_end_ms": 100.0,
+   "reached": true,
+   "L0_db": 55.818092346191406,
+   "L_end_rel_db": -10.28786849975586,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "10000 Hz",
+   "edt": 0.41798022389411926,
+   "i_start": 0,
+   "i_end": 8,
+   "n_fit": 9,
+   "slope_db_per_ms": -0.14354746043682098,
+   "t_start_ms": 10.0,
+   "t_end_ms": 90.0,
+   "reached": true,
+   "L0_db": 56.27336883544922,
+   "L_end_rel_db": -10.745620727539062,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "12500 Hz",
+   "edt": 0.3583522140979767,
+   "i_start": 0,
+   "i_end": 7,
+   "n_fit": 8,
+   "slope_db_per_ms": -0.16743303835391998,
+   "t_start_ms": 10.0,
+   "t_end_ms": 80.0,
+   "reached": true,
+   "L0_db": 55.91304016113281,
+   "L_end_rel_db": -10.7998046875,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "16000 Hz",
+   "edt": 0.3122275173664093,
+   "i_start": 0,
+   "i_end": 6,
+   "n_fit": 7,
+   "slope_db_per_ms": -0.19216756522655487,
+   "t_start_ms": 10.0,
+   "t_end_ms": 70.0,
+   "reached": true,
+   "L0_db": 54.88825988769531,
+   "L_end_rel_db": -10.653717041015625,
+   "first_energy_step": 1,
+   "n_steps": 200
+  },
+  {
+   "band": "20000 Hz",
+   "edt": 0.25552424788475037,
+   "i_start": 0,
+   "i_end": 5,
+   "n_fit": 6,
+   "slope_db_per_ms": -0.23481138050556183,
+   "t_start_ms": 10.0,
+   "t_end_ms": 60.0,
+   "reached": true,
+   "L0_db": 54.623111724853516,
+   "L_end_rel_db": -11.128204345703125,
+   "first_energy_step": 1,
+   "n_steps": 200
+  }
+ ]
+}

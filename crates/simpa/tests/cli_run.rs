@@ -722,9 +722,12 @@ fn a_parity_mesh_is_never_run_whatever_its_mesh_json_says() {
 /// and records `preprocess_aborted` as a warning in `run.json` (the tutorial-3 follow-ups'
 /// decision (d); `docs/solver-contract.md`, "Reason codes"). The tutorial-3 follow-ups' critic
 /// found no test that runs a project whose `preprocess.exe` gives up, so the warning could stop
-/// being recorded unseen. Here `preprocess.exe` is played by a batch file that prints the line
-/// upstream's prints when it gives up and saves nothing, exit 0 (`Preprocess.cpp:100-106`).
-/// Says no: the real `preprocess.exe`, which corrects the box, gives no warning.
+/// being recorded unseen. Here `preprocess.exe` is played by `simpa-stub-preprocess`, a real PE
+/// binary (unlike the batch file this test used before backlog 54's CLI half started verifying
+/// `--preprocess` too) that prints the line upstream's prints when it gives up and saves nothing,
+/// exit 0 (`Preprocess.cpp:100-106`); `SIMPA_SOLVER_MANIFEST` registers its own code sha256 under
+/// `preprocess.exe` so it verifies. Says no: the real `preprocess.exe`, which corrects the box,
+/// gives no warning.
 #[test]
 fn a_run_whose_preprocess_gives_up_records_the_warning() {
     let root = scratch("run-preprocess-aborted");
@@ -736,13 +739,8 @@ fn a_run_whose_preprocess_gives_up_records_the_warning() {
         text.replace("\"preprocess\": false", "\"preprocess\": true"),
     )
     .unwrap();
-    let fake = root.join("gives_up.bat");
-    std::fs::write(
-        &fake,
-        "@echo off\r\necho Mesh reparation has been aborted. The algorithm enter into an \
-         infinite loop. Try to stick coplanar faces or destroy manually.\r\nexit /b 0\r\n",
-    )
-    .unwrap();
+    let fake = stub_preprocess();
+    let manifest = manifest_with(&root, "preprocess.exe", &fake);
     let warnings = |m: &Value| -> Vec<String> {
         m["verdict"]["warnings"]
             .as_array()
@@ -752,11 +750,19 @@ fn a_run_whose_preprocess_gives_up_records_the_warning() {
             .collect()
     };
 
-    let o = run(
-        &project,
-        "tcr",
-        &root,
-        &["--preprocess", &fake.display().to_string()],
+    let o = simpa_run_env(
+        &[
+            "run".to_string(),
+            project.display().to_string(),
+            "--solver".to_string(),
+            "tcr".to_string(),
+            "--runs".to_string(),
+            root.display().to_string(),
+            "--json".to_string(),
+            "--preprocess".to_string(),
+            fake.display().to_string(),
+        ],
+        &[("SIMPA_SOLVER_MANIFEST", manifest.as_os_str())],
     );
     assert_eq!(o.code, 0, "{o:#?}");
     let m = json(&o);
@@ -1247,13 +1253,14 @@ fn written_materials(
     t
 }
 
-/// `simpa run <file> --solver tcr --json` with the stub solver and `extra`: what it printed, its
-/// manifest, and the `type_surface` elements of the `config.xml` it exported.
+/// `simpa run <file> --solver tcr --json` with the verified build and `extra`: what it printed,
+/// its manifest, and the `type_surface` elements of the `config.xml` it exported. The verified
+/// `classicalTheory.exe`, not the stub solver: backlog 54's CLI half verifies the solver build by
+/// default, which the stub (a mismatching, if genuine, PE binary) would now be refused for before
+/// any config.xml is even written, and the box these tests export is real and fast to solve
+/// (`tcr_runs_the_box_ok_twice_into_two_folders`), so nothing is lost running it for real.
 fn exported(file: &Path, root: &Path, extra: &[&str]) -> (Out, Value, Vec<String>) {
-    let stub = stub().display().to_string();
-    let mut args: Vec<&str> = vec!["--solver-exe", stub.as_str()];
-    args.extend(extra);
-    materials_of(run(file, "tcr", root, &args))
+    materials_of(run(file, "tcr", root, extra))
 }
 
 /// What a `simpa run --json` printed, its manifest, and the `type_surface` elements of the
@@ -1325,13 +1332,7 @@ fn t39_3_base_runs_the_base_when_an_active_variant_is_set() {
     let root = scratch("t39-3");
     let (file, p) = variant_box(&root, Some("rotated"));
     let base = written_materials(&p, None, &root);
-    let stub = stub().display().to_string();
-    let o = run(
-        &file,
-        "tcr",
-        &root,
-        &["--solver-exe", stub.as_str(), "--base"],
-    );
+    let o = run(&file, "tcr", &root, &["--base"]);
     assert_ne!(
         o.code, 2,
         "--base is refused as a usage error: {}",
@@ -1345,18 +1346,7 @@ fn t39_3_base_runs_the_base_when_an_active_variant_is_set() {
     );
     assert_eq!(m["source"]["variant"], Value::Null, "{}", m["source"]);
 
-    let both = run(
-        &file,
-        "tcr",
-        &root,
-        &[
-            "--solver-exe",
-            stub.as_str(),
-            "--base",
-            "--variant",
-            "uniform",
-        ],
-    );
+    let both = run(&file, "tcr", &root, &["--base", "--variant", "uniform"]);
     assert_eq!(
         both.code, 2,
         "--base with --variant is a usage error: {both:#?}"
@@ -1398,4 +1388,134 @@ fn t39_5_the_help_states_the_default_variant_and_the_base_spelling() {
         help.to_ascii_lowercase().contains("active variant"),
         "the help of run does not state that the default is the file's active variant:\n{help}"
     );
+}
+
+// -------------------------------------------------------------------------------------------
+// Backlog 54's CLI half (decision row 33): `simpa run` and `simpa run-folder` check their
+// solver build by default, as the app does (`RunOptions::verify`, `mesh_run.rs`'s
+// `run_options`), with no opt-out, since the app has none either.
+
+/// T54-1: a CLI run with the verified build records matching checks in `run.json`, and
+/// `simpa results` reads the run verified, in text and `--json` (`results::solver_build`,
+/// backlog 38, unchanged by this step).
+#[test]
+fn t54_1_a_cli_run_with_the_verified_build_reads_verified_in_simpa_results() {
+    let root = scratch("run-verify-ok");
+    let o = run(&fixture(BOX), "tcr", &root, &[]);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let m = json(&o);
+    assert_eq!(m["verdict"]["status"], "OK", "{m:#}");
+    let solvers = m["solvers"]
+        .as_array()
+        .unwrap_or_else(|| panic!("a default CLI run must record its checks: {m:#}"));
+    assert!(!solvers.is_empty(), "{m:#}");
+    assert!(
+        solvers.iter().all(|c| c["matches"] == Value::Bool(true)),
+        "{solvers:#?}"
+    );
+
+    let dir = run_dir(&m);
+    let r = simpa_run(&["results", &dir.display().to_string(), "--json"]);
+    assert_eq!(r.code, 0, "{r:#?}");
+    let rep = json(&r);
+    assert_eq!(rep["solver_build"]["status"], "verified", "{rep:#}");
+
+    let text_out = simpa_run(&["results", &dir.display().to_string()]);
+    assert_eq!(text_out.code, 0, "{text_out:#?}");
+    assert!(
+        text_out.stdout.contains("solver build verified"),
+        "{text_out:#?}"
+    );
+}
+
+/// T54-2: a tampered solver (the middle byte of its `.text` section flipped,
+/// `solvers/pe-fingerprint.ps1`'s say-NO input, `bed::pe::flip_text_byte` in Rust) is refused
+/// before launch, `solver_unverified`, exit class 2, stage `solvers`: the same code and stage the
+/// app's own `RunOptions::verify` gives for a build that does not match (`run/manager.rs`,
+/// `verify_solvers`). `run.json` still records the check that found it, `matches: false`, naming
+/// the tampered solver. This is the same check `results::solver_build`'s `solver_build_mismatch`
+/// (`results.rs`, `build_codes::MISMATCH`) judges a *completed* run's recorded checks by; a run
+/// refused this early never reaches that stage (`results::load`'s `check_status` refuses any
+/// non-OK run with `results_run_failed` first), so `simpa results` on this folder reads refused,
+/// not a solver-build verdict, naming `solver_unverified` among its reasons.
+#[test]
+fn t54_2_a_tampered_solver_is_refused_before_launch() {
+    let root = scratch("run-verify-tampered");
+    let bytes = std::fs::read(solver_exe("classicalTheory.exe")).unwrap();
+    let flipped = simpa_core::bed::pe::flip_text_byte(&bytes)
+        .unwrap_or_else(|e| panic!("flip_text_byte: {e}"));
+    let tampered = root.join("tampered-classicalTheory.exe");
+    std::fs::write(&tampered, &flipped).unwrap();
+
+    let o = run(
+        &fixture(BOX),
+        "tcr",
+        &root,
+        &["--solver-exe", &tampered.display().to_string()],
+    );
+    refused_before_launch(&o, 2, "solvers", &["solver_unverified"]);
+    let m = json(&o);
+    let solvers = m["solvers"]
+        .as_array()
+        .unwrap_or_else(|| panic!("a refused run must still record its checks: {m:#}"));
+    let own = solvers
+        .iter()
+        .find(|c| c["name"] == "classicalTheory.exe")
+        .unwrap_or_else(|| panic!("no check of the tampered solver: {solvers:#?}"));
+    assert_eq!(own["matches"], Value::Bool(false), "{own:#}");
+
+    // `simpa results` on the refused run refuses too (unchanged by this step): the run never
+    // reached stage `solve`, so it is `results_run_failed`, not a solver-build verdict, and its
+    // reasons name the same code the run itself was refused with.
+    let r = simpa_run(&["results", &run_dir(&m).display().to_string(), "--json"]);
+    assert_eq!(
+        r.code,
+        i32::from(simpa_core::results::EXIT_RUN_NOT_OK),
+        "{r:#?}"
+    );
+    let rep = json(&r);
+    assert_eq!(rep["refused"]["code"], "results_run_failed", "{rep:#}");
+    let reasons: Vec<String> = rep["refused"]["reasons"]
+        .as_array()
+        .expect("reasons")
+        .iter()
+        .map(|x| x["code"].as_str().unwrap().to_string())
+        .collect();
+    assert!(
+        reasons.contains(&"solver_unverified".to_string()),
+        "{reasons:?}"
+    );
+}
+
+/// T54-3: `simpa run-folder` shares `run_options`, so it checks its solver build by default too.
+/// The committed `tcr_ok` fixture (gate M6(d)/(e)) run with the verified `classicalTheory.exe`
+/// records a matching check and reads verified; `run-folder`'s mesh comes with the fixture, not
+/// built, so only the solver's own check is recorded (no `tetgen.exe`/`preprocess.exe` to verify
+/// for a folder that is not meshed here).
+#[test]
+fn t54_3_run_folder_also_verifies_its_solver_by_default() {
+    let root = scratch("run-folder-verify-ok");
+    let a = simpa_run(&[
+        "run-folder",
+        &fixture("runs/tcr_ok").display().to_string(),
+        "--solver",
+        "tcr",
+        "--runs",
+        &root.display().to_string(),
+        "--json",
+    ]);
+    assert_eq!(a.code, 0, "{a:#?}");
+    let m = json(&a);
+    assert_eq!(m["verdict"]["status"], "OK", "{m:#}");
+    let solvers = m["solvers"]
+        .as_array()
+        .unwrap_or_else(|| panic!("run-folder must record its checks by default: {m:#}"));
+    assert!(!solvers.is_empty(), "{m:#}");
+    assert!(
+        solvers.iter().all(|c| c["matches"] == Value::Bool(true)),
+        "{solvers:#?}"
+    );
+    let r = simpa_run(&["results", &run_dir(&m).display().to_string(), "--json"]);
+    assert_eq!(r.code, 0, "{r:#?}");
+    assert_eq!(json(&r)["solver_build"]["status"], "verified", "{r:#?}");
 }

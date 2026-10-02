@@ -123,10 +123,31 @@ fn material_id(i: usize) -> MaterialId {
 /// group in group order.
 fn teaching_room() -> Project {
     let mut p = Project::new("Teaching room");
+    // Pinned to the 6 octaves 125 Hz to 4 kHz these measured runs were made on, not the
+    // new-project default 125 Hz to 8 kHz (decision row 43); the per-band settings follow.
+    p.bands = BandSet::octaves_125_to_4000();
+    p.solvers = simpa_core::schema::SolverSettings::for_bands(p.bands.len());
     p.id = ProjectId::from_u128(0x1);
     p.description =
         "Concept B's teaching room (crates/simpa-core/tests/ui_fixtures.rs).".to_string();
-    assert_eq!(p.bands, BandSet::default(), "octave bands, 125 Hz to 4 kHz");
+    // Pinned to its historical 2 s, not left to track `SppsSettings::for_bands`'s new-project
+    // default (now 10 s, decision row 36, `docs/decision-log.md`): this fixture, and
+    // `box_run.simpa`, `box_long.simpa` and `hall_run.simpa` built from it, are each a specific
+    // measured run (fixed seeds, particle counts, named gates); letting them silently follow the
+    // default would change their numbers and invalidate what each gate measured.
+    p.solvers.spps.duration_s = F64::new(2.0);
+    // Pinned to random for the same reason: the new-project default is energetic since
+    // decision row 38, and these measured runs were made in random mode.
+    p.solvers.spps.method = simpa_core::schema::ComputationMethod::Random;
+    // And to upstream's trans_epsilon 5: the default is 7 since decision row 41.
+    p.solvers.spps.extinction_exponent = F64::new(5.0);
+    // And to upstream's 10 ms step: the default is 1 ms since decision row 11 reached the code.
+    p.solvers.spps.time_step_s = F64::new(0.01);
+    assert_eq!(
+        p.bands,
+        BandSet::octaves_125_to_4000(),
+        "octave bands, 125 Hz to 4 kHz"
+    );
     let n = p.bands.len();
     p.geometry.vertices = [
         [0.0, 0.0, 0.0],
@@ -344,7 +365,7 @@ fn box_long() -> Project {
 /// The corrected hall as the app would build it: the core's PLY import (m, z up), the library's
 /// "20% absorbing" on every group in place of the placeholder, the hall fixture's first source
 /// and first two receivers with nothing pinned, SPPS energetic at `HALL_PARTICLES` and
-/// `HALL_SEED`, the import's own 6 octave bands.
+/// `HALL_SEED`, the 6 octave bands it was measured on (pinned: an import from a mesh now takes 7).
 fn hall_run() -> Project {
     use simpa_core::geometry::import::{
         ImportOptions, Unit, Up, import_file, library_material, reference_material,
@@ -355,7 +376,15 @@ fn hall_run() -> Project {
     )
     .unwrap()
     .to_project("elmia_corrected");
-    assert_eq!(p.bands, BandSet::default(), "octave bands, 125 Hz to 4 kHz");
+    // Pinned to the 6 octaves 125 Hz to 4 kHz the hall run was measured on: an import from a
+    // mesh takes the new-project default, 125 Hz to 8 kHz since decision row 43.
+    p.bands = BandSet::octaves_125_to_4000();
+    p.solvers = simpa_core::schema::SolverSettings::for_bands(p.bands.len());
+    assert_eq!(
+        p.bands,
+        BandSet::octaves_125_to_4000(),
+        "octave bands, 125 Hz to 4 kHz"
+    );
     let n = p.bands.len();
     let reference = reference_material(HALL_MATERIAL).unwrap();
     assert_eq!(reference.name, "20% absorbing");
@@ -382,6 +411,15 @@ fn hall_run() -> Project {
     p.solvers.spps.method = simpa_core::schema::ComputationMethod::Energetic;
     p.solvers.spps.particles_per_source = HALL_PARTICLES;
     p.solvers.spps.random_seed = HALL_SEED;
+    // Pinned to its historical 2 s for the same reason as `teaching_room`'s: `import_file`'s
+    // project (`ImportedModel::to_project`) also starts from `Project::new`'s new-project
+    // default, now 10 s (decision row 36).
+    p.solvers.spps.duration_s = F64::new(2.0);
+    // And to upstream's trans_epsilon 5, not the default 7 (decision row 41): the gates time
+    // this run, and a later floor makes every particle live 7/5 as long.
+    p.solvers.spps.extinction_exponent = F64::new(5.0);
+    // And to upstream's 10 ms step (decision row 11 made 1 ms the default).
+    p.solvers.spps.time_step_s = F64::new(0.01);
     p.check_integrity().expect("the hall run is consistent");
     p
 }

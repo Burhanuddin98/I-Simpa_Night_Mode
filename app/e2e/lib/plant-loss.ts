@@ -7,10 +7,16 @@
 // tools/gates/m11.ps1 makes one real run of the box (`simpa run`, the verified solvers) in its
 // own project folder on C:, `p\loss`, then rewrites that run's `particles` table here with the
 // losses below, moving each lost particle out of `absorbed_by_materials` so every band still
-// sums to its total. Nothing else in run.json changes. The worst band is 500 Hz, not the first,
-// at 0.82 %: under the 1 % limit, so the core's OK verdict stays true of the table it now holds.
-// The Results step's own check reads the solver's output files, not this table, and is not
-// touched.
+// sums to its total. The worst band is 500 Hz, not the first, at 0.82 %: under the 1 % limit, so
+// the core's OK verdict stays true of the table it now holds. The Results step's own check reads
+// the solver's output files, not this table, and is not touched.
+//
+// Also clears `solvers`: this run is m11-b38's fixture too, the OK run with no solver record
+// (SOLVER_BUILD_UNRECORDED). Before backlog 54's CLI half a plain `simpa run` never recorded one,
+// so the two purposes shared a run for free; `simpa run` now verifies by default, with no
+// opt-out, so this plants that absence deliberately, the way `tests/fixtures/results/` does it
+// for `results_solver_build.rs`'s own CLI-wrote-it-before-M11 fixtures. The core's predicate
+// (`results::solver_build`) does not care whether the key was never there or was taken out.
 //
 // Run: node app/e2e/lib/plant-loss.ts <run folder>   (prints one JSON line: what was planted)
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -59,6 +65,17 @@ export function plantLoss(text: string): string {
   const why = (s: string) => new Error(`plantLoss: ${s}`);
   if (m.solver !== 'spps' || m.verdict.status !== 'OK') throw why(`the run is ${m.solver} ${m.verdict.status}, not an OK SPPS run`);
   if (m.loss_limit !== 0.01) throw why(`the loss limit is ${m.loss_limit}, not 0.01`);
+  // The run must actually have verified (backlog 54's default worked) before this plants its
+  // absence on purpose: a run that was never checked, or whose check already failed, would prove
+  // nothing about SOLVER_BUILD_UNRECORDED specifically.
+  if (!m.solvers || m.solvers.length === 0 || !m.solvers.every((c) => c.matches)) {
+    throw why(`solvers is ${JSON.stringify(m.solvers)}, want every check matching before it is cleared`);
+  }
+  delete m.solvers;
+  // solver_manifest (M8b) is recorded exactly when solvers is: cleared alongside it, so the
+  // planted run reads SOLVER_BUILD_UNRECORDED cleanly, not a solver_manifest left dangling with
+  // no solvers to go with it.
+  delete m.solver_manifest;
   const bands = m.particles?.bands ?? [];
   const freqs = bands.map((b) => b.freq_hz).join(',');
   if (freqs !== '125,250,500,1000,2000,4000') throw why(`the bands are ${freqs}`);

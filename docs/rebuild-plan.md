@@ -146,8 +146,8 @@ M5-M8 instead of after them.
    against Barron's revised theory. **Decided since** (the M8 design decisions of 2026-09-25
    00:20, decision 2): M8 gates T30 and EDT at `dt` 1 ms. SPL's direct field is M7's gate (c).
    SPL's diffuse field, C80 and D50 are reported, not gated, until a reference is chosen: Barron's
-   revised theory has no code here. At 1 ms C50, C80, D50 and Ts are refused at most receivers by
-   the onset-bin rule (`docs/results.md`, "The arrival").
+   revised theory has no code here. At 1 ms C50, C80, D50 and Ts were refused at most receivers by
+   the onset-bin rule, changed 2026-10-02 (`docs/results.md`, "The arrival").
 
    STI comes later.
 9. **Nothing enforced keeping the commercial option open.** `cargo-deny` now denies GPL, AGPL and

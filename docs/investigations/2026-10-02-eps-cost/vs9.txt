@@ -1,0 +1,15 @@
+=== vs9 ===
+t30_s  eps5 vs eps9           cells 122 mean -0.37% median -0.35% | rooms below 0: 5/5 (sign test p 0.06) | G1:-0.33(48) G4:-0.33(18) G5:-1.20(14) G6:-0.23(19) G7:-0.10(23)
+t30_s  eps6 vs eps9           cells 238 mean -0.32% median -0.12% | rooms below 0: 6/6 (sign test p 0.03) | G1:-0.06(48) G3:-0.70(36) G4:-0.19(18) G5:-0.28(46) G6:-0.51(42) G7:-0.23(48)
+t30_s  eps7 vs eps9           cells 257 mean -0.00% median -0.07% | rooms below 0: 2/6 (sign test p 0.69) | G1:+0.01(48) G3:-0.23(48) G4:+0.00(18) G5:+0.25(48) G6:+0.11(47) G7:-0.16(48)
+t30_s  ctl eps5 3101 vs 3102  cells 115 mean -0.04% median -0.07% | rooms below 0: 2/5 (sign test p 1.00) | G1:+0.01(48) G4:-0.28(18) G5:-0.41(11) G6:+0.10(15) G7:+0.11(23)
+t20_s  eps5 vs eps9           cells 300 mean -0.25% median -0.15% | rooms below 0: 5/7 (sign test p 0.45) | G1:-0.09(48) G2:+0.04(47) G3:-1.51(33) G4:-0.02(42) G5:-0.22(44) G6:-0.47(38) G7:+0.10(48)
+t20_s  eps6 vs eps9           cells 329 mean -0.09% median +0.07% | rooms below 0: 3/7 (sign test p 1.00) | G1:-0.00(48) G2:+0.02(47) G3:-1.05(48) G4:+0.08(42) G5:-0.01(48) G6:+0.18(48) G7:+0.18(48)
+t20_s  eps7 vs eps9           cells 329 mean -0.27% median +0.01% | rooms below 0: 4/7 (sign test p 1.00) | G1:+0.10(48) G2:-0.06(47) G3:-2.18(48) G4:-0.03(42) G5:+0.36(48) G6:+0.05(48) G7:-0.12(48)
+t20_s  ctl eps5 3101 vs 3102  cells 298 mean +0.09% median +0.05% | rooms below 0: 3/7 (sign test p 1.00) | G1:-0.02(48) G2:-0.19(47) G3:+0.51(32) G4:+0.14(42) G5:+0.15(43) G6:-0.06(38) G7:+0.23(48)
+edt_s  eps5 vs eps9           cells 336 mean -0.02% median -0.04% | rooms below 0: 4/7 (sign test p 1.00) | G1:+0.03(48) G2:-0.25(48) G3:-0.23(48) G4:-0.20(48) G5:-0.99(48) G6:+1.34(48) G7:+0.14(48)
+edt_s  eps6 vs eps9           cells 336 mean +0.08% median +0.04% | rooms below 0: 3/7 (sign test p 1.00) | G1:+0.08(48) G2:-0.26(48) G3:+0.03(48) G4:+0.12(48) G5:-0.66(48) G6:+1.63(48) G7:-0.38(48)
+edt_s  eps7 vs eps9           cells 336 mean +0.09% median +0.15% | rooms below 0: 4/7 (sign test p 1.00) | G1:+0.02(48) G2:-0.01(48) G3:+0.18(48) G4:-0.08(48) G5:-0.25(48) G6:+0.97(48) G7:-0.18(48)
+edt_s  ctl eps5 3101 vs 3102  cells 336 mean -0.07% median -0.07% | rooms below 0: 4/7 (sign test p 1.00) | G1:+0.01(48) G2:-0.36(48) G3:-0.25(48) G4:-0.32(48) G5:-0.31(48) G6:+0.29(48) G7:+0.46(48)
+t20_s answered of 336: {5: 300, 6: 329, 7: 329, 9: 329}
+t30_s answered of 336: {5: 122, 6: 238, 7: 257, 9: 258}

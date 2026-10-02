@@ -482,27 +482,37 @@ impl SppsResults {
     }
 
     /// Whether SPPS's own statistics show that no energy arrives after the series' end in band
-    /// `freq_hz`, but what unfinished paths would have brought: random mode with `trans_epsilon`
-    /// above 0, and at most [`REMAINING_UNFINISHED_SHARE`] of the band's particles remaining at the
-    /// end of the calculation. A particle is counted as remaining only when the time steps run out
-    /// while it is alive (`spps/CalculationCore.cpp:49, 88-92`), and in random mode a particle's
-    /// energy never dwindles, it is absorbed whole (`CalculationCore.cpp:62-67, 288-300`), so the
-    /// histogram holds every particle's whole path, except the unfinished paths of the lost and
-    /// the remaining ones, which [`SppsResults::lost_share`] bounds together. Energetic mode drops
-    /// a particle once its energy falls below `10^-trans_epsilon` of its start
-    /// (`sppsNantes.cpp:75`; `CalculationCore.cpp:305`), so it is never complete here: `params`
-    /// bounds its tail and its floor instead.
+    /// `freq_hz`, but what is bounded otherwise: `trans_epsilon` above 0, and at the end of the
+    /// calculation at most [`REMAINING_UNFINISHED_SHARE`] of the band's particles remaining in
+    /// random mode, none in energetic mode. A particle is counted as remaining only when the time
+    /// steps run out while it is alive (`spps/CalculationCore.cpp:49, 88-92`).
+    /// - In random mode a particle's energy never dwindles, it is absorbed whole
+    ///   (`CalculationCore.cpp:62-67, 288-300`), so the histogram holds every particle's whole
+    ///   path, except the unfinished paths of the lost and the remaining ones, which
+    ///   [`SppsResults::lost_share`] bounds together.
+    /// - Energetic mode drops a particle once its energy falls below `10^-trans_epsilon` of its
+    ///   start (`sppsNantes.cpp:75`; `CalculationCore.cpp:57-60, 305`), counted as absorbed, not
+    ///   remaining. With none remaining, the histogram holds every path up to its drop, absorption
+    ///   or loss: what the dropped would still have brought is the floor's missing energy
+    ///   (`params::EnergySeries::with_solver_floor`), and the lost ones' is
+    ///   [`SppsResults::lost_share_following_decay`]. A remaining particle's energy is not bounded
+    ///   by either, so one is enough to leave the band incomplete, its tail bounded from the
+    ///   series. Until 2026-10-02 energetic mode was never complete, and the tail of a series
+    ///   that had ended at its floor was estimated from its last few particles, which read as
+    ///   "not decaying" at random (round 2's G5: `docs/results.md`, "Complete series").
     pub fn band_complete(&self, freq_hz: i32) -> bool {
-        self.computation_method == 0
-            && self.trans_epsilon > 0.0
+        let allowed = if self.computation_method == 0 {
+            REMAINING_UNFINISHED_SHARE
+        } else {
+            0.0
+        };
+        self.trans_epsilon > 0.0
             && self
                 .particles
                 .bands
                 .iter()
                 .find(|b| b.freq_hz == freq_hz)
-                .is_some_and(|b| {
-                    f64::from(b.remaining) <= REMAINING_UNFINISHED_SHARE * f64::from(b.total)
-                })
+                .is_some_and(|b| f64::from(b.remaining) <= allowed * f64::from(b.total))
     }
 
     /// The particles of band `freq_hz` whose paths stopped unfinished: lost (`partLoop`,
@@ -1303,14 +1313,18 @@ mod tests {
     }
 
     #[test]
-    fn only_random_mode_with_nothing_remaining_is_complete() {
+    fn a_band_with_nothing_remaining_is_complete() {
         assert!(run(0, 5.0, 0, 0).band_complete(500));
         // Lost particles leave it complete; their share is bounded separately.
         assert!(run(0, 5.0, 0, 1).band_complete(500));
-        // Say no: energetic mode, even with every particle accounted for.
-        assert!(!run(1, 5.0, 0, 0).band_complete(500));
-        // A particle still alive at the end.
+        // Energetic mode with every particle dropped, absorbed or lost: it ended at its floor,
+        // and what the floor dropped is bounded separately.
+        assert!(run(1, 5.0, 0, 0).band_complete(500));
+        assert!(run(1, 5.0, 0, 1).band_complete(500));
+        // A particle still alive at the end, in either mode.
         assert!(!run(0, 5.0, 1, 0).band_complete(500));
+        assert!(!run(1, 5.0, 1, 0).band_complete(500));
+        assert!(!run(1, 0.0, 0, 0).band_complete(500));
         // trans_epsilon 0 drops every particle at its first surface, in random mode too.
         assert!(!run(0, 0.0, 0, 0).band_complete(500));
         assert!(!run(0, f64::NAN, 0, 0).band_complete(500));
@@ -1411,8 +1425,12 @@ mod tests {
         let r = big(11, 2);
         assert!(!r.band_complete(500));
         assert_eq!(r.lost_share(0, 500, 1), Some(2.0 / (10_000_000.0 * 0.25)));
-        // Says no: energetic mode is never complete, whatever remains.
+        // Energetic mode: complete with none remaining, and not with one in 10 million, whose
+        // energy the floor does not bound.
         let mut e = big(0, 0);
+        e.computation_method = 1;
+        assert!(e.band_complete(500));
+        let mut e = big(1, 0);
         e.computation_method = 1;
         assert!(!e.band_complete(500));
     }

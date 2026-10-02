@@ -97,23 +97,29 @@ the receiver. It must never be shown as "the room's T30".
   - `Arrival::Known { time_s, half_width_s }`: the time is given, such as the source–receiver
     distance over the speed of sound, with the direct sound spread over `t_a ± half_width_s`
     (a receiver ball of radius `R` crossed at `c`: `R/c`; 0 for an impulse, `Arrival::at`; see
-    "The direct sound's spread" below). For **C50, C80, D50 and Ts** it must lie in the onset
-    bin, or those four are refused as `params_bad_arrival`: before the bin, the direct sound is
-    more than 20 dB below the strongest arrival and its time does not place the onset; after it,
-    energy within 20 dB of the maximum came before the direct sound's centre. A time a rounding
-    step (10⁻⁹ dt) before the bin is taken as its start. A half-width that is not a finite time
-    of at least 0 is refused the same way.
+    "The direct sound's spread" below). It **fits the onset bin** when it lies in it, or after it
+    with the onset bin reaching into its spread (`(k₀+1)·dt > t_a − half_width_s`: the onset bin
+    holds the leading edge of the direct sound, which a receiver ball starts to catch `R/c`
+    before its centre, and the curve counts it in the direct sound). Every onset-relative
+    parameter is then measured from it. Otherwise **C50, C80, D50 and Ts** are refused as
+    `params_bad_arrival`: before the bin, the direct sound is more than 20 dB below the strongest
+    arrival and its time does not place the onset; after it by more than the spread, energy
+    within 20 dB of the maximum came before the direct sound. A time a rounding step (10⁻⁹ dt)
+    before the bin is taken as its start. A half-width that is not a finite time of at least 0 is
+    refused the same way. Until 2026-10-02 C, D and Ts refused any arrival after the onset bin,
+    spread or not, while the decay times took it: at the 1 ms step that refused them in 24 to 48
+    of 48 receiver-bands per room on M8's energetic runs. On the leading-edge cases of
+    `params_arrival.rs::c_d_and_ts_from_an_arrival_after_the_onset_bin_within_its_spread_are_exact`
+    (`dt` 10 and 1 ms, `T` 0.3 to 3 s, `D/R` 0.12 to 3) they are exact to 2·10⁻¹¹ of their limits.
   - **SPL, EDT, T20 and T30 are never refused `params_bad_arrival`** (M7 follow-up; they had
     been, T30 included, although decay times do not depend on where time starts). SPL does not
     use the arrival. The decay times depend only on where in the histogram the direct sound is
     taken to be, and `BandParameters::decay_arrival` says what they were measured from: the given
-    arrival when it fits the onset bin, or when it follows the onset bin and the onset bin reaches
-    into its spread (`(k₀+1)·dt > t_a − half_width_s`: the onset bin holds the leading edge of the
-    direct sound, which a receiver ball starts to catch `R/c` before its centre); otherwise
-    (before the onset bin, after it by more than the spread, or not a time) as if no arrival were
-    given, `Arrival::Detected`, **where they can still be refused `unresolved`** when the two ends
-    of the onset bin give values further apart than their limit. No such receiver was seen on
-    tutorial 1 (`docs/results.md`, "The arrival": none had `r/c` before the onset bin).
+    arrival when it fits the onset bin; otherwise (before the onset bin, after it by more than the
+    spread, or not a time) as if no arrival were given, `Arrival::Detected`, **where they can
+    still be refused `unresolved`** when the two ends of the onset bin give values further apart
+    than their limit. No such receiver was seen on tutorial 1 (`docs/results.md`, "The arrival":
+    none had `r/c` before the onset bin).
   - `Arrival::Detected`: not given. Every onset-relative parameter is computed with the arrival
     at **both ends of the onset bin**. The value reported is the mean of the two; when either end
     lies further from it than the parameter's limit (the truncation table below), the parameter is
@@ -175,8 +181,9 @@ bin it is that bin's decay continued back, and the rest, up to the top, is the d
 below the 20 dB rule, but it is the direct sound all the same. With `h = 0` this is the model
 above, unchanged. On the same 720 cases every quantity is exact to 3·10⁻¹³, except EDT where the
 direct sound's step leaves under 2 bins of its 10 dB range (`D/R` = 3, 6 dB, at `T` = 0.3 s:
-`range_too_short`, 40 cases), and C50, C80, D50 and Ts where `r/c` lies after the onset bin
-(`params_bad_arrival`, 324 cases). Says no: the same series with `h = 0`, above.
+`range_too_short`, 40 cases). In 324 of them `r/c` lies after the onset bin, which holds only the
+leading edge; C50, C80, D50 and Ts are exact there too (until 2026-10-02 refused,
+`params_bad_arrival`). Says no: the same series with `h = 0`, above.
 
 **What it assumes:** the reverberation continued back to the arrival as the first bin after the
 direct sound decays. The second review found this wrong for real runs, and it was: see "The early
@@ -209,7 +216,8 @@ wherever in its bin `t_a` falls: gate (a) and its direct-sound cases meet every 
 
 **What it assumes, and where it can be wrong.** Inside a bin, energy arrives as a smooth decay
 would bring it. A strong reflection inside the bin that a window edge falls in can put up to that
-bin's energy on the wrong side of the edge. In the onset bin, what the next bin's decay does not
+bin's energy on the wrong side of the edge: for C50, C80 and D50 that bin's bracket is now reported
+(next section, "The bin straddling te"). In the onset bin, what the next bin's decay does not
 explain is taken as the direct sound, at `t_a`. A direct sound spread over two bins is handled
 with its spread (above). The reverberation's own start is bounded for a solver that declares it
 unresolved (next).
@@ -278,10 +286,12 @@ extrapolation. Instead each parameter carries a bound:
    - Fewer than 2 bins from the onset to the last with energy: `params_series_too_short`.
    - **A series known to be complete** (`EnergySeries::complete`; `Tail::Complete`) has no tail:
      nothing is estimated, added or refused for it. Its caller must hold evidence that no energy
-     arrives after the last bin; `core::results` claims it only for SPPS in random mode when the
-     run's statistics count at most one particle in a million remaining at the end
-     (`results::spps::REMAINING_UNFINISHED_SHARE`), those few bounded with the lost ones as
-     unfinished paths (`docs/results.md`, "Complete series"). A decay time still needs the curve to reach the bottom of its range before the
+     arrives after the last bin, but what is bounded otherwise; `core::results` claims it only
+     from SPPS's statistics: in random mode when they count at most one particle in a million
+     remaining at the end (`results::spps::REMAINING_UNFINISHED_SHARE`), those few bounded with
+     the lost ones as unfinished paths; in energetic mode when they count none, every particle
+     dropped at the floor, absorbed or lost, what the floor dropped bounded as missing energy
+     ("A series that ended at its floor", below; `docs/results.md`, "Complete series"). A decay time still needs the curve to reach the bottom of its range before the
      last bin with energy, inside which the curve has no shape: otherwise `range_not_reached`,
      with the level at the start of that bin. Added by M7 piece B, with its tests in
      `tests/params_complete.rs`: without it, random-mode runs were refused wholesale for a tail
@@ -372,7 +382,10 @@ gets from the arrival on:
   have brought is, on average, what that much energy brings from any particle alive then. From
   the arrival on, the receiver gets `S(onset)` from the `alive_share` of the emitted energy the
   room still held then, so the dropped particles together would have brought at most
-  `10^{floor/10} / alive_share · S(onset)`;
+  `10^{floor/10} / alive_share · S(onset)`. Since 2026-10-02 `core::results` gives the smallest
+  share over the decay rather than the one at the arrival (`params::floor_alive_share`, "A series
+  that ended at its floor", below): in coupled rooms the particles the floor drops bring more per
+  unit of energy than those alive at the arrival;
 - a lost particle would have brought what an average particle alive at the arrival brings, so `n`
   of `N` lost take at most `n / (N · alive_share)` of `S(onset)` (`core::results` computes it,
   `docs/results.md`, "Lost particles");
@@ -416,6 +429,51 @@ T30 wrong from the series alone, and their share refuses it; one lost particle m
 **What it assumes:** that a dropped or lost particle's future is, on average, an alive particle's.
 In a diffuse room that holds; a particle lost where it would have crossed the receiver more than
 most is not covered.
+
+**A series that ended at its floor** (2026-10-02). A floor keeps a series' completeness, as a lost
+share does (`EnergySeries::with_solver_floor`): when SPPS's statistics count no particle alive at
+the end of an energetic run, nothing arrives after the last bin but what the floor dropped and the
+lost took, and both are bounded here. Such a series has no tail estimate. Before, it had one, read
+from its last `2w` bins, which hold the last few particles above the floor, not a decay. In round
+2's G5 (energetic, 150,000 particles, 1 ms, 10 s; `docs/investigations/2026-10-02-t20/
+RESULT-3B.md`) every band's series ended 1.4 to 2.5 s into the run with every particle dropped; the
+two windows sat 55 to 85 dB below `S(onset)`, with 0 to 23 of their 150 to 250 bins holding energy,
+read as "not decaying" at random, and refused T20 `truncated` in 42 of 144 receiver-bands at 1 ms,
+with T30, SPL and the clarity measures. The say-no is kept: a run with any particle still alive is
+not complete, and its tail is bounded from the series as before; a decay that stops falling while
+particles are alive is refused `truncated`; and the floor's own bound still refuses what it can
+move (`tests/params_floor.rs`: on the reviewer's model, the 108 cases whose histogram ends empty,
+claimed complete, accept 528 values, none further from the model without the drop than its limit,
+and refuse 259 the series alone gets wrong; G5's own series, `tests/fixtures/params/
+g5_energetic_ended.json`, answers T20 with the value its refusal carried).
+
+**What it assumes, and the guard** (B2 assay, 2026-10-02). The floor's bound takes what a dropped
+particle would still have brought, per unit of its energy, to be what the particles alive bring
+per unit of theirs. Taken at the arrival only, that holds where every particle decays alike: one
+exponential, as the reviewer's model and a diffuse room. In coupled rooms it does not. The
+particles left late are those in the slow room, and each dropped there would still have brought
+far more than an average particle at the arrival, so the bound at the arrival is short, and since
+completeness drops the tail check, nothing else catches it. (Before completeness the tail check
+caught nothing here either: a cliff's last window falls steeply.) So `core::results` takes the
+share alive the floor divides by as the smallest `alive(k)·S(onset)/S(k + 1)` from the arrival
+on, `alive(k)` from SPPS's room table at the end of bin `k`, over the bins where the decay is still
+above the floor, `S(k + 1) ≥ 10^{floor/10}·S(onset)` (`params::floor_alive_share`); never more
+than the share at the arrival, so it only ever refuses more. In the room-per-particle limit (the
+slow room's particles gathering late) the ratio tends to what a slow-room particle brings per unit
+of energy, which is what a dropped one brings. **Tested** (`tests/params_floor.rs::
+a_coupled_room_ended_at_the_floor_is_bounded_by_its_slowest_particles`) on two coupled rooms, the
+source's at T60 0.5 s and the other 2, 3, 4, 6 and 12 times slower (the last a near plateau ended
+by the drop), passage at 0.2 to 10 % of reflections, the receiver in either room, the expected
+histogram with and without the drop at −50 dB computed exactly over (room, level): 70 cases end
+at the floor; with the share at the arrival 18 values of T20, T30, SPL, C80 and Ts are accepted
+past their limit (T30 up to 1.9 % short, T20 0.5 %, all with the receiver in the slow room); with
+the guard 257 are accepted, none past its limit. **What it costs** on round 2 (1 ms, 150,000
+particles): the bound rises by a median 0.2 dB (at most 0.5) in G1, 2.4 dB (at most 10.5) in G5,
+whose specular low hall decays unevenly, and up to 10.6 dB in G3, the coupled room. T20 answered
+in G5's three seeds: 138 of 144 (144 with the share at the arrival, 102 before completeness); in
+G3 seed 3102, 34 of 48 (47); G1 unchanged. No value that is answered moves. **Not covered:** a
+room whose slowest particles never dominate the room table above the floor, and the limit of
+the room-table ratio itself, which is a measured average, not a bound.
 
 ## Monte-Carlo noise
 
@@ -545,6 +603,33 @@ in four pre-registered rounds; every number is in
   more than 10 resamples can refuse T30 (α 0.2 to 0.4 below about a million particles) although
   its calibrated noise is within the limit; the value is then refused naming the count at which
   the resamples clear (below).
+
+  **What the report shows (results version 7, decision-log row 37 (3)).** `params` still judges
+  and refuses as above, but `core::results` shows a value refused for its standard deviation alone
+  with its range, `value ± 2.5·sd`, marked `wide`, instead of refusing it
+  (`params::noise::shown`); and every value it gives is marked `ok` when that range is within the
+  limen (twice the table's numbers) and `wide` when not. A refusal by the resamples, or with no
+  standard deviation, stays a refusal (`docs/formats/results-json.md`, "The range"), unless its
+  stand-ins give it (next).
+
+  **The stand-ins (results version 9; `params::noise`, "The stand-ins").** The bed's G2 (T60 2 to
+  3 s, energetic, 150,000 particles, 1 ms, 10 s) answered T30 at 1 of 144 receiver-bands over its
+  three seeds; in tested-G2-4101 all 48 were refused because more than 10 resamples refused them,
+  and all 6,685 resample refusals were `range_not_reached`, near -34.5 dB at the nearest receiver:
+  a resample drawn from the model ends in a few whole deposits, one deposit there about 1/4,000 of
+  the band's total (4,210 crossings at 500 Hz), so the resample's last bin with energy sits
+  above -35 dB although the series itself passed it. That is a tail judgement made again on the
+  stand-in's ragged end, which the resamples are otherwise spared (above). So a value refused for
+  its resamples alone has them drawn again, the same draws, each judged with its decay range on the
+  series (`EnergySeries::with_range_judged_on_its_series`: the stand-in fits the part of the range
+  its curve covers); when at most 10 refuse it then, it is shown `wide` with `refused_resamples`,
+  its range `value ± 2.5·sd`, `sd` the larger of the stand-ins' calibrated standard deviation and
+  the judged one. The judgement, the calibration, the refusal's particle count and the curvature
+  are untouched: they are the resamples' as judged. Never `ok`, however narrow: the calibration
+  was not measured on stand-ins. **Measured** (build F, the bed's tested-G2-4101 and
+  tested-G4-4101 against the mean of their two high-count truth runs): T30 on G2 went from 0 ok,
+  0 wide, 48 refused to 0, 48, 0; on G4 from 18, 0, 30 to 18, 30, 0; the truth inside the shown
+  range at 48 of 48 receiver-bands in each; the stand-ins' half-width 1.2 to 4.8 % of the value.
 - **The particle count a refusal names** (`particle_count`): SPPS's spread falls as `1/√N` or
   faster on every one of twelve pairs of cells that differ only in `N` (5,000 against 50,000 up to
   150,000 against 15,000,000; no pair showed it falling slower by more than two standard errors,
@@ -700,6 +785,42 @@ How they are evaluated, all from the curve `S(u)`:
   - **Its Ts is not measured from the onset.** Line 432 weights by the absolute time label, so
     upstream's Ts includes the propagation delay `r/c` and half a bin more.
 
+### The bin straddling te (Theorem-CD; results version 9)
+
+Only one bin is ambiguous for `C_te` and `D_te`: the one the window edge `t_a + te` falls inside.
+Every other bin lies wholly before or wholly after the edge, so whatever its energy does inside it,
+the quantity lies between the value with that bin **wholly late** and **wholly early**
+(`docs/investigations/2026-09-27-edt-simplify/FINAL.md` section 2). `decay::Straddle` reports that
+bracket for C50, C80 and D50, from every arrival and reading the value is read from; the value, from
+the in-bin decay, lies inside it. When either end lies further from the value than the limit (0.1
+dB for C, 0.005 for D50), the value is not known to within the limit, and the report shows it
+`wide`, with `straddle` and a range covering the bracket (`params::noise::shown_with`). It is never
+refused for it (decision-log row 37 (3): every metric shows a range). A window edge on a bin edge
+has no bracket.
+- **Why.** The bed's set A fed the product exact noise-free echograms
+  (`crates/simpa-core/tests/bed_shim.rs`): C50 and D50 came back answered with no mark up to
+  0.50 dB and 0.054 off, against limits of 0.1 dB and 0.005, in 179 of 189 misses at 10 ms and 10
+  at 1 ms. In `s2|B26|rec1|R0.1|8000Hz|10ms` the edge, 84.1 ms, falls 41 % into its bin and the bin
+  holds a strong reflection after it: the in-bin decay put a share of it early and read C50 2.589 dB
+  against the truth 2.086. The bracket is 2.059 to 3.310 dB. The existing straddle handling was
+  only the in-bin model, exact for a smooth decay and assumed everywhere; nothing bounded it.
+- **Says no** (`tests/params_straddle.rs`): an exponential plus a reflection in the straddling bin
+  at 10 ms is answered 0.48 dB off by the in-bin model and is now `wide` with the truth inside the
+  bracket; a smooth decay at 1 ms keeps C50, C80 and D50 `ok` (the bin holds 0.35 % of the late
+  energy).
+- **Measured** (build F, set A re-run through the shim: S1 whole, `B:\data\m8b-bed\A-buildF\s1`; S2's
+  committed bins re-read, `A-buildF\s2-shim`). Rows answered `ok` beyond 1/10 limen, before → after:
+  S2 C50 189 → 0, C80 47 → 0, D50 176 → 0; S1 C50 45 → 12, C80 24 → 12, D50 24 → 3. Answered
+  share unchanged (`wide` is answered). The 27 left in S1 are all the `short` variant at 1 ms, a
+  double slope cut early: the tail's single exponential under-bounds it, a truncation miss, not the
+  straddling bin. Of the `wide` rows the truth lies inside the bracket in 98 to 99 %; outside it in
+  S1 only `short` rows, in S2 18 C50, 12 C80 and 18 D50 rows, not yet examined (the bracket takes
+  no account of the tail or the arrival's spread).
+- **The cost.** At a step of 10 ms the straddling bin holds `1 − e^{−13.8·dt/T60}` of the late
+  energy, 7 % at T60 2 s, about 0.3 dB of C: most C and D at 10 ms are `wide`. At 1 ms they are
+  `ok` unless that bin holds a strong reflection. Ts has no single straddling bin (every bin's
+  arrangement moves it, by up to a bin's width in all); it is not bracketed (`docs/v1.1-backlog.md`).
+
 ### Upstream's GUI reproduced on tutorial 1 (measured)
 
 The M7 critic: on the same 2019 `.recp`, upstream's stored `Acoustic parameters.gabe` gives C80,
@@ -757,6 +878,169 @@ cannot be made through it; gate (c) checks the level end to end. Its say-NO puts
 this code path (M7 follow-ups): a test-only seam replaces `p₀²` by 10⁻¹², and by `p₀²` 1 dB off
 either way, and the level box's report computed again with it misses the gate in all 12
 receiver-bands (`docs/results.md`, "Level calibration").
+
+## Sound strength G
+
+ISO 3382-1:2009 A.2.1, Eqs. A.1-A.3 (read in the standard, `docs/investigations/2026-10-02-m8b-metrics/STANDARDS-CHECK.md`):
+G is the level at the receiver less the level the same source gives in a free field at 10 m.
+`params::level::free_field_level_db` is that free field, `W·ρc/(4π·100 m²)` over the same
+reference SPL divides by, so
+
+`G = SPL − 10·lg( W·ρc / (4π·100 m²·p₀²) ) = 10·lg( Σ_k B_k · 4π·100 m² / (W·ρc) )`.
+
+`W·ρc` is the `.gap`'s column 2, the sources' power in the band times SPPS's `ρ` and `c`
+(`reportmanager.cpp:807-816`), the same `ρ` and `c` the deposits `B_k` carry
+(`spps/sppsInitialisation.cpp:86`), so `ρc` cancels and neither SPPS's `ρc` nor `p₀²` can move G.
+**Not the standard's `G = Lp − Lw + 31 dB`** (Eq. A.9): its 31 dB is
+`10·lg(4π·100·p₀²/(ρc·10⁻¹² W))` at `ρc ≈ 400`; at SPPS's 413.25 (20 °C, 101 325 Pa) it is
+30.85 dB (`params::level::iso_constant_db`), and the shortcut would read 0.15 dB high, above the
+product's 0.1 dB limit (`tests`: `g_uses_the_exact_rho_c_constant_not_the_standards_31`).
+
+- **Several sources.** A band's G is every source's energy at the receiver against every source's
+  free field at 10 m, both summed (`source_power_rho_c` is already the sum): the strength of the
+  sources together. A source's own G (`per_source`) takes its share of the band's power,
+  `band_power_w`, as the noise model's mean deposit does.
+- **Uncertainty.** G is SPL less a constant: it carries SPL's `mc_sd`, `status` and range, shifted.
+- **Refused** as SPL is, with the same refusal; `params_no_energy` when no source emits in the
+  band, `params_bad_energy` when the power is negative or not a number.
+- Upstream's GUI computes no G. The Barron-Lee revised theory's G is not computed here
+  (PLAN.md: reported by the bed only).
+
+## A-weighted level
+
+`L_A = 10·lg Σ_i 10^((SPL_i + A_i)/10)` over the computed bands, `A_i` IEC 61672-1's A-weighting
+at the octave centres as the plan pins it (`params::level::A_WEIGHTS_DB`: 125 Hz −16.1, 250 −8.6,
+500 −3.2, 1 k 0, 2 k +1.2, 4 k +1.0, 8 k −1.1 dB; IEC 61672-1 itself is not in hand, STANDARDS-CHECK.md).
+Only the computed bands are summed, and the report names them (`aggregate.dba.bands_hz`).
+
+- **Uncertainty**, to first order with the bands independent (SPPS runs each band's particles on
+  its own): `∂L_A/∂SPL_i = w_i`, band `i`'s share of the weighted energy, so
+  `sd_A = √Σ (w_i·sd_i)²`, at most the largest band's. Range and status as SPL's.
+- **Refused** when any band's SPL is, with that band's refusal; `no_a_weight` when a computed band
+  has no weight pinned (63 Hz, 16 kHz, any third-octave band): a third-octave sum would need the
+  third-octave table, which upstream's `dBa_Sum_Param` applies (`projet_calculation.cpp:262-300`,
+  `appconfig.cpp:106`) and the plan has not yet checked against the standard.
+
+## STI
+
+The speech transmission index, IEC 60268-16:2011 (edition 4, read as BS EN 60268-16:2011; edition
+5 not read), from a predicted response as cl. 8.3 asks (`params::sti`; tables pinned in
+`docs/investigations/2026-10-02-m8b-metrics/STANDARDS-CHECK.md`). Written from the standard's
+text, **not ported from upstream's `Compute_STI_Param`**, which masks band k by its own level and
+whose `if(gen='F')` is an assignment, so every STI it gives carries female weights.
+
+Per octave band k from 125 Hz to 8 kHz, for each speech:
+
+1. **MTF** (cl. 6.1, the Schroeder equation): `m_k(F) = |Σ_i E_i·e^{-j2πF·t_i}| / Σ_i E_i` over the
+   band's energy series from the bin of the direct sound's leading edge (`arrival − R/c`; the onset
+   bin when the arrival is not known), at the 14 modulation frequencies 0.63 to 12.5 Hz (A.2.2).
+   Each bin's energy is placed at its start: a shift of every `t_i` does not change the modulus, and
+   spreading each bin over its width would multiply every `m` by `sinc(πF·dt)`, 0.9997 at 12.5 Hz
+   and 1 ms, which is left out. The energy series is the band's intensity response, `h²` of cl. 6.1.
+2. **Speech level at the receiver.** Table A.4's spectrum (male 125 Hz to 8 kHz: +2.9, +2.9, −0.8,
+   −6.8, −12.8, −18.8, −24.8 dB; female 250 Hz to 8 kHz: +5.3, −1.9, −9.1, −15.8, −16.7, −18.0)
+   at 60 dB(A) at 1 m on the talker's axis (J.3), plus the room's transfer: the band's SPL at the
+   receiver less the same sources' free-field level at 1 m, `W·ρc/(4π·1 m²)` over `p₀²`
+   (`params::sti::free_field_level_at_db`, G's free field moved from 10 m; `ρc` and `p₀²` cancel
+   as in G). The table's levels are used as printed; A-weighted with `params::level`'s octave
+   weights they sum to 60.05 dB(A) (male) and 59.88 dB(A) (female), not exactly 60.
+   The free field is an omni source's, as G's: a directional source's on-axis level is not
+   modelled.
+3. **Corrections** (A.3, A.5.3): `m'_k(F) = m_k(F)·I_k / (I_k + I_n,k + I_am,k + I_rt,k)`, `I` the
+   intensities `10^(L/10)`: `I_k` the speech's, `I_n,k` the background noise's, `I_rt,k` the
+   reception threshold's (Table A.2: 46, 27, 12, 6.5, 7.5, 8, 12 dB SPL), and
+   `I_am,k = I_{k-1}·10^{amdB/10}`, the masking by **band k-1's** total level, speech plus noise
+   (Table A.1: `0.5L − 65` below 63 dB, `1.8L − 146.9` to 67, `0.5L − 59.8` to 100, −10 from 100;
+   as printed, the table steps by 0.2 dB at 100 dB though its note 2 calls the scheme continuous;
+   the unseen-energy range below takes the masking just below and at 100 dB when band k-1's level
+   may lie either side of it, since there neither end of the range is the extreme).
+   125 Hz is not masked. Female speech has no 125 Hz level, so band 250 Hz is masked by 125 Hz's
+   noise alone when the run has that band. The noise factor of cl. 6.1, `(1 + 10^{-SNR/10})^-1`,
+   is the same factor as the noise in this denominator (A.5.3 note 2; Annex M applies the two
+   steps and they multiply to this): it is applied once, here.
+4. `SNR_eff = 10·lg(m'/(1 − m'))` within ±15 dB (A.5.4), `TI = (SNR_eff + 15)/30` (A.5.5),
+   `MTI_k` the mean of the 14, and `STI = Σ α_k·MTI_k − Σ β_k·√(MTI_k·MTI_{k+1})` (A.5.6) with
+   Table A.3's factors (male α 0.085, 0.127, 0.230, 0.233, 0.309, 0.224, 0.173, β 0.085, 0.078,
+   0.065, 0.011, 0.047, 0.095; female from 250 Hz α 0.117, 0.223, 0.216, 0.328, 0.250, 0.194,
+   β 0.099, 0.066, 0.062, 0.025, 0.076; `Σα − Σβ` = 1 for both). Truncated at 1.0: Table A.3's
+   note names male, where the 250 Hz band at TI 0 and every other at 1 gives 1.036. The female
+   factors give 0.982 in that corner; the same truncation is applied to female as a guard.
+
+**Male is shown, female computed** (A.3.4: male speech assesses a channel; settled by the standard,
+STANDARDS-CHECK.md). The report states the weighting and that the MTF is from a predicted
+response (cl. 8.3).
+
+- **Noise.** The receiver's background noise per band (the `.gap`), when it has one. A receiver
+  without one is written 0 dB in every band (`config_xml::write`), so a band at 0 dB is no noise,
+  also when other bands have some (backlog 67); a `.gap` that reads 0 dB in every band is taken as
+  no noise, and the report says "none". Female speech is refused (`band_refused`, 125 Hz) when the
+  run's 125 Hz band cannot be read and the receiver has noise in it: that noise masks 250 Hz
+  (Table A.1), and 250 Hz is not taken unmasked (backlog 66).
+- **Run length** (cl. 6.2 b, 8.3 a: "the duration of the impulse response shall not be less than
+  half the reverberation time and at least 1,6 s to ensure a reliable calculation of the
+  modulation indices for the lowest modulation frequency of 0,63 Hz"): the response from the
+  direct sound must be at least 1.6 s and at least half the reverberation time, the longest over
+  the speech's bands. A band's reverberation time is the larger of its T30 (else T20, else EDT)
+  and **the decay its response's end shows** (`sti::end_decay`): two windows of a tenth of the
+  response each, ending at the series' end, give the decay rate there, unless the last window is
+  empty or at least 60 dB below the loudest window (the response has decayed through a whole
+  reverberation time's range and ended). Why: a response cut while it still decays has its own
+  Schroeder curve bent down by the cut, so the T30 read from it is short, and the T/2 rule passes
+  a response shorter than half the true T (the STI bed's set A, S1 short double slopes: T30 read
+  6.34 s against 8.26 s true; 528 answers the reference refused). The end's decay is what goes on
+  past the cut and what sets `m` at 0.63 Hz; for a double slope it is the late slope, so this is
+  stricter than the room's T30 there (set A: no answer below half the true T30 remains; 168 of
+  9,600 S1 cases the reference answers are now refused, all short double slopes at a rate ratio
+  of 5). Shorter: `params_series_too_short`. A band with none of the three decay times, or whose
+  response is within 60 dB of its loudest at its end and not decaying there, is refused
+  `band_refused`. **The end check is strict:** the end is not decaying whenever `W₂ ≥ W₁`, count
+  noise or not. Sparse late particles can tie or swap the last two windows 40 to 55 dB down by
+  chance, and such a band is then refused though it decays; that costs answers, never a wrong
+  number. A noise margin (`86e42f7`: not decaying only when `W₂ − W₁ ≥ 2σ` of the windows' own
+  scatter, the rate otherwise read back to the nearest window `2σ` louder) was tried and withdrawn
+  before release: it accepts a decay followed by a flat or slower tail (read as the last decaying
+  stretch's rate), a stray late deposit after an empty window (`W₁ = 0`, `W₂ = d`, `σ ≈ d`), and,
+  testing several windows at 2σ each, more than its stated 2.3 % of noise-only ends. A
+  noise-tolerant check that refuses all three is backlog 68 (`docs/v1.1-backlog.md`); the two
+  must-refuse cases are tests in `tests/params_sti.rs`, and the tie it would recover is an ignored
+  one there.
+- **What a series can lack** (`ReceiverBand::unseen_share`, `sti::sti_unseen_range`). The decay
+  quantities estimate the energy the solver did not record and refuse what it can move beyond its
+  limit; STI does the same with three parts, as a share `x` of the band's energy from the direct
+  sound on: the particles still alive when the run ended, in a band not complete (their energy is
+  the room table's at the last step, `alive_end`); the floor's dropped energy
+  (`10^{floor/10}/share`); and the lost particles' share. **The alive particles' part is a
+  heuristic, not a proof:** it assumes a particle alive at the end brings no more per unit of its
+  energy than the particles alive brought per unit of theirs over the decay above the floor
+  (`params::floor_alive_share`), giving `alive_end/share`. Nothing guarantees that: a particle
+  alive late in a coupled space, or near the receiver, can bring more per unit than the average
+  did. The range below is exact for the `x` it is given; `x` itself is that estimate, and the
+  refusal says so. Energy `X = x·ΣE` arriving at any time
+  changes the Schroeder sum by a phasor of modulus at most `X`, so each `m(F)` lies in
+  `[(m − x)/(1 + x), (m + x)/(1 + x)]`, at 0.63 Hz, where tail energy matters most, as at every
+  modulation frequency; the band's speech level rises by at most `10·lg(1 + x)` (its own factor up,
+  band k+1's masking up). The STI is bounded term by term over those ranges, and refused
+  (`band_refused`, naming the band with the largest share) when either end lies more than
+  **0.003** from the value: 1/10 of the 0.03 the STI bed holds STI to (IEC 60268-16 gives no
+  limen). Until build H a band with one particle alive at the end refused STI outright (the bed's
+  set C7, S-live: one particle of 150,000 alive at 10 s refused male STI at every receiver).
+- **Uncertainty: not modelled.** STI is shown as a bare value, `mc_sd` null, no range; the report's
+  `monte_carlo` says so. The plan (PLAN.md, "STI", item 4) expects count noise to bias `m` up where
+  it is small; that is not yet measured.
+- **Refused** (`params_not_evaluable`, quantity `sti`): `band_missing` (an octave the speech needs
+  is not in the run: a run of the old 6-band default refuses for 8 kHz), `band_refused` (an octave
+  it needs is in the run but its series is refused, or not complete with nothing to bound what
+  its particles alive at the end bring, or what it can lack moves the STI by more than 0.003, its
+  SPL is refused, or no source emits in it), `not_octave_bands` (a third-octave run: the band kind is read from
+  `freq_enum` as the importer reads it), `several_sources` (STI is one talker's).
+- Tests: `tests/params_sti.rs` (the exponential decay's closed form `1/√(1 + (2πF·T/13.8)²)` to
+  1e-6; m = 1 at a high level gives 1.000 for both speeches, m = 0 gives 0; masking from band k-1
+  and not k; 125 Hz unmasked; female without 125 Hz; the truncation; every refusal; set A's S1
+  short double slope re-created, refused for length; the unseen-energy bound held by energy added
+  after the end at 40 delays across a 0.63 Hz period; the end-decay windows; female refused for an
+  unreadable noisy 125 Hz band) and `results::report`'s unit tests (the report's shape, the noise
+  label, several sources, one particle alive at the end answered and many refused, a 0 dB band no
+  noise).
 
 ## ISO 9613-1: air attenuation
 
@@ -1320,7 +1604,11 @@ and one of:
   (`docs/results.md`, "Several sources");
 - `no_time_series`, with where the solver's own values are: made by `core::results` for every
   parameter of a TCR receiver, which has steady-state levels and no series
-  (`docs/formats/results-json.md`, "`tcr`").
+  (`docs/formats/results-json.md`, "`tcr`");
+- `no_a_weight`, with the band: dB(A) over a band that is not an octave centre from 125 Hz to
+  8 kHz, the only bands whose A-weighting is pinned ("A-weighted level");
+- `band_missing`, `band_refused` and `not_octave_bands`, with the band: STI without an octave it
+  needs, with one it cannot read, or over third-octave bands ("STI").
 
 `params_bad_noise_input` refuses a floor, a share alive or lost, a mean or least deposit, a
 lifetime spread, a particle count or a band count that is not a finite number in its domain.

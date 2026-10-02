@@ -1,0 +1,1 @@
+{"generator": "synth", "params": {"t60_s": [0.5, 1.5], "drr_db": [2, 5], "d_m": [1, 6], "delay_ms": [2, 10]}, "noise": {"kind": "none"}, "step_ms": 0.25, "run_over_t60": [1.5, 3], "R_m": [0.35, 0.5]}

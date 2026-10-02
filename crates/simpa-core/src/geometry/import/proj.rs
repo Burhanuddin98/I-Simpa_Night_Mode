@@ -2699,14 +2699,48 @@ fn read_solvers(
     }
     count!("nbparticules", sp.particles_per_source);
     count!("nbparticules_rendu", sp.particles_saved);
-    real!("duree_simulation", sp.duration_s);
-    real!("pasdetemps", sp.time_step_s);
+    match opt_prop_real(conf, "duree_simulation", what)? {
+        Some(v) => sp.duration_s = F64::new(v),
+        None => {
+            // Upstream's own GUI default (`e_core_sppscore.h`), kept independent of
+            // `SppsSettings::for_bands`'s new-project default: a legacy project with no
+            // `duree_simulation` gets upstream's actual 2 s, not Night Mode's 10 s
+            // (decision row 36, `docs/decision-log.md`).
+            sp.duration_s = F64::new(2.0);
+            notes.push(format!(
+                "{what}: no `duree_simulation`, upstream's default kept"
+            ));
+        }
+    }
+    match opt_prop_real(conf, "pasdetemps", what)? {
+        Some(v) => sp.time_step_s = F64::new(v),
+        None => {
+            // Upstream's own GUI default (`e_core_core_config.h:74`), kept independent of
+            // `SppsSettings::for_bands`'s new-project default: a legacy project with no
+            // `pasdetemps` gets upstream's actual 10 ms, not Night Mode's 1 ms (decision row 11,
+            // `docs/decision-log.md`).
+            sp.time_step_s = F64::new(0.01);
+            notes.push(format!("{what}: no `pasdetemps`, upstream's default kept"));
+        }
+    }
     count!("random_seed", sp.random_seed);
     flag!("abs_atmo_calc", sp.air_absorption);
     flag!("enc_calc", sp.fittings);
     flag!("direct_calc", sp.direct_field_only);
     flag!("trans_calc", sp.transmission);
-    real!("trans_epsilon", sp.extinction_exponent);
+    match opt_prop_real(conf, "trans_epsilon", what)? {
+        Some(v) => sp.extinction_exponent = F64::new(v),
+        None => {
+            // Upstream's own GUI default (`e_core_sppscore.h`), kept independent of
+            // `SppsSettings::for_bands`'s new-project default: a legacy project with no
+            // `trans_epsilon` gets upstream's actual 5, not Night Mode's 7 (decision row 41,
+            // `docs/decision-log.md`).
+            sp.extinction_exponent = F64::new(5.0);
+            notes.push(format!(
+                "{what}: no `trans_epsilon`, upstream's default kept"
+            ));
+        }
+    }
     real!("rayon_recepteurp", sp.receiver_radius_m);
     flag!("output_recs_byfreq", sp.sound_maps_per_band);
     flag!("output_recp_bysource", sp.echogram_per_source);
@@ -2724,9 +2758,16 @@ fn read_solvers(
                 format!("{what}: computation method {other}"),
             ));
         }
-        None => notes.push(format!(
-            "{what}: no `computation_method`, upstream's default kept"
-        )),
+        None => {
+            // Upstream's own GUI default (`e_core_sppscore.h`), kept independent of
+            // `SppsSettings::for_bands`'s new-project default: a legacy project with no
+            // `computation_method` gets upstream's random, not Night Mode's energetic
+            // (decision row 38, `docs/decision-log.md`).
+            sp.method = ComputationMethod::Random;
+            notes.push(format!(
+                "{what}: no `computation_method`, upstream's default kept"
+            ));
+        }
     }
     match opt_prop_choice(conf, "surf_receiv_method", what)? {
         Some(0) => sp.sound_map = SoundMapQuantity::Intensity,
@@ -2785,6 +2826,203 @@ fn read_solvers(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A legacy `.proj` whose SPPS `<configuration>` has no `duree_simulation` must keep
+    /// upstream's own GUI default (2 s), not Night Mode's own new-project default (10 s, decision
+    /// row 36): the note's "upstream's default kept" must stay true. Every other element and
+    /// attribute `read_solvers` needs is optional except the three container elements and one
+    /// band switch per band, each present here but otherwise empty.
+    #[test]
+    fn a_missing_duree_simulation_keeps_upstream_s_actual_default_not_night_mode_s() {
+        let xml = r#"<core>
+  <spps>
+    <configuration/>
+    <mesh_conf/>
+    <core_conf_bfreq>
+      <p name="125" value="1"/>
+      <p name="250" value="1"/>
+      <p name="500" value="1"/>
+      <p name="1000" value="1"/>
+      <p name="2000" value="1"/>
+      <p name="4000" value="1"/>
+    </core_conf_bfreq>
+  </spps>
+</core>"#;
+        let doc = Document::parse(xml).unwrap();
+        let bands = BandSet::octaves_125_to_4000();
+        let mut notes = Vec::new();
+        let s = read_solvers(doc.root_element(), &bands, &mut notes).unwrap();
+        assert_eq!(
+            s.spps.duration_s.get(),
+            2.0,
+            "upstream's actual GUI default, not Night Mode's 10 s new-project default"
+        );
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("no `duree_simulation`, upstream's default kept")),
+            "{notes:?}"
+        );
+    }
+
+    /// Decision-log row 38: a new project computes in energetic mode, but an imported `.proj`
+    /// keeps the file's own computation method, and one with none keeps upstream's actual
+    /// default, random (`e_core_sppscore.h`), so the note "upstream's default kept" stays true.
+    #[test]
+    fn an_imported_project_keeps_its_own_computation_method_not_night_mode_s_default() {
+        let parse = |configuration: &str| {
+            let xml = format!(
+                r#"<core>
+  <spps>
+    <configuration>{configuration}</configuration>
+    <mesh_conf/>
+    <core_conf_bfreq>
+      <p name="125" value="1"/>
+      <p name="250" value="1"/>
+      <p name="500" value="1"/>
+      <p name="1000" value="1"/>
+      <p name="2000" value="1"/>
+      <p name="4000" value="1"/>
+    </core_conf_bfreq>
+  </spps>
+</core>"#
+            );
+            let doc = Document::parse(&xml).unwrap();
+            let mut notes = Vec::new();
+            let s = read_solvers(
+                doc.root_element(),
+                &BandSet::octaves_125_to_4000(),
+                &mut notes,
+            )
+            .unwrap();
+            (s.spps.method, notes)
+        };
+        assert_eq!(
+            Project::new("new").solvers.spps.method,
+            ComputationMethod::Energetic,
+            "a new project's default, which an import must not take"
+        );
+        let (m, _) = parse(r#"<p name="computation_method" choice="0"/>"#);
+        assert_eq!(
+            m,
+            ComputationMethod::Random,
+            "random in the file stays random"
+        );
+        let (m, _) = parse(r#"<p name="computation_method" choice="1"/>"#);
+        assert_eq!(m, ComputationMethod::Energetic);
+        let (m, notes) = parse("");
+        assert_eq!(m, ComputationMethod::Random, "upstream's actual default");
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("no `computation_method`, upstream's default kept")),
+            "{notes:?}"
+        );
+    }
+
+    /// Decision-log row 41: a new project drops energetic particles at 10^-7, but an imported
+    /// `.proj` keeps the file's own `trans_epsilon`, and one with none keeps upstream's actual
+    /// default, 5 (`e_core_sppscore.h`), so the note "upstream's default kept" stays true.
+    #[test]
+    fn an_imported_project_keeps_its_own_trans_epsilon_not_night_mode_s_default() {
+        let parse = |configuration: &str| {
+            let xml = format!(
+                r#"<core>
+  <spps>
+    <configuration>{configuration}</configuration>
+    <mesh_conf/>
+    <core_conf_bfreq>
+      <p name="125" value="1"/>
+      <p name="250" value="1"/>
+      <p name="500" value="1"/>
+      <p name="1000" value="1"/>
+      <p name="2000" value="1"/>
+      <p name="4000" value="1"/>
+    </core_conf_bfreq>
+  </spps>
+</core>"#
+            );
+            let doc = Document::parse(&xml).unwrap();
+            let mut notes = Vec::new();
+            let s = read_solvers(
+                doc.root_element(),
+                &BandSet::octaves_125_to_4000(),
+                &mut notes,
+            )
+            .unwrap();
+            (s.spps.extinction_exponent.get(), notes)
+        };
+        assert_eq!(
+            Project::new("new").solvers.spps.extinction_exponent.get(),
+            7.0,
+            "a new project's default, which an import must not take"
+        );
+        let (e, _) = parse(r#"<p name="trans_epsilon" value="5"/>"#);
+        assert_eq!(e, 5.0, "5 in the file stays 5");
+        let (e, _) = parse(r#"<p name="trans_epsilon" value="9"/>"#);
+        assert_eq!(e, 9.0);
+        let (e, notes) = parse("");
+        assert_eq!(e, 5.0, "upstream's actual default");
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("no `trans_epsilon`, upstream's default kept")),
+            "{notes:?}"
+        );
+    }
+
+    /// Decision-log row 11: a new project steps at 1 ms, but an imported `.proj` keeps the
+    /// file's own `pasdetemps`, and one with none keeps upstream's actual default, 10 ms
+    /// (`e_core_core_config.h:74`), so the note "upstream's default kept" stays true.
+    #[test]
+    fn an_imported_project_keeps_its_own_time_step_not_night_mode_s_default() {
+        let parse = |configuration: &str| {
+            let xml = format!(
+                r#"<core>
+  <spps>
+    <configuration>{configuration}</configuration>
+    <mesh_conf/>
+    <core_conf_bfreq>
+      <p name="125" value="1"/>
+      <p name="250" value="1"/>
+      <p name="500" value="1"/>
+      <p name="1000" value="1"/>
+      <p name="2000" value="1"/>
+      <p name="4000" value="1"/>
+    </core_conf_bfreq>
+  </spps>
+</core>"#
+            );
+            let doc = Document::parse(&xml).unwrap();
+            let mut notes = Vec::new();
+            let s = read_solvers(
+                doc.root_element(),
+                &BandSet::octaves_125_to_4000(),
+                &mut notes,
+            )
+            .unwrap();
+            (s.spps.time_step_s.get(), notes)
+        };
+        assert_eq!(
+            Project::new("new").solvers.spps.time_step_s.get(),
+            0.001,
+            "a new project's default, which an import must not take"
+        );
+        let (dt, _) = parse(r#"<p name="pasdetemps" value="0.002"/>"#);
+        assert_eq!(
+            dt,
+            widen_f32(0.002),
+            "the file's own step, as the GUI's float holds it"
+        );
+        let (dt, notes) = parse("");
+        assert_eq!(dt, 0.01, "upstream's actual default");
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("no `pasdetemps`, upstream's default kept")),
+            "{notes:?}"
+        );
+    }
 
     #[test]
     fn an_imported_project_takes_its_file_s_name_only_in_place_of_upstream_s_default() {

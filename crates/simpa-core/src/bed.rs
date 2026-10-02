@@ -52,6 +52,9 @@ pub mod limits {
     pub const SEED_SPREAD: f64 = 0.02;
     /// C: T30 against the transport (row 1's revisit column, "about 0.5 %").
     pub const TRANSPORT: f64 = 0.005;
+    /// C's T20 twin: T20 against the transport's T20, the same 0.5 %, in its own verdict
+    /// (`report.t20`), which `report.pass` does not read.
+    pub const T20_TRANSPORT: f64 = 0.005;
     /// D: TCR's Eyring time against its analytic value.
     pub const TCR_EYRING: f64 = 0.005;
     /// E4: the transport against the committed high-count values, s.
@@ -135,7 +138,7 @@ mod tests {
     fn spps_on(seed: u32, kuttruff: f64, offset: f64, bands: &[i32]) -> SppsRead {
         let bands: Vec<i32> = bands.to_vec();
         let n = bands.len();
-        SppsRead {
+        let mut read = SppsRead {
             info: info("spps"),
             bands_hz: bands.clone(),
             particles_per_source: 1_500_000,
@@ -183,7 +186,16 @@ mod tests {
                     .collect(),
             },
             curves: vec![vec![None; n]; 3],
+            t20: Vec::new(),
+        };
+        // T20 is not T30: 3 % higher, its own spread, against a transport whose T20 is
+        // `T20_RATIO` times its T30 ([`transports`]), so a T20 gate that read T30 would FAIL.
+        read.t20 = read.t30.clone();
+        for t in read.t20.iter_mut().flatten() {
+            t.t = t.t.map(|x| x * T20_RATIO);
+            t.mc_sd = Some(0.002);
         }
+        read
     }
 
     /// A TCR run on `bands`, TCR at `off` from its analytic Eyring time.
@@ -207,6 +219,10 @@ mod tests {
         }
     }
 
+    /// The transport's T20 over its T30, and its T20 se over its T30 se: deliberately unlike 1.
+    const T20_RATIO: f64 = 1.03;
+    const T20_SE_RATIO: f64 = 2.0;
+
     fn transports(bed: &BedFile, t: f64) -> Transports {
         let h = transport::high("5x4x3", 0.2).unwrap();
         let mut ts = Transports::default();
@@ -227,6 +243,12 @@ mod tests {
                 room_se: h.room_se,
                 receivers: vec![[t, h.se]; 3],
                 curves: vec![],
+                t20: Some(t * T20_RATIO),
+                t20_se: Some(h.se * T20_SE_RATIO),
+                room_t20: Some(h.room_t),
+                room_t20_se: Some(h.room_se),
+                t20_error: None,
+                receivers_t20: vec![Some([t * T20_RATIO, h.se * T20_SE_RATIO]); 3],
             }),
         );
         ts
@@ -583,6 +605,352 @@ mod tests {
             "{:#?}",
             r.failures
         );
+    }
+
+    const CELL: &str = "5x4x3-a0.2-energetic-air-off";
+
+    /// `rd` with seed `seeds[i]`'s T20 at `t20·(1 + d + e[i])` in every receiver-band, a value;
+    /// a seed not in `rd` is added, its T30 at Kuttruff `k`.
+    fn with_t20(mut rd: Reads, k: f64, t20: f64, d: f64, seeds: &[u32], e: &[f64]) -> Reads {
+        let s = rd.spps.get_mut(CELL).unwrap();
+        for (seed, e) in seeds.iter().zip(e) {
+            let r = s.entry(*seed).or_insert_with(|| Ok(spps(*seed, k, 0.0)));
+            let r = r.as_mut().unwrap();
+            for rec in &mut r.t20 {
+                for t in rec.iter_mut() {
+                    *t = T30 {
+                        t: Some(t20 * (1.0 + d + e)),
+                        mc_sd: Some(0.001),
+                        source: "value".into(),
+                    };
+                }
+            }
+        }
+        rd
+    }
+
+    /// T20's gate C, the twin of T30's: the same statistic, limit 0.5 %, three outcomes and the
+    /// one extension, in its own verdict (`report.t20`), which never moves the M8a T30 verdict.
+    #[test]
+    fn t20_gate_c_has_three_outcomes_in_its_own_verdict() {
+        let bed = small_bed();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let base = reads(k, &[0.0, 0.0005, -0.0005], 0.001);
+        let seeds = [1, 2, 3];
+        let judged = |d: f64, e: &[f64]| {
+            judge(
+                &bed,
+                &with_t20(base.clone(), k, h.t * T20_RATIO, d, &seeds, e),
+                &ts,
+                &[],
+            )
+        };
+
+        // d = +0.1 %, the seeds ±0.05 % about it: PASS.
+        let r = judged(0.001, &[0.0, 0.0005, -0.0005]);
+        assert!(r.pass, "{:#?}", r.failures);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        let c = t.c.as_ref().unwrap();
+        assert_eq!(c.verdict, Verdict::Pass, "{c:?}");
+        assert!((c.interval.mean - 0.001).abs() < 1e-9, "{c:?}");
+        assert_eq!(c.limit, limits::T20_TRANSPORT);
+        assert_eq!(t.verdict, Verdict::Pass);
+        assert!(r.t20.pass && r.t20.failures.is_empty(), "{:#?}", r.t20);
+        // T20 against Kuttruff is reported, never gated.
+        let a = t.kuttruff.as_ref().unwrap();
+        assert_eq!(a.verdict, Verdict::Reported);
+        assert!(a.bands.iter().all(|b| b.verdict == Verdict::Reported));
+
+        // A planted 1 % bias with a tight spread: T20's C FAILs, named in `report.t20`; the
+        // T30 cell, `report.pass` and `report.failures` are untouched.
+        let r = judged(0.01, &[0.0, 0.0005, -0.0005]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        assert_eq!(t.c.as_ref().unwrap().verdict, Verdict::Fail);
+        assert_eq!(t.verdict, Verdict::Fail);
+        assert!(!r.t20.pass);
+        assert!(
+            r.t20
+                .failures
+                .iter()
+                .any(|f| f.starts_with(CELL) && f.contains("T20 C Fail")),
+            "{:#?}",
+            r.t20.failures
+        );
+        assert!(r.pass, "{:#?}", r.failures);
+        assert_eq!(r.cells[0].verdict, Verdict::Pass);
+        assert!(r.failures.is_empty());
+        let s = report::summary(&r, "abc");
+        assert!(s.pass && !s.t20_pass);
+        assert!(
+            s.rows
+                .iter()
+                .any(|x| x.cell == CELL && x.check == "T20 C (3 seeds)" && x.verdict == "fail")
+        );
+
+        // d = +0.4 %, the seeds ±0.1 %: the interval excludes 0 and reaches past 0.5 %, its
+        // centre inside: INCONCLUSIVE, which does not pass, and asks for T20's extension (not
+        // T30's).
+        let r = judged(0.004, &[0.0, 0.001, -0.001]);
+        let c = r.cells[0].t20.as_ref().unwrap().c.as_ref().unwrap();
+        assert_eq!(c.verdict, Verdict::Inconclusive, "{c:?}");
+        assert!(
+            c.interval.excludes_zero() && c.interval.reach() > 0.005,
+            "{c:?}"
+        );
+        assert!(!r.t20.pass);
+        assert_eq!(r.t20.needs_extension, vec![CELL.to_string()]);
+        assert!(r.needs_extension.is_empty() && r.pass);
+
+        // With seeds 11 to 20 there (at +0.1 %), T20's C is judged again on all thirteen, once;
+        // T30's C, which passed, stays on its three.
+        let ext: Vec<u32> = bed.extension_seeds.clone();
+        let more = with_t20(
+            with_t20(
+                base.clone(),
+                k,
+                h.t * T20_RATIO,
+                0.004,
+                &seeds,
+                &[0.0, 0.001, -0.001],
+            ),
+            k,
+            h.t * T20_RATIO,
+            0.001,
+            &ext,
+            &[
+                0.0, 0.0005, -0.0005, 0.0, 0.0005, -0.0005, 0.0, 0.0005, -0.0005, 0.0,
+            ],
+        );
+        let r = judge(&bed, &more, &ts, &[]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        let x = t.extension.as_ref().unwrap();
+        assert_eq!(x.c_first.verdict, Verdict::Inconclusive);
+        assert_eq!(x.seeds.len(), 10);
+        assert_eq!(t.c.as_ref().unwrap().seeds.len(), 13);
+        assert_eq!(t.c.as_ref().unwrap().verdict, Verdict::Pass);
+        assert!(r.t20.needs_extension.is_empty() && r.t20.pass);
+        assert_eq!(r.cells[0].c.as_ref().unwrap().seeds.len(), 3);
+        assert!(r.cells[0].extension.is_none() && r.pass);
+    }
+
+    /// Section 4 for T20: a seed's T20 refused for more than its noise (`range_not_reached`)
+    /// leaves the cell's T20 not judged, named with seed, receiver, band and code; a noise
+    /// refusal keeps its value and is judged. The T30 verdict does not move.
+    #[test]
+    fn a_t20_refused_for_more_than_noise_is_not_judged_and_named() {
+        let bed = small_bed();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let good = with_t20(
+            reads(k, &[0.0, 0.0005, -0.0005], 0.001),
+            k,
+            h.t * T20_RATIO,
+            0.001,
+            &[1, 2, 3],
+            &[0.0, 0.0005, -0.0005],
+        );
+        // A noise refusal with its value: judged, T20 still passes.
+        let mut noise = good.clone();
+        noise
+            .spps
+            .get_mut(CELL)
+            .unwrap()
+            .get_mut(&3)
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .t20[0][0] = T30 {
+            t: Some(h.t * T20_RATIO * (1.0 + 0.001 - 0.0005)),
+            mc_sd: Some(0.01),
+            source: "monte_carlo_noise".into(),
+        };
+        let r = judge(&bed, &noise, &ts, &[]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        assert!(t.e6.holds, "{:?}", t.e6);
+        assert_eq!(t.verdict, Verdict::Pass);
+        assert_eq!(t.sources.get("monte_carlo_noise"), Some(&1));
+        // The refusal's sd is kept in the cell's T20 record, not dropped with the refusal.
+        let kept = &t.seeds.iter().find(|x| x.seed == 3).unwrap().t20[0][0];
+        assert_eq!(kept.mc_sd, Some(0.01), "{kept:?}");
+        assert_eq!(kept.source, "monte_carlo_noise");
+        assert_eq!(kept.t, Some(h.t * T20_RATIO * (1.0 + 0.001 - 0.0005)));
+        // `range_not_reached` at seed 2, R001, 1000 Hz: not judged, named; T30 unmoved.
+        let mut short = good.clone();
+        short
+            .spps
+            .get_mut(CELL)
+            .unwrap()
+            .get_mut(&2)
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .t20[1][3] = T30 {
+            t: None,
+            mc_sd: None,
+            source: "range_not_reached".into(),
+        };
+        let r = judge(&bed, &short, &ts, &[]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        assert!(!t.e6.holds);
+        assert_eq!(t.verdict, Verdict::NotJudged);
+        assert!(t.c.is_none());
+        assert!(!r.t20.pass);
+        assert!(
+            r.t20.failures.iter().any(|f| f.starts_with(CELL)
+                && f.contains("seed 2, receiver R001, 1000 Hz: T20 refused range_not_reached")),
+            "{:#?}",
+            r.t20.failures
+        );
+        assert!(r.pass && r.preconditions.e6.holds, "{:#?}", r.failures);
+        assert_eq!(r.cells[0].verdict, Verdict::Pass);
+    }
+
+    /// T20's gate reads T20's transport value and se, and T20's own reads and refusals, never
+    /// T30's. The fixture makes them differ (transport T20 3 % over T30, its se twice as big;
+    /// seed T20s 3 % over T30s), so a gate that read T30 anywhere moves a number asserted here.
+    #[test]
+    fn t20_gate_reads_t20s_transport_and_refusals_never_t30s() {
+        let bed = small_bed();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let seeds = [1, 2, 3];
+        let e = [0.0, 0.0005, -0.0005];
+        let base = with_t20(
+            reads(k, &[0.0, 0.0005, -0.0005], 0.001),
+            k,
+            h.t * T20_RATIO,
+            0.001,
+            &seeds,
+            &e,
+        );
+        let r = judge(&bed, &base, &ts, &[]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        let c = t.c.as_ref().unwrap();
+        // The transport's T20 and se, per band, are T20's.
+        assert!(
+            t.transport_t20_s
+                .iter()
+                .all(|x| (x.unwrap() - h.t * T20_RATIO).abs() < 1e-12),
+            "{:?}",
+            t.transport_t20_s
+        );
+        assert!(
+            t.transport_t20_se_s
+                .iter()
+                .all(|x| (x.unwrap() - h.se * T20_SE_RATIO).abs() < 1e-12),
+            "{:?}",
+            t.transport_t20_se_s
+        );
+        // C's d is against T20's transport (+0.1 %), not T30's (it would be +3.1 %); its
+        // transport se is T20's se over T20's time, not T30's.
+        assert!((c.interval.mean - 0.001).abs() < 1e-9, "{c:?}");
+        assert_eq!(c.verdict, Verdict::Pass, "{c:?}");
+        let want = h.se * T20_SE_RATIO / (h.t * T20_RATIO);
+        assert!((c.se_transport - want).abs() < 1e-12, "{c:?} vs {want}");
+        // T30's own C is unmoved by any of it, on T30's transport.
+        let c30 = r.cells[0].c.as_ref().unwrap();
+        assert!(
+            (c30.se_transport - h.se / h.t).abs() < 1e-12,
+            "{:?}",
+            c30.se_transport
+        );
+
+        // Every T30 receiver-band refused for range in every seed: T30 is not judged, T20,
+        // read from its own field, still is, with the same numbers.
+        let mut t30_refused = base.clone();
+        for run in t30_refused.spps.get_mut(CELL).unwrap().values_mut() {
+            for t in run.as_mut().unwrap().t30.iter_mut().flatten() {
+                *t = T30 {
+                    t: None,
+                    mc_sd: None,
+                    source: "range_not_reached".into(),
+                };
+            }
+        }
+        let r = judge(&bed, &t30_refused, &ts, &[]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        assert!(t.e6.holds, "{:?}", t.e6);
+        assert_eq!(t.verdict, Verdict::Pass, "{:#?}", r.t20.failures);
+        assert!((t.c.as_ref().unwrap().interval.mean - 0.001).abs() < 1e-9);
+        assert_ne!(r.cells[0].verdict, Verdict::Pass);
+
+        // The converse: T20 refused everywhere, T30 intact: T20 is not judged, and does not
+        // borrow T30's values.
+        let mut t20_refused = base.clone();
+        for run in t20_refused.spps.get_mut(CELL).unwrap().values_mut() {
+            for t in run.as_mut().unwrap().t20.iter_mut().flatten() {
+                *t = T30 {
+                    t: None,
+                    mc_sd: None,
+                    source: "range_not_reached".into(),
+                };
+            }
+        }
+        let r = judge(&bed, &t20_refused, &ts, &[]);
+        let t = r.cells[0].t20.as_ref().unwrap();
+        assert!(!t.e6.holds && t.c.is_none());
+        assert_eq!(t.verdict, Verdict::NotJudged);
+        assert!(r.pass, "{:#?}", r.failures);
+    }
+
+    /// E1 on T20's own extension runs: a seed 11 to 20 run of another spps.exe fails T20, which
+    /// T30 (not extended) never sees.
+    #[test]
+    fn t20_e1_covers_t20s_extension_runs() {
+        let bed = small_bed();
+        let h = transport::high("5x4x3", 0.2).unwrap();
+        let ts = transports(&bed, h.t);
+        let k = 0.4794;
+        let ext: Vec<u32> = bed.extension_seeds.clone();
+        let mut more = with_t20(
+            with_t20(
+                reads(k, &[0.0, 0.0005, -0.0005], 0.001),
+                k,
+                h.t * T20_RATIO,
+                0.004,
+                &[1, 2, 3],
+                &[0.0, 0.001, -0.001],
+            ),
+            k,
+            h.t * T20_RATIO,
+            0.001,
+            &ext,
+            &[
+                0.0, 0.0005, -0.0005, 0.0, 0.0005, -0.0005, 0.0, 0.0005, -0.0005, 0.0,
+            ],
+        );
+        let r = judge(&bed, &more, &ts, &[]);
+        assert!(
+            r.t20.pass && r.pass,
+            "{:#?}{:#?}",
+            r.t20.failures,
+            r.failures
+        );
+        more.spps
+            .get_mut(CELL)
+            .unwrap()
+            .get_mut(&ext[0])
+            .unwrap()
+            .as_mut()
+            .unwrap()
+            .info
+            .exe_sha256 = "other".into();
+        let r = judge(&bed, &more, &ts, &[]);
+        assert!(!r.t20.pass);
+        assert!(
+            r.t20
+                .failures
+                .iter()
+                .any(|f| f.starts_with(CELL) && f.contains("T20 E1")),
+            "{:#?}",
+            r.t20.failures
+        );
+        // T30 did not extend: its own verdict and E1 do not see that run.
+        assert!(r.pass && r.preconditions.e1.holds, "{:#?}", r.failures);
     }
 
     #[test]

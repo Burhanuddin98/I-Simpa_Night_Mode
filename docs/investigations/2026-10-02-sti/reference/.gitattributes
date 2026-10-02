@@ -1,0 +1,2 @@
+# Pin the hashed bytes: no end-of-line conversion for the reference implementation.
+sti_reference.py -text

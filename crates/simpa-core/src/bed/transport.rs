@@ -9,6 +9,9 @@
 //! `transport_t30` with the settings of the bed file, so in the eight air-off gated cells it must
 //! reproduce [`HIGH`] to 10⁻⁹ s (E4): the transport is deterministic, and a difference is a
 //! changed transport, not noise.
+//!
+//! **Its T20**, for C's T20 twin, is read the same way over −5 to −25 dB from the same traced
+//! energy, after the T30 (no ray more); E4 holds the T30 fields alone.
 
 use std::collections::BTreeMap;
 
@@ -18,7 +21,7 @@ use super::file::{Room, TransportSettings};
 use crate::params::EnergySeries;
 use crate::params::ParamError;
 use crate::params::decay::{self, Arrival};
-use crate::params::lambert::{DecaySettings, Enclosure, decay};
+use crate::params::lambert::{DecaySettings, Enclosure, OverReplicas, decay};
 use crate::params::room::{RtConstant, Surface, eyring_rt};
 
 /// One of M8's eight air-off cells at high counts: the room (0 the 6×10×3 m, 1 the 5×4×3 m),
@@ -139,6 +142,26 @@ pub struct TransportT30 {
     #[serde(skip)]
     #[schemars(skip)]
     pub curves: Vec<(f64, Vec<[f64; 2]>)>,
+    /// The receivers' T20 (−5 to −25 dB), read from the same traced energy as `t` (no ray more):
+    /// the mean over replicas of the receivers' mean, and its standard error. `None`, with
+    /// `t20_error`, when a replica's T20 is refused; the T30 fields do not depend on it.
+    #[serde(default)]
+    pub t20: Option<f64>,
+    #[serde(default)]
+    pub t20_se: Option<f64>,
+    /// The room energy's T20 and its standard error, reported.
+    #[serde(default)]
+    pub room_t20: Option<f64>,
+    #[serde(default)]
+    pub room_t20_se: Option<f64>,
+    #[serde(default)]
+    pub t20_error: Option<String>,
+    /// Each receiver's T20 over the replicas, its mean and standard error, by the same
+    /// per-receiver path as `receivers` (T30's) with −5 to −25 dB in place of −5 to −35 dB, from
+    /// the same traced energy. `None` for a receiver whose T20 is refused; empty in a report
+    /// written before it existed. Neither `receivers` nor the T20 fields above depend on it.
+    #[serde(default)]
+    pub receivers_t20: Vec<Option<[f64; 2]>>,
 }
 
 /// Mean and standard error of the mean, as `params_kuttruff.rs` computes them.
@@ -216,6 +239,21 @@ pub fn t30(
         .collect();
     let (t, se) = mean_se(&means);
     let room_t30 = d.room_t30()?;
+    // Each receiver's T20, the same way as `receivers` above, after every T30.
+    let receivers_t20 = each_receiver(&arrivals, |i, a| d.receiver_t20(i, a));
+    // T20 from the same `d`, after every T30 above: its refusal leaves them as they are.
+    let t20 = (|| -> Result<(f64, f64, f64, f64), ParamError> {
+        let mut per_receiver = Vec::new();
+        for (i, a) in arrivals.iter().enumerate() {
+            per_receiver.push(d.receiver_t20(i, *a)?.values);
+        }
+        let means: Vec<f64> = (0..settings.replicas as usize)
+            .map(|k| per_receiver.iter().map(|v| v[k]).sum::<f64>() / n)
+            .collect();
+        let (t, se) = mean_se(&means);
+        let room = d.room_t20()?;
+        Ok((t, se, room.mean, room.se))
+    })();
     let curves = arrivals
         .iter()
         .enumerate()
@@ -247,7 +285,26 @@ pub fn t30(
         room_se: room_t30.se,
         receivers,
         curves,
+        t20: t20.as_ref().ok().map(|x| x.0),
+        t20_se: t20.as_ref().ok().map(|x| x.1),
+        room_t20: t20.as_ref().ok().map(|x| x.2),
+        room_t20_se: t20.as_ref().ok().map(|x| x.3),
+        t20_error: t20.err().map(|e| e.to_string()),
+        receivers_t20,
     })
+}
+
+/// Each receiver's value over the replicas, `[mean, se]`, as `receivers` holds T30's, read by
+/// `value` (receiver `i`, its arrival); `None` where it is refused.
+fn each_receiver(
+    arrivals: &[Arrival],
+    value: impl Fn(usize, Arrival) -> Result<OverReplicas, ParamError>,
+) -> Vec<Option<[f64; 2]>> {
+    arrivals
+        .iter()
+        .enumerate()
+        .map(|(i, a)| value(i, *a).ok().map(|o| [o.mean, o.se]))
+        .collect()
 }
 
 /// The key of a transport: room, `α` and air, exactly.
@@ -335,6 +392,126 @@ mod tests {
             let off = (bad.room_t - h.room_t) / bad.room_se.hypot(h.room_se);
             assert!(off.abs() > 4.0, "{off}");
         }
+    }
+
+    /// The T20 twin is traced in the same pass as the T30 (no ray more): the same rays, so both
+    /// are there, the room's and the receivers', and in a diffuse box at α 0.4 they are close
+    /// (T20 and T30 differ only by the decay's curvature).
+    #[test]
+    fn the_transport_carries_t20_beside_t30_from_the_same_rays() {
+        let bed = BedFile::m8a();
+        let room = bed.room("5x4x3").unwrap();
+        let rays = bed.transport.rays_per_replica(0.4) / 64;
+        let a = t30(room, 0.4, None, &bed.transport, Some(rays)).unwrap();
+        assert_eq!(a.t20_error, None);
+        let (t20, se20) = (a.t20.unwrap(), a.t20_se.unwrap());
+        let (room20, room_se20) = (a.room_t20.unwrap(), a.room_t20_se.unwrap());
+        assert!(se20 > 0.0 && room_se20 > 0.0);
+        assert!((t20 / a.t - 1.0).abs() < 0.03, "{t20} {}", a.t);
+        assert!(
+            (room20 / a.room_t - 1.0).abs() < 0.03,
+            "{room20} {}",
+            a.room_t
+        );
+        assert_ne!(t20, a.t);
+        // The T30 fields are what they were: the same function at the same rays gives the same
+        // T30 whatever else it computes (the low-count test above holds them to HIGH).
+        let b = t30(room, 0.4, None, &bed.transport, Some(rays)).unwrap();
+        assert_eq!(a, b);
+    }
+
+    /// A [`Decay`] of two identical replicas with three receivers whose energy per 1 ms bin, for
+    /// 8 s, is `a1·e^(−13.8·t/t1) + a2·e^(−13.8·t/t2)`, scaled per receiver.
+    fn two_slopes(a1: f64, t1: f64, a2: f64, t2: f64) -> crate::params::lambert::Decay {
+        use crate::params::lambert::{Decay, DecayReplica};
+        let dt = 0.001;
+        let k = 6.0 * std::f64::consts::LN_10;
+        let e: Vec<f64> = (0..8000)
+            .map(|i| {
+                let t = (i as f64 + 0.5) * dt;
+                a1 * (-k * t / t1).exp() + a2 * (-k * t / t2).exp()
+            })
+            .collect();
+        let r = DecayReplica {
+            room: e.clone(),
+            receivers: [1.0, 0.5, 2.0]
+                .iter()
+                .map(|g| e.iter().map(|x| g * x).collect())
+                .collect(),
+        };
+        Decay {
+            time_step_s: dt,
+            replicas: vec![r.clone(), r],
+        }
+    }
+
+    /// Per receiver, the T20 the transport stores is read by the path T30's `receivers` uses,
+    /// with T20's range: on one exponential it is T30 at every receiver; on a double slope (a fast
+    /// decay, then a slower one) it sits on the fast part, shorter than T30 at every receiver.
+    #[test]
+    fn per_receiver_t20_is_t30_on_one_exponential_and_differs_on_a_double_slope() {
+        let arrivals = [Arrival::at(0.0); 3];
+        let one = two_slopes(1.0, 1.0, 0.0, 1.0);
+        let r20 = each_receiver(&arrivals, |i, a| one.receiver_t20(i, a));
+        let r30 = each_receiver(&arrivals, |i, a| one.receiver_t30(i, a));
+        // `receivers`' own path: `receiver_t30`, `[mean, se]`.
+        let receivers: Vec<[f64; 2]> = (0..3)
+            .map(|i| {
+                let o = one.receiver_t30(i, arrivals[i]).unwrap();
+                [o.mean, o.se]
+            })
+            .collect();
+        assert_eq!(r30, receivers.iter().map(|x| Some(*x)).collect::<Vec<_>>());
+        assert_eq!(r20.len(), 3);
+        for (a, b) in r20.iter().zip(&r30) {
+            let (a, b) = (a.unwrap(), b.unwrap());
+            assert!((a[0] - 1.0).abs() < 1e-3, "{a:?}");
+            assert!((a[0] / b[0] - 1.0).abs() < 1e-4, "{a:?} {b:?}");
+        }
+
+        let double = two_slopes(1.0, 0.5, 0.01, 2.0);
+        let r20 = each_receiver(&arrivals, |i, a| double.receiver_t20(i, a));
+        let r30 = each_receiver(&arrivals, |i, a| double.receiver_t30(i, a));
+        for (a, b) in r20.iter().zip(&r30) {
+            let (a, b) = (a.unwrap(), b.unwrap());
+            assert!(b[0] / a[0] > 1.1, "{a:?} {b:?}");
+            assert!(a[0] > 0.5 && b[0] < 2.0, "{a:?} {b:?}");
+        }
+        // A refused receiver is `None`, the others are still there.
+        let mut short = two_slopes(1.0, 1.0, 0.0, 1.0);
+        for r in &mut short.replicas {
+            r.receivers[1] = vec![0.0; 8000];
+        }
+        let r20 = each_receiver(&arrivals, |i, a| short.receiver_t20(i, a));
+        assert!(
+            r20[0].is_some() && r20[1].is_none() && r20[2].is_some(),
+            "{r20:?}"
+        );
+    }
+
+    /// The transport stores each receiver's T20 with its standard error, from the same rays as
+    /// its T30 and its receiver-mean T20: their mean over the receivers is that mean.
+    #[test]
+    fn the_transport_stores_each_receivers_t20_with_its_standard_error() {
+        let bed = BedFile::m8a();
+        let room = bed.room("5x4x3").unwrap();
+        let rays = bed.transport.rays_per_replica(0.4) / 64;
+        let a = t30(room, 0.4, None, &bed.transport, Some(rays)).unwrap();
+        assert_eq!(a.receivers_t20.len(), 3);
+        let r: Vec<[f64; 2]> = a.receivers_t20.iter().map(|x| x.unwrap()).collect();
+        assert!(r.iter().all(|x| x[1] > 0.0), "{r:?}");
+        let mean = r.iter().map(|x| x[0]).sum::<f64>() / 3.0;
+        assert!((mean - a.t20.unwrap()).abs() < 1e-12, "{mean} {:?}", a.t20);
+        for (x, y) in r.iter().zip(&a.receivers) {
+            assert!((x[0] / y[0] - 1.0).abs() < 0.03, "{x:?} {y:?}");
+            assert_ne!(x[0], y[0]);
+        }
+        // A report written before the field existed reads with it empty.
+        let mut v = serde_json::to_value(&a).unwrap();
+        v.as_object_mut().unwrap().remove("receivers_t20");
+        let old: TransportT30 = serde_json::from_value(v).unwrap();
+        assert!(old.receivers_t20.is_empty());
+        assert_eq!(old.receivers, a.receivers);
     }
 
     /// E4 before the bed runs: at the bed's own settings, the transport is the committed

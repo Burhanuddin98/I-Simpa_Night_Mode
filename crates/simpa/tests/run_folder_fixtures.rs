@@ -140,10 +140,22 @@ fn every_run_folder_fixture_gives_its_expected_verdict() {
             root.display().to_string(),
             "--json".into(),
         ];
-        if name.starts_with("stub_") {
+        let manifest = name.starts_with("stub_").then(|| {
             args.extend(["--solver-exe".into(), stub().display().to_string()]);
-        }
-        let o = simpa_run(&args);
+            // The stub is not the verified build (backlog 54's CLI half checks by default): a
+            // manifest that knows its own code sha256, under the solver name `run-folder` looks
+            // up, lets it verify like the real one does.
+            let exe_name = match solver {
+                "spps" => "spps.exe",
+                "tcr" => "classicalTheory.exe",
+                other => panic!("{name}: unknown solver '{other}'"),
+            };
+            manifest_with(&root, exe_name, &stub())
+        });
+        let o = match &manifest {
+            Some(m) => simpa_run_env(&args, &[("SIMPA_SOLVER_MANIFEST", m.as_os_str())]),
+            None => simpa_run(&args),
+        };
         let m: Value = match serde_json::from_str(&o.stdout) {
             Ok(m) => m,
             Err(e) => {

@@ -1,0 +1,1 @@
+Mechanism: blocked/late direct (delay>2h) makes the method start 0 dB and the fit one step after first energy, inside the ball's 2h direct spread; DRR 3-6 dB. Assumes harness passes nominal t_arrival=d/c, not the delayed one.

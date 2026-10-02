@@ -126,7 +126,7 @@ fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
 
 /// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
 /// typed `error`.
-const NULLABLE: [&str; 27] = [
+const NULLABLE: [&str; 34] = [
     ".crossings_per_particle",
     ".lambert_walls",
     ".uniform_lambert_walls",
@@ -154,6 +154,15 @@ const NULLABLE: [&str; 27] = [
     ".with_missing",
     ".low",
     ".high",
+    // STI's bands (results version 10): a band that cannot be read has no MTF or transfer, female
+    // speech has no 125 Hz, a refused speech has no MTI, and no noise is `null`.
+    ".mtf",
+    ".transfer_db",
+    ".speech_male_db",
+    ".speech_female_db",
+    ".noise_db",
+    ".mti_male",
+    ".mti_female",
 ];
 
 #[test]
@@ -317,6 +326,52 @@ fn text_mode_prints_the_unvalidated_banner_and_a_row_per_band_and_receiver() {
     assert!(o.stdout.contains("TR Sab s"), "{}", o.stdout);
 }
 
+/// Finding 2 (assay): an EDT that is not validated is marked in the text table too, in its own
+/// cell and with a legend; a validated one (a single band with its direct sound, in either mode)
+/// is not.
+#[test]
+fn text_mode_marks_every_edt_that_is_not_validated() {
+    let rep = json(&results(&fixture(SEATS_SPPS), true));
+    let o = results(&fixture(SEATS_SPPS), false);
+    assert_eq!(o.code, 0, "{o:#?}");
+    let (mut marked, mut plain) = (0, 0);
+    for line in o.stdout.lines() {
+        let t: Vec<&str> = line.split_whitespace().collect();
+        // A band row is "<f> Hz <spl> <edt> ..."; the aggregate row "aggregate <spl> <edt> ...".
+        let edt = match t.as_slice() {
+            [f, "Hz", _, edt, ..] if f.parse::<u32>().is_ok() => *edt,
+            ["aggregate", _, edt, ..] => *edt,
+            _ => continue,
+        };
+        let is_aggregate = t[0] == "aggregate";
+        if edt.starts_with("NE(") {
+            assert!(!edt.ends_with('*'), "{line}");
+        } else if is_aggregate {
+            assert!(edt.ends_with('*'), "an unvalidated EDT unmarked: {line}");
+            marked += 1;
+        } else {
+            assert!(!edt.ends_with('*'), "a validated EDT marked: {line}");
+            plain += 1;
+        }
+    }
+    assert!(marked > 0, "no marked aggregate EDT: {}", o.stdout);
+    // The JSON says the same beside `edt_s`.
+    for r in rep["spps"]["point_receivers"].as_array().unwrap() {
+        let a = &r["aggregate"]["parameters"];
+        assert_eq!(a["edt_validated"], false);
+        for b in r["bands"].as_array().unwrap() {
+            let p = &b["parameters"];
+            assert_eq!(p["edt_validated"], p["edt"]["validated"]);
+        }
+    }
+    assert!(
+        o.stdout.contains("* EDT not yet validated"),
+        "no legend: {}",
+        o.stdout
+    );
+    let _ = plain;
+}
+
 const EIGHT: [&str; 8] = [
     "spl_db", "edt_s", "t20_s", "t30_s", "c50_db", "c80_db", "d50", "ts_s",
 ];
@@ -350,7 +405,7 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
                 "{run} {q}"
             );
         }
-        let (mut values, mut noise, mut outside) = (0, 0, 0);
+        let (mut values, mut noise, mut outside, mut edt_values) = (0, 0, 0, 0);
         for r in rep["spps"]["point_receivers"].as_array().unwrap() {
             let bands = r["bands"].as_array().unwrap();
             assert_eq!(bands.len(), 2);
@@ -363,6 +418,38 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
                     let p = &b["parameters"][q];
                     let ok = p["value"].is_f64() || p["not_evaluable"]["code"].is_string();
                     assert!(ok, "{run} {} {q}: {p}", r["label"]);
+                    if q == "edt_s" {
+                        // M8b: EDT is EDT v2.1's, which judges its own noise and gives a value
+                        // with its range wherever it can (decision-log row 9), whatever the
+                        // run's particles; the calibration's domain does not gate it. Counted
+                        // apart; every EDT agrees with its `edt` object.
+                        let e = &b["parameters"]["edt"];
+                        assert_eq!(e["method"], "edt_v2.1", "{run}");
+                        // A band's EDT is validated in either mode (decision-log row 38): every
+                        // band of these runs had its direct sound and a 0.31 m receiver. The
+                        // summed-bands aggregate's never is.
+                        let single = !std::ptr::eq(b, &r["aggregate"]);
+                        let want = single;
+                        assert_eq!(e["validated"], want, "{run}: {e}");
+                        assert_eq!(
+                            b["parameters"]["edt_validated"], want,
+                            "{run}: edt_validated beside edt_s"
+                        );
+                        assert_eq!(e["validation_note"].is_string(), !want);
+                        if p["value"].is_f64() {
+                            assert_eq!(p["value"], e["value_s"], "{run}: {p} {e}");
+                            assert!(e["status"] == "ok" || e["status"] == "wide", "{run}: {e}");
+                            assert!(e["lo_s"].as_f64() < e["value_s"].as_f64(), "{run}: {e}");
+                            assert!(e["value_s"].as_f64() < e["hi_s"].as_f64(), "{run}: {e}");
+                            edt_values += 1;
+                        } else {
+                            let why = &p["not_evaluable"]["error"]["why"];
+                            assert_eq!(why["why"], "edt_refused", "{run}: {p}");
+                            assert_eq!(why["reason"], e["reason"], "{run}: {p}");
+                            assert_eq!(e["status"], "refused", "{run}: {e}");
+                        }
+                        continue;
+                    }
                     values += usize::from(p["value"].is_f64());
                     let why = &p["not_evaluable"]["error"]["why"];
                     // No SPPS receiver is refused for having no series.
@@ -391,11 +478,15 @@ fn every_band_of_the_committed_runs_has_all_eight_parameters_or_their_reasons() 
         }
         println!(
             "{run}: {values} values, {noise} refused for noise above the limit, {outside} \
-             outside the calibration"
+             outside the calibration, {edt_values} EDT values"
         );
         if run == SEATS_SPPS {
             assert_eq!(values, 0, "{run}");
             assert!(outside > 20, "{run}: {outside}");
+            assert!(
+                edt_values > 0,
+                "{run}: EDT v2.1 answers the 2,000-particle run"
+            );
         } else {
             assert!(values > 0, "{run}: the SPPS run has values");
         }

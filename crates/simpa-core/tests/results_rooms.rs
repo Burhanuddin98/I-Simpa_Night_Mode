@@ -70,7 +70,9 @@ fn pick<T: Clone>(values: &[T], all: &[u32], keep: &[u32]) -> Vec<T> {
 ///   reflection could arrive no earlier than 29 ms.
 pub fn level_box() -> Project {
     let t = tutorial_box();
-    let bands = BandSet::default();
+    // Pinned to the 6 octaves 125 Hz to 4 kHz gate M7(c) was measured on: the new-project
+    // default is 125 Hz to 8 kHz since decision row 43.
+    let bands = BandSet::octaves_125_to_4000();
     let n = bands.len();
     let walls = GroupId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0701);
     let absorber = MaterialId::from_u128(0x0c0b_e000_0000_4000_8000_0000_0000_0702);

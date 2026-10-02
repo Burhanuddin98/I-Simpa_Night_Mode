@@ -19,7 +19,7 @@ use super::expect::normalize;
 use super::manager::{ExitClass, Stage};
 use super::stats::ParticleStats;
 use super::verdict::{Outputs, Verdict};
-use crate::bed::pe::SolverCheck;
+use crate::bed::pe::{ManifestSource, SolverCheck};
 use crate::process::Outcome;
 use crate::schema::SolverKind;
 
@@ -124,6 +124,20 @@ pub fn hash_folder(dir: &Path) -> io::Result<Vec<FileRef>> {
     Ok(out)
 }
 
+/// Which manifest `solvers`' checks were made against: the embedded verified build
+/// (`solvers/manifest.json`) or `$SIMPA_SOLVER_MANIFEST`'s override file, a test-only lever
+/// (`crates/simpa/src/mesh_run.rs::solver_manifest`) that lets a run proceed against a stand-in
+/// but never read verified ([`crate::results::solver_build`], `solver_manifest_override`).
+/// Present exactly when `solvers` is (a check was asked for).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SolverManifestRecord {
+    pub source: ManifestSource,
+    /// The manifest file's own sha256 (`\n` line ends for the embedded one, so a checkout's
+    /// conversion does not change it).
+    pub sha256: String,
+}
+
 /// `run.json`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -147,6 +161,11 @@ pub struct RunManifest {
     /// the file, so those manifests are byte for byte what they were.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub solvers: Option<Vec<SolverCheck>>,
+    /// Where the `solvers` checks came from: present exactly when `solvers` is. `None` (absent
+    /// from the file) when `solvers` is `None` too, so a manifest written before this field
+    /// existed is byte for byte what it was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub solver_manifest: Option<SolverManifestRecord>,
     /// The arguments after the program name: always `["config.xml"]` (contract Part B,
     /// "Launch").
     pub argv: Vec<String>,

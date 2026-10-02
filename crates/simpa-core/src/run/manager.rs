@@ -41,8 +41,8 @@ pub use super::clock::{folder_stamp, rfc3339};
 use super::expect::{self, Expectation};
 use super::locate;
 use super::manifest::{
-    FILE_NAME, FileCounts, FileRef, MANIFEST_VERSION, MeshRef, RunManifest, RunSource, hash_folder,
-    sha256_bytes, sha256_file,
+    FILE_NAME, FileCounts, FileRef, MANIFEST_VERSION, MeshRef, RunManifest, RunSource,
+    SolverManifestRecord, hash_folder, sha256_bytes, sha256_file,
 };
 use super::stats::ParticleStats;
 use super::verdict::{Evidence, Outputs, Reason, Status, Verdict, codes, judge};
@@ -497,6 +497,10 @@ impl Record<'_> {
             solver: self.opts.solver,
             exe: self.exe,
             solvers: self.solvers,
+            solver_manifest: self.opts.verify.as_ref().map(|m| SolverManifestRecord {
+                source: m.source.clone(),
+                sha256: m.file_sha256.clone(),
+            }),
             argv: vec![SOLVER_ARGUMENT.to_string()],
             cwd: self.solve.display().to_string(),
             started: self.started,

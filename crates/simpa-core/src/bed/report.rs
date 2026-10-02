@@ -5,6 +5,10 @@
 //! and E1 to E7 hold (section 5.2). E5's cargo test is run by the gate
 //! (`tools/gates/m8a.ps1`); the bed holds its own part of it, Kuttruff as shipped within 0.6 % of
 //! the committed transport T30s in the eight air-off gated cells.
+//!
+//! **T20's twin of gate C** is judged beside it and reported in `t20`, its own verdict
+//! ([`T20Report`]): `pass`, `failures` and `needs_extension` above are T30's alone and never
+//! read it.
 
 use std::collections::BTreeMap;
 
@@ -229,6 +233,27 @@ pub struct Report {
     /// Failures of the reported cells and runs: information, never a failure of the bed.
     pub reported_notes: Vec<String>,
     pub files: Files,
+    /// T20's gate C, its own verdict, which `pass` does not read.
+    #[serde(default)]
+    pub t20: T20Report,
+}
+
+/// T20's twin of gate C over the bed: its own verdict, beside M8a's T30 one and never part of
+/// it (`docs/investigations/2026-09-29-m8a/SPEC.md` section 5.1's C, with T20 in place of T30).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct T20Report {
+    /// True exactly when T20's C passes in every gated cell, every T20 extension run is the
+    /// checked `spps.exe` (E1), E1 held before any run, and the bed file is M8a's matrix.
+    pub pass: bool,
+    pub limit: f64,
+    /// Gated cells by their T20 verdict.
+    pub verdicts: BTreeMap<String, usize>,
+    /// Every failed or unjudged T20 check of a gated cell, with its numbers.
+    pub failures: Vec<String>,
+    /// Gated cells whose T20 C is INCONCLUSIVE on seeds 1 to 10 and has not been extended.
+    pub needs_extension: Vec<String>,
+    /// The cells that are not gated: information, never a failure.
+    pub reported_notes: Vec<String>,
 }
 
 /// The JSON Schema of `report.json`.
@@ -242,6 +267,7 @@ pub fn limits_map() -> BTreeMap<String, f64> {
         ("a_kuttruff", limits::KUTTRUFF),
         ("b_seed_spread", limits::SEED_SPREAD),
         ("c_transport", limits::TRANSPORT),
+        ("c_t20_transport", limits::T20_TRANSPORT),
         ("d_tcr_eyring", limits::TCR_EYRING),
         ("e4_high_s", limits::HIGH_TOLERANCE_S),
         ("e5_kuttruff_against_high", limits::KUTTRUFF_AGAINST_HIGH),
@@ -541,6 +567,7 @@ pub fn evaluate(i: &Inputs) -> Report {
     if !pass && failures.is_empty() {
         failures.push("the bed has no gated cell".into());
     }
+    let t20 = t20_report(i, &cells, preconditions.e1.holds);
     let mut transports = Vec::new();
     let mut transport_errors = BTreeMap::new();
     for (k, t) in &i.transports.by_key {
@@ -571,7 +598,76 @@ pub fn evaluate(i: &Inputs) -> Report {
         transport_errors,
         reported_notes,
         files: Files::default(),
+        t20,
     }
+}
+
+/// [`T20Report`] over the judged `cells`; `e1` is whether E1 held.
+fn t20_report(i: &Inputs, cells: &[CellReport], e1: bool) -> T20Report {
+    let mut out = T20Report {
+        limit: limits::T20_TRANSPORT,
+        ..Default::default()
+    };
+    let spps = raw_of(i.solvers, "spps.exe");
+    let mut extension_runs_ok = true;
+    for c in cells {
+        let Some(t) = &c.t20 else {
+            if c.gated {
+                out.failures.push(format!("{}: T20 not judged", c.id));
+            }
+            continue;
+        };
+        let mut failures = t.failures.clone();
+        // E1 on T20's extension runs, which T30's E1 sees only when T30 extended too.
+        for s in t.extension.iter().flat_map(|x| x.seeds.iter()) {
+            let run = i
+                .reads
+                .spps
+                .get(&c.id)
+                .and_then(|m| m.get(&s.seed))
+                .and_then(|r| r.as_ref().ok());
+            if let Some(r) = run
+                && spps != Some(r.info.exe_sha256.as_str())
+            {
+                failures.push(format!(
+                    "{}: T20 E1: {} ran {} of sha256 {}, not the checked spps.exe",
+                    c.id, r.info.folder, r.info.exe, r.info.exe_sha256
+                ));
+                if c.gated {
+                    extension_runs_ok = false;
+                }
+            }
+        }
+        if c.gated {
+            *out.verdicts.entry(format!("{:?}", t.verdict)).or_default() += 1;
+            out.failures.extend(failures);
+            if t.extension.is_none()
+                && t.c
+                    .as_ref()
+                    .is_some_and(|c| c.verdict == Verdict::Inconclusive)
+            {
+                out.needs_extension.push(c.id.clone());
+            }
+        } else {
+            out.reported_notes.extend(failures);
+        }
+    }
+    let gated: Vec<&CellReport> = cells.iter().filter(|c| c.gated).collect();
+    out.pass = i.exploratory.is_empty()
+        && e1
+        && extension_runs_ok
+        && !gated.is_empty()
+        && gated
+            .iter()
+            .all(|c| c.t20.as_ref().is_some_and(|t| t.verdict == Verdict::Pass));
+    if !out.pass && out.failures.is_empty() {
+        out.failures.push(if gated.is_empty() {
+            "the bed has no gated cell".into()
+        } else {
+            "T20 does not pass: E1 or E7 (the bed's own preconditions) does not hold".into()
+        });
+    }
+    out
 }
 
 /// R11.
@@ -776,6 +872,9 @@ pub struct Summary {
     pub bytes: u64,
     pub failures: usize,
     pub rows: Vec<SummaryRow>,
+    /// `report.t20.pass`: T20's gate C, its own verdict. Its rows (`T20 ...`) follow T30's.
+    #[serde(default)]
+    pub t20_pass: bool,
 }
 
 /// `summary.json` of `report`, whose text has sha256 `report_sha256`.
@@ -882,6 +981,56 @@ pub fn summary(report: &Report, report_sha256: &str) -> Summary {
         }
     }
     let p = &report.preconditions;
+    let mut t20_rows = Vec::new();
+    for c in &report.cells {
+        let Some(t) = &c.t20 else { continue };
+        t20_rows.push(SummaryRow {
+            cell: c.id.clone(),
+            check: "T20 E6".into(),
+            gated: c.gated,
+            value: Some(t.e6.problems.len() as f64),
+            lo: None,
+            hi: None,
+            limit: Some(0.0),
+            verdict: if t.e6.holds { "pass" } else { "fail" }.into(),
+        });
+        if let Some(x) = &t.c {
+            t20_rows.push(SummaryRow {
+                cell: c.id.clone(),
+                check: format!("T20 C ({} seeds)", x.seeds.len()),
+                gated: c.gated,
+                value: Some(x.interval.mean),
+                lo: Some(x.interval.lo),
+                hi: Some(x.interval.hi),
+                limit: Some(x.limit),
+                verdict: v(x.verdict),
+            });
+        }
+        if let Some(a) = &t.kuttruff {
+            for b in &a.bands {
+                t20_rows.push(SummaryRow {
+                    cell: c.id.clone(),
+                    check: format!("T20 against Kuttruff {} Hz", b.freq_hz),
+                    gated: false,
+                    value: b.interval.map(|i| i.mean),
+                    lo: b.interval.map(|i| i.lo),
+                    hi: b.interval.map(|i| i.hi),
+                    limit: None,
+                    verdict: v(b.verdict),
+                });
+            }
+        }
+        t20_rows.push(SummaryRow {
+            cell: c.id.clone(),
+            check: "T20 cell".into(),
+            gated: c.gated,
+            value: None,
+            lo: None,
+            hi: None,
+            limit: None,
+            verdict: v(t.verdict),
+        });
+    }
     for (name, holds) in [
         ("E1", p.e1.holds),
         ("E2", p.e2.holds),
@@ -902,6 +1051,8 @@ pub fn summary(report: &Report, report_sha256: &str) -> Summary {
             verdict: if holds { "pass" } else { "fail" }.into(),
         });
     }
+    // After every T30 row, so that T30's rows keep their places.
+    rows.extend(t20_rows);
     Summary {
         pass: report.pass,
         exploratory: report.exploratory,
@@ -918,5 +1069,6 @@ pub fn summary(report: &Report, report_sha256: &str) -> Summary {
         bytes: report.files.bytes,
         failures: report.failures.len(),
         rows,
+        t20_pass: report.t20.pass,
     }
 }

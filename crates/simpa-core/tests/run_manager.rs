@@ -641,6 +641,8 @@ fn manifest_of(names: &[&str]) -> simpa_core::bed::pe::SolverManifest {
     simpa_core::bed::pe::SolverManifest {
         code_sha256: code,
         sha256: raw,
+        source: simpa_core::bed::pe::ManifestSource::Embedded,
+        file_sha256: String::new(),
     }
 }
 

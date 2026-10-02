@@ -8,7 +8,7 @@
 //! - **Ids** are UUIDs ([`GroupId`], [`MaterialId`], ...). They never reach a solver as counters:
 //!   solver integer ids are assigned at export. The one exception is [`Material::solver_id`], an
 //!   optional pinned id that lets a project imported from a solver mesh keep its `idMat` values.
-//! - **One band set per project** ([`BandSet`], default octave 125-4000 Hz, third-octave
+//! - **One band set per project** ([`BandSet`], default octave 125-8000 Hz, third-octave
 //!   selectable). Every per-band array (materials, sources, fitting zones, solver band switches)
 //!   has exactly one value per band, in the band set's ascending order. The solvers map arrays by
 //!   sorted position (`base_core_configuration.cpp:98-152`), so this is what keeps them aligned.

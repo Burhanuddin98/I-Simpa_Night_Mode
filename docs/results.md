@@ -254,11 +254,11 @@ short ("What M8 needs", "EDT and the time step").
 receiver sphere, so the direct sound is spread over `[(r − R)/c, (r + R)/c]`, `2R/c` long (the JSON
 gives it as `receiver_crossing_s`). When `(r − R)/c` falls in the bin before the one holding `r/c`,
 that bin holds the cap of the sphere the wavefront has crossed; once the cap holds 1 % of the
-largest bin, it is the onset bin and `r/c` lies after it. Then C50, C80, D50 and Ts are refused,
-`params_bad_arrival`; **SPL, EDT, T20 and T30 are not** (M7 follow-up: the M7 review's version
-refused all seven onset-relative parameters, T30 included). The decay times are read from the
-arrival with the cap counted in the direct sound, which is exact on the synthetic series of
-`params_arrival.rs`.
+largest bin, it is the onset bin and `r/c` lies after it. Every onset-relative parameter is then
+read from the arrival with the cap counted in the direct sound, which is exact on the synthetic
+series of `params_arrival.rs`. Until 2026-10-02 only the decay times were (M7 follow-up: the M7
+review's version refused all seven, T30 included), and C50, C80, D50 and Ts were refused
+`params_bad_arrival`; see "For M8" below.
 - **Measured over receiver positions** (`crates/simpa/tests/m8_evidence.rs`,
   `arrival_outside_the_onset_bin_over_receiver_positions`, run on purpose): tutorial 1 at upstream's
   defaults (150,000 particles, random mode, `R` = 0.31 m, seed 1), octave bands 125 Hz to 4 kHz, 200
@@ -273,36 +273,56 @@ arrival with the cap counted in the direct sound, which is exact on the syntheti
   measurement confirms at 10 ms. Where refused, the decay times at 150,000 particles were refused
   for their noise (and T30 for its range at 10 ms), never for the arrival (counted before the early
   reverberation was bounded, below; EDT at 10 ms can now also be refused `early_unresolved`).
-- **For M8:** at a step of 1 ms, C50, C80, D50 and Ts are refused at four receivers in five by this
+- **For M8:** at a step of 1 ms, C50, C80, D50 and Ts were refused at four receivers in five by this
   rule alone. With the spread given, the same curve that gives the decay times gives them exactly
-  on the synthetic series; refusing them is a choice, not a limit of the model. **Whose choice:**
-  the rule is kept by the M8 design decision 7 of 2026-09-25 00:20 (Jarvis, on Burhan's "what
+  on the synthetic series; refusing them was a choice, not a limit of the model. **Whose choice:**
+  the rule was kept by the M8 design decision 7 of 2026-09-25 00:20 (Jarvis, on Burhan's "what
   would be best for the people using this"; his to override). It is not Burhan's decision 4 of
   2026-09-24, which set the numeric limits (1/10 of a difference limen), as the first version of
-  this text said.
+  this text said. **Changed 2026-10-02** (branch `m8b-edt`, for Burhan to confirm): an arrival
+  after the onset bin is taken when the onset bin holds the leading edge of its spread, for C, D
+  and Ts as for the decay times (`docs/params.md`, "Direct-arrival detection"). Re-read without new
+  solves, M8's energetic runs at 1 ms (G1 to G7, 150,000 particles, `trans_epsilon` 7) went from
+  243 refusals `params_bad_arrival` per quantity, of 336 receiver-bands, to 12: one receiver in
+  G3 and one in G4 with `r/c` before the onset bin. Of the 231 freed, C50 came out `ok` in 150,
+  `wide` in 79 and refused for its noise in 2 (C80 129/83/19, D50 216/13/2, Ts 205/24/2). Every
+  value answered before is unchanged; its Monte-Carlo spread moves slightly (C80 by at most
+  0.006 dB), and 23 of 24 `monte_carlo_noise` refusals per quantity lifted, because resamples
+  whose onset bin moved onto the leading edge now answer instead of refusing.
 - On the level box (`dt` = 0.2 ms, `R` = 0.5 m, `2R/c` = 2.9 ms), the first bin with energy is bin 21
   at 2 m, which is `(r − R)/c` = 4.37 ms; the onset bin (the first within 20 dB of the largest) is
-  bin 22; `r/c` = 5.83 ms is bin 29. So `r/c` lies after the onset bin, and C50, C80, D50 and Ts
-  are refused, `params_bad_arrival`; SPL is not. The same at 4 m: bins 50, 51 and 58. The decay
+  bin 22; `r/c` = 5.83 ms is bin 29. So `r/c` lies after the onset bin, and until 2026-10-02 C50,
+  C80, D50 and Ts were refused, `params_bad_arrival`; SPL is not. The onset bin holds the leading
+  edge, so they are now read from the arrival; what they come to on a free field was not re-run.
+  The same at 4 m: bins 50, 51 and 58. The decay
   times are read from the arrival over the spread (bins 22 to 36 are the direct sound); a free
   field has nothing after it, so they are refused, `range_too_short` (T30 at 4 m
   `range_not_reached`), never measured from the direct sound's own shape (a run of the level box,
   seed 1, both receivers, 125 Hz and 4 kHz checked).
 
 **Complete series.** When SPPS's own statistics show that nothing arrives after a band's last
-bin, but what unfinished paths would have brought, the series is given to `params` as complete
-(`EnergySeries::complete`, `tests/params_complete.rs`): SPPS in random mode with `trans_epsilon`
-above 0, and at most one particle in a million remaining at the end of the calculation
-(`spps::REMAINING_UNFINISHED_SHARE`). A particle counts as remaining only when the time steps run
+bin, but what unfinished paths or the floor would have brought, the series is given to `params` as
+complete (`EnergySeries::complete`, `tests/params_complete.rs`): SPPS with `trans_epsilon` above 0,
+and at the end of the calculation at most one particle in a million remaining in random mode
+(`spps::REMAINING_UNFINISHED_SHARE`), none in energetic mode. A particle counts as remaining only when the time steps run
 out while it is alive (`spps/CalculationCore.cpp:49, 88-92`), and in random mode a particle is
 absorbed whole, never dwindles (`CalculationCore.cpp:62-67, 147-155, 288-300`). `trans_epsilon` 0
 drops every particle at its first surface in random mode too (`CalculationCore.cpp:305`).
 Energetic mode drops a particle once its energy falls below `10^-trans_epsilon` of its start
-(`sppsNantes.cpp:75`), energy no histogram holds, so it never claims completeness: `params` bounds
-its tail and its floor. The JSON reports the claim per band (`complete`); `SppsResults::
-band_complete`'s unit tests say no for energetic mode, more than one particle in a million
-remaining, and `trans_epsilon` 0 or NaN, and the committed energetic run (below) is refused
-completeness with every particle accounted for.
+(`sppsNantes.cpp:75`), counted as absorbed, not remaining (`CalculationCore.cpp:57-60, 88-107,
+305-310`). With none remaining, the histogram holds every path up to its drop, absorption or loss;
+what the dropped would still have brought is the floor's missing energy, which `params` bounds
+(`docs/params.md`, "A series that ended at its floor"), and the lost ones' share follows the decay
+("Lost particles", below). A remaining particle's energy is bounded by neither, so in energetic
+mode one is enough to leave the band incomplete, its tail bounded from the series. **Until
+2026-10-02 energetic mode never claimed completeness**, and the tail of a series that had ended at
+its floor was estimated from its last few particles, which read as "not decaying" at random: in
+round 2's G5 (150,000 particles, 1 ms, 10 s), 42 of 144 receiver-bands refused T20 `truncated`,
+every band of all three seeds having ended 1.4 to 2.5 s in with no particle remaining. The JSON
+reports the claim per band (`complete`); `SppsResults::band_complete`'s unit tests say no for a
+particle remaining in energetic mode, more than one in a million in random mode, and
+`trans_epsilon` 0 or NaN; the committed energetic run (below), every particle accounted for, is
+complete, and its floor still refuses T30 in all four receiver-bands.
 
 **The few left alive** (M7 follow-ups, second review). The first rule was "none remaining". At
 M8's counts SPPS leaves about one particle in 10⁸ to 10⁹ alive at the end in the 6×10×3 m room,
@@ -486,6 +506,16 @@ Receiver 1, at 150,000 particles (`cli_results.rs`, `tutorial1_parameters_beside
 3,300 crossings per band; SPL, C50, C80, D50 and Ts come out in most of the 27 bands, T20 carries
 5–22 % and T30 is refused for its noise or its range everywhere. Before the M7 rule, on the 2019
 run, T30 came out at 2.40 s at 1.6 kHz where TCR's Sabine time is 0.66 s.
+
+**Results version 9 (build F, 2026-10-02).** Two more values are shown `wide` instead of refused or
+`ok` (`docs/formats/results-json.md`, "Two more `wide` values"). A value refused only because more
+than 10 resamples fell short of a decay range the series itself passed is shown from its stand-ins,
+`refused_resamples` beside it (`docs/params.md`, "The stand-ins"): re-read without new solves, the
+bed's tested-G2-4101 T30 went from 48 refused to 48 `wide`, tested-G4-4101 from 18 `ok` and 30
+refused to 18 `ok` and 30 `wide`, the high-count truth inside every range. A C50, C80 or D50 whose
+bin straddling te can move it past its limit is `wide` with `straddle` (`docs/params.md`, "The bin
+straddling te"): on the same two runs at 1 ms, C50 `ok` went from 36 to 31 (G2) and from 42 to 8
+(G4, its short decays), D50 from 47 to 45 and 42 to 21, C80 from 46 to 46 and 42 to 27.
 
 ### Several sources, and the echogram per source
 
@@ -897,8 +927,9 @@ Once open, now decided:
 
 Still open:
 - **EDT.** M8 gates EDT at `dt` 1 ms (decision 2 of 00:20). At 10 ms it comes out only where the
-  early decay is slow against the step. At 1 ms, C50, C80, D50 and Ts are refused
-  `params_bad_arrival` at most receivers: the onset-bin rule, kept by decision 7 of 00:20.
+  early decay is slow against the step. At 1 ms, C50, C80, D50 and Ts were refused
+  `params_bad_arrival` at most receivers: the onset-bin rule, kept by decision 7 of 00:20, changed
+  2026-10-02 ("The arrival", "For M8").
   - The early check shipped here lets some wrong EDT and Ts values through at steps above 2 ms.
     This is finding 1 of `target/agents/t30-edt-diagnosis/resolution.md`: EDT is wrong in 43 to 64
     of 240 to 360 values at 5 to 8 ms.

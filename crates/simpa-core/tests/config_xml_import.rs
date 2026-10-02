@@ -104,6 +104,22 @@ fn tutorial1_fixture_is_the_import_of_upstream_tutorial1() {
     );
 }
 
+/// Decision-log row 38: a new project computes in energetic mode; an imported upstream
+/// configuration keeps its own method (tutorial 1's `computation_method="0"`, random).
+#[test]
+fn a_new_project_is_energetic_and_an_imported_random_config_stays_random() {
+    use simpa_core::schema::ComputationMethod;
+    assert_eq!(
+        Project::new("new").solvers.spps.method,
+        ComputationMethod::Energetic
+    );
+    assert!(read_text(UPSTREAM_SPPS).contains(r#"computation_method="0""#));
+    assert_eq!(
+        tutorial1_from_upstream().solvers.spps.method,
+        ComputationMethod::Random
+    );
+}
+
 #[test]
 fn import_is_deterministic() {
     let a = schema::to_json(&tutorial1_from_upstream());

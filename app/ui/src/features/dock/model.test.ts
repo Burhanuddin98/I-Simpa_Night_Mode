@@ -294,4 +294,18 @@ test('t38_8 the Runs row marks the solver build by the verdict runs_list sends, 
     buildMark(row(A, { solvers: [check('spps.exe', true), check('tetgen.exe', true)], solver_build: { status: 'verified' } })),
     { kind: 'verified', names: ['spps.exe', 'tetgen.exe'], reason: null },
   );
+  // A run made under $SIMPA_SOLVER_MANIFEST's override: every check matches (the override
+  // registers its own executables' hashes), but the core still says unverified, so the row must
+  // never show 'verified' for it. `solver_manifest_override` is not `solver_build_unrecorded`, so
+  // it buckets as 'unverified', not 'unrecorded', with the core's own code and text shown.
+  const override_ = reason('solver_manifest_override');
+  assert.deepEqual(
+    buildMark(
+      row(A, {
+        solvers: [check('spps.exe', true), check('tetgen.exe', true)],
+        solver_build: { status: 'unverified', reason: override_ },
+      }),
+    ),
+    { kind: 'unverified', names: ['spps.exe', 'tetgen.exe'], reason: override_ },
+  );
 });

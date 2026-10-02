@@ -13,6 +13,10 @@
 //!   0.5 %`; otherwise INCONCLUSIVE, which does not pass, and which may be extended once by seeds
 //!   11 to 20 and judged again on all twenty.
 //! - **D**, per band of each TCR run: `|T_TCR,Eyring / T_analytic,Eyring − 1| ≤ 0.5 %`.
+//! - **C's T20 twin** ([`CellT20`]): C with T20 (`parameters.t20_s`, read by section 4's rules)
+//!   against the transport's T20 from the same traced rays, 0.5 %, the same three outcomes and
+//!   one extension, in its own verdict, which the cell's `verdict` and `report.pass` never read.
+//!   T20 against Kuttruff is reported only.
 //!
 //! A mean over a subset of seeds or receiver-bands is never formed (SB-3): a cell in which any
 //! seed's T30 is refused for more than its noise is not judged (E6).
@@ -23,7 +27,7 @@ use serde::{Deserialize, Serialize};
 
 use super::file::{BedFile, Cell, Method, Room, TcrCell};
 use super::limits;
-use super::read::{SppsRead, T30, TcrRead};
+use super::read::{SppsRead, T20, T30, TcrRead};
 use super::stats::{self, Interval};
 use super::transport::{self, Transports};
 use crate::params::air::{Atmosphere, solver_air_absorption_per_m};
@@ -476,6 +480,55 @@ pub struct CellReport {
     pub verdict: Verdict,
     /// Every failed or unjudged check, with its numbers.
     pub failures: Vec<String>,
+    /// The T20 twin of gate C, in its own verdict: `verdict` and `failures` above are T30's
+    /// alone, and never read it.
+    #[serde(default)]
+    pub t20: Option<CellT20>,
+}
+
+/// One seed's T20 in a cell.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct SeedT20 {
+    pub seed: u32,
+    /// Why the run could not be read, when it could not.
+    pub error: Option<String>,
+    /// `[receiver][band]`: `parameters.t20_s`, by section 4's rules.
+    pub t20: Vec<Vec<T20>>,
+}
+
+/// The one extension (seeds 11 to 20) of an INCONCLUSIVE T20 C, when its runs are there.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct T20Extension {
+    pub seeds: Vec<SeedT20>,
+    /// T20's C on seeds 1 to 10, which was INCONCLUSIVE.
+    pub c_first: CheckC,
+}
+
+/// The T20 twin of a cell's gate C: `y_s = mean_{r,b} T20_{s,r,b} / T20_tr,b − 1`, `d` its mean,
+/// `SE² = var_s(y)/k + se_tr²`, against [`limits::T20_TRANSPORT`] with C's three outcomes and its
+/// one extension. T20 is read by section 4's rules; any refusal other than noise leaves the
+/// cell's T20 not judged, named. T20 against Kuttruff (A's statistic) is reported only: T20 and
+/// T30 legitimately differ by the decay's curvature.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct CellT20 {
+    pub seeds: Vec<SeedT20>,
+    /// The transport's T20 and its standard error per band (`None` where there is none).
+    pub transport_t20_s: Vec<Option<f64>>,
+    pub transport_t20_se_s: Vec<Option<f64>>,
+    /// Section 4 / E6 for T20: every seed's T20 a value or a noise refusal, in every
+    /// receiver-band.
+    pub e6: Precondition,
+    /// `T20_{s,r,b}` per source (`value`, `monte_carlo_noise`, ..., or the refusal).
+    pub sources: BTreeMap<String, usize>,
+    pub c: Option<CheckC>,
+    pub extension: Option<T20Extension>,
+    /// Reported, never gated: A's statistic with T20 in place of T30.
+    pub kuttruff: Option<CheckA>,
+    /// T20's C: `pass`, `fail`, `inconclusive` or `not_judged` (the cell's E2 or E3, T20's E6,
+    /// or no transport T20); `reported` in a cell that is not gated.
+    pub verdict: Verdict,
+    /// Every failed or unjudged T20 check, with its numbers.
+    pub failures: Vec<String>,
 }
 
 /// One TCR run.
@@ -725,8 +778,243 @@ pub struct CellContext<'a> {
 
 /// Judges one cell on the runs of `bed.seeds` in `reads` (and its extension's, when C is
 /// INCONCLUSIVE on them and they are there). A read of `replace` stands in for the seed it names
-/// (the say-NO N5).
+/// (the say-NO N5). T20's twin of C is judged after, on the same runs, into `t20`.
 pub fn evaluate_cell(
+    ctx: &CellContext,
+    cell: &Cell,
+    reads: Option<&BTreeMap<u32, Result<SppsRead, String>>>,
+    replace: Option<(u32, &Result<SppsRead, String>)>,
+) -> CellReport {
+    let mut report = evaluate_cell_t30(ctx, cell, reads, replace);
+    report.t20 = Some(evaluate_t20(ctx, cell, reads, replace, &report));
+    report
+}
+
+/// T20 against the transport's T20 per seed: `[seed][receiver][band]`.
+fn values_t20(runs: &[(u32, &SppsRead)]) -> Vec<Vec<Vec<f64>>> {
+    runs.iter()
+        .map(|(_, r)| {
+            r.t20
+                .iter()
+                .map(|rec| rec.iter().map(|t| t.t.unwrap_or(f64::NAN)).collect())
+                .collect()
+        })
+        .collect()
+}
+
+/// E6 for T20: every seed's T20 a value or a noise refusal, in each of the bed's receivers and
+/// bands.
+fn e6_t20(runs: &[(u32, &SppsRead)], freqs: &[i32], receivers: usize) -> Vec<String> {
+    let mut out = Vec::new();
+    for (s, r) in runs {
+        if r.t20.len() != receivers || r.t20.iter().any(|rec| rec.len() != freqs.len()) {
+            out.push(format!(
+                "seed {s}: T20 has {} receivers of {:?} bands, the bed's {receivers} of {}",
+                r.t20.len(),
+                r.t20.iter().map(Vec::len).collect::<Vec<_>>(),
+                freqs.len()
+            ));
+            continue;
+        }
+        for (ri, rec) in r.t20.iter().enumerate() {
+            for (bi, t) in rec.iter().enumerate() {
+                if !t.judged() {
+                    out.push(format!(
+                        "seed {s}, receiver R{ri:03}, {} Hz: T20 refused {}",
+                        freqs.get(bi).copied().unwrap_or(0),
+                        t.source
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
+fn seed_t20(seed: u32, r: &Result<SppsRead, String>) -> SeedT20 {
+    match r {
+        Ok(read) => SeedT20 {
+            seed,
+            error: None,
+            t20: read.t20.clone(),
+        },
+        Err(e) => SeedT20 {
+            seed,
+            error: Some(e.clone()),
+            t20: Vec::new(),
+        },
+    }
+}
+
+/// The T20 twin of gate C on the cell `t30` judged ([`CellT20`]).
+fn evaluate_t20(
+    ctx: &CellContext,
+    cell: &Cell,
+    reads: Option<&BTreeMap<u32, Result<SppsRead, String>>>,
+    replace: Option<(u32, &Result<SppsRead, String>)>,
+    t30: &CellReport,
+) -> CellT20 {
+    let bed = ctx.bed;
+    let empty = BTreeMap::new();
+    let reads = reads.unwrap_or(&empty);
+    let missing: Result<SppsRead, String> = Err("no run".into());
+    let freqs = &t30.bands_hz;
+    let room: Option<&Room> = bed.room(&cell.room);
+    let receivers = room.map_or(0, |r| r.receivers_m.len());
+    let mut runs = runs_of(reads, &bed.seeds, &missing);
+    if let Some((seed, r)) = replace {
+        for x in &mut runs {
+            if x.0 == seed {
+                x.1 = r;
+            }
+        }
+    }
+    let ok: Vec<(u32, &SppsRead)> = runs
+        .iter()
+        .filter_map(|(s, r)| r.as_ref().ok().map(|r| (*s, r)))
+        .collect();
+    let mut sources: BTreeMap<String, usize> = BTreeMap::new();
+    for (_, r) in &ok {
+        for t in r.t20.iter().flatten() {
+            *sources.entry(t.source.clone()).or_default() += 1;
+        }
+    }
+    let tr: Vec<Option<(f64, f64)>> = freqs
+        .iter()
+        .map(|&f| {
+            let air = bed_air(bed, cell.air, f64::from(f));
+            room.and_then(|room| ctx.transports.get(&room.name, cell.alpha, air))
+                .and_then(|t| t.as_ref().ok())
+                .and_then(|t| t.t20.zip(t.t20_se))
+        })
+        .collect();
+    let mut out = CellT20 {
+        seeds: runs.iter().map(|(s, r)| seed_t20(*s, r)).collect(),
+        transport_t20_s: tr.iter().map(|x| x.map(|x| x.0)).collect(),
+        transport_t20_se_s: tr.iter().map(|x| x.map(|x| x.1)).collect(),
+        e6: Precondition::of(e6_t20(&ok, freqs, receivers)),
+        sources,
+        c: None,
+        extension: None,
+        kuttruff: None,
+        verdict: Verdict::NotJudged,
+        failures: Vec::new(),
+    };
+    let id = &cell.id;
+    let mut not_judged = Vec::new();
+    if ok.is_empty() || room.is_none() {
+        not_judged.push("no run could be read".to_string());
+    }
+    for (name, p) in [("E2", &t30.e2), ("E3", &t30.e3), ("T20 E6", &out.e6)] {
+        if !p.holds {
+            not_judged.push(format!("{name}: {}", p.problems.join("; ")));
+        }
+    }
+    if !not_judged.is_empty() {
+        for why in not_judged {
+            out.failures.push(format!("{id}: T20 not judged: {why}"));
+        }
+        return finish_t20(out, cell.gated);
+    }
+    let seeds: Vec<u32> = ok.iter().map(|x| x.0).collect();
+    let values = values_t20(&ok);
+    if let Some(reference) = &t30.reference {
+        let kuttruff: Vec<Option<f64>> = reference.bands.iter().map(|b| b.kuttruff_s).collect();
+        out.kuttruff = Some(reported(check_a(
+            &values,
+            freqs,
+            &kuttruff,
+            "kuttruff_s",
+            limits::KUTTRUFF,
+        )));
+    }
+    let Some(tr) = tr.iter().copied().collect::<Option<Vec<(f64, f64)>>>() else {
+        let why: Vec<String> = freqs
+            .iter()
+            .filter_map(|&f| {
+                let air = bed_air(bed, cell.air, f64::from(f));
+                let t = room.and_then(|room| ctx.transports.get(&room.name, cell.alpha, air));
+                match t {
+                    Some(Ok(t)) if t.t20.is_some() => None,
+                    Some(Ok(t)) => Some(format!(
+                        "{f} Hz: {}",
+                        t.t20_error.as_deref().unwrap_or("no T20")
+                    )),
+                    Some(Err(e)) => Some(format!("{f} Hz: {e}")),
+                    None => Some(format!("{f} Hz: not traced")),
+                }
+            })
+            .collect();
+        out.failures.push(format!(
+            "{id}: T20 C not judged: no transport T20 ({})",
+            why.join("; ")
+        ));
+        return finish_t20(out, cell.gated);
+    };
+    let c10 = check_c(&seeds, &values, &tr, limits::T20_TRANSPORT);
+    if c10.verdict == Verdict::Inconclusive
+        && !bed.extension_seeds.is_empty()
+        && bed.extension_seeds.iter().any(|s| reads.contains_key(s))
+    {
+        let ext = runs_of(reads, &bed.extension_seeds, &missing);
+        let mut problems = e2_of(&ext);
+        let ext_ok: Vec<(u32, &SppsRead)> = ext
+            .iter()
+            .filter_map(|(s, r)| r.as_ref().ok().map(|r| (*s, r)))
+            .collect();
+        problems.extend(e6_t20(&ext_ok, freqs, receivers));
+        let mut all_runs: Vec<(u32, &SppsRead)> = ok.clone();
+        all_runs.extend(ext_ok.iter().copied());
+        problems.extend(e3_of(&all_runs, freqs, receivers));
+        let seeds20: Vec<u32> = all_runs.iter().map(|x| x.0).collect();
+        let c20 = if problems.is_empty() {
+            check_c(&seeds20, &values_t20(&all_runs), &tr, limits::T20_TRANSPORT)
+        } else {
+            out.failures.push(format!(
+                "{id}: T20 C's extension not judged: {}",
+                problems.join("; ")
+            ));
+            let mut c = c10.clone();
+            c.verdict = Verdict::NotJudged;
+            c
+        };
+        out.extension = Some(T20Extension {
+            seeds: ext.iter().map(|(s, r)| seed_t20(*s, r)).collect(),
+            c_first: c10,
+        });
+        out.c = Some(c20);
+    } else {
+        out.c = Some(c10);
+    }
+    let c = out.c.as_ref().expect("set above");
+    out.verdict = c.verdict;
+    if c.verdict != Verdict::Pass {
+        out.failures.push(format!(
+            "{id}: T20 C {:?} on {} seeds: d = {:+.3} %, interval [{:+.3}, {:+.3}] %, limit ±{:.1} %",
+            c.verdict,
+            c.seeds.len(),
+            100.0 * c.interval.mean,
+            100.0 * c.interval.lo,
+            100.0 * c.interval.hi,
+            100.0 * c.limit
+        ));
+    }
+    finish_t20(out, cell.gated)
+}
+
+/// A cell's T20 verdict as its gating has it: `reported`, its failures marked, when not gated.
+fn finish_t20(mut t: CellT20, gated: bool) -> CellT20 {
+    if !gated {
+        t.verdict = Verdict::Reported;
+        t.failures
+            .iter_mut()
+            .for_each(|f| f.insert_str(0, "(reported) "));
+    }
+    t
+}
+
+/// [`evaluate_cell`]'s T30 checks, as M8a judged them.
+fn evaluate_cell_t30(
     ctx: &CellContext,
     cell: &Cell,
     reads: Option<&BTreeMap<u32, Result<SppsRead, String>>>,
@@ -770,6 +1058,7 @@ pub fn evaluate_cell(
         reported: CellReported::default(),
         verdict: Verdict::NotJudged,
         failures: Vec::new(),
+        t20: None,
     };
     let (sources, share) = sources_of(&runs);
     report.reported.sources = sources;

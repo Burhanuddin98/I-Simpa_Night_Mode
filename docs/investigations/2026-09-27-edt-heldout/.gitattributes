@@ -1,0 +1,11 @@
+# PREREG.md:8 pins frozen/method.py as sha256 462c37cf..., which is its committed LF text checked out with
+# CRLF line ends (core.autocrlf=true on Grace). This keeps every checkout in that form, whatever the local
+# git settings, so the hash check never voids a run on a machine that would check it out as LF.
+frozen/** text eol=crlf
+# Round 2 (PREREG-2): frozen2/method.py is hashed as LF bytes, and harness2 is hashed by B1 as committed LF text.
+frozen2/** text eol=lf
+harness2/** text eol=lf
+# Round 2 files at the investigation root that B1 hashes: the same bytes on every checkout.
+/preview_pin.json text eol=lf
+/frozen2.sha256 text eol=lf
+/expected_dry_2.json text eol=lf

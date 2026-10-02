@@ -106,6 +106,10 @@
             "$ref": "#/$defs/CurvatureReport",
             "description": "As for a band."
           },
+          "dba": {
+            "$ref": "#/$defs/DbaReport",
+            "description": "The A-weighted level of the receiver's (or the source's) bands, from their SPL."
+          },
           "decay_curve": {
             "anyOf": [
               {
@@ -125,6 +129,7 @@
           "aggregate",
           "bands_hz",
           "parameters",
+          "dba",
           "curvature"
         ],
         "type": "object"
@@ -227,7 +232,7 @@
             "type": "object"
           },
           {
-            "description": "Given, such as the source–receiver distance over the speed of sound. For C50, C80, D50 and\nTs it must lie in the onset bin; otherwise those four are refused, `params_bad_arrival`.\nThe decay times are computed whatever the arrival ([`evaluate`]).",
+            "description": "Given, such as the source–receiver distance over the speed of sound. It must lie in the\nonset bin, or after it with the onset bin holding the leading edge of its spread\n(`(k₀+1)·dt > time_s − half_width_s`); otherwise C50, C80, D50 and Ts are refused,\n`params_bad_arrival`, and the decay times are computed as if no arrival were given\n([`evaluate`]).",
             "properties": {
               "arrival": {
                 "const": "known",
@@ -337,6 +342,78 @@
         ],
         "type": "object"
       },
+      "BandSti": {
+        "description": "What [`receiver_sti`] read from one band.",
+        "properties": {
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          },
+          "mtf": {
+            "description": "The room's MTF at [`MODULATION_HZ`], before the level corrections; `null` when the band\ncannot give one.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "mti_female": {
+            "description": "`MTI_k` of female speech; `null` at 125 Hz, or when the female STI is refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "mti_male": {
+            "description": "`MTI_k` of male speech; `null` when the male STI is refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "noise_db": {
+            "description": "The background noise applied, dB SPL; `null` for none.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "speech_female_db": {
+            "description": "The female speech level at the receiver, dB SPL; `null` at 125 Hz, which female speech has\nnot.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "speech_male_db": {
+            "description": "The male speech level at the receiver, dB SPL (Table A.4 at 60 dB(A) at 1 m, plus\n`transfer_db`).",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "transfer_db": {
+            "description": "The band's SPL less the same sources' free-field level at 1 m, dB: what carries the speech\nfrom 1 m on axis to the receiver. `null` when the band cannot give one.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "freq_hz"
+        ],
+        "type": "object"
+      },
       "CurvatureReport": {
         "description": "The curvature of a decay (`params::decay::curvature`), for M8 and M12 to decide what a curved\ndecay may show: its value with its Monte-Carlo standard deviation, and the flag.",
         "properties": {
@@ -360,6 +437,51 @@
         "required": [
           "percent",
           "limit_percent"
+        ],
+        "type": "object"
+      },
+      "DbaReport": {
+        "description": "The A-weighted level of a receiver's computed bands (`params::level::a_weighted`): the energy\nsum of each band's SPL plus its A-weighting. An aggregate of band levels, not of a series.",
+        "properties": {
+          "bands_hz": {
+            "description": "The bands summed (when refused, the bands it would have summed): every computed band\nwith an A-weighting pinned.",
+            "items": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "level_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "dB(A) re 20 µPa. Its `mc_sd` is the bands' propagated to first order, the bands\nindependent (SPPS runs each band's particles on its own): `√Σ (wᵢ·sdᵢ)²`, `wᵢ` band `i`'s\nshare of the weighted energy; `status` and range as SPL's (±2.5 `mc_sd`, `ok` within 1 dB).\nRefused, with that band's refusal, when any band's SPL is; `no_a_weight` when a band is not\nan octave centre from 125 Hz to 8 kHz, the bands whose weighting is pinned."
+          },
+          "method": {
+            "description": "[`DBA_METHOD`].",
+            "type": "string"
+          },
+          "unweighted_hz": {
+            "description": "The computed bands with no A-weighting pinned (not an octave centre from 125 Hz to 8 kHz):\nwhen there is one, `level_db` is refused `no_a_weight`. Usually empty.",
+            "items": {
+              "format": "int32",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "weights_db": {
+            "description": "Their A-weighting, dB, in `bands_hz`' order.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "method",
+          "level_db",
+          "bands_hz",
+          "weights_db",
+          "unweighted_hz"
         ],
         "type": "object"
       },
@@ -407,6 +529,73 @@
           "tolerance_db",
           "knots",
           "histogram_from_s"
+        ],
+        "type": "object"
+      },
+      "EdtReport": {
+        "description": "EDT as EDT v2.1 ([`edt`]) read it from the band's raw histogram: the value with its\nguaranteed range, or the reason it declined. `Parameters::edt_s` carries the same value, or the\nrefusal as `edt_refused`.",
+        "properties": {
+          "arrival_s": {
+            "description": "The direct sound's arrival the method was given, s, **the source's emission delay\nincluded** (rounded up to the next whole step); absent when not computed.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "hi_s": {
+            "description": "The range's upper end, s; absent when refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "lo_s": {
+            "description": "The range's lower end, s; absent when refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "method": {
+            "description": "[`edt::METHOD`].",
+            "type": "string"
+          },
+          "reason": {
+            "description": "A refusal's code (`params::edt::REFUSAL_REASONS`), or the method's own detail\n(`hw=…;fit=…;noise=…;tail=…;n=…`).",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/$defs/Status2",
+            "description": "`ok` (the range is inside the 5 % JND), `wide` (shown with its range, decision-log row 9)\nor `refused`."
+          },
+          "validated": {
+            "description": "Whether the method has passed its held-out test for what this EDT was read from: a single\nband, in either mode, with a receiver up to 1 m that the direct sound reached\n(`docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md`; energetic mode's one H3\nfailure was a receiver with no direct sound, decision-log row 38), and an aggregate never\n(the test read single bands).",
+            "type": "boolean"
+          },
+          "validation_note": {
+            "description": "Why `validated` is false.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value_s": {
+            "description": "The value, s; absent when refused.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "method",
+          "status",
+          "reason",
+          "validated"
         ],
         "type": "object"
       },
@@ -469,11 +658,60 @@
           {
             "description": "In the quantity's unit (the field name says it).",
             "properties": {
+              "hi": {
+                "description": "The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with\n`status`.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "lo": {
+                "description": "The range's lower end, in the same unit: `value − 2.5·mc_sd`\n(`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "mc_sd": {
                 "description": "The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);\n`null` for a value that does not come from a Monte-Carlo histogram, such as TCR's\nanalytic references.",
                 "format": "double",
                 "type": [
                   "number",
+                  "null"
+                ]
+              },
+              "refused_resamples": {
+                "description": "Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because\nmore than 10 of its 200 resamples refused it, but which at most 10 refuse when the same\nresamples are judged with their decay range on the series (the stand-ins,\n`params::noise`, \"The stand-ins\"): how many refused it as judged. Shown `wide`, `mc_sd`\nthe judged standard deviation (the stand-ins' when the judged resamples gave none), and\n`lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.",
+                "format": "uint",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/RangeStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "One of the eight parameters of an SPPS band, aggregate or per-source band\n(decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within\nthe quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB\nfor SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value\nis shown with its range rather than refused; a consumer that shows the value shows the\nrange beside it. Also `wide`, whatever the range's width, with `refused_resamples` or\n`straddle` (results version 9). Absent for every other value."
+              },
+              "straddle": {
+                "description": "Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,\nmoves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the\nvalue with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,\nwidened by `2.5·mc_sd` each way.",
+                "items": {
+                  "format": "double",
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": [
+                  "array",
                   "null"
                 ]
               },
@@ -605,6 +843,14 @@
           "settings"
         ],
         "type": "object"
+      },
+      "Gender": {
+        "description": "The talker: male or female speech (A.3.4, A.3.5).",
+        "enum": [
+          "male",
+          "female"
+        ],
+        "type": "string"
       },
       "MainBand": {
         "description": "One band row of `Main results.gabe`.",
@@ -1241,6 +1487,110 @@
               "detail"
             ],
             "type": "object"
+          },
+          {
+            "description": "EDT v2.1 ([`edt`]) refused: the histogram is outside the method's premises. Made by\n`core::results`, which runs the method on the raw histogram; `reason` is one of\n[`edt::REFUSAL_REASONS`].",
+            "properties": {
+              "reason": {
+                "type": "string"
+              },
+              "why": {
+                "const": "edt_refused",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "reason"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "A band summed into the A-weighted level has no A-weighting pinned here: it is not an octave\ncentre from 125 Hz to 8 kHz ([`level::A_WEIGHTS_DB`]). Made by [`level::a_weighted`].",
+            "properties": {
+              "freq_hz": {
+                "format": "int32",
+                "type": "integer"
+              },
+              "why": {
+                "const": "no_a_weight",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "freq_hz"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "STI ([`sti`]): an octave band the speech needs (125 Hz to 8 kHz; female 250 Hz to 8 kHz,\nIEC 60268-16:2011 Tables A.3 and A.4) is not among the run's bands.",
+            "properties": {
+              "freq_hz": {
+                "format": "int32",
+                "type": "integer"
+              },
+              "needed_hz": {
+                "items": {
+                  "format": "int32",
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "why": {
+                "const": "band_missing",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "freq_hz",
+              "needed_hz"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "STI ([`sti`]): an octave band the speech needs is in the run but cannot be read: its\nseries is refused or not complete, its SPL is refused, no source emits in it, or it has no\nreverberation time to check the run's length against.",
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "freq_hz": {
+                "format": "int32",
+                "type": "integer"
+              },
+              "why": {
+                "const": "band_refused",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "freq_hz",
+              "detail"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "STI ([`sti`]): the run's bands are not octave bands, which IEC 60268-16 defines it on.",
+            "properties": {
+              "bands_hz": {
+                "items": {
+                  "format": "int32",
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "why": {
+                "const": "not_octave_bands",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "bands_hz"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -1559,9 +1909,24 @@
             "$ref": "#/$defs/Evaluated",
             "description": "A fraction, 0 to 1 (shown as a percentage)."
           },
+          "edt": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/EdtReport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "EDT's status, range and validation (below `edt_s`'s value). Absent where EDT is not\ncomputed from a histogram: TCR, and the several-sources refusal."
+          },
           "edt_s": {
             "$ref": "#/$defs/Evaluated",
             "description": "s."
+          },
+          "edt_validated": {
+            "description": "Whether `edt_s` is a tested number: `edt.validated`, and false where there is no `edt`.\n`edt_s` itself stays a bare value for the consumers that read it, so this is its marker:\na consumer that prints or exports `edt_s` carries \"not yet validated\" wherever this is false\n(decision-log row 20).",
+            "type": "boolean"
           },
           "spl_db": {
             "$ref": "#/$defs/Evaluated",
@@ -1588,7 +1953,8 @@
           "c50_db",
           "c80_db",
           "d50",
-          "ts_s"
+          "ts_s",
+          "edt_validated"
         ],
         "type": "object"
       },
@@ -1877,6 +2243,45 @@
               "quantity"
             ],
             "type": "object"
+          },
+          {
+            "description": "Sound strength G ([`level`]).",
+            "properties": {
+              "quantity": {
+                "const": "strength",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The A-weighted level, dB(A) ([`level`]).",
+            "properties": {
+              "quantity": {
+                "const": "a_weighted",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The speech transmission index ([`sti`]).",
+            "properties": {
+              "quantity": {
+                "const": "sti",
+                "type": "string"
+              }
+            },
+            "required": [
+              "quantity"
+            ],
+            "type": "object"
           }
         ]
       },
@@ -1956,6 +2361,21 @@
         ],
         "type": "object"
       },
+      "RangeStatus": {
+        "description": "What a shown value's range says (decision-log rows 37 (3) and 39 (3)), as EDT's does\n(`params::edt::Status`): `ok` when its half-width, [`RANGE_Z`] standard deviations, is within\nthe quantity's [`jnd`], `wide` otherwise.",
+        "oneOf": [
+          {
+            "const": "ok",
+            "description": "The range is inside the difference limen.",
+            "type": "string"
+          },
+          {
+            "const": "wide",
+            "description": "The range is wider than the difference limen: the value is shown with it, not refused.",
+            "type": "string"
+          }
+        ]
+      },
       "Reason": {
         "additionalProperties": false,
         "description": "One reason, or one recorded WARN line.",
@@ -1986,7 +2406,7 @@
             "type": "number"
           },
           "complete": {
-            "description": "SPPS's statistics show that at most one particle in a million was still alive when the\nsteps ran out (random mode, `trans_epsilon` above 0: `spps::SppsResults::band_complete`),\nso the series is given to `params` as complete and no tail after its end is bounded.\nOtherwise `params` bounds that tail. **Lost particles, and those few left alive, do not\nmake a band incomplete:** the energy their unfinished paths would have brought is bounded\nseparately, `lost_share`.",
+            "description": "SPPS's statistics show that at most one particle in a million was still alive when the\nsteps ran out in random mode, none in energetic mode (`trans_epsilon` above 0:\n`spps::SppsResults::band_complete`), so the series is given to `params` as complete and no\ntail after its end is bounded; in energetic mode its floor still is (`floor_db`).\nOtherwise `params` bounds that tail. **Lost particles, and those few left alive, do not\nmake a band incomplete:** the energy their unfinished paths would have brought is bounded\nseparately, `lost_share`.",
             "type": "boolean"
           },
           "contributing_sources": {
@@ -2062,6 +2482,10 @@
             "format": "int32",
             "type": "integer"
           },
+          "g_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Sound strength G, dB ([`strength`]): `parameters.spl_db` less the free field's level at\n10 m of the same sources, `source_power_rho_c` over `4π·100 m²` against the same `p₀²`, so\nSPPS's `ρc` cancels (ISO 3382-1:2009 A.2.1, Eqs. A.1-A.3; not Eq. A.9's `+31 dB`, which\nassumes `ρc ≈ 400`). With several sources, every source's energy at the receiver against\nevery source's free field, both summed. SPL's `mc_sd`, `status` and range, shifted by the\nsame constant; refused as SPL is."
+          },
           "lost_follows_decay": {
             "description": "Energetic mode: what the lost particles would still have brought falls with the decay, so\n`lost_share` bounds the energy from every time on, not a lump added at the end.",
             "type": "boolean"
@@ -2116,6 +2540,7 @@
           "source_power_rho_c",
           "background_noise_db",
           "parameters",
+          "g_db",
           "curvature"
         ],
         "type": "object"
@@ -2428,6 +2853,10 @@
             "format": "int32",
             "type": "integer"
           },
+          "g_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "As for the receiver's band, against this source's own free field at 10 m: the band's\n`source_power_rho_c` times this source's share of the sources' power in the band."
+          },
           "noise_model": {
             "$ref": "#/$defs/NoiseModel"
           },
@@ -2456,6 +2885,7 @@
           "energy_pa2",
           "total_pa2",
           "parameters",
+          "g_db",
           "curvature"
         ],
         "type": "object"
@@ -2615,6 +3045,10 @@
               "array",
               "null"
             ]
+          },
+          "sti": {
+            "$ref": "#/$defs/StiReport",
+            "description": "The speech transmission index at the receiver (results version 10)."
           }
         },
         "required": [
@@ -2622,6 +3056,7 @@
           "folder",
           "bands",
           "aggregate",
+          "sti",
           "by_source",
           "per_source"
         ],
@@ -2753,6 +3188,92 @@
           "CANCELLED"
         ],
         "type": "string"
+      },
+      "Status2": {
+        "description": "What the method says about the value.",
+        "oneOf": [
+          {
+            "const": "ok",
+            "description": "The range is inside the 5 % JND.",
+            "type": "string"
+          },
+          {
+            "const": "wide",
+            "description": "A value with a range wider than the JND: shown with its range (decision-log row 9).",
+            "type": "string"
+          },
+          {
+            "const": "refused",
+            "description": "No value; `reason` says why.",
+            "type": "string"
+          }
+        ]
+      },
+      "StiReport": {
+        "description": "The speech transmission index at a point receiver (`params::sti`): an aggregate of its octave\nbands 125 Hz to 8 kHz, not a band.",
+        "properties": {
+          "bands": {
+            "description": "One per octave band of the run from 125 Hz to 8 kHz: the room's MTF, the transfer, the\nspeech and noise levels, and each speech's MTI.",
+            "items": {
+              "$ref": "#/$defs/BandSti"
+            },
+            "type": "array"
+          },
+          "female": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Female speech's, refused as male's but needing 250 Hz to 8 kHz only."
+          },
+          "male": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Male speech's STI, 0 to 1, with no `mc_sd` (`monte_carlo`); or why it is refused: a band\n125 Hz to 8 kHz missing (`band_missing`) or unreadable (`band_refused`), bands that are not\noctaves (`not_octave_bands`), several sources (`several_sources`), or a response shorter\nthan 1.6 s or half the reverberation time (`params_series_too_short`)."
+          },
+          "method": {
+            "description": "[`STI_METHOD`].",
+            "type": "string"
+          },
+          "modulation_hz": {
+            "description": "The modulation frequencies, Hz, the order of every band's `mtf`.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "monte_carlo": {
+            "description": "[`STI_NOISE_NOT_MODELLED`].",
+            "type": "string"
+          },
+          "noise": {
+            "description": "The noise applied: [`STI_NOISE_RECEIVER`] or [`STI_NOISE_NONE`].",
+            "type": "string"
+          },
+          "shown": {
+            "$ref": "#/$defs/Gender",
+            "description": "The speech whose STI is shown: male."
+          },
+          "speech_level_dba_at_1m": {
+            "description": "The test speech level, dB(A) at 1 m on axis (J.3).",
+            "format": "double",
+            "type": "number"
+          },
+          "weighting": {
+            "description": "[`STI_WEIGHTING`]: male is the value shown, and the STI is from a predicted response.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "weighting",
+          "shown",
+          "male",
+          "female",
+          "speech_level_dba_at_1m",
+          "noise",
+          "monte_carlo",
+          "modulation_hz",
+          "bands"
+        ],
+        "type": "object"
       },
       "Structure": {
         "description": "How a series' resamples are drawn, per quantity ([`calibration::Entry::structure`]).",
@@ -2917,6 +3438,10 @@
             "format": "int32",
             "type": "integer"
           },
+          "g_db": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Sound strength G, refused as SPL is (`no_time_series`)."
+          },
           "parameters": {
             "$ref": "#/$defs/Parameters",
             "description": "TCR writes steady-state levels, not an energy time series, so `core::params` has nothing\nto compute from: each of the eight is `params_not_evaluable`, `no_time_series`. Its SPL\ntoo, because TCR gives two totals, Sabine's and Eyring's, and neither is `params`' SPL of a\nseries; they are `total_sabine_db` and `total_eyring_db`."
@@ -2936,6 +3461,7 @@
           "total_sabine_db",
           "total_eyring_db",
           "parameters",
+          "g_db",
           "curvature"
         ],
         "type": "object"

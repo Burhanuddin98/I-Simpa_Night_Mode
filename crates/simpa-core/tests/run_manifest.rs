@@ -45,6 +45,7 @@ fn sample() -> RunManifest {
             sha256: sha256_bytes(b"exe"),
         },
         solvers: None,
+        solver_manifest: None,
         argv: vec!["config.xml".into()],
         cwd: r"C:\runs\20260923-191500-123-spps\solve".into(),
         started: "2026-09-23T19:15:00.123+02:00".into(),
@@ -156,6 +157,37 @@ fn the_solver_checks_are_written_only_when_made() {
     let json = checked.to_json();
     assert!(json.contains("\"solvers\": ["), "{json}");
     assert_eq!(RunManifest::from_json(&json).unwrap(), checked);
+}
+
+/// `solver_manifest` (M8b override fix): absent exactly when `solvers` is, present with the
+/// source and the manifest file's sha256 when a check was made, embedded or override.
+#[test]
+fn the_solver_manifest_is_written_only_alongside_a_check() {
+    let json = sample().to_json();
+    assert!(!json.contains("\"solver_manifest\""), "{json}");
+    let embedded = RunManifest {
+        solvers: Some(Vec::new()),
+        solver_manifest: Some(manifest::SolverManifestRecord {
+            source: simpa_core::bed::pe::ManifestSource::Embedded,
+            sha256: sha256_bytes(b"manifest"),
+        }),
+        ..sample()
+    };
+    let json = embedded.to_json();
+    assert!(json.contains(r#""source": "embedded""#), "{json}");
+    assert_eq!(RunManifest::from_json(&json).unwrap(), embedded);
+
+    let overridden = RunManifest {
+        solvers: Some(Vec::new()),
+        solver_manifest: Some(manifest::SolverManifestRecord {
+            source: simpa_core::bed::pe::ManifestSource::Override,
+            sha256: sha256_bytes(b"override"),
+        }),
+        ..sample()
+    };
+    let json = overridden.to_json();
+    assert!(json.contains(r#""source": "override""#), "{json}");
+    assert_eq!(RunManifest::from_json(&json).unwrap(), overridden);
 }
 
 #[test]

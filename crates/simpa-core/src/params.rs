@@ -14,6 +14,8 @@
 //! - [`lambert`]: a diffuse (Lambert) ray transport written from scratch: the mean free path and
 //!   `γ²` of a room from its geometry alone, and its decay, for M8's reference and cross-check.
 //! - [`din18041`]: the group-A target reverberation times.
+//! - [`level`]: sound strength G and the A-weighted level, over SPL.
+//! - [`sti`]: the speech transmission index (IEC 60268-16:2011) from a receiver's octave bands.
 //!
 //! Everything is a pure function. A value that cannot be computed honestly is a typed
 //! [`ParamError`] with a stable code, never a number and never a warning. Nothing here is shown
@@ -27,9 +29,12 @@ use serde::Serialize;
 pub mod air;
 pub mod decay;
 pub mod din18041;
+pub mod edt;
 pub mod lambert;
+pub mod level;
 pub mod noise;
 pub mod room;
+pub mod sti;
 
 /// The refusal codes. Each is a row of `docs/solver-contract.md`, Part B, "Parameter refusals"
 /// (`tests/reason_codes_docs.rs`).
@@ -103,6 +108,12 @@ pub enum Quantity {
     CentreTime,
     /// `100·(T30/T20 − 1)`.
     Curvature,
+    /// Sound strength G ([`level`]).
+    Strength,
+    /// The A-weighted level, dB(A) ([`level`]).
+    AWeighted,
+    /// The speech transmission index ([`sti`]).
+    Sti,
 }
 
 impl fmt::Display for Quantity {
@@ -116,6 +127,9 @@ impl fmt::Display for Quantity {
             Quantity::Definition { te_s } => write!(f, "D{}", ms(*te_s)),
             Quantity::CentreTime => write!(f, "Ts"),
             Quantity::Curvature => write!(f, "curvature"),
+            Quantity::Strength => write!(f, "G"),
+            Quantity::AWeighted => write!(f, "dB(A)"),
+            Quantity::Sti => write!(f, "STI"),
         }
     }
 }
@@ -305,6 +319,22 @@ pub enum NotEvaluable {
         /// The solver, and where its own values for the receiver are.
         detail: String,
     },
+    /// EDT v2.1 ([`edt`]) refused: the histogram is outside the method's premises. Made by
+    /// `core::results`, which runs the method on the raw histogram; `reason` is one of
+    /// [`edt::REFUSAL_REASONS`].
+    EdtRefused { reason: String },
+    /// A band summed into the A-weighted level has no A-weighting pinned here: it is not an octave
+    /// centre from 125 Hz to 8 kHz ([`level::A_WEIGHTS_DB`]). Made by [`level::a_weighted`].
+    NoAWeight { freq_hz: i32 },
+    /// STI ([`sti`]): an octave band the speech needs (125 Hz to 8 kHz; female 250 Hz to 8 kHz,
+    /// IEC 60268-16:2011 Tables A.3 and A.4) is not among the run's bands.
+    BandMissing { freq_hz: i32, needed_hz: Vec<i32> },
+    /// STI ([`sti`]): an octave band the speech needs is in the run but cannot be read: its
+    /// series is refused or not complete, its SPL is refused, no source emits in it, or it has no
+    /// reverberation time to check the run's length against.
+    BandRefused { freq_hz: i32, detail: String },
+    /// STI ([`sti`]): the run's bands are not octave bands, which IEC 60268-16 defines it on.
+    NotOctaveBands { bands_hz: Vec<i32> },
 }
 
 impl fmt::Display for NotEvaluable {
@@ -416,70 +446,7 @@ impl fmt::Display for NotEvaluable {
                 }
                 write!(f, "; the limit is {limit}. Use a finer time step")
             }
-            NotEvaluable::MonteCarloNoise {
-                value,
-                sd,
-                limit,
-                resamples,
-                refused_resamples,
-                particle_count,
-            } => {
-                write!(f, "monte_carlo_noise: {value} from the series, ")?;
-                match sd {
-                    Some(sd) => write!(
-                        f,
-                        "standard deviation {sd} (calibrated) over {resamples} resamples"
-                    )?,
-                    None => write!(f, "no standard deviation from {resamples} resamples")?,
-                }
-                write!(
-                    f,
-                    ", {refused_resamples} of which refuse it; the limit is {limit}."
-                )?;
-                match particle_count {
-                    ParticleCount::Named {
-                        particles: Some(n), ..
-                    } => write!(
-                        f,
-                        " Run at least {n} particles per source to bring it within its limit"
-                    ),
-                    ParticleCount::Named { factor, .. } => write!(
-                        f,
-                        " Run at least {factor:.3} times the particles to bring it within its limit"
-                    ),
-                    ParticleCount::Resampled {
-                        particles: Some(n), ..
-                    } => write!(
-                        f,
-                        " Run at least {n} particles per source: there its resamples would refuse \
-                         it seldom enough and its noise would be within its limit"
-                    ),
-                    ParticleCount::Resampled { multiple, .. } => write!(
-                        f,
-                        " Run at least {multiple} times the particles: there its resamples would \
-                         refuse it seldom enough and its noise would be within its limit"
-                    ),
-                    ParticleCount::BeyondResampled { multiple } => write!(
-                        f,
-                        " No particle count is named: at {multiple} times the particles its \
-                         resamples would still refuse it, or its noise would still be above its \
-                         limit, so more particles may not help"
-                    ),
-                    ParticleCount::ResampledNotConfirmed => write!(
-                        f,
-                        " No particle count is named: for this quantity the counts its resamples                          named were not borne out at a higher count"
-                    ),
-                    ParticleCount::ScalingNotConfirmed => write!(
-                        f,
-                        " No particle count is named: the calibration did not confirm that this \
-                         quantity's spread falls as 1/√N in this computation method"
-                    ),
-                    ParticleCount::NoStandardDeviation => write!(
-                        f,
-                        " With no standard deviation, no particle count can be named"
-                    ),
-                }
-            }
+            NotEvaluable::MonteCarloNoise { .. } => self.fmt_noise(f, None),
             NotEvaluable::NoiseUnknown { value, detail } => write!(
                 f,
                 "noise_unknown: {value} from the series, but its Monte-Carlo noise cannot be \
@@ -521,6 +488,147 @@ impl fmt::Display for NotEvaluable {
             NotEvaluable::NoTimeSeries { detail } => {
                 write!(f, "no_time_series: the solver wrote none: {detail}")
             }
+            NotEvaluable::EdtRefused { reason } => write!(
+                f,
+                "edt_refused: {reason}: {}",
+                match reason.as_str() {
+                    "no_energy" | "no_energy_after_arrival" => "no energy to read a decay from",
+                    "run_too_short" | "not_decaying_at_run_end" =>
+                        "the run ends before the decay does; run longer",
+                    "direct_only" | "step_too_coarse" =>
+                        "too few time steps between the direct \
+                         sound and -10 dB; use a finer time step",
+                    "too_few_particles" => "too few hits after -10 dB; use more particles",
+                    "receiver_too_large" =>
+                        "the receiver ball hides the start of the decay; use a smaller radius",
+                    _ => "outside the method's premises",
+                }
+            ),
+            NotEvaluable::NoAWeight { freq_hz } => write!(
+                f,
+                "no_a_weight: the {freq_hz} Hz band has no A-weighting pinned; dB(A) sums the \
+                 octave bands 125 Hz to 8 kHz only"
+            ),
+            NotEvaluable::BandMissing { freq_hz, needed_hz } => write!(
+                f,
+                "band_missing: the {freq_hz} Hz octave is not in the run; this STI needs the \
+                 octaves {needed_hz:?} Hz (IEC 60268-16:2011 Table A.3). Compute the octave \
+                 bands 125 Hz to 8 kHz"
+            ),
+            NotEvaluable::BandRefused { freq_hz, detail } => write!(
+                f,
+                "band_refused: the {freq_hz} Hz band cannot be used: {detail}"
+            ),
+            NotEvaluable::NotOctaveBands { bands_hz } => write!(
+                f,
+                "not_octave_bands: the run's bands {bands_hz:?} Hz are not octave bands, which \
+                 IEC 60268-16 defines STI on"
+            ),
+        }
+    }
+}
+
+impl NotEvaluable {
+    /// `monte_carlo_noise` in words, naming the quantity that was compared with the limit
+    /// (backlog 60: the old text printed a decay time's standard deviation in seconds beside its
+    /// relative limit, "sd 0.013 ... limit 0.025", and read as refusing a value within it).
+    /// `relative`: whether the limit is relative to the value (the decay times, and the curvature,
+    /// which carries their refusal); `None` when the quantity is not known.
+    fn fmt_noise(&self, f: &mut fmt::Formatter<'_>, relative: Option<bool>) -> fmt::Result {
+        let NotEvaluable::MonteCarloNoise {
+            value,
+            sd,
+            limit,
+            resamples,
+            refused_resamples,
+            particle_count,
+        } = self
+        else {
+            unreachable!("monte_carlo_noise only")
+        };
+        write!(f, "monte_carlo_noise: {value} from the series; ")?;
+        let limit_text = match relative {
+            Some(true) => format!("{} % of the value", 100.0 * limit),
+            Some(false) => format!("{limit} in the quantity's unit"),
+            None => format!("{limit} (relative to the value for EDT, T20 and T30)"),
+        };
+        match (sd, relative) {
+            (Some(sd), Some(rel)) => {
+                let measure = if rel { sd / value.abs() } else { *sd };
+                write!(f, "its calibrated standard deviation is {sd}")?;
+                if rel {
+                    write!(f, ", {:.2} % of the value", 100.0 * measure)?;
+                }
+                let side = if measure <= *limit { "within" } else { "above" };
+                write!(f, ", {side} its limit of {limit_text}")?;
+            }
+            (Some(sd), None) => write!(
+                f,
+                "its calibrated standard deviation is {sd}; the limit is {limit_text}"
+            )?,
+            (None, _) => write!(
+                f,
+                "it has no standard deviation: fewer than two of the {resamples} resamples \
+                     give a value (the limit is {limit_text})"
+            )?,
+        }
+        let allowed = noise::REFUSED_RESAMPLES_ALLOWED;
+        if *refused_resamples > allowed {
+            write!(
+                f,
+                "; {refused_resamples} of the {resamples} resamples refuse it, more than the \
+                     {allowed} allowed."
+            )?;
+        } else {
+            write!(
+                f,
+                "; {refused_resamples} of the {resamples} resamples refuse it (at most \
+                     {allowed} may)."
+            )?;
+        }
+        match particle_count {
+            ParticleCount::Named {
+                particles: Some(n), ..
+            } => write!(
+                f,
+                " Run at least {n} particles per source to bring it within its limit"
+            ),
+            ParticleCount::Named { factor, .. } => write!(
+                f,
+                " Run at least {factor:.3} times the particles to bring it within its limit"
+            ),
+            ParticleCount::Resampled {
+                particles: Some(n), ..
+            } => write!(
+                f,
+                " Run at least {n} particles per source: there its resamples would refuse \
+                         it seldom enough and its noise would be within its limit"
+            ),
+            ParticleCount::Resampled { multiple, .. } => write!(
+                f,
+                " Run at least {multiple} times the particles: there its resamples would \
+                         refuse it seldom enough and its noise would be within its limit"
+            ),
+            ParticleCount::BeyondResampled { multiple } => write!(
+                f,
+                " No particle count is named: at {multiple} times the particles its \
+                         resamples would still refuse it, or its noise would still be above its \
+                         limit, so more particles may not help"
+            ),
+            ParticleCount::ResampledNotConfirmed => write!(
+                f,
+                " No particle count is named: for this quantity the counts its resamples named \
+                 were not borne out at a higher count"
+            ),
+            ParticleCount::ScalingNotConfirmed => write!(
+                f,
+                " No particle count is named: the calibration did not confirm that this \
+                         quantity's spread falls as 1/√N in this computation method"
+            ),
+            ParticleCount::NoStandardDeviation => write!(
+                f,
+                " With no standard deviation, no particle count can be named"
+            ),
         }
     }
 }
@@ -649,6 +757,19 @@ impl fmt::Display for ParamError {
             ParamError::BadArrival { time_s, detail } => {
                 write!(f, "the arrival at {time_s} s: {detail}")
             }
+            ParamError::NotEvaluable {
+                quantity,
+                why: why @ NotEvaluable::MonteCarloNoise { .. },
+            } => {
+                write!(f, "{quantity}: ")?;
+                why.fmt_noise(
+                    f,
+                    Some(matches!(
+                        quantity,
+                        Quantity::Edt | Quantity::T20 | Quantity::T30 | Quantity::Curvature
+                    )),
+                )
+            }
             ParamError::NotEvaluable { quantity, why } => write!(f, "{quantity}: {why}"),
             ParamError::SeriesMismatch { detail } => write!(f, "{detail}"),
             ParamError::BadAir { field, value } => write!(f, "{field} = {value}"),
@@ -699,6 +820,46 @@ pub struct SolverFloor {
     pub alive_share: f64,
 }
 
+/// The share alive the floor's bound divides by ([`SolverFloor::alive_share`]) when the share of
+/// the emitted energy alive is known bin by bin: `alive[k]` at the end of bin `k`, and `values`
+/// the series, its onset at `from`. The bound takes what a dropped particle would still have
+/// brought, per unit of its energy, to be what the particles alive bring per unit of theirs:
+/// `S(k + 1) / alive[k]`. At the arrival that is `S(from) / alive[from]`, and in a room where every
+/// particle decays alike it stays so; in coupled rooms it grows as the particles left gather in
+/// the slow room, where the ones the floor drops are (`docs/params.md`, "A series that ended at its
+/// floor"). So the share is the smallest `alive[k] · S(from) / S(k + 1)` from `from` on, over the
+/// bins where the decay is still above the floor, `S(k + 1) ≥ 10^{floor_db/10} · S(from)`, and
+/// never more than `alive[from]`. `None` when `alive[from]` is not a positive number or
+/// `S(from)` is 0.
+pub fn floor_alive_share(values: &[f64], alive: &[f64], from: usize, floor_db: f64) -> Option<f64> {
+    let first = *alive.get(from)?;
+    if !(first.is_finite() && first > 0.0) {
+        return None;
+    }
+    // Backward sums from `from`: s[j] = S(from + j).
+    let tail = values.get(from..)?;
+    let mut s = vec![0.0; tail.len() + 1];
+    for j in (0..tail.len()).rev() {
+        s[j] = s[j + 1] + tail[j];
+    }
+    let s0 = s[0];
+    if s0 <= 0.0 {
+        return None;
+    }
+    let above = 10f64.powf(floor_db / 10.0) * s0;
+    let mut share = first;
+    for (j, &a) in alive.iter().enumerate().skip(from) {
+        let after = s.get(j - from + 1).copied().unwrap_or(0.0);
+        if after < above || after <= 0.0 {
+            break;
+        }
+        if a.is_finite() && a > 0.0 {
+            share = share.min(a * s0 / after);
+        }
+    }
+    Some(share)
+}
+
 /// One band's energy histogram: bin `k` holds the energy that arrived in `[k·dt, (k+1)·dt)`,
 /// in Pa² as SPPS writes a `.recp` value (`docs/params.md`, "The input").
 #[derive(Clone, Debug, PartialEq)]
@@ -720,6 +881,9 @@ pub struct EnergySeries {
     /// How the reverberation ran before the first bin wholly after the direct sound is not known
     /// ([`EnergySeries::with_early_reverberation_unresolved`]).
     early_unresolved: bool,
+    /// A resample standing in for another run of a series whose decay ranges were judged
+    /// ([`EnergySeries::with_range_judged_on_its_series`]).
+    range_judged: bool,
 }
 
 impl EnergySeries {
@@ -754,6 +918,7 @@ impl EnergySeries {
             lost_share: None,
             lost_follows_decay: false,
             early_unresolved: false,
+            range_judged: false,
         })
     }
 
@@ -775,6 +940,22 @@ impl EnergySeries {
     /// Whether [`EnergySeries::with_early_reverberation_unresolved`] was set.
     pub fn early_reverberation_unresolved(&self) -> bool {
         self.early_unresolved
+    }
+
+    /// A resample that stands in for another run of a series whose decay ranges were judged on the
+    /// series itself (`params::noise`, "The stand-ins"): [`decay`] does not refuse its EDT, T20 or
+    /// T30 `range_not_reached` again, and fits the part of the range its curve covers. A resample
+    /// drawn from the model ends in a few whole deposits, so its last bin with energy can sit above
+    /// a range's bottom that the series itself passed: what refuses it there is the stand-in's
+    /// ragged end, not the value's spread.
+    pub fn with_range_judged_on_its_series(mut self) -> Self {
+        self.range_judged = true;
+        self
+    }
+
+    /// Whether [`EnergySeries::with_range_judged_on_its_series`] was set.
+    pub fn range_judged_on_its_series(&self) -> bool {
+        self.range_judged
     }
 
     /// The series of a solver that lost some particles mid-path, whose unfinished paths can have
@@ -827,9 +1008,11 @@ impl EnergySeries {
     /// `-10·trans_epsilon`. `alive_share` is the share of the emitted energy the room still held
     /// when the direct sound arrived ([`SolverFloor`]). What the dropped particles would still
     /// have brought is bounded, `10^{floor_db/10}/alive_share` of `S(onset)`, and every quantity it
-    /// could move beyond its limit is refused (`docs/params.md`, "Missing energy"). A floor means
-    /// energy is missing, so the series is no longer complete. Refused, `params_bad_noise_input`,
-    /// when `floor_db` is not a finite number or `alive_share` not a finite positive one.
+    /// could move beyond its limit is refused (`docs/params.md`, "Missing energy"). The series
+    /// keeps its completeness, as with a lost share: a complete series with a floor is one that
+    /// ended at it, nothing arriving after its end but what the floor dropped. Refused,
+    /// `params_bad_noise_input`, when `floor_db` is not a finite number or `alive_share` not a
+    /// finite positive one.
     pub fn with_solver_floor(
         mut self,
         floor_db: f64,
@@ -851,7 +1034,6 @@ impl EnergySeries {
             db: floor_db,
             alive_share,
         });
-        self.complete = false;
         Ok(self)
     }
 
@@ -863,10 +1045,12 @@ impl EnergySeries {
     /// A series whose caller knows that no energy arrives after its last bin, refused as
     /// [`EnergySeries::new`]. Its tail is [`decay::Tail::Complete`]: nothing is estimated, added
     /// or refused for the energy after the end (`docs/params.md`, "Truncation"). `core::results`
-    /// claims it for SPPS in random mode when the run's statistics count at most one particle in a
-    /// million remaining at the end of the calculation (`results::spps::REMAINING_UNFINISHED_SHARE`;
-    /// those few are bounded with the lost ones, as unfinished paths); the claim changes numbers,
-    /// so it needs such evidence.
+    /// claims it for SPPS when the run's statistics show that nothing was alive at the end of the
+    /// calculation but what is bounded otherwise: in random mode at most one particle in a million
+    /// remaining (`results::spps::REMAINING_UNFINISHED_SHARE`; those few are bounded with the lost
+    /// ones, as unfinished paths), in energetic mode none, every particle dropped at the floor
+    /// ([`EnergySeries::with_solver_floor`], which bounds what it dropped), absorbed or lost. The
+    /// claim changes numbers, so it needs such evidence.
     pub fn complete(dt: f64, values: Vec<f64>) -> Result<Self, ParamError> {
         let mut s = Self::new(dt, values)?;
         s.complete = true;

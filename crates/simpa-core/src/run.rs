@@ -38,7 +38,7 @@ pub use manager::{
     RunError, RunEvent, RunOptions, RunReport, Stage, check_mesh_dir, create_run_folder,
     pre_launch, reused_mesh_check, run_folder, run_project,
 };
-pub use manifest::{FileCounts, FileRef, MeshRef, RunManifest, RunSource};
+pub use manifest::{FileCounts, FileRef, MeshRef, RunManifest, RunSource, SolverManifestRecord};
 pub use stats::{BandStats, ParticleStats, StatsError};
 pub use verdict::{
     DEFAULT_LOSS_LIMIT, Evidence, Outputs, Reason, Status, SurfaceValues, Verdict, judge,

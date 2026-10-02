@@ -1,0 +1,11 @@
+c01.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, and the implied volume (at most about 8e4 m^3 before allowance) is neither above 1e8 nor below d^3."}
+c02.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, and the implied volume (at most about 1.6e5 m^3) is neither above 1e8 nor below d^3."}
+c03.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, and the implied volume (at most about 2e4 m^3) is neither above 1e8 nor below d^3."}
+c04.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, the implied volume is diffuse-consistent, and the compound-Poisson particle counts are ordinary."}
+c05.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, the implied volume is diffuse-consistent, and the compound-Poisson particle counts are ordinary."}
+c06.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, and the implied volume is neither above 1e8 nor below d^3."}
+c07.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, and the implied volume is diffuse-consistent; the 0.2 ms step is fine."}
+c08.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, and the implied volume is diffuse-consistent; the 0.25 ms step and 2-10 ms delay are fine."}
+c09.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits, and the implied volume is diffuse-consistent; the 0.5-3 ms delay is fine."}
+c10.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits and the implied volume is diffuse-consistent; the run length of 1.2-1.6 times T60 is just a run-length choice."}
+c11.json: {"verdict": "plausible", "reasons": "T60 and DRR are inside the hard limits and the implied volume is diffuse-consistent; a run length of 2.5-5 times T60 is fine."}

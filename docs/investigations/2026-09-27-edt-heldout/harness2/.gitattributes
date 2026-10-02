@@ -1,0 +1,9 @@
+# The harness's text files keep LF in every checkout. corpus.py writes its JSON with LF, and T22 holds
+# those files to a fresh run byte for byte. The raw sha256 of each file corpus.py reads from here goes
+# into weak_spots.json's sources. Binary files (fixtures) are not named, so nothing converts them.
+*.py text eol=lf
+*.json text eol=lf
+*.jsonl text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+.gitattributes text eol=lf

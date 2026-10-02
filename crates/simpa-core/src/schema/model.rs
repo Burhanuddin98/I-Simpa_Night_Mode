@@ -956,20 +956,30 @@ pub struct SppsSettings {
 }
 
 impl SppsSettings {
-    /// Upstream's GUI defaults (`e_core_sppscore.h`, `e_core_core_config.h`).
+    /// Upstream's GUI defaults (`e_core_sppscore.h`, `e_core_core_config.h`), except:
+    /// `duration_s`, a fixed 10 s, not upstream's 2 s (decision row 36, `docs/decision-log.md`);
+    /// `time_step_s`, 1 ms, not upstream's 10 ms (decision row 11: every acoustic parameter is
+    /// validated at 1 ms); `method`, energetic, not upstream's random (decision row 38: random
+    /// mode kills particles by chance, so its decays run out of particles long before T20 and
+    /// T30 can be read); and `extinction_exponent`, 7, not upstream's 5 (decision row 41: at 5
+    /// energetic particles are dropped before the floor clears T30 in most rooms, and T30 reads
+    /// about 0.4 % short where it answers; `docs/investigations/2026-10-02-eps-cost/RESULT.md`).
+    /// An imported legacy project with no `duree_simulation`, `pasdetemps`, `computation_method`
+    /// or `trans_epsilon` still keeps upstream's actual 2 s, 10 ms, random and 5
+    /// (`geometry::import::proj::read_solvers`); a `config.xml` always names its own.
     pub fn for_bands(n_bands: usize) -> Self {
         SppsSettings {
             particles_per_source: 150_000,
             particles_saved: 0,
-            duration_s: F64::new(2.0),
-            time_step_s: F64::new(0.01),
+            duration_s: F64::new(10.0),
+            time_step_s: F64::new(0.001),
             random_seed: 0,
-            method: ComputationMethod::Random,
+            method: ComputationMethod::Energetic,
             air_absorption: true,
             fittings: true,
             direct_field_only: false,
             transmission: true,
-            extinction_exponent: F64::new(5.0),
+            extinction_exponent: F64::new(7.0),
             receiver_radius_m: F64::new(0.31),
             sound_map: SoundMapQuantity::Intensity,
             sound_maps_per_band: true,
