@@ -250,6 +250,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::model_import,
             commands::project_save,
             commands::edit_apply,
+            commands::edit_reband,
             commands::edit_undo,
             commands::edit_redo,
             commands::scene_mesh,

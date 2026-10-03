@@ -18,13 +18,14 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use simpa_core::geometry::check;
 use simpa_core::geometry::import::{self, ImportOptions, Unit, Up};
-use simpa_core::schema::{self, F64, History, LoadError, Op, OpError, Project};
+use simpa_core::schema::{self, BandKind, BandSet, F64, History, LoadError, Op, OpError, Project, SolverKind};
 use simpa_core::validate::{self, Context};
 
 use crate::events::LineClass;
 use crate::guard::{CmdError, CmdResult};
 use crate::scene::{
-    self, CheckSummary, EditOutcome, IssueKey, IssueSeverity, LogLine, SceneState, UiIssue,
+    self, CheckSummary, EditOutcome, IssueKey, IssueSeverity, LogLine, SceneState, SolverIssues,
+    UiIssue,
 };
 
 /// What the chrome shows about the open project: names and counts, never an acoustic value.
@@ -97,6 +98,8 @@ pub struct Session {
     check: Option<CheckCache>,
     /// The validator's issues on the current state, with their UI codes.
     issues: Vec<UiIssue>,
+    /// The issues of the rules about one solver's run, per solver.
+    solver_issues: SolverIssues,
     /// Console lines not yet returned in a [`SceneState`].
     lines: Vec<LogLine>,
 }
@@ -177,6 +180,7 @@ impl Session {
         let Some(p) = self.project.as_ref() else {
             self.check = None;
             self.issues.clear();
+            self.solver_issues = SolverIssues::default();
             return;
         };
         if p.geometry.faces.is_empty() {
@@ -202,6 +206,7 @@ impl Session {
             .iter()
             .map(|i| scene::ui_issue(p, i))
             .collect();
+        self.solver_issues = SolverIssues::of(p);
     }
 
     fn replace(
@@ -287,6 +292,12 @@ impl Session {
         let p = self.project.as_ref()?;
         let check = self.check.as_ref().map(|c| &c.summary);
         Some(scene::run_blockers(p, check, &self.issues))
+    }
+
+    /// What blocks a run of `solver` beside [`Session::project_blockers`]: its own errors
+    /// (`no_band_computed`), as UI codes. Empty with no project open.
+    pub fn solver_blockers(&self, solver: SolverKind) -> Vec<String> {
+        self.solver_issues.blockers(solver)
     }
 
     /// The project in its canonical file form (`schema::to_json`).
@@ -382,6 +393,7 @@ impl Session {
             view: scene::view(p),
             groups: scene::group_stats(p),
             run_blockers: scene::run_blockers(p, check.as_ref(), &self.issues),
+            solver_issues: self.solver_issues.clone(),
             check,
             issues: self.issues.clone(),
             lines: std::mem::take(&mut self.lines),
@@ -566,6 +578,9 @@ impl Session {
             self.refresh();
         } else {
             self.issues = after;
+            if let Some(p) = self.project.as_ref() {
+                self.solver_issues = SolverIssues::of(p);
+            }
         }
         self.lines.extend(warnings);
         Ok(EditOutcome {
@@ -573,6 +588,40 @@ impl Session {
             refusals: Vec::new(),
             state: self.state()?,
         })
+    }
+
+    /// A band preset (PQ3, C26): the project moved onto every band of `kind` (`octave` or
+    /// `third_octave`) from `lowest_hz` to `highest_hz`, by [`Project::rebanded`] (each new band
+    /// takes every per-band value of the nearest current band), through the checked apply as one
+    /// undoable edit. The UI cannot build the per-band data itself.
+    pub fn edit_reband(
+        &mut self,
+        kind: &str,
+        lowest_hz: u32,
+        highest_hz: u32,
+    ) -> CmdResult<EditOutcome> {
+        let project = self.project.as_ref().ok_or_else(no_project)?;
+        let kind = match kind {
+            "octave" => BandKind::Octave,
+            "third_octave" => BandKind::ThirdOctave,
+            other => {
+                return Err(CmdError::new(
+                    "REBAND_KIND",
+                    format!("unknown band kind '{other}': octave or third_octave"),
+                ));
+            }
+        };
+        let range_error = || {
+            CmdError::new(
+                "REBAND_RANGE",
+                format!(
+                    "{lowest_hz} Hz to {highest_hz} Hz is not a range of nominal {kind:?}                      frequencies, lowest first"
+                ),
+            )
+        };
+        let bands = BandSet::range(kind, lowest_hz, highest_hz).ok_or_else(range_error)?;
+        let op = project.rebanded(bands).ok_or_else(range_error)?;
+        self.edit_apply(&op.to_json())
     }
 
     pub fn edit_undo(&mut self) -> CmdResult<SceneState> {
@@ -1120,5 +1169,178 @@ mod m10_tests {
         assert_eq!(err.code, "OP_IN_USE");
         assert_eq!(s.json().unwrap(), before);
         assert_eq!(s.info().unwrap().undo_depth, 0);
+    }
+}
+
+/// PQ3, the Simulate settings editor (docs/investigations/2026-10-03-pq3/PLAN.md): the refusals
+/// it shows inline, the per-solver blocker, and the band presets as one undoable edit.
+#[cfg(test)]
+mod pq3_tests {
+    use super::*;
+    use simpa_core::schema::{BandKind, SolverKind};
+
+    fn repo(rel: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(rel)
+    }
+
+    fn opened(rel: &str) -> Session {
+        let mut s = Session::default();
+        s.scene_open(&repo(rel)).unwrap();
+        s
+    }
+
+    fn project(s: &Session) -> &Project {
+        s.project.as_ref().unwrap()
+    }
+
+    const BOX: &str = "tests/fixtures/rooms/tutorial1_box.simpa";
+
+    /// Turning every band off is an edit like any other (the project may hold it); what it
+    /// blocks is a run of that solver, and only that solver.
+    #[test]
+    fn every_band_off_is_applied_and_blocks_only_that_solver() {
+        let mut s = opened(BOX);
+        let n = project(&s).bands.len();
+        let mut last = None;
+        for band in 0..n {
+            let op = Op::SetBandComputed {
+                solver: SolverKind::Spps,
+                band,
+                computed: false,
+            };
+            let out = s.edit_apply(&op.to_json()).unwrap();
+            assert!(out.applied, "band {band}: {:?}", out.refusals);
+            last = Some(out.state);
+        }
+        let st = last.unwrap();
+        let spps: Vec<&str> = st.solver_issues.spps.iter().map(|i| i.code.as_str()).collect();
+        assert_eq!(spps, ["NO_BAND_COMPUTED"]);
+        assert_eq!(st.solver_issues.spps[0].rule, "no_band_computed");
+        assert_eq!(st.solver_issues.spps[0].path, "/solvers/spps/bands_computed");
+        assert!(st.solver_issues.tcr.is_empty());
+        assert!(!st.run_blockers.iter().any(|b| b == "NO_BAND_COMPUTED"));
+        assert_eq!(s.solver_blockers(SolverKind::Spps), ["NO_BAND_COMPUTED"]);
+        assert!(s.solver_blockers(SolverKind::Tcr).is_empty());
+        // One band back on clears it; so does undo.
+        let out = s
+            .edit_apply(
+                &Op::SetBandComputed {
+                    solver: SolverKind::Spps,
+                    band: 2,
+                    computed: true,
+                }
+                .to_json(),
+            )
+            .unwrap();
+        assert!(out.state.solver_issues.spps.is_empty());
+        s.edit_undo().unwrap();
+        assert_eq!(s.solver_blockers(SolverKind::Spps), ["NO_BAND_COMPUTED"]);
+        s.edit_undo().unwrap();
+        assert!(s.solver_blockers(SolverKind::Spps).is_empty());
+    }
+
+    fn set_air(s: &mut Session, t: f64, h: f64, pa: f64) -> EditOutcome {
+        let mut env = project(s).environment.clone();
+        env.temperature_c = F64::new(t);
+        env.relative_humidity_percent = F64::new(h);
+        env.pressure_pa = F64::new(pa);
+        s.edit_apply(&Op::SetEnvironment { environment: env }.to_json())
+            .unwrap()
+    }
+
+    #[test]
+    fn non_physical_air_is_refused_inline_and_outside_the_formula_is_a_warning() {
+        let mut s = opened(BOX);
+        let before = s.json().unwrap();
+        for (t, h, pa, field) in [
+            (20.0, 120.0, 101_325.0, "relative_humidity_percent"),
+            (20.0, 50.0, 0.0, "pressure_pa"),
+            (-274.0, 50.0, 101_325.0, "temperature_c"),
+        ] {
+            let out = set_air(&mut s, t, h, pa);
+            assert!(!out.applied);
+            assert_eq!(out.refusals.len(), 1, "{:?}", out.refusals);
+            assert_eq!(out.refusals[0].code, "ATMOSPHERE_INVALID");
+            assert_eq!(out.refusals[0].path, format!("/environment/{field}"));
+            assert_eq!(s.json().unwrap(), before, "refused: unchanged");
+        }
+        let out = set_air(&mut s, 60.0, 50.0, 101_325.0);
+        assert!(out.applied, "a warning is not a refusal: {:?}", out.refusals);
+        let warned: Vec<&UiIssue> = out
+            .state
+            .issues
+            .iter()
+            .filter(|i| i.code == "ATMOSPHERE_OUTSIDE_FORMULA_RANGE")
+            .collect();
+        assert_eq!(warned.len(), 1);
+        assert_eq!(warned[0].severity, IssueSeverity::Warning);
+        assert!(out.state.run_blockers.is_empty(), "{:?}", out.state.run_blockers);
+    }
+
+    /// A preset is one edit: `Project::rebanded` in the core, applied through the checked apply,
+    /// and one undo gives back the project bit for bit.
+    #[test]
+    fn a_band_preset_is_one_edit_and_one_undo_restores_it_bit_for_bit() {
+        let mut s = opened(BOX);
+        let start = s.json().unwrap();
+        let original = project(&s).clone();
+        let out = s.edit_reband("third_octave", 50, 20_000).unwrap();
+        assert!(out.applied, "{:?}", out.refusals);
+        let p = project(&s);
+        assert_eq!(p.bands.kind, BandKind::ThirdOctave);
+        assert_eq!(p.bands.len(), 27);
+        assert_eq!(p.solvers.spps.bands_computed.len(), 27);
+        assert_eq!(p.materials[0].absorption.len(), 27);
+        assert_eq!(out.state.info.undo_depth, 1);
+        assert!(out.state.info.dirty);
+        let st = s.edit_undo().unwrap();
+        assert_eq!(st.info.undo_depth, 0);
+        assert_eq!(project(&s), &original);
+        assert_eq!(s.json().unwrap(), start);
+        // Redo is the same preset again.
+        s.edit_redo().unwrap();
+        assert_eq!(project(&s).bands.len(), 27);
+        // Every preset the editor offers applies on this project.
+        for (kind, lo, hi, n) in [
+            ("octave", 63, 16_000, 9),
+            ("octave", 125, 4_000, 6),
+            ("third_octave", 50, 20_000, 27),
+            ("third_octave", 100, 5_000, 18),
+            ("octave", 125, 8_000, 7),
+        ] {
+            let out = s.edit_reband(kind, lo, hi).unwrap();
+            assert!(out.applied, "{kind} {lo}-{hi}: {:?}", out.refusals);
+            assert_eq!(project(&s).bands.len(), n, "{kind} {lo}-{hi}");
+        }
+        while s.info().unwrap().can_undo {
+            s.edit_undo().unwrap();
+        }
+        assert_eq!(s.json().unwrap(), start);
+    }
+
+    #[test]
+    fn a_band_range_that_is_not_one_is_refused_and_nothing_changes() {
+        let mut s = opened(BOX);
+        let before = s.json().unwrap();
+        assert_eq!(s.edit_reband("fifth", 125, 4000).unwrap_err().code, "REBAND_KIND");
+        assert_eq!(
+            s.edit_reband("octave", 100, 4000).unwrap_err().code,
+            "REBAND_RANGE"
+        );
+        assert_eq!(
+            s.edit_reband("octave", 4000, 125).unwrap_err().code,
+            "REBAND_RANGE"
+        );
+        assert_eq!(s.json().unwrap(), before);
+        assert_eq!(s.info().unwrap().undo_depth, 0);
+        assert_eq!(
+            Session::default()
+                .edit_reband("octave", 125, 4000)
+                .unwrap_err()
+                .code,
+            "NO_PROJECT"
+        );
     }
 }

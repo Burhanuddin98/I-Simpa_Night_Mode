@@ -27,6 +27,7 @@ fn main() {
         "model_import",
         "project_save",
         "edit_apply",
+        "edit_reband",
         "edit_undo",
         "edit_redo",
         "scene_mesh",

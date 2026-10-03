@@ -969,7 +969,12 @@ fn plan(
                 "a run is active: cancel it first",
             ));
         }
-        let blockers = s.project_blockers().unwrap_or_default();
+        let mut blockers = s.project_blockers().unwrap_or_default();
+        for b in s.solver_blockers(kind) {
+            if !blockers.contains(&b) {
+                blockers.push(b);
+            }
+        }
         if !blockers.is_empty() {
             return Err(CmdError::new(
                 "RUN_BLOCKED",
