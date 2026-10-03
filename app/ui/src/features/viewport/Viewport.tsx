@@ -10,6 +10,9 @@
 // Scope row 15 (1), G19: a right click on the model that does not drag (a drag pans) opens the
 // context menu, `data-part="viewport-menu"`, while faces are picked: New group from selection,
 // the same action as Edit › New group from selection.
+//
+// M12 P3: on the Results step, `ResultsOverlay` adds the surface map's controls, its legend and
+// the timeline the map and the particles share; the engine draws them (resultsLayer.ts).
 import { useEffect, useRef, useState, type JSX } from 'react';
 import * as actions from '../../actions';
 import { MeasureTool, OrbitTool, ReceiverTool, SectionTool, SelectTool } from '../../chrome/icons';
@@ -17,6 +20,7 @@ import { REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
 import { sceneStore, selectionStore, toolStore, useStore, type Tool } from '../../store';
 import { attachViewport, frameModel, setView, viewportUi, type ViewMode } from './engine';
 import { VIEWPORT_LIBRARIES } from './libraries';
+import { ResultsOverlay } from './ResultsOverlay';
 import './viewport.css';
 
 /** Place source: the source marker's dot and glow, in the toolbar's line style. */
@@ -243,6 +247,9 @@ export function Viewport() {
         </div>
         <div className="plan-box" ref={insetRef} role="img" aria-label="Plan view from above" />
       </div>
+
+      {/* M12 P3: the Results step's map controls, legend and timeline (renders nothing elsewhere). */}
+      <ResultsOverlay />
 
       {/* The axis gizmo (x red, y grey, z white), turned by the engine to follow the camera. */}
       <svg className="gizmo" ref={gizmoRef} width="60" height="60" viewBox="0 0 64 64" aria-hidden>

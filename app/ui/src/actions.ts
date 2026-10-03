@@ -13,6 +13,7 @@ import {
   type AppEvent,
   type EditOutcome,
   type LibraryMaterial,
+  type ReportView,
   type ResultsState,
   type RunStarted,
   type RunStreamBatch,
@@ -51,6 +52,7 @@ import {
   promptStore,
   type PromptChoice,
   refusalStore,
+  reportStore,
   resultsStore,
   type RunLog,
   runLinesStore,
@@ -126,6 +128,7 @@ export async function newProject(name = 'Untitled'): Promise<SceneState | null> 
 function forgetRuns(): void {
   selectedRunStore.set(null);
   resultsStore.set(new Map());
+  reportStore.set(new Map());
 }
 
 /** The folder of a project file: its runs root's parent. */
@@ -463,6 +466,26 @@ export async function resultsFor(runName: string): Promise<ResultsState> {
   resultsStore.set(next);
   return state;
 }
+
+/** `run`'s report, as `simpa results --json` prints it, with its bed statuses and the open
+ * project's group names (M12 P2), fetched once per run. */
+export async function reportFor(runName: string): Promise<ReportView> {
+  const cached = reportStore.get().get(runName);
+  if (cached) return cached;
+  const view = await run(`Reading the results of ${runName}`, () => backend.runReport(runName));
+  const next = new Map(reportStore.get());
+  next.set(runName, view);
+  reportStore.set(next);
+  return view;
+}
+
+/** The Results step's viewport reads (M12 P3, `features/viewport/resultsView.ts`), passed through
+ * as the backend returns them: the caller keeps its own generation check and reads a refusal
+ * itself (`asCmdError`), so no busy line or Console entry is added here. Here because the backend
+ * is called only from this file (M10's lint). */
+export const runData = (runName: string) => backend.runData(runName);
+export const runSurfaceMap = (runName: string, path: string) => backend.runSurfaceMap(runName, path);
+export const runParticles = (runName: string, bandHz: number) => backend.runParticles(runName, bandHz);
 
 /**
  * The run stream's handler for the run with `ActiveRun.id` `id`, the one writer of

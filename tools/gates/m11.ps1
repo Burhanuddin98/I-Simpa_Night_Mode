@@ -4,7 +4,8 @@
 #   (c) Cancel: the row reads 'Cancelled', and 2 s later no spps.exe runs from the gate's copy
 #   (d) closing the window mid-solve, and Stop-Process on app.exe: no spps.exe 2 s later
 #   (e) a forced mesh failure: a Runs row FAIL with MESH_TETGEN_SKIPPED; the Results step no number
-# plus m11-h (no solver-computed acoustic number, the diagnostic allowance proven), row 22's items,
+# plus m11-h (no solver-computed acoustic number outside the Results step since M12, the diagnostic
+# allowance proven), row 22's items,
 # m11-b18, and m11-focus (the test windows visible, and never taking keyboard focus).
 #
 # Steps (PLAN.md 4.4): the static checks (M10's and M9's, the inventory, the lints, typecheck, the
@@ -94,8 +95,15 @@ $specIds = [ordered]@{
     groups   = @('row15-regroup', 'row15-receiver-folders')
     # Not a gate spec: the screenshots for the investigation folder (m11.screens.e2e.ts), no id.
     screens  = @()
+    # M12 P3 (docs/investigations/2026-10-03-m12/PLAN.md): run on this harness by m12.ps1, not
+    # part of M11's own run.
+    'm12.viewport' = @('m12-c', 'm12-d', 'm12-mq4', 'm12-p3-maps')
+    # M12 P2: the Acoustics tab (gate (a), (b), (e), (f)), likewise run by m12.ps1.
+    'm12.acoustics' = @('m12-a', 'm12-b', 'm12-e', 'm12-f')
+    # M12 P4: gate (b)'s plant, a session with $SIMPA_BED_DEMOTE (m11.conf.ts), likewise.
+    'm12.bedplant' = @('m12-b-plant')
 }
-$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' })
+$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -notlike 'm12.*' })
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }
 $fullRun = $Only -eq 'all' -and -not $SkipCore -and -not $SkipPrior -and (@($allSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
@@ -179,7 +187,7 @@ Check "M10 static checks (m10.ps1 -Only static -SkipCore; they run M9's)" {
     $code -eq 0
 }
 
-Check "command inventory: 39 commands (M10's 28, M11's 9, PQ3's edit_reband and row 15's edit_regroup), the same set in the attributes, generate_handler!, build.rs and capabilities" {
+Check "command inventory: 44 commands (M10's 28, M11's 9, PQ3's edit_reband, row 15's edit_regroup and M12's 5 reads), the same set in the attributes, generate_handler!, build.rs and capabilities" {
     $attrs = @()
     foreach ($f in Get-ChildItem (Join-Path $tauriDir 'src') -Filter *.rs) {
         $attrs += @([regex]::Matches((RustCode $f.FullName), '#\[tauri::command\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*pub\s+async\s+fn\s+(\w+)') | ForEach-Object { $_.Groups[1].Value })
@@ -198,7 +206,8 @@ Check "command inventory: 39 commands (M10's 28, M11's 9, PQ3's edit_reband and 
     }
     $absent = @($m11Commands | Where-Object { $attrs -notcontains $_ })
     if ($absent) { Note "M11 commands missing: $($absent -join ', ')" }
-    $same -and $attrs.Count -eq 39 -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup'
+    $m12Reads = @('run_report', 'run_data', 'run_surface_map', 'run_particles', 'run_echogram')
+    $same -and $attrs.Count -eq 44 -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup' -and @($m12Reads | Where-Object { $attrs -notcontains $_ }).Count -eq 0
 }
 
 Check "lint: the M11 commands are called only from actions.ts (and declared in backend.ts)" {
@@ -597,9 +606,11 @@ Check "m11-focus: the watcher runs (foreground, mouse and keyboard hooks install
 }
 
 $junitDir = Join-Path $work 'wdio'
-$present = @($Spec | Where-Object { Test-Path (Join-Path $appDir "e2e\specs\m11.$_.e2e.ts") })
+# A dotted name is its own file (m11.conf.ts): m12.viewport is specs\m12.viewport.e2e.ts.
+function SpecFile([string]$name) { Join-Path $appDir "e2e\specs\$(if ($name -like '*.*') { $name } else { "m11.$name" }).e2e.ts" }
+$present = @($Spec | Where-Object { Test-Path (SpecFile $_) })
 $pending = @($Spec | Where-Object { $present -notcontains $_ })
-foreach ($p in $pending) { Note "PENDING: app/e2e/specs/m11.$p.e2e.ts is not written yet (its ids fail below)" }
+foreach ($p in $pending) { Note "PENDING: $(SpecFile $p) is not written yet (its ids fail below)" }
 Check "e2e: wdio ran (verdict below) (-Spec $($present -join ','))" {
     if (-not $built) { throw 'no fresh app.exe from the build' }
     if (-not $script:driverExe) { throw 'no msedgedriver' }

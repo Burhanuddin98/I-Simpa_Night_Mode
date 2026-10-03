@@ -47,7 +47,10 @@ function listening(port: number, ms: number): Promise<void> {
 const specDir = path.join(import.meta.dirname, 'specs').replace(/\\/g, '/');
 const specs = (process.env.M11_SPEC ?? 'smoke')
   .split(',')
-  .map((s) => `${specDir}/m11.${s.trim()}.e2e.ts`);
+  // A dotted name is its own file (M12: `m12.viewport` is specs/m12.viewport.e2e.ts), run on this
+  // harness by tools/gates/m12.ps1 through m11.ps1 -Only e2e.
+  .map((s) => s.trim())
+  .map((s) => `${specDir}/${s.includes('.') ? s : `m11.${s}`}.e2e.ts`);
 
 export const config = {
   runner: 'local',
@@ -82,7 +85,16 @@ export const config = {
     'spec',
     ['junit', { outputDir: need('M11_WORK'), outputFileFormat: (o: { cid: string }) => `junit-${o.cid}.xml` }],
   ],
-  beforeSession: async () => {
+  // M12 gate (b)'s plant (specs/m12.bedplant.e2e.ts): its session alone runs with
+  // $SIMPA_BED_DEMOTE, which core (results::bed) reads to demote C80; the app inherits it through
+  // tauri-driver and msedgedriver, and the spec's `simpa results` calls from this process. Every
+  // other session runs without it, whatever the gate's environment holds.
+  beforeSession: async (_config: unknown, _caps: unknown, specFiles: string[]) => {
+    if (specFiles.some((f) => /m12\.bedplant\.e2e\.ts$/.test(f))) {
+      process.env.SIMPA_BED_DEMOTE = path.join(need('M11_REPO'), 'tests', 'fixtures', 'beds', 'summary-c80-fail.json');
+    } else {
+      delete process.env.SIMPA_BED_DEMOTE;
+    }
     driver = spawn(need('M11_TAURI_DRIVER'), ['--port', String(PORT), '--native-driver', need('M11_NATIVE_DRIVER')], {
       stdio: ['ignore', 'inherit', 'inherit'],
     });

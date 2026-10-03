@@ -22,6 +22,7 @@ import { fieldKey } from '../../issues';
 import { parseStrictDecimal } from '../../numbers';
 import { setBandComputed, setEnvironment, setSolverSettings } from '../../ops';
 import { refusalStore, type SolverName, useStore } from '../../store';
+import { EDT_MARKS } from '../acoustics/model';
 import { bandsText, hzText, projectSettings, type ProjectSettings, settingsRows } from './model';
 import {
   BAND_PRESETS,
@@ -400,7 +401,7 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
             ))}
           </span>
         </div>
-        <div className="sim-hint">Random for drafts, Energetic for final results. EDT in Energetic mode is marked not validated.</div>
+        <div className="sim-hint">Random for drafts, Energetic for final results. {EDT_MARKS[1]}.</div>
         <Issues refused={refusals.get(keyOf('spps', 'method')) ?? []} current={[]} />
       </div>
       <div className="sim-setting sim-block" data-setting="sound_maps">

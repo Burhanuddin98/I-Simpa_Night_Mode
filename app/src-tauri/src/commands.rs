@@ -22,6 +22,7 @@ use crate::events::{
     AppEvent, BATCH_PERIOD, BatchStats, Batcher, LineClass, RunEvent, RunEventBatch, Stream,
 };
 use crate::guard::{self, CmdError, CmdResult, lock};
+use crate::results_data::{self, EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
     self, LibraryMaterial, ResultsState, RunSlot, RunStarted, RunStreamBatch, RunsView,
     SolversCache, SolversStatus,
@@ -511,6 +512,94 @@ pub async fn run_results(state: State<'_, AppState>, run: String) -> CmdResult<R
             )
         })?;
         runs::results_state(&runs::runs_root(&path), &run)
+    })
+    .await
+}
+
+// ---- M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 3): the Results step's reads ------
+
+/// The runs root of the open project, or `RUN_NOT_FOUND` for `run` when it was never saved.
+fn runs_root_for(session: &Mutex<Session>, run: &str) -> CmdResult<PathBuf> {
+    let path = project_path(session)?.ok_or_else(|| {
+        CmdError::new(
+            "RUN_NOT_FOUND",
+            format!("no run '{run}': the project has no runs"),
+        )
+    })?;
+    Ok(runs::runs_root(&path))
+}
+
+/// The run's results state and, when its results load, the report `simpa results <run> --json`
+/// prints, with each parameter's bed status (`report.bed`).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_report(state: State<'_, AppState>, run: String) -> CmdResult<ReportView> {
+    let session = state.session.clone();
+    guard::blocking("run_report", move || {
+        let mut view = results_data::report_view(&runs_root_for(&session, &run)?, &run)?;
+        if view.report.is_some() {
+            let s = lock(&session, "project")?;
+            view.surface_groups = s
+                .project()
+                .map(results_data::group_names)
+                .unwrap_or_default();
+        }
+        Ok(view)
+    })
+    .await
+}
+
+/// Which surface maps, particle files and echograms the run holds.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_data(state: State<'_, AppState>, run: String) -> CmdResult<RunDataIndex> {
+    let session = state.session.clone();
+    guard::blocking("run_data", move || {
+        results_data::data_index(&runs_root_for(&session, &run)?, &run)
+    })
+    .await
+}
+
+/// One surface map (`path` as `run_data` lists it) as SMAP bytes (`results_data`): an
+/// ArrayBuffer in JS, the `.csbin`'s float32 values bit for bit.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_surface_map(
+    state: State<'_, AppState>,
+    run: String,
+    path: String,
+) -> CmdResult<Response> {
+    let session = state.session.clone();
+    guard::blocking("run_surface_map", move || {
+        results_data::surface_map_bytes(&runs_root_for(&session, &run)?, &run, &path)
+            .map(Response::new)
+    })
+    .await
+}
+
+/// One band's saved particles as PART bytes (`results_data`): an ArrayBuffer in JS, the
+/// `.pbin`'s positions and energies bit for bit.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_particles(
+    state: State<'_, AppState>,
+    run: String,
+    band_hz: i32,
+) -> CmdResult<Response> {
+    let session = state.session.clone();
+    guard::blocking("run_particles", move || {
+        results_data::particles_bytes(&runs_root_for(&session, &run)?, &run, band_hz)
+            .map(Response::new)
+    })
+    .await
+}
+
+/// One SPPS point receiver's echogram per band, and each source's own when the run wrote them.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_echogram(
+    state: State<'_, AppState>,
+    run: String,
+    receiver: String,
+) -> CmdResult<EchogramView> {
+    let session = state.session.clone();
+    guard::blocking("run_echogram", move || {
+        results_data::echogram(&runs_root_for(&session, &run)?, &run, &receiver)
     })
     .await
 }

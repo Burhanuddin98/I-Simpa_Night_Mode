@@ -414,6 +414,125 @@
         ],
         "type": "object"
       },
+      "BedParameter": {
+        "description": "One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes\n(the marks, the `wide` rules, what was not tested).",
+        "properties": {
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/$defs/BedStatus"
+          }
+        },
+        "required": [
+          "status",
+          "reasons",
+          "notes"
+        ],
+        "type": "object"
+      },
+      "BedParameters": {
+        "additionalProperties": false,
+        "description": "Every parameter the report carries, by its JSON name.",
+        "properties": {
+          "c50_db": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "c80_db": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "d50": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "dba": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "The A-weighted level (`aggregate.dba`)."
+          },
+          "edt_s": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "g_db": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "Sound strength G (`g_db` on a band)."
+          },
+          "spl_db": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "sti": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "The speech transmission index (`sti` on an SPPS point receiver)."
+          },
+          "t20_s": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "t30_s": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "ts_s": {
+            "$ref": "#/$defs/BedParameter"
+          }
+        },
+        "required": [
+          "spl_db",
+          "edt_s",
+          "t20_s",
+          "t30_s",
+          "c50_db",
+          "c80_db",
+          "d50",
+          "ts_s",
+          "sti",
+          "g_db",
+          "dba"
+        ],
+        "type": "object"
+      },
+      "BedReport": {
+        "description": "What the report carries: the summary's sha256 and its statuses.",
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/BedParameters"
+          },
+          "summary": {
+            "description": "The summary that holds the evidence: path, artifacts and their sha256, the rule.",
+            "type": "string"
+          },
+          "summary_sha256": {
+            "description": "The sha256 of `beds/summary.json` as compiled in.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary_sha256",
+          "summary",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "BedStatus": {
+        "description": "A parameter's bed status.",
+        "oneOf": [
+          {
+            "const": "PASS",
+            "description": "Every check on every artifact named final held.",
+            "type": "string"
+          },
+          {
+            "const": "FAIL",
+            "description": "A check did not hold, an artifact is missing, or no artifact scores it: `reasons` says\nwhich. Not rendered (M12 gate (b)).",
+            "type": "string"
+          }
+        ]
+      },
       "CurvatureReport": {
         "description": "The curvature of a decay (`params::decay::curvature`), for M8 and M12 to decide what a curved\ndecay may show: its value with its Monte-Carlo standard deviation, and the flag.",
         "properties": {
@@ -529,6 +648,28 @@
           "tolerance_db",
           "knots",
           "histogram_from_s"
+        ],
+        "type": "object"
+      },
+      "DinTargetReport": {
+        "description": "One DIN 18041 group-A target at the room's volume.",
+        "properties": {
+          "group": {
+            "$ref": "#/$defs/Group"
+          },
+          "target_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "`T_soll`, s, a bare value (`mc_sd` null); refused `params_din_out_of_range` where the\nvolume is outside the group's range."
+          },
+          "use": {
+            "description": "The use the group is for, in words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group",
+          "use",
+          "target_s"
         ],
         "type": "object"
       },
@@ -851,6 +992,96 @@
           "female"
         ],
         "type": "string"
+      },
+      "Group": {
+        "description": "A group-A use.",
+        "oneOf": [
+          {
+            "const": "A1",
+            "description": "Music.",
+            "type": "string"
+          },
+          {
+            "const": "A2",
+            "description": "Speech, lecture.",
+            "type": "string"
+          },
+          {
+            "const": "A3",
+            "description": "Teaching, communication.",
+            "type": "string"
+          },
+          {
+            "const": "A4",
+            "description": "Teaching, communication, inclusive.",
+            "type": "string"
+          },
+          {
+            "const": "A5",
+            "description": "Sport.",
+            "type": "string"
+          }
+        ]
+      },
+      "GroupAbsorptionReport": {
+        "description": "A surface group as the solver saw it: the `.cbin` faces of one material id (config.xml\ndeclares one material per surface group).",
+        "properties": {
+          "area_m2": {
+            "description": "m².",
+            "format": "double",
+            "type": "number"
+          },
+          "bands": {
+            "description": "Per computed band, ascending.",
+            "items": {
+              "$ref": "#/$defs/GroupBandReport"
+            },
+            "type": "array"
+          },
+          "faces": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "material_id": {
+            "description": "`type_surface@id`, the faces' `idMat`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "material_id",
+          "faces",
+          "area_m2",
+          "bands"
+        ],
+        "type": "object"
+      },
+      "GroupBandReport": {
+        "description": "One band of a surface group's absorption.",
+        "properties": {
+          "absorption": {
+            "description": "`α`, as config.xml declares it (read as the solvers read it, f32).",
+            "format": "double",
+            "type": "number"
+          },
+          "absorption_area_m2": {
+            "description": "`S·α`, m².",
+            "format": "double",
+            "type": "number"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "absorption",
+          "absorption_area_m2"
+        ],
+        "type": "object"
       },
       "MainBand": {
         "description": "One band row of `Main results.gabe`.",
@@ -2577,6 +2808,10 @@
             "format": "double",
             "type": "number"
           },
+          "sabine_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Sabine, `K·V/(4·m·V + Σ S·α)`, s, with SPPS's `K`: **reported only** (results version 12)."
+          },
           "uniform_absorption": {
             "description": "Every face has the same absorption in this band.",
             "type": "boolean"
@@ -2587,6 +2822,7 @@
           "mean_absorption",
           "lambert_walls",
           "uniform_absorption",
+          "sabine_s",
           "eyring_s",
           "kuttruff_s"
         ],
@@ -2694,6 +2930,99 @@
           "error"
         ],
         "type": "object"
+      },
+      "RoomBandReport": {
+        "description": "One band's total absorption.",
+        "properties": {
+          "absorption_area_m2": {
+            "description": "`Σ S·α` over the groups, m²: Sabine's absorption area without the air term.",
+            "format": "double",
+            "type": "number"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "absorption_area_m2"
+        ],
+        "type": "object"
+      },
+      "RoomReport": {
+        "description": "The room from a run's own inputs (`results::room`), or why there is none.",
+        "oneOf": [
+          {
+            "properties": {
+              "area_m2": {
+                "description": "The `.cbin` faces' total area, m².",
+                "format": "double",
+                "type": "number"
+              },
+              "bands": {
+                "description": "Per computed band, ascending.",
+                "items": {
+                  "$ref": "#/$defs/RoomBandReport"
+                },
+                "type": "array"
+              },
+              "din18041": {
+                "description": "A1 to A5, in order.",
+                "items": {
+                  "$ref": "#/$defs/DinTargetReport"
+                },
+                "type": "array"
+              },
+              "din18041_note": {
+                "description": "Always [`super::room::DIN18041_NOTE`].",
+                "type": "string"
+              },
+              "status": {
+                "const": "computed",
+                "type": "string"
+              },
+              "surfaces": {
+                "description": "By material id, ascending.",
+                "items": {
+                  "$ref": "#/$defs/GroupAbsorptionReport"
+                },
+                "type": "array"
+              },
+              "volume_m3": {
+                "description": "The `.mbin`'s volume, m³.",
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "status",
+              "volume_m3",
+              "area_m2",
+              "din18041",
+              "din18041_note",
+              "surfaces",
+              "bands"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "not_computed",
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "why"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "RunNoise": {
         "description": "What the calibration's correction and domain need from the run behind a series.",
@@ -3619,11 +3948,19 @@
         },
         "type": "array"
       },
+      "bed": {
+        "$ref": "#/$defs/BedReport",
+        "description": "Each parameter's bed status, from `beds/summary.json` as this build carries it."
+      },
       "results_version": {
         "description": "[`REPORT_VERSION`].",
         "format": "uint32",
         "minimum": 0,
         "type": "integer"
+      },
+      "room": {
+        "$ref": "#/$defs/RoomReport",
+        "description": "The room from the run's own inputs, for either solver (results version 12)."
       },
       "run_folder": {
         "description": "The run folder, as given.",
@@ -3667,19 +4004,21 @@
         "description": "Present for a TCR run."
       },
       "validated_by_bed": {
-        "description": "False until M8's physics bed passes: no number here may be shown to a user.",
+        "description": "True only when every parameter in `bed` passed its bed. A consumer shows a parameter by its\nown status in `bed`, never by this alone (M12 gate (b)).",
         "type": "boolean"
       }
     },
     "required": [
       "results_version",
       "validated_by_bed",
+      "bed",
       "run_folder",
       "solver",
       "status",
       "solver_build",
       "started",
-      "bands_hz"
+      "bands_hz",
+      "room"
     ],
     "title": "Report",
     "type": "object"

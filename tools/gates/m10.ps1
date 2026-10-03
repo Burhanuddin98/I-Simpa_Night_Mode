@@ -8,6 +8,7 @@
 #   (f) 50 edits then 50 undos (Ctrl+Z) save byte-identical to the original
 #   (g) document.querySelectorAll('canvas').length == 1
 #   (h) added by the plan, not in the gate text: no solver-computed acoustic number on screen
+#       (narrowed in M12 to "outside the Results step": m12.ps1, PLAN.md P1 item 4)
 # Each is a WebdriverIO test id (m10-a-console, ..., m10-h) run against the release app by
 # `wdio run app/e2e/m10.conf.ts`; every id must pass, none skipped, nothing failing. Plus the
 # static checks (M9's static checks, the command inventory across four places with M10's 28

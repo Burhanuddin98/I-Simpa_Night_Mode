@@ -9,7 +9,8 @@
 //! transport's rays start. Nothing of the run's output is read, so the reference is the same
 //! whatever SPPS computed.
 //!
-//! **Nothing here is validated**: M8's bed has not run (`Report::validated_by_bed`). Both formulas
+//! **Nothing here is validated**: the references are reported beside the values, never as a gate
+//! (decision-log row 37 (4)); no bed scores them (`Report::bed`). Both formulas
 //! describe a diffuse field: each band says whether every face of the room reflects by Lambert's
 //! law with scattering 1 in it (`lambert_walls`), the only case in which the transport's `γ²`
 //! describes the run's walls. **Kuttruff's time is computed only in such bands**, and the
@@ -50,6 +51,8 @@ pub struct ReferenceBand {
     /// Every face has the same absorption in this band (the noise calibration tells uniform
     /// Lambert rooms apart: `params::noise::Walls`).
     pub uniform_absorption: bool,
+    /// Sabine, `params::room::sabine_rt`, with SPPS's `K`.
+    pub sabine_s: Result<f64, ParamError>,
     /// Plain Eyring, `params::room::eyring_rt`, with SPPS's `K`.
     pub eyring_s: Result<f64, ParamError>,
     /// Kuttruff's time and the standard deviation it inherits from `γ²`'s standard error
@@ -141,6 +144,7 @@ fn inner(solve: &Path, exp: &Expectation, c: f64) -> Result<Reference, String> {
             mean_absorption: sa / area_m2,
             lambert_walls,
             uniform_absorption,
+            sabine_s: room::sabine_rt(room.volume_m3, &surfaces, air, constant),
             eyring_s: room::eyring_rt(room.volume_m3, &surfaces, air, constant),
             kuttruff_s: if lambert_walls {
                 kuttruff(&paths, &surfaces, air, constant)

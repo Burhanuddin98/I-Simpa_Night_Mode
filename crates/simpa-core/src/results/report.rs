@@ -6,19 +6,22 @@
 //! `docs/formats/results-json.md` and generated as a JSON Schema by [`report_schema`]
 //! (`docs/formats/results-json.schema.json`), which M12 reads.
 //!
-//! **`validated_by_bed` is false**: no number here may be shown to a user before M8's physics bed
-//! passes (`docs/rebuild-plan.md`, M12).
+//! **`bed` says which numbers may be shown** (M12): each parameter's bed status from
+//! `beds/summary.json` as this build carries it ([`super::bed`]); a parameter not PASS there is not
+//! rendered (M12 gate (b)). `validated_by_bed` is true only when every parameter passed.
 
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use super::reference::{REFERENCE_LABEL, Reference};
+use super::room::{DIN18041_NOTE, Room};
 use super::spps::{
     BandEnergy, ParticleFileSummary, PointReceiver, SourcePoint, SourceTotals, SppsResults,
 };
 use super::tcr::{self, MainBand, TcrResults};
 use super::{Refusal, RunResults, SolverBuild, SolverResults, SurfaceFile, value_invalid};
 use crate::params::decay::{self, Arrival, Onset};
+use crate::params::din18041;
 use crate::params::edt;
 use crate::params::lambert::FreePaths;
 use crate::params::level;
@@ -61,8 +64,13 @@ use crate::schema::SolverKind;
 /// (`params::decay::Straddle`). 10 (M8b): a new project computes the octaves 125 Hz to 8 kHz
 /// (decision-log row 43), and an SPPS point receiver carries `sti`, the speech transmission index
 /// (IEC 60268-16:2011, `params::sti`): male (shown) and female, the MTF and MTI per band, or
-/// refused. No other field changes.
-pub const REPORT_VERSION: u32 = 10;
+/// refused. No other field changes. 11 (M12): `bed`, each parameter's bed status from
+/// `beds/summary.json` as the build carries it ([`super::bed`]), and `validated_by_bed` read from it:
+/// true only when every parameter there is PASS, no longer always false. No other field changes.
+/// 12 (M12 P2): `room`, the room from the run's own inputs for either solver ([`RoomReport`]):
+/// volume, area, DIN 18041's group-A targets and the absorption by surface group; and an SPPS
+/// reference band's `sabine_s` beside `eyring_s`. No other field changes.
+pub const REPORT_VERSION: u32 = 12;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -1009,6 +1017,8 @@ pub struct ReferenceBandReport {
     pub lambert_walls: bool,
     /// Every face has the same absorption in this band.
     pub uniform_absorption: bool,
+    /// Sabine, `K·V/(4·m·V + Σ S·α)`, s, with SPPS's `K`: **reported only** (results version 12).
+    pub sabine_s: Evaluated,
     /// Plain Eyring, `K·V/(4·m·V − S·ln(1 − ᾱ))`, s, with SPPS's `K`: **reported only**.
     pub eyring_s: Evaluated,
     /// Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:
@@ -1075,6 +1085,7 @@ impl ReferenceReport {
                         mean_absorption: b.mean_absorption,
                         lambert_walls: b.lambert_walls,
                         uniform_absorption: b.uniform_absorption,
+                        sabine_s: Evaluated::of(b.sabine_s.clone()),
                         eyring_s: Evaluated::of(b.eyring_s.clone()),
                         kuttruff_s: match &b.kuttruff_s {
                             Ok((value, sd)) => Evaluated::bare(*value, Some(*sd)),
@@ -1242,8 +1253,11 @@ pub struct TcrReport {
 pub struct Report {
     /// [`REPORT_VERSION`].
     pub results_version: u32,
-    /// False until M8's physics bed passes: no number here may be shown to a user.
+    /// True only when every parameter in `bed` passed its bed. A consumer shows a parameter by its
+    /// own status in `bed`, never by this alone (M12 gate (b)).
     pub validated_by_bed: bool,
+    /// Each parameter's bed status, from `beds/summary.json` as this build carries it.
+    pub bed: super::bed::BedReport,
     /// The run folder, as given.
     pub run_folder: String,
     pub solver: SolverKind,
@@ -1260,6 +1274,138 @@ pub struct Report {
     pub spps: Option<SppsReport>,
     /// Present for a TCR run.
     pub tcr: Option<TcrReport>,
+    /// The room from the run's own inputs, for either solver (results version 12).
+    pub room: RoomReport,
+}
+
+/// One DIN 18041 group-A target at the room's volume.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct DinTargetReport {
+    pub group: din18041::Group,
+    /// The use the group is for, in words.
+    #[serde(rename = "use")]
+    pub use_: String,
+    /// `T_soll`, s, a bare value (`mc_sd` null); refused `params_din_out_of_range` where the
+    /// volume is outside the group's range.
+    pub target_s: Evaluated,
+}
+
+/// One band of a surface group's absorption.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct GroupBandReport {
+    pub freq_hz: i32,
+    /// `α`, as config.xml declares it (read as the solvers read it, f32).
+    pub absorption: f64,
+    /// `S·α`, m².
+    pub absorption_area_m2: f64,
+}
+
+/// A surface group as the solver saw it: the `.cbin` faces of one material id (config.xml
+/// declares one material per surface group).
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct GroupAbsorptionReport {
+    /// `type_surface@id`, the faces' `idMat`.
+    pub material_id: u32,
+    pub faces: usize,
+    /// m².
+    pub area_m2: f64,
+    /// Per computed band, ascending.
+    pub bands: Vec<GroupBandReport>,
+}
+
+/// One band's total absorption.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct RoomBandReport {
+    pub freq_hz: i32,
+    /// `Σ S·α` over the groups, m²: Sabine's absorption area without the air term.
+    pub absorption_area_m2: f64,
+}
+
+/// The room from a run's own inputs (`results::room`), or why there is none.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case", tag = "status")]
+pub enum RoomReport {
+    Computed {
+        /// The `.mbin`'s volume, m³.
+        volume_m3: f64,
+        /// The `.cbin` faces' total area, m².
+        area_m2: f64,
+        /// A1 to A5, in order.
+        din18041: Vec<DinTargetReport>,
+        /// Always [`super::room::DIN18041_NOTE`].
+        din18041_note: String,
+        /// By material id, ascending.
+        surfaces: Vec<GroupAbsorptionReport>,
+        /// Per computed band, ascending.
+        bands: Vec<RoomBandReport>,
+    },
+    NotComputed {
+        why: String,
+    },
+}
+
+impl RoomReport {
+    fn of(r: &Room) -> Self {
+        match r {
+            Room::Computed {
+                volume_m3,
+                area_m2,
+                din18041,
+                groups,
+            } => {
+                let surfaces: Vec<GroupAbsorptionReport> = groups
+                    .iter()
+                    .map(|g| GroupAbsorptionReport {
+                        material_id: g.material_id,
+                        faces: g.faces,
+                        area_m2: g.area_m2,
+                        bands: g
+                            .absorption
+                            .iter()
+                            .map(|&(freq_hz, a)| GroupBandReport {
+                                freq_hz,
+                                absorption: a,
+                                absorption_area_m2: g.area_m2 * a,
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                let bands = groups
+                    .first()
+                    .map(|g| g.absorption.as_slice())
+                    .unwrap_or_default()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &(freq_hz, _))| RoomBandReport {
+                        freq_hz,
+                        absorption_area_m2: surfaces
+                            .iter()
+                            .map(|s| s.bands[i].absorption_area_m2)
+                            .sum(),
+                    })
+                    .collect();
+                RoomReport::Computed {
+                    volume_m3: *volume_m3,
+                    area_m2: *area_m2,
+                    din18041: din18041
+                        .iter()
+                        .map(|(g, t)| DinTargetReport {
+                            group: *g,
+                            use_: g.use_name().into(),
+                            target_s: match t {
+                                Ok(v) => Evaluated::bare(*v, None),
+                                Err(e) => Evaluated::refused(e.clone()),
+                            },
+                        })
+                        .collect(),
+                    din18041_note: DIN18041_NOTE.into(),
+                    surfaces,
+                    bands,
+                }
+            }
+            Room::NotComputed { why } => RoomReport::NotComputed { why: why.clone() },
+        }
+    }
 }
 
 /// A band's series as `params` gets it: complete when the statistics say so, with the run's floor
@@ -1942,9 +2088,11 @@ pub fn report(r: &RunResults) -> Report {
         }
         SolverResults::Tcr(t) => (None, Some(tcr_report(t))),
     };
+    let bed = super::bed::report().clone();
     Report {
         results_version: REPORT_VERSION,
-        validated_by_bed: false,
+        validated_by_bed: bed.all_passed(),
+        bed,
         run_folder: r.folder.display().to_string(),
         solver: r.manifest.solver,
         status: r.manifest.verdict.status,
@@ -1953,6 +2101,7 @@ pub fn report(r: &RunResults) -> Report {
         bands_hz: r.bands_hz.clone(),
         spps,
         tcr,
+        room: RoomReport::of(&r.room),
     }
 }
 
@@ -2266,6 +2415,52 @@ mod tests {
     use super::*;
     use serde_json::Value;
 
+    /// Backlog 47: the report's required fields, at every depth of its schema, pinned to
+    /// [`REPORT_VERSION`]. A field made required (or no longer required) changes the digest, and
+    /// the pair below no longer matches: bump the version, write its history line (here and in
+    /// `docs/formats/results-json.md`), and pin the new pair.
+    const REQUIRED_FIELDS_PIN: (u32, &str) = (
+        12,
+        "667ef5d3ddf4926b45f44347306b43eb264ea1172d6b04ffbb3abd2bf6767233",
+    );
+
+    /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.
+    fn required_lists(v: &Value, path: &str, out: &mut Vec<String>) {
+        match v {
+            Value::Object(m) => {
+                if let Some(Value::Array(r)) = m.get("required") {
+                    let mut names: Vec<&str> = r.iter().filter_map(Value::as_str).collect();
+                    names.sort_unstable();
+                    out.push(format!("{path}: {}", names.join(",")));
+                }
+                for (k, x) in m {
+                    required_lists(x, &format!("{path}/{k}"), out);
+                }
+            }
+            Value::Array(a) => {
+                for (i, x) in a.iter().enumerate() {
+                    required_lists(x, &format!("{path}/{i}"), out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn the_required_fields_are_pinned_to_the_results_version() {
+        use sha2::{Digest, Sha256};
+        let mut lists = Vec::new();
+        required_lists(&report_schema().to_value(), "", &mut lists);
+        lists.sort();
+        let digest = format!("{:x}", Sha256::digest(lists.join("\n").as_bytes()));
+        assert_eq!(
+            (REPORT_VERSION, digest.as_str()),
+            REQUIRED_FIELDS_PIN,
+            "the report's required fields changed: bump REPORT_VERSION, write its history line, \
+             and pin the new pair (backlog 47)"
+        );
+    }
+
     #[derive(Serialize)]
     struct Inner {
         a: f64,
@@ -2425,6 +2620,7 @@ mod tests {
                 mean_absorption: 0.2,
                 lambert_walls: true,
                 uniform_absorption: true,
+                sabine_s: Ok(0.67),
                 eyring_s: Ok(0.6),
                 kuttruff_s: Err(refusal),
             }],

@@ -398,7 +398,11 @@ describe('M11 gate', () => {
     assert.equal(code, 'SOLVER_BUILD_UNRECORDED');
   });
 
-  it('m11-h: no solver-computed acoustic number on any step or dock tab, and every diagnostic proven', async () => {
+  // Narrowed in M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 4): no solver-computed
+  // number outside the Results step. `collectSnapshot` reads the Results regions out only while
+  // the Results step is current, and `judge` holds every other step to M11's rules unchanged
+  // (lib/acoustic.test.ts: a number in those regions on another step still fails).
+  it('m11-h: no solver-computed acoustic number outside the Results step, on any step or dock tab, and every diagnostic proven', async () => {
     assert.ok(boxRun && hallRun && meshfailRun, 'm11-h needs the runs of m11-a, m11-b and m11-e');
     const roots = ['box', 'hall', 'meshfail', 'long', 'room', 'loss'].map((p) => path.join(need('M11_P'), p, 'runs'));
     const proof = runResolver(roots, runFolders);

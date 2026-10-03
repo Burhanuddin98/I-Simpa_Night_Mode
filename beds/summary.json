@@ -1,0 +1,1490 @@
+{
+  "generated_by": "tools/bed/summary.py",
+  "do_not_edit": "Generated. crates/simpa-core/tests/bed_summary.rs fails unless this file is the script's output byte for byte.",
+  "plan": "docs/investigations/2026-10-03-m12/PLAN.md, P1 item 1",
+  "rule": "Decision 39's product grade, read from the artifacts: PASS when every check on every artifact named final holds. Exact inputs: no answered value beyond the just-noticeable difference (STI: beyond 0.03). Default runs: no wrong-silent value and the scorer's own pass flag (coverage >= 90 %, every room answered >= 80 %). T30 also M8a's gate; EDT its held-out round 2 in Random mode, H1-H5 from the scored summary on its real sets joined with H6 from the attacker run, as VERDICT-2.md reads it; G and dB(A) set C's end-to-end summary (ADDENDUM-6). A parameter no final artifact scores, a missing artifact or a check that does not hold: FAIL, with the reason. A decision-log ruling that names its exception exactly makes a FAIL PASS only while that exception is the only thing failing, and the entry says so (`by`, with the rule's status and reasons kept under `rule`).",
+  "parameters": {
+    "spl_db": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b, the one test bed (decision 39)",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/A/summary.json",
+          "sha256": "6b66afc62f9826119f5fef99575fd30b697d5eb1b295f6befe22490063393f4b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "git_commit": "dcc5e1101b207bb6ae43ad723502fbfc21139ef1",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "3 files changed, 460 insertions(+), 8 deletions(-)",
+          "checks": [
+            {
+              "read": "score.spl.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s1/summary.json",
+          "sha256": "8d48a5169a0c132cefc469f4fb806e8e38bcfe85429b1e64897b53f899d783af",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "git_commit": "8ec5cec0c33ca3a63218c1689e41c2b1117e404c",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "5 files changed, 566 insertions(+), 40 deletions(-)",
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.spl.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s2-shim/rescore.json",
+          "sha256": "a26fb4b9a55d8eb49b7d828a679191961b529a119df33ef15e470d0340e1647e",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "checks": [
+            {
+              "read": "spl.beyond_limen_after",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F/summary.json",
+          "sha256": "58c34ed60bdf29030a6711f964ebc871b61d57cac2f10817fa815881bec7429b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F/run.log",
+            "sha256": "013370429fe8e6f80e4a781011fa7719a4990c2d751baeb54ed535b92d908e8d"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.spl.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.spl.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F-fresh/summary.json",
+          "sha256": "b00f2aaa888f9784f6ff42eabd1e5f115e9ee9507d1bf5c1599411b923ef7070",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F-fresh/run.log",
+            "sha256": "24eaf49112eb72d39107e86ebedeee130099342c1e89ad6bcaca092fd36c2b70"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.spl.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.spl.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/C-score-F/summary.json",
+          "sha256": "058fcf88a7b9027a04af0c11e98823b3cd533468f79583bb3efc434b4e212443",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/C-score-F/run.log",
+            "sha256": "ee91164e79d4ef58d8b77f3172fa067978a10a69b2cd0af9f05337740039212c"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.spl.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.spl.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "Exact inputs (set A, before build F): 99.7 % of answered rows within 1/10 of the JND; the bed's research bar is 99 % (met; research grade is v1.1, decision 39; MQ1).",
+        "On set A SPL checks a sum against itself (ADDENDUM-1 item 6); set C is its real test.",
+        "Set B is a convergence check: its truths are SPPS itself at 1,000,000 particles, not an independent physics reference (backlog 74).",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "edt_s": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b, the EDT held-out test, round 2 (Random mode decides, PREREG-2 P11)",
+      "result": {
+        "document": "docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md",
+        "sections": [
+          "docs/investigations/2026-09-27-edt-heldout/RESULTS-2.md (the scored run, H1-H5) and VERDICT-2.md, Criteria",
+          "docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md, Criteria row H6 (attack/H6.md; the runner: ADDENDUM-B2.md)"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-edt/round2/results/score/summary.json",
+          "sha256": "695644aa3d114f0bd7a08281b44eae05a49c9dbb903e527938af9b5b9e22d290",
+          "section": "docs/investigations/2026-09-27-edt-heldout/RESULTS-2.md (the scored run, H1-H5) and VERDICT-2.md, Criteria",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "verdict_as_scored": {
+            "pass": false,
+            "failing": [
+              "H5",
+              "H6"
+            ],
+            "used": false,
+            "why": "scored with an empty attack set, so its H5 attack entry and its H6 judge nothing (docs/investigations/2026-10-03-m12/SENTINEL-EDT.md); H6 is read from attack/h6.json"
+          },
+          "checks": [
+            {
+              "read": "criteria.frozen.random.H1.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H2.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H3.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H4.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H5.per_set.spps.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H5.per_set.ism.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H5.per_set.synth.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "inputs.per_set.attack",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H5.per_set.attack.n_paired",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H6.n_classes",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-edt/round2/results/attack/h6.json",
+          "sha256": "d716d3d29ec413a093519aecc0181da5fb9cb2d2bd319ad63662fdf2073938b6",
+          "section": "docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md, Criteria row H6 (attack/H6.md; the runner: ADDENDUM-B2.md)",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "checks": [
+            {
+              "read": "pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "n_failing",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "n_classes",
+              "value": 11,
+              "expect": "== 11",
+              "holds": true
+            },
+            {
+              "read": "method_sha256",
+              "value": "029d90ac5e8f6a634a51a7ffce136cbd4c0b7ea3d3ad8a18b78fd8240ff224a0",
+              "expect": "== \"029d90ac5e8f6a634a51a7ffce136cbd4c0b7ea3d3ad8a18b78fd8240ff224a0\"",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "Marks (decision 37 (1)-(2), both shown in the GUI): EDT not validated for receiver radius above 1 m; Energetic-mode EDT not validated.",
+        "Read as VERDICT-2.md reads it: H1-H5 from the scored summary on its three real fresh sets, H6 from the attacker run (attack/h6.json, same frozen method). The scored summary's own verdict.pass is false (H5, H6) because it ran with an empty attack set (docs/investigations/2026-10-03-m12/SENTINEL-EDT.md); it is recorded, not used.",
+        "H6 is weak evidence beyond H1-H5: one attacker, 11 synthetic classes (VERDICT-2.md, Caveats).",
+        "Ball against ISO point receiver (decision 37 (6)): docs/investigations/2026-10-02-edt-ball-vs-point/RESULT.md, PARTIAL as pre-registered, no row beyond the JND."
+      ]
+    },
+    "t20_s": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b, the one test bed (decision 39)",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/A/summary.json",
+          "sha256": "6b66afc62f9826119f5fef99575fd30b697d5eb1b295f6befe22490063393f4b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "git_commit": "dcc5e1101b207bb6ae43ad723502fbfc21139ef1",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "3 files changed, 460 insertions(+), 8 deletions(-)",
+          "checks": [
+            {
+              "read": "score.t20.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s1/summary.json",
+          "sha256": "8d48a5169a0c132cefc469f4fb806e8e38bcfe85429b1e64897b53f899d783af",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "git_commit": "8ec5cec0c33ca3a63218c1689e41c2b1117e404c",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "5 files changed, 566 insertions(+), 40 deletions(-)",
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.t20.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s2-shim/rescore.json",
+          "sha256": "a26fb4b9a55d8eb49b7d828a679191961b529a119df33ef15e470d0340e1647e",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "checks": [
+            {
+              "read": "t20.beyond_limen_after",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F/summary.json",
+          "sha256": "58c34ed60bdf29030a6711f964ebc871b61d57cac2f10817fa815881bec7429b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F/run.log",
+            "sha256": "013370429fe8e6f80e4a781011fa7719a4990c2d751baeb54ed535b92d908e8d"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.t20.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.t20.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F-fresh/summary.json",
+          "sha256": "b00f2aaa888f9784f6ff42eabd1e5f115e9ee9507d1bf5c1599411b923ef7070",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F-fresh/run.log",
+            "sha256": "24eaf49112eb72d39107e86ebedeee130099342c1e89ad6bcaca092fd36c2b70"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.t20.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.t20.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/C-score-F/summary.json",
+          "sha256": "058fcf88a7b9027a04af0c11e98823b3cd533468f79583bb3efc434b4e212443",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/C-score-F/run.log",
+            "sha256": "ee91164e79d4ef58d8b77f3172fa067978a10a69b2cd0af9f05337740039212c"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.t20.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.t20.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "Exact inputs (set A, before build F): 99.1 % of answered rows within 1/10 of the JND; the bed's research bar is 99 % (met; research grade is v1.1, decision 39; MQ1).",
+        "Set B is a convergence check: its truths are SPPS itself at 1,000,000 particles, not an independent physics reference (backlog 74).",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "t30_s": {
+      "status": "PASS",
+      "by": "decision 46",
+      "rule": {
+        "status": "FAIL",
+        "reasons": [
+          "B:/data/m8b-bed/B-score-F-fresh/summary.json: score.t30.wrong_silent is 1, not 0",
+          "B:/data/m8b-bed/B-score-F-fresh/summary.json: score.t30.pass_ is false, not true"
+        ]
+      },
+      "ruling": {
+        "decision": 46,
+        "date": "2026-10-03 12:52",
+        "text": "docs/decision-log.md, row 46",
+        "rules": "T30 is shown on the Results screen although its bed status by the strict rule is FAIL: one wrong-silent row in 833 on M8b set B's fresh draw. When backlog 65 closes, T30 must pass by the rule.",
+        "row": {
+          "room": "G6",
+          "receiver": "R007",
+          "band_hz": 1000,
+          "seed": 4201
+        },
+        "artifact": "B:/data/m8b-bed/B-score-F-fresh/summary.json",
+        "applies": true
+      },
+      "bed": "M8a, the T30 bed; and M8b, the one test bed, which scores T30 beside the others",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
+        "sections": [
+          "docs/investigations/2026-09-29-m8a/SPEC.md (the T30 bed); its summary, gate checks A-E",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "beds/m8a-20260929T093134Z/summary.json",
+          "sha256": "6af1656e16429ab8cddfeaa00fb0f0c0765f91b2fe2669dbaa9ff54bf91b3ced",
+          "section": "docs/investigations/2026-09-29-m8a/SPEC.md (the T30 bed); its summary, gate checks A-E",
+          "git_commit": "da6f15cf0c9a3c757442a4e58c0ee419b04f2597",
+          "uncommitted_changes": null,
+          "also": {
+            "path": "beds/m8a-20260929T093134Z/report.json",
+            "sha256": "5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad",
+            "section": "docs/investigations/2026-09-29-m8a/SPEC.md section 6: report.json, hashed by the summary's report_sha256",
+            "git_commit": null,
+            "uncommitted_changes": null,
+            "git_commit_note": "not recorded by the artifact"
+          },
+          "checks": [
+            {
+              "read": "pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "failures",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "exploratory",
+              "value": false,
+              "expect": "== false",
+              "holds": true
+            },
+            {
+              "read": "report_sha256",
+              "value": "5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad",
+              "expect": "== \"5c0041fc468583eeef7d6be020094a64dc6be0269a218a98b40e380282e20fad\"",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A/summary.json",
+          "sha256": "6b66afc62f9826119f5fef99575fd30b697d5eb1b295f6befe22490063393f4b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "git_commit": "dcc5e1101b207bb6ae43ad723502fbfc21139ef1",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "3 files changed, 460 insertions(+), 8 deletions(-)",
+          "checks": [
+            {
+              "read": "score.t30.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s1/summary.json",
+          "sha256": "8d48a5169a0c132cefc469f4fb806e8e38bcfe85429b1e64897b53f899d783af",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "git_commit": "8ec5cec0c33ca3a63218c1689e41c2b1117e404c",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "5 files changed, 566 insertions(+), 40 deletions(-)",
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.t30.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s2-shim/rescore.json",
+          "sha256": "a26fb4b9a55d8eb49b7d828a679191961b529a119df33ef15e470d0340e1647e",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "checks": [
+            {
+              "read": "t30.beyond_limen_after",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F/summary.json",
+          "sha256": "58c34ed60bdf29030a6711f964ebc871b61d57cac2f10817fa815881bec7429b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F/run.log",
+            "sha256": "013370429fe8e6f80e4a781011fa7719a4990c2d751baeb54ed535b92d908e8d"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.t30.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.t30.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F-fresh/summary.json",
+          "sha256": "b00f2aaa888f9784f6ff42eabd1e5f115e9ee9507d1bf5c1599411b923ef7070",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F-fresh/run.log",
+            "sha256": "24eaf49112eb72d39107e86ebedeee130099342c1e89ad6bcaca092fd36c2b70"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.t30.wrong_silent",
+              "value": 1,
+              "expect": "== 0",
+              "holds": false
+            },
+            {
+              "read": "score.t30.pass_",
+              "value": false,
+              "expect": "== true",
+              "holds": false
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/C-score-F/summary.json",
+          "sha256": "058fcf88a7b9027a04af0c11e98823b3cd533468f79583bb3efc434b4e212443",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/C-score-F/run.log",
+            "sha256": "ee91164e79d4ef58d8b77f3172fa067978a10a69b2cd0af9f05337740039212c"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.t30.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.t30.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "PASS by decision 46 (2026-10-03 12:52), not by the rule, which reads FAIL: one wrong-silent row in 833 answered on B:/data/m8b-bed/B-score-F-fresh/summary.json (G6 R007 1000 Hz, seed 4201: 0.385 s shown, range 0.362-0.408 s, true 0.360 s, 0.0015 s below the range). When backlog 65 closes, T30 must pass by the rule.",
+        "Exact inputs (set A, before build F): 99.7 % of answered rows within 1/10 of the JND; the bed's research bar is 99 % (not judged by the scorer; research grade is v1.1, decision 39; MQ1).",
+        "The T30 stand-in range is not calibrated (backlog 65); G3's (coupled room) T30 range is +-87 %.",
+        "Set B is a convergence check: its truths are SPPS itself at 1,000,000 particles, not an independent physics reference (backlog 74).",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "c50_db": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b, the one test bed (decision 39)",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/A/summary.json",
+          "sha256": "6b66afc62f9826119f5fef99575fd30b697d5eb1b295f6befe22490063393f4b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "git_commit": "dcc5e1101b207bb6ae43ad723502fbfc21139ef1",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "3 files changed, 460 insertions(+), 8 deletions(-)",
+          "checks": [
+            {
+              "read": "score.c50.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s1/summary.json",
+          "sha256": "8d48a5169a0c132cefc469f4fb806e8e38bcfe85429b1e64897b53f899d783af",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "git_commit": "8ec5cec0c33ca3a63218c1689e41c2b1117e404c",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "5 files changed, 566 insertions(+), 40 deletions(-)",
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.c50.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s2-shim/rescore.json",
+          "sha256": "a26fb4b9a55d8eb49b7d828a679191961b529a119df33ef15e470d0340e1647e",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "checks": [
+            {
+              "read": "c50.beyond_limen_after",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F/summary.json",
+          "sha256": "58c34ed60bdf29030a6711f964ebc871b61d57cac2f10817fa815881bec7429b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F/run.log",
+            "sha256": "013370429fe8e6f80e4a781011fa7719a4990c2d751baeb54ed535b92d908e8d"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.c50.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.c50.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F-fresh/summary.json",
+          "sha256": "b00f2aaa888f9784f6ff42eabd1e5f115e9ee9507d1bf5c1599411b923ef7070",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F-fresh/run.log",
+            "sha256": "24eaf49112eb72d39107e86ebedeee130099342c1e89ad6bcaca092fd36c2b70"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.c50.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.c50.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/C-score-F/summary.json",
+          "sha256": "058fcf88a7b9027a04af0c11e98823b3cd533468f79583bb3efc434b4e212443",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/C-score-F/run.log",
+            "sha256": "ee91164e79d4ef58d8b77f3172fa067978a10a69b2cd0af9f05337740039212c"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.c50.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.c50.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "Exact inputs (set A, before build F): 97.8 % of answered rows within 1/10 of the JND; the bed's research bar is 99 % (not met; research grade is v1.1, decision 39; MQ1).",
+        "Shown `wide` where the bin straddling 50 ms can move it past 1/10 of the JND (build F, 917345c).",
+        "Backlog 69: `ok` beyond 1/10 of the JND on short double-slope closed forms at 1 ms.",
+        "Set B is a convergence check: its truths are SPPS itself at 1,000,000 particles, not an independent physics reference (backlog 74).",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "c80_db": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b, the one test bed (decision 39)",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/A/summary.json",
+          "sha256": "6b66afc62f9826119f5fef99575fd30b697d5eb1b295f6befe22490063393f4b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "git_commit": "dcc5e1101b207bb6ae43ad723502fbfc21139ef1",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "3 files changed, 460 insertions(+), 8 deletions(-)",
+          "checks": [
+            {
+              "read": "score.c80.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s1/summary.json",
+          "sha256": "8d48a5169a0c132cefc469f4fb806e8e38bcfe85429b1e64897b53f899d783af",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "git_commit": "8ec5cec0c33ca3a63218c1689e41c2b1117e404c",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "5 files changed, 566 insertions(+), 40 deletions(-)",
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.c80.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s2-shim/rescore.json",
+          "sha256": "a26fb4b9a55d8eb49b7d828a679191961b529a119df33ef15e470d0340e1647e",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "checks": [
+            {
+              "read": "c80.beyond_limen_after",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F/summary.json",
+          "sha256": "58c34ed60bdf29030a6711f964ebc871b61d57cac2f10817fa815881bec7429b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F/run.log",
+            "sha256": "013370429fe8e6f80e4a781011fa7719a4990c2d751baeb54ed535b92d908e8d"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.c80.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.c80.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F-fresh/summary.json",
+          "sha256": "b00f2aaa888f9784f6ff42eabd1e5f115e9ee9507d1bf5c1599411b923ef7070",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F-fresh/run.log",
+            "sha256": "24eaf49112eb72d39107e86ebedeee130099342c1e89ad6bcaca092fd36c2b70"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.c80.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.c80.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/C-score-F/summary.json",
+          "sha256": "058fcf88a7b9027a04af0c11e98823b3cd533468f79583bb3efc434b4e212443",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/C-score-F/run.log",
+            "sha256": "ee91164e79d4ef58d8b77f3172fa067978a10a69b2cd0af9f05337740039212c"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.c80.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.c80.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "Exact inputs (set A, before build F): 99.3 % of answered rows within 1/10 of the JND; the bed's research bar is 99 % (met; research grade is v1.1, decision 39; MQ1).",
+        "Shown `wide` where the bin straddling 80 ms can move it past 1/10 of the JND (build F, 917345c).",
+        "Backlog 69: `ok` beyond 1/10 of the JND on short double-slope closed forms at 1 ms.",
+        "Set B is a convergence check: its truths are SPPS itself at 1,000,000 particles, not an independent physics reference (backlog 74).",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "d50": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b, the one test bed (decision 39)",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/A/summary.json",
+          "sha256": "6b66afc62f9826119f5fef99575fd30b697d5eb1b295f6befe22490063393f4b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "git_commit": "dcc5e1101b207bb6ae43ad723502fbfc21139ef1",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "3 files changed, 460 insertions(+), 8 deletions(-)",
+          "checks": [
+            {
+              "read": "score.d50.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s1/summary.json",
+          "sha256": "8d48a5169a0c132cefc469f4fb806e8e38bcfe85429b1e64897b53f899d783af",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "git_commit": "8ec5cec0c33ca3a63218c1689e41c2b1117e404c",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "5 files changed, 566 insertions(+), 40 deletions(-)",
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.d50.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s2-shim/rescore.json",
+          "sha256": "a26fb4b9a55d8eb49b7d828a679191961b529a119df33ef15e470d0340e1647e",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "checks": [
+            {
+              "read": "d50.beyond_limen_after",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F/summary.json",
+          "sha256": "58c34ed60bdf29030a6711f964ebc871b61d57cac2f10817fa815881bec7429b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F/run.log",
+            "sha256": "013370429fe8e6f80e4a781011fa7719a4990c2d751baeb54ed535b92d908e8d"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.d50.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.d50.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F-fresh/summary.json",
+          "sha256": "b00f2aaa888f9784f6ff42eabd1e5f115e9ee9507d1bf5c1599411b923ef7070",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F-fresh/run.log",
+            "sha256": "24eaf49112eb72d39107e86ebedeee130099342c1e89ad6bcaca092fd36c2b70"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.d50.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.d50.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/C-score-F/summary.json",
+          "sha256": "058fcf88a7b9027a04af0c11e98823b3cd533468f79583bb3efc434b4e212443",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/C-score-F/run.log",
+            "sha256": "ee91164e79d4ef58d8b77f3172fa067978a10a69b2cd0af9f05337740039212c"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.d50.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.d50.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "Exact inputs (set A, before build F): 98.1 % of answered rows within 1/10 of the JND; the bed's research bar is 99 % (not met; research grade is v1.1, decision 39; MQ1).",
+        "Shown `wide` where the bin straddling 50 ms can move it past 1/10 of the JND (build F, 917345c).",
+        "Backlog 69: `ok` beyond 1/10 of the JND on short double-slope closed forms at 1 ms.",
+        "Set B is a convergence check: its truths are SPPS itself at 1,000,000 particles, not an independent physics reference (backlog 74).",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "ts_s": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b, the one test bed (decision 39)",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/A/summary.json",
+          "sha256": "6b66afc62f9826119f5fef99575fd30b697d5eb1b295f6befe22490063393f4b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (the table, before build F)",
+          "git_commit": "dcc5e1101b207bb6ae43ad723502fbfc21139ef1",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "3 files changed, 460 insertions(+), 8 deletions(-)",
+          "checks": [
+            {
+              "read": "score.ts.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s1/summary.json",
+          "sha256": "8d48a5169a0c132cefc469f4fb806e8e38bcfe85429b1e64897b53f899d783af",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S1 after build F)",
+          "git_commit": "8ec5cec0c33ca3a63218c1689e41c2b1117e404c",
+          "uncommitted_changes": true,
+          "uncommitted_summary": "5 files changed, 566 insertions(+), 40 deletions(-)",
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.ts.all.beyond_limen",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/A-buildF/s2-shim/rescore.json",
+          "sha256": "a26fb4b9a55d8eb49b7d828a679191961b529a119df33ef15e470d0340e1647e",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set A: exact inputs (S2 after build F: ok rows beyond 1/10 limen)",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "checks": [
+            {
+              "read": "ts.beyond_limen_after",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F/summary.json",
+          "sha256": "58c34ed60bdf29030a6711f964ebc871b61d57cac2f10817fa815881bec7429b",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: seeds 4101-4103 under build F",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F/run.log",
+            "sha256": "013370429fe8e6f80e4a781011fa7719a4990c2d751baeb54ed535b92d908e8d"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.ts.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.ts.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/B-score-F-fresh/summary.json",
+          "sha256": "b00f2aaa888f9784f6ff42eabd1e5f115e9ee9507d1bf5c1599411b923ef7070",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set B: fresh seeds 4201-4203 (the table)",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/B-score-F-fresh/run.log",
+            "sha256": "24eaf49112eb72d39107e86ebedeee130099342c1e89ad6bcaca092fd36c2b70"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.ts.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.ts.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/C-score-F/summary.json",
+          "sha256": "058fcf88a7b9027a04af0c11e98823b3cd533468f79583bb3efc434b4e212443",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, Set C: specular boxes against the exact image-source answer",
+          "git_commit": "917345c86cb00c339297997cc3596b793936d184",
+          "uncommitted_changes": false,
+          "git_commit_from": {
+            "path": "B:/data/m8b-bed/C-score-F/run.log",
+            "sha256": "ee91164e79d4ef58d8b77f3172fa067978a10a69b2cd0af9f05337740039212c"
+          },
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.ts.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.ts.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "Exact inputs (set A, before build F): 99.6 % of answered rows within 1/10 of the JND; the bed's research bar is 99 % (met; research grade is v1.1, decision 39; MQ1).",
+        "Ts has no straddle bracket (backlog 64).",
+        "Set B is a convergence check: its truths are SPPS itself at 1,000,000 particles, not an independent physics reference (backlog 74).",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "sti": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b, the one test bed, STI (ADDENDUM-2 to -5)",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT.md, STI: B7 seven rooms, seeds 4301-4303",
+          "docs/investigations/2026-10-02-bed/RESULT.md, STI: fresh C7 draw after build H, ADDENDUM-5 scoring",
+          "docs/investigations/2026-10-02-bed/RESULT.md, STI: fresh C7 draw after build H, frozen ADDENDUM-3 scoring",
+          "docs/investigations/2026-10-02-bed/RESULT.md, STI: set A S1 after build H",
+          "docs/investigations/2026-10-02-bed/RESULT.md, STI: set A S2"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/STI/a-s1-buildH/summary.json",
+          "sha256": "377476bd32e0e6b3326cc8fdca587c5b52719e2ebb680f6ea6a1be55fa1987ad",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, STI: set A S1 after build H",
+          "git_commit": "e012ecb2186463ccf4f5c41618ed57f4bb88d0b0",
+          "uncommitted_changes": null,
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.all.beyond_0_03",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/STI/a-s2/summary.json",
+          "sha256": "08e592e1c32f2488a9a82e529836f47ccb4cfbc24c16a5f1e69ec2c02130da2d",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, STI: set A S2",
+          "git_commit": "1883f4e5666e7a9ad9eab214a57c28f6f162b301",
+          "uncommitted_changes": null,
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.all.beyond_0_03",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/STI/b7/summary.json",
+          "sha256": "da4d2df9e0ef991d9b134a9e8ab6dd6ee39fcda2c9c0cc2d41e7a8b470dc7a00",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, STI: B7 seven rooms, seeds 4301-4303",
+          "git_commit": "5d0d281538d4cde563d20ba4f66029c37d5b97b9",
+          "uncommitted_changes": null,
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.all.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/STI/c7-fresh-H/summary.json",
+          "sha256": "55d484122a9ccf94bb09c4abc07d035b08115d62b6bb3dc03335f0587f81d263",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, STI: fresh C7 draw after build H, frozen ADDENDUM-3 scoring",
+          "git_commit": "e012ecb2186463ccf4f5c41618ed57f4bb88d0b0",
+          "uncommitted_changes": null,
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.all.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-bed/STI/c7-fresh-H-add5/summary.json",
+          "sha256": "916cde947c0806cd1e857feafe1ebb599b7f827908bd09759061800ecb25fdb3",
+          "section": "docs/investigations/2026-10-02-bed/RESULT.md, STI: fresh C7 draw after build H, ADDENDUM-5 scoring",
+          "git_commit": "e012ecb2186463ccf4f5c41618ed57f4bb88d0b0",
+          "uncommitted_changes": null,
+          "mode": "POST-HOC (ADDENDUM-4 item 2)",
+          "checks": [
+            {
+              "read": "score.all.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "No noise range: STI's Monte Carlo noise is not modelled (`mc_sd` null, backlog 71); shown with a visible 'noise range not computed' note (MQ3).",
+        "Tolerance 0.03 STI, not a JND (IEC 60268-16 ed. 4: repeatability 0.02).",
+        "B7 was scored at 5d0d281 (build G); RESULT.md says build H's re-read moved no answered value, and no artifact of that re-read is named.",
+        "Several sources at one receiver are refused; directional sources are treated as omni.",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "g_db": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b set C, G and dB(A) end to end (ADDENDUM-6)",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT-GDBA.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT-GDBA.md, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/C-score-GdBA/summary.json",
+          "sha256": "d5abc0a4bdd772ddd99be8ec55d8891e7ddcebc5baf65122dac69429c5faf169",
+          "section": "docs/investigations/2026-10-02-bed/RESULT-GDBA.md, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)",
+          "git_commit": "5832655db75ef0406fbd7c0e17d7403fef1b3e55",
+          "uncommitted_changes": null,
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.g_db.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.g_db.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "G = SPL minus the same source's free-field level at 10 m (ISO 3382-1 A.2.1); the product's constant agrees with the standard's to 0.0004 dB (RESULT-GDBA.md).",
+        "The reference SPL carries the product's own W rho c, so G's error on set C is SPL's plus the constant: not a second test of SPL (RESULT-GDBA.md).",
+        "Set C only (two specular boxes); set B not scored for G.",
+        "No comparison with a measured room (V2-9)."
+      ]
+    },
+    "dba": {
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b set C, G and dB(A) end to end (ADDENDUM-6)",
+      "result": {
+        "document": "docs/investigations/2026-10-02-bed/RESULT-GDBA.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT-GDBA.md, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)"
+        ]
+      },
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/C-score-GdBA/summary.json",
+          "sha256": "d5abc0a4bdd772ddd99be8ec55d8891e7ddcebc5baf65122dac69429c5faf169",
+          "section": "docs/investigations/2026-10-02-bed/RESULT-GDBA.md, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)",
+          "git_commit": "5832655db75ef0406fbd7c0e17d7403fef1b3e55",
+          "uncommitted_changes": null,
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.dba.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.dba.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
+      ],
+      "reasons": [],
+      "notes": [
+        "dB(A) = band SPL plus IEC 61672-1 octave weights over the bands the run computes; IEC 61672-1 itself not in hand, the weights checked against its Annex E closed form (RESULT-GDBA.md).",
+        "Set C only (two specular boxes, 125 Hz - 4 kHz); set B not scored for dB(A).",
+        "No comparison with a measured room (V2-9)."
+      ]
+    }
+  }
+}

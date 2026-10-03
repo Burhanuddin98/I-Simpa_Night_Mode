@@ -1,0 +1,27 @@
+# M12 assay: findings and how each was resolved (2026-10-03)
+
+The assay (an adversarial read of the `m12` branch at `2833b4a` against PLAN.md, BUILD-P2.md, BUILD-P4.md and
+decision-log rows 37, 39 and 46) could not write its own report; this file records it, and how each finding was
+resolved. Fixes: commits `a5ef89b`, `ccff1d3`, `b90e7d5` on `m12`; build record: BUILD-P4.md, "Assay fixes";
+receipts (red and green logs): `B:\data\m12\p4\`.
+
+## Verdict
+
+**SHIP-WITH-FIXES.** Two MED findings, four LOW. Nothing found was a wrong number reaching a user; the MED findings
+were a word the product had ruled out (MQ2) and a gap in what gate (a) proves.
+
+## Findings
+
+| # | Severity | Finding | Resolution |
+|---|---|---|---|
+| 1 | MED | `app/ui/src/features/simulate/SettingsEditor.tsx:403`, the Method hint on the Simulate step, said "EDT in Energetic mode is marked not validated". MQ2 and decision 39: no screen text says "validated". m12-a's page check reads the Results step only, so it could not see this. | **Fixed** (`a5ef89b`). The hint uses the Acoustics tab's own EDT mark (row 37 (2)): "EDT unchecked in energetic mode" (`EDT_MARKS[1]`). The wording check now covers every UI string: `app/ui/src/wording.test.ts` parses every `.ts`/`.tsx`/`.mjs`/`.css` file under `app/ui/src` (and `ui/index.html`) and fails on "validated" in any string literal, template text, JSX text or CSS text; comments and snake_case field names (`edt_validated`) are not words on screen. Red: the one hit at `SettingsEditor.tsx:403`; green after. Run by `m12.ps1` ("assay: ..."). |
+| 2 | MED | Gate (a) (`app/e2e/lib/acousticsTab.ts:143`, `scan`, and m12-a) held each number to the JSON path in its own `data-json`, but never tied the cell's visible row and column labels (receiver, parameter, band) to that path. A value right by its path but under the wrong receiver or column would have passed. | **Fixed** (`b90e7d5`). `scan` reads, per cell, its row head, column head and its card's Band or Receiver selection from the rendered DOM, plus every `data-json` inside it; `cellLabelMismatch` (`app/e2e/lib/acoustics.ts`) requires every path in the cell to be of one receiver, parameter and band, and those to be the ones the page shows (receiver label from the JSON, parameter name, band name; receiver-wide STI and dB(A) need no band). m12-a counts the cells checked and fails on any mismatch. Red: the harness test's deliberately mislabelled cases (another receiver, parameter, band; paths that disagree; a path of no cell) went unflagged against a stub; green with the check. In the e2e, a control swaps two rendered cells' paths (different receiver and parameter) and requires both to be caught. |
+| 3 | LOW | The RT chart drew raw `.value` (`app/ui/src/features/acoustics/model.ts:222`, `rtSeries`), outside `cell()`'s filter: a value the tables do not show (a status other than `ok`/`wide`, or no range) would still be drawn, and the range was never drawn. | **Fixed** (`b90e7d5`). `rtSeries` builds each point from `cell()`: only PASS parameters, a value only where the table shows it (with its range and status), a gap where refused. Each series carries `lo`/`hi` and their paths, drawn as whiskers. Gate (f)'s `seriesMismatches` compares the range as well as the value, against the same filter written from the JSON's side. Red: `model.test.ts` (T20 with no range drawn as 0.555) and the harness test; green after. |
+| 4 | LOW | T30 is shown by decision 46 although one checked value in 833 fell outside its range, and the screen said nothing about it: only MQ2's plain wording. | **Fixed** (`b90e7d5`). A mark beside the receivers table, in the EDT marks' style, shown only while T30 is: "Ranges on noise-limited T30 values may be slightly narrow: 1 of 833 checked values fell 1.5 ms outside its range." (`T30_MARK`; no word "validated"). Marks carry `data-label="mark"`; m12-a requires each to be a known mark word for word, m12-b requires T30's whenever T30 is PASS. Red: `model.test.ts` failed to load without `T30_MARK`/`paramMarks`. |
+| 5 | LOW | Particle count mode (`resultsLayer.ts:193`, the m12-d hook) returned before the draw's own code, so a cull the draw made after that point (on energy, say) would not be counted, and gate (d) would compare a count the screen does not show. | **Fixed** (`ccff1d3`). The draw had no energy cull (a zero-energy record draws at the ramp's floor), so the two already agreed on which records they keep. The vertex shader now drops records in one `kept()` function (the `.pbin`'s alive: a record at its step); the count branch follows it directly, and `particles.test.ts` fails on any cull after the count branch or any energy test in `kept()`. What still differs, by design, is stated in BUILD-P4.md: count mode skips the camera (the count is of particles alive, not of those in view) and the sprite's round corners (no point loses its centre pixels). Gate (d) still compares the GPU count with alive in the `.pbin` at 5 steps. |
+| 6 | LOW | H6 `n_classes == 11` (`tools/bed/summary.py:331`): the summary's EDT status requires the attacker run to have exactly VERDICT-2.md's 11 classes. | **No change: fails safe.** A run with any other class count makes the check not hold, which demotes EDT to FAIL (hidden by gate (b)); it can never promote a status. Re-running the attacker with more classes would need the summary regenerated, which is the intended path. |
+
+## What was run
+
+Unit and harness suites, typecheck, the workspace suite and the full `tools/gates/m12.ps1`: BUILD-P4.md, "Assay
+fixes".

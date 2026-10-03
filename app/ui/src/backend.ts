@@ -9,13 +9,16 @@ import { Channel, invoke as tauriInvoke, type InvokeArgs } from '@tauri-apps/api
 import type {
   AppEvent,
   CmdError,
+  EchogramView,
   EditOutcome,
   EventsProbeReport,
   FloatProbe,
   LibraryMaterial,
   Prepared,
   ProjectInfo,
+  ReportView,
   ResultsState,
+  RunDataIndex,
   RunEventBatch,
   RunStarted,
   RunStreamBatch,
@@ -31,6 +34,9 @@ import { busyStore, type SolverName } from './store';
 export type {
   AppEvent,
   CmdError,
+  EchogramView,
+  ReportView,
+  RunDataIndex,
   EditOutcome,
   LibraryMaterial,
   ProjectInfo,
@@ -124,4 +130,15 @@ export const backend = {
   solversStatus: () => invoke<SolversStatus>('solvers_status'),
   appEvents: (onEvent: Channel<AppEvent>) => invoke<null>('app_events', { on_event: onEvent }),
   appQuit: () => invoke<null>('app_quit'),
+
+  // M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 3): the Results step's reads. The
+  // report is the CLI's (`simpa results --json`); a parameter is shown only when its
+  // `report.bed.parameters[name].status` is PASS (gate (b)). The bytes decode in resultsData.ts.
+  runReport: (run: string) => invoke<ReportView>('run_report', { run }),
+  runData: (run: string) => invoke<RunDataIndex>('run_data', { run }),
+  /** A surface map, `path` as `runData` lists it, as SMAP bytes (`decodeSurfaceMap`). */
+  runSurfaceMap: (run: string, path: string) => invoke<ArrayBuffer>('run_surface_map', { run, path }),
+  /** One band's saved particles as PART bytes (`decodeParticles`). */
+  runParticles: (run: string, bandHz: number) => invoke<ArrayBuffer>('run_particles', { run, band_hz: bandHz }),
+  runEchogram: (run: string, receiver: string) => invoke<EchogramView>('run_echogram', { run, receiver }),
 };

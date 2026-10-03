@@ -87,7 +87,14 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 10,              // 10: SPPS point receivers carry sti, the speech
+  "results_version": 12,              // 12: room, the room from the run's own inputs
+                                      //    (volume, area, DIN 18041 targets, absorption
+                                      //    by surface group), for either solver; an SPPS
+                                      //    reference band carries sabine_s;
+                                      // 11: bed, each parameter's bed status from
+                                      //    beds/summary.json, and validated_by_bed read
+                                      //    from it (true only when every one is PASS);
+                                      // 10: SPPS point receivers carry sti, the speech
                                       //    transmission index (IEC 60268-16:2011): male
                                       //    (shown) and female, MTF and MTI per band; a
                                       //    new project computes 125 Hz to 8 kHz;
@@ -125,7 +132,18 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
                                       //    and lambert_walls; noise_model.run; bands'
                                       //    and aggregates' crossings_per_particle;
                                       //    refusals noise_uncalibrated)
-  "validated_by_bed": false,          // false until M8's bed passes: show nothing
+  "validated_by_bed": false,          // true only when every parameter in bed is PASS
+  "bed": {                            // beds/summary.json as this build carries it (M12)
+    "summary_sha256": "<64 hex>",     //   the compiled-in file's sha256
+    "summary": "beds/summary.json",   //   where the evidence is: artifacts, sha256, rule
+    "parameters": {                   //   one per parameter: spl_db, edt_s, t20_s, t30_s,
+      "t30_s": {                      //   c50_db, c80_db, d50, ts_s, sti, g_db, dba
+        "status": "PASS" | "FAIL",    //   FAIL: not rendered (M12 gate (b))
+        "reasons": ["..."],           //   why it failed; empty for a PASS
+        "notes": ["..."]              //   the marks, the wide rules, what was not tested
+      }, ...
+    }
+  },
   "run_folder": "<as given>",
   "solver": "spps" | "tcr",
   "status": "OK",                     // always: any other run is refused
@@ -138,9 +156,56 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
   "started": "2026-09-24T11:50:30.959+02:00",
   "bands_hz": [500, 1000],            // the computed bands, ascending
   "spps": { ... } | null,
-  "tcr": { ... } | null
+  "tcr": { ... } | null,
+  "room": {                           // the room from the run's own inputs (M12 P2), read
+    "status": "computed",             //   as TCR's analytic references read it
+    "volume_m3": 180.0,               //   the .mbin's tetrahedra
+    "area_m2": 216.0,                 //   the .cbin's faces
+    "din18041": [                     //   A1 to A5, T_soll = a lg(V) + b at volume_m3
+      {"group": "A3", "use": "teaching, communication",
+       "target_s": {"value": 0.5517, "mc_sd": null}}, ...
+                                      //   refused params_din_out_of_range outside a
+                                      //   group's volume range
+    ],
+    "din18041_note": "...",           //   what a target applies to (80 % occupied, mid
+                                      //   frequencies) and where the formulas come from
+    "surfaces": [                     //   by material id: config.xml declares one
+      {"material_id": 21, "faces": 2, "area_m2": 60.0,   // material per surface group
+       "bands": [{"freq_hz": 500, "absorption": 0.3, "absorption_area_m2": 18.0}, ...]}
+    ],
+    "bands": [{"freq_hz": 500, "absorption_area_m2": 43.2}, ...]
+                                      //   sum of S alpha: Sabine's area without air
+  } | {"status": "not_computed", "why": "..."}
 }
 ```
+
+**The room, `room` (results version 12).** What the Results screen's Acoustics tab shows beside
+the solver's values is computed here, so every number it shows is in this JSON (M12 gate (a)):
+the volume and area, DIN 18041's five group-A targets at that volume (`params::din18041`; the
+standard itself was not read, `din18041_note` says from where), and the absorption by surface
+group: the `.cbin` faces grouped by material id, which config.xml declares one per surface group,
+each with its faces, area, and per computed band its `absorption` (as the solvers read it, f32)
+and `absorption_area_m2` (`S·α`); `bands` is each band's sum. Not computed, with why, for a scene
+with fitting faces or one whose inputs do not read. Nothing of the solver's output is read.
+
+**The bed status, `bed` (results version 11).** Each parameter's status is read from
+`beds/summary.json`, compiled in (`core::results::bed`). That file is written by
+`tools/bed/summary.py` from the bed artifacts the result documents name as final, never by hand:
+`crates/simpa-core/tests/bed_summary.rs` re-runs the script and requires the committed file byte for
+byte. A parameter is PASS only when every check on every artifact holds (decision 39's product
+grade); the Results screen renders a parameter only when its status is PASS. `validated_by_bed` is
+true only when all eleven are PASS, so a reader must use the per-parameter status. The required
+fields at every depth are pinned to `results_version` by a test (`report.rs`,
+`the_required_fields_are_pinned_to_the_results_version`, backlog 47).
+
+**`$SIMPA_BED_DEMOTE`, a test-only lever (M12 P4).** When set, it names a file of the summary's
+shape, and a parameter is PASS only where both `beds/summary.json` and that file say PASS: it can hide
+a number and never show one. A demoted parameter's `reasons` gain `demoted by $SIMPA_BED_DEMOTE
+(<path>): ...`, `summary` reads `beds/summary.json, demoted by $SIMPA_BED_DEMOTE (<path>)`, and
+`summary_sha256` stays the compiled-in file's. A file that cannot be read, or does not read, fails
+every parameter. M12 gate (b)'s plant (`app/e2e/specs/m12.bedplant.e2e.ts`) runs the app and the
+CLI with `tests/fixtures/beds/summary-c80-fail.json`, so the gate proves a FAIL is not rendered while
+every real status is PASS.
 
 ### `spps`
 
@@ -185,6 +250,7 @@ output. **Nothing in it is validated**, and `label` says so beside the numbers:
               "bands": [{"freq_hz": 500, "air_m_per_metre": 0.000628 | null,
                          "mean_absorption": 0.2,              // ᾱ = Σ Sᵢαᵢ / S
                          "lambert_walls": true,               // every face Lambert, scattering 1?
+                         "sabine_s": {"value": 0.6667, "mc_sd": null}, // results version 12
                          "eyring_s": {"value": 0.5957, "mc_sd": null},
                          "kuttruff_s": {"value": 0.6225, "mc_sd": 0.0000103}}, ...]}
                                                               // mc_sd: gamma^2's share only; a
@@ -200,7 +266,8 @@ output. **Nothing in it is validated**, and `label` says so beside the numbers:
   leaves out the formula's own error against a diffuse room, which no ray count reduces (−0.41 %
   to +0.59 % in M8's cells, `docs/params.md`, "Kuttruff's reference"; not measured in other
   rooms). A comparison that divides by `mc_sd` alone would fail a correct solver for the
-  formula's error. **`eyring_s` is plain Eyring, reported only.** Both use SPPS's `c` in `K` and
+  formula's error. **`eyring_s` is plain Eyring, and `sabine_s` Sabine,
+  `K·V/(4·m·V + Σ Sᵢαᵢ)` (results version 12), both reported only.** All three use SPPS's `c` in `K` and
   the solver's own air term `m` (`null` with air absorption off).
 - **Both describe a diffuse field.** `lambert_walls` says whether every face reflects by Lambert's
   law with scattering 1 in the band, the only walls the transport's `γ²` describes; with specular

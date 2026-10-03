@@ -3,13 +3,15 @@
 //
 // - Badges, as text: the Console reads "live" while a run is active, else "<n> fail" (its FAIL
 //   lines); the Runs tab shows its row count.
-// - The Acoustics tab keeps M9's empty state: no solver-computed number before M12.
+// - The Acoustics tab (M12 P2, features/acoustics): the selected run's report, only on the Results
+//   step; on every other step it holds no number.
 // - The run list is re-read when a run's folder appears, so its Running row shows at once; a
 //   run's end re-reads it too (actions.ts).
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../../actions';
 import { consoleStore, runsStore, runStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
+import { AcousticsPane, useAcousticsDock } from '../acoustics/AcousticsPane';
 import { ConsolePane } from './ConsolePane';
 import { consoleBadge, runsBadge } from './model';
 import { RunsPane } from './RunsPane';
@@ -30,6 +32,7 @@ export function Dock() {
   const body = useRef<HTMLDivElement>(null);
   const consoleTag = consoleBadge(lines, active !== null);
   const runs = runsBadge(view);
+  useAcousticsDock();
 
   const activeRun = active?.run;
   useEffect(() => {
@@ -89,9 +92,7 @@ export function Dock() {
         ))}
       </div>
       <div className="dock-body" role="tabpanel" data-dock-panel={tab} ref={body}>
-        {tab === 'acoustics' && (
-          <div className="dock-empty empty">Room acoustics appear here once the physics checks behind them pass.</div>
-        )}
+        {tab === 'acoustics' && <AcousticsPane />}
         {tab === 'console' && <ConsolePane />}
         {tab === 'runs' && <RunsPane />}
       </div>

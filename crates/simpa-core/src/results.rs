@@ -34,8 +34,10 @@ use crate::run::manifest::{self, MANIFEST_VERSION, RunManifest};
 use crate::run::verdict::{self, Outputs, Reason, Status};
 use crate::schema::SolverKind;
 
+pub mod bed;
 pub mod reference;
 pub mod report;
+pub mod room;
 pub mod spps;
 pub mod tcr;
 
@@ -152,6 +154,9 @@ pub struct RunResults {
     pub bands_hz: Vec<i32>,
     /// What the solver wrote, typed.
     pub data: SolverResults,
+    /// The room from the run's own inputs (M12 P2): volume, area, DIN 18041 targets and the
+    /// absorption by surface group, for either solver.
+    pub room: room::Room,
 }
 
 /// The results of each solver.
@@ -403,12 +408,14 @@ pub fn load(folder: &Path) -> Result<RunResults, Refusal> {
         }
         SolverKind::Tcr => SolverResults::Tcr(tcr::read(&solve, &exp)?),
     };
+    let room = room::room(&solve, &exp);
     Ok(RunResults {
         folder: folder.to_path_buf(),
         manifest: m,
         expectation: exp,
         bands_hz,
         data,
+        room,
     })
 }
 
