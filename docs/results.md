@@ -8,8 +8,9 @@ CLI: `simpa results <run-folder> [--json]` (`crates/simpa/src/results_cmd.rs`); 
 `crates/simpa/tests/cli_results.rs`. Gate: `tools/gates/m7.ps1`. Evidence for M8, run on purpose:
 `crates/simpa/tests/m8_evidence.rs` ("What M8 needs", below).
 
-**No number read or computed here is shown to a user until M8's physics bed passes**
-(`docs/rebuild-plan.md`, M12). The JSON says so: `"validated_by_bed": false`.
+**No number read or computed here is shown to a user unless its parameter's bed passed**
+(`docs/rebuild-plan.md`, M12, gate (b)). The JSON says which, parameter by parameter: `bed`, read
+from `beds/summary.json` (results version 11, `docs/formats/results-json.md`).
 
 ## Verified runs only
 

@@ -241,13 +241,34 @@ fn recp_500(run: &Path, label: &str) -> Vec<f64> {
         .collect()
 }
 
+/// M12 (PLAN.md P1 item 2): `bed` is `beds/summary.json` as this build carries it, parameter by
+/// parameter, and `validated_by_bed` is true only when every parameter there is PASS. Read here
+/// from the file on disk, so a report that hard-coded either would differ from it.
+fn assert_bed_read_from_the_summary(rep: &Value) {
+    let text = std::fs::read_to_string(paths::repo_file("beds/summary.json")).unwrap();
+    let summary: Value = serde_json::from_str(&text).unwrap();
+    let want = summary["parameters"].as_object().unwrap();
+    let got = rep["bed"]["parameters"]
+        .as_object()
+        .unwrap_or_else(|| panic!("no bed: {rep}"));
+    assert_eq!(got.len(), want.len(), "{got:?}");
+    for (name, p) in want {
+        assert_eq!(got[name]["status"], p["status"], "{name}");
+        assert_eq!(got[name]["reasons"], p["reasons"], "{name}");
+        assert_eq!(got[name]["notes"], p["notes"], "{name}");
+    }
+    let all_pass = want.values().all(|p| p["status"] == "PASS");
+    assert_eq!(rep["validated_by_bed"], all_pass);
+    assert_eq!(rep["results_version"], 11);
+}
+
 #[test]
 fn gate_e_seat_and_seat2_are_both_read_each_from_its_own_folder() {
     let run = fixture(SEATS_SPPS);
     let o = results(&run, true);
     assert_eq!(o.code, 0, "{o:#?}");
     let rep = json(&o);
-    assert_eq!(rep["validated_by_bed"], false);
+    assert_bed_read_from_the_summary(&rep);
     let series = spps_series(&rep);
     let labels: Vec<&str> = series.iter().map(|(l, _)| l.as_str()).collect();
     assert_eq!(labels, ["Seat", "Seat2"]);
@@ -968,7 +989,7 @@ fn an_spps_report_carries_its_rooms_reference_labelled_and_not_validated() {
     let o = results(&fixture(SEATS_SPPS), true);
     assert_eq!(o.code, 0, "{o:#?}");
     let rep = json(&o);
-    assert_eq!(rep["validated_by_bed"], false);
+    assert_bed_read_from_the_summary(&rep);
     let r = &rep["spps"]["reference"];
     assert_eq!(r["status"], "computed", "{r}");
     let label = r["label"].as_str().unwrap();

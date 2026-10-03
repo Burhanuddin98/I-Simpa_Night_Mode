@@ -414,6 +414,125 @@
         ],
         "type": "object"
       },
+      "BedParameter": {
+        "description": "One parameter's entry: its status, why it failed (empty for a PASS), and the summary's notes\n(the marks, the `wide` rules, what was not tested).",
+        "properties": {
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/$defs/BedStatus"
+          }
+        },
+        "required": [
+          "status",
+          "reasons",
+          "notes"
+        ],
+        "type": "object"
+      },
+      "BedParameters": {
+        "additionalProperties": false,
+        "description": "Every parameter the report carries, by its JSON name.",
+        "properties": {
+          "c50_db": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "c80_db": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "d50": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "dba": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "The A-weighted level (`aggregate.dba`)."
+          },
+          "edt_s": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "g_db": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "Sound strength G (`g_db` on a band)."
+          },
+          "spl_db": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "sti": {
+            "$ref": "#/$defs/BedParameter",
+            "description": "The speech transmission index (`sti` on an SPPS point receiver)."
+          },
+          "t20_s": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "t30_s": {
+            "$ref": "#/$defs/BedParameter"
+          },
+          "ts_s": {
+            "$ref": "#/$defs/BedParameter"
+          }
+        },
+        "required": [
+          "spl_db",
+          "edt_s",
+          "t20_s",
+          "t30_s",
+          "c50_db",
+          "c80_db",
+          "d50",
+          "ts_s",
+          "sti",
+          "g_db",
+          "dba"
+        ],
+        "type": "object"
+      },
+      "BedReport": {
+        "description": "What the report carries: the summary's sha256 and its statuses.",
+        "properties": {
+          "parameters": {
+            "$ref": "#/$defs/BedParameters"
+          },
+          "summary": {
+            "description": "The summary that holds the evidence: path, artifacts and their sha256, the rule.",
+            "type": "string"
+          },
+          "summary_sha256": {
+            "description": "The sha256 of `beds/summary.json` as compiled in.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary_sha256",
+          "summary",
+          "parameters"
+        ],
+        "type": "object"
+      },
+      "BedStatus": {
+        "description": "A parameter's bed status.",
+        "oneOf": [
+          {
+            "const": "PASS",
+            "description": "Every check on every artifact named final held.",
+            "type": "string"
+          },
+          {
+            "const": "FAIL",
+            "description": "A check did not hold, an artifact is missing, or no artifact scores it: `reasons` says\nwhich. Not rendered (M12 gate (b)).",
+            "type": "string"
+          }
+        ]
+      },
       "CurvatureReport": {
         "description": "The curvature of a decay (`params::decay::curvature`), for M8 and M12 to decide what a curved\ndecay may show: its value with its Monte-Carlo standard deviation, and the flag.",
         "properties": {
@@ -3619,6 +3738,10 @@
         },
         "type": "array"
       },
+      "bed": {
+        "$ref": "#/$defs/BedReport",
+        "description": "Each parameter's bed status, from `beds/summary.json` as this build carries it."
+      },
       "results_version": {
         "description": "[`REPORT_VERSION`].",
         "format": "uint32",
@@ -3667,13 +3790,14 @@
         "description": "Present for a TCR run."
       },
       "validated_by_bed": {
-        "description": "False until M8's physics bed passes: no number here may be shown to a user.",
+        "description": "True only when every parameter in `bed` passed its bed. A consumer shows a parameter by its\nown status in `bed`, never by this alone (M12 gate (b)).",
         "type": "boolean"
       }
     },
     "required": [
       "results_version",
       "validated_by_bed",
+      "bed",
       "run_folder",
       "solver",
       "status",

@@ -6,8 +6,9 @@
 //! `docs/formats/results-json.md` and generated as a JSON Schema by [`report_schema`]
 //! (`docs/formats/results-json.schema.json`), which M12 reads.
 //!
-//! **`validated_by_bed` is false**: no number here may be shown to a user before M8's physics bed
-//! passes (`docs/rebuild-plan.md`, M12).
+//! **`bed` says which numbers may be shown** (M12): each parameter's bed status from
+//! `beds/summary.json` as this build carries it ([`super::bed`]); a parameter not PASS there is not
+//! rendered (M12 gate (b)). `validated_by_bed` is true only when every parameter passed.
 
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -61,8 +62,10 @@ use crate::schema::SolverKind;
 /// (`params::decay::Straddle`). 10 (M8b): a new project computes the octaves 125 Hz to 8 kHz
 /// (decision-log row 43), and an SPPS point receiver carries `sti`, the speech transmission index
 /// (IEC 60268-16:2011, `params::sti`): male (shown) and female, the MTF and MTI per band, or
-/// refused. No other field changes.
-pub const REPORT_VERSION: u32 = 10;
+/// refused. No other field changes. 11 (M12): `bed`, each parameter's bed status from
+/// `beds/summary.json` as the build carries it ([`super::bed`]), and `validated_by_bed` read from it:
+/// true only when every parameter there is PASS, no longer always false. No other field changes.
+pub const REPORT_VERSION: u32 = 11;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -1242,8 +1245,11 @@ pub struct TcrReport {
 pub struct Report {
     /// [`REPORT_VERSION`].
     pub results_version: u32,
-    /// False until M8's physics bed passes: no number here may be shown to a user.
+    /// True only when every parameter in `bed` passed its bed. A consumer shows a parameter by its
+    /// own status in `bed`, never by this alone (M12 gate (b)).
     pub validated_by_bed: bool,
+    /// Each parameter's bed status, from `beds/summary.json` as this build carries it.
+    pub bed: super::bed::BedReport,
     /// The run folder, as given.
     pub run_folder: String,
     pub solver: SolverKind,
@@ -1942,9 +1948,11 @@ pub fn report(r: &RunResults) -> Report {
         }
         SolverResults::Tcr(t) => (None, Some(tcr_report(t))),
     };
+    let bed = super::bed::report().clone();
     Report {
         results_version: REPORT_VERSION,
-        validated_by_bed: false,
+        validated_by_bed: bed.all_passed(),
+        bed,
         run_folder: r.folder.display().to_string(),
         solver: r.manifest.solver,
         status: r.manifest.verdict.status,
@@ -2265,6 +2273,52 @@ impl serde::ser::SerializeStructVariant for &mut Finder {
 mod tests {
     use super::*;
     use serde_json::Value;
+
+    /// Backlog 47: the report's required fields, at every depth of its schema, pinned to
+    /// [`REPORT_VERSION`]. A field made required (or no longer required) changes the digest, and
+    /// the pair below no longer matches: bump the version, write its history line (here and in
+    /// `docs/formats/results-json.md`), and pin the new pair.
+    const REQUIRED_FIELDS_PIN: (u32, &str) = (
+        11,
+        "178cbc01d443d0e9785fecde350041e6dc5473f84ad9bf7b05186c2ae15a3aa5",
+    );
+
+    /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.
+    fn required_lists(v: &Value, path: &str, out: &mut Vec<String>) {
+        match v {
+            Value::Object(m) => {
+                if let Some(Value::Array(r)) = m.get("required") {
+                    let mut names: Vec<&str> = r.iter().filter_map(Value::as_str).collect();
+                    names.sort_unstable();
+                    out.push(format!("{path}: {}", names.join(",")));
+                }
+                for (k, x) in m {
+                    required_lists(x, &format!("{path}/{k}"), out);
+                }
+            }
+            Value::Array(a) => {
+                for (i, x) in a.iter().enumerate() {
+                    required_lists(x, &format!("{path}/{i}"), out);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    #[test]
+    fn the_required_fields_are_pinned_to_the_results_version() {
+        use sha2::{Digest, Sha256};
+        let mut lists = Vec::new();
+        required_lists(&report_schema().to_value(), "", &mut lists);
+        lists.sort();
+        let digest = format!("{:x}", Sha256::digest(lists.join("\n").as_bytes()));
+        assert_eq!(
+            (REPORT_VERSION, digest.as_str()),
+            REQUIRED_FIELDS_PIN,
+            "the report's required fields changed: bump REPORT_VERSION, write its history line, \
+             and pin the new pair (backlog 47)"
+        );
+    }
 
     #[derive(Serialize)]
     struct Inner {

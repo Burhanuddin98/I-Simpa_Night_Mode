@@ -9,7 +9,8 @@
 //! transport's rays start. Nothing of the run's output is read, so the reference is the same
 //! whatever SPPS computed.
 //!
-//! **Nothing here is validated**: M8's bed has not run (`Report::validated_by_bed`). Both formulas
+//! **Nothing here is validated**: the references are reported beside the values, never as a gate
+//! (decision-log row 37 (4)); no bed scores them (`Report::bed`). Both formulas
 //! describe a diffuse field: each band says whether every face of the room reflects by Lambert's
 //! law with scattering 1 in it (`lambert_walls`), the only case in which the transport's `γ²`
 //! describes the run's walls. **Kuttruff's time is computed only in such bands**, and the
