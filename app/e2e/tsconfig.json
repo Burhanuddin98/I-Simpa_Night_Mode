@@ -20,5 +20,5 @@
     "typeRoots": ["C:/tmp/nm-e2e/node/node_modules/@types", "C:/tmp/nm-e2e/node/node_modules"],
     "types": ["node", "mocha", "@wdio/globals/types"]
   },
-  "include": ["m10.conf.ts", "m11.conf.ts", "lib/**/*.ts", "specs/**/*.ts"]
+  "include": ["m10.conf.ts", "m11.conf.ts", "m12.conf.ts", "lib/**/*.ts", "specs/**/*.ts"]
 }

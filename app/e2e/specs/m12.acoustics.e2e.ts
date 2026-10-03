@@ -1,0 +1,377 @@
+// M12 P2's spec, the Acoustics tab (docs/investigations/2026-10-03-m12/PLAN.md, gate (a), (b),
+// (e), (f)). Each id with its control:
+//   m12-a  the box run (box_run.simpa, SPPS): every number the Acoustics tab shows, under every
+//          band, receiver and DIN group it offers, equals `simpa results <run> --json` at the
+//          precision shown (lib/acoustics.ts `numberMismatch`), every string its JSON string;
+//          no digit is shown anywhere else on the tab; every value carries its range and status
+//          or its refusal; STI carries "noise range not computed"; the words are MQ2's; and the
+//          word "validated" is nowhere on the page. Control: at least one value per receiver,
+//          and a planted wrong digit is caught by the same comparison
+//   m12-b  0 elements for a parameter whose status in beds/summary.json is not PASS, under every
+//          selection, and its name nowhere in the tab's or the Results panel's text; the run's
+//          report carries the file's statuses. Control: every PASS parameter that has a place
+//          on the tab has elements there
+//   m12-e  the DIN 18041 A3 target shown for the 180 m3 box reads 0.55 s, from the report's
+//          own path. Control: A1 reads its own value, not 0.55
+//   m12-f  a variant (the rear wall in a 0.6 curtain) run beside the baseline: switching the
+//          variant switch shows the newest run of that variant, and the RT series drawn and the
+//          RT numbers shown are that run's JSON, 0 mismatches, both ways. Control: the two
+//          runs' series differ, so the check can tell them apart
+//
+// Its files, under <M11_WORK>\m12 (C:): a copy of the box and its runs. The repository is only
+// read (beds/summary.json, the fixture).
+import { strict as assert } from 'node:assert';
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import {
+  labelPattern,
+  MQ2_WORDING,
+  notPassed,
+  numberMismatch,
+  PARAM_LABELS,
+  type NumEl,
+  seriesMismatches,
+  strayDigits,
+  stringMismatch,
+} from '../lib/acoustics.ts';
+import { hook, m10, waitForHooks } from '../lib/hooks.ts';
+import { env } from '../lib/types.ts';
+
+const repo = (rel: string) => path.join(env('M11_REPO'), rel);
+const WORK = () => path.join(env('M11_WORK'), 'm12');
+const PANEL = '[data-dock-panel="acoustics"]';
+
+interface Row {
+  run: string;
+  number: number;
+  status: string;
+  variant?: string | null;
+}
+interface Series {
+  param: string;
+  paths: string[];
+  values: (number | null)[];
+}
+interface View {
+  state: string;
+  run: string | null;
+  receiver: number;
+  band: string;
+  din: string;
+  series: Series[];
+}
+interface Scan {
+  state: string | null;
+  run: string | null;
+  nums: NumEl[];
+  strs: { path: string; text: string }[];
+  labels: { kind: string; param: string | null; text: string }[];
+  cells: { param: string; receiver: string; band: string; status: string; nums: string[]; refusal: string | null; note: string | null }[];
+  params: string[];
+  stray: string;
+  options: { control: string; value: string; text: string }[];
+  text: string;
+}
+
+/** Copies the box into this spec's own folder, so its runs root is this spec's. */
+function ownBox(): string {
+  mkdirSync(WORK(), { recursive: true });
+  const to = path.join(WORK(), 'box_run.simpa');
+  copyFileSync(repo('tests/fixtures/ui/box_run.simpa'), to);
+  return to;
+}
+
+/** `simpa results <run> --json`, parsed: the CLI's report, outside the app. */
+function cliReport(project: string, run: string): Record<string, unknown> {
+  const dir = path.join(path.dirname(project), 'runs', run);
+  const out = execFileSync(env('M12_SIMPA'), ['results', dir, '--json'], { maxBuffer: 1 << 30, encoding: 'utf8' });
+  return JSON.parse(out) as Record<string, unknown>;
+}
+
+/** Runs SPPS from the app and waits for it to end OK; its Runs row. */
+async function runSpps(): Promise<Row> {
+  const before = new Set((await hook<Row[]>('runsRows')).map((r) => r.run));
+  await hook('setSolver', 'spps');
+  await hook('runStart', 'spps');
+  let fresh: Row | undefined;
+  await browser.waitUntil(
+    async () => {
+      if ((await hook<unknown>('runState')) !== null) return false;
+      fresh = (await hook<Row[]>('runsRows')).find((r) => !before.has(r.run) && r.status !== 'RUNNING');
+      return fresh !== undefined;
+    },
+    { timeout: 900_000, interval: 500, timeoutMsg: 'no SPPS run ended within 900 s' },
+  );
+  await m10.idle();
+  assert.equal(fresh?.status, 'OK', `the run ended ${fresh?.status}`);
+  return fresh as Row;
+}
+
+/** Shows the Results step and the Acoustics tab, and waits until it shows `run`, ready. */
+async function showRun(run: string): Promise<void> {
+  await m10.setStep('results');
+  await hook('dockTab', 'acoustics');
+  await browser.waitUntil(
+    async () => {
+      const v = await hook<View | null>('acousticsView');
+      return v !== null && v.run === run && v.state === 'ready';
+    },
+    { timeout: 60_000, interval: 250, timeoutMsg: `the Acoustics tab did not show ${run} ready` },
+  );
+}
+
+/** Picks an option of one of the tab's controls, as a user does, and waits for the page. */
+async function pick(control: string, value: string): Promise<void> {
+  const sel = await $(`${PANEL} select[data-control="${control}"]`);
+  await sel.waitForExist({ timeout: 10_000 });
+  await sel.selectByAttribute('value', value);
+  await browser.waitUntil(async () => (await sel.getValue()) === value, { timeout: 10_000 });
+  await m10.idle();
+}
+
+/** The tab as shown: its marked numbers, strings and words, its cells, and its text with all of
+ * them, its controls and the run label removed (`stray`), which must hold no digit. */
+const scan = (): Promise<Scan> =>
+  browser.execute((panelSel: string) => {
+    const panel = document.querySelector<HTMLElement>(panelSel);
+    const root = panel?.querySelector<HTMLElement>('[data-acoustics]') ?? null;
+    const all = (sel: string) => (panel ? [...panel.querySelectorAll<HTMLElement>(sel)] : []);
+    const clone = panel ? (panel.cloneNode(true) as HTMLElement) : null;
+    clone?.querySelectorAll('[data-num], [data-str], [data-label], select, [data-run-label]').forEach((e) => e.remove());
+    return {
+      state: root?.getAttribute('data-acoustics-state') ?? null,
+      run: root?.getAttribute('data-run') ?? null,
+      nums: all('[data-num]').map((e) => ({
+        path: e.getAttribute('data-json') ?? '',
+        text: e.textContent ?? '',
+        digits: e.getAttribute('data-digits'),
+        scale: e.getAttribute('data-scale'),
+      })),
+      strs: all('[data-str]').map((e) => ({ path: e.getAttribute('data-json') ?? '', text: e.textContent ?? '' })),
+      labels: all('[data-label]').map((e) => ({ kind: e.getAttribute('data-label') ?? '', param: e.getAttribute('data-param'), text: e.textContent ?? '' })),
+      cells: all('[data-cell]').map((e) => ({
+        param: e.getAttribute('data-param') ?? '',
+        receiver: e.getAttribute('data-receiver') ?? '',
+        band: e.getAttribute('data-band') ?? '',
+        status: e.getAttribute('data-status') ?? '',
+        nums: [...e.querySelectorAll('[data-num]')].map((n) => n.getAttribute('data-json') ?? ''),
+        refusal: e.querySelector('[data-refusal]')?.getAttribute('data-refusal') ?? null,
+        note: e.querySelector('[data-note]')?.getAttribute('data-note') ?? null,
+      })),
+      params: [...document.querySelectorAll('[data-param]')].map((e) => e.getAttribute('data-param') ?? ''),
+      stray: clone?.textContent ?? '',
+      options: all('select[data-control] option').map((o) => ({
+        control: o.closest('select')?.getAttribute('data-control') ?? '',
+        value: (o as HTMLOptionElement).value,
+        text: o.textContent ?? '',
+      })),
+      text: panel?.innerText ?? '',
+    };
+  }, PANEL);
+
+/** Every selection the tab offers: each band, then each receiver, then each DIN group. */
+async function everySelection(visit: (what: string) => Promise<void>): Promise<void> {
+  const s = await scan();
+  const values = (c: string) => s.options.filter((o) => o.control === c).map((o) => o.value);
+  for (const b of values('band')) {
+    await pick('band', b);
+    await visit(`band ${b}`);
+  }
+  for (const r of values('receiver')) {
+    await pick('receiver', r);
+    await visit(`receiver ${r}`);
+  }
+  for (const g of values('din-group')) {
+    await pick('din-group', g);
+    await visit(`DIN ${g}`);
+  }
+  await pick('din-group', 'A3');
+  await pick('receiver', values('receiver')[0]);
+  await pick('band', values('band')[0]);
+}
+
+const summary = () => JSON.parse(readFileSync(repo('beds/summary.json'), 'utf8')) as { parameters: Record<string, { status: string }> };
+
+describe('M12 P2: the Acoustics tab', () => {
+  let box = '';
+  let baseRun: Row | undefined;
+  let baseJson: Record<string, unknown> = {};
+
+  before(async () => {
+    await waitForHooks(['idle', 'openProject', 'edit', 'setStep', 'dockTab', 'runStart', 'runState', 'runsRows', 'selectRun', 'setSolver', 'acousticsView']);
+    box = ownBox();
+    await m10.openProject(box);
+    baseRun = await runSpps();
+    baseJson = cliReport(box, baseRun.run);
+    await showRun(baseRun.run);
+  });
+
+  it('m12-a: every number on the Acoustics tab equals simpa results --json at the precision shown', async () => {
+    assert.ok(baseRun);
+    const mismatches: string[] = [];
+    let compared = 0;
+    let strings = 0;
+    const cellsSeen = new Set<string>();
+    await everySelection(async (what) => {
+      const s = await scan();
+      assert.equal(s.state, 'ready', what);
+      assert.equal(s.run, baseRun?.run, what);
+      for (const n of s.nums) {
+        const m = numberMismatch(n, baseJson);
+        if (m) mismatches.push(`${what}: ${m}`);
+        compared++;
+      }
+      for (const t of s.strs) {
+        const m = stringMismatch(t, baseJson);
+        if (m) mismatches.push(`${what}: ${m}`);
+        strings++;
+      }
+      const stray = strayDigits(s.stray);
+      assert.equal(stray, null, `${what}: a digit outside the marked numbers: ${stray}`);
+      for (const l of s.labels) {
+        if (l.kind === 'wording') assert.equal(l.text, MQ2_WORDING, what);
+        else if (l.kind === 'param') assert.equal(l.text, PARAM_LABELS[l.param ?? ''], `${what}: label of ${l.param}`);
+        else assert.ok(['group', 'unit'].includes(l.kind), `${what}: a label of kind ${l.kind}`);
+      }
+      // Each band option is the JSON's band at its digits (kHz above 999 Hz).
+      for (const o of s.options.filter((x) => x.control === 'band' && x.value !== 'sum')) {
+        const hz = Number(o.value);
+        assert.ok((baseJson.bands_hz as number[]).includes(hz), `${what}: band option ${o.value}`);
+        assert.equal(o.text, hz >= 1000 ? `${hz / 1000} kHz` : `${hz} Hz`, `${what}: band option text`);
+      }
+      // Every value carries its range and status; every refusal its code (row 37 (3), MQ3).
+      for (const c of s.cells) {
+        cellsSeen.add(`${c.receiver}|${c.param}`);
+        if (c.status === 'refused') {
+          assert.ok(c.refusal && /^[a-z_]+$/.test(c.refusal), `${what}: ${c.param} at ${c.receiver} refused without its code`);
+        } else if (c.param === 'sti') {
+          assert.equal(c.status, 'value', `${what}: STI`);
+          assert.equal(c.note, 'noise range not computed', `${what}: STI carries MQ3's note`);
+        } else {
+          assert.ok(['ok', 'wide'].includes(c.status), `${what}: ${c.param} status ${c.status}`);
+          assert.ok(c.nums.some((p) => p.endsWith('.lo')) && c.nums.some((p) => p.endsWith('.hi')), `${what}: ${c.param} at ${c.receiver} has no range`);
+        }
+      }
+    });
+    // Control: the comparison catches a digit changed by one.
+    const first = (await scan()).nums.find((n) => n.digits !== '0');
+    assert.ok(first, 'a number with decimals is shown');
+    const last = first.text.slice(-1);
+    const planted = { ...first, text: first.text.slice(0, -1) + (last === '9' ? '8' : String(Number(last) + 1)) };
+    assert.notEqual(numberMismatch(planted, baseJson), null, 'a planted wrong digit is caught');
+    // The word "validated" nowhere on the page, text or tooltip.
+    const page = await browser.execute(() => [document.body.innerText, ...[...document.querySelectorAll('[title]')].map((e) => e.getAttribute('title') ?? '')].join('\n'));
+    assert.ok(!/validated/i.test(page), `"validated" is on screen: ${page.match(/.{0,40}validated.{0,40}/i)?.[0]}`);
+    const receivers = ((baseJson.spps as { point_receivers: { label: string }[] }).point_receivers ?? []).map((r) => r.label);
+    for (const r of receivers) assert.ok([...cellsSeen].some((k) => k.startsWith(`${r}|`)), `receiver ${r} has no cell`);
+    console.log(`m12-a receipt: run ${baseRun.run}; ${compared} numbers and ${strings} strings compared over every selection; ${mismatches.length} mismatches; ${cellsSeen.size} receiver-parameter cells`);
+    assert.deepEqual(mismatches, []);
+    assert.ok(compared > 100, `only ${compared} numbers compared`);
+  });
+
+  it('m12-b: no element for a parameter not PASS in beds/summary.json', async () => {
+    const s0 = summary();
+    const hidden = notPassed(s0);
+    // The report the app read carries the file's statuses (core reads them, never the UI).
+    const bed = (baseJson.bed as { parameters: Record<string, { status: string }> }).parameters;
+    for (const [n, p] of Object.entries(s0.parameters)) assert.equal(bed[n]?.status, p.status, `report.bed ${n}`);
+    const shownSomewhere = new Set<string>();
+    await everySelection(async (what) => {
+      const s = await scan();
+      for (const n of hidden) {
+        assert.equal(s.params.filter((p) => p === n).length, 0, `${what}: ${n} (${s0.parameters[n].status}) has elements`);
+        assert.ok(!labelPattern(n).test(s.text), `${what}: "${PARAM_LABELS[n]}" is in the Acoustics tab's text`);
+      }
+      const props = await browser.execute(() => (document.querySelector('[data-props-step="results"]') as HTMLElement | null)?.innerText ?? '');
+      for (const n of hidden) assert.ok(!labelPattern(n).test(props), `${what}: "${PARAM_LABELS[n]}" is in the Results panel`);
+      const v = await hook<View>('acousticsView');
+      for (const n of hidden) assert.ok(!v.series.some((x) => x.param === n), `${what}: ${n} is drawn`);
+      s.params.forEach((p) => shownSomewhere.add(p));
+    });
+    const passed = Object.keys(s0.parameters).filter((n) => !hidden.includes(n));
+    console.log(`m12-b receipt: not PASS ${JSON.stringify(hidden)}; PASS ${JSON.stringify(passed)}; with elements ${JSON.stringify([...shownSomewhere].sort())}`);
+    // Control: a PASS parameter is shown (each has a column in the receivers table).
+    for (const n of passed) assert.ok(shownSomewhere.has(n), `${n} is PASS and has no element`);
+  });
+
+  it('m12-e: the DIN 18041 A3 target for the 180 m3 box reads 0.55 s', async () => {
+    await pick('din-group', 'A3');
+    const read = () =>
+      browser.execute((sel: string) => {
+        const t = document.querySelector(`${sel} [data-part="din-target"]`);
+        const n = t?.querySelector('[data-num][data-json$=".target_s.value"]');
+        const v = t?.querySelector('[data-num][data-json="room.volume_m3"]');
+        const g = t?.querySelector('[data-str][data-json$=".group"]');
+        return { target: n?.textContent ?? null, path: n?.getAttribute('data-json') ?? null, volume: v?.textContent ?? null, group: g?.textContent ?? null, text: (t as HTMLElement | null)?.innerText ?? null };
+      }, PANEL);
+    const a3 = await read();
+    console.log(`m12-e receipt: ${JSON.stringify(a3)}`);
+    assert.equal(a3.target, '0.55');
+    assert.equal(a3.group, 'A3');
+    assert.equal(a3.volume, '180');
+    assert.equal(a3.path, 'room.din18041.2.target_s.value');
+    assert.equal(((baseJson.room as { din18041: { target_s: { value: number } }[] }).din18041[2].target_s.value).toFixed(2), '0.55');
+    // Control: another group reads its own target.
+    await pick('din-group', 'A1');
+    const a1 = await read();
+    assert.equal(a1.group, 'A1');
+    assert.notEqual(a1.target, '0.55');
+    assert.equal(a1.target, (baseJson.room as { din18041: { target_s: { value: number } }[] }).din18041[0].target_s.value.toFixed(2));
+    await pick('din-group', 'A3');
+  });
+
+  it("m12-f: the variant switch replaces the RT series with the other run's JSON values", async () => {
+    assert.ok(baseRun);
+    // A curtain (0.6) on the rear wall, as a variant: the curtain is unused in the baseline.
+    const curtain = '00000000-0000-0000-0000-000000000204';
+    const rear = '00000000-0000-0000-0000-000000000105';
+    const variant = '00000000-0000-0000-0000-00000000f00f';
+    const p = JSON.parse(await m10.projectJson()) as { bands: { frequencies_hz: number[] } };
+    const ops = p.bands.frequencies_hz.map((_, band) => ({ op: 'set_material_band', material: curtain, quantity: 'absorption', band, value: 0.6 }));
+    const out = await m10.edit({
+      op: 'batch',
+      ops: [...ops, { op: 'add_variant', index: 0, variant: { id: variant, name: 'Curtain', overrides: [{ group: rear, material: curtain }] } }, { op: 'set_active_variant', variant }],
+    });
+    assert.ok(out.applied, `the variant edit was refused: ${JSON.stringify(out.refusals)}`);
+    const varRun = await runSpps();
+    const varJson = cliReport(box, varRun.run);
+    const tab = (id: string) => clickVariant(id);
+
+    const check = async (run: Row, json: Record<string, unknown>, label: string): Promise<{ mismatches: string[]; values: string }> => {
+      await browser.waitUntil(async () => (await hook<View | null>('acousticsView'))?.run === run.run && (await hook<View>('acousticsView')).state === 'ready', {
+        timeout: 60_000,
+        timeoutMsg: `${label}: the tab did not switch to ${run.run}`,
+      });
+      const v = await hook<View>('acousticsView');
+      const mismatches: string[] = [];
+      assert.ok(v.series.length > 0, `${label}: no RT series is drawn`);
+      for (const s of v.series) mismatches.push(...seriesMismatches(s, json, v.receiver, s.param).map((m) => `${label}: ${m}`));
+      const s = await scan();
+      for (const n of s.nums) {
+        const m = numberMismatch(n, json);
+        if (m) mismatches.push(`${label}: ${m}`);
+      }
+      return { mismatches, values: JSON.stringify(v.series.map((x) => x.values)) };
+    };
+
+    await tab('baseline');
+    const a = await check(baseRun, baseJson, 'baseline');
+    await tab(variant);
+    const b = await check(varRun, varJson, 'Curtain');
+    await tab('baseline');
+    const a2 = await check(baseRun, baseJson, 'baseline again');
+    console.log(`m12-f receipt: baseline ${baseRun.run} ${a.values}; Curtain ${varRun.run} ${b.values}; mismatches ${a.mismatches.length + b.mismatches.length + a2.mismatches.length}`);
+    assert.notEqual(a.values, b.values, 'control: the two runs draw the same series, so the switch is not tested');
+    assert.deepEqual([...a.mismatches, ...b.mismatches, ...a2.mismatches], []);
+  });
+});
+
+/** Clicks a variant tab in the step bar, as a user does. */
+async function clickVariant(id: string): Promise<void> {
+  const t = await $(`[data-part="variants"] [data-variant="${id}"]`);
+  await t.waitForExist({ timeout: 10_000 });
+  await t.click();
+  await browser.waitUntil(async () => (await t.getAttribute('aria-selected')) === 'true', { timeout: 10_000 });
+  await m10.idle();
+}
