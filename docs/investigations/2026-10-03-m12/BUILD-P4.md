@@ -90,8 +90,14 @@ and status or a refusal code.
 
 ## Gate
 
-The final `m12.ps1` in full (`-TargetDir C:\tmp\nm-target-h -BedData B:\data`, `gate-final-m12.log`) runs after
-this file is committed and pushed; its result is recorded below in a follow-up commit.
+**Final `m12.ps1` in full: M12 PASSED** (`-TargetDir C:\tmp\nm-target-h -BedData B:\data`,
+`gate-final-m12-2.log`, 14:50-15:04, at `1c280c5`, this file committed and pushed before it): 21 of 21 checks.
+P1's six; P2's three static; the P2 e2e (`-Spec m12.acoustics,m12.bedplant`) and **m12-a, m12-b, m12-b-plant,
+m12-e, m12-f PASS**; the P3 e2e and **m12-c, m12-d, m12-mq4, m12-p3-maps PASS**; no id NOT BUILT; prior gate
+**M11 PASSED** (32 of 32 checks; inventory 44 commands; core selection 926 passed / 0 failed / 36 ignored in 86
+binaries; e2e 37 of 37 required ids, 0 failures, 0 skipped; m10 `-SkipCore` exit 0 with the backend lint
+passing; **M9 PASSED**); 0 files left in the repository. The first run (`gate-final-m12-1.log`) failed on the M10
+lint above.
 
 ## Left open
 
