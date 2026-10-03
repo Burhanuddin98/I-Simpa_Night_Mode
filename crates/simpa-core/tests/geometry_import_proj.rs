@@ -1556,3 +1556,220 @@ fn an_element_id_no_solver_reads_is_refused_on_import() {
         .unwrap();
     assert_eq!(zone.solver_id, Some(simpa_core::schema::SOLVER_INT_MAX));
 }
+
+// Point-receiver groups (M37, docs/investigations/2026-10-03-row15/PLAN.md, order of work 2).
+// No upstream project nests its receivers, so tutorial 1's is edited to: Receiver 1 in
+// `Stalls / Front` (two levels), Receiver 2 in `Balcony`, the folders upstream's GUI makes with
+// "New group" in the point-receiver list (`e_scene_recepteursp.h:66-70`).
+
+/// Tutorial 1's archive and its own `projet_config.xml`, to edit.
+fn tutorial1_parts() -> (Vec<u8>, String) {
+    let bytes = std::fs::read(upstream(TUTORIAL1)).unwrap();
+    let xml = String::from_utf8(
+        Archive::parse(&bytes)
+            .unwrap()
+            .read("instance2/projet_config.xml")
+            .unwrap(),
+    )
+    .unwrap();
+    (bytes, xml)
+}
+
+/// Tutorial 1 read with `xml` as its project: the import, or its error's code and text.
+fn import_tutorial1_as(xml: &str) -> Result<ProjImport, (String, String)> {
+    let (bytes, _) = tutorial1_parts();
+    import_proj_with_config(&bytes, xml.as_bytes())
+        .map_err(|e| (e.code().to_string(), e.to_string()))
+}
+
+const RECEIVER1: &str = "<recepteurp name=\"Receiver 1\" eid=\"8\" wxid=\"1473\"";
+const RECEIVER2: &str = "<recepteurp name=\"Receiver 2\" eid=\"8\" wxid=\"1632\"";
+
+/// Tutorial 1's receivers moved into folders: Receiver 1 into `Stalls / Front`, Receiver 2 into
+/// `Balcony`. The folders' element ids sort after the receivers' list order is kept (`kids`).
+fn tutorial1_grouped(xml: &str) -> String {
+    let close = "</recepteurp>";
+    let at2 = xml.find(RECEIVER2).unwrap();
+    let end2 = at2 + xml[at2..].find(close).unwrap() + close.len();
+    let at1 = xml.find(RECEIVER1).unwrap();
+    let end1 = at1 + xml[at1..].find(close).unwrap() + close.len();
+    assert!(end1 < at2, "Receiver 1 comes first in the file");
+    format!(
+        "{}<recepteursp name=\"Stalls\" eid=\"7\" wxid=\"9001\" exp=\"1\">\
+         <recepteursp name=\"Front\" eid=\"7\" wxid=\"9002\" exp=\"1\">{}</recepteursp>\
+         </recepteursp>{}<recepteursp name=\"Balcony\" eid=\"7\" wxid=\"9003\" exp=\"1\">{}\
+         </recepteursp>{}",
+        &xml[..at1],
+        &xml[at1..end1],
+        &xml[end1..at2],
+        &xml[at2..end2],
+        &xml[end2..],
+    )
+}
+
+/// Nested receiver groups import: every receiver is there, in the flat project's order, with its
+/// folder path (the shape `Source::group` has); nothing else of the project differs.
+#[test]
+fn nested_point_receiver_groups_import_with_their_folder_paths() {
+    let (_, xml) = tutorial1_parts();
+    let flat = import_tutorial1_as(&xml).unwrap();
+    let grouped = import_tutorial1_as(&tutorial1_grouped(&xml)).unwrap();
+    let names = |p: &Project| -> Vec<(String, Option<String>)> {
+        p.point_receivers
+            .iter()
+            .map(|r| (r.name.clone(), r.group.clone()))
+            .collect()
+    };
+    assert_eq!(
+        names(&flat.project),
+        [("Receiver 1".into(), None), ("Receiver 2".into(), None)]
+    );
+    assert_eq!(
+        names(&grouped.project),
+        [
+            ("Receiver 1".into(), Some("Stalls / Front".into())),
+            ("Receiver 2".into(), Some("Balcony".into())),
+        ]
+    );
+    // An import's ids derive from the file's bytes, so they differ: compare the project files
+    // with each id replaced by its order of first use.
+    let mut ungrouped = grouped.project.clone();
+    for r in &mut ungrouped.point_receivers {
+        r.group = None;
+    }
+    fn ids_numbered(text: &str) -> String {
+        let mut seen: Vec<String> = Vec::new();
+        let mut out = String::new();
+        for (i, part) in text.split('"').enumerate() {
+            if i > 0 {
+                out.push('"');
+            }
+            if uuid::Uuid::parse_str(part).is_ok() {
+                let k = seen.iter().position(|x| x == part).unwrap_or_else(|| {
+                    seen.push(part.to_string());
+                    seen.len() - 1
+                });
+                out.push_str(&format!("id{k}"));
+            } else {
+                out.push_str(part);
+            }
+        }
+        out
+    }
+    assert_eq!(
+        ids_numbered(&schema::to_json(&ungrouped)),
+        ids_numbered(&schema::to_json(&flat.project)),
+        "only the folder paths differ"
+    );
+    let pins = |i: &ProjImport| -> Vec<(String, i64)> {
+        i.report
+            .upstream_ids
+            .iter()
+            .map(|u| (u.name.clone(), u.upstream))
+            .collect()
+    };
+    assert_eq!(pins(&grouped), pins(&flat));
+}
+
+/// The solvers read receivers flat (upstream writes a group's receivers in its place,
+/// `e_scene_recepteursp.h:152-161`): the grouped import writes the same `config.xml` and scene
+/// mesh as the flat one, for both solvers.
+#[test]
+fn a_grouped_import_writes_the_same_receivers_as_the_flat_one() {
+    let (_, xml) = tutorial1_parts();
+    let flat = import_tutorial1_as(&xml).unwrap().project;
+    let grouped = import_tutorial1_as(&tutorial1_grouped(&xml))
+        .unwrap()
+        .project;
+    for solver in [schema::SolverKind::Spps, schema::SolverKind::Tcr] {
+        let write = |p: &Project| {
+            simpa_core::config_xml::write(p, solver, None, Path::new(r"C:\run\")).unwrap()
+        };
+        let (a, b) = (write(&flat), write(&grouped));
+        assert_eq!(a.matches("<recepteur_ponctuel ").count(), 2, "{solver:?}");
+        assert_eq!(a, b, "{solver:?}");
+    }
+    assert_eq!(solver_inputs(&flat).1, solver_inputs(&grouped).1);
+}
+
+/// A child of the receiver list, or of a receiver group, that is neither a receiver (8) nor a
+/// group (7) is refused by name, where upstream's GUI skips it silently
+/// (`e_scene_recepteursp.h:55-73`).
+#[test]
+fn a_malformed_receiver_group_is_refused_by_name() {
+    let (_, xml) = tutorial1_parts();
+    let grouped = tutorial1_grouped(&xml);
+    let balcony = "<recepteursp name=\"Balcony\" eid=\"7\" wxid=\"9003\" exp=\"1\">";
+    let list = "<recepteursp name=\"Punctual receivers\" eid=\"7\" wxid=\"1472\" exp=\"1\">";
+    let cases = [
+        (
+            "a group with a child of an unknown element type",
+            edited_once(
+                &grouped,
+                balcony,
+                &format!("{balcony}<bogus name=\"Stray\" eid=\"99\"/>"),
+            ),
+            "receiver group `Balcony`",
+        ),
+        (
+            "a group with a child of no element type",
+            edited_once(
+                &grouped,
+                balcony,
+                &format!("{balcony}<note name=\"Stray\"/>"),
+            ),
+            "receiver group `Balcony`",
+        ),
+        (
+            "the list with a child of an unknown element type",
+            edited_once(
+                &xml,
+                list,
+                &format!("{list}<bogus name=\"Stray\" eid=\"99\"/>"),
+            ),
+            "the point receivers",
+        ),
+    ];
+    for (what, edited, place) in cases {
+        let (code, text) = import_tutorial1_as(&edited).map(|_| ()).unwrap_err();
+        assert_eq!(code, codes::RECEIVER_GROUP_MALFORMED, "{what}: {text}");
+        assert!(
+            text.contains(place) && text.contains("Stray"),
+            "{what}: {text}"
+        );
+    }
+}
+
+/// `PointReceiver::group` is optional in the file: a project written before it existed loads
+/// with every receiver ungrouped and saves without the key, byte for byte as before; a grouped
+/// receiver writes it and reads back equal.
+#[test]
+fn project_files_without_receiver_groups_load_unchanged() {
+    for rel in [
+        "tests/fixtures/projects/tutorial1.simpa",
+        "tests/fixtures/rooms/tutorial1_box.simpa",
+    ] {
+        let path = repo_file(rel);
+        let text = std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("\r\n", "\n");
+        let tree: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let receivers = tree["point_receivers"].as_array().unwrap();
+        assert!(!receivers.is_empty(), "{rel}");
+        assert!(
+            receivers.iter().all(|r| r.get("group").is_none()),
+            "{rel} predates the field"
+        );
+        let p = schema::load(&path).unwrap();
+        assert!(p.point_receivers.iter().all(|r| r.group.is_none()), "{rel}");
+        assert_eq!(schema::to_json(&p), text, "{rel} resaves byte for byte");
+    }
+    let (_, xml) = tutorial1_parts();
+    let grouped = import_tutorial1_as(&tutorial1_grouped(&xml))
+        .unwrap()
+        .project;
+    let text = schema::to_json(&grouped);
+    assert!(text.contains("\"group\": \"Stalls / Front\""), "{text}");
+    let back = schema::from_json(&text).unwrap();
+    assert!(back == grouped);
+}

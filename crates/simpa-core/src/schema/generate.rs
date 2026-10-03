@@ -173,6 +173,7 @@ pub fn generate(seed: u64) -> Project {
             orientation: r.direction(),
             background_noise: (r.below(3) == 0).then(|| random_spectrum(&mut r, 0.0, 40.0, n)),
             solver_id: pinned.then_some(155 + i as u32),
+            group: None,
         })
         .collect();
 

@@ -780,6 +780,7 @@ fn read_point_receiver(
         ),
         background_noise,
         solver_id: None,
+        group: None,
     })
 }
 

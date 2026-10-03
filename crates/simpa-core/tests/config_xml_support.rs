@@ -175,6 +175,7 @@ pub fn rich_cube() -> Project {
         orientation: Vec3::new(0.0, 0.0, 1.0),
         background_noise: Some(Spectrum::new(20.0, SpectrumShape::White)),
         solver_id: None,
+        group: None,
     });
     p.surface_receivers = vec![
         SurfaceReceiver {

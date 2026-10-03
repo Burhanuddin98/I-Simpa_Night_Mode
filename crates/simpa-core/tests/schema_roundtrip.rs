@@ -431,6 +431,7 @@ fn point_receiver(rng: &mut Rng, p: &Project) -> PointReceiver {
         orientation: vec3(rng),
         background_noise: rng.chance(2).then(|| spectrum(rng, n)),
         solver_id: None,
+        group: rng.chance(3).then(|| rng.string()),
     }
 }
 
@@ -1680,6 +1681,7 @@ fn cube_project() -> Project {
             orientation: Vec3::new(1.0, 0.0, 0.0),
             background_noise: None,
             solver_id: None,
+            group: None,
         }],
         surface_receivers: Vec::new(),
         fitting_zones: Vec::new(),

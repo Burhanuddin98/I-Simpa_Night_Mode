@@ -591,6 +591,14 @@ pub struct PointReceiver {
     #[serde(deserialize_with = "required")]
     #[schemars(with = "Nullable<u32>", range(max = 2_147_483_647))]
     pub solver_id: Option<u32>,
+    /// The receiver group it sits in, as upstream's GUI groups point receivers (a receiver
+    /// list's element of type 7, `e_scene_recepteursp.h:66-70`): the groups' names from the
+    /// outermost, joined by ` / `, as [`Source::group`]. `None` at the top level. It reaches no
+    /// solver: upstream writes a group's receivers in its place (`e_scene_recepteursp.h:152-161`).
+    /// Optional in the file, and not written when `None`, so a project saved before it existed
+    /// loads and saves unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 /// A surface receiver (sound map): `recepteurss/recepteur_surfacique` or
