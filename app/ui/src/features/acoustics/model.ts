@@ -324,7 +324,7 @@ export function classical(report: Report): ClassicalRow[] {
     }));
   }
   if (at(report, 'spps.reference.status') !== 'computed') return [];
-  return report.bands_hz.map((_, b) => ({
+  const rows = report.bands_hz.map((_, b) => ({
     band: b,
     cells: [
       ev(`spps.reference.bands.${b}.sabine_s`, 'Sabine', 's', 2),
@@ -332,6 +332,10 @@ export function classical(report: Report): ClassicalRow[] {
       ev(`spps.reference.bands.${b}.kuttruff_s`, 'Kuttruff', 's', 2),
     ],
   }));
+  // Kuttruff's time applies only where every wall is Lambert with scattering 1: a column refused
+  // in every band says nothing a row needs to repeat, so it is left out.
+  const kept = [0, 1, 2].filter((k) => rows.some((r) => r.cells[k].value !== null));
+  return rows.map((r) => ({ band: r.band, cells: kept.map((k) => r.cells[k]) }));
 }
 
 /** A receiver's decay curve in one band (or the bands summed): the report's points, as drawn. */

@@ -6,7 +6,7 @@
 //   [data-str]   a string: its text is the report's JSON at `data-json`, exactly
 //   [data-label] a word that is not the report's: `wording` (MQ2), `param` (a parameter's
 //                name, `data-param` says which), `group` (a surface group's name, from the open
-//                project), `unit`
+//                project), `standard` (the words `DIN 18041`)
 //   [data-param] every element of one parameter (gate (b)): a column head, a cell, a series
 // Every digit the tab shows is inside one of these, or in a `<select>` (whose options are checked
 // on their own) or the run label (`[data-run-label]`); `strayDigits` says where one is not.

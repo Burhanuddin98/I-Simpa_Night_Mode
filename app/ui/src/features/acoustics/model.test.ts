@@ -194,7 +194,13 @@ test('Acoustics: bands as numbers of bands_hz, and the absorption, classical tab
   assert.equal(a.totals[1]?.path, 'room.bands.1.absorption_area_m2');
   const c = classical(r);
   assert.equal(c[0].cells[0].value?.path, 'spps.reference.bands.0.sabine_s.value');
-  assert.equal(c[0].cells[2].refusal?.code.text, 'params_not_evaluable');
+  // Kuttruff refused in every band: its column is left out; refused in one band only, kept.
+  assert.deepEqual(c[0].cells.map((x) => x.label), ['Sabine', 'Eyring']);
+  const k = report();
+  (at(k, 'spps.reference.bands.0') as Record<string, unknown>).kuttruff_s = { value: 0.62, mc_sd: 0.001 };
+  const ck = classical(k);
+  assert.deepEqual(ck[1].cells.map((x) => x.label), ['Sabine', 'Eyring', 'Kuttruff']);
+  assert.equal(ck[1].cells[2].refusal?.code.text, 'params_not_evaluable');
   assert.deepEqual(decay(r, 0, 0), { path: 'spps.point_receivers.0.bands.0.decay_curve', t: [0, 0.1], db: [0, -5.5] });
   assert.equal(decay(r, 0, 1), null);
 });

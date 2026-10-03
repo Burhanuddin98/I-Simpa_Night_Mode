@@ -232,14 +232,23 @@ describe('M12 P2: the Acoustics tab', () => {
       for (const l of s.labels) {
         if (l.kind === 'wording') assert.equal(l.text, MQ2_WORDING, what);
         else if (l.kind === 'param') assert.equal(l.text, PARAM_LABELS[l.param ?? ''], `${what}: label of ${l.param}`);
-        else assert.ok(['group', 'unit'].includes(l.kind), `${what}: a label of kind ${l.kind}`);
+        else if (l.kind === 'standard') assert.equal(l.text, 'DIN 18041', what);
+        else assert.equal(l.kind, 'group', `${what}: a label of kind ${l.kind}`);
       }
-      // Each band option is the JSON's band at its digits (kHz above 999 Hz).
-      for (const o of s.options.filter((x) => x.control === 'band' && x.value !== 'sum')) {
-        const hz = Number(o.value);
-        assert.ok((baseJson.bands_hz as number[]).includes(hz), `${what}: band option ${o.value}`);
+      // The controls' options hold digits too: each is the JSON's. A band option is its index into
+      // bands_hz, named by that band (kHz from 1000 Hz); a receiver option its index, named by
+      // its label; a DIN option the group the report carries.
+      const bandsHz = baseJson.bands_hz as number[];
+      const bandOpts = s.options.filter((x) => x.control === 'band');
+      assert.deepEqual(bandOpts.map((o) => o.value), [...bandsHz.map((_, i) => String(i)), 'sum'], `${what}: band options`);
+      for (const o of bandOpts.filter((x) => x.value !== 'sum')) {
+        const hz = bandsHz[Number(o.value)];
         assert.equal(o.text, hz >= 1000 ? `${hz / 1000} kHz` : `${hz} Hz`, `${what}: band option text`);
       }
+      const labels = (baseJson.spps as { point_receivers: { label: string }[] }).point_receivers.map((r) => r.label);
+      assert.deepEqual(s.options.filter((x) => x.control === 'receiver').map((o) => [o.value, o.text]), labels.map((l, i) => [String(i), l]), `${what}: receiver options`);
+      const groups = (baseJson.room as { din18041: { group: string }[] }).din18041.map((d) => d.group);
+      assert.deepEqual(s.options.filter((x) => x.control === 'din-group').map((o) => [o.value, o.text]), groups.map((g) => [g, g]), `${what}: DIN options`);
       // Every value carries its range and status; every refusal its code (row 37 (3), MQ3).
       for (const c of s.cells) {
         cellsSeen.add(`${c.receiver}|${c.param}`);
@@ -265,6 +274,8 @@ describe('M12 P2: the Acoustics tab', () => {
     assert.ok(!/validated/i.test(page), `"validated" is on screen: ${page.match(/.{0,40}validated.{0,40}/i)?.[0]}`);
     const receivers = ((baseJson.spps as { point_receivers: { label: string }[] }).point_receivers ?? []).map((r) => r.label);
     for (const r of receivers) assert.ok([...cellsSeen].some((k) => k.startsWith(`${r}|`)), `receiver ${r} has no cell`);
+    // A picture of the tab beside the receipt (C:, the gate's work folder).
+    await browser.saveScreenshot(path.join(WORK(), 'm12-a-acoustics.png'));
     console.log(`m12-a receipt: run ${baseRun.run}; ${compared} numbers and ${strings} strings compared over every selection; ${mismatches.length} mismatches; ${cellsSeen.size} receiver-parameter cells`);
     assert.deepEqual(mismatches, []);
     assert.ok(compared > 100, `only ${compared} numbers compared`);
