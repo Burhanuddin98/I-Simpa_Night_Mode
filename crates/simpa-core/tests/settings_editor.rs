@@ -142,7 +142,10 @@ fn air_outside_the_formula_s_range_is_a_warning_not_a_refusal() {
         assert_eq!(warned.len(), 1, "{t} °C {h} % {pa} Pa: {issues:#?}");
         assert_eq!(warned[0].severity, Severity::Warning);
         assert_eq!(warned[0].path, "/environment");
-        assert!(!validate::has_errors(&issues), "a warning only: {issues:#?}");
+        assert!(
+            !validate::has_errors(&issues),
+            "a warning only: {issues:#?}"
+        );
     }
     for (t, h, pa) in [
         (20.0, 50.0, 101_325.0),
@@ -331,7 +334,11 @@ fn every_editable_field_reaches_config_xml_and_survives_save_and_load() {
     assert_eq!(freqs, thirds.frequencies_hz);
     // 250 Hz was off: its three thirds (200, 250, 315) are off; everything else is on.
     for (f, d) in &spps.bands {
-        let want = if [200, 250, 315].contains(f) { "0" } else { "1" };
+        let want = if [200, 250, 315].contains(f) {
+            "0"
+        } else {
+            "1"
+        };
         assert_eq!(d, want, "{f} Hz");
     }
 

@@ -18,7 +18,9 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use simpa_core::geometry::check;
 use simpa_core::geometry::import::{self, ImportOptions, Unit, Up};
-use simpa_core::schema::{self, BandKind, BandSet, F64, History, LoadError, Op, OpError, Project, SolverKind};
+use simpa_core::schema::{
+    self, BandKind, BandSet, F64, History, LoadError, Op, OpError, Project, SolverKind,
+};
 use simpa_core::validate::{self, Context};
 
 use crate::events::LineClass;
@@ -1215,10 +1217,18 @@ mod pq3_tests {
             last = Some(out.state);
         }
         let st = last.unwrap();
-        let spps: Vec<&str> = st.solver_issues.spps.iter().map(|i| i.code.as_str()).collect();
+        let spps: Vec<&str> = st
+            .solver_issues
+            .spps
+            .iter()
+            .map(|i| i.code.as_str())
+            .collect();
         assert_eq!(spps, ["NO_BAND_COMPUTED"]);
         assert_eq!(st.solver_issues.spps[0].rule, "no_band_computed");
-        assert_eq!(st.solver_issues.spps[0].path, "/solvers/spps/bands_computed");
+        assert_eq!(
+            st.solver_issues.spps[0].path,
+            "/solvers/spps/bands_computed"
+        );
         assert!(st.solver_issues.tcr.is_empty());
         assert!(!st.run_blockers.iter().any(|b| b == "NO_BAND_COMPUTED"));
         assert_eq!(s.solver_blockers(SolverKind::Spps), ["NO_BAND_COMPUTED"]);
@@ -1267,7 +1277,11 @@ mod pq3_tests {
             assert_eq!(s.json().unwrap(), before, "refused: unchanged");
         }
         let out = set_air(&mut s, 60.0, 50.0, 101_325.0);
-        assert!(out.applied, "a warning is not a refusal: {:?}", out.refusals);
+        assert!(
+            out.applied,
+            "a warning is not a refusal: {:?}",
+            out.refusals
+        );
         let warned: Vec<&UiIssue> = out
             .state
             .issues
@@ -1276,7 +1290,11 @@ mod pq3_tests {
             .collect();
         assert_eq!(warned.len(), 1);
         assert_eq!(warned[0].severity, IssueSeverity::Warning);
-        assert!(out.state.run_blockers.is_empty(), "{:?}", out.state.run_blockers);
+        assert!(
+            out.state.run_blockers.is_empty(),
+            "{:?}",
+            out.state.run_blockers
+        );
     }
 
     /// A preset is one edit: `Project::rebanded` in the core, applied through the checked apply,
@@ -1324,7 +1342,10 @@ mod pq3_tests {
     fn a_band_range_that_is_not_one_is_refused_and_nothing_changes() {
         let mut s = opened(BOX);
         let before = s.json().unwrap();
-        assert_eq!(s.edit_reband("fifth", 125, 4000).unwrap_err().code, "REBAND_KIND");
+        assert_eq!(
+            s.edit_reband("fifth", 125, 4000).unwrap_err().code,
+            "REBAND_KIND"
+        );
         assert_eq!(
             s.edit_reband("octave", 100, 4000).unwrap_err().code,
             "REBAND_RANGE"

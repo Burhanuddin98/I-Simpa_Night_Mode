@@ -984,7 +984,11 @@ fn every_band_off_refuses_that_solver_s_run_and_not_the_other_s() {
     assert!(p.solvers.tcr.bands_computed.iter().all(|&on| on));
     let empty = fresh_dir("pq3-no-band-mesh");
 
-    let opts = options("pq3-no-band-spps", SolverKind::Spps, exe_for(SolverKind::Spps));
+    let opts = options(
+        "pq3-no-band-spps",
+        SolverKind::Spps,
+        exe_for(SolverKind::Spps),
+    );
     let r = project("spps", &file, &MeshChoice::Reuse(empty.clone()), &opts);
     assert_refused(&r, Stage::Validate, &["no_band_computed"], ExitClass::Usage);
     assert_eq!(written(&r).verdict.codes(), ["no_band_computed"]);
