@@ -143,6 +143,8 @@ fn teaching_room() -> Project {
     p.solvers.spps.extinction_exponent = F64::new(5.0);
     // And to upstream's 10 ms step: the default is 1 ms since decision row 11 reached the code.
     p.solvers.spps.time_step_s = F64::new(0.01);
+    // And to upstream's echogram per source off: on is the default since PQ3 call 3.
+    p.solvers.spps.echogram_per_source = false;
     assert_eq!(
         p.bands,
         BandSet::octaves_125_to_4000(),
@@ -420,6 +422,8 @@ fn hall_run() -> Project {
     p.solvers.spps.extinction_exponent = F64::new(5.0);
     // And to upstream's 10 ms step (decision row 11 made 1 ms the default).
     p.solvers.spps.time_step_s = F64::new(0.01);
+    // And to upstream's echogram per source off (PQ3 call 3 made on the default).
+    p.solvers.spps.echogram_per_source = false;
     p.check_integrity().expect("the hall run is consistent");
     p
 }
