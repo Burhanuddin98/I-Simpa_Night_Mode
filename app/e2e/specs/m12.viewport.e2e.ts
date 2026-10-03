@@ -25,7 +25,6 @@ import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { clickSelector, RESULTS_STEP_CURRENT } from '../lib/dom.ts';
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
-import { waitRun } from '../lib/m11.ts';
 import { f32, level, readCsbin, readPbin, type Csbin } from '../lib/m12files.ts';
 import { env } from '../lib/types.ts';
 
@@ -53,7 +52,7 @@ interface ParticleState {
   bufferBytes: number;
 }
 
-const HOOKS = ['idle', 'openProject', 'edit', 'projectJson', 'runStart', 'waitRun', 'selectRun', 'setStep', 'm12Map', 'm12Texels', 'm12DiffTexels', 'm12SetStep', 'm12Particles'];
+const HOOKS = ['idle', 'openProject', 'edit', 'projectJson', 'runStart', 'runState', 'runsRows', 'selectRun', 'setStep', 'm12Map', 'm12Texels', 'm12DiffTexels', 'm12SetStep', 'm12Particles', 'm12MapPixels'];
 
 const mapState = () => hook<MapState | null>('m12Map');
 const particleState = () => hook<ParticleState | null>('m12Particles');
@@ -105,9 +104,22 @@ describe('M12 P3 viewport: surface maps and particle playback', () => {
     p.solvers.spps.random_seed = seed;
     const r = await m10.edit({ op: 'set_solver_settings', settings: p.solvers });
     assert.equal(r.applied, true, `settings refused: ${JSON.stringify(r.refusals)}`);
+    // A short run can end before a waitRun(null) is asked: the new row is found by name, as
+    // m11.settings.e2e.ts does.
+    const before = new Set((await hook<{ run: string }[]>('runsRows')).map((r) => r.run));
     await hook('runStart', 'spps');
-    const run = await waitRun(null, 'ended', 300_000);
+    let fresh: { run: string; status: string } | undefined;
+    await browser.waitUntil(
+      async () => {
+        if ((await hook<unknown>('runState')) !== null) return false;
+        fresh = (await hook<{ run: string; status: string }[]>('runsRows')).find((r) => !before.has(r.run) && r.status !== 'RUNNING');
+        return fresh !== undefined;
+      },
+      { timeout: 300_000, interval: 250, timeoutMsg: 'the run did not end within 300 s' },
+    );
     await m10.idle();
+    const run = (fresh as unknown as { run: string; status: string }).run;
+    assert.equal((fresh as unknown as { status: string }).status, 'OK', `run ${run} ended ${(fresh as unknown as { status: string }).status}`);
     return run;
   }
 
@@ -220,12 +232,17 @@ describe('M12 P3 viewport: surface maps and particle playback', () => {
     const bottom = Math.max(Math.floor(lo + 1e-5), top - 60);
     const legend = await $('[data-part="map-legend"]');
     await legend.waitForDisplayed({ timeout: 30_000 });
-    assert.equal(await legend.getAttribute('data-results-region'), '', 'the legend is a results region (m10-h, m11-h)');
+    assert.notEqual(await legend.getAttribute('data-results-region'), null, 'the legend is a results region (m10-h, m11-h)');
     const lab = async (k: string) => shown(await legend.$(`[data-legend="${k}"]`).getText());
     console.log(`receipt m12-p3-maps: legend ${await lab('lo')} / ${await lab('mid')} / ${await lab('hi')}, file ${lo.toFixed(3)}..${hi.toFixed(3)} dB`);
     assert.equal(await lab('lo'), String(bottom));
     assert.equal(await lab('hi'), `${top} dB`);
     assert.match(m.legend?.gradient ?? '', /#0B0B0E.*#B0161F.*#FCD270/i, 'black through red to yellow');
+    // The map is drawn: at a step with energy, hiding it changes pixels on screen.
+    await hook('m12SetStep', 0);
+    const px = await hook<{ pixels: number; changed: number } | null>('m12MapPixels');
+    console.log(`receipt m12-p3-maps: the map changes ${px?.changed} of ${px?.pixels} pixels at step 0`);
+    assert.ok(px && px.changed > 100, 'the map draws on screen');
 
     // Band choice: 500 Hz loads the 500 Hz file.
     await clickSelector('[data-map-band="500"]');

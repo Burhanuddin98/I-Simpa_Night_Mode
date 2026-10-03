@@ -13,7 +13,9 @@
 //   - The plan inset is a second pass in the same renderer: an orthographic top camera and a
 //     scissor rectangle under the DOM frame. The Plan tab uses that camera as the main view.
 //
-// No acoustic number is computed or shown here; the plan label is a geometry fact.
+// No acoustic number is computed or shown here; the plan label is a geometry fact. The Results
+// step's layer (resultsLayer.ts: the surface map and particle playback, M12 P3) is drawn in this
+// scene, only on that step, at the shared Animator's step (animator.ts).
 import {
   AmbientLight,
   BackSide,
@@ -49,10 +51,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { MeshBVH } from 'three-mesh-bvh';
 import * as actions from '../../actions';
 import type { SceneMesh } from '../../mesh';
-import { log, meshStore, sceneStore, selectionStore, Store, toolStore, viewportStore, type Selection } from '../../store';
+import type { Particles, SurfaceMap } from '../../resultsData';
+import { log, meshStore, sceneStore, selectionStore, stepStore, Store, toolStore, viewportStore, type Selection } from '../../store';
 import { registerHook } from '../../testhooks';
 import { buildTopology, coplanarFaces, faceNormalOf, type FaceTopology } from './floodfill';
+import { animatorStore } from './animator';
 import { firstFace, modelGeometry, pickingBvh } from './pick';
+import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
 import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
 
@@ -189,6 +194,9 @@ class ViewportEngine {
   // The pointer between down and up.
   private down = { x: 0, y: 0, moved: false };
 
+  /** The Results step's surface map and particles (M12 P3). */
+  readonly results = new ResultsLayer();
+
   constructor() {
     this.persp.up.set(0, 0, 1);
     this.plan.up.set(0, 1, 0);
@@ -241,7 +249,9 @@ class ViewportEngine {
       this.receiverPoints,
       this.sourcePoints,
       this.halo,
+      this.results.group,
     );
+    this.results.setShown(stepStore.get() === 'results');
     this.defaultCamera();
   }
 
@@ -270,6 +280,14 @@ class ViewportEngine {
       sceneStore.subscribe(() => this.onScene()),
       selectionStore.subscribe(() => this.onSelection()),
       toolStore.subscribe(() => this.applyTool()),
+      stepStore.subscribe(() => {
+        this.results.setShown(stepStore.get() === 'results');
+        this.invalidate();
+      }),
+      animatorStore.subscribe(() => {
+        this.results.setStep(animatorStore.get().step);
+        this.invalidate();
+      }),
       () => resize.disconnect(),
       () => window.removeEventListener('keydown', onKey),
       registerHook('highlightedFaceCount', () => this.highlightCount),
@@ -325,6 +343,7 @@ class ViewportEngine {
     renderer.autoClear = false;
     this.renderer = renderer;
     this.canvas = canvas;
+    this.results.setRenderer(renderer);
 
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
@@ -966,6 +985,37 @@ class ViewportEngine {
    * hidden, transparent, recoloured, rejected by the depth test or not in the scene counts 0.
    * Null without a live renderer.
    */
+  /**
+   * M12 P3: the pixels the surface map changes on screen, drawn as the app draws it and again
+   * with the map hidden, in one task (as `highlightPixels`). A map whose shader does not compile,
+   * or that draws nothing, changes 0.
+   */
+  mapPixels(): { pixels: number; changed: number } | null {
+    const r = this.renderer;
+    if (!r || !this.dom || this.contextLost || !this.syncSize()) return null;
+    const gl = r.getContext();
+    const read = () => {
+      const px = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+      gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return px;
+    };
+    this.renderNow();
+    const drawn = read();
+    const restore = this.results.hideMapFor();
+    try {
+      this.renderNow();
+    } finally {
+      restore();
+    }
+    const bare = read();
+    this.renderNow();
+    let changed = 0;
+    for (let i = 0; i < drawn.length; i += 4) {
+      if (Math.max(Math.abs(drawn[i] - bare[i]), Math.abs(drawn[i + 1] - bare[i + 1]), Math.abs(drawn[i + 2] - bare[i + 2])) > 2) changed++;
+    }
+    return { pixels: drawn.length / 4, changed };
+  }
+
   private highlightPixels(): { pixels: number; changed: number; warn: number } | null {
     const r = this.renderer;
     if (!r || !this.dom || this.contextLost || !this.syncSize()) return null;
@@ -1029,6 +1079,34 @@ export function attachViewport(dom: ViewportDom): () => void {
 /** The main view: perspective, or the plan's top camera. View › Perspective / Plan may call it. */
 export function setView(view: ViewMode): void {
   engine.setView(view);
+}
+
+/** The Results step's map: `m` drawn with `meta` (a difference when `base` is given); null clears it. Returns why it cannot be drawn, or null. */
+export function showMap(m: SurfaceMap | null, meta?: MapMeta, base: SurfaceMap | null = null): string | null {
+  const err = m && meta ? engine.results.setMap(m, meta, base) : (engine.results.clearMap(), null);
+  engine.results.setStep(animatorStore.get().step);
+  engine.invalidate();
+  return err;
+}
+
+/** The Results step's particles; null clears them. */
+export function showParticles(p: Particles | null, meta?: ParticleMeta): void {
+  engine.results.setParticles(p, meta ?? null);
+  engine.results.setStep(animatorStore.get().step);
+  engine.invalidate();
+}
+
+/** What the surface map changes on screen (the m12 pixel hook). */
+export function mapPixels(): { pixels: number; changed: number } | null {
+  return engine.mapPixels();
+}
+
+/** The layer itself, for the M12 test hooks (ResultsOverlay.tsx). */
+export const resultsLayer = (): ResultsLayer => engine.results;
+
+/** Draws now (a test hook's read must see the current step). */
+export function renderNow(): void {
+  engine.invalidate();
 }
 
 /** Frames the model in the perspective view (View › Frame model may call it). */

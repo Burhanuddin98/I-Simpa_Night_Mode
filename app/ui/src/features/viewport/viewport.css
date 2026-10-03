@@ -207,3 +207,147 @@
 .vp-menu {
   z-index: 20;
 }
+
+/* M12 P3: the Results step's map controls, legend and timeline (design:164-170, :436-450). */
+.vp-map-panel {
+  position: absolute;
+  top: 52px;
+  left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  max-width: 340px;
+}
+.vp-results-note {
+  position: absolute;
+  top: 52px;
+  left: 12px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+.vp-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.vp-row-label,
+.vp-map-title {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-right: 4px;
+}
+.vp-chip-btn {
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 5px;
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.vp-chip-btn.mono,
+.mono {
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+.vp-chip-btn[aria-checked='true'] {
+  background: var(--red-deep);
+  border-color: var(--red);
+  color: var(--text);
+}
+.vp-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  text-align: left;
+}
+.vp-switch .track {
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--edge);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 2px;
+  box-sizing: border-box;
+}
+.vp-switch[aria-checked='true'] .track {
+  background: var(--red);
+  justify-content: flex-end;
+}
+.vp-switch .knob {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text);
+}
+.vp-diff-note {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.vp-legend {
+  position: absolute;
+  left: 226px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+.vp-legend-title {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.vp-legend-bar {
+  width: 200px;
+  height: 8px;
+  border-radius: 2px;
+}
+.vp-legend-labels {
+  width: 200px;
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-2);
+}
+.vp-transport {
+  position: absolute;
+  left: 450px;
+  right: 84px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px;
+  min-width: 220px;
+}
+.vp-step {
+  flex: 1;
+  min-width: 80px;
+  accent-color: var(--red);
+}
+.vp-time {
+  min-width: 64px;
+  text-align: right;
+  color: var(--text-2);
+}
+.vp-particles-none {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.vp-particles-none .title {
+  font-size: 12.5px;
+  color: var(--text-2);
+}
