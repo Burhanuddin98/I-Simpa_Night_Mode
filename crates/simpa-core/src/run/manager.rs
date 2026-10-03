@@ -718,10 +718,11 @@ pub fn run_project(
     }
 
     // The project rules: any error is exit class 2. The mesh stamp is not given here: a mesh
-    // folder's staleness is the mesh stage's `mesh_out_of_date`, exit class 4.
+    // folder's staleness is the mesh stage's `mesh_out_of_date`, exit class 4. The solver is: a
+    // rule about one solver's run (`no_band_computed`) is judged for the solver launched.
     on_event(&RunEvent::Stage(Stage::Validate));
-    let issues =
-        validate::validate_with(&project, &validate::Context::for_project_file(project_file));
+    let ctx = validate::Context::for_project_file(project_file).with_solver(opts.solver);
+    let issues = validate::validate_with(&project, &ctx);
     rec.warnings.extend(
         issues
             .iter()

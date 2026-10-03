@@ -1595,6 +1595,9 @@ fn cube_project() -> Project {
     solvers.spps.method = ComputationMethod::Random;
     // And to upstream's trans_epsilon 5, for the same reason (decision row 41 made 7 the default).
     solvers.spps.extinction_exponent = F64::new(5.0);
+    // And to upstream's echogram per source off, for the same reason (PQ3 call 3 made on the
+    // new-project default).
+    solvers.spps.echogram_per_source = false;
     Project {
         format_version: FORMAT_VERSION,
         id: ProjectId::from_u128(id(1)),

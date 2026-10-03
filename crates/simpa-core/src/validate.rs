@@ -6,8 +6,10 @@
 //! proceeds. No rule turns a solver failure into a warning.
 //!
 //! There are two stages, as on the contract page:
-//! - [`validate`] and [`validate_with`] check a typed [`Project`] (36 `project` rules), with its
+//! - [`validate`] and [`validate_with`] check a typed [`Project`] (38 `project` rules), with its
 //!   geometry, its directivity files and, when one is given, the stamp of its tetrahedral mesh.
+//!   A rule about the run of one solver (`no_band_computed`) applies only when the [`Context`]
+//!   names that solver; [`solver_issues`] checks those rules alone.
 //! - [`validate_export`] checks the exact files the exporter wrote to a run folder
 //!   (`config.xml`, the `.cbin` and the `.mbin`) immediately before launch (7 `export` rules).
 //!
@@ -50,7 +52,7 @@ use serde::Serialize;
 
 use crate::schema::{
     self, FORMAT_VERSION, FittingShape, FittingZoneId, LoadError, MeshSettings, Project,
-    SurfaceReceiverShape, Vec3,
+    SolverKind, SurfaceReceiverShape, Vec3,
 };
 
 mod directivity;
@@ -131,6 +133,7 @@ pub mod codes {
     pub const BAND_DUPLICATE: &str = "band_duplicate";
     pub const BAND_FREQUENCY_NOT_INTEGER: &str = "band_frequency_not_integer";
     pub const BAND_SET_MISMATCH: &str = "band_set_mismatch";
+    pub const NO_BAND_COMPUTED: &str = "no_band_computed";
     // Materials.
     pub const MATERIAL_UNASSIGNED: &str = "material_unassigned";
     pub const MATERIAL_PLACEHOLDER: &str = "material_placeholder";
@@ -161,6 +164,7 @@ pub mod codes {
     // Environment.
     pub const ATMOSPHERE_INVALID: &str = "atmosphere_invalid";
     pub const ABSATMO_INVALID: &str = "absatmo_invalid";
+    pub const ATMOSPHERE_OUTSIDE_FORMULA_RANGE: &str = "atmosphere_outside_formula_range";
     // Names.
     pub const NAME_TOO_LONG: &str = "name_too_long";
     pub const NAME_NOT_FILENAME_SAFE: &str = "name_not_filename_safe";
@@ -213,13 +217,14 @@ const fn rule(code: &'static str, stage: Stage, severity: Severity) -> Rule {
 use Severity::{Error as E, Warning as W};
 use Stage::{Export as X, Project as P};
 
-/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 36 project rules and 7
-/// export rules, 40 errors and 3 warnings.
-pub const RULES: [Rule; 43] = [
+/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 38 project rules and 7
+/// export rules, 41 errors and 4 warnings.
+pub const RULES: [Rule; 45] = [
     rule(codes::BAND_SET_EMPTY, P, E),
     rule(codes::BAND_DUPLICATE, P, E),
     rule(codes::BAND_FREQUENCY_NOT_INTEGER, P, E),
     rule(codes::BAND_SET_MISMATCH, P, E),
+    rule(codes::NO_BAND_COMPUTED, P, E),
     rule(codes::MATERIAL_UNASSIGNED, P, E),
     rule(codes::MATERIAL_PLACEHOLDER, P, E),
     rule(codes::MATERIAL_VALUE_OUT_OF_RANGE, P, E),
@@ -243,6 +248,7 @@ pub const RULES: [Rule; 43] = [
     rule(codes::PARTICLE_COUNT_INVALID, P, E),
     rule(codes::ATMOSPHERE_INVALID, P, E),
     rule(codes::ABSATMO_INVALID, P, E),
+    rule(codes::ATMOSPHERE_OUTSIDE_FORMULA_RANGE, P, W),
     rule(codes::NAME_TOO_LONG, P, E),
     rule(codes::NAME_NOT_FILENAME_SAFE, P, E),
     rule(codes::NAME_DUPLICATE, P, E),
@@ -336,14 +342,26 @@ pub struct Context {
     /// [`mesh_input_hash`] of the project it was built from. `None` when no mesh exists yet, so
     /// export will build a fresh one and `mesh_out_of_date` does not apply.
     pub mesh_input_hash: Option<String>,
+    /// The solver that would run. The rules about one solver's run (`no_band_computed`) apply
+    /// only to it; `None` (an edit, `simpa validate`) checks none of them.
+    pub solver: Option<SolverKind>,
 }
 
 impl Context {
-    /// The context of a project file at `path`: its folder, and no mesh.
+    /// The context of a project file at `path`: its folder, no mesh and no solver.
     pub fn for_project_file(path: &Path) -> Self {
         Context {
             project_dir: path.parent().map(Path::to_path_buf),
             mesh_input_hash: None,
+            solver: None,
+        }
+    }
+
+    /// The same context for a run of `solver`.
+    pub fn with_solver(self, solver: SolverKind) -> Self {
+        Context {
+            solver: Some(solver),
+            ..self
         }
     }
 }
@@ -359,6 +377,15 @@ pub fn validate_with(project: &Project, ctx: &Context) -> Vec<Issue> {
     let mut out = Vec::new();
     structure::check(project, &mut out);
     project::check(project, ctx, &mut out);
+    out
+}
+
+/// Only the rules about a run of `solver` (`no_band_computed`): what [`validate_with`] adds when
+/// its context names `solver`. The app asks this per solver, so that Run is blocked for the
+/// solver chosen and not for the other one.
+pub fn solver_issues(project: &Project, solver: SolverKind) -> Vec<Issue> {
+    let mut out = Vec::new();
+    project::solver_rules(project, solver, &mut out);
     out
 }
 
@@ -489,14 +516,14 @@ mod tests {
 
     #[test]
     fn rule_table_matches_the_contract_counts() {
-        assert_eq!(RULES.len(), 43);
+        assert_eq!(RULES.len(), 45);
         let project = RULES.iter().filter(|r| r.stage == Stage::Project).count();
         let warnings = RULES
             .iter()
             .filter(|r| r.severity == Severity::Warning)
             .count();
-        assert_eq!((project, 43 - project), (36, 7));
-        assert_eq!((43 - warnings, warnings), (40, 3));
+        assert_eq!((project, 45 - project), (38, 7));
+        assert_eq!((45 - warnings, warnings), (41, 4));
         let mut all: Vec<&str> = RULES.iter().map(|r| r.code).collect();
         all.extend(STRUCTURAL_CODES);
         let n = all.len();

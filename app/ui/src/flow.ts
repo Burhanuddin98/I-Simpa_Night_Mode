@@ -1,11 +1,28 @@
 // Pure pieces of the M11 run and save flows (docs/investigations/2026-09-29-m11/PLAN.md 3.2),
 // shared by actions.ts, the test hooks and the packages' components. No store, no backend, only
 // erasable TypeScript, tested by flow.test.ts under `node --test`.
-import type { ProjectInfo, RunRow, RunStreamEvent, SolversStatus } from './bindings/ipc.ts';
-import type { ClassCounts, ConsoleLine, ConsoleTag, LinePart, RunLine, RunLog } from './store.ts';
+import type { ProjectInfo, RunRow, RunStreamEvent, SceneState, SolversStatus } from './bindings/ipc.ts';
+import type { ClassCounts, ConsoleLine, ConsoleTag, LinePart, RunLine, RunLog, SolverName } from './store.ts';
 
 /** The app's own run blocker: a run is active (the backend refuses a second one). */
 export const RUN_ACTIVE = 'RUN_ACTIVE';
+
+/**
+ * Why the project may not run with `solver`, as UI codes: `SceneState.run_blockers`, then that
+ * solver's own errors (`SceneState.solver_issues`, PQ3's `NO_BAND_COMPUTED`), each once. The
+ * other solver's do not block it. `null` with no project. What `joinBlockers` takes as `project`.
+ */
+export function projectBlockers(
+  scene: Pick<SceneState, 'run_blockers' | 'solver_issues'> | null,
+  solver: SolverName,
+): string[] | null {
+  if (!scene) return null;
+  const out = [...scene.run_blockers];
+  for (const i of scene.solver_issues[solver]) {
+    if (i.severity === 'error' && !out.includes(i.code)) out.push(i.code);
+  }
+  return out;
+}
 
 /**
  * Why Run is disabled, as UI codes: the project's own (`SceneState.run_blockers`), then the

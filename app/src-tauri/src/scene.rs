@@ -13,8 +13,8 @@ use serde::Serialize;
 use simpa_core::geometry::check::{CheckReport, ReasonCode, Verdict};
 use simpa_core::geometry::import::ImportReport;
 use simpa_core::schema::{
-    BandSet, EntityRef, GroupId, Material, PointReceiver, Project, Source, SurfaceGroup,
-    SurfaceReceiver, Variant, VariantId,
+    BandSet, EntityRef, GroupId, Material, PointReceiver, Project, SolverKind, Source,
+    SurfaceGroup, SurfaceReceiver, Variant, VariantId,
 };
 use simpa_core::validate::{Issue, Severity, codes};
 
@@ -35,8 +35,13 @@ pub struct SceneState {
     pub issues: Vec<UiIssue>,
     /// Why Run is disabled by the project itself, as UI codes; empty when the project may run.
     /// The UI adds the app's own blockers beside them: `SOLVER_NOT_FOUND` and
-    /// `SOLVER_UNVERIFIED` (`solvers_status`) and `RUN_ACTIVE` (the run slot).
+    /// `SOLVER_UNVERIFIED` (`solvers_status`) and `RUN_ACTIVE` (the run slot), and the chosen
+    /// solver's own errors from `solver_issues`.
     pub run_blockers: Vec<String>,
+    /// The issues of the rules about one solver's run (`no_band_computed`), per solver. Run with
+    /// a solver is blocked by its errors here as well as by `run_blockers`; the other solver's
+    /// do not block it.
+    pub solver_issues: SolverIssues,
     /// Console lines produced since the last state was returned.
     pub lines: Vec<LogLine>,
 }
@@ -133,6 +138,44 @@ pub struct CheckSummary {
 pub enum IssueSeverity {
     Error,
     Warning,
+}
+
+/// [`SceneState::solver_issues`]: `validate::solver_issues` for each solver.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct SolverIssues {
+    pub spps: Vec<UiIssue>,
+    pub tcr: Vec<UiIssue>,
+}
+
+impl SolverIssues {
+    pub fn of(project: &Project) -> Self {
+        let each = |solver| {
+            simpa_core::validate::solver_issues(project, solver)
+                .iter()
+                .map(|i| ui_issue(project, i))
+                .collect()
+        };
+        SolverIssues {
+            spps: each(SolverKind::Spps),
+            tcr: each(SolverKind::Tcr),
+        }
+    }
+
+    /// The UI codes of `solver`'s errors, each once: what blocks a run of it beside the
+    /// project's own `run_blockers`.
+    pub fn blockers(&self, solver: SolverKind) -> Vec<String> {
+        let issues = match solver {
+            SolverKind::Spps => &self.spps,
+            SolverKind::Tcr => &self.tcr,
+        };
+        let mut out: Vec<String> = Vec::new();
+        for i in issues {
+            if i.severity == IssueSeverity::Error && !out.contains(&i.code) {
+                out.push(i.code.clone());
+            }
+        }
+        out
+    }
 }
 
 /// A validator issue as the UI shows it: the UI code and the core rule, both.

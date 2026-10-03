@@ -4,11 +4,14 @@
 import type { LibraryMaterial } from './bindings/ipc.ts';
 import type {
   EntityRef,
+  Environment,
   Material,
   MaterialQuantity,
   Op,
   PointReceiver,
   ReflectionLaw,
+  SolverKind,
+  SolverSettings,
   Source,
   Variant,
 } from './bindings/schema.ts';
@@ -131,6 +134,22 @@ export function libraryMaterial(entry: LibraryMaterial, id: string, bandCount: n
     solver_id: null,
   };
 }
+
+// ---- PQ3: the Simulate settings (docs/investigations/2026-10-03-pq3/PLAN.md) -----------------
+
+/** The whole solver settings, as the editor sends any SPPS field (C7-C12, C21, C22). */
+export const setSolverSettings = (settings: SolverSettings): Op => ({ op: 'set_solver_settings', settings });
+
+/** One band of one solver on or off (C25). Every band off blocks that solver's run, not the edit. */
+export const setBandComputed = (solver: SolverKind, band: number, computed: boolean): Op => ({
+  op: 'set_band_computed',
+  solver,
+  band,
+  computed,
+});
+
+/** The whole environment, as the editor sends the air's temperature, humidity and pressure (C27). */
+export const setEnvironment = (environment: Environment): Op => ({ op: 'set_environment', environment });
 
 // ---- new entities -----------------------------------------------------------------------------
 

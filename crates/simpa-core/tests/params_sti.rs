@@ -811,7 +811,12 @@ fn a_decay_followed_by_a_flat_tail_refuses() {
         other => panic!("{other:?}"),
     }
     let r = receiver(&every_octave(&e, 2.0), dt, true);
-    assert!(r.male.is_err() && r.female.is_err(), "{:?} {:?}", r.male, r.female);
+    assert!(
+        r.male.is_err() && r.female.is_err(),
+        "{:?} {:?}",
+        r.male,
+        r.female
+    );
 }
 
 /// The same 2 s decay over 1.6 s, then an empty window and one stray deposit, 1/30 of the last
@@ -830,5 +835,10 @@ fn a_stray_late_deposit_after_an_empty_window_refuses() {
         other => panic!("{other:?}"),
     }
     let r = receiver(&every_octave(&e, 2.0), dt, true);
-    assert!(r.male.is_err() && r.female.is_err(), "{:?} {:?}", r.male, r.female);
+    assert!(
+        r.male.is_err() && r.female.is_err(),
+        "{:?} {:?}",
+        r.male,
+        r.female
+    );
 }

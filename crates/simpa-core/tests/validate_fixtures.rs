@@ -144,6 +144,10 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
     add("band_set_mismatch", &|p| {
         p.materials[0].absorption.pop();
     });
+    add("no_band_computed", &|p| {
+        // Checked for the solver its context names (`no_band_computed.context.json`: SPPS).
+        p.solvers.spps.bands_computed = vec![false; 6];
+    });
     add("material_unassigned", &|p| {
         p.surface_groups[0].material = MaterialId::from_u128(fixed(0x901));
     });
@@ -224,6 +228,10 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
             unit: AttenuationUnit::PerMetre,
         };
     });
+    add("atmosphere_outside_formula_range", &|p| {
+        // Above ISO 9613-1's +50 °C: physical air, but no accuracy stated for the formula.
+        p.environment.temperature_c = F64::new(60.0);
+    });
     add("name_too_long", &|p| {
         p.sources[0].name = "Source with a name longer than the 49 bytes a cell holds".to_string();
     });
@@ -301,14 +309,17 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
     all
 }
 
-/// The context a project fixture is checked in: its folder, and the mesh stamp from
-/// `<stem>.context.json` if there is one.
+/// The context a project fixture is checked in: its folder, and the mesh stamp and the solver
+/// from `<stem>.context.json` if there is one.
 fn context_for(path: &Path) -> Context {
     let mut ctx = Context::for_project_file(path);
     let sidecar = path.with_extension("context.json");
     if let Ok(text) = std::fs::read_to_string(&sidecar) {
         let value: serde_json::Value = serde_json::from_str(&text).expect("context JSON");
         ctx.mesh_input_hash = value["mesh_input_hash"].as_str().map(str::to_string);
+        ctx.solver = value
+            .get("solver")
+            .map(|s| serde_json::from_value::<SolverKind>(s.clone()).expect("a solver"));
     }
     ctx
 }
@@ -486,6 +497,11 @@ fn generated_files() -> Vec<(String, Vec<u8>)> {
         "mesh_out_of_date.context.json".to_string(),
         pretty(&context).into_bytes(),
     ));
+    let context = serde_json::json!({ "solver": SolverKind::Spps });
+    files.push((
+        "no_band_computed.context.json".to_string(),
+        pretty(&context).into_bytes(),
+    ));
     for (name, text) in directivity_files() {
         files.push((name.to_string(), text.into_bytes()));
     }
@@ -637,6 +653,7 @@ fn a_complete_directivity_file_and_the_current_mesh_pass() {
     let ctx = Context {
         project_dir: Some(dir.clone()),
         mesh_input_hash: Some(mesh_input_hash(&p)),
+        solver: None,
     };
     assert_eq!(validate::validate_with(&p, &ctx), Vec::new());
 

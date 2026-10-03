@@ -10,6 +10,7 @@ import {
   joinBlockers,
   needsSavePrompt,
   progressText,
+  projectBlockers,
   RUN_ACTIVE,
   WITHHELD_DETAIL,
 } from './flow.ts';
@@ -26,6 +27,27 @@ test('the blockers join the project, the solvers and the run slot, each once', (
     RUN_ACTIVE,
   ]);
   assert.deepEqual(joinBlockers([RUN_ACTIVE], solvers([]), true), [RUN_ACTIVE]);
+});
+
+test("a solver's own errors block its run, not the other solver's (PQ3, no_band_computed)", () => {
+  const issue = (code: string, severity: 'error' | 'warning') => ({
+    code,
+    rule: code.toLowerCase(),
+    severity,
+    path: '/solvers/spps/bands_computed',
+    entity: null,
+    field: '',
+    message: '',
+  });
+  const scene = {
+    run_blockers: ['SOURCE_NONE'],
+    solver_issues: { spps: [issue('NO_BAND_COMPUTED', 'error'), issue('SOME_WARNING', 'warning')], tcr: [] },
+  };
+  assert.equal(projectBlockers(null, 'spps'), null);
+  assert.deepEqual(projectBlockers(scene, 'spps'), ['SOURCE_NONE', 'NO_BAND_COMPUTED']);
+  assert.deepEqual(projectBlockers(scene, 'tcr'), ['SOURCE_NONE']);
+  assert.deepEqual(projectBlockers({ ...scene, run_blockers: ['NO_BAND_COMPUTED'] }, 'spps'), ['NO_BAND_COMPUTED'], 'each once');
+  assert.deepEqual(joinBlockers(projectBlockers(scene, 'spps'), solvers([]), false), ['SOURCE_NONE', 'NO_BAND_COMPUTED']);
 });
 
 test('the save prompt asks only when the user changed something not on disk', () => {

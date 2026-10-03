@@ -2743,7 +2743,19 @@ fn read_solvers(
     }
     real!("rayon_recepteurp", sp.receiver_radius_m);
     flag!("output_recs_byfreq", sp.sound_maps_per_band);
-    flag!("output_recp_bysource", sp.echogram_per_source);
+    match opt_prop_bool(conf, "output_recp_bysource", what)? {
+        Some(v) => sp.echogram_per_source = v,
+        None => {
+            // Upstream's own GUI default (`e_core_sppscore.h:82`), kept independent of
+            // `SppsSettings::for_bands`'s new-project default: a legacy project with no
+            // `output_recp_bysource` gets upstream's actual off, not Night Mode's on (PQ3 call 3,
+            // `docs/investigations/2026-10-03-pq3/PLAN.md`).
+            sp.echogram_per_source = false;
+            notes.push(format!(
+                "{what}: no `output_recp_bysource`, upstream's default kept"
+            ));
+        }
+    }
     flag!("save_surface_intersection", sp.save_surface_intersections);
     flag!(
         "save_receivers_intersection",
@@ -3020,6 +3032,56 @@ mod tests {
             notes
                 .iter()
                 .any(|n| n.contains("no `pasdetemps`, upstream's default kept")),
+            "{notes:?}"
+        );
+    }
+
+    /// PQ3 call 3: a new project writes an echogram per source, but an imported `.proj` keeps
+    /// the file's own `output_recp_bysource`, and one with none keeps upstream's actual default,
+    /// off (`e_core_sppscore.h:82`), so the note "upstream's default kept" stays true.
+    #[test]
+    fn an_imported_project_keeps_its_own_echogram_per_source_not_night_mode_s_default() {
+        let parse = |configuration: &str| {
+            let xml = format!(
+                r#"<core>
+  <spps>
+    <configuration>{configuration}</configuration>
+    <mesh_conf/>
+    <core_conf_bfreq>
+      <p name="125" value="1"/>
+      <p name="250" value="1"/>
+      <p name="500" value="1"/>
+      <p name="1000" value="1"/>
+      <p name="2000" value="1"/>
+      <p name="4000" value="1"/>
+    </core_conf_bfreq>
+  </spps>
+</core>"#
+            );
+            let doc = Document::parse(&xml).unwrap();
+            let mut notes = Vec::new();
+            let s = read_solvers(
+                doc.root_element(),
+                &BandSet::octaves_125_to_4000(),
+                &mut notes,
+            )
+            .unwrap();
+            (s.spps.echogram_per_source, notes)
+        };
+        assert!(
+            Project::new("new").solvers.spps.echogram_per_source,
+            "a new project's default, which an import must not take"
+        );
+        let (on, _) = parse(r#"<p name="output_recp_bysource" value="1"/>"#);
+        assert!(on, "on in the file stays on");
+        let (on, _) = parse(r#"<p name="output_recp_bysource" value="0"/>"#);
+        assert!(!on, "off in the file stays off");
+        let (on, notes) = parse("");
+        assert!(!on, "upstream's actual default");
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("no `output_recp_bysource`, upstream's default kept")),
             "{notes:?}"
         );
     }

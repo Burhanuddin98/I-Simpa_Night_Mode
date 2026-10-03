@@ -24,7 +24,7 @@ import type {
   SolversStatus,
   StartupInfo,
 } from './bindings/ipc';
-import type { Op } from './bindings/schema';
+import type { BandKind, Op } from './bindings/schema';
 import { opText } from './ops';
 import { busyStore, type SolverName } from './store';
 
@@ -101,6 +101,9 @@ export const backend = {
   projectSave: (path: string | null) => invoke<SceneState>('project_save', { path }),
   /** The checked apply. The op goes as `opText`, never `JSON.stringify` (-0, NaN). */
   editApply: (op: Op) => invoke<EditOutcome>('edit_apply', { op: opText(op) }),
+  /** A band preset (PQ3): the core rebands the project and applies it as one checked edit. */
+  editReband: (kind: BandKind, lowestHz: number, highestHz: number) =>
+    invoke<EditOutcome>('edit_reband', { kind, lowest_hz: lowestHz, highest_hz: highestHz }),
   editUndo: () => invoke<SceneState>('edit_undo'),
   editRedo: () => invoke<SceneState>('edit_redo'),
   /** The geometry as raw bytes (mesh.ts decodes them). */

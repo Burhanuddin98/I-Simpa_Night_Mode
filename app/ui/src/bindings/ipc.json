@@ -1959,11 +1959,15 @@
           "type": "array"
         },
         "run_blockers": {
-          "description": "Why Run is disabled by the project itself, as UI codes; empty when the project may run.\nThe UI adds the app's own blockers beside them: `SOLVER_NOT_FOUND` and\n`SOLVER_UNVERIFIED` (`solvers_status`) and `RUN_ACTIVE` (the run slot).",
+          "description": "Why Run is disabled by the project itself, as UI codes; empty when the project may run.\nThe UI adds the app's own blockers beside them: `SOLVER_NOT_FOUND` and\n`SOLVER_UNVERIFIED` (`solvers_status`) and `RUN_ACTIVE` (the run slot), and the chosen\nsolver's own errors from `solver_issues`.",
           "items": {
             "type": "string"
           },
           "type": "array"
+        },
+        "solver_issues": {
+          "$ref": "#/$defs/SolverIssues",
+          "description": "The issues of the rules about one solver's run (`no_band_computed`), per solver. Run with\na solver is blocked by its errors here as well as by `run_blockers`; the other solver's\ndo not block it."
         },
         "view": {
           "$ref": "#/$defs/ProjectView",
@@ -1976,6 +1980,7 @@
         "groups",
         "issues",
         "run_blockers",
+        "solver_issues",
         "lines"
       ],
       "type": "object"
@@ -2055,6 +2060,28 @@
         "name",
         "path",
         "matches"
+      ],
+      "type": "object"
+    },
+    "SolverIssues": {
+      "description": "[`SceneState::solver_issues`]: `validate::solver_issues` for each solver.",
+      "properties": {
+        "spps": {
+          "items": {
+            "$ref": "#/$defs/UiIssue"
+          },
+          "type": "array"
+        },
+        "tcr": {
+          "items": {
+            "$ref": "#/$defs/UiIssue"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "spps",
+        "tcr"
       ],
       "type": "object"
     },

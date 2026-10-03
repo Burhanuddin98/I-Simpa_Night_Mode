@@ -439,9 +439,11 @@ export interface SceneState {
   /**
    * Why Run is disabled by the project itself, as UI codes; empty when the project may run.
    * The UI adds the app's own blockers beside them: `SOLVER_NOT_FOUND` and
-   * `SOLVER_UNVERIFIED` (`solvers_status`) and `RUN_ACTIVE` (the run slot).
+   * `SOLVER_UNVERIFIED` (`solvers_status`) and `RUN_ACTIVE` (the run slot), and the chosen
+   * solver's own errors from `solver_issues`.
    */
   run_blockers: string[];
+  solver_issues: SolverIssues;
   view: ProjectView;
 }
 /**
@@ -608,6 +610,15 @@ export interface VariantInfo {
 export interface LogLine {
   class: LineClass;
   text: string;
+}
+/**
+ * The issues of the rules about one solver's run (`no_band_computed`), per solver. Run with
+ * a solver is blocked by its errors here as well as by `run_blockers`; the other solver's
+ * do not block it.
+ */
+export interface SolverIssues {
+  spps: UiIssue[];
+  tcr: UiIssue[];
 }
 /**
  * The project without its mesh; the mesh travels as bytes (`scene_mesh`).
@@ -1256,4 +1267,14 @@ export interface ProjectView1 {
   surface_groups: SurfaceGroup[];
   surface_receivers: SurfaceReceiver[];
   variants: Variant[];
+}
+/**
+ * [`SceneState::solver_issues`]: `validate::solver_issues` for each solver.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "SolverIssues".
+ */
+export interface SolverIssues1 {
+  spps: UiIssue[];
+  tcr: UiIssue[];
 }

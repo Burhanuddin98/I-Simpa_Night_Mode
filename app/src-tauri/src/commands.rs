@@ -392,6 +392,22 @@ pub async fn edit_apply(state: State<'_, AppState>, op: String) -> CmdResult<Edi
     .await
 }
 
+/// A band preset (PQ3): every band of `kind` (`octave` or `third_octave`) from `lowest_hz` to
+/// `highest_hz`, per-band values from the nearest current band, as one undoable checked apply.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn edit_reband(
+    state: State<'_, AppState>,
+    kind: String,
+    lowest_hz: u32,
+    highest_hz: u32,
+) -> CmdResult<EditOutcome> {
+    let session = state.session.clone();
+    guard::blocking("edit_reband", move || {
+        lock(&session, "project")?.edit_reband(&kind, lowest_hz, highest_hz)
+    })
+    .await
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn edit_undo(state: State<'_, AppState>) -> CmdResult<SceneState> {
     let session = state.session.clone();

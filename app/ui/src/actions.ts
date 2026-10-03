@@ -23,7 +23,7 @@ import {
   type Up,
 } from './backend';
 import type { UiIssue } from './bindings/ipc';
-import type { Op, ReflectionLaw } from './bindings/schema';
+import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
 import { decodeMesh } from './mesh';
 import {
@@ -218,6 +218,20 @@ function fileRefusals(fieldKey: string | undefined, outcome: EditOutcome): void 
 export async function apply(op: Op, fieldKey?: string): Promise<EditOutcome> {
   return run('Edit failed', async () => {
     const outcome = await backend.editApply(op);
+    await accept(outcome.state);
+    fileRefusals(fieldKey, outcome);
+    return outcome;
+  });
+}
+
+/**
+ * A band preset (PQ3, C26): every band of `kind` from `lowestHz` to `highestHz`, each new band
+ * taking every per-band value of the nearest current band, computed and applied by the core as
+ * one checked edit and one undo step. Refusals are filed under `fieldKey` as `apply` files them.
+ */
+export async function reband(kind: BandKind, lowestHz: number, highestHz: number, fieldKey?: string): Promise<EditOutcome> {
+  return run('Changing the bands failed', async () => {
+    const outcome = await backend.editReband(kind, lowestHz, highestHz);
     await accept(outcome.state);
     fileRefusals(fieldKey, outcome);
     return outcome;
