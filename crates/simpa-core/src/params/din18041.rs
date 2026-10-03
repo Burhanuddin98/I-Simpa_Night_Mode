@@ -41,6 +41,20 @@ pub enum Group {
 }
 
 impl Group {
+    /// The five, in order.
+    pub const ALL: [Group; 5] = [Group::A1, Group::A2, Group::A3, Group::A4, Group::A5];
+
+    /// The use the group is for, in words.
+    pub fn use_name(self) -> &'static str {
+        match self {
+            Group::A1 => "music",
+            Group::A2 => "speech, lecture",
+            Group::A3 => "teaching, communication",
+            Group::A4 => "teaching, communication, inclusive",
+            Group::A5 => "sport",
+        }
+    }
+
     /// `(a, b)` of `T_soll = a·lg(V/m³) + b`.
     pub fn coefficients(self) -> (f64, f64) {
         match self {

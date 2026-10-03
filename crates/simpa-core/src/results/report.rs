@@ -14,12 +14,14 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use super::reference::{REFERENCE_LABEL, Reference};
+use super::room::{DIN18041_NOTE, Room};
 use super::spps::{
     BandEnergy, ParticleFileSummary, PointReceiver, SourcePoint, SourceTotals, SppsResults,
 };
 use super::tcr::{self, MainBand, TcrResults};
 use super::{Refusal, RunResults, SolverBuild, SolverResults, SurfaceFile, value_invalid};
 use crate::params::decay::{self, Arrival, Onset};
+use crate::params::din18041;
 use crate::params::edt;
 use crate::params::lambert::FreePaths;
 use crate::params::level;
@@ -65,7 +67,10 @@ use crate::schema::SolverKind;
 /// refused. No other field changes. 11 (M12): `bed`, each parameter's bed status from
 /// `beds/summary.json` as the build carries it ([`super::bed`]), and `validated_by_bed` read from it:
 /// true only when every parameter there is PASS, no longer always false. No other field changes.
-pub const REPORT_VERSION: u32 = 11;
+/// 12 (M12 P2): `room`, the room from the run's own inputs for either solver ([`RoomReport`]):
+/// volume, area, DIN 18041's group-A targets and the absorption by surface group; and an SPPS
+/// reference band's `sabine_s` beside `eyring_s`. No other field changes.
+pub const REPORT_VERSION: u32 = 12;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -1012,6 +1017,8 @@ pub struct ReferenceBandReport {
     pub lambert_walls: bool,
     /// Every face has the same absorption in this band.
     pub uniform_absorption: bool,
+    /// Sabine, `K·V/(4·m·V + Σ S·α)`, s, with SPPS's `K`: **reported only** (results version 12).
+    pub sabine_s: Evaluated,
     /// Plain Eyring, `K·V/(4·m·V − S·ln(1 − ᾱ))`, s, with SPPS's `K`: **reported only**.
     pub eyring_s: Evaluated,
     /// Kuttruff's corrected Eyring, `K·V/(4·m·V + A_K)`, s, with `γ²` from the room's geometry:
@@ -1078,6 +1085,7 @@ impl ReferenceReport {
                         mean_absorption: b.mean_absorption,
                         lambert_walls: b.lambert_walls,
                         uniform_absorption: b.uniform_absorption,
+                        sabine_s: Evaluated::of(b.sabine_s.clone()),
                         eyring_s: Evaluated::of(b.eyring_s.clone()),
                         kuttruff_s: match &b.kuttruff_s {
                             Ok((value, sd)) => Evaluated::bare(*value, Some(*sd)),
@@ -1266,6 +1274,138 @@ pub struct Report {
     pub spps: Option<SppsReport>,
     /// Present for a TCR run.
     pub tcr: Option<TcrReport>,
+    /// The room from the run's own inputs, for either solver (results version 12).
+    pub room: RoomReport,
+}
+
+/// One DIN 18041 group-A target at the room's volume.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct DinTargetReport {
+    pub group: din18041::Group,
+    /// The use the group is for, in words.
+    #[serde(rename = "use")]
+    pub use_: String,
+    /// `T_soll`, s, a bare value (`mc_sd` null); refused `params_din_out_of_range` where the
+    /// volume is outside the group's range.
+    pub target_s: Evaluated,
+}
+
+/// One band of a surface group's absorption.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct GroupBandReport {
+    pub freq_hz: i32,
+    /// `α`, as config.xml declares it (read as the solvers read it, f32).
+    pub absorption: f64,
+    /// `S·α`, m².
+    pub absorption_area_m2: f64,
+}
+
+/// A surface group as the solver saw it: the `.cbin` faces of one material id (config.xml
+/// declares one material per surface group).
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct GroupAbsorptionReport {
+    /// `type_surface@id`, the faces' `idMat`.
+    pub material_id: u32,
+    pub faces: usize,
+    /// m².
+    pub area_m2: f64,
+    /// Per computed band, ascending.
+    pub bands: Vec<GroupBandReport>,
+}
+
+/// One band's total absorption.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct RoomBandReport {
+    pub freq_hz: i32,
+    /// `Σ S·α` over the groups, m²: Sabine's absorption area without the air term.
+    pub absorption_area_m2: f64,
+}
+
+/// The room from a run's own inputs (`results::room`), or why there is none.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case", tag = "status")]
+pub enum RoomReport {
+    Computed {
+        /// The `.mbin`'s volume, m³.
+        volume_m3: f64,
+        /// The `.cbin` faces' total area, m².
+        area_m2: f64,
+        /// A1 to A5, in order.
+        din18041: Vec<DinTargetReport>,
+        /// Always [`super::room::DIN18041_NOTE`].
+        din18041_note: String,
+        /// By material id, ascending.
+        surfaces: Vec<GroupAbsorptionReport>,
+        /// Per computed band, ascending.
+        bands: Vec<RoomBandReport>,
+    },
+    NotComputed {
+        why: String,
+    },
+}
+
+impl RoomReport {
+    fn of(r: &Room) -> Self {
+        match r {
+            Room::Computed {
+                volume_m3,
+                area_m2,
+                din18041,
+                groups,
+            } => {
+                let surfaces: Vec<GroupAbsorptionReport> = groups
+                    .iter()
+                    .map(|g| GroupAbsorptionReport {
+                        material_id: g.material_id,
+                        faces: g.faces,
+                        area_m2: g.area_m2,
+                        bands: g
+                            .absorption
+                            .iter()
+                            .map(|&(freq_hz, a)| GroupBandReport {
+                                freq_hz,
+                                absorption: a,
+                                absorption_area_m2: g.area_m2 * a,
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                let bands = groups
+                    .first()
+                    .map(|g| g.absorption.as_slice())
+                    .unwrap_or_default()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &(freq_hz, _))| RoomBandReport {
+                        freq_hz,
+                        absorption_area_m2: surfaces
+                            .iter()
+                            .map(|s| s.bands[i].absorption_area_m2)
+                            .sum(),
+                    })
+                    .collect();
+                RoomReport::Computed {
+                    volume_m3: *volume_m3,
+                    area_m2: *area_m2,
+                    din18041: din18041
+                        .iter()
+                        .map(|(g, t)| DinTargetReport {
+                            group: *g,
+                            use_: g.use_name().into(),
+                            target_s: match t {
+                                Ok(v) => Evaluated::bare(*v, None),
+                                Err(e) => Evaluated::refused(e.clone()),
+                            },
+                        })
+                        .collect(),
+                    din18041_note: DIN18041_NOTE.into(),
+                    surfaces,
+                    bands,
+                }
+            }
+            Room::NotComputed { why } => RoomReport::NotComputed { why: why.clone() },
+        }
+    }
 }
 
 /// A band's series as `params` gets it: complete when the statistics say so, with the run's floor
@@ -1961,6 +2101,7 @@ pub fn report(r: &RunResults) -> Report {
         bands_hz: r.bands_hz.clone(),
         spps,
         tcr,
+        room: RoomReport::of(&r.room),
     }
 }
 
@@ -2279,8 +2420,8 @@ mod tests {
     /// the pair below no longer matches: bump the version, write its history line (here and in
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
-        11,
-        "178cbc01d443d0e9785fecde350041e6dc5473f84ad9bf7b05186c2ae15a3aa5",
+        12,
+        "667ef5d3ddf4926b45f44347306b43eb264ea1172d6b04ffbb3abd2bf6767233",
     );
 
     /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.
@@ -2479,6 +2620,7 @@ mod tests {
                 mean_absorption: 0.2,
                 lambert_walls: true,
                 uniform_absorption: true,
+                sabine_s: Ok(0.67),
                 eyring_s: Ok(0.6),
                 kuttruff_s: Err(refusal),
             }],

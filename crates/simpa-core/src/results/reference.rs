@@ -51,6 +51,8 @@ pub struct ReferenceBand {
     /// Every face has the same absorption in this band (the noise calibration tells uniform
     /// Lambert rooms apart: `params::noise::Walls`).
     pub uniform_absorption: bool,
+    /// Sabine, `params::room::sabine_rt`, with SPPS's `K`.
+    pub sabine_s: Result<f64, ParamError>,
     /// Plain Eyring, `params::room::eyring_rt`, with SPPS's `K`.
     pub eyring_s: Result<f64, ParamError>,
     /// Kuttruff's time and the standard deviation it inherits from `γ²`'s standard error
@@ -142,6 +144,7 @@ fn inner(solve: &Path, exp: &Expectation, c: f64) -> Result<Reference, String> {
             mean_absorption: sa / area_m2,
             lambert_walls,
             uniform_absorption,
+            sabine_s: room::sabine_rt(room.volume_m3, &surfaces, air, constant),
             eyring_s: room::eyring_rt(room.volume_m3, &surfaces, air, constant),
             kuttruff_s: if lambert_walls {
                 kuttruff(&paths, &surfaces, air, constant)

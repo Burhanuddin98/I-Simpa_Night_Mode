@@ -259,7 +259,7 @@ fn assert_bed_read_from_the_summary(rep: &Value) {
     }
     let all_pass = want.values().all(|p| p["status"] == "PASS");
     assert_eq!(rep["validated_by_bed"], all_pass);
-    assert_eq!(rep["results_version"], 11);
+    assert_eq!(rep["results_version"], 12);
 }
 
 #[test]
@@ -1042,6 +1042,131 @@ fn an_spps_report_carries_its_rooms_reference_labelled_and_not_validated() {
     // A TCR report has its own analytic block and no SPPS reference.
     let tcr = json(&results(&fixture(SEATS_TCR), true));
     assert!(tcr["spps"].is_null() && tcr["tcr"]["analytic"]["status"] == "computed");
+}
+
+/// M12 P2 (docs/investigations/2026-10-03-m12/PLAN.md, P2; gate (a) reads every number the
+/// Acoustics tab shows from this JSON): the report's `room`, for both solvers, carries the room's
+/// volume and area, DIN 18041's five group-A targets at that volume, and the absorption by surface
+/// group (one row per solver material id: its faces, area, and per band α and S·α), with each
+/// band's total; an SPPS reference band carries Sabine beside Eyring. Checked here against the
+/// project the fixtures were run from (`rooms/seats_box.simpa`: ceiling 60 m² α 0.3, floor
+/// 60 m² α 0.1, walls 96 m² α 0.2, pinned ids 21, 25, 22), against DIN's formula written out
+/// here, and, for TCR, against TCR's own Sabine absorption area.
+#[test]
+fn m12_the_report_carries_the_rooms_din_targets_absorption_by_group_and_sabine() {
+    let f = |v: &Value| v.as_f64().unwrap_or_else(|| panic!("not a number: {v}"));
+    // (material id, faces, area m², α) per surface group of seats_box.simpa.
+    let groups = [
+        (21u64, 2u64, 60.0, 0.3),
+        (22, 8, 96.0, 0.2),
+        (25, 2, 60.0, 0.1),
+    ];
+    for name in [SEATS_SPPS, SEATS_TCR] {
+        let o = results(&fixture(name), true);
+        assert_eq!(o.code, 0, "{o:#?}");
+        let rep = json(&o);
+        assert_eq!(rep["results_version"], 12, "{name}");
+        let room = &rep["room"];
+        assert_eq!(room["status"], "computed", "{name}: {room}");
+        let (v, s) = (f(&room["volume_m3"]), f(&room["area_m2"]));
+        assert!(
+            (v - 180.0).abs() < 1e-6 && (s - 216.0).abs() < 1e-6,
+            "{room}"
+        );
+
+        // DIN 18041: T_soll = a·lg(V) + b (BNB V 2020 3.1.4), written out here; 180 m³ is below
+        // A5's 200 m³, so A5 is refused, not extrapolated.
+        let din = room["din18041"].as_array().unwrap();
+        let want = [
+            ("A1", 0.45, 0.07),
+            ("A2", 0.37, -0.14),
+            ("A3", 0.32, -0.17),
+            ("A4", 0.26, -0.14),
+            ("A5", 0.75, -1.00),
+        ];
+        assert_eq!(din.len(), want.len(), "{room}");
+        for (d, (g, a, b)) in din.iter().zip(want) {
+            assert_eq!(d["group"], g, "{d}");
+            assert!(d["use"].as_str().is_some_and(|u| !u.is_empty()), "{d}");
+            if g == "A5" {
+                assert_eq!(
+                    d["target_s"]["not_evaluable"]["code"], "params_din_out_of_range",
+                    "{d}"
+                );
+            } else {
+                assert!(
+                    (f(&d["target_s"]["value"]) - (a * v.log10() + b)).abs() < 1e-12,
+                    "{d}"
+                );
+                assert!(d["target_s"]["mc_sd"].is_null(), "{d}");
+            }
+        }
+        // Gate (e): the A3 target of the 180 m³ room reads 0.55 s at the two decimals shown.
+        assert_eq!(format!("{:.2}", f(&din[2]["target_s"]["value"])), "0.55");
+        assert!(
+            room["din18041_note"]
+                .as_str()
+                .is_some_and(|n| n.contains("80 %")),
+            "{room}"
+        );
+
+        // Absorption by surface group, in solver-id order.
+        let bands_hz: Vec<i64> = rep["bands_hz"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b.as_i64().unwrap())
+            .collect();
+        let rows = room["surfaces"].as_array().unwrap();
+        assert_eq!(rows.len(), groups.len(), "{room}");
+        for (row, (id, faces, area, alpha)) in rows.iter().zip(groups) {
+            assert_eq!(row["material_id"], id, "{row}");
+            assert_eq!(row["faces"], faces, "{row}");
+            assert!((f(&row["area_m2"]) - area).abs() < 1e-9, "{row}");
+            let rb = row["bands"].as_array().unwrap();
+            assert_eq!(rb.len(), bands_hz.len(), "{row}");
+            for (b, hz) in rb.iter().zip(&bands_hz) {
+                assert_eq!(b["freq_hz"], *hz);
+                // config.xml holds the absorption as text; the f32 reading SPPS and TCR make.
+                assert_eq!(f(&b["absorption"]), f64::from(alpha as f32), "{b}");
+                assert_eq!(
+                    f(&b["absorption_area_m2"]),
+                    f(&row["area_m2"]) * f(&b["absorption"])
+                );
+            }
+        }
+        let totals = room["bands"].as_array().unwrap();
+        assert_eq!(totals.len(), bands_hz.len());
+        for (i, t) in totals.iter().enumerate() {
+            assert_eq!(t["freq_hz"], bands_hz[i]);
+            let sum: f64 = rows
+                .iter()
+                .map(|r| f(&r["bands"][i]["absorption_area_m2"]))
+                .sum();
+            assert_eq!(f(&t["absorption_area_m2"]), sum, "{t}");
+            assert!((sum - 43.2).abs() < 1e-5, "{t}");
+            if name == SEATS_TCR {
+                // TCR's own A_Sabine (Main results.gabe, f32) is the same sum.
+                let tcr_a = f(&rep["tcr"]["bands"][i]["sabine"]["absorption_area_m2"]);
+                assert!((sum / tcr_a - 1.0).abs() < 1e-6, "{sum} vs TCR {tcr_a}");
+            }
+        }
+
+        // Sabine beside Eyring in an SPPS reference band, with the reference's own K and air term.
+        if name == SEATS_SPPS {
+            let r = &rep["spps"]["reference"];
+            let k = f(&r["constant_s_per_m"]);
+            for (i, b) in r["bands"].as_array().unwrap().iter().enumerate() {
+                let m = b["air_m_per_metre"].as_f64().unwrap_or(0.0);
+                let sabine = k * v / (4.0 * m * v + f(&totals[i]["absorption_area_m2"]));
+                assert!(
+                    (f(&b["sabine_s"]["value"]) / sabine - 1.0).abs() < 1e-9,
+                    "{b}"
+                );
+                assert!(b["sabine_s"]["mc_sd"].is_null(), "{b}");
+            }
+        }
+    }
 }
 
 // --- the schema ----------------------------------------------------------------------------------
