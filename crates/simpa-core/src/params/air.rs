@@ -155,7 +155,8 @@ pub fn stated_accuracy(f_hz: f64, air: &Atmosphere) -> Result<Option<StatedAccur
     if p >= 200_000.0 || !(4e-4..=10.0).contains(&(f_hz / p)) {
         return Ok(None);
     }
-    let temperate = (253.15..=323.15).contains(&k);
+    // Clause 7's -20 to +50 °C, compared in °C: -20 + 273.15 is 253.14999999999998 in f64.
+    let temperate = (-20.0..=50.0).contains(&air.temperature_c);
     Ok(if temperate && (0.05..=5.0).contains(&h) {
         Some(StatedAccuracy::TenPercent)
     } else if temperate && ((0.005..0.05).contains(&h) || h > 5.0) {

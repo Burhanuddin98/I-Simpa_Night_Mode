@@ -149,9 +149,9 @@ fn air_outside_the_formula_s_range_is_a_warning_not_a_refusal() {
     }
     for (t, h, pa) in [
         (20.0, 50.0, 101_325.0),
-        // Not -20 °C itself: -20 + 273.15 is 253.14999999999998 K in f64, just below clause 7's
-        // 253.15 K, so the edge is warned (`params::air::stated_accuracy`).
-        (-19.5, 50.0, 101_325.0),
+        // Clause 7's edges are inside: -20 °C is 253.14999999999998 K in f64, so the range is
+        // checked in °C (`params::air::stated_accuracy`).
+        (-20.0, 50.0, 101_325.0),
         (50.0, 10.0, 101_325.0),
         (20.0, 0.0, 101_325.0), // h below 0.005 %: clause 7.3's ±50 % still applies
     ] {

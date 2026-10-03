@@ -112,7 +112,7 @@ pub(super) fn solver_rules(p: &Project, solver: SolverKind, out: &mut Vec<Issue>
         NO_BAND_COMPUTED,
         format!("/solvers/{field}/bands_computed"),
         format!(
-            "{name} computes none of the project's {n} bands: turn at least one on, or the solver              runs, computes nothing and exits as if it had succeeded"
+            "{name} computes none of the project's {n} bands: turn at least one on, or the solver runs, computes nothing and exits as if it had succeeded"
         ),
     ));
 }
@@ -763,7 +763,7 @@ fn formula_range(p: &Project, out: &mut Vec<Issue>) {
         ATMOSPHERE_OUTSIDE_FORMULA_RANGE,
         "/environment",
         format!(
-            "{} °C, {} % relative humidity and {} Pa are outside the range where ISO 9613-1,              the formula the solvers use for air absorption, states an accuracy (clause 7: -20              to +50 °C, below 200 kPa), at {first} Hz{}: the air absorption there is not              validated",
+            "{} °C, {} % relative humidity and {} Pa are outside the range where ISO 9613-1, the formula the solvers use for air absorption, states an accuracy (clause 7: -20 to +50 °C, below 200 kPa), at {first} Hz{}: the air absorption there is not validated",
             air.temperature_c,
             air.relative_humidity_percent,
             air.pressure_pa,
