@@ -168,5 +168,8 @@ series, ranges included, 0 mismatches both ways. m12-d: drawn 33, 2, 1, 0, 27 ag
 
 ### Gate
 
-The full `m12.ps1` (`-TargetDir C:\tmp\nm-target-h -BedData B:\data`) runs after this file is committed and
-pushed; its result is recorded in the commit after it.
+The full `m12.ps1` (`-TargetDir C:\tmp\nm-target-h -BedData B:\data`) ran after this file was committed and
+pushed (`d6f5d61`): **M12 PASSED**, 22 of 22 checks (`gate-final-m12-assay.log`, 15:30-15:45, under
+`B:\data\m12\e2e.lock`): P1's six, P2's three static and the new assay check, m12-a (738 cells' labels held to their
+paths, 0 mismatches, the swap control caught), m12-b, m12-b-plant, m12-e, m12-f, m12-c, m12-d, m12-mq4,
+m12-p3-maps; prior gate **M11 PASSED** (with **M9 PASSED**); 0 files left in the repository.
