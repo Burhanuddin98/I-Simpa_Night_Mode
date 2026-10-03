@@ -11,6 +11,8 @@ import {
   clickSelector,
   consoleLines,
   PARAMETER_NUMBER,
+  pageText,
+  resultsStepCurrent,
   textOutsideInputsAndGeometry,
 } from '../lib/dom.ts';
 import { compareFiles } from '../lib/files.ts';
@@ -197,7 +199,13 @@ describe('M10 shell (foundation)', () => {
     assert.ok(readFileSync(f).length > 0);
   });
 
-  it('m10-h: no solver-computed acoustic number is shown, on any step or dock tab', async () => {
+  // Narrowed in M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 4): no solver-computed
+  // number outside the Results step. On the Results step its regions (dom.ts RESULTS_REGIONS: its
+  // panel, the Acoustics tab, [data-results-region]) are hidden from the reads, and only there;
+  // on every other step the whole page is read as in M10, the Acoustics panel's no-digit rule too.
+  // lib/acoustic.test.ts holds the rule on snapshots: a number in those regions on another step
+  // fails.
+  it('m10-h: no solver-computed acoustic number is shown outside the Results step, on any step or dock tab', async () => {
     const steps = ['geometry', 'materials', 'sources', 'simulate', 'results'];
     const tabs = ['acoustics', 'console', 'runs'];
     const seen: string[] = [];
@@ -205,6 +213,9 @@ describe('M10 shell (foundation)', () => {
       await load();
       for (const step of steps) {
         await clickSelector(`[data-step="${step}"]`);
+        // The page says which step is current; the reads below trust it, not this loop.
+        const onResults = await resultsStepCurrent();
+        assert.equal(onResults, step === 'results', `step ${step}: the Results step is ${onResults ? '' : 'not '}current`);
         for (const tab of tabs) {
           await clickSelector(`[data-dock-tab="${tab}"]`);
           await m10.idle();
@@ -213,14 +224,14 @@ describe('M10 shell (foundation)', () => {
               () => document.querySelector('[data-dock-panel="acoustics"]')?.textContent ?? null,
             );
             assert.notEqual(acoustics, null, 'the Acoustics panel is shown');
-            assert.ok(!/\d/.test(acoustics ?? ''), `a digit in the Acoustics panel: ${acoustics}`);
+            if (!onResults) assert.ok(!/\d/.test(acoustics ?? ''), `a digit in the Acoustics panel: ${acoustics}`);
           }
-          const text = await textOutsideInputsAndGeometry();
+          const text = await textOutsideInputsAndGeometry(onResults);
           const m = text.match(ACOUSTIC_NUMBER);
           assert.equal(m, null, `step ${step}, tab ${tab}: "${m?.[0]}" in the text outside [data-input] and [data-geometry]`);
           // M11 (PLAN.md 4.2 rule 2, M10 MINOR A-2): a parameter's name followed by a number,
           // unit or none, anywhere on the page with nothing hidden. A tightening of m10-h.
-          const whole = await browser.execute(() => document.body.innerText);
+          const whole = await pageText(onResults);
           const p = whole.match(PARAMETER_NUMBER);
           assert.equal(p, null, `step ${step}, tab ${tab}: "${p?.[0]}" names a parameter with a number`);
           seen.push(`${step}/${tab}`);

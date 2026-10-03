@@ -4,7 +4,8 @@
 #   (c) Cancel: the row reads 'Cancelled', and 2 s later no spps.exe runs from the gate's copy
 #   (d) closing the window mid-solve, and Stop-Process on app.exe: no spps.exe 2 s later
 #   (e) a forced mesh failure: a Runs row FAIL with MESH_TETGEN_SKIPPED; the Results step no number
-# plus m11-h (no solver-computed acoustic number, the diagnostic allowance proven), row 22's items,
+# plus m11-h (no solver-computed acoustic number outside the Results step since M12, the diagnostic
+# allowance proven), row 22's items,
 # m11-b18, and m11-focus (the test windows visible, and never taking keyboard focus).
 #
 # Steps (PLAN.md 4.4): the static checks (M10's and M9's, the inventory, the lints, typecheck, the

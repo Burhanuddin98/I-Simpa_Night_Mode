@@ -55,27 +55,82 @@ export const EXEMPT_REGIONS: Record<'data-input' | 'data-geometry', Record<strin
 };
 
 /**
+ * M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 4): where a solver-computed number may
+ * be shown, and only while the Results step is the current one (`RESULTS_STEP_CURRENT`): the
+ * Results step's properties panel, the Acoustics dock panel, and any element the Results step
+ * marks `[data-results-region]` (the viewport's map legend, for one). On every other step these
+ * regions are read like the rest of the page, so a number left in them there is flagged: m10-h
+ * and m11-h are narrowed to "no solver number outside the Results step", not lifted.
+ */
+export const RESULTS_REGIONS: Record<string, string> = {
+  'results-panel': '[data-props-step="results"]',
+  acoustics: '[data-dock-panel="acoustics"]',
+  'results-region': '[data-results-region]',
+};
+
+/** The Results step is the current step (StepBar.tsx: `aria-current="step"`). */
+export const RESULTS_STEP_CURRENT = '[data-step="results"][aria-current="step"]';
+
+/** Whether the Results step is the current one, read from the page. */
+export async function resultsStepCurrent(): Promise<boolean> {
+  return browser.execute((sel: string) => document.querySelector(sel) !== null, RESULTS_STEP_CURRENT);
+}
+
+/**
  * The page's visible text with every `[data-input]` and `[data-geometry]` element hidden that
  * sits in its own region (`EXEMPT_REGIONS`): inputs that carry units (a source's power) and
  * geometry facts (volume, area) may show a number next to a unit there; nothing else may
- * (PLAN.md 2.4, rule 2). An exempt attribute outside its regions hides nothing.
+ * (PLAN.md 2.4, rule 2). An exempt attribute outside its regions hides nothing. With
+ * `outsideResults`, the Results regions are hidden too, and only while the Results step is
+ * current (M12): on any other step they are read.
  */
-export async function textOutsideInputsAndGeometry(): Promise<string> {
-  return browser.execute((regions: Record<string, Record<string, string>>) => {
-    const hidden: HTMLElement[] = [];
-    for (const attr of Object.keys(regions)) {
-      for (const el of document.querySelectorAll<HTMLElement>(`[${attr}]`)) {
-        if (Object.values(regions[attr]).some((sel) => el.closest(sel) !== null)) hidden.push(el);
+export async function textOutsideInputsAndGeometry(outsideResults = false): Promise<string> {
+  return browser.execute(
+    (regions: Record<string, Record<string, string>>, results: string[], current: string, outside: boolean) => {
+      const hidden: HTMLElement[] = [];
+      for (const attr of Object.keys(regions)) {
+        for (const el of document.querySelectorAll<HTMLElement>(`[${attr}]`)) {
+          if (Object.values(regions[attr]).some((sel) => el.closest(sel) !== null)) hidden.push(el);
+        }
       }
-    }
-    const before = hidden.map((el) => el.style.display);
-    hidden.forEach((el) => (el.style.display = 'none'));
-    try {
-      return document.body.innerText;
-    } finally {
-      hidden.forEach((el, i) => (el.style.display = before[i]));
-    }
-  }, EXEMPT_REGIONS);
+      if (outside && document.querySelector(current) !== null) {
+        hidden.push(...document.querySelectorAll<HTMLElement>(results.join(', ')));
+      }
+      const before = hidden.map((el) => el.style.display);
+      hidden.forEach((el) => (el.style.display = 'none'));
+      try {
+        return document.body.innerText;
+      } finally {
+        hidden.forEach((el, i) => (el.style.display = before[i]));
+      }
+    },
+    EXEMPT_REGIONS,
+    Object.values(RESULTS_REGIONS),
+    RESULTS_STEP_CURRENT,
+    outsideResults,
+  );
+}
+
+/**
+ * The page's whole visible text, nothing hidden; with `outsideResults`, the Results regions
+ * hidden while the Results step is current (M12), and nothing else.
+ */
+export async function pageText(outsideResults = false): Promise<string> {
+  return browser.execute(
+    (results: string[], current: string, outside: boolean) => {
+      const hidden = outside && document.querySelector(current) !== null ? [...document.querySelectorAll<HTMLElement>(results.join(', '))] : [];
+      const before = hidden.map((el) => el.style.display);
+      hidden.forEach((el) => (el.style.display = 'none'));
+      try {
+        return document.body.innerText;
+      } finally {
+        hidden.forEach((el, i) => (el.style.display = before[i]));
+      }
+    },
+    Object.values(RESULTS_REGIONS),
+    RESULTS_STEP_CURRENT,
+    outsideResults,
+  );
 }
 
 /** A solver-computed acoustic number: a digit next to dB, s, ms or % (PLAN.md 3, m10-h). */

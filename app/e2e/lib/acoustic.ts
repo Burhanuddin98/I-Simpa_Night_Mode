@@ -26,11 +26,16 @@
 //   4. A [data-verbatim="<run>:<source>"] element whose text is not a line of that run's logs.
 // Plus M10's: the Acoustics panel holds no digit at all.
 //
+// M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 4) narrows every rule to "no solver
+// number outside the Results step": while the Results step is current, `collectSnapshot` also
+// reads the page with the Results regions hidden (dom.ts RESULTS_REGIONS), and `judge` holds
+// rules 1, 2 and 1t and the Acoustics rule to that reading. On any other step nothing changes.
+//
 // The in-page function is serialised by WebdriverIO and run in the page, so it closes over
 // nothing and names no function inside itself (tsx's keepNames would wrap a named one in a
 // helper the page does not have).
 import path from 'node:path';
-import { ACOUSTIC_NUMBER, EXEMPT_REGIONS, PARAMETER_NUMBER } from './dom.ts';
+import { ACOUSTIC_NUMBER, EXEMPT_REGIONS, PARAMETER_NUMBER, RESULTS_REGIONS, RESULTS_STEP_CURRENT } from './dom.ts';
 import {
   elapsedS,
   endedCalculation,
@@ -82,6 +87,8 @@ export interface SnapshotConfig {
   exempt: Record<string, Record<string, string>>;
   /** The Acoustics panel. */
   acoustics: string;
+  /** M12: the Results step's regions, honoured only while `current` matches. */
+  results: { current: string; regions: Record<string, string> };
 }
 
 /**
@@ -101,6 +108,7 @@ export const SNAPSHOT_CONFIG: SnapshotConfig = {
   hide: ['[data-diagnostic]', '[data-verbatim]'],
   exempt: EXEMPT_REGIONS,
   acoustics: '[data-dock-panel="acoustics"]',
+  results: { current: RESULTS_STEP_CURRENT, regions: RESULTS_REGIONS },
 };
 
 /** An element the say-NO cases plant before the snapshot and remove after it. */
@@ -141,6 +149,18 @@ export interface TitleEl {
   text: string;
   region: string;
   sayNo: boolean;
+  /** M12: it sits in one of the Results regions. */
+  inResults?: boolean;
+}
+
+/** M12: the page read while the Results step is current, with the Results regions hidden. */
+export interface ResultsView {
+  /** `wholeText` with the Results regions hidden as well. */
+  wholeText: string;
+  /** `hiddenText` with the Results regions hidden as well. */
+  hiddenText: string;
+  /** The Acoustics panel is inside a Results region. */
+  acousticsInRegion: boolean;
 }
 
 export interface DomSnapshot {
@@ -158,6 +178,8 @@ export interface DomSnapshot {
   hiddenText: string;
   /** The Acoustics panel's text; null when it is not shown. */
   acousticsText: string | null;
+  /** M12: set only while the Results step is current; null (or absent) on every other step. */
+  results?: ResultsView | null;
 }
 
 /**
@@ -170,7 +192,7 @@ export function collectSnapshot(cfg: SnapshotConfig, plant: Plant | null): DomSn
   if (plant) {
     const host = document.querySelector(plant.host);
     if (!host) {
-      return { error: `no ${plant.host} to plant in`, diagnostics: [], verbatim: [], exempt: [], titles: [], wholeText: '', hiddenText: '', acousticsText: null };
+      return { error: `no ${plant.host} to plant in`, diagnostics: [], verbatim: [], exempt: [], titles: [], wholeText: '', hiddenText: '', acousticsText: null, results: null };
     }
     planted = document.createElement(plant.tag);
     for (const [k, v] of Object.entries(plant.attrs)) planted.setAttribute(k, v);
@@ -205,23 +227,42 @@ export function collectSnapshot(cfg: SnapshotConfig, plant: Plant | null): DomSn
     const titles: TitleEl[] = [];
     for (const el of document.querySelectorAll<HTMLElement>('[title]')) {
       const region = Object.keys(cfg.titleRegions).find((k) => el.closest(cfg.titleRegions[k]) !== null) ?? null;
-      if (region !== null) titles.push({ text: el.getAttribute('title') ?? '', region, sayNo: el.hasAttribute('data-say-no') });
+      if (region !== null) {
+        const inResults = Object.values(cfg.results.regions).some((sel) => el.closest(sel) !== null);
+        titles.push({ text: el.getAttribute('title') ?? '', region, sayNo: el.hasAttribute('data-say-no'), inResults });
+      }
     }
     const wholeText = document.body.innerText;
     const hidden = [...document.querySelectorAll<HTMLElement>(cfg.hide.join(', ')), ...inRegion];
-    const before = hidden.map((el) => el.style.display);
-    hidden.forEach((el) => {
-      el.style.display = 'none';
-    });
-    let hiddenText = '';
-    try {
-      hiddenText = document.body.innerText;
-    } finally {
-      hidden.forEach((el, i) => {
-        el.style.display = before[i];
-      });
-    }
     const acoustics = document.querySelector(cfg.acoustics);
+    const regions = Object.values(cfg.results.regions);
+    const onResults = document.querySelector(cfg.results.current) !== null;
+    const resultsEls = onResults ? [...document.querySelectorAll<HTMLElement>(regions.join(', '))] : [];
+    // innerText with each list hidden, then shown again as it was: the hidden text, and on the
+    // Results step the whole and the hidden text outside its regions. An unnamed arrow: the page
+    // has no helper for a named one (the header's note).
+    const lists = onResults ? [hidden, resultsEls, [...hidden, ...resultsEls]] : [hidden];
+    const texts = lists.map((els) => {
+      const before = els.map((el) => el.style.display);
+      els.forEach((el) => {
+        el.style.display = 'none';
+      });
+      try {
+        return document.body.innerText;
+      } finally {
+        els.forEach((el, i) => {
+          el.style.display = before[i];
+        });
+      }
+    });
+    const hiddenText = texts[0];
+    const results: ResultsView | null = onResults
+      ? {
+          wholeText: texts[1],
+          hiddenText: texts[2],
+          acousticsInRegion: acoustics !== null && regions.some((sel) => acoustics.closest(sel) !== null),
+        }
+      : null;
     return {
       diagnostics,
       verbatim,
@@ -230,6 +271,7 @@ export function collectSnapshot(cfg: SnapshotConfig, plant: Plant | null): DomSn
       wholeText,
       hiddenText,
       acousticsText: acoustics ? (acoustics.textContent ?? '') : null,
+      results,
     };
   } finally {
     planted?.remove();
@@ -336,7 +378,12 @@ export function progressProven(text: string, p: RunProof): boolean {
 export function judge(snap: DomSnapshot, proof: (run: string) => RunProof | null): Violation[] {
   const out: Violation[] = [];
   if (snap.error) return [{ rule: '1', text: '', detail: snap.error, sayNo: false }];
-  for (const t of matchesWithContext(snap.hiddenText, ACOUSTIC_NUMBER)) {
+  // M12: while the Results step is current, rules 1, 2 and 1t and the Acoustics rule read the page
+  // outside the Results regions; on any other step, the whole page as before.
+  const results = snap.results ?? null;
+  const hiddenText = results ? results.hiddenText : snap.hiddenText;
+  const wholeText = results ? results.wholeText : snap.wholeText;
+  for (const t of matchesWithContext(hiddenText, ACOUSTIC_NUMBER)) {
     out.push({ rule: '1', text: t, detail: 'a number next to a unit outside diagnostics, verbatim lines, and [data-input] and [data-geometry] in their regions', sayNo: false });
   }
   for (const e of snap.exempt) {
@@ -344,10 +391,11 @@ export function judge(snap: DomSnapshot, proof: (run: string) => RunProof | null
     const regions = Object.keys(EXEMPT_REGIONS[e.attr as keyof typeof EXEMPT_REGIONS] ?? {}).join(', ');
     out.push({ rule: '1x', text: `[${e.attr}] "${e.text}"`, detail: `a [${e.attr}] element outside its regions (${regions || 'none'})`, sayNo: e.sayNo });
   }
-  for (const t of matchesWithContext(snap.wholeText, PARAMETER_NUMBER)) {
+  for (const t of matchesWithContext(wholeText, PARAMETER_NUMBER)) {
     out.push({ rule: '2', text: t, detail: "a room-acoustic parameter's name followed by a number", sayNo: false });
   }
   for (const t of snap.titles) {
+    if (results && t.inResults) continue;
     const hits = [...matchesWithContext(t.text, ACOUSTIC_NUMBER), ...matchesWithContext(t.text, PARAMETER_NUMBER)];
     if (hits.length === 0) continue;
     out.push({
@@ -357,7 +405,7 @@ export function judge(snap: DomSnapshot, proof: (run: string) => RunProof | null
       sayNo: t.sayNo,
     });
   }
-  if (snap.acousticsText !== null && /\d/.test(snap.acousticsText)) {
+  if (snap.acousticsText !== null && !(results && results.acousticsInRegion) && /\d/.test(snap.acousticsText)) {
     out.push({ rule: 'acoustics', text: snap.acousticsText.slice(0, 120), detail: 'a digit in the Acoustics panel', sayNo: false });
   }
   for (const d of snap.diagnostics) {

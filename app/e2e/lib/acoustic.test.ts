@@ -259,3 +259,32 @@ test('rule 1t: a tooltip with a number and a unit, or a parameter and a number, 
     assert.deepEqual(rules(snap({ titles: [t(clean)] })), [], clean);
   }
 });
+
+// M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 4): m11-h narrowed to "no solver
+// number outside the Results step". `results` is what `collectSnapshot` reads while the Results
+// step is current: the page's texts with the Results regions hidden. On any other step it is null
+// and every rule reads the whole page, the Acoustics panel and every tooltip, as in M11.
+test('M12: a number in the Results regions passes only while the Results step is current', () => {
+  const shown = 'Results\nT30 1.23 s\nC80 -1.2 dB';
+  const onStep = (over: Partial<DomSnapshot>) => snap({ wholeText: shown, hiddenText: shown, acousticsText: shown, ...over });
+  // Another step: the same numbers leak, and every rule that sees them says so.
+  assert.deepEqual(rules(onStep({ results: null })), ['1', '1', '2', '2', 'acoustics']);
+  assert.deepEqual(rules(onStep({})), ['1', '1', '2', '2', 'acoustics'], 'no results view: as M11');
+  // The Results step: inside its regions they are the step's own.
+  const inside = { wholeText: 'Results', hiddenText: 'Results', acousticsInRegion: true };
+  assert.deepEqual(rules(onStep({ results: inside })), []);
+  // The Results step, but a number outside its regions (the status bar, the Geometry panel):
+  // still flagged, by rule 1 and rule 2.
+  const leak = { wholeText: 'Results\nSabine 1.52 s', hiddenText: 'Results\nSabine 1.52 s', acousticsInRegion: true };
+  assert.deepEqual(rules(onStep({ results: leak })), ['1', '2']);
+  // An Acoustics panel the Results regions do not cover keeps M10's no-digit rule.
+  assert.deepEqual(rules(onStep({ results: { ...inside, acousticsInRegion: false } })), ['acoustics']);
+});
+
+test('M12: a tooltip in the Results regions passes only while the Results step is current', () => {
+  const tip = { text: 'T30 1.23 s (1.18-1.29)', region: 'results', sayNo: false, inResults: true };
+  const results = { wholeText: '', hiddenText: '', acousticsInRegion: true };
+  assert.deepEqual(rules(snap({ titles: [tip] })), ['1t']);
+  assert.deepEqual(rules(snap({ titles: [tip], results })), []);
+  assert.deepEqual(rules(snap({ titles: [{ ...tip, inResults: false, region: 'statusbar' }], results })), ['1t']);
+});
