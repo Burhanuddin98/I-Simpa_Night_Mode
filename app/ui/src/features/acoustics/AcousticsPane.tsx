@@ -34,9 +34,9 @@ import {
   din,
   dinGroups,
   dinTarget,
-  EDT_MARKS,
   MQ2_WORDING,
   type Num,
+  paramMarks,
   receiverRows,
   receivers,
   type Refusal,
@@ -44,7 +44,6 @@ import {
   runForVariant,
   type Series,
   shownParams,
-  STI_NOTE,
   type Str,
 } from './model';
 import './acoustics.css';
@@ -155,8 +154,9 @@ function axes(xLabel: string, yLabel: string, xValues?: (u: uPlot, splits: numbe
   ];
 }
 
-/** RT per band against the DIN target: the shown reverberation times (gaps where refused), the
- * target line, and a shaded fifth either side of it. */
+/** RT per band against the DIN target: the shown reverberation times, each with its range as a
+ * whisker (`rtSeries`: the tables' filter, so a value the tables do not show is a gap), the target
+ * line, and a shaded fifth either side of it. */
 function RtChart({ report, series, target }: { report: NonNullable<ReportView['report']>; series: Series[]; target: number | null }) {
   const { opts, data } = useMemo(() => {
     const x = report.bands_hz.map((_, i) => i);
@@ -164,10 +164,37 @@ function RtChart({ report, series, target }: { report: NonNullable<ReportView['r
     const flat = (k: number) => x.map(() => (t === null ? null : t * k));
     const data: uPlot.AlignedData = [x, ...series.map((s) => s.values), flat(1), flat(0.8), flat(1.2)];
     const n = series.length;
+    const top = Math.max(0, ...series.flatMap((s) => s.hi.filter((v): v is number => v !== null)));
+    // Each drawn value's range (lo to hi), as the tables print it beside the value.
+    const whiskers = (u: uPlot) => {
+      const ctx = u.ctx;
+      const cap = 4 * devicePixelRatio;
+      for (const s of series) {
+        ctx.save();
+        ctx.strokeStyle = SERIES_COLOURS[s.param] ?? '#a1a1aa';
+        ctx.lineWidth = 1.5 * devicePixelRatio;
+        s.lo.forEach((lo, i) => {
+          const hi = s.hi[i];
+          if (lo === null || hi === null || s.values[i] === null) return;
+          const px = u.valToPos(i, 'x', true);
+          const y0 = u.valToPos(lo, 'y', true);
+          const y1 = u.valToPos(hi, 'y', true);
+          ctx.beginPath();
+          ctx.moveTo(px, y0);
+          ctx.lineTo(px, y1);
+          ctx.moveTo(px - cap, y0);
+          ctx.lineTo(px + cap, y0);
+          ctx.moveTo(px - cap, y1);
+          ctx.lineTo(px + cap, y1);
+          ctx.stroke();
+        });
+        ctx.restore();
+      }
+    };
     const opts: Omit<uPlot.Options, 'width' | 'height'> = {
       legend: { show: false },
       cursor: { show: false },
-      scales: { x: { time: false, range: [-0.5, x.length - 0.5] }, y: { range: (_u, _lo, hi) => [0, Math.max(hi ?? 1, (t ?? 0) * 1.3) * 1.1 || 1] } },
+      scales: { x: { time: false, range: [-0.5, x.length - 0.5] }, y: { range: (_u, _lo, hi) => [0, Math.max(hi ?? 1, top, (t ?? 0) * 1.3) * 1.1 || 1] } },
       axes: axes('Band', 'Time (s)', (_u, splits) => splits.map((v) => (Number.isInteger(v) && report.bands_hz[v] !== undefined ? bandText(report.bands_hz[v]) : ''))),
       series: [
         {},
@@ -177,6 +204,7 @@ function RtChart({ report, series, target }: { report: NonNullable<ReportView['r
         { label: 'upper', stroke: 'transparent', points: { show: false } },
       ],
       bands: [{ series: [n + 3, n + 2], fill: 'rgba(161,161,170,0.12)' }],
+      hooks: { draw: [whiskers] },
     };
     return { opts, data };
   }, [report, series, target]);
@@ -324,8 +352,8 @@ export function AcousticsPane() {
   const cls = classical(report);
   const variants = scene?.view.variants ?? [];
   const label = row ? `Run ${row.number} · ${runVariantName(row.variant, variants)}` : selected;
-  const hasEdt = specs.some((s) => s.name === 'edt_s');
-  const hasSti = specs.some((s) => s.name === 'sti');
+  // EDT's row 37 marks, T30's row 46 mark, STI's MQ3 note: each only while its parameter is shown.
+  const marks = paramMarks(report);
 
   return (
     <div data-acoustics data-acoustics-state="ready" data-run={selected} className="ac">
@@ -367,6 +395,7 @@ export function AcousticsPane() {
               <span className="ac-swatch dash" />
               target, shaded a fifth either side
             </span>
+            <span className="ac-key">whiskers: each value's range</span>
           </div>
           <div className="ac-din" data-part="din-target">
             <label className="ac-control">
@@ -437,20 +466,17 @@ export function AcousticsPane() {
               </select>
             </label>
           </div>
-          {hasEdt ? (
-            <div className="ac-marks" data-param="edt_s">
-              {EDT_MARKS.map((m) => (
-                <span key={m} className="ac-mark">
-                  {m}
-                </span>
-              ))}
+          {[...new Set(marks.map((m) => m.param))].map((param) => (
+            <div key={param} className="ac-marks" data-param={param}>
+              {marks
+                .filter((m) => m.param === param)
+                .map((m) => (
+                  <span key={m.text} className="ac-mark" data-label="mark">
+                    {m.text}
+                  </span>
+                ))}
             </div>
-          ) : null}
-          {hasSti ? (
-            <div className="ac-marks" data-param="sti">
-              <span className="ac-mark">STI: {STI_NOTE}</span>
-            </div>
-          ) : null}
+          ))}
           <table className="ac-table" data-part="receivers-table">
             <thead>
               <tr>

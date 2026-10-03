@@ -30,6 +30,12 @@ export const EDT_MARKS = [
 /** MQ3: STI's Monte-Carlo noise is not modelled (backlog 71). */
 export const STI_NOTE = 'noise range not computed';
 
+/** Decision-log row 46's mark, shown with T30 wherever it appears: T30 is shown by Burhan's
+ * decision although one of 833 checked noise-limited values fell outside its range (backlog 65).
+ * Its digits are words, not the report's numbers: the page marks it `[data-label="mark"]`. */
+export const T30_MARK =
+  'Ranges on noise-limited T30 values may be slightly narrow: 1 of 833 checked values fell 1.5 ms outside its range.';
+
 export interface ParamSpec {
   /** The parameter's name in `beds/summary.json` and `report.bed`. */
   name: string;
@@ -63,6 +69,17 @@ export const PARAM_SPECS: readonly ParamSpec[] = [
 export function shownParams(report: Report): ParamSpec[] {
   const bed = report.bed?.parameters as unknown as Record<string, { status?: string } | undefined> | undefined;
   return PARAM_SPECS.filter((p) => bed?.[p.name]?.status === 'PASS');
+}
+
+/** The marks shown beside the receivers table, each with its parameter and only while that
+ * parameter is shown: EDT's two (row 37 (1)-(2)), T30's (row 46), STI's note (MQ3). */
+export function paramMarks(report: Report): { param: string; text: string }[] {
+  const shown = new Set(shownParams(report).map((p) => p.name));
+  const out: { param: string; text: string }[] = [];
+  if (shown.has('edt_s')) for (const m of EDT_MARKS) out.push({ param: 'edt_s', text: m });
+  if (shown.has('t30_s')) out.push({ param: 't30_s', text: T30_MARK });
+  if (shown.has('sti')) out.push({ param: 'sti', text: `STI: ${STI_NOTE}` });
+  return out;
 }
 
 /** The value at a dot path of the report (`spps.point_receivers.0.label`). */
@@ -210,22 +227,41 @@ export function receiverRows(report: Report, band: BandSel): { receiver: Str; ce
   }));
 }
 
-/** An RT series of one receiver: per band its value (null where refused) and the path read. */
+/** An RT series of one receiver: per band its value and range (null where the table shows no
+ * value: refused, or not one `cell` lets through) and the paths read. */
 export interface Series {
   param: string;
   label: string;
   paths: string[];
   values: (number | null)[];
+  loPaths: string[];
+  lo: (number | null)[];
+  hiPaths: string[];
+  hi: (number | null)[];
 }
 
 /** The shown reverberation times of receiver `r`, per band: what the chart draws and the RT
- * table prints, from one read. */
+ * table prints, from one read. Each point is the band's `cell` (the tables' filter: PASS
+ * parameters only, a value only with its range and an `ok`/`wide` status), so the chart draws
+ * no value the table does not show, and draws the range the table shows beside it. */
 export function rtSeries(report: Report, r: number): Series[] {
   return shownParams(report)
     .filter((s) => s.rt)
     .map((s) => {
-      const paths = report.bands_hz.map((_, b) => `${paramPath(report, s, r, b)}.value`);
-      return { param: s.name, label: s.label, paths, values: paths.map((p) => (typeof at(report, p) === 'number' ? (at(report, p) as number) : null)) };
+      const base = report.bands_hz.map((_, b) => paramPath(report, s, r, b));
+      const cells = report.bands_hz.map((_, b) => cell(report, s, r, b));
+      const shown = (c: Cell | null): c is Cell & { value: Num; lo: Num; hi: Num } => c !== null && c.status !== 'refused' && !!c.value && !!c.lo && !!c.hi;
+      const read = (n: Num | null) => (n ? (at(report, n.path) as number) : null);
+      return {
+        param: s.name,
+        label: s.label,
+        paths: base.map((p) => `${p}.value`),
+        values: cells.map((c) => (shown(c) ? read(c.value) : null)),
+        loPaths: base.map((p) => `${p}.lo`),
+        lo: cells.map((c) => (shown(c) ? read(c.lo) : null)),
+        hiPaths: base.map((p) => `${p}.hi`),
+        hi: cells.map((c) => (shown(c) ? read(c.hi) : null)),
+      };
     });
 }
 

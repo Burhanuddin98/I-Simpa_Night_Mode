@@ -5,8 +5,13 @@
 //          precision shown (lib/acoustics.ts `numberMismatch`), every string its JSON string;
 //          no digit is shown anywhere else on the tab; every value carries its range and status
 //          or its refusal; STI carries "noise range not computed"; the words are MQ2's; and the
-//          word "validated" is nowhere on the page. Control: at least one value per receiver,
-//          and a planted wrong digit is caught by the same comparison
+//          word "validated" is nowhere on the page. Every cell's visible row and column heads
+//          (and its card's Band or Receiver selection), read from the rendered DOM, name the
+//          receiver, parameter and band of the JSON paths inside it (the assay's MED finding:
+//          a value right by its path but under the wrong label passed before); every mark is
+//          one of the known marks, word for word. Control: at least one value per receiver, a
+//          planted wrong digit is caught by the same comparison, and two cells' paths swapped
+//          are caught by the label check
 //   m12-b  0 elements for a parameter whose status in beds/summary.json is not PASS, under every
 //          selection, and its name nowhere in the tab's or the Results panel's text; the run's
 //          report carries the file's statuses; every PASS parameter has elements and cells,
@@ -25,7 +30,7 @@
 // with m12.bedplant.e2e.ts (P4).
 import { strict as assert } from 'node:assert';
 import path from 'node:path';
-import { MQ2_WORDING, notPassed, numberMismatch, PARAM_LABELS, seriesMismatches, strayDigits, stringMismatch } from '../lib/acoustics.ts';
+import { cellLabelMismatch, MARKS, MQ2_WORDING, notPassed, numberMismatch, PARAM_LABELS, seriesMismatches, strayDigits, stringMismatch } from '../lib/acoustics.ts';
 import {
   assertPassRendered,
   bedSweep,
@@ -37,6 +42,7 @@ import {
   type Row,
   runSpps,
   scan,
+  type ScanCell,
   showRun,
   summary,
   type View,
@@ -65,6 +71,8 @@ describe('M12 P2: the Acoustics tab', () => {
     const mismatches: string[] = [];
     let compared = 0;
     let strings = 0;
+    let labelled = 0;
+    let swapCells: ScanCell[] = [];
     const cellsSeen = new Set<string>();
     await everySelection(async (what) => {
       const s = await scan();
@@ -86,6 +94,7 @@ describe('M12 P2: the Acoustics tab', () => {
         if (l.kind === 'wording') assert.equal(l.text, MQ2_WORDING, what);
         else if (l.kind === 'param') assert.equal(l.text, PARAM_LABELS[l.param ?? ''], `${what}: label of ${l.param}`);
         else if (l.kind === 'standard') assert.equal(l.text, 'DIN 18041', what);
+        else if (l.kind === 'mark') assert.ok(MARKS.includes(l.text), `${what}: a mark not known word for word: ${JSON.stringify(l.text)}`);
         else assert.equal(l.kind, 'group', `${what}: a label of kind ${l.kind}`);
       }
       // The controls' options hold digits too: each is the JSON's. A band option is its index into
@@ -102,6 +111,18 @@ describe('M12 P2: the Acoustics tab', () => {
       assert.deepEqual(s.options.filter((x) => x.control === 'receiver').map((o) => [o.value, o.text]), labels.map((l, i) => [String(i), l]), `${what}: receiver options`);
       const groups = (baseJson.room as { din18041: { group: string }[] }).din18041.map((d) => d.group);
       assert.deepEqual(s.options.filter((x) => x.control === 'din-group').map((o) => [o.value, o.text]), groups.map((g) => [g, g]), `${what}: DIN options`);
+      // Every cell is where its labels say: the row and column heads and the card's selection, as
+      // rendered, name the receiver, parameter and band of every JSON path inside it.
+      for (const c of s.cells) {
+        const m = cellLabelMismatch(c.labelled, baseJson);
+        if (m) mismatches.push(`${what}: ${m}`);
+        labelled++;
+      }
+      if (swapCells.length === 0) {
+        const a = s.cells.find((c) => c.labelled.table === 'receivers-table' && c.status !== 'refused');
+        const b = a && s.cells.find((c) => c.labelled.table === 'receivers-table' && c.status !== 'refused' && c.param !== a.param && c.receiver !== a.receiver);
+        if (a && b) swapCells = [a, b];
+      }
       // Every value carries its range and status; every refusal its code (row 37 (3), MQ3).
       for (const c of s.cells) {
         cellsSeen.add(`${c.receiver}|${c.param}`);
@@ -122,6 +143,15 @@ describe('M12 P2: the Acoustics tab', () => {
     const last = first.text.slice(-1);
     const planted = { ...first, text: first.text.slice(0, -1) + (last === '9' ? '8' : String(Number(last) + 1)) };
     assert.notEqual(numberMismatch(planted, baseJson), null, 'a planted wrong digit is caught');
+    // Control: two cells of the page with their paths swapped (another receiver and parameter)
+    // are each caught by the label check, so it can tell a mislabelled cell.
+    assert.equal(swapCells.length, 2, 'two cells of different receivers and parameters were seen');
+    const [ca, cb] = swapCells;
+    assert.equal(cellLabelMismatch(ca.labelled, baseJson), null, `control: ${ca.param} at ${ca.receiver} as rendered`);
+    const swapA = cellLabelMismatch({ ...ca.labelled, paths: cb.labelled.paths }, baseJson);
+    const swapB = cellLabelMismatch({ ...cb.labelled, paths: ca.labelled.paths }, baseJson);
+    assert.notEqual(swapA, null, `control: ${ca.param} at ${ca.receiver} with ${cb.param} at ${cb.receiver}'s paths is caught`);
+    assert.notEqual(swapB, null, 'control: the other half of the swap is caught');
     // The word "validated" nowhere on the page, text or tooltip.
     const page = await browser.execute(() => [document.body.innerText, ...[...document.querySelectorAll('[title]')].map((e) => e.getAttribute('title') ?? '')].join('\n'));
     assert.ok(!/validated/i.test(page), `"validated" is on screen: ${page.match(/.{0,40}validated.{0,40}/i)?.[0]}`);
@@ -129,9 +159,12 @@ describe('M12 P2: the Acoustics tab', () => {
     for (const r of receivers) assert.ok([...cellsSeen].some((k) => k.startsWith(`${r}|`)), `receiver ${r} has no cell`);
     // A picture of the tab beside the receipt (C:, the gate's work folder).
     await browser.saveScreenshot(path.join(WORK(), 'm12-a-acoustics.png'));
-    console.log(`m12-a receipt: run ${baseRun.run}; ${compared} numbers and ${strings} strings compared over every selection; ${mismatches.length} mismatches; ${cellsSeen.size} receiver-parameter cells`);
+    console.log(
+      `m12-a receipt: run ${baseRun.run}; ${compared} numbers and ${strings} strings compared over every selection; ${labelled} cells' visible labels held to their paths; ${mismatches.length} mismatches; ${cellsSeen.size} receiver-parameter cells; swap control: ${swapA}`,
+    );
     assert.deepEqual(mismatches, []);
     assert.ok(compared > 100, `only ${compared} numbers compared`);
+    assert.ok(labelled > 100, `only ${labelled} cells' labels checked`);
   });
 
   it('m12-b: no element for a parameter not PASS in beds/summary.json; every PASS parameter rendered with its range and status', async () => {
@@ -149,7 +182,7 @@ describe('M12 P2: the Acoustics tab', () => {
     // T30 (PASS by decision 46) as any other reverberation time: drawn against the DIN band too.
     if (passed.includes('t30_s')) assert.ok(sweep.drawn.has('t30_s'), `T30 is PASS and not drawn (drawn ${JSON.stringify([...sweep.drawn])})`);
     console.log(
-      `m12-b receipt: not PASS ${JSON.stringify(hidden)}; PASS ${JSON.stringify(passed)}; with elements ${JSON.stringify([...sweep.shown].sort())}; drawn ${JSON.stringify([...sweep.drawn].sort())}; EDT marks ${JSON.stringify(sweep.edtMarks)}; ${lines.join('; ')}`,
+      `m12-b receipt: not PASS ${JSON.stringify(hidden)}; PASS ${JSON.stringify(passed)}; with elements ${JSON.stringify([...sweep.shown].sort())}; drawn ${JSON.stringify([...sweep.drawn].sort())}; marks ${JSON.stringify(sweep.marks)}; ${lines.join('; ')}`,
     );
   });
 

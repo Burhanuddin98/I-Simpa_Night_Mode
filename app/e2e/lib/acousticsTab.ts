@@ -7,7 +7,7 @@ import { strict as assert } from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { EDT_MARKS, labelPattern, PARAM_LABELS, type NumEl } from './acoustics.ts';
+import { EDT_MARKS, type LabelledCell, labelPattern, PARAM_LABELS, type NumEl, type SeriesView, T30_MARK } from './acoustics.ts';
 import { hook, m10 } from './hooks.ts';
 import { env } from './types.ts';
 
@@ -20,10 +20,8 @@ export interface Row {
   status: string;
   variant?: string | null;
 }
-export interface Series {
+export interface Series extends SeriesView {
   param: string;
-  paths: string[];
-  values: (number | null)[];
 }
 export interface View {
   state: string;
@@ -41,6 +39,9 @@ export interface ScanCell {
   nums: string[];
   refusal: string | null;
   note: string | null;
+  /** The cell as a reader takes it: its row and column heads and its card's selections, read
+   * from the rendered DOM, with every JSON path inside it (lib/acoustics.ts `cellLabelMismatch`). */
+  labelled: LabelledCell;
 }
 export interface Scan {
   state: string | null;
@@ -148,6 +149,25 @@ export const scan = (): Promise<Scan> =>
         nums: [...e.querySelectorAll('[data-num]')].map((n) => n.getAttribute('data-json') ?? ''),
         refusal: e.querySelector('[data-refusal]')?.getAttribute('data-refusal') ?? null,
         note: e.querySelector('[data-note]')?.getAttribute('data-note') ?? null,
+        labelled: (() => {
+          const tr = e.closest('tr');
+          const table = e.closest('table');
+          const idx = tr ? [...tr.children].indexOf(e) : -1;
+          const th = table?.querySelector('thead tr')?.children[idx] ?? null;
+          const card = e.closest('section');
+          const selected = (control: string) => {
+            const sel = card?.querySelector<HTMLSelectElement>(`select[data-control="${control}"]`);
+            return sel ? (sel.options[sel.selectedIndex]?.textContent ?? '') : '';
+          };
+          return {
+            table: table?.getAttribute('data-part') ?? '',
+            rowHead: tr?.children[0]?.textContent ?? '',
+            colHead: th?.querySelector('[data-label="param"]')?.textContent ?? th?.textContent ?? '',
+            band: selected('band'),
+            receiver: selected('receiver'),
+            paths: [...e.querySelectorAll('[data-json]')].map((n) => n.getAttribute('data-json') ?? ''),
+          };
+        })(),
       })),
       params: [...document.querySelectorAll('[data-param]')].map((e) => e.getAttribute('data-param') ?? ''),
       stray: clone?.textContent ?? '',
@@ -188,13 +208,15 @@ export interface BedSweep {
   cells: (ScanCell & { what: string })[];
   drawn: Set<string>;
   edtMarks: string[];
+  /** Every mark seen beside the receivers table, by the parameter it is shown with. */
+  marks: Record<string, string[]>;
 }
 
 /** Gate (b) over every selection: each of `hidden` has 0 `[data-param]` elements on the page, its
  * name in neither the tab's nor the Results panel's text, and is not drawn. Returns what was
  * shown, for the caller's check that every PASS parameter is. */
 export async function bedSweep(hidden: string[], bedOf: BedSummary): Promise<BedSweep> {
-  const out: BedSweep = { shown: new Set(), cells: [], drawn: new Set(), edtMarks: [] };
+  const out: BedSweep = { shown: new Set(), cells: [], drawn: new Set(), edtMarks: [], marks: {} };
   await everySelection(async (what) => {
     const s = await scan();
     for (const n of hidden) {
@@ -209,10 +231,15 @@ export async function bedSweep(hidden: string[], bedOf: BedSummary): Promise<Bed
     s.cells.forEach((c) => out.cells.push({ ...c, what }));
     v.series.forEach((x) => out.drawn.add(x.param));
     const marks = await browser.execute(
-      (sel: string) => [...document.querySelectorAll(`${sel} .ac-marks[data-param="edt_s"] .ac-mark`)].map((e) => e.textContent ?? ''),
+      (sel: string) =>
+        [...document.querySelectorAll(`${sel} .ac-marks .ac-mark`)].map((e) => ({ param: e.closest('[data-param]')?.getAttribute('data-param') ?? '', text: e.textContent ?? '' })),
       PANEL,
     );
-    for (const m of marks) if (!out.edtMarks.includes(m)) out.edtMarks.push(m);
+    for (const m of marks) {
+      const list = (out.marks[m.param] ??= []);
+      if (!list.includes(m.text)) list.push(m.text);
+      if (m.param === 'edt_s' && !out.edtMarks.includes(m.text)) out.edtMarks.push(m.text);
+    }
   });
   return out;
 }
@@ -220,7 +247,7 @@ export async function bedSweep(hidden: string[], bedOf: BedSummary): Promise<Bed
 /** Gate (b)'s other half: every parameter in `passed` has elements and cells, and each of its
  * cells carries its range and status (`ok`/`wide` with `.lo` and `.hi`), STI its value with
  * MQ3's note, or a refusal with its code (row 37 (3)); each of `mustRange` shows a value with its
- * range in at least one cell. EDT, where shown, carries both of row 37's marks. Returns a line per
+ * range in at least one cell. EDT, where shown, carries both of row 37's marks; T30 row 46's. Returns a line per
  * parameter for the receipt. */
 export function assertPassRendered(passed: string[], sweep: BedSweep, mustRange: string[] = ['edt_s', 't20_s', 't30_s']): string[] {
   const lines: string[] = [];
@@ -253,6 +280,10 @@ export function assertPassRendered(passed: string[], sweep: BedSweep, mustRange:
   }
   if (passed.includes('edt_s')) {
     for (const m of EDT_MARKS) assert.ok(sweep.edtMarks.includes(m), `EDT is shown without row 37's mark "${m}" (seen ${JSON.stringify(sweep.edtMarks)})`);
+  }
+  // T30, shown by decision 46, carries its mark wherever it appears (the assay's LOW finding).
+  if (passed.includes('t30_s')) {
+    assert.deepEqual(sweep.marks.t30_s ?? [], [T30_MARK], `T30 is shown without decision 46's mark (seen ${JSON.stringify(sweep.marks)})`);
   }
   return lines;
 }

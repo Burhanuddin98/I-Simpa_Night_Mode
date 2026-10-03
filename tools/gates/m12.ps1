@@ -148,6 +148,17 @@ Check "P2: the Acoustics tab's model and the e2e comparison rules (node --test, 
     $code -eq 0
 }
 
+# The assay's fixes (ASSAY.md beside PLAN.md): no string the UI can show says "validated", on any
+# step (the Acoustics tab's page check reads one step only); the particle count of gate (d) passes
+# through the draw's own kept() gate, with no cull after the count branch.
+Check "assay: no UI string says `"validated`" on any step, and the particle count goes through the draw's kept() gate (node --test ui/src/wording.test.ts ui/src/features/viewport/particles.test.ts)" {
+    $log = Join-Path $work 'assay-node.log'
+    Push-Location (Join-Path $repo 'app')
+    try { $code = Native 'node --test ui/src/wording.test.ts ui/src/features/viewport/particles.test.ts' $log } finally { Pop-Location }
+    Tail $log 8
+    $code -eq 0
+}
+
 # app/e2e/specs/m12.acoustics.e2e.ts, run by `m11.ps1 -Only e2e -Spec m12.acoustics` on m11.ps1's
 # harness (the release build, the drivers, the private verified solvers, the e2e lock, the focus
 # watcher), as P3's spec is. The ids are read from its junit verdict lines.
@@ -155,8 +166,8 @@ Check "P2: the Acoustics tab's model and the e2e comparison rules (node --test, 
 # eleven PASS in beds/summary.json, m12-b alone hides nothing, so (b) needs both ids.
 $p2Spec = 'm12.acoustics,m12.bedplant'
 $p2Ids = [ordered]@{
-    'm12-a' = 'every number on the Acoustics tab == simpa results --json at the displayed precision, every selection; no other digit; ranges, statuses, refusals; MQ2 words; no "validated"'
-    'm12-b' = 'no element for a parameter not PASS in beds/summary.json, under every selection; every PASS parameter rendered with its range and status, T30 drawn, EDT with both row 37 marks'
+    'm12-a' = 'every number on the Acoustics tab == simpa results --json at the displayed precision, every selection; each cell''s visible row and column labels name its paths; no other digit; ranges, statuses, refusals; marks word for word; MQ2 words; no "validated"'
+    'm12-b' = 'no element for a parameter not PASS in beds/summary.json, under every selection; every PASS parameter rendered with its range and status, T30 drawn with decision 46''s mark, EDT with both row 37 marks'
     'm12-b-plant' = '(b) not vacuous: C80 planted FAIL through core ($SIMPA_BED_DEMOTE) has 0 elements under every selection; the other ten rendered with range and status'
     'm12-e' = 'the DIN 18041 A3 target of the 180 m3 box reads 0.55 s, from the report; A1 reads its own'
     'm12-f' = "the variant switch replaces the RT series and numbers with the other run's JSON, 0 mismatches, both ways"

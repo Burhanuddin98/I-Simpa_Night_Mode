@@ -16,11 +16,13 @@ import {
   EDT_MARKS,
   MQ2_WORDING,
   PARAM_SPECS,
+  paramMarks,
   receiverRows,
   rtSeries,
   runForVariant,
   shownParams,
   STI_NOTE,
+  T30_MARK,
 } from './model.ts';
 
 const value = (v: number, status = 'ok', d = 0.01) => ({ value: v, mc_sd: d, status, lo: v - d, hi: v + d });
@@ -89,7 +91,7 @@ function report(fail: string[] = ['t30_s', 'edt_s', 'g_db', 'dba']): Report {
 
 test('Acoustics: the words are MQ2s and no mark says validated', () => {
   assert.ok(MQ2_WORDING.startsWith('Computed to ISO 3382-1 / IEC 60268-16'));
-  for (const t of [MQ2_WORDING, ...EDT_MARKS, STI_NOTE]) assert.ok(!/validated/i.test(t), t);
+  for (const t of [MQ2_WORDING, ...EDT_MARKS, STI_NOTE, T30_MARK]) assert.ok(!/validated/i.test(t), t);
 });
 
 test('Acoustics: only the parameters the report says PASS are shown, read from report.bed', () => {
@@ -166,6 +168,48 @@ test('Acoustics: the RT series are the shown reverberation times, value for valu
   assert.deepEqual(s[2].values, [0.6, null]);
   assert.equal(s[2].paths[1], 'spps.point_receivers.0.bands.1.parameters.t30_s.value');
   assert.deepEqual(rtSeries(report(), 1).map((x) => x.param), ['t20_s']);
+});
+
+test('Acoustics: the RT chart goes through the tables filter: only what a cell shows is drawn, with its range', () => {
+  // Assay (M12, LOW): the chart drew `.value` wherever it was a number. A value the table does
+  // not show (a status other than ok/wide, or no range) must be a gap in the chart too.
+  const r = report(['spl_db']);
+  const b0 = (r as unknown as { spps: { point_receivers: { bands: { parameters: Record<string, unknown> }[] }[] } }).spps.point_receivers[0].bands[0].parameters;
+  b0.t20_s = { value: 0.555, mc_sd: 0.01, status: 'ok' }; // no range: the table shows nothing
+  b0.edt_s = { value: 0.61, mc_sd: 0.05, status: 'unknown', lo: 0.56, hi: 0.66 }; // not ok/wide
+  const t20 = PARAM_SPECS.find((p) => p.name === 't20_s')!;
+  assert.equal(cell(r, t20, 0, 0), null, 'the table shows no T20 here');
+  const s = rtSeries(r, 0);
+  const by = (n: string) => s.find((x) => x.param === n)!;
+  assert.deepEqual(by('t20_s').values, [null, 0.555], 'T20 drawn only where its cell shows it');
+  assert.deepEqual(by('edt_s').values, [null, 0.61]);
+  // The range drawn is the cell's: lo and hi where the value is drawn, gaps where it is not.
+  assert.deepEqual(by('t30_s').values, [0.6, null]);
+  assert.deepEqual(by('t30_s').lo, [0.6 - 0.01, null]);
+  assert.deepEqual(by('t30_s').hi, [0.6 + 0.01, null]);
+  assert.deepEqual(by('t20_s').lo, [null, 0.555 - 0.01]);
+  // Every drawn number is a path the gate reads: values, and the range beside them.
+  assert.equal(by('t30_s').paths[0], 'spps.point_receivers.0.bands.0.parameters.t30_s.value');
+  assert.equal(by('t30_s').loPaths[0], 'spps.point_receivers.0.bands.0.parameters.t30_s.lo');
+  assert.equal(by('t30_s').hiPaths[0], 'spps.point_receivers.0.bands.0.parameters.t30_s.hi');
+  // Only PASS parameters are drawn (gate (b)), as before.
+  assert.deepEqual(rtSeries(report(), 0).map((x) => x.param), ['t20_s']);
+});
+
+test('Acoustics: the marks beside the table: EDT row 37, T30 decision 46, STI MQ3, each only with its parameter', () => {
+  assert.equal(T30_MARK, 'Ranges on noise-limited T30 values may be slightly narrow: 1 of 833 checked values fell 1.5 ms outside its range.');
+  const all = paramMarks(report(['spl_db']));
+  assert.deepEqual(
+    all.map((m) => [m.param, m.text]),
+    [
+      ['edt_s', EDT_MARKS[0]],
+      ['edt_s', EDT_MARKS[1]],
+      ['t30_s', T30_MARK],
+      ['sti', `STI: ${STI_NOTE}`],
+    ],
+  );
+  // Say-NO: with T30 and EDT not PASS, neither carries a mark (nothing of theirs is on screen).
+  assert.deepEqual(paramMarks(report()).map((m) => m.param), ['sti']);
 });
 
 test('Acoustics: the DIN target is the report own, by group, with the volume', () => {

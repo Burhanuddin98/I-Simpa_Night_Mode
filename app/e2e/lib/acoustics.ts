@@ -102,24 +102,136 @@ export function labelPattern(name: string): RegExp {
   return new RegExp(`(^|[^A-Za-z0-9])${esc}(?![A-Za-z0-9])`);
 }
 
-/**
- * A receiver's RT series as the JSON gives it, the paths the tab must have drawn from: per band of
- * `bands_hz`, the parameter's value, or null where it is refused.
- */
-export function rtSeries(json: unknown, receiver: number, param: string): { paths: string[]; values: (number | null)[] } {
-  const bands = (at(json, 'bands_hz') as number[] | undefined) ?? [];
-  const paths = bands.map((_, b) => `spps.point_receivers.${receiver}.bands.${b}.parameters.${param}.value`);
-  return { paths, values: paths.map((p) => (typeof at(json, p) === 'number' ? (at(json, p) as number) : null)) };
+
+/** A drawn or expected RT series: per band of `bands_hz`, the value and its range, with the
+ * paths they are read from. */
+export interface SeriesView {
+  paths: string[];
+  values: (number | null)[];
+  loPaths: string[];
+  lo: (number | null)[];
+  hiPaths: string[];
+  hi: (number | null)[];
 }
 
-/** Mismatches between a drawn series and the JSON's: its paths and its values, exactly. */
-export function seriesMismatches(drawn: { paths: string[]; values: (number | null)[] }, json: unknown, receiver: number, param: string): string[] {
+/**
+ * A receiver's RT series as the JSON gives it, the paths the tab must have drawn from: per band
+ * of `bands_hz`, the parameter's value and range where the tables show it (status `ok` or `wide`
+ * with `lo` and `hi`, row 37 (3)), or null: refused, or a value no table shows. The M12 assay
+ * found the chart drawing `.value` wherever it was a number; the chart goes through the tables'
+ * filter, and this is that filter, written from the JSON's side.
+ */
+export function rtSeries(json: unknown, receiver: number, param: string): SeriesView {
+  const bands = (at(json, 'bands_hz') as number[] | undefined) ?? [];
+  const base = bands.map((_, b) => `spps.point_receivers.${receiver}.bands.${b}.parameters.${param}`);
+  const shown = base.map((p) => {
+    const e = at(json, p) as { value?: unknown; status?: unknown; lo?: unknown; hi?: unknown } | undefined;
+    const n = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+    return !!e && typeof e === 'object' && n(e.value) && (e.status === 'ok' || e.status === 'wide') && n(e.lo) && n(e.hi);
+  });
+  const read = (k: string) => base.map((p, i) => (shown[i] ? (at(json, `${p}.${k}`) as number) : null));
+  return {
+    paths: base.map((p) => `${p}.value`),
+    values: read('value'),
+    loPaths: base.map((p) => `${p}.lo`),
+    lo: read('lo'),
+    hiPaths: base.map((p) => `${p}.hi`),
+    hi: read('hi'),
+  };
+}
+
+/** Mismatches between a drawn series and the JSON's: its paths, values and ranges, exactly. */
+export function seriesMismatches(drawn: SeriesView, json: unknown, receiver: number, param: string): string[] {
   const want = rtSeries(json, receiver, param);
   const out: string[] = [];
   if (drawn.values.length !== want.values.length) out.push(`${param}: ${drawn.values.length} points drawn, the JSON has ${want.values.length} bands`);
+  for (const k of ['lo', 'hi'] as const) {
+    if (!Array.isArray(drawn[k]) || !Array.isArray(drawn[`${k}Paths`])) out.push(`${param}: no ${k} drawn (the range is not on the chart)`);
+  }
   want.values.forEach((v, i) => {
     if (drawn.paths[i] !== want.paths[i]) out.push(`${param}[${i}]: drawn from ${drawn.paths[i]}, not ${want.paths[i]}`);
     if (drawn.values[i] !== v) out.push(`${param}[${i}]: drawn ${drawn.values[i]}, JSON ${v}`);
+    for (const k of ['lo', 'hi'] as const) {
+      const paths = drawn[`${k}Paths`];
+      const vals = drawn[k];
+      if (!Array.isArray(paths) || !Array.isArray(vals)) continue;
+      if (paths[i] !== want[`${k}Paths`][i]) out.push(`${param}[${i}].${k}: drawn from ${paths[i]}, not ${want[`${k}Paths`][i]}`);
+      if (vals[i] !== want[k][i]) out.push(`${param}[${i}].${k}: drawn ${vals[i]}, JSON ${want[k][i]}`);
+    }
   });
   return out;
+}
+
+/** Decision-log row 46's mark, beside T30 wherever it appears. */
+export const T30_MARK = 'Ranges on noise-limited T30 values may be slightly narrow: 1 of 833 checked values fell 1.5 ms outside its range.';
+
+/** Every mark the tab may show beside its receivers table (`[data-label="mark"]`), word for word:
+ * row 37's two EDT marks, row 46's T30 mark, MQ3's STI note. */
+export const MARKS: readonly string[] = [...EDT_MARKS, T30_MARK, 'STI: noise range not computed'];
+
+/**
+ * One cell of the tab's tables as the page shows it (gate (a), the assay's MED finding): the
+ * labels a reader takes it by, read from the rendered DOM, and the JSON paths of everything in it.
+ *   receivers-table  rowHead the receiver, colHead the parameter, `band` the Band select's text
+ *   rt-table         rowHead the band, colHead the parameter, `receiver` the Receiver select's text
+ */
+export interface LabelledCell {
+  table: string;
+  rowHead: string;
+  colHead: string;
+  band: string;
+  receiver: string;
+  paths: string[];
+}
+
+/** What a cell's JSON path is of: receiver index, parameter, band (an index, `sum`, or null for a
+ * receiver-wide parameter); null when it is the path of no cell. */
+export function pathCell(path: string): { receiver: number; param: string; band: number | 'sum' | null } | null {
+  const m = /^(?:spps|tcr)\.point_receivers\.(\d+)\.(.+)$/.exec(path);
+  if (!m) return null;
+  const r = Number(m[1]);
+  const rest = m[2];
+  let k: RegExpExecArray | null;
+  if ((k = /^bands\.(\d+)\.parameters\.([a-z0-9_]+)\./.exec(rest))) return { receiver: r, param: k[2], band: Number(k[1]) };
+  if ((k = /^bands\.(\d+)\.g_db\./.exec(rest))) return { receiver: r, param: 'g_db', band: Number(k[1]) };
+  if ((k = /^aggregate\.parameters\.([a-z0-9_]+)\./.exec(rest))) return { receiver: r, param: k[1], band: 'sum' };
+  if (/^aggregate\.dba\./.test(rest)) return { receiver: r, param: 'dba', band: null };
+  if (/^sti\./.test(rest)) return { receiver: r, param: 'sti', band: null };
+  return null;
+}
+
+/** A band's name as the tab writes it: `500 Hz`, `1 kHz`, `bands summed`. */
+export function bandName(json: unknown, band: number | 'sum'): string {
+  if (band === 'sum') return 'bands summed';
+  const hz = (at(json, 'bands_hz') as number[] | undefined)?.[band];
+  if (typeof hz !== 'number') return `no band ${band}`;
+  return hz >= 1000 ? `${hz / 1000} kHz` : `${hz} Hz`;
+}
+
+const squash = (s: string) => s.replace(/\s+/g, ' ').trim();
+
+/**
+ * Why a cell's visible labels do not name the receiver, parameter and band its JSON paths are
+ * of, or null when they do. Every path in the cell must be of one cell, and that cell's receiver
+ * label (the JSON's), parameter name (`PARAM_LABELS`) and band name must be the ones the page
+ * shows for it.
+ */
+export function cellLabelMismatch(c: LabelledCell, json: unknown): string | null {
+  if (c.paths.length === 0) return `${c.table} "${c.rowHead}" x "${c.colHead}": no path in the cell`;
+  const of = c.paths.map((p) => ({ p, at: pathCell(p) }));
+  const bad = of.find((x) => x.at === null);
+  if (bad) return `${c.table} "${c.rowHead}" x "${c.colHead}": ${bad.p} names no receiver cell`;
+  const key = (x: NonNullable<ReturnType<typeof pathCell>>) => `${x.receiver}|${x.param}|${x.band}`;
+  const first = of[0].at as NonNullable<ReturnType<typeof pathCell>>;
+  const other = of.find((x) => key(x.at as NonNullable<ReturnType<typeof pathCell>>) !== key(first));
+  if (other) return `${c.table} "${c.rowHead}" x "${c.colHead}": its paths disagree (${of[0].p} and ${other.p})`;
+  const shownReceiver = squash(c.table === 'rt-table' ? c.receiver : c.rowHead);
+  const shownBand = squash(c.table === 'rt-table' ? c.rowHead : c.band);
+  const shownParam = squash(c.colHead);
+  const label = at(json, `spps.point_receivers.${first.receiver}.label`) ?? at(json, `tcr.point_receivers.${first.receiver}.label`);
+  const where = `${c.table} "${c.rowHead}" x "${c.colHead}" (${of[0].p})`;
+  if (shownReceiver !== label) return `${where}: the receiver shown is "${shownReceiver}", the path's is "${String(label)}"`;
+  if (shownParam !== PARAM_LABELS[first.param]) return `${where}: the parameter shown is "${shownParam}", the path's is "${PARAM_LABELS[first.param] ?? first.param}"`;
+  if (first.band !== null && shownBand !== bandName(json, first.band)) return `${where}: the band shown is "${shownBand}", the path's is "${bandName(json, first.band)}"`;
+  return null;
 }
