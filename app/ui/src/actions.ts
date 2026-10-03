@@ -24,6 +24,7 @@ import {
 } from './backend';
 import type { UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
+import { regroupFaces } from './chrome/sceneModel';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
 import { decodeMesh } from './mesh';
 import {
@@ -57,6 +58,7 @@ import {
   runStore,
   sceneStore,
   selectedRunStore,
+  selectionStore,
   type SolverName,
   solversStatusStore,
   solverStore,
@@ -234,6 +236,30 @@ export async function reband(kind: BandKind, lowestHz: number, highestHz: number
     const outcome = await backend.editReband(kind, lowestHz, highestHz);
     await accept(outcome.state);
     fileRefusals(fieldKey, outcome);
+    return outcome;
+  });
+}
+
+/**
+ * New group from selection (scope row 15 (1), G19): the faces picked in the 3D view go to a new
+ * surface group, `Group <n>`, with the material the core picks: their common one, or upstream's
+ * placeholder when they differ, which blocks Run until a material is chosen. One checked edit,
+ * one undo step; the new group is then selected, so its material can be set. A selection the
+ * core refuses (one that straddles a surface receiver or fitting zone) is a FAIL line, and the
+ * project is unchanged. `null` when no faces are picked.
+ */
+export async function regroupSelection(): Promise<EditOutcome | null> {
+  const faces = regroupFaces(selectionStore.get());
+  if (!faces) return null;
+  return run('New group from selection', async () => {
+    const before = new Set((sceneStore.get()?.view.surface_groups ?? []).map((g) => g.id));
+    const outcome = await backend.editRegroup(faces);
+    await accept(outcome.state);
+    const added = outcome.state.view.surface_groups.find((g) => !before.has(g.id));
+    if (outcome.applied && added) {
+      selectionStore.set({ kind: 'group', id: added.id });
+      log('OK', `New group ${added.name}: ${faces.length} ${faces.length === 1 ? 'face' : 'faces'}`);
+    }
     return outcome;
   });
 }

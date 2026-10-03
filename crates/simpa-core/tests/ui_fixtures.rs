@@ -235,6 +235,7 @@ fn teaching_room() -> Project {
         orientation: Vec3::new(1.0, 0.0, 0.0),
         background_noise: None,
         solver_id: None,
+        group: None,
     })
     .collect();
     p.check_integrity()

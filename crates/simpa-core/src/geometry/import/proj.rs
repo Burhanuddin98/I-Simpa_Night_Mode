@@ -128,7 +128,9 @@
 //! - **Sources**, in load order through any nesting of source groups (a `sources` element of type
 //!   15 inside the list), as upstream's GUI loads them (`e_scene_sources.h:73-87`) and writes them,
 //!   a group's sources in place of the group (`e_scene_sources.h:192-202`); a child of any other
-//!   type is refused ([`codes::SOURCE_GROUP_MALFORMED`]). **Point receivers.** Both with their
+//!   type is refused ([`codes::SOURCE_GROUP_MALFORMED`]). **Point receivers** the same way,
+//!   through any nesting of receiver groups (type 7 inside the list), each keeping its group
+//!   path ([`codes::RECEIVER_GROUP_MALFORMED`]). Both with their
 //!   `<position>` children, directions, delays and enable flags; **cutting-plane receivers** from
 //!   `verta`, `vertb`, `vertc` and `resolution`.
 //! - **Environment** from `atmoconfig`; **SPPS** and **TCR** settings and computed bands from
@@ -174,6 +176,10 @@ const APP_SPECTRUM_TYPE: i64 = 45;
 /// Upstream's element types (`data_manager/element.h:97-206`, numbered from 0; `PROPERTY_FREQ`
 /// is pinned at 49, `:145`) that this import tells apart by `eid`.
 mod eid {
+    /// `ELEMENT_TYPE_SCENE_RECEPTEURSP`: the point-receiver list, and a receiver group inside it.
+    pub const RECEIVERS: i64 = 7;
+    /// `ELEMENT_TYPE_SCENE_RECEPTEURSP_RECEPTEUR`.
+    pub const RECEIVER: i64 = 8;
     /// `ELEMENT_TYPE_SCENE_SOURCES`: the source list, and a source group inside it.
     pub const SOURCES: i64 = 15;
     /// `ELEMENT_TYPE_SCENE_SOURCES_SOURCE`.
@@ -240,6 +246,10 @@ pub mod codes {
     /// source group (15), or has no element type. Upstream's GUI skips it silently
     /// (`e_scene_sources.h:73-87`).
     pub const SOURCE_GROUP_MALFORMED: &str = "proj_source_group_malformed";
+    /// A child of the point-receiver list or of a receiver group that is neither a receiver (8)
+    /// nor a receiver group (7), or has no element type. Upstream's GUI skips it silently
+    /// (`e_scene_recepteursp.h:55-73`).
+    pub const RECEIVER_GROUP_MALFORMED: &str = "proj_receiver_group_malformed";
     /// Volumes (`volumes/volume`): TetGen regions with their own seed and volume bound
     /// (`e_scene_volumes_volume.h:168-188`), which a project does not hold.
     pub const VOLUMES_UNSUPPORTED: &str = "proj_volumes_unsupported";
@@ -261,6 +271,7 @@ pub mod codes {
         MATERIAL_ROW_UNREADABLE,
         TRANSMISSION_EXCEEDS_ABSORPTION,
         SOURCE_GROUP_MALFORMED,
+        RECEIVER_GROUP_MALFORMED,
         VOLUMES_UNSUPPORTED,
         MESH_DEBUG_MODE,
     ];
@@ -904,7 +915,8 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
         for (s, group) in source_elements(list)? {
             let index = sources.len();
             let id = SourceId(ids.uuid("source", index));
-            let mut source = read_source(s, &bands, id).map_err(|e| in_group(e, &group))?;
+            let mut source =
+                read_source(s, &bands, id).map_err(|e| in_group(e, "source group", &group))?;
             source.group = (!group.is_empty()).then(|| group.clone());
             if let Some(upstream) = element_id(s) {
                 report.upstream_ids.push(UpstreamId {
@@ -919,19 +931,15 @@ fn import(bytes: &[u8], projet_config: Option<&[u8]>) -> Result<ProjImport> {
     }
     let mut point_receivers = Vec::new();
     if let Some(list) = opt_child(data, "recepteursp") {
-        for r in element_kids(list) {
-            if !r.has_tag_name("recepteurp") {
-                return Err(ImportError::unsupported(
-                    FMT_XML,
-                    format!("<{}> in the point receivers", r.tag_name().name()),
-                ));
-            }
+        for (r, group) in receiver_elements(list)? {
             let index = point_receivers.len();
-            let receiver = read_point_receiver(
+            let mut receiver = read_point_receiver(
                 r,
                 &bands,
                 PointReceiverId(ids.uuid("point receiver", index)),
-            )?;
+            )
+            .map_err(|e| in_group(e, "receiver group", &group))?;
+            receiver.group = (!group.is_empty()).then(|| group.clone());
             if let Some(upstream) = element_id(r) {
                 report.upstream_ids.push(UpstreamId {
                     kind: UpstreamKind::PointReceiver,
@@ -1096,19 +1104,72 @@ fn source_elements<'a, 'i>(list: Node<'a, 'i>) -> Result<Vec<(Node<'a, 'i>, Stri
     Ok(out)
 }
 
-/// A source's error, naming the group the source sits in.
-fn in_group(e: ImportError, group: &str) -> ImportError {
+/// Every point receiver of the receiver list `list`, in upstream's load order ([`kids`]) through
+/// any nesting of receiver groups, with the path of the groups it sits in (`Stalls / Front`, or
+/// empty at the top level): as [`source_elements`] for sources. Upstream's GUI loads a child of
+/// type 8 as a receiver and one of type 7 as a group, whose children it reads the same way
+/// (`e_scene_recepteursp.h:55-73`); on writing, a group writes each of its receivers in its place
+/// (`e_scene_recepteursp.h:152-161`), so the solvers read the list flat in this order. Any other
+/// child is refused, where upstream skips it silently: [`codes::RECEIVER_GROUP_MALFORMED`].
+fn receiver_elements<'a, 'i>(list: Node<'a, 'i>) -> Result<Vec<(Node<'a, 'i>, String)>> {
+    let mut out = Vec::new();
+    let children = |n: Node<'a, 'i>| element_kids(n).collect::<Vec<_>>();
+    let mut stack: Vec<(Node<'a, 'i>, String)> = children(list)
+        .into_iter()
+        .rev()
+        .map(|c| (c, String::new()))
+        .collect();
+    while let Some((node, group)) = stack.pop() {
+        let name = node.attribute("name").unwrap_or("");
+        match element_type(node) {
+            Some(eid::RECEIVER) => out.push((node, group)),
+            Some(eid::RECEIVERS) => {
+                let path = if group.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{group} / {name}")
+                };
+                for c in children(node).into_iter().rev() {
+                    stack.push((c, path.clone()));
+                }
+            }
+            other => {
+                let place = if group.is_empty() {
+                    "the point receivers".to_string()
+                } else {
+                    format!("receiver group `{group}`")
+                };
+                let what = match other {
+                    Some(t) => format!("element type {t}"),
+                    None => "no element type (eid)".to_string(),
+                };
+                return Err(ImportError::refused(
+                    FMT_XML,
+                    codes::RECEIVER_GROUP_MALFORMED,
+                    format!(
+                        "<{} name=\"{name}\"> in {place} has {what}: it is neither a point receiver (8) nor a receiver group (7), and upstream's GUI would skip it silently (e_scene_recepteursp.h:55-73)",
+                        node.tag_name().name()
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// A source's or receiver's error, naming the group (`kind`, e.g. `source group`) it sits in.
+fn in_group(e: ImportError, kind: &str, group: &str) -> ImportError {
     if group.is_empty() {
         return e;
     }
     match e {
         ImportError::Invalid { format, message } => ImportError::Invalid {
             format,
-            message: format!("source group `{group}`: {message}"),
+            message: format!("{kind} `{group}`: {message}"),
         },
         ImportError::Unsupported { format, message } => ImportError::Unsupported {
             format,
-            message: format!("source group `{group}`: {message}"),
+            message: format!("{kind} `{group}`: {message}"),
         },
         other => other,
     }
@@ -2419,6 +2480,7 @@ fn read_point_receiver(
         ),
         background_noise,
         solver_id: pin(element_id(r), &what)?,
+        group: None,
         name,
     })
 }

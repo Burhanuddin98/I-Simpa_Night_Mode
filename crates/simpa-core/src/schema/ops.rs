@@ -132,6 +132,29 @@ pub enum Op {
     RemoveSurfaceGroup {
         id: GroupId,
     },
+    /// Creates `group` at `index` and moves the listed faces into it (parity G19, "send selected
+    /// faces to a new group"). No face changes material and no receiver or zone gains or loses a
+    /// face:
+    ///
+    /// - `group.material` must be every listed face's own base material, or upstream's
+    ///   placeholder (`validate::is_placeholder_material`, which blocks a run until a material is
+    ///   chosen); any other is refused (`material_change`).
+    /// - Under a variant that gives every listed face one material, the new group gets that
+    ///   material as the variant's override (none when it is the group's own). One that gives
+    ///   them different materials is refused (`split`), unless the new group is the
+    ///   placeholder, which it then shows under that variant too.
+    /// - A scene receiver or surfaces fitting zone holding every listed face gets the new group
+    ///   appended to its groups; one holding some but not all is refused (`split`).
+    ///
+    /// Refused too: an empty face list, a face index out of range or listed twice (`faces`), and
+    /// a group id or name already taken. The faces' former groups stay, even if empty. The
+    /// inverse puts every face back in its former group and removes the new group; it is a
+    /// [`Op::Batch`] of the inverse ops. [`Project::regrouped`] picks the material.
+    RegroupFaces {
+        index: usize,
+        group: SurfaceGroup,
+        faces: Vec<u32>,
+    },
     SetGroupMaterial {
         group: GroupId,
         material: MaterialId,
@@ -298,6 +321,17 @@ pub enum OpError {
         index: usize,
         error: Box<OpError>,
     },
+    /// A face list that is empty, names a face past the mesh, or names one twice.
+    Faces(String),
+    /// A name another entity of the kind already has.
+    NameTaken {
+        kind: &'static str,
+        name: String,
+    },
+    /// Faces a receiver, zone or variant treats differently, sent to one group.
+    Split(String),
+    /// A regroup that would give a face a material it did not have.
+    MaterialChange(String),
 }
 
 impl OpError {
@@ -313,6 +347,10 @@ impl OpError {
             OpError::BandData(_) => "band_data",
             OpError::Integrity(_) => "integrity",
             OpError::Batch { .. } => "batch",
+            OpError::Faces(_) => "faces",
+            OpError::NameTaken { .. } => "name_taken",
+            OpError::Split(_) => "split",
+            OpError::MaterialChange(_) => "material_change",
         }
     }
 }
@@ -344,6 +382,12 @@ impl fmt::Display for OpError {
             OpError::BandData(msg) => write!(f, "band data does not match the project: {msg}"),
             OpError::Integrity(e) => write!(f, "{e}"),
             OpError::Batch { index, error } => write!(f, "op {index} of the batch: {error}"),
+            OpError::Faces(msg) => write!(f, "face list: {msg}"),
+            OpError::NameTaken { kind, name } => {
+                write!(f, "a {kind} named '{name}' already exists")
+            }
+            OpError::Split(msg) => write!(f, "{msg}"),
+            OpError::MaterialChange(msg) => write!(f, "{msg}"),
         }
     }
 }
@@ -677,6 +721,237 @@ impl Project {
         data.tcr_bands_computed = map(&pick, &data.tcr_bands_computed);
         Some(Op::SetBands { bands, data })
     }
+
+    /// The edit that sends `faces` to a new surface group `id` named `name`, appended to the
+    /// groups ([`Op::RegroupFaces`]), with the material the new group should have: the faces'
+    /// common material when they all have one in the base project and every variant treats them
+    /// alike (so no face changes material under any variant); otherwise upstream's placeholder,
+    /// which blocks a run until a material is chosen (decision row 22 (2)). The project's own
+    /// placeholder material if it holds one, else a new one with id `placeholder`, added in the
+    /// same [`Op::Batch`] so one undo removes both.
+    ///
+    /// Upstream's GUI ("Create a group from the selection", `projet.cpp:1638-1651`) always gives
+    /// the new group material id 0, its placeholder (`e_scene_groupesurfaces_groupe.cpp:92`),
+    /// whatever the faces had. Faces this cannot read (an index out of range) are left to
+    /// [`Op::apply`] to refuse.
+    pub fn regrouped(&self, faces: &[u32], id: GroupId, name: &str, placeholder: MaterialId) -> Op {
+        let from = former_groups(self, faces);
+        let alike = |v: &[Option<MaterialId>]| v.windows(2).all(|w| w[0] == w[1]);
+        let base: Vec<Option<MaterialId>> = from
+            .iter()
+            .map(|&g| self.group(g).map(|x| x.material))
+            .collect();
+        let common = base.first().copied().flatten().filter(|_| {
+            alike(&base)
+                && self.variants.iter().all(|v| {
+                    let under: Vec<_> = from
+                        .iter()
+                        .map(|&g| self.effective_material(g, Some(v.id)))
+                        .collect();
+                    alike(&under)
+                })
+        });
+        let regroup = |material| Op::RegroupFaces {
+            index: self.surface_groups.len(),
+            group: SurfaceGroup {
+                id,
+                name: name.to_string(),
+                material,
+            },
+            faces: faces.to_vec(),
+        };
+        if let Some(m) = common {
+            return regroup(m);
+        }
+        if from.is_empty() {
+            return regroup(placeholder);
+        }
+        if let Some(m) = self
+            .materials
+            .iter()
+            .find(|m| crate::validate::is_placeholder_material(m))
+        {
+            return regroup(m.id);
+        }
+        Op::Batch {
+            ops: vec![
+                Op::AddMaterial {
+                    index: self.materials.len(),
+                    material: crate::geometry::import::default_material(
+                        placeholder,
+                        self.bands.len(),
+                    ),
+                },
+                regroup(placeholder),
+            ],
+        }
+    }
+}
+
+/// The distinct groups the listed faces are in, in the order first met; faces out of range are
+/// skipped.
+fn former_groups(p: &Project, faces: &[u32]) -> Vec<GroupId> {
+    let mut out: Vec<GroupId> = Vec::new();
+    for f in faces {
+        if let Some(face) = p.geometry.faces.get(*f as usize)
+            && !out.contains(&face.group)
+        {
+            out.push(face.group);
+        }
+    }
+    out
+}
+
+/// Whether a list of groups holds all of `from` (`Some(true)`), none of it (`Some(false)`), or
+/// some of it (`None`).
+fn holds(groups: &[GroupId], from: &[GroupId]) -> Option<bool> {
+    match from.iter().filter(|g| groups.contains(g)).count() {
+        0 => Some(false),
+        k if k == from.len() => Some(true),
+        _ => None,
+    }
+}
+
+/// [`Op::RegroupFaces`]: everything is checked before anything changes.
+fn regroup_faces(
+    p: &mut Project,
+    index: usize,
+    group: SurfaceGroup,
+    faces: Vec<u32>,
+) -> Result<Op> {
+    let n = p.geometry.faces.len();
+    if faces.is_empty() {
+        return Err(OpError::Faces("no face is listed".into()));
+    }
+    let mut seen = std::collections::HashSet::with_capacity(faces.len());
+    for &f in &faces {
+        if f as usize >= n {
+            return Err(OpError::Faces(format!(
+                "face {f} does not exist: the mesh has {n} faces"
+            )));
+        }
+        if !seen.insert(f) {
+            return Err(OpError::Faces(format!("face {f} is listed twice")));
+        }
+    }
+    insertable(&p.surface_groups, "surface group", index, group.id, |g| {
+        g.id
+    })?;
+    if p.surface_groups.iter().any(|g| g.name == group.name) {
+        return Err(OpError::NameTaken {
+            kind: "surface group",
+            name: group.name,
+        });
+    }
+    integrity::check_group(&group, &|m| p.material(m).is_some())?;
+
+    let id = group.id;
+    let from = former_groups(p, &faces);
+    let group_name = |g: GroupId| p.group(g).map_or_else(String::new, |x| x.name.clone());
+    let material_name = |m: MaterialId| p.material(m).map_or_else(String::new, |x| x.name.clone());
+    let placeholder = p
+        .material(group.material)
+        .is_some_and(crate::validate::is_placeholder_material);
+    if !placeholder
+        && let Some(&g) = from
+            .iter()
+            .find(|&&g| p.group(g).map(|x| x.material) != Some(group.material))
+    {
+        let had = p.group(g).map(|x| x.material);
+        return Err(OpError::MaterialChange(format!(
+            "the faces of surface group '{}' have material '{}', not '{}': a new group takes \
+             the faces' own material, or the placeholder when they differ",
+            group_name(g),
+            had.map(material_name).unwrap_or_default(),
+            material_name(group.material),
+        )));
+    }
+
+    let mut carried: Vec<(VariantId, MaterialId)> = Vec::new();
+    for v in &p.variants {
+        let under: Vec<Option<MaterialId>> = from
+            .iter()
+            .map(|&g| p.effective_material(g, Some(v.id)))
+            .collect();
+        if under.windows(2).all(|w| w[0] == w[1]) {
+            if let Some(&Some(m)) = under.first()
+                && m != group.material
+            {
+                carried.push((v.id, m));
+            }
+        } else if !placeholder {
+            return Err(OpError::Split(format!(
+                "variant '{}' gives the selected faces different materials, so no one material \
+                 keeps them all: the new group must be the placeholder",
+                v.name
+            )));
+        }
+    }
+
+    let split = |what: &str, name: &str| {
+        OpError::Split(format!(
+            "{what} '{name}' holds some of the selected faces but not all: one new group would \
+             take faces out of it or add faces to it"
+        ))
+    };
+    let mut receivers = Vec::new();
+    for (i, r) in p.surface_receivers.iter().enumerate() {
+        if let SurfaceReceiverShape::Scene { groups } = &r.shape {
+            match holds(groups, &from) {
+                Some(true) => receivers.push(i),
+                Some(false) => {}
+                None => return Err(split("surface receiver", &r.name)),
+            }
+        }
+    }
+    let mut zones = Vec::new();
+    for (i, z) in p.fitting_zones.iter().enumerate() {
+        if let FittingShape::Surfaces { groups, .. } = &z.shape {
+            match holds(groups, &from) {
+                Some(true) => zones.push(i),
+                Some(false) => {}
+                None => return Err(split("fitting zone", &z.name)),
+            }
+        }
+    }
+
+    // Checked: now apply, and build the inverse from the ops that undo each part.
+    let mut inverse = Vec::new();
+    p.surface_groups.insert(index, group);
+    for &(v, m) in &carried {
+        let i = p
+            .variants
+            .iter()
+            .position(|x| x.id == v)
+            .expect("found above");
+        p.variants[i].set_override(id, Some(m));
+        inverse.push(Op::SetVariantOverride {
+            variant: v,
+            group: id,
+            material: None,
+        });
+    }
+    for &i in &receivers {
+        let old = p.surface_receivers[i].clone();
+        if let SurfaceReceiverShape::Scene { groups } = &mut p.surface_receivers[i].shape {
+            groups.push(id);
+        }
+        inverse.push(Op::ReplaceSurfaceReceiver { receiver: old });
+    }
+    for &i in &zones {
+        let old = p.fitting_zones[i].clone();
+        if let FittingShape::Surfaces { groups, .. } = &mut p.fitting_zones[i].shape {
+            groups.push(id);
+        }
+        inverse.push(Op::ReplaceFittingZone { zone: old });
+    }
+    let old = p.geometry.clone();
+    for &f in &faces {
+        p.geometry.faces[f as usize].group = id;
+    }
+    inverse.push(Op::SetGeometry { geometry: old });
+    inverse.push(Op::RemoveSurfaceGroup { id });
+    Ok(Op::Batch { ops: inverse })
 }
 
 impl Op {
@@ -800,6 +1075,11 @@ impl Op {
                     group: p.surface_groups.remove(index),
                 })
             }
+            Op::RegroupFaces {
+                index,
+                group,
+                faces,
+            } => regroup_faces(p, index, group, faces),
             Op::SetGroupMaterial { group, material } => {
                 let i = position(&p.surface_groups, "surface group", group, |g| g.id)?;
                 position(&p.materials, "material", material, |m| m.id)?;

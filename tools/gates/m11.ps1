@@ -27,7 +27,7 @@
 # tauri-driver, the msedgedriver of the live WebView2 runtime, and the solver build.
 #
 # Run: powershell -File tools/gates/m11.ps1 [-TargetDir C:\tmp\nm-target] [-E2eHome C:\tmp\nm-e2e]
-#        [-Only all|static|e2e] [-Spec smoke,gate,close,kill,after,simulate,dock,project,reload,settings]
+#        [-Only all|static|e2e] [-Spec smoke,gate,close,kill,after,simulate,dock,project,reload,settings,groups]
 #        [-SolversDir C:\tmp\nm-m8a-solvers] [-SkipCore] [-SkipPrior] [-FocusSayNo] [-FetchDriver]
 # Partial runs (-Only other than all, a -Spec subset, -SkipCore, -SkipPrior) never print
 # "M11 PASSED".
@@ -35,7 +35,7 @@ param(
     [string]$TargetDir = 'C:\tmp\nm-target',
     [string]$E2eHome = 'C:\tmp\nm-e2e',
     [ValidateSet('all', 'static', 'e2e')][string]$Only = 'all',
-    [string[]]$Spec = @('smoke', 'gate', 'close', 'kill', 'after', 'simulate', 'dock', 'project', 'reload', 'settings'),
+    [string[]]$Spec = @('smoke', 'gate', 'close', 'kill', 'after', 'simulate', 'dock', 'project', 'reload', 'settings', 'groups'),
     [string]$SolversDir = 'C:\tmp\nm-m8a-solvers',
     # Upstream's TetGen 1.6.0 build, the reference two core tests refuse by name. Default:
     # $SIMPA_TETGEN160, else beside the solver build (solvers/build.ps1's layout), else M10's copy.
@@ -90,6 +90,8 @@ $specIds = [ordered]@{
     reload   = @('m11-reload')
     # PQ3, the Simulate settings editor (docs/investigations/2026-10-03-pq3/PLAN.md, order of work 4).
     settings = @('pq3-settings-edit', 'pq3-settings-bands-off', 'pq3-settings-preset')
+    # Scope row 15 (1): face regrouping and receiver folders (docs/investigations/2026-10-03-row15/PLAN.md, order of work 4).
+    groups   = @('row15-regroup', 'row15-receiver-folders')
     # Not a gate spec: the screenshots for the investigation folder (m11.screens.e2e.ts), no id.
     screens  = @()
 }
@@ -177,7 +179,7 @@ Check "M10 static checks (m10.ps1 -Only static -SkipCore; they run M9's)" {
     $code -eq 0
 }
 
-Check "command inventory: 38 commands (M10's 28, M11's 9 and PQ3's edit_reband), the same set in the attributes, generate_handler!, build.rs and capabilities" {
+Check "command inventory: 39 commands (M10's 28, M11's 9, PQ3's edit_reband and row 15's edit_regroup), the same set in the attributes, generate_handler!, build.rs and capabilities" {
     $attrs = @()
     foreach ($f in Get-ChildItem (Join-Path $tauriDir 'src') -Filter *.rs) {
         $attrs += @([regex]::Matches((RustCode $f.FullName), '#\[tauri::command\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*pub\s+async\s+fn\s+(\w+)') | ForEach-Object { $_.Groups[1].Value })
@@ -196,7 +198,7 @@ Check "command inventory: 38 commands (M10's 28, M11's 9 and PQ3's edit_reband),
     }
     $absent = @($m11Commands | Where-Object { $attrs -notcontains $_ })
     if ($absent) { Note "M11 commands missing: $($absent -join ', ')" }
-    $same -and $attrs.Count -eq 38 -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband'
+    $same -and $attrs.Count -eq 39 -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup'
 }
 
 Check "lint: the M11 commands are called only from actions.ts (and declared in backend.ts)" {

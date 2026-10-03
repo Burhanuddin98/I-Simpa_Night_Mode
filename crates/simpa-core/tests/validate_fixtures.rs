@@ -246,6 +246,7 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
             orientation: Vec3::new(1.0, 0.0, 0.0),
             background_noise: None,
             solver_id: None,
+            group: None,
         });
     });
     add("surface_receiver_empty", &|p| {

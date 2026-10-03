@@ -333,6 +333,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* A point receiver's group path (scope row 15 (1), M37). */
+.row-folder {
+  flex-shrink: 2;
+  min-width: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--text-3);
+}
 .row-detail {
   flex-shrink: 1;
   min-width: 0;

@@ -9,13 +9,16 @@
 // source switched on outside the room: SOURCE_OUTSIDE) is shown inline under the sources, in
 // both places, and the project is left unchanged. The switch is a button of its own beside the
 // row's button, never inside it.
+//
+// Scope row 15 (1), M37: a point receiver an imported `.proj` put in a receiver group shows the
+// group's path, read-only (`[data-receiver-group]`), and the filter finds it by it.
 import { useState } from 'react';
 import * as actions from '../actions';
 import type { Source, UiIssue } from '../bindings/ipc';
 import { issuesByEntity, projectIssues } from '../issues';
 import { refusalStore, sceneStore, selectionStore, useStore } from '../store';
 import { Search } from './icons';
-import { coord, effectiveMaterial, matchesFilter, sentence, uniqueIssues, worstSeverity } from './sceneModel';
+import { coord, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
 import { onEntityKey, selectGroup, selectPoint } from './sceneUi';
 
 // ---- the source switch (M26) -------------------------------------------------------------------
@@ -135,7 +138,7 @@ export function ScenePanel() {
     : [];
   const shownSurfaces = surfaces.filter(({ g, m }) => matchesFilter(query, g.name, m?.name ?? ''));
   const sources = (view?.sources ?? []).filter((s) => matchesFilter(query, s.name));
-  const receivers = (view?.point_receivers ?? []).filter((r) => matchesFilter(query, r.name));
+  const receivers = (view?.point_receivers ?? []).filter((r) => matchesFilter(query, r.name, receiverFolder(r)));
   const grids = (view?.surface_receivers ?? []).filter((r) => matchesFilter(query, r.name));
   const general = projectIssues(scene?.issues ?? []);
 
@@ -230,6 +233,15 @@ export function ScenePanel() {
               >
                 <span className="marker receiver" />
                 <span className="row-name">{r.name}</span>
+                {receiverFolder(r) && (
+                  <span
+                    className="row-folder"
+                    data-receiver-group={receiverFolder(r)}
+                    title={`In the receiver group ${receiverFolder(r)}, as the imported project has it`}
+                  >
+                    {receiverFolder(r)}
+                  </span>
+                )}
                 <IssueTag issues={issuesOf('point_receiver', r.id)} />
                 <span className="row-detail mono">
                   {coord(r.position[0], 1)}, {coord(r.position[1], 1)}

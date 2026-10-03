@@ -11,14 +11,15 @@
 // - While a run is active, New and Open are disabled, saying why (PQ4).
 // - Simulate › Run and Simulate › Cancel run (PQ2), the same actions as the Run button, F5 and
 //   the Simulate step's Cancel.
+// - Edit › New group from selection (scope row 15 (1), G19), the viewport's context menu entry.
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
 import { frameModel, setView } from '../features/viewport/engine';
 import { joinBlockers, projectBlockers } from '../flow';
-import { runStore, sceneStore, solversStatusStore, solverStore, useStore } from '../store';
+import { runStore, sceneStore, selectionStore, solversStatusStore, solverStore, useStore } from '../store';
 import { Search } from './icons';
 import { RunButton } from './RunButton';
-import { runTooltip } from './sceneModel';
+import { REGROUP_LABEL, regroupFaces, runTooltip } from './sceneModel';
 import './chrome.css';
 
 type Item = { id: string; label: string; keys?: string; run: () => unknown; disabled?: boolean; title?: string };
@@ -37,6 +38,7 @@ export function MenuBar() {
   const active = useStore(runStore);
   const solvers = useStore(solversStatusStore);
   const solver = useStore(solverStore);
+  const selection = useStore(selectionStore);
   const info = scene?.info ?? null;
   const [open, setOpen] = useState<MenuName | null>(null);
   const bar = useRef<HTMLElement>(null);
@@ -83,6 +85,15 @@ export function MenuBar() {
     Edit: [
       { id: 'undo', label: 'Undo', keys: 'Ctrl+Z', run: () => actions.fire(actions.undo()), disabled: !info?.can_undo },
       { id: 'redo', label: 'Redo', keys: 'Ctrl+Y', run: () => actions.fire(actions.redo()), disabled: !info?.can_redo },
+      {
+        id: 'new-group-from-selection',
+        label: REGROUP_LABEL,
+        run: () => actions.fire(actions.regroupSelection()),
+        disabled: !regroupFaces(selection),
+        title: regroupFaces(selection)
+          ? 'Send the faces picked in the 3D view to a new surface group'
+          : 'Pick faces in the 3D view first: click a face, or double-click for its flat surface',
+      },
     ],
     View: [
       { id: 'perspective', label: 'Perspective', run: () => setView('perspective') },

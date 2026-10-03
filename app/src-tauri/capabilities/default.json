@@ -33,6 +33,7 @@
     "allow-project-save",
     "allow-edit-apply",
     "allow-edit-reband",
+    "allow-edit-regroup",
     "allow-edit-undo",
     "allow-edit-redo",
     "allow-scene-mesh",
