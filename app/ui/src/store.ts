@@ -5,6 +5,7 @@ import { useSyncExternalStore } from 'react';
 import type {
   LibraryMaterial,
   LineClass,
+  ReportView,
   ResultsState,
   RunLineClass,
   RunsView,
@@ -153,6 +154,8 @@ export const runsStore = new Store<RunsView | null>(null);
 export const selectedRunStore = new Store<string | null>(null);
 /** Whether each run's results verify: never a value (M12 is the first that may show one). */
 export const resultsStore = new Store<ReadonlyMap<string, ResultsState>>(new Map());
+/** Each run's report as `run_report` read it (M12 P2: the Acoustics tab), fetched once per run. */
+export const reportStore = new Store<ReadonlyMap<string, ReportView>>(new Map());
 /** The solver the Simulate step runs: session state, not saved in the project. */
 export const solverStore = new Store<SolverName>('spps');
 /** The four executables, checked against the verified build (at boot and before each run). */

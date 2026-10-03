@@ -13,6 +13,7 @@ import {
   type AppEvent,
   type EditOutcome,
   type LibraryMaterial,
+  type ReportView,
   type ResultsState,
   type RunStarted,
   type RunStreamBatch,
@@ -51,6 +52,7 @@ import {
   promptStore,
   type PromptChoice,
   refusalStore,
+  reportStore,
   resultsStore,
   type RunLog,
   runLinesStore,
@@ -126,6 +128,7 @@ export async function newProject(name = 'Untitled'): Promise<SceneState | null> 
 function forgetRuns(): void {
   selectedRunStore.set(null);
   resultsStore.set(new Map());
+  reportStore.set(new Map());
 }
 
 /** The folder of a project file: its runs root's parent. */
@@ -462,6 +465,18 @@ export async function resultsFor(runName: string): Promise<ResultsState> {
   next.set(runName, state);
   resultsStore.set(next);
   return state;
+}
+
+/** `run`'s report, as `simpa results --json` prints it, with its bed statuses and the open
+ * project's group names (M12 P2), fetched once per run. */
+export async function reportFor(runName: string): Promise<ReportView> {
+  const cached = reportStore.get().get(runName);
+  if (cached) return cached;
+  const view = await run(`Reading the results of ${runName}`, () => backend.runReport(runName));
+  const next = new Map(reportStore.get());
+  next.set(runName, view);
+  reportStore.set(next);
+  return view;
 }
 
 /**

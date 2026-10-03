@@ -1,0 +1,205 @@
+/* The Acoustics tab (M12 P2). The tokens are theme.css's; amber (--warn) marks a wide range,
+   as the design README asks for out-of-target bands, and a refusal carries a FAIL-style tag. */
+.ac {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+.ac-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.ac-title {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.ac-solver {
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.ac-wording {
+  color: var(--text-3);
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.ac-body {
+  flex-grow: 1;
+  min-height: 0;
+  display: flex;
+  gap: 1px;
+  overflow-x: auto;
+  background: var(--line);
+}
+.ac-card {
+  flex: 0 0 auto;
+  min-width: 300px;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--panel);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+.ac-rt {
+  width: 460px;
+}
+.ac-receivers {
+  max-width: none;
+}
+.ac-decay {
+  width: 340px;
+}
+.ac-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.ac-card-title {
+  font-family: var(--cond);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.ac-sub {
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.ac-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.ac-control select {
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--edge);
+  border-radius: 4px;
+  font: inherit;
+  padding: 1px 4px;
+}
+.ac-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.ac-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ac-swatch {
+  width: 12px;
+  height: 3px;
+  border-radius: 2px;
+}
+.ac-swatch.dash {
+  background: repeating-linear-gradient(90deg, var(--text-2) 0 3px, transparent 3px 6px);
+}
+.ac-din {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ac-chart {
+  flex: 0 0 140px;
+  min-height: 120px;
+}
+.ac-decay .ac-chart {
+  flex: 1 1 auto;
+}
+.ac-table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.ac-table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-3);
+  padding: 2px 8px 2px 0;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.ac-table td {
+  padding: 3px 10px 3px 0;
+  border-bottom: 1px solid var(--line-soft);
+  vertical-align: top;
+  white-space: nowrap;
+}
+.ac-total td {
+  color: var(--text-2);
+}
+.ac-cell .ac-value {
+  font-family: var(--mono);
+  display: block;
+}
+.ac-range {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
+[data-num] {
+  font-family: var(--mono);
+}
+.ac-unit {
+  color: var(--text-3);
+}
+.ac-tag {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--badge);
+  color: var(--text-2);
+}
+.ac-tag.wide,
+.ac-tag.warn {
+  color: var(--warn);
+}
+.ac-tag.ok {
+  color: var(--ok);
+}
+.ac-tag.fail {
+  margin-left: 0;
+  color: var(--fail-text);
+}
+.ac-refusal {
+  font-size: 11px;
+  color: var(--text-3);
+}
+.ac-note,
+.ac-mark {
+  font-size: 11px;
+  color: var(--warn);
+}
+.ac-note {
+  display: block;
+}
+.ac-note.block {
+  color: var(--text-3);
+  white-space: normal;
+}
+.ac-marks {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ac-none {
+  color: var(--text-3);
+}

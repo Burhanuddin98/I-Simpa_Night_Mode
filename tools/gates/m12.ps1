@@ -10,24 +10,20 @@
 # plus m10-h and m11-h, narrowed to "no solver-computed number outside the Results step" (they run
 # inside m11.ps1, this gate's prior gate).
 #
-# P1 built the contracts (PLAN.md P1): beds/summary.json regenerated from its evidence byte for
-# byte (item 1), the report's per-parameter bed status (item 2), the Results step's IPC reads and
-# their decoders (item 3), the narrowed checker (item 4). P2 added the e2e section and its spec,
-# app/e2e/specs/m12.acoustics.e2e.ts (a, b, e, f); P3's spec m12.viewport.e2e.ts carries (c, d).
-# A spec not written yet is pending and its ids fail as NOT BUILT, so this gate cannot print
-# "M12 PASSED" until every id runs and passes. The e2e takes m11.ps1's lock (port 4444).
+# THIS IS P1'S SKELETON (PLAN.md P1 item 4). Built now: the contracts P2 and P3 build on, each
+# with its tests: beds/summary.json regenerated from its evidence byte for byte (item 1), the
+# report's per-parameter bed status (item 2), the Results step's IPC reads and their decoders
+# (item 3), the narrowed checker (item 4). Not built: the e2e ids of (a)-(f), which P2 (a, b, e, f)
+# and P3 (c, d) write and P4 wires in. Each is listed in $gateIds and fails as NOT BUILT, so this
+# gate cannot print "M12 PASSED" until every one runs and passes.
 #
 # Windows PowerShell 5.1 (pwsh is not installed on Grace).
-# Run: powershell -File tools/gates/m12.ps1 [-TargetDir C:\tmp\nm-target] [-Only all|static|e2e]
-#        [-Spec acoustics,viewport] [-E2eHome C:\tmp\nm-e2e] [-FetchDriver]
+# Run: powershell -File tools/gates/m12.ps1 [-TargetDir C:\tmp\nm-target] [-Only all|static]
 #        [-SolversDir C:\tmp\nm-m8a-solvers] [-BedData B:\data] [-SkipPrior]
-# Partial runs (-Only static or e2e, a -Spec subset, -SkipPrior) never print "M12 PASSED".
+# Partial runs (-Only static, -SkipPrior) never print "M12 PASSED".
 param(
     [string]$TargetDir = 'C:\tmp\nm-target',
-    [ValidateSet('all', 'static', 'e2e')][string]$Only = 'all',
-    [string[]]$Spec = @('acoustics', 'viewport'),
-    [string]$E2eHome = 'C:\tmp\nm-e2e',
-    [switch]$FetchDriver,
+    [ValidateSet('all', 'static')][string]$Only = 'all',
     [string]$SolversDir = 'C:\tmp\nm-m8a-solvers',
     [string]$Upstream = 'B:\repos\I-Simpa-upstream',
     # The bed evidence beds/summary.json is derived from (m8b-bed, m8b-edt).
@@ -53,6 +49,16 @@ New-Item -ItemType Directory -Force $work | Out-Null
 function Untracked { @(cmd /c "git -C `"$repo`" status --porcelain --untracked-files=all 2>nul" | Where-Object { $_ -match '^\?\? ' }) }
 $untrackedBefore = Untracked
 $fullRun = $Only -eq 'all' -and -not $SkipPrior
+
+# The e2e ids of the gate (PLAN.md, P2 and P3): none is built yet.
+$gateIds = [ordered]@{
+    'm12-a' = 'P2: DOM numbers == simpa results --json at the displayed precision'
+    'm12-b' = 'P2: no DOM element for a parameter not PASS in beds/summary.json'
+    'm12-c' = 'P3: 3 sampled texels == the .csbin float32s'
+    'm12-d' = 'P3: rendered particle count == alive in the .pbin at 5 steps'
+    'm12-e' = 'P2: DIN 18041 A3 target 0.55 s for the 180 m3 teaching room'
+    'm12-f' = 'P2: the variant switch replaces the RT series, 0 mismatches'
+}
 
 $failures = @()
 function Check($name, [scriptblock]$body) {
@@ -82,9 +88,7 @@ function CargoTest([string]$args_, [string]$name) {
     $code -eq 0 -and $passed -gt 0
 }
 
-# ---- 1. the contracts (P1) and the report's room (P2) ---------------------------------------------
-if ($Only -ne 'e2e') {
-
+# ---- 1. the contracts (P1) -------------------------------------------------------------------------
 Check "item 1: beds/summary.json is tools/bed/summary.py's output from the evidence under $BedData, byte for byte" {
     $env:SIMPA_BED_DATA = $BedData
     try { CargoTest '-p simpa-core --test bed_summary' 'bed-summary' } finally { Remove-Item Env:\SIMPA_BED_DATA }
@@ -126,204 +130,54 @@ Check "item 4: m10-h and m11-h narrowed to no number outside the Results step, a
     $code -eq 0 -and (Select-String -Path $log -Pattern 'M12: a number in the Results regions' -Quiet)
 }
 
-Check "P2: the report carries the room: DIN 18041 targets (A3 at 180 m3 reads 0.55 s), absorption by surface group, SPPS Sabine (cli_results m12_)" {
+# ---- P2: the report's room, the Acoustics tab's model, and its e2e (gate (a), (b), (e), (f)) -------
+Check "P2: the report carries the room: DIN 18041 targets (A3 at 180 m3 reads 0.55 s), absorption by surface group, SPPS Sabine (cli_results m12_; results version 12)" {
     CargoTest '-p simpa --test cli_results -- m12_' 'report-room'
 }
 
-Check "P2: the UI's unit tests (npm test: the Acoustics tab's model among them) and typecheck" {
-    $log = Join-Path $work 'ui-test.log'
-    Push-Location $appDir
-    try { $code = Native 'npm test -s' $log; $tc = Native 'npm run -s typecheck' (Join-Path $work 'ui-typecheck.log') } finally { Pop-Location }
-    Get-Content $log | Where-Object { $_ -match '^. (tests|pass|fail) |not ok' } | ForEach-Object { Note $_ }
-    Tail (Join-Path $work 'ui-typecheck.log') 10
-    $code -eq 0 -and $tc -eq 0 -and (Select-String -Path $log -Pattern 'Acoustics' -Quiet)
+Check "P2: run_report names each material id by the open project's surface groups (cargo test -p app the_surface_groups)" {
+    CargoTest '-p app the_surface_groups' 'group-names'
 }
 
-}
-
-# ---- 2. the gate's e2e ids (P2's acoustics spec; P3's viewport spec) ------------------------------
-# Each spec file's ids. A spec file not written yet is reported as pending and its ids fail as NOT
-# BUILT: a run that lacks any required id never prints "M12 PASSED".
-$specIds = [ordered]@{
-    # P2 (PLAN.md P2): app/e2e/specs/m12.acoustics.e2e.ts
-    acoustics = @('m12-a', 'm12-b', 'm12-e', 'm12-f')
-    # P3 (PLAN.md P3): app/e2e/specs/m12.viewport.e2e.ts
-    viewport  = @('m12-c', 'm12-d')
-}
-$Spec = @($Spec | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }
-if (@($specIds.Keys | Where-Object { $Spec -notcontains $_ }).Count) { $fullRun = $false }
-if ($Only -eq 'static') { Note 'the e2e ids (a)-(f): not run (-Only static)' }
-if ($Only -ne 'static') {
-
-$exe = Join-Path $target 'release\app.exe'
-$simpa = Join-Path $target 'release\simpa.exe'
-$node = Join-Path $E2eHome 'node'
-$lockPath = Join-Path $E2eHome 'e2e.lock'
-New-Item -ItemType Directory -Force $E2eHome | Out-Null
-$lock = $null
-$driverExe = $null
-$tauriDriver = Join-Path $env:CARGO_HOME 'bin\tauri-driver.exe'
-$privateSolvers = Join-Path $work 'solvers'
-$junitDir = Join-Path $work 'wdio'
-function Sha256([string]$path) { (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant() }
-. (Join-Path $repo 'solvers\pe-fingerprint.ps1')
-
-# Port 4444 is fixed, and every build and e2e run holds this lock (m11.ps1's), waiting up to 30 min.
-Check "e2e lock ($lockPath)" {
-    $t0 = Get-Date
-    while (-not $script:lock) {
-        try { $script:lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None') }
-        catch {
-            if (((Get-Date) - $t0).TotalMinutes -gt 30) { throw 'another build or e2e run held the lock for 30 min' }
-            Start-Sleep -Seconds 5
-        }
-    }
-    Note "held after $([math]::Round(((Get-Date) - $t0).TotalSeconds)) s"
-    $true
-}
-
-try {
-
-$built = $false
-Check "build: npx tauri build --no-bundle (custom protocol, ui/dist embedded) and simpa.exe" {
-    if (-not $script:lock) { throw 'no lock' }
-    $t0 = Get-Date
-    $log = Join-Path $work 'tauri-build.log'
-    Push-Location $appDir
-    try { $code = Native 'npx --no-install tauri build --no-bundle' $log } finally { Pop-Location }
-    Tail $log 4
-    $fresh = (Test-Path $exe) -and (Get-Item $exe).LastWriteTime -ge $t0.AddSeconds(-1)
-    $cli = Native 'cargo build -q --release -p simpa --bin simpa' (Join-Path $work 'simpa-build.log')
-    Note "exit $code in $([math]::Round(((Get-Date) - $t0).TotalSeconds, 1)) s; app.exe rebuilt: $fresh; simpa.exe build exit $cli"
-    $script:built = $code -eq 0 -and $fresh -and $cli -eq 0
-    $script:built
-}
-
-Check "harness: tauri-driver present" {
-    if (-not (Test-Path $tauriDriver)) { throw "no ${tauriDriver}: cargo install tauri-driver --locked" }
-    Note $tauriDriver
-    $true
-}
-
-Check "harness: msedgedriver matches the WebView2 runtime exactly" {
-    $pv = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}').pv
-    $dir = Join-Path $E2eHome "msedgedriver\$pv"
-    $script:driverExe = Join-Path $dir 'msedgedriver.exe'
-    $url = "https://msedgedriver.microsoft.com/$pv/edgedriver_win64.zip"
-    if (-not (Test-Path $script:driverExe)) {
-        if (-not $FetchDriver) { throw "no msedgedriver $pv at $($script:driverExe); rerun with -FetchDriver, or fetch $url" }
-        New-Item -ItemType Directory -Force $dir | Out-Null
-        $zip = Join-Path $dir 'edgedriver_win64.zip'
-        $ProgressPreference = 'SilentlyContinue'
-        Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $zip
-        Expand-Archive -Force $zip $dir
-    }
-    $v = @(cmd /c "`"$($script:driverExe)`" --version 2>nul")[0]
-    Note "WebView2 runtime pv $pv; $v"
-    "$v" -match [regex]::Escape($pv)
-}
-
-Check "harness: WebdriverIO installed from app/e2e/package-lock.json (by its sha256)" {
-    $lockFile = Join-Path $appDir 'e2e\package-lock.json'
-    $want = Sha256 $lockFile
-    $stampFile = Join-Path $node '.lock.sha256'
-    $have = if (Test-Path $stampFile) { (Get-Content $stampFile -Raw).Trim() } else { '' }
-    New-Item -ItemType Directory -Force $node | Out-Null
-    if ($have -ne $want -or -not (Test-Path (Join-Path $node 'node_modules\.bin\wdio.cmd'))) {
-        Copy-Item (Join-Path $appDir 'e2e\package.json'), $lockFile $node -Force
-        Push-Location $node
-        try { $code = Native 'npm ci --no-audit --no-fund' (Join-Path $work 'e2e-npm-ci.log') } finally { Pop-Location }
-        if ($code -ne 0) { Tail (Join-Path $work 'e2e-npm-ci.log') 10; throw "npm ci exited $code" }
-        Set-Content -Path $stampFile -Value $want -Encoding ascii
-    } else { Note "current: lock sha256 $($want.Substring(0, 16))" }
-    Test-Path (Join-Path $node 'node_modules\.bin\wdio.cmd')
-}
-
-Check "harness: the e2e configs, libraries and specs typecheck, and the libraries' tests pass (node --test e2e/lib)" {
-    $log = Join-Path $work 'e2e-tsc.log'
-    $code = Native "`"$appDir\node_modules\.bin\tsc.cmd`" -p `"$appDir\e2e\tsconfig.json`"" $log
-    Tail $log 20
-    $tlog = Join-Path $work 'e2e-lib-test.log'
-    Push-Location $appDir
-    try { $tcode = Native 'node --test "e2e/lib/*.test.ts"' $tlog } finally { Pop-Location }
-    Get-Content $tlog | Where-Object { $_ -match '^. (tests|pass|fail) |not ok' } | ForEach-Object { Note $_ }
-    $code -eq 0 -and $tcode -eq 0
-}
-
-# The app runs a private copy of the verified build (m11.ps1, PLAN.md 4.1 F8).
-Check "harness: the private solver copy, each executable the verified build by code sha256" {
-    New-Item -ItemType Directory -Force $privateSolvers | Out-Null
-    $manifest = Get-Content (Join-Path $repo 'solvers\manifest.json') -Raw | ConvertFrom-Json
-    $ok = $true
-    foreach ($name in 'spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe') {
-        $src = Join-Path $SolversDir $name
-        if (-not (Test-Path $src)) { Note "MISSING $src"; $ok = $false; continue }
-        $dst = Join-Path $privateSolvers $name
-        Copy-Item $src $dst -Force
-        if ((Get-CodeSha256 $dst) -ne $manifest.code_sha256.$name) { Note "$name differs from the manifest"; $ok = $false }
-    }
-    $ok
-}
-
-$present = @($Spec | Where-Object { Test-Path (Join-Path $appDir "e2e\specs\m12.$_.e2e.ts") })
-$pending = @($Spec | Where-Object { $present -notcontains $_ })
-foreach ($p in $pending) { Note "PENDING: app/e2e/specs/m12.$p.e2e.ts is not written yet (its ids fail below)" }
-Check "e2e: wdio ran (verdict below) (-Spec $($present -join ','))" {
-    if (-not $built) { throw 'no fresh app.exe from the build' }
-    if (-not $script:driverExe) { throw 'no msedgedriver' }
-    if ($present.Count -eq 0) { throw 'no spec file to run' }
-    New-Item -ItemType Directory -Force $junitDir | Out-Null
-    $env:M11_APP = $exe; $env:M11_WORK = $junitDir; $env:M11_REPO = $repo
-    $env:M11_TAURI_DRIVER = $tauriDriver; $env:M11_NATIVE_DRIVER = $script:driverExe
-    $env:M11_SOLVERS = $privateSolvers; $env:M11_GATEWORK = $work
-    $env:M12_SPEC = $present -join ','; $env:M12_SIMPA = $simpa
-    # msedgedriver passes the environment on to app.exe: this is where the app finds its solvers.
-    $env:SIMPA_SOLVERS_DIR = $privateSolvers
-    $t0 = Get-Date
-    $log = Join-Path $work 'wdio.log'
-    $code = Native "`"$node\node_modules\.bin\wdio.cmd`" run app/e2e/m12.conf.ts" $log
-    Note "exit $code in $([math]::Round(((Get-Date) - $t0).TotalSeconds, 1)) s; log $log; the ids are judged from the junit files below"
-    Get-Content $log | Where-Object { $_ -match 'receipt' } | ForEach-Object { Note $_.Trim() }
+Check "P2: the Acoustics tab's model and the e2e comparison rules (node --test, each with its say-NO)" {
+    $log = Join-Path $work 'p2-node.log'
+    Push-Location (Join-Path $repo 'app')
+    try { $code = Native 'node --test ui/src/features/acoustics/model.test.ts e2e/lib/acoustics.test.ts' $log } finally { Pop-Location }
+    Tail $log 8
     $code -eq 0
 }
 
-} finally {
-    if ($lock) { $lock.Dispose(); Note 'e2e lock released' }
+# app/e2e/specs/m12.acoustics.e2e.ts, run by `m11.ps1 -Only e2e -Spec m12.acoustics` on m11.ps1's
+# harness (the release build, the drivers, the private verified solvers, the e2e lock, the focus
+# watcher), as P3's spec is. The ids are read from its junit verdict lines.
+$p2Spec = 'm12.acoustics'
+$p2Ids = [ordered]@{
+    'm12-a' = 'every number on the Acoustics tab == simpa results --json at the displayed precision, every selection; no other digit; ranges, statuses, refusals; MQ2 words; no "validated"'
+    'm12-b' = 'no element for a parameter not PASS in beds/summary.json, under every selection; every PASS parameter shown'
+    'm12-e' = 'the DIN 18041 A3 target of the 180 m3 box reads 0.55 s, from the report; A1 reads its own'
+    'm12-f' = "the variant switch replaces the RT series and numbers with the other run's JSON, 0 mismatches, both ways"
 }
-
-# The verdict, from the junit files (m11.ps1's reading).
-Check "verdict: every required id passed, 0 failures, 0 skipped" {
-    $required = @($Spec | ForEach-Object { $specIds[$_] })
-    $norm = { param($s) (("$s" -replace '[^A-Za-z0-9]+', ' ').Trim().ToLowerInvariant()) + ' ' }
-    $allIds = @($specIds.Values | ForEach-Object { $_ } | Sort-Object Length -Descending)
-    $cases = @()
-    foreach ($f in @(Get-ChildItem $junitDir -Filter 'junit-*.xml' -ErrorAction SilentlyContinue)) {
-        [xml]$x = Get-Content $f.FullName -Raw
-        foreach ($tc in $x.SelectNodes('//testcase')) {
-            $state = if ($tc.SelectSingleNode('failure|error')) { 'FAILED' } elseif ($tc.SelectSingleNode('skipped')) { 'SKIPPED' } else { 'passed' }
-            $n = & $norm $tc.name
-            $id = @($allIds | Where-Object { $n.StartsWith((& $norm $_)) } | Select-Object -First 1)[0]
-            $msg = ''
-            $fail = $tc.SelectSingleNode('failure|error')
-            if ($fail) { $msg = "$($fail.GetAttribute('message'))" }
-            $cases += [pscustomobject]@{ id = $id; name = $tc.name; state = $state; time = [double]$tc.time; message = $msg }
+foreach ($id in $p2Ids.Keys) { $gateIds.Remove($id) }
+if ($Only -eq 'all') {
+    $script:p2Log = Join-Path $work 'p2-e2e.log'
+    Check "P2 e2e: m11.ps1 -Only e2e -Spec $p2Spec exits 0" {
+        $code = Native "powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\tools\gates\m11.ps1`" -Only e2e -Spec $p2Spec -TargetDir `"$target`" -SolversDir `"$SolversDir`" -Upstream `"$Upstream`"" $script:p2Log
+        Get-Content $script:p2Log | Where-Object { $_ -match '^(PASS|FAIL) |^M11 |receipt' } | ForEach-Object { Note $_.Trim() }
+        $code -eq 0
+    }
+    foreach ($id in $p2Ids.Keys) {
+        Check "${id}: $($p2Ids[$id])" {
+            (Test-Path $script:p2Log) -and @(Get-Content $script:p2Log | Where-Object { $_ -match "^\s+passed\s+[\d.,]+ s\s+$([regex]::Escape($id))\s" }).Count -eq 1
         }
     }
-    foreach ($c in $cases) {
-        Note ("{0,-7} {1,7:N1} s  {2,-8} {3}" -f $c.state, $c.time, $(if ($c.id) { $c.id } else { '(no id)' }), $c.name)
-        if ($c.message) { Note ("          " + $c.message.Substring(0, [Math]::Min(400, $c.message.Length))) }
-    }
-    $passedIds = @($cases | Where-Object { $_.state -eq 'passed' } | ForEach-Object { $_.id })
-    $missing = @($required | Where-Object { $passedIds -notcontains $_ })
-    foreach ($id in $missing) { Note "NOT PASSED: $id" }
-    $failedN = @($cases | Where-Object { $_.state -eq 'FAILED' }).Count
-    $skippedN = @($cases | Where-Object { $_.state -eq 'SKIPPED' }).Count
-    Note "$($cases.Count) test(s); required $($required.Count); failures $failedN; skipped $skippedN"
-    $cases.Count -gt 0 -and $missing.Count -eq 0 -and $failedN -eq 0 -and $skippedN -eq 0
-}
+} else { Note "P2 e2e ($p2Spec): not run (-Only static)" }
 
-}
+# ---- 2. the gate's e2e ids (P2, P3; wired by P4) ---------------------------------------------------
+if ($Only -eq 'all') {
+    foreach ($id in $gateIds.Keys) {
+        Check "$id NOT BUILT: $($gateIds[$id])" { $false }
+    }
+} else { Note 'the e2e ids (a)-(f): not run (-Only static)' }
 
 # ---- 3. prior gate ---------------------------------------------------------------------------------
 if (-not $SkipPrior -and $Only -eq 'all') {

@@ -21,7 +21,8 @@
     "react": "~19.3.0",
     "react-dom": "~19.3.0",
     "three": "0.186.1",
-    "three-mesh-bvh": "0.9.15"
+    "three-mesh-bvh": "0.9.15",
+    "uplot": "1.6.32"
   },
   "devDependencies": {
     "@tauri-apps/cli": "~2.11.5",

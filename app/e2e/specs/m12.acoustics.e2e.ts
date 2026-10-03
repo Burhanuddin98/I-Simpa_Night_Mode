@@ -85,7 +85,7 @@ function ownBox(): string {
 /** `simpa results <run> --json`, parsed: the CLI's report, outside the app. */
 function cliReport(project: string, run: string): Record<string, unknown> {
   const dir = path.join(path.dirname(project), 'runs', run);
-  const out = execFileSync(env('M12_SIMPA'), ['results', dir, '--json'], { maxBuffer: 1 << 30, encoding: 'utf8' });
+  const out = execFileSync(env('M11_SIMPA'), ['results', dir, '--json'], { maxBuffer: 1 << 30, encoding: 'utf8' });
   return JSON.parse(out) as Record<string, unknown>;
 }
 

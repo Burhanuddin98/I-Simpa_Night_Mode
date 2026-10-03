@@ -1,0 +1,353 @@
+// The Acoustics tab's model (M12 P2, docs/investigations/2026-10-03-m12/PLAN.md): what the tab
+// shows of a run's report, as plain data the component maps one to one onto elements. A pure
+// module, tested by model.test.ts under `node --test`.
+//
+// The rules it carries:
+// - **Only a PASS parameter is shown (gate (b)).** Whether a parameter passed is read from the
+//   report core built (`report.bed.parameters[name].status`, from `beds/summary.json`), never
+//   from a list here: `PARAM_SPECS` says only how a parameter is shown, `shownParams` which are.
+// - **Every number is a path into the report (gate (a)).** A `Num` carries the dot path of the
+//   value it shows, the decimals it shows and a scale, and its text is `toFixed` of that value;
+//   the page marks it `[data-num][data-json][data-digits]`, so the gate reads the same value
+//   from `simpa results --json` by the same path.
+// - **A value is never shown without its range and status, or its refusal** (decision-log row
+//   37 (3)); STI, which has no range yet, carries "noise range not computed" (MQ3); EDT carries
+//   row 37's two marks wherever it appears, and a per-value mark where `edt_validated` is false.
+// - **No screen text says "validated"** (MQ2, decision 39): `MQ2_WORDING` is the tab's words.
+import type { Report } from '../../bindings/ipc';
+
+/** The words on the Results screen (MQ2, Burhan 2026-10-03 08:31). */
+export const MQ2_WORDING =
+  'Computed to ISO 3382-1 / IEC 60268-16 and checked against exact solutions to within the just-noticeable difference. Simulated with I-Simpa’s solvers; not compared with measured rooms.';
+
+/** Row 37 (1)-(2)'s marks, shown with EDT wherever it appears (row 37 (5)), in words that do not
+ * say "validated". */
+export const EDT_MARKS = [
+  'EDT unchecked for receivers larger than one metre in radius',
+  'EDT unchecked in energetic mode',
+] as const;
+
+/** MQ3: STI's Monte-Carlo noise is not modelled (backlog 71). */
+export const STI_NOTE = 'noise range not computed';
+
+export interface ParamSpec {
+  /** The parameter's name in `beds/summary.json` and `report.bed`. */
+  name: string;
+  /** On screen. */
+  label: string;
+  unit: string;
+  /** Decimals shown, at about a tenth of the parameter's difference limen. */
+  digits: number;
+  /** `band`: per receiver and band (and the bands summed); `receiver`: one per receiver. */
+  scope: 'band' | 'receiver';
+  /** A reverberation time: drawn per band against the DIN target. */
+  rt?: true;
+}
+
+/** How each parameter is shown, in the tab's column order. Whether it is shown is `shownParams`. */
+export const PARAM_SPECS: readonly ParamSpec[] = [
+  { name: 'spl_db', label: 'SPL', unit: 'dB', digits: 1, scope: 'band' },
+  { name: 'g_db', label: 'G', unit: 'dB', digits: 1, scope: 'band' },
+  { name: 'edt_s', label: 'EDT', unit: 's', digits: 2, scope: 'band', rt: true },
+  { name: 't20_s', label: 'T20', unit: 's', digits: 2, scope: 'band', rt: true },
+  { name: 't30_s', label: 'T30', unit: 's', digits: 2, scope: 'band', rt: true },
+  { name: 'c50_db', label: 'C50', unit: 'dB', digits: 1, scope: 'band' },
+  { name: 'c80_db', label: 'C80', unit: 'dB', digits: 1, scope: 'band' },
+  { name: 'd50', label: 'D50', unit: '', digits: 2, scope: 'band' },
+  { name: 'ts_s', label: 'Ts', unit: 's', digits: 3, scope: 'band' },
+  { name: 'sti', label: 'STI', unit: '', digits: 2, scope: 'receiver' },
+  { name: 'dba', label: 'dB(A)', unit: 'dB', digits: 1, scope: 'receiver' },
+];
+
+/** The parameters the report's bed status lets the tab show, in column order. */
+export function shownParams(report: Report): ParamSpec[] {
+  const bed = report.bed?.parameters as unknown as Record<string, { status?: string } | undefined> | undefined;
+  return PARAM_SPECS.filter((p) => bed?.[p.name]?.status === 'PASS');
+}
+
+/** The value at a dot path of the report (`spps.point_receivers.0.label`). */
+export function at(root: unknown, path: string): unknown {
+  let v: unknown = root;
+  for (const k of path.split('.')) {
+    if (v === null || typeof v !== 'object') return undefined;
+    v = Array.isArray(v) ? v[Number(k)] : (v as Record<string, unknown>)[k];
+  }
+  return v;
+}
+
+/** A shown number: `text` is `toFixed(digits)` of the report's value at `path`, times `scale`. */
+export interface Num {
+  path: string;
+  digits: number;
+  scale?: number;
+  text: string;
+}
+
+/** A shown string: the report's string at `path`. */
+export interface Str {
+  path: string;
+  text: string;
+}
+
+/** The number at `path`, or null when the report holds none there. */
+export function num(report: unknown, path: string, digits: number, scale?: number): Num | null {
+  const v = at(report, path);
+  if (typeof v !== 'number' || !Number.isFinite(v)) return null;
+  return { path, digits, ...(scale === undefined ? {} : { scale }), text: (scale === undefined ? v : v * scale).toFixed(digits) };
+}
+
+/** The string at `path`, or null. */
+export function str(report: unknown, path: string): Str | null {
+  const v = at(report, path);
+  return typeof v === 'string' ? { path, text: v } : null;
+}
+
+/** A band's label: `125 Hz`, `1 kHz`, `1.25 kHz`; as a `Num` of `bands_hz` with its unit. */
+export function bandNum(report: Report, index: number): { num: Num; unit: string } | null {
+  const hz = report.bands_hz[index];
+  if (hz === undefined) return null;
+  if (hz < 1000) return { num: num(report, `bands_hz.${index}`, 0) as Num, unit: 'Hz' };
+  const digits = hz % 1000 === 0 ? 0 : hz % 100 === 0 ? 1 : 2;
+  return { num: num(report, `bands_hz.${index}`, digits, 0.001) as Num, unit: 'kHz' };
+}
+
+/** A band's label as plain text (the `<select>` options): `${hz} Hz` or `${hz / 1000} kHz`. */
+export function bandText(hz: number): string {
+  return hz >= 1000 ? `${hz / 1000} kHz` : `${hz} Hz`;
+}
+
+/** Which band a table shows: an index into `bands_hz`, or the bands summed. */
+export type BandSel = number | 'sum';
+
+export interface Refusal {
+  code: Str;
+  /** The refusal's kind (`range_not_reached`), when the report names one. */
+  why: Str | null;
+}
+
+/** One parameter of one receiver in one band (or receiver-wide), as shown. */
+export interface Cell {
+  param: string;
+  receiver: string;
+  /** `bands_hz` value, or `sum`, or `all` for a receiver-wide parameter. */
+  band: string;
+  /** `ok`/`wide` with a range, `value` (STI: no range), `refused`. */
+  status: 'ok' | 'wide' | 'value' | 'refused';
+  value: Num | null;
+  lo: Num | null;
+  hi: Num | null;
+  refusal: Refusal | null;
+  /** STI's MQ3 note, or why an EDT is unchecked. */
+  note: string | null;
+}
+
+function solverKey(report: Report): 'spps' | 'tcr' {
+  return report.solver === 'tcr' ? 'tcr' : 'spps';
+}
+
+/** The report's point receivers' labels, in order. */
+export function receivers(report: Report): string[] {
+  const s = (report as unknown as Record<string, { point_receivers?: { label: string }[] } | null>)[solverKey(report)];
+  return (s?.point_receivers ?? []).map((r) => r.label);
+}
+
+/** Where a parameter's `Evaluated` is for receiver `r` in band `band`; null where the report
+ * has no place for it (G of the bands summed). */
+export function paramPath(report: Report, spec: ParamSpec, r: number, band: BandSel): string | null {
+  const rx = `${solverKey(report)}.point_receivers.${r}`;
+  if (spec.name === 'sti') {
+    const shown = at(report, `${rx}.sti.shown`);
+    return typeof shown === 'string' ? `${rx}.sti.${shown}` : null;
+  }
+  if (spec.name === 'dba') return `${rx}.aggregate.dba.level_db`;
+  const base = band === 'sum' ? `${rx}.aggregate` : `${rx}.bands.${band}`;
+  if (spec.name === 'g_db') return band === 'sum' ? null : `${base}.g_db`;
+  return `${base}.parameters.${spec.name}`;
+}
+
+/** Why an EDT is unchecked, in this tab's words; null when `edt_validated` is true. */
+function edtNote(report: Report, path: string): string | null {
+  const params = path.slice(0, path.lastIndexOf('.'));
+  if (at(report, `${params}.edt_validated`) === true) return null;
+  const note = String(at(report, `${params}.edt.validation_note`) ?? '');
+  const why: string[] = [];
+  if (/broadband/.test(note)) why.push('the bands summed');
+  if (/no direct path/.test(note)) why.push('no direct path from the source');
+  if (/receivers over/.test(note)) why.push('receiver larger than one metre in radius');
+  return `unchecked: ${why.length ? why.join('; ') : 'outside the tested cases'}`;
+}
+
+/** One cell. */
+export function cell(report: Report, spec: ParamSpec, r: number, band: BandSel): Cell | null {
+  const path = paramPath(report, spec, r, band);
+  if (path === null) return null;
+  const e = at(report, path);
+  if (e === null || typeof e !== 'object') return null;
+  const receiver = receivers(report)[r] ?? '';
+  const bandKey = spec.scope === 'receiver' ? 'all' : band === 'sum' ? 'sum' : String(report.bands_hz[band]);
+  const base = { param: spec.name, receiver, band: bandKey, lo: null, hi: null, refusal: null, note: null };
+  if ('not_evaluable' in e) {
+    const why = str(report, `${path}.not_evaluable.error.why.why`) ?? str(report, `${path}.not_evaluable.error.kind`);
+    return { ...base, status: 'refused', value: null, refusal: { code: str(report, `${path}.not_evaluable.code`) as Str, why } };
+  }
+  const value = num(report, `${path}.value`, spec.digits);
+  if (!value) return null;
+  if (spec.name === 'sti') return { ...base, status: 'value', value, note: STI_NOTE };
+  const status = at(report, `${path}.status`);
+  const lo = num(report, `${path}.lo`, spec.digits);
+  const hi = num(report, `${path}.hi`, spec.digits);
+  // A value with no range is not one this tab may show alone (row 37 (3)): refused as such.
+  if ((status !== 'ok' && status !== 'wide') || !lo || !hi) return null;
+  return { ...base, status, value, lo, hi, note: spec.name === 'edt_s' ? edtNote(report, path) : null };
+}
+
+/** The receivers table: one row per receiver, one cell per shown parameter (null: no place). */
+export function receiverRows(report: Report, band: BandSel): { receiver: Str; cells: (Cell | null)[] }[] {
+  const specs = shownParams(report);
+  return receivers(report).map((_, r) => ({
+    receiver: str(report, `${solverKey(report)}.point_receivers.${r}.label`) as Str,
+    cells: specs.map((s) => cell(report, s, r, band)),
+  }));
+}
+
+/** An RT series of one receiver: per band its value (null where refused) and the path read. */
+export interface Series {
+  param: string;
+  label: string;
+  paths: string[];
+  values: (number | null)[];
+}
+
+/** The shown reverberation times of receiver `r`, per band: what the chart draws and the RT
+ * table prints, from one read. */
+export function rtSeries(report: Report, r: number): Series[] {
+  return shownParams(report)
+    .filter((s) => s.rt)
+    .map((s) => {
+      const paths = report.bands_hz.map((_, b) => `${paramPath(report, s, r, b)}.value`);
+      return { param: s.name, label: s.label, paths, values: paths.map((p) => (typeof at(report, p) === 'number' ? (at(report, p) as number) : null)) };
+    });
+}
+
+export interface DinView {
+  group: Str;
+  use: Str;
+  target: Num | null;
+  refusal: Refusal | null;
+  volume: Num | null;
+  note: Str | null;
+}
+
+/** DIN 18041's target for `group` (A1 to A5) at the room's volume, from `report.room`. */
+export function din(report: Report, group: string): DinView | null {
+  const list = at(report, 'room.din18041');
+  if (!Array.isArray(list)) return null;
+  const i = list.findIndex((d) => (d as { group?: string }).group === group);
+  if (i < 0) return null;
+  const p = `room.din18041.${i}`;
+  const refused = at(report, `${p}.target_s.not_evaluable`) !== undefined;
+  return {
+    group: str(report, `${p}.group`) as Str,
+    use: str(report, `${p}.use`) as Str,
+    target: num(report, `${p}.target_s.value`, 2),
+    refusal: refused ? { code: str(report, `${p}.target_s.not_evaluable.code`) as Str, why: null } : null,
+    volume: num(report, 'room.volume_m3', 0),
+    note: str(report, 'room.din18041_note'),
+  };
+}
+
+/** The target's value, for the chart (the line drawn is the number shown). */
+export function dinTarget(report: Report, group: string): number | null {
+  const d = din(report, group);
+  return d?.target ? (at(report, d.target.path) as number) : null;
+}
+
+/** The DIN groups the report carries, in order. */
+export function dinGroups(report: Report): string[] {
+  const list = at(report, 'room.din18041');
+  return Array.isArray(list) ? list.map((d) => String((d as { group?: string }).group)) : [];
+}
+
+export interface AbsorptionRow {
+  materialId: Num;
+  /** The surface groups the open project gives this material id (names, not numbers). */
+  names: string[];
+  area: Num;
+  /** Per band, `S·α`, m². */
+  bands: (Num | null)[];
+}
+
+/** The absorption by surface group and each band's total, from `report.room`. */
+export function absorption(report: Report, names: ReadonlyMap<number, string[]>): { rows: AbsorptionRow[]; totals: (Num | null)[] } | null {
+  const surfaces = at(report, 'room.surfaces');
+  if (!Array.isArray(surfaces)) return null;
+  const rows = surfaces.map((s, i) => ({
+    materialId: num(report, `room.surfaces.${i}.material_id`, 0) as Num,
+    names: names.get((s as { material_id: number }).material_id) ?? [],
+    area: num(report, `room.surfaces.${i}.area_m2`, 1) as Num,
+    bands: report.bands_hz.map((_, b) => num(report, `room.surfaces.${i}.bands.${b}.absorption_area_m2`, 2)),
+  }));
+  return { rows, totals: report.bands_hz.map((_, b) => num(report, `room.bands.${b}.absorption_area_m2`, 2)) };
+}
+
+export interface ClassicalRow {
+  band: number;
+  cells: { key: string; label: string; unit: string; value: Num | null; refusal: Refusal | null }[];
+}
+
+/** The Sabine/Eyring table: an SPPS run's reference (Sabine, Eyring, and Kuttruff where it
+ * applies), or a TCR run's own main results (absorption area, time and level per theory). */
+export function classical(report: Report): ClassicalRow[] {
+  const ev = (path: string, label: string, unit: string, digits: number) => {
+    const n = num(report, `${path}.value`, digits);
+    const refused = at(report, `${path}.not_evaluable`) !== undefined;
+    return {
+      key: path.slice(path.lastIndexOf('.') + 1),
+      label,
+      unit,
+      value: n,
+      refusal: refused ? { code: str(report, `${path}.not_evaluable.code`) as Str, why: null } : null,
+    };
+  };
+  const plain = (path: string, key: string, label: string, unit: string, digits: number) => ({ key, label, unit, value: num(report, path, digits), refusal: null });
+  if (report.solver === 'tcr') {
+    return report.bands_hz.map((_, b) => ({
+      band: b,
+      cells: [
+        plain(`tcr.bands.${b}.sabine.absorption_area_m2`, 'sabine_a', 'Sabine A', 'm²', 1),
+        plain(`tcr.bands.${b}.sabine.reverberation_time_s`, 'sabine_t', 'Sabine', 's', 2),
+        plain(`tcr.bands.${b}.sabine.level_db`, 'sabine_l', 'Sabine L', 'dB', 1),
+        plain(`tcr.bands.${b}.eyring.absorption_area_m2`, 'eyring_a', 'Eyring A', 'm²', 1),
+        plain(`tcr.bands.${b}.eyring.reverberation_time_s`, 'eyring_t', 'Eyring', 's', 2),
+        plain(`tcr.bands.${b}.eyring.level_db`, 'eyring_l', 'Eyring L', 'dB', 1),
+      ],
+    }));
+  }
+  if (at(report, 'spps.reference.status') !== 'computed') return [];
+  return report.bands_hz.map((_, b) => ({
+    band: b,
+    cells: [
+      ev(`spps.reference.bands.${b}.sabine_s`, 'Sabine', 's', 2),
+      ev(`spps.reference.bands.${b}.eyring_s`, 'Eyring', 's', 2),
+      ev(`spps.reference.bands.${b}.kuttruff_s`, 'Kuttruff', 's', 2),
+    ],
+  }));
+}
+
+/** A receiver's decay curve in one band (or the bands summed): the report's points, as drawn. */
+export function decay(report: Report, r: number, band: BandSel): { path: string; t: number[]; db: number[] } | null {
+  const rx = `${solverKey(report)}.point_receivers.${r}`;
+  const path = band === 'sum' ? `${rx}.aggregate.decay_curve` : `${rx}.bands.${band}.decay_curve`;
+  const pts = at(report, `${path}.points`);
+  if (!Array.isArray(pts)) return null;
+  return { path, t: pts.map((p) => (p as number[])[0]), db: pts.map((p) => (p as number[])[1]) };
+}
+
+/** The run to show after the active variant changes: the newest OK run of that variant, or
+ * null to keep the current one. */
+export function runForVariant(rows: readonly { run: string; status: string; variant?: string | null }[], variant: string | null): string | null {
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if ((rows[i].variant ?? null) === variant && rows[i].status === 'OK') return rows[i].run;
+  }
+  return null;
+}
