@@ -100,8 +100,11 @@ shows a number (the map legend, for one) `[data-results-region]`.
 - Workspace suite (`cargo test --workspace --no-fail-fast`, 4 test threads, `suite-1.log`, 12:35-12:46): **1101
   passed, 0 failed, 40 ignored** in 158 binaries. Baseline 1086; the difference is the 15 tests added here (core 9,
   app 6).
-- `m11.ps1` in full, with the narrowed checks: appended after the run (this file is committed before it, so the gate
-  sees no untracked file).
+- `m11.ps1 -TargetDir C:\tmp\nm-target-h` in full, with the narrowed checks (`m11-full-1.log`, 12:46-13:01, at
+  `0a3dba0`, this file committed before it): **M11 PASSED**, 32 of 32 checks; the inventory reads 44 commands; core
+  selection 918 passed / 0 failed / 36 ignored in 86 binaries; e2e 37 of 37 required ids, 0 failures, 0 skipped
+  (m10-h inside m10.ps1, m11-h: 60 views clean, every say-NO plant flagged); prior gates m10 `-SkipCore` exit 0 and
+  "M9 PASSED"; 0 files left in the repository.
 
 ## Left open
 
