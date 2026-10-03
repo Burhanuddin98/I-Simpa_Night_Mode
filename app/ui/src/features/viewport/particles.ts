@@ -43,3 +43,48 @@ export function noParticlesText(steps: number, sources: number): { title: string
       `1,000 saved particles write about ${size} a band for this run's steps and sources.`,
   };
 }
+
+/**
+ * The playback's vertex shader (after the ramp's GLSL), in draw mode and in count mode (gate (d),
+ * `ResultsLayer.countParticles`). Both pass through `kept()` first, the one place a record is
+ * dropped: it is the `.pbin`'s own definition of alive (a record at its step, `aliveCounts`),
+ * so the count is of what the draw keeps. Energy is colour, never a cull: a record alive by the
+ * file is drawn and counted whatever its energy (zero draws at the ramp's floor). What count
+ * mode does not share with the draw is the camera (each kept record lands on the one pixel, so
+ * the count does not depend on the view: a particle off-screen or behind a wall is still alive)
+ * and, in the fragment shader, the round sprite's corners (every point keeps its centre pixels).
+ * particles.test.ts holds this shape: the gate, the count branch right after it, no cull after.
+ */
+export const PARTICLE_VERTEX_GLSL = /* glsl */ `
+uniform float uStep;
+uniform float uCount;
+uniform float uSize;
+uniform float uLogMax;
+attribute float aStep;
+attribute float aEnergy;
+varying vec3 vColor;
+// The records drawn now: the particles alive at the timeline's step.
+bool kept() {
+  return abs(aStep - uStep) <= 0.5;
+}
+void main() {
+  if (!kept()) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vColor = vec3(0.0); return; }
+  if (uCount > 0.5) { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); gl_PointSize = 1.0; vColor = vec3(1.0); return; }
+  float db = aEnergy > 0.0 ? 10.0 * log2(aEnergy) * 0.30102999566398120 : -1e9;
+  vColor = hot(0.55 + 0.45 * clamp((db - uLogMax + 40.0) / 40.0, 0.0, 1.0));
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_PointSize = uSize;
+}
+`;
+
+/** The playback's fragment shader. */
+export const PARTICLE_FRAGMENT_GLSL = /* glsl */ `
+      uniform float uCount;
+      varying vec3 vColor;
+      void main() {
+        if (uCount > 0.5) { gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); return; }
+        vec2 d = gl_PointCoord - 0.5;
+        if (dot(d, d) > 0.25) discard;
+        gl_FragColor = vec4(vColor, 1.0);
+      }
+`;

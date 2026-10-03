@@ -37,7 +37,7 @@ import {
 } from 'three';
 import type { Particles, SurfaceMap } from '../../resultsData';
 import { COOL, denseValues, HOT, mapLayout, rampFloats, type MapLayout, type Range } from './mapData';
-import { recordSteps } from './particles';
+import { PARTICLE_FRAGMENT_GLSL, PARTICLE_VERTEX_GLSL, recordSteps } from './particles';
 
 /** The GLSL that reads the map: the draw and the read-back hook share it. */
 const MAP_GLSL = /* glsl */ `
@@ -173,46 +173,9 @@ const PARTICLE_PX = 4;
 function particleMaterial(): ShaderMaterial {
   return new ShaderMaterial({
     uniforms: { uStep: { value: 0 }, uCount: { value: 0 }, uSize: { value: PARTICLE_PX }, uLogMax: { value: 0 }, uHot: { value: vec3s(HOT) }, uCool: { value: vec3s(COOL) } },
-    vertexShader: /* glsl */ `
-      ${RAMP_GLSL}
-      uniform float uStep;
-      uniform float uCount;
-      uniform float uSize;
-      uniform float uLogMax;
-      attribute float aStep;
-      attribute float aEnergy;
-      varying vec3 vColor;
-      void main() {
-        // A record is drawn only at its own step: the particles alive now.
-        if (abs(aStep - uStep) > 0.5) {
-          gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-          gl_PointSize = 0.0;
-          vColor = vec3(0.0);
-          return;
-        }
-        if (uCount > 0.5) {
-          // Count mode (the m12-d hook): every drawn particle lands on the one pixel.
-          gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
-          gl_PointSize = 1.0;
-          vColor = vec3(1.0);
-          return;
-        }
-        float db = aEnergy > 0.0 ? 10.0 * log2(aEnergy) * 0.30102999566398120 : -1e9;
-        vColor = hot(0.55 + 0.45 * clamp((db - uLogMax + 40.0) / 40.0, 0.0, 1.0));
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        gl_PointSize = uSize;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      uniform float uCount;
-      varying vec3 vColor;
-      void main() {
-        if (uCount > 0.5) { gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); return; }
-        vec2 d = gl_PointCoord - 0.5;
-        if (dot(d, d) > 0.25) discard;
-        gl_FragColor = vec4(vColor, 1.0);
-      }
-    `,
+    vertexShader: `${RAMP_GLSL}
+${PARTICLE_VERTEX_GLSL}`,
+    fragmentShader: PARTICLE_FRAGMENT_GLSL,
     transparent: true,
     depthWrite: false,
   });
