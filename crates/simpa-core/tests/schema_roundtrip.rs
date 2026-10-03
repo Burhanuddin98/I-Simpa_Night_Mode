@@ -558,7 +558,7 @@ fn random_op(rng: &mut Rng, p: &Project, depth: usize) -> Op {
     let n = p.bands.len();
     let group_id = |rng: &mut Rng| some_id(rng, &p.surface_groups, |g| g.id, GroupId);
     let material_id = |rng: &mut Rng| some_id(rng, &p.materials, |m| m.id, MaterialId);
-    match rng.below(if depth > 0 { 36 } else { 37 }) {
+    match rng.below(if depth > 0 { 37 } else { 38 }) {
         0 => Op::SetProjectName { name: rng.string() },
         1 => Op::SetDescription {
             description: rng.string(),
@@ -800,6 +800,38 @@ fn random_op(rng: &mut Rng, p: &Project, depth: usize) -> Op {
                 vertical_fov_deg: rng.f64(10.0, 100.0),
             }),
         },
+        36 => {
+            // A few faces, now and then one out of range or listed twice; half the time with
+            // the material `Project::regrouped` picks, so most of those apply.
+            let n_faces = p.geometry.faces.len();
+            let faces: Vec<u32> = (0..rng.below(4))
+                .map(|_| {
+                    let past = usize::from(rng.chance(20));
+                    rng.below(n_faces + past) as u32
+                })
+                .collect();
+            if rng.chance(2) {
+                p.regrouped(
+                    &faces,
+                    GroupId(uuid(rng)),
+                    &rng.string(),
+                    MaterialId(uuid(rng)),
+                )
+            } else {
+                Op::RegroupFaces {
+                    index: index(rng, p.surface_groups.len()),
+                    group: SurfaceGroup {
+                        id: group_id(rng),
+                        name: match pick(rng, &p.surface_groups) {
+                            Some(g) if rng.chance(4) => g.name,
+                            _ => rng.string(),
+                        },
+                        material: material_id(rng),
+                    },
+                    faces,
+                }
+            }
+        }
         _ => Op::Batch {
             ops: (0..rng.below(5))
                 .map(|_| random_op(rng, p, depth + 1))
@@ -927,6 +959,10 @@ fn random_ops_undo_to_the_original_bytes_and_redo_to_the_final_ones() {
         "band_data",
         "integrity",
         "batch",
+        "faces",
+        "name_taken",
+        "split",
+        "material_change",
     ] {
         assert!(
             refusal_codes.contains_key(code),
@@ -1463,8 +1499,8 @@ fn an_unknown_key_is_refused_in_every_object_of_an_op() {
             checked += 1;
         }
     }
-    // All 37 ops, and every EntityRef kind (the adjacently tagged `target` of a rename).
-    assert_eq!(tags.len(), 37, "{tags:?}");
+    // All 38 ops, and every EntityRef kind (the adjacently tagged `target` of a rename).
+    assert_eq!(tags.len(), 38, "{tags:?}");
     for kind in [
         "surface_group",
         "material",
