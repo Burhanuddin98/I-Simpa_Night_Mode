@@ -1,7 +1,9 @@
 // The Simulate step's properties panel (design:386-426), top to bottom (M11 PLAN.md 3.3):
 // - the head, "Simulation · Runs in the background · the app stays usable";
 // - the solver choice, SPPS or TCR (`[data-solver]`, `aria-checked`), session state only;
-// - the chosen solver's settings, read-only as drawn (PQ3), each value inside `[data-input]`;
+// - the chosen solver's settings as fields (PQ3, SettingsEditor.tsx): each edit an op through the
+//   checked apply, its refusals inline; Run is blocked for the chosen solver's own errors too
+//   (`flow.projectBlockers`: every band off, `NO_BAND_COMPUTED`);
 // - "Before running": one row per check with an OK or FAIL text label (never colour alone) and
 //   the UI codes that fail it, from the same blockers the Run button's `data-blockers` joins;
 // - while a run is active, the running block: what it is doing ("Meshing…", "Solving · <p> %"),
@@ -18,7 +20,7 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent } from 'react
 import * as actions from '../../actions';
 import type { SceneState } from '../../bindings/ipc';
 import { runTooltip } from '../../chrome/sceneModel';
-import { detailTitle, joinBlockers } from '../../flow';
+import { detailTitle, joinBlockers, projectBlockers } from '../../flow';
 import {
   type ActiveRun,
   type LinePart,
@@ -48,6 +50,7 @@ import {
   settingsRows,
   solverLabel,
 } from './model';
+import { SettingsEditor } from './SettingsEditor';
 import './simulate.css';
 
 /**
@@ -285,9 +288,10 @@ export function SimulatePanel() {
   const solver = useStore(solverStore);
   const settings = useProjectSettings(scene);
 
-  const blockers = joinBlockers(scene?.run_blockers ?? null, solvers, active !== null);
+  const project = projectBlockers(scene, solver);
+  const blockers = joinBlockers(project, solvers, active !== null);
   const preflight = preflightRows({
-    blockers: scene?.run_blockers ?? null,
+    blockers: project,
     solvers,
     check: scene?.check ?? null,
     info: scene?.info ?? null,
@@ -311,16 +315,7 @@ export function SimulatePanel() {
 
       <div className="props-section">
         <SolverChoice solver={solver} />
-        <div className="sim-settings" data-part="settings" title="Read-only in this version">
-          {settingRows.map((r) => (
-            <div key={r.key} className="sim-setting" data-setting={r.key}>
-              <span className="k">{r.label}</span>
-              <span className="v mono" data-input>
-                {r.value}
-              </span>
-            </div>
-          ))}
-        </div>
+        <SettingsEditor scene={scene} settings={settings} solver={solver} />
       </div>
 
       <div className="props-section">

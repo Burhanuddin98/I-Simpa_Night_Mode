@@ -17,7 +17,7 @@ import { StepBar } from './chrome/StepBar';
 import { Dock } from './features/dock/Dock';
 import { frameModel } from './features/viewport/engine';
 import { Viewport } from './features/viewport/Viewport';
-import { isReloadKey, joinBlockers } from './flow';
+import { isReloadKey, joinBlockers, projectBlockers } from './flow';
 import { probeWebGL } from './gpu';
 import { runSelftest } from './selftest';
 import { log, runStore, sceneStore, solversStatusStore, solverStore, statusStore } from './store';
@@ -69,7 +69,7 @@ function onPlainKey(e: KeyboardEvent): boolean {
   if (e.key === 'F5') {
     // Never the webview's reload.
     e.preventDefault();
-    const blockers = joinBlockers(sceneStore.get()?.run_blockers ?? null, solversStatusStore.get(), runStore.get() !== null);
+    const blockers = joinBlockers(projectBlockers(sceneStore.get(), solverStore.get()), solversStatusStore.get(), runStore.get() !== null);
     if (blockers !== null && blockers.length === 0) actions.fire(actions.runStart(solverStore.get()));
     return true;
   }

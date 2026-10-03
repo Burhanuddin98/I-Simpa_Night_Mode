@@ -8,7 +8,7 @@
 import * as actions from './actions';
 import type { Unit, Up } from './backend';
 import type { Op } from './bindings/schema';
-import { joinBlockers } from './flow';
+import { joinBlockers, projectBlockers } from './flow';
 import { STEPS, type StepKey } from './steps';
 import {
   busyStore,
@@ -21,6 +21,7 @@ import {
   sceneStore,
   solversStatusStore,
   type SolverName,
+  solverStore,
   stepStore,
   viewportStore,
 } from './store';
@@ -105,7 +106,7 @@ function foundationHooks(): Record<string, Hook> {
     undoDepth: () => sceneStore.get()?.info.undo_depth ?? 0,
     projectJson: () => actions.projectJson(),
     // What the Run button's data-blockers shows: the project's, the solvers' and RUN_ACTIVE.
-    runBlockers: () => joinBlockers(sceneStore.get()?.run_blockers ?? null, solversStatusStore.get(), runStore.get() !== null) ?? [],
+    runBlockers: () => joinBlockers(projectBlockers(sceneStore.get(), solverStore.get()), solversStatusStore.get(), runStore.get() !== null) ?? [],
     dirty: () => sceneStore.get()?.info.dirty ?? false,
     // The validator's issues on the open project, each with its UI code and the core's rule
     // (M11 m11-r22-default reads `material_placeholder` here).

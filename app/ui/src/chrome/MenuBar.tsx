@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
 import { frameModel, setView } from '../features/viewport/engine';
-import { joinBlockers } from '../flow';
+import { joinBlockers, projectBlockers } from '../flow';
 import { runStore, sceneStore, solversStatusStore, solverStore, useStore } from '../store';
 import { Search } from './icons';
 import { RunButton } from './RunButton';
@@ -59,7 +59,7 @@ export function MenuBar() {
 
   const hasModel = !!scene?.check;
   const running = active !== null;
-  const blockers = joinBlockers(scene?.run_blockers ?? null, solvers, running);
+  const blockers = joinBlockers(projectBlockers(scene, solver), solvers, running);
   const items: Partial<Record<MenuName, Item[]>> = {
     File: [
       {

@@ -39,7 +39,7 @@ type Point = Source | PointReceiver;
 let renamesTaken = 0;
 
 /** One inline issue: FAIL or WARN and the UI code as text, the message, and the core rule. */
-function IssueLine({ issue, refused }: { issue: UiIssue; refused: boolean }) {
+export function IssueLine({ issue, refused }: { issue: UiIssue; refused: boolean }) {
   const fail = issue.severity === 'error';
   return (
     <div className={`issue${fail ? '' : ' warning'}`} data-issue-code={issue.code} role={fail ? 'alert' : undefined}>
@@ -55,7 +55,7 @@ function IssueLine({ issue, refused }: { issue: UiIssue; refused: boolean }) {
   );
 }
 
-function Issues({ refused, current }: { refused: readonly UiIssue[]; current: readonly UiIssue[] }) {
+export function Issues({ refused, current }: { refused: readonly UiIssue[]; current: readonly UiIssue[] }) {
   const all = uniqueIssues(refused, current);
   if (!all.length) return null;
   return (
@@ -72,7 +72,7 @@ function Issues({ refused, current }: { refused: readonly UiIssue[]; current: re
  * refused text stays in the field (marked invalid) and is not sent again on blur. Esc restores
  * the project's value.
  */
-function CommitInput(props: {
+export function CommitInput(props: {
   field: string;
   label: string;
   value: string;
@@ -81,9 +81,15 @@ function CommitInput(props: {
   onRevert: () => void;
   inputRef?: Ref<HTMLInputElement>;
   className?: string;
+  /** Called with the text being typed, or null when the field shows the project's value again. */
+  onDraft?: (text: string | null) => void;
 }) {
-  const { field, label, value, invalid, commit, onRevert, inputRef, className } = props;
-  const [draft, setDraft] = useState<string | null>(null);
+  const { field, label, value, invalid, commit, onRevert, inputRef, className, onDraft } = props;
+  const [draft, setDraftState] = useState<string | null>(null);
+  const setDraft = (text: string | null) => {
+    setDraftState(text);
+    onDraft?.(text);
+  };
   const tried = useRef<string | null>(null);
   const busy = useRef(false);
   const go = async (why: 'enter' | 'blur') => {

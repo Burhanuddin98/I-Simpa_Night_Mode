@@ -117,6 +117,7 @@ function scene(v: ProjectView, c: CheckSummary | null, assigned: number): SceneS
     check: c,
     issues: [],
     run_blockers: [],
+    solver_issues: { spps: [], tcr: [] },
     lines: [],
   };
 }

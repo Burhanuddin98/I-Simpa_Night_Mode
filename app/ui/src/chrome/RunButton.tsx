@@ -12,7 +12,7 @@ import * as actions from '../actions';
 import { Parts } from '../features/simulate/SimulatePanel';
 import { runLabel } from '../features/simulate/model';
 import '../features/simulate/simulate.css';
-import { joinBlockers } from '../flow';
+import { joinBlockers, projectBlockers } from '../flow';
 import { runStore, sceneStore, type SolverName, solversStatusStore, solverStore, useStore } from '../store';
 import { registerHook } from '../testhooks';
 import { Play } from './icons';
@@ -34,7 +34,7 @@ export function RunButton() {
       }),
     [],
   );
-  const blockers = joinBlockers(scene?.run_blockers ?? null, solvers, active !== null);
+  const blockers = joinBlockers(projectBlockers(scene, solver), solvers, active !== null);
   const tip = runTooltip(blockers);
   const disabled = blockers === null || blockers.length > 0;
   return (
