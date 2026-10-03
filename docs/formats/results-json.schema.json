@@ -651,6 +651,28 @@
         ],
         "type": "object"
       },
+      "DinTargetReport": {
+        "description": "One DIN 18041 group-A target at the room's volume.",
+        "properties": {
+          "group": {
+            "$ref": "#/$defs/Group"
+          },
+          "target_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "`T_soll`, s, a bare value (`mc_sd` null); refused `params_din_out_of_range` where the\nvolume is outside the group's range."
+          },
+          "use": {
+            "description": "The use the group is for, in words.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "group",
+          "use",
+          "target_s"
+        ],
+        "type": "object"
+      },
       "EdtReport": {
         "description": "EDT as EDT v2.1 ([`edt`]) read it from the band's raw histogram: the value with its\nguaranteed range, or the reason it declined. `Parameters::edt_s` carries the same value, or the\nrefusal as `edt_refused`.",
         "properties": {
@@ -970,6 +992,96 @@
           "female"
         ],
         "type": "string"
+      },
+      "Group": {
+        "description": "A group-A use.",
+        "oneOf": [
+          {
+            "const": "A1",
+            "description": "Music.",
+            "type": "string"
+          },
+          {
+            "const": "A2",
+            "description": "Speech, lecture.",
+            "type": "string"
+          },
+          {
+            "const": "A3",
+            "description": "Teaching, communication.",
+            "type": "string"
+          },
+          {
+            "const": "A4",
+            "description": "Teaching, communication, inclusive.",
+            "type": "string"
+          },
+          {
+            "const": "A5",
+            "description": "Sport.",
+            "type": "string"
+          }
+        ]
+      },
+      "GroupAbsorptionReport": {
+        "description": "A surface group as the solver saw it: the `.cbin` faces of one material id (config.xml\ndeclares one material per surface group).",
+        "properties": {
+          "area_m2": {
+            "description": "m².",
+            "format": "double",
+            "type": "number"
+          },
+          "bands": {
+            "description": "Per computed band, ascending.",
+            "items": {
+              "$ref": "#/$defs/GroupBandReport"
+            },
+            "type": "array"
+          },
+          "faces": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "material_id": {
+            "description": "`type_surface@id`, the faces' `idMat`.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "material_id",
+          "faces",
+          "area_m2",
+          "bands"
+        ],
+        "type": "object"
+      },
+      "GroupBandReport": {
+        "description": "One band of a surface group's absorption.",
+        "properties": {
+          "absorption": {
+            "description": "`α`, as config.xml declares it (read as the solvers read it, f32).",
+            "format": "double",
+            "type": "number"
+          },
+          "absorption_area_m2": {
+            "description": "`S·α`, m².",
+            "format": "double",
+            "type": "number"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "absorption",
+          "absorption_area_m2"
+        ],
+        "type": "object"
       },
       "MainBand": {
         "description": "One band row of `Main results.gabe`.",
@@ -2696,6 +2808,10 @@
             "format": "double",
             "type": "number"
           },
+          "sabine_s": {
+            "$ref": "#/$defs/Evaluated",
+            "description": "Sabine, `K·V/(4·m·V + Σ S·α)`, s, with SPPS's `K`: **reported only** (results version 12)."
+          },
           "uniform_absorption": {
             "description": "Every face has the same absorption in this band.",
             "type": "boolean"
@@ -2706,6 +2822,7 @@
           "mean_absorption",
           "lambert_walls",
           "uniform_absorption",
+          "sabine_s",
           "eyring_s",
           "kuttruff_s"
         ],
@@ -2813,6 +2930,99 @@
           "error"
         ],
         "type": "object"
+      },
+      "RoomBandReport": {
+        "description": "One band's total absorption.",
+        "properties": {
+          "absorption_area_m2": {
+            "description": "`Σ S·α` over the groups, m²: Sabine's absorption area without the air term.",
+            "format": "double",
+            "type": "number"
+          },
+          "freq_hz": {
+            "format": "int32",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "freq_hz",
+          "absorption_area_m2"
+        ],
+        "type": "object"
+      },
+      "RoomReport": {
+        "description": "The room from a run's own inputs (`results::room`), or why there is none.",
+        "oneOf": [
+          {
+            "properties": {
+              "area_m2": {
+                "description": "The `.cbin` faces' total area, m².",
+                "format": "double",
+                "type": "number"
+              },
+              "bands": {
+                "description": "Per computed band, ascending.",
+                "items": {
+                  "$ref": "#/$defs/RoomBandReport"
+                },
+                "type": "array"
+              },
+              "din18041": {
+                "description": "A1 to A5, in order.",
+                "items": {
+                  "$ref": "#/$defs/DinTargetReport"
+                },
+                "type": "array"
+              },
+              "din18041_note": {
+                "description": "Always [`super::room::DIN18041_NOTE`].",
+                "type": "string"
+              },
+              "status": {
+                "const": "computed",
+                "type": "string"
+              },
+              "surfaces": {
+                "description": "By material id, ascending.",
+                "items": {
+                  "$ref": "#/$defs/GroupAbsorptionReport"
+                },
+                "type": "array"
+              },
+              "volume_m3": {
+                "description": "The `.mbin`'s volume, m³.",
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "status",
+              "volume_m3",
+              "area_m2",
+              "din18041",
+              "din18041_note",
+              "surfaces",
+              "bands"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "status": {
+                "const": "not_computed",
+                "type": "string"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status",
+              "why"
+            ],
+            "type": "object"
+          }
+        ]
       },
       "RunNoise": {
         "description": "What the calibration's correction and domain need from the run behind a series.",
@@ -3748,6 +3958,10 @@
         "minimum": 0,
         "type": "integer"
       },
+      "room": {
+        "$ref": "#/$defs/RoomReport",
+        "description": "The room from the run's own inputs, for either solver (results version 12)."
+      },
       "run_folder": {
         "description": "The run folder, as given.",
         "type": "string"
@@ -3803,7 +4017,8 @@
       "status",
       "solver_build",
       "started",
-      "bands_hz"
+      "bands_hz",
+      "room"
     ],
     "title": "Report",
     "type": "object"

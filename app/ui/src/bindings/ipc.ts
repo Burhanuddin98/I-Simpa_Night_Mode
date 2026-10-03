@@ -222,42 +222,50 @@ export type SurfaceReceiverShape =
  */
 export type BedStatus = 'PASS' | 'FAIL';
 /**
- * This interface was referenced by `IpcBindings`'s JSON-Schema
- * via the `definition` "SolverKind".
+ * The room from the run's own inputs, for either solver (results version 12).
  */
-export type SolverKind = 'spps' | 'tcr';
-/**
- * Whether the run's solver build was verified (backlog 38, [`super::solver_build`]): it marks
- * the run and refuses nothing.
- */
-export type SolverBuild =
+export type RoomReport =
   | {
-      status: 'verified';
+      /**
+       * The `.cbin` faces' total area, m².
+       */
+      area_m2: number;
+      /**
+       * Per computed band, ascending.
+       */
+      bands: RoomBandReport[];
+      /**
+       * A1 to A5, in order.
+       */
+      din18041: DinTargetReport[];
+      /**
+       * Always [`super::room::DIN18041_NOTE`].
+       */
+      din18041_note: string;
+      status: 'computed';
+      /**
+       * By material id, ascending.
+       */
+      surfaces: GroupAbsorptionReport[];
+      /**
+       * The `.mbin`'s volume, m³.
+       */
+      volume_m3: number;
     }
   | {
-      reason: Reason;
-      status: 'unverified';
+      status: 'not_computed';
+      why: string;
     };
 /**
- * How the resamples the factor applies to are drawn ([`super::Structure`]).
+ * A group-A use.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "Group".
  */
-export type Structure = 'constant' | 'roughness';
+export type Group = 'A1' | 'A2' | 'A3' | 'A4' | 'A5';
 /**
- * How the resamples the factor applies to are drawn ([`super::Structure`]).
- */
-export type Structure1 = 'constant' | 'roughness';
-/**
- * What `n`, the crossings of a receiver per particle each band's `crossings_per_particle`
- * gives, is for this method (`params::noise::calibration::variable`).
- */
-export type Variable = 'crossings_per_particle' | 'crossings_times_lifetime_spread';
-/**
- * The run's computation method, which picks the calibration.
- */
-export type Method = 'random' | 'energetic';
-/**
- * `100·(T30/T20 − 1)`, %, from the reported T20 and T30, with its standard deviation over
- * the Monte-Carlo resamples; refused, with T30's refusal or else T20's, when either is.
+ * `T_soll`, s, a bare value (`mc_sd` null); refused `params_din_out_of_range` where the
+ * volume is outside the group's range.
  */
 export type Evaluated =
   | {
@@ -659,11 +667,42 @@ export type ParticleCount =
       count: 'no_standard_deviation';
     };
 /**
- * dB(A) re 20 µPa. Its `mc_sd` is the bands' propagated to first order, the bands
- * independent (SPPS runs each band's particles on its own): `√Σ (wᵢ·sdᵢ)²`, `wᵢ` band `i`'s
- * share of the weighted energy; `status` and range as SPL's (±2.5 `mc_sd`, `ok` within 1 dB).
- * Refused, with that band's refusal, when any band's SPL is; `no_a_weight` when a band is not
- * an octave centre from 125 Hz to 8 kHz, the bands whose weighting is pinned.
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "SolverKind".
+ */
+export type SolverKind = 'spps' | 'tcr';
+/**
+ * Whether the run's solver build was verified (backlog 38, [`super::solver_build`]): it marks
+ * the run and refuses nothing.
+ */
+export type SolverBuild =
+  | {
+      status: 'verified';
+    }
+  | {
+      reason: Reason;
+      status: 'unverified';
+    };
+/**
+ * How the resamples the factor applies to are drawn ([`super::Structure`]).
+ */
+export type Structure = 'constant' | 'roughness';
+/**
+ * How the resamples the factor applies to are drawn ([`super::Structure`]).
+ */
+export type Structure1 = 'constant' | 'roughness';
+/**
+ * What `n`, the crossings of a receiver per particle each band's `crossings_per_particle`
+ * gives, is for this method (`params::noise::calibration::variable`).
+ */
+export type Variable = 'crossings_per_particle' | 'crossings_times_lifetime_spread';
+/**
+ * The run's computation method, which picks the calibration.
+ */
+export type Method = 'random' | 'energetic';
+/**
+ * `100·(T30/T20 − 1)`, %, from the reported T20 and T30, with its standard deviation over
+ * the Monte-Carlo resamples; refused, with T30's refusal or else T20's, when either is.
  */
 export type Evaluated1 =
   | {
@@ -718,7 +757,11 @@ export type Evaluated1 =
       not_evaluable: Refused;
     };
 /**
- * dB.
+ * dB(A) re 20 µPa. Its `mc_sd` is the bands' propagated to first order, the bands
+ * independent (SPPS runs each band's particles on its own): `√Σ (wᵢ·sdᵢ)²`, `wᵢ` band `i`'s
+ * share of the weighted energy; `status` and range as SPL's (±2.5 `mc_sd`, `ok` within 1 dB).
+ * Refused, with that band's refusal, when any band's SPL is; `no_a_weight` when a band is not
+ * an octave centre from 125 Hz to 8 kHz, the bands whose weighting is pinned.
  */
 export type Evaluated2 =
   | {
@@ -828,9 +871,64 @@ export type Evaluated3 =
       not_evaluable: Refused;
     };
 /**
- * A fraction, 0 to 1 (shown as a percentage).
+ * dB.
  */
 export type Evaluated4 =
+  | {
+      /**
+       * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
+       * `status`.
+       */
+      hi?: number | null;
+      /**
+       * The range's lower end, in the same unit: `value − 2.5·mc_sd`
+       * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
+       */
+      lo?: number | null;
+      /**
+       * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
+       * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
+       * analytic references.
+       */
+      mc_sd?: number | null;
+      /**
+       * Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because
+       * more than 10 of its 200 resamples refused it, but which at most 10 refuse when the same
+       * resamples are judged with their decay range on the series (the stand-ins,
+       * `params::noise`, "The stand-ins"): how many refused it as judged. Shown `wide`, `mc_sd`
+       * the judged standard deviation (the stand-ins' when the judged resamples gave none), and
+       * `lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.
+       */
+      refused_resamples?: number | null;
+      /**
+       * One of the eight parameters of an SPPS band, aggregate or per-source band
+       * (decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within
+       * the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
+       * for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
+       * is shown with its range rather than refused; a consumer that shows the value shows the
+       * range beside it. Also `wide`, whatever the range's width, with `refused_resamples` or
+       * `straddle` (results version 9). Absent for every other value.
+       */
+      status?: RangeStatus | null;
+      /**
+       * Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,
+       * moves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the
+       * value with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,
+       * widened by `2.5·mc_sd` each way.
+       *
+       * @minItems 2
+       * @maxItems 2
+       */
+      straddle?: [number, number] | null;
+      value: number;
+    }
+  | {
+      not_evaluable: Refused;
+    };
+/**
+ * A fraction, 0 to 1 (shown as a percentage).
+ */
+export type Evaluated5 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -890,61 +988,6 @@ export type Status2 = 'ok' | 'wide' | 'refused';
 /**
  * s.
  */
-export type Evaluated5 =
-  | {
-      /**
-       * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
-       * `status`.
-       */
-      hi?: number | null;
-      /**
-       * The range's lower end, in the same unit: `value − 2.5·mc_sd`
-       * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
-       */
-      lo?: number | null;
-      /**
-       * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
-       * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
-       * analytic references.
-       */
-      mc_sd?: number | null;
-      /**
-       * Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because
-       * more than 10 of its 200 resamples refused it, but which at most 10 refuse when the same
-       * resamples are judged with their decay range on the series (the stand-ins,
-       * `params::noise`, "The stand-ins"): how many refused it as judged. Shown `wide`, `mc_sd`
-       * the judged standard deviation (the stand-ins' when the judged resamples gave none), and
-       * `lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.
-       */
-      refused_resamples?: number | null;
-      /**
-       * One of the eight parameters of an SPPS band, aggregate or per-source band
-       * (decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within
-       * the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
-       * for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
-       * is shown with its range rather than refused; a consumer that shows the value shows the
-       * range beside it. Also `wide`, whatever the range's width, with `refused_resamples` or
-       * `straddle` (results version 9). Absent for every other value.
-       */
-      status?: RangeStatus | null;
-      /**
-       * Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,
-       * moves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the
-       * value with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,
-       * widened by `2.5·mc_sd` each way.
-       *
-       * @minItems 2
-       * @maxItems 2
-       */
-      straddle?: [number, number] | null;
-      value: number;
-    }
-  | {
-      not_evaluable: Refused;
-    };
-/**
- * dB re 20 µPa.
- */
 export type Evaluated6 =
   | {
       /**
@@ -998,7 +1041,7 @@ export type Evaluated6 =
       not_evaluable: Refused;
     };
 /**
- * s.
+ * dB re 20 µPa.
  */
 export type Evaluated7 =
   | {
@@ -1163,6 +1206,61 @@ export type Evaluated9 =
       not_evaluable: Refused;
     };
 /**
+ * s.
+ */
+export type Evaluated10 =
+  | {
+      /**
+       * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
+       * `status`.
+       */
+      hi?: number | null;
+      /**
+       * The range's lower end, in the same unit: `value − 2.5·mc_sd`
+       * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
+       */
+      lo?: number | null;
+      /**
+       * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
+       * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
+       * analytic references.
+       */
+      mc_sd?: number | null;
+      /**
+       * Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because
+       * more than 10 of its 200 resamples refused it, but which at most 10 refuse when the same
+       * resamples are judged with their decay range on the series (the stand-ins,
+       * `params::noise`, "The stand-ins"): how many refused it as judged. Shown `wide`, `mc_sd`
+       * the judged standard deviation (the stand-ins' when the judged resamples gave none), and
+       * `lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.
+       */
+      refused_resamples?: number | null;
+      /**
+       * One of the eight parameters of an SPPS band, aggregate or per-source band
+       * (decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within
+       * the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
+       * for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
+       * is shown with its range rather than refused; a consumer that shows the value shows the
+       * range beside it. Also `wide`, whatever the range's width, with `refused_resamples` or
+       * `straddle` (results version 9). Absent for every other value.
+       */
+      status?: RangeStatus | null;
+      /**
+       * Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,
+       * moves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the
+       * value with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,
+       * widened by `2.5·mc_sd` each way.
+       *
+       * @minItems 2
+       * @maxItems 2
+       */
+      straddle?: [number, number] | null;
+      value: number;
+    }
+  | {
+      not_evaluable: Refused;
+    };
+/**
  * The arrival C50, C80, D50 and Ts are measured from: the direct sound at the receiver's
  * centre, `arrival_s`, spread over `±R/c` (`params::decay::Arrival::Known`), or `detected`.
  */
@@ -1208,7 +1306,7 @@ export type Arrival1 =
  * every source's free field, both summed. SPL's `mc_sd`, `status` and range, shifted by the
  * same constant; refused as SPL is.
  */
-export type Evaluated10 =
+export type Evaluated11 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1309,7 +1407,7 @@ export type Arrival2 =
  * As for the receiver's band, against this source's own free field at 10 m: the band's
  * `source_power_rho_c` times this source's share of the sources' power in the band.
  */
-export type Evaluated11 =
+export type Evaluated12 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1391,7 +1489,7 @@ export type NoiseModel1 =
 /**
  * Female speech's, refused as male's but needing 250 Hz to 8 kHz only.
  */
-export type Evaluated12 =
+export type Evaluated13 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1449,7 +1547,7 @@ export type Evaluated12 =
  * octaves (`not_octave_bands`), several sources (`several_sources`), or a response shorter
  * than 1.6 s or half the reverberation time (`params_series_too_short`).
  */
-export type Evaluated13 =
+export type Evaluated14 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1551,7 +1649,7 @@ export type ReferenceReport =
 /**
  * Plain Eyring, `K·V/(4·m·V − S·ln(1 − ᾱ))`, s, with SPPS's `K`: **reported only**.
  */
-export type Evaluated14 =
+export type Evaluated15 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1612,7 +1710,62 @@ export type Evaluated14 =
  * refused, and `params_reference_not_applicable` where `lambert_walls` is false: it is
  * computed only where it describes the band.
  */
-export type Evaluated15 =
+export type Evaluated16 =
+  | {
+      /**
+       * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
+       * `status`.
+       */
+      hi?: number | null;
+      /**
+       * The range's lower end, in the same unit: `value − 2.5·mc_sd`
+       * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
+       */
+      lo?: number | null;
+      /**
+       * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
+       * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
+       * analytic references.
+       */
+      mc_sd?: number | null;
+      /**
+       * Present only on a value `params::noise::evaluate` refused `monte_carlo_noise` because
+       * more than 10 of its 200 resamples refused it, but which at most 10 refuse when the same
+       * resamples are judged with their decay range on the series (the stand-ins,
+       * `params::noise`, "The stand-ins"): how many refused it as judged. Shown `wide`, `mc_sd`
+       * the judged standard deviation (the stand-ins' when the judged resamples gave none), and
+       * `lo`/`hi` `value ∓ 2.5·sd` with `sd` the larger of the stand-ins' and `mc_sd`.
+       */
+      refused_resamples?: number | null;
+      /**
+       * One of the eight parameters of an SPPS band, aggregate or per-source band
+       * (decision-log rows 37 (3) and 39 (3)): `ok` when its range, `lo` to `hi`, is within
+       * the quantity's difference limen (`params::noise::jnd`: 5 % for the decay times, 1 dB
+       * for SPL, C50 and C80, 0.05 for D50, 10 ms for Ts), `wide` when it is not. A `wide` value
+       * is shown with its range rather than refused; a consumer that shows the value shows the
+       * range beside it. Also `wide`, whatever the range's width, with `refused_resamples` or
+       * `straddle` (results version 9). Absent for every other value.
+       */
+      status?: RangeStatus | null;
+      /**
+       * Present only on a C50, C80 or D50 whose bin straddling te, wholly late or wholly early,
+       * moves it beyond its limit (0.1 dB, 0.005; `params::decay::Straddle`): `[lo, hi]`, the
+       * value with that bin each way. The value is `wide`, and `lo`/`hi` cover the bracket,
+       * widened by `2.5·mc_sd` each way.
+       *
+       * @minItems 2
+       * @maxItems 2
+       */
+      straddle?: [number, number] | null;
+      value: number;
+    }
+  | {
+      not_evaluable: Refused;
+    };
+/**
+ * Sabine, `K·V/(4·m·V + Σ S·α)`, s, with SPPS's `K`: **reported only** (results version 12).
+ */
+export type Evaluated17 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1688,7 +1841,7 @@ export type AnalyticReport =
 /**
  * s, with TCR's constant 0.163.
  */
-export type Evaluated16 =
+export type Evaluated18 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1743,7 +1896,7 @@ export type Evaluated16 =
 /**
  * s, with TCR's constant 0.163.
  */
-export type Evaluated17 =
+export type Evaluated19 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1798,7 +1951,7 @@ export type Evaluated17 =
 /**
  * Sound strength G, refused as SPL is (`no_time_series`).
  */
-export type Evaluated18 =
+export type Evaluated20 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -1960,7 +2113,7 @@ export type RunStatusUi = ('OK' | 'FAIL' | 'CRASH' | 'CANCELLED') | 'RUNNING' | 
  * This interface was referenced by `IpcBindings`'s JSON-Schema
  * via the `definition` "Evaluated".
  */
-export type Evaluated19 =
+export type Evaluated21 =
   | {
       /**
        * The range's upper end: `value + 2.5·mc_sd`, or EDT's own (`edt.hi_s`). Present with
@@ -2188,6 +2341,44 @@ export type ReferenceReport1 =
  * via the `definition` "ReflectionLaws".
  */
 export type ReflectionLaws1 = ReflectionLaw | ReflectionLaw1[];
+/**
+ * The room from a run's own inputs (`results::room`), or why there is none.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "RoomReport".
+ */
+export type RoomReport1 =
+  | {
+      /**
+       * The `.cbin` faces' total area, m².
+       */
+      area_m2: number;
+      /**
+       * Per computed band, ascending.
+       */
+      bands: RoomBandReport[];
+      /**
+       * A1 to A5, in order.
+       */
+      din18041: DinTargetReport[];
+      /**
+       * Always [`super::room::DIN18041_NOTE`].
+       */
+      din18041_note: string;
+      status: 'computed';
+      /**
+       * By material id, ascending.
+       */
+      surfaces: GroupAbsorptionReport[];
+      /**
+       * The `.mbin`'s volume, m³.
+       */
+      volume_m3: number;
+    }
+  | {
+      status: 'not_computed';
+      why: string;
+    };
 /**
  * Whether a run's solver build was verified, decided from its manifest alone (backlog 38,
  * `docs/investigations/2026-09-30-b38-39/PLAN.md` C5). Computed beside [`load`], never by it:
@@ -2913,6 +3104,12 @@ export interface ReportView {
    */
   report?: Report | null;
   state: ResultsState;
+  /**
+   * M12 P2: the surface groups the open project gives each solver material id
+   * ([`group_names`]), so the Acoustics tab can name `report.room.surfaces` by group. Names,
+   * not numbers: every number shown stays the report's. Empty with no project open.
+   */
+  surface_groups: SurfaceGroupNames[];
 }
 /**
  * What `simpa results <run> --json` prints.
@@ -2930,6 +3127,7 @@ export interface Report {
    * [`REPORT_VERSION`].
    */
   results_version: number;
+  room: RoomReport;
   /**
    * The run folder, as given.
    */
@@ -3026,6 +3224,89 @@ export interface BedParameter3 {
   notes: string[];
   reasons: string[];
   status: BedStatus;
+}
+/**
+ * One band's total absorption.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "RoomBandReport".
+ */
+export interface RoomBandReport {
+  /**
+   * `Σ S·α` over the groups, m²: Sabine's absorption area without the air term.
+   */
+  absorption_area_m2: number;
+  freq_hz: number;
+}
+/**
+ * One DIN 18041 group-A target at the room's volume.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "DinTargetReport".
+ */
+export interface DinTargetReport {
+  group: Group;
+  target_s: Evaluated;
+  /**
+   * The use the group is for, in words.
+   */
+  use: string;
+}
+/**
+ * A `core::params` refusal.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "Refused".
+ */
+export interface Refused {
+  /**
+   * One of `params::codes::ALL` (`docs/solver-contract.md`, "Parameter refusals").
+   */
+  code: string;
+  error: ParamError;
+  /**
+   * The refusal in words.
+   */
+  message: string;
+}
+/**
+ * A surface group as the solver saw it: the `.cbin` faces of one material id (config.xml
+ * declares one material per surface group).
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "GroupAbsorptionReport".
+ */
+export interface GroupAbsorptionReport {
+  /**
+   * m².
+   */
+  area_m2: number;
+  /**
+   * Per computed band, ascending.
+   */
+  bands: GroupBandReport[];
+  faces: number;
+  /**
+   * `type_surface@id`, the faces' `idMat`.
+   */
+  material_id: number;
+}
+/**
+ * One band of a surface group's absorption.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "GroupBandReport".
+ */
+export interface GroupBandReport {
+  /**
+   * `α`, as config.xml declares it (read as the solvers read it, f32).
+   */
+  absorption: number;
+  /**
+   * `S·α`, m².
+   */
+  absorption_area_m2: number;
+  freq_hz: number;
 }
 /**
  * One reason, or one recorded WARN line.
@@ -3388,24 +3669,7 @@ export interface CurvatureReport {
    * 10 %, ISO 3382-2's, as commonly stated (`params::decay::CURVATURE_LIMIT_PERCENT`).
    */
   limit_percent: number;
-  percent: Evaluated;
-}
-/**
- * A `core::params` refusal.
- *
- * This interface was referenced by `IpcBindings`'s JSON-Schema
- * via the `definition` "Refused".
- */
-export interface Refused {
-  /**
-   * One of `params::codes::ALL` (`docs/solver-contract.md`, "Parameter refusals").
-   */
-  code: string;
-  error: ParamError;
-  /**
-   * The refusal in words.
-   */
-  message: string;
+  percent: Evaluated1;
 }
 /**
  * The A-weighted level of the receiver's (or the source's) bands, from their SPL.
@@ -3416,7 +3680,7 @@ export interface DbaReport {
    * with an A-weighting pinned.
    */
   bands_hz: number[];
-  level_db: Evaluated1;
+  level_db: Evaluated2;
   /**
    * [`DBA_METHOD`].
    */
@@ -3481,15 +3745,15 @@ export interface DecayCurve {
  * via the `definition` "Parameters".
  */
 export interface Parameters {
-  c50_db: Evaluated2;
-  c80_db: Evaluated3;
-  d50: Evaluated4;
+  c50_db: Evaluated3;
+  c80_db: Evaluated4;
+  d50: Evaluated5;
   /**
    * EDT's status, range and validation (below `edt_s`'s value). Absent where EDT is not
    * computed from a histogram: TCR, and the several-sources refusal.
    */
   edt?: EdtReport | null;
-  edt_s: Evaluated5;
+  edt_s: Evaluated6;
   /**
    * Whether `edt_s` is a tested number: `edt.validated`, and false where there is no `edt`.
    * `edt_s` itself stays a bare value for the consumers that read it, so this is its marker:
@@ -3497,10 +3761,10 @@ export interface Parameters {
    * (decision-log row 20).
    */
   edt_validated: boolean;
-  spl_db: Evaluated6;
-  t20_s: Evaluated7;
-  t30_s: Evaluated8;
-  ts_s: Evaluated9;
+  spl_db: Evaluated7;
+  t20_s: Evaluated8;
+  t30_s: Evaluated9;
+  ts_s: Evaluated10;
 }
 /**
  * EDT as EDT v2.1 ([`edt`]) read it from the band's raw histogram: the value with its
@@ -3626,7 +3890,7 @@ export interface ReceiverBandReport {
    */
   floor_db?: number | null;
   freq_hz: number;
-  g_db: Evaluated10;
+  g_db: Evaluated11;
   /**
    * Energetic mode: what the lost particles would still have brought falls with the decay, so
    * `lost_share` bounds the energy from every time on, not a lump added at the end.
@@ -3669,7 +3933,7 @@ export interface CurvatureReport1 {
    * 10 %, ISO 3382-2's, as commonly stated (`params::decay::CURVATURE_LIMIT_PERCENT`).
    */
   limit_percent: number;
-  percent: Evaluated;
+  percent: Evaluated1;
 }
 /**
  * What the calibration's correction and domain need from the run behind a series.
@@ -3793,7 +4057,7 @@ export interface SourceBandReport {
    */
   energy_pa2: number[];
   freq_hz: number;
-  g_db: Evaluated11;
+  g_db: Evaluated12;
   noise_model: NoiseModel1;
   onset?: Onset | null;
   parameters: Parameters;
@@ -3812,7 +4076,7 @@ export interface CurvatureReport2 {
    * 10 %, ISO 3382-2's, as commonly stated (`params::decay::CURVATURE_LIMIT_PERCENT`).
    */
   limit_percent: number;
-  percent: Evaluated;
+  percent: Evaluated1;
 }
 /**
  * The speech transmission index at the receiver (results version 10).
@@ -3823,8 +4087,8 @@ export interface StiReport {
    * speech and noise levels, and each speech's MTI.
    */
   bands: BandSti[];
-  female: Evaluated12;
-  male: Evaluated13;
+  female: Evaluated13;
+  male: Evaluated14;
   /**
    * [`STI_METHOD`].
    */
@@ -3904,9 +4168,9 @@ export interface ReferenceBandReport {
    * absorption off.
    */
   air_m_per_metre?: number | null;
-  eyring_s: Evaluated14;
+  eyring_s: Evaluated15;
   freq_hz: number;
-  kuttruff_s: Evaluated15;
+  kuttruff_s: Evaluated16;
   /**
    * Every face reflects by Lambert's law with scattering 1 in this band: the only walls the
    * transport's `γ²` describes. When false, neither time describes the run's field.
@@ -3916,6 +4180,7 @@ export interface ReferenceBandReport {
    * `ᾱ = Σ Sᵢ·αᵢ / S` over the room's faces.
    */
   mean_absorption: number;
+  sabine_s: Evaluated17;
   /**
    * Every face has the same absorption in this band.
    */
@@ -4113,9 +4378,9 @@ export interface AnalyticBandReport {
    * The energy attenuation TCR adds as `4·m·V`, 1/m; `null` with air absorption off.
    */
   air_m_per_metre?: number | null;
-  eyring_s: Evaluated16;
+  eyring_s: Evaluated18;
   freq_hz: number;
-  sabine_s: Evaluated17;
+  sabine_s: Evaluated19;
 }
 /**
  * One band row of `Main results.gabe`.
@@ -4224,7 +4489,7 @@ export interface TcrReceiverBandReport {
   decay_curve?: DecayCurve | null;
   direct_db: number;
   freq_hz: number;
-  g_db: Evaluated18;
+  g_db: Evaluated20;
   parameters: Parameters1;
   total_eyring_db: number;
   total_sabine_db: number;
@@ -4242,21 +4507,21 @@ export interface CurvatureReport3 {
    * 10 %, ISO 3382-2's, as commonly stated (`params::decay::CURVATURE_LIMIT_PERCENT`).
    */
   limit_percent: number;
-  percent: Evaluated;
+  percent: Evaluated1;
 }
 /**
  * The eight parameters of one band (or of the aggregate).
  */
 export interface Parameters1 {
-  c50_db: Evaluated2;
-  c80_db: Evaluated3;
-  d50: Evaluated4;
+  c50_db: Evaluated3;
+  c80_db: Evaluated4;
+  d50: Evaluated5;
   /**
    * EDT's status, range and validation (below `edt_s`'s value). Absent where EDT is not
    * computed from a histogram: TCR, and the several-sources refusal.
    */
   edt?: EdtReport | null;
-  edt_s: Evaluated5;
+  edt_s: Evaluated6;
   /**
    * Whether `edt_s` is a tested number: `edt.validated`, and false where there is no `edt`.
    * `edt_s` itself stays a bare value for the consumers that read it, so this is its marker:
@@ -4264,10 +4529,10 @@ export interface Parameters1 {
    * (decision-log row 20).
    */
   edt_validated: boolean;
-  spl_db: Evaluated6;
-  t20_s: Evaluated7;
-  t30_s: Evaluated8;
-  ts_s: Evaluated9;
+  spl_db: Evaluated7;
+  t20_s: Evaluated8;
+  t30_s: Evaluated9;
+  ts_s: Evaluated10;
 }
 /**
  * The `Global` row, **an aggregate**, labelled.
@@ -4311,6 +4576,17 @@ export interface ReasonUi {
   code: string;
   detail: string;
   ui_code: string;
+}
+/**
+ * One solver material id (`type_surface@id`, the `.cbin` faces' `idMat`) and the surface groups
+ * that carry it, in project order.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "SurfaceGroupNames".
+ */
+export interface SurfaceGroupNames {
+  material_id: number;
+  names: string[];
 }
 /**
  * `run_data`: what the run holds for the viewport and the charts.
@@ -4722,7 +4998,7 @@ export interface CurvatureReport4 {
    * 10 %, ISO 3382-2's, as commonly stated (`params::decay::CURVATURE_LIMIT_PERCENT`).
    */
   limit_percent: number;
-  percent: Evaluated;
+  percent: Evaluated1;
 }
 /**
  * The A-weighted level of a receiver's computed bands (`params::level::a_weighted`): the energy
@@ -4737,7 +5013,7 @@ export interface DbaReport1 {
    * with an A-weighting pinned.
    */
   bands_hz: number[];
-  level_db: Evaluated1;
+  level_db: Evaluated2;
   /**
    * [`DBA_METHOD`].
    */
@@ -4828,8 +5104,8 @@ export interface StiReport1 {
    * speech and noise levels, and each speech's MTI.
    */
   bands: BandSti[];
-  female: Evaluated12;
-  male: Evaluated13;
+  female: Evaluated13;
+  male: Evaluated14;
   /**
    * [`STI_METHOD`].
    */

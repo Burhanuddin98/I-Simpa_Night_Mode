@@ -99,8 +99,7 @@ export function ResultsPanel() {
               Results verified
             </div>
             <div className="res-text">
-              Results verified: run.json, inputs and outputs re-checked. Values appear here once the physics checks
-              behind them pass.
+              Results verified: run.json, inputs and outputs re-checked. The values are in the Acoustics tab below.
             </div>
           </>
         )}

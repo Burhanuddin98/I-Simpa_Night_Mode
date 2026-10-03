@@ -98,6 +98,8 @@ $specIds = [ordered]@{
     # M12 P3 (docs/investigations/2026-10-03-m12/PLAN.md): run on this harness by m12.ps1, not
     # part of M11's own run.
     'm12.viewport' = @('m12-c', 'm12-d', 'm12-mq4', 'm12-p3-maps')
+    # M12 P2: the Acoustics tab (gate (a), (b), (e), (f)), likewise run by m12.ps1.
+    'm12.acoustics' = @('m12-a', 'm12-b', 'm12-e', 'm12-f')
 }
 $allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -notlike 'm12.*' })
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }

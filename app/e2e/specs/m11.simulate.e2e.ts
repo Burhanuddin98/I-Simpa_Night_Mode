@@ -10,8 +10,11 @@
 //                      the planted-loss run's idle block reads its known 0.82 % (M11 review F1)
 //   m11-sim-numbers    the Simulate and Results steps show no number next to a unit outside
 //                      [data-input] (in its own region) but in a diagnostic span that proves
-//                      itself, on the box and on the planted-loss run; the Results step has no
-//                      [data-result] and no digit outside [data-run-label]
+//                      itself, on the box and on the planted-loss run; the Results panel has no
+//                      [data-result] and no digit outside [data-run-label] and the Results
+//                      regions (M12: `[data-results-region]`, dom.ts RESULTS_REGIONS); on the
+//                      Simulate step the Acoustics tab and every Results region hold no digit, so
+//                      a number off the Results step still fails
 //   m11-sim-tcr        the radio switches the label to "Run TCR"; a TCR run of the box ends OK
 //                      with no loss line
 //   m11-sim-link       the "Run <n>" link selects that run on the Results step
@@ -173,24 +176,37 @@ const runningHead = () =>
     return { head: head?.textContent ?? null, p: span?.textContent ?? null, run: span?.getAttribute('data-run') ?? null };
   });
 
-/** The Results step as read by gate (e): its state, run, label, [data-result] count, text. */
+/**
+ * The Results step as read by gate (e): its state, run, label, the [data-result] count outside
+ * the Results regions, and its text and tooltips with the run label and the Results regions
+ * removed. M12 narrows it (P1 BUILD.md, "Left open"): a number may sit in a `[data-results-region]`
+ * of the Results panel while the Results step is current; anywhere else in the panel it still
+ * fails.
+ */
 const resultsDom = () =>
   browser.execute(() => {
     const aside = document.querySelector('[data-props-step="results"]');
     if (!aside) return null;
     const clone = aside.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll('[data-run-label]').forEach((e) => e.remove());
+    clone.querySelectorAll('[data-run-label], [data-results-region]').forEach((e) => e.remove());
     const state = aside.querySelector('[data-results-state]');
     return {
       state: state?.getAttribute('data-results-state') ?? null,
       run: state?.getAttribute('data-run') ?? null,
       label: aside.querySelector('[data-run-label]')?.textContent ?? null,
-      results: aside.querySelectorAll('[data-result]').length,
+      results: clone.querySelectorAll('[data-result]').length,
       text: clone.textContent ?? '',
       // Tooltips are read as surely as text (M11 review 2, app 4).
       titles: [...clone.querySelectorAll('[title]')].map((e) => e.getAttribute('title') ?? ''),
     };
   });
+
+/** Off the Results step: the Acoustics tab's text, and each Results region's. */
+const offResults = () =>
+  browser.execute(() => ({
+    acoustics: (document.querySelector('[data-dock-panel="acoustics"]') as HTMLElement | null)?.innerText ?? null,
+    regions: [...document.querySelectorAll<HTMLElement>('[data-results-region]')].map((e) => e.innerText),
+  }));
 
 /**
  * `shown` (before its ` %`) is one of the run's `#` lines at the digits shown, rounded half up:
@@ -343,12 +359,21 @@ describe('M11 simulate', () => {
         assert.equal(d.run, boxRun.run, `${d.field} names run ${d.run}`);
         assert.equal(d.text, expected[d.field], `${d.field} is not the manifest's value`);
       }
-      if (step === 'simulate') assert.deepEqual(s.diags.map((d) => d.field).sort(), ['loss_limit_pct', 'loss_pct']);
+      if (step === 'simulate') {
+        assert.deepEqual(s.diags.map((d) => d.field).sort(), ['loss_limit_pct', 'loss_pct']);
+        // M12: off the Results step the Acoustics tab and every Results region hold no digit.
+        await hook('dockTab', 'acoustics');
+        const off = await offResults();
+        console.log(`m11-sim-numbers receipt: Simulate step, Acoustics tab ${JSON.stringify(off.acoustics)}, ${off.regions.length} Results region(s)`);
+        assert.ok(!/\d/.test(off.acoustics ?? ''), `a digit in the Acoustics tab off the Results step: ${off.acoustics}`);
+        for (const r of off.regions) assert.ok(!/\d/.test(r), `a digit in a Results region off the Results step: ${r}`);
+        await hook('dockTab', 'console');
+      }
       if (step === 'results') {
         const r = await resultsDom();
         console.log(`m11-sim-numbers receipt: results ${JSON.stringify(r)}`);
         assert.ok(r);
-        assert.equal(r.results, 0, 'no [data-result] in M11');
+        assert.equal(r.results, 0, 'no [data-result] outside the Results regions');
         assert.equal(r.run, boxRun.run, 'the newest run is shown');
         assert.equal(r.state, 'verified', 'the OK box run verifies');
         assert.ok(!/\d/.test(r.text), `a digit outside [data-run-label]: ${r.text}`);

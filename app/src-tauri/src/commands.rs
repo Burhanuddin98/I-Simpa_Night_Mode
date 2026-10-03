@@ -535,7 +535,15 @@ fn runs_root_for(session: &Mutex<Session>, run: &str) -> CmdResult<PathBuf> {
 pub async fn run_report(state: State<'_, AppState>, run: String) -> CmdResult<ReportView> {
     let session = state.session.clone();
     guard::blocking("run_report", move || {
-        results_data::report_view(&runs_root_for(&session, &run)?, &run)
+        let mut view = results_data::report_view(&runs_root_for(&session, &run)?, &run)?;
+        if view.report.is_some() {
+            let s = lock(&session, "project")?;
+            view.surface_groups = s
+                .project()
+                .map(results_data::group_names)
+                .unwrap_or_default();
+        }
+        Ok(view)
     })
     .await
 }

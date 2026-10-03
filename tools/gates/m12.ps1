@@ -104,7 +104,7 @@ Check "item 1: every parameter's derived status (gate (b) renders only PASS)" {
     $names.Count -eq 11 -and @($names | Where-Object { @('PASS', 'FAIL') -notcontains $s.parameters.$_.status }).Count -eq 0
 }
 
-Check "item 2: the report carries each parameter's bed status from beds/summary.json (results version 11; the required fields pinned)" {
+Check "item 2: the report carries each parameter's bed status from beds/summary.json (results version 12; the required fields pinned)" {
     $a = CargoTest '-p simpa-core --lib -- results::bed results::report::tests::the_required_fields_are_pinned_to_the_results_version' 'report-bed-unit'
     $b = CargoTest '-p simpa --test cli_results -- gate_e_seat_and_seat2 an_spps_report_carries the_committed_schema' 'report-bed-cli'
     $a -and $b
@@ -129,6 +129,48 @@ Check "item 4: m10-h and m11-h narrowed to no number outside the Results step, a
     Tail $log 4
     $code -eq 0 -and (Select-String -Path $log -Pattern 'M12: a number in the Results regions' -Quiet)
 }
+
+# ---- P2: the report's room, the Acoustics tab's model, and its e2e (gate (a), (b), (e), (f)) -------
+Check "P2: the report carries the room: DIN 18041 targets (A3 at 180 m3 reads 0.55 s), absorption by surface group, SPPS Sabine (cli_results m12_; results version 12)" {
+    CargoTest '-p simpa --test cli_results -- m12_' 'report-room'
+}
+
+Check "P2: run_report names each material id by the open project's surface groups (cargo test -p app the_surface_groups)" {
+    CargoTest '-p app the_surface_groups' 'group-names'
+}
+
+Check "P2: the Acoustics tab's model and the e2e comparison rules (node --test, each with its say-NO)" {
+    $log = Join-Path $work 'p2-node.log'
+    Push-Location (Join-Path $repo 'app')
+    try { $code = Native 'node --test ui/src/features/acoustics/model.test.ts e2e/lib/acoustics.test.ts' $log } finally { Pop-Location }
+    Tail $log 8
+    $code -eq 0
+}
+
+# app/e2e/specs/m12.acoustics.e2e.ts, run by `m11.ps1 -Only e2e -Spec m12.acoustics` on m11.ps1's
+# harness (the release build, the drivers, the private verified solvers, the e2e lock, the focus
+# watcher), as P3's spec is. The ids are read from its junit verdict lines.
+$p2Spec = 'm12.acoustics'
+$p2Ids = [ordered]@{
+    'm12-a' = 'every number on the Acoustics tab == simpa results --json at the displayed precision, every selection; no other digit; ranges, statuses, refusals; MQ2 words; no "validated"'
+    'm12-b' = 'no element for a parameter not PASS in beds/summary.json, under every selection; every PASS parameter shown'
+    'm12-e' = 'the DIN 18041 A3 target of the 180 m3 box reads 0.55 s, from the report; A1 reads its own'
+    'm12-f' = "the variant switch replaces the RT series and numbers with the other run's JSON, 0 mismatches, both ways"
+}
+foreach ($id in $p2Ids.Keys) { $gateIds.Remove($id) }
+if ($Only -eq 'all') {
+    $script:p2Log = Join-Path $work 'p2-e2e.log'
+    Check "P2 e2e: m11.ps1 -Only e2e -Spec $p2Spec exits 0" {
+        $code = Native "powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\tools\gates\m11.ps1`" -Only e2e -Spec $p2Spec -TargetDir `"$target`" -SolversDir `"$SolversDir`" -Upstream `"$Upstream`"" $script:p2Log
+        Get-Content $script:p2Log | Where-Object { $_ -match '^(PASS|FAIL) |^M11 |receipt' } | ForEach-Object { Note $_.Trim() }
+        $code -eq 0
+    }
+    foreach ($id in $p2Ids.Keys) {
+        Check "${id}: $($p2Ids[$id])" {
+            (Test-Path $script:p2Log) -and @(Get-Content $script:p2Log | Where-Object { $_ -match "^\s+passed\s+[\d.,]+ s\s+$([regex]::Escape($id))\s" }).Count -eq 1
+        }
+    }
+} else { Note "P2 e2e ($p2Spec): not run (-Only static)" }
 
 # ---- P3: the viewport's e2e (gate (c), (d), MQ4), on m11.ps1's harness ---------------------------
 # app/e2e/specs/m12.viewport.e2e.ts, run by `m11.ps1 -Only e2e -Spec m12.viewport`: the release
