@@ -47,7 +47,10 @@ function listening(port: number, ms: number): Promise<void> {
 const specDir = path.join(import.meta.dirname, 'specs').replace(/\\/g, '/');
 const specs = (process.env.M11_SPEC ?? 'smoke')
   .split(',')
-  .map((s) => `${specDir}/m11.${s.trim()}.e2e.ts`);
+  // A dotted name is its own file (M12: `m12.viewport` is specs/m12.viewport.e2e.ts), run on this
+  // harness by tools/gates/m12.ps1 through m11.ps1 -Only e2e.
+  .map((s) => s.trim())
+  .map((s) => `${specDir}/${s.includes('.') ? s : `m11.${s}`}.e2e.ts`);
 
 export const config = {
   runner: 'local',

@@ -95,8 +95,11 @@ $specIds = [ordered]@{
     groups   = @('row15-regroup', 'row15-receiver-folders')
     # Not a gate spec: the screenshots for the investigation folder (m11.screens.e2e.ts), no id.
     screens  = @()
+    # M12 P3 (docs/investigations/2026-10-03-m12/PLAN.md): run on this harness by m12.ps1, not
+    # part of M11's own run.
+    'm12.viewport' = @('m12-c', 'm12-d', 'm12-mq4', 'm12-p3-maps')
 }
-$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' })
+$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -notlike 'm12.*' })
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }
 $fullRun = $Only -eq 'all' -and -not $SkipCore -and -not $SkipPrior -and (@($allSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
@@ -599,9 +602,11 @@ Check "m11-focus: the watcher runs (foreground, mouse and keyboard hooks install
 }
 
 $junitDir = Join-Path $work 'wdio'
-$present = @($Spec | Where-Object { Test-Path (Join-Path $appDir "e2e\specs\m11.$_.e2e.ts") })
+# A dotted name is its own file (m11.conf.ts): m12.viewport is specs\m12.viewport.e2e.ts.
+function SpecFile([string]$name) { Join-Path $appDir "e2e\specs\$(if ($name -like '*.*') { $name } else { "m11.$name" }).e2e.ts" }
+$present = @($Spec | Where-Object { Test-Path (SpecFile $_) })
 $pending = @($Spec | Where-Object { $present -notcontains $_ })
-foreach ($p in $pending) { Note "PENDING: app/e2e/specs/m11.$p.e2e.ts is not written yet (its ids fail below)" }
+foreach ($p in $pending) { Note "PENDING: $(SpecFile $p) is not written yet (its ids fail below)" }
 Check "e2e: wdio ran (verdict below) (-Spec $($present -join ','))" {
     if (-not $built) { throw 'no fresh app.exe from the build' }
     if (-not $script:driverExe) { throw 'no msedgedriver' }
