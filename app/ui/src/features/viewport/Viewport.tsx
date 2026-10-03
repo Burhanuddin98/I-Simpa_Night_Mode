@@ -6,10 +6,15 @@
 // M11 (row 22, G42): Frame model at the foot of the tools, `data-tool="frame"`, the same
 // `frameModel` as View › Frame model and the Home key. An action, not a mode: it has no pressed
 // state and leaves the tool as it was.
-import { useEffect, useRef, type JSX } from 'react';
+//
+// Scope row 15 (1), G19: a right click on the model that does not drag (a drag pans) opens the
+// context menu, `data-part="viewport-menu"`, while faces are picked: New group from selection,
+// the same action as Edit › New group from selection.
+import { useEffect, useRef, useState, type JSX } from 'react';
 import * as actions from '../../actions';
 import { MeasureTool, OrbitTool, ReceiverTool, SectionTool, SelectTool } from '../../chrome/icons';
-import { sceneStore, toolStore, useStore, type Tool } from '../../store';
+import { REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
+import { sceneStore, selectionStore, toolStore, useStore, type Tool } from '../../store';
 import { attachViewport, frameModel, setView, viewportUi, type ViewMode } from './engine';
 import { VIEWPORT_LIBRARIES } from './libraries';
 import './viewport.css';
@@ -57,6 +62,25 @@ export function Viewport() {
   const ui = useStore(viewportUi);
   const tool = useStore(toolStore);
   const info = useStore(sceneStore)?.info ?? null;
+  const selection = useStore(selectionStore);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const rightDown = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [menu]);
+  // The picked faces went away (a new mesh, another pick): so does the menu.
+  useEffect(() => {
+    if (!regroupFaces(selection)) setMenu(null);
+  }, [selection]);
 
   useEffect(() => {
     const [root, host, inset, labels, gizmo] = [rootRef.current, hostRef.current, insetRef.current, labelsRef.current, gizmoRef.current];
@@ -76,8 +100,43 @@ export function Viewport() {
       data-active-tool={tool}
       data-libraries={VIEWPORT_LIBRARIES}
       ref={rootRef}
+      onPointerDown={(e) => {
+        if (e.button === 2) rightDown.current = { x: e.clientX, y: e.clientY };
+      }}
+      onContextMenu={(e) => {
+        const down = rightDown.current;
+        rightDown.current = null;
+        const still = !down || Math.hypot(e.clientX - down.x, e.clientY - down.y) <= 4;
+        const box = rootRef.current?.getBoundingClientRect();
+        if (!still || !box || (e.target as HTMLElement).tagName !== 'CANVAS' || !regroupFaces(selectionStore.get())) return;
+        setMenu({ x: e.clientX - box.left, y: e.clientY - box.top });
+      }}
     >
       <div className="viewport-host" ref={hostRef} />
+      {menu && (
+        <div
+          className="dropdown vp-menu"
+          role="menu"
+          aria-label="Selection"
+          data-part="viewport-menu"
+          style={{ left: menu.x, top: menu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            role="menuitem"
+            data-menu-item="new-group-from-selection"
+            onClick={() => {
+              setMenu(null);
+              actions.fire(actions.regroupSelection());
+            }}
+          >
+            <span className="grow">{REGROUP_LABEL}</span>
+            <span className="menu-keys">
+              {regroupFaces(selection)?.length ?? 0} {regroupFaces(selection)?.length === 1 ? 'face' : 'faces'}
+            </span>
+          </button>
+        </div>
+      )}
       <div className="vp-labels" ref={labelsRef} aria-hidden />
 
       {(ui.error || !ui.hasModel) && (

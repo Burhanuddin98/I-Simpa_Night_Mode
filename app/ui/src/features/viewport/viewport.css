@@ -202,3 +202,8 @@
   font-weight: 500;
   color: var(--text-2);
 }
+
+/* Scope row 15 (1), G19: the context menu on picked faces, at the right click. */
+.vp-menu {
+  z-index: 20;
+}

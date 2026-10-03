@@ -104,6 +104,9 @@ export const backend = {
   /** A band preset (PQ3): the core rebands the project and applies it as one checked edit. */
   editReband: (kind: BandKind, lowestHz: number, highestHz: number) =>
     invoke<EditOutcome>('edit_reband', { kind, lowest_hz: lowestHz, highest_hz: highestHz }),
+  /** New group from selection (row 15, G19): the core picks the material and applies it as one
+   * checked edit. */
+  editRegroup: (faces: number[]) => invoke<EditOutcome>('edit_regroup', { faces }),
   editUndo: () => invoke<SceneState>('edit_undo'),
   editRedo: () => invoke<SceneState>('edit_redo'),
   /** The geometry as raw bytes (mesh.ts decodes them). */

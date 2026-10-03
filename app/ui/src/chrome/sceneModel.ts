@@ -185,6 +185,29 @@ export function sentence(text: string): string {
   return /[.!?]$/.test(s) ? s : `${s}.`;
 }
 
+// ---- groups (scope row 15 (1)) -----------------------------------------------------------------
+
+/** The menu entry of G19, in the viewport's context menu and the Edit menu. */
+export const REGROUP_LABEL = 'New group from selection';
+
+/**
+ * The faces "New group from selection" sends (G19): a viewport pick or fill, each face once and
+ * ascending; `null` for any other selection (a whole group is already a group), so the entry is
+ * disabled.
+ */
+export function regroupFaces(selection: { kind: string; faces?: readonly number[]; [key: string]: unknown }): number[] | null {
+  if (selection.kind !== 'faces' || !selection.faces?.length) return null;
+  return [...new Set(selection.faces)].sort((a, b) => a - b);
+}
+
+/**
+ * A point receiver's folder (M37): the path of the receiver groups an imported `.proj` put it in
+ * (`Stalls / Front`), or '' at the top level. Read-only: groups are made in upstream's GUI.
+ */
+export function receiverFolder(receiver: { group?: string | null }): string {
+  return receiver.group ?? '';
+}
+
 // ---- filter ----------------------------------------------------------------------------------
 
 /**

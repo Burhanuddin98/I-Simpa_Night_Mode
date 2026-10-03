@@ -14,6 +14,8 @@ import {
   matchesFilter,
   nextVariantName,
   powerText,
+  receiverFolder,
+  regroupFaces,
   roomCentre,
   runTooltip,
   sentence,
@@ -301,4 +303,20 @@ test('a validator message reads as a sentence', () => {
   assert.equal(sentence('no source is enabled: the run would emit nothing and exit 0'), 'No source is enabled: the run would emit nothing and exit 0.');
   assert.equal(sentence('Already one.'), 'Already one.');
   assert.equal(sentence('  '), '');
+});
+
+test('New group from selection takes the picked faces, each once, ascending; nothing else', () => {
+  assert.deepEqual(regroupFaces({ kind: 'faces', faces: [3, 2], groups: ['Walls'] }), [2, 3]);
+  assert.deepEqual(regroupFaces({ kind: 'faces', faces: [5, 2, 5], groups: ['Walls'] }), [2, 5]);
+  assert.equal(regroupFaces({ kind: 'faces', faces: [], groups: [] }), null);
+  assert.equal(regroupFaces({ kind: 'group', id: 'g1' }), null, 'a whole group is already a group');
+  assert.equal(regroupFaces({ kind: 'none' }), null);
+  assert.equal(regroupFaces({ kind: 'receiver', id: 'r1' }), null);
+});
+
+test("a point receiver's folder reads as its group path, and the filter finds it", () => {
+  assert.equal(receiverFolder({ group: 'Stalls / Front' }), 'Stalls / Front');
+  assert.equal(receiverFolder({ group: null }), '');
+  assert.equal(receiverFolder({}), '', 'a project saved before receiver groups');
+  assert.ok(matchesFilter('front', 'Receiver 1', receiverFolder({ group: 'Stalls / Front' })));
 });
