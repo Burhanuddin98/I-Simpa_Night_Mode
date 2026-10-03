@@ -87,8 +87,7 @@ now).
   app's group names); the core's lib count is unchanged (the pin test was updated, not added).
 - UI `npm test`: 169 passed (159 + 10). Harness `node --test e2e/lib/*.test.ts`: 52 passed (+7). `npm run typecheck`,
   the e2e `tsc`, `cargo fmt --check`, both clippys `-D warnings`: clean.
-- **Final `m12.ps1` in full** (`-TargetDir C:	mp
-m-target-h -BedData B:\data`, `gate-final-m12.log`,
+- **Final `m12.ps1` in full** (`-TargetDir C:\tmp\nm-target-h -BedData B:\data`, `gate-final-m12.log`,
   13:51-14:07, at `0a7c8bc`, this file committed before it): P1's six checks, P2's three static checks, the P2 e2e
   and **m12-a, m12-b, m12-e, m12-f PASS**; prior gate **M11 PASSED** (core selection 919 passed / 0 failed / 36
   ignored in 86 binaries; e2e 37 of 37 required ids, the narrowed m11-sim-numbers and m11-sim-link among them; m10
