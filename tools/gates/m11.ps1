@@ -27,7 +27,7 @@
 # tauri-driver, the msedgedriver of the live WebView2 runtime, and the solver build.
 #
 # Run: powershell -File tools/gates/m11.ps1 [-TargetDir C:\tmp\nm-target] [-E2eHome C:\tmp\nm-e2e]
-#        [-Only all|static|e2e] [-Spec smoke,gate,close,kill,after,simulate,dock,project,reload]
+#        [-Only all|static|e2e] [-Spec smoke,gate,close,kill,after,simulate,dock,project,reload,settings]
 #        [-SolversDir C:\tmp\nm-m8a-solvers] [-SkipCore] [-SkipPrior] [-FocusSayNo] [-FetchDriver]
 # Partial runs (-Only other than all, a -Spec subset, -SkipCore, -SkipPrior) never print
 # "M11 PASSED".
@@ -35,7 +35,7 @@ param(
     [string]$TargetDir = 'C:\tmp\nm-target',
     [string]$E2eHome = 'C:\tmp\nm-e2e',
     [ValidateSet('all', 'static', 'e2e')][string]$Only = 'all',
-    [string[]]$Spec = @('smoke', 'gate', 'close', 'kill', 'after', 'simulate', 'dock', 'project', 'reload'),
+    [string[]]$Spec = @('smoke', 'gate', 'close', 'kill', 'after', 'simulate', 'dock', 'project', 'reload', 'settings'),
     [string]$SolversDir = 'C:\tmp\nm-m8a-solvers',
     # Upstream's TetGen 1.6.0 build, the reference two core tests refuse by name. Default:
     # $SIMPA_TETGEN160, else beside the solver build (solvers/build.ps1's layout), else M10's copy.
@@ -88,6 +88,8 @@ $specIds = [ordered]@{
     project  = @('m11-r22-a9', 'm11-r22-a3', 'm11-r22-g42', 'm11-r22-m26', 'm11-r22-m5', 'm11-r22-m1', 'm11-b18')
     # M11 review 2, app 2: a page reloaded mid-run.
     reload   = @('m11-reload')
+    # PQ3, the Simulate settings editor (docs/investigations/2026-10-03-pq3/PLAN.md, order of work 4).
+    settings = @('pq3-settings-edit', 'pq3-settings-bands-off', 'pq3-settings-preset')
     # Not a gate spec: the screenshots for the investigation folder (m11.screens.e2e.ts), no id.
     screens  = @()
 }

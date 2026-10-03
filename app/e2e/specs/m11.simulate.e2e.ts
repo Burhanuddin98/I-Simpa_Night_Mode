@@ -242,15 +242,17 @@ describe('M11 simulate', () => {
     assert.deepEqual(await blockersOf('[data-part="run"]'), []);
     assert.deepEqual(await blockersOf('[data-part="run-panel"]'), []);
 
-    // The settings shown are the project file's, each inside [data-input].
+    // The settings shown are the project file's own: since PQ3 each is an input field holding
+    // the stored value (the time step in ms), and an input's value is not page text.
     const file = JSON.parse(await m10.projectJson());
     const spps = file.solvers.spps;
-    const setting = (k: string) => text(`[data-setting="${k}"] [data-input]`);
-    await browser.waitUntil(async () => (await setting('particles')) !== '—', { timeout: 30_000, timeoutMsg: 'the settings did not load' });
-    assert.equal(await setting('particles'), String(spps.particles_per_source).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
-    assert.equal(await setting('duration'), `${spps.duration_s} s`);
-    assert.equal(await setting('time_step'), `${Number((spps.time_step_s * 1000).toPrecision(12))} ms`);
-    console.log(`m11-sim-preflight receipt: box settings particles ${await setting('particles')}, duration ${await setting('duration')}, time step ${await setting('time_step')}, bands ${await setting('bands')}, air ${await setting('air')}`);
+    const setting = (k: string) =>
+      browser.execute((sel: string) => document.querySelector<HTMLInputElement>(sel)?.value ?? null, `[data-setting="${k}"] input[data-field]`);
+    await browser.waitUntil(async () => (await setting('particles')) !== null, { timeout: 30_000, timeoutMsg: 'the settings did not load' });
+    assert.equal(await setting('particles'), String(spps.particles_per_source));
+    assert.equal(await setting('duration'), String(spps.duration_s));
+    assert.equal(await setting('time_step'), String(Number((spps.time_step_s * 1000).toPrecision(12))));
+    console.log(`m11-sim-preflight receipt: box settings particles ${await setting('particles')}, duration ${await setting('duration')} s, time step ${await setting('time_step')} ms, bands ${await text('[data-setting="bands"] [data-part="bands-summary"]')}, air ${await setting('air')} °C`);
   });
 
   it("m11-sim-last-run: the panel's Run runs the box; the idle block reads the run's own record", async () => {
