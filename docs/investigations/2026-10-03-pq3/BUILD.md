@@ -91,3 +91,5 @@ top) carried `NO_BAND_COMPUTED`, on the FAIL row and under the bands; TCR was no
 - `EXEMPT_REGIONS['data-input']['simulate-settings']` (`app/e2e/lib/dom.ts`) is now unused: the settings block has
   no `[data-input]`. Left in place.
 - Calls 1-5 go into `docs/decision-log.md` at the merge (PLAN.md), not done here.
+
+**After the assay (main thread, `896f745`):** the -20 °C edge is fixed in `stated_accuracy` (range checked in °C; the test now uses -20 °C itself), and the two messages' space runs are collapsed. `simpa validate` and `no_band_computed`: backlog 75.
