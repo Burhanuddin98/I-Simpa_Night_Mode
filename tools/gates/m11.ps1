@@ -29,6 +29,7 @@
 #
 # Run: powershell -File tools/gates/m11.ps1 [-TargetDir C:\tmp\nm-target] [-E2eHome C:\tmp\nm-e2e]
 #        [-Only all|static|e2e] [-Spec smoke,gate,close,kill,after,simulate,dock,project,reload,settings,groups]
+#        [-ScreensDir <dir>] (with -Spec screens or -Spec tour)
 #        [-SolversDir C:\tmp\nm-m8a-solvers] [-SkipCore] [-SkipPrior] [-FocusSayNo] [-FetchDriver]
 # Partial runs (-Only other than all, a -Spec subset, -SkipCore, -SkipPrior) never print
 # "M11 PASSED".
@@ -47,7 +48,8 @@ param(
     # The live proof of the focus watcher: a window of the gate's own takes the foreground once.
     [switch]$FocusSayNo,
     [switch]$FetchDriver,
-    # Where -Spec screens saves its PNGs (default: the run's work folder). Not a gate spec.
+    # Where -Spec screens saves its PNGs, and -Spec tour its progress.log and runs (default: the
+    # run's work folder). Neither is a gate spec.
     [string]$ScreensDir = ''
 )
 $ErrorActionPreference = 'Stop'
@@ -102,8 +104,11 @@ $specIds = [ordered]@{
     'm12.acoustics' = @('m12-a', 'm12-b', 'm12-e', 'm12-f')
     # M12 P4: gate (b)'s plant, a session with $SIMPA_BED_DEMOTE (m11.conf.ts), likewise.
     'm12.bedplant' = @('m12-b-plant')
+    # Not a gate spec: the app tour of the Elmia hall, recorded as a video (specs/tour.e2e.ts), no
+    # id. Its progress.log goes to -ScreensDir, its project copy and runs beside it; no pictures.
+    tour     = @()
 }
-$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -notlike 'm12.*' })
+$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -ne 'tour' -and $_ -notlike 'm12.*' })
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }
 $fullRun = $Only -eq 'all' -and -not $SkipCore -and -not $SkipPrior -and (@($allSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
@@ -606,8 +611,8 @@ Check "m11-focus: the watcher runs (foreground, mouse and keyboard hooks install
 }
 
 $junitDir = Join-Path $work 'wdio'
-# A dotted name is its own file (m11.conf.ts): m12.viewport is specs\m12.viewport.e2e.ts.
-function SpecFile([string]$name) { Join-Path $appDir "e2e\specs\$(if ($name -like '*.*') { $name } else { "m11.$name" }).e2e.ts" }
+# A dotted name is its own file (m11.conf.ts): m12.viewport is specs\m12.viewport.e2e.ts; so is tour.
+function SpecFile([string]$name) { Join-Path $appDir "e2e\specs\$(if ($name -like '*.*' -or $name -eq 'tour') { $name } else { "m11.$name" }).e2e.ts" }
 $present = @($Spec | Where-Object { Test-Path (SpecFile $_) })
 $pending = @($Spec | Where-Object { $present -notcontains $_ })
 foreach ($p in $pending) { Note "PENDING: $(SpecFile $p) is not written yet (its ids fail below)" }
