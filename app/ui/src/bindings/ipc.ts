@@ -3104,6 +3104,12 @@ export interface ReportView {
    */
   report?: Report | null;
   state: ResultsState;
+  /**
+   * M12 P2: the surface groups the open project gives each solver material id
+   * ([`group_names`]), so the Acoustics tab can name `report.room.surfaces` by group. Names,
+   * not numbers: every number shown stays the report's. Empty with no project open.
+   */
+  surface_groups: SurfaceGroupNames[];
 }
 /**
  * What `simpa results <run> --json` prints.
@@ -4570,6 +4576,17 @@ export interface ReasonUi {
   code: string;
   detail: string;
   ui_code: string;
+}
+/**
+ * One solver material id (`type_surface@id`, the `.cbin` faces' `idMat`) and the surface groups
+ * that carry it, in project order.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "SurfaceGroupNames".
+ */
+export interface SurfaceGroupNames {
+  material_id: number;
+  names: string[];
 }
 /**
  * `run_data`: what the run holds for the viewport and the charts.

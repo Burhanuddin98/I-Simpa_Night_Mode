@@ -44,9 +44,11 @@ use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::Serialize;
+use simpa_core::config_xml::SolverIds;
 use simpa_core::formats::{csbin, pbin};
 use simpa_core::results::spps::{BandEnergy, ParticleFileSummary};
 use simpa_core::results::{self, Report, RunResults, SolverResults, SurfaceFile};
+use simpa_core::schema::Project;
 
 use crate::guard::{CmdError, CmdResult};
 use crate::runs::{ReasonUi, ResultsState, is_run_name, reason_ui};
@@ -65,6 +67,42 @@ pub struct ReportView {
     pub state: ResultsState,
     /// `None` when the results are refused (`state.refusal` says why).
     pub report: Option<Report>,
+    /// M12 P2: the surface groups the open project gives each solver material id
+    /// ([`group_names`]), so the Acoustics tab can name `report.room.surfaces` by group. Names,
+    /// not numbers: every number shown stays the report's. Empty with no project open.
+    pub surface_groups: Vec<SurfaceGroupNames>,
+}
+
+/// One solver material id (`type_surface@id`, the `.cbin` faces' `idMat`) and the surface groups
+/// that carry it, in project order.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct SurfaceGroupNames {
+    pub material_id: u32,
+    pub names: Vec<String>,
+}
+
+/// Each material id the project's config.xml is written with ([`SolverIds::assign`]) and its
+/// groups' names, ascending by id; none when the ids cannot be assigned (a clash the run itself
+/// would have refused).
+pub fn group_names(project: &Project) -> Vec<SurfaceGroupNames> {
+    let Ok(ids) = SolverIds::assign(project) else {
+        return Vec::new();
+    };
+    let mut out: Vec<SurfaceGroupNames> = Vec::new();
+    for (group, id) in ids.group_materials {
+        let Some(name) = project.group(group).map(|g| g.name.clone()) else {
+            continue;
+        };
+        match out.iter_mut().find(|g| g.material_id == id) {
+            Some(g) => g.names.push(name),
+            None => out.push(SurfaceGroupNames {
+                material_id: id,
+                names: vec![name],
+            }),
+        }
+    }
+    out.sort_by_key(|g| g.material_id);
+    out
 }
 
 /// `run_data`: what the run holds for the viewport and the charts.
@@ -224,6 +262,7 @@ pub fn report_view(root: &Path, run: &str) -> CmdResult<ReportView> {
         None => ReportView {
             state,
             report: None,
+            surface_groups: Vec::new(),
         },
         // The CLI prints this report (`results_cmd`); one that holds a number that is not
         // finite is refused there and here alike.
@@ -231,10 +270,12 @@ pub fn report_view(root: &Path, run: &str) -> CmdResult<ReportView> {
             Ok(report) => ReportView {
                 state,
                 report: Some(report),
+                surface_groups: Vec::new(),
             },
             Err(refusal) => ReportView {
                 state: refused(run, refusal),
                 report: None,
+                surface_groups: Vec::new(),
             },
         },
     })
@@ -587,6 +628,59 @@ mod tests {
             assert_eq!(report_view(&root, bad).unwrap_err().code, "RUN_NOT_FOUND");
         }
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// M12 P2: the absorption table names each of the report's material ids by the surface groups
+    /// the open project gives it (`SolverIds::assign`, the ids config.xml was written with): the
+    /// seats box pins 21, 22 and 25; the teaching room numbers its six groups 1 to 6 in order.
+    #[test]
+    fn the_surface_groups_name_the_reports_material_ids() {
+        let seats =
+            simpa_core::schema::load(&repo("tests/fixtures/rooms/seats_box.simpa")).unwrap();
+        let names = group_names(&seats);
+        let got: Vec<(u32, Vec<String>)> = names
+            .iter()
+            .map(|g| (g.material_id, g.names.clone()))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (21, vec!["Ceiling".to_string()]),
+                (22, vec!["Walls".to_string()]),
+                (25, vec!["Floor".to_string()]),
+            ]
+        );
+        // Every material id of the seats run's report has its names.
+        let (dir, root) = runs_with("names", "seats_spps");
+        let rep = report_view(&root, RUN).unwrap().report.unwrap();
+        let room = serde_json::to_value(&rep.room).unwrap();
+        let ids: Vec<u64> = room["surfaces"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| s["material_id"].as_u64().unwrap())
+            .collect();
+        assert_eq!(ids, vec![21, 22, 25]);
+        std::fs::remove_dir_all(&dir).unwrap();
+        let room =
+            simpa_core::schema::load(&repo("tests/fixtures/ui/teaching_room.simpa")).unwrap();
+        let got: Vec<(u32, Vec<String>)> = group_names(&room)
+            .iter()
+            .map(|g| (g.material_id, g.names.clone()))
+            .collect();
+        let want: Vec<(u32, Vec<String>)> = [
+            "Floor",
+            "Ceiling",
+            "Left wall",
+            "Right wall",
+            "Front wall",
+            "Rear wall",
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (i as u32 + 1, vec![n.to_string()]))
+        .collect();
+        assert_eq!(got, want);
     }
 
     #[test]

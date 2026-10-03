@@ -4382,10 +4382,18 @@
         },
         "state": {
           "$ref": "#/$defs/ResultsState"
+        },
+        "surface_groups": {
+          "description": "M12 P2: the surface groups the open project gives each solver material id\n([`group_names`]), so the Acoustics tab can name `report.room.surfaces` by group. Names,\nnot numbers: every number shown stays the report's. Empty with no project open.",
+          "items": {
+            "$ref": "#/$defs/SurfaceGroupNames"
+          },
+          "type": "array"
         }
       },
       "required": [
-        "state"
+        "state",
+        "surface_groups"
       ],
       "type": "object"
     },
@@ -6183,6 +6191,27 @@
         "id",
         "name",
         "material"
+      ],
+      "type": "object"
+    },
+    "SurfaceGroupNames": {
+      "description": "One solver material id (`type_surface@id`, the `.cbin` faces' `idMat`) and the surface groups\nthat carry it, in project order.",
+      "properties": {
+        "material_id": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "material_id",
+        "names"
       ],
       "type": "object"
     },

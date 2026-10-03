@@ -285,6 +285,11 @@ impl Session {
         })
     }
 
+    /// The open project, as edited.
+    pub fn project(&self) -> Option<&Project> {
+        self.project.as_ref()
+    }
+
     /// The project file this session was opened from or last saved to.
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
