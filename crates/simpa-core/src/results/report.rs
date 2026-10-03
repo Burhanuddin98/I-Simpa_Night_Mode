@@ -3306,12 +3306,12 @@ mod tests {
                     .collect(),
             })
             .collect();
-        let stats = s.particles.bands[0].clone();
+        let stats = s.particles.bands[0];
         s.particles.bands = [500, 1000]
             .into_iter()
             .map(|f| BandStats {
                 freq_hz: f,
-                ..stats.clone()
+                ..stats
             })
             .collect();
         s
