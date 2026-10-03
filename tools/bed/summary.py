@@ -12,11 +12,20 @@ decision 39's product grade, check by check, as the artifacts state it:
 - default runs (sets B and C, STI B7 and C7): no wrong-silent value, and the scorer's own pass
   flag (coverage at least 90 %, every room answered at least 80 %: PREREG criteria 2 and 3);
 - T30 also its own bed, M8a: the gate passed, no failures, not exploratory;
-- EDT its held-out round 2: the scorer's verdict.
+- EDT its held-out round 2 in Random mode, as VERDICT-2.md reads it: H1-H4 and H5 on the three
+  real fresh sets from the scored summary, which left the attack set empty (SENTINEL-EDT.md), and
+  H6 from the attacker run on the same frozen method (`attack/h6.json`);
+- G and dB(A) set C's end-to-end summary (ADDENDUM-6), read as the other set summaries are.
 
 A parameter is PASS when every check on every artifact holds. A parameter no final artifact
 scores, an artifact that is missing or does not read, or a check that does not hold, makes it
 FAIL with the reason named: nothing here is a judgement, and no status is written by hand.
+
+One layer sits above the rule, and only where the decision log puts it: a ruling (RULINGS) that
+names its exception exactly. It turns a FAIL into PASS only while the exception it names is the
+only thing failing; the entry then says `by: "decision N"` and keeps the rule's own status and
+reasons beside it (`rule`). Otherwise the rule's FAIL stands and the ruling says why it does not
+apply. Every other entry says `by: "the rule"`.
 
 Never edit beds/summary.json by hand: crates/simpa-core/tests/bed_summary.rs re-runs this script
 and fails unless the committed file is its output byte for byte. Paths are recorded as they are on
@@ -40,6 +49,8 @@ DATA_PREFIX = "B:/data/"
 
 RESULT = "docs/investigations/2026-10-02-bed/RESULT.md"
 EDT_RESULT = "docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md"
+GDBA_RESULT = "docs/investigations/2026-10-02-bed/RESULT-GDBA.md"
+EDT_SENTINEL = "docs/investigations/2026-10-03-m12/SENTINEL-EDT.md"
 M8A_RESULT = "docs/investigations/2026-09-29-m8a/SPEC.md"
 
 RULE = (
@@ -47,8 +58,12 @@ RULE = (
     "artifact named final holds. Exact inputs: no answered value beyond the just-noticeable "
     "difference (STI: beyond 0.03). Default runs: no wrong-silent value and the scorer's own "
     "pass flag (coverage >= 90 %, every room answered >= 80 %). T30 also M8a's gate; EDT its "
-    "held-out round 2 verdict. A parameter no final artifact scores, a missing artifact or a "
-    "check that does not hold: FAIL, with the reason."
+    "held-out round 2 in Random mode, H1-H5 from the scored summary on its real sets joined with "
+    "H6 from the attacker run, as VERDICT-2.md reads it; G and dB(A) set C's end-to-end summary "
+    "(ADDENDUM-6). A parameter no final artifact scores, a missing artifact or a check that does "
+    "not hold: FAIL, with the reason. A decision-log ruling that names its exception exactly "
+    "makes a FAIL PASS only while that exception is the only thing failing, and the entry says "
+    "so (`by`, with the rule's status and reasons kept under `rule`)."
 )
 
 # ---- the artifacts ------------------------------------------------------------------------------
@@ -123,7 +138,19 @@ ARTIFACTS = {
     "edt-r2": (
         "B:/data/m8b-edt/round2/results/score/summary.json",
         "data",
-        "docs/investigations/2026-09-27-edt-heldout/RESULTS-2.md (the scored run) and VERDICT-2.md",
+        "docs/investigations/2026-09-27-edt-heldout/RESULTS-2.md (the scored run, H1-H5) and "
+        "VERDICT-2.md, Criteria",
+    ),
+    "edt-h6": (
+        "B:/data/m8b-edt/round2/results/attack/h6.json",
+        "data",
+        "docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md, Criteria row H6 (attack/H6.md; "
+        "the runner: ADDENDUM-B2.md)",
+    ),
+    "C-GdBA": (
+        "B:/data/m8b-bed/C-score-GdBA/summary.json",
+        "data",
+        f"{GDBA_RESULT}, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)",
     ),
 }
 
@@ -193,6 +220,8 @@ def commit_of(key: str, ev: Evidence, value):
     recorded = ARTIFACTS[key][0]
     if key == "m8a":
         return value.get("git_commit"), None, None, recorded
+    if key == "C-GdBA":
+        return value.get("head"), None, None, recorded
     if key == "A":
         h = value.get("hashes", {}).get("s1", {})
         u, line = uncommitted_of(h.get("src_uncommitted"))
@@ -273,8 +302,39 @@ def m8a_checks(value, ev):
     ]
 
 
+EDT_RANDOM = ("criteria", "frozen", "random")
+EDT_REAL_SETS = ("spps", "ism", "synth")
+
+
 def edt_checks(value):
-    return [check(value, ("verdict", "pass"), True)]
+    """The scored round-2 summary's half of VERDICT-2.md's join: H1-H4, and H5 on the three real
+    fresh sets (7 v 1,471; 0 v 2,793; 7 v 3,034). Its attack set is empty (SENTINEL-EDT.md), so
+    its H5 entry for that set and its H6 judge nothing; the join holds only while that is so."""
+    out = [check(value, EDT_RANDOM + (h, "pass"), True) for h in ("H1", "H2", "H3", "H4")]
+    out += [check(value, EDT_RANDOM + ("H5", "per_set", s, "pass"), True) for s in EDT_REAL_SETS]
+    out += [
+        check(value, ("inputs", "per_set", "attack"), 0),
+        check(value, EDT_RANDOM + ("H5", "per_set", "attack", "n_paired"), 0),
+        check(value, EDT_RANDOM + ("H6", "n_classes"), 0),
+    ]
+    return out
+
+
+def edt_h6_checks(value, ev):
+    """The attacker run's half: H6 passed on VERDICT-2.md's 11 classes, none failing, scored with
+    the same frozen method as the summary (its sha256)."""
+    r2, _ = ev.json("edt-r2")
+    method, _ = dig(r2, "method", "sha256")
+    return [
+        check(value, ("pass",), True),
+        check(value, ("n_failing",), 0),
+        check(value, ("n_classes",), 11),
+        check(
+            value,
+            ("method_sha256",),
+            method if isinstance(method, str) else "the scored summary's method.sha256, unreadable",
+        ),
+    ]
 
 
 # ---- the parameters -----------------------------------------------------------------------------
@@ -302,13 +362,17 @@ PARAMETERS = [
     (
         "edt_s",
         "edt",
-        "M8b, the EDT held-out test, round 2",
-        ["edt-r2"],
+        "M8b, the EDT held-out test, round 2 (Random mode decides, PREREG-2 P11)",
+        ["edt-r2", "edt-h6"],
         [
             "Marks (decision 37 (1)-(2), both shown in the GUI): EDT not validated for receiver "
             "radius above 1 m; Energetic-mode EDT not validated.",
-            "VERDICT-2.md reads Random mode PASS on H1-H6 with H6 from a separate attacker run; "
-            "the scored artifact's own verdict is what this file reads.",
+            "Read as VERDICT-2.md reads it: H1-H5 from the scored summary on its three real fresh "
+            "sets, H6 from the attacker run (attack/h6.json, same frozen method). The scored "
+            "summary's own verdict.pass is false (H5, H6) because it ran with an empty attack set "
+            f"({EDT_SENTINEL}); it is recorded, not used.",
+            "H6 is weak evidence beyond H1-H5: one attacker, 11 synthetic classes (VERDICT-2.md, "
+            "Caveats).",
             "Ball against ISO point receiver (decision 37 (6)): "
             "docs/investigations/2026-10-02-edt-ball-vs-point/RESULT.md, PARTIAL as "
             "pre-registered, no row beyond the JND.",
@@ -390,25 +454,111 @@ PARAMETERS = [
     ),
     (
         "g_db",
-        "g",
-        "none",
-        [],
+        "g_db",
+        "M8b set C, G and dB(A) end to end (ADDENDUM-6)",
+        ["C-GdBA"],
         [
-            "G = SPL minus the same source's free-field level at 10 m with SPPS's rho c; "
-            "unit-tested (decision 21), not scored end to end (backlog 70).",
+            "G = SPL minus the same source's free-field level at 10 m (ISO 3382-1 A.2.1); the "
+            "product's constant agrees with the standard's to 0.0004 dB (RESULT-GDBA.md).",
+            "The reference SPL carries the product's own W rho c, so G's error on set C is SPL's "
+            "plus the constant: not a second test of SPL (RESULT-GDBA.md).",
+            "Set C only (two specular boxes); set B not scored for G.",
+            NO_MEASURED_ROOM,
         ],
     ),
     (
         "dba",
         "dba",
-        "none",
-        [],
+        "M8b set C, G and dB(A) end to end (ADDENDUM-6)",
+        ["C-GdBA"],
         [
-            "dB(A) = band SPL plus IEC 61672-1 octave weights; unit-tested (decision 21), not "
-            "scored end to end (backlog 70).",
+            "dB(A) = band SPL plus IEC 61672-1 octave weights over the bands the run computes; "
+            "IEC 61672-1 itself not in hand, the weights checked against its Annex E closed form "
+            "(RESULT-GDBA.md).",
+            "Set C only (two specular boxes, 125 Hz - 4 kHz); set B not scored for dB(A).",
+            NO_MEASURED_ROOM,
         ],
     ),
 ]
+
+# ---- the rulings --------------------------------------------------------------------------------
+
+# A ruling from the decision log, per parameter, with the exception it names, exactly. It applies
+# only while that exception is the only thing failing (ruling_applies).
+RULINGS = {
+    "t30_s": {
+        "decision": 46,
+        "date": "2026-10-03 12:52",
+        "text": "docs/decision-log.md, row 46",
+        "rules": "T30 is shown on the Results screen although its bed status by the strict rule "
+        "is FAIL: one wrong-silent row in 833 on M8b set B's fresh draw. When backlog 65 closes, "
+        "T30 must pass by the rule.",
+        "artifact": "B-F-fresh",
+        "metric": "t30",
+        "row": {"room": "G6", "receiver": "R007", "band_hz": 1000, "seed": 4201},
+    },
+}
+
+# What one wrong-silent row fails on its default-run artifact: the count, and the scorer's flag.
+RULED_CHECKS = ("wrong_silent", "pass_")
+
+
+def ruling_applies(ruling, failed, values):
+    """Whether `ruling` covers every check that failed: (True, the named row) or (False, why not).
+
+    `failed` is [(artifact key, check)] for every check that did not hold; `values` is each
+    artifact read, by key (None when it did not read)."""
+    why = []
+    key, metric, want = ruling["artifact"], ruling["metric"], ruling["row"]
+    path = ARTIFACTS[key][0]
+    for k, v in values.items():
+        if v is None:
+            why.append(f"{ARTIFACTS[k][0]} did not read")
+    covered = tuple(f"score.{metric}.{x}" for x in RULED_CHECKS)
+    for k, c in failed:
+        if k != key or c["read"] not in covered:
+            why.append(f"{ARTIFACTS[k][0]}: {c['read']} is {json.dumps(c['value'])}, not the ruling's")
+    t, _ = dig(values.get(key), "score", metric)
+    t = t if isinstance(t, dict) else {}
+    rows = t.get("wrong_silent_rows")
+    rows = rows if isinstance(rows, list) else []
+    ident = [want["room"], want["receiver"], want["band_hz"], want["seed"]]
+    named = [r for r in rows if isinstance(r, list) and r[:4] == ident]
+    for r in rows:
+        if r not in named:
+            shown = r[:4] if isinstance(r, list) else r
+            why.append(f"{path}: wrong-silent row {json.dumps(shown)} is not the one the ruling names")
+    if t.get("wrong_silent") != 1 or len(named) != 1:
+        why.append(
+            f"{path}: score.{metric}.wrong_silent is {json.dumps(t.get('wrong_silent'))}, "
+            f"{len(named)} of them the named row; the ruling covers exactly one"
+        )
+    # The scorer's flag fails only for the row: coverage and answered share hold (PREREG 2, 3).
+    cov = t.get("coverage")
+    if not (isinstance(cov, (int, float)) and cov >= 0.9):
+        why.append(f"{path}: score.{metric}.coverage is {json.dumps(cov)}, below 0.9")
+    rooms = t.get("by_room")
+    if not isinstance(rooms, dict) or any(
+        not isinstance(r, dict) or r.get("flag_below_80") is not False for r in rooms.values()
+    ):
+        why.append(f"{path}: score.{metric}.by_room has a room not shown answered >= 80 %")
+    if why:
+        return False, why
+    return True, named[0]
+
+
+def ruling_note(ruling, row, values):
+    """The note the report carries, so the Results screen says PASS by ruling too."""
+    t, _ = dig(values[ruling["artifact"]], "score", ruling["metric"])
+    value, truth, lo, hi = row[4:8]
+    side = f"{lo - truth:.4f} s below" if truth < lo else f"{truth - hi:.4f} s above"
+    return (
+        f"PASS by decision {ruling['decision']} ({ruling['date']}), not by the rule, which reads "
+        f"FAIL: one wrong-silent row in {t.get('answered')} answered on "
+        f"{ARTIFACTS[ruling['artifact']][0]} ({row[0]} {row[1]} {row[2]} Hz, seed {row[3]}: "
+        f"{value:.3f} s shown, range {lo:.3f}-{hi:.3f} s, true {truth:.3f} s, {side} the range). "
+        "When backlog 65 closes, T30 must pass by the rule."
+    )
 
 
 def derived_notes(name, metric, ev):
@@ -451,13 +601,14 @@ def artifact_entry(key, ev, value):
 
 
 def parameter(name, metric, bed, keys, notes, ev):
-    artifacts, reasons = [], []
+    artifacts, reasons, failed, values = [], [], [], {}
     if not keys:
         reasons.append(
             f"no final bed artifact scores {name}: its status cannot be derived from the evidence"
         )
     for key in keys:
         value, why = ev.json(key)
+        values[key] = value
         entry = artifact_entry(key, ev, value)
         if value is None:
             entry["checks"] = []
@@ -468,6 +619,15 @@ def parameter(name, metric, bed, keys, notes, ev):
                 entry["also"] = artifact_entry("m8a-report", ev, None)
             elif key == "edt-r2":
                 checks = edt_checks(value)
+                entry["verdict_as_scored"] = {
+                    "pass": dig(value, "verdict", "pass")[0],
+                    "failing": dig(value, "verdict", "failing")[0],
+                    "used": False,
+                    "why": "scored with an empty attack set, so its H5 attack entry and its H6 "
+                    f"judge nothing ({EDT_SENTINEL}); H6 is read from attack/h6.json",
+                }
+            elif key == "edt-h6":
+                checks = edt_h6_checks(value, ev)
             elif metric == "sti":
                 checks = sti_checks(key, value)
             else:
@@ -475,24 +635,41 @@ def parameter(name, metric, bed, keys, notes, ev):
             entry["checks"] = checks
             for c in checks:
                 if not c["holds"]:
+                    failed.append((key, c))
                     reasons.append(
                         f"{entry['path']}: {c['read']} is {json.dumps(c['value'])}, not {c['expect'][3:]}"
                     )
-        if key == "edt-r2" and value is not None:
-            failing, _ = dig(value, "verdict", "failing")
-            if failing:
-                reasons.append(f"{entry['path']}: verdict.failing {json.dumps(failing)}")
         artifacts.append(entry)
-    result_doc = EDT_RESULT if metric == "edt" else RESULT
+    result_doc = {"edt": EDT_RESULT, "g_db": GDBA_RESULT, "dba": GDBA_RESULT}.get(metric, RESULT)
     sections = sorted({ARTIFACTS[k][2] for k in keys})
-    return {
+    out = {
         "status": "FAIL" if reasons else "PASS",
+        "by": "the rule",
         "bed": bed,
         "result": {"document": result_doc, "sections": sections},
         "artifacts": artifacts,
         "reasons": reasons,
         "notes": derived_notes(name, metric, ev) + notes,
     }
+    ruling = RULINGS.get(name)
+    if ruling is not None and reasons:
+        record = {k: ruling[k] for k in ("decision", "date", "text", "rules", "row")}
+        record["artifact"] = ARTIFACTS[ruling["artifact"]][0]
+        applies, got = ruling_applies(ruling, failed, values)
+        record["applies"] = applies
+        if applies:
+            out["status"] = "PASS"
+            out["by"] = f"decision {ruling['decision']}"
+            out["rule"] = {"status": "FAIL", "reasons": reasons}
+            out["reasons"] = []
+            out["notes"] = [ruling_note(ruling, got, values)] + out["notes"]
+        else:
+            record["why_not"] = got
+        out["ruling"] = record
+        # The status, what it rests on, and the rule's own reading beside it, at the top.
+        first = ("status", "by", "rule", "ruling")
+        out = {k: out[k] for k in first if k in out} | {k: v for k, v in out.items() if k not in first}
+    return out
 
 
 def summary(data: Path):
@@ -521,7 +698,8 @@ def main(argv):
         f.write(text)
     s = json.loads(text)
     for name, p in s["parameters"].items():
-        print(f"{name:7} {p['status']}" + (f"  ({p['reasons'][0]})" if p["reasons"] else ""))
+        by = "" if p["by"] == "the rule" else f" by {p['by']} (the rule: {p['rule']['status']})"
+        print(f"{name:7} {p['status']}{by}" + (f"  ({p['reasons'][0]})" if p["reasons"] else ""))
     return 0
 
 

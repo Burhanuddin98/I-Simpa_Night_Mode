@@ -120,3 +120,52 @@ shows a number (the map legend, for one) `[data-results-region]`.
 - **Backlog 47** half closed: the pin test exists; the history line for `solver_build` needs Burhan's word.
 - **No cache**: every read re-loads and re-verifies the run. Fine for the fixtures; P3 may want one for band
   switching on large runs, and a particle file crosses IPC at about its `.pbin` size.
+
+## Update 13:11: EDT, G, dB(A) and T30 (decision 46)
+
+**All eleven parameters are now PASS; T30 is PASS by decision 46, not by the rule, and the file says so.** Three
+mechanical changes to `tools/bed/summary.py`, tests first (`B:\data\m12\red-bedfix-bed_summary.txt`: 4 failed;
+`green-bedfix-bed_summary.txt`: 7 passed; consumers `green-bedfix-consumers.txt`: core `results::bed` + pin 5,
+`cli_results` 25, app `results_data` 6).
+
+1. **EDT**: `SENTINEL-EDT.md` (copied here from the main checkout, unchanged) found the scored round-2 summary's
+   `verdict.pass: false` comes from an empty attack set. EDT is now read as `VERDICT-2.md` reads it, from both files,
+   both hashed: H1-H4 and H5 on the three real sets (`spps`, `ism`, `synth`) from `score/summary.json`, plus checks that
+   its attack set is empty (`inputs.per_set.attack` 0, H5's attack `n_paired` 0, H6 `n_classes` 0); H6 from
+   `attack/h6.json` (`pass`, `n_failing` 0, `n_classes` 11, `method_sha256` equal to the summary's `method.sha256`).
+   The summary's own verdict is recorded under `verdict_as_scored` with `used: false` and why. Row 37's two marks stay
+   in the notes. Planted: H6 failing, H5 failing on `ism`, a non-empty attack set, a different method hash: each FAIL.
+2. **G and dB(A)**: `B:\data\m8b-bed\C-score-GdBA\summary.json` (ADDENDUM-6, `RESULT-GDBA.md`) read as the other set
+   summaries: `score.<g_db|dba>.wrong_silent` 0 and `pass_` true; commit from its `head` (`5832655`, the scorer's;
+   product values from build F, `917345c`, per `RESULT-GDBA.md`). Planted G wrong-silent: G FAIL, dB(A) unmoved.
+3. **T30**: the rule still reads FAIL (`rule.reasons`: `B-score-F-fresh` `score.t30.wrong_silent` 1, `pass_` false).
+   A ruling layer (`RULINGS`) turns it PASS with `by: "decision 46"`, `ruling` (decision, date `2026-10-03 12:52`,
+   `docs/decision-log.md, row 46`, the row G6 R007 1000 Hz seed 4201) and `rule` beside it, only when every failed check
+   is that artifact's `wrong_silent`/`pass_`, its one wrong-silent row is the named one, and coverage >= 0.9 with no
+   room below 80 % answered. The first note says "PASS by decision 46 ... not by the rule", so the report carries it.
+   Planted: a second wrong-silent row (FAIL, `ruling.applies: false`, `why_not` names it); a wrong-silent T30 on set C
+   (FAIL). Every other parameter says `by: "the rule"`.
+
+| Parameter | Status | By | Read from |
+|---|---|---|---|
+| `spl_db` | PASS | the rule | set A (3 files), B (2), C |
+| `edt_s` | PASS | the rule | EDT round 2 `score/summary.json` (H1-H5, real sets) + `attack/h6.json` (H6) |
+| `t20_s` | PASS | the rule | set A, B, C |
+| `t30_s` | **PASS** | **decision 46** (rule: FAIL, G6 R007 1 kHz seed 4201) | M8a, set A, B, C |
+| `c50_db` | PASS | the rule | set A, B, C |
+| `c80_db` | PASS | the rule | set A, B, C |
+| `d50` | PASS | the rule | set A, B, C |
+| `ts_s` | PASS | the rule | set A, B, C |
+| `sti` | PASS | the rule | STI A (2), B7, C7 (2) |
+| `g_db` | PASS | the rule | `C-score-GdBA/summary.json` |
+| `dba` | PASS | the rule | `C-score-GdBA/summary.json` |
+
+Left open by this update:
+- **`validated_by_bed` is now true** in every report (all eleven PASS), T30 included by ruling. The report's `bed`
+  carries only status, reasons and notes, so the ruling reaches it as T30's first note, not as a field.
+- **The CLI banner** (`results_cmd.rs:186`, "M8's physics bed has not passed") is unconditional and now contradicts
+  `validated_by_bed`; `cli_results` asserts the banner. Wording is backlog 74 / MQ2.
+- `SENTINEL-EDT.md` is untracked in the main checkout on `rebuild`; that copy must be removed before `m12` merges, or
+  git refuses the merge.
+- `cli_results` needs the verified solver build: `SIMPA_SOLVERS_DIR=C:\tmp\nm-m8a-solvers`; the main checkout's
+  `target\solvers\bin\tetgen.exe` is not the manifest's (`solver_unverified`).

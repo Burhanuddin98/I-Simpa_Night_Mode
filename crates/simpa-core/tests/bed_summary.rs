@@ -156,6 +156,21 @@ fn every_report_parameter_has_a_derived_status_with_hashed_artifacts() {
                 "{name}: a PASS rests on at least one artifact"
             );
         }
+        // Every status says what it rests on; one that rests on a ruling keeps the rule's beside it.
+        let by = p["by"]
+            .as_str()
+            .unwrap_or_else(|| panic!("{name}: no `by`"));
+        if by != "the rule" {
+            assert!(by.starts_with("decision "), "{name}: {by}");
+            assert_eq!(
+                p["rule"]["status"], "FAIL",
+                "{name}: a ruling only where the rule fails"
+            );
+            assert!(
+                !p["rule"]["reasons"].as_array().unwrap().is_empty(),
+                "{name}: the rule's reasons are kept"
+            );
+        }
     }
 }
 
@@ -209,4 +224,215 @@ fn a_missing_artifact_refuses_its_parameters_by_name() {
         );
     }
     let _ = std::fs::remove_dir_all(&root);
+}
+
+/// Rewrites one JSON artifact of a scratch copy of the evidence.
+fn plant(root: &Path, rel: &str, f: impl FnOnce(&mut Value)) {
+    let p = root.join(rel);
+    let mut v: Value = serde_json::from_slice(&std::fs::read(&p).unwrap()).unwrap();
+    f(&mut v);
+    std::fs::write(&p, serde_json::to_vec_pretty(&v).unwrap()).unwrap();
+}
+
+fn derive_planted(name: &str, f: impl FnOnce(&Path)) -> Value {
+    let data = need_evidence();
+    let (_, s) = committed();
+    let root = scratch(name);
+    copy_evidence(&data, &root, &s);
+    f(&root);
+    let out = root.join("out.json");
+    derive(&root, &out);
+    let got: Value = serde_json::from_slice(&std::fs::read(&out).unwrap()).unwrap();
+    let _ = std::fs::remove_dir_all(&root);
+    got
+}
+
+fn paths_of(p: &Value) -> Vec<String> {
+    p["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["path"].as_str().unwrap().to_string())
+        .collect()
+}
+
+const EDT_SCORE: &str = "m8b-edt/round2/results/score/summary.json";
+const EDT_H6: &str = "m8b-edt/round2/results/attack/h6.json";
+const GDBA: &str = "m8b-bed/C-score-GdBA/summary.json";
+const T30_RULED: &str = "m8b-bed/B-score-F-fresh/summary.json";
+
+/// EDT (SENTINEL-EDT.md): the scored round-2 file's own verdict was computed with an empty attack
+/// set; VERDICT-2.md joins its H1-H5 on the real sets with H6 from the attacker run. The summary
+/// makes that join, from both files, hashed, and it fails when either half does.
+#[test]
+fn edt_is_the_join_of_h1_to_h5_on_the_real_sets_with_h6_from_the_attacker_run() {
+    let (_, s) = committed();
+    let edt = &s["parameters"]["edt_s"];
+    assert_eq!(edt["status"], "PASS", "{edt:#}");
+    assert_eq!(edt["by"], "the rule", "{edt:#}");
+    let paths = paths_of(edt);
+    for want in [EDT_SCORE, EDT_H6] {
+        assert!(
+            paths.contains(&format!("B:/data/{want}")),
+            "{want} is read and hashed: {paths:?}"
+        );
+    }
+    let notes = edt["notes"].to_string();
+    assert!(
+        notes.contains("receiver radius above 1 m")
+            && notes.contains("Energetic-mode EDT not validated"),
+        "row 37's two marks stay in the notes: {notes}"
+    );
+
+    // H6 failing in the attacker run fails EDT.
+    let got = derive_planted("edt-h6", |r| plant(r, EDT_H6, |v| v["pass"] = false.into()));
+    let p = &got["parameters"]["edt_s"];
+    assert_eq!(p["status"], "FAIL", "{p:#}");
+    assert!(p["reasons"].to_string().contains("h6.json"), "{p:#}");
+
+    // H5 failing on a real set fails EDT.
+    let got = derive_planted("edt-h5", |r| {
+        plant(r, EDT_SCORE, |v| {
+            v["criteria"]["frozen"]["random"]["H5"]["per_set"]["ism"]["pass"] = false.into()
+        })
+    });
+    let p = &got["parameters"]["edt_s"];
+    assert_eq!(p["status"], "FAIL", "{p:#}");
+    assert!(
+        p["reasons"].to_string().contains("H5.per_set.ism.pass"),
+        "{p:#}"
+    );
+
+    // The join holds only while the scored file left the attack set empty for H6 to judge.
+    let got = derive_planted("edt-attack", |r| {
+        plant(r, EDT_SCORE, |v| {
+            v["inputs"]["per_set"]["attack"] = 5.into()
+        })
+    });
+    assert_eq!(got["parameters"]["edt_s"]["status"], "FAIL");
+
+    // The attacker run must have scored the same frozen method.
+    let got = derive_planted("edt-method", |r| {
+        plant(r, EDT_H6, |v| v["method_sha256"] = "0".repeat(64).into())
+    });
+    let p = &got["parameters"]["edt_s"];
+    assert_eq!(p["status"], "FAIL", "{p:#}");
+    assert!(p["reasons"].to_string().contains("method_sha256"), "{p:#}");
+}
+
+/// G and dB(A) (ADDENDUM-6, RESULT-GDBA.md): set C's G and dB(A) summary is read as the other set
+/// summaries are: no wrong-silent value, the scorer's own pass flag.
+#[test]
+fn g_and_dba_are_read_from_their_set_c_summary_like_the_other_sets() {
+    let (_, s) = committed();
+    for name in ["g_db", "dba"] {
+        let p = &s["parameters"][name];
+        assert_eq!(p["status"], "PASS", "{name}: {p:#}");
+        assert_eq!(
+            paths_of(p),
+            vec![format!("B:/data/{GDBA}")],
+            "{name}: read from ADDENDUM-6's summary"
+        );
+        let reads: Vec<&str> = p["artifacts"][0]["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["read"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            reads,
+            vec![
+                format!("score.{name}.wrong_silent").as_str(),
+                format!("score.{name}.pass_").as_str()
+            ],
+            "{name}"
+        );
+    }
+    let got = derive_planted("gdba", |r| {
+        plant(r, GDBA, |v| v["score"]["g_db"]["wrong_silent"] = 1.into())
+    });
+    let g = &got["parameters"]["g_db"];
+    assert_eq!(g["status"], "FAIL", "{g:#}");
+    assert!(
+        g["reasons"].to_string().contains("score.g_db.wrong_silent"),
+        "{g:#}"
+    );
+    assert_eq!(
+        got["parameters"]["dba"]["status"], "PASS",
+        "dB(A) did not move"
+    );
+}
+
+/// T30 (decision 46): FAIL by the rule, PASS by the ruling, and the file says which. The ruling
+/// covers the one wrong-silent row it names and nothing else.
+#[test]
+fn t30_is_pass_by_decision_46_only_while_its_named_row_is_the_only_wrong_silent_row() {
+    let (_, s) = committed();
+    let t30 = &s["parameters"]["t30_s"];
+    assert_eq!(t30["status"], "PASS", "{t30:#}");
+    assert_eq!(t30["by"], "decision 46", "{t30:#}");
+    assert!(t30["reasons"].as_array().unwrap().is_empty(), "{t30:#}");
+    let ruling = &t30["ruling"];
+    assert_eq!(ruling["decision"], 46, "{t30:#}");
+    assert_eq!(ruling["date"], "2026-10-03 12:52", "{t30:#}");
+    assert!(
+        ruling["text"]
+            .as_str()
+            .unwrap()
+            .contains("docs/decision-log.md"),
+        "{t30:#}"
+    );
+    assert_eq!(ruling["row"]["room"], "G6");
+    assert_eq!(ruling["row"]["receiver"], "R007");
+    assert_eq!(ruling["row"]["band_hz"], 1000);
+    assert_eq!(ruling["row"]["seed"], 4201);
+    // The rule's own status and reasons, kept beside the ruling.
+    assert_eq!(t30["rule"]["status"], "FAIL", "{t30:#}");
+    let why = t30["rule"]["reasons"].to_string();
+    assert!(
+        why.contains("B-score-F-fresh") && why.contains("score.t30.wrong_silent"),
+        "{t30:#}"
+    );
+    assert!(
+        t30["notes"].to_string().contains("decision 46"),
+        "the report's notes say PASS by ruling: {t30:#}"
+    );
+    // No other parameter is PASS by a ruling.
+    for (name, p) in s["parameters"].as_object().unwrap() {
+        if name != "t30_s" {
+            assert_eq!(p["by"], "the rule", "{name}");
+        }
+    }
+
+    // A second wrong-silent row beside the named one: the ruling does not cover it.
+    let got = derive_planted("t30-second", |r| {
+        plant(r, T30_RULED, |v| {
+            let t = &mut v["score"]["t30"];
+            t["wrong_silent"] = 2.into();
+            t["wrong_silent_rows"]
+                .as_array_mut()
+                .unwrap()
+                .push(serde_json::json!([
+                    "G1", "R000", 500, 4202, 1.2, 1.0, 1.1, 1.15
+                ]));
+        })
+    });
+    let p = &got["parameters"]["t30_s"];
+    assert_eq!(p["status"], "FAIL", "{p:#}");
+    assert_eq!(p["by"], "the rule", "{p:#}");
+    assert!(p["reasons"].to_string().contains("wrong_silent"), "{p:#}");
+    assert!(
+        p["ruling"]["applies"] == false && p["ruling"]["why_not"].to_string().contains("G1"),
+        "the ruling says why it does not apply: {p:#}"
+    );
+
+    // A wrong-silent row on another set: likewise.
+    let got = derive_planted("t30-other-set", |r| {
+        plant(r, "m8b-bed/C-score-F/summary.json", |v| {
+            v["score"]["t30"]["wrong_silent"] = 1.into()
+        })
+    });
+    let p = &got["parameters"]["t30_s"];
+    assert_eq!(p["status"], "FAIL", "{p:#}");
+    assert_eq!(p["by"], "the rule", "{p:#}");
 }

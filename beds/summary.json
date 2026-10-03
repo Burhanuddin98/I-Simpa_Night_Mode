@@ -2,10 +2,11 @@
   "generated_by": "tools/bed/summary.py",
   "do_not_edit": "Generated. crates/simpa-core/tests/bed_summary.rs fails unless this file is the script's output byte for byte.",
   "plan": "docs/investigations/2026-10-03-m12/PLAN.md, P1 item 1",
-  "rule": "Decision 39's product grade, read from the artifacts: PASS when every check on every artifact named final holds. Exact inputs: no answered value beyond the just-noticeable difference (STI: beyond 0.03). Default runs: no wrong-silent value and the scorer's own pass flag (coverage >= 90 %, every room answered >= 80 %). T30 also M8a's gate; EDT its held-out round 2 verdict. A parameter no final artifact scores, a missing artifact or a check that does not hold: FAIL, with the reason.",
+  "rule": "Decision 39's product grade, read from the artifacts: PASS when every check on every artifact named final holds. Exact inputs: no answered value beyond the just-noticeable difference (STI: beyond 0.03). Default runs: no wrong-silent value and the scorer's own pass flag (coverage >= 90 %, every room answered >= 80 %). T30 also M8a's gate; EDT its held-out round 2 in Random mode, H1-H5 from the scored summary on its real sets joined with H6 from the attacker run, as VERDICT-2.md reads it; G and dB(A) set C's end-to-end summary (ADDENDUM-6). A parameter no final artifact scores, a missing artifact or a check that does not hold: FAIL, with the reason. A decision-log ruling that names its exception exactly makes a FAIL PASS only while that exception is the only thing failing, and the entry says so (`by`, with the rule's status and reasons kept under `rule`).",
   "parameters": {
     "spl_db": {
       "status": "PASS",
+      "by": "the rule",
       "bed": "M8b, the one test bed (decision 39)",
       "result": {
         "document": "docs/investigations/2026-10-02-bed/RESULT.md",
@@ -156,44 +157,142 @@
       ]
     },
     "edt_s": {
-      "status": "FAIL",
-      "bed": "M8b, the EDT held-out test, round 2",
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b, the EDT held-out test, round 2 (Random mode decides, PREREG-2 P11)",
       "result": {
         "document": "docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md",
         "sections": [
-          "docs/investigations/2026-09-27-edt-heldout/RESULTS-2.md (the scored run) and VERDICT-2.md"
+          "docs/investigations/2026-09-27-edt-heldout/RESULTS-2.md (the scored run, H1-H5) and VERDICT-2.md, Criteria",
+          "docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md, Criteria row H6 (attack/H6.md; the runner: ADDENDUM-B2.md)"
         ]
       },
       "artifacts": [
         {
           "path": "B:/data/m8b-edt/round2/results/score/summary.json",
           "sha256": "695644aa3d114f0bd7a08281b44eae05a49c9dbb903e527938af9b5b9e22d290",
-          "section": "docs/investigations/2026-09-27-edt-heldout/RESULTS-2.md (the scored run) and VERDICT-2.md",
+          "section": "docs/investigations/2026-09-27-edt-heldout/RESULTS-2.md (the scored run, H1-H5) and VERDICT-2.md, Criteria",
+          "git_commit": null,
+          "uncommitted_changes": null,
+          "git_commit_note": "not recorded by the artifact",
+          "verdict_as_scored": {
+            "pass": false,
+            "failing": [
+              "H5",
+              "H6"
+            ],
+            "used": false,
+            "why": "scored with an empty attack set, so its H5 attack entry and its H6 judge nothing (docs/investigations/2026-10-03-m12/SENTINEL-EDT.md); H6 is read from attack/h6.json"
+          },
+          "checks": [
+            {
+              "read": "criteria.frozen.random.H1.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H2.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H3.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H4.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H5.per_set.spps.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H5.per_set.ism.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H5.per_set.synth.pass",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            },
+            {
+              "read": "inputs.per_set.attack",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H5.per_set.attack.n_paired",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "criteria.frozen.random.H6.n_classes",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            }
+          ]
+        },
+        {
+          "path": "B:/data/m8b-edt/round2/results/attack/h6.json",
+          "sha256": "d716d3d29ec413a093519aecc0181da5fb9cb2d2bd319ad63662fdf2073938b6",
+          "section": "docs/investigations/2026-09-27-edt-heldout/VERDICT-2.md, Criteria row H6 (attack/H6.md; the runner: ADDENDUM-B2.md)",
           "git_commit": null,
           "uncommitted_changes": null,
           "git_commit_note": "not recorded by the artifact",
           "checks": [
             {
-              "read": "verdict.pass",
-              "value": false,
+              "read": "pass",
+              "value": true,
               "expect": "== true",
-              "holds": false
+              "holds": true
+            },
+            {
+              "read": "n_failing",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "n_classes",
+              "value": 11,
+              "expect": "== 11",
+              "holds": true
+            },
+            {
+              "read": "method_sha256",
+              "value": "029d90ac5e8f6a634a51a7ffce136cbd4c0b7ea3d3ad8a18b78fd8240ff224a0",
+              "expect": "== \"029d90ac5e8f6a634a51a7ffce136cbd4c0b7ea3d3ad8a18b78fd8240ff224a0\"",
+              "holds": true
             }
           ]
         }
       ],
-      "reasons": [
-        "B:/data/m8b-edt/round2/results/score/summary.json: verdict.pass is false, not true",
-        "B:/data/m8b-edt/round2/results/score/summary.json: verdict.failing [\"H5\", \"H6\"]"
-      ],
+      "reasons": [],
       "notes": [
         "Marks (decision 37 (1)-(2), both shown in the GUI): EDT not validated for receiver radius above 1 m; Energetic-mode EDT not validated.",
-        "VERDICT-2.md reads Random mode PASS on H1-H6 with H6 from a separate attacker run; the scored artifact's own verdict is what this file reads.",
+        "Read as VERDICT-2.md reads it: H1-H5 from the scored summary on its three real fresh sets, H6 from the attacker run (attack/h6.json, same frozen method). The scored summary's own verdict.pass is false (H5, H6) because it ran with an empty attack set (docs/investigations/2026-10-03-m12/SENTINEL-EDT.md); it is recorded, not used.",
+        "H6 is weak evidence beyond H1-H5: one attacker, 11 synthetic classes (VERDICT-2.md, Caveats).",
         "Ball against ISO point receiver (decision 37 (6)): docs/investigations/2026-10-02-edt-ball-vs-point/RESULT.md, PARTIAL as pre-registered, no row beyond the JND."
       ]
     },
     "t20_s": {
       "status": "PASS",
+      "by": "the rule",
       "bed": "M8b, the one test bed (decision 39)",
       "result": {
         "document": "docs/investigations/2026-10-02-bed/RESULT.md",
@@ -343,7 +442,29 @@
       ]
     },
     "t30_s": {
-      "status": "FAIL",
+      "status": "PASS",
+      "by": "decision 46",
+      "rule": {
+        "status": "FAIL",
+        "reasons": [
+          "B:/data/m8b-bed/B-score-F-fresh/summary.json: score.t30.wrong_silent is 1, not 0",
+          "B:/data/m8b-bed/B-score-F-fresh/summary.json: score.t30.pass_ is false, not true"
+        ]
+      },
+      "ruling": {
+        "decision": 46,
+        "date": "2026-10-03 12:52",
+        "text": "docs/decision-log.md, row 46",
+        "rules": "T30 is shown on the Results screen although its bed status by the strict rule is FAIL: one wrong-silent row in 833 on M8b set B's fresh draw. When backlog 65 closes, T30 must pass by the rule.",
+        "row": {
+          "room": "G6",
+          "receiver": "R007",
+          "band_hz": 1000,
+          "seed": 4201
+        },
+        "artifact": "B:/data/m8b-bed/B-score-F-fresh/summary.json",
+        "applies": true
+      },
       "bed": "M8a, the T30 bed; and M8b, the one test bed, which scores T30 beside the others",
       "result": {
         "document": "docs/investigations/2026-10-02-bed/RESULT.md",
@@ -527,11 +648,9 @@
           ]
         }
       ],
-      "reasons": [
-        "B:/data/m8b-bed/B-score-F-fresh/summary.json: score.t30.wrong_silent is 1, not 0",
-        "B:/data/m8b-bed/B-score-F-fresh/summary.json: score.t30.pass_ is false, not true"
-      ],
+      "reasons": [],
       "notes": [
+        "PASS by decision 46 (2026-10-03 12:52), not by the rule, which reads FAIL: one wrong-silent row in 833 answered on B:/data/m8b-bed/B-score-F-fresh/summary.json (G6 R007 1000 Hz, seed 4201: 0.385 s shown, range 0.362-0.408 s, true 0.360 s, 0.0015 s below the range). When backlog 65 closes, T30 must pass by the rule.",
         "Exact inputs (set A, before build F): 99.7 % of answered rows within 1/10 of the JND; the bed's research bar is 99 % (not judged by the scorer; research grade is v1.1, decision 39; MQ1).",
         "The T30 stand-in range is not calibrated (backlog 65); G3's (coupled room) T30 range is +-87 %.",
         "Set B is a convergence check: its truths are SPPS itself at 1,000,000 particles, not an independent physics reference (backlog 74).",
@@ -540,6 +659,7 @@
     },
     "c50_db": {
       "status": "PASS",
+      "by": "the rule",
       "bed": "M8b, the one test bed (decision 39)",
       "result": {
         "document": "docs/investigations/2026-10-02-bed/RESULT.md",
@@ -692,6 +812,7 @@
     },
     "c80_db": {
       "status": "PASS",
+      "by": "the rule",
       "bed": "M8b, the one test bed (decision 39)",
       "result": {
         "document": "docs/investigations/2026-10-02-bed/RESULT.md",
@@ -844,6 +965,7 @@
     },
     "d50": {
       "status": "PASS",
+      "by": "the rule",
       "bed": "M8b, the one test bed (decision 39)",
       "result": {
         "document": "docs/investigations/2026-10-02-bed/RESULT.md",
@@ -996,6 +1118,7 @@
     },
     "ts_s": {
       "status": "PASS",
+      "by": "the rule",
       "bed": "M8b, the one test bed (decision 39)",
       "result": {
         "document": "docs/investigations/2026-10-02-bed/RESULT.md",
@@ -1147,6 +1270,7 @@
     },
     "sti": {
       "status": "PASS",
+      "by": "the rule",
       "bed": "M8b, the one test bed, STI (ADDENDUM-2 to -5)",
       "result": {
         "document": "docs/investigations/2026-10-02-bed/RESULT.md",
@@ -1280,33 +1404,86 @@
       ]
     },
     "g_db": {
-      "status": "FAIL",
-      "bed": "none",
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b set C, G and dB(A) end to end (ADDENDUM-6)",
       "result": {
-        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
-        "sections": []
+        "document": "docs/investigations/2026-10-02-bed/RESULT-GDBA.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT-GDBA.md, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)"
+        ]
       },
-      "artifacts": [],
-      "reasons": [
-        "no final bed artifact scores g_db: its status cannot be derived from the evidence"
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/C-score-GdBA/summary.json",
+          "sha256": "d5abc0a4bdd772ddd99be8ec55d8891e7ddcebc5baf65122dac69429c5faf169",
+          "section": "docs/investigations/2026-10-02-bed/RESULT-GDBA.md, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)",
+          "git_commit": "5832655db75ef0406fbd7c0e17d7403fef1b3e55",
+          "uncommitted_changes": null,
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.g_db.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.g_db.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
       ],
+      "reasons": [],
       "notes": [
-        "G = SPL minus the same source's free-field level at 10 m with SPPS's rho c; unit-tested (decision 21), not scored end to end (backlog 70)."
+        "G = SPL minus the same source's free-field level at 10 m (ISO 3382-1 A.2.1); the product's constant agrees with the standard's to 0.0004 dB (RESULT-GDBA.md).",
+        "The reference SPL carries the product's own W rho c, so G's error on set C is SPL's plus the constant: not a second test of SPL (RESULT-GDBA.md).",
+        "Set C only (two specular boxes); set B not scored for G.",
+        "No comparison with a measured room (V2-9)."
       ]
     },
     "dba": {
-      "status": "FAIL",
-      "bed": "none",
+      "status": "PASS",
+      "by": "the rule",
+      "bed": "M8b set C, G and dB(A) end to end (ADDENDUM-6)",
       "result": {
-        "document": "docs/investigations/2026-10-02-bed/RESULT.md",
-        "sections": []
+        "document": "docs/investigations/2026-10-02-bed/RESULT-GDBA.md",
+        "sections": [
+          "docs/investigations/2026-10-02-bed/RESULT-GDBA.md, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)"
+        ]
       },
-      "artifacts": [],
-      "reasons": [
-        "no final bed artifact scores dba: its status cannot be derived from the evidence"
+      "artifacts": [
+        {
+          "path": "B:/data/m8b-bed/C-score-GdBA/summary.json",
+          "sha256": "d5abc0a4bdd772ddd99be8ec55d8891e7ddcebc5baf65122dac69429c5faf169",
+          "section": "docs/investigations/2026-10-02-bed/RESULT-GDBA.md, Numbers (ADDENDUM-6: G and dB(A) end to end on set C)",
+          "git_commit": "5832655db75ef0406fbd7c0e17d7403fef1b3e55",
+          "uncommitted_changes": null,
+          "mode": "SCORED",
+          "checks": [
+            {
+              "read": "score.dba.wrong_silent",
+              "value": 0,
+              "expect": "== 0",
+              "holds": true
+            },
+            {
+              "read": "score.dba.pass_",
+              "value": true,
+              "expect": "== true",
+              "holds": true
+            }
+          ]
+        }
       ],
+      "reasons": [],
       "notes": [
-        "dB(A) = band SPL plus IEC 61672-1 octave weights; unit-tested (decision 21), not scored end to end (backlog 70)."
+        "dB(A) = band SPL plus IEC 61672-1 octave weights over the bands the run computes; IEC 61672-1 itself not in hand, the weights checked against its Annex E closed form (RESULT-GDBA.md).",
+        "Set C only (two specular boxes, 125 Hz - 4 kHz); set B not scored for dB(A).",
+        "No comparison with a measured room (V2-9)."
       ]
     }
   }
