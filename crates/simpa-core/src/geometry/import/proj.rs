@@ -1147,7 +1147,7 @@ fn receiver_elements<'a, 'i>(list: Node<'a, 'i>) -> Result<Vec<(Node<'a, 'i>, St
                     FMT_XML,
                     codes::RECEIVER_GROUP_MALFORMED,
                     format!(
-                        "<{} name=\"{name}\"> in {place} has {what}: it is neither a point                          receiver (8) nor a receiver group (7), and upstream's GUI would skip it                          silently (e_scene_recepteursp.h:55-73)",
+                        "<{} name=\"{name}\"> in {place} has {what}: it is neither a point receiver (8) nor a receiver group (7), and upstream's GUI would skip it silently (e_scene_recepteursp.h:55-73)",
                         node.tag_name().name()
                     ),
                 ));
