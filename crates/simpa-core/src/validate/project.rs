@@ -11,12 +11,16 @@ use super::names::{collision_key, filename_problem};
 use super::{
     Context, Issue, MAX_NAME_BYTES, MAX_TIME_STEPS, SOURCE_CLEARANCE_M, issue, mesh_input_hash,
 };
+use crate::params::air::{Atmosphere, stated_accuracy};
 use crate::schema::{
-    AirAbsorption, Directivity, F64, MaterialId, Project, SOLVER_INT_MAX, SurfaceReceiverShape,
-    Vec3,
+    AirAbsorption, Directivity, F64, MaterialId, Project, SOLVER_INT_MAX, SolverKind,
+    SurfaceReceiverShape, Vec3,
 };
 
 pub(super) fn check(p: &Project, ctx: &Context, out: &mut Vec<Issue>) {
+    if let Some(solver) = ctx.solver {
+        solver_rules(p, solver, out);
+    }
     placeholders(p, out);
     materials(p, out);
     let triangles = geometry::triangles(&p.geometry);
@@ -89,6 +93,28 @@ fn materials_in_use(p: &Project) -> Vec<usize> {
     (0..p.materials.len())
         .filter(|&i| used.contains(&p.materials[i].id))
         .collect()
+}
+
+/// The rules about a run of `solver`. `no_band_computed`: the solver computes at least one of
+/// the project's bands. With every `docalc` 0 it computes nothing and exits normally, as with no
+/// band at all (`band_set_empty`). A project with no band, or flags that do not match the band
+/// set, is those rules' fault, not this one's.
+pub(super) fn solver_rules(p: &Project, solver: SolverKind, out: &mut Vec<Issue>) {
+    let (flags, field, name) = match solver {
+        SolverKind::Spps => (&p.solvers.spps.bands_computed, "spps", "SPPS"),
+        SolverKind::Tcr => (&p.solvers.tcr.bands_computed, "tcr", "TCR"),
+    };
+    let n = p.bands.len();
+    if n == 0 || flags.len() != n || flags.iter().any(|&on| on) {
+        return;
+    }
+    out.push(issue(
+        NO_BAND_COMPUTED,
+        format!("/solvers/{field}/bands_computed"),
+        format!(
+            "{name} computes none of the project's {n} bands: turn at least one on, or the solver              runs, computes nothing and exits as if it had succeeded"
+        ),
+    ));
 }
 
 /// `material_placeholder`: one issue per surface group whose effective material under the active
@@ -701,6 +727,49 @@ fn environment(p: &Project, out: &mut Vec<Issue>) {
             ));
         }
     }
+    formula_range(p, out);
+}
+
+/// `atmosphere_outside_formula_range`: the solvers compute air absorption by ISO 9613-1
+/// (`Coef_Att_Atmos.cpp`) when it is on in either solver and not user-defined. Outside every
+/// range of the standard's clause 7 (`params::air::stated_accuracy`: -20 to +50 °C for its ±10 %
+/// and ±20 % classes, below 200 kPa, and the humidity classes) the standard states no accuracy
+/// for the value, so the run is warned, not refused. Air that is not physical is
+/// `atmosphere_invalid`'s, not this rule's.
+fn formula_range(p: &Project, out: &mut Vec<Issue>) {
+    let e = &p.environment;
+    let used = p.solvers.spps.air_absorption || p.solvers.tcr.air_absorption;
+    if !used || !matches!(e.air_absorption, AirAbsorption::Iso9613) {
+        return;
+    }
+    let air = Atmosphere {
+        temperature_c: e.temperature_c.get(),
+        relative_humidity_percent: e.relative_humidity_percent.get(),
+        pressure_pa: e.pressure_pa.get(),
+    };
+    let outside: Vec<u32> = p
+        .bands
+        .frequencies_hz
+        .iter()
+        .copied()
+        .filter(|&f| f > 0)
+        .filter(|&f| matches!(stated_accuracy(f64::from(f), &air), Ok(None)))
+        .collect();
+    // An error from `stated_accuracy` is air that is not physical: `atmosphere_invalid`.
+    let Some(&first) = outside.first() else {
+        return;
+    };
+    out.push(issue(
+        ATMOSPHERE_OUTSIDE_FORMULA_RANGE,
+        "/environment",
+        format!(
+            "{} °C, {} % relative humidity and {} Pa are outside the range where ISO 9613-1,              the formula the solvers use for air absorption, states an accuracy (clause 7: -20              to +50 °C, below 200 kPa), at {first} Hz{}: the air absorption there is not              validated",
+            air.temperature_c,
+            air.relative_humidity_percent,
+            air.pressure_pa,
+            and_more(outside.len() - 1)
+        ),
+    ));
 }
 
 fn names(p: &Project, out: &mut Vec<Issue>) {

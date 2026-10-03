@@ -972,3 +972,25 @@ fn the_materials_validated_are_the_materials_exported() {
         ExitClass::Usage,
     );
 }
+
+/// `no_band_computed` is judged for the solver the run launches (PQ3 PLAN.md, C25): SPPS with
+/// every band off is refused at the validate stage; TCR, which computes every band of the same
+/// file, passes it (an empty mesh folder stands in for the mesh, so nothing is launched).
+#[test]
+fn every_band_off_refuses_that_solver_s_run_and_not_the_other_s() {
+    let file = fixture("negative/schema/no_band_computed.simpa");
+    let p = simpa_core::schema::load(&file).unwrap();
+    assert!(p.solvers.spps.bands_computed.iter().all(|&on| !on));
+    assert!(p.solvers.tcr.bands_computed.iter().all(|&on| on));
+    let empty = fresh_dir("pq3-no-band-mesh");
+
+    let opts = options("pq3-no-band-spps", SolverKind::Spps, exe_for(SolverKind::Spps));
+    let r = project("spps", &file, &MeshChoice::Reuse(empty.clone()), &opts);
+    assert_refused(&r, Stage::Validate, &["no_band_computed"], ExitClass::Usage);
+    assert_eq!(written(&r).verdict.codes(), ["no_band_computed"]);
+
+    let opts = options("pq3-no-band-tcr", SolverKind::Tcr, exe_for(SolverKind::Tcr));
+    let r = project("tcr", &file, &MeshChoice::Reuse(empty), &opts);
+    assert_refused(&r, Stage::Mesh, &[codes::MESH_MISSING], ExitClass::Mesh);
+    assert!(!written(&r).verdict.codes().contains(&"no_band_computed"));
+}

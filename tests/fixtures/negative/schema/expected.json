@@ -1,6 +1,7 @@
 {
   "absatmo_invalid.simpa": "absatmo_invalid",
   "atmosphere_invalid.simpa": "atmosphere_invalid",
+  "atmosphere_outside_formula_range.simpa": "atmosphere_outside_formula_range",
   "band_duplicate.simpa": "band_duplicate",
   "band_frequency_not_integer.simpa": "band_frequency_not_integer",
   "band_set_empty.simpa": "band_set_empty",
@@ -21,6 +22,7 @@
   "name_duplicate.simpa": "name_duplicate",
   "name_not_filename_safe.simpa": "name_not_filename_safe",
   "name_too_long.simpa": "name_too_long",
+  "no_band_computed.simpa": "no_band_computed",
   "particle_count_invalid.simpa": "particle_count_invalid",
   "receiver_on_surface.simpa": "receiver_on_surface",
   "receiver_outside_volume.simpa": "receiver_outside_volume",
