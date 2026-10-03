@@ -179,7 +179,7 @@ Check "M10 static checks (m10.ps1 -Only static -SkipCore; they run M9's)" {
     $code -eq 0
 }
 
-Check "command inventory: 39 commands (M10's 28, M11's 9, PQ3's edit_reband and row 15's edit_regroup), the same set in the attributes, generate_handler!, build.rs and capabilities" {
+Check "command inventory: 44 commands (M10's 28, M11's 9, PQ3's edit_reband, row 15's edit_regroup and M12's 5 reads), the same set in the attributes, generate_handler!, build.rs and capabilities" {
     $attrs = @()
     foreach ($f in Get-ChildItem (Join-Path $tauriDir 'src') -Filter *.rs) {
         $attrs += @([regex]::Matches((RustCode $f.FullName), '#\[tauri::command\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*pub\s+async\s+fn\s+(\w+)') | ForEach-Object { $_.Groups[1].Value })
@@ -198,7 +198,8 @@ Check "command inventory: 39 commands (M10's 28, M11's 9, PQ3's edit_reband and 
     }
     $absent = @($m11Commands | Where-Object { $attrs -notcontains $_ })
     if ($absent) { Note "M11 commands missing: $($absent -join ', ')" }
-    $same -and $attrs.Count -eq 39 -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup'
+    $m12Reads = @('run_report', 'run_data', 'run_surface_map', 'run_particles', 'run_echogram')
+    $same -and $attrs.Count -eq 44 -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup' -and @($m12Reads | Where-Object { $attrs -notcontains $_ }).Count -eq 0
 }
 
 Check "lint: the M11 commands are called only from actions.ts (and declared in backend.ts)" {

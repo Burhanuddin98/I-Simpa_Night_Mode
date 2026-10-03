@@ -403,7 +403,7 @@ fn is_validator_code(code: &str) -> bool {
     validate::RULES.iter().any(|r| r.code == code) || validate::STRUCTURAL_CODES.contains(&code)
 }
 
-fn reason_ui(r: &simpa_core::run::Reason, stage: Option<Stage>) -> ReasonUi {
+pub(crate) fn reason_ui(r: &simpa_core::run::Reason, stage: Option<Stage>) -> ReasonUi {
     ReasonUi {
         code: r.code.clone(),
         ui_code: run_ui_code(&r.code, stage),
@@ -681,46 +681,10 @@ fn unreadable(name: &str, error: String) -> RunRow {
 
 /// Whether the run `run` of the project under `root` has results that verify, from a solver build
 /// that was verified. `run` must be a bare run-folder name that exists under `root`; anything else
-/// is `RUN_NOT_FOUND`.
+/// is `RUN_NOT_FOUND`. The state is `results_data::open`'s, which the Results step's reads share,
+/// so the two cannot disagree; the results themselves are dropped here.
 pub fn results_state(root: &Path, run: &str) -> CmdResult<ResultsState> {
-    let not_found = || {
-        CmdError::new(
-            "RUN_NOT_FOUND",
-            format!("no run '{run}' in {}", root.display()),
-        )
-    };
-    if !is_run_name(run) {
-        return Err(not_found());
-    }
-    let dir = root.join(run);
-    if !dir.is_dir() {
-        return Err(not_found());
-    }
-    Ok(match results::load(&dir) {
-        // Results that load are verified only when the solver build was (backlog 38); otherwise
-        // they are marked unverified with its reason, not refused (C6).
-        Ok(r) => {
-            let unverified = results::solver_build(&r.manifest)
-                .reason()
-                .map(|x| reason_ui(x, None));
-            ResultsState {
-                run: run.to_string(),
-                verified: unverified.is_none(),
-                refusal: None,
-                unverified,
-            }
-        }
-        Err(r) => ResultsState {
-            run: run.to_string(),
-            verified: false,
-            refusal: Some(ReasonUi {
-                ui_code: r.code.to_ascii_uppercase(),
-                code: r.code,
-                detail: r.detail,
-            }),
-            unverified: None,
-        },
-    })
+    crate::results_data::open(root, run).map(|(state, _)| state)
 }
 
 // ---- the library and the solvers ------------------------------------------------------------------

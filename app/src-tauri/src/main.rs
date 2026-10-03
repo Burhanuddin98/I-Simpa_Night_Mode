@@ -36,6 +36,7 @@ mod bridge;
 mod commands;
 mod events;
 mod guard;
+mod results_data;
 mod runs;
 mod scene;
 mod selftest;
@@ -259,6 +260,11 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::run_cancel,
             commands::runs_list,
             commands::run_results,
+            commands::run_report,
+            commands::run_data,
+            commands::run_surface_map,
+            commands::run_particles,
+            commands::run_echogram,
             commands::proj_import,
             commands::material_library,
             commands::solvers_status,

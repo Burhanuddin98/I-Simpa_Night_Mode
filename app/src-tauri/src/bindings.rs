@@ -17,6 +17,7 @@ use crate::bridge::{FloatProbe, ProjectInfo};
 use crate::commands::{EventsProbeReport, StartupInfo};
 use crate::events::{AppEvent, RunEventBatch};
 use crate::guard::CmdError;
+use crate::results_data::{EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
     LibraryMaterial, ResultsState, RunStarted, RunStreamBatch, RunsView, SolversStatus,
 };
@@ -112,6 +113,22 @@ fn dumps() -> Vec<Dump> {
                     schema_for!(SolversStatus).to_value(),
                 ),
                 ("app_event", "AppEvent", schema_for!(AppEvent).to_value()),
+                // M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 3).
+                (
+                    "report_view",
+                    "ReportView",
+                    schema_for!(ReportView).to_value(),
+                ),
+                (
+                    "run_data_index",
+                    "RunDataIndex",
+                    schema_for!(RunDataIndex).to_value(),
+                ),
+                (
+                    "echogram_view",
+                    "EchogramView",
+                    schema_for!(EchogramView).to_value(),
+                ),
             ],
         },
     ]
