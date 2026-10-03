@@ -106,3 +106,67 @@ lint above.
   `validated_by_bed: true`; P1's open item, backlog 74 / MQ2.
 - P3's map controls sit over the viewport, not in the design's right-hand panel; P3's open items stand.
 - `app/src-tauri/Cargo.toml` shows modified after a build (line endings only); not committed.
+
+## Assay fixes (2026-10-03, after `2833b4a`)
+
+The assay's verdict was **SHIP-WITH-FIXES**: two MED findings and four LOW, recorded with their resolutions in
+`ASSAY.md` beside this file. Five are fixed in three commits; the sixth (H6 `n_classes == 11`) fails safe and is
+left. Receipts: `B:\data\m12\p4\` (`red-assay*`, `green-assay*`, `suite-assay.log`, the gate log).
+
+**What it means for Burhan:** no number on screen changed. The word "validated" is gone from the Simulate step's
+Method hint (it now says "EDT unchecked in energetic mode", the Acoustics tab's own mark), and a test fails if it
+appears in any UI string again. T30 now carries a small mark beside the table: "Ranges on noise-limited T30
+values may be slightly narrow: 1 of 833 checked values fell 1.5 ms outside its range." The RT chart draws each
+value's range as a whisker, and only the values the tables show. Gate (a) now also proves each number sits under
+the right receiver, parameter and band labels, not only that it equals its JSON path.
+
+| Commit | Finding | Change |
+|---|---|---|
+| `a5ef89b` | 1 (MED): "marked not validated" in `SettingsEditor.tsx:403` | Hint uses `EDT_MARKS[1]`; `ui/src/wording.test.ts` parses every UI source file's strings (literals, templates, JSX text, CSS) and fails on "validated"; snake_case field names and comments are not words on screen |
+| `b90e7d5` | 2 (MED): gate (a) never tied a cell's visible labels to its path | `scan` reads each cell's row head, column head and its card's Band/Receiver selection from the DOM with every `data-json` inside; `cellLabelMismatch` requires them to name the paths' receiver, parameter and band; m12-a checks every cell under every selection, and a control swaps two rendered cells' paths |
+| `b90e7d5` | 3 (LOW): RT chart drew raw `.value` outside `cell()` | `rtSeries` built from `cell()` (PASS only, value only with its range and `ok`/`wide`, gaps where refused), with `lo`/`hi` drawn as whiskers; gate (f) compares the range too |
+| `b90e7d5` | 4 (LOW): T30 shown by decision 46 with no mark | `T30_MARK` beside the receivers table while T30 is shown (`paramMarks`, which also carries EDT's two marks and STI's note); marks are `[data-label="mark"]`, checked word for word by m12-a, T30's required by m12-b |
+| `ccff1d3` | 5 (LOW): count mode skipped the draw's code after the step test | One `kept()` gate for both modes, count branch directly after it, no cull after; shaders moved to `particles.ts` so `particles.test.ts` holds that shape |
+| none | 6 (LOW): H6 `n_classes == 11` | Fails safe: any other class count demotes EDT, never promotes; left as is |
+
+### Why count mode and the draw still differ (finding 5)
+
+The draw had no energy cull: a zero-energy record is drawn at the ramp's floor, so the two modes already kept the
+same records. Now both go through `kept()` (a record at its own step, the `.pbin`'s definition of alive, which
+`aliveCounts` counts), and nothing after the count branch may drop a record. Two things differ by design, and gate
+(d) depends on both: **the camera**, because count mode puts every kept record on one pixel, so the count is of
+the particles alive at that step, not of those the current view happens to frame (a particle behind a wall or
+off-screen is still alive and still drawn when the view turns to it); and **the round sprite**, whose
+corner discard in the fragment shader never removes a point's centre pixels, so it cannot hide a particle. Gate
+(d) still compares the GPU's count with alive in the `.pbin` at 5 steps.
+
+### Red, then green
+
+| Test | Red | Green |
+|---|---|---|
+| UI `wording.test.ts` (2) | `red-assay1-wording.txt`: one hit, `features\simulate\SettingsEditor.tsx:403` | `green-assay1-wording.txt`: 2 passed |
+| UI `model.test.ts` (+2: RT chart through `cell()` with range; marks) | `red-assay34-model.txt`: no export `T30_MARK`; `red-assay3-model.txt`: T20 with no range drawn (`[0.555, 0.555]`, want `[null, 0.555]`) | `green-assay34-model.txt`: 12 passed |
+| harness `acoustics.test.ts` (+3: series filter and range, labels against paths with deliberately mislabelled cases and a swap, marks) | `red-assay2-harness.txt`: 3 failed against stubs (`cellLabelMismatch` returning null; the old raw-value series) | `green-assay2-harness.txt`: 10 passed |
+| UI `particles.test.ts` (+1: one `kept()` gate, count branch after it, no cull after) | `red-assay5-particles.txt`: no `kept()` | `green-assay5-particles.txt`: 4 passed |
+| e2e m12-a, m12-b, m12-f, m12-d | the in-run controls (a planted digit; two cells' paths swapped) | the final gate below |
+
+UI `npm test`: 185 passed (180 + 5). Harness `node --test e2e/lib/*.test.ts`: 59 passed (56 + 3). `npm run
+typecheck` and the e2e `tsc`: clean. `m12.ps1` gains one static check (the wording and particle suites) and the
+m12-a/m12-b descriptions name the new checks.
+
+### Suite
+
+Workspace (`cargo test --workspace --no-fail-fast -- --test-threads 2`, `suite-assay.log`, 15:18-15:28, at
+`b90e7d5`): **1110 passed, 0 failed, 40 ignored**, as before: the fixes touched no Rust.
+
+An e2e pre-run before the gate (`m11.ps1 -Only e2e -Spec m12.acoustics,m12.bedplant,m12.viewport`,
+`pre-e2e-assay.log`, 15:28-15:29, under `B:\data\m12\e2e.lock`): m12-a, b, b-plant, e, f, c, d, mq4, p3-maps
+passed. m12-a: 2,546 numbers and 688 strings compared, **738 cells' visible labels held to their paths, 0
+mismatches**; the swap control caught `receivers-table "R1" x "SPL"` carrying R2's G path ("the receiver shown is
+R1, the path's is R2"). m12-b: T30's mark seen word for word; T30 135 cells, 81 with a range. m12-f: the drawn
+series, ranges included, 0 mismatches both ways. m12-d: drawn 33, 2, 1, 0, 27 against alive 33, 2, 1, 0, 27.
+
+### Gate
+
+The full `m12.ps1` (`-TargetDir C:\tmp\nm-target-h -BedData B:\data`) runs after this file is committed and
+pushed; its result is recorded in the commit after it.
