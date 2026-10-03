@@ -28,6 +28,7 @@ fn main() {
         "project_save",
         "edit_apply",
         "edit_reband",
+        "edit_regroup",
         "edit_undo",
         "edit_redo",
         "scene_mesh",

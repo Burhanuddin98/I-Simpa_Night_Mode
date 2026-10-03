@@ -177,7 +177,7 @@ Check "M10 static checks (m10.ps1 -Only static -SkipCore; they run M9's)" {
     $code -eq 0
 }
 
-Check "command inventory: 38 commands (M10's 28, M11's 9 and PQ3's edit_reband), the same set in the attributes, generate_handler!, build.rs and capabilities" {
+Check "command inventory: 39 commands (M10's 28, M11's 9, PQ3's edit_reband and row 15's edit_regroup), the same set in the attributes, generate_handler!, build.rs and capabilities" {
     $attrs = @()
     foreach ($f in Get-ChildItem (Join-Path $tauriDir 'src') -Filter *.rs) {
         $attrs += @([regex]::Matches((RustCode $f.FullName), '#\[tauri::command\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*pub\s+async\s+fn\s+(\w+)') | ForEach-Object { $_.Groups[1].Value })
@@ -196,7 +196,7 @@ Check "command inventory: 38 commands (M10's 28, M11's 9 and PQ3's edit_reband),
     }
     $absent = @($m11Commands | Where-Object { $attrs -notcontains $_ })
     if ($absent) { Note "M11 commands missing: $($absent -join ', ')" }
-    $same -and $attrs.Count -eq 38 -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband'
+    $same -and $attrs.Count -eq 39 -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup'
 }
 
 Check "lint: the M11 commands are called only from actions.ts (and declared in backend.ts)" {

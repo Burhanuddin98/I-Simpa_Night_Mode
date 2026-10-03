@@ -43,6 +43,12 @@ export type Op =
       op: 'remove_surface_group';
     }
   | {
+      faces: number[];
+      group: SurfaceGroup;
+      index: number;
+      op: 'regroup_faces';
+    }
+  | {
       group: string;
       material: string;
       op: 'set_group_material';
@@ -774,6 +780,15 @@ export interface PointReceiver {
    * Background noise, `bfreq@db` per band. `None` writes none.
    */
   background_noise: Spectrum1 | null;
+  /**
+   * The receiver group it sits in, as upstream's GUI groups point receivers (a receiver
+   * list's element of type 7, `e_scene_recepteursp.h:66-70`): the groups' names from the
+   * outermost, joined by ` / `, as [`Source::group`]. `None` at the top level. It reaches no
+   * solver: upstream writes a group's receivers in its place (`e_scene_recepteursp.h:152-161`).
+   * Optional in the file, and not written when `None`, so a project saved before it existed
+   * loads and saves unchanged.
+   */
+  group?: string | null;
   id: string;
   /**
    * `@lbl` and `@name`. SPPS makes it a folder name and TCR a file name.

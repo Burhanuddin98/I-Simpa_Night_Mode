@@ -1423,6 +1423,39 @@
         },
         {
           "additionalProperties": false,
+          "description": "Creates `group` at `index` and moves the listed faces into it (parity G19, \"send selected\nfaces to a new group\"). No face changes material and no receiver or zone gains or loses a\nface:\n\n- `group.material` must be every listed face's own base material, or upstream's\n  placeholder (`validate::is_placeholder_material`, which blocks a run until a material is\n  chosen); any other is refused (`material_change`).\n- Under a variant that gives every listed face one material, the new group gets that\n  material as the variant's override (none when it is the group's own). One that gives\n  them different materials is refused (`split`), unless the new group is the\n  placeholder, which it then shows under that variant too.\n- A scene receiver or surfaces fitting zone holding every listed face gets the new group\n  appended to its groups; one holding some but not all is refused (`split`).\n\nRefused too: an empty face list, a face index out of range or listed twice (`faces`), and\na group id or name already taken. The faces' former groups stay, even if empty. The\ninverse puts every face back in its former group and removes the new group; it is a\n[`Op::Batch`] of the inverse ops. [`Project::regrouped`] picks the material.",
+          "properties": {
+            "faces": {
+              "items": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            "group": {
+              "$ref": "#/$defs/SurfaceGroup"
+            },
+            "index": {
+              "format": "uint",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "op": {
+              "const": "regroup_faces",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "index",
+            "group",
+            "faces"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "properties": {
             "group": {
               "format": "uuid",
@@ -2129,6 +2162,13 @@
             }
           ],
           "description": "Background noise, `bfreq@db` per band. `None` writes none."
+        },
+        "group": {
+          "description": "The receiver group it sits in, as upstream's GUI groups point receivers (a receiver\nlist's element of type 7, `e_scene_recepteursp.h:66-70`): the groups' names from the\noutermost, joined by ` / `, as [`Source::group`]. `None` at the top level. It reaches no\nsolver: upstream writes a group's receivers in its place (`e_scene_recepteursp.h:152-161`).\nOptional in the file, and not written when `None`, so a project saved before it existed\nloads and saves unchanged.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "id": {
           "format": "uuid",

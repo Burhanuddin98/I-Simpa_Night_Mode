@@ -408,6 +408,17 @@ pub async fn edit_reband(
     .await
 }
 
+/// New group from selection (scope row 15 (1), G19): `faces` (indices into the mesh) sent to a
+/// new surface group, as one undoable checked apply (`Session::edit_regroup`).
+#[tauri::command(rename_all = "snake_case")]
+pub async fn edit_regroup(state: State<'_, AppState>, faces: Vec<u32>) -> CmdResult<EditOutcome> {
+    let session = state.session.clone();
+    guard::blocking("edit_regroup", move || {
+        lock(&session, "project")?.edit_regroup(&faces)
+    })
+    .await
+}
+
 #[tauri::command(rename_all = "snake_case")]
 pub async fn edit_undo(state: State<'_, AppState>) -> CmdResult<SceneState> {
     let session = state.session.clone();

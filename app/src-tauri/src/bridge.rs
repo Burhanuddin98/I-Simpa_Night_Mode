@@ -19,7 +19,8 @@ use serde::Serialize;
 use simpa_core::geometry::check;
 use simpa_core::geometry::import::{self, ImportOptions, Unit, Up};
 use simpa_core::schema::{
-    self, BandKind, BandSet, F64, History, LoadError, Op, OpError, Project, SolverKind,
+    self, BandKind, BandSet, EntityRef, F64, GroupId, History, LoadError, MaterialId, Op, OpError,
+    Project, SolverKind,
 };
 use simpa_core::validate::{self, Context};
 
@@ -142,10 +143,11 @@ fn no_project() -> CmdError {
     CmdError::new("NO_PROJECT", "no project is open")
 }
 
-/// Whether an op holds a `set_geometry`, directly or inside a batch.
+/// Whether an op changes the mesh buffer (`scene::mesh_bytes`): a `set_geometry`, or a
+/// `regroup_faces` (each face's group index), directly or inside a batch.
 fn touches_geometry(op: &Op) -> bool {
     match op {
-        Op::SetGeometry { .. } => true,
+        Op::SetGeometry { .. } | Op::RegroupFaces { .. } => true,
         Op::Batch { ops } => ops.iter().any(touches_geometry),
         _ => false,
     }
@@ -543,9 +545,16 @@ impl Session {
             .map(|i| scene::ui_issue(&candidate, i))
             .collect();
         let before: HashSet<IssueKey> = self.issues.iter().map(scene::issue_key).collect();
+        // A surface group the edit creates may start with upstream's placeholder (G19's new group
+        // from faces of different materials): that is "no material chosen yet", a run blocker
+        // the Scene panel shows, not a value the edit broke. Every other new error refuses.
+        let created_group = |i: &UiIssue| {
+            i.rule == validate::codes::MATERIAL_PLACEHOLDER
+                && matches!(i.entity, Some(EntityRef::SurfaceGroup(g)) if project.group(g).is_none())
+        };
         let (refusals, warnings): (Vec<&UiIssue>, Vec<&UiIssue>) = after
             .iter()
-            .filter(|i| !before.contains(&scene::issue_key(i)))
+            .filter(|i| !before.contains(&scene::issue_key(i)) && !created_group(i))
             .partition(|i| i.severity == IssueSeverity::Error);
         if !refusals.is_empty() {
             let refusals: Vec<UiIssue> = refusals.into_iter().cloned().collect();
@@ -623,6 +632,27 @@ impl Session {
         };
         let bands = BandSet::range(kind, lowest_hz, highest_hz).ok_or_else(range_error)?;
         let op = project.rebanded(bands).ok_or_else(range_error)?;
+        self.edit_apply(&op.to_json())
+    }
+
+    /// "New group from selection" (scope row 15 (1), G19): `faces` sent to a new surface group
+    /// named `Group <n>` (the first free n; upstream names it `Group`), with the material
+    /// [`Project::regrouped`] picks, through the checked apply as one undoable edit. A refusal
+    /// of the op itself (a selection straddling a receiver, a bad face list) is an error with
+    /// that op's own code, not the batch's.
+    pub fn edit_regroup(&mut self, faces: &[u32]) -> CmdResult<EditOutcome> {
+        let project = self.project.as_ref().ok_or_else(no_project)?;
+        let name = (1u32..)
+            .map(|n| format!("Group {n}"))
+            .find(|n| !project.surface_groups.iter().any(|g| &g.name == n))
+            .expect("some n is free");
+        let op = project.regrouped(faces, GroupId::random(), &name, MaterialId::random());
+        if let Err(mut e) = op.clone().apply(&mut project.clone()) {
+            while let OpError::Batch { error, .. } = e {
+                e = *error;
+            }
+            return Err(op_error(&e));
+        }
         self.edit_apply(&op.to_json())
     }
 
@@ -1363,5 +1393,159 @@ mod pq3_tests {
                 .code,
             "NO_PROJECT"
         );
+    }
+}
+
+/// Scope row 15 (1), G19: "New group from selection" (`edit_regroup`) through the checked apply.
+#[cfg(test)]
+mod row15_tests {
+    use super::*;
+    use crate::scene::MATERIALS_UNASSIGNED;
+
+    fn repo(rel: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(rel)
+    }
+
+    fn opened(rel: &str) -> Session {
+        let mut s = Session::default();
+        s.scene_open(&repo(rel)).unwrap();
+        s
+    }
+
+    fn project(s: &Session) -> &Project {
+        s.project.as_ref().unwrap()
+    }
+
+    /// The teaching room: Ceiling faces 10, 11; Floor 0, 1 (the scene receiver's group); Walls 2
+    /// to 9.
+    const BOX: &str = "tests/fixtures/rooms/tutorial1_box.simpa";
+
+    /// Two wall faces: one edit, the new group `Group 1` with Walls' material, the mesh buffer's
+    /// revision moved (its per-face group changed), and one undo gives the project back byte
+    /// for byte; redo gives the edited one.
+    #[test]
+    fn regroup_is_one_checked_edit_and_one_undo_restores_the_project() {
+        let mut s = opened(BOX);
+        let before = s.json().unwrap();
+        let rev = s.info().unwrap().geometry_rev;
+        let walls_m = project(&s).surface_groups[2].material;
+        let out = s.edit_regroup(&[2, 3]).unwrap();
+        assert!(out.applied, "{:?}", out.refusals);
+        let g = out.state.view.surface_groups.last().unwrap().clone();
+        assert_eq!(g.name, "Group 1");
+        assert_eq!(g.material, walls_m);
+        assert_eq!(out.state.view.surface_groups.len(), 4);
+        assert!(out.state.info.geometry_rev > rev);
+        assert!(out.state.info.dirty);
+        assert_eq!(out.state.info.undo_depth, 1);
+        let after = s.json().unwrap();
+        // The mesh buffer's group index of faces 2 and 3 is the new group's, 3.
+        let mesh = s.mesh().unwrap();
+        let nv = project(&s).geometry.vertices.len();
+        let at = 24 + 24 * nv + 12 * 12;
+        let gi = |face: usize| {
+            u32::from_le_bytes(mesh[at + 4 * face..at + 4 * face + 4].try_into().unwrap())
+        };
+        assert_eq!((gi(2), gi(3), gi(4)), (3, 3, 2));
+
+        s.edit_undo().unwrap();
+        assert_eq!(s.json().unwrap(), before);
+        s.edit_redo().unwrap();
+        assert_eq!(s.json().unwrap(), after);
+
+        // The next one is `Group 2`.
+        let out = s.edit_regroup(&[4, 5]).unwrap();
+        assert!(out.applied);
+        assert_eq!(
+            out.state.view.surface_groups.last().unwrap().name,
+            "Group 2"
+        );
+    }
+
+    /// Faces of two materials: the new group is the placeholder. The checked apply accepts it
+    /// (a group the edit creates may start with no material chosen); the run is blocked until a
+    /// material is set, and two undos give back the original.
+    #[test]
+    fn a_new_group_with_the_placeholder_is_accepted_and_blocks_the_run() {
+        let mut s = opened(BOX);
+        let before = s.json().unwrap();
+        assert!(
+            !s.state()
+                .unwrap()
+                .run_blockers
+                .iter()
+                .any(|b| b == MATERIALS_UNASSIGNED)
+        );
+        let out = s.edit_regroup(&[2, 10]).unwrap();
+        assert!(out.applied, "{:?}", out.refusals);
+        let st = out.state;
+        let g = st.view.surface_groups.last().unwrap().clone();
+        assert!(
+            st.issues
+                .iter()
+                .any(|i| i.rule == "material_placeholder" && i.path == "/surface_groups/3/material")
+        );
+        assert!(st.run_blockers.iter().any(|b| b == MATERIALS_UNASSIGNED));
+        assert!(!st.groups.iter().find(|x| x.id == g.id).unwrap().assigned);
+
+        let ceiling_m = project(&s).surface_groups[0].material;
+        let out = s
+            .edit_apply(
+                &Op::SetGroupMaterial {
+                    group: g.id,
+                    material: ceiling_m,
+                }
+                .to_json(),
+            )
+            .unwrap();
+        assert!(out.applied, "{:?}", out.refusals);
+        assert!(
+            !out.state
+                .run_blockers
+                .iter()
+                .any(|b| b == MATERIALS_UNASSIGNED)
+        );
+
+        s.edit_undo().unwrap();
+        s.edit_undo().unwrap();
+        assert_eq!(s.json().unwrap(), before);
+
+        // Setting an existing group to the placeholder is still refused: only a group the
+        // edit itself creates may start unassigned.
+        s.edit_regroup(&[2, 10]).unwrap();
+        let placeholder = project(&s).surface_groups[3].material;
+        let floor = project(&s).surface_groups[1].id;
+        let out = s
+            .edit_apply(
+                &Op::SetGroupMaterial {
+                    group: floor,
+                    material: placeholder,
+                }
+                .to_json(),
+            )
+            .unwrap();
+        assert!(!out.applied);
+        assert_eq!(out.refusals[0].rule, "material_placeholder");
+    }
+
+    /// A selection with faces in and out of the scene receiver is refused by its own reason,
+    /// not the batch's, and nothing changes, the history included.
+    #[test]
+    fn a_selection_straddling_a_receiver_is_refused_by_its_reason() {
+        let mut s = opened(BOX);
+        let before = s.json().unwrap();
+        let err = s.edit_regroup(&[0, 2]).unwrap_err();
+        assert_eq!(err.code, "OP_SPLIT", "{}", err.message);
+        assert!(
+            err.message.contains("surface receiver 'Receiver'"),
+            "{}",
+            err.message
+        );
+        assert_eq!(s.json().unwrap(), before);
+        assert_eq!(s.info().unwrap().undo_depth, 0);
+        assert_eq!(s.edit_regroup(&[]).unwrap_err().code, "OP_FACES");
+        assert_eq!(s.edit_regroup(&[2, 99]).unwrap_err().code, "OP_FACES");
     }
 }

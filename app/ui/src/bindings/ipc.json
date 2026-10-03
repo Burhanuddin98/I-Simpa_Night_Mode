@@ -1026,6 +1026,13 @@
           ],
           "description": "Background noise, `bfreq@db` per band. `None` writes none."
         },
+        "group": {
+          "description": "The receiver group it sits in, as upstream's GUI groups point receivers (a receiver\nlist's element of type 7, `e_scene_recepteursp.h:66-70`): the groups' names from the\noutermost, joined by ` / `, as [`Source::group`]. `None` at the top level. It reaches no\nsolver: upstream writes a group's receivers in its place (`e_scene_recepteursp.h:152-161`).\nOptional in the file, and not written when `None`, so a project saved before it existed\nloads and saves unchanged.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "format": "uuid",
           "type": "string"
