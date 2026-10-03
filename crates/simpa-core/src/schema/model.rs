@@ -963,10 +963,15 @@ impl SppsSettings {
     /// mode kills particles by chance, so its decays run out of particles long before T20 and
     /// T30 can be read); and `extinction_exponent`, 7, not upstream's 5 (decision row 41: at 5
     /// energetic particles are dropped before the floor clears T30 in most rooms, and T30 reads
-    /// about 0.4 % short where it answers; `docs/investigations/2026-10-02-eps-cost/RESULT.md`).
-    /// An imported legacy project with no `duree_simulation`, `pasdetemps`, `computation_method`
-    /// or `trans_epsilon` still keeps upstream's actual 2 s, 10 ms, random and 5
-    /// (`geometry::import::proj::read_solvers`); a `config.xml` always names its own.
+    /// about 0.4 % short where it answers; `docs/investigations/2026-10-02-eps-cost/RESULT.md`);
+    /// and `echogram_per_source`, on, not upstream's off (PQ3 call 3: with it a project of two or
+    /// more sources gets each source's decay parameters, which a summed echogram does not give;
+    /// a seeded run of the teaching room gave every other output identical with it on and off,
+    /// `docs/investigations/2026-10-03-pq3/BUILD.md`).
+    /// An imported legacy project with no `duree_simulation`, `pasdetemps`, `computation_method`,
+    /// `trans_epsilon` or `output_recp_bysource` still keeps upstream's actual 2 s, 10 ms,
+    /// random, 5 and off (`geometry::import::proj::read_solvers`); a `config.xml` always names
+    /// its own, or off.
     pub fn for_bands(n_bands: usize) -> Self {
         SppsSettings {
             particles_per_source: 150_000,
@@ -983,7 +988,7 @@ impl SppsSettings {
             receiver_radius_m: F64::new(0.31),
             sound_map: SoundMapQuantity::Intensity,
             sound_maps_per_band: true,
-            echogram_per_source: false,
+            echogram_per_source: true,
             save_surface_intersections: true,
             save_receiver_intersections: true,
             bands_computed: vec![true; n_bands],
