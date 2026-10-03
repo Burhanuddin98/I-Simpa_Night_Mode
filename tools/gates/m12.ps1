@@ -130,6 +130,32 @@ Check "item 4: m10-h and m11-h narrowed to no number outside the Results step, a
     $code -eq 0 -and (Select-String -Path $log -Pattern 'M12: a number in the Results regions' -Quiet)
 }
 
+# ---- P3: the viewport's e2e (gate (c), (d), MQ4), on m11.ps1's harness ---------------------------
+# app/e2e/specs/m12.viewport.e2e.ts, run by `m11.ps1 -Only e2e -Spec m12.viewport`: the release
+# build, tauri-driver and msedgedriver, the private verified solver copy, the projects on C:, the
+# e2e lock and the focus watcher are m11.ps1's. The ids are read from its junit verdict lines.
+$p3Spec = 'm12.viewport'
+$p3Ids = [ordered]@{
+    'm12-c'       = '3 sampled texels of the map read back from the GPU == the .csbin float32s, bit for bit'
+    'm12-d'       = 'at 5 steps the particles drawn (counted on the GPU) == alive in the .pbin, map on the same step'
+    'm12-mq4'     = 'MQ4: particles saved 0 says "No particles saved for this run" and how to turn it on, with the file size'
+    'm12-p3-maps' = 'legend range, band choice, difference from the baseline run, Play on one timeline'
+}
+foreach ($id in @('m12-c', 'm12-d')) { $gateIds.Remove($id) }
+if ($Only -eq 'all') {
+    $script:p3Log = Join-Path $work 'p3-e2e.log'
+    Check "P3 e2e: m11.ps1 -Only e2e -Spec $p3Spec exits 0" {
+        $code = Native "powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\tools\gates\m11.ps1`" -Only e2e -Spec $p3Spec -TargetDir `"$target`" -SolversDir `"$SolversDir`" -Upstream `"$Upstream`"" $script:p3Log
+        Get-Content $script:p3Log | Where-Object { $_ -match '^(PASS|FAIL) |^M11 |receipt' } | ForEach-Object { Note $_.Trim() }
+        $code -eq 0
+    }
+    foreach ($id in $p3Ids.Keys) {
+        Check "${id}: $($p3Ids[$id])" {
+            (Test-Path $script:p3Log) -and @(Get-Content $script:p3Log | Where-Object { $_ -match "^\s+passed\s+[\d.,]+ s\s+$([regex]::Escape($id))\s" }).Count -eq 1
+        }
+    }
+} else { Note "P3 e2e ($p3Spec): not run (-Only static)" }
+
 # ---- 2. the gate's e2e ids (P2, P3; wired by P4) ---------------------------------------------------
 if ($Only -eq 'all') {
     foreach ($id in $gateIds.Keys) {
