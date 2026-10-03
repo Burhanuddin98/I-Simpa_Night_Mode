@@ -5,7 +5,8 @@
 //
 // Nothing loads off the Results step. A run whose results are refused or unverified shows no map
 // (the panel says why); a run that saved no particles shows MQ4's notice instead of playback.
-import { asCmdError, backend } from '../../backend';
+import * as actions from '../../actions';
+import { asCmdError } from '../../backend';
 import type { RunData, SurfaceMapInfo } from '../../bindings/ipc';
 import { decodeParticles, decodeSurfaceMap, type SurfaceMap } from '../../resultsData';
 import { runsStore, sceneStore, selectedRunStore, stepStore, Store } from '../../store';
@@ -110,7 +111,7 @@ async function loadIndex(run: string, g: number): Promise<void> {
   showMap(null);
   showParticles(null);
   try {
-    const idx = await backend.runData(run);
+    const idx = await actions.runData(run);
     if (!fresh(g)) return;
     if (idx.state.refusal || !idx.data) {
       set({ status: 'refused', message: 'Results refused: no map is drawn for this run.' });
@@ -135,7 +136,7 @@ async function loadIndex(run: string, g: number): Promise<void> {
 }
 
 async function mapBytes(run: string, path: string): Promise<SurfaceMap> {
-  return decodeSurfaceMap(await backend.runSurfaceMap(run, path));
+  return decodeSurfaceMap(await actions.runSurfaceMap(run, path));
 }
 
 async function loadMap(g: number): Promise<void> {
@@ -156,7 +157,7 @@ async function loadMap(g: number): Promise<void> {
     if (v.diff) {
       if (!v.baseline) reason = 'No other run to compare with.';
       else {
-        const bi = await backend.runData(v.baseline);
+        const bi = await actions.runData(v.baseline);
         if (!fresh(g)) return;
         if (!bi.data || !bi.state.verified) reason = `${runLabel(v.baseline)}: results not verified.`;
         else if (!bi.data.surfaces.some((s) => s.path === info.path)) reason = `${runLabel(v.baseline)} has no ${groupLabel(info).toLowerCase()} map at ${bandName(v.bandHz)}.`;
@@ -210,7 +211,7 @@ async function loadParticles(g: number): Promise<void> {
   const band = d.particle_files.some((f) => f.freq_hz === v.bandHz) ? (v.bandHz as number) : d.particle_files[0].freq_hz;
   set({ particles: { state: 'loading', bandHz: band } });
   try {
-    const p = decodeParticles(await backend.runParticles(v.run, band));
+    const p = decodeParticles(await actions.runParticles(v.run, band));
     if (!fresh(g)) return;
     showParticles(p, { run: v.run, bandHz: band, particles: p.particleCount, records: p.recordCount });
     set({ particles: { state: 'shown', bandHz: band, particles: p.particleCount } });

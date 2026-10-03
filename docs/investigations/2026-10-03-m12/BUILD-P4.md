@@ -33,6 +33,15 @@ P1.1 (`e8acdc5`) touched none of P2's or P3's files. No report version or IPC co
 12 and its pin (`667ef5d3...`); P1.1 changed the summary's content, not the report's fields; P3 added no command,
 so m11's inventory stays at P1's 44.
 
+One integration fault, found by the first full gate run (`gate-final-m12-1.log`, 14:34-14:49, at `741b76a`):
+M10's lint "backend is called only from actions.ts, selftest.ts and App.tsx" failed on P3's
+`features/viewport/resultsView.ts` (`backend.runData` x2, `backend.runSurfaceMap`, `backend.runParticles`). P3
+had not run the prior gates (BUILD-P3, Regression). Fixed in `actions.ts` with three pass-through actions
+(`runData`, `runSurfaceMap`, `runParticles`; no busy line or Console entry, so the viewport's behaviour is
+unchanged) that `resultsView.ts` now calls. Every other check of that run passed: P1's six, P2's three static, the
+P2+plant e2e and m12-a, b, b-plant, e, f, the P3 e2e and m12-c, d, mq4, p3-maps; in M11, only this M10 lint (and
+the m10 call it sits in) failed; M9 PASSED; 0 files left in the repository.
+
 One environment fault on the first e2e try, not a code fault: the worktree's `app/node_modules` predated P2's
 `uplot` dependency, so `tsc` read uPlot's callbacks as `any` (`red-e2e-bedplant.log`). `npm ci` from the
 lockfile fixed it (`npm-ci.log`).
