@@ -67,7 +67,8 @@ m-target-h`, in full (`m11-full-1.log`, 09:18-09:31): all 32 checks PASS
   (static and lints, app 59, both clippys, rustfmt, UI fixtures, the gate's core selection 896 passed / 0 failed / 36
   ignored in 84 binaries, release build, harness, e2e, prior gates m10 `-SkipCore` exit 0 and m9 "M9 PASSED",
   m11-focus), and it printed "M11 FAILED: 1 check(s)" for the last one: this BUILD.md, untracked while the gate ran,
-  was a file left in the repository. Rerun with it committed: RERUN_RESULT
+  was a file left in the repository. Rerun with it committed (`m11-full-2.log`, 09:32-09:44, at the BUILD.md commit): **M11 PASSED**, 32 of 32
+  checks, core selection 896 / 0 / 36, e2e 35 of 35, 0 files left in the repository.
 - e2e, inside that gate: **35 of 35 required ids passed**, 0 failures, 0 skipped (all ten specs; `settings` adds
   3). A first `-Only e2e -Spec simulate,settings` run (`m11-e2e-1.log`) passed 9 of 9.
 
