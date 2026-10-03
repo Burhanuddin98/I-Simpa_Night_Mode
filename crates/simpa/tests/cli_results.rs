@@ -262,6 +262,54 @@ fn assert_bed_read_from_the_summary(rep: &Value) {
     assert_eq!(rep["results_version"], 12);
 }
 
+/// M12 gate (b)'s plant through the CLI (P4): `$SIMPA_BED_DEMOTE` naming
+/// `tests/fixtures/beds/summary-c80-fail.json` turns C80 FAIL in `simpa results --json`, with the
+/// plant named in its reasons and in `bed.summary`, and leaves every other parameter as the
+/// committed summary says; the compiled-in sha256 is unchanged. Without it the report is the file's.
+#[test]
+fn m12_the_bed_demote_plant_fails_c80_in_the_cli_report_and_nothing_else() {
+    let run = fixture(SEATS_SPPS);
+    let plain = json(&results(&run, true));
+    assert_bed_read_from_the_summary(&plain);
+    let plant = paths::repo_file("tests/fixtures/beds/summary-c80-fail.json");
+    let o = simpa_run_env(
+        &[
+            "results".to_string(),
+            run.display().to_string(),
+            "--json".into(),
+        ],
+        &[("SIMPA_BED_DEMOTE", plant.as_os_str())],
+    );
+    assert_eq!(o.code, 0, "{o:#?}");
+    let rep = json(&o);
+    let got = rep["bed"]["parameters"].as_object().unwrap();
+    let want = plain["bed"]["parameters"].as_object().unwrap();
+    assert_eq!(got["c80_db"]["status"], "FAIL");
+    let reasons = got["c80_db"]["reasons"].as_array().unwrap();
+    assert!(
+        reasons.iter().any(|r| r
+            .as_str()
+            .unwrap()
+            .starts_with("demoted by $SIMPA_BED_DEMOTE (")),
+        "{reasons:?}"
+    );
+    for (name, p) in want {
+        if name != "c80_db" {
+            assert_eq!(&got[name], p, "{name}");
+        }
+    }
+    assert_eq!(rep["validated_by_bed"], false);
+    assert_eq!(rep["bed"]["summary_sha256"], plain["bed"]["summary_sha256"]);
+    assert!(
+        rep["bed"]["summary"]
+            .as_str()
+            .unwrap()
+            .starts_with("beds/summary.json, demoted by $SIMPA_BED_DEMOTE ("),
+        "{}",
+        rep["bed"]["summary"]
+    );
+}
+
 #[test]
 fn gate_e_seat_and_seat2_are_both_read_each_from_its_own_folder() {
     let run = fixture(SEATS_SPPS);

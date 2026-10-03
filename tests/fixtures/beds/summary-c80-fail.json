@@ -1,0 +1,62 @@
+{
+  "what": "M12 gate (b)'s plant, read through $SIMPA_BED_DEMOTE: C80 FAIL, the rest PASS. It can only demote: a parameter is PASS only where both this file and beds/summary.json say PASS. Not bed evidence.",
+  "parameters": {
+    "spl_db": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "edt_s": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "t20_s": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "t30_s": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "c50_db": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "c80_db": {
+      "status": "FAIL",
+      "reasons": [
+        "planted by tests/fixtures/beds/summary-c80-fail.json: M12 gate (b) proves a FAIL parameter has no element (not evidence; C80's real status is beds/summary.json's)"
+      ],
+      "notes": []
+    },
+    "d50": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "ts_s": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "sti": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "g_db": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    },
+    "dba": {
+      "status": "PASS",
+      "reasons": [],
+      "notes": []
+    }
+  }
+}

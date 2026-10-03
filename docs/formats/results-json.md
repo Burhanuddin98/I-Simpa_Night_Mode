@@ -198,6 +198,15 @@ true only when all eleven are PASS, so a reader must use the per-parameter statu
 fields at every depth are pinned to `results_version` by a test (`report.rs`,
 `the_required_fields_are_pinned_to_the_results_version`, backlog 47).
 
+**`$SIMPA_BED_DEMOTE`, a test-only lever (M12 P4).** When set, it names a file of the summary's
+shape, and a parameter is PASS only where both `beds/summary.json` and that file say PASS: it can hide
+a number and never show one. A demoted parameter's `reasons` gain `demoted by $SIMPA_BED_DEMOTE
+(<path>): ...`, `summary` reads `beds/summary.json, demoted by $SIMPA_BED_DEMOTE (<path>)`, and
+`summary_sha256` stays the compiled-in file's. A file that cannot be read, or does not read, fails
+every parameter. M12 gate (b)'s plant (`app/e2e/specs/m12.bedplant.e2e.ts`) runs the app and the
+CLI with `tests/fixtures/beds/summary-c80-fail.json`, so the gate proves a FAIL is not rendered while
+every real status is PASS.
+
 ### `spps`
 
 | Field | What |

@@ -9,8 +9,10 @@
 //          and a planted wrong digit is caught by the same comparison
 //   m12-b  0 elements for a parameter whose status in beds/summary.json is not PASS, under every
 //          selection, and its name nowhere in the tab's or the Results panel's text; the run's
-//          report carries the file's statuses. Control: every PASS parameter that has a place
-//          on the tab has elements there
+//          report carries the file's statuses; every PASS parameter has elements and cells,
+//          each with its range and status or its refusal, T30 drawn, EDT with row 37's two
+//          marks. With all eleven PASS the hiding half is empty here: m12.bedplant's
+//          m12-b-plant proves it on a FAIL planted through core ($SIMPA_BED_DEMOTE)
 //   m12-e  the DIN 18041 A3 target shown for the 180 m3 box reads 0.55 s, from the report's
 //          own path. Control: A1 reads its own value, not 0.55
 //   m12-f  a variant (the rear wall in a 0.6 curtain) run beside the baseline: switching the
@@ -19,179 +21,30 @@
 //          runs' series differ, so the check can tell them apart
 //
 // Its files, under <M11_WORK>\m12 (C:): a copy of the box and its runs. The repository is only
-// read (beds/summary.json, the fixture).
+// read (beds/summary.json, the fixture). The tab is driven and read by lib/acousticsTab.ts, shared
+// with m12.bedplant.e2e.ts (P4).
 import { strict as assert } from 'node:assert';
-import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { MQ2_WORDING, notPassed, numberMismatch, PARAM_LABELS, seriesMismatches, strayDigits, stringMismatch } from '../lib/acoustics.ts';
 import {
-  labelPattern,
-  MQ2_WORDING,
-  notPassed,
-  numberMismatch,
-  PARAM_LABELS,
-  type NumEl,
-  seriesMismatches,
-  strayDigits,
-  stringMismatch,
-} from '../lib/acoustics.ts';
+  assertPassRendered,
+  bedSweep,
+  cliReport,
+  everySelection,
+  ownBox,
+  PANEL,
+  pick,
+  type Row,
+  runSpps,
+  scan,
+  showRun,
+  summary,
+  type View,
+} from '../lib/acousticsTab.ts';
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
 import { env } from '../lib/types.ts';
 
-const repo = (rel: string) => path.join(env('M11_REPO'), rel);
 const WORK = () => path.join(env('M11_WORK'), 'm12');
-const PANEL = '[data-dock-panel="acoustics"]';
-
-interface Row {
-  run: string;
-  number: number;
-  status: string;
-  variant?: string | null;
-}
-interface Series {
-  param: string;
-  paths: string[];
-  values: (number | null)[];
-}
-interface View {
-  state: string;
-  run: string | null;
-  receiver: number;
-  band: string;
-  din: string;
-  series: Series[];
-}
-interface Scan {
-  state: string | null;
-  run: string | null;
-  nums: NumEl[];
-  strs: { path: string; text: string }[];
-  labels: { kind: string; param: string | null; text: string }[];
-  cells: { param: string; receiver: string; band: string; status: string; nums: string[]; refusal: string | null; note: string | null }[];
-  params: string[];
-  stray: string;
-  options: { control: string; value: string; text: string }[];
-  text: string;
-}
-
-/** Copies the box into this spec's own folder, so its runs root is this spec's. */
-function ownBox(): string {
-  mkdirSync(WORK(), { recursive: true });
-  const to = path.join(WORK(), 'box_run.simpa');
-  copyFileSync(repo('tests/fixtures/ui/box_run.simpa'), to);
-  return to;
-}
-
-/** `simpa results <run> --json`, parsed: the CLI's report, outside the app. */
-function cliReport(project: string, run: string): Record<string, unknown> {
-  const dir = path.join(path.dirname(project), 'runs', run);
-  const out = execFileSync(env('M11_SIMPA'), ['results', dir, '--json'], { maxBuffer: 1 << 30, encoding: 'utf8' });
-  return JSON.parse(out) as Record<string, unknown>;
-}
-
-/** Runs SPPS from the app and waits for it to end OK; its Runs row. */
-async function runSpps(): Promise<Row> {
-  const before = new Set((await hook<Row[]>('runsRows')).map((r) => r.run));
-  await hook('setSolver', 'spps');
-  await hook('runStart', 'spps');
-  let fresh: Row | undefined;
-  await browser.waitUntil(
-    async () => {
-      if ((await hook<unknown>('runState')) !== null) return false;
-      fresh = (await hook<Row[]>('runsRows')).find((r) => !before.has(r.run) && r.status !== 'RUNNING');
-      return fresh !== undefined;
-    },
-    { timeout: 900_000, interval: 500, timeoutMsg: 'no SPPS run ended within 900 s' },
-  );
-  await m10.idle();
-  assert.equal(fresh?.status, 'OK', `the run ended ${fresh?.status}`);
-  return fresh as Row;
-}
-
-/** Shows the Results step and the Acoustics tab, and waits until it shows `run`, ready. */
-async function showRun(run: string): Promise<void> {
-  await m10.setStep('results');
-  await hook('dockTab', 'acoustics');
-  await browser.waitUntil(
-    async () => {
-      const v = await hook<View | null>('acousticsView');
-      return v !== null && v.run === run && v.state === 'ready';
-    },
-    { timeout: 60_000, interval: 250, timeoutMsg: `the Acoustics tab did not show ${run} ready` },
-  );
-}
-
-/** Picks an option of one of the tab's controls, as a user does, and waits for the page. */
-async function pick(control: string, value: string): Promise<void> {
-  const sel = await $(`${PANEL} select[data-control="${control}"]`);
-  await sel.waitForExist({ timeout: 10_000 });
-  await sel.selectByAttribute('value', value);
-  await browser.waitUntil(async () => (await sel.getValue()) === value, { timeout: 10_000 });
-  await m10.idle();
-}
-
-/** The tab as shown: its marked numbers, strings and words, its cells, and its text with all of
- * them, its controls and the run label removed (`stray`), which must hold no digit. */
-const scan = (): Promise<Scan> =>
-  browser.execute((panelSel: string) => {
-    const panel = document.querySelector<HTMLElement>(panelSel);
-    const root = panel?.querySelector<HTMLElement>('[data-acoustics]') ?? null;
-    const all = (sel: string) => (panel ? [...panel.querySelectorAll<HTMLElement>(sel)] : []);
-    const clone = panel ? (panel.cloneNode(true) as HTMLElement) : null;
-    clone?.querySelectorAll('[data-num], [data-str], [data-label], select, [data-run-label]').forEach((e) => e.remove());
-    return {
-      state: root?.getAttribute('data-acoustics-state') ?? null,
-      run: root?.getAttribute('data-run') ?? null,
-      nums: all('[data-num]').map((e) => ({
-        path: e.getAttribute('data-json') ?? '',
-        text: e.textContent ?? '',
-        digits: e.getAttribute('data-digits'),
-        scale: e.getAttribute('data-scale'),
-      })),
-      strs: all('[data-str]').map((e) => ({ path: e.getAttribute('data-json') ?? '', text: e.textContent ?? '' })),
-      labels: all('[data-label]').map((e) => ({ kind: e.getAttribute('data-label') ?? '', param: e.getAttribute('data-param'), text: e.textContent ?? '' })),
-      cells: all('[data-cell]').map((e) => ({
-        param: e.getAttribute('data-param') ?? '',
-        receiver: e.getAttribute('data-receiver') ?? '',
-        band: e.getAttribute('data-band') ?? '',
-        status: e.getAttribute('data-status') ?? '',
-        nums: [...e.querySelectorAll('[data-num]')].map((n) => n.getAttribute('data-json') ?? ''),
-        refusal: e.querySelector('[data-refusal]')?.getAttribute('data-refusal') ?? null,
-        note: e.querySelector('[data-note]')?.getAttribute('data-note') ?? null,
-      })),
-      params: [...document.querySelectorAll('[data-param]')].map((e) => e.getAttribute('data-param') ?? ''),
-      stray: clone?.textContent ?? '',
-      options: all('select[data-control] option').map((o) => ({
-        control: o.closest('select')?.getAttribute('data-control') ?? '',
-        value: (o as HTMLOptionElement).value,
-        text: o.textContent ?? '',
-      })),
-      text: panel?.innerText ?? '',
-    };
-  }, PANEL);
-
-/** Every selection the tab offers: each band, then each receiver, then each DIN group. */
-async function everySelection(visit: (what: string) => Promise<void>): Promise<void> {
-  const s = await scan();
-  const values = (c: string) => s.options.filter((o) => o.control === c).map((o) => o.value);
-  for (const b of values('band')) {
-    await pick('band', b);
-    await visit(`band ${b}`);
-  }
-  for (const r of values('receiver')) {
-    await pick('receiver', r);
-    await visit(`receiver ${r}`);
-  }
-  for (const g of values('din-group')) {
-    await pick('din-group', g);
-    await visit(`DIN ${g}`);
-  }
-  await pick('din-group', 'A3');
-  await pick('receiver', values('receiver')[0]);
-  await pick('band', values('band')[0]);
-}
-
-const summary = () => JSON.parse(readFileSync(repo('beds/summary.json'), 'utf8')) as { parameters: Record<string, { status: string }> };
 
 describe('M12 P2: the Acoustics tab', () => {
   let box = '';
@@ -200,7 +53,7 @@ describe('M12 P2: the Acoustics tab', () => {
 
   before(async () => {
     await waitForHooks(['idle', 'openProject', 'edit', 'setStep', 'dockTab', 'runStart', 'runState', 'runsRows', 'selectRun', 'setSolver', 'acousticsView']);
-    box = ownBox();
+    box = ownBox(WORK());
     await m10.openProject(box);
     baseRun = await runSpps();
     baseJson = cliReport(box, baseRun.run);
@@ -281,29 +134,23 @@ describe('M12 P2: the Acoustics tab', () => {
     assert.ok(compared > 100, `only ${compared} numbers compared`);
   });
 
-  it('m12-b: no element for a parameter not PASS in beds/summary.json', async () => {
+  it('m12-b: no element for a parameter not PASS in beds/summary.json; every PASS parameter rendered with its range and status', async () => {
     const s0 = summary();
     const hidden = notPassed(s0);
     // The report the app read carries the file's statuses (core reads them, never the UI).
     const bed = (baseJson.bed as { parameters: Record<string, { status: string }> }).parameters;
     for (const [n, p] of Object.entries(s0.parameters)) assert.equal(bed[n]?.status, p.status, `report.bed ${n}`);
-    const shownSomewhere = new Set<string>();
-    await everySelection(async (what) => {
-      const s = await scan();
-      for (const n of hidden) {
-        assert.equal(s.params.filter((p) => p === n).length, 0, `${what}: ${n} (${s0.parameters[n].status}) has elements`);
-        assert.ok(!labelPattern(n).test(s.text), `${what}: "${PARAM_LABELS[n]}" is in the Acoustics tab's text`);
-      }
-      const props = await browser.execute(() => (document.querySelector('[data-props-step="results"]') as HTMLElement | null)?.innerText ?? '');
-      for (const n of hidden) assert.ok(!labelPattern(n).test(props), `${what}: "${PARAM_LABELS[n]}" is in the Results panel`);
-      const v = await hook<View>('acousticsView');
-      for (const n of hidden) assert.ok(!v.series.some((x) => x.param === n), `${what}: ${n} is drawn`);
-      s.params.forEach((p) => shownSomewhere.add(p));
-    });
+    const sweep = await bedSweep(hidden, s0);
     const passed = Object.keys(s0.parameters).filter((n) => !hidden.includes(n));
-    console.log(`m12-b receipt: not PASS ${JSON.stringify(hidden)}; PASS ${JSON.stringify(passed)}; with elements ${JSON.stringify([...shownSomewhere].sort())}`);
-    // Control: a PASS parameter is shown (each has a column in the receivers table).
-    for (const n of passed) assert.ok(shownSomewhere.has(n), `${n} is PASS and has no element`);
+    // Every PASS parameter is rendered, each cell with its range and status or its refusal; EDT
+    // with row 37's two marks. With every parameter PASS (decision 46), `hidden` is empty here,
+    // and the hiding itself is proved by m12.bedplant's m12-b-plant (a FAIL planted through core).
+    const lines = assertPassRendered(passed, sweep);
+    // T30 (PASS by decision 46) as any other reverberation time: drawn against the DIN band too.
+    if (passed.includes('t30_s')) assert.ok(sweep.drawn.has('t30_s'), `T30 is PASS and not drawn (drawn ${JSON.stringify([...sweep.drawn])})`);
+    console.log(
+      `m12-b receipt: not PASS ${JSON.stringify(hidden)}; PASS ${JSON.stringify(passed)}; with elements ${JSON.stringify([...sweep.shown].sort())}; drawn ${JSON.stringify([...sweep.drawn].sort())}; EDT marks ${JSON.stringify(sweep.edtMarks)}; ${lines.join('; ')}`,
+    );
   });
 
   it('m12-e: the DIN 18041 A3 target for the 180 m3 box reads 0.55 s', async () => {

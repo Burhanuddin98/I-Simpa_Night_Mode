@@ -128,23 +128,84 @@ struct SummaryFile {
 /// The statuses of `text`, a summary; a summary that does not read makes every parameter FAIL,
 /// naming why.
 pub fn parse(text: &str) -> BedParameters {
+    parse_named(text, "beds/summary.json")
+}
+
+fn parse_named(text: &str, name: &str) -> BedParameters {
     match serde_json::from_str::<SummaryFile>(text) {
         Ok(s) => s.parameters,
-        Err(e) => BedParameters::all(
-            BedStatus::Fail,
-            &format!("beds/summary.json does not read: {e}"),
-        ),
+        Err(e) => BedParameters::all(BedStatus::Fail, &format!("{name} does not read: {e}")),
     }
 }
 
-/// [`SUMMARY`]'s report, read once.
-pub fn report() -> &'static BedReport {
-    static R: OnceLock<BedReport> = OnceLock::new();
-    R.get_or_init(|| BedReport {
+/// A test-only lever (M12 gate (b)'s plant, `app/e2e/specs/m12.bedplant.e2e.ts`): a file of the
+/// summary's shape whose FAILs are laid over [`SUMMARY`]'s. It can only demote: a parameter is
+/// PASS only where both say PASS, so it can hide a number and never show one. The report names it
+/// (`summary`, and each demoted parameter's reasons); a file that cannot be read, or does not
+/// read, fails every parameter. Unset or empty: no effect.
+pub const DEMOTE_ENV: &str = "SIMPA_BED_DEMOTE";
+
+/// `base` with every parameter `plant` does not pass turned FAIL, `plant`'s reasons added after
+/// `base`'s, each prefixed `demoted by <source>`. A parameter `plant` passes is `base`'s, unchanged.
+pub fn demote(base: &BedParameters, plant: &BedParameters, source: &str) -> BedParameters {
+    let one = |b: &BedParameter, p: &BedParameter| {
+        if p.passed() {
+            return b.clone();
+        }
+        let mut out = b.clone();
+        out.status = BedStatus::Fail;
+        if p.reasons.is_empty() {
+            out.reasons.push(format!("demoted by {source}"));
+        }
+        out.reasons.extend(
+            p.reasons
+                .iter()
+                .map(|r| format!("demoted by {source}: {r}")),
+        );
+        out
+    };
+    BedParameters {
+        spl_db: one(&base.spl_db, &plant.spl_db),
+        edt_s: one(&base.edt_s, &plant.edt_s),
+        t20_s: one(&base.t20_s, &plant.t20_s),
+        t30_s: one(&base.t30_s, &plant.t30_s),
+        c50_db: one(&base.c50_db, &plant.c50_db),
+        c80_db: one(&base.c80_db, &plant.c80_db),
+        d50: one(&base.d50, &plant.d50),
+        ts_s: one(&base.ts_s, &plant.ts_s),
+        sti: one(&base.sti, &plant.sti),
+        g_db: one(&base.g_db, &plant.g_db),
+        dba: one(&base.dba, &plant.dba),
+    }
+}
+
+/// [`SUMMARY`]'s report, demoted by the file `demote_path` names when it is given and not empty
+/// ([`DEMOTE_ENV`]).
+fn build(demote_path: Option<std::ffi::OsString>) -> BedReport {
+    let mut report = BedReport {
         summary_sha256: format!("{:x}", Sha256::digest(SUMMARY.as_bytes())),
         summary: "beds/summary.json".to_string(),
         parameters: parse(SUMMARY),
-    })
+    };
+    if let Some(path) = demote_path.filter(|p| !p.is_empty()) {
+        let path = std::path::PathBuf::from(path);
+        let source = format!("${DEMOTE_ENV} ({})", path.display());
+        let plant = match std::fs::read_to_string(&path) {
+            Ok(text) => parse_named(&text, &source),
+            Err(e) => {
+                BedParameters::all(BedStatus::Fail, &format!("{source} could not be read: {e}"))
+            }
+        };
+        report.parameters = demote(&report.parameters, &plant, &source);
+        report.summary = format!("beds/summary.json, demoted by {source}");
+    }
+    report
+}
+
+/// [`SUMMARY`]'s report, read once ([`DEMOTE_ENV`] read with it).
+pub fn report() -> &'static BedReport {
+    static R: OnceLock<BedReport> = OnceLock::new();
+    R.get_or_init(|| build(std::env::var_os(DEMOTE_ENV)))
 }
 
 #[cfg(test)]
@@ -214,5 +275,124 @@ mod tests {
         let mut one = all.clone();
         one.parameters.dba.status = BedStatus::Fail;
         assert!(!one.all_passed());
+    }
+
+    /// `SUMMARY` with every status set to `status`.
+    fn all_of(status: &str) -> BedParameters {
+        let mut v: serde_json::Value = serde_json::from_str(SUMMARY).unwrap();
+        for (_, p) in v["parameters"].as_object_mut().unwrap() {
+            p["status"] = status.into();
+            p["reasons"] = serde_json::json!([]);
+        }
+        parse(&v.to_string())
+    }
+
+    fn plant_path() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/beds/summary-c80-fail.json")
+    }
+
+    #[test]
+    fn a_demotion_plant_can_turn_a_pass_fail_and_never_a_fail_pass() {
+        let base = all_of("PASS");
+        let plant = parse(&std::fs::read_to_string(plant_path()).unwrap());
+        let out = demote(&base, &plant, "$SIMPA_BED_DEMOTE (plant)");
+        for (name, p) in out.named() {
+            if name == "c80_db" {
+                assert_eq!(p.status, BedStatus::Fail);
+                assert!(
+                    p.reasons
+                        .iter()
+                        .any(|r| r.starts_with("demoted by $SIMPA_BED_DEMOTE (plant): planted")),
+                    "{:?}",
+                    p.reasons
+                );
+            } else {
+                assert_eq!(
+                    p,
+                    base.named().iter().find(|(n, _)| *n == name).unwrap().1,
+                    "{name}"
+                );
+            }
+        }
+        // A plant that says PASS everywhere leaves a FAIL a FAIL, reasons and all.
+        let mut failing = all_of("PASS");
+        failing.dba.status = BedStatus::Fail;
+        failing.dba.reasons = vec!["the rule".into()];
+        let out = demote(&failing, &all_of("PASS"), "x");
+        assert_eq!(out, failing);
+        // A FAIL demoted again stays FAIL and carries both reasons.
+        let out = demote(&failing, &all_of("FAIL"), "x");
+        assert!(out.named().iter().all(|(_, p)| p.status == BedStatus::Fail));
+        assert_eq!(out.dba.reasons, ["the rule", "demoted by x"]);
+    }
+
+    #[test]
+    fn without_the_variable_the_report_is_the_compiled_in_summary() {
+        let plain = build(None);
+        assert_eq!(plain.summary, "beds/summary.json");
+        assert_eq!(plain.parameters, parse(SUMMARY));
+        // Empty is unset.
+        assert_eq!(build(Some(std::ffi::OsString::new())), plain);
+    }
+
+    #[test]
+    fn the_variable_names_a_plant_that_demotes_and_the_report_says_so() {
+        let path = plant_path();
+        let r = build(Some(path.clone().into_os_string()));
+        let plain = build(None);
+        assert_eq!(
+            r.summary_sha256, plain.summary_sha256,
+            "the compiled-in file's"
+        );
+        assert_eq!(
+            r.summary,
+            format!(
+                "beds/summary.json, demoted by $SIMPA_BED_DEMOTE ({})",
+                path.display()
+            )
+        );
+        assert_eq!(r.parameters.c80_db.status, BedStatus::Fail);
+        assert!(!r.all_passed());
+        for (name, p) in r.parameters.named() {
+            if name != "c80_db" {
+                let q = plain
+                    .parameters
+                    .named()
+                    .into_iter()
+                    .find(|(n, _)| *n == name)
+                    .unwrap()
+                    .1;
+                assert_eq!(p, q, "{name}");
+            }
+        }
+        // A plant that cannot be read fails every parameter, naming why.
+        let r = build(Some(
+            path.with_file_name("no-such-plant.json").into_os_string(),
+        ));
+        for (name, p) in r.parameters.named() {
+            assert_eq!(p.status, BedStatus::Fail, "{name}");
+            assert!(
+                p.reasons.iter().any(|x| x.contains("could not be read")),
+                "{name}: {:?}",
+                p.reasons
+            );
+        }
+        // One that does not read, likewise, and says which file.
+        let bad =
+            std::env::temp_dir().join(format!("simpa-bed-demote-{}.json", std::process::id()));
+        std::fs::write(&bad, "{}").unwrap();
+        let r = build(Some(bad.clone().into_os_string()));
+        std::fs::remove_file(&bad).unwrap();
+        for (name, p) in r.parameters.named() {
+            assert_eq!(p.status, BedStatus::Fail, "{name}");
+            assert!(
+                p.reasons
+                    .iter()
+                    .any(|x| x.contains("$SIMPA_BED_DEMOTE") && x.contains("does not read")),
+                "{name}: {:?}",
+                p.reasons
+            );
+        }
     }
 }

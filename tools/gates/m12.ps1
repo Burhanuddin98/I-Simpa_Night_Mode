@@ -10,12 +10,13 @@
 # plus m10-h and m11-h, narrowed to "no solver-computed number outside the Results step" (they run
 # inside m11.ps1, this gate's prior gate).
 #
-# THIS IS P1'S SKELETON (PLAN.md P1 item 4). Built now: the contracts P2 and P3 build on, each
-# with its tests: beds/summary.json regenerated from its evidence byte for byte (item 1), the
-# report's per-parameter bed status (item 2), the Results step's IPC reads and their decoders
-# (item 3), the narrowed checker (item 4). Not built: the e2e ids of (a)-(f), which P2 (a, b, e, f)
-# and P3 (c, d) write and P4 wires in. Each is listed in $gateIds and fails as NOT BUILT, so this
-# gate cannot print "M12 PASSED" until every one runs and passes.
+# P1 built the contracts (beds/summary.json regenerated from its evidence byte for byte, the
+# report's per-parameter bed status, the Results step's IPC reads, the narrowed checker); P2 the
+# Acoustics tab (a, b, e, f), P3 the viewport (c, d); P4 merged them and made (b) not vacuous: with
+# all eleven parameters PASS, m12-b hides nothing, so m12-b-plant (specs/m12.bedplant.e2e.ts) runs
+# the app and the CLI with C80 planted FAIL through core ($SIMPA_BED_DEMOTE, which can only demote)
+# and finds no element for it. An id left in $gateIds fails as NOT BUILT, so this gate cannot print
+# "M12 PASSED" until every one runs and passes.
 #
 # Windows PowerShell 5.1 (pwsh is not installed on Grace).
 # Run: powershell -File tools/gates/m12.ps1 [-TargetDir C:\tmp\nm-target] [-Only all|static]
@@ -150,10 +151,13 @@ Check "P2: the Acoustics tab's model and the e2e comparison rules (node --test, 
 # app/e2e/specs/m12.acoustics.e2e.ts, run by `m11.ps1 -Only e2e -Spec m12.acoustics` on m11.ps1's
 # harness (the release build, the drivers, the private verified solvers, the e2e lock, the focus
 # watcher), as P3's spec is. The ids are read from its junit verdict lines.
-$p2Spec = 'm12.acoustics'
+# P4: gate (b)'s plant runs in the same call, its own session (specs/m12.bedplant.e2e.ts): with all
+# eleven PASS in beds/summary.json, m12-b alone hides nothing, so (b) needs both ids.
+$p2Spec = 'm12.acoustics,m12.bedplant'
 $p2Ids = [ordered]@{
     'm12-a' = 'every number on the Acoustics tab == simpa results --json at the displayed precision, every selection; no other digit; ranges, statuses, refusals; MQ2 words; no "validated"'
-    'm12-b' = 'no element for a parameter not PASS in beds/summary.json, under every selection; every PASS parameter shown'
+    'm12-b' = 'no element for a parameter not PASS in beds/summary.json, under every selection; every PASS parameter rendered with its range and status, T30 drawn, EDT with both row 37 marks'
+    'm12-b-plant' = '(b) not vacuous: C80 planted FAIL through core ($SIMPA_BED_DEMOTE) has 0 elements under every selection; the other ten rendered with range and status'
     'm12-e' = 'the DIN 18041 A3 target of the 180 m3 box reads 0.55 s, from the report; A1 reads its own'
     'm12-f' = "the variant switch replaces the RT series and numbers with the other run's JSON, 0 mismatches, both ways"
 }
