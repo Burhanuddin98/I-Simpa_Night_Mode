@@ -20,7 +20,7 @@ use simpa_core::geometry::import::{
 };
 use simpa_core::schema::{
     self, BoxBound, DiffusionLaw, Directivity, F64, FittingShape, MeshSettings, Project,
-    ReflectionLaw, SurfaceReceiverShape, Vec3,
+    ReflectionLaw, SppsSettings, SurfaceReceiverShape, Vec3,
 };
 
 #[allow(dead_code)]
@@ -120,7 +120,7 @@ fn tutorial1_box(proj: &Path) -> Project {
 /// then meshes the `.poly` as written, as upstream's GUI does, and records the abort
 /// (`preprocess_aborted`, an outcome, not a refusal).
 ///
-/// Four more of tutorial 2's settings are replaced (backlog 78, `B:\data\m12\b78-mesh\FINDINGS.md`).
+/// More of tutorial 2's settings are replaced (backlog 78, `B:\data\m12\b78-mesh\FINDINGS.md`).
 /// Its meshing, `-q2` without `-Y`, lets TetGen split the hall's boundary, and SPPS then loses
 /// 119-171 particles per band to meshing problems (28-44 with `-Y`). With that many lost, every T20
 /// and T30 is refused (`missing_moves`). They get the new-project meshing default instead (`-q5`
@@ -154,6 +154,20 @@ fn elmia_corrected(proj: &Path) -> Project {
         "tutorial_2.proj writes no echogram per source"
     );
     p.solvers.spps.echogram_per_source = true;
+    // And its 1.5 s, 5 ms and trans_epsilon 5: the run ends before the hall's decay does, and
+    // every per-source T30 is refused (`truncated`, `missing_moves`). The new-project 10 s, 1 ms
+    // and 7 instead; its million particles stay.
+    let s = &p.solvers.spps;
+    assert!(
+        s.duration_s.get() == 1.5
+            && s.time_step_s.get() == 0.005
+            && s.extinction_exponent.get() == 5.0,
+        "tutorial_2.proj runs 1.5 s at 5 ms, trans_epsilon 5"
+    );
+    let new = SppsSettings::for_bands(p.bands.len());
+    p.solvers.spps.duration_s = new.duration_s;
+    p.solvers.spps.time_step_s = new.time_step_s;
+    p.solvers.spps.extinction_exponent = new.extinction_exponent;
     p.name = "Elmia (corrected)".into();
     p.description = "Upstream I-Simpa tutorial 2 (tutorial_2.proj at 929a5c8), imported by \
                      geometry::import::import_proj: the Elmia hall as upstream's scene correction \
