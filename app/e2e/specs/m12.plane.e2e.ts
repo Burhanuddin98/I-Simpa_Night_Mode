@@ -7,7 +7,7 @@
 //              the click the project has no such plane, and Undo removes it
 //   w1-refuse  a cell size larger than a side is refused by the core (`cutting_plane_invalid`)
 //              inline, the project unchanged; a height above the ceiling and a word are refused by
-//              the field before the core; a height of 1.2 m moves all three corners to it
+//              the field before the core; a height of 1.7 m moves all three corners to it (clear of the fixture's Cut at 1.2 m)
 //   w1-rerun   the run made before the plane says on the Results step that the plane is not in
 //              it and SPPS must run again. Control: the run made after says nothing of the kind
 //   w1-map     after SPPS runs again, the cutting-plane map holds the plane by name with 2 x cells
@@ -154,7 +154,7 @@ describe('W1: the ear-height plane', () => {
     assert.ok(planeId);
   });
 
-  it('w1-refuse: the core refuses a cell larger than a side, the field a height outside the room; 1.2 m moves the plane', async () => {
+  it('w1-refuse: the core refuses a cell larger than a side, the field a height outside the room; 1.7 m moves the plane', async () => {
     await m10.setStep('sources');
     const sel = (f: string) => `[data-plane="${planeId}"] [data-field="${f}"]`;
     const json0 = await m10.projectJson();
@@ -177,11 +177,11 @@ describe('W1: the ear-height plane', () => {
       assert.equal(await m10.projectJson(), json0);
     }
     await typeInto(sel('plane.resolution'), '1');
-    await typeInto(sel('plane.height'), '1.2');
+    await typeInto(sel('plane.height'), '1.7');
     const p = planesOf(await project()).find((x) => x.id === planeId) as Plane;
-    assert.deepEqual([p.shape.a?.[2], p.shape.b?.[2], p.shape.c?.[2]], [1.2, 1.2, 1.2]);
+    assert.deepEqual([p.shape.a?.[2], p.shape.b?.[2], p.shape.c?.[2]], [1.7, 1.7, 1.7]);
     assert.equal(p.shape.resolution_m, 1);
-    console.log(`receipt w1-refuse: height 1.2 m: A ${JSON.stringify(p.shape.a)}`);
+    console.log(`receipt w1-refuse: height 1.7 m: A ${JSON.stringify(p.shape.a)}`);
   });
 
   it('w1-rerun: the run made before the plane says it is not in it; SPPS runs again and the run after says nothing', async () => {

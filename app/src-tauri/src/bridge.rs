@@ -879,6 +879,60 @@ mod m10_tests {
         assert!(ok.state.info.dirty);
     }
 
+    /// Wow list W1 (parity M41): the ear-height plane as the UI sends it (`ops.ts`
+    /// `addSurfaceReceiver`, the text `planes.test.ts` pins), through the checked apply; the
+    /// core's `cutting_plane_invalid` refuses a cell larger than a side and collinear corners,
+    /// and nothing changes.
+    #[test]
+    fn an_ear_height_plane_goes_through_the_checked_apply() {
+        let mut s = opened("tests/fixtures/rooms/outputs_box.simpa");
+        let _ = s.scene_state();
+        let id = "0c0be000-0000-4000-8000-0000000000a1";
+        let plane = |a: &str, b: &str, c: &str, res: &str| {
+            format!(
+                r#"{{"id":"{id}","name":"Plane 1","enabled":true,"shape":{{"kind":"cutting_plane","a":{a},"b":{b},"c":{c},"resolution_m":{res}}},"solver_id":null}}"#
+            )
+        };
+        let n = project(&s).surface_receivers.len();
+        let add = format!(
+            r#"{{"op":"add_surface_receiver","index":{n},"receiver":{}}}"#,
+            plane("[0,10,1.6]", "[0,0,1.6]", "[6,0,1.6]", "1")
+        );
+        let ok = s.edit_apply(&add).unwrap();
+        assert!(ok.applied, "{:?}", ok.refusals);
+        assert_eq!(ok.state.info.undo_depth, 1);
+        let added = project(&s).surface_receivers.last().unwrap().clone();
+        assert_eq!(added.name, "Plane 1");
+        let sid = added.id;
+        let before = s.json().unwrap();
+
+        for (shape, why) in [
+            (plane("[0,10,1.6]", "[0,0,1.6]", "[6,0,1.6]", "50"), "larger than a side"),
+            (plane("[0,10,1.6]", "[0,0,1.6]", "[0,5,1.6]", "1"), "collinear"),
+        ] {
+            let op = format!(r#"{{"op":"replace_surface_receiver","receiver":{shape}}}"#);
+            let out = s.edit_apply(&op).unwrap();
+            assert!(!out.applied, "{why}: accepted");
+            assert_eq!(out.refusals.len(), 1, "{:?}", out.refusals);
+            let r = &out.refusals[0];
+            assert_eq!(r.rule, "cutting_plane_invalid");
+            assert_eq!(r.field, "shape");
+            assert_eq!(r.entity, Some(EntityRef::SurfaceReceiver(sid)));
+            assert!(r.message.contains(why), "{}", r.message);
+            assert_eq!(s.json().unwrap(), before, "{why}: the project changed");
+            assert_eq!(out.state.info.undo_depth, 1);
+        }
+
+        // The positive control: the same plane at 1.2 m, accepted, a second undo step.
+        let op = format!(
+            r#"{{"op":"replace_surface_receiver","receiver":{}}}"#,
+            plane("[0,10,1.2]", "[0,0,1.2]", "[6,0,1.2]", "0.5")
+        );
+        let moved = s.edit_apply(&op).unwrap();
+        assert!(moved.applied, "{:?}", moved.refusals);
+        assert_eq!(moved.state.info.undo_depth, 2);
+    }
+
     #[test]
     fn an_unsafe_label_is_refused_and_a_safe_one_accepted() {
         let mut s = opened("tests/fixtures/rooms/tutorial1_box.simpa");

@@ -137,7 +137,8 @@ function Probe() {
   );
 }
 
-/** W5: the fixed range's two ends, committed together on Enter or blur; a refusal stays inline. */
+/** W5: the fixed range's two ends, committed together on Enter or blur; a refusal stays inline. Mounted
+ * once per switch-on: the typed text is its own, so a commit of one end never resets the other. */
 function RangeFields({ lo, hi }: { lo: number; hi: number }) {
   const [text, setText] = useState({ lo: String(lo), hi: String(hi) });
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -301,7 +302,7 @@ export function ResultsOverlay() {
             <span className="knob" />
           </span>
         </button>
-        {v.fixed && <RangeFields key={`${v.fixed.lo}|${v.fixed.hi}`} lo={v.fixed.lo} hi={v.fixed.hi} />}
+        {v.fixed && <RangeFields lo={v.fixed.lo} hi={v.fixed.hi} />}
       </div>
 
       {v.map && (
