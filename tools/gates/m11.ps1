@@ -104,6 +104,8 @@ $specIds = [ordered]@{
     'm12.bedplant' = @('m12-b-plant')
     # Backlog 77: per-source results on the Acoustics tab, the Elmia hall's three sources.
     'm12.sources' = @('b77-picker', 'b77-numbers')
+    # The response window (Burhan 2026-10-04 11:45): the energy echogram per band on the box.
+    'm12.response' = @('resp-window', 'resp-pixels', 'resp-numbers')
 }
 $allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -notlike 'm12.*' })
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }

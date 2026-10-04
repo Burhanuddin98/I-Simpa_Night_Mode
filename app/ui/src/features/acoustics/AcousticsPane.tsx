@@ -14,7 +14,7 @@
 //                                                   refusal (`[data-refusal]`), or STI's note
 // The charts (uPlot) are drawn from the same arrays the numbers are read from (`rtSeries`,
 // `decay`), and the `acousticsView` test hook returns those arrays.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import * as actions from '../../actions';
@@ -35,7 +35,6 @@ import {
   dinGroups,
   dinTarget,
   MQ2_WORDING,
-  type Num,
   paramMarks,
   receiverRows,
   receivers,
@@ -51,27 +50,8 @@ import {
   type Str,
 } from './model';
 import './acoustics.css';
-
-function N({ n, unit }: { n: Num | null; unit?: string }) {
-  if (!n) return <span className="ac-none">–</span>;
-  return (
-    <span className="ac-n">
-      <span data-num data-json={n.path} data-digits={n.digits} data-scale={n.scale}>
-        {n.text}
-      </span>
-      {unit ? <span className="ac-unit"> {unit}</span> : null}
-    </span>
-  );
-}
-
-function S({ s, className }: { s: Str | null; className?: string }) {
-  if (!s) return null;
-  return (
-    <span data-str data-json={s.path} className={className}>
-      {s.text}
-    </span>
-  );
-}
+import { N, S } from './Marked';
+import { responseHookView, ResponseWindow } from './ResponseWindow';
 
 function Band({ report, index }: { report: NonNullable<ReportView['report']>; index: number }) {
   const b = bandNum(report, index);
@@ -251,6 +231,7 @@ let paneView: HookView | null = null;
  */
 export function useAcousticsDock(): void {
   useEffect(() => registerHook('acousticsView', () => paneView), []);
+  useEffect(() => registerHook('responseView', () => responseHookView()), []);
   useVariantRunFollow();
 }
 
@@ -282,6 +263,8 @@ export function AcousticsPane() {
   const [source, setSource] = useState<SourceSel | undefined>(undefined);
   const [group, setGroup] = useState('A3');
   const [error, setError] = useState<{ run: string; code: string } | null>(null);
+  const [responseOpen, setResponseOpen] = useState(false);
+  const closeResponse = useCallback(() => setResponseOpen(false), []);
 
   const onResults = step === 'results';
   const row = selected ? (runs?.rows.find((r) => r.run === selected) ?? null) : null;
@@ -332,6 +315,11 @@ export function AcousticsPane() {
     },
     [],
   );
+
+  // The response window holds numbers: it closes with the run it shows, and off the Results step.
+  useEffect(() => {
+    if (state !== 'ready') setResponseOpen(false);
+  }, [state, selected]);
 
   if (state === 'off-step') {
     return (
@@ -537,6 +525,11 @@ export function AcousticsPane() {
         <section className="ac-card ac-decay" aria-label="Decay">
           <div className="ac-card-head">
             <span className="ac-card-title">Decay</span>
+            {report.solver !== 'tcr' ? (
+              <button type="button" className="small-button ac-open" data-action="open-response" aria-pressed={responseOpen} onClick={() => setResponseOpen((o) => !o)}>
+                Open response
+              </button>
+            ) : null}
             <span className="ac-sub">
               {names[r] !== undefined ? <S s={{ path: `${report.solver === 'tcr' ? 'tcr' : 'spps'}.point_receivers.${r}.label`, text: names[r] }} /> : null}
               {' · '}
@@ -546,6 +539,7 @@ export function AcousticsPane() {
             </span>
           </div>
           {curve ? <DecayChart curve={curve} /> : <div className="ac-none">No decay curve for this receiver and band.</div>}
+          {responseOpen && report.solver !== 'tcr' ? <ResponseWindow report={report} receiver={r} source={src} onClose={closeResponse} /> : null}
         </section>
 
         <section className="ac-card ac-classical" aria-label="Sabine and Eyring">

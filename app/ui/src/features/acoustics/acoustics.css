@@ -203,3 +203,156 @@
 .ac-none {
   color: var(--text-3);
 }
+
+/* The response window (ResponseWindow.tsx): floating on row 50's glass, pinned at the centre.
+   The map's canvas is one pixel per bin, scaled up without smoothing. */
+.ac-open {
+  height: 22px;
+  margin-left: auto;
+}
+.rw {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  width: min(980px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 10px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+}
+.rw-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.rw-title {
+  font-weight: 600;
+  font-size: 13px;
+}
+.rw-sub {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.rw-close {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: 1px solid var(--glass-edge);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 16px;
+  line-height: 1;
+}
+.rw-close:hover {
+  color: var(--text);
+  border-color: var(--red);
+}
+.rw-note {
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.rw-grid {
+  display: grid;
+  grid-template-columns: 64px 1fr 64px;
+  grid-template-rows: clamp(150px, calc(var(--rw-rows) * 30px), 300px) 72px 18px auto;
+  column-gap: 8px;
+  row-gap: 4px;
+  margin-top: 4px;
+}
+.rw-y {
+  display: flex;
+  flex-direction: column-reverse;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+  text-align: right;
+}
+.rw-band {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+.rw-map {
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  background: #000;
+  border: 1px solid var(--line);
+  box-sizing: border-box;
+}
+.rw-bar {
+  display: flex;
+  gap: 6px;
+}
+.rw-bar-img {
+  width: 14px;
+  height: 100%;
+  image-rendering: pixelated;
+  border: 1px solid var(--line);
+  box-sizing: border-box;
+}
+.rw-bar-labels,
+.rw-y-strip {
+  position: relative;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.rw-span {
+  position: absolute;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+.rw-bar-labels .rw-span {
+  left: 0;
+}
+.rw-y-strip .rw-span {
+  right: 0;
+}
+.rw-strip {
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--line);
+  box-sizing: border-box;
+}
+.rw-strip-key {
+  align-self: center;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.rw-x {
+  position: relative;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.rw-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.rw-tick::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  height: 4px;
+  border-left: 1px solid var(--text-3);
+}
+.rw-x-label {
+  color: var(--text-3);
+  font-size: 11.5px;
+  text-align: center;
+}
