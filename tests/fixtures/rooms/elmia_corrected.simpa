@@ -12211,7 +12211,7 @@
       "direct_field_only": false,
       "transmission": true,
       "extinction_exponent": 7.0,
-      "receiver_radius_m": 1.0,
+      "receiver_radius_m": 0.6,
       "sound_map": "intensity",
       "sound_maps_per_band": true,
       "echogram_per_source": true,

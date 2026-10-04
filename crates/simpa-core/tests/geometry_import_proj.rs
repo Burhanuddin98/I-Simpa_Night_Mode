@@ -125,8 +125,9 @@ fn tutorial1_box(proj: &Path) -> Project {
 /// 119-171 particles per band to meshing problems (28-44 with `-Y`). With that many lost, every T20
 /// and T30 is refused (`missing_moves`). They get the new-project meshing default instead (`-q5`
 /// with `-Y`). Its 0.31 m receivers catch too few particles in a 10,389 m³ hall: at 150,000
-/// particles each T30 range is 34 % of its value, median, and 9 of the 36 ranges go below zero. At
-/// 1.0 m (the largest radius EDT is checked at) the median is 2.3 %. Its echogram per source is off,
+/// particles each T30 range is 34 % of its value, median, and 9 of the 36 ranges go below zero (2.3 %
+/// at 1.0 m). They get 0.6 m: the most below 0.647 m, the closest receiver's (R03's) distance to a
+/// face, so that no sphere crosses a wall (`receiver_sphere_crosses_surface`: the level reads low). Its echogram per source is off,
 /// which leaves a three-source hall with no per-source parameter. The new-project default is on.
 fn elmia_corrected(proj: &Path) -> Project {
     let mut p = import_proj_file(proj).unwrap().project;
@@ -148,7 +149,7 @@ fn elmia_corrected(proj: &Path) -> Project {
         0.31,
         "tutorial_2.proj's receivers"
     );
-    p.solvers.spps.receiver_radius_m = F64::new(1.0);
+    p.solvers.spps.receiver_radius_m = F64::new(0.6);
     assert!(
         !p.solvers.spps.echogram_per_source,
         "tutorial_2.proj writes no echogram per source"
