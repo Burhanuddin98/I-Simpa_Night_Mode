@@ -107,7 +107,7 @@ $specIds = [ordered]@{
     # Backlog 77: per-source results on the Acoustics tab, the Elmia hall's three sources.
     'm12.sources' = @('b77-picker', 'b77-numbers')
     # The response window (Burhan 2026-10-04 11:45): the energy echogram per band on the box.
-    'm12.response' = @('resp-window', 'resp-pixels', 'resp-numbers')
+    'm12.response' = @('resp-window', 'resp-pixels', 'resp-crop', 'resp-numbers')
     # Wow list W1 and W5 (docs/investigations/2026-10-04-wow-w1w5/PLAN.md): the ear-height plane,
     # and smooth colour, contours, fixed range and the value probe on the box.
     'm12.plane' = @('w1-add', 'w1-refuse', 'w1-rerun', 'w1-map')

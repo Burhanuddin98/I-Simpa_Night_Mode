@@ -15,6 +15,9 @@
 //   the source's emission is `spps.sources.i.emission_s`. The colour bar's ends are the map's
 //   own span, words not the report's (`SPAN_LABELS`, marked `[data-label="span"]`).
 // - **The image is drawn from the same arrays the paths name**: `energy` is read at `paths`.
+// - **The time axis ends where the energy does** (Burhan 2026-10-04: CR4's 10 s run is black
+//   past about 3 s): `cropCols`, shortly after the last bin above the floor in any band; the
+//   window's "Full run" shows every step, and the window says which is shown.
 import type { Report } from '../../bindings/ipc';
 import { at, num, type Num, type SourceSel, str, type Str } from './model.ts';
 
@@ -125,11 +128,13 @@ export function decayDb(series: readonly number[], span = SPAN_DB): number[] | n
   return m ? m.db[0].map((d) => clipDb(d, span)) : null;
 }
 
-/** The map as RGBA pixels, one per bin: `cols` wide, one row per band, the highest band on top
- * (image row 0 is the last band). */
-export function mapPixels(m: DbMatrix, span = SPAN_DB): Uint8ClampedArray {
+/** The map as RGBA pixels, one per bin: `cols` wide (the first `cols` steps; all by default), one
+ * row per band, the highest band on top (image row 0 is the last band). Refuses a column count
+ * outside 1 to the map's steps. */
+export function mapPixels(m: DbMatrix, span = SPAN_DB, cols = m.db[0].length): Uint8ClampedArray {
   const rows = m.db.length;
-  const cols = m.db[0].length;
+  const all = m.db[0].length;
+  if (!Number.isInteger(cols) || cols < 1 || cols > all) throw new RangeError(`mapPixels: ${cols} columns of ${all}`);
   const px = new Uint8ClampedArray(rows * cols * 4);
   for (let b = 0; b < rows; b++) {
     const y = rows - 1 - b;
@@ -145,22 +150,62 @@ export function mapPixels(m: DbMatrix, span = SPAN_DB): Uint8ClampedArray {
   return px;
 }
 
+/** The 1-2-5 interval giving about `target` ticks over `total` (s), and the decimals it reads at. */
+export function niceInterval(total: number, target = 6): { interval: number; digits: number } {
+  const raw = total / target;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  const interval = [1, 2, 5, 10].map((m) => m * p).find((v) => v >= raw * (1 - 1e-9)) ?? 10 * p;
+  return { interval, digits: Math.max(0, -Math.floor(Math.log10(interval) + 1e-9)) };
+}
+
 /** Time ticks over `cols` steps of `stepS`: at whole multiples of a 1-2-5 interval giving about
  * `target` ticks, each at the whole step `j` nearest it (1 <= j <= cols) and shown at the
  * interval's decimals. Empty when `cols` or `stepS` is not above 0. */
 export function timeTicks(stepS: number, cols: number, target = 6): { j: number; digits: number }[] {
   if (!(stepS > 0) || !(cols > 0) || !Number.isFinite(stepS)) return [];
-  const total = cols * stepS;
-  const raw = total / target;
-  const p = 10 ** Math.floor(Math.log10(raw));
-  const nice = [1, 2, 5, 10].map((m) => m * p).find((v) => v >= raw * (1 - 1e-9)) ?? 10 * p;
-  const digits = Math.max(0, -Math.floor(Math.log10(nice) + 1e-9));
+  const { interval: nice, digits } = niceInterval(cols * stepS, target);
   const out: { j: number; digits: number }[] = [];
   for (let n = 1; Math.round((n * nice) / stepS) <= cols; n++) {
     const j = Math.round((n * nice) / stepS);
     if (j >= 1 && !out.some((t) => t.j === j)) out.push({ j, digits });
   }
   return out;
+}
+
+/** The margin past the last bin above the floor before the end is rounded up: 5 % of that time. */
+export const CROP_MARGIN = 0.05;
+
+/** The last step at which a bin of any band is above the floor (more than `span` dB down is not;
+ * exactly `span` down is not). The maximum is 0 dB, so there is always one. */
+export function lastAbove(m: DbMatrix, span = SPAN_DB): number {
+  let last = -1;
+  for (const row of m.db) {
+    for (let c = row.length - 1; c > last; c--) {
+      if (row[c] > -span) {
+        last = c;
+        break;
+      }
+    }
+  }
+  return last;
+}
+
+/**
+ * Where the map ends when it is not the full run, in steps: the end of the last bin above the
+ * floor in any band (`lastAbove` + 1 steps), plus `CROP_MARGIN`, rounded up to a whole multiple of
+ * the 1-2-5 tick interval for that time (and of a step, when the interval is under one). Null,
+ * the full run, when a band is still above the floor at the last bin, when that end reaches the
+ * run's, or when there is no step.
+ */
+export function cropCols(m: DbMatrix, stepS: number, span = SPAN_DB): number | null {
+  const cols = m.db[0].length;
+  if (!(stepS > 0) || !Number.isFinite(stepS)) return null;
+  const last = lastAbove(m, span);
+  if (last >= cols - 1) return null;
+  const t = (last + 1) * stepS * (1 + CROP_MARGIN);
+  const iv = Math.max(niceInterval(t).interval, stepS);
+  const n = Math.round((Math.ceil(t / iv - 1e-9) * iv) / stepS);
+  return n >= cols ? null : n;
 }
 
 /** A band's label from its own `freq_hz` path: `125 Hz`, `1 kHz`, `1.25 kHz`. */
@@ -188,8 +233,21 @@ export interface ResponseView {
   map: DbMatrix;
   /** The bands summed, dB re its own maximum, clipped `SPAN_DB` down. */
   broadband: number[] | null;
-  /** Each tick's column (steps after `k0`) and its time, `spps.time_step_s` times that. */
-  ticks: { col: number; num: Num }[];
+  /** The full run's ticks: each one's column (steps after `k0`) and its time, `spps.time_step_s`
+   * times that. */
+  ticks: Tick[];
+  /** The run's length from `k0`: `spps.time_step_s` times its steps. */
+  run: Num;
+  /** The time from which every band is at the floor or lower (`lastAbove` + 1 steps), at the
+   * step's decimals; null when a band is still above it at the run's end. */
+  floor: Num | null;
+  /** The map cut short (`cropCols`): its steps, its end and its own ticks; null for the full run. */
+  crop: { cols: number; end: Num; ticks: Tick[] } | null;
+}
+
+export interface Tick {
+  col: number;
+  num: Num;
 }
 
 /**
@@ -237,6 +295,27 @@ export function responseView(report: Report, r: number, src: SourceSel): Respons
   if (!map) return null;
   const sum = broadband(energy);
   const cols = map.db[0].length;
-  const ticks = timeTicks(step, cols).map((t) => ({ col: t.j, num: num(report, 'spps.time_step_s', t.digits, t.j) as Num }));
-  return { receiver, source, emission, k0, bands, energy, map, broadband: sum ? decayDb(sum) : null, ticks };
+  const stepNum = (digits: number, k: number) => num(report, 'spps.time_step_s', digits, k) as Num;
+  const ticksOver = (n: number): Tick[] => timeTicks(step, n).map((t) => ({ col: t.j, num: stepNum(t.digits, t.j) }));
+  const runDigits = niceInterval(cols * step).digits;
+  const n = cropCols(map, step);
+  const cropDigits = n === null ? runDigits : niceInterval(n * step).digits;
+  const last = lastAbove(map);
+  // The floor's time to the step's own decimals (0.001 s: 3; the f32 widening's last digits
+  // ignored): a whole number of steps, not rounded to a tick.
+  const stepDigits = Math.max(0, Math.ceil(-Math.log10(step) - 1e-6));
+  return {
+    receiver,
+    source,
+    emission,
+    k0,
+    bands,
+    energy,
+    map,
+    broadband: sum ? decayDb(sum) : null,
+    ticks: ticksOver(cols),
+    run: stepNum(runDigits, cols),
+    floor: last >= cols - 1 ? null : stepNum(stepDigits, last + 1),
+    crop: n === null ? null : { cols: n, end: stepNum(cropDigits, n), ticks: ticksOver(n) },
+  };
 }

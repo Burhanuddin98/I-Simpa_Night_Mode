@@ -275,7 +275,7 @@
   border-radius: 5px;
   background: rgba(9, 9, 11, 0.88);
   grid-template-columns: 64px 1fr 64px;
-  grid-template-rows: clamp(150px, calc(var(--rw-rows) * 30px), 300px) 72px 18px auto;
+  grid-template-rows: clamp(150px, calc(var(--rw-rows) * 30px), 300px) 72px 18px auto auto;
   column-gap: 8px;
   row-gap: 4px;
   margin-top: 4px;
@@ -378,4 +378,31 @@
   color: var(--text-3);
   font-size: 11.5px;
   text-align: center;
+}
+/* Which part of the run the map shows, and the "Full run" toggle (ResponseWindow.tsx). */
+.rw-shown {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.rw-full {
+  height: 22px;
+  padding: 0 10px;
+  border-radius: 5px;
+  border: 1px solid var(--glass-edge);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 11.5px;
+}
+.rw-full:hover {
+  color: var(--text);
+  border-color: var(--red);
+}
+.rw-full.on {
+  color: var(--text);
+  border-color: var(--red);
+  background: rgba(224, 32, 46, 0.18);
 }

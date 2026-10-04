@@ -11,7 +11,7 @@
 // the map is a PNG of one pixel per bin (`mapPixels`, png.ts), scaled up by CSS, so a pixel
 // decoded from it is the bin's colour; the decay strip and its marks are SVG, the colour bar a
 // CSS gradient of the same stops.
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Report } from '../../bindings/ipc';
 import { N, S } from './Marked';
@@ -25,6 +25,11 @@ export interface ResponseHookView {
   source: string | null;
   k0: number;
   cols: number;
+  /** The steps drawn: `cols`, or the crop's when the map is cut short. */
+  shown: number;
+  /** The crop's steps (null: none, the map is always the full run), and whether "Full run" is on. */
+  crop: number | null;
+  full: boolean;
   paths: string[];
   max: { band: number; col: number };
 }
@@ -34,10 +39,9 @@ export const responseHookView = (): ResponseHookView | null => hookView;
 /** The map as an image (M10 PLAN rule 3, one canvas: the 3D view's is the only one): one pixel
  * per bin (`mapPixels`), a PNG in a data URL (png.ts), scaled up by CSS with `pixelated`, so a
  * pixel decoded from it is the bin's colour. */
-function MapImage({ v }: { v: ResponseView }) {
+function MapImage({ v, cols }: { v: ResponseView; cols: number }) {
   const rows = v.map.db.length;
-  const cols = v.map.db[0].length;
-  const src = useMemo(() => pngDataUrl(mapPixels(v.map), cols, rows), [v, cols, rows]);
+  const src = useMemo(() => pngDataUrl(mapPixels(v.map, SPAN_DB, cols), cols, rows), [v, cols, rows]);
   return <img className="rw-map" data-part="response-map" src={src} width={cols} height={rows} alt="Level per band and time step" draggable={false} />;
 }
 
@@ -77,8 +81,24 @@ function SpanLabels({ ends }: { ends?: boolean }) {
   );
 }
 
+/** The span's bottom as a word in a sentence, marked as the colour bar's words are. */
+function SpanWord() {
+  const l = SPAN_LABELS[SPAN_LABELS.length - 1];
+  return (
+    <span className="rw-span-word" data-label="span">
+      {l.text}
+    </span>
+  );
+}
+
 export function ResponseWindow({ report, receiver, source, onClose }: { report: Report; receiver: number; source: SourceSel; onClose: () => void }) {
   const v = useMemo(() => responseView(report, receiver, source), [report, receiver, source]);
+  // The time axis ends shortly after the last bin above the floor (response.ts `cropCols`);
+  // "Full run" shows the whole duration. The choice holds across receivers and sources.
+  const [fullRun, setFullRun] = useState(false);
+  const cropped = !!v?.crop && !fullRun;
+  const shown = v ? (cropped && v.crop ? v.crop.cols : v.map.db[0].length) : 1;
+  const ticks = v ? (cropped && v.crop ? v.crop.ticks : v.ticks) : [];
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -87,7 +107,7 @@ export function ResponseWindow({ report, receiver, source, onClose }: { report: 
     return () => window.removeEventListener('keydown', key);
   }, [onClose]);
   hookView = v
-    ? { receiver, source, k0: v.k0, cols: v.map.db[0].length, paths: v.bands.map((b) => b.path), max: { band: v.map.at.row, col: v.map.at.col } }
+    ? { receiver, source, k0: v.k0, cols: v.map.db[0].length, shown, crop: v.crop?.cols ?? null, full: !cropped, paths: v.bands.map((b) => b.path), max: { band: v.map.at.row, col: v.map.at.col } }
     : null;
   useEffect(
     () => () => {
@@ -95,7 +115,7 @@ export function ResponseWindow({ report, receiver, source, onClose }: { report: 
     },
     [],
   );
-  const cols = v ? v.map.db[0].length : 1;
+  const cols = shown;
   const emitted = v?.emission && (report.spps?.sources.length ?? 0) > 1 && source === null;
 
   return createPortal(
@@ -125,7 +145,7 @@ export function ResponseWindow({ report, receiver, source, onClose }: { report: 
               </span>
             ))}
           </div>
-          <MapImage v={v} />
+          <MapImage v={v} cols={shown} />
           <div className="rw-bar">
             <ColourBar />
             <div className="rw-bar-labels">
@@ -136,12 +156,12 @@ export function ResponseWindow({ report, receiver, source, onClose }: { report: 
           <div className="rw-y rw-y-strip">
             <SpanLabels ends />
           </div>
-          {v.broadband ? <Strip db={v.broadband} ticks={v.ticks.map((t) => t.col)} /> : <div className="ac-none">No broadband decay.</div>}
+          {v.broadband ? <Strip db={v.broadband.slice(0, shown)} ticks={ticks.map((t) => t.col)} /> : <div className="ac-none">No broadband decay.</div>}
           <div className="rw-strip-key">bands summed</div>
 
           <div />
           <div className="rw-x" data-part="response-ticks">
-            {v.ticks.map((t) => (
+            {ticks.map((t) => (
               <span key={t.col} className="rw-tick" style={{ left: `${(t.col / cols) * 100}%` }}>
                 <N n={t.num} />
               </span>
@@ -159,6 +179,43 @@ export function ResponseWindow({ report, receiver, source, onClose }: { report: 
               </>
             ) : null}
             {' · colour: level re the map’s maximum'}
+          </div>
+          <div />
+
+          <div />
+          <div className="rw-shown" data-part="response-shown" data-shown={cropped ? 'crop' : 'full'}>
+            <span>
+              {cropped && v.crop ? (
+                <>
+                  Shown: to <N n={v.crop.end} unit="s" /> of the <N n={v.run} unit="s" /> run
+                </>
+              ) : (
+                <>
+                  Shown: the full run, <N n={v.run} unit="s" />
+                </>
+              )}
+              {v.floor ? (
+                <>
+                  ; from <N n={v.floor} unit="s" /> every band is at <SpanWord /> or lower
+                </>
+              ) : (
+                <>
+                  ; a band is still above <SpanWord /> at its end
+                </>
+              )}
+            </span>
+            {v.crop ? (
+              <button
+                type="button"
+                className={`rw-full${fullRun ? ' on' : ''}`}
+                data-action="response-full"
+                aria-pressed={fullRun}
+                title={fullRun ? 'Show the map up to where every band has reached the floor' : 'Show the whole duration of the run'}
+                onClick={() => setFullRun((f) => !f)}
+              >
+                Full run
+              </button>
+            ) : null}
           </div>
           <div />
         </div>

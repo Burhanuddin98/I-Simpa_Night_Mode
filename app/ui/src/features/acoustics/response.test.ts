@@ -9,13 +9,17 @@ import {
   broadband,
   clipDb,
   COLOUR_STOPS,
+  CROP_MARGIN,
+  cropCols,
   colourAt,
   colourBarCss,
   dbMatrix,
   decayDb,
   freqLabel,
+  lastAbove,
   levelT,
   mapPixels,
+  niceInterval,
   RESPONSE_NOTE,
   RESPONSE_TITLE,
   responseView,
@@ -27,8 +31,9 @@ import {
 // SPPS's time step as the report carries it: 0.01 s through f32, widened.
 const DT = Math.fround(0.01);
 
-function report(opts: { solver?: string; emission?: number[]; zero?: boolean } = {}): Report {
-  const series = (scale: number) => (opts.zero ? [0, 0, 0, 0, 0, 0] : [0, 0, 1e-2 * scale, 1e-4 * scale, 1e-6 * scale, 1e-9 * scale]);
+function report(opts: { solver?: string; emission?: number[]; zero?: boolean; pad?: number } = {}): Report {
+  const tail = Array.from({ length: opts.pad ?? 0 }, () => 0);
+  const series = (scale: number) => (opts.zero ? [0, 0, 0, 0, 0, 0] : [0, 0, 1e-2 * scale, 1e-4 * scale, 1e-6 * scale, 1e-9 * scale, ...tail]);
   const bands = (scale: number) => [
     { freq_hz: 500, energy_pa2: series(scale) },
     { freq_hz: 1000, energy_pa2: series(scale / 10) },
@@ -182,6 +187,89 @@ test('timeTicks: a 1-2-5 interval, each tick a whole step, at the interval decim
   assert.deepEqual(timeTicks(Number.NaN, 10), []);
 });
 
+test('mapPixels: drawn to a column count, the first columns of the full map', () => {
+  const m = dbMatrix([[1, 1e-2, 1e-4, 1e-8]]);
+  assert.ok(m);
+  const full = mapPixels(m);
+  const two = mapPixels(m, SPAN_DB, 2);
+  assert.equal(two.length, 2 * 4);
+  assert.deepEqual([...two], [...full.slice(0, 8)]);
+  // say NO: no column count outside 1..cols.
+  assert.throws(() => mapPixels(m, SPAN_DB, 0), RangeError);
+  assert.throws(() => mapPixels(m, SPAN_DB, 5), RangeError);
+});
+
+test('niceInterval: the 1-2-5 interval for about `target` ticks over a span, and its decimals', () => {
+  assert.deepEqual(niceInterval(2.73, 6), { interval: 0.5, digits: 1 });
+  assert.deepEqual(niceInterval(10, 6), { interval: 2, digits: 0 });
+  assert.deepEqual(niceInterval(0.063, 6), { interval: 0.02, digits: 2 });
+});
+
+/** One band, `cols` steps of `DT`, falling `perStep` dB a step from 0 dB at step 0. */
+const falling = (cols: number, perStep: number) => [Array.from({ length: cols }, (_, c) => 10 ** ((-perStep * c) / 10))];
+const fast = () => dbMatrix(falling(200, 10)) as NonNullable<ReturnType<typeof dbMatrix>>;
+
+test('lastAbove: the last step with a bin above the floor in any band', () => {
+  const m = dbMatrix([
+    [1, 1e-3, 1e-7, 0],
+    [1e-2, 1e-5, 1e-6, 0],
+  ]);
+  assert.ok(m);
+  assert.equal(lastAbove(m), 1, 'step 2 is 70 dB and 60 dB down: not above');
+  const end = dbMatrix([[1, 0, 1e-3]]);
+  assert.ok(end);
+  assert.equal(lastAbove(end), 2);
+});
+
+test('cropCols: the map ends after the last bin above the floor, rounded up to a clean tick, with a margin', () => {
+  assert.equal(CROP_MARGIN, 0.05);
+  // 10 dB a step: steps 0..5 are above -60 dB, step 6 is at it. The last above ends at 0.06 s;
+  // 5 % more is 0.063 s, whose 1-2-5 interval is 0.02 s: the map ends at 0.08 s, 8 steps.
+  const fast = dbMatrix(falling(200, 10));
+  assert.ok(fast);
+  assert.equal(cropCols(fast, DT), 8);
+  assert.deepEqual(
+    timeTicks(DT, 8).map((t) => t.j),
+    [2, 4, 6, 8],
+    'the end is a tick',
+  );
+  // CR4's shape: 1 ms steps over 10 s, a band above the floor up to 2.6 s (step 2599), the others
+  // lower: 2.6 s plus 5 % is 2.73 s, interval 0.5 s, so the map ends at 3.0 s, step 3000.
+  const ms = Math.fround(0.001);
+  const cr4 = Array.from({ length: 3 }, (_, b) => Array.from({ length: 10_000 }, (_, c) => (c < 2600 - b * 500 ? 10 ** (-5.9 * (c / 2599)) : 1e-9)));
+  const m = dbMatrix(cr4);
+  assert.ok(m);
+  assert.equal(cropCols(m, ms), 3000);
+  assert.equal(timeTicks(ms, 3000).at(-1)?.j, 3000, 'the end is a tick');
+  // Every bin after the end, and after the last above, is at the floor or below in every band.
+  m.db.forEach((row) => row.slice(2600).forEach((d) => assert.ok(d <= -SPAN_DB)));
+  // A bin exactly 60 dB down is not above the floor.
+  const edge = dbMatrix([[1, 1e-6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]);
+  assert.ok(edge);
+  // The last above is step 0, 0.0105 s with the margin; its interval, 0.002 s, is under a step,
+  // so the end rounds up to whole steps: 2.
+  assert.equal(cropCols(edge, DT), 2);
+});
+
+test('cropCols says NO: a series still above the floor at its last bin shows the full run', () => {
+  // Above -60 dB to the last step: no crop.
+  const slow = dbMatrix(falling(200, 0.2));
+  assert.ok(slow);
+  assert.equal(cropCols(slow, DT), null);
+  // One band dies early, another is still above at the end: the full run.
+  const mixed = dbMatrix([falling(200, 10)[0], falling(200, 0.25)[0].map((e) => e * 0.5)]);
+  assert.ok(mixed);
+  assert.equal(cropCols(mixed, DT), null);
+  // The rounded end would reach the run's end: the full run (last above at step 195, 1.96 s,
+  // 2.058 s with the margin, rounded up to 2.5 s, past the 2.0 s run).
+  const late = dbMatrix([Array.from({ length: 200 }, (_, c) => (c <= 195 ? 1 : 0))]);
+  assert.ok(late);
+  assert.equal(cropCols(late, DT), null);
+  // No step, no crop.
+  assert.equal(cropCols(fast(), 0), null);
+  assert.equal(cropCols(fast(), Number.NaN), null);
+});
+
 test('freqLabel: Hz below 1 kHz, kHz from it, as a path with its scale', () => {
   const r = report();
   assert.deepEqual(freqLabel(r, 'spps.point_receivers.0.bands.0.freq_hz'), {
@@ -219,11 +307,42 @@ test('responseView: the receiver series at their paths, every number a path of t
   }
   assert.equal(v.emission?.source.text, 'S1');
   assert.equal(v.emission?.at.path, 'spps.sources.0.emission_s');
+  // The run's length, and where the floor is reached: R1's last bin above -60 dB is step 4 (the
+  // 1.25 kHz band is 60 dB down there, the others above); the rounded end, 0.06 s, is the run's
+  // end, so there is no crop.
+  assert.deepEqual(v.run, { path: 'spps.time_step_s', digits: 2, scale: 6, text: '0.06' });
+  assert.deepEqual(v.floor, { path: 'spps.time_step_s', digits: 2, scale: 5, text: '0.05' });
+  assert.equal(v.crop, null);
   // say NO: a TCR run, a receiver not in the report, a source with no echogram here, no energy.
   assert.equal(responseView(report({ solver: 'tcr' }), 0, null), null);
   assert.equal(responseView(r, 3, null), null);
   assert.equal(responseView(r, 0, 'S1'), null, 'one source: no echogram per source');
   assert.equal(responseView(report({ zero: true }), 0, null), null);
+});
+
+test('responseView: the crop, its end a whole number of steps, its own ticks; the full run kept', () => {
+  const r = report({ pad: 20 });
+  const v = responseView(r, 0, null);
+  assert.ok(v);
+  assert.equal(v.map.db[0].length, 26, 'the map holds the full run');
+  assert.deepEqual(v.run, { path: 'spps.time_step_s', digits: 2, scale: 26, text: '0.26' });
+  assert.deepEqual(v.floor, { path: 'spps.time_step_s', digits: 2, scale: 5, text: '0.05' }, "at the step's decimals");
+  assert.ok(v.crop);
+  assert.equal(v.crop.cols, 6);
+  assert.deepEqual(v.crop.end, { path: 'spps.time_step_s', digits: 2, scale: 6, text: '0.06' });
+  assert.equal(v.crop.ticks.at(-1)?.col, 6, 'the end is a tick');
+  for (const t of [...v.crop.ticks, ...v.ticks]) {
+    assert.equal(t.num.path, 'spps.time_step_s');
+    assert.equal(t.num.scale, t.col);
+  }
+  assert.ok(v.ticks.at(-1)!.col > 6, 'the full run keeps its own ticks');
+  // say NO: a series still above the floor at its last bin has no floor and no crop.
+  const live = report({ pad: 0 }) as unknown as { spps: { point_receivers: { bands: { energy_pa2: number[] }[] }[] } };
+  live.spps.point_receivers[0].bands.forEach((b) => (b.energy_pa2[5] = b.energy_pa2[2]));
+  const lv = responseView(live as unknown as Report, 0, null);
+  assert.ok(lv);
+  assert.equal(lv.floor, null);
+  assert.equal(lv.crop, null);
 });
 
 test("responseView: a source's own echogram, from its emission; the sources summed from the first", () => {

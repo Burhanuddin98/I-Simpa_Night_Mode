@@ -12,6 +12,11 @@
 //                 copy of the map's stops): the loudest bin white, a bin 60 dB or more down
 //                 black; picking another receiver redraws it from that receiver's series.
 //                 Control: the drawn map against another receiver's expectation is caught
+//   resp-crop     the map ends shortly after the last step with a bin above -60 dB in any band
+//                 (that time plus 5 %, rounded up to the 1-2-5 tick interval), computed here from
+//                 the JSON; every bin past it is 60 dB down or more; "Full run" draws every step and
+//                 says so, a second click cuts it again. Control: the cut map against the full
+//                 run's width is caught
 //   resp-numbers  every number the window prints (band labels, time ticks) equals the JSON at
 //                 the precision shown, every name is the JSON's, the colour bar's words are the
 //                 span's, and no digit is outside them. Control: a planted wrong digit is caught.
@@ -48,6 +53,9 @@ interface HookView {
   source: string | null;
   k0: number;
   cols: number;
+  shown: number;
+  crop: number | null;
+  full: boolean;
   paths: string[];
   max: { band: number; col: number };
 }
@@ -74,7 +82,24 @@ function expected(json: Json, r: number) {
   const rows = paths.map((p) => (at(json, p) as number[]).slice(k0));
   const max = Math.max(...rows.flat());
   const db = rows.map((row) => row.map((e) => (e > 0 ? 10 * Math.log10(e / max) : -Infinity)));
-  return { k0, paths, rows, db, cols: rows[0].length, bands };
+  const cols = rows[0].length;
+  return { k0, paths, rows, db, cols, bands, crop: cropOf(db, cols, dt) };
+}
+
+/** Where the map is cut, from the request: the end of the last step with a bin above -60 dB in any
+ * band, plus 5 %, rounded up to a whole multiple of the 1-2-5 interval for about 6 ticks over that
+ * time (at least one step); null (the full run) when a band is above the floor at the last step or
+ * the rounded end reaches the run's. */
+function cropOf(db: number[][], cols: number, dt: number): number | null {
+  let last = -1;
+  db.forEach((row) => row.forEach((d, c) => (d > -SPAN && c > last ? (last = c) : null)));
+  if (last >= cols - 1) return null;
+  const t = (last + 1) * dt * 1.05;
+  const raw = t / 6;
+  const p = 10 ** Math.floor(Math.log10(raw));
+  const iv = Math.max([p, 2 * p, 5 * p, 10 * p].find((v) => v >= raw * (1 - 1e-9)) ?? 10 * p, dt);
+  const n = Math.round((Math.ceil(t / iv - 1e-9) * iv) / dt);
+  return n >= cols ? null : n;
 }
 
 /** A PNG decoded here, sharing no code with the app's encoder: 8-bit RGBA, no interlace, rows
@@ -133,13 +158,13 @@ async function pixels(): Promise<{ w: number; h: number; data: number[] } | null
 }
 
 /** Pixels that are not the expected map's colour (within 1 per channel), with where. */
-function pixelMismatches(px: { w: number; h: number; data: number[] }, want: ReturnType<typeof expected>): string[] {
+function pixelMismatches(px: { w: number; h: number; data: number[] }, want: ReturnType<typeof expected>, cols = want.crop ?? want.cols): string[] {
   const out: string[] = [];
-  if (px.w !== want.cols || px.h !== want.bands) return [`image ${px.w} x ${px.h}, the JSON's map ${want.cols} x ${want.bands}`];
+  if (px.w !== cols || px.h !== want.bands) return [`image ${px.w} x ${px.h}, the JSON's map ${cols} x ${want.bands}`];
   for (let b = 0; b < want.bands; b++) {
     const y = want.bands - 1 - b;
-    for (let c = 0; c < want.cols; c++) {
-      const i = (y * want.cols + c) * 4;
+    for (let c = 0; c < cols; c++) {
+      const i = (y * cols + c) * 4;
       const got = px.data.slice(i, i + 4);
       const rgb = colour(want.db[b][c]);
       if (got[3] !== 255 || rgb.some((v, k) => Math.abs(v - got[k]) > 1)) out.push(`band ${b} step ${c}: drawn ${got.join(',')}, want ${rgb.join(',')} (${want.db[b][c].toFixed(1)} dB)`);
@@ -240,7 +265,7 @@ describe('The response window: the energy echogram per band', () => {
     const hot = pixelAt(px, want.bands, top.b, top.c);
     assert.deepEqual(hot, [255, 255, 255], 'the loudest bin');
     const down: { b: number; c: number; d: number }[] = [];
-    want.db.forEach((row, b) => row.forEach((d, c) => (d <= -SPAN ? down.push({ b, c, d }) : null)));
+    want.db.forEach((row, b) => row.slice(0, px.w).forEach((d, c) => (d <= -SPAN ? down.push({ b, c, d }) : null)));
     assert.ok(down.length > 0, 'bins 60 dB down');
     for (const x of down) assert.ok(pixelAt(px, want.bands, x.b, x.c).every((ch) => ch <= 2), `band ${x.b} step ${x.c} at ${x.d.toFixed(1)} dB is not black`);
     const near = down.filter((x) => x.d > -SPAN - 1);
@@ -257,10 +282,63 @@ describe('The response window: the energy echogram per band', () => {
     assert.ok(px1);
     const bad1 = pixelMismatches(px1, want1);
     assert.deepEqual(bad1.slice(0, 10), [], `R2: ${bad1.length} pixels`);
+    assert.equal(v1.crop, want1.crop, "R2's crop");
     await pick('receiver', '0');
     console.log(
       `resp-pixels receipt: ${want.cols} steps x ${want.bands} bands from step ${want.k0}; ${bad.length} mismatched pixels (R1), ${bad1.length} (R2); loudest bin band ${top.b} step ${top.c} drawn ${hot.join(',')}; ${down.length} bins >= 60 dB down all black (${near.length} within 1 dB of the edge); control ${other.length} pixels differ from R2's map`,
     );
+  });
+
+  it('resp-crop: the map ends after the last bin above the floor; "Full run" shows every step', async () => {
+    const want = expected(json, 0);
+    const shownAs = () => browser.execute(() => {
+      const el = document.querySelector<HTMLElement>('[data-response-window] [data-part="response-shown"]');
+      const b = document.querySelector<HTMLElement>('[data-response-window] [data-action="response-full"]');
+      return { shown: el?.getAttribute('data-shown') ?? '', text: el?.innerText ?? '', button: b ? b.getAttribute('aria-pressed') : null };
+    });
+    const v = await hook<HookView>('responseView');
+    assert.equal(v.crop, want.crop, 'the crop, against the JSON');
+    const s0 = await shownAs();
+    if (want.crop === null) {
+      // The full run, and no toggle to offer.
+      assert.equal(v.shown, want.cols);
+      assert.equal(s0.shown, 'full');
+      assert.equal(s0.button, null, 'a "Full run" toggle with nothing cut');
+      assert.match(s0.text, /^Shown: the full run/);
+      console.log(`resp-crop receipt: run ${run?.run}: no crop (${want.cols} steps), the full run shown, no toggle`);
+      return;
+    }
+    // Every bin past the end is 60 dB down or more: nothing above the floor is cut off.
+    const hidden = want.db.flatMap((row, b) => row.slice(want.crop as number).flatMap((d, c) => (d > -SPAN ? [`band ${b} step ${c + (want.crop as number)}: ${d.toFixed(1)} dB`] : [])));
+    assert.deepEqual(hidden, [], 'bins above the floor past the end');
+    assert.equal(v.shown, want.crop);
+    assert.equal(v.full, false);
+    assert.equal(s0.shown, 'crop');
+    assert.equal(s0.button, 'false');
+    assert.match(s0.text, /^Shown: to [\d.]+ s of the [\d.]+ s run/);
+    const cut = await pixels();
+    assert.ok(cut);
+    assert.equal(cut.w, want.crop);
+    // Control: the cut map against the full run's width is caught.
+    assert.ok(pixelMismatches(cut, want, want.cols).length > 0, 'the cut map read as the full run');
+    await clickSelector(`${WIN} [data-action="response-full"]`);
+    await browser.waitUntil(async () => (await hook<HookView>('responseView')).full, { timeout: 10_000, timeoutMsg: '"Full run" did not take' });
+    await m10.idle();
+    const vf = await hook<HookView>('responseView');
+    assert.equal(vf.shown, want.cols);
+    const sf = await shownAs();
+    assert.equal(sf.shown, 'full');
+    assert.equal(sf.button, 'true');
+    assert.match(sf.text, /^Shown: the full run, [\d.]+ s/);
+    const whole = await pixels();
+    assert.ok(whole);
+    const badFull = pixelMismatches(whole, want, want.cols);
+    assert.deepEqual(badFull.slice(0, 10), [], `full run: ${badFull.length} pixels`);
+    await clickSelector(`${WIN} [data-action="response-full"]`);
+    await browser.waitUntil(async () => !(await hook<HookView>('responseView')).full, { timeout: 10_000, timeoutMsg: 'the second click did not cut the map again' });
+    await m10.idle();
+    assert.equal((await hook<HookView>('responseView')).shown, want.crop);
+    console.log(`resp-crop receipt: run ${run?.run}: ${want.crop} of ${want.cols} steps shown ("${s0.text}"); 0 bins above -60 dB past the end; full run ${whole.w} steps, ${badFull.length} mismatched ("${sf.text}"); cut again`);
   });
 
   it('resp-numbers: every number the window prints is the JSON at the precision shown', async () => {

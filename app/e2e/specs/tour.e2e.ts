@@ -155,13 +155,19 @@ async function runFromButton(): Promise<Row> {
 
 const PANEL = '[data-dock-panel="acoustics"]';
 async function acousticsShows(run: string): Promise<void> {
-  await browser.waitUntil(
-    async () => {
-      const v = await hook<{ state: string; run: string | null } | null>('acousticsView');
-      return v !== null && v.run === run && v.state === 'ready';
-    },
-    { timeout: 120_000, interval: 250, timeoutMsg: `the Acoustics tab did not show ${run} ready` },
-  );
+  let last: unknown = null;
+  await browser
+    .waitUntil(
+      async () => {
+        const v = await hook<{ state: string; run: string | null } | null>('acousticsView');
+        last = v && { state: v.state, run: v.run, ...((v as { error?: unknown }).error ? { error: (v as { error?: unknown }).error } : {}) };
+        return v !== null && v.run === run && v.state === 'ready';
+      },
+      { timeout: 120_000, interval: 250 },
+    )
+    .catch(() => {
+      throw new Error(`the Acoustics tab did not show ${run} ready; last ${JSON.stringify(last)?.slice(0, 400)}`);
+    });
 }
 async function pick(control: string, value: string): Promise<void> {
   const sel = await $(`${PANEL} select[data-control="${control}"]`);
@@ -273,9 +279,11 @@ if (IR_SHOT) {
         await $(WIN).waitForExist({ timeout: 10_000 });
         await m10.idle();
         await browser.execute(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
-        const v = await hook<{ receiver: number; source: string | null; cols: number; paths: string[] } | null>('responseView');
+        const v = await hook<{ receiver: number; source: string | null; cols: number; shown: number; crop: number | null; paths: string[] } | null>('responseView');
         assert.ok(v, 'the response window shows no echogram');
-        progress(`ir: ${what}: ${(await text(`${WIN} .rw-sub`)) || '?'}; receiver ${v.receiver}, source ${v.source}, ${v.cols} steps x ${v.paths.length} bands`);
+        progress(
+          `ir: ${what}: ${(await text(`${WIN} .rw-sub`)) || '?'}; receiver ${v.receiver}, source ${v.source}, ${v.shown} of ${v.cols} steps shown (crop ${v.crop}) x ${v.paths.length} bands; ${(await text(`${WIN} [data-part="response-shown"]`)) || '?'}`,
+        );
       };
       progress('tour start');
       await pause(2_000);
