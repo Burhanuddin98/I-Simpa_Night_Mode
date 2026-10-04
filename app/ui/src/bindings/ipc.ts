@@ -605,6 +605,22 @@ export type NotEvaluable =
       why: 'noise_uncalibrated';
     }
   | {
+      /**
+       * The range's lower end, below zero.
+       */
+      lo: number;
+      /**
+       * The standard deviation the range was built from; `None` for EDT, whose range is the
+       * method's own.
+       */
+      sd?: number | null;
+      /**
+       * The value from the series. Not reported as the quantity.
+       */
+      value: number;
+      why: 'range_below_zero';
+    }
+  | {
       sources: string[];
       why: 'several_sources';
     }

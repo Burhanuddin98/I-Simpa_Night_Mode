@@ -896,7 +896,30 @@ pub fn shown_with(
         s.status = RangeStatus::Wide;
         s.straddle = Some((lo, hi));
     }
+    if cannot_be_negative(i) && s.lo < 0.0 {
+        return Err(not_evaluable(
+            QUANTITIES[i].0,
+            NotEvaluable::RangeBelowZero {
+                value: s.value,
+                lo: s.lo,
+                sd: Some(s.sd),
+            },
+        ));
+    }
     Ok(s)
+}
+
+/// Whether quantity `i` ([`QUANTITY_NAMES`]) cannot be negative, so that a shown range reaching
+/// below zero is refused (`range_below_zero`): the decay times, D50 and Ts. SPL, C50 and C80 can.
+pub fn cannot_be_negative(i: usize) -> bool {
+    matches!(
+        QUANTITIES[i].0,
+        Quantity::Edt
+            | Quantity::T20
+            | Quantity::T30
+            | Quantity::Definition { .. }
+            | Quantity::CentreTime
+    )
 }
 
 /// Whether [`judge_one`] refuses quantity `i`'s `value` for its calibrated standard deviation
@@ -2081,6 +2104,52 @@ mod tests {
         assert_eq!(range(6, 0.4, 0.021).status, RangeStatus::Wide);
         // Says no: a NaN standard deviation is never ok.
         assert_eq!(range(2, 0.5, f64::NAN).status, RangeStatus::Wide);
+    }
+
+    #[test]
+    fn a_range_below_zero_is_refused_for_a_quantity_that_cannot_be_negative() {
+        let est = |value, sd| Ok(Estimate { value, sd });
+        let below = |i: usize, value: f64, sd: f64| match shown(i, est(value, sd)) {
+            Err(e) => matches!(e.not_evaluable(), Some(NotEvaluable::RangeBelowZero { .. })),
+            Ok(_) => false,
+        };
+        // The Elmia hall's R03 at 1 kHz (backlog 78): T30 1.960 s, sd 1.178 s, lo -0.985 s.
+        assert!(below(3, 1.960, 1.178));
+        let Err(e) = shown(3, est(1.960, 1.178)) else {
+            unreachable!()
+        };
+        let Some(NotEvaluable::RangeBelowZero { value, lo, sd }) = e.not_evaluable() else {
+            unreachable!()
+        };
+        assert_eq!((*value, *sd), (1.960, Some(1.178)));
+        assert!((lo - (1.960 - 2.5 * 1.178)).abs() < 1e-12, "{lo}");
+        assert_eq!(e.code(), super::super::codes::NOT_EVALUABLE);
+        // T20, Ts and D50 alike; each just inside zero is still shown.
+        assert!(below(2, 0.5, 0.21) && below(7, 0.08, 0.04) && below(6, 0.04, 0.02));
+        assert!(shown(2, est(0.5, 0.19)).is_ok());
+        assert!(shown(7, est(0.08, 0.03)).is_ok());
+        assert!(shown(6, est(0.06, 0.02)).is_ok());
+        // Says no: SPL, C50 and C80 may be negative, so a range below zero is theirs to have.
+        assert!(shown(0, est(-3.0, 1.0)).is_ok());
+        assert!(shown(4, est(-1.0, 2.0)).is_ok());
+        assert!(shown(5, est(0.5, 2.0)).is_ok());
+        // A refusal for noise alone, shown wide instead, is refused the same way when its range
+        // reaches below zero.
+        let noisy = not_evaluable(
+            Quantity::T30,
+            NotEvaluable::MonteCarloNoise {
+                value: 1.960,
+                sd: Some(1.178),
+                limit: limits::DECAY_RELATIVE,
+                resamples: RESAMPLES,
+                refused_resamples: 1,
+                particle_count: ParticleCount::BeyondResampled { multiple: 64 },
+            },
+        );
+        assert!(matches!(
+            shown(3, Err(noisy)).unwrap_err().not_evaluable(),
+            Some(NotEvaluable::RangeBelowZero { .. })
+        ));
     }
 
     #[test]

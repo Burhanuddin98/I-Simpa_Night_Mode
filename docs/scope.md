@@ -41,7 +41,7 @@ into the file named here in the same session, never only into a chat or a handof
 
 ## Decided 2026-09-27
 
-- **EDT display (Burhan): "Show the range always".** EDT is always shown with its guaranteed range; wide ranges are flagged.
+- **EDT display (Burhan): "Show the range always".** EDT is always shown with its guaranteed range; wide ranges are flagged, and one that reaches below zero is refused (`range_below_zero`, decision-log row 48).
 - **M8 split (Jarvis's call, Burhan may overrule):** M8a T30 first, M8b EDT once the band is in Rust.
 - **Default step:** pending the step-cost measurement (Burhan: "needs more research").
 

@@ -69,8 +69,10 @@ use crate::schema::SolverKind;
 /// true only when every parameter there is PASS, no longer always false. No other field changes.
 /// 12 (M12 P2): `room`, the room from the run's own inputs for either solver ([`RoomReport`]):
 /// volume, area, DIN 18041's group-A targets and the absorption by surface group; and an SPPS
-/// reference band's `sabine_s` beside `eyring_s`. No other field changes.
-pub const REPORT_VERSION: u32 = 12;
+/// reference band's `sabine_s` beside `eyring_s`. No other field changes. 13 (backlog 78): a
+/// refusal `range_below_zero`, for an EDT, T20, T30, D50 or Ts whose range reaches below zero, which
+/// earlier versions showed `wide` with that range. No other field changes.
+pub const REPORT_VERSION: u32 = 13;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -1723,6 +1725,20 @@ impl EdtReport {
     /// `edt_refused`.
     fn evaluated(&self) -> Evaluated {
         match self.value_s {
+            Some(value)
+                if self.status != edt::Status::Refused
+                    && let Some(lo) = self.lo_s
+                    && lo < 0.0 =>
+            {
+                Evaluated::refused(params::not_evaluable(
+                    Quantity::Edt,
+                    NotEvaluable::RangeBelowZero {
+                        value,
+                        lo,
+                        sd: None,
+                    },
+                ))
+            }
             Some(value) if self.status != edt::Status::Refused => Evaluated::Value {
                 value,
                 mc_sd: None,
@@ -2415,13 +2431,44 @@ mod tests {
     use super::*;
     use serde_json::Value;
 
+    #[test]
+    fn an_edt_whose_range_reaches_below_zero_is_refused() {
+        let edt = |status, lo: f64| EdtReport {
+            method: edt::METHOD.into(),
+            status,
+            value_s: Some(0.4),
+            lo_s: Some(lo),
+            hi_s: Some(0.8 - lo),
+            reason: String::new(),
+            arrival_s: None,
+            validated: true,
+            validation_note: None,
+        };
+        let refusal = |e: &Evaluated| match e {
+            Evaluated::NotEvaluable { not_evaluable } => {
+                not_evaluable.error.not_evaluable().cloned()
+            }
+            Evaluated::Value { .. } => None,
+        };
+        assert_eq!(
+            refusal(&edt(edt::Status::Wide, -0.1).evaluated()),
+            Some(NotEvaluable::RangeBelowZero {
+                value: 0.4,
+                lo: -0.1,
+                sd: None
+            })
+        );
+        // Says no: a wide EDT whose range stays above zero is shown.
+        assert_eq!(edt(edt::Status::Wide, 0.05).evaluated().value(), Some(0.4));
+    }
+
     /// Backlog 47: the report's required fields, at every depth of its schema, pinned to
     /// [`REPORT_VERSION`]. A field made required (or no longer required) changes the digest, and
     /// the pair below no longer matches: bump the version, write its history line (here and in
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
-        12,
-        "667ef5d3ddf4926b45f44347306b43eb264ea1172d6b04ffbb3abd2bf6767233",
+        13,
+        "dc4921238bee3b08d5a22de7a61898c7b674ebb82750e750152aaeff50367cb5",
     );
 
     /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.

@@ -609,7 +609,9 @@ in four pre-registered rounds; every number is in
   with its range, `value ± 2.5·sd`, marked `wide`, instead of refusing it
   (`params::noise::shown`); and every value it gives is marked `ok` when that range is within the
   limen (twice the table's numbers) and `wide` when not. A refusal by the resamples, or with no
-  standard deviation, stays a refusal (`docs/formats/results-json.md`, "The range"), unless its
+  standard deviation, stays a refusal (`docs/formats/results-json.md`, "The range"), and so does
+  an EDT, T20, T30, D50 or Ts whose range reaches below zero (`range_below_zero`, results version
+  13, decision-log row 48), unless its
   stand-ins give it (next).
 
   **The stand-ins (results version 9; `params::noise`, "The stand-ins").** The bed's G2 (T60 2 to
@@ -794,8 +796,9 @@ the quantity lies between the value with that bin **wholly late** and **wholly e
 bracket for C50, C80 and D50, from every arrival and reading the value is read from; the value, from
 the in-bin decay, lies inside it. When either end lies further from the value than the limit (0.1
 dB for C, 0.005 for D50), the value is not known to within the limit, and the report shows it
-`wide`, with `straddle` and a range covering the bracket (`params::noise::shown_with`). It is never
-refused for it (decision-log row 37 (3): every metric shows a range). A window edge on a bin edge
+`wide`, with `straddle` and a range covering the bracket (`params::noise::shown_with`). It is not
+refused for it (decision-log row 37 (3): every metric shows a range), unless a D50's range then
+reaches below zero (`range_below_zero`, row 48). A window edge on a bin edge
 has no bracket.
 - **Why.** The bed's set A fed the product exact noise-free echograms
   (`crates/simpa-core/tests/bed_shim.rs`): C50 and D50 came back answered with no mark up to
