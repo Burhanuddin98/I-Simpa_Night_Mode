@@ -230,8 +230,74 @@ const PARTICLES_FROM: Vec = [19, -13, 6];
 const PARTICLES_LOOK: Vec = [0, 0, 0.5];
 
 const PROBE = process.env.TOUR_PROBE ?? '';
+/** The response window on a finished CR4 run (Burhan 2026-10-04: "WHAT ABOUT THE IR SPECTROGRAM
+ * RESULT"): TOUR_IR is the one picture's path, TOUR_IR_RUN the run, opened in TOUR_HALL itself. */
+const IR_SHOT = process.env.TOUR_IR ?? '';
 
-if (PROBE) {
+if (IR_SHOT) {
+  describe('Tour clip: the response window on CR4, two receivers and the two sources', function () {
+    this.timeout(1_200_000);
+    afterEach(function () {
+      const t = this.currentTest;
+      if (t?.state === 'failed') progress(`FAILED at "${t.title}": ${String(t.err?.message ?? '').replace(/\s+/g, ' ').slice(0, 400)}`);
+    });
+    after(() => progress('tour end'));
+    it('ir', async () => {
+      await browser.setTimeout({ script: 120_000 });
+      progress('tour prep');
+      await waitForHooks(['idle', 'openProject', 'setStep', 'runsRows', 'selectRun', 'dockTab', 'acousticsView', 'responseView']);
+      for (const panel of ['scene', 'props', 'dock'] as const) await fold(panel, false).catch(() => undefined);
+      await m10.openProject(need('TOUR_HALL'));
+      await m10.setStep('results');
+      const run = need('TOUR_IR_RUN');
+      let rows: Row[] = [];
+      await browser.waitUntil(async () => (rows = await hook<Row[]>('runsRows')).some((r) => r.run === run), { timeout: 30_000 }).catch(() => {
+        throw new Error(`the project lists no run ${run}: ${JSON.stringify(rows).slice(0, 600)}`);
+      });
+      assert.equal(rows.find((r) => r.run === run)?.status, 'OK', `run ${run}`);
+      await hook('selectRun', run);
+      await showTab('acoustics');
+      await acousticsShows(run);
+      const value = async (control: string, name: string) => {
+        const o = (await options(control)).find((x) => x.text === name || x.text.startsWith(`${name} `));
+        assert.ok(o, `no ${control} "${name}" in ${JSON.stringify(await options(control))}`);
+        return o.value;
+      };
+      const [ls1, ls2, mp1, mp5] = [await value('source', 'LS1'), await value('source', 'LS2'), await value('receiver', 'MP1'), await value('receiver', 'MP5')];
+      await pick('source', ls1);
+      await pick('receiver', mp1);
+      await acousticsShows(run);
+      await browser.action('pointer', { parameters: { pointerType: 'mouse' } }).move({ x: 2, y: 2, origin: 'viewport', duration: 0 }).perform();
+      const WIN = '[data-response-window]';
+      const shown = async (what: string) => {
+        await $(WIN).waitForExist({ timeout: 10_000 });
+        await m10.idle();
+        await browser.execute(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))));
+        const v = await hook<{ receiver: number; source: string | null; cols: number; paths: string[] } | null>('responseView');
+        assert.ok(v, 'the response window shows no echogram');
+        progress(`ir: ${what}: ${(await text(`${WIN} .rw-sub`)) || '?'}; receiver ${v.receiver}, source ${v.source}, ${v.cols} steps x ${v.paths.length} bands`);
+      };
+      progress('tour start');
+      await pause(2_000);
+      mark('ir-open');
+      await clickSelector(`${PANEL} [data-action="open-response"]`);
+      await shown('opened');
+      await browser.saveScreenshot(IR_SHOT);
+      progress(`ir: picture ${IR_SHOT}`);
+      await pause(4_500);
+      for (const [control, v, what] of [
+        ['receiver', mp5, 'receiver MP5'],
+        ['source', ls2, 'source LS2'],
+        ['receiver', mp1, 'receiver MP1'],
+      ] as const) {
+        await pick(control, v);
+        await shown(what);
+        await pause(4_000);
+      }
+      mark('ir-done');
+    });
+  });
+} else if (PROBE) {
   describe('Tour probe: camera angles over the map and the particles', function () {
     this.timeout(1_200_000);
     it('probe', async () => {

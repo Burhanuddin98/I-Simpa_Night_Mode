@@ -227,6 +227,14 @@
   color: var(--text);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
 }
+/* The whole window on a dense backing, not the 40 % glass alone: on the glass the 3D view's map
+   panel ("Smooth colour", "Contours") read through the title and the note (Burhan 2026-10-04).
+   0.95, not the plot's 0.88: at 0.88 those words and the inspector's still showed as ghosts
+   behind the head (the plot itself sits on both fills). `.rw.glass` so it wins over theme.css's
+   `.glass` whatever the import order; the edge stays. */
+.rw.glass {
+  background: rgba(9, 9, 11, 0.95);
+}
 .rw-head {
   display: flex;
   align-items: baseline;
@@ -259,8 +267,8 @@
   color: var(--text-2);
   font-size: 11.5px;
 }
-/* The plot sits on a dense backing: on the 40 % glass alone the 3D view's lines and the inset's
-   words read through the strip and the axes. The head and the note stay on the glass. */
+/* The plot sits on its own dense backing as well, a panel within the window's: the 3D view's
+   lines and the inset's words must not read through the strip and the axes. */
 .rw-grid {
   display: grid;
   padding: 8px 6px 6px;
