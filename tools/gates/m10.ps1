@@ -81,7 +81,7 @@ $fullRun = $Only -eq 'all' -and -not $SkipCore -and (@($gateSpecs | Where-Object
 
 # theme.css is pinned (M10 PLAN.md 2.4 rule 4; re-pinned for the glass layout, decision-log row 50): its git blob, which does
 # not depend on the checkout's line endings.
-$themeBlob = 'bbb2d2b53c1a08d6886ca116f5db0b7f66f7081c'
+$themeBlob = '8c9f6bd20faa141b56e53692b812311488eafc15'
 
 $failures = @()
 function Check($name, [scriptblock]$body) {

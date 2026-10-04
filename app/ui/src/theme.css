@@ -199,6 +199,9 @@ input[aria-invalid='true'] {
 .center > * {
   pointer-events: auto;
 }
+.work > .center {
+  pointer-events: none;
+}
 /* A floating panel (row 50). */
 .glass {
   background: var(--glass);
