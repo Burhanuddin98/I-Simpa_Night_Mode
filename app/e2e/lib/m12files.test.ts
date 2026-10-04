@@ -18,6 +18,11 @@ test('M12 files: the surface map fixture reads to its last byte, its header as t
   assert.ok(c.faces.every((f) => f.records.every(([s]) => s < 100)));
   const cut = readCsbin(path.join(solve, 'Surface receiver', '1000 Hz', 'rs_cut.csbin'));
   assert.equal(cut.nodes, 60);
+  // W5: every face's vertices index the nodes; W1: the receivers' names and face counts.
+  for (const x of [c, cut]) assert.ok(x.faces.every((f) => f.vertices.every((v) => v >= 0 && v < x.nodes)));
+  assert.equal(cut.receivers.reduce((n, r) => n + r.faces, 0), cut.faces.length);
+  assert.ok(cut.receivers.every((r) => r.name.length > 0 && !r.name.includes('\0')));
+  console.log(`receivers: ${JSON.stringify(c.receivers)} ${JSON.stringify(cut.receivers)}`);
 });
 
 test('M12 files: the particle fixture: 8 particles, alive counts summing to its records', () => {

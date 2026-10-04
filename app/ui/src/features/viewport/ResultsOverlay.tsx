@@ -8,12 +8,18 @@
 // numbers are the map's own range, from the `.csbin` (mapData.ts), not report parameters.
 //
 // The test hooks of gate (c) and (d) are registered here, on mount, on every step.
-import { useEffect } from 'react';
-import { stepStore, useStore } from '../../store';
+//
+// W5 (wow list; mapView.ts): smooth colour, contours on it and a fixed colour range in the map
+// panel, and the value probe: the map face under the pointer, its own `.csbin` record with its
+// level, band and time, in a card by the pointer (`[data-part="map-probe"]`, a results region).
+import { useEffect, useState } from 'react';
+import { planesNotInRun, rerunText } from '../../chrome/planes';
+import { sceneStore, stepStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
 import { Animator, animatorStore } from './animator';
-import { mapPixels, resultsLayer } from './engine';
-import { bandLabel, resultsView, resultsViewStore, startResultsView } from './resultsView';
+import { framePixels, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, resultsLayer } from './engine';
+import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, stepTime, type ProbeView } from './mapView';
+import { bandLabel, bandName, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
 
 const PlayIcon = () => (
   <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
@@ -49,6 +55,13 @@ function registerM12Hooks(): () => void {
       };
     }),
     registerHook('m12MapPixels', () => mapPixels()),
+    // W5: how the map is drawn, the node means the shader computes, a point over a face, the probe.
+    registerHook('wowLook', () => ({ ...layer.look(), smoothRefusal: layer.smoothRefusal, fixed: resultsViewStore.get().fixed })),
+    registerHook('wowNodeEnergies', (samples: [number, number][]) => layer.readNodes(samples)),
+    registerHook('wowMapFacePoint', (face: number) => mapFacePoint(face)),
+    registerHook('wowProbe', () => currentProbe()),
+    registerHook('wowOffMapPoint', () => offMapPoint()),
+    registerHook('wowFramePixels', () => framePixels()),
     registerHook('m12Texels', (samples: [number, number][]) => layer.readTexels(samples, 'texel')),
     registerHook('m12DiffTexels', (samples: [number, number][]) => layer.readTexels(samples, 'diff')),
     registerHook('m12SetStep', (step: number) => {
@@ -75,16 +88,106 @@ function registerM12Hooks(): () => void {
 }
 
 /** `120 ms`: the step's start time, from the run's own float32 time step. */
-function timeText(step: number, dt: number | null | undefined): string {
-  if (!dt) return `step ${step}`;
-  const ms = step * dt * 1000;
-  return `${ms < 100 ? ms.toFixed(1) : Math.round(ms)} ms`;
+const timeText = stepTime;
+
+/** The probe of the face under the pointer at the timeline's step: the shown map's own record. */
+function currentProbe(): (ProbeView & { x: number; y: number }) | null {
+  const at = mapPointerStore.get();
+  const s = shownMaps();
+  const v = resultsViewStore.get();
+  if (!at || !s || !v.map || at.face >= s.map.faceCount || stepStore.get() !== 'results') return null;
+  const step = Math.min(animatorStore.get().step, s.map.timeStepCount - 1);
+  const dt = v.data?.time_step_s ?? v.data?.surfaces[0]?.time_step_s;
+  const base = v.map.kind === 'diff' ? s.base : null;
+  return { ...probeOf(s.map, at.face, step, { what: s.what, band: bandName(v.bandHz), dtS: dt, smooth: v.smooth, base }), x: at.x, y: at.y };
+}
+
+/** The probe card by the pointer. */
+function Probe() {
+  useStore(mapPointerStore);
+  useStore(animatorStore);
+  useStore(resultsViewStore);
+  const p = currentProbe();
+  if (!p) return null;
+  return (
+    <div
+      className="vp-probe float-panel"
+      data-part="map-probe"
+      data-results-region
+      data-probe-face={p.face}
+      data-probe-step={p.step}
+      data-probe-bits={p.bits === null ? '' : p.bits.toString(16)}
+      style={{ left: p.x + 16, top: p.y + 16 }}
+    >
+      <div className="vp-probe-title" data-probe="title">
+        {p.title}
+      </div>
+      {p.level !== null && (
+        <div className="vp-probe-level mono" data-probe="level">
+          {p.level}
+        </div>
+      )}
+      <div className="vp-probe-value mono" data-probe="value">
+        {p.value}
+      </div>
+      <div className="vp-probe-note" data-probe="face">
+        Face {p.face} of the map{p.note ? `. ${p.note}` : ''}
+      </div>
+    </div>
+  );
+}
+
+/** W5: the fixed range's two ends, committed together on Enter or blur; a refusal stays inline. */
+function RangeFields({ lo, hi }: { lo: number; hi: number }) {
+  const [text, setText] = useState({ lo: String(lo), hi: String(hi) });
+  const [refusal, setRefusal] = useState<string | null>(null);
+  const commit = (next: { lo: string; hi: string }) => {
+    const r = parseRange(next.lo, next.hi);
+    if (!r.ok) {
+      setRefusal(r.message);
+      return;
+    }
+    setRefusal(null);
+    resultsView.setFixedRange(r.range);
+  };
+  const field = (k: 'lo' | 'hi', label: string) => (
+    <input
+      className="vp-range-input mono"
+      data-field={`range.${k}`}
+      aria-label={label}
+      aria-invalid={refusal !== null}
+      spellCheck={false}
+      value={text[k]}
+      onChange={(e) => setText({ ...text, [k]: e.target.value })}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit(text);
+      }}
+      onBlur={() => commit(text)}
+    />
+  );
+  return (
+    <>
+      <div className="vp-row" data-part="map-range">
+        <span className="vp-row-label">From</span>
+        {field('lo', 'Colour range low end in dB')}
+        <span className="vp-row-label">to</span>
+        {field('hi', 'Colour range high end in dB')}
+        <span className="vp-row-label">dB</span>
+      </div>
+      {refusal && (
+        <div className="vp-diff-note vp-refused" data-part="range-refused" role="alert">
+          {refusal}. Not applied.
+        </div>
+      )}
+    </>
+  );
 }
 
 export function ResultsOverlay() {
   const step = useStore(stepStore);
   const v = useStore(resultsViewStore);
   const anim = useStore(animatorStore);
+  const scene = useStore(sceneStore);
 
   useEffect(() => {
     startResultsView();
@@ -100,6 +203,8 @@ export function ResultsOverlay() {
     );
   }
   const dt = v.data?.time_step_s ?? v.data?.surfaces[0]?.time_step_s;
+  // W1: a plane added or renamed after this run has no map in it until SPPS runs again.
+  const rerun = v.data?.solver === 'spps' ? rerunText(planesNotInRun(scene?.view.surface_receivers ?? [], v.data)) : null;
   const p = v.particles;
   return (
     <>
@@ -143,11 +248,60 @@ export function ResultsOverlay() {
             {v.baselineReason ?? (v.baselineLabel ? `This run minus ${v.baselineLabel}, in dB. Blue is quieter, red louder.` : '')}
           </div>
         )}
+        {rerun && (
+          <div className="vp-diff-note vp-rerun" data-part="plane-rerun">
+            {rerun}
+          </div>
+        )}
         {v.mapMessage && (
           <div className="vp-diff-note" data-part="map-message">
             {v.mapMessage}
           </div>
         )}
+
+        <button className="vp-switch" role="switch" aria-checked={v.smooth} data-part="map-smooth" disabled={v.smoothRefusal !== null} onClick={() => resultsView.setSmooth(!v.smooth)}>
+          <span>Smooth colour</span>
+          <span className="track" aria-hidden>
+            <span className="knob" />
+          </span>
+        </button>
+        {v.smoothRefusal && (
+          <div className="vp-diff-note" data-part="smooth-refused">
+            Drawn flat: {v.smoothRefusal}.
+          </div>
+        )}
+        <div className="vp-row" role="radiogroup" aria-label="Contours">
+          <span className="vp-row-label">Contours</span>
+          {[0, ...CONTOUR_STEPS_DB].map((db) => (
+            <button
+              key={db}
+              className="vp-chip-btn mono"
+              role="radio"
+              data-map-contours={db}
+              aria-checked={v.isoDb === db}
+              disabled={!v.smooth && db > 0}
+              title={db === 0 ? 'No contour lines' : v.smooth ? `A line every ${db} dB on the smoothed levels` : 'Contours follow the smooth colour: switch it on first'}
+              onClick={() => resultsView.setContours(db)}
+            >
+              {db === 0 ? 'Off' : `${db} dB`}
+            </button>
+          ))}
+        </div>
+        <button
+          className="vp-switch"
+          role="switch"
+          aria-checked={v.fixed !== null}
+          data-part="map-fixed"
+          disabled={v.map?.kind !== 'level' && v.fixed === null}
+          title={v.map?.kind === 'diff' ? 'A difference keeps its own range, symmetric about 0 dB' : 'Hold the colour range while switching bands and runs'}
+          onClick={() => resultsView.setFixedRange(v.fixed ? null : (v.map?.range ?? null))}
+        >
+          <span>Fixed colour range</span>
+          <span className="track" aria-hidden>
+            <span className="knob" />
+          </span>
+        </button>
+        {v.fixed && <RangeFields key={`${v.fixed.lo}|${v.fixed.hi}`} lo={v.fixed.lo} hi={v.fixed.hi} />}
       </div>
 
       {v.map && (
@@ -159,8 +313,14 @@ export function ResultsOverlay() {
             <span data-legend="mid">{v.map.legend.mid}</span>
             <span data-legend="hi">{v.map.legend.hi}</span>
           </div>
+          {v.smooth && !v.smoothRefusal && (
+            <div className="vp-legend-note" data-part="legend-note">
+              Smoothed between faces; the probe reads each face's own value.{v.isoDb > 0 ? ` ${contourText(v.isoDb)}.` : ''}
+            </div>
+          )}
         </div>
       )}
+      <Probe />
 
       <div className="vp-transport float-panel" data-part="animator" data-results-region>
         {p.state === 'none' && (

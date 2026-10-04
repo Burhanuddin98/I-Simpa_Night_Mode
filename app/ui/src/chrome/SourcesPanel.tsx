@@ -8,6 +8,8 @@
 // M11 (row 22, M26): each source in the list has its on/off switch (`[data-source-toggle]`, the
 // scene list's `SourceSwitch`, here with its state as text), and a disabled source reads "off"
 // in the list and in its editor's head. A refused switch is shown under the sources.
+//
+// W1 (parity M41): the sound-level planes below the receivers (PlanesSection.tsx).
 import { useEffect, useRef, useState, type Ref } from 'react';
 import * as actions from '../actions';
 import type { PointReceiver, SceneState, Source, UiIssue } from '../bindings/ipc';
@@ -15,6 +17,7 @@ import { fieldKey, issuesByEntity, issuesForField } from '../issues';
 import { NOT_A_NUMBER, parseStrictDecimal } from '../numbers';
 import { moveReceiver, moveSource, rename } from '../ops';
 import { refusalStore, sceneStore, selectionStore, toolStore, useStore } from '../store';
+import { PlanesSection } from './PlanesSection';
 import { IssueTag, SourceSwitch, toggleRefusals } from './ScenePanel';
 import {
   AXES,
@@ -471,6 +474,8 @@ export function SourcesPanel() {
           and the project is left unchanged.
         </div>
       </div>
+
+      <PlanesSection scene={scene} />
     </div>
   );
 }

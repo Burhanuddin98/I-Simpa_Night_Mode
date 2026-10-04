@@ -8,6 +8,11 @@
 //     Difference from the baseline: a second texture of the same layout, subtracted in dB.
 //   - Particles: every record of the band's `.pbin` uploaded once (position, step, energy); the
 //     vertex shader keeps a record only at its own step. Changing the step uploads nothing.
+//   - W5 (wow list; mapView.ts): smooth colour, upstream's node mean of the linked faces' texels
+//     at the step, computed in the vertex shader from a node-to-faces texture, its level
+//     interpolated across the face and coloured per fragment; iso-contours on that level
+//     (`fwidth`); a fixed colour range (the uLo/uHi uniforms); and a BVH over the map's own
+//     triangles for the value probe, whose number is the CPU's read of the face's record.
 //   - Test hooks (gate (c), (d)) read what the GPU holds and draws, through the same GLSL: texels
 //     read back by a pass that calls the map shader's own `mapTexel` into a float32 target, and
 //     the particle count by drawing the particle material itself, in its count mode, additively
@@ -27,6 +32,7 @@ import {
   AddEquation,
   NormalBlending,
   OrthographicCamera,
+  type Ray,
   Points,
   RedFormat,
   RGBAFormat,
@@ -35,8 +41,10 @@ import {
   WebGLRenderTarget,
   type WebGLRenderer,
 } from 'three';
+import { MeshBVH } from 'three-mesh-bvh';
 import type { Particles, SurfaceMap } from '../../resultsData';
 import { COOL, denseValues, HOT, mapLayout, rampFloats, type MapLayout, type Range } from './mapData';
+import { MAX_NODE_FACES, nodeFaces, type NodeFaces } from './mapView';
 import { PARTICLE_FRAGMENT_GLSL, PARTICLE_VERTEX_GLSL, recordSteps } from './particles';
 
 /** The GLSL that reads the map: the draw and the read-back hook share it. */
@@ -57,6 +65,23 @@ float diffDb(int face, int step, out bool ok) {
   float b = mapTexel(uBase, face, step);
   ok = a > 0.0 && b > 0.0 && !isinf(a) && !isinf(b) && !isnan(a) && !isnan(b);
   return ok ? levelDb(a) - levelDb(b) : 0.0;
+}
+`;
+
+/** W5: a node's energy, upstream's mean of its linked faces' texels (mapView.ts `nodeEnergy`). */
+const NODE_GLSL = /* glsl */ `
+uniform highp sampler2D uAdj;
+uniform int uAdjWidth;
+float nodeEnergy(highp sampler2D t, int start, int n, int step) {
+  float s = 0.0;
+  for (int k = 0; k < ${MAX_NODE_FACES}; k++) {
+    if (k >= n) break;
+    int j = start + k;
+    int face = int(texelFetch(uAdj, ivec2(j % uAdjWidth, j / uAdjWidth), 0).r + 0.5);
+    float e = mapTexel(t, face, step);
+    if (!isinf(e) && !isnan(e)) s += e;
+  }
+  return n > 0 ? s / float(n) : 0.0;
 }
 `;
 
@@ -83,10 +108,14 @@ function mapMaterial(): ShaderMaterial {
     uniforms: {
       uMap: { value: null },
       uBase: { value: null },
+      uAdj: { value: null },
+      uAdjWidth: { value: 1 },
       uWidth: { value: 1 },
       uSteps: { value: 1 },
       uStep: { value: 0 },
       uDiff: { value: 0 },
+      uSmooth: { value: 0 },
+      uIso: { value: 0 },
       uLo: { value: 0 },
       uHi: { value: 1 },
       uHot: { value: vec3s(HOT) },
@@ -94,42 +123,107 @@ function mapMaterial(): ShaderMaterial {
     },
     vertexShader: /* glsl */ `
       ${MAP_GLSL}
-      ${RAMP_GLSL}
+      ${NODE_GLSL}
       uniform int uStep;
       uniform int uDiff;
-      uniform float uLo;
-      uniform float uHi;
+      uniform int uSmooth;
       attribute float aFace;
-      flat varying vec4 vColor;
+      attribute float aAdj;
+      attribute float aAdjN;
+      flat varying float vFaceOk;
+      flat varying float vFaceLevel;
+      varying float vLevel;
+      varying float vOk;
       void main() {
         int face = int(aFace + 0.5);
-        vec4 c = vec4(0.0);
+        vFaceOk = 0.0;
+        vFaceLevel = 0.0;
         if (uDiff == 1) {
           bool ok;
           float d = diffDb(face, uStep, ok);
-          if (ok) {
-            float t = d / max(uHi, 1e-6);
-            c = vec4(t < 0.0 ? cool(-t) : hot(t), 1.0);
-          }
+          if (ok) { vFaceOk = 1.0; vFaceLevel = d; }
         } else {
           float e = mapTexel(uMap, face, uStep);
-          if (e > 0.0 && !isinf(e) && !isnan(e)) c = vec4(hot((levelDb(e) - uLo) / max(uHi - uLo, 1e-6)), 1.0);
+          if (e > 0.0 && !isinf(e) && !isnan(e)) { vFaceOk = 1.0; vFaceLevel = levelDb(e); }
         }
-        vColor = c;
+        vLevel = 0.0;
+        vOk = 0.0;
+        if (uSmooth == 1) {
+          int start = int(aAdj + 0.5);
+          int n = int(aAdjN + 0.5);
+          float a = nodeEnergy(uMap, start, n, uStep);
+          if (uDiff == 1) {
+            float b = nodeEnergy(uBase, start, n, uStep);
+            if (a > 0.0 && b > 0.0) { vOk = 1.0; vLevel = levelDb(a) - levelDb(b); }
+          } else if (a > 0.0) { vOk = 1.0; vLevel = levelDb(a); }
+        }
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
     fragmentShader: /* glsl */ `
-      flat varying vec4 vColor;
+      ${RAMP_GLSL}
+      uniform int uDiff;
+      uniform int uSmooth;
+      uniform float uIso;
+      uniform float uLo;
+      uniform float uHi;
+      flat varying float vFaceOk;
+      flat varying float vFaceLevel;
+      varying float vLevel;
+      varying float vOk;
+      vec3 colourOf(float l) {
+        if (uDiff == 1) {
+          float t = l / max(uHi, 1e-6);
+          return t < 0.0 ? cool(-t) : hot(t);
+        }
+        return hot((l - uLo) / max(uHi - uLo, 1e-6));
+      }
       void main() {
-        if (vColor.a < 0.5) discard;
-        gl_FragColor = vec4(vColor.rgb, 1.0);
+        if (vFaceOk < 0.5) discard;
+        // Smooth where every corner of the face has energy, else the face's own flat colour.
+        bool smoothHere = uSmooth == 1 && vOk > 0.999;
+        float l = smoothHere ? vLevel : vFaceLevel;
+        vec3 c = colourOf(l);
+        if (smoothHere && uIso > 0.0) {
+          float f = l / uIso;
+          float w = max(fwidth(f), 1e-6);
+          float d = abs(fract(f + 0.5) - 0.5);
+          float line = 1.0 - smoothstep(0.5 * w, 1.5 * w, d);
+          c = mix(c, vec3(0.93, 0.93, 0.94), 0.85 * line);
+        }
+        gl_FragColor = vec4(c, 1.0);
       }
     `,
     side: DoubleSide,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -2,
+  });
+}
+
+/** W5's read-back: point i writes the node mean (nodeEnergy) of sample i (start, count, step) to pixel i. */
+function nodeProbeMaterial(): ShaderMaterial {
+  return new ShaderMaterial({
+    uniforms: { uMap: { value: null }, uBase: { value: null }, uAdj: { value: null }, uAdjWidth: { value: 1 }, uWidth: { value: 1 }, uSteps: { value: 1 }, uN: { value: 1 } },
+    vertexShader: /* glsl */ `
+      ${MAP_GLSL}
+      ${NODE_GLSL}
+      uniform float uN;
+      attribute vec4 aSample; // start, count, step, index
+      flat varying vec4 vValue;
+      void main() {
+        vValue = vec4(nodeEnergy(uMap, int(aSample.x + 0.5), int(aSample.y + 0.5), int(aSample.z + 0.5)), 0.0, 0.0, 1.0);
+        gl_Position = vec4((2.0 * aSample.w + 1.0) / uN - 1.0, 0.0, 0.0, 1.0);
+        gl_PointSize = 1.0;
+      }
+    `,
+    fragmentShader: /* glsl */ `
+      flat varying vec4 vValue;
+      void main() { gl_FragColor = vValue; }
+    `,
+    blending: NoBlending,
+    depthTest: false,
+    depthWrite: false,
   });
 }
 
@@ -191,6 +285,12 @@ export interface MapMeta {
   baseline: string | null;
 }
 
+/** W5: how the map is drawn (smooth colour, contour spacing in dB, 0 for none). */
+export interface MapLook {
+  smooth: boolean;
+  isoDb: number;
+}
+
 export interface ParticleMeta {
   run: string;
   bandHz: number;
@@ -218,6 +318,12 @@ export class ResultsLayer {
   private layout: MapLayout | null = null;
   private mapTex: DataTexture | null = null;
   private baseTex: DataTexture | null = null;
+  /** W5: the node-to-faces list of the shown map, its texture, and the BVH of its triangles. */
+  private adj: NodeFaces | null = null;
+  private adjTex: DataTexture | null = null;
+  private mapBvh: MeshBVH | null = null;
+  /** Why smooth colour cannot be drawn for this map, or null. */
+  smoothRefusal: string | null = null;
   mapMeta: MapMeta | null = null;
   particleMeta: ParticleMeta | null = null;
   private particleBytes = 0;
@@ -255,23 +361,49 @@ export class ResultsLayer {
     this.mapTex = floatTexture(denseValues(m, l), l);
     this.baseTex = base ? floatTexture(denseValues(base, l), l) : null;
     this.textureBytes = 4 * l.width * l.height * (base ? 2 : 1);
+    // W5: the node mean's faces; above MAX_NODE_FACES a node's mean is not computed, so the map
+    // is drawn flat and says why. Face indices as float32 are exact below 2^24.
+    this.adj = nodeFaces(m);
+    this.smoothRefusal = this.adj.maxFaces > MAX_NODE_FACES ? `a node of this map links ${this.adj.maxFaces} faces, more than the ${MAX_NODE_FACES} the smooth colouring averages` : m.faceCount >= 1 << 24 ? 'the map has too many faces for smooth colouring' : null;
+    const adjN = Math.max(1, this.adj.faces.length);
+    const adjW = Math.min(this.maxTextureSize(), adjN);
+    const adjH = Math.ceil(adjN / adjW);
+    const adjData = new Float32Array(adjW * adjH);
+    adjData.set(this.adj.faces);
+    this.adjTex = adjH <= this.maxTextureSize() ? floatTexture(adjData, { faces: 0, steps: 0, width: adjW, height: adjH }) : null;
+    if (!this.adjTex) this.smoothRefusal ??= 'the node list is larger than one texture';
+    this.textureBytes += this.adjTex ? 4 * adjW * adjH : 0;
     const pos = new Float32Array(9 * m.faceCount);
     const face = new Float32Array(3 * m.faceCount);
+    const adjStart = new Float32Array(3 * m.faceCount);
+    const adjCount = new Float32Array(3 * m.faceCount);
     for (let f = 0; f < m.faceCount; f++) {
       for (let c = 0; c < 3; c++) {
         const v = m.indices[3 * f + c];
         pos.set(m.positions.subarray(3 * v, 3 * v + 3), 9 * f + 3 * c);
         face[3 * f + c] = f;
+        adjStart[3 * f + c] = this.adj.offsets[v];
+        adjCount[3 * f + c] = Math.min(this.adj.offsets[v + 1] - this.adj.offsets[v], MAX_NODE_FACES);
       }
     }
     this.map.geometry.dispose();
     const g = new BufferGeometry();
     g.setAttribute('position', new BufferAttribute(pos, 3));
     g.setAttribute('aFace', new BufferAttribute(face, 1));
+    g.setAttribute('aAdj', new BufferAttribute(adjStart, 1));
+    g.setAttribute('aAdjN', new BufferAttribute(adjCount, 1));
+    // An index in face order, so the probe's BVH (indirect: it keeps its own order) names map faces.
+    const index = new Uint32Array(3 * m.faceCount);
+    for (let i = 0; i < index.length; i++) index[i] = i;
+    g.setIndex(new BufferAttribute(index, 1));
     this.map.geometry = g;
+    this.mapBvh = m.faceCount > 0 ? new MeshBVH(g, { indirect: true }) : null;
     const u = this.map.material.uniforms;
     u.uMap.value = this.mapTex;
     u.uBase.value = this.baseTex ?? this.mapTex;
+    u.uAdj.value = this.adjTex ?? this.mapTex;
+    u.uAdjWidth.value = adjW;
+    if (this.smoothRefusal) u.uSmooth.value = 0;
     u.uWidth.value = l.width;
     u.uSteps.value = l.steps;
     u.uDiff.value = meta.kind === 'diff' && base ? 1 : 0;
@@ -282,6 +414,80 @@ export class ResultsLayer {
     return null;
   }
 
+  /** W5: smooth colour and contours; smooth stays off where `smoothRefusal` says why. */
+  setLook(look: MapLook): void {
+    const u = this.map.material.uniforms;
+    u.uSmooth.value = look.smooth && !this.smoothRefusal ? 1 : 0;
+    u.uIso.value = look.smooth && look.isoDb > 0 ? look.isoDb : 0;
+  }
+
+  /** W5: the colour scale's range (a fixed range, R47), without reloading the map. */
+  setRange(range: Range): void {
+    const u = this.map.material.uniforms;
+    u.uLo.value = range.lo;
+    u.uHi.value = range.hi;
+    if (this.mapMeta) this.mapMeta = { ...this.mapMeta, range };
+  }
+
+  look(): { smooth: boolean; isoDb: number; lo: number; hi: number } {
+    const u = this.map.material.uniforms;
+    return { smooth: u.uSmooth.value === 1, isoDb: u.uIso.value as number, lo: u.uLo.value as number, hi: u.uHi.value as number };
+  }
+
+  /** The map face a ray meets first (either side), and how far; null off the map or with none shown. */
+  pickMap(ray: Ray): { face: number; distance: number; point: [number, number, number] } | null {
+    if (!this.mapBvh || !this.map.visible || !this.group.visible) return null;
+    const hit = this.mapBvh.raycastFirst(ray, DoubleSide);
+    if (!hit || typeof hit.faceIndex !== 'number') return null;
+    return { face: hit.faceIndex, distance: hit.distance, point: [hit.point.x, hit.point.y, hit.point.z] };
+  }
+
+  /** A map face's centroid, from the drawn positions. */
+  faceCentroid(face: number): [number, number, number] | null {
+    const p = this.map.geometry.getAttribute('position');
+    if (!p || !(face >= 0 && 3 * face + 2 < p.count)) return null;
+    const out: [number, number, number] = [0, 0, 0];
+    for (let c = 0; c < 3; c++) for (let i = 0; i < 3; i++) out[i] += (p.array[9 * face + 3 * c + i] as number) / 3;
+    return out;
+  }
+
+  /** W5's read-back: each node's mean energy at a step, computed by the map shader's `nodeEnergy`, as float32 bits. */
+  readNodes(samples: [number, number][]): number[] {
+    const l = this.layout;
+    const adj = this.adj;
+    if (!l || !this.mapTex || !adj || !this.adjTex) throw new Error('no map with a node list loaded');
+    const nodes = adj.offsets.length - 1;
+    for (const [n, s] of samples) {
+      if (!(n >= 0 && n < nodes && s >= 0 && s < l.steps)) throw new Error(`no node ${n} or step ${s} in ${nodes} nodes x ${l.steps} steps`);
+      if (adj.offsets[n + 1] - adj.offsets[n] > MAX_NODE_FACES) throw new Error(`node ${n} links more than ${MAX_NODE_FACES} faces`);
+    }
+    const n = samples.length;
+    const mat = nodeProbeMaterial();
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array(3 * n), 3));
+    g.setAttribute('aSample', new BufferAttribute(new Float32Array(samples.flatMap(([v, s], i) => [adj.offsets[v], adj.offsets[v + 1] - adj.offsets[v], s, i])), 4));
+    const pts = new Points(g, mat);
+    pts.frustumCulled = false;
+    const scene = new Scene();
+    scene.add(pts);
+    const u = mat.uniforms;
+    u.uMap.value = this.mapTex;
+    u.uBase.value = this.mapTex;
+    u.uAdj.value = this.adjTex;
+    u.uAdjWidth.value = this.map.material.uniforms.uAdjWidth.value;
+    u.uWidth.value = l.width;
+    u.uSteps.value = l.steps;
+    u.uN.value = n;
+    try {
+      const px = this.readPass(n, (r) => r.render(scene, new OrthographicCamera()));
+      const bits = new Uint32Array(px.buffer);
+      return samples.map((_, i) => bits[4 * i]);
+    } finally {
+      g.dispose();
+      mat.dispose();
+    }
+  }
+
   clearMap(): void {
     this.disposeTextures();
     this.map.geometry.dispose();
@@ -289,13 +495,18 @@ export class ResultsLayer {
     this.map.visible = false;
     this.mapMeta = null;
     this.layout = null;
+    this.adj = null;
+    this.mapBvh = null;
+    this.smoothRefusal = null;
   }
 
   private disposeTextures(): void {
     this.mapTex?.dispose();
     this.baseTex?.dispose();
+    this.adjTex?.dispose();
     this.mapTex = null;
     this.baseTex = null;
+    this.adjTex = null;
     this.textureBytes = 0;
   }
 

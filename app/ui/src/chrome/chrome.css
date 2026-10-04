@@ -971,3 +971,16 @@
   position: relative;
   z-index: 1;
 }
+
+/* W1: the sound-level planes (PlanesSection.tsx) */
+.plane-row {
+  padding: 8px 0 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.plane-head {
+  margin-bottom: 6px;
+}
+.plane-head .point-name {
+  flex-grow: 1;
+  width: auto;
+}

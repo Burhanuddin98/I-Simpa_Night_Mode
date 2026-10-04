@@ -28,10 +28,13 @@ import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { regroupFaces } from './chrome/sceneModel';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
 import { decodeMesh } from './mesh';
+import { earPlane, PLANE_RESOLUTION_M, roomBox } from './chrome/planes';
 import {
   addMaterial,
   addReceiver,
   addSource,
+  addSurfaceReceiver,
+  newCuttingPlane,
   libraryMaterial,
   newReceiver,
   newSource,
@@ -301,6 +304,24 @@ export async function placeAt(kind: 'receiver' | 'source', point: Vec3): Promise
   }
   const name = nextName('S', view.sources.map((s) => s.name));
   return apply(addSource(view.sources.length, newSource(id, name, point)), `source:new:position`);
+}
+
+/**
+ * W1 (parity M41): a new cutting plane over the model's box at ear height, as upstream places
+ * one (1.6 m above the lowest point, A, B, C at the box's corners), named `Plane <n>`, cells of
+ * `PLANE_RESOLUTION_M`, at the end of the surface receivers. Through the checked apply: the
+ * core's `cutting_plane_invalid` refuses a bad one, filed under `surface_receiver:new:shape`.
+ * Null without a checked model to place it in.
+ */
+export async function addEarPlane(): Promise<EditOutcome | null> {
+  const state = sceneStore.get();
+  const box = roomBox(state?.check);
+  if (!state || !box) return null;
+  const view = state.view;
+  const { a, b, c } = earPlane(box);
+  const name = nextName('Plane ', view.surface_receivers.map((r) => r.name));
+  const plane = newCuttingPlane(crypto.randomUUID(), name, a, b, c, PLANE_RESOLUTION_M);
+  return apply(addSurfaceReceiver(view.surface_receivers.length, plane), 'surface_receiver:new:shape');
 }
 
 /** The issues of the current state and the refusals of one field, for inline messages. */

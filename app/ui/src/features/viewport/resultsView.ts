@@ -3,6 +3,10 @@
 // particles (R53), all through P1's IPC (`run_data`, `run_surface_map`, `run_particles`), which
 // serve only results that load and verify. The drawing is resultsLayer.ts's, through the engine.
 //
+// W5 (wow list; mapView.ts): smooth colour, contours and a fixed colour range are view choices
+// kept here across bands and runs, applied to the GPU without a reload; the probe reads the map
+// shown (`shownMaps`), the CPU's copy of the file's float32s.
+//
 // Nothing loads off the Results step. A run whose results are refused or unverified shows no map
 // (the panel says why); a run that saved no particles shows MQ4's notice instead of playback.
 import * as actions from '../../actions';
@@ -11,7 +15,7 @@ import type { RunData, SurfaceMapInfo } from '../../bindings/ipc';
 import { decodeParticles, decodeSurfaceMap, type SurfaceMap } from '../../resultsData';
 import { runsStore, sceneStore, selectedRunStore, stepStore, Store } from '../../store';
 import { Animator } from './animator';
-import { showMap, showParticles } from './engine';
+import { resultsLayer, renderNow, showMap, showParticles } from './engine';
 import { diffRange, legendGradient, legendLabels, levelRange, surfaceMismatch, type Range } from './mapData';
 import { noParticlesText } from './particles';
 
@@ -44,6 +48,13 @@ export interface ResultsView {
   baselineReason: string | null;
   map: { path: string; kind: 'level' | 'diff'; range: Range; legend: { lo: string; mid: string; hi: string; gradient: string; title: string } } | null;
   mapMessage: string | null;
+  /** W5: smooth colour (R46), contours every `isoDb` dB on it, 0 for none (R48). */
+  smooth: boolean;
+  isoDb: number;
+  /** Why smooth colour is not drawn for this map, or null. */
+  smoothRefusal: string | null;
+  /** W5: a fixed colour range for level maps (R47), or null for the map's own. */
+  fixed: Range | null;
   particles: ParticlesView;
 }
 
@@ -62,8 +73,19 @@ const OFF: ResultsView = {
   baselineReason: null,
   map: null,
   mapMessage: null,
+  smooth: false,
+  isoDb: 0,
+  smoothRefusal: null,
+  fixed: null,
   particles: { state: 'off' },
 };
+
+/** The view choices a new run keeps (W5). */
+const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed });
+
+/** The map on screen and its baseline, as decoded: the probe reads its values here. */
+let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string } | null = null;
+export const shownMaps = () => shown;
 
 export const resultsViewStore = new Store<ResultsView>(OFF);
 
@@ -71,7 +93,7 @@ const set = (patch: Partial<ResultsView>) => resultsViewStore.set({ ...resultsVi
 
 const groupKey = (s: SurfaceMapInfo) => `${s.cutting_plane ? 'plane' : 'surface'}|${s.field ?? ''}`;
 const groupLabel = (s: SurfaceMapInfo) => `${s.cutting_plane ? 'Cutting planes' : 'Surface receivers'}${s.field ? ` · ${s.field}` : ''}`;
-const bandName = (b: number | null) => (b === null ? 'all bands' : b >= 1000 ? `${b / 1000} kHz` : `${b} Hz`);
+export const bandName = (b: number | null) => (b === null ? 'all bands' : b >= 1000 ? `${b / 1000} kHz` : `${b} Hz`);
 export const bandLabel = (b: number | null) => (b === null ? 'All' : b >= 1000 ? `${b / 1000}k` : String(b));
 
 function groupsOf(d: RunData): MapGroup[] {
@@ -107,7 +129,8 @@ function defaultBaseline(run: string): string | null {
 }
 
 async function loadIndex(run: string, g: number): Promise<void> {
-  set({ ...OFF, run, status: 'loading' });
+  set({ ...OFF, ...kept(resultsViewStore.get()), run, status: 'loading' });
+  shown = null;
   showMap(null);
   showParticles(null);
   try {
@@ -145,6 +168,7 @@ async function loadMap(g: number): Promise<void> {
   if (!d || !v.run) return;
   const info = d.surfaces.find((s) => groupKey(s) === v.group && (s.band_hz ?? null) === v.bandHz);
   if (!info) {
+    shown = null;
     showMap(null);
     set({ map: null, mapMessage: d.surfaces.length ? 'No map for this choice.' : 'This run has no surface receivers or cutting planes.' });
     return;
@@ -173,24 +197,40 @@ async function loadMap(g: number): Promise<void> {
     const kind: 'level' | 'diff' = base ? 'diff' : 'level';
     const range = kind === 'diff' && base ? diffRange(m, base) : levelRange(m);
     const what = groupLabel(info);
-    const title = kind === 'diff'
-      ? `Difference from ${runLabel(v.baseline as string)} · ${bandName(v.bandHz)}`
-      : `${what} · level · ${bandName(v.bandHz)}`;
-    const shownRange = range ?? { lo: 0, hi: 1 };
+    const now = resultsViewStore.get();
+    // W5: a fixed range applies to level maps; a difference keeps its own symmetric range.
+    const fixed = kind === 'level' ? now.fixed : null;
+    const shownRange = fixed ?? range ?? { lo: 0, hi: 1 };
     const err = showMap(m, { run: v.run, path: info.path, bandHz: v.bandHz, kind, range: shownRange, baseline: base ? v.baseline : null }, base);
     if (!fresh(g)) return;
+    const layer = resultsLayer();
+    layer.setLook({ smooth: now.smooth, isoDb: now.isoDb });
+    renderNow();
+    shown = err ? null : { map: m, base, what };
     set({
-      map: err ? null : { path: info.path, kind, range: shownRange, legend: { ...legendLabels(shownRange, kind), gradient: legendGradient(kind), title } },
+      map: err ? null : { path: info.path, kind, range: shownRange, legend: legendOf(shownRange, kind, v.bandHz, fixed !== null) },
       mapMessage: err ?? (range ? null : `No energy reached the ${what.toLowerCase()} at ${bandName(v.bandHz)}.`),
+      smoothRefusal: err ? null : layer.smoothRefusal,
       baselineLabel: v.baseline ? runLabel(v.baseline) : null,
       baselineReason: reason,
     });
   } catch (e) {
     if (!fresh(g)) return;
     const err = asCmdError(e);
+    shown = null;
     showMap(null);
     set({ map: null, mapMessage: `${err.message} (${err.code})` });
   }
+}
+
+/** The legend of a map shown with `range` (a fixed one says so in its title). */
+function legendOf(range: Range, kind: 'level' | 'diff', bandHz: number | null, fixed: boolean) {
+  const v = resultsViewStore.get();
+  const what = shown?.what ?? groupLabel(v.data?.surfaces.find((s) => groupKey(s) === v.group) ?? ({ cutting_plane: false } as SurfaceMapInfo));
+  const title = kind === 'diff'
+    ? `Difference from ${runLabel(v.baseline as string)} · ${bandName(bandHz)}`
+    : `${what} · level · ${bandName(bandHz)}${fixed ? ' · fixed range' : ''}`;
+  return { ...legendLabels(range, kind), gradient: legendGradient(kind), title };
 }
 
 async function loadParticles(g: number): Promise<void> {
@@ -262,6 +302,31 @@ export const resultsView = {
     set({ baseline: run });
     fire();
   },
+  /** W5: smooth colour on or off; contours go with it. No reload: the GPU has the node list. */
+  setSmooth(on: boolean): void {
+    const isoDb = on ? resultsViewStore.get().isoDb : 0;
+    set({ smooth: on, isoDb });
+    resultsLayer().setLook({ smooth: on, isoDb });
+    renderNow();
+  },
+  /** W5: contours every `db` dB (0 for none), drawn on the smoothed level only. */
+  setContours(db: number): void {
+    const v = resultsViewStore.get();
+    if (!v.smooth && db > 0) return;
+    set({ isoDb: db });
+    resultsLayer().setLook({ smooth: v.smooth, isoDb: db });
+    renderNow();
+  },
+  /** W5: a fixed colour range for level maps (null: each map's own), kept across bands and runs. */
+  setFixedRange(range: Range | null): void {
+    set({ fixed: range });
+    const v = resultsViewStore.get();
+    if (!v.map || v.map.kind !== 'level' || !shown) return;
+    const r = range ?? levelRange(shown.map) ?? { lo: 0, hi: 1 };
+    resultsLayer().setRange(r);
+    renderNow();
+    set({ map: { ...v.map, range: r, legend: legendOf(r, 'level', v.bandHz, range !== null) } });
+  },
 };
 
 let started = false;
@@ -285,9 +350,10 @@ export function startResultsView(): void {
     indexed = null;
     if (r === null) {
       gen++;
+      shown = null;
       showMap(null);
       showParticles(null);
-      resultsViewStore.set(OFF);
+      resultsViewStore.set({ ...OFF, ...kept(resultsViewStore.get()) });
     } else fire();
   });
   fire();

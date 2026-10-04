@@ -106,6 +106,10 @@ $specIds = [ordered]@{
     'm12.sources' = @('b77-picker', 'b77-numbers')
     # The response window (Burhan 2026-10-04 11:45): the energy echogram per band on the box.
     'm12.response' = @('resp-window', 'resp-pixels', 'resp-numbers')
+    # Wow list W1 and W5 (docs/investigations/2026-10-04-wow-w1w5/PLAN.md): the ear-height plane,
+    # and smooth colour, contours, fixed range and the value probe on the box.
+    'm12.plane' = @('w1-add', 'w1-refuse', 'w1-rerun', 'w1-map')
+    'm12.mapview' = @('w5-smooth', 'w5-contours', 'w5-range', 'w5-probe')
 }
 $allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -notlike 'm12.*' })
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }

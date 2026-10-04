@@ -13,6 +13,7 @@ import type {
   SolverKind,
   SolverSettings,
   Source,
+  SurfaceReceiver,
   Variant,
 } from './bindings/schema.ts';
 
@@ -180,4 +181,15 @@ export function newSource(id: string, name: string, position: Vec3, globalDb = 8
     group: null,
     solver_id: null,
   };
+}
+
+// ---- W1: cutting planes (docs/investigations/2026-10-04-wow-w1w5/PLAN.md) --------------------
+
+export const addSurfaceReceiver = (index: number, receiver: SurfaceReceiver): Op => ({ op: 'add_surface_receiver', index, receiver });
+export const replaceSurfaceReceiver = (receiver: SurfaceReceiver): Op => ({ op: 'replace_surface_receiver', receiver });
+export const removeSurfaceReceiver = (id: string): Op => ({ op: 'remove_surface_receiver', id });
+
+/** An enabled cutting plane through corners `a`, `b`, `c` (upstream's A, B, C), cells of `resolution` m. */
+export function newCuttingPlane(id: string, name: string, a: Vec3, b: Vec3, c: Vec3, resolution: F64): SurfaceReceiver {
+  return { id, name, enabled: true, shape: { kind: 'cutting_plane', a, b, c, resolution_m: resolution }, solver_id: null };
 }

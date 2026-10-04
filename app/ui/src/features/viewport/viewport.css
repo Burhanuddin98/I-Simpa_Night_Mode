@@ -367,3 +367,47 @@
   font-size: 12.5px;
   color: var(--text-2);
 }
+
+/* W1: a plane the selected run does not hold */
+.vp-rerun {
+  color: var(--warn, #f2a93b);
+  max-width: 300px;
+}
+
+
+/* W5: the value probe and the fixed range (ResultsOverlay.tsx) */
+.vp-probe {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  max-width: 300px;
+}
+.vp-probe-title {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.vp-probe-level {
+  font-size: 15px;
+  color: var(--text);
+}
+.vp-probe-value,
+.vp-probe-note,
+.vp-legend-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.vp-legend-note {
+  max-width: 200px;
+}
+.vp-range-input {
+  width: 58px;
+  height: 24px;
+  padding: 0 6px;
+}
+.vp-refused {
+  color: var(--red-hi);
+}

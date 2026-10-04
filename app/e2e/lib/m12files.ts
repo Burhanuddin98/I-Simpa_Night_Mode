@@ -6,6 +6,8 @@
 import { readFileSync } from 'node:fs';
 
 export interface CsbinFace {
+  /** The face's three node indices (`sommetsIndex`). */
+  vertices: [number, number, number];
   /** [time step, the value's float32 bits], in file order. */
   records: [number, number][];
 }
@@ -16,6 +18,8 @@ export interface Csbin {
   recordType: number;
   /** Every receiver's faces, in file order: the map's face index is the position here. */
   faces: CsbinFace[];
+  /** The receivers in file order: name (up to its NUL, read as latin1) and face count. */
+  receivers: { name: string; faces: number }[];
 }
 
 /** A `.csbin` (version 3), every record stride from its stored lengths. Throws on a short file. */
@@ -34,12 +38,18 @@ export function readCsbin(path: string): Csbin {
   const recordType = d.getInt32(40, true);
   let o = lh + nodes * ln;
   const faces: CsbinFace[] = [];
+  const names: { name: string; faces: number }[] = [];
   for (let r = 0; r < receivers; r++) {
     need(o, 8);
     const quantFaces = d.getInt32(o + 4, true);
+    need(o, Math.min(lr, 263));
+    const raw = b.subarray(o + 8, o + Math.min(lr, 263));
+    const end = raw.indexOf(0);
+    names.push({ name: raw.subarray(0, end < 0 ? raw.length : end).toString('latin1'), faces: quantFaces });
     o += lr;
     for (let f = 0; f < quantFaces; f++) {
       need(o, 16);
+      const vertices: [number, number, number] = [d.getInt32(o, true), d.getInt32(o + 4, true), d.getInt32(o + 8, true)];
       const n = d.getInt32(o + 12, true);
       o += lf;
       const records: [number, number][] = [];
@@ -48,11 +58,11 @@ export function readCsbin(path: string): Csbin {
         records.push([d.getUint16(o, true), d.getUint32(o + 4, true)]);
         o += lv;
       }
-      faces.push({ records });
+      faces.push({ vertices, records });
     }
   }
   if (o !== b.byteLength) throw new Error(`${path}: ${b.byteLength - o} bytes after the last record`);
-  return { nodes, timeSteps, recordType, faces };
+  return { nodes, timeSteps, recordType, faces, receivers: names };
 }
 
 /** The float32 a value's bits stand for. */

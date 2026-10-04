@@ -60,6 +60,7 @@ import { firstFace, modelGeometry, pickingBvh } from './pick';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
 import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
+import { planeCells } from '../../chrome/planes';
 
 export type ViewMode = 'perspective' | 'plan';
 
@@ -77,6 +78,12 @@ export interface ViewportUi {
   /** Why the 3D view cannot draw (no WebGL). */
   error: string | null;
 }
+
+/**
+ * W5 (R51): the map face under the pointer on the Results step, where nothing of the model hides
+ * it, with the pointer's client point; null off the map. The overlay reads the face's value.
+ */
+export const mapPointerStore = new Store<{ face: number; x: number; y: number } | null>(null);
 
 export const viewportUi = new Store<ViewportUi>({
   view: 'perspective',
@@ -116,6 +123,8 @@ const INSET_MARKER_SCALE = 0.5;
 const MARKER_PICK_PX = { source: 11, receiver: 9 } as const;
 /** A pointer that travels further than this between down and up was a drag, not a click. */
 const CLICK_SLOP_PX = 4;
+/** A plane's drawn grid has at most this many lines each way (a finer plane is drawn coarser, its outline exact). */
+const PLANE_GRID_MAX = 120;
 
 type MarkerKind = 'source' | 'receiver';
 interface Marker {
@@ -190,6 +199,10 @@ class ViewportEngine {
   private readonly halo: Points;
   private readonly sourceStems: LineSegments;
   private readonly receiverStems: LineSegments;
+  /** W1: each cutting plane's outline, and its cell grid off the Results step (upstream's DrawPlan). */
+  private readonly planeOutline: LineSegments;
+  private readonly planeGrid: LineSegments;
+  private planeSummary: { name: string; corners: Vec[]; u: number; v: number; gridLines: number }[] = [];
 
   // The pointer between down and up.
   private down = { x: 0, y: 0, moved: false };
@@ -225,6 +238,8 @@ class ViewportEngine {
     this.halo = new Points(new BufferGeometry(), markerMaterial(ringPixels(64, 0.78, 0.92, RED, null), 64, HALO_PX));
     this.sourceStems = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: SELECT, transparent: true, opacity: 0.9 }));
     this.receiverStems = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.5 }));
+    this.planeOutline = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: SELECT, transparent: true, opacity: 0.95, depthWrite: false }));
+    this.planeGrid = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: SELECT, transparent: true, opacity: 0.32, depthWrite: false }));
     const order: [{ renderOrder: number }, number][] = [
       [this.faces, 0],
       [this.highlight, 1],
@@ -233,6 +248,8 @@ class ViewportEngine {
       [this.selectionEdges, 4],
       [this.sourceStems, 5],
       [this.receiverStems, 5],
+      [this.planeGrid, 4],
+      [this.planeOutline, 5],
       [this.receiverPoints, 6],
       [this.sourcePoints, 7],
       [this.halo, 8],
@@ -246,6 +263,8 @@ class ViewportEngine {
       this.selectionEdges,
       this.sourceStems,
       this.receiverStems,
+      this.planeGrid,
+      this.planeOutline,
       this.receiverPoints,
       this.sourcePoints,
       this.halo,
@@ -282,6 +301,8 @@ class ViewportEngine {
       toolStore.subscribe(() => this.applyTool()),
       stepStore.subscribe(() => {
         this.results.setShown(stepStore.get() === 'results');
+        if (stepStore.get() !== 'results') mapPointerStore.set(null);
+        this.updatePlanes();
         this.invalidate();
       }),
       animatorStore.subscribe(() => {
@@ -305,6 +326,8 @@ class ViewportEngine {
       registerHook('cameraState', () => this.cameraState()),
       // Gate (a): what the check-highlight overlay puts on screen, not what was uploaded to it.
       registerHook('highlightPixels', () => this.highlightPixels()),
+      // W1: the cutting planes the view draws (outline corners, cells, grid lines drawn).
+      registerHook('planeOutlines', () => this.planeSummary),
     ];
     // A remount (React StrictMode in dev) rebuilds the DOM-side state from the stores.
     this.setMesh(meshStore.get(), true);
@@ -361,7 +384,9 @@ class ViewportEngine {
     });
     canvas.addEventListener('pointermove', (e) => {
       if (e.buttons !== 0 && Math.hypot(e.clientX - this.down.x, e.clientY - this.down.y) > CLICK_SLOP_PX) this.down.moved = true;
+      this.probeAt(e.buttons === 0 ? e.clientX : null, e.clientY);
     });
+    canvas.addEventListener('pointerleave', () => this.probeAt(null, 0));
     canvas.addEventListener('click', (e) => {
       if (!this.down.moved) this.onClick(e.clientX, e.clientY);
     });
@@ -581,6 +606,7 @@ class ViewportEngine {
     this.updateHighlight();
     this.updateSelection();
     this.updateMarkers();
+    this.updatePlanes();
     this.setUi({
       hasModel: !!this.mesh && this.mesh.faceCount > 0,
       highlightCount: this.highlightCount,
@@ -727,6 +753,60 @@ class ViewportEngine {
     this.halo.geometry = halo;
   }
 
+  /**
+   * W1: every enabled cutting plane as its parallelogram A, B, C, A + C - B, and, off the Results
+   * step (where its map is the picture), the solver's cell grid: ceil(|BC| / r) cells along BC and
+   * ceil(|BA| / r) along BA (planes.ts), at most `PLANE_GRID_MAX` lines each way.
+   */
+  private updatePlanes(): void {
+    const receivers = sceneStore.get()?.view.surface_receivers ?? [];
+    const outline: number[] = [];
+    const grid: number[] = [];
+    const summary: typeof this.planeSummary = [];
+    const onResults = stepStore.get() === 'results';
+    for (const r of receivers) {
+      if (!r.enabled || r.shape.kind !== 'cutting_plane') continue;
+      const { a, b, c, resolution_m } = r.shape;
+      if (![...a, ...b, ...c].every(finite)) continue;
+      const A = new Vector3(...(a as Vec));
+      const B = new Vector3(...(b as Vec));
+      const C = new Vector3(...(c as Vec));
+      const D = A.clone().add(C).sub(B);
+      const seg = (out: number[], p: Vector3, q: Vector3) => out.push(p.x, p.y, p.z, q.x, q.y, q.z);
+      seg(outline, B, C);
+      seg(outline, C, D);
+      seg(outline, D, A);
+      seg(outline, A, B);
+      const cells = planeCells(a, b, c, resolution_m);
+      let lines = 0;
+      if (cells && !onResults) {
+        const bc = C.clone().sub(B);
+        const ba = A.clone().sub(B);
+        const nu = Math.min(cells.u, PLANE_GRID_MAX);
+        const nv = Math.min(cells.v, PLANE_GRID_MAX);
+        for (let i = 1; i < nu; i++) {
+          const t = bc.clone().multiplyScalar(i / nu);
+          seg(grid, B.clone().add(t), A.clone().add(t));
+          lines++;
+        }
+        for (let j = 1; j < nv; j++) {
+          const t = ba.clone().multiplyScalar(j / nv);
+          seg(grid, B.clone().add(t), C.clone().add(t));
+          lines++;
+        }
+      }
+      summary.push({ name: r.name, corners: [A, B, C, D].map((p) => [p.x, p.y, p.z] as Vec), u: cells?.u ?? 0, v: cells?.v ?? 0, gridLines: lines });
+    }
+    for (const o of [this.planeOutline, this.planeGrid]) o.geometry.dispose();
+    const g1 = new BufferGeometry();
+    g1.setAttribute('position', new Float32BufferAttribute(outline, 3));
+    const g2 = new BufferGeometry();
+    g2.setAttribute('position', new Float32BufferAttribute(grid, 3));
+    this.planeOutline.geometry = g1;
+    this.planeGrid.geometry = g2;
+    this.planeSummary = summary;
+  }
+
   // ---- cameras --------------------------------------------------------------------------
 
   private defaultCamera(): void {
@@ -859,6 +939,74 @@ class ViewportEngine {
     if (marker) return { kind: 'marker', marker };
     const hit = this.pickFace(clientX, clientY);
     return hit ? { kind: 'face', face: hit.face, origin: hit.origin, dir: hit.dir } : { kind: 'none' };
+  }
+
+  /** W5: the map face at a client point, unless a drawn model face is in front of it. */
+  private mapFaceAt(clientX: number, clientY: number): number | null {
+    if (stepStore.get() !== 'results') return null;
+    const ray = this.rayAt(clientX, clientY);
+    if (!ray) return null;
+    const hit = this.results.pickMap(ray);
+    if (!hit) return null;
+    const wall = this.bvh ? firstFace(this.bvh, ray) : null;
+    // A surface receiver's map lies on the model's own faces: the same distance is not in front.
+    if (wall && wall.distance < hit.distance - (1e-3 + 1e-4 * hit.distance)) return null;
+    return hit.face;
+  }
+
+  private probeAt(clientX: number | null, clientY: number): void {
+    const face = clientX === null ? null : this.mapFaceAt(clientX, clientY);
+    const cur = mapPointerStore.get();
+    if (face === null || clientX === null) {
+      if (cur !== null) mapPointerStore.set(null);
+      return;
+    }
+    if (cur?.face === face && cur.x === clientX && cur.y === clientY) return;
+    mapPointerStore.set({ face, x: clientX, y: clientY });
+  }
+
+  /**
+   * W5's hook: a client point over map face `face`'s centroid where the probe takes exactly that
+   * face (on the canvas, nothing of the model in front); null when there is none.
+   */
+  mapFacePoint(face: number): { x: number; y: number } | null {
+    const c = this.canvas;
+    const centre = this.results.faceCentroid(face);
+    if (!c || !centre) return null;
+    const q = this.clientOf(new Vector3(...centre));
+    if (!q) return null;
+    const p = { x: Math.round(q.x), y: Math.round(q.y) };
+    const r = c.getBoundingClientRect();
+    if (p.x < r.left + 1 || p.x > r.right - 1 || p.y < r.top + 1 || p.y > r.bottom - 1) return null;
+    if (document.elementFromPoint(p.x, p.y) !== c) return null;
+    return this.mapFaceAt(p.x, p.y) === face ? p : null;
+  }
+
+  /** W5's hook: a client point on the canvas where the probe takes no map face; null if none on a 24 px grid. */
+  offMapPoint(): { x: number; y: number } | null {
+    const c = this.canvas;
+    if (!c) return null;
+    const r = c.getBoundingClientRect();
+    for (let y = r.top + 12; y < r.bottom - 12; y += 24) {
+      for (let x = r.left + 12; x < r.right - 12; x += 24) {
+        const p = { x: Math.round(x), y: Math.round(y) };
+        if (document.elementFromPoint(p.x, p.y) === c && this.mapFaceAt(p.x, p.y) === null) return p;
+      }
+    }
+    return null;
+  }
+
+  /** W5's hook: an FNV-1a hash of the frame as drawn now, to tell two looks of the map apart. */
+  framePixels(): { pixels: number; hash: number } | null {
+    const r = this.renderer;
+    if (!r || !this.dom || this.contextLost || !this.syncSize()) return null;
+    const gl = r.getContext();
+    this.renderNow();
+    const px = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let h = 0x811c9dc5;
+    for (let i = 0; i < px.length; i++) h = Math.imul(h ^ px[i], 0x01000193) >>> 0;
+    return { pixels: px.length / 4, hash: h };
   }
 
   private onClick(x: number, y: number): void {
@@ -1101,6 +1249,14 @@ export function showParticles(p: Particles | null, meta?: ParticleMeta): void {
 export function mapPixels(): { pixels: number; changed: number } | null {
   return engine.mapPixels();
 }
+
+/** W5's hook: a client point where the probe takes map face `face`, or null. */
+export function mapFacePoint(face: number): { x: number; y: number } | null {
+  return engine.mapFacePoint(face);
+}
+
+export const offMapPoint = () => engine.offMapPoint();
+export const framePixels = () => engine.framePixels();
 
 /** The layer itself, for the M12 test hooks (ResultsOverlay.tsx). */
 export const resultsLayer = (): ResultsLayer => engine.results;
