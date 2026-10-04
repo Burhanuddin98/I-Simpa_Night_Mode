@@ -50,6 +50,13 @@ const pause = (ms: number) => browser.pause(ms);
 const text = (sel: string): Promise<string> =>
   browser.execute((s: string) => ((document.querySelector(s) as HTMLElement | null)?.innerText ?? '').replace(/\s+/g, ' ').trim(), sel);
 
+/** Scrolls the element to the top of its scroll container (a table's rows into the dock's view). */
+async function toTop(sel: string, settle = 800): Promise<void> {
+  await $(sel).waitForExist({ timeout: 30_000 });
+  await browser.execute((s: string) => document.querySelector(s)?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'start' }), sel);
+  await pause(settle);
+}
+
 async function reveal(sel: string, settle = 1_000): Promise<void> {
   await $(sel).waitForExist({ timeout: 30_000 });
   await browser.execute((s: string) => document.querySelector(s)?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' }), sel);
@@ -209,14 +216,18 @@ function planeOf(p: ProjectFile): { centre: Vec; a: Vec; b: Vec; c: Vec } {
 }
 const add = (u: Vec, v: Vec): Vec => [u[0] + v[0], u[1] + v[1], u[2] + v[2]];
 
-/** The map from the stage end, above the front rows, looking down the rake. */
-const MAP_FROM_STAGE: Vec = [-12.5, -1.5, 9.5];
-/** The map from the back of the hall's side, low enough to stay under the ceiling panels. */
-const MAP_FROM_SIDE: Vec = [-3.5, -17.5, 8.5];
-/** The particles around source LS1: close for the first steps, then back as the sphere grows. */
-const PARTICLES_CLOSE: Vec = [4, -3.5, 2];
-const PARTICLES_FROM: Vec = [12, -10, 6];
-const PARTICLES_WIDE: Vec = [20, -16, 9];
+/** The map from the hall's side, low enough to stay under the ceiling panels; the look point is
+ * moved toward the near edge so the plane sits above the bottom cards. */
+const MAP_FROM: Vec = [-4, -20, 10];
+const MAP_LOOK: Vec = [0, -3.5, -1];
+/** The same plane from the other side, for the cumulative map. */
+const MAP_FROM_2: Vec = [-6, 19, 10];
+const MAP_LOOK_2: Vec = [0, 3.5, -1];
+/** The particles around source LS1 from the side at about its height: close for the first steps,
+ * then back as the sphere grows. Trails 5 steps long draw each particle's way out from the source. */
+const PARTICLES_CLOSE: Vec = [9, -6, 3];
+const PARTICLES_FROM: Vec = [19, -13, 6];
+const PARTICLES_LOOK: Vec = [0, 0, 0.5];
 
 const PROBE = process.env.TOUR_PROBE ?? '';
 
@@ -229,8 +240,14 @@ if (PROBE) {
       await waitForHooks(['idle', 'openProject', 'setStep', 'runsRows', 'selectRun', 'm12Map', 'm12SetStep', 'cameraState', 'flyCamera', 'm12Playback', 'projectJson']);
       await m10.openProject(need('TOUR_HALL'));
       await m10.setStep('results');
-      const rows = await hook<Row[]>('runsRows');
-      const run = rows.filter((r) => r.status === 'OK').sort((a, b) => a.number - b.number)[0].run;
+      let rows: Row[] = [];
+      let all: Row[] = [];
+      await browser
+        .waitUntil(async () => (rows = (all = await hook<Row[]>('runsRows')).filter((r) => r.status === 'OK')).length > 0, { timeout: 30_000 })
+        .catch(() => {
+          throw new Error(`the project lists no OK run: ${JSON.stringify(all).slice(0, 600)}`);
+        });
+      const run = rows.sort((a, b) => a.number - b.number)[0].run;
       await hook('selectRun', run);
       await mapOf(run);
       await clickSelector('[data-map-band="1000"]');
@@ -241,16 +258,19 @@ if (PROBE) {
       const p = await project();
       const pl = planeOf(p);
       const src = p.sources[0].position as Vec;
-      const shots: [string, Vec, Vec, number][] = [
-        ['map-stage', add(pl.centre, MAP_FROM_STAGE), pl.centre, 60],
-        ['map-side', add(pl.centre, MAP_FROM_SIDE), pl.centre, 60],
-        ['map-stage-late', add(pl.centre, MAP_FROM_STAGE), pl.centre, 300],
-        ['particles-close-5', add(src, PARTICLES_CLOSE), add(src, [0, 0, 0.3]), 5],
-        ['particles-near', add(src, PARTICLES_FROM), add(src, [0, 0, 1]), 15],
-        ['particles-near-40', add(src, PARTICLES_FROM), add(src, [0, 0, 1]), 40],
-        ['particles-wide', add(src, PARTICLES_WIDE), add(src, [4, 0, 1]), 80],
+      const shots: [string, Vec, Vec, number, string][] = [
+        ['map-side-80', add(pl.centre, MAP_FROM), add(pl.centre, MAP_LOOK), 80, ''],
+        ['map-other-cum-400', add(pl.centre, MAP_FROM_2), add(pl.centre, MAP_LOOK_2), 400, 'cumulative'],
+        ['particles-close-6', add(src, PARTICLES_CLOSE), add(src, PARTICLES_LOOK), 6, 'trails'],
+        ['particles-close-20', add(src, PARTICLES_CLOSE), add(src, PARTICLES_LOOK), 20, ''],
+        ['particles-far-45', add(src, PARTICLES_FROM), add(src, PARTICLES_LOOK), 45, ''],
       ];
-      for (const [name, at, look, step] of shots) {
+      for (const [name, at, look, step, then] of shots) {
+        if (then === 'cumulative') await clickSelector('[data-part="map-cumulative"]');
+        if (then === 'trails') {
+          await clickSelector('[data-part="map-cumulative"]');
+          await clickSelector('[data-trails="5"]');
+        }
         await fly(at, look, 300);
         await hook('m12SetStep', step);
         await pause(900);
@@ -304,7 +324,7 @@ if (PROBE) {
       progress(`step 1: model check "${await text('[data-part="check-verdict"]')}"`);
       await pause(HOLD_MS);
       await orbit(420, 0, 6_000);
-      await orbit(0, 90, 2_500);
+      await orbit(300, 0, 4_000);
       progress(`step 1: orbit: ${await camText()}`);
       await pause(BEAT_MS);
     });
@@ -350,12 +370,12 @@ if (PROBE) {
       for (const o of sources) {
         await pick('source', o.value);
         await acousticsShows(run);
-        await reveal(`${PANEL} .ac-receivers`, 600);
+        await toTop(`${PANEL} [data-part="receivers-table"]`);
         progress(`step 3: source "${o.text}", the receivers at 1 kHz`);
         await pause(HOLD_MS);
       }
       await pick('source', sources[0].value);
-      await reveal(`${PANEL} .ac-rt`, 600);
+      await toTop(`${PANEL} [data-part="rt-table"]`);
       progress('step 3: reverberation time per band');
       await pause(HOLD_MS);
     });
@@ -367,30 +387,38 @@ if (PROBE) {
       for (const panel of ['scene', 'props', 'dock'] as const) await fold(panel, true);
       await clickSelector('[data-part="map-smooth"]');
       await clickSelector('[data-map-contours="3"]');
-      const p = await project();
-      const pl = planeOf(p);
+      const pl = planeOf(await project());
       await hook('m12SetStep', 40);
-      await fly(add(pl.centre, MAP_FROM_STAGE), pl.centre, 3_000);
-      progress(`step 4: the plane map at 1 kHz, smooth with contours, ${await camText()}`);
-      for (const step of [40, 70, 120, 250, 600]) {
+      await fly(add(pl.centre, MAP_FROM), add(pl.centre, MAP_LOOK), 3_500);
+      progress(`step 4: the plane map at 1 kHz, smooth with contours every 3 dB, ${await camText()}`);
+      for (const step of [40, 80, 150, 400]) {
         await hook('m12SetStep', step);
-        progress(`step 4: map at ${await readoutText()}`);
+        progress(`step 4: the level at ${await readoutText()}`);
         await pause(HOLD_MS);
       }
-      await fly(add(pl.centre, MAP_FROM_SIDE), pl.centre, 3_500);
-      await hook('m12SetStep', 90);
-      progress(`step 4: the map from the side, ${await readoutText()}; ${await camText()}`);
-      await pause(HOLD_MS);
+      await clickSelector('[data-part="map-cumulative"]');
+      await browser.waitUntil(async () => (await text('[data-part="map-legend"] .vp-legend-title')).includes('cumulative'), {
+        timeout: 60_000,
+        timeoutMsg: 'the cumulative map did not load',
+      });
+      await fly(add(pl.centre, MAP_FROM_2), add(pl.centre, MAP_LOOK_2), 4_000);
+      for (const step of [80, 400]) {
+        await hook('m12SetStep', step);
+        progress(`step 4: the cumulative level (sound building up) at ${await readoutText()}; ${await camText()}`);
+        await pause(HOLD_MS);
+      }
+      await clickSelector('[data-part="map-cumulative"]');
+      await browser.waitUntil(async () => !(await text('[data-part="map-legend"] .vp-legend-title')).includes('cumulative'), { timeout: 60_000 });
     });
 
     it('5: the particles at the slow speed: the sphere expands step by step', async () => {
       await browser.waitUntil(async () => (await hook<{ run: string } | null>('m12Particles'))?.run === run, { timeout: 120_000, timeoutMsg: 'no particles loaded' });
-      const p = await project();
-      const src = p.sources[0].position as Vec;
+      const src = (await project()).sources[0].position as Vec;
+      await clickSelector('[data-trails="5"]');
       await clickSelector('[data-part="anim-start"]');
-      await fly(add(src, PARTICLES_CLOSE), add(src, [0, 0, 0.3]), 3_000);
+      await fly(add(src, PARTICLES_CLOSE), add(src, PARTICLES_LOOK), 3_500);
       const pb = await playback();
-      progress(`step 5: particles from the emission (step ${pb.start}), ${pb.rate}; ${await camText()}`);
+      progress(`step 5: particles from the emission (step ${pb.start}), trails 5 steps, ${pb.rate}; ${await camText()}`);
       await pause(2_000);
       for (let i = 0; i < 6; i++) {
         await clickSelector('[data-part="anim-forward"]');
@@ -400,19 +428,15 @@ if (PROBE) {
       await clickSelector('[data-part="anim-play"]');
       progress(`step 5: Play at ${(await playback()).rate}`);
       // The camera backs away as the sphere grows (3.4 m of radius a second at 0.01x).
-      await fly(add(src, PARTICLES_FROM), add(src, [0, 0, 1]), 14_000);
+      await fly(add(src, PARTICLES_FROM), add(src, PARTICLES_LOOK), 14_000);
       await pause(1_000);
       await clickSelector('[data-part="anim-play"]');
       progress(`step 5: paused at ${await readoutText()}`);
       await pause(HOLD_MS);
     });
 
-    it('6: trails', async () => {
-      const p = await project();
-      const src = p.sources[0].position as Vec;
+    it('6: longer trails at 0.025x', async () => {
       await clickSelector('[data-trails="20"]');
-      await hook('m12SetStep', 25);
-      await fly(add(src, PARTICLES_WIDE), add(src, [4, 0, 1]), 3_000);
       await clickSelector('[data-anim-speed="0.025"]');
       await clickSelector('[data-part="anim-play"]');
       progress(`step 6: trails 20 steps, Play at ${(await playback()).rate}`);
@@ -421,6 +445,7 @@ if (PROBE) {
       progress(`step 6: paused at ${await readoutText()}`);
       await pause(HOLD_MS);
       await clickSelector('[data-trails="0"]');
+      await clickSelector('[data-anim-speed="0.01"]');
       for (const panel of ['scene', 'props', 'dock'] as const) await fold(panel, false);
       await pause(BEAT_MS);
     });
