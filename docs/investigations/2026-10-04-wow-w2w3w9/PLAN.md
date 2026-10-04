@@ -82,3 +82,37 @@ panel and the plan inset and asserts no two overlap, with the probe shown.
   `w9-export.png`.
 - Registered in `tools/gates/m11.ps1`'s spec table; run with `m12.plane`, `m12.mapview`, `m12.viewport`,
   `m12.response`.
+
+## Result (13:24)
+
+Built as planned, on `wow-w2w3w9` (not pushed, not merged). Receipts: `B:\data\m12\wow\` (`red-w3-ui.txt`,
+`red-w3-window.txt`, `red-w9-ui.txt`, `red-w9-snapshot.txt`, `cargo-app-{1,2}.log`, `e2e-w2w3w9-try{1,2,3,4}.log`);
+screenshots `shots\w2-fill.png`, `w3-trails.png`, `w9-layout.png`, `w9-export.png` (the exported PNG itself).
+
+- UI suite 235 of 235 (new: `cumulative.test.ts` 4, trails 5 in `particles.test.ts`, `exportModel.test.ts` 6,
+  `snapshot.test.ts` 3, each with a say-NO case); typecheck clean; e2e reader test 4 of 4; `cargo test -p app --bins`
+  74 of 74 (new: `export.rs` 4: a good path written whole, a wrong extension / relative path / missing folder /
+  folder path writes nothing, bytes not of the kind refused, the path header decoded).
+- e2e try 4 (`-Spec m12.fill,m12.trails,m12.export,m12.plane,m12.mapview,m12.viewport,m12.response`): 25 of 25 ids.
+  Try 1 failed on two real faults and one wrong assumption: the trail window kept N + 1 heads (12 drawn where the
+  `.pbin` rule says 10 at step 11; fixed, and the shader's `keptTrail()` is now run as JavaScript in a unit test);
+  the box leaves 50 of 56 parameter rows refused, so a floor of 20 numbers was wrong (both kinds are checked now).
+  Try 2's screenshots showed the cumulative note pushing the map panel over the plan inset and 10 px into the dock;
+  try 3 bounds the panel (left of the dock, above the inset, scrolling) and w9-layout checks it at its tallest.
+- Measured: cumulative texels equal the file's float32 running sums bit for bit (3 cells, e.g. face 0 step 2
+  0x35ba5858, 61.43 dB); the probe's bits equal the sum (face 1 step 30, 62.2 dB); trails 5 and 1 steps at 5 steps
+  equal the rule (27, 50, 10, 5, 0 and 27, 10, 2, 1, 0; 135 segments, 6,480 B); CSV and JSON: 56 rows, 18 numbers,
+  50 refusals, 0 mismatches against `simpa results --json` by path; PNG 1440 x 964 (the frame and the 64 px strip),
+  210 sampled pixels equal the frame over the background, 0 differ; layout: 8 cards, 0 overlaps.
+
+## Left
+
+- W2: no "decay after the fill" view of its own (the instantaneous map is that); a difference is never cumulative.
+- W3: trails are straight chords between saved steps (said on screen); no per-trail colour by age beyond fading;
+  the budget (256 MB) is not measured on Elmia.
+- W9: animation video (R56's second half) and chart images (R63) are not built; the PNG is the canvas only (side
+  panels are not in it, by design), with the legend redrawn in a strip; no PNG of the plan inset alone.
+- Layout: the dock is right of the map panel's widest; on a narrow window it wraps upward and covers more of the
+  view's centre (no overlap, measured at 1440 x 900 only).
+- Not run here: the full m10/m11 e2e regressions, `m12.ps1`, and m11's static half (its command inventory now
+  expects 45, with `export_write`).
