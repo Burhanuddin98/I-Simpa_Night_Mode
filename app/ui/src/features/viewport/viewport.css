@@ -229,6 +229,11 @@
   position: absolute;
   top: 52px;
   left: 12px;
+  /* Its right edge stays left of the bottom dock (364 px), and its foot above the plan inset
+     (about 160 px tall at the bottom left): a taller panel scrolls instead of covering either. */
+  box-sizing: border-box;
+  max-height: calc(100% - 52px - 184px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 6px;

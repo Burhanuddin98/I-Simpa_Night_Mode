@@ -25,9 +25,9 @@ import { asCmdError } from '../../actions';
 import { exportParams, exportView, lastExportStore } from '../export/exportActions';
 import { Animator, animatorStore } from './animator';
 import { framePixels, frameRgba, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, resultsLayer } from './engine';
-import { CUMULATIVE_HINT } from './cumulative';
+import { CUMULATIVE_HINT, CUMULATIVE_NOTE } from './cumulative';
 import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, stepTime, type ProbeView } from './mapView';
-import { TRAIL_HINT, TRAIL_LENGTHS } from './particles';
+import { TRAIL_HINT, TRAIL_LENGTHS, TRAIL_NOTE } from './particles';
 import { bandLabel, bandName, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
 
 const PlayIcon = () => (
@@ -314,11 +314,6 @@ export function ResultsOverlay() {
             <span className="knob" />
           </span>
         </button>
-        {v.map?.cumulative && (
-          <div className="vp-diff-note" data-part="cumulative-note">
-            {CUMULATIVE_HINT}
-          </div>
-        )}
         {v.cumulative && v.cumulativeRefusal && (
           <div className="vp-diff-note" data-part="cumulative-refused">
             {v.cumulativeRefusal}.
@@ -402,6 +397,11 @@ export function ResultsOverlay() {
                 <span data-legend="mid">{v.map.legend.mid}</span>
                 <span data-legend="hi">{v.map.legend.hi}</span>
               </div>
+              {v.map.cumulative && (
+                <div className="vp-legend-note" data-part="cumulative-note">
+                  {CUMULATIVE_NOTE}
+                </div>
+              )}
               {v.smooth && !v.smoothRefusal && (
                 <div className="vp-legend-note" data-part="legend-note">
                   Smoothed between faces; the probe reads each face's own value.{v.isoDb > 0 ? ` ${contourText(v.isoDb)}.` : ''}
@@ -447,7 +447,9 @@ export function ResultsOverlay() {
             </div>
             {v.data?.solver === 'spps' && (
               <div className="vp-row" role="radiogroup" aria-label="Trails" data-part="trails">
-                <span className="vp-row-label">Trails</span>
+                <span className="vp-row-label" title={TRAIL_HINT}>
+                  Trails, steps
+                </span>
                 {[0, ...TRAIL_LENGTHS].map((n) => (
                   <button
                     key={n}
@@ -459,14 +461,14 @@ export function ResultsOverlay() {
                     title={n === 0 ? 'No trails' : v.trailRefusal ? `${v.trailRefusal}.` : `Each live particle's last ${n === 1 ? 'step' : `${n} steps`}`}
                     onClick={() => resultsView.setTrails(n)}
                   >
-                    {n === 0 ? 'Off' : n === 1 ? 'Ray' : `${n} steps`}
+                    {n === 0 ? 'Off' : n === 1 ? 'Ray' : n}
                   </button>
                 ))}
               </div>
             )}
             {v.trails > 0 && !v.trailRefusal && (
-              <div className="vp-diff-note" data-part="trails-note">
-                {TRAIL_HINT}
+              <div className="vp-diff-note" data-part="trails-note" title={TRAIL_HINT}>
+                {TRAIL_NOTE}
               </div>
             )}
             {v.trailRefusal && v.trailRefusal !== 'No particles saved for this run' && v.data?.solver === 'spps' && (

@@ -10,6 +10,7 @@ import {
   TRAIL_BUDGET_BYTES,
   TRAIL_BYTES_PER_SEGMENT,
   TRAIL_HINT,
+  TRAIL_NOTE,
   TRAIL_LENGTHS,
   TRAIL_VERTEX_GLSL,
   trailCount,
@@ -148,6 +149,7 @@ test('W3 trails: refused without particles and above the GPU budget, with the si
   const big = { ...small, recordCount: Math.ceil(TRAIL_BUDGET_BYTES / TRAIL_BYTES_PER_SEGMENT) + 2 };
   assert.match(trailRefusal(big) ?? '', /MB/);
   assert.match(TRAIL_HINT, /straight lines/);
+  assert.match(TRAIL_NOTE, /Straight lines between saved positions/);
   assert.deepEqual(TRAIL_LENGTHS, [1, 5, 20, 60]);
 });
 

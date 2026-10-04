@@ -15,8 +15,9 @@
 //   w9-refuse  the core refuses a `.exe` path and a relative path for an export, and writes
 //              nothing; off the Results step the parameter items are disabled and say why
 //   w9-layout  with the map's legend, the timeline, the "no particles" notice and the probe all
-//              shown, no two of them, the map panel, the plan inset, the tools and the gizmo
-//              overlap. Screenshot w9-layout.png
+//              shown, and the map panel at its tallest the box offers (cumulative and fixed range
+//              on), no two of them, the map panel, the plan inset, the tools and the gizmo overlap.
+//              Screenshot w9-layout.png
 //
 // The box: tests/fixtures/rooms/outputs_box.simpa, copied into this spec's own folder on C:
 // (M11_P), run once from the app with particles saved 0. The exports land in that folder.
@@ -320,6 +321,12 @@ describe('W9: export, and the bottom dock', () => {
     await mapOf(run);
     await hook('m12SetStep', 20);
     await $('[data-part="particles-none"]').waitForExist({ timeout: 30_000 });
+    await clickSelector('[data-part="map-cumulative"]');
+    await clickSelector('[data-part="map-smooth"]');
+    await clickSelector('[data-part="map-fixed"]');
+    await browser.waitUntil(async () => (await hook<{ cumulative: boolean } | null>('m12Map'))?.cumulative === true, { timeout: 30_000, timeoutMsg: 'cumulative did not come on' });
+    await $('[data-part="map-range"]').waitForExist({ timeout: 10_000 });
+    await $('[data-part="cumulative-note"]').waitForExist({ timeout: 10_000 });
     const m = await hook<{ faces: number }>('m12Map');
     let hovered = false;
     for (let face = 0; face < m.faces && !hovered; face++) {

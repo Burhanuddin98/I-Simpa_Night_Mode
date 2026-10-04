@@ -14,6 +14,9 @@ import { LEVEL_DEPTH_DB, levelDb, type MapLayout, type Range } from './mapData.t
 export const CUMULATIVE_HINT =
   "Each face's energy summed from the first step to this one (I-Simpa's cumulative sound level): the colour builds up and holds. The decay is the instantaneous map.";
 
+/** The legend's line while the map is cumulative. */
+export const CUMULATIVE_NOTE = 'Summed from the first step: it builds up and holds.';
+
 /** Why a map kind has no cumulative view, or null. */
 export function cumulativeRefusal(kind: 'level' | 'diff'): string | null {
   return kind === 'diff' ? 'A difference between two runs is shown instantaneous only' : null;

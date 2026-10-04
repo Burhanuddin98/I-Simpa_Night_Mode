@@ -108,6 +108,9 @@ export const TRAIL_BUDGET_BYTES = 256 * 1024 * 1024;
 export const TRAIL_HINT =
   "Each live particle's path over its last steps: straight lines between its saved positions, one a step, so a bounce inside a step is cut short. Older is fainter.";
 
+/** The timeline card's one line while trails are drawn (the hint is its tooltip). */
+export const TRAIL_NOTE = 'Straight lines between saved positions; older is fainter.';
+
 export interface Trails {
   segments: number;
   /** Two vertices a segment: the earlier record, then the head. */

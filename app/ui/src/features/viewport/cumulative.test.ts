@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { SurfaceMap } from '../../resultsData.ts';
-import { cumulativeAt, cumulativeRange, cumulativeValues, CUMULATIVE_HINT, cumulativeRefusal } from './cumulative.ts';
+import { cumulativeAt, cumulativeRange, cumulativeValues, CUMULATIVE_HINT, CUMULATIVE_NOTE, cumulativeRefusal } from './cumulative.ts';
 import { mapLayout, type MapLayout } from './mapData.ts';
 
 /**
@@ -79,6 +79,7 @@ test('no cumulative map of a difference; the hint says it builds and holds', () 
   assert.match(cumulativeRefusal('diff') ?? '', /difference/);
   assert.match(CUMULATIVE_HINT, /builds up and holds/);
   assert.match(CUMULATIVE_HINT, /instantaneous/);
+  assert.match(CUMULATIVE_NOTE, /builds up and holds/);
 });
 
 test('the probe of a cumulative map shows the running sum and says so; no energy yet, no number', async () => {
