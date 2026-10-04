@@ -259,8 +259,13 @@
   color: var(--text-2);
   font-size: 11.5px;
 }
+/* The plot sits on a dense backing: on the 40 % glass alone the 3D view's lines and the inset's
+   words read through the strip and the axes. The head and the note stay on the glass. */
 .rw-grid {
   display: grid;
+  padding: 8px 6px 6px;
+  border-radius: 5px;
+  background: rgba(9, 9, 11, 0.88);
   grid-template-columns: 64px 1fr 64px;
   grid-template-rows: clamp(150px, calc(var(--rw-rows) * 30px), 300px) 72px 18px auto;
   column-gap: 8px;
@@ -322,7 +327,7 @@
 .rw-strip {
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.55);
+  background: #000;
   border: 1px solid var(--line);
   box-sizing: border-box;
 }
