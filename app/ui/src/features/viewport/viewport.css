@@ -313,9 +313,7 @@
   color: var(--text-3);
 }
 .vp-legend {
-  position: absolute;
-  left: 226px;
-  bottom: 12px;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -339,15 +337,44 @@
   color: var(--text-2);
 }
 .vp-transport {
-  position: absolute;
-  left: 450px;
-  right: 84px;
-  bottom: 12px;
+  flex: 1 1 260px;
   display: flex;
   flex-direction: column;
   gap: 6px;
   padding: 6px 10px;
   min-width: 220px;
+}
+/* The bottom of the view (W5's overlap fixed, wow W2/W3/W9 PLAN.md): the probe, the "no particles"
+   notice, the legend and the timeline in one dock, in flow, so none covers another. It starts
+   right of the map panel's widest (12 + 340 px) and ends left of the axis gizmo; the plan inset
+   (left, bottom) and the map panel (left, top) are outside its columns. */
+.vp-dock {
+  position: absolute;
+  left: 364px;
+  right: 84px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 8px;
+  pointer-events: none;
+}
+.vp-dock-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+.vp-dock-row:empty {
+  display: none;
+}
+.vp-dock-row > * {
+  pointer-events: auto;
+}
+.vp-particles-none.float-panel {
+  flex: 1 1 260px;
+  max-width: 420px;
+  padding: 8px 10px;
 }
 .vp-step {
   flex: 1;
@@ -376,10 +403,11 @@
 
 
 /* W5: the value probe and the fixed range (ResultsOverlay.tsx) */
-.vp-probe {
-  position: fixed;
-  z-index: 40;
+.vp-dock-row > .vp-probe {
   pointer-events: none;
+}
+.vp-probe {
+  flex: 0 1 300px;
   display: flex;
   flex-direction: column;
   gap: 3px;

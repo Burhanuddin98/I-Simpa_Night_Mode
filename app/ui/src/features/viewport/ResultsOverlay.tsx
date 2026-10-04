@@ -11,14 +11,23 @@
 //
 // W5 (wow list; mapView.ts): smooth colour, contours on it and a fixed colour range in the map
 // panel, and the value probe: the map face under the pointer, its own `.csbin` record with its
-// level, band and time, in a card by the pointer (`[data-part="map-probe"]`, a results region).
+// level, band and time, in a card (`[data-part="map-probe"]`, a results region).
+//
+// W2 and W3 (docs/investigations/2026-10-04-wow-w2w3w9/PLAN.md): the cumulative switch in the map
+// panel, the trails' length in the timeline's card. The bottom of the view is one dock
+// (`.vp-dock`): the probe, the "no particles" notice, the legend and the timeline sit in it in flow,
+// so none covers another (W5's screenshot had them overlapping).
 import { useEffect, useState } from 'react';
 import { planesNotInRun, rerunText } from '../../chrome/planes';
 import { sceneStore, stepStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
+import { asCmdError } from '../../actions';
+import { exportParams, exportView, lastExportStore } from '../export/exportActions';
 import { Animator, animatorStore } from './animator';
-import { framePixels, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, resultsLayer } from './engine';
+import { framePixels, frameRgba, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, resultsLayer } from './engine';
+import { CUMULATIVE_HINT } from './cumulative';
 import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, stepTime, type ProbeView } from './mapView';
+import { TRAIL_HINT, TRAIL_LENGTHS } from './particles';
 import { bandLabel, bandName, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
 
 const PlayIcon = () => (
@@ -45,6 +54,7 @@ function registerM12Hooks(): () => void {
         path: meta.path,
         bandHz: meta.bandHz,
         kind: meta.kind,
+        cumulative: meta.cumulative === true,
         faces: s.faces,
         steps: s.steps,
         step: layer.mapStep(),
@@ -62,6 +72,25 @@ function registerM12Hooks(): () => void {
     registerHook('wowProbe', () => currentProbe()),
     registerHook('wowOffMapPoint', () => offMapPoint()),
     registerHook('wowFramePixels', () => framePixels()),
+    // W3: the trails' state, and the segments the draw keeps now, counted on the GPU.
+    registerHook('wowTrails', () => ({ ...layer.trailState(), step: layer.particleStep(), drawn: layer.trailState().on ? layer.countTrails() : 0 })),
+    // The bottom dock's cards and the panels around them, as client rectangles (W9's layout check).
+    registerHook('wowCardRects', () => cardRects()),
+    // W9: an export to `path` (the dialog's answer, given), as File › Export does; its refusal as {code, message}.
+    registerHook('wowExport', async (kind: 'csv' | 'json' | 'png', path: string) => {
+      try {
+        return { done: kind === 'png' ? await exportView(path) : await exportParams(kind, path), error: null };
+      } catch (e) {
+        return { done: null, error: asCmdError(e) };
+      }
+    }),
+    registerHook('wowLastExport', () => lastExportStore.get()),
+    // W9: the frame's own RGBA (premultiplied, as the GPU holds it) at buffer points, top row first.
+    registerHook('wowFrameSamples', (points: [number, number][]) => {
+      const f = frameRgba();
+      if (!f) return null;
+      return { width: f.width, height: f.height, rgba: points.map(([x, y]) => [...f.rgba.subarray(4 * (y * f.width + x), 4 * (y * f.width + x) + 4)]) };
+    }),
     registerHook('m12Texels', (samples: [number, number][]) => layer.readTexels(samples, 'texel')),
     registerHook('m12DiffTexels', (samples: [number, number][]) => layer.readTexels(samples, 'diff')),
     registerHook('m12SetStep', (step: number) => {
@@ -87,6 +116,29 @@ function registerM12Hooks(): () => void {
   return () => offs.forEach((off) => off());
 }
 
+const CARDS: Record<string, string> = {
+  'map-panel': '.vp-map-panel',
+  'plan-inset': '.plan-inset',
+  legend: '[data-part="map-legend"]',
+  timeline: '[data-part="animator"]',
+  'particles-none': '[data-part="particles-none"]',
+  probe: '[data-part="map-probe"]',
+  tools: '.viewport .tools',
+  gizmo: '.gizmo',
+};
+
+/** Each card shown now, by name, as its client rectangle. */
+function cardRects(): Record<string, { left: number; top: number; right: number; bottom: number }> {
+  const out: Record<string, { left: number; top: number; right: number; bottom: number }> = {};
+  for (const [k, sel] of Object.entries(CARDS)) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) out[k] = { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+  }
+  return out;
+}
+
 /** `120 ms`: the step's start time, from the run's own float32 time step. */
 const timeText = stepTime;
 
@@ -99,10 +151,10 @@ function currentProbe(): (ProbeView & { x: number; y: number }) | null {
   const step = Math.min(animatorStore.get().step, s.map.timeStepCount - 1);
   const dt = v.data?.time_step_s ?? v.data?.surfaces[0]?.time_step_s;
   const base = v.map.kind === 'diff' ? s.base : null;
-  return { ...probeOf(s.map, at.face, step, { what: s.what, band: bandName(v.bandHz), dtS: dt, smooth: v.smooth, base }), x: at.x, y: at.y };
+  return { ...probeOf(s.map, at.face, step, { what: s.what, band: bandName(v.bandHz), dtS: dt, smooth: v.smooth, base, cumulative: s.cumulative }), x: at.x, y: at.y };
 }
 
-/** The probe card by the pointer. */
+/** The probe card, docked at the bottom of the view (it names its face). */
 function Probe() {
   useStore(mapPointerStore);
   useStore(animatorStore);
@@ -117,7 +169,6 @@ function Probe() {
       data-probe-face={p.face}
       data-probe-step={p.step}
       data-probe-bits={p.bits === null ? '' : p.bits.toString(16)}
-      style={{ left: p.x + 16, top: p.y + 16 }}
     >
       <div className="vp-probe-title" data-probe="title">
         {p.title}
@@ -249,6 +300,30 @@ export function ResultsOverlay() {
             {v.baselineReason ?? (v.baselineLabel ? `This run minus ${v.baselineLabel}, in dB. Blue is quieter, red louder.` : '')}
           </div>
         )}
+        <button
+          className="vp-switch"
+          role="switch"
+          aria-checked={v.cumulative && v.map?.cumulative === true}
+          data-part="map-cumulative"
+          disabled={v.diff}
+          title={v.diff ? 'A difference between two runs is shown instantaneous only' : CUMULATIVE_HINT}
+          onClick={() => resultsView.setCumulative(!v.cumulative)}
+        >
+          <span>Cumulative (sound building up)</span>
+          <span className="track" aria-hidden>
+            <span className="knob" />
+          </span>
+        </button>
+        {v.map?.cumulative && (
+          <div className="vp-diff-note" data-part="cumulative-note">
+            {CUMULATIVE_HINT}
+          </div>
+        )}
+        {v.cumulative && v.cumulativeRefusal && (
+          <div className="vp-diff-note" data-part="cumulative-refused">
+            {v.cumulativeRefusal}.
+          </div>
+        )}
         {rerun && (
           <div className="vp-diff-note vp-rerun" data-part="plane-rerun">
             {rerun}
@@ -305,67 +380,101 @@ export function ResultsOverlay() {
         {v.fixed && <RangeFields lo={v.fixed.lo} hi={v.fixed.hi} />}
       </div>
 
-      {v.map && (
-        <div className="vp-legend float-panel" data-part="map-legend" data-results-region data-map-kind-shown={v.map.kind}>
-          <div className="vp-legend-title">{v.map.legend.title}</div>
-          <div className="vp-legend-bar" style={{ background: v.map.legend.gradient }} />
-          <div className="vp-legend-labels">
-            <span data-legend="lo">{v.map.legend.lo}</span>
-            <span data-legend="mid">{v.map.legend.mid}</span>
-            <span data-legend="hi">{v.map.legend.hi}</span>
-          </div>
-          {v.smooth && !v.smoothRefusal && (
-            <div className="vp-legend-note" data-part="legend-note">
-              Smoothed between faces; the probe reads each face's own value.{v.isoDb > 0 ? ` ${contourText(v.isoDb)}.` : ''}
+      <div className="vp-dock" data-part="results-dock">
+        <div className="vp-dock-row">
+          <Probe />
+          {p.state === 'none' && (
+            <div className="vp-particles-none float-panel" data-part="particles-none" data-results-region>
+              <div data-part="particles-none-title" className="title">
+                {p.title}
+              </div>
+              <div data-part="particles-none-how">{p.how}</div>
             </div>
           )}
         </div>
-      )}
-      <Probe />
-
-      <div className="vp-transport float-panel" data-part="animator" data-results-region>
-        {p.state === 'none' && (
-          <div className="vp-particles-none" data-part="particles-none">
-            <div data-part="particles-none-title" className="title">
-              {p.title}
+        <div className="vp-dock-row">
+          {v.map && (
+            <div className="vp-legend float-panel" data-part="map-legend" data-results-region data-map-kind-shown={v.map.kind}>
+              <div className="vp-legend-title">{v.map.legend.title}</div>
+              <div className="vp-legend-bar" style={{ background: v.map.legend.gradient }} />
+              <div className="vp-legend-labels">
+                <span data-legend="lo">{v.map.legend.lo}</span>
+                <span data-legend="mid">{v.map.legend.mid}</span>
+                <span data-legend="hi">{v.map.legend.hi}</span>
+              </div>
+              {v.smooth && !v.smoothRefusal && (
+                <div className="vp-legend-note" data-part="legend-note">
+                  Smoothed between faces; the probe reads each face's own value.{v.isoDb > 0 ? ` ${contourText(v.isoDb)}.` : ''}
+                </div>
+              )}
             </div>
-            <div data-part="particles-none-how">{p.how}</div>
-          </div>
-        )}
-        {p.state === 'error' && <div className="vp-particles-none">{p.message}</div>}
-        <div className="vp-row">
-          <button
-            className="tool"
-            data-part="anim-play"
-            aria-label={anim.playing ? 'Pause' : 'Play'}
-            aria-pressed={anim.playing}
-            disabled={anim.steps <= 1}
-            onClick={() => (anim.playing ? Animator.pause() : Animator.play())}
-          >
-            {anim.playing ? <PauseIcon /> : <PlayIcon />}
-          </button>
-          <input
-            type="range"
-            className="vp-step"
-            data-part="anim-step"
-            aria-label="Time step"
-            min={0}
-            max={Math.max(0, anim.steps - 1)}
-            step={1}
-            value={anim.step}
-            onChange={(e) => {
-              Animator.pause();
-              Animator.setStep(Number(e.target.value));
-            }}
-          />
-          <span className="vp-time mono" data-part="anim-time">
-            {timeText(anim.step, dt)}
-          </span>
-          {p.state === 'shown' && (
-            <span className="vp-row-label" data-part="particles-band">
-              Particles {bandLabel(p.bandHz)}
-            </span>
           )}
+          <div className="vp-transport float-panel" data-part="animator" data-results-region>
+            {p.state === 'error' && <div className="vp-particles-none">{p.message}</div>}
+            <div className="vp-row">
+              <button
+                className="tool"
+                data-part="anim-play"
+                aria-label={anim.playing ? 'Pause' : 'Play'}
+                aria-pressed={anim.playing}
+                disabled={anim.steps <= 1}
+                onClick={() => (anim.playing ? Animator.pause() : Animator.play())}
+              >
+                {anim.playing ? <PauseIcon /> : <PlayIcon />}
+              </button>
+              <input
+                type="range"
+                className="vp-step"
+                data-part="anim-step"
+                aria-label="Time step"
+                min={0}
+                max={Math.max(0, anim.steps - 1)}
+                step={1}
+                value={anim.step}
+                onChange={(e) => {
+                  Animator.pause();
+                  Animator.setStep(Number(e.target.value));
+                }}
+              />
+              <span className="vp-time mono" data-part="anim-time">
+                {timeText(anim.step, dt)}
+              </span>
+              {p.state === 'shown' && (
+                <span className="vp-row-label" data-part="particles-band">
+                  Particles {bandLabel(p.bandHz)}
+                </span>
+              )}
+            </div>
+            {v.data?.solver === 'spps' && (
+              <div className="vp-row" role="radiogroup" aria-label="Trails" data-part="trails">
+                <span className="vp-row-label">Trails</span>
+                {[0, ...TRAIL_LENGTHS].map((n) => (
+                  <button
+                    key={n}
+                    className="vp-chip-btn mono"
+                    role="radio"
+                    data-trails={n}
+                    aria-checked={(v.trailRefusal ? 0 : v.trails) === n}
+                    disabled={n > 0 && v.trailRefusal !== null}
+                    title={n === 0 ? 'No trails' : v.trailRefusal ? `${v.trailRefusal}.` : `Each live particle's last ${n === 1 ? 'step' : `${n} steps`}`}
+                    onClick={() => resultsView.setTrails(n)}
+                  >
+                    {n === 0 ? 'Off' : n === 1 ? 'Ray' : `${n} steps`}
+                  </button>
+                ))}
+              </div>
+            )}
+            {v.trails > 0 && !v.trailRefusal && (
+              <div className="vp-diff-note" data-part="trails-note">
+                {TRAIL_HINT}
+              </div>
+            )}
+            {v.trailRefusal && v.trailRefusal !== 'No particles saved for this run' && v.data?.solver === 'spps' && (
+              <div className="vp-diff-note" data-part="trails-refused">
+                Trails: {v.trailRefusal}.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>

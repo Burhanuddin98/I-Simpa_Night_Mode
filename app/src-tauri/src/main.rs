@@ -35,6 +35,7 @@ mod bindings;
 mod bridge;
 mod commands;
 mod events;
+mod export;
 mod guard;
 mod results_data;
 mod runs;
@@ -270,6 +271,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::solvers_status,
             commands::app_events,
             commands::app_quit,
+            commands::export_write,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

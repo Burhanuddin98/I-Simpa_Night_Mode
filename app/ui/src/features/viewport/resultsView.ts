@@ -7,6 +7,10 @@
 // kept here across bands and runs, applied to the GPU without a reload; the probe reads the map
 // shown (`shownMaps`), the CPU's copy of the file's float32s.
 //
+// W2 (cumulative.ts): the cumulative map, a view choice kept like W5's, reloads the map with each
+// face's running sum in the texture; a difference is not offered cumulative. W3 (particles.ts):
+// trails of a chosen length over the particles shown, refused without particles or past the budget.
+//
 // Nothing loads off the Results step. A run whose results are refused or unverified shows no map
 // (the panel says why); a run that saved no particles shows MQ4's notice instead of playback.
 import * as actions from '../../actions';
@@ -16,6 +20,7 @@ import { decodeParticles, decodeSurfaceMap, type SurfaceMap } from '../../result
 import { runsStore, sceneStore, selectedRunStore, stepStore, Store } from '../../store';
 import { Animator } from './animator';
 import { resultsLayer, renderNow, showMap, showParticles } from './engine';
+import { cumulativeRange, cumulativeRefusal } from './cumulative';
 import { diffRange, legendGradient, legendLabels, levelRange, surfaceMismatch, type Range } from './mapData';
 import { noParticlesText } from './particles';
 
@@ -46,7 +51,7 @@ export interface ResultsView {
   baseline: string | null;
   baselineLabel: string | null;
   baselineReason: string | null;
-  map: { path: string; kind: 'level' | 'diff'; range: Range; legend: { lo: string; mid: string; hi: string; gradient: string; title: string } } | null;
+  map: { path: string; kind: 'level' | 'diff'; cumulative: boolean; range: Range; legend: { lo: string; mid: string; hi: string; gradient: string; title: string } } | null;
   mapMessage: string | null;
   /** W5: smooth colour (R46), contours every `isoDb` dB on it, 0 for none (R48). */
   smooth: boolean;
@@ -55,6 +60,13 @@ export interface ResultsView {
   smoothRefusal: string | null;
   /** W5: a fixed colour range for level maps (R47), or null for the map's own. */
   fixed: Range | null;
+  /** W2: the cumulative map (sound building up) for level maps. */
+  cumulative: boolean;
+  /** Why the shown map has no cumulative view, or null. */
+  cumulativeRefusal: string | null;
+  /** W3: trail length in steps, 0 for none; and why trails cannot be drawn, or null. */
+  trails: number;
+  trailRefusal: string | null;
   particles: ParticlesView;
 }
 
@@ -77,14 +89,18 @@ const OFF: ResultsView = {
   isoDb: 0,
   smoothRefusal: null,
   fixed: null,
+  cumulative: false,
+  cumulativeRefusal: null,
+  trails: 0,
+  trailRefusal: null,
   particles: { state: 'off' },
 };
 
 /** The view choices a new run keeps (W5). */
-const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed });
+const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, trails: v.trails });
 
 /** The map on screen and its baseline, as decoded: the probe reads its values here. */
-let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string } | null = null;
+let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string; cumulative: boolean } | null = null;
 export const shownMaps = () => shown;
 
 export const resultsViewStore = new Store<ResultsView>(OFF);
@@ -195,20 +211,24 @@ async function loadMap(g: number): Promise<void> {
       }
     }
     const kind: 'level' | 'diff' = base ? 'diff' : 'level';
-    const range = kind === 'diff' && base ? diffRange(m, base) : levelRange(m);
-    const what = groupLabel(info);
     const now = resultsViewStore.get();
+    // W2: cumulative for a level map only; a difference says why not.
+    const cumRefusal = now.cumulative ? cumulativeRefusal(v.diff ? 'diff' : kind) : null;
+    const cumulative = now.cumulative && cumRefusal === null;
+    const range = kind === 'diff' && base ? diffRange(m, base) : cumulative ? cumulativeRange(m) : levelRange(m);
+    const what = groupLabel(info);
     // W5: a fixed range applies to level maps; a difference keeps its own symmetric range.
     const fixed = kind === 'level' ? now.fixed : null;
     const shownRange = fixed ?? range ?? { lo: 0, hi: 1 };
-    const err = showMap(m, { run: v.run, path: info.path, bandHz: v.bandHz, kind, range: shownRange, baseline: base ? v.baseline : null }, base);
+    const err = showMap(m, { run: v.run, path: info.path, bandHz: v.bandHz, kind, range: shownRange, baseline: base ? v.baseline : null, cumulative }, base);
     if (!fresh(g)) return;
     const layer = resultsLayer();
     layer.setLook({ smooth: now.smooth, isoDb: now.isoDb });
     renderNow();
-    shown = err ? null : { map: m, base, what };
+    shown = err ? null : { map: m, base, what, cumulative };
     set({
-      map: err ? null : { path: info.path, kind, range: shownRange, legend: legendOf(shownRange, kind, v.bandHz, fixed !== null) },
+      map: err ? null : { path: info.path, kind, cumulative, range: shownRange, legend: legendOf(shownRange, kind, v.bandHz, fixed !== null, cumulative) },
+      cumulativeRefusal: cumRefusal,
       mapMessage: err ?? (range ? null : `No energy reached the ${what.toLowerCase()} at ${bandName(v.bandHz)}.`),
       smoothRefusal: err ? null : layer.smoothRefusal,
       baselineLabel: v.baseline ? runLabel(v.baseline) : null,
@@ -224,12 +244,12 @@ async function loadMap(g: number): Promise<void> {
 }
 
 /** The legend of a map shown with `range` (a fixed one says so in its title). */
-function legendOf(range: Range, kind: 'level' | 'diff', bandHz: number | null, fixed: boolean) {
+function legendOf(range: Range, kind: 'level' | 'diff', bandHz: number | null, fixed: boolean, cumulative = false) {
   const v = resultsViewStore.get();
   const what = shown?.what ?? groupLabel(v.data?.surfaces.find((s) => groupKey(s) === v.group) ?? ({ cutting_plane: false } as SurfaceMapInfo));
   const title = kind === 'diff'
     ? `Difference from ${runLabel(v.baseline as string)} · ${bandName(bandHz)}`
-    : `${what} · level · ${bandName(bandHz)}${fixed ? ' · fixed range' : ''}`;
+    : `${what} · ${cumulative ? 'cumulative level from 0 ms' : 'level'} · ${bandName(bandHz)}${fixed ? ' · fixed range' : ''}`;
   return { ...legendLabels(range, kind), gradient: legendGradient(kind), title };
 }
 
@@ -239,13 +259,13 @@ async function loadParticles(g: number): Promise<void> {
   if (!d || !v.run) return;
   if (d.solver !== 'spps') {
     showParticles(null);
-    set({ particles: { state: 'off' } });
+    set({ particles: { state: 'off' }, trailRefusal: 'Only an SPPS run has particles' });
     return;
   }
   if (d.particle_files.length === 0) {
     showParticles(null);
     const sources = (sceneStore.get()?.view.sources ?? []).filter((s) => s.enabled).length;
-    set({ particles: { state: 'none', ...noParticlesText(d.steps ?? 0, sources) } });
+    set({ particles: { state: 'none', ...noParticlesText(d.steps ?? 0, sources) }, trailRefusal: 'No particles saved for this run' });
     return;
   }
   const band = d.particle_files.some((f) => f.freq_hz === v.bandHz) ? (v.bandHz as number) : d.particle_files[0].freq_hz;
@@ -254,12 +274,15 @@ async function loadParticles(g: number): Promise<void> {
     const p = decodeParticles(await actions.runParticles(v.run, band));
     if (!fresh(g)) return;
     showParticles(p, { run: v.run, bandHz: band, particles: p.particleCount, records: p.recordCount });
-    set({ particles: { state: 'shown', bandHz: band, particles: p.particleCount } });
+    const layer = resultsLayer();
+    layer.setTrails(resultsViewStore.get().trails);
+    renderNow();
+    set({ particles: { state: 'shown', bandHz: band, particles: p.particleCount }, trailRefusal: layer.trailRefusal });
   } catch (e) {
     if (!fresh(g)) return;
     const err = asCmdError(e);
     showParticles(null);
-    set({ particles: { state: 'error', message: `${err.message} (${err.code})` } });
+    set({ particles: { state: 'error', message: `${err.message} (${err.code})` }, trailRefusal: 'The particles could not be read' });
   }
 }
 
@@ -322,10 +345,23 @@ export const resultsView = {
     set({ fixed: range });
     const v = resultsViewStore.get();
     if (!v.map || v.map.kind !== 'level' || !shown) return;
-    const r = range ?? levelRange(shown.map) ?? { lo: 0, hi: 1 };
+    const r = range ?? (shown.cumulative ? cumulativeRange(shown.map) : levelRange(shown.map)) ?? { lo: 0, hi: 1 };
     resultsLayer().setRange(r);
     renderNow();
-    set({ map: { ...v.map, range: r, legend: legendOf(r, 'level', v.bandHz, range !== null) } });
+    set({ map: { ...v.map, range: r, legend: legendOf(r, 'level', v.bandHz, range !== null, shown.cumulative) } });
+  },
+  /** W2: the cumulative map on or off; the map reloads (its texture is the running sum). */
+  setCumulative(on: boolean): void {
+    set({ cumulative: on });
+    fire();
+  },
+  /** W3: trails `steps` long (0 for none), over the particles shown; no reload. */
+  setTrails(steps: number): void {
+    const layer = resultsLayer();
+    if (steps > 0 && layer.trailRefusal) return;
+    set({ trails: steps });
+    layer.setTrails(steps);
+    renderNow();
   },
 };
 

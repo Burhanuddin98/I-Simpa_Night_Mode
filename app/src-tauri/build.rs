@@ -46,6 +46,7 @@ fn main() {
         "solvers_status",
         "app_events",
         "app_quit",
+        "export_write",
     ];
     let attributes = tauri_build::Attributes::new()
         .app_manifest(tauri_build::AppManifest::new().commands(commands));

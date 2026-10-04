@@ -65,6 +65,16 @@ async function invoke<T>(cmd: string, args?: InvokeArgs): Promise<T> {
   }
 }
 
+/** `invoke` with a raw body and headers (W9's export). */
+async function invokeWith<T>(cmd: string, body: Uint8Array, options: { headers: Record<string, string> }): Promise<T> {
+  busyStore.set(busyStore.get() + 1);
+  try {
+    return await tauriInvoke<T>(cmd, body, options);
+  } finally {
+    busyStore.set(busyStore.get() - 1);
+  }
+}
+
 /** Every rejected command carries `{code, message}`; anything else is wrapped as UNKNOWN. */
 export function asCmdError(e: unknown): CmdError {
   if (e && typeof e === 'object' && 'code' in e && 'message' in e) {
@@ -141,4 +151,7 @@ export const backend = {
   /** One band's saved particles as PART bytes (`decodeParticles`). */
   runParticles: (run: string, bandHz: number) => invoke<ArrayBuffer>('run_particles', { run, band_hz: bandHz }),
   runEchogram: (run: string, receiver: string) => invoke<EchogramView>('run_echogram', { run, receiver }),
+  /** W9: writes `bytes` to `path` (the save dialog's) as a `kind` file; the core checks both. */
+  exportWrite: (kind: 'csv' | 'json' | 'png', path: string, bytes: Uint8Array) =>
+    invokeWith<number>('export_write', bytes, { headers: { 'x-export-path': encodeURIComponent(path), 'x-export-kind': kind } }),
 };

@@ -12,6 +12,7 @@
 //   smoothed or interpolated value.
 import type { SurfaceMap } from '../../resultsData.ts';
 import { parseStrictDecimal } from '../../numbers.ts';
+import { cumulativeAt } from './cumulative.ts';
 import { levelDb, type Range } from './mapData.ts';
 
 /** The most faces a node may link for the GPU's average loop; a map above it is drawn flat only. */
@@ -125,10 +126,17 @@ export function probeOf(
   m: SurfaceMap,
   face: number,
   step: number,
-  o: { what: string; band: string; dtS: number | null | undefined; smooth: boolean; base?: SurfaceMap | null },
+  o: { what: string; band: string; dtS: number | null | undefined; smooth: boolean; base?: SurfaceMap | null; cumulative?: boolean },
 ): ProbeView {
   const title = `${o.what} · ${o.band} · ${stepTime(step, o.dtS)}`;
   const note = o.smooth ? "The face's own value from the file. The colours between faces are smoothed, not values." : null;
+  // W2: the face's records summed from the first step to this one (cumulative.ts), as the texture holds it.
+  if (o.cumulative && !o.base) {
+    const sum = cumulativeAt(m, face, step);
+    const l = levelDb(sum);
+    if (l === null) return { face, step, title, level: null, bits: null, value: 'No energy yet at this step', note };
+    return { face, step, title, level: `${l.toFixed(1)} dB`, bits: valueBits(sum), value: `the file's values summed from the first step to this one, ${sum.toExponential(4)}`, note };
+  }
   let rec: number | null = null;
   for (let k = m.offsets[face]; k < m.offsets[face + 1]; k++) if (m.steps[k] === step) rec = m.values[k];
   const la = rec === null ? null : levelDb(rec);

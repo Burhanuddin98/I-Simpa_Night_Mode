@@ -677,3 +677,29 @@ pub async fn selftest_report(
     app.exit(if ok { 0 } else { 1 });
     Ok(ok)
 }
+
+/// W9 export: writes the request's raw bytes to the path the save dialog returned. The path
+/// (`encodeURIComponent`) and the kind (`csv`, `json`, `png`) ride in the `x-export-path` and
+/// `x-export-kind` headers; `export::write` refuses a path without the kind's extension and
+/// bytes that are not the kind, and writes the file whole or not at all. Returns the bytes written.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn export_write(request: tauri::ipc::Request<'_>) -> CmdResult<u64> {
+    let header = |name: &str| -> CmdResult<String> {
+        let v = request
+            .headers()
+            .get(name)
+            .ok_or_else(|| CmdError::new("EXPORT_PATH", format!("no {name} header")))?;
+        v.to_str()
+            .map(str::to_owned)
+            .map_err(|_| CmdError::new("EXPORT_PATH", format!("the {name} header is not text")))
+    };
+    let path = crate::export::percent_decode(&header("x-export-path")?)?;
+    let kind = header("x-export-kind")?;
+    let bytes = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b.clone(),
+        tauri::ipc::InvokeBody::Json(_) => {
+            return Err(CmdError::new("EXPORT_CONTENT", "the export's bytes must be sent raw, not as JSON"));
+        }
+    };
+    guard::blocking("export_write", move || crate::export::write(&kind, &path, &bytes)).await
+}

@@ -2,7 +2,20 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { Particles } from '../../resultsData.ts';
 import { advance, type AnimatorState } from './animator.ts';
-import { aliveCounts, noParticlesText, PARTICLE_VERTEX_GLSL, recordSteps } from './particles.ts';
+import {
+  aliveCounts,
+  noParticlesText,
+  PARTICLE_VERTEX_GLSL,
+  recordSteps,
+  TRAIL_BUDGET_BYTES,
+  TRAIL_BYTES_PER_SEGMENT,
+  TRAIL_HINT,
+  TRAIL_LENGTHS,
+  TRAIL_VERTEX_GLSL,
+  trailCount,
+  trailRefusal,
+  trailSegments,
+} from './particles.ts';
 
 /** A decoded PART: per particle its first step and its record count. */
 function particles(spec: [number, number][], maxSteps = 10): Particles {
@@ -80,4 +93,73 @@ test('count mode (gate (d)) and the draw keep the same records: one kept() gate,
   for (const cull of [/return/, /discard/, /gl_PointSize\s*=\s*0\.0/, /gl_Position\s*=\s*vec4\(2\.0/, /if\s*\(/]) {
     assert.doesNotMatch(draw, cull, `the draw culls after the count branch: ${cull}`);
   }
+});
+
+test("W3 trails: one segment per pair of consecutive records, tagged with its head step and the particle's last step", () => {
+  const p = particles([
+    [0, 3],
+    [2, 2],
+    [2, 0],
+    [7, 1],
+  ]);
+  for (let k = 0; k < p.recordCount; k++) p.positions.set([k, 10 * k, 100 * k], 3 * k);
+  p.energies.set([1, 2, 3, 4, 5, 6]);
+  const t = trailSegments(p);
+  // Particle 0: (0,1), (1,2); particle 1: (3,4); particle 2 none; particle 3 one record, no segment.
+  assert.equal(t.segments, 3);
+  assert.deepEqual([...t.positions.subarray(0, 6)], [0, 0, 0, 1, 10, 100]);
+  assert.deepEqual([...t.positions.subarray(12, 18)], [3, 30, 300, 4, 40, 400]);
+  // Both ends of a segment carry the same tags, so the shader keeps or drops it whole.
+  assert.deepEqual([...t.head], [1, 1, 2, 2, 3, 3]);
+  assert.deepEqual([...t.last], [2, 2, 2, 2, 3, 3]);
+  // The head's energy colours the segment, at both ends.
+  assert.deepEqual([...t.energy], [2, 2, 3, 3, 5, 5]);
+});
+
+test("W3 trails: the count a step keeps is each live particle's last N steps; a dead particle leaves none", () => {
+  const p = particles([
+    [0, 3],
+    [2, 2],
+    [2, 0],
+    [7, 3],
+  ]);
+  const brute = (step: number, n: number) => {
+    const t = trailSegments(p);
+    let c = 0;
+    for (let i = 0; i < t.segments; i++) {
+      const h = t.head[2 * i];
+      if (t.last[2 * i] >= step && h <= step && h > step - n) c++;
+    }
+    return c;
+  };
+  for (const n of TRAIL_LENGTHS) for (let s = 0; s < 10; s++) assert.equal(trailCount(p, s, n), brute(s, n), `step ${s}, ${n} steps`);
+  assert.equal(trailCount(p, 2, 1), 1, "upstream's ray: one segment for each live particle with a step before (particle 1 starts at 2)");
+  assert.equal(trailCount(p, 2, 5), 2);
+  assert.equal(trailCount(p, 3, 5), 1);
+  // say NO: particle 0 died after step 2; at step 4 it draws nothing, though its segments are recent.
+  assert.equal(trailCount(p, 4, 60), 0);
+  assert.equal(trailCount(p, 9, 60), 2);
+});
+
+test('W3 trails: refused without particles and above the GPU budget, with the size', () => {
+  assert.match(trailRefusal(null) ?? '', /No particles saved/);
+  const small = particles([[0, 3]]);
+  assert.equal(trailRefusal(small), null);
+  const big = { ...small, recordCount: Math.ceil(TRAIL_BUDGET_BYTES / TRAIL_BYTES_PER_SEGMENT) + 2 };
+  assert.match(trailRefusal(big) ?? '', /MB/);
+  assert.match(TRAIL_HINT, /straight lines/);
+  assert.deepEqual(TRAIL_LENGTHS, [1, 5, 20, 60]);
+});
+
+test('W3 trails: the draw and its count mode keep segments by one keptTrail() gate on the steps, never on energy', () => {
+  const glsl = TRAIL_VERTEX_GLSL.replace(/\/\/[^\n]*/g, '');
+  const kept = /bool keptTrail\(\)\s*\{([\s\S]*?)\n\s*\}/.exec(glsl);
+  assert.ok(kept);
+  assert.match(kept[1], /aHead/);
+  assert.match(kept[1], /aLast/);
+  assert.doesNotMatch(kept[1], /aEnergy/);
+  const main = glsl.slice(glsl.indexOf('void main()'));
+  assert.match(main, /^void main\(\) \{\s*if \(!keptTrail\(\)\)/);
+  const afterGate = main.slice(main.indexOf('}') + 1);
+  assert.match(afterGate, /^\s*if \(uCount > 0\.5\)/);
 });

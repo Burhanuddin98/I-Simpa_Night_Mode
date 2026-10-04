@@ -55,6 +55,7 @@ import type { Particles, SurfaceMap } from '../../resultsData';
 import { log, meshStore, sceneStore, selectionStore, stepStore, Store, toolStore, viewportStore, type Selection } from '../../store';
 import { registerHook } from '../../testhooks';
 import { buildTopology, coplanarFaces, faceNormalOf, type FaceTopology } from './floodfill';
+import { flipRows } from './snapshot';
 import { animatorStore } from './animator';
 import { firstFace, modelGeometry, pickingBvh } from './pick';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
@@ -1009,6 +1010,19 @@ class ViewportEngine {
     return { pixels: px.length / 4, hash: h };
   }
 
+  /** W9: the frame as drawn now, top row first, the GPU's premultiplied RGBA; null without a view. */
+  frameRgba(): { width: number; height: number; rgba: Uint8ClampedArray } | null {
+    const r = this.renderer;
+    if (!r || !this.dom || this.contextLost || !this.syncSize()) return null;
+    const gl = r.getContext();
+    this.renderNow();
+    const w = gl.drawingBufferWidth;
+    const h = gl.drawingBufferHeight;
+    const px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    return { width: w, height: h, rgba: flipRows(px, w, h) };
+  }
+
   private onClick(x: number, y: number): void {
     const tool = toolStore.get();
     if (tool === 'orbit') return;
@@ -1257,6 +1271,8 @@ export function mapFacePoint(face: number): { x: number; y: number } | null {
 
 export const offMapPoint = () => engine.offMapPoint();
 export const framePixels = () => engine.framePixels();
+/** W9: the frame as drawn, top row first (export/snapshot.ts composites and encodes it). */
+export const frameRgba = () => engine.frameRgba();
 
 /** The layer itself, for the M12 test hooks (ResultsOverlay.tsx). */
 export const resultsLayer = (): ResultsLayer => engine.results;

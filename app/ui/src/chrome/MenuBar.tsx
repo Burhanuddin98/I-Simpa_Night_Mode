@@ -12,11 +12,14 @@
 // - Simulate › Run and Simulate › Cancel run (PQ2), the same actions as the Run button, F5 and
 //   the Simulate step's Cancel.
 // - Edit › New group from selection (scope row 15 (1), G19), the viewport's context menu entry.
+// - File › Export view as PNG…, Export parameters as CSV… and as JSON… (wow list W9,
+//   features/export/), each disabled with the reason where there is nothing to export.
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
+import { exportParams, exportView, paramsRefusal, viewRefusal } from '../features/export/exportActions';
 import { frameModel, setView } from '../features/viewport/engine';
 import { joinBlockers, projectBlockers } from '../flow';
-import { runStore, sceneStore, selectionStore, solversStatusStore, solverStore, useStore } from '../store';
+import { reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { Search } from './icons';
 import { RunButton } from './RunButton';
 import { REGROUP_LABEL, regroupFaces, runTooltip } from './sceneModel';
@@ -39,6 +42,13 @@ export function MenuBar() {
   const solvers = useStore(solversStatusStore);
   const solver = useStore(solverStore);
   const selection = useStore(selectionStore);
+  // W9: what the export items say depends on the step, the run and its report, and the view.
+  useStore(stepStore);
+  useStore(selectedRunStore);
+  useStore(reportStore);
+  useStore(viewportStore);
+  const paramsWhy = paramsRefusal();
+  const viewWhy = viewRefusal();
   const info = scene?.info ?? null;
   const [open, setOpen] = useState<MenuName | null>(null);
   const bar = useRef<HTMLElement>(null);
@@ -81,6 +91,27 @@ export function MenuBar() {
       },
       { id: 'save', label: 'Save', keys: 'Ctrl+S', run: () => actions.fire(actions.save()), disabled: !info },
       { id: 'save-as', label: 'Save as…', keys: 'Ctrl+Shift+S', run: () => actions.fire(actions.saveAs()), disabled: !info },
+      {
+        id: 'export-view',
+        label: 'Export view as PNG…',
+        run: () => actions.fire(exportView()),
+        disabled: viewWhy !== null,
+        title: viewWhy ?? 'The 3D view as drawn, with the shown map’s legend below it',
+      },
+      {
+        id: 'export-csv',
+        label: 'Export parameters as CSV…',
+        run: () => actions.fire(exportParams('csv')),
+        disabled: paramsWhy !== null,
+        title: paramsWhy ?? 'The parameters the Acoustics tab shows, each with its range or refusal and its report path',
+      },
+      {
+        id: 'export-json',
+        label: 'Export parameters as JSON…',
+        run: () => actions.fire(exportParams('json')),
+        disabled: paramsWhy !== null,
+        title: paramsWhy ?? 'The parameters the Acoustics tab shows, with the words and marks shown with them',
+      },
     ],
     Edit: [
       { id: 'undo', label: 'Undo', keys: 'Ctrl+Z', run: () => actions.fire(actions.undo()), disabled: !info?.can_undo },

@@ -77,6 +77,8 @@ export interface Pbin {
   stepsMax: number;
   /** Per step 0..stepsMax-1: the particles with a record there. */
   alive: number[];
+  /** Per particle, its first step and its record count (W3's trails). */
+  spans: [number, number][];
 }
 
 /** A `.pbin` (Windows layout, 28/8/16): the particles alive at each step. */
@@ -89,16 +91,18 @@ export function readPbin(path: string): Pbin {
   const alive = new Array<number>(stepsMax).fill(0);
   let o = 28;
   let records = 0;
+  const spans: [number, number][] = [];
   for (let i = 0; i < particles; i++) {
     if (o + 8 > b.byteLength) throw new Error(`${path}: particle ${i} runs past the end`);
     const n = d.getUint32(o, true);
     const first = d.getUint16(o + 4, true);
     o += 8 + 16 * n;
     records += n;
+    spans.push([first, n]);
     for (let k = 0; k < n; k++) if (first + k < stepsMax) alive[first + k]++;
   }
   if (o !== b.byteLength) throw new Error(`${path}: ${b.byteLength - o} bytes after the last particle`);
-  return { particles, records, stepsMax, alive };
+  return { particles, records, stepsMax, alive, spans };
 }
 
 /** Upstream's level of an energy, dB re 1e-12 (`Recepteurs_surfacique.cpp`); null for none. */

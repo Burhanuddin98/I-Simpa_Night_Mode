@@ -500,6 +500,21 @@ export async function reportFor(runName: string): Promise<ReportView> {
   return view;
 }
 
+/** W9: asks the save dialog where a `kind` export goes (null: cancelled), unless `path` is given. */
+export async function exportPath(kind: 'csv' | 'json' | 'png', defaultName: string, path?: string): Promise<string | null> {
+  if (path !== undefined) return path;
+  const names = { csv: 'CSV table', json: 'JSON', png: 'PNG image' } as const;
+  const target = await saveDialog({ defaultPath: defaultName, filters: [{ name: names[kind], extensions: [kind] }] });
+  return typeof target === 'string' ? target : null;
+}
+
+/** W9: writes an export the core checks (absolute path, the kind's extension, the kind's bytes). */
+export async function exportWrite(kind: 'csv' | 'json' | 'png', path: string, bytes: Uint8Array, what: string): Promise<number> {
+  const n = await run(`Could not export ${what} to ${path}`, () => backend.exportWrite(kind, path, bytes));
+  log('OK', `Exported ${what} to ${path}`);
+  return n;
+}
+
 /** The Results step's viewport reads (M12 P3, `features/viewport/resultsView.ts`), passed through
  * as the backend returns them: the caller keeps its own generation check and reads a refusal
  * itself (`asCmdError`), so no busy line or Console entry is added here. Here because the backend

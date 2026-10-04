@@ -13,6 +13,11 @@
 //     interpolated across the face and coloured per fragment; iso-contours on that level
 //     (`fwidth`); a fixed colour range (the uLo/uHi uniforms); and a BVH over the map's own
 //     triangles for the value probe, whose number is the CPU's read of the face's record.
+//   - W2 (cumulative.ts): a cumulative map is the same layout with each texel the face's running
+//     sum (upstream's float32 rule), built on the CPU and uploaded in place of the instantaneous one.
+//   - W3 (particles.ts): trails, one line segment per pair of consecutive records, both ends
+//     tagged with the head's step and the particle's last step; `keptTrail()` keeps a segment
+//     whole. Counted like gate (d): the trail material drawn as points in its count mode.
 //   - Test hooks (gate (c), (d)) read what the GPU holds and draws, through the same GLSL: texels
 //     read back by a pass that calls the map shader's own `mapTexel` into a float32 target, and
 //     the particle count by drawing the particle material itself, in its count mode, additively
@@ -25,6 +30,7 @@ import {
   DoubleSide,
   FloatType,
   Group,
+  LineSegments,
   Mesh,
   NearestFilter,
   NoBlending,
@@ -44,8 +50,9 @@ import {
 import { MeshBVH } from 'three-mesh-bvh';
 import type { Particles, SurfaceMap } from '../../resultsData';
 import { COOL, denseValues, HOT, mapLayout, rampFloats, type MapLayout, type Range } from './mapData';
+import { cumulativeValues } from './cumulative';
 import { MAX_NODE_FACES, nodeFaces, type NodeFaces } from './mapView';
-import { PARTICLE_FRAGMENT_GLSL, PARTICLE_VERTEX_GLSL, recordSteps } from './particles';
+import { PARTICLE_FRAGMENT_GLSL, PARTICLE_VERTEX_GLSL, recordSteps, TRAIL_BYTES_PER_SEGMENT, TRAIL_FRAGMENT_GLSL, TRAIL_VERTEX_GLSL, trailRefusal, trailSegments } from './particles';
 
 /** The GLSL that reads the map: the draw and the read-back hook share it. */
 const MAP_GLSL = /* glsl */ `
@@ -275,6 +282,17 @@ ${PARTICLE_VERTEX_GLSL}`,
   });
 }
 
+function trailMaterial(): ShaderMaterial {
+  return new ShaderMaterial({
+    uniforms: { uStep: { value: 0 }, uCount: { value: 0 }, uLength: { value: 1 }, uLogMax: { value: 0 }, uHot: { value: vec3s(HOT) }, uCool: { value: vec3s(COOL) } },
+    vertexShader: `${RAMP_GLSL}
+${TRAIL_VERTEX_GLSL}`,
+    fragmentShader: TRAIL_FRAGMENT_GLSL,
+    transparent: true,
+    depthWrite: false,
+  });
+}
+
 /** What the map shows; the hooks report it. */
 export interface MapMeta {
   run: string;
@@ -283,6 +301,8 @@ export interface MapMeta {
   kind: 'level' | 'diff';
   range: Range;
   baseline: string | null;
+  /** W2: the texture holds each face's running sum from the first step (cumulative.ts). */
+  cumulative?: boolean;
 }
 
 /** W5: how the map is drawn (smooth colour, contour spacing in dB, 0 for none). */
@@ -315,6 +335,12 @@ export class ResultsLayer {
   private renderer: WebGLRenderer | null = null;
   private readonly map = new Mesh(new BufferGeometry(), mapMaterial());
   private readonly particles = new Points(new BufferGeometry(), particleMaterial());
+  /** W3: the band's trail segments, drawn while `trailSteps` > 0. */
+  private readonly trails = new LineSegments(new BufferGeometry(), trailMaterial());
+  private trailData: { segments: number; bytes: number } | null = null;
+  private trailSource: Particles | null = null;
+  /** W3: why trails cannot be drawn for the particles shown, or null. */
+  trailRefusal: string | null = 'No particles saved for this run';
   private layout: MapLayout | null = null;
   private mapTex: DataTexture | null = null;
   private baseTex: DataTexture | null = null;
@@ -332,11 +358,14 @@ export class ResultsLayer {
   constructor() {
     this.map.renderOrder = 1;
     this.particles.renderOrder = 9;
+    this.trails.renderOrder = 8;
     this.map.frustumCulled = false;
     this.particles.frustumCulled = false;
+    this.trails.frustumCulled = false;
     this.map.visible = false;
     this.particles.visible = false;
-    this.group.add(this.map, this.particles);
+    this.trails.visible = false;
+    this.group.add(this.map, this.particles, this.trails);
   }
 
   setRenderer(r: WebGLRenderer | null): void {
@@ -358,7 +387,7 @@ export class ResultsLayer {
     }
     this.disposeTextures();
     this.layout = l;
-    this.mapTex = floatTexture(denseValues(m, l), l);
+    this.mapTex = floatTexture(meta.cumulative && !base ? cumulativeValues(m, l) : denseValues(m, l), l);
     this.baseTex = base ? floatTexture(denseValues(base, l), l) : null;
     this.textureBytes = 4 * l.width * l.height * (base ? 2 : 1);
     // W5: the node mean's faces; above MAX_NODE_FACES a node's mean is not computed, so the map
@@ -526,6 +555,72 @@ export class ResultsLayer {
     this.particles.geometry = g;
     this.particles.visible = !!p;
     this.particleMeta = p ? meta : null;
+    this.trailSource = p && meta ? p : null;
+    this.trails.geometry.dispose();
+    this.trails.geometry = new BufferGeometry();
+    this.trailData = null;
+    this.trailRefusal = trailRefusal(this.trailSource);
+    this.trails.material.uniforms.uLogMax.value = this.particles.material.uniforms.uLogMax.value;
+    this.setTrails(this.trailSteps());
+  }
+
+  /** W3: the trails' length in steps (0: off). Built on first use; refused where `trailRefusal` says why. */
+  setTrails(steps: number): void {
+    const on = steps > 0 && this.trailRefusal === null && this.trailSource !== null;
+    this.trails.material.uniforms.uLength.value = steps > 0 ? steps : 0;
+    if (on && !this.trailData) {
+      const t = trailSegments(this.trailSource as Particles);
+      const g = new BufferGeometry();
+      g.setAttribute('position', new BufferAttribute(t.positions, 3));
+      g.setAttribute('aHead', new BufferAttribute(t.head, 1));
+      g.setAttribute('aLast', new BufferAttribute(t.last, 1));
+      g.setAttribute('aEnergy', new BufferAttribute(t.energy, 1));
+      this.trails.geometry.dispose();
+      this.trails.geometry = g;
+      this.trailData = { segments: t.segments, bytes: TRAIL_BYTES_PER_SEGMENT * t.segments };
+    }
+    this.trails.visible = on;
+  }
+
+  trailSteps(): number {
+    return this.trails.material.uniforms.uLength.value as number;
+  }
+
+  /** W3's hook: what the trails hold and draw now. */
+  trailState(): { steps: number; on: boolean; segments: number; bytes: number; refusal: string | null } {
+    return { steps: this.trailSteps(), on: this.trails.visible, segments: this.trailData?.segments ?? 0, bytes: this.trailData?.bytes ?? 0, refusal: this.trailRefusal };
+  }
+
+  /** W3: the segments the trail draw keeps at its step, counted on the GPU (two points a segment, the material's count mode). */
+  countTrails(): number {
+    const r = this.renderer;
+    if (!r) throw new Error('no WebGL renderer');
+    if (!this.trails.visible || !this.trailData) throw new Error('no trails drawn');
+    if (!r.extensions.has('EXT_float_blend')) throw new Error('EXT_float_blend is not available: float32 additive counting cannot run');
+    const mat = this.trails.material;
+    const u = mat.uniforms;
+    const saved = { blending: mat.blending, src: mat.blendSrc, dst: mat.blendDst, eq: mat.blendEquation, depthTest: mat.depthTest };
+    const pts = new Points(this.trails.geometry, mat);
+    pts.frustumCulled = false;
+    const scene = new Scene();
+    scene.add(pts);
+    u.uCount.value = 1;
+    mat.blending = CustomBlending;
+    mat.blendSrc = OneFactor;
+    mat.blendDst = OneFactor;
+    mat.blendEquation = AddEquation;
+    mat.depthTest = false;
+    try {
+      const px = this.readPass(1, (rr) => rr.render(scene, new OrthographicCamera()));
+      return px[0] / 2;
+    } finally {
+      u.uCount.value = 0;
+      mat.blending = saved.blending ?? NormalBlending;
+      mat.blendSrc = saved.src;
+      mat.blendDst = saved.dst;
+      mat.blendEquation = saved.eq;
+      mat.depthTest = saved.depthTest;
+    }
   }
 
   /** The timeline's step, for both: the map clamped to its own steps (TCR has one). */
@@ -533,6 +628,7 @@ export class ResultsLayer {
     const steps = this.layout?.steps ?? 1;
     this.map.material.uniforms.uStep.value = Math.max(0, Math.min(steps - 1, step));
     this.particles.material.uniforms.uStep.value = step;
+    this.trails.material.uniforms.uStep.value = step;
   }
 
   /** Hides the map for one draw (the m12 pixel hook); returns the restore. */

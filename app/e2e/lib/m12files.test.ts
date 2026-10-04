@@ -33,6 +33,12 @@ test('M12 files: the particle fixture: 8 particles, alive counts summing to its 
   assert.equal(p.records, 39);
   assert.equal(p.alive.reduce((a, b) => a + b, 0), 39);
   assert.ok(p.alive[0] > 0 && p.alive[0] <= 8);
+  // W3: the spans are the particles' own: their counts sum to the records, their steps to the alive counts.
+  assert.equal(p.spans.length, 8);
+  assert.equal(p.spans.reduce((a, [, n]) => a + n, 0), 39);
+  const alive = new Array<number>(p.stepsMax).fill(0);
+  for (const [first, n] of p.spans) for (let k = 0; k < n; k++) if (first + k < p.stepsMax) alive[first + k]++;
+  assert.deepEqual(alive, p.alive);
 });
 
 test('M12 files: a file one byte short or one byte long is refused', () => {
