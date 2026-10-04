@@ -10,6 +10,7 @@ import {
   clipDb,
   COLOUR_STOPS,
   colourAt,
+  colourBarCss,
   dbMatrix,
   decayDb,
   freqLabel,
@@ -81,6 +82,12 @@ test('colourAt: black, deep red, red, white at the stops, linear between, clampe
   }
   // say NO: a bin with no level has no colour.
   assert.throws(() => colourAt(Number.NaN), RangeError);
+});
+
+test('colourBarCss: the colour bar is the map stops at their fractions, bottom to top', () => {
+  assert.equal(colourBarCss(), 'linear-gradient(to top, rgb(0, 0, 0) 0%, rgb(58, 11, 16) 33.3333%, rgb(224, 32, 46) 66.6667%, rgb(255, 255, 255) 100%)');
+  // Say NO: the bar is not drawn top-down (white at the bottom would read the scale upside down).
+  assert.ok(!colourBarCss().includes('to bottom'));
 });
 
 test('clipDb and levelT: 60 dB down and below read as the bottom; NaN and above the maximum refused', () => {

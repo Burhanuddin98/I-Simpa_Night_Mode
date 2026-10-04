@@ -5,11 +5,13 @@
 //                 the tab, on the screen) titled as an SPPS energy echogram, saying it is not a
 //                 pressure impulse response; its close button removes it. Control: before the
 //                 click, and after the close, there is no window
-//   resp-pixels   the map's canvas holds one pixel per bin and each is the colour this spec
-//                 computes from `simpa results <run> --json` (its own copy of the map's stops):
-//                 the loudest bin white, a bin 60 dB or more down black; picking another receiver
-//                 redraws it from that receiver's series. Control: the drawn map against another
-//                 receiver's expectation is caught
+//   resp-pixels   the map is an image (no canvas: M10 PLAN rule 3, the 3D view's is the only one
+//                 in the document, the window open), a PNG this spec decodes itself (node:zlib)
+//                 and the WebView decoded too (its natural size); it holds one pixel per bin and
+//                 each is the colour this spec computes from `simpa results <run> --json` (its own
+//                 copy of the map's stops): the loudest bin white, a bin 60 dB or more down
+//                 black; picking another receiver redraws it from that receiver's series.
+//                 Control: the drawn map against another receiver's expectation is caught
 //   resp-numbers  every number the window prints (band labels, time ticks) equals the JSON at
 //                 the precision shown, every name is the JSON's, the colour bar's words are the
 //                 span's, and no digit is outside them. Control: a planted wrong digit is caught.
@@ -18,6 +20,7 @@
 // Its files, under <M11_WORK>\m12-response (C:). The repository is only read.
 import { strict as assert } from 'node:assert';
 import { mkdirSync } from 'node:fs';
+import { inflateSync } from 'node:zlib';
 import path from 'node:path';
 import { at, numberMismatch, strayDigits, stringMismatch, type NumEl } from '../lib/acoustics.ts';
 import { cliReport, ownBox, PANEL, pick, type Row, runSpps, showRun } from '../lib/acousticsTab.ts';
@@ -74,19 +77,67 @@ function expected(json: Json, r: number) {
   return { k0, paths, rows, db, cols: rows[0].length, bands };
 }
 
-/** The map canvas's pixels, as RGBA, with its size. */
-const pixels = (): Promise<{ w: number; h: number; data: number[] } | null> =>
-  browser.execute(() => {
-    const c = document.querySelector<HTMLCanvasElement>('[data-response-window] canvas[data-part="response-map"]');
-    const ctx = c?.getContext('2d');
-    if (!c || !ctx) return null;
-    return { w: c.width, h: c.height, data: [...ctx.getImageData(0, 0, c.width, c.height).data] };
+/** A PNG decoded here, sharing no code with the app's encoder: 8-bit RGBA, no interlace, rows
+ * unfiltered as the app writes them (any other filter is refused, not guessed). */
+function decodePng(bytes: Buffer): { w: number; h: number; data: number[] } {
+  assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', 'the PNG signature');
+  let o = 8;
+  let w = 0;
+  let h = 0;
+  const idat: Buffer[] = [];
+  while (o < bytes.length) {
+    const len = bytes.readUInt32BE(o);
+    const type = bytes.toString('latin1', o + 4, o + 8);
+    if (type === 'IHDR') {
+      w = bytes.readUInt32BE(o + 8);
+      h = bytes.readUInt32BE(o + 12);
+      assert.deepEqual([...bytes.subarray(o + 16, o + 21)], [8, 6, 0, 0, 0], 'IHDR: 8-bit RGBA, no interlace');
+    }
+    if (type === 'IDAT') idat.push(bytes.subarray(o + 8, o + 8 + len));
+    o += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  assert.equal(raw.length, h * (w * 4 + 1), 'a filter byte and a row per line');
+  const data: number[] = [];
+  for (let y = 0; y < h; y++) {
+    const r = y * (w * 4 + 1);
+    assert.equal(raw[r], 0, `row ${y}: filter ${raw[r]}`);
+    for (const v of raw.subarray(r + 1, r + 1 + w * 4)) data.push(v);
+  }
+  return { w, h, data };
+}
+
+/** The map image's pixels, as RGBA, with its size, decoded from its data URL; it also holds the
+ * document to one canvas (none in the window) and the WebView's decode to the same size. */
+async function pixels(): Promise<{ w: number; h: number; data: number[] } | null> {
+  const got = await browser.execute(() => {
+    const img = document.querySelector<HTMLImageElement>('[data-response-window] img[data-part="response-map"]');
+    return img
+      ? {
+          src: img.getAttribute('src') ?? '',
+          complete: img.complete,
+          natural: [img.naturalWidth, img.naturalHeight],
+          canvases: document.querySelectorAll('canvas').length,
+          inWindow: document.querySelectorAll('[data-response-window] canvas').length,
+        }
+      : null;
   });
+  if (!got) return null;
+  assert.equal(got.inWindow, 0, 'a canvas in the response window');
+  assert.equal(got.canvases, 1, "the document holds one canvas, the 3D view's (M10 rule 3)");
+  const prefix = 'data:image/png;base64,';
+  assert.ok(got.src.startsWith(prefix), `the map's src: ${got.src.slice(0, 40)}`);
+  const px = decodePng(Buffer.from(got.src.slice(prefix.length), 'base64'));
+  // The WebView decoded it too (a data URL the CSP refused would read 0 x 0).
+  assert.ok(got.complete, 'the map image loaded');
+  assert.deepEqual(got.natural, [px.w, px.h], 'the size the WebView decoded the map at');
+  return px;
+}
 
 /** Pixels that are not the expected map's colour (within 1 per channel), with where. */
 function pixelMismatches(px: { w: number; h: number; data: number[] }, want: ReturnType<typeof expected>): string[] {
   const out: string[] = [];
-  if (px.w !== want.cols || px.h !== want.bands) return [`canvas ${px.w} x ${px.h}, the JSON's map ${want.cols} x ${want.bands}`];
+  if (px.w !== want.cols || px.h !== want.bands) return [`image ${px.w} x ${px.h}, the JSON's map ${want.cols} x ${want.bands}`];
   for (let b = 0; b < want.bands; b++) {
     const y = want.bands - 1 - b;
     for (let c = 0; c < want.cols; c++) {
@@ -175,7 +226,7 @@ describe('The response window: the energy echogram per band', () => {
     assert.deepEqual(v.paths, want.paths, 'the series drawn');
     assert.equal(v.k0, want.k0);
     const px = await pixels();
-    assert.ok(px, 'the map canvas');
+    assert.ok(px, 'the map image');
     const bad = pixelMismatches(px, want);
     assert.deepEqual(bad.slice(0, 10), [], `${bad.length} of ${want.cols * want.bands} pixels`);
     // The loudest bin is white, not black; a bin 60 dB or more down is black.

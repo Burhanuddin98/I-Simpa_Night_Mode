@@ -288,9 +288,12 @@
   white-space: nowrap;
 }
 .rw-map {
+  display: block;
   width: 100%;
   height: 100%;
+  object-fit: fill;
   image-rendering: pixelated;
+  user-select: none;
   background: #000;
   border: 1px solid var(--line);
   box-sizing: border-box;
@@ -302,7 +305,6 @@
 .rw-bar-img {
   width: 14px;
   height: 100%;
-  image-rendering: pixelated;
   border: 1px solid var(--line);
   box-sizing: border-box;
 }
@@ -325,11 +327,27 @@
   right: 0;
 }
 .rw-strip {
+  display: block;
   width: 100%;
   height: 100%;
   background: #000;
   border: 1px solid var(--line);
   box-sizing: border-box;
+  overflow: hidden;
+}
+.rw-strip-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.rw-strip-tick {
+  stroke: var(--text-3);
+  stroke-width: 1;
+}
+.rw-strip-line {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
 }
 .rw-strip-key {
   align-self: center;
@@ -347,14 +365,6 @@
   top: 0;
   transform: translateX(-50%);
   white-space: nowrap;
-}
-.rw-tick::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: -5px;
-  height: 4px;
-  border-left: 1px solid var(--text-3);
 }
 .rw-x-label {
   color: var(--text-3);

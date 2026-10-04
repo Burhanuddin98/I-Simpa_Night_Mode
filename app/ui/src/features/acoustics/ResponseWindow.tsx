@@ -7,14 +7,17 @@
 //
 // What response.ts decides is drawn and printed here, with the tab's DOM contract: every number
 // a `[data-num][data-json]` path of the report (band labels, time ticks, the emission), every
-// name a `[data-str]`, the colour bar's span `[data-label="span"]`. The map's canvas holds one
-// pixel per bin (`mapPixels`), scaled up by CSS, so a pixel read back is the bin's colour.
-import { useEffect, useMemo, useRef } from 'react';
+// name a `[data-str]`, the colour bar's span `[data-label="span"]`. No canvas (M10 PLAN rule 3):
+// the map is a PNG of one pixel per bin (`mapPixels`, png.ts), scaled up by CSS, so a pixel
+// decoded from it is the bin's colour; the decay strip and its marks are SVG, the colour bar a
+// CSS gradient of the same stops.
+import { useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { Report } from '../../bindings/ipc';
 import { N, S } from './Marked';
 import type { SourceSel } from './model';
-import { colourAt, mapPixels, RESPONSE_NOTE, RESPONSE_TITLE, responseView, SPAN_DB, SPAN_LABELS, type ResponseView } from './response';
+import { pngDataUrl } from './png';
+import { colourBarCss, mapPixels, RESPONSE_NOTE, RESPONSE_TITLE, responseView, SPAN_DB, SPAN_LABELS, type ResponseView } from './response';
 
 /** What the window shows, for the `responseView` test hook; null while it is closed. */
 export interface ResponseHookView {
@@ -28,77 +31,38 @@ export interface ResponseHookView {
 let hookView: ResponseHookView | null = null;
 export const responseHookView = (): ResponseHookView | null => hookView;
 
-const css = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-
-function MapCanvas({ v }: { v: ResponseView }) {
-  const ref = useRef<HTMLCanvasElement>(null);
+/** The map as an image (M10 PLAN rule 3, one canvas: the 3D view's is the only one): one pixel
+ * per bin (`mapPixels`), a PNG in a data URL (png.ts), scaled up by CSS with `pixelated`, so a
+ * pixel decoded from it is the bin's colour. */
+function MapImage({ v }: { v: ResponseView }) {
   const rows = v.map.db.length;
   const cols = v.map.db[0].length;
-  useEffect(() => {
-    const ctx = ref.current?.getContext('2d');
-    if (!ctx) return;
-    ctx.putImageData(new ImageData(mapPixels(v.map) as Uint8ClampedArray<ArrayBuffer>, cols, rows), 0, 0);
-  }, [v, cols, rows]);
-  return <canvas ref={ref} className="rw-map" data-part="response-map" width={cols} height={rows} />;
+  const src = useMemo(() => pngDataUrl(mapPixels(v.map), cols, rows), [v, cols, rows]);
+  return <img className="rw-map" data-part="response-map" src={src} width={cols} height={rows} alt="Level per band and time step" draggable={false} />;
 }
 
-const BAR_PX = 120;
+/** The colour bar: the map's stops as a CSS gradient, the span's top at the top. */
 function ColourBar() {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const ctx = ref.current?.getContext('2d');
-    if (!ctx) return;
-    const img = ctx.createImageData(1, BAR_PX);
-    for (let y = 0; y < BAR_PX; y++) {
-      const [r, g, b] = colourAt(1 - (y + 0.5) / BAR_PX);
-      img.data.set([r, g, b, 255], y * 4);
-    }
-    ctx.putImageData(img, 0, 0);
-  }, []);
-  return <canvas ref={ref} className="rw-bar-img" data-part="response-bar" width={1} height={BAR_PX} />;
+  return <div className="rw-bar-img" data-part="response-bar" style={{ backgroundImage: colourBarCss() }} />;
 }
 
-/** The bands summed, dB re its maximum, as a line over the same time axis as the map. */
-function Strip({ db }: { db: number[] }) {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const draw = () => {
-      const dpr = devicePixelRatio || 1;
-      const w = Math.max(1, Math.round(el.clientWidth * dpr));
-      const h = Math.max(1, Math.round(el.clientHeight * dpr));
-      el.width = w;
-      el.height = h;
-      const ctx = el.getContext('2d');
-      if (!ctx) return;
-      ctx.clearRect(0, 0, w, h);
-      ctx.strokeStyle = css('--line', '#1d1d21');
-      ctx.lineWidth = 1;
-      for (const k of [1, 2]) {
-        const y = Math.round((k / 3) * h) + 0.5;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-      }
-      ctx.strokeStyle = css('--red', '#e0202e');
-      ctx.lineWidth = 1.5 * dpr;
-      ctx.beginPath();
-      db.forEach((d, c) => {
-        const x = ((c + 0.5) / db.length) * w;
-        const y = (-d / SPAN_DB) * (h - dpr) + dpr / 2;
-        if (c === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-    };
-    draw();
-    const ro = new ResizeObserver(draw);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [db]);
-  return <canvas ref={ref} className="rw-strip" data-part="response-strip" />;
+/** The bands summed, dB re its maximum, as a line over the same time axis as the map, with the
+ * span's thirds and the time ticks' marks, in SVG: x in steps (0 to `db.length`), y in dB below
+ * the maximum (0 to `SPAN_DB`), stretched to the box; strokes keep their width. */
+function Strip({ db, ticks }: { db: number[]; ticks: readonly number[] }) {
+  const n = db.length;
+  const points = db.map((d, c) => `${c + 0.5},${-d}`).join(' ');
+  return (
+    <svg className="rw-strip" data-part="response-strip" viewBox={`0 0 ${n} ${SPAN_DB}`} preserveAspectRatio="none" aria-hidden="true">
+      {[1, 2].map((k) => (
+        <line key={k} className="rw-strip-grid" x1={0} x2={n} y1={(k * SPAN_DB) / 3} y2={(k * SPAN_DB) / 3} vectorEffect="non-scaling-stroke" />
+      ))}
+      {ticks.map((c) => (
+        <line key={`t${c}`} className="rw-strip-tick" x1={c} x2={c} y1={SPAN_DB * 0.93} y2={SPAN_DB} vectorEffect="non-scaling-stroke" />
+      ))}
+      <polyline className="rw-strip-line" points={points} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
 }
 
 function SpanLabels({ ends }: { ends?: boolean }) {
@@ -161,7 +125,7 @@ export function ResponseWindow({ report, receiver, source, onClose }: { report: 
               </span>
             ))}
           </div>
-          <MapCanvas v={v} />
+          <MapImage v={v} />
           <div className="rw-bar">
             <ColourBar />
             <div className="rw-bar-labels">
@@ -172,7 +136,7 @@ export function ResponseWindow({ report, receiver, source, onClose }: { report: 
           <div className="rw-y rw-y-strip">
             <SpanLabels ends />
           </div>
-          {v.broadband ? <Strip db={v.broadband} /> : <div className="ac-none">No broadband decay.</div>}
+          {v.broadband ? <Strip db={v.broadband} ticks={v.ticks.map((t) => t.col)} /> : <div className="ac-none">No broadband decay.</div>}
           <div className="rw-strip-key">bands summed</div>
 
           <div />

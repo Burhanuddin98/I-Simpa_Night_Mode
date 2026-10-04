@@ -60,6 +60,13 @@ export function colourAt(t: number): Rgb {
   return COLOUR_STOPS[COLOUR_STOPS.length - 1].rgb;
 }
 
+/** The colour bar as a CSS gradient, bottom (the span's bottom) to top, through the same stops
+ * at the same fractions: CSS interpolates sRGB linearly between stops, as `colourAt` does. */
+export function colourBarCss(): string {
+  const stops = COLOUR_STOPS.map((s) => `rgb(${s.rgb.join(', ')}) ${+(s.t * 100).toFixed(4)}%`);
+  return `linear-gradient(to top, ${stops.join(', ')})`;
+}
+
 /** A level re the maximum, clipped `span` dB down: -Infinity (no energy) and anything lower read
  * as `-span`. Refuses NaN, a level above the maximum, and a span that is not above 0. */
 export function clipDb(db: number, span = SPAN_DB): number {
