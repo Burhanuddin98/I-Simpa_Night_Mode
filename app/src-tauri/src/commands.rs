@@ -698,8 +698,14 @@ pub async fn export_write(request: tauri::ipc::Request<'_>) -> CmdResult<u64> {
     let bytes = match request.body() {
         tauri::ipc::InvokeBody::Raw(b) => b.clone(),
         tauri::ipc::InvokeBody::Json(_) => {
-            return Err(CmdError::new("EXPORT_CONTENT", "the export's bytes must be sent raw, not as JSON"));
+            return Err(CmdError::new(
+                "EXPORT_CONTENT",
+                "the export's bytes must be sent raw, not as JSON",
+            ));
         }
     };
-    guard::blocking("export_write", move || crate::export::write(&kind, &path, &bytes)).await
+    guard::blocking("export_write", move || {
+        crate::export::write(&kind, &path, &bytes)
+    })
+    .await
 }

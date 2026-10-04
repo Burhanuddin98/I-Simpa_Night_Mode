@@ -907,8 +907,14 @@ mod m10_tests {
         let before = s.json().unwrap();
 
         for (shape, why) in [
-            (plane("[0,10,1.6]", "[0,0,1.6]", "[6,0,1.6]", "50"), "larger than a side"),
-            (plane("[0,10,1.6]", "[0,0,1.6]", "[0,5,1.6]", "1"), "collinear"),
+            (
+                plane("[0,10,1.6]", "[0,0,1.6]", "[6,0,1.6]", "50"),
+                "larger than a side",
+            ),
+            (
+                plane("[0,10,1.6]", "[0,0,1.6]", "[0,5,1.6]", "1"),
+                "collinear",
+            ),
         ] {
             let op = format!(r#"{{"op":"replace_surface_receiver","receiver":{shape}}}"#);
             let out = s.edit_apply(&op).unwrap();

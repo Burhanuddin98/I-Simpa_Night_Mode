@@ -27,7 +27,12 @@ pub fn percent_decode(s: &str) -> CmdResult<String> {
             let hex = s
                 .get(i + 1..i + 3)
                 .and_then(|h| u8::from_str_radix(h, 16).ok())
-                .ok_or_else(|| CmdError::new("EXPORT_PATH", format!("the path header is not percent-encoded at byte {i}")))?;
+                .ok_or_else(|| {
+                    CmdError::new(
+                        "EXPORT_PATH",
+                        format!("the path header is not percent-encoded at byte {i}"),
+                    )
+                })?;
             out.push(hex);
             i += 3;
         } else {
@@ -41,35 +46,60 @@ pub fn percent_decode(s: &str) -> CmdResult<String> {
 /// The path to write, refused unless absolute, with the kind's extension, in a folder that exists.
 pub fn checked_path(kind: &str, path: &str) -> CmdResult<PathBuf> {
     if !KINDS.contains(&kind) {
-        return Err(CmdError::new("EXPORT_KIND", format!("'{kind}' is not an export kind: csv, json or png")));
+        return Err(CmdError::new(
+            "EXPORT_KIND",
+            format!("'{kind}' is not an export kind: csv, json or png"),
+        ));
     }
     let p = PathBuf::from(path);
     if !p.is_absolute() {
-        return Err(CmdError::new("EXPORT_PATH", format!("'{path}' is not an absolute path")));
+        return Err(CmdError::new(
+            "EXPORT_PATH",
+            format!("'{path}' is not an absolute path"),
+        ));
     }
-    let ext = p.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase);
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase);
     if ext.as_deref() != Some(kind) {
         return Err(CmdError::new(
             "EXPORT_PATH",
-            format!("'{}' does not end in .{kind}: a {kind} export is written only to a .{kind} file", p.display()),
+            format!(
+                "'{}' does not end in .{kind}: a {kind} export is written only to a .{kind} file",
+                p.display()
+            ),
         ));
     }
     if p.is_dir() {
-        return Err(CmdError::new("EXPORT_PATH", format!("'{}' is a folder", p.display())));
+        return Err(CmdError::new(
+            "EXPORT_PATH",
+            format!("'{}' is a folder", p.display()),
+        ));
     }
     match p.parent() {
         Some(dir) if dir.is_dir() => Ok(p),
-        _ => Err(CmdError::new("EXPORT_PATH", format!("the folder of '{}' does not exist", p.display()))),
+        _ => Err(CmdError::new(
+            "EXPORT_PATH",
+            format!("the folder of '{}' does not exist", p.display()),
+        )),
     }
 }
 
 /// Refuses bytes that are not what the kind says.
 pub fn check_content(kind: &str, bytes: &[u8]) -> CmdResult<()> {
-    let bad = |why: &str| Err(CmdError::new("EXPORT_CONTENT", format!("not a {kind} file: {why}")));
+    let bad = |why: &str| {
+        Err(CmdError::new(
+            "EXPORT_CONTENT",
+            format!("not a {kind} file: {why}"),
+        ))
+    };
     match kind {
         "png" if !bytes.starts_with(&PNG_SIGNATURE) => bad("no PNG signature"),
         "csv" if std::str::from_utf8(bytes).is_err() => bad("not UTF-8 text"),
-        "json" if serde_json::from_slice::<serde_json::Value>(bytes).is_err() => bad("not a JSON document"),
+        "json" if serde_json::from_slice::<serde_json::Value>(bytes).is_err() => {
+            bad("not a JSON document")
+        }
         _ if bytes.is_empty() => bad("empty"),
         _ => Ok(()),
     }
@@ -79,7 +109,9 @@ pub fn check_content(kind: &str, bytes: &[u8]) -> CmdResult<()> {
 pub fn write(kind: &str, path: &str, bytes: &[u8]) -> CmdResult<u64> {
     let p = checked_path(kind, path)?;
     check_content(kind, bytes)?;
-    let io = |what: &str, e: std::io::Error| CmdError::new("EXPORT_IO", format!("{what} '{}': {e}", p.display()));
+    let io = |what: &str, e: std::io::Error| {
+        CmdError::new("EXPORT_IO", format!("{what} '{}': {e}", p.display()))
+    };
     let tmp = temp_beside(&p);
     std::fs::write(&tmp, bytes).map_err(|e| io("could not write beside", e))?;
     if let Err(e) = std::fs::rename(&tmp, &p) {
@@ -90,7 +122,10 @@ pub fn write(kind: &str, path: &str, bytes: &[u8]) -> CmdResult<u64> {
 }
 
 fn temp_beside(p: &Path) -> PathBuf {
-    let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = p
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     p.with_file_name(format!(".{name}.{}.part", std::process::id()))
 }
 
@@ -99,14 +134,23 @@ mod tests {
     use super::*;
 
     fn dir(tag: &str) -> PathBuf {
-        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let d = std::env::temp_dir().join(format!("simpa-app-export-{tag}-{}-{nanos}", std::process::id()));
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let d = std::env::temp_dir().join(format!(
+            "simpa-app-export-{tag}-{}-{nanos}",
+            std::process::id()
+        ));
         std::fs::create_dir_all(&d).unwrap();
         d
     }
 
     fn files(d: &Path) -> Vec<String> {
-        let mut v: Vec<String> = std::fs::read_dir(d).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+        let mut v: Vec<String> = std::fs::read_dir(d)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
         v.sort();
         v
     }
@@ -116,7 +160,10 @@ mod tests {
         let d = dir("ok");
         let p = d.join("Box - run 1 - parameters.csv");
         let body = b"receiver,value\r\nR1,60.04\r\n";
-        assert_eq!(write("csv", p.to_str().unwrap(), body).unwrap(), body.len() as u64);
+        assert_eq!(
+            write("csv", p.to_str().unwrap(), body).unwrap(),
+            body.len() as u64
+        );
         assert_eq!(std::fs::read(&p).unwrap(), body);
         // Again over it: replaced, still one file.
         write("csv", p.to_str().unwrap(), b"a\r\n").unwrap();
@@ -132,13 +179,29 @@ mod tests {
         let e = write("png", exe.to_str().unwrap(), &PNG_SIGNATURE).unwrap_err();
         assert_eq!(e.code, "EXPORT_PATH");
         assert!(e.message.contains("does not end in .png"), "{}", e.message);
-        assert_eq!(write("csv", "relative.csv", b"a").unwrap_err().code, "EXPORT_PATH");
+        assert_eq!(
+            write("csv", "relative.csv", b"a").unwrap_err().code,
+            "EXPORT_PATH"
+        );
         let missing = d.join("nowhere").join("x.json");
-        assert_eq!(write("json", missing.to_str().unwrap(), b"{}").unwrap_err().code, "EXPORT_PATH");
-        assert_eq!(write("exe", exe.to_str().unwrap(), b"a").unwrap_err().code, "EXPORT_KIND");
+        assert_eq!(
+            write("json", missing.to_str().unwrap(), b"{}")
+                .unwrap_err()
+                .code,
+            "EXPORT_PATH"
+        );
+        assert_eq!(
+            write("exe", exe.to_str().unwrap(), b"a").unwrap_err().code,
+            "EXPORT_KIND"
+        );
         // A .csv that names a folder.
         std::fs::create_dir_all(d.join("folder.csv")).unwrap();
-        assert_eq!(write("csv", d.join("folder.csv").to_str().unwrap(), b"a").unwrap_err().code, "EXPORT_PATH");
+        assert_eq!(
+            write("csv", d.join("folder.csv").to_str().unwrap(), b"a")
+                .unwrap_err()
+                .code,
+            "EXPORT_PATH"
+        );
         assert_eq!(files(&d), vec!["folder.csv".to_string()]);
         std::fs::remove_dir_all(&d).unwrap();
     }
@@ -147,9 +210,28 @@ mod tests {
     fn bytes_that_are_not_the_kind_are_refused() {
         let d = dir("content");
         let png = d.join("v.png");
-        assert_eq!(write("png", png.to_str().unwrap(), b"not a png").unwrap_err().code, "EXPORT_CONTENT");
-        assert_eq!(write("json", d.join("p.json").to_str().unwrap(), b"{\"a\":").unwrap_err().code, "EXPORT_CONTENT");
-        assert_eq!(write("csv", d.join("p.csv").to_str().unwrap(), &[0xff, 0xfe, 0x00]).unwrap_err().code, "EXPORT_CONTENT");
+        assert_eq!(
+            write("png", png.to_str().unwrap(), b"not a png")
+                .unwrap_err()
+                .code,
+            "EXPORT_CONTENT"
+        );
+        assert_eq!(
+            write("json", d.join("p.json").to_str().unwrap(), b"{\"a\":")
+                .unwrap_err()
+                .code,
+            "EXPORT_CONTENT"
+        );
+        assert_eq!(
+            write(
+                "csv",
+                d.join("p.csv").to_str().unwrap(),
+                &[0xff, 0xfe, 0x00]
+            )
+            .unwrap_err()
+            .code,
+            "EXPORT_CONTENT"
+        );
         assert!(files(&d).is_empty());
         let mut ok = PNG_SIGNATURE.to_vec();
         ok.extend_from_slice(b"rest");
@@ -159,7 +241,10 @@ mod tests {
 
     #[test]
     fn the_path_header_is_percent_decoded_as_utf8() {
-        assert_eq!(percent_decode("C%3A%5Ctmp%5Cr%C3%A9sultats.csv").unwrap(), "C:\\tmp\\résultats.csv");
+        assert_eq!(
+            percent_decode("C%3A%5Ctmp%5Cr%C3%A9sultats.csv").unwrap(),
+            "C:\\tmp\\résultats.csv"
+        );
         assert_eq!(percent_decode("plain").unwrap(), "plain");
         assert_eq!(percent_decode("bad%zz").unwrap_err().code, "EXPORT_PATH");
         assert_eq!(percent_decode("%ff").unwrap_err().code, "EXPORT_PATH");
