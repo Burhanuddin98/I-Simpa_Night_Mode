@@ -44,6 +44,10 @@ import {
   runForVariant,
   type Series,
   shownParams,
+  sourceLabel,
+  sourceNote,
+  sources,
+  type SourceSel,
   type Str,
 } from './model';
 import './acoustics.css';
@@ -232,6 +236,8 @@ interface HookView {
   run: string | null;
   receiver: number;
   band: string;
+  /** The source shown, or null for the sources summed (backlog 77). */
+  source: string | null;
   din: string;
   series: Series[];
 }
@@ -272,6 +278,8 @@ export function AcousticsPane() {
   const scene = useStore(sceneStore);
   const [band, setBand] = useState<BandSel>(0);
   const [receiver, setReceiver] = useState(0);
+  // Undefined until picked: a run with several sources opens on the first (backlog 77).
+  const [source, setSource] = useState<SourceSel | undefined>(undefined);
   const [group, setGroup] = useState('A3');
   const [error, setError] = useState<{ run: string; code: string } | null>(null);
 
@@ -295,9 +303,12 @@ export function AcousticsPane() {
   const names = receivers(report ?? ({ solver: 'spps', bands_hz: [] } as unknown as NonNullable<ReportView['report']>));
   const r = Math.min(receiver, Math.max(0, names.length - 1));
   const b: BandSel = band === 'sum' || (report && band < report.bands_hz.length) ? band : 0;
-  const series = useMemo(() => (report ? rtSeries(report, r) : []), [report, r]);
+  const projectSources = scene?.view.sources;
+  const srcNames = useMemo(() => (report ? sources(report, (projectSources ?? []).map((s) => s.name)) : []), [report, projectSources]);
+  const src: SourceSel = !srcNames.length ? null : source === undefined || (source !== null && !srcNames.includes(source)) ? srcNames[0] : source;
+  const series = useMemo(() => (report ? rtSeries(report, r, src) : []), [report, r, src]);
   const target = report ? dinTarget(report, group) : null;
-  const curve = useMemo(() => (report ? decay(report, r, b) : null), [report, r, b]);
+  const curve = useMemo(() => (report ? decay(report, r, b, src) : null), [report, r, b, src]);
 
   const state = !onResults
     ? 'off-step'
@@ -314,7 +325,7 @@ export function AcousticsPane() {
               : 'refused';
 
   // The test hook (gate (f)): what is shown and the arrays the RT chart was given.
-  paneView = { state, run: selected, receiver: r, band: String(b), din: group, series };
+  paneView = { state, run: selected, receiver: r, band: String(b), source: src, din: group, series };
   useEffect(
     () => () => {
       paneView = null;
@@ -345,7 +356,8 @@ export function AcousticsPane() {
   }
 
   const specs = shownParams(report);
-  const rows = receiverRows(report, b);
+  const rows = receiverRows(report, b, src);
+  const note = sourceNote(report);
   const d = din(report, group);
   const groupNames = new Map((view?.surface_groups ?? []).map((g) => [g.material_id, g.names]));
   const abs = absorption(report, groupNames);
@@ -366,7 +378,25 @@ export function AcousticsPane() {
           {MQ2_WORDING}
         </span>
         {view?.state.unverified ? <span className="ac-tag warn">UNVERIFIED solver build</span> : null}
+        {srcNames.length ? (
+          <label className="ac-control">
+            Source
+            <select data-control="source" value={src ?? ''} onChange={(e) => setSource(e.target.value === '' ? null : e.target.value)}>
+              {srcNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+              <option value="">all sources summed</option>
+            </select>
+          </label>
+        ) : null}
       </div>
+      {note ? (
+        <div className="ac-note block" data-part="source-note" data-label="note">
+          {note}
+        </div>
+      ) : null}
       <div className="ac-body">
         <section className="ac-card ac-rt" aria-label="Reverberation time against DIN 18041">
           <div className="ac-card-head">
@@ -441,7 +471,7 @@ export function AcousticsPane() {
                     </td>
                     {series.map((s) => {
                       const spec = specs.find((x) => x.name === s.param)!;
-                      const c = cell(report, spec, r, i);
+                      const c = cell(report, spec, r, i, src);
                       return c ? <CellView key={s.param} c={c} unit="s" /> : <td key={s.param} />;
                     })}
                   </tr>
@@ -511,6 +541,8 @@ export function AcousticsPane() {
               {names[r] !== undefined ? <S s={{ path: `${report.solver === 'tcr' ? 'tcr' : 'spps'}.point_receivers.${r}.label`, text: names[r] }} /> : null}
               {' · '}
               {b === 'sum' ? 'bands summed' : <Band report={report} index={b} />}
+              {srcNames.length ? ' · ' : null}
+              {srcNames.length ? src === null ? 'all sources summed' : sourceLabel(report, r, src) ? <S s={sourceLabel(report, r, src) as Str} /> : null : null}
             </span>
           </div>
           {curve ? <DecayChart curve={curve} /> : <div className="ac-none">No decay curve for this receiver and band.</div>}

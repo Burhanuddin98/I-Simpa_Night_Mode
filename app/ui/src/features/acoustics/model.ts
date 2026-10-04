@@ -168,11 +168,63 @@ export function receivers(report: Report): string[] {
   return (s?.point_receivers ?? []).map((r) => r.label);
 }
 
-/** Where a parameter's `Evaluated` is for receiver `r` in band `band`; null where the report
- * has no place for it (G of the bands summed). */
-export function paramPath(report: Report, spec: ParamSpec, r: number, band: BandSel): string | null {
+/** Which source's echogram a value is read from: a source's name, or null for the sources summed
+ * (the receiver's own `bands` and `aggregate`). */
+export type SourceSel = string | null;
+
+/** The sources with their own echogram at the receivers (`per_source`, written when the run's
+ * echogram per source is on), in `order` (the open project's sources, by name) and then in the
+ * first such receiver's (`config.xml`'s, which lists them last first); empty with fewer than two,
+ * where the summed echogram is the one source's. Backlog 77 (parity R11). */
+export function sources(report: Report, order: readonly string[] = []): string[] {
+  const s = (report as unknown as Record<string, { point_receivers?: { per_source?: { source: string }[] }[] } | null>)[solverKey(report)];
+  const first = (s?.point_receivers ?? []).find((rx) => (rx.per_source ?? []).length > 0);
+  const names = (first?.per_source ?? []).map((p) => p.source);
+  const rank = (n: string) => (order.includes(n) ? order.indexOf(n) : order.length + names.indexOf(n));
+  return names.length >= 2 ? [...names].sort((a, b) => rank(a) - rank(b)) : [];
+}
+
+/** Several sources summed, with no echogram per source: the onset-relative parameters are refused
+ * `several_sources` (ISO 3382-1 defines them per source and receiver), and this says how to get
+ * them; null otherwise. */
+export function sourceNote(report: Report): string | null {
+  if (sources(report).length) return null;
+  const rxs = at(report, `${solverKey(report)}.point_receivers`);
+  if (!Array.isArray(rxs)) return null;
+  const several = rxs.some((_, r) =>
+    report.bands_hz.some((_, b) => PARAM_SPECS.some((p) => at(report, `${solverKey(report)}.point_receivers.${r}.bands.${b}.parameters.${p.name}.not_evaluable.error.why.why`) === 'several_sources')),
+  );
+  return several
+    ? 'This run has several sources and no echogram per source. EDT, T20, T30, C50, C80, D50 and Ts are defined per source and receiver: turn on "Echogram per source" in the simulation settings and run again.'
+    : null;
+}
+
+/** Where receiver `r`'s echogram for `src` is: the receiver itself for the sources summed, its
+ * `per_source` entry of that name otherwise; null when it has none. */
+function echogramPath(report: Report, r: number, src: SourceSel): string | null {
   const rx = `${solverKey(report)}.point_receivers.${r}`;
+  if (src === null) return rx;
+  const list = at(report, `${rx}.per_source`);
+  const k = Array.isArray(list) ? list.findIndex((p) => (p as { source?: string }).source === src) : -1;
+  return k < 0 ? null : `${rx}.per_source.${k}`;
+}
+
+/** Source `src`'s name as receiver `r`'s echogram carries it (a path, for gate (a)); null for the
+ * sources summed or a source the receiver has none for. */
+export function sourceLabel(report: Report, r: number, src: SourceSel): Str | null {
+  if (src === null) return null;
+  const p = echogramPath(report, r, src);
+  return p === null ? null : str(report, `${p}.source`);
+}
+
+/** Where a parameter's `Evaluated` is for receiver `r` in band `band`, from source `src`'s
+ * echogram (null: the sources summed); null where the report has no place for it (G of the bands
+ * summed, STI of one source, a source the receiver has no echogram for). */
+export function paramPath(report: Report, spec: ParamSpec, r: number, band: BandSel, src: SourceSel = null): string | null {
+  const rx = echogramPath(report, r, src);
+  if (rx === null) return null;
   if (spec.name === 'sti') {
+    if (src !== null) return null;
     const shown = at(report, `${rx}.sti.shown`);
     return typeof shown === 'string' ? `${rx}.sti.${shown}` : null;
   }
@@ -195,8 +247,8 @@ function edtNote(report: Report, path: string): string | null {
 }
 
 /** One cell. */
-export function cell(report: Report, spec: ParamSpec, r: number, band: BandSel): Cell | null {
-  const path = paramPath(report, spec, r, band);
+export function cell(report: Report, spec: ParamSpec, r: number, band: BandSel, src: SourceSel = null): Cell | null {
+  const path = paramPath(report, spec, r, band, src);
   if (path === null) return null;
   const e = at(report, path);
   if (e === null || typeof e !== 'object') return null;
@@ -219,11 +271,11 @@ export function cell(report: Report, spec: ParamSpec, r: number, band: BandSel):
 }
 
 /** The receivers table: one row per receiver, one cell per shown parameter (null: no place). */
-export function receiverRows(report: Report, band: BandSel): { receiver: Str; cells: (Cell | null)[] }[] {
+export function receiverRows(report: Report, band: BandSel, src: SourceSel = null): { receiver: Str; cells: (Cell | null)[] }[] {
   const specs = shownParams(report);
   return receivers(report).map((_, r) => ({
     receiver: str(report, `${solverKey(report)}.point_receivers.${r}.label`) as Str,
-    cells: specs.map((s) => cell(report, s, r, band)),
+    cells: specs.map((s) => cell(report, s, r, band, src)),
   }));
 }
 
@@ -244,12 +296,12 @@ export interface Series {
  * table prints, from one read. Each point is the band's `cell` (the tables' filter: PASS
  * parameters only, a value only with its range and an `ok`/`wide` status), so the chart draws
  * no value the table does not show, and draws the range the table shows beside it. */
-export function rtSeries(report: Report, r: number): Series[] {
+export function rtSeries(report: Report, r: number, src: SourceSel = null): Series[] {
   return shownParams(report)
     .filter((s) => s.rt)
     .map((s) => {
-      const base = report.bands_hz.map((_, b) => paramPath(report, s, r, b));
-      const cells = report.bands_hz.map((_, b) => cell(report, s, r, b));
+      const base = report.bands_hz.map((_, b) => paramPath(report, s, r, b, src));
+      const cells = report.bands_hz.map((_, b) => cell(report, s, r, b, src));
       const shown = (c: Cell | null): c is Cell & { value: Num; lo: Num; hi: Num } => c !== null && c.status !== 'refused' && !!c.value && !!c.lo && !!c.hi;
       const read = (n: Num | null) => (n ? (at(report, n.path) as number) : null);
       return {
@@ -374,9 +426,11 @@ export function classical(report: Report): ClassicalRow[] {
   return rows.map((r) => ({ band: r.band, cells: kept.map((k) => r.cells[k]) }));
 }
 
-/** A receiver's decay curve in one band (or the bands summed): the report's points, as drawn. */
-export function decay(report: Report, r: number, band: BandSel): { path: string; t: number[]; db: number[] } | null {
-  const rx = `${solverKey(report)}.point_receivers.${r}`;
+/** A receiver's decay curve in one band (or the bands summed), from source `src`'s echogram (null:
+ * the sources summed): the report's points, as drawn. */
+export function decay(report: Report, r: number, band: BandSel, src: SourceSel = null): { path: string; t: number[]; db: number[] } | null {
+  const rx = echogramPath(report, r, src);
+  if (rx === null) return null;
   const path = band === 'sum' ? `${rx}.aggregate.decay_curve` : `${rx}.bands.${band}.decay_curve`;
   const pts = at(report, `${path}.points`);
   if (!Array.isArray(pts)) return null;

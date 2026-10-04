@@ -20,6 +20,9 @@ import {
   receiverRows,
   rtSeries,
   runForVariant,
+  sourceLabel,
+  sourceNote,
+  sources,
   shownParams,
   STI_NOTE,
   T30_MARK,
@@ -247,6 +250,86 @@ test('Acoustics: bands as numbers of bands_hz, and the absorption, classical tab
   assert.equal(ck[1].cells[2].refusal?.code.text, 'params_not_evaluable');
   assert.deepEqual(decay(r, 0, 0), { path: 'spps.point_receivers.0.bands.0.decay_curve', t: [0, 0.1], db: [0, -5.5] });
   assert.equal(decay(r, 0, 1), null);
+});
+
+// Backlog 77: two sources. The summed echogram refuses the onset-relative parameters
+// (`several_sources`); each source's own echogram, `per_source`, carries them. R2 lists its
+// sources in the other order, so a source is found by its name, not its position.
+function twoSources(fail: string[] = ['t30_s', 'edt_s', 'g_db', 'dba'], perSource = true): Report {
+  const r = report(fail);
+  const several = { not_evaluable: { code: 'params_not_evaluable', message: 'm', error: { kind: 'not_evaluable', why: { why: 'several_sources', sources: ['A', 'B'] } } } };
+  const src = (source: string, t30: number) => ({
+    source,
+    file: `x/${source}.recp`,
+    arrival_s: 0.01,
+    bands: [
+      { freq_hz: 500, parameters: params(value(t30)), g_db: value(9.5), decay_curve: { from_s: 0, points: [[0, 0], [0.1, -6]] } },
+      { freq_hz: 1000, parameters: params(value(t30 - 0.1)), g_db: value(9.4), decay_curve: null },
+    ],
+    aggregate: { parameters: params(value(t30 - 0.05), false), dba: { level_db: value(54.5) }, decay_curve: null },
+  });
+  const rxs = (r as unknown as { spps: { point_receivers: Record<string, unknown>[] } }).spps.point_receivers;
+  rxs.forEach((rx, i) => {
+    for (const b of rx.bands as { parameters: Record<string, unknown> }[]) for (const k of ['edt_s', 't20_s', 't30_s', 'c50_db', 'c80_db', 'd50', 'ts_s']) b.parameters[k] = several;
+    rx.per_source = perSource ? (i === 0 ? [src('A', 0.7), src('B', 0.9)] : [src('B', 0.95), src('A', 0.75)]) : [];
+  });
+  return r;
+}
+
+test('Acoustics (77): the sources are the per-source echograms, and only when there are two or more', () => {
+  assert.deepEqual(sources(twoSources()), ['A', 'B']);
+  // In the open project's order where it names them (config.xml lists them last first), then the
+  // report's.
+  assert.deepEqual(sources(twoSources(), ['B', 'A']), ['B', 'A']);
+  assert.deepEqual(sources(twoSources(), ['B']), ['B', 'A']);
+  assert.deepEqual(sources(twoSources(), ['Z']), ['A', 'B']);
+  assert.deepEqual(sources(report()), [], 'one summed echogram, no per-source');
+  assert.deepEqual(sources(twoSources(undefined, false)), []);
+});
+
+test("Acoustics (77): a source's values are paths into that source's own echogram, found by name", () => {
+  const r = twoSources(['spl_db']);
+  const t30 = PARAM_SPECS.find((p) => p.name === 't30_s')!;
+  const a = cell(r, t30, 0, 0, 'A')!;
+  assert.equal(a.status, 'ok');
+  assert.equal(a.value?.path, 'spps.point_receivers.0.per_source.0.bands.0.parameters.t30_s.value');
+  assert.equal(a.value?.text, '0.70');
+  // R2 lists B first: A is its per_source.1.
+  assert.equal(cell(r, t30, 1, 0, 'A')?.value?.path, 'spps.point_receivers.1.per_source.1.bands.0.parameters.t30_s.value');
+  assert.equal(cell(r, t30, 1, 'sum', 'B')?.value?.path, 'spps.point_receivers.1.per_source.0.aggregate.parameters.t30_s.value');
+  for (const n of [a.value!, a.lo!, a.hi!]) assert.equal((at(r, n.path) as number).toFixed(n.digits), n.text);
+  // G and dB(A) are the source's own; STI is defined on the sources together, so none per source.
+  assert.equal(cell(r, PARAM_SPECS.find((p) => p.name === 'g_db')!, 0, 1, 'B')?.value?.path, 'spps.point_receivers.0.per_source.1.bands.1.g_db.value');
+  assert.equal(cell(r, PARAM_SPECS.find((p) => p.name === 'dba')!, 0, 0, 'B')?.value?.path, 'spps.point_receivers.0.per_source.1.aggregate.dba.level_db.value');
+  assert.equal(cell(r, PARAM_SPECS.find((p) => p.name === 'sti')!, 0, 0, 'A'), null);
+  // The sources summed are what they were: refused several_sources, shown by code and kind.
+  const summed = cell(r, t30, 0, 0)!;
+  assert.equal(summed.status, 'refused');
+  assert.equal(summed.refusal?.why?.text, 'several_sources');
+  // Says no: a source the receiver has no echogram for has no place, never the summed value.
+  assert.equal(cell(r, t30, 0, 0, 'C'), null);
+});
+
+test("Acoustics (77): the receivers table, RT series and decay follow the source, through the same filters", () => {
+  const r = twoSources(['spl_db']);
+  const rows = receiverRows(r, 0, 'B');
+  assert.equal(rows[0].cells.find((c) => c?.param === 't30_s')?.value?.text, '0.90');
+  assert.equal(rows[1].cells.find((c) => c?.param === 't30_s')?.value?.text, '0.95');
+  const s = rtSeries(r, 1, 'A');
+  const t30 = s.find((x) => x.param === 't30_s')!;
+  assert.deepEqual(t30.values, [0.75, 0.65]);
+  assert.equal(t30.paths[0], 'spps.point_receivers.1.per_source.1.bands.0.parameters.t30_s.value');
+  assert.deepEqual(sourceLabel(r, 1, 'A'), { path: 'spps.point_receivers.1.per_source.1.source', text: 'A' });
+  assert.equal(sourceLabel(r, 1, null), null);
+  assert.deepEqual(decay(r, 0, 0, 'B'), { path: 'spps.point_receivers.0.per_source.1.bands.0.decay_curve', t: [0, 0.1], db: [0, -6] });
+  // Gate (b) still holds per source: with T30 not PASS, no source draws it.
+  assert.ok(!rtSeries(twoSources(), 0, 'A').some((x) => x.param === 't30_s'));
+});
+
+test('Acoustics (77): several sources with no echogram per source say how to get the per-source values', () => {
+  assert.match(sourceNote(twoSources(undefined, false)) ?? '', /echogram per source/i);
+  assert.equal(sourceNote(twoSources()), null, 'the per-source values are there');
+  assert.equal(sourceNote(report()), null, 'one source');
 });
 
 test("Acoustics: a variant's newest OK run is the one shown after a switch", () => {

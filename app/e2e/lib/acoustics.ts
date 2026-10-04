@@ -181,24 +181,32 @@ export interface LabelledCell {
   colHead: string;
   band: string;
   receiver: string;
+  /** The page's Source selection (backlog 77): a source's name, `all sources summed`, or empty
+   * when the run has no source picker. */
+  source?: string;
   paths: string[];
 }
 
-/** What a cell's JSON path is of: receiver index, parameter, band (an index, `sum`, or null for a
+/** What a cell's JSON path is of: receiver index, source (an index into the receiver's
+ * `per_source`, or null for the sources summed), parameter, band (an index, `sum`, or null for a
  * receiver-wide parameter); null when it is the path of no cell. */
-export function pathCell(path: string): { receiver: number; param: string; band: number | 'sum' | null } | null {
-  const m = /^(?:spps|tcr)\.point_receivers\.(\d+)\.(.+)$/.exec(path);
+export function pathCell(path: string): { receiver: number; source: number | null; param: string; band: number | 'sum' | null } | null {
+  const m = /^(?:spps|tcr)\.point_receivers\.(\d+)\.(?:per_source\.(\d+)\.)?(.+)$/.exec(path);
   if (!m) return null;
-  const r = Number(m[1]);
-  const rest = m[2];
+  const receiver = Number(m[1]);
+  const source = m[2] === undefined ? null : Number(m[2]);
+  const rest = m[3];
   let k: RegExpExecArray | null;
-  if ((k = /^bands\.(\d+)\.parameters\.([a-z0-9_]+)\./.exec(rest))) return { receiver: r, param: k[2], band: Number(k[1]) };
-  if ((k = /^bands\.(\d+)\.g_db\./.exec(rest))) return { receiver: r, param: 'g_db', band: Number(k[1]) };
-  if ((k = /^aggregate\.parameters\.([a-z0-9_]+)\./.exec(rest))) return { receiver: r, param: k[1], band: 'sum' };
-  if (/^aggregate\.dba\./.test(rest)) return { receiver: r, param: 'dba', band: null };
-  if (/^sti\./.test(rest)) return { receiver: r, param: 'sti', band: null };
+  if ((k = /^bands\.(\d+)\.parameters\.([a-z0-9_]+)\./.exec(rest))) return { receiver, source, param: k[2], band: Number(k[1]) };
+  if ((k = /^bands\.(\d+)\.g_db\./.exec(rest))) return { receiver, source, param: 'g_db', band: Number(k[1]) };
+  if ((k = /^aggregate\.parameters\.([a-z0-9_]+)\./.exec(rest))) return { receiver, source, param: k[1], band: 'sum' };
+  if (/^aggregate\.dba\./.test(rest)) return { receiver, source, param: 'dba', band: null };
+  if (source === null && /^sti\./.test(rest)) return { receiver, source, param: 'sti', band: null };
   return null;
 }
+
+/** The Source selection that names the sources summed. */
+export const SOURCES_SUMMED = 'all sources summed';
 
 /** A band's name as the tab writes it: `500 Hz`, `1 kHz`, `bands summed`. */
 export function bandName(json: unknown, band: number | 'sum'): string {
@@ -221,7 +229,7 @@ export function cellLabelMismatch(c: LabelledCell, json: unknown): string | null
   const of = c.paths.map((p) => ({ p, at: pathCell(p) }));
   const bad = of.find((x) => x.at === null);
   if (bad) return `${c.table} "${c.rowHead}" x "${c.colHead}": ${bad.p} names no receiver cell`;
-  const key = (x: NonNullable<ReturnType<typeof pathCell>>) => `${x.receiver}|${x.param}|${x.band}`;
+  const key = (x: NonNullable<ReturnType<typeof pathCell>>) => `${x.receiver}|${x.source}|${x.param}|${x.band}`;
   const first = of[0].at as NonNullable<ReturnType<typeof pathCell>>;
   const other = of.find((x) => key(x.at as NonNullable<ReturnType<typeof pathCell>>) !== key(first));
   if (other) return `${c.table} "${c.rowHead}" x "${c.colHead}": its paths disagree (${of[0].p} and ${other.p})`;
@@ -233,5 +241,9 @@ export function cellLabelMismatch(c: LabelledCell, json: unknown): string | null
   if (shownReceiver !== label) return `${where}: the receiver shown is "${shownReceiver}", the path's is "${String(label)}"`;
   if (shownParam !== PARAM_LABELS[first.param]) return `${where}: the parameter shown is "${shownParam}", the path's is "${PARAM_LABELS[first.param] ?? first.param}"`;
   if (first.band !== null && shownBand !== bandName(json, first.band)) return `${where}: the band shown is "${shownBand}", the path's is "${bandName(json, first.band)}"`;
+  const shownSource = squash(c.source ?? '');
+  const pathSource = first.source === null ? null : at(json, `spps.point_receivers.${first.receiver}.per_source.${first.source}.source`);
+  if (pathSource === null ? shownSource !== '' && shownSource !== SOURCES_SUMMED : shownSource !== pathSource)
+    return `${where}: the source shown is "${shownSource || 'none'}", the path's is "${pathSource === null ? SOURCES_SUMMED : String(pathSource)}"`;
   return null;
 }
