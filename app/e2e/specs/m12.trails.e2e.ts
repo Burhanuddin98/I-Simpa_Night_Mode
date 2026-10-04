@@ -6,6 +6,10 @@
 //              min(N, step - first) segments; and the map, the dots and the trails are at the one
 //              step. Controls: the counts differ among the steps and N, a step past every
 //              particle's end keeps 0. Screenshot w3-trails.png
+//   w3-play    while Play runs at 0.1x (Burhan 2026-10-04 15:08), the trails move on the dots' one
+//              timeline a step at a time: every sample's segments drawn equal the .pbin's rule at
+//              the step drawn, and the frames drawn never skip a step. Control: the samples span
+//              several steps with different counts
 //   w3-refuse  a run that saved no particles offers no trails: the length chips are disabled and
 //              say why, and nothing is drawn
 //
@@ -19,7 +23,7 @@ import { hook, m10, waitForHooks } from '../lib/hooks.ts';
 import { readPbin } from '../lib/m12files.ts';
 import { env } from '../lib/types.ts';
 
-const HOOKS = ['idle', 'openProject', 'edit', 'projectJson', 'runStart', 'runState', 'runsRows', 'selectRun', 'setStep', 'm12Map', 'm12SetStep', 'm12Particles', 'wowTrails'];
+const HOOKS = ['idle', 'openProject', 'edit', 'projectJson', 'runStart', 'runState', 'runsRows', 'selectRun', 'setStep', 'm12Map', 'm12SetStep', 'm12Particles', 'wowTrails', 'm12DrawnSteps'];
 
 interface TrailState {
   steps: number;
@@ -111,6 +115,35 @@ describe('W3: particle trails', () => {
     await clickSelector('[data-trails="20"]');
     await hook('m12SetStep', living[Math.floor(living.length / 4)]);
     await browser.saveScreenshot(path.join(env('M11_SCREENS'), 'w3-trails.png'));
+  });
+
+  it('w3-play: at 0.1x the trails follow Play a step at a time on the dots\' timeline', async () => {
+    await hook('selectRun', runSaved);
+    await browser.waitUntil(async () => (await hook<{ run: string } | null>('m12Particles'))?.run === runSaved, { timeout: 60_000, timeoutMsg: 'no particles loaded' });
+    const file = readPbin(path.join(runsRoot, runSaved, 'solve', 'Particles', '1000', 'particles.pbin'));
+    const rule = (s: number, n: number) => file.spans.reduce((c, [first, k]) => (k > 0 && s >= first && s <= first + k - 1 ? c + Math.min(n, s - first) : c), 0);
+    await clickSelector('[data-trails="5"]');
+    await browser.waitUntil(async () => (await trails()).steps === 5, { timeout: 10_000, timeoutMsg: 'trails 5 did not switch on' });
+    await clickSelector('[data-anim-speed="0.1"]');
+    await hook('m12SetStep', 0);
+    await hook('m12DrawnSteps');
+    await clickSelector('[data-part="anim-play"]');
+    const samples: { step: number; drawn: number }[] = [];
+    const t0 = Date.now();
+    while (Date.now() - t0 < 2_500) {
+      const t = await trails();
+      samples.push({ step: t.step, drawn: t.drawn });
+    }
+    await clickSelector('[data-part="anim-play"]');
+    const log = await hook<{ t: number; step: number }[]>('m12DrawnSteps');
+    const distinct = [...new Set(samples.map((x) => x.step))];
+    console.log(`receipt w3-play: ${samples.length} samples over steps ${distinct.join(',')}; frames drawn at steps ${[...new Set(log.map((f) => f.step))].join(',')}`);
+    for (const x of samples) assert.equal(x.drawn, rule(x.step, 5), `trails at step ${x.step}`);
+    for (let i = 1; i < log.length; i++) assert.ok([0, 1].includes(log[i].step - log[i - 1].step), `frames drawn at step ${log[i - 1].step} then ${log[i].step}`);
+    assert.ok(distinct.length >= 5, `the control: only ${distinct.length} steps sampled`);
+    assert.ok(new Set(distinct.map((s) => rule(s, 5))).size >= 2, 'the control: different counts among the steps');
+    await clickSelector('[data-anim-speed="0.01"]');
+    await clickSelector('[data-trails="0"]');
   });
 
   it('w3-refuse: a run with no particles saved offers no trails, and says why', async () => {

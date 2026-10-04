@@ -84,6 +84,18 @@ export interface ViewportUi {
  * W5 (R51): the map face under the pointer on the Results step, where nothing of the model hides
  * it, with the pointer's client point; null off the map. The overlay reads the face's value.
  */
+/** The particle step of each frame drawn on the Results step, newest last (the playback e2e reads it). */
+const drawn: { t: number; step: number }[] = [];
+const DRAWN_MAX = 4096;
+function noteDrawn(step: number): void {
+  drawn.push({ t: performance.now(), step });
+  if (drawn.length > DRAWN_MAX) drawn.splice(0, drawn.length - DRAWN_MAX);
+}
+/** The frames drawn since the last call (and clears them): the time each was drawn, ms, and its step. */
+export function drawnSteps(): { t: number; step: number }[] {
+  return drawn.splice(0, drawn.length);
+}
+
 export const mapPointerStore = new Store<{ face: number; x: number; y: number } | null>(null);
 
 export const viewportUi = new Store<ViewportUi>({
@@ -449,6 +461,7 @@ class ViewportEngine {
       const main = this.mainCamera(w / h);
       this.setMarkerScale(1);
       r.render(this.scene, main);
+      if (this.results.particleMeta && stepStore.get() === 'results') noteDrawn(this.results.particleStep());
       if (this.view === 'perspective' && this.bounds) this.renderInset(r, dom.inset);
       this.placeLabels(main, w, h);
       this.placeGizmo(main);

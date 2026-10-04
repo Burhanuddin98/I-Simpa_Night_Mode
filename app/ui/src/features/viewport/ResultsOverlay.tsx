@@ -23,16 +23,31 @@ import { sceneStore, stepStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
 import { asCmdError } from '../../actions';
 import { exportParams, exportView, lastExportStore } from '../export/exportActions';
-import { Animator, animatorStore } from './animator';
-import { framePixels, frameRgba, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, resultsLayer } from './engine';
+import { Animator, animatorStore, rateText, readout, SPEEDS, speedLabel, stepsPerSecond } from './animator';
+import { drawnSteps, framePixels, frameRgba, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, resultsLayer } from './engine';
 import { CUMULATIVE_HINT, CUMULATIVE_NOTE } from './cumulative';
-import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, stepTime, type ProbeView } from './mapView';
+import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, type ProbeView } from './mapView';
 import { TRAIL_HINT, TRAIL_LENGTHS, TRAIL_NOTE } from './particles';
 import { bandLabel, bandName, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
 
 const PlayIcon = () => (
   <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
     <path d="M6 4l10 6-10 6z" fill="currentColor" />
+  </svg>
+);
+const StartIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <path d="M4 4h2.5v12H4zM16 4v12L7 10z" fill="currentColor" />
+  </svg>
+);
+const BackIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <path d="M13.5 4h2.5v12h-2.5zM12 4v12L4 10z" fill="currentColor" />
+  </svg>
+);
+const ForwardIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <path d="M4 4h2.5v12H4zM8 4v12l8-6z" fill="currentColor" />
   </svg>
 );
 const PauseIcon = () => (
@@ -98,6 +113,12 @@ function registerM12Hooks(): () => void {
       Animator.setStep(step);
       return animatorStore.get().step;
     }),
+    // The playback's timeline (speed, time step, emission) and the steps of the frames drawn since the last read.
+    registerHook('m12Playback', () => {
+      const a = animatorStore.get();
+      return { ...a, stepsPerSecond: stepsPerSecond(a), rate: rateText(a) };
+    }),
+    registerHook('m12DrawnSteps', () => drawnSteps()),
     registerHook('m12Particles', () => {
       const meta = layer.particleMeta;
       if (!meta) return null;
@@ -139,8 +160,45 @@ function cardRects(): Record<string, { left: number; top: number; right: number;
   return out;
 }
 
-/** `120 ms`: the step's start time, from the run's own float32 time step. */
-const timeText = stepTime;
+/**
+ * The time and the step under the transport. The time is the report's `spps.time_step_s` times 1000 x
+ * step (gate (a): `[data-num]` with that path and scale); the step count is the report's `spps.steps`;
+ * the step index is the timeline's own (`data-anim-step`, the time's scale over 1000).
+ */
+function Readout({ step, steps, dt, band, spps }: { step: number; steps: number; dt: number | null | undefined; band: number | null; spps: boolean }) {
+  const r = readout(step, steps, dt, spps);
+  return (
+    <div className="vp-row vp-readout" data-part="anim-readout">
+      <span className="vp-time mono" data-part="anim-time">
+        {r.path ? (
+          <>
+            <span data-num data-json={r.path} data-scale={r.scale} data-digits={r.digits ?? 0}>
+              {r.ms}
+            </span>{' '}
+            ms
+          </>
+        ) : (
+          r.time
+        )}
+      </span>
+      <span className="vp-row-label mono" data-part="anim-stepno" data-anim-step={step}>
+        step {r.stepText} of{' '}
+        {r.stepsPath ? (
+          <span data-num data-json={r.stepsPath} data-digits={0}>
+            {r.stepsText}
+          </span>
+        ) : (
+          r.stepsText
+        )}
+      </span>
+      {band !== null && (
+        <span className="vp-row-label" data-part="particles-band">
+          Particles {bandLabel(band)}
+        </span>
+      )}
+    </div>
+  );
+}
 
 /** The probe of the face under the pointer at the timeline's step: the shown map's own record. */
 function currentProbe(): (ProbeView & { x: number; y: number }) | null {
@@ -412,6 +470,12 @@ export function ResultsOverlay() {
           <div className="vp-transport float-panel" data-part="animator" data-results-region>
             {p.state === 'error' && <div className="vp-particles-none">{p.message}</div>}
             <div className="vp-row">
+              <button className="tool" data-part="anim-start" aria-label="Back to the emission" title="Back to where the sources emit" disabled={anim.steps <= 1} onClick={() => Animator.toStart()}>
+                <StartIcon />
+              </button>
+              <button className="tool" data-part="anim-back" aria-label="One step back" title="One step back" disabled={anim.step <= 0} onClick={() => Animator.stepBy(-1)}>
+                <BackIcon />
+              </button>
               <button
                 className="tool"
                 data-part="anim-play"
@@ -422,6 +486,16 @@ export function ResultsOverlay() {
               >
                 {anim.playing ? <PauseIcon /> : <PlayIcon />}
               </button>
+              <button
+                className="tool"
+                data-part="anim-forward"
+                aria-label="One step forward"
+                title="One step forward"
+                disabled={anim.step >= anim.steps - 1}
+                onClick={() => Animator.stepBy(1)}
+              >
+                <ForwardIcon />
+              </button>
               <input
                 type="range"
                 className="vp-step"
@@ -431,19 +505,28 @@ export function ResultsOverlay() {
                 max={Math.max(0, anim.steps - 1)}
                 step={1}
                 value={anim.step}
-                onChange={(e) => {
-                  Animator.pause();
-                  Animator.setStep(Number(e.target.value));
-                }}
+                onChange={(e) => Animator.setStep(Number(e.target.value))}
               />
-              <span className="vp-time mono" data-part="anim-time">
-                {timeText(anim.step, dt)}
-              </span>
-              {p.state === 'shown' && (
-                <span className="vp-row-label" data-part="particles-band">
-                  Particles {bandLabel(p.bandHz)}
-                </span>
-              )}
+            </div>
+            <Readout step={anim.step} steps={anim.steps} dt={dt} band={p.state === 'shown' ? p.bandHz : null} spps={v.data?.solver === 'spps'} />
+            <div className="vp-row" role="radiogroup" aria-label="Playback speed" data-part="anim-speeds">
+              <span className="vp-row-label">Speed</span>
+              {SPEEDS.map((x) => (
+                <button
+                  key={x}
+                  className="vp-chip-btn mono"
+                  role="radio"
+                  data-anim-speed={x}
+                  aria-checked={anim.speed === x}
+                  title={rateText({ speed: x, dtMs: anim.dtMs })}
+                  onClick={() => Animator.setSpeed(x)}
+                >
+                  {speedLabel(x)}
+                </button>
+              ))}
+            </div>
+            <div className="vp-diff-note" data-part="anim-rate">
+              {rateText(anim)}
             </div>
             {v.data?.solver === 'spps' && (
               <div className="vp-row" role="radiogroup" aria-label="Trails" data-part="trails">

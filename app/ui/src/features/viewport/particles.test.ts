@@ -4,6 +4,7 @@ import type { Particles } from '../../resultsData.ts';
 import { advance, type AnimatorState } from './animator.ts';
 import {
   aliveCounts,
+  emissionStep,
   noParticlesText,
   PARTICLE_VERTEX_GLSL,
   recordSteps,
@@ -60,16 +61,24 @@ test('no particles saved: what it says, and how to turn it on with the file size
 });
 
 test('the shared timeline: steps advance at its rate, stop at the end, and a step is set in range', () => {
-  const s: AnimatorState = { step: 0, steps: 100, playing: true, stepsPerSecond: 50, carry: 0 };
-  const a = advance(s, 100);
+  // 0.1x of real time at a 1 ms step: 100 steps a second (more than one a frame: whole steps taken).
+  const s: AnimatorState = { step: 0, steps: 100, playing: true, speed: 0.1, dtMs: 1, carry: 0, start: 0 };
+  const a = advance(s, 50);
   assert.equal(a.step, 5);
-  const b = advance({ ...a }, 10);
+  const b = advance({ ...a }, 5);
   assert.equal(b.step, 5, 'half a step carried, not dropped');
-  assert.equal(advance(b, 10).step, 6);
-  const end = advance({ ...s, step: 98 }, 1000);
+  assert.equal(advance(b, 5).step, 6);
+  const end = advance({ ...s, step: 98 }, 100);
   assert.equal(end.step, 99);
   assert.equal(end.playing, false, 'playback stops at the last step');
   assert.deepEqual(advance({ ...s, playing: false }, 1000), { ...s, playing: false }, 'paused: nothing moves');
+});
+
+test('the emission step is the first step any saved particle is alive', () => {
+  assert.equal(emissionStep(particles([[3, 2], [5, 1]])), 3);
+  // A particle with no record is not alive anywhere: it does not set the emission.
+  assert.equal(emissionStep(particles([[0, 0], [4, 2]])), 4);
+  assert.equal(emissionStep(particles([])), 0, 'no particles: step 0');
 });
 
 test('count mode (gate (d)) and the draw keep the same records: one kept() gate, then the count branch, no cull after it', () => {

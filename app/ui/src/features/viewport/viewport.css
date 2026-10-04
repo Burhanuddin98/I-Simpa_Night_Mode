@@ -391,6 +391,16 @@
   text-align: right;
   color: var(--text-2);
 }
+/* The playback's time and step: read from across the room in a recording. */
+.vp-readout {
+  align-items: baseline;
+}
+.vp-readout .vp-time {
+  min-width: 84px;
+  text-align: left;
+  font-size: 16px;
+  color: var(--text);
+}
 .vp-particles-none {
   font-size: 12px;
   color: var(--text-3);

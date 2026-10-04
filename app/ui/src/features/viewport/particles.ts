@@ -28,6 +28,13 @@ export function aliveCounts(p: Particles, steps: number): Uint32Array {
   return out;
 }
 
+/** The step the sources emit at: the first step any saved particle is alive (0 when none is). */
+export function emissionStep(p: Particles): number {
+  let first = Infinity;
+  for (let i = 0; i < p.particleCount; i++) if (p.offsets[i + 1] > p.offsets[i]) first = Math.min(first, p.firstStep[i]);
+  return Number.isFinite(first) ? first : 0;
+}
+
 /** The particle count the hint sizes the file for. */
 export const HINT_PARTICLES = 1000;
 

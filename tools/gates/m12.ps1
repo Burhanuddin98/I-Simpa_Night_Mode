@@ -195,6 +195,7 @@ $p3Spec = 'm12.viewport'
 $p3Ids = [ordered]@{
     'm12-c'       = '3 sampled texels of the map read back from the GPU == the .csbin float32s, bit for bit'
     'm12-d'       = 'at 5 steps the particles drawn (counted on the GPU) == alive in the .pbin, map on the same step'
+    'm12-play'    = 'playback: slow default (0.01x), Play from the emission, every step drawn in turn at 0.01x and 0.1x, step forward/back, the readout is spps.time_step_s x step'
     'm12-mq4'     = 'MQ4: particles saved 0 says "No particles saved for this run" and how to turn it on, with the file size'
     'm12-p3-maps' = 'legend range, band choice, difference from the baseline run, Play on one timeline'
 }

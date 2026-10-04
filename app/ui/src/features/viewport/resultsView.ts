@@ -22,7 +22,7 @@ import { Animator } from './animator';
 import { resultsLayer, renderNow, showMap, showParticles } from './engine';
 import { cumulativeRange, cumulativeRefusal } from './cumulative';
 import { diffRange, legendGradient, legendLabels, levelRange, surfaceMismatch, type Range } from './mapData';
-import { noParticlesText } from './particles';
+import { emissionStep, noParticlesText } from './particles';
 
 export interface MapGroup {
   key: string;
@@ -165,7 +165,8 @@ async function loadIndex(run: string, g: number): Promise<void> {
     const group = groups.find((x) => x.key.startsWith('surface|'))?.key ?? groups[0]?.key ?? null;
     const bands = bandsOf(data, group);
     indexed = run;
-    Animator.reset(data.steps ?? Math.max(1, ...data.surfaces.map((s) => s.time_step_count)));
+    const dtS = data.time_step_s ?? data.surfaces[0]?.time_step_s ?? null;
+    Animator.reset(data.steps ?? Math.max(1, ...data.surfaces.map((s) => s.time_step_count)), dtS ? dtS * 1000 : null);
     set({ status: 'ready', data, groups, group, bands, bandHz: defaultBand(bands), baseline: defaultBaseline(run) });
   } catch (e) {
     if (!fresh(g)) return;
@@ -274,6 +275,8 @@ async function loadParticles(g: number): Promise<void> {
     const p = decodeParticles(await actions.runParticles(v.run, band));
     if (!fresh(g)) return;
     showParticles(p, { run: v.run, bandHz: band, particles: p.particleCount, records: p.recordCount });
+    // Playback starts where the sources emit: the first step a saved particle is alive.
+    Animator.setStart(emissionStep(p));
     const layer = resultsLayer();
     layer.setTrails(resultsViewStore.get().trails);
     renderNow();

@@ -97,7 +97,7 @@ $specIds = [ordered]@{
     screens  = @()
     # M12 P3 (docs/investigations/2026-10-03-m12/PLAN.md): run on this harness by m12.ps1, not
     # part of M11's own run.
-    'm12.viewport' = @('m12-c', 'm12-d', 'm12-mq4', 'm12-p3-maps')
+    'm12.viewport' = @('m12-c', 'm12-d', 'm12-play', 'm12-mq4', 'm12-p3-maps')
     # M12 P2: the Acoustics tab (gate (a), (b), (e), (f)), likewise run by m12.ps1.
     'm12.acoustics' = @('m12-a', 'm12-b', 'm12-e', 'm12-f')
     # M12 P4: gate (b)'s plant, a session with $SIMPA_BED_DEMOTE (m11.conf.ts), likewise.
@@ -113,7 +113,7 @@ $specIds = [ordered]@{
     # Wow list W2, W3 and W9 (docs/investigations/2026-10-04-wow-w2w3w9/PLAN.md): the cumulative
     # map, particle trails, and export (with the bottom dock's layout).
     'm12.fill' = @('w2-fill', 'w2-probe', 'w2-refuse')
-    'm12.trails' = @('w3-count', 'w3-refuse')
+    'm12.trails' = @('w3-count', 'w3-play', 'w3-refuse')
     'm12.export' = @('w9-csv', 'w9-json', 'w9-png', 'w9-refuse', 'w9-layout')
 }
 $allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -notlike 'm12.*' })

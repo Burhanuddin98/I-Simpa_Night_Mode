@@ -8,6 +8,15 @@
 //   m12-d       at 5 steps the particles the playback draw lets through, counted on the GPU,
 //               equal the particles alive in the .pbin at that step, and the map is at the same
 //               step (one timeline); control: the steps include different counts and a 0
+//   m12-play    playback (Burhan 2026-10-04 15:08): the default speed is the slow 0.01x (10 ms of
+//               sound a second); Play from the last step starts again at the emission (the .pbin's
+//               first live step); at 0.01x and 0.1x every frame drawn is the step before's or the
+//               next (no step skipped), at the speed's rate (10 steps a second at 0.1x and 10 ms
+//               steps, timed by the frames' own clock); step forward / back move one step and the
+//               frame drawn holds that step's particles (the .pbin's count); the readout's time is
+//               the report's spps.time_step_s x 1000 x step (gate (a)'s rule, `numberMismatch`) and
+//               its step count the report's spps.steps. Controls: the readout differs between two steps;
+//               back is refused at step 0, forward at the last; a speed not offered is no chip
 //   m12-mq4     a run with particles saved 0 says "No particles saved for this run" and how to
 //               turn it on, with the file size for this run (control: the run with particles
 //               saved shows no such notice)
@@ -25,6 +34,8 @@ import { copyFileSync, existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { clickSelector, RESULTS_STEP_CURRENT } from '../lib/dom.ts';
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
+import { at, numberMismatch, type NumEl } from '../lib/acoustics.ts';
+import { cliReport } from '../lib/acousticsTab.ts';
 import { f32, level, readCsbin, readPbin, type Csbin } from '../lib/m12files.ts';
 import { env } from '../lib/types.ts';
 
@@ -52,7 +63,45 @@ interface ParticleState {
   bufferBytes: number;
 }
 
-const HOOKS = ['idle', 'openProject', 'edit', 'projectJson', 'runStart', 'runState', 'runsRows', 'selectRun', 'setStep', 'm12Map', 'm12Texels', 'm12DiffTexels', 'm12SetStep', 'm12Particles', 'm12MapPixels'];
+const HOOKS = ['idle', 'openProject', 'edit', 'projectJson', 'runStart', 'runState', 'runsRows', 'selectRun', 'setStep', 'm12Map', 'm12Texels', 'm12DiffTexels', 'm12SetStep', 'm12Particles', 'm12MapPixels', 'm12Playback', 'm12DrawnSteps'];
+
+interface Playback {
+  step: number;
+  steps: number;
+  playing: boolean;
+  speed: number;
+  dtMs: number | null;
+  start: number;
+  stepsPerSecond: number;
+  rate: string;
+}
+type Drawn = { t: number; step: number }[];
+
+/** The readout as the page shows it: the time's mark, the step index and the step count's mark. */
+async function readoutNow(): Promise<{ time: string; timeNum: NumEl | null; index: number; stepText: string; stepsNum: NumEl | null }> {
+  return browser.execute(() => {
+    const num = (e: Element | null) =>
+      e ? { path: e.getAttribute('data-json') ?? '', text: (e.textContent ?? '').trim(), digits: e.getAttribute('data-digits'), scale: e.getAttribute('data-scale') } : null;
+    const t = document.querySelector('[data-part="anim-time"]');
+    const s = document.querySelector('[data-part="anim-stepno"]');
+    return {
+      time: (t?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      timeNum: num(t?.querySelector('[data-num]') ?? null),
+      index: Number(s?.getAttribute('data-anim-step')),
+      stepText: (s?.textContent ?? '').replace(/\s+/g, ' ').trim(),
+      stepsNum: num(s?.querySelector('[data-num]') ?? null),
+    };
+  });
+}
+
+/** Why the frames drawn are not one step at a time in order, or null. */
+function skipped(log: Drawn): string | null {
+  for (let i = 1; i < log.length; i++) {
+    const d = log[i].step - log[i - 1].step;
+    if (d !== 0 && d !== 1) return `frame ${i}: step ${log[i - 1].step} then ${log[i].step}`;
+  }
+  return null;
+}
 
 const mapState = () => hook<MapState | null>('m12Map');
 const particleState = () => hook<ParticleState | null>('m12Particles');
@@ -212,6 +261,97 @@ describe('M12 P3 viewport: surface maps and particle playback', () => {
       assert.equal(now.rendered, alive[s], `step ${s}`);
     }
     console.log(`receipt m12-d: particle buffer ${ps.bufferBytes} B for ${ps.records} records`);
+  });
+
+  it('m12-play: Play starts at the emission, draws every step in turn at the slow speeds, and the readout is the step’s time', async () => {
+    await hook('selectRun', runB);
+    await mapOf(runB, { bandHz: 1000 });
+    await browser.waitUntil(async () => (await particleState())?.run === runB, { timeout: 60_000, timeoutMsg: 'no particles loaded for run B' });
+    const file = readPbin(path.join(runsRoot, runB, 'solve', 'Particles', '1000', 'particles.pbin'));
+    const emission = file.alive.findIndex((n) => n > 0);
+    const report = cliReport(box, runB);
+    const dtS = at(report, 'spps.time_step_s') as number;
+    const steps = at(report, 'spps.steps') as number;
+    let pb = await hook<Playback>('m12Playback');
+    console.log(`receipt m12-play: ${JSON.stringify(pb)}; report time_step_s ${dtS}, steps ${steps}; emission at step ${emission}`);
+    assert.equal(pb.speed, 0.01, 'the slow default');
+    assert.equal(await $('[data-anim-speed="0.01"]').getAttribute('aria-checked'), 'true');
+    assert.equal(await $('[data-anim-speed="0.5"]').isExisting(), false, 'say NO: a speed not offered is not a chip');
+    assert.ok(Math.abs((pb.dtMs ?? 0) - dtS * 1000) < 1e-9, 'the timeline steps the run’s own time step');
+    assert.equal(pb.steps, steps);
+    assert.equal(pb.start, emission, 'the emission is the .pbin’s first live step');
+    assert.equal(shown(await $('[data-part="anim-rate"]').getText()), `0.01× real time: 10 ms of sound per second, one step every ${Math.round(dtS * 1e5)} ms`);
+
+    // From the last step, Play starts again at the emission, one step at a time at 0.01x.
+    await hook('m12SetStep', steps - 1);
+    await browser.pause(300);
+    await hook('m12DrawnSteps');
+    await clickSelector('[data-part="anim-play"]');
+    await browser.pause(3_500);
+    let log = await hook<Drawn>('m12DrawnSteps');
+    while (log.length && log[0].step === steps - 1) log.shift();
+    console.log(`receipt m12-play: 0.01x for 3.5 s drew steps ${log.map((f) => f.step).join(',')}`);
+    assert.equal(log[0]?.step, emission, 'Play from the end starts at the emission');
+    assert.equal(skipped(log), null);
+    const slow = log[log.length - 1].step - emission;
+    assert.ok(slow >= 2 && slow <= 5, `0.01x at ${dtS * 1000} ms steps: about 1 step a second, ${slow} in 3.5 s`);
+
+    // 0.1x while playing: 10 steps a second at 10 ms steps, still every step drawn in turn.
+    await clickSelector('[data-anim-speed="0.1"]');
+    await hook('m12DrawnSteps');
+    await browser.pause(3_000);
+    log = await hook<Drawn>('m12DrawnSteps');
+    await clickSelector('[data-part="anim-play"]');
+    pb = await hook<Playback>('m12Playback');
+    assert.equal(pb.playing, false);
+    assert.equal(pb.speed, 0.1);
+    assert.equal(skipped(log), null);
+    const changes = log.filter((f, i) => i === 0 || f.step !== log[i - 1].step);
+    const span = changes[changes.length - 1];
+    const rate = (span.step - changes[0].step) / ((span.t - changes[0].t) / 1000);
+    console.log(`receipt m12-play: 0.1x for 3 s drew ${changes.length} steps, ${changes[0].step}..${span.step}, ${rate.toFixed(2)} steps a second (want ${pb.stepsPerSecond})`);
+    assert.ok(changes.length >= 20, `only ${changes.length} steps drawn in 3 s at 0.1x`);
+    assert.ok(Math.abs(rate - pb.stepsPerSecond) <= 0.15 * pb.stepsPerSecond, `rate ${rate} vs ${pb.stepsPerSecond}`);
+
+    // Step forward and back: one step each, the frame drawn holds that step, the readout its time;
+    // from a step with particles alive on both sides, so the counts are not all 0.
+    const k = file.alive.findIndex((n, s) => s > emission + 1 && n > 0 && (file.alive[s - 1] ?? 0) > 0 && (file.alive[s + 1] ?? 0) > 0);
+    assert.ok(k > 0, 'a step with particles alive before and after it');
+    await hook('m12SetStep', k);
+    const check = async (want: number) => {
+      await browser.waitUntil(async () => (await particleState())?.step === want, { timeout: 5_000, timeoutMsg: `the timeline is not at step ${want}` });
+      const now = (await particleState()) as ParticleState;
+      const r = await readoutNow();
+      console.log(`receipt m12-play: step ${want}: readout "${r.time}" "${r.stepText}" (time scale ${r.timeNum?.scale}); drawn ${now.rendered}, alive in the .pbin ${file.alive[want]}`);
+      assert.equal(now.mapStep, want, 'map and particles on one timeline');
+      assert.equal(now.rendered, file.alive[want], `the frame at step ${want} holds that step's particles`);
+      assert.equal(r.index, want);
+      assert.equal(r.stepText, `step ${want} of ${steps}`);
+      assert.ok(r.timeNum && r.stepsNum, 'the time and the step count are gate (a) marks');
+      assert.equal(r.timeNum.path, 'spps.time_step_s');
+      assert.equal(Number(r.timeNum.scale), 1000 * want);
+      assert.equal(numberMismatch(r.timeNum, report), null);
+      assert.equal(r.stepsNum.path, 'spps.steps');
+      assert.equal(numberMismatch(r.stepsNum, report), null);
+      assert.equal(r.time, `${r.timeNum.text} ms`);
+      return r.time;
+    };
+    await clickSelector('[data-part="anim-forward"]');
+    const t1 = await check(k + 1);
+    await clickSelector('[data-part="anim-back"]');
+    await clickSelector('[data-part="anim-back"]');
+    const t2 = await check(k - 1);
+    assert.notEqual(t1, t2, 'the control: two steps read two times');
+    assert.ok(file.alive[k + 1] > 0 && file.alive[k - 1] > 0, 'the control: particles drawn at both steps');
+    await clickSelector('[data-part="anim-start"]');
+    assert.equal((await hook<Playback>('m12Playback')).step, emission, 'back to the emission');
+    // Say NO at the ends.
+    await hook('m12SetStep', 0);
+    await browser.waitUntil(async () => (await $('[data-part="anim-back"]').getAttribute('disabled')) === 'true', { timeout: 5_000, timeoutMsg: 'back not refused at step 0' });
+    assert.equal((await readoutNow()).time, '0.0 ms');
+    await hook('m12SetStep', steps - 1);
+    await browser.waitUntil(async () => (await $('[data-part="anim-forward"]').getAttribute('disabled')) === 'true', { timeout: 5_000, timeoutMsg: 'forward not refused at the last step' });
+    await clickSelector('[data-anim-speed="0.01"]');
   });
 
   it('m12-p3-maps: legend, band choice, difference from the baseline, and Play on one timeline', async () => {
