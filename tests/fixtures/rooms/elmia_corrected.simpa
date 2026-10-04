@@ -12211,10 +12211,10 @@
       "direct_field_only": false,
       "transmission": true,
       "extinction_exponent": 5.0,
-      "receiver_radius_m": 0.31,
+      "receiver_radius_m": 1.0,
       "sound_map": "intensity",
       "sound_maps_per_band": true,
-      "echogram_per_source": false,
+      "echogram_per_source": true,
       "save_surface_intersections": true,
       "save_receiver_intersections": true,
       "bands_computed": [false, false, false, false, true, false, false, true, false, false, true, false, false, true, false, false, true, false, false, true, false, false, false, false, false, false, false]
@@ -12224,10 +12224,10 @@
       "bands_computed": [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
     },
     "meshing": {
-      "min_radius_edge_ratio": 2.0,
+      "min_radius_edge_ratio": 5.0,
       "max_volume_m3": null,
       "surface_receiver_max_area_m2": null,
-      "preserve_boundary": false,
+      "preserve_boundary": true,
       "preprocess": false
     }
   },

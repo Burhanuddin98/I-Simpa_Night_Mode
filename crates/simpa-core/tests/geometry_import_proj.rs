@@ -19,8 +19,8 @@ use simpa_core::geometry::import::{
     import_proj_file, import_proj_with_config,
 };
 use simpa_core::schema::{
-    self, BoxBound, DiffusionLaw, Directivity, FittingShape, Project, ReflectionLaw,
-    SurfaceReceiverShape, Vec3,
+    self, BoxBound, DiffusionLaw, Directivity, F64, FittingShape, MeshSettings, Project,
+    ReflectionLaw, SurfaceReceiverShape, Vec3,
 };
 
 #[allow(dead_code)]
@@ -119,6 +119,15 @@ fn tutorial1_box(proj: &Path) -> Project {
 /// `preprocess.exe` gives up and saves nothing ("Mesh reparation has been aborted"); the mesher
 /// then meshes the `.poly` as written, as upstream's GUI does, and records the abort
 /// (`preprocess_aborted`, an outcome, not a refusal).
+///
+/// Four more of tutorial 2's settings are replaced (backlog 78, `B:\data\m12\b78-mesh\FINDINGS.md`).
+/// Its meshing, `-q2` without `-Y`, lets TetGen split the hall's boundary, and SPPS then loses
+/// 119-171 particles per band to meshing problems (28-44 with `-Y`). With that many lost, every T20
+/// and T30 is refused (`missing_moves`). They get the new-project meshing default instead (`-q5`
+/// with `-Y`). Its 0.31 m receivers catch too few particles in a 10,389 m³ hall: at 150,000
+/// particles each T30 range is 34 % of its value, median, and 9 of the 36 ranges go below zero. At
+/// 1.0 m (the largest radius EDT is checked at) the median is 2.3 %. Its echogram per source is off,
+/// which leaves a three-source hall with no per-source parameter. The new-project default is on.
 fn elmia_corrected(proj: &Path) -> Project {
     let mut p = import_proj_file(proj).unwrap().project;
     assert!(
@@ -126,6 +135,25 @@ fn elmia_corrected(proj: &Path) -> Project {
         "tutorial_2.proj asks for preprocess"
     );
     p.solvers.meshing.preprocess = false;
+    let m = &p.solvers.meshing;
+    assert!(
+        m.min_radius_edge_ratio.get() == 2.0 && !m.preserve_boundary,
+        "tutorial_2.proj meshes at -q2 without -Y"
+    );
+    let defaults = MeshSettings::default();
+    p.solvers.meshing.min_radius_edge_ratio = defaults.min_radius_edge_ratio;
+    p.solvers.meshing.preserve_boundary = defaults.preserve_boundary;
+    assert_eq!(
+        p.solvers.spps.receiver_radius_m.get(),
+        0.31,
+        "tutorial_2.proj's receivers"
+    );
+    p.solvers.spps.receiver_radius_m = F64::new(1.0);
+    assert!(
+        !p.solvers.spps.echogram_per_source,
+        "tutorial_2.proj writes no echogram per source"
+    );
+    p.solvers.spps.echogram_per_source = true;
     p.name = "Elmia (corrected)".into();
     p.description = "Upstream I-Simpa tutorial 2 (tutorial_2.proj at 929a5c8), imported by \
                      geometry::import::import_proj: the Elmia hall as upstream's scene correction \

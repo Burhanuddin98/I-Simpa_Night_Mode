@@ -15,6 +15,7 @@ use simpa_core::formats::mbin;
 use simpa_core::formats::tetgen::{self, TetgenFile};
 use simpa_core::mesh::{MeshManifest, MeshStatus, Mesher, TetgenMesher, codes, mesh_project};
 use simpa_core::process::{CancelToken, Line, Outcome};
+use simpa_core::schema::{F64, Project};
 use support::{invariants, load_room, process_running, scratch, tetgen_exe};
 
 /// The hall's mesh, and what the tests read of its folder, held in memory: the folder is the
@@ -28,29 +29,45 @@ struct Reference {
     mesh: Result<mbin::Mesh, String>,
 }
 
-/// The hall, meshed once, uncancelled: the reference the cancel test compares with.
+/// The hall, meshed once with its own settings, uncancelled.
 fn hall() -> &'static Reference {
     static HALL: OnceLock<Reference> = OnceLock::new();
-    HALL.get_or_init(|| {
-        let p = load_room("elmia_corrected.simpa");
-        let dir = scratch("hall");
-        let t0 = Instant::now();
-        let manifest = mesh_project(
-            &p,
-            &dir,
-            &TetgenMesher::new(tetgen_exe()),
-            &CancelToken::new(),
-            &mut |_: &Line| {},
-        )
-        .unwrap();
-        let wall_ms = t0.elapsed().as_secs_f64() * 1e3;
-        Reference {
-            manifest,
-            wall_ms,
-            face: tetgen::read_file(&dir.join("scene_mesh.1.face")).map_err(|e| e.to_string()),
-            mesh: mbin::read_file(&dir.join("tetramesh.mbin")).map_err(|e| e.to_string()),
-        }
-    })
+    HALL.get_or_init(|| reference(load_room("elmia_corrected.simpa"), "hall"))
+}
+
+/// The hall as upstream's tutorial 2 meshes it, `-q2` without `-Y`: TetGen runs about 0.9 s on it
+/// (the fixture's own `-q5 -Y` finishes too soon for a 50 ms cancel to land mid-run). The cancel
+/// tests mesh it, and this, meshed once uncancelled, is what they compare with.
+fn slow_hall_project() -> Project {
+    let mut p = load_room("elmia_corrected.simpa");
+    p.solvers.meshing.min_radius_edge_ratio = F64::new(2.0);
+    p.solvers.meshing.preserve_boundary = false;
+    p
+}
+
+fn slow_hall() -> &'static Reference {
+    static SLOW: OnceLock<Reference> = OnceLock::new();
+    SLOW.get_or_init(|| reference(slow_hall_project(), "hall-slow"))
+}
+
+fn reference(p: Project, label: &str) -> Reference {
+    let dir = scratch(label);
+    let t0 = Instant::now();
+    let manifest = mesh_project(
+        &p,
+        &dir,
+        &TetgenMesher::new(tetgen_exe()),
+        &CancelToken::new(),
+        &mut |_: &Line| {},
+    )
+    .unwrap();
+    let wall_ms = t0.elapsed().as_secs_f64() * 1e3;
+    Reference {
+        manifest,
+        wall_ms,
+        face: tetgen::read_file(&dir.join("scene_mesh.1.face")).map_err(|e| e.to_string()),
+        mesh: mbin::read_file(&dir.join("tetramesh.mbin")).map_err(|e| e.to_string()),
+    }
 }
 
 #[test]
@@ -59,7 +76,7 @@ fn the_corrected_hall_meshes() {
     let m = &r.manifest;
     assert_eq!(m.status, MeshStatus::Ok, "{m:#?}");
     let call = m.tetgen.as_ref().unwrap();
-    assert_eq!(call.argv, ["-pq2", "-A", "-n", "scene_mesh.poly"]);
+    assert_eq!(call.argv, ["-pq5", "-A", "-n", "-Y", "scene_mesh.poly"]);
 
     let TetgenFile::Face(face) = r.face.as_ref().unwrap() else {
         panic!("not a .face")
@@ -87,7 +104,7 @@ fn the_corrected_hall_meshes() {
         .map(|t| support::orient(mesh, t).abs() / 6.0)
         .sum();
     println!(
-        "hall -pq2 -A -n: {} nodes, {} tetrahedra, {} .face rows, volume {volume:.3} m³; TetGen \
+        "hall -pq5 -A -n -Y: {} nodes, {} tetrahedra, {} .face rows, volume {volume:.3} m³; TetGen \
          {:.0} ms, whole mesh_project {:.0} ms (wall {:.0} ms)",
         mesh.nodes.len(),
         mesh.tetrahedra.len(),
@@ -171,7 +188,7 @@ fn cancel_run(label: &str, honour_cancel: bool) -> CancelRun {
     let dir = scratch(label);
     let (image, exe) = tetgen_copy(&dir);
     let out = dir.join("mesh");
-    let p = load_room("elmia_corrected.simpa");
+    let p = slow_hall_project();
     let mesher = CancelAfterLaunch {
         inner: TetgenMesher::new(&exe),
         after: Duration::from_millis(50),
@@ -199,7 +216,7 @@ fn cancel_run(label: &str, honour_cancel: bool) -> CancelRun {
 
 #[test]
 fn a_cancel_50_ms_into_tetgen_stops_it_and_leaves_no_mbin() {
-    let reference = hall();
+    let reference = slow_hall();
     assert!(reference.manifest.is_ok());
     let tetgen_ms = reference.manifest.tetgen.as_ref().unwrap().elapsed_ms;
     assert!(
