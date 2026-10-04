@@ -90,6 +90,10 @@ test('the probe of a cumulative map shows the running sum and says so; no energy
   assert.equal(p.bits, valueBits(want));
   assert.equal(p.level, `${(10 * Math.log10(want) + 120).toFixed(1)} dB`);
   assert.match(p.value, /summed from the first step/);
+  // Under smooth colour it does not call the sum the file's own value.
+  const sm = probeOf(m, 0, 3, { what: 'S', band: 'b', dtS: 0.01, smooth: true, cumulative: true });
+  assert.match(sm.note ?? '', /own sum/);
+  assert.doesNotMatch(sm.note ?? '', /own value/);
   // Face 0 has no record at step 3: the instantaneous probe has no number there, the cumulative one has.
   assert.equal(probeOf(m, 0, 3, { what: 'S', band: 'b', dtS: 0.01, smooth: false }).level, null);
   // say NO: face 1 before its first energy (step 0) and face 2 ever: no number.

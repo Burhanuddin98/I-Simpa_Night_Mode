@@ -132,10 +132,11 @@ export function probeOf(
   const note = o.smooth ? "The face's own value from the file. The colours between faces are smoothed, not values." : null;
   // W2: the face's records summed from the first step to this one (cumulative.ts), as the texture holds it.
   if (o.cumulative && !o.base) {
+    const sumNote = o.smooth ? "The face's own sum from the file's records. The colours between faces are smoothed, not values." : null;
     const sum = cumulativeAt(m, face, step);
     const l = levelDb(sum);
-    if (l === null) return { face, step, title, level: null, bits: null, value: 'No energy yet at this step', note };
-    return { face, step, title, level: `${l.toFixed(1)} dB`, bits: valueBits(sum), value: `the file's values summed from the first step to this one, ${sum.toExponential(4)}`, note };
+    if (l === null) return { face, step, title, level: null, bits: null, value: 'No energy yet at this step', note: sumNote };
+    return { face, step, title, level: `${l.toFixed(1)} dB`, bits: valueBits(sum), value: `the file's values summed from the first step to this one, ${sum.toExponential(4)}`, note: sumNote };
   }
   let rec: number | null = null;
   for (let k = m.offsets[face]; k < m.offsets[face + 1]; k++) if (m.steps[k] === step) rec = m.values[k];
