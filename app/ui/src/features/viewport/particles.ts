@@ -185,7 +185,7 @@ varying vec3 vColor;
 varying float vAlpha;
 // The segments drawn now: the particle is alive at the step and the head is one of its last uLength steps.
 bool keptTrail() {
-  return aLast >= uStep - 0.5 && aHead <= uStep + 0.5 && aHead > uStep - uLength - 0.5;
+  return aLast >= uStep - 0.5 && aHead <= uStep + 0.5 && aHead > uStep - uLength + 0.5;
 }
 void main() {
   if (!keptTrail()) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vColor = vec3(0.0); vAlpha = 0.0; return; }

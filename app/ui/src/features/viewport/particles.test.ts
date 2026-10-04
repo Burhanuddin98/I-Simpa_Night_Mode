@@ -163,3 +163,23 @@ test('W3 trails: the draw and its count mode keep segments by one keptTrail() ga
   const afterGate = main.slice(main.indexOf('}') + 1);
   assert.match(afterGate, /^\s*if \(uCount > 0\.5\)/);
 });
+
+test('W3 trails: the shader\'s keptTrail(), run as JavaScript, keeps exactly the segments trailCount counts', () => {
+  // The e2e caught the window one step too long (6 heads for 5 steps): the GLSL itself is held here.
+  const body = /bool keptTrail\(\)\s*\{\s*return ([^;]+);/.exec(TRAIL_VERTEX_GLSL);
+  assert.ok(body);
+  const kept = new Function('aLast', 'aHead', 'uStep', 'uLength', `return ${body[1]};`) as (l: number, h: number, s: number, n: number) => boolean;
+  const p = particles([
+    [0, 30],
+    [3, 12],
+    [20, 9],
+  ]);
+  const t = trailSegments(p);
+  for (const n of TRAIL_LENGTHS) {
+    for (let s = 0; s < 40; s++) {
+      let c = 0;
+      for (let i = 0; i < t.segments; i++) if (kept(t.last[2 * i], t.head[2 * i], s, n)) c++;
+      assert.equal(c, trailCount(p, s, n), `${n} steps at step ${s}`);
+    }
+  }
+});
