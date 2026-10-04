@@ -61,3 +61,29 @@ Left (said in the report): a 3D drag gizmo for the three corners; tilted planes 
   refused), `w5-probe` (hover a face: the card's value bits equal the file's, level to 0.1 dB; off the map, no card).
   Screenshot.
 - Both registered in `tools/gates/m11.ps1`'s spec table; run with `m12.viewport` as the regression.
+
+## Result (12:51)
+
+Built as planned, on `wow-w1w5` (not pushed, not merged). Receipts and screenshots: `B:\data\m12\wow\` (`red-*.txt`,
+`e2e-try{1,2,3}.log`, `shots\w1-plane-placed.png`, `w1-plane-map.png`, `w5-probe.png`).
+
+- UI suite 217 of 217 (`planes.test.ts` 9, `mapView.test.ts` 9 new, each with a say-NO case); typecheck clean; e2e
+  harness reader test 4 of 4; `cargo test -p app --bins` 70 of 70 (new: `an_ear_height_plane_goes_through_the_checked_apply`,
+  the UI's op text through `edit_apply`, `cutting_plane_invalid` refusing a cell larger than a side and collinear
+  corners); `simpa-core` `schema_roundtrip` 17 and `validate_fixtures` 10 pass (the latter needs `SIMPA_SOLVERS_DIR`).
+- e2e `m11.ps1 -Only e2e -Spec m12.plane,m12.mapview,m12.viewport` (try 3): 12 of 12 ids, 0 files left. Try 1 and 2
+  failed `w5-range` on a real fault: the range fields remounted on every commit, so typing the second end was lost
+  (fixed), then a WebDriver clear that never reached React's state (the spec now types as a person does).
+- Measured: the box's new plane holds 120 faces (2 x 6 x 10 cells), three texels equal the file; GPU node means equal
+  upstream's rule from the file to 1e-6 relative; the probe's bits equal the file's (face 4, 52.2 dB).
+- Elmia (not run): its largest node links 17 faces, under the 64 the smooth average takes.
+
+## Left
+
+- W1: no drag gizmo for the three corners in the 3D view (height and cell size are fields); a tilted plane is shown,
+  not edited; no on/off per plane. On Elmia an ear plane at 1 m cells adds on the order of 3,000 faces to a
+  cutting-plane map of 10,000 steps (texture grows with faces x steps, P3's table); not measured there.
+- W5: the fixed range applies to level maps only (a difference keeps its symmetric range); the probe follows the
+  pointer (no pinned probes); contours only on smooth colour; palette choice (R49) not built.
+- Product choice for Burhan: the new plane's cell size defaults to 1 m, not upstream's 0.5 m (reason above).
+- Not run here: the full m10/m11 e2e regressions and `m12.ps1`.
