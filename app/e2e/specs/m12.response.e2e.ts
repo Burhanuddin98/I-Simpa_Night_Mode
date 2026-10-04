@@ -5,8 +5,8 @@
 //                 the tab, on the screen) titled as an SPPS energy echogram, saying it is not a
 //                 pressure impulse response; its close button removes it. Control: before the
 //                 click, and after the close, there is no window
-//   resp-pixels   the map is an image (no canvas: M10 PLAN rule 3, the 3D view's is the only one
-//                 in the document, the window open), a PNG this spec decodes itself (node:zlib)
+//   resp-pixels   the map is an image (no canvas: M10 PLAN rule 3; the window holds none and
+//                 opening it adds none), a PNG this spec decodes itself (node:zlib)
 //                 and the WebView decoded too (its natural size); it holds one pixel per bin and
 //                 each is the colour this spec computes from `simpa results <run> --json` (its own
 //                 copy of the map's stops): the loudest bin white, a bin 60 dB or more down
@@ -108,7 +108,7 @@ function decodePng(bytes: Buffer): { w: number; h: number; data: number[] } {
 }
 
 /** The map image's pixels, as RGBA, with its size, decoded from its data URL; it also holds the
- * document to one canvas (none in the window) and the WebView's decode to the same size. */
+ * window to no canvas and the WebView's decode to the same size. */
 async function pixels(): Promise<{ w: number; h: number; data: number[] } | null> {
   const got = await browser.execute(() => {
     const img = document.querySelector<HTMLImageElement>('[data-response-window] img[data-part="response-map"]');
@@ -117,14 +117,12 @@ async function pixels(): Promise<{ w: number; h: number; data: number[] } | null
           src: img.getAttribute('src') ?? '',
           complete: img.complete,
           natural: [img.naturalWidth, img.naturalHeight],
-          canvases: document.querySelectorAll('canvas').length,
           inWindow: document.querySelectorAll('[data-response-window] canvas').length,
         }
       : null;
   });
   if (!got) return null;
   assert.equal(got.inWindow, 0, 'a canvas in the response window');
-  assert.equal(got.canvases, 1, "the document holds one canvas, the 3D view's (M10 rule 3)");
   const prefix = 'data:image/png;base64,';
   assert.ok(got.src.startsWith(prefix), `the map's src: ${got.src.slice(0, 40)}`);
   const px = decodePng(Buffer.from(got.src.slice(prefix.length), 'base64'));
@@ -192,6 +190,8 @@ describe('The response window: the energy echogram per band', () => {
   it('resp-window: "Open response" opens a floating window, titled an SPPS energy echogram; its button closes it', async () => {
     // Control: no window before the click.
     assert.equal(await $(WIN).isExisting(), false, 'a window before the click');
+    const canvases = () => browser.execute(() => document.querySelectorAll('canvas').length);
+    const before = await canvases();
     assert.equal(await hook<HookView | null>('responseView'), null, 'the hook before the click');
     await open();
     const w = await browser.execute((sel: string, panel: string) => {
@@ -215,7 +215,10 @@ describe('The response window: the energy echogram per band', () => {
     await browser.waitUntil(async () => !(await $(WIN).isExisting()), { timeout: 10_000, timeoutMsg: 'the window did not close' });
     assert.equal(await hook<HookView | null>('responseView'), null, 'the hook after the close');
     await open();
-    console.log(`resp-window receipt: run ${run?.run}; opened, closed and opened again; ${JSON.stringify(w.box)} in ${w.view.w} x ${w.view.h}`);
+    // M10 PLAN rule 3: the window adds no canvas (it holds none; resp-pixels checks inside it).
+    const after = await canvases();
+    assert.equal(after, before, `canvases in the document: ${before} before the window, ${after} with it open`);
+    console.log(`resp-window receipt: run ${run?.run}; opened, closed and opened again; ${JSON.stringify(w.box)} in ${w.view.w} x ${w.view.h}; canvases ${before} before, ${after} open`);
   });
 
   it('resp-pixels: each bin of the map is the colour of its level in the JSON; another receiver redraws it', async () => {
