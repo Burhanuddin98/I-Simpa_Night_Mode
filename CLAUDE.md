@@ -23,7 +23,7 @@
 number reaching a user, or a feature Burhan asked for. Anything else goes to that file in the same session,
 with its receipt and a "done when" test. Milestone M14 closes it.
 
-Live handoff: `session-logs/HANDOFF-2026-10-03.md` (its lower half is 10-02's history). Read it before the scope ledger. It names
+Live handoff: `session-logs/HANDOFF-2026-10-04.md` (10-03's day, M12 and the Elmia tour, is in `HANDOFF-2026-10-03.md`). Read it before the scope ledger. It names
 what is proven, what is retracted, and the traps already paid for.
 
 **This is Burhan's personal project.** Decisions and pushes are his; nothing is routed to anyone else
