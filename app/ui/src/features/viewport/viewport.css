@@ -2,8 +2,8 @@
    viewport package; the tokens are theme.css's. */
 
 /* `.viewport` is the region the floating panels leave clear (decision-log row 50): its overlays
-   sit in it, and the engine centres and frames the camera on it. The canvas under it fills the
-   window, behind every panel, and takes the pointer wherever no panel or overlay does. */
+   sit in it. The canvas under it fills the window, behind every panel, which the model shows
+   through; it takes the pointer wherever no panel or overlay does. */
 .viewport {
   position: relative;
   flex-grow: 1;

@@ -110,7 +110,7 @@ foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '
 $fullRun = $Only -eq 'all' -and -not $SkipCore -and -not $SkipPrior -and (@($allSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
 # theme.css is pinned (M10 PLAN.md 2.4 rule 4; M11 PLAN.md 3.4 rule 5; re-pinned for the glass layout, decision-log row 50).
-$themeBlob = '8c9f6bd20faa141b56e53692b812311488eafc15'
+$themeBlob = 'b08cb4a52944a3d089e2a0040085191cc3186229'
 
 # M11's nine commands (PLAN.md 2.2), on top of M10's 28.
 $m11Commands = @('run_start', 'run_cancel', 'runs_list', 'run_results', 'proj_import', 'material_library',

@@ -30,8 +30,8 @@
   --mono: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
   /* A floating panel's fill and blur (row 50). The fill is see-through, the text on it is not:
      never `opacity` on a panel. */
-  --glass: rgba(15, 15, 17, 0.55);
-  --glass-blur: 12px;
+  --glass: rgba(15, 15, 17, 0.4);
+  --glass-blur: 0px;
   --glass-edge: rgba(255, 255, 255, 0.08);
   --gap: 8px;
 }

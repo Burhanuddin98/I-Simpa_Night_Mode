@@ -950,3 +950,14 @@
 .props[data-folded='true'] > .fold {
   margin: 6px;
 }
+
+/* Row 50: the side panels are cards that take their content's height, not columns, so the
+   3D view shows round and through them. */
+.scene,
+.props {
+  align-self: flex-start;
+  max-height: 100%;
+}
+.scene {
+  overflow-y: auto;
+}
