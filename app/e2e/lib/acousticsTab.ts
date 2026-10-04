@@ -165,6 +165,11 @@ export const scan = (): Promise<Scan> =>
             colHead: th?.querySelector('[data-label="param"]')?.textContent ?? th?.textContent ?? '',
             band: selected('band'),
             receiver: selected('receiver'),
+            // The Source picker sits in the tab's head, above every card (backlog 77).
+            source: (() => {
+              const sel = panel?.querySelector<HTMLSelectElement>('select[data-control="source"]');
+              return sel ? (sel.options[sel.selectedIndex]?.textContent ?? '') : '';
+            })(),
             paths: [...e.querySelectorAll('[data-json]')].map((n) => n.getAttribute('data-json') ?? ''),
           };
         })(),
@@ -180,10 +185,16 @@ export const scan = (): Promise<Scan> =>
     };
   }, PANEL);
 
-/** Every selection the tab offers: each band, then each receiver, then each DIN group. */
+/** Every selection the tab offers: each band, then each receiver, then each DIN group, then each
+ * source with the first band and receiver (a run with several sources, backlog 77). */
 export async function everySelection(visit: (what: string) => Promise<void>): Promise<void> {
   const s = await scan();
   const values = (c: string) => s.options.filter((o) => o.control === c).map((o) => o.value);
+  for (const src of values('source')) {
+    await pick('source', src);
+    await visit(`source ${src || 'summed'}`);
+  }
+  if (values('source').length) await pick('source', values('source')[0]);
   for (const b of values('band')) {
     await pick('band', b);
     await visit(`band ${b}`);

@@ -308,6 +308,20 @@ pub enum NotEvaluable {
         /// `√(max_crossings_per_particle / crossings_per_particle)`.
         receiver_radius_scale_at_most: Option<f64>,
     },
+    /// The value's shown range reaches below zero, for a quantity that cannot be negative (EDT,
+    /// T20, T30, D50, Ts): its Monte-Carlo noise is too large for the value to mean anything, and a
+    /// negative end would be shown as one. Made by [`noise::shown_with`] and EDT's report, where a
+    /// value is given its range; `wide` shows a noisy value with its range only while the range
+    /// stays where the quantity can be (backlog 78, decision-log row 48).
+    RangeBelowZero {
+        /// The value from the series. Not reported as the quantity.
+        value: f64,
+        /// The range's lower end, below zero.
+        lo: f64,
+        /// The standard deviation the range was built from; `None` for EDT, whose range is the
+        /// method's own.
+        sd: Option<f64>,
+    },
     /// More than one source contributes to the series. ISO 3382-1 defines the onset-relative
     /// quantities per source–receiver pair, and a sum of several sources' responses is not one.
     /// Made by `core::results`, which knows the sources; `params` never sees them.
@@ -480,6 +494,12 @@ impl fmt::Display for NotEvaluable {
                 }
                 Ok(())
             }
+            NotEvaluable::RangeBelowZero { value, lo, .. } => write!(
+                f,
+                "range_below_zero: {value} from the series, but its range reaches {lo}, below \
+                 zero, which the quantity cannot be: the Monte-Carlo noise is too large to show \
+                 it. More particles, or larger receivers, narrow the range"
+            ),
             NotEvaluable::SeveralSources { sources } => write!(
                 f,
                 "several_sources: {sources:?} all contribute; the quantity is defined per source \

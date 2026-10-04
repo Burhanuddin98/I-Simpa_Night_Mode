@@ -9,6 +9,7 @@ import {
   MARKS,
   notPassed,
   numberMismatch,
+  pathCell,
   rtSeries,
   seriesMismatches,
   strayDigits,
@@ -155,4 +156,43 @@ test("the marks the tab may show: EDT's two, T30's (decision 46), STI's note; no
   assert.ok(MARKS.includes(T30_MARK));
   assert.ok(MARKS.includes('STI: noise range not computed'));
   for (const m of MARKS) assert.ok(!/validated/i.test(m), m);
+});
+
+test("backlog 77: a per-source cell's labels name its source too, and a summed cell shows no source", () => {
+  const two = {
+    bands_hz: [500],
+    spps: {
+      point_receivers: [
+        {
+          label: 'R1',
+          bands: [{ parameters: { t30_s: { not_evaluable: { code: 'params_not_evaluable' } } } }],
+          per_source: [
+            { source: 'S01', bands: [{ parameters: { t30_s: { value: 1.97, status: 'ok', lo: 1.92, hi: 2.01 } } }] },
+            { source: 'S02', bands: [{ parameters: { t30_s: { value: 1.98, status: 'ok', lo: 1.93, hi: 2.03 } } }] },
+          ],
+        },
+      ],
+    },
+  };
+  const cellOf = (source: string, rest: string, row = 'R1'): LabelledCell => ({
+    table: 'receivers-table',
+    rowHead: row,
+    colHead: 'T30',
+    band: '500 Hz',
+    receiver: '',
+    source,
+    paths: [`spps.point_receivers.0.${rest}`],
+  });
+  assert.deepEqual(pathCell('spps.point_receivers.0.per_source.1.bands.0.parameters.t30_s.value'), { receiver: 0, source: 1, param: 't30_s', band: 0 });
+  assert.deepEqual(pathCell('spps.point_receivers.0.bands.0.parameters.t30_s.value'), { receiver: 0, source: null, param: 't30_s', band: 0 });
+  assert.equal(cellLabelMismatch(cellOf('S02', 'per_source.1.bands.0.parameters.t30_s.value'), two), null);
+  assert.equal(cellLabelMismatch(cellOf('all sources summed', 'bands.0.parameters.t30_s.not_evaluable.code'), two), null);
+  assert.equal(cellLabelMismatch(cellOf('', 'bands.0.parameters.t30_s.not_evaluable.code'), two), null, 'no source picker');
+  // Says no: S01's value under S02, a source's value with the sources summed selected, the summed
+  // value under a source, and two sources' paths in one cell.
+  assert.match(cellLabelMismatch(cellOf('S02', 'per_source.0.bands.0.parameters.t30_s.value'), two) ?? '', /source/);
+  assert.match(cellLabelMismatch(cellOf('all sources summed', 'per_source.0.bands.0.parameters.t30_s.value'), two) ?? '', /source/);
+  assert.match(cellLabelMismatch(cellOf('S01', 'bands.0.parameters.t30_s.not_evaluable.code'), two) ?? '', /source/);
+  const mixed = { ...cellOf('S01', 'per_source.0.bands.0.parameters.t30_s.value'), paths: ['spps.point_receivers.0.per_source.0.bands.0.parameters.t30_s.value', 'spps.point_receivers.0.per_source.1.bands.0.parameters.t30_s.lo'] };
+  assert.match(cellLabelMismatch(mixed, two) ?? '', /disagree/);
 });

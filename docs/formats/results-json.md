@@ -87,7 +87,10 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 12,              // 12: room, the room from the run's own inputs
+  "results_version": 13,              // 13: range_below_zero, a refusal for an EDT,
+                                      //    T20, T30, D50 or Ts whose range reaches below
+                                      //    zero (shown wide with it before);
+                                      // 12: room, the room from the run's own inputs
                                       //    (volume, area, DIN 18041 targets, absorption
                                       //    by surface group), for either solver; an SPPS
                                       //    reference band carries sabine_s;
@@ -424,9 +427,12 @@ limens). A consumer that shows a value shows its range beside it, and marks a `w
 `monte_carlo_noise` when more than 10 of the 200 resamples refuse the value (the spread of the
 resamples that gave one does not bound those that did not) or when there is no standard deviation, and
 every refusal not about noise, `noise_uncalibrated` and `noise_unknown` included (but see version 9's
-stand-ins, next). `status`, `lo` and `hi` are absent from every other value (TCR's, the reference's, `curvature.percent`). The curvature
+stand-ins, next). **Since version 13, an EDT, T20, T30, D50 or Ts whose range reaches below zero is
+refused `range_below_zero`** (`value`, `lo`, and `sd`, `null` for EDT), whatever made the range
+(decision-log row 48): the quantity cannot be negative, so such a range says the noise is too large for
+the value to mean anything. SPL, C50 and C80 keep any range. `status`, `lo` and `hi` are absent from every other value (TCR's, the reference's, `curvature.percent`). The curvature
 is still refused with a T20 or T30 that `params` refused for noise, **even though that T20 or T30 is now
-shown `wide`**: a consumer will see both values beside a `monte_carlo_noise` curvature. A refusal for
+shown `wide`** (unless its range reaches below zero, when both are refused): a consumer will see both values beside a `monte_carlo_noise` curvature. A refusal for
 `monte_carlo_noise` carries `particle_count`, the particles per source that would bring the value
 within its limit, or why none is named: `{"count": "named", "factor", "margin", "particles"}`
 (`factor` times the run's particles, `(margin·sd/limit)²`, and that many per source rounded up to

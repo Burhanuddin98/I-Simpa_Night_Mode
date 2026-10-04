@@ -12202,19 +12202,19 @@
     "spps": {
       "particles_per_source": 1000000,
       "particles_saved": 0,
-      "duration_s": 1.5,
-      "time_step_s": 0.005,
+      "duration_s": 10.0,
+      "time_step_s": 0.001,
       "random_seed": 0,
       "method": "energetic",
       "air_absorption": true,
       "fittings": true,
       "direct_field_only": false,
       "transmission": true,
-      "extinction_exponent": 5.0,
-      "receiver_radius_m": 0.31,
+      "extinction_exponent": 7.0,
+      "receiver_radius_m": 0.6,
       "sound_map": "intensity",
       "sound_maps_per_band": true,
-      "echogram_per_source": false,
+      "echogram_per_source": true,
       "save_surface_intersections": true,
       "save_receiver_intersections": true,
       "bands_computed": [false, false, false, false, true, false, false, true, false, false, true, false, false, true, false, false, true, false, false, true, false, false, false, false, false, false, false]
@@ -12224,10 +12224,10 @@
       "bands_computed": [true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true, true]
     },
     "meshing": {
-      "min_radius_edge_ratio": 2.0,
+      "min_radius_edge_ratio": 5.0,
       "max_volume_m3": null,
       "surface_receiver_max_area_m2": null,
-      "preserve_boundary": false,
+      "preserve_boundary": true,
       "preprocess": false
     }
   },
