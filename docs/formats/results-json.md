@@ -87,7 +87,11 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 13,              // 13: range_below_zero, a refusal for an EDT,
+  "results_version": 14,              // 14: the room's volume is its air's, without the
+                                      //    inside of closed obstacles, in room,
+                                      //    reference and analytic and every time from
+                                      //    it; room carries obstacle_volume_m3;
+                                      // 13: range_below_zero, a refusal for an EDT,
                                       //    T20, T30, D50 or Ts whose range reaches below
                                       //    zero (shown wide with it before);
                                       // 12: room, the room from the run's own inputs
@@ -162,7 +166,9 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
   "tcr": { ... } | null,
   "room": {                           // the room from the run's own inputs (M12 P2), read
     "status": "computed",             //   as TCR's analytic references read it
-    "volume_m3": 180.0,               //   the .mbin's tetrahedra
+    "volume_m3": 180.0,               //   the air's: the .mbin's tetrahedra outside every
+                                      //   closed obstacle (version 14)
+    "obstacle_volume_m3": 0.0,        //   the tetrahedra left out: the obstacles' inside
     "area_m2": 216.0,                 //   the .cbin's faces
     "din18041": [                     //   A1 to A5, T_soll = a lg(V) + b at volume_m3
       {"group": "A3", "use": "teaching, communication",
@@ -190,6 +196,19 @@ group: the `.cbin` faces grouped by material id, which config.xml declares one p
 each with its faces, area, and per computed band its `absorption` (as the solvers read it, f32)
 and `absorption_area_m2` (`S·α`); `bands` is each band's sum. Not computed, with why, for a scene
 with fitting faces or one whose inputs do not read. Nothing of the solver's output is read.
+
+**The volume is the air's (results version 14, backlog 85).** `volume_m3`, in `room`, in an SPPS
+`reference` (where the transport's rays also start in it) and in TCR's `analytic`, sums the `.mbin`'s
+tetrahedra of every region (`idVolume`) that reaches the mesh's outer surface
+(`results::room::air_tetrahedra`). A closed shell nested in the room, a radiator or a stage panel, is
+meshed as a region of its own that reaches only the air around it, so its inside is left out, and
+`room.obstacle_volume_m3` says how much was: BRAS CR2's three radiator boxes 0.325 m³ (air 146.094 of
+146.418), CR4's panels and canopy 39.05 m³ (air 8656.6 of 8695.7). Every Sabine, Eyring, Kuttruff and
+DIN 18041 value takes this volume; versions up to 13 summed every tetrahedron, as TCR's own times in
+`Main results.gabe` still do (`TC_CalculationCore.cpp:199-209`), so in a room with a closed obstacle
+TCR's `bands` and `analytic` differ by the obstacle's share. A room without one reads the same
+volume as before. Limits: a solid touching the outer surface, a box against a wall, reaches it and is
+counted as air; a mesh of one region (upstream's without region attributes) is all air.
 
 **The bed status, `bed` (results version 11).** Each parameter's status is read from
 `beds/summary.json`, compiled in (`core::results::bed`). That file is written by
@@ -238,7 +257,7 @@ output. **Nothing in it is validated**, and `label` says so beside the numbers:
 ```
 "reference": {"status": "computed",
               "label": "analytic reference for a diffuse field, not validated (M8's bed has not run): ...",
-              "volume_m3": 180.0, "area_m2": 216.0,           // the .mbin's volume, the .cbin's area
+              "volume_m3": 180.0, "area_m2": 216.0,           // the air's volume, the .cbin's area
               "speed_of_sound_m_s": 343.20001220703125,       // SPPS's c
               "constant_s_per_m": 0.16101993084580937,        // K = 24·ln 10/c
               "free_paths": {"mean_free_path_m": 3.3340, "mean_free_path_se_m": 0.0004,
@@ -541,7 +560,7 @@ come from the code that gives the numbers, not from a second implementation.
 | `global` | `aggregate` (the label), `sabine_level_db`, `eyring_level_db` |
 | `point_receivers[]` | `label`, `file`; `bands[]`, per band `freq_hz`, `direct_db`, `total_sabine_db`, `total_eyring_db` (TCR's own levels), `parameters`, `g_db` and `curvature` (refused `no_time_series`) and `decay_curve` (`null`); `global` (the `Global` row, each column's energetic sum over the bands, **an aggregate**, labelled: `aggregate`, `direct_db`, `total_sabine_db`, `total_eyring_db`; a value that is not finite is refused, `results_value_invalid`); `aggregate` (SPPS's shape, labelled `"none: TCR writes no series to sum"`, `bands_hz` empty, `dba` refused `no_time_series`) |
 | `surfaces[]` | as for SPPS, with `field` one of `Direct field`, `Total field (Sabine)`, `Total field (Eyring)` |
-| `analytic` | `core::params`' Sabine and Eyring times on the run's own inputs: `{"status": "computed", "volume_m3", "area_m2", "bands": [{"freq_hz", "air_m_per_metre", "sabine_s", "eyring_s"}]}`, the two times as `{"value": …, "mc_sd": null}` or `{"not_evaluable": …}`; or `{"status": "not_computed", "why": …}` |
+| `analytic` | `core::params`' Sabine and Eyring times on the run's own inputs, at the air's volume (version 14): `{"status": "computed", "volume_m3", "area_m2", "bands": [{"freq_hz", "air_m_per_metre", "sabine_s", "eyring_s"}]}`, the two times as `{"value": …, "mc_sd": null}` or `{"not_evaluable": …}`; or `{"status": "not_computed", "why": …}` |
 
 TCR writes steady-state levels, not an energy time series, so `core::params` has nothing to compute
 from. A TCR receiver still has the same `bands[].parameters` and `aggregate.parameters` as an SPPS

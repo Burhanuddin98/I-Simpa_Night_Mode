@@ -85,6 +85,7 @@ function check(over: Partial<CheckSummary> = {}, counts: Partial<CheckSummary['c
     reasons: [],
     area_m2: 216,
     enclosed_volume_m3: 180,
+    air_volume_m3: 180,
     bbox_min: [0, 0, 0],
     extents_m: [10, 6, 3],
     highlight_faces: [],

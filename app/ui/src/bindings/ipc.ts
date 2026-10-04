@@ -242,13 +242,20 @@ export type RoomReport =
        * Always [`super::room::DIN18041_NOTE`].
        */
       din18041_note: string;
+      /**
+       * The volume of the regions left out, m³: the inside of the closed obstacles, a
+       * radiator, a stage panel; 0 in a room without one (version 14).
+       */
+      obstacle_volume_m3: number;
       status: 'computed';
       /**
        * By material id, ascending.
        */
       surfaces: GroupAbsorptionReport[];
       /**
-       * The `.mbin`'s volume, m³.
+       * The air's volume, m³: the `.mbin`'s tetrahedra of every region that reaches the
+       * room's outer surface, so not the inside of a closed obstacle (version 14; earlier, every
+       * tetrahedron). DIN 18041's targets are at this volume.
        */
       volume_m3: number;
     }
@@ -1654,7 +1661,8 @@ export type ReferenceReport =
       speed_of_sound_m_s: number;
       status: 'computed';
       /**
-       * The `.mbin`'s volume, m³.
+       * The air's volume, m³: the `.mbin`'s tetrahedra outside every closed obstacle
+       * (version 14), which the transport's rays also start in.
        */
       volume_m3: number;
     }
@@ -1848,6 +1856,11 @@ export type AnalyticReport =
       area_m2: number;
       bands: AnalyticBandReport[];
       status: 'computed';
+      /**
+       * The air's volume, m³, as `room.volume_m3` (version 14). TCR's own times sum every
+       * tetrahedron, so in a room with a closed obstacle they are longer than these by the
+       * obstacle's share of the volume.
+       */
       volume_m3: number;
     }
   | {
@@ -2335,7 +2348,8 @@ export type ReferenceReport1 =
       speed_of_sound_m_s: number;
       status: 'computed';
       /**
-       * The `.mbin`'s volume, m³.
+       * The air's volume, m³: the `.mbin`'s tetrahedra outside every closed obstacle
+       * (version 14), which the transport's rays also start in.
        */
       volume_m3: number;
     }
@@ -2381,13 +2395,20 @@ export type RoomReport1 =
        * Always [`super::room::DIN18041_NOTE`].
        */
       din18041_note: string;
+      /**
+       * The volume of the regions left out, m³: the inside of the closed obstacles, a
+       * radiator, a stage panel; 0 in a room without one (version 14).
+       */
+      obstacle_volume_m3: number;
       status: 'computed';
       /**
        * By material id, ascending.
        */
       surfaces: GroupAbsorptionReport[];
       /**
-       * The `.mbin`'s volume, m³.
+       * The air's volume, m³: the `.mbin`'s tetrahedra of every region that reaches the
+       * room's outer surface, so not the inside of a closed obstacle (version 14; earlier, every
+       * tetrahedron). DIN 18041's targets are at this volume.
        */
       volume_m3: number;
     }
@@ -2602,6 +2623,12 @@ export interface SceneState {
  * via the `definition` "CheckSummary".
  */
 export interface CheckSummary {
+  /**
+   * The air's volume, the rooms' cells outside every closed shell nested in them (the core's
+   * `air_volume_m3`, backlog 85): what the status bar and the Geometry panel show, labelled
+   * air. `None` exactly when `enclosed_volume_m3` is.
+   */
+  air_volume_m3?: number | null;
   area_m2: number;
   /**
    * The bounding box of the vertices the faces use.

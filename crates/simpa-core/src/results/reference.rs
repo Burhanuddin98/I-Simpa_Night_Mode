@@ -5,8 +5,9 @@
 //! `K = 24·ln 10/c` and the air term as the solver applies it (M8 decisions 17:45 and 00:20).
 //!
 //! The room is read as TCR's analytic references read it ([`super::tcr::RoomInputs`]): the `.cbin`
-//! faces with their materials, and the `.mbin`'s tetrahedra, which give the volume and where the
-//! transport's rays start. Nothing of the run's output is read, so the reference is the same
+//! faces with their materials, and the `.mbin`'s air, its tetrahedra outside every closed obstacle
+//! (results version 14, backlog 85), which give the volume and where the transport's rays start:
+//! before, a ray could start inside a radiator box. Nothing of the run's output is read, so the reference is the same
 //! whatever SPPS computed.
 //!
 //! **Nothing here is validated**: the references are reported beside the values, never as a gate
@@ -66,7 +67,7 @@ pub struct ReferenceBand {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Reference {
     Computed {
-        /// The `.mbin`'s volume, m³.
+        /// The air's volume, m³ ([`RoomInputs::volume_m3`]).
         volume_m3: f64,
         /// The `.cbin` faces' total area, m².
         area_m2: f64,

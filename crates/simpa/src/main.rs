@@ -337,6 +337,7 @@ fn project_summary(p: &schema::Project) -> serde_json::Value {
         "surface_receivers": surface_receivers,
         "area_m2": report.measures.area_m2,
         "volume_m3": report.measures.signed_volume_m3,
+        "air_volume_m3": report.measures.air_volume_m3,
         "sources": p.sources.iter().map(|s| s.position.to_array()).collect::<Vec<_>>(),
         "receivers": p.point_receivers.iter().map(|r| r.position.to_array()).collect::<Vec<_>>(),
     })
@@ -396,12 +397,13 @@ fn print_summary(project: &schema::Project, json: bool) -> ExitCode {
         println!("{s}");
     } else {
         println!(
-            "{} vertices, {} faces, {} groups, area {:.3} m2, volume {:.3} m3",
+            "{} vertices, {} faces, {} groups, area {:.3} m2, volume {:.3} m3, air {:.3} m3",
             s["vertices"],
             s["faces"],
             project.surface_groups.len(),
             s["area_m2"].as_f64().unwrap_or(0.0),
-            s["volume_m3"].as_f64().unwrap_or(0.0)
+            s["volume_m3"].as_f64().unwrap_or(0.0),
+            s["air_volume_m3"].as_f64().unwrap_or(0.0)
         );
     }
     ExitCode::SUCCESS
@@ -486,20 +488,22 @@ fn check_cmd(args: &[&str]) -> ExitCode {
             "self_intersections": r.counts.self_intersecting_pairs,
             "intersecting_pairs": r.self_intersections,
             "signed_volume_m3": r.measures.signed_volume_m3,
+            "air_volume_m3": r.measures.air_volume_m3,
             "area_m2": r.measures.area_m2,
             "report": r,
         });
         println!("{out}");
     } else {
         println!(
-            "{}: {} faces, {} edges ({} open, {} non-manifold), {} self-intersecting pairs, volume {:.3} m3",
+            "{}: {} faces, {} edges ({} open, {} non-manifold), {} self-intersecting pairs, volume {:.3} m3, air {:.3} m3",
             if ok { "ok" } else { "refused" },
             r.counts.faces,
             r.counts.edges,
             r.counts.open_edges,
             r.counts.nonmanifold_edges,
             r.counts.self_intersecting_pairs,
-            r.measures.signed_volume_m3
+            r.measures.signed_volume_m3,
+            r.measures.air_volume_m3
         );
         for reason in &r.reasons {
             println!("  {}: {}", reason.code.as_str(), reason.message);

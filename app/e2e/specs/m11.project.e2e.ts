@@ -517,16 +517,17 @@ describe('M11 project', () => {
     assert.equal(rawDims.length, 3);
     for (const d of rawDims) assert.match(d, /^\d+\.\d{2} m$/);
 
-    // Control: the corrected hall shows the volume the check measures, as a geometry fact.
+    // Control: the corrected hall shows the air's volume the check measures (backlog 85: the
+    // inside of a closed obstacle is not air), as a geometry fact.
     const r = simpa(['check', CORRECTED_HALL(), '--unit', 'm', '--up', 'z', '--json']);
     assert.equal(r.status, 0, r.stderr);
-    const measured = (JSON.parse(r.stdout) as { report: { measures: { enclosed_volume_m3: number } } }).report.measures.enclosed_volume_m3;
+    const measured = (JSON.parse(r.stdout) as { report: { measures: { air_volume_m3: number } } }).report.measures.air_volume_m3;
     await m10.importModel(CORRECTED_HALL(), 'm', 'z');
     const shown = await (await volume()).getText();
     const hallDims = await dims();
     console.log(`m11-b18 receipt: corrected hall '${shown}' (simpa check ${measured} m³), dimensions ${JSON.stringify(hallDims)}`);
-    assert.equal(shown, `Volume ${fact(measured, 1)} m³`);
-    assert.equal(await (await volume()).getAttribute('data-volume'), 'enclosed');
+    assert.equal(shown, `Air volume ${fact(measured, 1)} m³`);
+    assert.equal(await (await volume()).getAttribute('data-volume'), 'air');
     assert.equal(
       await browser.execute(() => !!document.querySelector('[data-part="volume"]')?.closest('[data-geometry]')),
       true,

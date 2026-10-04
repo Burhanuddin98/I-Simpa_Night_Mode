@@ -71,8 +71,13 @@ use crate::schema::SolverKind;
 /// volume, area, DIN 18041's group-A targets and the absorption by surface group; and an SPPS
 /// reference band's `sabine_s` beside `eyring_s`. No other field changes. 13 (backlog 78): a
 /// refusal `range_below_zero`, for an EDT, T20, T30, D50 or Ts whose range reaches below zero, which
-/// earlier versions showed `wide` with that range. No other field changes.
-pub const REPORT_VERSION: u32 = 13;
+/// earlier versions showed `wide` with that range. No other field changes. 14 (backlog 85): the
+/// room's volume is its air's, the `.mbin`'s tetrahedra outside every closed obstacle
+/// (`results::room::air_tetrahedra`), in `room`, an SPPS `reference` and TCR's `analytic`, and
+/// every Sabine, Eyring, Kuttruff and DIN 18041 value computed from it; earlier versions summed
+/// every tetrahedron, the inside of a radiator or a stage panel too. `room` carries
+/// `obstacle_volume_m3`, the volume left out. No other field changes.
+pub const REPORT_VERSION: u32 = 14;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -1040,7 +1045,8 @@ pub enum ReferenceReport {
     Computed {
         /// Always [`crate::results::reference::REFERENCE_LABEL`].
         label: String,
-        /// The `.mbin`'s volume, m³.
+        /// The air's volume, m³: the `.mbin`'s tetrahedra outside every closed obstacle
+        /// (version 14), which the transport's rays also start in.
         volume_m3: f64,
         /// The `.cbin` faces' total area, m².
         area_m2: f64,
@@ -1138,6 +1144,9 @@ pub struct AnalyticBandReport {
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum AnalyticReport {
     Computed {
+        /// The air's volume, m³, as `room.volume_m3` (version 14). TCR's own times sum every
+        /// tetrahedron, so in a room with a closed obstacle they are longer than these by the
+        /// obstacle's share of the volume.
         volume_m3: f64,
         area_m2: f64,
         bands: Vec<AnalyticBandReport>,
@@ -1328,8 +1337,13 @@ pub struct RoomBandReport {
 #[serde(rename_all = "snake_case", tag = "status")]
 pub enum RoomReport {
     Computed {
-        /// The `.mbin`'s volume, m³.
+        /// The air's volume, m³: the `.mbin`'s tetrahedra of every region that reaches the
+        /// room's outer surface, so not the inside of a closed obstacle (version 14; earlier, every
+        /// tetrahedron). DIN 18041's targets are at this volume.
         volume_m3: f64,
+        /// The volume of the regions left out, m³: the inside of the closed obstacles, a
+        /// radiator, a stage panel; 0 in a room without one (version 14).
+        obstacle_volume_m3: f64,
         /// The `.cbin` faces' total area, m².
         area_m2: f64,
         /// A1 to A5, in order.
@@ -1351,6 +1365,7 @@ impl RoomReport {
         match r {
             Room::Computed {
                 volume_m3,
+                obstacle_volume_m3,
                 area_m2,
                 din18041,
                 groups,
@@ -1388,6 +1403,7 @@ impl RoomReport {
                     .collect();
                 RoomReport::Computed {
                     volume_m3: *volume_m3,
+                    obstacle_volume_m3: *obstacle_volume_m3,
                     area_m2: *area_m2,
                     din18041: din18041
                         .iter()
@@ -2467,8 +2483,8 @@ mod tests {
     /// the pair below no longer matches: bump the version, write its history line (here and in
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
-        13,
-        "dc4921238bee3b08d5a22de7a61898c7b674ebb82750e750152aaeff50367cb5",
+        14,
+        "619f0a1204ea173dfc9cc14d422aa871aac545ca77672b716b130207e4e0f6b2",
     );
 
     /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.

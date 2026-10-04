@@ -106,6 +106,7 @@
               "type": "string"
             },
             "volume_m3": {
+              "description": "The air's volume, m³, as `room.volume_m3` (version 14). TCR's own times sum every\ntetrahedron, so in a room with a closed obstacle they are longer than these by the\nobstacle's share of the volume.",
               "format": "double",
               "type": "number"
             }
@@ -710,6 +711,14 @@
     "CheckSummary": {
       "description": "The model check, for the Geometry panel and the view's highlight.",
       "properties": {
+        "air_volume_m3": {
+          "description": "The air's volume, the rooms' cells outside every closed shell nested in them (the core's\n`air_volume_m3`, backlog 85): what the status bar and the Geometry panel show, labelled\nair. `None` exactly when `enclosed_volume_m3` is.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "area_m2": {
           "format": "double",
           "type": "number"
@@ -4220,7 +4229,7 @@
               "type": "string"
             },
             "volume_m3": {
-              "description": "The `.mbin`'s volume, m³.",
+              "description": "The air's volume, m³: the `.mbin`'s tetrahedra outside every closed obstacle\n(version 14), which the transport's rays also start in.",
               "format": "double",
               "type": "number"
             }
@@ -4515,6 +4524,11 @@
               "description": "Always [`super::room::DIN18041_NOTE`].",
               "type": "string"
             },
+            "obstacle_volume_m3": {
+              "description": "The volume of the regions left out, m³: the inside of the closed obstacles, a\nradiator, a stage panel; 0 in a room without one (version 14).",
+              "format": "double",
+              "type": "number"
+            },
             "status": {
               "const": "computed",
               "type": "string"
@@ -4527,7 +4541,7 @@
               "type": "array"
             },
             "volume_m3": {
-              "description": "The `.mbin`'s volume, m³.",
+              "description": "The air's volume, m³: the `.mbin`'s tetrahedra of every region that reaches the\nroom's outer surface, so not the inside of a closed obstacle (version 14; earlier, every\ntetrahedron). DIN 18041's targets are at this volume.",
               "format": "double",
               "type": "number"
             }
@@ -4535,6 +4549,7 @@
           "required": [
             "status",
             "volume_m3",
+            "obstacle_volume_m3",
             "area_m2",
             "din18041",
             "din18041_note",

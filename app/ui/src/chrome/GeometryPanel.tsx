@@ -6,9 +6,11 @@
 // M11 (M10 MINOR B-18, check m11-b18):
 // - The three dimensions share one precision, two decimals, as the design writes them
 //   ("10.00 m"), where M10 dropped trailing zeros and mixed `41.45 m` with `16.1 m`.
-// - A refused model shows no volume: the core sends none (`enclosed_volume_m3` null), and the
+// - A refused model shows no volume: the core sends none (`air_volume_m3` null), and the
 //   row says why in words, with no digit. A checked model's volume keeps the status bar's
 //   spelling (`fact(v, 1)`: "180 m³"), so one number reads the same in both places.
+// - The volume is the air's (backlog 85), labelled so: the inside of a closed obstacle is not in
+//   it. When the faces enclose more, the row's title says how much more and why.
 // - Import model… waits while a run is active (PQ4), saying why.
 import * as actions from '../actions';
 import { runStore, sceneStore, useStore } from '../store';
@@ -62,7 +64,9 @@ export function GeometryPanel() {
   const ok = check.verdict === 'ok';
   const imported = !info.path;
   const [lx, ly, lz] = check.extents_m;
-  const volume = check.enclosed_volume_m3;
+  const volume = check.air_volume_m3 ?? null;
+  const enclosed = check.enclosed_volume_m3 ?? null;
+  const inside = volume != null && enclosed != null && enclosed > volume ? enclosed - volume : null;
   return (
     <div data-part="geometry-panel">
       <div className="props-head">
@@ -116,8 +120,8 @@ export function GeometryPanel() {
           ))}
         </div>
         <div className="fact-line">
-          <span data-part="volume" data-volume={volume == null ? 'none' : 'enclosed'}>
-            Volume{' '}
+          <span data-part="volume" data-volume={volume == null ? 'none' : 'air'}>
+            Air volume{' '}
             {volume == null ? (
               <span
                 className="v"
@@ -126,7 +130,16 @@ export function GeometryPanel() {
                 {ok ? 'not given' : 'none: the model is refused'}
               </span>
             ) : (
-              <span className="mono v">{fact(volume, 1)} m³</span>
+              <span
+                className="mono v"
+                title={
+                  inside == null
+                    ? undefined
+                    : `The faces enclose ${fact(enclosed, 1)} m³; ${fact(inside, 1)} m³ of it is inside closed obstacles, not air`
+                }
+              >
+                {fact(volume, 1)} m³
+              </span>
             )}
           </span>
           <span data-part="surface">

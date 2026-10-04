@@ -17,8 +17,10 @@
 //!
 //! [`analytic`] computes `core::params`' Sabine and Eyring times from the run's own inputs, the
 //! way TCR takes them (`TC_CalculationCore.cpp:87-141, 199-209`): every `.cbin` face with its
-//! material's absorption in the band, the `.mbin`'s volume, and the air term from
-//! `config.xml`. It is what gate M7(d) and M8 compare TCR with.
+//! material's absorption in the band, and the air term from `config.xml`; and the volume of the
+//! `.mbin`'s air, where TCR sums every tetrahedron (results version 14: they differ in a room with
+//! a closed obstacle, by its inside). It is what gate M7(d) and M8 compare TCR with, in rooms
+//! without one.
 
 use std::path::Path;
 
@@ -94,7 +96,9 @@ pub struct AnalyticBand {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Analytic {
     Computed {
-        /// The `.mbin`'s volume, the sum of its tetrahedra's (`TC_CalculationCore.cpp:199-209`).
+        /// The air's volume, [`RoomInputs::volume_m3`]. TCR's own sums every tetrahedron
+        /// (`TC_CalculationCore.cpp:199-209`), so in a room with a closed obstacle its times in
+        /// `Main results.gabe` are longer than these by the obstacle's share of the volume.
         volume_m3: f64,
         /// The `.cbin` faces' total area.
         area_m2: f64,
@@ -206,17 +210,24 @@ pub(crate) struct RoomBand {
 }
 
 /// The room as a run's own inputs give it, the way TCR takes it (`TC_CalculationCore.cpp:87-141,
-/// 199-209`): every `.cbin` face with its material, the `.mbin`'s volume, the materials' absorption
-/// per band and the air term from `config.xml`. [`analytic`] and `results::reference` read it.
+/// 199-209`) but for the volume: every `.cbin` face with its material, the materials' absorption
+/// per band and the air term from `config.xml`, and the volume of the `.mbin`'s air, where TCR
+/// sums every tetrahedron, the inside of closed obstacles too (results version 14, backlog 85).
+/// [`analytic`], `results::room` and `results::reference` read it.
 #[derive(Clone, Debug)]
 pub(crate) struct RoomInputs {
     /// The `.cbin`'s faces, in its order, as triangles in metres.
     pub triangles: Vec<[[f64; 3]; 3]>,
     /// Each face's area, m², and material id, in the same order.
     pub faces: Vec<(f64, u32)>,
-    /// The `.mbin`'s volume, the sum of its tetrahedra's, m³.
+    /// The air's volume, m³: the sum of the `.mbin`'s tetrahedra that
+    /// [`super::room::air_tetrahedra`] keeps, those outside every closed obstacle (backlog 85).
     pub volume_m3: f64,
-    /// The `.mbin`'s tetrahedra, in metres: they fill the meshed room.
+    /// The sum of the others, m³: the inside of the closed obstacles, which TCR's own volume
+    /// counts as well (`TC_CalculationCore.cpp:199-209`); 0 in a room without one.
+    pub obstacle_volume_m3: f64,
+    /// The air's tetrahedra, in metres: they fill the room's air, and the transport of
+    /// `results::reference` starts its rays in them.
     pub tetrahedra: Vec<[[f64; 3]; 4]>,
     /// [`materials`]: each material's absorption per band, in frequency order.
     pub materials: Vec<(u32, Vec<f64>)>,
@@ -251,9 +262,10 @@ impl RoomInputs {
                 .ok_or_else(|| format!("{mesh_rel}: node {i} out of range"))?;
             Ok(n.map(f64::from))
         };
-        let mut volume_m3 = 0.0;
+        let air = super::room::air_tetrahedra(&mesh);
+        let (mut volume_m3, mut obstacle_volume_m3) = (0.0, 0.0);
         let mut tetrahedra = Vec::with_capacity(mesh.tetrahedra.len());
-        for t in &mesh.tetrahedra {
+        for (t, &air) in mesh.tetrahedra.iter().zip(&air) {
             let [a, b, c, d] = [
                 node(t.vertices[0])?,
                 node(t.vertices[1])?,
@@ -261,8 +273,13 @@ impl RoomInputs {
                 node(t.vertices[3])?,
             ];
             let (u, v, w) = (sub(a, d), sub(b, d), sub(c, d));
-            volume_m3 += dot(u, cross(v, w)).abs() / 6.0;
-            tetrahedra.push([a, b, c, d]);
+            let tet_m3 = dot(u, cross(v, w)).abs() / 6.0;
+            if air {
+                volume_m3 += tet_m3;
+                tetrahedra.push([a, b, c, d]);
+            } else {
+                obstacle_volume_m3 += tet_m3;
+            }
         }
         let text = std::fs::read(solve.join(crate::config_xml::names::CONFIG))
             .map_err(|e| format!("config.xml: {e}"))?;
@@ -336,6 +353,7 @@ impl RoomInputs {
             triangles,
             faces,
             volume_m3,
+            obstacle_volume_m3,
             tetrahedra,
             materials,
             bands,

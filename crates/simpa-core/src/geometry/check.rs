@@ -314,10 +314,20 @@ pub struct Measures {
     pub area_m2: f64,
     /// The sum of the signed volumes of the analysed faces as oriented: the enclosed volume for
     /// a closed shell with outward normals, negative when they point inwards. Internal faces
-    /// contribute too; the verdict relies on [`Counts::inverted_faces`], not on this sign.
+    /// contribute too, a nested shell with its own sign: a closed obstacle, its normals pointing
+    /// out of it as they must, adds its volume where the air loses it, so a room with obstacles
+    /// reads its air plus twice their volume (BRAS CR2: 146.743 m³ for 146.094 of air). It is an
+    /// orientation tell, not a volume of anything: the verdict relies on
+    /// [`Counts::inverted_faces`], not on this sign, and the air is [`Measures::air_volume_m3`].
     pub signed_volume_m3: f64,
-    /// The sum of the enclosed cells' volumes, independent of orientation.
+    /// The sum of the enclosed cells' volumes, independent of orientation: the air and the
+    /// inside of every closed shell nested in it.
     pub enclosed_volume_m3: f64,
+    /// The sum of the depth-1 cells' volumes, the rooms: the air outside every closed shell
+    /// nested in them (backlog 85), the volume a reverberation formula takes. A nested shell is
+    /// an obstacle or a fitting zone made of model faces; the air of such a zone is not in it. 0
+    /// with no cell.
+    pub air_volume_m3: f64,
 }
 
 /// The result of [`check`]. Face indices are indices into `Geometry::faces`, vertex indices
@@ -671,6 +681,10 @@ pub fn check(geometry: &Geometry) -> CheckReport {
         .collect();
     // A fold from +0.0: `Sum` for f64 starts at -0.0, which would print as "-0.0" with no cells.
     let enclosed_volume_m3 = cell_reports.iter().fold(0.0, |acc, c| acc + c.volume_m3);
+    let air_volume_m3 = cell_reports
+        .iter()
+        .filter(|c| c.depth == 1)
+        .fold(0.0, |acc, c| acc + c.volume_m3);
 
     // Classify the listed edges.
     let mut edges = Vec::with_capacity(pending.len());
@@ -878,6 +892,7 @@ pub fn check(geometry: &Geometry) -> CheckReport {
             area_m2,
             signed_volume_m3,
             enclosed_volume_m3,
+            air_volume_m3,
         },
         topology_reliable,
         edges,

@@ -1,5 +1,7 @@
 // The status bar (design:474-481): the app's status, the model as a geometry fact ("Model closed
-// · 6 surfaces · 180 m³", inside `[data-geometry]`), the active variant, the solvers, the units.
+// · 6 surfaces · air 180 m³", inside `[data-geometry]`), the active variant, the solvers, the units.
+// The volume is the air's (backlog 85): the inside of a closed obstacle, a radiator or a stage
+// panel, is not in it (BRAS CR4: air 8656.6 m³, where the faces enclose 8695.7).
 // While a run is active the status reads "Simulating", with SPPS's own last percentage in a
 // diagnostic span (M11 PLAN.md 3.3, 3.4 rule 1): SPPS's text after its `#`, as the simulate
 // package's `progressDisplay` shows it everywhere (as printed up to two decimals, else rounded
@@ -39,7 +41,7 @@ export function StatusBar() {
         (check ? (
           <span data-geometry data-part="model-fact">
             {check.verdict === 'ok'
-              ? `Model closed · ${groups} surfaces · ${check.enclosed_volume_m3 === null ? '' : `${fact(check.enclosed_volume_m3, 1)} m³`}`
+              ? `Model closed · ${groups} surfaces · ${check.air_volume_m3 == null ? '' : `air ${fact(check.air_volume_m3, 1)} m³`}`
               : `Model refused · ${groups} surfaces`}
           </span>
         ) : (

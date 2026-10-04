@@ -126,6 +126,10 @@ pub struct CheckSummary {
     /// The volume the faces enclose; `None` when the check refuses the model, whose "volume" is
     /// not a number anyone should read (a refused model encloses no volume, M10 MINOR B-18).
     pub enclosed_volume_m3: Option<f64>,
+    /// The air's volume, the rooms' cells outside every closed shell nested in them (the core's
+    /// `air_volume_m3`, backlog 85): what the status bar and the Geometry panel show, labelled
+    /// air. `None` exactly when `enclosed_volume_m3` is.
+    pub air_volume_m3: Option<f64>,
     /// The bounding box of the vertices the faces use.
     pub bbox_min: [f64; 3],
     pub extents_m: [f64; 3],
@@ -463,6 +467,7 @@ pub fn check_summary(project: &Project, report: &CheckReport) -> CheckSummary {
         area_m2: report.measures.area_m2,
         enclosed_volume_m3: (report.verdict == Verdict::Ok)
             .then_some(report.measures.enclosed_volume_m3),
+        air_volume_m3: (report.verdict == Verdict::Ok).then_some(report.measures.air_volume_m3),
         bbox_min,
         extents_m,
         highlight_faces: highlight,
@@ -825,6 +830,7 @@ mod tests {
         assert_eq!(s.verdict, CheckVerdict::Refused);
         // A refused model encloses no volume anyone should read (M10 MINOR B-18).
         assert_eq!(s.enclosed_volume_m3, None);
+        assert_eq!(s.air_volume_m3, None);
         let mut want: Vec<u32> = report
             .reasons
             .iter()
@@ -840,7 +846,49 @@ mod tests {
         assert!(s.highlight_faces.is_empty() && s.reasons.is_empty());
         let volume = s.enclosed_volume_m3.expect("an ok model has its volume");
         assert!((volume - 180.0).abs() < 1e-9, "{volume}");
+        // Without an obstacle the air is all of it (backlog 85's say-NO).
+        assert_eq!(s.air_volume_m3, Some(volume));
         assert!((s.area_m2 - 216.0).abs() < 1e-9);
+    }
+
+    /// Backlog 85: a closed obstacle inside the room. The summary's air leaves its inside out,
+    /// where the enclosed volume counts it: tutorial 1's 180 m³ box around a 2 x 1 x 0.5 m box.
+    #[test]
+    fn the_check_summary_s_air_leaves_out_a_closed_obstacle() {
+        let mut p = load("tests/fixtures/rooms/tutorial1_box.simpa");
+        let (min, max) = ([2.0, 4.0, 0.5], [4.0, 5.0, 1.0]);
+        let base = p.geometry.vertices.len() as u32;
+        for k in 0..8usize {
+            let at_max = [matches!(k & 3, 1 | 2), matches!(k & 3, 2 | 3), k >= 4];
+            p.geometry.vertices.push(simpa_core::schema::Vec3::from(
+                [0, 1, 2].map(|a| if at_max[a] { max[a] } else { min[a] }),
+            ));
+        }
+        let group = p.surface_groups[0].id;
+        for t in [
+            [0, 2, 1],
+            [0, 3, 2],
+            [4, 5, 6],
+            [4, 6, 7],
+            [0, 1, 5],
+            [0, 5, 4],
+            [1, 2, 6],
+            [1, 6, 5],
+            [2, 3, 7],
+            [2, 7, 6],
+            [3, 0, 4],
+            [3, 4, 7],
+        ] {
+            p.geometry.faces.push(simpa_core::schema::Face {
+                vertices: t.map(|c: u32| base + c),
+                group,
+            });
+        }
+        let s = check_summary(&p, &check(&p.geometry));
+        assert_eq!(s.verdict, CheckVerdict::Ok, "{:?}", s.reasons);
+        let (air, enclosed) = (s.air_volume_m3.unwrap(), s.enclosed_volume_m3.unwrap());
+        assert!((air - 179.0).abs() < 1e-9, "{air}");
+        assert!((enclosed - 180.0).abs() < 1e-9, "{enclosed}");
     }
 
     #[test]

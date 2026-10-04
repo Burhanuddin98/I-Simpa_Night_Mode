@@ -2,7 +2,9 @@
 //! `docs/investigations/2026-10-03-m12/PLAN.md`). Gate M12(a) holds every number that tab shows
 //! to `simpa results --json`, so what it shows beside the solver's values is computed here, in
 //! the report, never in the UI:
-//! - the room's volume (the `.mbin`'s tetrahedra) and area (the `.cbin`'s faces);
+//! - the room's volume, its air's ([`air_tetrahedra`]: the `.mbin`'s tetrahedra outside every
+//!   closed obstacle, results version 14), the obstacles' inside beside it, and its area (the
+//!   `.cbin`'s faces);
 //! - DIN 18041's five group-A targets at that volume ([`din18041::target_s`]), each refused
 //!   where the volume is outside the group's range;
 //! - the absorption by surface group: config.xml declares one material per surface group, so the
@@ -14,9 +16,11 @@
 //! SPPS run as for a TCR one; a scene with fitting faces, or one that does not read, is
 //! [`Room::NotComputed`] with why. Nothing of the solver's output is read.
 
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use super::tcr::RoomInputs;
+use crate::formats::mbin;
 use crate::params::ParamError;
 use crate::params::din18041::{self, Group};
 use crate::run::expect::Expectation;
@@ -45,8 +49,11 @@ pub struct GroupAbsorption {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Room {
     Computed {
-        /// The `.mbin`'s volume, m³.
+        /// The air's volume, m³: the `.mbin`'s tetrahedra that [`air_tetrahedra`] keeps.
         volume_m3: f64,
+        /// The rest of the `.mbin`'s tetrahedra, m³: the inside of the closed obstacles; 0 in a
+        /// room without one.
+        obstacle_volume_m3: f64,
         /// The `.cbin` faces' total area, m².
         area_m2: f64,
         /// Every group, A1 to A5, with its target at `volume_m3`, s, or the refusal.
@@ -57,6 +64,52 @@ pub enum Room {
     NotComputed {
         why: String,
     },
+}
+
+/// Which of `mesh`'s tetrahedra hold the room's air (backlog 85), in its order: those of every
+/// region (`idVolume`) that reaches the mesh's outer surface. A closed shell nested in the room, a
+/// radiator or a stage panel, is meshed as a region of its own that touches only the room around
+/// it, so its inside is left out; the rooms themselves, one region or several split by partition
+/// walls, each reach the outer surface. These are `geometry::check`'s depth-1 cells (its
+/// `air_volume_m3`), found here from the mesh alone: a face of the outer surface is a face only
+/// one tetrahedron has (the same three nodes), so neither TetGen's region numbering nor the
+/// `.mbin`'s neighbour fields are trusted. A mesh of one region, as upstream's meshes without
+/// region attributes are, is all air: the volume every tetrahedron gives, as before version 14.
+///
+/// Its limit: a solid that touches the outer surface, a box pushed against a wall, reaches it too,
+/// and is counted as air, as the check counts it a room. A fitting zone nested in the room is air
+/// with scattering objects in it but would be left out; [`super::tcr::RoomInputs::read`] refuses a
+/// scene with fitting faces before this is asked.
+pub fn air_tetrahedra(mesh: &mbin::Mesh) -> Vec<bool> {
+    let mut uses: HashMap<[i32; 3], u32> = HashMap::with_capacity(2 * mesh.tetrahedra.len());
+    let faces = |t: &mbin::Tetrahedron| {
+        let v = t.vertices;
+        [
+            [v[1], v[2], v[3]],
+            [v[0], v[2], v[3]],
+            [v[0], v[1], v[3]],
+            [v[0], v[1], v[2]],
+        ]
+        .map(|mut f| {
+            f.sort_unstable();
+            f
+        })
+    };
+    for t in &mesh.tetrahedra {
+        for f in faces(t) {
+            *uses.entry(f).or_insert(0) += 1;
+        }
+    }
+    let outer: HashSet<i32> = mesh
+        .tetrahedra
+        .iter()
+        .filter(|t| faces(t).iter().any(|f| uses[f] == 1))
+        .map(|t| t.id_volume)
+        .collect();
+    mesh.tetrahedra
+        .iter()
+        .map(|t| outer.contains(&t.id_volume))
+        .collect()
 }
 
 /// The room of the run whose solver folder is `solve` ([module docs](self)).
@@ -101,6 +154,7 @@ fn inner(solve: &Path, exp: &Expectation) -> Result<Room, String> {
     }
     Ok(Room::Computed {
         volume_m3: room.volume_m3,
+        obstacle_volume_m3: room.obstacle_volume_m3,
         area_m2,
         din18041: Group::ALL
             .iter()
