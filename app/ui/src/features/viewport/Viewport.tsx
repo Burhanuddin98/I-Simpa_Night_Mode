@@ -256,13 +256,13 @@ export function Viewport() {
         <path data-axis="y" d="M32 32l12.3 8.4" stroke="#A1A1AA" strokeWidth="1.6" strokeLinecap="round" />
         <path data-axis="x" d="M32 32l16-6.6" stroke="#E0202E" strokeWidth="1.6" strokeLinecap="round" />
         <path data-axis="z" d="M32 32V15" stroke="#EDEDEF" strokeWidth="1.6" strokeLinecap="round" />
-        <text data-axis-label="x" x="51" y="26" fontSize="9" fill="#E0202E" fontFamily="JetBrains Mono, monospace">
+        <text data-axis-label="x" x="51" y="26" fontSize="9" fill="#E0202E" fontFamily="Cascadia Mono, Consolas, monospace">
           x
         </text>
-        <text data-axis-label="y" x="46" y="48" fontSize="9" fill="#A1A1AA" fontFamily="JetBrains Mono, monospace">
+        <text data-axis-label="y" x="46" y="48" fontSize="9" fill="#A1A1AA" fontFamily="Cascadia Mono, Consolas, monospace">
           y
         </text>
-        <text data-axis-label="z" x="29" y="11" fontSize="9" fill="#EDEDEF" fontFamily="JetBrains Mono, monospace">
+        <text data-axis-label="z" x="29" y="11" fontSize="9" fill="#EDEDEF" fontFamily="Cascadia Mono, Consolas, monospace">
           z
         </text>
       </svg>

@@ -9,13 +9,16 @@ import { SimulatePanel } from '../features/simulate/SimulatePanel';
 import { STEPS } from '../steps';
 import { stepStore, useStore } from '../store';
 import { GeometryPanel } from './GeometryPanel';
+import { FoldButton, useFold } from './fold';
 import { SourcesPanel } from './SourcesPanel';
 
 export function PropertiesPanel() {
   const step = useStore(stepStore);
   const s = STEPS.find((x) => x.key === step) ?? STEPS[0];
+  const folded = useFold('props');
   return (
-    <aside className="props" aria-label="Properties" data-props-step={s.key}>
+    <aside className="props" aria-label="Properties" data-props-step={s.key} data-folded={folded}>
+      <FoldButton panel="props" />
       {s.key === 'geometry' && <GeometryPanel />}
       {s.key === 'materials' && <MaterialsPanel />}
       {s.key === 'sources' && <SourcesPanel />}

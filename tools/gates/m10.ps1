@@ -79,9 +79,9 @@ $gateSpecs = @('smoke', 'shell', 'viewport', 'materials', 'scene')
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $($specIds.Keys -join ', ')" } }
 $fullRun = $Only -eq 'all' -and -not $SkipCore -and (@($gateSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
-# theme.css is frozen after the M10 foundation (PLAN.md 2.4, rule 4): its git blob, which does
+# theme.css is pinned (M10 PLAN.md 2.4 rule 4; re-pinned for the glass layout, decision-log row 50): its git blob, which does
 # not depend on the checkout's line endings.
-$themeBlob = 'dd3e89e270604ee648944c854c68ba3a2b51d331'
+$themeBlob = 'bbb2d2b53c1a08d6886ca116f5db0b7f66f7081c'
 
 $failures = @()
 function Check($name, [scriptblock]$body) {

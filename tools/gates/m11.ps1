@@ -109,8 +109,8 @@ $allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -notlike '
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }
 $fullRun = $Only -eq 'all' -and -not $SkipCore -and -not $SkipPrior -and (@($allSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
-# theme.css is frozen since the M10 foundation (M10 PLAN.md 2.4 rule 4; M11 PLAN.md 3.4 rule 5).
-$themeBlob = 'dd3e89e270604ee648944c854c68ba3a2b51d331'
+# theme.css is pinned (M10 PLAN.md 2.4 rule 4; M11 PLAN.md 3.4 rule 5; re-pinned for the glass layout, decision-log row 50).
+$themeBlob = 'bbb2d2b53c1a08d6886ca116f5db0b7f66f7081c'
 
 # M11's nine commands (PLAN.md 2.2), on top of M10's 28.
 $m11Commands = @('run_start', 'run_cancel', 'runs_list', 'run_results', 'proj_import', 'material_library',

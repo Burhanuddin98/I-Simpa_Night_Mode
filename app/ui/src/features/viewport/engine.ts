@@ -420,7 +420,7 @@ class ViewportEngine {
       r.setViewport(0, 0, w, h);
       r.setClearColor(0x000000, 0);
       r.clear();
-      const main = this.mainCamera(w / h);
+      const main = this.mainCamera(w, h);
       this.setMarkerScale(1);
       r.render(this.scene, main);
       if (this.view === 'perspective' && this.bounds) this.renderInset(r, dom.inset);
@@ -442,7 +442,8 @@ class ViewportEngine {
     r.setScissorTest(true);
     r.setScissor(x, y, b.width, b.height);
     r.setViewport(x, y, b.width, b.height);
-    r.setClearColor(PANEL, 1);
+    // The inset is a floating panel too (decision-log row 50): its box is see-through.
+    r.setClearColor(PANEL, 0.55);
     r.clear();
     this.fitPlan(b.width / b.height);
     this.setMarkerScale(INSET_MARKER_SCALE);
@@ -456,23 +457,50 @@ class ViewportEngine {
     (this.halo.material as PointsMaterial).size = HALO_PX * k;
   }
 
-  private mainCamera(aspect: number): Camera {
+  /** The region the floating panels leave clear (`dom.root`, decision-log row 50), in the
+   * canvas's pixels; the whole canvas when it cannot be read. */
+  private clearRegion(w: number, h: number): { x: number; y: number; w: number; h: number } {
+    const c = this.canvas?.getBoundingClientRect();
+    const s = this.dom?.root.getBoundingClientRect();
+    if (!c || !s || s.width < 2 || s.height < 2) return { x: 0, y: 0, w, h };
+    return { x: s.left - c.left, y: s.top - c.top, w: s.width, h: s.height };
+  }
+
+  /** The main camera for a `w` x `h` canvas, its axis through the centre of the clear region. */
+  private mainCamera(w: number, h: number): Camera {
+    const s = this.clearRegion(w, h);
     if (this.view === 'plan') {
-      this.fitPlan(aspect);
+      this.fitPlan(s.w / s.h, { full: [w, h], region: s });
       return this.plan;
     }
+    const ox = w / 2 - (s.x + s.w / 2);
+    const oy = h / 2 - (s.y + s.h / 2);
+    const v = this.persp.view;
+    if (!v || v.fullWidth !== w || v.fullHeight !== h || v.offsetX !== ox || v.offsetY !== oy) this.persp.setViewOffset(w, h, ox, oy, w, h);
     this.persp.updateMatrixWorld();
     return this.persp;
   }
 
-  /** The top camera, fitted to the model's plan at `aspect`. */
-  private fitPlan(aspect: number): void {
+  /** The top camera, fitted to the model's plan at `aspect`; with `on`, fitted to the clear
+   * region of a full canvas and centred on it (the Plan tab), else to its whole box (the inset). */
+  private fitPlan(aspect: number, on?: { full: [number, number]; region: { x: number; y: number; w: number; h: number } }): void {
     const b = this.bounds ?? { min: [-5, -5, 0], max: [5, 5, 3] };
     const cx = (b.min[0] + b.max[0]) / 2;
     const cy = (b.min[1] + b.max[1]) / 2;
     const ez = b.max[2] - b.min[2];
-    const { halfW, halfH } = fitOrtho(b.max[0] - b.min[0], b.max[1] - b.min[1], aspect);
+    const fit = fitOrtho(b.max[0] - b.min[0], b.max[1] - b.min[1], aspect);
     const p = this.plan;
+    let halfW = fit.halfW;
+    let halfH = fit.halfH;
+    if (on) {
+      const [w, h] = on.full;
+      const s = on.region;
+      halfW *= w / s.w;
+      halfH *= h / s.h;
+      p.setViewOffset(w, h, w / 2 - (s.x + s.w / 2), h / 2 - (s.y + s.h / 2), w, h);
+    } else {
+      p.clearViewOffset();
+    }
     p.left = -halfW;
     p.right = halfW;
     p.top = halfH;
@@ -749,9 +777,14 @@ class ViewportEngine {
     }
     const c = new Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
     const radius = Math.max(0.5 * Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]), 0.05);
+    // Fitted to the clear region (decision-log row 50): its share of the view's height and width.
+    const cw = this.canvas?.clientWidth ?? 0;
+    const ch = this.canvas?.clientHeight ?? 0;
+    const s = cw > 0 && ch > 0 ? this.clearRegion(cw, ch) : null;
+    const t = Math.tan((this.persp.fov * Math.PI) / 360);
     const aspect = this.persp.aspect > 0 ? this.persp.aspect : 1;
-    const fovV = (this.persp.fov * Math.PI) / 180;
-    const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect);
+    const fovV = 2 * Math.atan(t * (s ? s.h / ch : 1));
+    const fovH = 2 * Math.atan(t * aspect * (s ? s.w / cw : 1));
     const dist = (radius / Math.sin(Math.min(fovV, fovH) / 2)) * 1.05;
     const dir = new Vector3(-0.5, -0.8, 0.62).normalize();
     this.persp.near = Math.max(radius * 0.002, 0.002);
@@ -781,7 +814,7 @@ class ViewportEngine {
   private cameraState() {
     const main = this.view === 'plan' ? this.plan : this.persp;
     const size = this.syncSize();
-    this.mainCamera(size ? size.w / size.h : 1);
+    if (size) this.mainCamera(size.w, size.h);
     const dir = main.getWorldDirection(new Vector3());
     const arr = (v: Vector3): Vec => [v.x, v.y, v.z];
     return {
@@ -801,7 +834,7 @@ class ViewportEngine {
     if (!c || !this.syncSize()) return null;
     const r = c.getBoundingClientRect();
     const ndc = new Vector2(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
-    const camera = this.mainCamera(r.width / r.height);
+    const camera = this.mainCamera(r.width, r.height);
     this.raycaster.setFromCamera(ndc, camera);
     return this.raycaster.ray.clone();
   }
@@ -827,7 +860,7 @@ class ViewportEngine {
     const size = this.syncSize();
     if (!c || !size) return null;
     const r = c.getBoundingClientRect();
-    const v = p.clone().project(this.mainCamera(r.width / r.height));
+    const v = p.clone().project(this.mainCamera(r.width, r.height));
     if (!(v.z > -1 && v.z < 1)) return null;
     return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height };
   }

@@ -15,6 +15,7 @@ import { AcousticsPane, useAcousticsDock } from '../acoustics/AcousticsPane';
 import { ConsolePane } from './ConsolePane';
 import { consoleBadge, runsBadge } from './model';
 import { RunsPane } from './RunsPane';
+import { FoldButton, useFold } from '../../chrome/fold';
 import './dock.css';
 
 const DOCK_TABS = [
@@ -61,9 +62,11 @@ export function Dock() {
       offScroll();
     };
   }, []);
+  const folded = useFold('dock');
 
   return (
-    <section className="dock" aria-label="Analysis dock">
+    <section className="dock" aria-label="Analysis dock" data-folded={folded}>
+      <FoldButton panel="dock" />
       <div className="dock-tabs" role="tablist" aria-label="Dock">
         {DOCK_TABS.map((d) => (
           <button

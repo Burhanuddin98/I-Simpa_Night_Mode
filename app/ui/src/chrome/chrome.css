@@ -12,8 +12,12 @@
   align-items: center;
   gap: 2px;
   padding: 0 8px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
+  margin: var(--gap) var(--gap) 0;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  border: 1px solid var(--glass-edge);
+  border-radius: 7px;
   box-sizing: border-box;
   position: relative;
   z-index: 5;
@@ -133,8 +137,12 @@
   display: flex;
   align-items: stretch;
   padding: 0 12px;
-  background: var(--panel);
-  border-bottom: 1px solid var(--line);
+  margin: var(--gap) var(--gap) 0;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  border: 1px solid var(--glass-edge);
+  border-radius: 7px;
   box-sizing: border-box;
 }
 .steps {
@@ -242,8 +250,12 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--panel);
-  border-right: 1px solid var(--line);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  border: 1px solid var(--glass-edge);
+  border-radius: 7px;
+  overflow: hidden;
 }
 .filter {
   margin: 10px 10px 6px;
@@ -423,8 +435,11 @@
   width: 344px;
   flex-shrink: 0;
   overflow-y: auto;
-  background: var(--panel);
-  border-left: 1px solid var(--line);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  border: 1px solid var(--glass-edge);
+  border-radius: 7px;
 }
 .props-head {
   padding: 16px 16px 14px;
@@ -702,8 +717,12 @@
   align-items: center;
   gap: 18px;
   padding: 0 12px;
-  background: var(--panel);
-  border-top: 1px solid var(--line);
+  margin: 0 var(--gap) var(--gap);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  border: 1px solid var(--glass-edge);
+  border-radius: 7px;
   font-size: 12px;
   color: var(--text-3);
   box-sizing: border-box;
@@ -892,4 +911,42 @@
 }
 .scene-list .toggle-issues {
   margin: 6px 8px 0;
+}
+
+/* Folding a floating panel away (chrome/fold.tsx, decision-log row 50). */
+.fold {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1;
+}
+.fold:hover {
+  color: var(--text);
+  background: var(--glass-edge);
+}
+.scene > .fold,
+.props > .fold {
+  margin: 6px 6px 0 auto;
+}
+.scene[data-folded='true'],
+.props[data-folded='true'] {
+  width: 36px;
+  align-self: flex-start;
+  overflow: hidden;
+}
+.scene[data-folded='true'] > :not(.fold),
+.props[data-folded='true'] > :not(.fold) {
+  display: none;
+}
+.scene[data-folded='true'] > .fold,
+.props[data-folded='true'] > .fold {
+  margin: 6px;
 }

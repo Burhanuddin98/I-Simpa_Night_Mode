@@ -17,6 +17,7 @@ import * as actions from '../actions';
 import type { Source, UiIssue } from '../bindings/ipc';
 import { issuesByEntity, projectIssues } from '../issues';
 import { refusalStore, sceneStore, selectionStore, useStore } from '../store';
+import { FoldButton, useFold } from './fold';
 import { Search } from './icons';
 import { coord, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
 import { onEntityKey, selectGroup, selectPoint } from './sceneUi';
@@ -141,9 +142,11 @@ export function ScenePanel() {
   const receivers = (view?.point_receivers ?? []).filter((r) => matchesFilter(query, r.name, receiverFolder(r)));
   const grids = (view?.surface_receivers ?? []).filter((r) => matchesFilter(query, r.name));
   const general = projectIssues(scene?.issues ?? []);
+  const folded = useFold('scene');
 
   return (
-    <aside className="scene" aria-label="Scene">
+    <aside className="scene" aria-label="Scene" data-folded={folded}>
+      <FoldButton panel="scene" />
       <label className="filter">
         <Search size={12} />
         <input

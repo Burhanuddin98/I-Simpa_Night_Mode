@@ -1,17 +1,27 @@
 /* The 3D view region (docs/design/concept-b-approved.dc.html, lines 106-173). Owned by the
    viewport package; the tokens are theme.css's. */
 
+/* `.viewport` is the region the floating panels leave clear (decision-log row 50): its overlays
+   sit in it, and the engine centres and frames the camera on it. The canvas under it fills the
+   window, behind every panel, and takes the pointer wherever no panel or overlay does. */
 .viewport {
   position: relative;
   flex-grow: 1;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg) radial-gradient(ellipse at 50% 60%, rgba(224, 32, 46, 0.07) 0%, rgba(9, 9, 11, 0) 60%);
 }
-/* The one canvas (engine.ts), transparent over the region's background. */
+.center > .viewport {
+  pointer-events: none;
+}
+.viewport > * {
+  pointer-events: auto;
+}
+/* The one canvas (engine.ts), transparent over the window's background. */
 .viewport-host {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: -1;
+  background: var(--bg) radial-gradient(ellipse at 50% 55%, rgba(224, 32, 46, 0.07) 0%, rgba(9, 9, 11, 0) 60%);
 }
 .viewport-canvas {
   position: absolute;
@@ -29,8 +39,10 @@
 }
 .float-panel {
   border-radius: 7px;
-  background: rgba(15, 15, 17, 0.9);
-  border: 1px solid var(--edge);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  border: 1px solid var(--glass-edge);
 }
 .viewport .tools {
   position: absolute;
@@ -83,7 +95,7 @@
   bottom: 12px;
   padding: 8px 10px 10px;
   border-radius: 7px;
-  border: 1px solid var(--edge);
+  border: 1px solid var(--glass-edge);
   overflow: hidden;
 }
 .plan-head {
@@ -106,7 +118,7 @@
 .plan-box {
   width: 180px;
   height: 116px;
-  box-shadow: 0 0 0 400px rgba(15, 15, 17, 0.92);
+  box-shadow: 0 0 0 400px var(--glass);
 }
 
 /* Chips above the view: the model check (FAIL, with the overlay's colour) and placement. */
@@ -128,8 +140,10 @@
   height: 28px;
   padding: 0 12px;
   border-radius: 7px;
-  background: rgba(15, 15, 17, 0.92);
-  border: 1px solid var(--edge);
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  border: 1px solid var(--glass-edge);
   font-size: 12.5px;
   white-space: nowrap;
   color: var(--text-2);
@@ -151,9 +165,11 @@
 }
 
 /* Marker labels, placed by the engine each frame. */
-.vp-labels {
-  position: absolute;
+/* In the canvas's pixels, so over the whole window like the canvas. */
+.viewport > .vp-labels {
+  position: fixed;
   inset: 0;
+  z-index: -1;
   pointer-events: none;
   overflow: hidden;
 }

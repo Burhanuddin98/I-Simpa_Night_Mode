@@ -1,7 +1,8 @@
 /* Concept B (docs/design/concept-b-approved.dc.html): Dockyard red and black, no logo, no
-   wordmark. The tokens, the base rules, the shared layout and the themed scrollbars. Frozen
-   after the M10 foundation (tools/gates/m10.ps1 checks its hash): the packages use these
-   variables and keep their region rules in chrome/chrome.css,
+   wordmark; since decision-log row 50 the 3D view fills the window and the panels float over it
+   as glass (`--glass`, see-through fill and blur; text stays opaque). The tokens, the base rules,
+   the shared layout and the themed scrollbars. Its hash is pinned by tools/gates/m10.ps1 and
+   m11.ps1: the packages use these variables and keep their region rules in chrome/chrome.css,
    features/viewport/viewport.css and features/materials/materials.css. */
 :root {
   color-scheme: dark;
@@ -23,9 +24,16 @@
   --ok: #74d39f;
   --warn: #f2a93b;
   --fail-text: #ffb3b8;
-  --sans: 'Barlow', system-ui, sans-serif;
-  --cond: 'Barlow Condensed', 'Barlow', sans-serif;
-  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  /* Windows' own faces (row 50): nothing bundled. */
+  --sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --cond: 'Segoe UI Variable Display', 'Segoe UI Semibold', 'Segoe UI', sans-serif;
+  --mono: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+  /* A floating panel's fill and blur (row 50). The fill is see-through, the text on it is not:
+     never `opacity` on a panel. */
+  --glass: rgba(15, 15, 17, 0.55);
+  --glass-blur: 12px;
+  --glass-edge: rgba(255, 255, 255, 0.08);
+  --gap: 8px;
 }
 
 html,
@@ -171,10 +179,31 @@ input[aria-invalid='true'] {
   flex-grow: 1;
   min-height: 0;
   display: flex;
+  gap: var(--gap);
+  padding: var(--gap);
 }
 .center {
   flex-grow: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: var(--gap);
+}
+/* The layout boxes are see-through and let the pointer through to the 3D view under them
+   (viewport.css); the panels they hold take it back. */
+.work,
+.center {
+  pointer-events: none;
+}
+.work > *,
+.center > * {
+  pointer-events: auto;
+}
+/* A floating panel (row 50). */
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.15);
+  border: 1px solid var(--glass-edge);
+  border-radius: 7px;
 }
