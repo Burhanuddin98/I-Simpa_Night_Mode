@@ -180,8 +180,12 @@ describe('W5: smooth colour, contours, fixed range and the value probe', () => {
     assert.deepEqual((await look()).fixed, { lo: auto.lo, hi: auto.hi }, 'on, it starts at the map\'s own range');
     const set = async (lo: string, hi: string) => {
       for (const [k, t] of [['lo', lo], ['hi', hi]]) {
+        // Typed as a person types (select all, then the keys): a WebDriver clear does not reach
+        // React's state, and the new text would be appended to the old.
         const el = await $(`[data-field="range.${k}"]`);
-        await el.setValue(t);
+        await el.click();
+        await browser.keys(['Control', 'a']);
+        await browser.keys(t.split(''));
       }
       await browser.keys('Enter');
     };
