@@ -961,3 +961,13 @@
 .scene {
   overflow-y: auto;
 }
+
+/* Row 50: the floating panels sit above the full-window canvas (layer 0, viewport.css). */
+.stepbar,
+.statusbar,
+.scene,
+.props,
+.dock {
+  position: relative;
+  z-index: 1;
+}
