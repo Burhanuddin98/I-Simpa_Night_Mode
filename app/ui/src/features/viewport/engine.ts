@@ -337,6 +337,8 @@ class ViewportEngine {
       // current camera (no camera move), and the camera itself.
       registerHook('faceClientPoint', (face: number) => this.faceClientPoint(face)),
       registerHook('cameraState', () => this.cameraState()),
+      // The recorded tour (app/e2e/specs/tour.e2e.ts): the perspective camera flown to a position and target over `ms`.
+      registerHook('flyCamera', (position: Vec, target: Vec, ms: number) => this.flyCamera(position, target, ms)),
       // Gate (a): what the check-highlight overlay puts on screen, not what was uploaded to it.
       registerHook('highlightPixels', () => this.highlightPixels()),
       // W1: the cutting planes the view draws (outline corners, cells, grid lines drawn).
@@ -871,6 +873,30 @@ class ViewportEngine {
     this.applyTool();
     this.setUi({ view });
     this.invalidate();
+  }
+
+  /** The perspective camera eased from where it is to `position` looking at `target` over `ms`; resolves when there. */
+  private flyCamera(position: Vec, target: Vec, ms: number): Promise<boolean> {
+    const controls = this.controls;
+    if (!controls || this.view !== 'perspective') return Promise.resolve(false);
+    const p0 = this.persp.position.clone();
+    const t0 = controls.target.clone();
+    const p1 = new Vector3(...position);
+    const t1 = new Vector3(...target);
+    const start = performance.now();
+    return new Promise((resolve) => {
+      const step = (now: number) => {
+        const f = ms > 0 ? Math.min(1, (now - start) / ms) : 1;
+        const e = f < 0.5 ? 2 * f * f : 1 - 2 * (1 - f) * (1 - f);
+        this.persp.position.lerpVectors(p0, p1, e);
+        controls.target.lerpVectors(t0, t1, e);
+        controls.update();
+        this.invalidate();
+        if (f < 1) requestAnimationFrame(step);
+        else resolve(true);
+      };
+      requestAnimationFrame(step);
+    });
   }
 
   private cameraState() {
