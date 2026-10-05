@@ -32,7 +32,7 @@ import {
   LineSegments,
   Mesh,
   MeshBasicMaterial,
-  MeshLambertMaterial,
+  MeshMatcapMaterial,
   OrthographicCamera,
   PerspectiveCamera,
   Points,
@@ -122,7 +122,6 @@ export interface ViewportDom {
 
 // Colours: the design's (concept-b-approved.dc.html) and theme.css's tokens.
 const PANEL = new Color(0x0f0f11);
-const FACE = 0x19191d;
 const LINE = 0xededef;
 const WARN = 0xf2a93b;
 const SELECT = 0xe0202e;
@@ -163,6 +162,39 @@ function dataTexture(pixels: Uint8Array, size: number): DataTexture {
   t.generateMipmaps = false;
   t.needsUpdate = true;
   return t;
+}
+
+// The surfaces' shading (decision 59): a camera-fixed matcap, so each face is lit by its angle to
+// the eye and walls, floor and ceiling separate at a glance. Mid greys on black, a key light upper
+// left, no red (red stays for actions and selection). Built from pixels, not a canvas (rule 3).
+// Chosen by Burhan on the proof page, docs/investigations/2026-10-06-ui-3d/.
+function matcapTexture(): DataTexture {
+  const n = 128;
+  const stops: [number, number[]][] = [
+    [0, [0x76, 0x76, 0x80]],
+    [0.45, [0x4a, 0x4a, 0x52]],
+    [0.85, [0x26, 0x26, 0x2b]],
+    [1, [0x1a, 0x1a, 0x1e]],
+  ];
+  const at = (t: number): number[] => {
+    for (let i = 1; i < stops.length; i++) {
+      const [t1, c1] = stops[i];
+      const [t0, c0] = stops[i - 1];
+      if (t <= t1) return c0.map((c, k) => c + ((c1[k] - c) * (t - t0)) / (t1 - t0));
+    }
+    return stops[stops.length - 1][1];
+  };
+  const pixels = new Uint8Array(n * n * 4);
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const u = (x + 0.5) / n, v = (y + 0.5) / n;
+      const inside = Math.hypot(u - 0.5, v - 0.5) <= 0.5;
+      // DataTexture rows run bottom-up: the key sits upper left on screen at (0.36, 0.68).
+      const c = inside ? at(Math.min(1, Math.hypot(u - 0.36, v - 0.68) / 0.62)) : [0, 0, 0];
+      pixels.set([c[0], c[1], c[2], 255], (y * n + x) * 4);
+    }
+  }
+  return dataTexture(pixels, n);
 }
 
 function markerMaterial(pixels: Uint8Array, texSize: number, px: number): PointsMaterial {
@@ -234,7 +266,7 @@ class ViewportEngine {
     // Faces are pushed back a little so lines on them and the overlays win the depth test.
     this.faces = new Mesh(
       new BufferGeometry(),
-      new MeshLambertMaterial({ color: FACE, side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
+      new MeshMatcapMaterial({ matcap: matcapTexture(), side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
     );
     this.edges = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }));
     this.highlight = new Mesh(
