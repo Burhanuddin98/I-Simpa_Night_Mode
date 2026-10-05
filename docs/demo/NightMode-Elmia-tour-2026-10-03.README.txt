@@ -1,0 +1,21 @@
+I-Simpa Night Mode: Elmia hall tour, recorded 2026-10-03 22:47 on Grace (6 min 21 s, the app window only)
+
+What it shows, in order
+- The corrected Elmia concert hall (7,860 faces, 10 surface groups, 10,389 m3) opened in the app.
+- Its surface groups and materials; its 3 sources (S01 on, S02 and S03 off, see below), 6 receivers and 2 cutting-plane maps.
+- The Simulate settings at the defaults: SPPS energetic, 150,000 particles per source and band, 10 s at 1 ms,
+  plus 100 particles per source saved for playback.
+- A full SPPS run of the hall (about 30 s on Grace), live progress and Console.
+- Results: the receivers table (each value with its range and ok/wide status), reverberation per band,
+  Sabine/Eyring, absorption by surface group, decay curves.
+- Cutting-plane sound-level maps animated through the decay, band by band, with the legend.
+- Particle playback through the hall.
+- A second design ("Absorbing ceiling"), its run, and the switch between the two designs.
+
+Known gaps this tour shows honestly (being fixed next)
+- Only one source is on. With all 3 sources the app correctly refuses EDT/T30/C80 (ISO 3382 defines them per
+  source and receiver), and the Results screen cannot yet show the per-source values the core computes.
+- T20 and T30 are refused in Elmia at the defaults (reason "missing_moves"). Under investigation.
+- DIN 18041 has no target for a 10,389 m3 hall, so that line reads "out of range" by design.
+- All numbers are I-Simpa's own solvers, checked against exact solutions within the just-noticeable difference;
+  nothing here is compared with a measured room yet.
