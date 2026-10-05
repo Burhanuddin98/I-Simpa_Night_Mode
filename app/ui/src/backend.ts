@@ -24,12 +24,20 @@ import type {
   RunStreamBatch,
   RunsView,
   SceneState,
+  Setting,
   SolversStatus,
   StartupInfo,
 } from './bindings/ipc';
 import type { BandKind, Op } from './bindings/schema';
 import { opText } from './ops';
 import { busyStore, type SolverName } from './store';
+
+/** An advice Apply's arguments as JSON text: a finite number or on/off each (the core reads them
+ * exactly, as it reads an op). */
+function adviceText(a: { setting: Setting; from: number | boolean; to: number | boolean }): string {
+  for (const v of [a.from, a.to]) if (typeof v === 'number' && !Number.isFinite(v)) throw new Error(`adviceApply: ${v} is not a finite number`);
+  return JSON.stringify({ setting: a.setting, from: a.from, to: a.to });
+}
 
 export type {
   AppEvent,
@@ -120,6 +128,11 @@ export const backend = {
   /** A band preset (PQ3): the core rebands the project and applies it as one checked edit. */
   editReband: (kind: BandKind, lowestHz: number, highestHz: number) =>
     invoke<EditOutcome>('edit_reband', { kind, lowest_hz: lowestHz, highest_hz: highestHz }),
+  /** "Apply" on a run-quality advice item (backlog 80): `{setting, from, to}` as JSON text, read
+   * by the core's exact reader; refused `ADVICE_PROJECT_CHANGED` when the project's value is no
+   * longer `from`. */
+  adviceApply: (apply: { setting: Setting; from: number | boolean; to: number | boolean }) =>
+    invoke<EditOutcome>('advice_apply', { apply: adviceText(apply) }),
   /** New group from selection (row 15, G19): the core picks the material and applies it as one
    * checked edit. */
   editRegroup: (faces: number[]) => invoke<EditOutcome>('edit_regroup', { faces }),

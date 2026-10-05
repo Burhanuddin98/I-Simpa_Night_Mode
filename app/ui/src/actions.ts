@@ -23,7 +23,7 @@ import {
   type Unit,
   type Up,
 } from './backend';
-import type { UiIssue } from './bindings/ipc';
+import type { Setting, UiIssue } from './bindings/ipc';
 import type { BandKind, Op, ReflectionLaw } from './bindings/schema';
 import { regroupFaces } from './chrome/sceneModel';
 import { emptyLog, endLine, foldEvent, needsSavePrompt, progressText } from './flow';
@@ -230,6 +230,39 @@ export async function apply(op: Op, fieldKey?: string): Promise<EditOutcome> {
     fileRefusals(fieldKey, outcome);
     return outcome;
   });
+}
+
+/** What "Apply" on a run-quality advice item sends (backlog 80). */
+export interface AdviceApply {
+  setting: Setting;
+  from: number | boolean;
+  to: number | boolean;
+}
+
+/** The refusal key an advice Apply is filed under: `advice:<setting>`. */
+export const adviceKey = (a: AdviceApply) => `advice:${a.setting}`;
+
+/**
+ * "Apply" on a run-quality advice item (backlog 80): the one setting from `from` to `to`, through
+ * the checked apply, one undo step. Refused by the core when the project's value is no longer
+ * `from` (the project changed since the run the advice came from): a FAIL line, nothing changes.
+ * A validator refusal is `applied: false`, filed under `adviceKey` as `apply` files its own.
+ */
+export async function adviceApply(a: AdviceApply): Promise<EditOutcome> {
+  return run('Apply failed', async () => {
+    const outcome = await backend.adviceApply(a);
+    await accept(outcome.state);
+    fileRefusals(adviceKey(a), outcome);
+    return outcome;
+  });
+}
+
+/** "Apply and re-run" (the Results step, backlog 80): the Apply, then a run of `solver` when the
+ * project took it. `null` when nothing was started. */
+export async function adviceApplyAndRerun(a: AdviceApply, solver: SolverName): Promise<RunStarted | null> {
+  const outcome = await adviceApply(a);
+  if (!outcome.applied) return null;
+  return runStart(solver);
 }
 
 /**

@@ -454,3 +454,23 @@
   font-size: 11px;
   color: var(--text-3);
 }
+
+/* The run-quality advisor before a run (backlog 80). */
+.sim-advice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sim-advice-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--warn, #d9a441);
+}
+.sim-advice-cause {
+  font-weight: 500;
+}
+.sim-advice-row .small-button {
+  align-self: flex-start;
+}

@@ -14,7 +14,7 @@
 //   37 (3)); STI, which has no range yet, carries "noise range not computed" (MQ3); EDT carries
 //   row 37's two marks wherever it appears, and a per-value mark where `edt_validated` is false.
 // - **No screen text says "validated"** (MQ2, decision 39): `MQ2_WORDING` is the tab's words.
-import type { Report } from '../../bindings/ipc';
+import type { Advice, Report, Setting } from '../../bindings/ipc';
 
 /** The words on the Results screen (MQ2, Burhan 2026-10-03 08:31). */
 export const MQ2_WORDING =
@@ -169,6 +169,9 @@ export interface Cell {
   /** Decision 56: the band's lost share, %, when it is a warning (`lost_share_warning`, from 0.3 %
    * lost), shown before `LOST_WARNING`. */
   lost?: Num;
+  /** Backlog 80: the code of the advice item (`report.advice`) that explains this value, when it
+   * is refused, wide or warned; the page marks the cell `[data-advice]`. */
+  advice?: string;
 }
 
 function solverKey(report: Report): 'spps' | 'tcr' {
@@ -259,8 +262,22 @@ function edtNote(report: Report, path: string): string | null {
   return `unchecked: ${why.length ? why.join('; ') : 'outside the tested cases'}`;
 }
 
+/** The code of the first advice item that explains the value at `path`, or undefined. */
+export function adviceAt(report: Report, path: string): string | undefined {
+  const list = (report as unknown as { advice?: { code: string; values: string[] }[] }).advice;
+  return list?.find((a) => a.values.includes(path))?.code;
+}
+
 /** One cell. */
 export function cell(report: Report, spec: ParamSpec, r: number, band: BandSel, src: SourceSel = null): Cell | null {
+  const c = cellAt(report, spec, r, band, src);
+  if (c === null) return null;
+  const path = paramPath(report, spec, r, band, src) as string;
+  const advice = adviceAt(report, path);
+  return advice === undefined ? c : { ...c, advice };
+}
+
+function cellAt(report: Report, spec: ParamSpec, r: number, band: BandSel, src: SourceSel): Cell | null {
   const path = paramPath(report, spec, r, band, src);
   if (path === null) return null;
   const e = at(report, path);
@@ -464,4 +481,71 @@ export function runForVariant(rows: readonly { run: string; status: string; vari
     if ((rows[i].variant ?? null) === variant && rows[i].status === 'OK') return rows[i].run;
   }
   return null;
+}
+
+// ---- the run-quality advisor (backlog 80) -------------------------------------------------------------
+
+/** How a setting's value is shown: its unit, decimals and scale (a time step in ms). */
+const SETTING_NUM: Record<Setting, { unit: string; digits: number; scale?: number }> = {
+  receiver_radius: { unit: 'm', digits: 2 },
+  particles_per_source: { unit: '', digits: 0 },
+  duration: { unit: 's', digits: 3 },
+  time_step: { unit: 'ms', digits: 0, scale: 1000 },
+  extinction_exponent: { unit: '', digits: 0 },
+  preserve_boundary: { unit: '', digits: 0 },
+  echogram_per_source: { unit: '', digits: 0 },
+};
+
+/** One advice item as the "Why values are missing" card shows it: each word and number a path
+ * into `report.advice` (gate (a)). */
+export interface AdviceCard {
+  index: number;
+  code: Str;
+  cause: Str;
+  words: Str;
+  label: Str | null;
+  /** A number setting's value now and the value Apply sets, as `Num`s of the report; null for an
+   * on/off setting, which `fromWord`/`toWord` say. */
+  from: Num | null;
+  to: Num | null;
+  fromWord: string | null;
+  toWord: string | null;
+  unit: string;
+  why: Str | null;
+  note: Str | null;
+  /** What "Apply and re-run" sends; null when the core offers no Apply. */
+  apply: { setting: Setting; from: number | boolean; to: number | boolean } | null;
+  values: string[];
+}
+
+/** The report's advice (results version 17), one card per item, in the core's order; none in a
+ * report without it. */
+export function adviceCards(report: Report): AdviceCard[] {
+  const list = (report as unknown as { advice?: Advice[] }).advice;
+  if (!Array.isArray(list)) return [];
+  return list.map((a, i) => {
+    const p = `advice.${i}`;
+    const f = a.fix;
+    const setting = f.setting ?? null;
+    const spec = setting ? SETTING_NUM[setting] : { unit: '', digits: 0 };
+    const word = (v: unknown) => (typeof v === 'boolean' ? (v ? 'on' : 'off') : null);
+    const from = f.from ?? null;
+    const to = f.to ?? null;
+    return {
+      index: i,
+      code: str(report, `${p}.code`) as Str,
+      cause: str(report, `${p}.cause`) as Str,
+      words: str(report, `${p}.fix.words`) as Str,
+      label: str(report, `${p}.fix.label`),
+      from: num(report, `${p}.fix.from`, spec.digits, spec.scale),
+      to: num(report, `${p}.fix.to`, spec.digits, spec.scale),
+      fromWord: word(from),
+      toWord: word(to),
+      unit: spec.unit,
+      why: str(report, `${p}.fix.why_no_apply`),
+      note: str(report, `${p}.fix.note`),
+      apply: setting !== null && from !== null && to !== null ? { setting, from, to } : null,
+      values: a.values,
+    };
+  });
 }

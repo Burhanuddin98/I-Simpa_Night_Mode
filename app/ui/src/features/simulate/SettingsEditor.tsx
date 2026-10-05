@@ -4,7 +4,9 @@
 // them (`fieldKey`, `refusalStore`).
 //
 // SPPS: particles per source and band (C7), particles saved for playback with the particle
-// file's size (C8), duration (C10), time step in ms with the step count (C11), the method (C12),
+// file's size (C8), duration (C10), time step in ms with the step count (C11), the receiver
+// radius, the particle extinction and "Preserve walls when meshing (-Y)" (backlog 80: every value
+// the run-quality advisor's Apply sets has its field), the method (C12),
 // sound maps per band (C21), echogram per source (C22), the bands it computes (C25) and the band
 // presets (C26), and the air (C27). TCR: its method as drawn, its bands and the air.
 //
@@ -37,6 +39,7 @@ import {
   stepCountText,
   timeStepInputText,
   withAir,
+  withMeshing,
   withSpps,
 } from './settings';
 
@@ -324,6 +327,12 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
           : setSolverSettings(withSpps(now.solvers, field === 'sound_maps_per_band' ? { sound_maps_per_band: on } : { echogram_per_source: on })),
       ),
     );
+  const setPreserve = (on: boolean) =>
+    actions.fire(
+      edit(keyOf('meshing', 'preserve_boundary'), (now) =>
+        now.solvers.meshing.preserve_boundary === on ? null : setSolverSettings(withMeshing(now.solvers, { preserve_boundary: on })),
+      ),
+    );
   const setMethod = (m: ComputationMethod) =>
     actions.fire(edit(keyOf('spps', 'method'), (now) => (now.solvers.spps.method === m ? null : setSolverSettings(withSpps(now.solvers, { method: m })))));
 
@@ -382,6 +391,37 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
         <div className="sim-hint mono" data-part="steps">
           {stepCountText(spps.duration_s, step)}
         </div>
+      </div>
+      <div className="sim-setting sim-block" data-setting="receiver_radius">
+        <NumberField
+          group="spps"
+          field="receiver_radius"
+          label="Receiver radius"
+          unit="m"
+          value={realInputText(spps.receiver_radius_m)}
+          read={parseStrictDecimal}
+          op={sppsOp((v) => ({ receiver_radius_m: v }), (now, v) => Object.is(now.receiver_radius_m, v))}
+          current={issuesAt(issues, ['/solvers/spps/receiver_radius_m'])}
+        />
+      </div>
+      <div className="sim-setting sim-block" data-setting="extinction">
+        <NumberField
+          group="spps"
+          field="extinction"
+          label="Particle extinction"
+          value={realInputText(spps.extinction_exponent)}
+          read={parseStrictDecimal}
+          op={sppsOp((v) => ({ extinction_exponent: v }), (now, v) => Object.is(now.extinction_exponent, v))}
+          current={issuesAt(issues, ['/solvers/spps/extinction_exponent'])}
+        />
+        <div className="sim-hint">A particle is dropped once its energy falls this many tens of decibels.</div>
+      </div>
+      <div className="sim-setting sim-block" data-setting="preserve_boundary">
+        <Toggle field="preserve_boundary" label="Preserve walls when meshing (-Y)" checked={s.solvers.meshing.preserve_boundary} onChange={setPreserve} />
+        <Issues
+          refused={refusals.get(keyOf('meshing', 'preserve_boundary')) ?? []}
+          current={issuesAt(issues, ['/solvers/meshing/preserve_boundary'])}
+        />
       </div>
       <div className="sim-setting sim-block" data-setting="method">
         <div className="sim-field-line">

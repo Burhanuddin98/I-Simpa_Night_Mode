@@ -11,7 +11,12 @@
 //   [data-label]                                    a word that is not the report's
 //   [data-param]                                    every element of one parameter (gate (b))
 //   [data-cell]                                     a value with its range and status, or its
-//                                                   refusal (`[data-refusal]`), or STI's note
+//                                                   refusal (`[data-refusal]`), or STI's note;
+//                                                   `[data-advice]` names the advice item that
+//                                                   explains a refused, wide or warned one
+//   [data-part="advice-card"]                       "Why values are missing" (backlog 80): each
+//                                                   item of `report.advice`, `[data-advice=<code>]`,
+//                                                   its words and numbers paths into the report
 // The charts (uPlot) are drawn from the same arrays the numbers are read from (`rtSeries`,
 // `decay`), and the `acousticsView` test hook returns those arrays.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,6 +28,8 @@ import { reportStore, runsStore, sceneStore, selectedRunStore, stepStore, useSto
 import { registerHook } from '../../testhooks';
 import { runVariantName, solverLabel } from '../simulate/model';
 import {
+  type AdviceCard,
+  adviceCards,
   absorption,
   bandNum,
   bandText,
@@ -81,7 +88,15 @@ function RefusalView({ r }: { r: Refusal }) {
 
 function CellView({ c, unit }: { c: Cell; unit: string }) {
   return (
-    <td data-cell data-param={c.param} data-receiver={c.receiver} data-band={c.band} data-status={c.status} className={`ac-cell ${c.status}`}>
+    <td
+      data-cell
+      data-param={c.param}
+      data-receiver={c.receiver}
+      data-band={c.band}
+      data-status={c.status}
+      data-advice={c.advice}
+      className={`ac-cell ${c.status}`}
+    >
       {c.status === 'refused' && c.refusal ? (
         <RefusalView r={c.refusal} />
       ) : (
@@ -110,6 +125,61 @@ function CellView({ c, unit }: { c: Cell; unit: string }) {
         </>
       )}
     </td>
+  );
+}
+
+/** A setting's value on the card: a number of the report, or on/off. */
+function SettingValueView({ n, word, unit }: { n: AdviceCard['from']; word: string | null; unit: string }) {
+  if (word !== null) return <span className="ac-word">{word}</span>;
+  return <N n={n} unit={unit || undefined} />;
+}
+
+/** "Why values are missing" (backlog 80): the run-quality advisor's items for this run, each its
+ * cause, the setting that addresses it and, where the core offers one, "Apply and re-run" (one
+ * checked edit, one undo step, then a run of the same solver). */
+function AdviceCardView({ cards, solver }: { cards: AdviceCard[]; solver: 'spps' | 'tcr' }) {
+  if (!cards.length) return null;
+  return (
+    <section className="ac-card ac-advice-card" aria-label="Why values are missing" data-part="advice-card">
+      <div className="ac-card-head">
+        <span className="ac-card-title">Why values are missing</span>
+        <span className="ac-sub">each cause once; the values it explains are marked in the tables</span>
+      </div>
+      {cards.map((c) => (
+        <div key={c.index} className="ac-advice" data-advice={c.code.text}>
+          <div className="ac-advice-cause">
+            <S s={c.cause} />
+          </div>
+          <div className="ac-advice-fix">
+            <S s={c.words} />
+            {c.label && (c.from || c.fromWord !== null) && (c.to || c.toWord !== null) ? (
+              <span className="ac-advice-change" data-part="advice-change">
+                {' '}
+                <S s={c.label} />
+                {': '}
+                <SettingValueView n={c.from} word={c.fromWord} unit={c.unit} />
+                {' → '}
+                <SettingValueView n={c.to} word={c.toWord} unit={c.unit} />
+              </span>
+            ) : null}
+          </div>
+          {c.note ? <S s={c.note} className="ac-note block" /> : null}
+          {c.apply && solver === 'spps' ? (
+            <button
+              type="button"
+              className="small-button"
+              data-part="advice-apply-rerun"
+              data-setting={c.apply.setting}
+              onClick={() => c.apply && actions.fire(actions.adviceApplyAndRerun(c.apply, solver))}
+            >
+              Apply and re-run
+            </button>
+          ) : c.why ? (
+            <S s={c.why} className="ac-note block" />
+          ) : null}
+        </div>
+      ))}
+    </section>
   );
 }
 
@@ -398,6 +468,7 @@ export function AcousticsPane() {
         </div>
       ) : null}
       <div className="ac-body">
+        <AdviceCardView cards={adviceCards(report)} solver={report.solver === 'tcr' ? 'tcr' : 'spps'} />
         <section className="ac-card ac-rt" aria-label="Reverberation time against DIN 18041">
           <div className="ac-card-head">
             <span className="ac-card-title">Reverberation time</span>

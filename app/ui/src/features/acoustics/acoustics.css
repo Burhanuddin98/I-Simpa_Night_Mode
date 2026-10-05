@@ -406,3 +406,21 @@
   border-color: var(--red);
   background: rgba(224, 32, 46, 0.18);
 }
+
+/* "Why values are missing" (backlog 80). */
+.ac-advice-card {
+  grid-column: 1 / -1;
+}
+.ac-advice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+.ac-advice-cause {
+  font-weight: 500;
+}
+.ac-advice .small-button {
+  align-self: flex-start;
+}

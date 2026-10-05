@@ -6,6 +6,10 @@
 //   (`flow.projectBlockers`: every band off, `NO_BAND_COMPUTED`);
 // - "Before running": one row per check with an OK or FAIL text label (never colour alone) and
 //   the UI codes that fail it, from the same blockers the Run button's `data-blockers` joins;
+// - "Run quality" (backlog 80): the run-quality advisor's items (`SceneState.advice`), each its
+//   cause, the setting that addresses it and an Apply (one checked edit, one undo step). It never
+//   blocks Run, and holds no number next to s, ms, dB or % (m10-h): a duration's or a time
+//   step's new value shows in its own field once applied;
 // - while a run is active, the running block: what it is doing ("Meshing…", "Solving · <p> %"),
 //   the bar, the elapsed m:ss, Cancel (`[data-part="cancel-run"]`, PQ2);
 // - when idle, the last run: "Run <n> · <variant>" (a link to the Results step), its status as
@@ -21,9 +25,11 @@ import * as actions from '../../actions';
 import type { SceneState } from '../../bindings/ipc';
 import { runTooltip } from '../../chrome/sceneModel';
 import { detailTitle, joinBlockers, projectBlockers } from '../../flow';
+import { Issues } from '../../chrome/SourcesPanel';
 import {
   type ActiveRun,
   type LinePart,
+  refusalStore,
   runsStore,
   runStore,
   sceneStore,
@@ -35,6 +41,8 @@ import {
 } from '../../store';
 import { registerHook } from '../../testhooks';
 import {
+  type AdviceRow,
+  adviceRows,
   elapsedText,
   lastRunView,
   latestRun,
@@ -172,6 +180,52 @@ function PreflightList({ rows }: { rows: PreflightRow[] | null }) {
   );
 }
 
+/** The run-quality advisor before a run (backlog 80): advice, never a blocker. */
+function AdviceList({ rows }: { rows: AdviceRow[] | null }) {
+  const refusals = useStore(refusalStore);
+  if (rows === null) return null;
+  if (rows.length === 0)
+    return (
+      <div className="empty" data-part="advice-none">
+        Nothing in the settings is known to make values noisy or refused.
+      </div>
+    );
+  return (
+    <div className="sim-advice" data-part="advice">
+      {rows.map((r, i) => (
+        <div key={`${r.key}-${i}`} className="sim-advice-row" data-advice={r.key}>
+          <div className="sim-advice-cause">{r.cause}</div>
+          <div className="sim-advice-fix">
+            <span className="sim-advice-words">{r.words}</span>
+            {r.change ? (
+              <span className="sim-advice-change mono" data-part="advice-change">
+                {' '}
+                {r.change}
+              </span>
+            ) : null}
+          </div>
+          {r.note ? <div className="sim-note">{r.note}</div> : null}
+          {r.apply ? (
+            <button
+              className="small-button"
+              data-part="advice-apply"
+              data-setting={r.apply.setting}
+              onClick={() => r.apply && actions.fire(actions.adviceApply(r.apply))}
+            >
+              Apply
+            </button>
+          ) : r.why ? (
+            <div className="sim-note" data-part="advice-why">
+              {r.why}
+            </div>
+          ) : null}
+          {r.apply ? <Issues refused={refusals.get(actions.adviceKey(r.apply)) ?? []} current={[]} /> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RunningBlock({ active }: { active: ActiveRun }) {
   const now = useNow(true);
   const cancelling = active.status === 'cancelling';
@@ -297,13 +351,14 @@ export function SimulatePanel() {
     info: scene?.info ?? null,
   });
   const settingRows = settingsRows(settings, solver);
+  const advice = solver === 'spps' ? adviceRows(scene?.advice) : null;
   const lastRow = latestRun(runs);
   const last = lastRow ? lastRunView(lastRow, scene?.view.variants ?? []) : null;
   const tip = runTooltip(blockers);
 
   // What this panel shows, for the e2e (PLAN.md 3.5: packages register their own hooks).
-  const view = useRef({ solver, settings: settingRows, preflight, last, running: active ? partsText(runningHead(active)) : null });
-  view.current = { solver, settings: settingRows, preflight, last, running: active ? partsText(runningHead(active)) : null };
+  const view = useRef({ solver, settings: settingRows, preflight, advice, last, running: active ? partsText(runningHead(active)) : null });
+  view.current = { solver, settings: settingRows, preflight, advice, last, running: active ? partsText(runningHead(active)) : null };
   useEffect(() => registerHook('simulateView', () => structuredClone(view.current)), []);
 
   return (
@@ -322,6 +377,13 @@ export function SimulatePanel() {
         <div className="label sim-section-label">Before running</div>
         <PreflightList rows={preflight} />
       </div>
+
+      {advice !== null ? (
+        <div className="props-section" data-part="run-quality">
+          <div className="label sim-section-label">Run quality</div>
+          <AdviceList rows={advice} />
+        </div>
+      ) : null}
 
       <div className="props-section">
         {active ? (

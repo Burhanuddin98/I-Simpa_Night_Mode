@@ -388,3 +388,82 @@ test("Acoustics: a variant's newest OK run is the one shown after a switch", () 
   assert.equal(runForVariant(rows, 'v'), 'b');
   assert.equal(runForVariant(rows, 'w'), null);
 });
+
+// ---- the run-quality advisor after a run (backlog 80, T9) -------------------------------------------
+
+import { adviceCards } from './model.ts';
+
+function advised(): Report {
+  const r = report([]) as unknown as Record<string, unknown>;
+  r.advice = [
+    {
+      code: 'range_below_zero',
+      cause: 'Monte-Carlo noise: the range reaches below zero.',
+      fix: {
+        words: 'Use larger receivers (Receiver radius).',
+        setting: 'receiver_radius',
+        pointer: '/solvers/spps/receiver_radius_m',
+        label: 'Receiver radius',
+        from: 0.3100000023841858,
+        to: 0.6,
+        why_no_apply: null,
+        bound: 'clearance',
+        note: 'This room is outside the rooms the noise model was measured on.',
+      },
+      values: ['spps.point_receivers.0.bands.1.parameters.t30_s'],
+    },
+    {
+      code: 'decay_not_fitted',
+      cause: 'The decay cannot be fitted here.',
+      fix: { words: 'No setting.', setting: null, pointer: null, label: null, from: null, to: null, why_no_apply: 'none', bound: null, note: null },
+      values: ['spps.point_receivers.1.bands.1.parameters.t30_s'],
+    },
+    {
+      code: 'onset_too_coarse',
+      cause: 'The time step is too coarse.',
+      fix: {
+        words: 'Use a finer time step (Time step).',
+        setting: 'time_step',
+        pointer: '/solvers/spps/time_step_s',
+        label: 'Time step',
+        from: 0.004999999888241291,
+        to: 0.001,
+        why_no_apply: null,
+        bound: null,
+        note: null,
+      },
+      values: [],
+    },
+  ];
+  return r as unknown as Report;
+}
+
+test('adviceCards: every number is a path into the report, every word the report’s', () => {
+  const rep = advised();
+  const cards = adviceCards(rep);
+  assert.equal(cards.length, 3);
+  const [a, b, c] = cards;
+  assert.equal(a.code.text, 'range_below_zero');
+  assert.equal(a.cause.path, 'advice.0.cause');
+  assert.equal(a.words.path, 'advice.0.fix.words');
+  assert.deepEqual([a.from?.path, a.from?.text, a.to?.path, a.to?.text, a.unit], ['advice.0.fix.from', '0.31', 'advice.0.fix.to', '0.60', 'm']);
+  assert.equal(a.note?.path, 'advice.0.fix.note');
+  assert.deepEqual(a.apply, { setting: 'receiver_radius', from: 0.3100000023841858, to: 0.6 });
+  // Each shown number is its report value at the shown decimals (gate (a)).
+  for (const n of [a.from!, a.to!]) assert.equal(n.text, ((at(rep, n.path) as number) * (n.scale ?? 1)).toFixed(n.digits));
+  // No setting: no Apply, the reason is the report's.
+  assert.equal(b.apply, null);
+  assert.equal(b.why?.path, 'advice.1.fix.why_no_apply');
+  // A time step in ms, scaled from the report's seconds.
+  assert.deepEqual([c.from?.text, c.from?.scale, c.to?.text, c.unit], ['5', 1000, '1', 'ms']);
+});
+
+test('a refused or wide cell names the advice that explains it; an ok one names none', () => {
+  const rep = advised();
+  const t30 = PARAM_SPECS.find((p) => p.name === 't30_s')!;
+  assert.equal(cell(rep, t30, 0, 1)?.advice, 'range_below_zero');
+  assert.equal(cell(rep, t30, 1, 1)?.advice, 'decay_not_fitted');
+  assert.equal(cell(rep, t30, 0, 0)?.advice, undefined);
+  // A report without advice (before results version 17) shows none.
+  assert.deepEqual(adviceCards(report([])), []);
+});

@@ -15,7 +15,7 @@
 import { useEffect, useState } from 'react';
 import * as actions from '../../actions';
 import type { ReasonUi } from '../../bindings/ipc';
-import { resultsStore, runsStore, sceneStore, selectedRunStore, useStore } from '../../store';
+import { reportStore, resultsStore, runsStore, sceneStore, selectedRunStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
 import { resultsCodes, resultsStateName, runVariantName, solverLabel } from './model';
 import './simulate.css';
@@ -40,6 +40,7 @@ export function ResultsPanel() {
   const selected = useStore(selectedRunStore);
   const runs = useStore(runsStore);
   const results = useStore(resultsStore);
+  const reports = useStore(reportStore);
   const scene = useStore(sceneStore);
   const [error, setError] = useState<{ run: string; code: string; message: string } | null>(null);
 
@@ -101,6 +102,12 @@ export function ResultsPanel() {
             <div className="res-text">
               Results verified: run.json, inputs and outputs re-checked. The values are in the Acoustics tab below.
             </div>
+            {(selected ? (reports.get(selected)?.report?.advice.length ?? 0) : 0) > 0 && (
+              <div className="res-text" data-part="advice-pointer">
+                Some values are refused or wide: “Why values are missing” in the Acoustics tab names each cause and the
+                setting to change.
+              </div>
+            )}
           </>
         )}
         {state === 'unverified' && (

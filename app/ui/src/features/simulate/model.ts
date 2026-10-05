@@ -8,7 +8,7 @@
 // came. The one number this module shapes is SPPS's progress, which it takes from the `#` line's
 // text by string and integer operations only (`progressDisplay`), never by formatting a float.
 // Settings are inputs, shown inside `[data-input]` exactly as stored (a time step in ms).
-import type { CheckSummary, ProjectInfo, ReasonUi, ResultsState, RunRow, RunsView, SolversStatus } from '../../bindings/ipc.ts';
+import type { Advice, CheckSummary, ProjectInfo, ReasonUi, ResultsState, RunRow, RunsView, Setting, SolversStatus } from '../../bindings/ipc.ts';
 import type { BandSet, Environment, SolverSettings, Variant } from '../../bindings/schema.ts';
 import { RUN_ACTIVE, statusWord } from '../../flow.ts';
 import type { ActiveRun, LinePart, SolverName } from '../../store.ts';
@@ -436,4 +436,76 @@ export function resultsStateName(
 export function resultsCodes(results: ResultsState | null): ReasonUi[] {
   if (results?.refusal) return [results.refusal];
   return results?.unverified ? [results.unverified] : [];
+}
+
+// ---- the run-quality advisor before a run (backlog 80) ------------------------------------------------
+
+/** m10-h's scanner (app/e2e/lib/dom.ts `ACOUSTIC_NUMBER`), copied for the unit test: a digit next
+ * to dB, s, ms or %. The advisor's rows hold none on the Simulate step. */
+export const ACOUSTIC_NUMBER_RE = /\d\s*(dB|s|ms|%)(?![\p{L}\p{N}])/u;
+
+/** What "Apply" sends: the setting, the value the advice was given for, and the value it sets. */
+export interface AdviceApply {
+  setting: Setting;
+  from: number | boolean;
+  to: number | boolean;
+}
+
+/** One advice item as the Simulate step shows it (`[data-advice=<key>]`). */
+export interface AdviceRow {
+  /** The advisor's code (`simpa_core::advise::CODES`). */
+  key: string;
+  /** The core's words, as they came: no number. */
+  cause: string;
+  words: string;
+  /** The setting's field label, or null when no setting addresses it. */
+  label: string | null;
+  /** `0.31 m → 0.6 m`, `off → on`; null for a duration or a time step, whose value would read as
+   * a number next to s or ms (m10-h): it shows in its own field once applied. */
+  change: string | null;
+  apply: AdviceApply | null;
+  why: string | null;
+  note: string | null;
+}
+
+/** A setting's value as the Simulate step may print it, or null when it may not (s, ms). */
+export function settingValueText(setting: Setting, v: number | boolean): string | null {
+  if (typeof v === 'boolean') return v ? 'on' : 'off';
+  switch (setting) {
+    case 'receiver_radius':
+      return `${v} m`;
+    case 'particles_per_source':
+      return groupedInt(v);
+    case 'extinction_exponent':
+      return String(v);
+    case 'duration':
+    case 'time_step':
+    case 'preserve_boundary':
+    case 'echogram_per_source':
+      return null;
+  }
+}
+
+/** The advisor's rows (`SceneState.advice`), in the core's order; `null` with no project. */
+export function adviceRows(advice: readonly Advice[] | null | undefined): AdviceRow[] | null {
+  if (!advice) return null;
+  return advice.map((a) => {
+    const f = a.fix;
+    const setting = f.setting ?? null;
+    const from = f.from ?? null;
+    const to = f.to ?? null;
+    const apply = setting !== null && from !== null && to !== null ? { setting, from, to } : null;
+    const a2 = apply ? settingValueText(apply.setting, apply.from) : null;
+    const b2 = apply ? settingValueText(apply.setting, apply.to) : null;
+    return {
+      key: a.code,
+      cause: a.cause,
+      words: f.words,
+      label: f.label ?? null,
+      change: a2 !== null && b2 !== null ? `${a2} → ${b2}` : null,
+      apply,
+      why: f.why_no_apply ?? null,
+      note: f.note ?? null,
+    };
+  });
 }

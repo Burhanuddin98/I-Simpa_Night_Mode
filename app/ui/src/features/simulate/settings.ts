@@ -6,7 +6,7 @@
 // Numbers. A typed value is read by `parseStrictDecimal` (Rust's reader rounds the same way), and
 // a time step typed in milliseconds becomes seconds by moving the decimal point in the text, never
 // by dividing a float: `2.1 / 1000` is 0.0021000000000000003, not the 0.0021 the user wrote.
-import type { BandKind, BandSet, Environment, SolverSettings, SppsSettings } from '../../bindings/schema.ts';
+import type { BandKind, BandSet, Environment, MeshSettings, SolverSettings, SppsSettings } from '../../bindings/schema.ts';
 import { NOT_A_NUMBER, parseStrictDecimal, type Parsed } from '../../numbers.ts';
 
 /** A number as the schema stores it: finite values as numbers, non-finite ones as strings. */
@@ -199,6 +199,11 @@ export function bandPresetOf(bands: BandSet): BandPreset | null {
 /** The solver settings with SPPS fields replaced; everything else as stored. */
 export function withSpps(s: SolverSettings, patch: Partial<SppsSettings>): SolverSettings {
   return { ...s, spps: { ...s.spps, ...patch } };
+}
+
+/** The solver settings with meshing fields replaced (`-Y`, backlog 80); everything else as stored. */
+export function withMeshing(s: SolverSettings, patch: Partial<MeshSettings>): SolverSettings {
+  return { ...s, meshing: { ...s.meshing, ...patch } };
 }
 
 /** The environment with the air's fields replaced; everything else as stored. */

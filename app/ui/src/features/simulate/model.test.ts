@@ -410,3 +410,65 @@ test('t38_7 the Results step shows an unverified solver build as unverified with
   assert.equal(resultsStateName('r', { status: 'OK' }, verified, false), 'verified');
   assert.deepEqual(resultsCodes(verified), []);
 });
+
+// ---- the run-quality advisor before a run (backlog 80, T8) ------------------------------------------
+
+import type { Advice } from '../../bindings/ipc.ts';
+import { ACOUSTIC_NUMBER_RE, adviceRows } from './model.ts';
+
+const advice = (code: string, setting: Advice['fix']['setting'], from: number | boolean | null, to: number | boolean | null): Advice => ({
+  code,
+  cause: `The cause of ${code}.`,
+  fix: {
+    words: 'Use larger receivers (Receiver radius).',
+    setting,
+    pointer: setting ? `/solvers/spps/${setting}` : null,
+    label: setting ? 'Receiver radius' : null,
+    from,
+    to,
+    why_no_apply: to === null ? 'why not' : null,
+    bound: null,
+    note: null,
+  },
+  values: [],
+});
+
+test('adviceRows: one row per item, with its Apply only where the core offers one', () => {
+  assert.equal(adviceRows(null), null);
+  assert.deepEqual(adviceRows([]), []);
+  const rows = adviceRows([
+    advice('mesh_splits_walls', 'preserve_boundary', false, true),
+    advice('receivers_small', 'receiver_radius', 0.31, 0.6),
+    advice('run_short', 'duration', 1.5, 10),
+    advice('particles_few', 'particles_per_source', 10000, 50000),
+    advice('receivers_small', 'particles_per_source', 100000, null),
+  ])!;
+  assert.deepEqual(
+    rows.map((r) => [r.key, r.change, r.apply !== null]),
+    [
+      ['mesh_splits_walls', 'off → on', true],
+      ['receivers_small', '0.31 m → 0.6 m', true],
+      // A duration's change is not printed on the Simulate step (m10-h: a number next to s): the
+      // value shows in its field after Apply.
+      ['run_short', null, true],
+      ['particles_few', '10,000 → 50,000', true],
+      ['receivers_small', null, false],
+    ],
+  );
+  assert.equal(rows[4].why, 'why not');
+  assert.deepEqual(rows[1].apply, { setting: 'receiver_radius', from: 0.31, to: 0.6 });
+});
+
+test('adviceRows: no row text trips the m10-h number scanner', () => {
+  const rows = adviceRows([
+    advice('run_short', 'duration', 1.5, 10),
+    advice('onset_too_coarse', 'time_step', 0.005, 0.001),
+    advice('receivers_small', 'receiver_radius', 0.31, 0.6),
+    advice('solver_floor', 'extinction_exponent', 5, 7),
+  ])!;
+  for (const r of rows) {
+    for (const t of [r.cause, r.words, r.label, r.change, r.why, r.note]) {
+      if (t) assert.ok(!ACOUSTIC_NUMBER_RE.test(t), `${r.key}: ${t}`);
+    }
+  }
+});

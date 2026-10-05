@@ -163,3 +163,20 @@ test('the settings ops: the whole solver settings with one field changed, and th
     '{"op":"set_environment","environment":{"temperature_c":20,"relative_humidity_percent":61.5,"pressure_pa":101325,"air_absorption":{"kind":"iso9613"},"ground_roughness_m":0.02,"celerity_gradient_log":0,"celerity_gradient_lin":0}}',
   );
 });
+
+// Backlog 80 (T6): every value an advisor Apply sets has a field, -Y among them.
+import { withMeshing } from './settings.ts';
+
+test('withMeshing replaces the meshing fields only, and travels as one set_solver_settings', () => {
+  const s = solvers();
+  const next = withMeshing(s, { preserve_boundary: true });
+  assert.equal(next.meshing.preserve_boundary, true);
+  assert.deepEqual({ ...next, meshing: s.meshing }, s);
+  assert.deepEqual({ ...next.meshing, preserve_boundary: false }, s.meshing);
+  assert.equal(s.meshing.preserve_boundary, false, 'the input is not changed');
+  const text = opText(setSolverSettings(next));
+  assert.match(text, /"preserve_boundary":true/);
+  // The receiver radius and the extinction go through withSpps, as the other SPPS fields.
+  const r = withSpps(s, { receiver_radius_m: 0.6, extinction_exponent: 7 });
+  assert.deepEqual([r.spps.receiver_radius_m, r.spps.extinction_exponent], [0.6, 7]);
+});
