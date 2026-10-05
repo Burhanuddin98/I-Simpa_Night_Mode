@@ -120,11 +120,13 @@ $specIds = [ordered]@{
     # The map's time window (Burhan 2026-10-05 01:59, app/ui/src/features/viewport/window.ts):
     # each face's mean over the last steps, on a 1 ms box run; with cumulative and difference.
     'm12.mapwindow' = @('mw-default', 'mw-off', 'mw-probe', 'mw-cumulative', 'mw-diff')
+    # Backlog 80, the run-quality advisor (M12b, decision 57): run on this harness by m12.ps1.
+    'b80.advisor' = @('b80-pre', 'b80-h', 'b80-after', 'b80-undo')
     # Not a gate spec: the app tour of BRAS CR4, recorded as a video (specs/tour.e2e.ts), no
     # id. Its progress.log goes to -ScreensDir, its project copy and runs beside it; no pictures.
     tour     = @()
 }
-$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -ne 'tour' -and $_ -notlike 'm12.*' })
+$allSpecs = @($specIds.Keys | Where-Object { $_ -ne 'screens' -and $_ -ne 'tour' -and $_ -notlike 'm12.*' -and $_ -notlike 'b80.*' })
 foreach ($s in $Spec) { if (-not $specIds.Contains($s)) { throw "unknown -Spec '$s': one of $(@($specIds.Keys) -join ', ')" } }
 $fullRun = $Only -eq 'all' -and -not $SkipCore -and -not $SkipPrior -and (@($allSpecs | Where-Object { $Spec -notcontains $_ }).Count -eq 0)
 
@@ -208,7 +210,7 @@ Check "M10 static checks (m10.ps1 -Only static -SkipCore; they run M9's)" {
     $code -eq 0
 }
 
-Check "command inventory: 45 commands (M10's 28, M11's 9, PQ3's edit_reband, row 15's edit_regroup, M12's 5 reads and W9's export_write), the same set in the attributes, generate_handler!, build.rs and capabilities" {
+Check "command inventory: 46 commands (M10's 28, M11's 9, PQ3's edit_reband, row 15's edit_regroup, M12's 5 reads, W9's export_write and backlog 80's advice_apply), the same set in the attributes, generate_handler!, build.rs and capabilities" {
     $attrs = @()
     foreach ($f in Get-ChildItem (Join-Path $tauriDir 'src') -Filter *.rs) {
         $attrs += @([regex]::Matches((RustCode $f.FullName), '#\[tauri::command\b[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*pub\s+async\s+fn\s+(\w+)') | ForEach-Object { $_.Groups[1].Value })
@@ -228,7 +230,7 @@ Check "command inventory: 45 commands (M10's 28, M11's 9, PQ3's edit_reband, row
     $absent = @($m11Commands | Where-Object { $attrs -notcontains $_ })
     if ($absent) { Note "M11 commands missing: $($absent -join ', ')" }
     $m12Reads = @('run_report', 'run_data', 'run_surface_map', 'run_particles', 'run_echogram')
-    $same -and $attrs.Count -eq 45 -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup' -and $attrs -contains 'export_write' -and @($m12Reads | Where-Object { $attrs -notcontains $_ }).Count -eq 0
+    $same -and $attrs.Count -eq 46 -and $attrs -contains 'advice_apply' -and $absent.Count -eq 0 -and $attrs -contains 'edit_reband' -and $attrs -contains 'edit_regroup' -and $attrs -contains 'export_write' -and @($m12Reads | Where-Object { $attrs -notcontains $_ }).Count -eq 0
 }
 
 Check "lint: the M11 commands are called only from actions.ts (and declared in backend.ts)" {

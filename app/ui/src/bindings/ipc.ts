@@ -53,6 +53,34 @@ export type EntityRef =
  */
 export type IssueSeverity = 'error' | 'warning';
 /**
+ * Which bound set a proposed receiver radius: the smallest of three.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "RadiusBound".
+ */
+export type RadiusBound = 'clearance' | 'edt_checked' | 'calibration';
+/**
+ * A setting's value: a number in the setting's own unit (m, s, a count), or on and off.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "SettingValue".
+ */
+export type SettingValue = boolean | number;
+/**
+ * A setting a fix changes: every one a field of `SolverSettings`.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "Setting".
+ */
+export type Setting =
+  | 'receiver_radius'
+  | 'particles_per_source'
+  | 'duration'
+  | 'time_step'
+  | 'extinction_exponent'
+  | 'preserve_boundary'
+  | 'echogram_per_source';
+/**
  * This interface was referenced by `IpcBindings`'s JSON-Schema
  * via the `definition` "CheckVerdict".
  */
@@ -2813,6 +2841,13 @@ export interface UiIssue {
  */
 export interface SceneState {
   /**
+   * The run-quality advisor before a run (backlog 80, `simpa_core::advise::before`): meshing
+   * that splits the walls, receivers small for the room, a run shorter than its decay, fewer
+   * particles than the noise model was measured with. Never a run blocker; each item names a
+   * setting and the value "Apply" sets (`advice_apply`).
+   */
+  advice: Advice[];
+  /**
    * The model check of the current geometry; `None` when the project has no faces.
    */
   check?: CheckSummary | null;
@@ -2838,6 +2873,75 @@ export interface SceneState {
   run_blockers: string[];
   solver_issues: SolverIssues;
   view: ProjectView;
+}
+/**
+ * One advice item: a cause and its fix, with the values it explains.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "Advice".
+ */
+export interface Advice {
+  /**
+   * The cause, in plain words; no number.
+   */
+  cause: string;
+  /**
+   * One of [`CODES`].
+   */
+  code: string;
+  fix: Fix;
+  /**
+   * After a run: the report's dot paths of the values it explains
+   * (`spps.point_receivers.0.bands.3.parameters.t30_s`), each once, in report order. Before a
+   * run: the project pointers it read.
+   */
+  values: string[];
+}
+/**
+ * What addresses an advice item's cause.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "Fix".
+ */
+export interface Fix {
+  /**
+   * For a radius: the bound that set `to`.
+   */
+  bound?: RadiusBound | null;
+  /**
+   * The setting's value now: the project's before a run, the run's after one; `null` when it
+   * is not known (the run's meshing, with no `mesh/mesh.json`).
+   */
+  from?: SettingValue | null;
+  /**
+   * The setting's name as its field is labelled ([`Setting::label`]); `null` with `setting`.
+   */
+  label?: string | null;
+  /**
+   * A caveat on the fix, in plain words (the room is outside what the noise model was
+   * measured on); `null` when none.
+   */
+  note?: string | null;
+  /**
+   * The setting's project pointer ([`Setting::pointer`]); `null` with `setting`.
+   */
+  pointer?: string | null;
+  /**
+   * The setting it changes; `null` when no setting addresses the cause.
+   */
+  setting?: Setting | null;
+  /**
+   * The value "Apply" sets; `null` when no Apply is offered (`why_no_apply` says why).
+   */
+  to?: SettingValue | null;
+  /**
+   * Why no Apply is offered, in plain words; `null` when `to` is given.
+   */
+  why_no_apply?: string | null;
+  /**
+   * The fix in plain words, naming the setting; no number.
+   */
+  words: string;
 }
 /**
  * The model check, for the Geometry panel and the view's highlight.
@@ -3384,6 +3488,13 @@ export interface ReportView {
  * via the `definition` "Report".
  */
 export interface Report {
+  /**
+   * The run-quality advisor's items (results version 17, backlog 80): for the refused,
+   * `wide` and lost-particle-warned values above, each cause once, the setting that addresses
+   * it and the value "Apply" sets, with the dot paths of the values it explains
+   * (`crate::advise::after`). Empty when every value is `ok`.
+   */
+  advice: Advice[];
   /**
    * The computed bands, ascending.
    */

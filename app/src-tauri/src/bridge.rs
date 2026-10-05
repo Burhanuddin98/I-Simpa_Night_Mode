@@ -103,6 +103,8 @@ pub struct Session {
     issues: Vec<UiIssue>,
     /// The issues of the rules about one solver's run, per solver.
     solver_issues: SolverIssues,
+    /// The run-quality advisor on the current state ([`SceneState::advice`]).
+    advice: Vec<simpa_core::advise::Advice>,
     /// Console lines not yet returned in a [`SceneState`].
     lines: Vec<LogLine>,
 }
@@ -185,6 +187,7 @@ impl Session {
             self.check = None;
             self.issues.clear();
             self.solver_issues = SolverIssues::default();
+            self.advice.clear();
             return;
         };
         if p.geometry.faces.is_empty() {
@@ -211,6 +214,18 @@ impl Session {
             .map(|i| scene::ui_issue(p, i))
             .collect();
         self.solver_issues = SolverIssues::of(p);
+        self.readvise();
+    }
+
+    /// The advisor on the current project, with the cached check's air volume (backlog 80).
+    fn readvise(&mut self) {
+        self.advice = match self.project.as_ref() {
+            Some(p) => simpa_core::advise::before_with(
+                p,
+                self.check.as_ref().and_then(|c| c.summary.air_volume_m3),
+            ),
+            None => Vec::new(),
+        };
     }
 
     fn replace(
@@ -403,6 +418,7 @@ impl Session {
             groups: scene::group_stats(p),
             run_blockers: scene::run_blockers(p, check.as_ref(), &self.issues),
             solver_issues: self.solver_issues.clone(),
+            advice: self.advice.clone(),
             check,
             issues: self.issues.clone(),
             lines: std::mem::take(&mut self.lines),
@@ -597,6 +613,7 @@ impl Session {
             if let Some(p) = self.project.as_ref() {
                 self.solver_issues = SolverIssues::of(p);
             }
+            self.readvise();
         }
         self.lines.extend(warnings);
         Ok(EditOutcome {
@@ -604,6 +621,31 @@ impl Session {
             refusals: Vec::new(),
             state: self.state()?,
         })
+    }
+
+    /// "Apply" on an advice item (backlog 80): `setting` from `from` to `to`, one
+    /// `Op::SetSolverSettings` through the checked apply ([`Session::edit_apply`]): one undo step,
+    /// refused by the validator like any edit. Refused, `ADVICE_PROJECT_CHANGED`, when the
+    /// project's value is no longer `from`, the value the advice was given for (the project
+    /// changed since the run).
+    pub fn advice_apply(
+        &mut self,
+        setting: simpa_core::advise::Setting,
+        from: simpa_core::advise::SettingValue,
+        to: simpa_core::advise::SettingValue,
+    ) -> CmdResult<EditOutcome> {
+        let project = self.project.as_ref().ok_or_else(no_project)?;
+        let op = simpa_core::advise::apply_op(project, setting, from, to)
+            .map_err(|e| CmdError::new(e.code(), e.to_string()))?;
+        self.edit_apply(&op.to_json())
+    }
+
+    /// [`Session::advice_apply`] from its arguments as JSON text
+    /// (`simpa_core::advise::ApplyArgs`), read with the core's exact reader.
+    pub fn advice_apply_text(&mut self, args: &str) -> CmdResult<EditOutcome> {
+        let a: simpa_core::advise::ApplyArgs =
+            schema::from_json_exact(args).map_err(|e| load_error(&e))?;
+        self.advice_apply(a.setting, a.from, a.to)
     }
 
     /// A band preset (PQ3, C26): the project moved onto every band of `kind` (`octave` or
@@ -1612,5 +1654,114 @@ mod row15_tests {
         assert_eq!(s.info().unwrap().undo_depth, 0);
         assert_eq!(s.edit_regroup(&[]).unwrap_err().code, "OP_FACES");
         assert_eq!(s.edit_regroup(&[2, 99]).unwrap_err().code, "OP_FACES");
+    }
+}
+
+/// Backlog 80: the run-quality advisor in the session, and "Apply" on its items.
+#[cfg(test)]
+mod advisor_tests {
+    use super::*;
+    use simpa_core::advise::{Setting, SettingValue, code};
+    use simpa_core::schema::F64;
+
+    /// Tutorial 2 as upstream ships it: the Elmia fixture without `-Y` and with 0.31 m receivers.
+    fn tutorial2() -> Session {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/rooms/elmia_corrected.simpa");
+        let mut p = schema::load(&path).unwrap();
+        p.solvers.meshing.preserve_boundary = false;
+        p.solvers.spps.receiver_radius_m = F64::new(0.31);
+        let mut s = Session::default();
+        s.load_text(&schema::to_json(&p)).unwrap();
+        s
+    }
+
+    fn codes_of(s: &mut Session) -> Vec<String> {
+        s.scene_state()
+            .unwrap()
+            .advice
+            .iter()
+            .map(|a| a.code.clone())
+            .collect()
+    }
+
+    fn radius(s: &Session) -> f64 {
+        s.project().unwrap().solvers.spps.receiver_radius_m.get()
+    }
+
+    #[test]
+    fn the_scene_carries_the_advice_and_apply_is_one_undo_step() {
+        let mut s = tutorial2();
+        let codes = codes_of(&mut s);
+        assert!(
+            codes.contains(&code::MESH_SPLITS_WALLS.to_string()),
+            "{codes:?}"
+        );
+        assert!(
+            codes.contains(&code::RECEIVERS_SMALL.to_string()),
+            "{codes:?}"
+        );
+        let depth = s.info().unwrap().undo_depth;
+        let out = s
+            .advice_apply(
+                Setting::ReceiverRadius,
+                SettingValue::Number(0.31),
+                SettingValue::Number(0.6),
+            )
+            .unwrap();
+        assert!(out.applied, "{:?}", out.refusals);
+        assert_eq!(radius(&s), 0.6);
+        assert_eq!(s.info().unwrap().undo_depth, depth + 1);
+        assert!(
+            !out.state
+                .advice
+                .iter()
+                .any(|a| a.code == code::RECEIVERS_SMALL),
+            "the advice follows the edit"
+        );
+        // Undo restores the setting exactly, and the advice with it.
+        s.edit_undo().unwrap();
+        assert_eq!(radius(&s).to_bits(), 0.31f64.to_bits());
+        assert!(codes_of(&mut s).contains(&code::RECEIVERS_SMALL.to_string()));
+        // -Y, as the UI sends it: JSON text, read exactly.
+        let out = s
+            .advice_apply_text(r#"{"setting": "preserve_boundary", "from": false, "to": true}"#)
+            .unwrap();
+        assert!(out.applied);
+        assert!(s.project().unwrap().solvers.meshing.preserve_boundary);
+    }
+
+    #[test]
+    fn apply_is_refused_when_the_project_changed_since_the_run() {
+        let mut s = tutorial2();
+        // A run reports the radius as the solver read it, f32: the same setting.
+        let run_from = SettingValue::Number(f64::from(0.31f32));
+        assert!(
+            s.advice_apply(Setting::ReceiverRadius, run_from, SettingValue::Number(0.6))
+                .unwrap()
+                .applied
+        );
+        // The project now holds 0.6, not the run's 0.31: refused, nothing changes.
+        let depth = s.info().unwrap().undo_depth;
+        let e = s
+            .advice_apply(Setting::ReceiverRadius, run_from, SettingValue::Number(0.6))
+            .unwrap_err();
+        assert_eq!(e.code, "ADVICE_PROJECT_CHANGED");
+        assert!(
+            e.message.contains("the project changed since this run"),
+            "{}",
+            e.message
+        );
+        assert_eq!(s.info().unwrap().undo_depth, depth);
+        // The checked apply still refuses what the validator refuses: a step count past 16 bits.
+        let e = s
+            .advice_apply(
+                Setting::Duration,
+                SettingValue::Number(10.0),
+                SettingValue::Number(100.0),
+            )
+            .unwrap();
+        assert!(!e.applied);
+        assert_eq!(s.info().unwrap().undo_depth, depth);
     }
 }

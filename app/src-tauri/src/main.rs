@@ -252,6 +252,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::model_import,
             commands::project_save,
             commands::edit_apply,
+            commands::advice_apply,
             commands::edit_reband,
             commands::edit_regroup,
             commands::edit_undo,

@@ -393,6 +393,19 @@ pub async fn edit_apply(state: State<'_, AppState>, op: String) -> CmdResult<Edi
     .await
 }
 
+/// "Apply" on a run-quality advice item (backlog 80): `apply` is `{setting, from, to}` as JSON
+/// text (`simpa_core::advise::ApplyArgs`, read exactly, as an op is): the setting from `from`
+/// (the value the advice was given for: the project's, or the run's) to `to`, through the
+/// checked apply. Refused, `ADVICE_PROJECT_CHANGED`, when the project's value is not `from`.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn advice_apply(state: State<'_, AppState>, apply: String) -> CmdResult<EditOutcome> {
+    let session = state.session.clone();
+    guard::blocking("advice_apply", move || {
+        lock(&session, "project")?.advice_apply_text(&apply)
+    })
+    .await
+}
+
 /// A band preset (PQ3): every band of `kind` (`octave` or `third_octave`) from `lowest_hz` to
 /// `highest_hz`, per-band values from the nearest current band, as one undoable checked apply.
 #[tauri::command(rename_all = "snake_case")]

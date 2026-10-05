@@ -27,6 +27,7 @@ fn main() {
         "model_import",
         "project_save",
         "edit_apply",
+        "advice_apply",
         "edit_reband",
         "edit_regroup",
         "edit_undo",

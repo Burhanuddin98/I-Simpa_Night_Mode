@@ -1,5 +1,35 @@
 {
   "$defs": {
+    "Advice": {
+      "description": "One advice item: a cause and its fix, with the values it explains.",
+      "properties": {
+        "cause": {
+          "description": "The cause, in plain words; no number.",
+          "type": "string"
+        },
+        "code": {
+          "description": "One of [`CODES`].",
+          "type": "string"
+        },
+        "fix": {
+          "$ref": "#/$defs/Fix"
+        },
+        "values": {
+          "description": "After a run: the report's dot paths of the values it explains\n(`spps.point_receivers.0.bands.3.parameters.t30_s`), each once, in report order. Before a\nrun: the project pointers it read.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "cause",
+        "fix",
+        "values"
+      ],
+      "type": "object"
+    },
     "AggregateReport": {
       "description": "All bands of a receiver summed bin by bin (`params::aggregate`): **an aggregate, not a band,\nand not ISO 3382-1's single-number value** (the arithmetic mean of band values), since its\ndecay is weighted by the source spectrum.",
       "properties": {
@@ -1545,6 +1575,91 @@
       "required": [
         "path",
         "sha256"
+      ],
+      "type": "object"
+    },
+    "Fix": {
+      "description": "What addresses an advice item's cause.",
+      "properties": {
+        "bound": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RadiusBound"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For a radius: the bound that set `to`."
+        },
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SettingValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The setting's value now: the project's before a run, the run's after one; `null` when it\nis not known (the run's meshing, with no `mesh/mesh.json`)."
+        },
+        "label": {
+          "description": "The setting's name as its field is labelled ([`Setting::label`]); `null` with `setting`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "description": "A caveat on the fix, in plain words (the room is outside what the noise model was\nmeasured on); `null` when none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pointer": {
+          "description": "The setting's project pointer ([`Setting::pointer`]); `null` with `setting`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "setting": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Setting"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The setting it changes; `null` when no setting addresses the cause."
+        },
+        "to": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SettingValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The value \"Apply\" sets; `null` when no Apply is offered (`why_no_apply` says why)."
+        },
+        "why_no_apply": {
+          "description": "Why no Apply is offered, in plain words; `null` when `to` is given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "words": {
+          "description": "The fix in plain words, naming the setting; no number.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "words"
       ],
       "type": "object"
     },
@@ -3980,6 +4095,26 @@
       ],
       "type": "object"
     },
+    "RadiusBound": {
+      "description": "Which bound set a proposed receiver radius: the smallest of three.",
+      "oneOf": [
+        {
+          "const": "clearance",
+          "description": "Below the nearest receiver's distance to a face, rounded down to [`RADIUS_STEP_M`]: no\nsphere crosses a wall (`receiver_sphere_crosses_surface`).",
+          "type": "string"
+        },
+        {
+          "const": "edt_checked",
+          "description": "[`RADIUS_MAX_M`]: EDT is unchecked above it.",
+          "type": "string"
+        },
+        {
+          "const": "calibration",
+          "description": "The noise model's calibrated crossings per particle (`noise_uncalibrated` would refuse\nabove it).",
+          "type": "string"
+        }
+      ]
+    },
     "RangeStatus": {
       "description": "What a shown value's range says (decision-log rows 37 (3) and 39 (3)), as EDT's does\n(`params::edt::Status`): `ok` when its half-width, [`RANGE_Z`] standard deviations, is within\nthe quantity's [`jnd`], `wide` otherwise.",
       "oneOf": [
@@ -4387,6 +4522,13 @@
     "Report": {
       "description": "What `simpa results <run> --json` prints.",
       "properties": {
+        "advice": {
+          "description": "The run-quality advisor's items (results version 17, backlog 80): for the refused,\n`wide` and lost-particle-warned values above, each cause once, the setting that addresses\nit and the value \"Apply\" sets, with the dot paths of the values it explains\n(`crate::advise::after`). Empty when every value is `ok`.",
+          "items": {
+            "$ref": "#/$defs/Advice"
+          },
+          "type": "array"
+        },
         "bands_hz": {
           "description": "The computed bands, ascending.",
           "items": {
@@ -4465,7 +4607,8 @@
         "solver_build",
         "started",
         "bands_hz",
-        "room"
+        "room",
+        "advice"
       ],
       "type": "object"
     },
@@ -5296,6 +5439,13 @@
     "SceneState": {
       "description": "The state of the open project as the M10 UI shows it. Returned by every M10 command.",
       "properties": {
+        "advice": {
+          "description": "The run-quality advisor before a run (backlog 80, `simpa_core::advise::before`): meshing\nthat splits the walls, receivers small for the room, a run shorter than its decay, fewer\nparticles than the noise model was measured with. Never a run blocker; each item names a\nsetting and the value \"Apply\" sets (`advice_apply`).",
+          "items": {
+            "$ref": "#/$defs/Advice"
+          },
+          "type": "array"
+        },
         "check": {
           "anyOf": [
             {
@@ -5354,9 +5504,62 @@
         "issues",
         "run_blockers",
         "solver_issues",
+        "advice",
         "lines"
       ],
       "type": "object"
+    },
+    "Setting": {
+      "description": "A setting a fix changes: every one a field of `SolverSettings`.",
+      "oneOf": [
+        {
+          "const": "receiver_radius",
+          "description": "`spps.receiver_radius_m`.",
+          "type": "string"
+        },
+        {
+          "const": "particles_per_source",
+          "description": "`spps.particles_per_source`.",
+          "type": "string"
+        },
+        {
+          "const": "duration",
+          "description": "`spps.duration_s`.",
+          "type": "string"
+        },
+        {
+          "const": "time_step",
+          "description": "`spps.time_step_s`.",
+          "type": "string"
+        },
+        {
+          "const": "extinction_exponent",
+          "description": "`spps.extinction_exponent`.",
+          "type": "string"
+        },
+        {
+          "const": "preserve_boundary",
+          "description": "`meshing.preserve_boundary` (TetGen's `-Y`).",
+          "type": "string"
+        },
+        {
+          "const": "echogram_per_source",
+          "description": "`spps.echogram_per_source`.",
+          "type": "string"
+        }
+      ]
+    },
+    "SettingValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "format": "double",
+          "type": "number"
+        }
+      ],
+      "description": "A setting's value: a number in the setting's own unit (m, s, a count), or on and off."
     },
     "SolverBuild": {
       "description": "Whether a run's solver build was verified, decided from its manifest alone (backlog 38,\n`docs/investigations/2026-09-30-b38-39/PLAN.md` C5). Computed beside [`load`], never by it:\n`load`'s Ok or Err does not depend on it (C1).",

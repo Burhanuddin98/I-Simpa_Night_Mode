@@ -32,6 +32,7 @@
     "allow-model-import",
     "allow-project-save",
     "allow-edit-apply",
+    "allow-advice-apply",
     "allow-edit-reband",
     "allow-edit-regroup",
     "allow-edit-undo",

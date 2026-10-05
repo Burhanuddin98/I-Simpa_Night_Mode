@@ -42,6 +42,11 @@ pub struct SceneState {
     /// a solver is blocked by its errors here as well as by `run_blockers`; the other solver's
     /// do not block it.
     pub solver_issues: SolverIssues,
+    /// The run-quality advisor before a run (backlog 80, `simpa_core::advise::before`): meshing
+    /// that splits the walls, receivers small for the room, a run shorter than its decay, fewer
+    /// particles than the noise model was measured with. Never a run blocker; each item names a
+    /// setting and the value "Apply" sets (`advice_apply`).
+    pub advice: Vec<simpa_core::advise::Advice>,
     /// Console lines produced since the last state was returned.
     pub lines: Vec<LogLine>,
 }
