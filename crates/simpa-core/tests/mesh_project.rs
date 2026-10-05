@@ -1781,13 +1781,16 @@ fn a_box_zone_whose_triangles_tetgen_never_read_is_refused() {
 }
 
 /// TetGen still running at the mesher's limit is stopped, its process tree killed, and the mesh
-/// fails by name (`tetgen_timeout`), with no `.1.ele` and no `.mbin`: the Elmia hall, which TetGen
-/// meshes in seconds, under a 100 ms limit. The limit is recorded in the call. (The control, a
-/// mesh under the default limit, is every other test here; `every_preprocess_failure_code_...`
-/// asserts the default is what the manifest records.)
+/// fails by name (`tetgen_timeout`), with no `.1.ele` and no `.mbin`: the Elmia hall under a 100 ms
+/// limit, held to tetrahedra of at most 0.005 m3 (`-a`): TetGen then needs 6.6 s on Grace (10-05,
+/// 1,765,456 tetrahedra), 66 times the limit. At the project's own settings it meshes Elmia in
+/// 0.065 s, which raced the limit and failed the 10-05 gate. The limit is recorded in the call.
+/// (The control, a mesh under the default limit, is every other test here;
+/// `every_preprocess_failure_code_...` asserts the default is what the manifest records.)
 #[test]
 fn tetgen_is_stopped_at_the_meshers_limit() {
-    let p = load_room("elmia_corrected.simpa");
+    let mut p = load_room("elmia_corrected.simpa");
+    p.solvers.meshing.max_volume_m3 = Some(F64::new(0.005));
     let tetgen = tetgen();
     let tools = mesh::MeshTools {
         tetgen: &tetgen,

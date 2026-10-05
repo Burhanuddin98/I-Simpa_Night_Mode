@@ -385,8 +385,9 @@ Check "(f) built dist: 0 googleapis, 0 http(s):// outside the listed exceptions"
     $external = [regex]::Matches($index, '(src|href)="(?!/assets/)[^"]*"').Count
     Note "index.html references outside /assets/: $external"
     $fonts = @($files | Where-Object { $_.Extension -eq '.woff2' }).Count
-    Note "bundled woff2 fonts: $fonts"
-    $files.Count -gt 0 -and $google -eq 0 -and $bad.Count -eq 0 -and $external -eq 0 -and $fonts -eq 7
+    # Decision 50 (2026-10-04): the fonts are Windows' own (Segoe UI, Cascadia Mono); none ship.
+    Note "bundled woff2 fonts: $fonts (decision 50: 0)"
+    $files.Count -gt 0 -and $google -eq 0 -and $bad.Count -eq 0 -and $external -eq 0 -and $fonts -eq 0
 }
 
 # ---- (c), (d), (h): the self-test ------------------------------------------------------------
@@ -397,7 +398,7 @@ $requiredChecks = @(
     'alive_after_unguarded_panic', 'channel_complete_in_order', 'channel_batch_period_50ms',
     'channel_gap_near_period', 'channel_batched', 'checksum_known_answers', 'bridge_exact_floats',
     'bridge_op_roundtrip_exact', 'bridge_undo', 'step_bar_five_steps', 'no_acoustic_numbers',
-    'fonts_bundled_and_loaded', 'csp_blocks_inline_script', 'csp_blocks_eval', 'prototype_frozen'
+    'fonts_system_none_bundled', 'csp_blocks_inline_script', 'csp_blocks_eval', 'prototype_frozen'
 )
 $st = $null
 $stJson = Join-Path $work 'selftest.json'
