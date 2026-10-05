@@ -42,9 +42,19 @@ pub const EXAMPLES: &[Example] = &[
         bytes: include_bytes!("../examples/elmia_hall.simpa"),
     },
     Example {
+        id: "bras-cr1",
+        file_stem: "BRAS CR1",
+        bytes: include_bytes!("../examples/bras_cr1.simpa"),
+    },
+    Example {
         id: "bras-cr2",
         file_stem: "BRAS CR2",
         bytes: include_bytes!("../examples/bras_cr2.simpa"),
+    },
+    Example {
+        id: "bras-cr3",
+        file_stem: "BRAS CR3",
+        bytes: include_bytes!("../examples/bras_cr3.simpa"),
     },
     Example {
         id: "bras-cr4",

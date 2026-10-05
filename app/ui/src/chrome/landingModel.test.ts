@@ -46,7 +46,9 @@ test('landing: the lines read as plain sentences', () => {
     EXAMPLES.map(exampleLine),
     [
       'A concert hall, I-Simpa’s own tutorial room: 3 sources, 6 receivers, 2 sound-level planes and every surface’s material — ready to run.',
+      'Coupled rooms from the BRAS benchmark, a laboratory opening onto a reverberation chamber: 2 sources, 2 receivers and every surface’s material — ready to run.',
       'A seminar room from the BRAS benchmark: 2 sources, 5 receivers and every surface’s material — ready to run.',
+      'A chamber music hall from the BRAS benchmark: 2 sources, 5 receivers and every surface’s material — ready to run.',
       'An auditorium from the BRAS benchmark: 2 sources, 5 receivers, a sound-level plane, every surface’s material and one variant set — ready to run.',
     ],
   );

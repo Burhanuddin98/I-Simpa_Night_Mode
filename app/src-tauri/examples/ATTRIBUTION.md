@@ -1,13 +1,15 @@
 # The example projects: sources and licences
 
-These three `.simpa` files ship inside the app (`src/examples.rs`, `include_bytes!`) and are
+These five `.simpa` files ship inside the app (`src/examples.rs`, `include_bytes!`) and are
 offered on the landing page while no project is open. Opening one writes a copy into the user's
 `Documents\Night Mode\Examples` folder. The files here are never modified at run time.
 
 | file | room | source | licence |
 |---|---|---|---|
 | `elmia_hall.simpa` | Elmia hall | Upstream I-Simpa's tutorial 2 (`tutorial_2.proj`) | GPL-3.0 |
+| `bras_cr1.simpa` | BRAS CR1, coupled rooms: laboratory and reverberation chamber (BRAS scene 8) | The BRAS database | CC BY-SA 4.0 |
 | `bras_cr2.simpa` | BRAS CR2, seminar room (BRAS scene 9) | The BRAS database | CC BY-SA 4.0 |
+| `bras_cr3.simpa` | BRAS CR3, chamber music hall (BRAS scene 10) | The BRAS database | CC BY-SA 4.0 |
 | `bras_cr4.simpa` | BRAS CR4, auditorium (BRAS scene 11) | The BRAS database | CC BY-SA 4.0 |
 
 ## Elmia hall
@@ -50,6 +52,21 @@ file say the same.
   holds one sound-level plane, "Audience plane", and one variant, "Absorbing panels", which is
   active.
 
-**Share-alike.** These two files are adaptations of BRAS. They are shipped, and may be passed on,
+## BRAS CR1 and BRAS CR3
+
+Derived from BRAS as CR2 is (the citation and licence above), built on 2026-10-06 by
+`.out\examples\build_bras_room.py` (generalised from CR2's `build_cr2.py`): the sealed geometry of
+`B:\data\m12\pearl-geom\cr1-clean` (BRAS `CR1_RIR_DoorAngle3_Dodecahedron.skp`, the door at 30.4 degrees) and
+`cr3-clean` (scene 10), with each room's `fitted_estimates` materials reduced to octaves as for CR2.
+CR3's sources (LS1, LS2) and receivers (MP1 to MP5) are BRAS's `positions.json`. CR1 has no entry there;
+its positions are read from `CR1_RIRs_DoorAngle3_Dodecahedron.sofa` as `positions.json` was made from the
+other rooms' SOFA files: the emitters by EmitterID (LS1, LS2, the dodecahedron's mid-frequency driver) and
+the receivers by ReceiverID (MP3, MP4). Every source and receiver of both rooms was checked to lie inside
+the room. Both files pass `simpa validate` with no issue.
+
+- `bras_cr1.simpa` sha256 `e558fb6f5c494395c3ed959074a3db2870ffc9e464d92174b761600f241b89a2`.
+- `bras_cr3.simpa` sha256 `bc0843f5fbe2ba90dfe2b297831aec24be27595ca964aff2b2db75b51e66bb8c`.
+
+**Share-alike.** These four BRAS files are adaptations of BRAS. They are shipped, and may be passed on,
 only under CC BY-SA 4.0, with this attribution. The share-alike term covers these data files. It
 does not cover the app's code, which is GPL-3.0.
