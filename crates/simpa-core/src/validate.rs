@@ -65,7 +65,7 @@ mod structure;
 pub use export::{
     AttrKind, CONFIG_ATTRIBUTES, CONFIG_FILE_NAME, ConfigAttribute, Writer, validate_export,
 };
-pub use geometry::{PointLocation, locate_point};
+pub use geometry::{PointLocation, locate_in, locate_point};
 
 /// Whether an issue blocks the run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize)]

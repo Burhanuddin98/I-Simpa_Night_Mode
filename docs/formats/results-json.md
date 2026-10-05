@@ -88,7 +88,11 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 16,              // 16: lost particles reported, not bounded
+  "results_version": 17,              // 17: advice, the run-quality advisor's items
+                                      //    (backlog 80): each refused, wide or
+                                      //    lost-particle-warned value's cause and the
+                                      //    setting that addresses it;
+                                      // 16: lost particles reported, not bounded
                                       //    (decision 56): a band's lost_share is lost
                                       //    over emitted, beside lost_status; every
                                       //    quantity of a band's series (dB(A), STI:
@@ -199,9 +203,44 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
     ],
     "bands": [{"freq_hz": 500, "absorption_area_m2": 43.2}, ...]
                                       //   sum of S alpha: Sabine's area without air
-  } | {"status": "not_computed", "why": "..."}
+  } | {"status": "not_computed", "why": "..."},
+  "advice": [                         // the run-quality advisor (version 17); empty
+    {"code": "range_below_zero",      //   when every value is ok: one of advise::CODES
+     "cause": "Monte-Carlo noise: ...",   // plain words, no number
+     "fix": {"words": "Use larger receivers (Receiver radius): ...",
+             "setting": "receiver_radius",            // or null: no setting addresses it
+             "pointer": "/solvers/spps/receiver_radius_m",
+             "label": "Receiver radius",
+             "from": 0.3100000023841858,              // the run's value (f32), or null
+             "to": 0.6,                               // what Apply sets, or null
+             "why_no_apply": null,                    // why not, when to is null
+             "bound": "clearance",                    // radius: clearance | edt_checked |
+                                                      //   calibration
+             "note": "This room's volume is outside ..." | null},
+     "values": ["spps.point_receivers.2.bands.3.parameters.t30_s", ...]}
+                                      //   the dot paths of the values it explains
+  ]
 }
 ```
+
+**The run-quality advisor, `advice` (results version 17, backlog 80, decision 57).** For every
+value the Results screen can show (each point receiver's bands' eight parameters and `g_db`, its
+bands summed and `aggregate.dba.level_db`, `sti.male`, and the same per source), a value that is
+refused, `wide` or carries `lost_share_warning` gets an item; an `ok` value gets none. Items are
+grouped by cause and fix, so each cause appears once with every value it explains (`values`, dot
+paths into this JSON). `fix` names a **setting** of the project (`pointer`) and, when it offers
+"Apply", the value it sets (`to`); it never names a value the run will produce: the noise fell 9x
+and 15x where the square-root rule forecast 3.2x (`B:\data\m12\b78-mesh\FINDINGS.md`), so
+nothing extrapolates. The only particle counts it names are the core's own: a calibration minimum
+(`noise_uncalibrated`) or the count a `monte_carlo_noise` refusal names (`particle_count`; a
+setting, not a forecast). A proposed receiver radius is the smallest of three bounds, `bound` says
+which: below the nearest receiver's distance to a face of the run's `.cbin`, rounded down to 0.05 m
+(`clearance`; Elmia's 0.647 m gives 0.6), at most 1 m (`edt_checked`), and within the noise
+calibration's crossings per particle (`calibration`). When the clearance cannot be read no radius
+is proposed. Lost particles (decision 56) are never answered with more particles, whose share does
+not fall with more: `-Y` when the run was meshed without it (`mesh/mesh.json`'s TetGen argv), else
+no setting. The mapping is `crate::advise::after`, an exhaustive `match` on `ParamError` and
+`NotEvaluable`, its codes and wording in `docs/results.md`, "The run-quality advisor".
 
 **The room, `room` (results version 12).** What the Results screen's Acoustics tab shows beside
 the solver's values is computed here, so every number it shows is in this JSON (M12 gate (a)):

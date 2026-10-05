@@ -616,7 +616,7 @@ mod tests {
             serde_json::to_value(&want).unwrap(),
             "the CLI's report (results_cmd prints checked_report)"
         );
-        assert_eq!(rep.results_version, 16);
+        assert_eq!(rep.results_version, 17);
         let summary: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(repo("beds/summary.json")).unwrap())
                 .unwrap();

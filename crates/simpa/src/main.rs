@@ -46,6 +46,11 @@ const USAGE: &str = "usage:
   simpa results <run-folder> [--json]                        a verified run's results and parameters
       exit 0; 2 usage; 5 the run is FAIL, CRASH or CANCELLED; 6 its results do not verify
   simpa results --schema                                     the JSON Schemas of results --json
+  simpa advise <project.simpa> [--json]                      the run-quality advisor before a run:
+      meshing that splits the walls, receivers small for the room, a run shorter than its decay,
+      fewer particles than the noise model was measured with; each names a setting and the value
+      Apply sets (after a run the same advice is `advice` in results --json). Exit 0, advice
+      or none; 2 usage or a project that does not load.
   simpa bed <bed.json> --out <root> [--jobs <n>] [--from <earlier>] [--upstream <dir>] [--json]
       M8a's T30 physics bed (docs/investigations/2026-09-29-m8a/SPEC.md): checks the solvers
       against solvers/manifest.json (exit 2 when not the verified build), runs the matrix
@@ -84,6 +89,7 @@ fn main() -> ExitCode {
         ["run", rest @ ..] => mesh_run::run_cmd(rest),
         ["run-folder", rest @ ..] => mesh_run::run_folder_cmd(rest),
         ["results", rest @ ..] => results_cmd::results_cmd(rest),
+        ["advise", rest @ ..] => advise_cmd(rest),
         ["bed", rest @ ..] => bed_cmd::bed_cmd(rest),
         [command, ..] => fail(&format!("unknown command '{command}'\n{USAGE}")),
     }
@@ -110,6 +116,74 @@ fn dump(format: &str, file: &Path) -> ExitCode {
         ExitCode::from(1)
     } else {
         ExitCode::SUCCESS
+    }
+}
+
+/// `advise <project> [--json]`: the run-quality advisor before a run (`simpa_core::advise::before`).
+/// `--json` prints the items as `results --json` prints `advice`; otherwise one block per item.
+/// Exit 0 whatever it advises: advice never blocks a run.
+fn advise_cmd(args: &[&str]) -> ExitCode {
+    let mut json = false;
+    let mut file = None;
+    for &a in args {
+        match a {
+            "--json" => json = true,
+            _ if file.is_none() && !a.starts_with("--") => file = Some(Path::new(a)),
+            _ => {
+                return fail(&format!(
+                    "unexpected argument '{a}'
+{USAGE}"
+                ));
+            }
+        }
+    }
+    let Some(file) = file else {
+        return fail(&format!(
+            "advise needs a project file
+{USAGE}"
+        ));
+    };
+    let project = match schema::load(file) {
+        Ok(p) => p,
+        Err(e) => return fail(&format!("{}: {e}", file.display())),
+    };
+    let advice = simpa_core::advise::before(&project);
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string(&advice).expect("advice serialises")
+        );
+        return ExitCode::SUCCESS;
+    }
+    if advice.is_empty() {
+        println!(
+            "no advice: nothing in the project's settings is known to make its values noisy or refused"
+        );
+    }
+    for a in &advice {
+        println!("{}: {}", a.code, a.cause);
+        println!("  fix: {}", a.fix.words);
+        if let (Some(label), Some(from), Some(to)) = (&a.fix.label, &a.fix.from, &a.fix.to) {
+            println!(
+                "  apply: {label} {} -> {}",
+                setting_text(from),
+                setting_text(to)
+            );
+        }
+        if let Some(why) = &a.fix.why_no_apply {
+            println!("  no apply: {why}");
+        }
+        if let Some(note) = &a.fix.note {
+            println!("  note: {note}");
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+fn setting_text(v: &simpa_core::advise::SettingValue) -> String {
+    match v {
+        simpa_core::advise::SettingValue::Bool(b) => (if *b { "on" } else { "off" }).to_string(),
+        simpa_core::advise::SettingValue::Number(x) => x.to_string(),
     }
 }
 

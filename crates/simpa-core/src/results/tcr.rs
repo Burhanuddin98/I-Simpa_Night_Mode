@@ -237,6 +237,29 @@ pub(crate) struct RoomInputs {
     pub config: String,
 }
 
+/// The run's `.cbin` faces as triangles in metres, in its order: what the advisor measures the
+/// receivers' clearance against after a run (`advise::RunFacts`).
+pub(crate) fn scene_triangles(
+    solve: &Path,
+    exp: &Expectation,
+) -> Result<Vec<[[f64; 3]; 3]>, String> {
+    let scene_rel = key(&exp.names.model_name);
+    let scene =
+        cbin::read_file(&solve.join(&scene_rel)).map_err(|e| format!("{scene_rel}: {e}"))?;
+    let p = |i: u32| {
+        scene
+            .vertices
+            .get(i as usize)
+            .map(|v| [f64::from(v.x), f64::from(v.y), f64::from(v.z)])
+            .ok_or_else(|| format!("{scene_rel}: vertex {i} out of range"))
+    };
+    scene
+        .faces
+        .iter()
+        .map(|f| Ok([p(f.a)?, p(f.b)?, p(f.c)?]))
+        .collect()
+}
+
 impl RoomInputs {
     /// Refused, with why, for a scene with fitting faces (whose rule TCR applies per face and
     /// this does not emulate), a file that does not read, or an index out of range.

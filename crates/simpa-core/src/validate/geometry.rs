@@ -73,6 +73,11 @@ pub fn locate_point(geometry: &Geometry, point: Vec3) -> PointLocation {
     locate(&triangles(geometry), point.to_array())
 }
 
+/// [`locate_point`] against triangles in metres (a run's `.cbin`, for the advisor).
+pub fn locate_in(triangles: &[[P3; 3]], point: P3) -> PointLocation {
+    locate(triangles, point)
+}
+
 pub(super) fn locate(triangles: &[[P3; 3]], p: P3) -> PointLocation {
     if !p.iter().all(|c| c.is_finite()) {
         return PointLocation::Outside {

@@ -89,8 +89,12 @@ use crate::schema::SolverKind;
 /// following the decay, or random mode's lump) no longer refuses any quantity: `missing_moves`
 /// and `missing_not_cleared` come from the solver's floor and the particles left alive at the end
 /// of a complete band, which a band's `unfinished_share` gives (the old `lost_share`'s other
-/// part); `lost_follows_decay` is gone. No other field changes.
-pub const REPORT_VERSION: u32 = 16;
+/// part); `lost_follows_decay` is gone. No other field changes. 17 (backlog 80, the run-quality
+/// advisor, decision 57): `advice`, each refused, `wide` or lost-particle-warned value's cause and
+/// the setting that addresses it, grouped by cause and fix (`crate::advise::after`), with the
+/// value "Apply" sets; it names a setting, never a value the run will produce. No other field
+/// changes.
+pub const REPORT_VERSION: u32 = 17;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -1352,6 +1356,11 @@ pub struct Report {
     pub tcr: Option<TcrReport>,
     /// The room from the run's own inputs, for either solver (results version 12).
     pub room: RoomReport,
+    /// The run-quality advisor's items (results version 17, backlog 80): for the refused,
+    /// `wide` and lost-particle-warned values above, each cause once, the setting that addresses
+    /// it and the value "Apply" sets, with the dot paths of the values it explains
+    /// (`crate::advise::after`). Empty when every value is `ok`.
+    pub advice: Vec<crate::advise::Advice>,
 }
 
 /// One DIN 18041 group-A target at the room's volume.
@@ -2355,7 +2364,7 @@ pub fn report(r: &RunResults) -> Report {
         SolverResults::Tcr(t) => (None, Some(tcr_report(t))),
     };
     let bed = super::bed::report().clone();
-    Report {
+    let mut rep = Report {
         results_version: REPORT_VERSION,
         validated_by_bed: bed.all_passed(),
         bed,
@@ -2368,7 +2377,10 @@ pub fn report(r: &RunResults) -> Report {
         spps,
         tcr,
         room: RoomReport::of(&r.room),
-    }
+        advice: Vec::new(),
+    };
+    rep.advice = crate::advise::after(&rep, &crate::advise::RunFacts::read(r, &rep));
+    rep
 }
 
 /// [`report`], refused, `results_value_invalid`, when any number in it is NaN or infinite.
@@ -2718,8 +2730,8 @@ mod tests {
     /// the pair below no longer matches: bump the version, write its history line (here and in
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
-        16,
-        "51b5ae7703844a40d3f773e08b6561b9823f096dd4be41b665f89927165739ef",
+        17,
+        "3f9ae1039d7c463a044201d57cac4222c5e98ac386dc92ca4e1eebe016e55071",
     );
 
     /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.
