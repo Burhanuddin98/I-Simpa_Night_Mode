@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D view, step 1</title>
+<style>
+  :root { --bg: #09090b; --ink: #ededef; --dim: #9a9aa2; --red: #e0202e; --plate: rgba(15, 15, 17, 0.82); }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 14px/1.4 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+  #view { position: fixed; inset: 0; }
+  .card { position: fixed; left: 16px; top: 16px; max-width: 360px; padding: 14px 16px; background: var(--plate);
+    border: 1px solid #26262b; border-radius: 10px; }
+  h1 { font-size: 16px; font-weight: 600; margin: 0 0 6px; }
+  p { margin: 0 0 10px; color: var(--dim); }
+  .modes { display: flex; gap: 8px; }
+  button { font: inherit; color: var(--ink); background: #18181c; border: 1px solid #2c2c32; border-radius: 6px;
+    padding: 6px 12px; cursor: pointer; }
+  button[aria-pressed="true"] { border-color: var(--red); background: #2a0d11; }
+  button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .hint { position: fixed; left: 16px; bottom: 16px; color: var(--dim); font-size: 13px; }
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div class="card">
+  <h1>3D view, step 1 of the depth recipe</h1>
+  <p>The Elmia hall. "Now" is the app's view as it ships. "Shaded surfaces" changes only the surface material:
+     faces lit by their orientation, mid greys on black. Edges, camera and the inside view are the same in both.</p>
+  <div class="modes">
+    <button id="now" aria-pressed="true">Now</button>
+    <button id="shaded" aria-pressed="false">Shaded surfaces</button>
+  </div>
+</div>
+<div class="hint">Drag to orbit, right-drag to pan, scroll to zoom. Keys 1 and 2 switch.</div>
+
+<script src="elmia.js"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const D = window.ELMIA;
+const geometry = new THREE.BufferGeometry();
+geometry.setAttribute('position', new THREE.Float32BufferAttribute(D.positions, 3));
+geometry.setIndex(D.index);
+geometry.computeVertexNormals();
+geometry.computeBoundingBox();
+const box = geometry.boundingBox;
+const centre = box.getCenter(new THREE.Vector3());
+const size = box.getSize(new THREE.Vector3()).length();
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setClearColor(0x09090b, 1);
+document.getElementById('view').appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
+camera.up.set(0, 0, 1);
+camera.position.copy(centre).add(new THREE.Vector3(0.55, -0.85, 0.45).multiplyScalar(size * 0.75));
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.copy(centre);
+controls.enableDamping = true;
+
+// "Now": the app's own material and lights (engine.ts:229-239, b80): Lambert, flat, colour 0x19191d, BackSide,
+// ambient 1.6 and a directional 2.6 from (0.35, 0.55, 1); edges at a 1 degree threshold, white at 30 %.
+scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 2.6);
+sun.position.set(0.35, 0.55, 1);
+scene.add(sun);
+const nowMaterial = new THREE.MeshLambertMaterial({ color: 0x19191d, side: THREE.BackSide, flatShading: true,
+  polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+
+// "Shaded surfaces": a camera-fixed matcap, drawn once: a dark body and a grey key light upper left.
+// It shades each face by its angle to the eye, so walls, floor and ceiling separate at a glance.
+function matcap() {
+  const n = 256, c = document.createElement('canvas');
+  c.width = c.height = n;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, n, n);
+  const key = g.createRadialGradient(n * 0.36, n * 0.32, n * 0.02, n * 0.5, n * 0.5, n * 0.5);
+  key.addColorStop(0, '#767680'); key.addColorStop(0.45, '#4a4a52'); key.addColorStop(0.85, '#26262b');
+  key.addColorStop(1, '#1a1a1e');
+  g.fillStyle = key; g.beginPath(); g.arc(n / 2, n / 2, n / 2, 0, Math.PI * 2); g.fill();
+  // No red rim: at grazing angles it covered whole floors, and red is kept for actions and selection.
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const shadedMaterial = new THREE.MeshMatcapMaterial({ matcap: matcap(), side: THREE.BackSide, flatShading: true,
+  polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+
+const faces = new THREE.Mesh(geometry, nowMaterial);
+scene.add(faces);
+const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 1),
+  new THREE.LineBasicMaterial({ color: 0xededef, transparent: true, opacity: 0.3, depthWrite: false }));
+scene.add(edges);
+
+function setMode(mode) {
+  faces.material = mode === 'shaded' ? shadedMaterial : nowMaterial;
+  document.getElementById('now').setAttribute('aria-pressed', String(mode === 'now'));
+  document.getElementById('shaded').setAttribute('aria-pressed', String(mode === 'shaded'));
+}
+document.getElementById('now').onclick = () => setMode('now');
+document.getElementById('shaded').onclick = () => setMode('shaded');
+addEventListener('keydown', (e) => { if (e.key === '1') setMode('now'); if (e.key === '2') setMode('shaded'); });
+if (location.hash === '#shaded') setMode('shaded');
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+resize();
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
+</body>
+</html>
