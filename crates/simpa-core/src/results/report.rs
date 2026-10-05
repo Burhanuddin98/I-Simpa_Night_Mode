@@ -82,8 +82,9 @@ use crate::schema::SolverKind;
 /// added back, moves EDT outside its own range (`edt_missing`); earlier versions never checked EDT
 /// against it. `edt` is unchanged. No other field changes. 16 (decision 56, backlogs 82 and 84):
 /// lost particles are reported, not bounded, as Odeon reports lost rays. A band's `lost_share` is
-/// now lost over emitted, beside `lost_status`; EDT, T20 and T30 carry `lost_share_warning` from
-/// 0.3 % lost and are refused `lost_particles` from 1 % (the curvature with them), and the
+/// now lost over emitted, beside `lost_status`; every quantity of a band's series (the eight
+/// parameters, the curvature, G, and dB(A) and STI by the largest share of their bands) carries
+/// `lost_share_warning` from 0.3 % lost and is refused `lost_particles` from 1 %, and the
 /// worst-case bound on what lost particles carried (`ENERGETIC_LOST_ENERGY_RATIO` x lost/emitted
 /// following the decay, or random mode's lump) no longer refuses any quantity: `missing_moves`
 /// and `missing_not_cleared` come from the solver's floor and the particles left alive at the end
@@ -133,11 +134,12 @@ pub enum Evaluated {
         /// widened by `2.5·mc_sd` each way.
         #[serde(skip_serializing_if = "Option::is_none")]
         straddle: Option<[f64; 2]>,
-        /// Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-        /// from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-        /// (decision 56): the share, lost over emitted, shown beside the value as a warning that
-        /// it may read slightly low in the late decay. From 1 % the value is refused
-        /// `lost_particles`.
+        /// Present only on a quantity of an SPPS band's series (the eight parameters, the
+        /// curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+        /// lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+        /// [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+        /// emitted, shown beside the value as a warning that the late decay may hold slightly too
+        /// little energy. From 1 % the value is refused `lost_particles`.
         #[serde(skip_serializing_if = "Option::is_none")]
         lost_share_warning: Option<f64>,
     },
@@ -517,12 +519,12 @@ pub struct ReceiverBandReport {
     pub unfinished_share: Option<f64>,
     /// The share of the band's particles SPPS lost (`partLoop`, `partLost`) over those emitted
     /// (`spps::SppsResults::lost_share`); `null` when none was lost. **Reported, not bounded**
-    /// (decision 56, as Odeon reports lost rays): `lost_status` says what it does to EDT, T20 and
-    /// T30. Until results version 16 this was the share of the energy the lost particles were
+    /// (decision 56, as Odeon reports lost rays): `lost_status` says what it does to the quantities
+    /// of its series. Until results version 16 this was the share of the energy the lost particles were
     /// bounded to have taken.
     pub lost_share: Option<f64>,
-    /// `ok` below 0.3 % lost; `warning` from it, EDT, T20 and T30 carrying `lost_share_warning`;
-    /// `refused` from 1 %, where they and the curvature are refused `lost_particles`
+    /// `ok` below 0.3 % lost; `warning` from it, every quantity of the band's series carrying
+    /// `lost_share_warning`; `refused` from 1 %, where they are refused `lost_particles`
     /// ([`LostStatus`]).
     pub lost_status: LostStatus,
     /// Always true for SPPS, whose reverberation begins with the first reflection: how it ran
@@ -705,7 +707,7 @@ fn strength(spl: &Evaluated, power_rho_c: f64) -> Evaluated {
         hi,
         refused_resamples,
         straddle,
-        ..
+        lost_share_warning,
     } = spl
     else {
         return spl.clone();
@@ -719,7 +721,7 @@ fn strength(spl: &Evaluated, power_rho_c: f64) -> Evaluated {
             hi: hi.map(|x| x - free),
             refused_resamples: *refused_resamples,
             straddle: straddle.map(|[a, b]| [a - free, b - free]),
-            lost_share_warning: None,
+            lost_share_warning: *lost_share_warning,
         },
         Err(e) => Evaluated::refused(e),
     }
@@ -733,7 +735,31 @@ fn dba_report(bands: &[(i32, &Evaluated)]) -> DbaReport {
         .iter()
         .filter_map(|(f, _)| level::a_weight_db(*f).map(|w| (*f, w)))
         .collect();
-    let refused = bands.iter().find_map(|(f, e)| e.refusal().map(|r| (f, r)));
+    // Decision 56: a band refused `lost_particles` refuses it with the largest share of them, before
+    // any other band's refusal; otherwise the first refused band's.
+    let lost_share = |r: &Refused| match r.error.not_evaluable() {
+        Some(NotEvaluable::LostParticles { share, .. }) => Some(*share),
+        _ => None,
+    };
+    let refused = bands
+        .iter()
+        .filter_map(|(f, e)| e.refusal().map(|r| (f, r)))
+        .filter(|(_, r)| lost_share(r).is_some())
+        .max_by(|a, b| {
+            let share = |r: &Refused| lost_share(r).unwrap_or(0.0);
+            share(a.1).total_cmp(&share(b.1))
+        })
+        .or_else(|| bands.iter().find_map(|(f, e)| e.refusal().map(|r| (f, r))));
+    // The largest warning of the bands summed.
+    let warned = bands
+        .iter()
+        .filter_map(|(_, e)| match e {
+            Evaluated::Value {
+                lost_share_warning, ..
+            } => *lost_share_warning,
+            Evaluated::NotEvaluable { .. } => None,
+        })
+        .reduce(f64::max);
     let level_db = match refused {
         Some((f, r)) => Evaluated::NotEvaluable {
             not_evaluable: Refused {
@@ -761,10 +787,14 @@ fn dba_report(bands: &[(i32, &Evaluated)]) -> DbaReport {
                         hi: Some(r.hi),
                         refused_resamples: None,
                         straddle: None,
-                        lost_share_warning: None,
+                        lost_share_warning: warned,
                     }
                 }
-                Ok((value, None)) => Evaluated::bare(value, None),
+                Ok((value, None)) => {
+                    let mut e = Evaluated::bare(value, None);
+                    with_lost_tier(&mut e, Quantity::AWeighted, warned);
+                    e
+                }
                 Err(e) => Evaluated::refused(e),
             }
         }
@@ -1896,42 +1926,56 @@ impl EdtReport {
     }
 }
 
+/// Decision 56: `e`, quantity `q`, of a band (or bands) that lost `share` of its particles (lost
+/// over emitted, [`SppsResults::lost_share`]; `None`: none lost): as it is below
+/// [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING); a value carries the share as
+/// `lost_share_warning` from it; refused `lost_particles` from [`LOST_SHARE_REFUSED`], whatever it
+/// read or why it was refused (the model is broken).
+fn with_lost_tier(e: &mut Evaluated, q: Quantity, share: Option<f64>) {
+    match (LostStatus::of(share), share) {
+        (LostStatus::Warning, Some(_)) => {
+            if let Evaluated::Value {
+                lost_share_warning, ..
+            } = e
+            {
+                *lost_share_warning = share;
+            }
+        }
+        (LostStatus::Refused, Some(share)) => {
+            *e = Evaluated::refused(params::not_evaluable(
+                q,
+                NotEvaluable::LostParticles {
+                    share,
+                    limit: LOST_SHARE_REFUSED,
+                },
+            ));
+        }
+        _ => {}
+    }
+}
+
 impl Evaluation {
-    /// Decision 56: lost particles are reported, not bounded, as Odeon reports lost rays. EDT,
-    /// T20 and T30 of a band that lost `share` of its particles (lost over emitted,
-    /// [`SppsResults::lost_share`]; `None`: none lost) are shown as they are below
-    /// [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING), shown with the share as `lost_share_warning` from it, and refused
-    /// `lost_particles` from [`LOST_SHARE_REFUSED`], whatever else they read (the model is
-    /// broken), the curvature from T20 and T30 with them. Every other refusal stays.
+    /// Decision 56: lost particles are reported, not bounded, as Odeon reports lost rays. Every
+    /// quantity of the band's series (the eight parameters and the curvature) takes its tier
+    /// ([`with_lost_tier`]); G follows SPL ([`strength`]), dB(A) and STI the largest share of
+    /// their bands ([`dba_report`], [`sti_report`]). Every other refusal stays.
     fn lost_particles(&mut self, share: Option<f64>) {
         let p = &mut self.parameters;
-        match (LostStatus::of(share), share) {
-            (LostStatus::Warning, Some(_)) => {
-                for e in [&mut p.edt_s, &mut p.t20_s, &mut p.t30_s] {
-                    if let Evaluated::Value {
-                        lost_share_warning, ..
-                    } = e
-                    {
-                        *lost_share_warning = share;
-                    }
-                }
-            }
-            (LostStatus::Refused, Some(share)) => {
-                let refuse = |q: Quantity| {
-                    params::not_evaluable(
-                        q,
-                        NotEvaluable::LostParticles {
-                            share,
-                            limit: LOST_SHARE_REFUSED,
-                        },
-                    )
-                };
-                p.edt_s = Evaluated::refused(refuse(Quantity::Edt));
-                p.t20_s = Evaluated::refused(refuse(Quantity::T20));
-                p.t30_s = Evaluated::refused(refuse(Quantity::T30));
-                self.curvature = CurvatureReport::of(Err(refuse(Quantity::Curvature)));
-            }
-            _ => {}
+        for (e, q) in [
+            (&mut p.spl_db, Quantity::Spl),
+            (&mut p.edt_s, Quantity::Edt),
+            (&mut p.t20_s, Quantity::T20),
+            (&mut p.t30_s, Quantity::T30),
+            (&mut p.c50_db, Quantity::Clarity { te_s: 0.05 }),
+            (&mut p.c80_db, Quantity::Clarity { te_s: 0.08 }),
+            (&mut p.d50, Quantity::Definition { te_s: 0.05 }),
+            (&mut p.ts_s, Quantity::CentreTime),
+        ] {
+            with_lost_tier(e, q, share);
+        }
+        with_lost_tier(&mut self.curvature.percent, Quantity::Curvature, share);
+        if self.curvature.percent.refusal().is_some() {
+            self.curvature.curved = None;
         }
     }
 
@@ -1956,6 +2000,11 @@ fn sti_report(
     contributing: &[&str],
 ) -> StiReport {
     let r = sti::receiver_sti(s.time_step_s, inputs, octave);
+    // Decision 56: the largest share any of its bands lost.
+    let lost = inputs
+        .iter()
+        .filter_map(|b| s.lost_share(b.freq_hz))
+        .reduce(f64::max);
     let shown = |v: Result<sti::StiValue, ParamError>| match v {
         _ if contributing.len() > 1 => Evaluated::refused(params::not_evaluable(
             Quantity::Sti,
@@ -1963,8 +2012,14 @@ fn sti_report(
                 sources: contributing.iter().map(|c| c.to_string()).collect(),
             },
         )),
-        Ok(v) => Evaluated::bare(v.value, None),
-        Err(e) => Evaluated::refused(e),
+        v => {
+            let mut e = match v {
+                Ok(v) => Evaluated::bare(v.value, None),
+                Err(e) => Evaluated::refused(e),
+            };
+            with_lost_tier(&mut e, Quantity::Sti, lost);
+            e
+        }
     };
     let noisy = inputs.iter().any(|b| b.noise_db.is_some());
     StiReport {
@@ -4120,9 +4175,9 @@ mod tests {
         let p = &b.parameters;
         assert_eq!(warning(&p.t30_s), Ok(Some(0.005)), "{:?}", p.t30_s);
         assert_eq!(warning(&p.t20_s), Ok(Some(0.005)), "{:?}", p.t20_s);
-        // Nothing else carries it.
-        assert_eq!(warning(&p.spl_db), Ok(None));
-        assert_eq!(warning(&b.g_db), Ok(None));
+        // SPL and G carry it too (every quantity of the series, coordinator 10-05).
+        assert_eq!(warning(&p.spl_db), Ok(Some(0.005)));
+        assert_eq!(warning(&b.g_db), Ok(Some(0.005)));
         // The JSON names it beside the value, and not where there is none.
         let v = serde_json::to_value(&p.t30_s).unwrap();
         assert_eq!(v["lost_share_warning"], 0.005);
@@ -4162,9 +4217,10 @@ mod tests {
             r.message
         );
         assert_eq!(b.curvature.curved, None);
-        // SPL, C80 and the method's own EDT report are not touched.
-        assert!(p.spl_db.value().is_some());
-        assert_eq!(lost_refusal(&p.c80_db), None);
+        // SPL and C80 too (every quantity of the series); the method's own EDT report is not
+        // touched.
+        assert_eq!(lost_refusal(&p.spl_db), want);
+        assert_eq!(lost_refusal(&p.c80_db), want);
         assert!(p.edt.as_ref().unwrap().value_s.is_some());
         assert_eq!(lost_refusal(&rep.aggregate.parameters.t30_s), want);
         // 1 % exactly is refused; just under it is a warning.
@@ -4267,6 +4323,101 @@ mod tests {
                 limit: LOST_SHARE_REFUSED
             })
         );
+    }
+
+    /// Decision 56 for every quantity of the band's series: C80 (and SPL, G, C50, D50, Ts, the
+    /// curvature and dB(A)) carry the warning from 0.3 % lost and are refused `lost_particles`
+    /// from 1 %, as EDT, T20 and T30 are.
+    #[test]
+    fn c80_and_every_series_quantity_follow_the_lost_particle_tiers() {
+        let rep = lost_band(&lost_run(1000, 5.0));
+        let b = &rep.bands[0];
+        let p = &b.parameters;
+        assert_eq!(warning(&p.c80_db), Ok(Some(0.005)), "{:?}", p.c80_db);
+        for (name, e) in [
+            ("spl", &p.spl_db),
+            ("c50", &p.c50_db),
+            ("d50", &p.d50),
+            ("ts", &p.ts_s),
+            ("g", &b.g_db),
+            ("dba", &rep.aggregate.dba.level_db),
+        ] {
+            if let Ok(w) = warning(e) {
+                assert_eq!(w, Some(0.005), "{name}: {e:?}");
+            }
+        }
+        assert_eq!(
+            warning(&p.spl_db),
+            Ok(Some(0.005)),
+            "SPL is shown: {:?}",
+            p.spl_db
+        );
+        assert_eq!(warning(&rep.aggregate.dba.level_db), Ok(Some(0.005)));
+        // Below 0.3 %: no warning.
+        let quiet = lost_band(&lost_run(60, 5.0));
+        assert_eq!(warning(&quiet.bands[0].parameters.c80_db), Ok(None));
+        // 1.5 %: refused, every one of them.
+        let rep = lost_band(&lost_run(3000, 5.0));
+        let b = &rep.bands[0];
+        let p = &b.parameters;
+        let want = Some(NotEvaluable::LostParticles {
+            share: 0.015,
+            limit: LOST_SHARE_REFUSED,
+        });
+        for e in [
+            &p.c80_db,
+            &p.spl_db,
+            &p.c50_db,
+            &p.d50,
+            &p.ts_s,
+            &b.g_db,
+            &rep.aggregate.dba.level_db,
+            &rep.aggregate.parameters.c80_db,
+        ] {
+            assert_eq!(lost_refusal(e), want, "{e:?}");
+        }
+    }
+
+    /// [`energetic_octave_run`] on the seven octaves at 200,000 particles, `lost` of them lost in
+    /// every band.
+    fn lost_octave_run(lost: u32) -> SppsResults {
+        let octaves = [125, 250, 500, 1000, 2000, 4000, 8000];
+        let mut s = energetic_octave_run(&octaves, 0, 0.0);
+        s.particles_per_source = 200_000;
+        for b in &mut s.particles.bands {
+            b.total = 200_000;
+            b.lost_by_meshing_problems = lost;
+            b.absorbed_by_materials = 200_000 - lost;
+        }
+        s
+    }
+
+    /// Decision 56 for STI: the warning from 0.3 % lost in its bands, `lost_particles` from 1 %.
+    #[test]
+    fn sti_follows_the_lost_particle_tiers() {
+        let octaves = [125, 250, 500, 1000, 2000, 4000, 8000];
+        let sti = |lost: u32| {
+            let s = lost_octave_run(lost);
+            receiver_report(&octaves, &s, &s.point_receivers[0], true).sti
+        };
+        let none = sti(0);
+        assert!(none.male.value().is_some(), "{:?}", none.male);
+        assert_eq!(warning(&none.male), Ok(None));
+        let warned = sti(1000);
+        assert_eq!(warning(&warned.male), Ok(Some(0.005)), "{:?}", warned.male);
+        assert_eq!(warning(&warned.female), Ok(Some(0.005)));
+        assert_eq!(
+            warned.male.value(),
+            none.male.value(),
+            "the value itself is untouched"
+        );
+        let refused = sti(3000);
+        let want = Some(NotEvaluable::LostParticles {
+            share: 0.015,
+            limit: LOST_SHARE_REFUSED,
+        });
+        assert_eq!(lost_refusal(&refused.male), want, "{:?}", refused.male);
+        assert_eq!(lost_refusal(&refused.female), want);
     }
 
     #[test]

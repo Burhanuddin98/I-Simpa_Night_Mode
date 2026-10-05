@@ -90,9 +90,11 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 {
   "results_version": 16,              // 16: lost particles reported, not bounded
                                       //    (decision 56): a band's lost_share is lost
-                                      //    over emitted, beside lost_status; EDT, T20
-                                      //    and T30 carry lost_share_warning from 0.3 %
-                                      //    and are refused lost_particles from 1 %;
+                                      //    over emitted, beside lost_status; every
+                                      //    quantity of a band's series (dB(A), STI:
+                                      //    of its bands) carries lost_share_warning
+                                      //    from 0.3 % and is refused lost_particles
+                                      //    from 1 %;
                                       //    unfinished_share (the particles left alive
                                       //    at the end of a complete band) replaces the
                                       //    old lost_share's other part;
@@ -448,13 +450,14 @@ Both fields are absent from every other value. With either, `lo`/`hi` are no lon
 
 **Lost particles (results version 16, decision 56).** Lost particles are reported, not bounded, as
 Odeon reports lost rays. A band's `lost_share` is the share of its particles SPPS lost (loops and
-meshing) over those emitted; `lost_status` says what it does to EDT, T20 and T30, of the band, of
-its per-source bands and (the largest share of any band) of the aggregate:
+meshing) over those emitted; `lost_status` says what it does to every quantity of the band's series (SPL, G, EDT, T20, T30, C50, C80, D50, Ts and the curvature; dB(A) and STI by the largest share of the bands they use), of the band, of its per-source
+bands and (the largest share of any band) of the aggregate:
 - below 0.3 % (`ok`): shown as they are;
 - from 0.3 % (`warning`): shown, each value carrying `lost_share_warning`, the share (a fraction):
-  the value may read slightly low in the late decay. The field is absent from every other value;
+  the late decay may hold slightly too little energy. The field is absent from every other value
+  (TCR's, the references');
 - from 1 % (`refused`): refused `lost_particles` (`params_not_evaluable`, `why`: `share`, `limit`
-  0.01), the curvature with them: the model is broken (holes, a bad mesh). The run's verdict refuses
+  0.01), whatever else they read: the model is broken (holes, a bad mesh). The run's verdict refuses
   a band over 1 % whole (`particle_loss_excess`), so this is seen at 1 % exactly or under a raised
   loss limit.
 
@@ -464,8 +467,7 @@ about 3.6e-3 against the 5e-3 limit (`docs/investigations/2026-10-05-b82-b84/FIN
 `results::spps::LOST_SHARE_WARNING`, `LOST_SHARE_REFUSED`). Until version 15 the lost particles'
 energy was bounded instead (`ENERGETIC_LOST_ENERGY_RATIO` × lost/emitted following the decay in
 energetic mode, a lump from the arrival in random mode) and refused whatever it could move; that
-bound refused T20 in BRAS CR2 at 0.03 % lost and no longer refuses anything. SPL, G, C50, C80, D50,
-Ts, dB(A) and STI no longer see lost particles at all.
+bound refused T20 in BRAS CR2 at 0.03 % lost and no longer refuses anything.
 
 **The range (results version 7; decision-log rows 37 (3) and 39 (3)).** Every value of the eight
 parameters of an SPPS band, aggregate or per-source band carries `status`, `lo` and `hi`: the range
@@ -508,7 +510,7 @@ radius squared and do not fall with more particles, so the radius must shrink to
 multiple of the run's); the text output shows `NE(uncal:<count>)` or `NE(uncal:R<=<s>x)`. `code` is a row of `docs/solver-contract.md`, "Parameter refusals"; `error` is the typed
 refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `early_unresolved`,
 `range_too_short`, `not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`,
-`lost_particles` (EDT, T20, T30 and the curvature, version 16),
+`lost_particles` (every quantity of an SPPS band's series, dB(A) and STI, version 16),
 `monte_carlo_noise`, `noise_unknown`, `noise_uncalibrated`, `several_sources`, `no_time_series`,
 `edt_refused` (EDT only: `reason` is one of `no_energy`, `no_energy_after_arrival`, `run_too_short`,
 `direct_only`, `step_too_coarse`, `not_decaying`, `too_few_particles`, `not_decaying_at_run_end`,

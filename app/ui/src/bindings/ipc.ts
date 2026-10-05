@@ -287,11 +287,12 @@ export type Evaluated =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -759,11 +760,12 @@ export type Evaluated1 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -826,11 +828,12 @@ export type Evaluated2 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -889,11 +892,12 @@ export type Evaluated3 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -952,11 +956,12 @@ export type Evaluated4 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1015,11 +1020,12 @@ export type Evaluated5 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1083,11 +1089,12 @@ export type Evaluated6 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1146,11 +1153,12 @@ export type Evaluated7 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1209,11 +1217,12 @@ export type Evaluated8 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1272,11 +1281,12 @@ export type Evaluated9 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1335,11 +1345,12 @@ export type Evaluated10 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1441,11 +1452,12 @@ export type Evaluated11 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1489,8 +1501,8 @@ export type Evaluated11 =
       not_evaluable: Refused;
     };
 /**
- * `ok` below 0.3 % lost; `warning` from it, EDT, T20 and T30 carrying `lost_share_warning`;
- * `refused` from 1 %, where they and the curvature are refused `lost_particles`
+ * `ok` below 0.3 % lost; `warning` from it, every quantity of the band's series carrying
+ * `lost_share_warning`; `refused` from 1 %, where they are refused `lost_particles`
  * ([`LostStatus`]).
  */
 export type LostStatus = 'ok' | 'warning' | 'refused';
@@ -1556,11 +1568,12 @@ export type Evaluated12 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1646,11 +1659,12 @@ export type Evaluated13 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1712,11 +1726,12 @@ export type Evaluated14 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1823,11 +1838,12 @@ export type Evaluated15 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1892,11 +1908,12 @@ export type Evaluated16 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -1955,11 +1972,12 @@ export type Evaluated17 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -2044,11 +2062,12 @@ export type Evaluated18 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -2107,11 +2126,12 @@ export type Evaluated19 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -2170,11 +2190,12 @@ export type Evaluated20 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -2340,11 +2361,12 @@ export type Evaluated21 =
        */
       lo?: number | null;
       /**
-       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
-       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
-       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
-       * it may read slightly low in the late decay. From 1 % the value is refused
-       * `lost_particles`.
+       * Present only on a quantity of an SPPS band's series (the eight parameters, the
+       * curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
+       * lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
+       * [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
+       * emitted, shown beside the value as a warning that the late decay may hold slightly too
+       * little energy. From 1 % the value is refused `lost_particles`.
        */
       lost_share_warning?: number | null;
       /**
@@ -2395,7 +2417,7 @@ export type Evaluated21 =
  */
 export type Gender1 = 'male' | 'female';
 /**
- * What a band's lost share ([`SppsResults::lost_share`]) does to its EDT, T20 and T30
+ * What a band's lost share ([`SppsResults::lost_share`]) does to the quantities of its series
  * (decision 56).
  *
  * This interface was referenced by `IpcBindings`'s JSON-Schema
@@ -4138,8 +4160,8 @@ export interface ReceiverBandReport {
   /**
    * The share of the band's particles SPPS lost (`partLoop`, `partLost`) over those emitted
    * (`spps::SppsResults::lost_share`); `null` when none was lost. **Reported, not bounded**
-   * (decision 56, as Odeon reports lost rays): `lost_status` says what it does to EDT, T20 and
-   * T30. Until results version 16 this was the share of the energy the lost particles were
+   * (decision 56, as Odeon reports lost rays): `lost_status` says what it does to the quantities
+   * of its series. Until results version 16 this was the share of the energy the lost particles were
    * bounded to have taken.
    */
   lost_share?: number | null;

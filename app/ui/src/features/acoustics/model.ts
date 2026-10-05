@@ -30,9 +30,9 @@ export const EDT_MARKS = [
 /** MQ3: STI's Monte-Carlo noise is not modelled (backlog 71). */
 export const STI_NOTE = 'noise range not computed';
 
-/** Decision 56's words after the band's lost share (a number of the report, `Cell.lost`), beside an
- * EDT, T20 or T30 whose band lost from 0.3 % of its particles. */
-export const LOST_WARNING = 'of particles lost: values may be slightly low in the late decay';
+/** Decision 56's words after the band's lost share (a number of the report, `Cell.lost`), beside a
+ * value whose band (or, for STI and dB(A), one of whose bands) lost from 0.3 % of its particles. */
+export const LOST_WARNING = 'of particles lost: the late decay may hold slightly too little energy';
 
 /** Decision 56's words after the share (`Refusal.lost`), beside a refusal `lost_particles`: from
  * 1 % lost, where the model is broken. */
@@ -166,8 +166,8 @@ export interface Cell {
   refusal: Refusal | null;
   /** STI's MQ3 note, or why an EDT is unchecked. */
   note: string | null;
-  /** Decision 56: the band's lost share, %, when it is a warning (`lost_share_warning`, EDT, T20
-   * and T30 from 0.3 % lost), shown before `LOST_WARNING`. */
+  /** Decision 56: the band's lost share, %, when it is a warning (`lost_share_warning`, from 0.3 %
+   * lost), shown before `LOST_WARNING`. */
   lost?: Num;
 }
 
@@ -276,13 +276,16 @@ export function cell(report: Report, spec: ParamSpec, r: number, band: BandSel, 
   }
   const value = num(report, `${path}.value`, spec.digits);
   if (!value) return null;
-  if (spec.name === 'sti') return { ...base, status: 'value', value, note: STI_NOTE };
+  if (spec.name === 'sti') {
+    const lost = num(report, `${path}.lost_share_warning`, 2, 100);
+    return { ...base, status: 'value', value, note: STI_NOTE, ...(lost ? { lost } : {}) };
+  }
   const status = at(report, `${path}.status`);
   const lo = num(report, `${path}.lo`, spec.digits);
   const hi = num(report, `${path}.hi`, spec.digits);
   // A value with no range is not one this tab may show alone (row 37 (3)): refused as such.
   if ((status !== 'ok' && status !== 'wide') || !lo || !hi) return null;
-  // Decision 56: the band lost from 0.3 % of its particles (EDT, T20 and T30 only carry it).
+  // Decision 56: the band lost from 0.3 % of its particles.
   const lost = num(report, `${path}.lost_share_warning`, 2, 100);
   return { ...base, status, value, lo, hi, note: spec.name === 'edt_s' ? edtNote(report, path) : null, ...(lost ? { lost } : {}) };
 }

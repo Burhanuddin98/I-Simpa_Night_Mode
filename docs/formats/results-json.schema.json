@@ -817,7 +817,7 @@
                 ]
               },
               "lost_share_warning": {
-                "description": "Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost\nfrom [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted\n(decision 56): the share, lost over emitted, shown beside the value as a warning that\nit may read slightly low in the late decay. From 1 % the value is refused\n`lost_particles`.",
+                "description": "Present only on a quantity of an SPPS band's series (the eight parameters, the\ncurvature, G; dB(A) and STI with the largest share of their bands) whose particles were\nlost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to\n[`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over\nemitted, shown beside the value as a warning that the late decay may hold slightly too\nlittle energy. From 1 % the value is refused `lost_particles`.",
                 "format": "double",
                 "type": [
                   "number",
@@ -1093,7 +1093,7 @@
         "type": "object"
       },
       "LostStatus": {
-        "description": "What a band's lost share ([`SppsResults::lost_share`]) does to its EDT, T20 and T30\n(decision 56).",
+        "description": "What a band's lost share ([`SppsResults::lost_share`]) does to the quantities of its series\n(decision 56).",
         "oneOf": [
           {
             "const": "ok",
@@ -1532,7 +1532,7 @@
             "type": "object"
           },
           {
-            "description": "The band lost `share` of its particles (lost over emitted), at least `limit`\n(`results::spps::LOST_SHARE_REFUSED`, decision 56): the model is broken (holes, a bad\nmesh), so EDT, T20 and T30 are refused whatever they read. Below it the share is reported\nbeside them, not bounded. Made by `core::results`, which knows the particle statistics;\n`params` never sees them.",
+            "description": "The band lost `share` of its particles (lost over emitted), at least `limit`\n(`results::spps::LOST_SHARE_REFUSED`, decision 56): the model is broken (holes, a bad\nmesh), so every quantity of the band's series (dB(A) and STI: of any band they sum) is\nrefused whatever it reads. Below it the share is reported beside them, not bounded. Made by `core::results`, which knows the particle statistics;\n`params` never sees them.",
             "properties": {
               "limit": {
                 "description": "A fraction.",
@@ -2805,7 +2805,7 @@
             "description": "Sound strength G, dB ([`strength`]): `parameters.spl_db` less the free field's level at\n10 m of the same sources, `source_power_rho_c` over `4π·100 m²` against the same `p₀²`, so\nSPPS's `ρc` cancels (ISO 3382-1:2009 A.2.1, Eqs. A.1-A.3; not Eq. A.9's `+31 dB`, which\nassumes `ρc ≈ 400`). With several sources, every source's energy at the receiver against\nevery source's free field, both summed. SPL's `mc_sd`, `status` and range, shifted by the\nsame constant; refused as SPL is."
           },
           "lost_share": {
-            "description": "The share of the band's particles SPPS lost (`partLoop`, `partLost`) over those emitted\n(`spps::SppsResults::lost_share`); `null` when none was lost. **Reported, not bounded**\n(decision 56, as Odeon reports lost rays): `lost_status` says what it does to EDT, T20 and\nT30. Until results version 16 this was the share of the energy the lost particles were\nbounded to have taken.",
+            "description": "The share of the band's particles SPPS lost (`partLoop`, `partLost`) over those emitted\n(`spps::SppsResults::lost_share`); `null` when none was lost. **Reported, not bounded**\n(decision 56, as Odeon reports lost rays): `lost_status` says what it does to the quantities\nof its series. Until results version 16 this was the share of the energy the lost particles were\nbounded to have taken.",
             "format": "double",
             "type": [
               "number",
@@ -2814,7 +2814,7 @@
           },
           "lost_status": {
             "$ref": "#/$defs/LostStatus",
-            "description": "`ok` below 0.3 % lost; `warning` from it, EDT, T20 and T30 carrying `lost_share_warning`;\n`refused` from 1 %, where they and the curvature are refused `lost_particles`\n([`LostStatus`])."
+            "description": "`ok` below 0.3 % lost; `warning` from it, every quantity of the band's series carrying\n`lost_share_warning`; `refused` from 1 %, where they are refused `lost_particles`\n([`LostStatus`])."
           },
           "noise_model": {
             "$ref": "#/$defs/NoiseModel",

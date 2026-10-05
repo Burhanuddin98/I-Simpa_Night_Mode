@@ -259,7 +259,7 @@ fn text(rep: &Report) -> String {
             for (label, p) in rows {
                 let edt = edt_cell(p);
                 edt_marked |= edt.ends_with('*');
-                lost_marked |= [&p.edt_s, &p.t20_s, &p.t30_s].iter().any(|e| {
+                lost_marked |= p.named().iter().any(|(_, e)| {
                     matches!(
                         e,
                         Evaluated::Value {
@@ -296,9 +296,9 @@ estimated from the first recorded hit; VERDICT-2 H3, G4 R007) \
         if lost_marked {
             let _ = writeln!(
                 s,
-                "! lost particles: the band lost from 0.3 % to under 1 % of its particles; values \
-may be slightly low in the late decay. From 1 % they are refused, NE(lost_particles): holes or a \
-bad mesh (decision 56; JSON: lost_share_warning, the band's lost_share)"
+                "! lost particles: the band lost from 0.3 % to under 1 % of its particles; its late \
+decay may hold slightly too little energy. From 1 % its values are refused, NE(lost_particles): \
+holes or a bad mesh (decision 56; JSON: lost_share_warning, the band's lost_share)"
             );
         }
         match &sp.reference {

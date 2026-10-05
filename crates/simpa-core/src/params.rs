@@ -248,8 +248,8 @@ pub enum NotEvaluable {
     },
     /// The band lost `share` of its particles (lost over emitted), at least `limit`
     /// (`results::spps::LOST_SHARE_REFUSED`, decision 56): the model is broken (holes, a bad
-    /// mesh), so EDT, T20 and T30 are refused whatever they read. Below it the share is reported
-    /// beside them, not bounded. Made by `core::results`, which knows the particle statistics;
+    /// mesh), so every quantity of the band's series (dB(A) and STI: of any band they sum) is
+    /// refused whatever it reads. Below it the share is reported beside them, not bounded. Made by `core::results`, which knows the particle statistics;
     /// `params` never sees them.
     LostParticles {
         /// Lost over emitted, a fraction.

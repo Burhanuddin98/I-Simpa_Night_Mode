@@ -353,11 +353,12 @@ reaches its bottom before that bin, and both are refused.
 
 **Reported, not bounded (decision 56, results version 16, 2026-10-05), as Odeon reports lost rays.**
 A band's lost share is its lost particles over those emitted (`SppsResults::lost_share`, the JSON's
-`lost_share` per band, with `lost_status`). EDT, T20 and T30 are shown whatever the share; from
-0.3 % (`LOST_SHARE_WARNING`) each carries `lost_share_warning`, the share, shown beside it ("0.40 %
-of particles lost: values may be slightly low in the late decay"); from 1 % (`LOST_SHARE_REFUSED`)
-they and the curvature are refused `lost_particles` ("2.10 % of particles lost (holes or a bad
-mesh?)"), where the model is broken. The aggregate takes the largest share of its bands. The
+`lost_share` per band, with `lost_status`). Every quantity of the band's series (SPL, G, EDT, T20,
+T30, C50, C80, D50, Ts, the curvature) is shown whatever the share below 1 %; from 0.3 %
+(`LOST_SHARE_WARNING`) each carries `lost_share_warning`, the share, shown beside it ("0.40 % of
+particles lost: the late decay may hold slightly too little energy"); from 1 % (`LOST_SHARE_REFUSED`)
+they are refused `lost_particles` ("2.10 % of particles lost (holes or a bad mesh?)"), where the model
+is broken. The aggregate, dB(A) and STI take the largest share of the bands they use. The
 thresholds are a forecast from the 10-05 hall bed (`docs/investigations/2026-10-05-b82-b84/FINDINGS.md`):
 the lost particles actually moved T30 by 5.3e-4 in Elmia at 0.15 % lost and 1.2e-4 in BRAS CR2 at
 0.23 %, against the 5e-3 limit; scaled linearly from the worse room (0.36 × the share), 0.3 % moves T30

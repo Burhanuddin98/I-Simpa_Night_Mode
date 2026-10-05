@@ -555,8 +555,9 @@ impl SppsResults {
     /// The share of band `freq_hz`'s particles SPPS lost (`partLoop` and `partLost`,
     /// `CalculationCore.cpp:102-107`): lost over emitted, the sources' particles together; `None`
     /// when none was lost or nothing was emitted. **Reported, not bounded** (decision 56, as Odeon
-    /// reports lost rays): EDT, T20 and T30 carry a warning from [`LOST_SHARE_WARNING`] and are
-    /// refused `lost_particles` from [`LOST_SHARE_REFUSED`] ([`LostStatus::of`]).
+    /// reports lost rays): every quantity of the band's series carries a warning from
+    /// [`LOST_SHARE_WARNING`] and is refused `lost_particles` from [`LOST_SHARE_REFUSED`]
+    /// ([`LostStatus::of`]).
     pub fn lost_share(&self, freq_hz: i32) -> Option<f64> {
         let b = self.particles.bands.iter().find(|b| b.freq_hz == freq_hz)?;
         let emitted = f64::from(self.particles_per_source) * self.sources.len() as f64;
@@ -591,21 +592,22 @@ impl SppsResults {
 /// particles alive, stays incomplete, and its tail is bounded from the series.
 pub const REMAINING_UNFINISHED_SHARE: f64 = 1e-6;
 
-/// From this share of a band's particles lost ([`SppsResults::lost_share`]), its EDT, T20 and T30
-/// carry a warning beside their value (decision 56). **A forecast, not a measurement:** the 10-05
+/// From this share of a band's particles lost ([`SppsResults::lost_share`]), every quantity of its
+/// series (EDT, T20, T30, SPL, G, C50, C80, D50, Ts; dB(A) and STI of the bands they sum) carries a
+/// warning beside its value (decision 56). **A forecast, not a measurement:** the 10-05
 /// hall bed (`docs/investigations/2026-10-05-b82-b84/FINDINGS.md`) measured what the lost
 /// particles moved T30 by, 5.3e-4 in Elmia at 0.15 % lost (the worst room, about 0.36 x the lost
 /// share) and 1.2e-4 in BRAS CR2 at 0.23 %, against the 5e-3 limit; scaled linearly from Elmia,
 /// 0.3 % lost moves T30 by about 1e-3, a fifth of the limit.
 pub const LOST_SHARE_WARNING: f64 = 0.003;
 
-/// From this share of a band's particles lost its EDT, T20 and T30 are refused `lost_particles`
+/// From this share of a band's particles lost those quantities are refused `lost_particles`
 /// (decision 56): the model is broken (holes, a bad mesh). The same forecast as
 /// [`LOST_SHARE_WARNING`]: 1 % lost moves T30 by about 3.6e-3, and the 5e-3 limit is reached near
 /// 1.4 %. The run's verdict accepts up to 1 % too (`run/verdict.rs`).
 pub const LOST_SHARE_REFUSED: f64 = 0.01;
 
-/// What a band's lost share ([`SppsResults::lost_share`]) does to its EDT, T20 and T30
+/// What a band's lost share ([`SppsResults::lost_share`]) does to the quantities of its series
 /// (decision 56).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]

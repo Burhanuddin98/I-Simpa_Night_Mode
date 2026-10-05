@@ -180,6 +180,13 @@ test('Acoustics (decision 56): a lost-particle warning and refusal name the shar
   assert.doesNotMatch(LOST_REFUSED, /\d/);
   // Says no: another refusal names no share.
   assert.equal(cell(r, t30, 0, 1)?.refusal?.lost, undefined);
+  // STI and C80 carry it the same way.
+  const sti = PARAM_SPECS.find((p) => p.name === 'sti')!;
+  (at(r, 'spps.point_receivers.0.sti.male') as Record<string, unknown>).lost_share_warning = 0.005;
+  assert.equal(cell(r, sti, 0, 0)?.lost?.text, '0.50');
+  assert.equal(cell(r, sti, 0, 0)?.lost?.path, 'spps.point_receivers.0.sti.male.lost_share_warning');
+  band.c80_db.lost_share_warning = 0.0041;
+  assert.equal(cell(r, PARAM_SPECS.find((p) => p.name === 'c80_db')!, 0, 0)?.lost?.text, '0.41');
 });
 
 test('Acoustics: STI shows its value with the noise-range note; dB(A) and G where the report has them', () => {

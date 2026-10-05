@@ -434,13 +434,10 @@ fn energetic_lost_particles_are_reported_not_bounded_through_the_report() {
     let b = &rep.spps.as_ref().unwrap().point_receivers[0].bands[0];
     assert_eq!(b.lost_share, Some(0.004));
     assert_eq!(b.lost_status, LostStatus::Warning);
-    assert!(
-        b.parameters.spl_db.value().is_some(),
-        "{:?}",
-        b.parameters.spl_db
-    );
     let p = &b.parameters;
-    for e in [&p.edt_s, &p.t20_s, &p.t30_s] {
+    // SPL is shown (the old bound refused it here), with the warning, as every quantity is.
+    assert!(p.spl_db.value().is_some(), "{:?}", p.spl_db);
+    for e in [&p.spl_db, &p.edt_s, &p.t20_s, &p.t30_s, &p.c80_db] {
         match e {
             simpa_core::results::report::Evaluated::Value {
                 lost_share_warning, ..
@@ -455,7 +452,7 @@ fn energetic_lost_particles_are_reported_not_bounded_through_the_report() {
             ),
         }
     }
-    // 500 lost, 1 %: EDT, T20 and T30 refused `lost_particles`; SPL still shown. (Over 1 % the
+    // 500 lost, 1 %: every quantity of the band's series refused `lost_particles`. (Over 1 % the
     // run's verdict refuses the whole run, `particle_loss_excess`.)
     let run = copy_of(ENERGETIC, "energetic-lost-500");
     plant_int(&run.join("solve/SPPS particle statistics.gabe"), 1, 4, 500);
@@ -463,8 +460,9 @@ fn energetic_lost_particles_are_reported_not_bounded_through_the_report() {
     let rep = results::report(&r);
     let b = &rep.spps.as_ref().unwrap().point_receivers[0].bands[0];
     assert_eq!(b.lost_status, LostStatus::Refused);
-    assert!(b.parameters.spl_db.value().is_some());
     for e in [
+        &b.parameters.spl_db,
+        &b.parameters.c80_db,
         &b.parameters.edt_s,
         &b.parameters.t20_s,
         &b.parameters.t30_s,
