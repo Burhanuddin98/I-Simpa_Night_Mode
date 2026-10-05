@@ -29,6 +29,7 @@
     "allow-scene-state",
     "allow-scene-new",
     "allow-scene-open",
+    "allow-example-open",
     "allow-model-import",
     "allow-project-save",
     "allow-edit-apply",

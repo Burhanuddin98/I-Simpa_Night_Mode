@@ -35,6 +35,7 @@ mod bindings;
 mod bridge;
 mod commands;
 mod events;
+mod examples;
 mod export;
 mod guard;
 mod results_data;
@@ -249,6 +250,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::scene_state,
             commands::scene_new,
             commands::scene_open,
+            commands::example_open,
             commands::model_import,
             commands::project_save,
             commands::edit_apply,

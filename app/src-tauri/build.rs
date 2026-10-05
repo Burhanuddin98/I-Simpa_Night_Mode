@@ -24,6 +24,7 @@ fn main() {
         "scene_state",
         "scene_new",
         "scene_open",
+        "example_open",
         "model_import",
         "project_save",
         "edit_apply",

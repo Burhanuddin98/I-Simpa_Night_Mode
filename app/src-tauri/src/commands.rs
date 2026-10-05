@@ -14,13 +14,14 @@ use std::time::{Duration, Instant};
 use schemars::JsonSchema;
 use serde::Serialize;
 use tauri::ipc::{Channel, Response};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::bench::{BenchStore, Prepared};
 use crate::bridge::{self, FloatProbe, ProjectInfo, Session};
 use crate::events::{
     AppEvent, BATCH_PERIOD, BatchStats, Batcher, LineClass, RunEvent, RunEventBatch, Stream,
 };
+use crate::examples;
 use crate::guard::{self, CmdError, CmdResult, lock};
 use crate::results_data::{self, EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
@@ -347,6 +348,30 @@ pub async fn scene_open(state: State<'_, AppState>, path: String) -> CmdResult<S
         let mut s = lock(&session, "project")?;
         runs::refuse_while_running(&slot, "Open")?;
         s.scene_open(&PathBuf::from(path))
+    })
+    .await
+}
+
+/// Opens a shipped example (`examples::EXAMPLES`, by `id`): a fresh copy is written to
+/// `Documents\Night Mode\Examples` under a name no file has yet, then opened as `scene_open`
+/// opens a `.simpa`. The embedded original is never written.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn example_open(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<SceneState> {
+    let (session, slot) = (state.session.clone(), state.run.clone());
+    guard::blocking("example_open", move || {
+        let mut s = lock(&session, "project")?;
+        runs::refuse_while_running(&slot, "Open")?;
+        let documents = app.path().document_dir().map_err(|e| {
+            CmdError::new(
+                examples::EXAMPLE_WRITE,
+                format!("no Documents folder to copy the example into: {e}"),
+            )
+        })?;
+        examples::open_copy(&mut s, &documents, &id)
     })
     .await
 }
