@@ -367,6 +367,12 @@ instead (`SppsResults::lost_share`):
   (`EnergySeries::with_lost_share`; `docs/params.md`, "Missing energy"). In a complete band the
   few particles left alive at the end are counted with them ("Complete series").
 
+**EDT too** (backlog 84, results version 15): until then only T20 and T30 were checked. EDT v2.1 is
+run again with the same missing energy added to every backward sum (and in energetic mode the
+following bound over 10 dB added to the distance) and refused `missing_moves` only where that value
+leaves the method's own range; T20 and T30's 0.5 % would refuse every EDT over 10 dB, even at 0.02 %
+lost (`report::edt_missing`).
+
 The JSON gives the share per band (`lost_share`). The report path is tested on the committed runs
 (`results_load.rs`): the random-mode Seat run with 20 lost planted at 500 Hz gives `n/(N·f)`, not
 following the decay.

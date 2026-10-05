@@ -920,22 +920,55 @@ impl Pair {
 /// Energy missing from the series ([`EnergySeries::with_solver_floor`],
 /// [`EnergySeries::with_lost_share`]), bounded (`docs/params.md`, "Missing energy").
 #[derive(Clone, Copy, Debug)]
-struct Missing {
-    floor_db: Option<f64>,
-    lost_share: Option<f64>,
+pub(crate) struct Missing {
+    pub(crate) floor_db: Option<f64>,
+    pub(crate) lost_share: Option<f64>,
     /// The most energy the dropped and lost particles would still have brought to the receiver:
     /// `10^{floor/10} / alive_share · S(onset)` for the floor, `share · S(onset)` for the lost
     /// particles, unless their share follows the decay.
-    energy: f64,
+    pub(crate) energy: f64,
     /// The lost particles' share when it follows the decay
     /// ([`EnergySeries::with_lost_share_following_decay`]): at most `share·S(u)` from every `u`.
-    following: Option<f64>,
+    pub(crate) following: Option<f64>,
+}
+
+/// The energy missing from `series`, `s0` its sum from the onset bin: the floor's dropped
+/// particles would, all together, have brought at most `10^{floor/10}/alive_share` of it (from the
+/// arrival on the receiver gets `S(onset)` from the `alive_share` of the emitted energy the room
+/// still held, and each dropped particle carried at most `10^{floor/10}` of its start energy);
+/// the lost particles' share is a lump of `share·S(onset)`, or, when it follows the decay, bounded
+/// apart ([`following`]). `None` when nothing is missing.
+fn missing_of(series: &EnergySeries, s0: f64) -> Option<Missing> {
+    let floor_energy = series
+        .floor()
+        .map(|f| 10f64.powf(f.db / 10.0) / f.alive_share * s0);
+    let follows = series.lost_follows_decay();
+    let lost_energy = series
+        .lost_share()
+        .filter(|_| !follows)
+        .map(|share| share * s0);
+    (floor_energy.is_some() || series.lost_share().is_some()).then(|| Missing {
+        floor_db: series.floor().map(|f| f.db),
+        lost_share: series.lost_share(),
+        energy: floor_energy.unwrap_or(0.0) + lost_energy.unwrap_or(0.0),
+        following: series.lost_share().filter(|_| follows),
+    })
+}
+
+/// The energy missing from `series`, bounded as every quantity here is checked against it
+/// (`docs/params.md`, "Missing energy"), for a method that reads the bins itself (EDT,
+/// [`super::edt`], backlog 84): `energy` is what it adds to every backward sum, `following` the
+/// share it bounds apart ([`following::decay_relative`]). `None` when nothing is missing.
+pub(crate) fn missing_energy(series: &EnergySeries) -> Option<Missing> {
+    let v = series.values();
+    // Summed from the end, as `backward_sums` sums it.
+    missing_of(series, v[onset(series).index..].iter().rev().sum())
 }
 
 /// The most a share `s` of missing energy that follows the decay can move each quantity: the
 /// true curve is `S(u)·(1 + a(u))` with `a(u)` anywhere in `[0, s]`, so every level moves by at
 /// most `Δ = 10·lg(1 + s)` dB (`docs/params.md`, "Missing energy").
-mod following {
+pub(crate) mod following {
     /// Level change, dB.
     pub fn level_db(s: f64) -> f64 {
         10.0 * (1.0 + s).log10()
@@ -1048,28 +1081,7 @@ impl<'a> Analysis<'a> {
         } else {
             (arrival, None)
         };
-        // The floor's dropped energy: each particle is dropped with at most `10^{db/10}` of its
-        // start energy, and what it would still have brought is, on average, what that much energy
-        // brings from any particle alive then. From the arrival on the receiver gets `S(onset)`
-        // from the `alive_share` of the emitted energy the room still held, so the dropped
-        // particles, all together, would have brought at most `10^{db/10}/alive_share` of it.
-        // The lost particles' share is given whole: a lump of `share·S(onset)`, or, when it
-        // follows the decay, bounded apart (`following`).
-        let s0 = sums[onset.index];
-        let floor_energy = series
-            .floor()
-            .map(|f| 10f64.powf(f.db / 10.0) / f.alive_share * s0);
-        let follows = series.lost_follows_decay();
-        let lost_energy = series
-            .lost_share()
-            .filter(|_| !follows)
-            .map(|share| share * s0);
-        let missing = (floor_energy.is_some() || series.lost_share().is_some()).then(|| Missing {
-            floor_db: series.floor().map(|f| f.db),
-            lost_share: series.lost_share(),
-            energy: floor_energy.unwrap_or(0.0) + lost_energy.unwrap_or(0.0),
-            following: series.lost_share().filter(|_| follows),
-        });
+        let missing = missing_of(series, sums[onset.index]);
         // The curve with the missing energy: added to every sum, and after the end continued at
         // the tail's rate, or, for a complete series, a lump at its end, the latest it can be.
         let with_missing = match (missing, &tail) {

@@ -76,8 +76,11 @@ use crate::schema::SolverKind;
 /// (`results::room::air_tetrahedra`), in `room`, an SPPS `reference` and TCR's `analytic`, and
 /// every Sabine, Eyring, Kuttruff and DIN 18041 value computed from it; earlier versions summed
 /// every tetrahedron, the inside of a radiator or a stage panel too. `room` carries
-/// `obstacle_volume_m3`, the volume left out. No other field changes.
-pub const REPORT_VERSION: u32 = 14;
+/// `obstacle_volume_m3`, the volume left out. No other field changes. 15 (backlog 84): `edt_s` is
+/// refused `missing_moves` where the energy the solver's floor and lost particles can carry,
+/// added back, moves EDT outside its own range (`edt_missing`); earlier versions never checked EDT
+/// against it. `edt` is unchanged. No other field changes.
+pub const REPORT_VERSION: u32 = 15;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -265,6 +268,11 @@ pub struct EdtReport {
     /// Why `validated` is false.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub validation_note: Option<String>,
+    /// `edt_s`'s refusal when the energy the series can lack moves the value outside its own
+    /// range ([`edt_missing`], backlog 84). The method's own fields above are unchanged; not in
+    /// the JSON, where `edt_s` carries it.
+    #[serde(skip)]
+    pub missing_moves: Option<NotEvaluable>,
 }
 
 /// The note an EDT carries, in every mode, when no direct sound reached the receiver
@@ -1700,14 +1708,11 @@ fn edt_report(
     arrival: Arrival,
     broadband: bool,
 ) -> Option<EdtReport> {
-    let bins = series.as_ref().ok()?.values();
+    let series = series.as_ref().ok()?;
     let t_arrival = arrival_time(arrival);
-    let o = edt::analyse(
-        bins,
-        s.time_step_s,
-        t_arrival,
-        Some(s.receiver_crossing_s() / 2.0),
-    );
+    let h = s.receiver_crossing_s() / 2.0;
+    let o = edt::analyse(series.values(), s.time_step_s, t_arrival, Some(h));
+    let missing_moves = edt_missing(series, &o, s.time_step_s, t_arrival, h);
     // The held-out test passed single bands with receivers up to 1 m that the direct sound
     // reached, in either mode; outside any of these the EDT is not validated, and the note names
     // every reason that applies.
@@ -1733,7 +1738,89 @@ fn edt_report(
         arrival_s: t_arrival,
         validated,
         validation_note: (!validated).then(|| reasons.join("; ")),
+        missing_moves,
     })
+}
+
+/// EDT checked against the energy `series` can lack, the solver's floor and its lost particles
+/// (`params::decay::missing_energy`; `docs/params.md`, "Missing energy"), as T20 and T30 are, but
+/// against its own range (backlog 84). The method `o` came from is run again on the bins with that
+/// energy appended after their end, so that every backward sum its fit reads gains it whole, as
+/// T20 and T30's `with_missing` curve does; in energetic mode the most a lost share following the
+/// decay can move a decay time over 10 dB (`following::decay_relative(s, 10)`) is added to the
+/// distance, as `settle` adds it. Refused `missing_moves` when the value so moved falls outside
+/// `edt_lo`..`edt_hi`. T20 and T30's 0.5 % limit is not used: over 10 dB it would refuse every
+/// EDT, even at 0.02 % lost. `None` when nothing is missing, the method refused, or the value
+/// stays inside its range; refused with `with_missing` `None` when the energy has no finite bound
+/// or the method gives no value with it.
+///
+/// The refusal's `limit` is the range's relative half-width on the side the value moved to,
+/// `hi/value − 1` (added energy only lengthens a decay) or `1 − lo/value`: the one it exceeded.
+fn edt_missing(
+    series: &EnergySeries,
+    o: &edt::Outcome,
+    dt: f64,
+    t_arrival: Option<f64>,
+    h: f64,
+) -> Option<NotEvaluable> {
+    if o.status == edt::Status::Refused {
+        return None;
+    }
+    let m = decay::missing_energy(series)?;
+    let (value, lo, hi) = (o.edt?, o.edt_lo?, o.edt_hi?);
+    let with_missing = if m.energy == 0.0 {
+        Some(value)
+    } else if m.energy.is_finite() {
+        let bins = with_energy_appended(series.values(), m.energy, 10f64.powf(-6.0 * dt / value));
+        edt::analyse(&bins, dt, t_arrival, Some(h)).edt
+    } else {
+        None
+    };
+    let follows = m
+        .following
+        .map_or(0.0, |s| decay::following::decay_relative(s, 10.0));
+    let up = with_missing.is_none_or(|w| w >= value);
+    let limit = if up {
+        hi / value - 1.0
+    } else {
+        1.0 - lo / value
+    };
+    let moved = with_missing.map(|w| (w / value - 1.0).abs() + follows);
+    if moved.is_some_and(|d| d <= limit) {
+        return None;
+    }
+    // The value moved by both, in the direction the appended energy moves it.
+    let reported = with_missing
+        .zip(moved)
+        .map(|(w, d)| match (follows == 0.0, up) {
+            (true, _) => w,
+            (false, true) => value * (1.0 + d),
+            (false, false) => value * (1.0 - d),
+        });
+    Some(NotEvaluable::MissingMoves {
+        floor_db: m.floor_db,
+        lost_share: m.lost_share,
+        value,
+        with_missing: reported,
+        limit,
+    })
+}
+
+/// `bins` with `energy` appended after their end, falling by `ratio` a bin until a billionth of it
+/// is left, then nothing ([`edt_missing`]). Where the energy goes after the end does not change a
+/// fit inside the series, whose every backward sum gains it whole; it matters only when the curve
+/// with it falls 10 dB past the end, and there it continues at the decay the method measured.
+/// Never a lump: the method reads the step after the last energy as a cliff (a level of about
+/// −3000 dB). The zeros, at least the last fifth of the bins, are what the method's own tail check
+/// reads: no unrecorded tail, as is true once everything missing is added.
+fn with_energy_appended(bins: &[f64], energy: f64, ratio: f64) -> Vec<f64> {
+    let n = ((1e-9f64).ln() / ratio.ln()).ceil().clamp(1.0, 1e7) as usize;
+    // Normalised so that the bins appended hold `energy` exactly.
+    let first = energy * (1.0 - ratio) / (1.0 - ratio.powf(n as f64));
+    let mut out = bins.to_vec();
+    out.extend((0..n).map(|i| first * ratio.powf(i as f64)));
+    out.resize(out.len() + out.len() / 4 + 2, 0.0);
+    out
 }
 
 impl EdtReport {
@@ -1754,6 +1841,12 @@ impl EdtReport {
                         sd: None,
                     },
                 ))
+            }
+            Some(_)
+                if self.status != edt::Status::Refused
+                    && let Some(why) = &self.missing_moves =>
+            {
+                Evaluated::refused(params::not_evaluable(Quantity::Edt, why.clone()))
             }
             Some(value) if self.status != edt::Status::Refused => Evaluated::Value {
                 value,
@@ -2459,6 +2552,7 @@ mod tests {
             arrival_s: None,
             validated: true,
             validation_note: None,
+            missing_moves: None,
         };
         let refusal = |e: &Evaluated| match e {
             Evaluated::NotEvaluable { not_evaluable } => {
@@ -2483,7 +2577,7 @@ mod tests {
     /// the pair below no longer matches: bump the version, write its history line (here and in
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
-        14,
+        15,
         "619f0a1204ea173dfc9cc14d422aa871aac545ca77672b716b130207e4e0f6b2",
     );
 
@@ -2893,6 +2987,98 @@ mod tests {
                 reason: e.reason.clone()
             })
         );
+    }
+
+    /// A 0.6 s decay whose particles a share `share` of were lost at 0.4 s: the histogram holds
+    /// `1 − share` of the decay from there on, and the series says so (random mode's lump,
+    /// `EnergySeries::with_lost_share`). With `share` 0 nothing is lost and nothing said.
+    fn lost_late(share: f64) -> (SppsResults, Result<EnergySeries, ParamError>, Arrival) {
+        let dt = f64::from(DT);
+        let arrival_s = emission_s(0.0, DT) + DISTANCE_M / C;
+        let bins: Vec<f64> = decay(1500, arrival_s, 0.6)
+            .into_iter()
+            .enumerate()
+            .map(|(k, e)| {
+                if k as f64 * dt >= 0.4 {
+                    e * (1.0 - share)
+                } else {
+                    e
+                }
+            })
+            .collect();
+        let s = edt_run(0, 0.0, bins.clone());
+        let series = EnergySeries::new(dt, bins)
+            .and_then(|x| x.with_lost_share(share))
+            .map(EnergySeries::with_early_reverberation_unresolved);
+        let arrival = known_arrival(&s, Some(arrival_s));
+        (s, series, arrival)
+    }
+
+    /// Backlog 84: EDT is computed again with the lost energy added back, as T20 and T30 are,
+    /// and refused `missing_moves` where that value leaves EDT's own range; the method's own
+    /// report (`edt`) is unchanged.
+    #[test]
+    fn edt_is_refused_where_the_lost_energy_moves_it_outside_its_range() {
+        let (s, series, arrival) = lost_late(0.03);
+        let e = edt_report(&s, &series, arrival, false).expect("an EDT report");
+        assert_ne!(e.status, edt::Status::Refused, "the method shows it: {e:?}");
+        let (value, hi) = (e.value_s.unwrap(), e.hi_s.unwrap());
+        let shown = e.evaluated();
+        let why = shown
+            .refusal()
+            .and_then(|r| r.error.not_evaluable().cloned());
+        let Some(NotEvaluable::MissingMoves {
+            floor_db,
+            lost_share,
+            value: v,
+            with_missing,
+            limit,
+        }) = why
+        else {
+            panic!("refused missing_moves, got {shown:?}");
+        };
+        assert_eq!((floor_db, lost_share, v), (None, Some(0.03), value));
+        // Energy added back only lengthens the decay; the limit is the range's upper half-width.
+        let w = with_missing.expect("the curve with the lost energy is fitted");
+        assert!(w > hi, "{w} outside the range's top {hi}");
+        assert!((limit - (hi / value - 1.0)).abs() < 1e-12, "{limit}");
+        // Energetic mode: the share follows the decay, nothing is appended, and the most it can
+        // move a decay time over 10 dB is the distance, as `settle` takes it for T20 and T30.
+        let follows = decay::following::decay_relative(0.03, 10.0);
+        let energetic = series
+            .clone()
+            .and_then(|x| x.with_lost_share_following_decay(0.03));
+        let e = edt_report(&s, &energetic, arrival, false).unwrap();
+        let why = e
+            .evaluated()
+            .refusal()
+            .unwrap()
+            .error
+            .not_evaluable()
+            .cloned();
+        let Some(NotEvaluable::MissingMoves { with_missing, .. }) = why else {
+            panic!("refused missing_moves, got {why:?}");
+        };
+        assert_eq!(with_missing, Some(value * (1.0 + follows)));
+        // Without the loss nothing is checked and the value is shown as the method gives it.
+        let (s, series, arrival) = lost_late(0.0);
+        let e = edt_report(&s, &series, arrival, false).unwrap();
+        assert_eq!(e.evaluated().value(), e.value_s);
+        assert!(e.value_s.is_some());
+    }
+
+    /// Backlog 84: a share too small to move EDT out of its range leaves it shown.
+    #[test]
+    fn a_tiny_lost_share_leaves_edt_shown_unchanged() {
+        let (s0, plain, arrival) = lost_late(0.0);
+        let unlost = edt_report(&s0, &plain, arrival, false).unwrap();
+        let (s, series, arrival) = lost_late(1e-4);
+        let e = edt_report(&s, &series, arrival, false).unwrap();
+        assert_eq!(series.as_ref().unwrap().lost_share(), Some(1e-4));
+        assert_eq!(e.evaluated().value(), e.value_s, "{:?}", e.evaluated());
+        // The histogram itself barely changed: the same method, a value within a hair of it.
+        let (a, b) = (e.value_s.unwrap(), unlost.value_s.unwrap());
+        assert!((a / b - 1.0).abs() < 1e-3, "{a} vs {b}");
     }
 
     /// A receiver the direct sound never reaches: nothing until `onset_s` after the geometric

@@ -87,7 +87,10 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 14,              // 14: the room's volume is its air's, without the
+  "results_version": 15,              // 15: edt_s refused missing_moves where the
+                                      //    floor's and lost particles' energy, added
+                                      //    back, moves EDT outside its own range;
+                                      // 14: the room's volume is its air's, without the
                                       //    inside of closed obstacles, in room,
                                       //    reference and analytic and every time from
                                       //    it; room carries obstacle_volume_m3;
@@ -501,6 +504,12 @@ whenever the method finds no energy from the receiver ball's front to one step p
 run with too few particles can also give; and for **every aggregate (summed-bands, broadband) EDT
 whatever the mode** ("broadband EDT is not covered by the held-out test"). `validation_note` names
 every reason that applies, joined by `; `.
+
+**Missing energy (version 15, backlog 84).** Where the solver's floor or lost particles can have cost the
+series energy (`docs/params.md`, "Missing energy"), the method is run again with that energy added to every
+backward sum, plus, in energetic mode, the most a lost share following the decay can move a decay time over
+10 dB; `edt_s` is refused `missing_moves` when that value falls outside the method's own `lo`..`hi`, its
+`limit` the range's relative half-width on that side. `edt` still holds the method's own value and range.
 
 **The marker rule (decision-log row 20).** Only tested numbers are shown as validated; every EDT that is not
 validated carries "not yet validated" on every surface that prints or exports it. `edt_s` stays a value

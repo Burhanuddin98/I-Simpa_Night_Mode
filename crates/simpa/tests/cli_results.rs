@@ -259,7 +259,7 @@ fn assert_bed_read_from_the_summary(rep: &Value) {
     }
     let all_pass = want.values().all(|p| p["status"] == "PASS");
     assert_eq!(rep["validated_by_bed"], all_pass);
-    assert_eq!(rep["results_version"], 14);
+    assert_eq!(rep["results_version"], 15);
 }
 
 /// M12 gate (b)'s plant through the CLI (P4): `$SIMPA_BED_DEMOTE` naming
@@ -1113,7 +1113,7 @@ fn m12_the_report_carries_the_rooms_din_targets_absorption_by_group_and_sabine()
         let o = results(&fixture(name), true);
         assert_eq!(o.code, 0, "{o:#?}");
         let rep = json(&o);
-        assert_eq!(rep["results_version"], 14, "{name}");
+        assert_eq!(rep["results_version"], 15, "{name}");
         let room = &rep["room"];
         assert_eq!(room["status"], "computed", "{name}: {room}");
         let (v, s) = (f(&room["volume_m3"]), f(&room["area_m2"]));
