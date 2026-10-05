@@ -55,6 +55,7 @@ import type { MeshBVH } from 'three-mesh-bvh';
 import * as actions from '../../actions';
 import type { SceneMesh } from '../../mesh';
 import type { Particles, SurfaceMap } from '../../resultsData';
+import { effectiveMaterial } from '../../chrome/sceneModel';
 import { log, meshStore, sceneStore, selectionStore, stepStore, Store, toolStore, viewportStore, type Selection } from '../../store';
 import { registerHook } from '../../testhooks';
 import { buildTopology, coplanarFaces, faceNormalOf, type FaceTopology } from './floodfill';
@@ -238,6 +239,7 @@ class ViewportEngine {
 
   // Scene objects, created once; their geometries are swapped.
   private readonly faces: Mesh;
+  private readonly tint: Mesh;
   private readonly edges: LineSegments;
   private readonly highlight: Mesh;
   private readonly selectionWash: Mesh;
@@ -267,9 +269,18 @@ class ViewportEngine {
     this.scene.add(sun);
 
     // Faces are pushed back a little so lines on them and the overlays win the depth test.
+    // `faces` is the picked mesh (indexed, project face order) and writes only depth; `tint`, a
+    // non-indexed copy, draws it with each face in its surface group's material colour, muted, under
+    // the matcap's shading (Burhan 2026-10-06: "the surfaces still look kinda greyscale"). A copy,
+    // because groups share vertices: per-vertex colour on the indexed mesh would bleed across seams.
+    const matcap = matcapTexture();
     this.faces = new Mesh(
       new BufferGeometry(),
-      new MeshMatcapMaterial({ matcap: matcapTexture(), side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
+      new MeshMatcapMaterial({ matcap, side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, colorWrite: false }),
+    );
+    this.tint = new Mesh(
+      new BufferGeometry(),
+      new MeshMatcapMaterial({ matcap, vertexColors: true, side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
     );
     this.edges = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }));
     this.highlight = new Mesh(
@@ -292,6 +303,7 @@ class ViewportEngine {
     this.planeGrid = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: SELECT, linewidth: 1.5, transparent: true, opacity: 0.45, depthWrite: false }));
     const order: [{ renderOrder: number }, number][] = [
       [this.faces, 0],
+      [this.tint, 0.5],
       [this.highlight, 1],
       [this.selectionWash, 2],
       [this.edges, 3],
@@ -307,6 +319,7 @@ class ViewportEngine {
     for (const [o, n] of order) o.renderOrder = n;
     this.scene.add(
       this.faces,
+      this.tint,
       this.highlight,
       this.selectionWash,
       this.edges,
@@ -618,6 +631,8 @@ class ViewportEngine {
       this.topo = buildTopology(mesh.positions, mesh.indices);
       this.bounds = faceBounds(mesh.positions, mesh.indices);
       this.faces.geometry = geometry;
+      this.tint.geometry = geometry.toNonIndexed();
+      this.recolor();
       this.edges.geometry = new EdgesGeometry(geometry, 1);
     }
     this.builtRev = mesh?.geometryRev ?? null;
@@ -628,7 +643,7 @@ class ViewportEngine {
   }
 
   private disposeModel(): void {
-    for (const o of [this.faces, this.edges, this.highlight, this.selectionWash]) {
+    for (const o of [this.faces, this.tint, this.edges, this.highlight, this.selectionWash]) {
       o.geometry.dispose();
       o.geometry = new BufferGeometry();
     }
@@ -660,7 +675,38 @@ class ViewportEngine {
     return g;
   }
 
+  /** Each face in its surface group's effective material colour (variants included), muted toward white. */
+  private recolor(): void {
+    const mesh = this.mesh;
+    const view = sceneStore.get()?.view;
+    const g = this.tint.geometry;
+    const pos = g.getAttribute('position');
+    if (!mesh || !view || !pos) return;
+    const byGroup = new Map<number, Color>();
+    const colorOf = (gi: number): Color => {
+      let c = byGroup.get(gi);
+      if (!c) {
+        const group = view.surface_groups[gi];
+        const m = group ? effectiveMaterial(view, group.id) : null;
+        const base = new Color(m?.color ?? '#9a9aa0');
+        // The hue at full brightness, then 40 % of the way from white: the matcap keeps the shading.
+        const peak = Math.max(base.r, base.g, base.b, 1e-6);
+        c = new Color(1, 1, 1).lerp(new Color(base.r / peak, base.g / peak, base.b / peak), 0.4);
+        byGroup.set(gi, c);
+      }
+      return c;
+    };
+    const colors = new Float32Array(pos.count * 3);
+    const faces = Math.min(mesh.faceCount, pos.count / 3);
+    for (let f = 0; f < faces; f++) {
+      const c = colorOf(mesh.groups[f]);
+      for (let k = 0; k < 3; k++) colors.set([c.r, c.g, c.b], (3 * f + k) * 3);
+    }
+    g.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  }
+
   private onScene(): void {
+    this.recolor();
     this.updateHighlight();
     this.updateSelection();
     this.updateMarkers();
