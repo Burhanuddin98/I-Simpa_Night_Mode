@@ -460,22 +460,36 @@ fn energetic_lost_particles_are_reported_not_bounded_through_the_report() {
     let rep = results::report(&r);
     let b = &rep.spps.as_ref().unwrap().point_receivers[0].bands[0];
     assert_eq!(b.lost_status, LostStatus::Refused);
-    for e in [
-        &b.parameters.spl_db,
-        &b.parameters.c80_db,
-        &b.parameters.edt_s,
-        &b.parameters.t20_s,
-        &b.parameters.t30_s,
-    ] {
-        let why = e.refusal().expect("refused").error.not_evaluable().cloned();
-        assert_eq!(
-            why,
-            Some(NotEvaluable::LostParticles {
-                share: 0.01,
-                limit: 0.01
-            })
-        );
+    // Against the committed run (2 lost): each shown quantity is now refused `lost_particles`,
+    // and each refused one keeps its refusal (the audit's fix: lost_particles replaces only a
+    // shown value; here the floor refuses T20/T30 `missing_moves` on its own).
+    let base = results::report(&load(ENERGETIC));
+    let base = &base.spps.as_ref().unwrap().point_receivers[0].bands[0];
+    let why = |e: &simpa_core::results::report::Evaluated| {
+        e.refusal().and_then(|r| r.error.not_evaluable().cloned())
+    };
+    let mut shown = 0;
+    for ((name, was), (_, now)) in base
+        .parameters
+        .named()
+        .into_iter()
+        .zip(b.parameters.named())
+    {
+        if was.value().is_some() {
+            shown += 1;
+            assert_eq!(
+                why(now),
+                Some(NotEvaluable::LostParticles {
+                    share: 0.01,
+                    limit: 0.01
+                }),
+                "{name}"
+            );
+        } else {
+            assert_eq!(why(now), why(was), "{name}");
+        }
     }
+    assert!(shown > 0, "SPL at least is shown in the committed run");
 }
 
 /// Decision 56: random mode's lost particles are no longer a lump from the arrival either. Until
@@ -489,27 +503,44 @@ fn random_mode_lost_particles_are_reported_not_bounded_through_the_report() {
     plant_int(&run.join("solve/SPPS particle statistics.gabe"), 1, 4, 20);
     let r = results::load(&run).unwrap_or_else(|e| panic!("{e}"));
     let rep = results::report(&r);
-    for p in &rep.spps.as_ref().unwrap().point_receivers {
+    // Against the committed run (none lost): shown becomes `lost_particles`, refused stays.
+    let base = results::report(&load(SPPS));
+    let why = |e: &simpa_core::results::report::Evaluated| {
+        e.refusal().and_then(|r| r.error.not_evaluable().cloned())
+    };
+    let mut shown = 0;
+    for (p, q) in rep
+        .spps
+        .as_ref()
+        .unwrap()
+        .point_receivers
+        .iter()
+        .zip(&base.spps.as_ref().unwrap().point_receivers)
+    {
         let b = &p.bands[0];
         assert_eq!(b.unfinished_share, None);
         assert_eq!(b.lost_share, Some(20.0 / 2000.0));
         assert_eq!(b.lost_status, LostStatus::Refused);
-        for e in [
-            &b.parameters.edt_s,
-            &b.parameters.t20_s,
-            &b.parameters.t30_s,
-        ] {
-            assert!(
-                matches!(
-                    e.refusal().and_then(|r| r.error.not_evaluable()),
-                    Some(NotEvaluable::LostParticles { .. })
-                ),
-                "{e:?}"
-            );
+        for ((name, was), (_, now)) in q.bands[0]
+            .parameters
+            .named()
+            .into_iter()
+            .zip(b.parameters.named())
+        {
+            if was.value().is_some() {
+                shown += 1;
+                assert!(
+                    matches!(why(now), Some(NotEvaluable::LostParticles { .. })),
+                    "{name}: {now:?}"
+                );
+            } else {
+                assert_eq!(why(now), why(was), "{name}");
+            }
         }
         assert_eq!(p.bands[1].lost_share, None);
         assert_eq!(p.bands[1].lost_status, LostStatus::Ok);
     }
+    assert!(shown > 0, "a shown quantity to say yes on");
 }
 
 type Spoil = fn(&Path);

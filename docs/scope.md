@@ -59,7 +59,7 @@ into the file named here in the same session, never only into a chat or a handof
 3. The noise model in M8's cells: let the bed measure it (10 seeds).
 4. Particle counts shown to users are too high: accept for now, and move the fix to v1.1.
 5. The solver build and the manifest check: use the verified build, and check on every run (engine item 5).
-6. ρ = 10 for energetic lost particles: accept, and measure more in v1.1.
+6. Lost particles: reported, not bounded (decision 56, 2026-10-05, replacing "ρ = 10: accept, and measure more in v1.1"): every quantity of a band's series carries a warning from 0.3 % lost and is refused `lost_particles` from 1 %; the ρ = 10 bound and `ENERGETIC_LOST_ENERGY_RATIO` are gone (`docs/investigations/2026-10-05-b82-b84/FINDINGS.md`).
 7. Reference precision: keep 32×, and accept 0.6 % through the room-energy argument (v1.1 item 5).
 
 ## Product decisions for Burhan (from the parity audit)

@@ -35,6 +35,9 @@ export interface ParamRow {
   refusal: string | null;
   why: string | null;
   note: string | null;
+  /** Decision 56: the band's lost share (a fraction, the report's double) where it is a warning
+   * (`lost_share_warning`) or the refusal `lost_particles`; null otherwise. */
+  lost_share: number | null;
   marks: string;
   /** The report path of the parameter: its value is at `<path>.value`, its range at `.lo` and `.hi`. */
   path: string;
@@ -76,6 +79,7 @@ export function paramRows(report: Report, sourceOrder: readonly string[] = []): 
             refusal: null,
             why: null,
             note: null,
+            lost_share: null,
             marks: marks.filter((m) => m.param === spec.name).map((m) => m.text).join(' | '),
             path,
           };
@@ -87,6 +91,7 @@ export function paramRows(report: Report, sourceOrder: readonly string[] = []): 
             row.refusal = c.refusal?.code.text ?? null;
             row.why = c.refusal?.why?.text ?? null;
             row.note = c.note;
+            row.lost_share = numAt(report, (c.lost ?? c.refusal?.lost)?.path);
           }
           out.push(row);
         }
@@ -96,7 +101,7 @@ export function paramRows(report: Report, sourceOrder: readonly string[] = []): 
   return out;
 }
 
-const COLUMNS: (keyof ParamRow)[] = ['receiver', 'source', 'parameter', 'label', 'unit', 'band', 'status', 'value', 'lo', 'hi', 'refusal', 'why', 'note', 'marks', 'path'];
+const COLUMNS: (keyof ParamRow)[] = ['receiver', 'source', 'parameter', 'label', 'unit', 'band', 'status', 'value', 'lo', 'hi', 'refusal', 'why', 'note', 'lost_share', 'marks', 'path'];
 const HEADER = COLUMNS.map((c) => (c === 'band' ? 'band_hz' : c));
 
 /** One CSV field (RFC 4180): quoted when it holds a comma, a quote or a line break. */

@@ -358,7 +358,10 @@ T30, C50, C80, D50, Ts, the curvature) is shown whatever the share below 1 %; fr
 (`LOST_SHARE_WARNING`) each carries `lost_share_warning`, the share, shown beside it ("0.40 % of
 particles lost: the late decay may hold slightly too little energy"); from 1 % (`LOST_SHARE_REFUSED`)
 they are refused `lost_particles` ("2.10 % of particles lost (holes or a bad mesh?)"), where the model
-is broken. The aggregate, dB(A) and STI take the largest share of the bands they use. The
+is broken; a quantity already refused for another reason keeps that refusal. The aggregate, dB(A)
+and STI take the largest share of the bands they use. SPPS counts lost particles per band, not per
+source, so a source's own echogram (`per_source`) carries its band's share over every source's
+particles. The
 thresholds are a forecast from the 10-05 hall bed (`docs/investigations/2026-10-05-b82-b84/FINDINGS.md`):
 the lost particles actually moved T30 by 5.3e-4 in Elmia at 0.15 % lost and 1.2e-4 in BRAS CR2 at
 0.23 %, against the 5e-3 limit; scaled linearly from the worse room (0.36 × the share), 0.3 % moves T30

@@ -77,6 +77,35 @@ test('rows: a refusal has its code and no number; a value with no range is not s
   assert.equal(sti.path, 'spps.point_receivers.0.sti.male');
 });
 
+test('rows (decision 56): a lost-particle warning or refusal leaves with its share, the report\'s double', () => {
+  const r = report();
+  const band = at(r, 'spps.point_receivers.0.bands.0.parameters') as Record<string, Record<string, unknown>>;
+  band.t30_s.lost_share_warning = 0.0041;
+  band.t20_s = {
+    not_evaluable: {
+      code: 'params_not_evaluable',
+      message: 'm',
+      error: { kind: 'not_evaluable', quantity: 'T20', why: { why: 'lost_particles', share: 0.0123, limit: 0.01 } },
+    },
+  };
+  const rows = paramRows(r);
+  const pick = (p: string) => rows.find((x) => x.parameter === p && x.band === '500' && x.receiver === 'R1')!;
+  assert.equal(pick('t30_s').status, 'ok');
+  assert.equal(pick('t30_s').lost_share, 0.0041);
+  assert.equal(pick('t20_s').status, 'refused');
+  assert.equal(pick('t20_s').why, 'lost_particles');
+  assert.equal(pick('t20_s').lost_share, 0.0123);
+  // say NO: a value without the warning, and another refusal, carry none.
+  assert.equal(pick('spl_db').lost_share, null);
+  assert.equal(rows.find((x) => x.parameter === 't30_s' && x.band === '1000')!.lost_share, null);
+  // The CSV carries it in its own column, back to the same double.
+  const table = parseCsv(paramsCsv(rows));
+  const col = table[0].indexOf('lost_share');
+  assert.ok(col > 0, 'a lost_share column');
+  const t30 = table.find((row) => row[table[0].indexOf('path')] === pick('t30_s').path)!;
+  assert.equal(Number(t30[col]), 0.0041);
+});
+
 test('CSV: quoted where it must be, and every number parses back to the report\'s double', () => {
   assert.equal(csvField('plain'), 'plain');
   assert.equal(csvField('Seat, "front"'), '"Seat, ""front"""');
@@ -85,7 +114,7 @@ test('CSV: quoted where it must be, and every number parses back to the report\'
   const rows = paramRows(r);
   const text = paramsCsv(rows);
   const table = parseCsv(text);
-  assert.deepEqual(table[0], ['receiver', 'source', 'parameter', 'label', 'unit', 'band_hz', 'status', 'value', 'lo', 'hi', 'refusal', 'why', 'note', 'marks', 'path']);
+  assert.deepEqual(table[0], ['receiver', 'source', 'parameter', 'label', 'unit', 'band_hz', 'status', 'value', 'lo', 'hi', 'refusal', 'why', 'note', 'lost_share', 'marks', 'path']);
   assert.equal(table.length, rows.length + 1);
   const col = (k: string) => table[0].indexOf(k);
   for (const row of table.slice(1)) {

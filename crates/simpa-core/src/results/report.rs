@@ -1929,9 +1929,13 @@ impl EdtReport {
 /// Decision 56: `e`, quantity `q`, of a band (or bands) that lost `share` of its particles (lost
 /// over emitted, [`SppsResults::lost_share`]; `None`: none lost): as it is below
 /// [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING); a value carries the share as
-/// `lost_share_warning` from it; refused `lost_particles` from [`LOST_SHARE_REFUSED`], whatever it
-/// read or why it was refused (the model is broken).
+/// `lost_share_warning` from it; refused `lost_particles` from [`LOST_SHARE_REFUSED`] when it is
+/// shown (the model is broken). A quantity already refused keeps its refusal as it was (noise,
+/// `truncated`, the floor's `missing_moves`, ...): `lost_particles` replaces only a shown value.
 fn with_lost_tier(e: &mut Evaluated, q: Quantity, share: Option<f64>) {
+    if e.refusal().is_some() {
+        return;
+    }
     match (LostStatus::of(share), share) {
         (LostStatus::Warning, Some(_)) => {
             if let Evaluated::Value {
@@ -2015,6 +2019,23 @@ fn sti_report(
         v => {
             let mut e = match v {
                 Ok(v) => Evaluated::bare(v.value, None),
+                // A band refused for its own lost particles: STI's refusal is theirs, named so
+                // (decision 56); any other refusal stays as it is.
+                Err(ParamError::NotEvaluable {
+                    why: NotEvaluable::BandRefused { freq_hz, .. },
+                    ..
+                }) if LostStatus::of(s.lost_share(freq_hz)) == LostStatus::Refused => {
+                    Evaluated::refused(params::not_evaluable(
+                        Quantity::Sti,
+                        NotEvaluable::LostParticles {
+                            share: lost
+                                .into_iter()
+                                .chain(s.lost_share(freq_hz))
+                                .fold(0.0, f64::max),
+                            limit: LOST_SHARE_REFUSED,
+                        },
+                    ))
+                }
                 Err(e) => Evaluated::refused(e),
             };
             with_lost_tier(&mut e, Quantity::Sti, lost);
@@ -2201,6 +2222,8 @@ fn receiver_report(
                 .map(|(i, (((b, energy), se), model))| {
                     let mut e = evaluated(se, arrival, model);
                     e.set_edt(edt_report(s, se, arrival, false));
+                    // SPPS counts lost particles per band, not per source: a source's echogram
+                    // takes the band's share over every source's particles (decision 56).
                     e.lost_particles(s.lost_share(b.freq_hz));
                     let total_pa2: f64 = energy.iter().sum();
                     let g_db = strength(
@@ -4376,6 +4399,52 @@ mod tests {
         ] {
             assert_eq!(lost_refusal(e), want, "{e:?}");
         }
+    }
+
+    /// Audit fix: at 1 % lost a quantity already refused for another reason keeps that refusal;
+    /// `lost_particles` replaces only a shown value. A floor at −15 dB refuses T30 on its own.
+    #[test]
+    fn a_quantity_already_refused_keeps_its_refusal_at_one_and_a_half_percent_lost() {
+        let floor = lost_band(&lost_run(0, 1.5));
+        let lost = lost_band(&lost_run(3000, 1.5));
+        let why = |e: &Evaluated| e.refusal().and_then(|r| r.error.not_evaluable().cloned());
+        let (f, l) = (&floor.bands[0].parameters, &lost.bands[0].parameters);
+        assert!(
+            matches!(
+                why(&f.t30_s),
+                Some(NotEvaluable::MissingNotCleared { .. } | NotEvaluable::MissingMoves { .. })
+            ),
+            "{:?}",
+            f.t30_s
+        );
+        assert_eq!(why(&l.t30_s), why(&f.t30_s));
+        // Every quantity, at the floor's −15 dB and at −50 dB: refused as it was, or, where it was
+        // shown, refused `lost_particles`.
+        let want = Some(NotEvaluable::LostParticles {
+            share: 0.015,
+            limit: LOST_SHARE_REFUSED,
+        });
+        let (mut shown, mut kept) = (0, 0);
+        for eps in [1.5, 5.0] {
+            let (f, l) = (
+                lost_band(&lost_run(0, eps)),
+                lost_band(&lost_run(3000, eps)),
+            );
+            let (f, l) = (&f.bands[0].parameters, &l.bands[0].parameters);
+            for ((name, a), (_, b)) in f.named().into_iter().zip(l.named()) {
+                if a.value().is_some() {
+                    shown += 1;
+                    assert_eq!(why(b), want, "{name} at {eps}");
+                } else {
+                    kept += 1;
+                    assert_eq!(why(b), why(a), "{name} at {eps}");
+                }
+            }
+        }
+        assert!(
+            shown > 0 && kept > 0,
+            "{shown} shown, {kept} kept: the test needs both"
+        );
     }
 
     /// [`energetic_octave_run`] on the seven octaves at 200,000 particles, `lost` of them lost in
