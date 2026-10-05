@@ -131,7 +131,8 @@ function setMode(mode) {
 }
 for (const m of MODES) document.getElementById(m).onclick = () => setMode(m);
 addEventListener('keydown', (e) => { const i = '123'.indexOf(e.key); if (i >= 0) setMode(MODES[i]); });
-if (MODES.includes(location.hash.slice(1))) setMode(location.hash.slice(1));
+// Burhan 2026-10-06 00:52: shaded surfaces are the default.
+setMode(MODES.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'shaded');
 
 function resize() {
   const w = innerWidth, h = innerHeight;
