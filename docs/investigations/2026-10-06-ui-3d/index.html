@@ -18,6 +18,7 @@
     padding: 6px 12px; cursor: pointer; }
   button[aria-pressed="true"] { border-color: var(--red); background: #2a0d11; }
   button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .rooms { margin-bottom: 10px; }
   .edges { margin-top: 10px; align-items: center; }
   .edges span { color: var(--dim); margin-right: 4px; }
   .amount { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--dim); }
@@ -31,7 +32,12 @@
 <div id="view"></div>
 <div class="card">
   <h1>3D view: depth, step by step</h1>
-  <p>The Elmia hall. "Now" is the app's view as it ships. "Shaded surfaces" changes only the surface material:
+  <div class="modes rooms">
+    <button id="room-elmia" aria-pressed="true">Elmia hall</button>
+    <button id="room-cr4" aria-pressed="false">BRAS CR4</button>
+    <button id="room-cr2" aria-pressed="false">BRAS CR2</button>
+  </div>
+  <p>"Now" is the app's view as it ships. "Shaded surfaces" changes only the surface material:
      faces lit by their orientation, mid greys on black. "See-through" adds the near walls back as glass, so the
      whole shell shows from outside. "Feature edges" draws only edges where surfaces meet at an angle,
      instead of every triangle. The camera is the same throughout.</p>
@@ -52,6 +58,8 @@
 <div class="hint">Drag to orbit, right-drag to pan, scroll to zoom. Keys 1, 2 and 3 switch.</div>
 
 <script src="elmia.js"></script>
+<script src="cr4.js"></script>
+<script src="cr2.js"></script>
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
@@ -62,15 +70,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const D = window.ELMIA;
-const geometry = new THREE.BufferGeometry();
-geometry.setAttribute('position', new THREE.Float32BufferAttribute(D.positions, 3));
-geometry.setIndex(D.index);
-geometry.computeVertexNormals();
-geometry.computeBoundingBox();
-const box = geometry.boundingBox;
-const centre = box.getCenter(new THREE.Vector3());
-const size = box.getSize(new THREE.Vector3()).length();
+function roomGeometry(key) {
+  const D = window.ROOMS[key];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(D.positions, 3));
+  g.setIndex(D.index);
+  g.computeVertexNormals();
+  g.computeBoundingBox();
+  return g;
+}
+const geometry = roomGeometry('elmia');
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -80,10 +89,16 @@ document.getElementById('view').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 1000);
 camera.up.set(0, 0, 1);
-camera.position.copy(centre).add(new THREE.Vector3(0.55, -0.85, 0.45).multiplyScalar(size * 0.75));
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.copy(centre);
 controls.enableDamping = true;
+function frame(g) {
+  const centre = g.boundingBox.getCenter(new THREE.Vector3());
+  const size = g.boundingBox.getSize(new THREE.Vector3()).length();
+  camera.position.copy(centre).add(new THREE.Vector3(0.55, -0.85, 0.45).multiplyScalar(size * 0.75));
+  camera.near = size / 1000; camera.far = size * 10; camera.updateProjectionMatrix();
+  controls.target.copy(centre);
+}
+frame(geometry);
 
 // "Now": the app's own material and lights (engine.ts:229-239, b80): Lambert, flat, colour 0x19191d, BackSide,
 // ambient 1.6 and a directional 2.6 from (0.35, 0.55, 1); edges at a 1 degree threshold, white at 30 %.
@@ -134,14 +149,32 @@ amount.oninput = () => { ghostMaterial.opacity = amount.value / 100; amountOut.t
 // Edges (layer 4 of the recipe): "Every triangle" is the app's 1 degree threshold (engine.ts:581), which draws
 // nearly every triangle of a curved hall; "Feature edges" keeps only edges where the faces meet at 20 degrees or
 // more: balcony lips, stair nosings, the stage edge, the outline.
-const triangleEdges = edges.geometry;
-const featureEdges = new THREE.EdgesGeometry(geometry, 20);
+let triangleEdges = edges.geometry;
+let featureEdges = new THREE.EdgesGeometry(geometry, 20);
+let edgeKind = 'tri';
 function setEdges(kind) {
+  edgeKind = kind;
   edges.geometry = kind === 'feat' ? featureEdges : triangleEdges;
   for (const k of ['tri', 'feat']) document.getElementById(k).setAttribute('aria-pressed', String(k === kind));
 }
 for (const k of ['tri', 'feat']) document.getElementById(k).onclick = () => setEdges(k);
 if (new URLSearchParams(location.search).get('edges') === 'feat') setEdges('feat');
+
+// Rooms: the Elmia hall (testdata/elmia_corrected.ply) and the BRAS rooms sealed on 10-04
+// (B:\data\m12\pearl-geom\cr{2,4}-clean\*.obj).
+const ROOM_KEYS = ['elmia', 'cr4', 'cr2'];
+function setRoom(key) {
+  const g = roomGeometry(key);
+  faces.geometry = g; ghost.geometry = g;
+  triangleEdges = new THREE.EdgesGeometry(g, 1);
+  featureEdges = new THREE.EdgesGeometry(g, 20);
+  setEdges(edgeKind);
+  frame(g);
+  for (const k of ROOM_KEYS) document.getElementById('room-' + k).setAttribute('aria-pressed', String(k === key));
+}
+for (const k of ROOM_KEYS) document.getElementById('room-' + k).onclick = () => setRoom(k);
+const roomParam = new URLSearchParams(location.search).get('room');
+if (ROOM_KEYS.includes(roomParam)) setRoom(roomParam);
 
 const MODES = ['now', 'shaded', 'glass'];
 function setMode(mode) {
