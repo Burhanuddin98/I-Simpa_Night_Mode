@@ -649,7 +649,30 @@ fn energetic_lost_particles_from_saved_trajectories() {
     let cell = std::env::var("SIMPA_LOST_CELL")
         .ok()
         .map(|c| parse_cells(&c).remove(0));
-    let particles = cell.map_or(150_000u32, |c| c.particles);
+    // `$SIMPA_LOST_PROJECT`: a project file (a hall, backlog 82) in place of tutorial 1, in
+    // energetic mode, with `$SIMPA_LOST_PARTICLES` particles per source (default its own) of which
+    // `$SIMPA_LOST_SAVED` (default all) are saved, so that a hall's trajectories fit on the disk.
+    // SPPS saves an even spread of the particles, so the ratios below are a sample of them all;
+    // the counts and the bound lines are then of the saved subset, not of every particle.
+    let hall = std::env::var_os("SIMPA_LOST_PROJECT").map(|path| {
+        let mut p = simpa_core::validate::read_project(Path::new(&path)).unwrap();
+        p.solvers.spps.method = ComputationMethod::Energetic;
+        if let Some(n) = std::env::var("SIMPA_LOST_PARTICLES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+        {
+            p.solvers.spps.particles_per_source = n;
+        }
+        p.solvers.spps.particles_saved = std::env::var("SIMPA_LOST_SAVED")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(p.solvers.spps.particles_per_source);
+        p
+    });
+    let particles = match (&hall, cell) {
+        (Some(p), _) => p.solvers.spps.particles_saved,
+        (None, c) => c.map_or(150_000u32, |c| c.particles),
+    };
     // `$SIMPA_LOST_FROM`: the folder an earlier run of this test wrote, read again instead of
     // running the solver (each run leaves 0.7 GB of trajectories on tutorial 1).
     let done = match std::env::var_os("SIMPA_LOST_FROM") {
@@ -683,9 +706,11 @@ fn energetic_lost_particles_from_saved_trajectories() {
             let root = evidence_root("energetic-lost");
             let projects = (1..=seeds)
                 .map(|seed| {
-                    let mut p = match &cell {
-                        Some(c) => c.project(seed),
-                        None => {
+                    let mut p = match (&hall, &cell) {
+                        // Unseeded, so SPPS keeps its one thread per band; each run draws anew.
+                        (Some(h), _) => h.clone(),
+                        (None, Some(c)) => c.project(seed),
+                        (None, None) => {
                             let mut p = tutorial_octaves(seed);
                             with_receivers(&mut p, &SIX);
                             p.solvers.spps.method = ComputationMethod::Energetic;
