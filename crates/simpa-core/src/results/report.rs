@@ -142,8 +142,8 @@ pub enum Evaluated {
         /// curvature, G; dB(A) and STI with the largest share of their bands) whose particles were
         /// lost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to
         /// [`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over
-        /// emitted, shown beside the value as a warning that the late decay may hold slightly too
-        /// little energy. From 1 % the value is refused `lost_particles`.
+        /// emitted, shown beside the value as a warning that the late decay may hold too little
+        /// energy. From 1 % the value is refused `lost_particles`.
         #[serde(skip_serializing_if = "Option::is_none")]
         lost_share_warning: Option<f64>,
     },

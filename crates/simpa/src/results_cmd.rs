@@ -297,7 +297,7 @@ estimated from the first recorded hit; VERDICT-2 H3, G4 R007) \
             let _ = writeln!(
                 s,
                 "! lost particles: the band lost from 0.3 % to under 1 % of its particles; its late \
-decay may hold slightly too little energy. From 1 % its values are refused, NE(lost_particles): \
+decay may hold too little energy. From 1 % its values are refused, NE(lost_particles): \
 holes or a bad mesh (decision 56; JSON: lost_share_warning, the band's lost_share)"
             );
         }

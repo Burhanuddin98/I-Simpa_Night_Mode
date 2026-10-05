@@ -32,7 +32,7 @@ export const STI_NOTE = 'noise range not computed';
 
 /** Decision 56's words after the band's lost share (a number of the report, `Cell.lost`), beside a
  * value whose band (or, for STI and dB(A), one of whose bands) lost from 0.3 % of its particles. */
-export const LOST_WARNING = 'of particles lost: the late decay may hold slightly too little energy';
+export const LOST_WARNING = 'of particles lost: the late decay may hold too little energy';
 
 /** Decision 56's words after the share (`Refusal.lost`), beside a refusal `lost_particles`: from
  * 1 % lost, where the model is broken. */

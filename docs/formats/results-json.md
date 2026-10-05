@@ -493,7 +493,7 @@ meshing) over those emitted; `lost_status` says what it does to every quantity o
 bands and (the largest share of any band) of the aggregate:
 - below 0.3 % (`ok`): shown as they are;
 - from 0.3 % (`warning`): shown, each value carrying `lost_share_warning`, the share (a fraction):
-  the late decay may hold slightly too little energy. The field is absent from every other value
+  the late decay may hold too little energy. The field is absent from every other value
   (TCR's, the references');
 - from 1 % (`refused`): refused `lost_particles` (`params_not_evaluable`, `why`: `share`, `limit`
   0.01), whatever else they read: the model is broken (holes, a bad mesh). The run's verdict refuses

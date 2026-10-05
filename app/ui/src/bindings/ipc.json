@@ -1483,7 +1483,7 @@
               ]
             },
             "lost_share_warning": {
-              "description": "Present only on a quantity of an SPPS band's series (the eight parameters, the\ncurvature, G; dB(A) and STI with the largest share of their bands) whose particles were\nlost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to\n[`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over\nemitted, shown beside the value as a warning that the late decay may hold slightly too\nlittle energy. From 1 % the value is refused `lost_particles`.",
+              "description": "Present only on a quantity of an SPPS band's series (the eight parameters, the\ncurvature, G; dB(A) and STI with the largest share of their bands) whose particles were\nlost from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to\n[`LOST_SHARE_REFUSED`] (1 %) of those emitted (decision 56): the share, lost over\nemitted, shown beside the value as a warning that the late decay may hold too little\nenergy. From 1 % the value is refused `lost_particles`.",
               "format": "double",
               "type": [
                 "number",
