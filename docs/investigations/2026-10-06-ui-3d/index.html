@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3D view, steps 1-2</title>
+<title>3D view steps</title>
 <style>
   :root { --bg: #09090b; --ink: #ededef; --dim: #9a9aa2; --red: #e0202e; --plate: rgba(15, 15, 17, 0.82); }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
@@ -18,8 +18,11 @@
     padding: 6px 12px; cursor: pointer; }
   button[aria-pressed="true"] { border-color: var(--red); background: #2a0d11; }
   button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .edges { margin-top: 10px; align-items: center; }
+  .edges span { color: var(--dim); margin-right: 4px; }
   .amount { display: flex; align-items: center; gap: 8px; margin-top: 12px; color: var(--dim); }
   .amount input { accent-color: var(--red); width: 160px; }
+  .amount[hidden] { display: none; }
   .amount span { color: var(--ink); font-variant-numeric: tabular-nums; min-width: 3.5em; }
   .hint { position: fixed; left: 16px; bottom: 16px; color: var(--dim); font-size: 13px; }
 </style>
@@ -27,14 +30,20 @@
 <body>
 <div id="view"></div>
 <div class="card">
-  <h1>3D view, steps 1 and 2 of the depth recipe</h1>
+  <h1>3D view: depth, step by step</h1>
   <p>The Elmia hall. "Now" is the app's view as it ships. "Shaded surfaces" changes only the surface material:
      faces lit by their orientation, mid greys on black. "See-through" adds the near walls back as glass, so the
-     whole shell shows from outside. Edges and camera are the same in all three.</p>
+     whole shell shows from outside. "Feature edges" draws only edges where surfaces meet at an angle,
+     instead of every triangle. The camera is the same throughout.</p>
   <div class="modes">
     <button id="now" aria-pressed="true">Now</button>
     <button id="shaded" aria-pressed="false">Shaded surfaces</button>
     <button id="glass" aria-pressed="false">See-through</button>
+  </div>
+  <div class="modes edges">
+    <span>Edges</span>
+    <button id="tri" aria-pressed="true">Every triangle</button>
+    <button id="feat" aria-pressed="false">Feature edges</button>
   </div>
   <label class="amount" id="amountRow" hidden>Near walls
     <input id="amount" type="range" min="0" max="60" value="15"> <span id="amountOut">15 %</span>
@@ -121,6 +130,18 @@ ghost.visible = false;
 scene.add(ghost);
 const amount = document.getElementById('amount'), amountOut = document.getElementById('amountOut');
 amount.oninput = () => { ghostMaterial.opacity = amount.value / 100; amountOut.textContent = amount.value + ' %'; };
+
+// Edges (layer 4 of the recipe): "Every triangle" is the app's 1 degree threshold (engine.ts:581), which draws
+// nearly every triangle of a curved hall; "Feature edges" keeps only edges where the faces meet at 20 degrees or
+// more: balcony lips, stair nosings, the stage edge, the outline.
+const triangleEdges = edges.geometry;
+const featureEdges = new THREE.EdgesGeometry(geometry, 20);
+function setEdges(kind) {
+  edges.geometry = kind === 'feat' ? featureEdges : triangleEdges;
+  for (const k of ['tri', 'feat']) document.getElementById(k).setAttribute('aria-pressed', String(k === kind));
+}
+for (const k of ['tri', 'feat']) document.getElementById(k).onclick = () => setEdges(k);
+if (new URLSearchParams(location.search).get('edges') === 'feat') setEdges('feat');
 
 const MODES = ['now', 'shaded', 'glass'];
 function setMode(mode) {
