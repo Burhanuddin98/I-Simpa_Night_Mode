@@ -19,6 +19,7 @@
 import {
   AmbientLight,
   BackSide,
+  FrontSide,
   BufferAttribute,
   BufferGeometry,
   Color,
@@ -32,6 +33,7 @@ import {
   LineSegments,
   Mesh,
   MeshBasicMaterial,
+  MeshLambertMaterial,
   MeshMatcapMaterial,
   OrthographicCamera,
   PerspectiveCamera,
@@ -109,6 +111,44 @@ export const viewportUi = new Store<ViewportUi>({
   planLabel: null,
   notice: null,
   error: null,
+});
+
+/**
+ * How the 3D view draws the room (the View style menu, Burhan 2026-10-06): surfaces in their
+ * material colours (the default), grey, see-through (the near walls as glass at `glass` %), or the
+ * old wireframe look; edges at every triangle or only where faces meet at 20 degrees or more.
+ * Remembered per viewer in localStorage, which can be absent: then the defaults.
+ */
+export type SurfaceStyle = 'colour' | 'grey' | 'glass' | 'wire';
+export type EdgeStyle = 'all' | 'feature';
+export interface ViewStyle {
+  surfaces: SurfaceStyle;
+  edges: EdgeStyle;
+  /** The near walls' opacity in see-through, percent, 0 to 60. */
+  glass: number;
+}
+const STYLE_KEY = 'nm.viewStyle';
+const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15 };
+function loadStyle(): ViewStyle {
+  try {
+    const v = JSON.parse(localStorage.getItem(STYLE_KEY) ?? 'null') as Partial<ViewStyle> | null;
+    if (!v) return DEFAULT_STYLE;
+    return {
+      surfaces: (['colour', 'grey', 'glass', 'wire'] as const).includes(v.surfaces as SurfaceStyle) ? (v.surfaces as SurfaceStyle) : DEFAULT_STYLE.surfaces,
+      edges: v.edges === 'feature' ? 'feature' : 'all',
+      glass: typeof v.glass === 'number' ? Math.min(60, Math.max(0, v.glass)) : DEFAULT_STYLE.glass,
+    };
+  } catch {
+    return DEFAULT_STYLE;
+  }
+}
+export const viewStyle = new Store<ViewStyle>(loadStyle());
+viewStyle.subscribe(() => {
+  try {
+    localStorage.setItem(STYLE_KEY, JSON.stringify(viewStyle.get()));
+  } catch {
+    // No storage (a private profile): the choice lasts this session only.
+  }
 });
 
 export interface ViewportDom {
@@ -240,6 +280,12 @@ class ViewportEngine {
   // Scene objects, created once; their geometries are swapped.
   private readonly faces: Mesh;
   private readonly tint: Mesh;
+  private readonly ghost: Mesh;
+  private readonly tintColour: MeshMatcapMaterial;
+  private readonly tintGrey: MeshMatcapMaterial;
+  private readonly tintWire: MeshLambertMaterial;
+  private triangleEdges: BufferGeometry = new BufferGeometry();
+  private featureEdges: BufferGeometry = new BufferGeometry();
   private readonly edges: LineSegments;
   private readonly highlight: Mesh;
   private readonly selectionWash: Mesh;
@@ -278,10 +324,19 @@ class ViewportEngine {
       new BufferGeometry(),
       new MeshMatcapMaterial({ matcap, side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, colorWrite: false }),
     );
-    this.tint = new Mesh(
+    const flat = { side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 } as const;
+    this.tintColour = new MeshMatcapMaterial({ matcap, vertexColors: true, ...flat });
+    this.tintGrey = new MeshMatcapMaterial({ matcap, ...flat });
+    // The old look, kept as Wireframe in the menu: near-black Lambert faces under every edge.
+    this.tintWire = new MeshLambertMaterial({ color: 0x19191d, ...flat });
+    this.tint = new Mesh(new BufferGeometry(), this.tintColour);
+    // See-through: the near walls drawn again as glass on top, writing no depth, so nothing behind
+    // them is hidden (the proof page's layer 2, decision 59).
+    this.ghost = new Mesh(
       new BufferGeometry(),
-      new MeshMatcapMaterial({ matcap, vertexColors: true, side: BackSide, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
+      new MeshMatcapMaterial({ matcap, vertexColors: true, side: FrontSide, flatShading: true, transparent: true, opacity: 0.15, depthWrite: false }),
     );
+    this.ghost.visible = false;
     this.edges = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }));
     this.highlight = new Mesh(
       new BufferGeometry(),
@@ -304,6 +359,7 @@ class ViewportEngine {
     const order: [{ renderOrder: number }, number][] = [
       [this.faces, 0],
       [this.tint, 0.5],
+      [this.ghost, 2.5],
       [this.highlight, 1],
       [this.selectionWash, 2],
       [this.edges, 3],
@@ -320,6 +376,7 @@ class ViewportEngine {
     this.scene.add(
       this.faces,
       this.tint,
+      this.ghost,
       this.highlight,
       this.selectionWash,
       this.edges,
@@ -361,6 +418,7 @@ class ViewportEngine {
       meshStore.subscribe(() => this.setMesh(meshStore.get())),
       sceneStore.subscribe(() => this.onScene()),
       selectionStore.subscribe(() => this.onSelection()),
+      viewStyle.subscribe(() => this.applyStyle()),
       toolStore.subscribe(() => this.applyTool()),
       stepStore.subscribe(() => {
         this.results.setShown(stepStore.get() === 'results');
@@ -632,8 +690,11 @@ class ViewportEngine {
       this.bounds = faceBounds(mesh.positions, mesh.indices);
       this.faces.geometry = geometry;
       this.tint.geometry = geometry.toNonIndexed();
+      this.ghost.geometry = this.tint.geometry;
       this.recolor();
-      this.edges.geometry = new EdgesGeometry(geometry, 1);
+      this.triangleEdges = new EdgesGeometry(geometry, 1);
+      this.featureEdges = new EdgesGeometry(geometry, 20);
+      this.applyStyle();
     }
     this.builtRev = mesh?.geometryRev ?? null;
     // A face selection names faces of the geometry it was made on.
@@ -643,10 +704,16 @@ class ViewportEngine {
   }
 
   private disposeModel(): void {
-    for (const o of [this.faces, this.tint, this.edges, this.highlight, this.selectionWash]) {
+    for (const o of [this.faces, this.tint, this.highlight, this.selectionWash]) {
       o.geometry.dispose();
       o.geometry = new BufferGeometry();
     }
+    this.ghost.geometry = new BufferGeometry();
+    this.triangleEdges.dispose();
+    this.featureEdges.dispose();
+    this.triangleEdges = new BufferGeometry();
+    this.featureEdges = new BufferGeometry();
+    this.edges.geometry = this.triangleEdges;
     this.selectionEdges.geometry.dispose();
     this.selectionEdges.geometry = new LineSegmentsGeometry();
     this.bvh = null;
@@ -673,6 +740,16 @@ class ViewportEngine {
     g.setAttribute('position', new BufferAttribute(this.positions32, 3));
     g.setIndex(new BufferAttribute(index.subarray(0, 3 * n), 1));
     return g;
+  }
+
+  /** Applies `viewStyle`: the surface material, the glass layer and the edge set. */
+  private applyStyle(): void {
+    const st = viewStyle.get();
+    this.tint.material = st.surfaces === 'wire' ? this.tintWire : st.surfaces === 'grey' ? this.tintGrey : this.tintColour;
+    this.ghost.visible = st.surfaces === 'glass';
+    (this.ghost.material as MeshMatcapMaterial).opacity = st.glass / 100;
+    this.edges.geometry = st.edges === 'feature' ? this.featureEdges : this.triangleEdges;
+    this.invalidate();
   }
 
   /** Each face in its surface group's effective material colour (variants included), muted toward white. */

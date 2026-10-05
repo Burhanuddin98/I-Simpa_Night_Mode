@@ -22,6 +22,7 @@ import { sceneStore, selectionStore, toolStore, useStore, type Tool } from '../.
 import { attachViewport, frameModel, setView, viewportUi, type ViewMode } from './engine';
 import { VIEWPORT_LIBRARIES } from './libraries';
 import { ResultsOverlay } from './ResultsOverlay';
+import { ViewStyleMenu } from './ViewStyleMenu';
 import './viewport.css';
 
 /** Place source: the source marker's dot and glow, in the toolbar's line style. */
@@ -186,7 +187,8 @@ export function Viewport() {
         )}
       </div>
 
-      <div className="overlay-tl segmented view float-panel" role="tablist" aria-label="View">
+      <div className="overlay-tl view-bar">
+      <div className="segmented view float-panel" role="tablist" aria-label="View">
         {VIEWS.map((v) =>
           v.key === 'section' ? (
             <button key={v.key} role="tab" data-view={v.key} aria-selected={false} disabled aria-disabled="true" title="Section: not in this version">
@@ -204,6 +206,8 @@ export function Viewport() {
             </button>
           ),
         )}
+      </div>
+      <ViewStyleMenu />
       </div>
 
       <div className="tools float-panel" role="toolbar" aria-label="Tools">

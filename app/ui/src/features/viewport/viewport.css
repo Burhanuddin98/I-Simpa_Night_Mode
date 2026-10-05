@@ -454,3 +454,79 @@
 .vp-refused {
   color: var(--red-hi);
 }
+
+/* The view tabs and the Style menu side by side, top left. */
+.viewport .view-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.view-style {
+  position: relative;
+}
+.view-style-button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--edge);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.view-style-button[aria-expanded='true'] {
+  border-color: var(--red);
+}
+.view-style-menu {
+  position: absolute;
+  top: 38px;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid var(--edge);
+}
+.view-style-head {
+  padding: 8px 8px 4px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.view-style-menu button {
+  padding: 6px 8px 6px 26px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  position: relative;
+  cursor: pointer;
+}
+.view-style-menu button:hover {
+  background: var(--raised-2);
+}
+.view-style-menu button[aria-checked='true']::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--red);
+  transform: translateY(-50%);
+}
+.view-style-glass {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 8px 26px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.view-style-glass input {
+  accent-color: var(--red);
+  width: 90px;
+}
