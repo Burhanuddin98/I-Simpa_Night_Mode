@@ -987,7 +987,10 @@
 
 /* A scene row's remove button (sources, receivers): quiet until the row is hovered or it has focus. */
 .row-remove {
-  flex: none;
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
   display: grid;
   place-items: center;
   width: 22px;
@@ -999,6 +1002,13 @@
   color: var(--text-3);
   opacity: 0.55;
   cursor: pointer;
+}
+/* Beside a source's on/off switch, the remove button sits to its left. */
+.scene-line:has(.switch) .row-remove {
+  right: 38px;
+}
+.scene-line:has(.switch) .scene-row {
+  padding-right: 64px;
 }
 .scene-line:hover .row-remove,
 .row-remove:focus-visible {
