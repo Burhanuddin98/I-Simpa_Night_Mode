@@ -48,6 +48,9 @@ import {
   type Camera,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { MeshBVH } from 'three-mesh-bvh';
 import * as actions from '../../actions';
 import type { SceneMesh } from '../../mesh';
@@ -238,14 +241,14 @@ class ViewportEngine {
   private readonly edges: LineSegments;
   private readonly highlight: Mesh;
   private readonly selectionWash: Mesh;
-  private readonly selectionEdges: LineSegments;
+  private readonly selectionEdges: LineSegments2;
   private readonly sourcePoints: Points;
   private readonly receiverPoints: Points;
   private readonly halo: Points;
   private readonly sourceStems: LineSegments;
   private readonly receiverStems: LineSegments;
   /** W1: each cutting plane's outline, and its cell grid off the Results step (upstream's DrawPlan). */
-  private readonly planeOutline: LineSegments;
+  private readonly planeOutline: LineSegments2;
   private readonly planeGrid: LineSegments;
   private planeSummary: { name: string; corners: Vec[]; u: number; v: number; gridLines: number }[] = [];
 
@@ -277,13 +280,15 @@ class ViewportEngine {
       new BufferGeometry(),
       new MeshBasicMaterial({ color: SELECT, transparent: true, opacity: 0.3, side: BackSide, depthWrite: false }),
     );
-    this.selectionEdges = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: SELECT, transparent: true, opacity: 1 }));
+    // The red outlines are fat lines (WebGL draws 1 px whatever is asked): the selection 2 px, a sound-level
+    // plane 2.5 px (Burhan 2026-10-06: "the red lines need to be a bit thicker ... like the sound-level plane").
+    this.selectionEdges = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: SELECT, linewidth: 2, transparent: true, opacity: 1 }));
     this.sourcePoints = new Points(new BufferGeometry(), markerMaterial(glowPixels(64), 64, SOURCE_PX));
     this.receiverPoints = new Points(new BufferGeometry(), markerMaterial(ringPixels(32, 0.55, 0.85, WHITE, BG), 32, RECEIVER_PX));
     this.halo = new Points(new BufferGeometry(), markerMaterial(ringPixels(64, 0.78, 0.92, RED, null), 64, HALO_PX));
     this.sourceStems = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: SELECT, transparent: true, opacity: 0.9 }));
     this.receiverStems = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.5 }));
-    this.planeOutline = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: SELECT, transparent: true, opacity: 0.95, depthWrite: false }));
+    this.planeOutline = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: SELECT, linewidth: 2.5, transparent: true, opacity: 0.95, depthWrite: false }));
     this.planeGrid = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: SELECT, transparent: true, opacity: 0.32, depthWrite: false }));
     const order: [{ renderOrder: number }, number][] = [
       [this.faces, 0],
@@ -476,6 +481,7 @@ class ViewportEngine {
     const size = r.getSize(new Vector2());
     if (size.x !== w || size.y !== h) {
       r.setSize(w, h, false);
+      for (const m of [this.selectionEdges.material, this.planeOutline.material]) m.resolution.set(w, h);
       this.persp.aspect = w / h;
       this.persp.updateProjectionMatrix();
     }
@@ -620,10 +626,12 @@ class ViewportEngine {
   }
 
   private disposeModel(): void {
-    for (const o of [this.faces, this.edges, this.highlight, this.selectionWash, this.selectionEdges]) {
+    for (const o of [this.faces, this.edges, this.highlight, this.selectionWash]) {
       o.geometry.dispose();
       o.geometry = new BufferGeometry();
     }
+    this.selectionEdges.geometry.dispose();
+    this.selectionEdges.geometry = new LineSegmentsGeometry();
     this.bvh = null;
     this.positions32 = null;
     this.topo = null;
@@ -688,7 +696,13 @@ class ViewportEngine {
     this.selectionEdges.geometry.dispose();
     const g = this.overlay(faces);
     this.selectionWash.geometry = g;
-    this.selectionEdges.geometry = faces.length > 0 ? new EdgesGeometry(g, 1) : new BufferGeometry();
+    const fat = new LineSegmentsGeometry();
+    if (faces.length > 0) {
+      const e = new EdgesGeometry(g, 1);
+      fat.setPositions(e.getAttribute('position').array as Float32Array);
+      e.dispose();
+    }
+    this.selectionEdges.geometry = fat;
   }
 
   /** The faces the selection covers: picked faces, or every face of a selected group. */
@@ -846,8 +860,8 @@ class ViewportEngine {
       summary.push({ name: r.name, corners: [A, B, C, D].map((p) => [p.x, p.y, p.z] as Vec), u: cells?.u ?? 0, v: cells?.v ?? 0, gridLines: lines });
     }
     for (const o of [this.planeOutline, this.planeGrid]) o.geometry.dispose();
-    const g1 = new BufferGeometry();
-    g1.setAttribute('position', new Float32BufferAttribute(outline, 3));
+    const g1 = new LineSegmentsGeometry();
+    if (outline.length > 0) g1.setPositions(outline);
     const g2 = new BufferGeometry();
     g2.setAttribute('position', new Float32BufferAttribute(grid, 3));
     this.planeOutline.geometry = g1;
