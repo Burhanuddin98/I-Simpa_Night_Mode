@@ -984,3 +984,27 @@
   flex-grow: 1;
   width: auto;
 }
+
+/* A scene row's remove button (sources, receivers): quiet until the row is hovered or it has focus. */
+.row-remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  opacity: 0.55;
+  cursor: pointer;
+}
+.scene-line:hover .row-remove,
+.row-remove:focus-visible {
+  opacity: 1;
+}
+.row-remove:hover {
+  color: var(--red);
+  background: var(--red-wash);
+}

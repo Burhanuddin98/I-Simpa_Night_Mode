@@ -18,9 +18,9 @@ import type { Source, UiIssue } from '../bindings/ipc';
 import { issuesByEntity, projectIssues } from '../issues';
 import { refusalStore, sceneStore, selectionStore, useStore } from '../store';
 import { FoldButton, useFold } from './fold';
-import { Search } from './icons';
+import { Search, Trash2 } from './icons';
 import { coord, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
-import { onEntityKey, selectGroup, selectPoint } from './sceneUi';
+import { onEntityKey, removeEntity, selectGroup, selectPoint } from './sceneUi';
 
 // ---- the source switch (M26) -------------------------------------------------------------------
 
@@ -110,6 +110,21 @@ export function IssueTag({ issues }: { issues: readonly UiIssue[] }) {
         {more}
       </span>
     </span>
+  );
+}
+
+/** A row's own remove button: one click removes it (Ctrl+Z brings it back). */
+function RemoveButton({ kind, id, name }: { kind: 'source' | 'receiver'; id: string; name: string }) {
+  return (
+    <button
+      className="row-remove"
+      data-part="row-remove"
+      aria-label={`Remove ${name}`}
+      title={`Remove ${name} (Del; Ctrl+Z brings it back)`}
+      onClick={() => actions.fire(removeEntity(kind, id))}
+    >
+      <Trash2 size={12} />
+    </button>
   );
 }
 
@@ -216,6 +231,7 @@ export function ScenePanel() {
                   </span>
                 </button>
                 <SourceSwitch source={s} compact />
+                <RemoveButton kind="source" id={s.id} name={s.name} />
               </div>
             ))}
             {!view.sources.length && <div className="scene-empty empty">No sources</div>}
@@ -227,8 +243,8 @@ export function ScenePanel() {
               total={view.point_receivers.length + view.surface_receivers.length}
             />
             {receivers.map((r) => (
+              <div key={r.id} className="scene-line">
               <button
-                key={r.id}
                 className="scene-row"
                 data-entity={`point_receiver:${r.id}`}
                 aria-pressed={selection.kind === 'receiver' && selection.id === r.id}
@@ -250,6 +266,8 @@ export function ScenePanel() {
                   {coord(r.position[0], 1)}, {coord(r.position[1], 1)}
                 </span>
               </button>
+              <RemoveButton kind="receiver" id={r.id} name={r.name} />
+              </div>
             ))}
             {grids.map((r) => (
               <div key={r.id} className="scene-row static" data-entity={`surface_receiver:${r.id}`}>

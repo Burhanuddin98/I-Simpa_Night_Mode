@@ -17,6 +17,7 @@ import { useEffect, useRef, useState, type JSX } from 'react';
 import * as actions from '../../actions';
 import { MeasureTool, OrbitTool, ReceiverTool, SectionTool, SelectTool } from '../../chrome/icons';
 import { REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
+import { onWindowEntityKey } from '../../chrome/sceneUi';
 import { sceneStore, selectionStore, toolStore, useStore, type Tool } from '../../store';
 import { attachViewport, frameModel, setView, viewportUi, type ViewMode } from './engine';
 import { VIEWPORT_LIBRARIES } from './libraries';
@@ -81,6 +82,11 @@ export function Viewport() {
       window.removeEventListener('keydown', esc);
     };
   }, [menu]);
+  // Del and F2 on a source or receiver picked in the view (the panels handle their own).
+  useEffect(() => {
+    window.addEventListener('keydown', onWindowEntityKey);
+    return () => window.removeEventListener('keydown', onWindowEntityKey);
+  }, []);
   // The picked faces went away (a new mesh, another pick): so does the menu.
   useEffect(() => {
     if (!regroupFaces(selection)) setMenu(null);

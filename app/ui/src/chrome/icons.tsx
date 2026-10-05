@@ -8,6 +8,12 @@ export const Search = ({ size = 13 }: { size?: number }) => (
   </svg>
 );
 
+export const Trash2 = ({ size = 13 }: { size?: number }) => (
+  <svg width={size} height={size} {...common}>
+    <path d="M4 6h12M8 6V4h4v2M6 6l1 10h6l1-10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 export const Play = () => (
   <svg width="11" height="11" viewBox="0 0 20 20" aria-hidden>
     <path d="M5 3l12 7-12 7z" fill="currentColor" />

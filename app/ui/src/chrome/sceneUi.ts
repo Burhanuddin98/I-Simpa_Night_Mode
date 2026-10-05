@@ -1,7 +1,8 @@
 // UI state and verbs the scene package keeps for itself. The backend's truth stays in store.ts
 // and changes only through actions.ts; this holds what the chrome needs between its own panels:
 // selecting a scene entity, and Del and F2 on it.
-import type { KeyboardEvent } from 'react';
+/** What the key handlers read: React's synthetic event and the window's native one both have it. */
+type KeyEvent = Pick<KeyboardEvent, 'key' | 'target' | 'ctrlKey' | 'altKey' | 'metaKey' | 'preventDefault'>;
 import * as actions from '../actions';
 import { fieldKey } from '../issues';
 import { removeReceiver, removeSource } from '../ops';
@@ -37,13 +38,17 @@ export const entityKey = (kind: 'source' | 'point_receiver', id: string) => fiel
  */
 export async function removeSelected(): Promise<void> {
   const sel = selectionStore.get();
-  if (sel.kind === 'source') {
-    const out = await actions.apply(removeSource(sel.id), entityKey('source', sel.id));
-    if (out.applied) selectionStore.set({ kind: 'none' });
-  } else if (sel.kind === 'receiver') {
-    const out = await actions.apply(removeReceiver(sel.id), entityKey('point_receiver', sel.id));
-    if (out.applied) selectionStore.set({ kind: 'none' });
-  }
+  if (sel.kind === 'source' || sel.kind === 'receiver') await removeEntity(sel.kind, sel.id);
+}
+
+/** Removes one source or receiver by id (the scene list's remove buttons); the selection clears if it was that one. */
+export async function removeEntity(kind: 'source' | 'receiver', id: string): Promise<void> {
+  const out =
+    kind === 'source'
+      ? await actions.apply(removeSource(id), entityKey('source', id))
+      : await actions.apply(removeReceiver(id), entityKey('point_receiver', id));
+  const sel = selectionStore.get();
+  if (out.applied && sel.kind === kind && sel.id === id) selectionStore.set({ kind: 'none' });
 }
 
 /** Keys that belong to a text field while it has focus. */
@@ -53,10 +58,12 @@ export function typing(target: EventTarget | null): boolean {
 }
 
 /**
- * Del removes and F2 renames the selected source or receiver, inside the scene list and the
- * Sources panel only (PLAN.md 7.5, points 1 and 3). A text field keeps its own keys.
+ * Del removes and F2 renames the selected source or receiver (PLAN.md 7.5, points 1 and 3): in the
+ * scene list and the Sources panel, and, through `onWindowEntityKey`, anywhere else, the 3D view
+ * included (Burhan 2026-10-06: Del did nothing after picking a source in the view). A text field
+ * keeps its own keys.
  */
-export function onEntityKey(e: KeyboardEvent): void {
+export function onEntityKey(e: KeyEvent): void {
   if (typing(e.target) || e.ctrlKey || e.altKey || e.metaKey) return;
   const sel = selectionStore.get();
   if (sel.kind !== 'source' && sel.kind !== 'receiver') return;
@@ -67,4 +74,9 @@ export function onEntityKey(e: KeyboardEvent): void {
     e.preventDefault();
     requestRename();
   }
+}
+
+/** The window's listener: Del and F2 outside the panels that already handle them (their handler marks the event). */
+export function onWindowEntityKey(e: KeyboardEvent): void {
+  if (!e.defaultPrevented) onEntityKey(e);
 }
