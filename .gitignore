@@ -30,3 +30,6 @@ test_project.isimpa
 
 # Python bytecode from the fixture generators and their tests
 __pycache__/
+
+# Decision 55: this project's outputs (runs, beds, videos, screenshots)
+/.out/
