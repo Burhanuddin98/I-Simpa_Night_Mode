@@ -61,7 +61,8 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 - **`null` appears only at these keys:** `spps`, `tcr` (the other solver's), `mc_sd` (a value not
   from a Monte-Carlo histogram), `band_hz` and `aggregate` (a surface file's: the first for the
   `Global` file, the second for a band's), `curved`, `decay_curve`, `field`, `air_m_per_metre`,
-  `onset`, `position_m`, `arrival_s`, `decay_arrival`, `floor_db`, `lost_share`, `crossings`,
+  `onset`, `position_m`, `arrival_s`, `decay_arrival`, `floor_db`, `lost_share`,
+  `unfinished_share`, `crossings`,
   `crossings_per_particle`, `lambert_walls` and `uniform_lambert_walls` (a quantity's calibration that has no entry of its own for those walls),
   `free_paths` (the reference's, when the transport refused), and inside a refusal's typed
   `error`, `sd`, `with_tail`, `with_missing`, `low`, `high`, `particles_at_least` and
@@ -87,7 +88,16 @@ on the same line: `solver build verified: ...` or `solver build UNVERIFIED <code
 
 ```
 {
-  "results_version": 15,              // 15: edt_s refused missing_moves where the
+  "results_version": 16,              // 16: lost particles reported, not bounded
+                                      //    (decision 56): a band's lost_share is lost
+                                      //    over emitted, beside lost_status; EDT, T20
+                                      //    and T30 carry lost_share_warning from 0.3 %
+                                      //    and are refused lost_particles from 1 %;
+                                      //    unfinished_share (the particles left alive
+                                      //    at the end of a complete band) replaces the
+                                      //    old lost_share's other part;
+                                      //    lost_follows_decay is gone;
+                                      // 15: edt_s refused missing_moves where the
                                       //    floor's and lost particles' energy, added
                                       //    back, moves EDT outside its own range;
                                       // 14: the room's volume is its air's, without the
@@ -316,7 +326,7 @@ A point receiver:
 | `label`, `folder` | the folder's name, which is exactly one `config.xml` label, and its path under `solve/` |
 | `position_m` | as SPPS stores it; `null` when not read |
 | `arrival_s` | the direct sound's arrival at the centre, which every onset-relative parameter is measured from, the direct sound spread over `±receiver_crossing_s/2` about it; `null` when not computed, and the parameters then detect it. When it lies before a band's onset bin, or after it with the leading edge of its spread at or after the bin's end, C50, C80, D50 and Ts are refused `params_bad_arrival`; SPL, EDT, T20 and T30 are not |
-| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete, their unfinished paths are bounded by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `lost_share` (the share of the energy from the arrival on that unfinished particles can have taken, or `null` when there are none); `lost_follows_decay` (energetic mode: the share bounds the energy from every time on, since what a lost particle would still have brought falls with the decay; `docs/results.md`, "Lost particles"); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …, "method": "random" | "energetic", "particles": …, "run": {"particles", "least_deposit", "lifetime_cv2", "lambert_walls", "uniform_absorption", "mean_absorption", "bands", "receiver_crossing_s"}}`, the mean deposit in Pa², the particles per source, and what the calibration's correction, domain and structure take from the run: the least of the contributing sources' deposits, the spread of the particles' lifetimes from the band's room table, whether every face is Lambert with scattering 1 in the band, whether every face has the same absorption, the faces' mean absorption, the bands summed, and `2R/c`, the roughness structure's shortest block; or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `crossings_per_particle` (`n`, the crossings of the receiver per particle as the calibration measures them, which its correction and domain take, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters`; `g_db` (sound strength G, below); `curvature` and `decay_curve` (below) |
+| `bands[]` | per computed band: `freq_hz`; `complete` (random mode, `trans_epsilon` above 0, and SPPS's statistics count at most one particle in a million remaining when the steps ran out, so no tail after the series is bounded; lost particles, and those few remaining, do not make a band incomplete: the remaining ones' unfinished paths are bounded by `unfinished_share`, the lost ones are reported by `lost_share`); `floor_db` (energetic mode's `-10·trans_epsilon`, or `null`); `unfinished_share` (the share of the energy from the arrival on that the particles left alive at the end of a complete band can have taken, or `null` when there are none; version 16); `lost_share` (version 16, decision 56: the share of the band's particles SPPS lost to loops and meshing, over those emitted, or `null` when none was lost; reported, not bounded; until version 15 the share of the energy the lost and remaining particles were bounded to have taken); `lost_status` (`ok` below 0.3 % lost, `warning` from it, `refused` from 1 %: "Lost particles", below); `early_reverberation_unresolved` (always `true` for SPPS: each value is midway between the reverberation beginning at the arrival, at the first bin wholly after the direct sound and at that bin's end, or refused `early_unresolved`; `docs/params.md`, "The early reverberation"); `arrival` (what C50, C80, D50 and Ts are measured from: `{"arrival": "known", "time_s": …, "half_width_s": …}`, the direct sound at `arrival_s` spread over `±receiver_crossing_s/2`, or `{"arrival": "detected"}`); `decay_arrival` (what EDT, T20 and T30 are measured from, the same shape, or `null` when the series is refused); `contributing_sources` (the sources whose `.recps` total is above 0: with more than one, the seven onset-relative parameters are refused, `several_sources`); `noise_model` (`{"model": "crossings", "mean_deposit": …, "method": "random" | "energetic", "particles": …, "run": {"particles", "least_deposit", "lifetime_cv2", "lambert_walls", "uniform_absorption", "mean_absorption", "bands", "receiver_crossing_s"}}`, the mean deposit in Pa², the particles per source, and what the calibration's correction, domain and structure take from the run: the least of the contributing sources' deposits, the spread of the particles' lifetimes from the band's room table, whether every face is Lambert with scattering 1 in the band, whether every face has the same absorption, the faces' mean absorption, the bands summed, and `2R/c`, the roughness structure's shortest block; or `{"model": "unknown", "detail": …}`); `crossings` (the receiver crossings the model implies, or `null`); `crossings_per_particle` (`n`, the crossings of the receiver per particle as the calibration measures them, which its correction and domain take, or `null`); `energy_pa2` (the `.recp` series, one per step) and `total_pa2`; `source_power_rho_c` (Pa²·m², the free field at `r` is this over `4πr²`); `background_noise_db`; `onset` (`index`, `bin_start_s`, `bin_end_s`, or `null`); `parameters`; `g_db` (sound strength G, below); `curvature` and `decay_curve` (below) |
 | `aggregate` | `aggregate` (the label), `bands_hz` (the bands summed), `crossings_per_particle` (the aggregate's own `n`: its bands' particles together, at the least deposit of any band and the largest lifetime spread; `null` for TCR), `parameters`, `dba` (the A-weighted level of the bands' SPL, below: a sum of band levels, not of the summed series), `curvature`, `decay_curve`. **Not ISO 3382-1's single-number value** (a mean of band values): one decay of all bands' energy, weighted by the source spectrum. Never show it as the room's value |
 | `sti` | the speech transmission index at the receiver (results version 10, below): `method`, `weighting`, `shown` (`"male"`), `male`, `female`, `speech_level_dba_at_1m`, `noise`, `monte_carlo`, `modulation_hz`, `bands[]` |
 | `by_source[]` | `source` and its `energy` per band, Pa² |
@@ -436,6 +446,27 @@ series; not per source), IEC 60268-16:2011 (edition 4) from the predicted energy
 Both fields are absent from every other value. With either, `lo`/`hi` are no longer `value ∓
 2.5·mc_sd`, and `status` is `wide` whatever their width.
 
+**Lost particles (results version 16, decision 56).** Lost particles are reported, not bounded, as
+Odeon reports lost rays. A band's `lost_share` is the share of its particles SPPS lost (loops and
+meshing) over those emitted; `lost_status` says what it does to EDT, T20 and T30, of the band, of
+its per-source bands and (the largest share of any band) of the aggregate:
+- below 0.3 % (`ok`): shown as they are;
+- from 0.3 % (`warning`): shown, each value carrying `lost_share_warning`, the share (a fraction):
+  the value may read slightly low in the late decay. The field is absent from every other value;
+- from 1 % (`refused`): refused `lost_particles` (`params_not_evaluable`, `why`: `share`, `limit`
+  0.01), the curvature with them: the model is broken (holes, a bad mesh). The run's verdict refuses
+  a band over 1 % whole (`particle_loss_excess`), so this is seen at 1 % exactly or under a raised
+  loss limit.
+
+The thresholds are a forecast, by linear scaling of the worst room the 10-05 hall bed measured
+(Elmia, 0.15 % lost moved T30 by 5.3e-4: 0.36 × the share), so 0.3 % moves T30 about 1e-3 and 1 %
+about 3.6e-3 against the 5e-3 limit (`docs/investigations/2026-10-05-b82-b84/FINDINGS.md`;
+`results::spps::LOST_SHARE_WARNING`, `LOST_SHARE_REFUSED`). Until version 15 the lost particles'
+energy was bounded instead (`ENERGETIC_LOST_ENERGY_RATIO` × lost/emitted following the decay in
+energetic mode, a lump from the arrival in random mode) and refused whatever it could move; that
+bound refused T20 in BRAS CR2 at 0.03 % lost and no longer refuses anything. SPL, G, C50, C80, D50,
+Ts, dB(A) and STI no longer see lost particles at all.
+
 **The range (results version 7; decision-log rows 37 (3) and 39 (3)).** Every value of the eight
 parameters of an SPPS band, aggregate or per-source band carries `status`, `lo` and `hi`: the range
 `value ± 2.5·mc_sd` (`params::noise::RANGE_Z`, EDT's Z) and `"ok"` when its half-width is within the
@@ -477,6 +508,7 @@ radius squared and do not fall with more particles, so the radius must shrink to
 multiple of the run's); the text output shows `NE(uncal:<count>)` or `NE(uncal:R<=<s>x)`. `code` is a row of `docs/solver-contract.md`, "Parameter refusals"; `error` is the typed
 refusal, `why.why` one of `range_not_reached`, `truncated`, `unresolved`, `early_unresolved`,
 `range_too_short`, `not_decaying`, `empty_window`, `missing_not_cleared`, `missing_moves`,
+`lost_particles` (EDT, T20, T30 and the curvature, version 16),
 `monte_carlo_noise`, `noise_unknown`, `noise_uncalibrated`, `several_sources`, `no_time_series`,
 `edt_refused` (EDT only: `reason` is one of `no_energy`, `no_energy_after_arrival`, `run_too_short`,
 `direct_only`, `step_too_coarse`, `not_decaying`, `too_few_particles`, `not_decaying_at_run_end`,
@@ -505,11 +537,13 @@ run with too few particles can also give; and for **every aggregate (summed-band
 whatever the mode** ("broadband EDT is not covered by the held-out test"). `validation_note` names
 every reason that applies, joined by `; `.
 
-**Missing energy (version 15, backlog 84).** Where the solver's floor or lost particles can have cost the
-series energy (`docs/params.md`, "Missing energy"), the method is run again with that energy added to every
-backward sum, plus, in energetic mode, the most a lost share following the decay can move a decay time over
-10 dB; `edt_s` is refused `missing_moves` when that value falls outside the method's own `lo`..`hi`, its
-`limit` the range's relative half-width on that side. `edt` still holds the method's own value and range.
+**Missing energy (version 15, backlog 84).** Where the solver's floor or the particles left alive at the
+end of a complete band can have cost the series energy (`docs/params.md`, "Missing energy"), the method is
+run again with that energy added to every backward sum; `edt_s` is refused `missing_moves` when that value
+falls outside the method's own `lo`..`hi`, its `limit` the range's relative half-width on that side. `edt`
+still holds the method's own value and range. Version 15 also added the lost particles' share (in energetic
+mode, the most a share following the decay can move a decay time over 10 dB); since version 16 lost
+particles are reported, not bounded ("Lost particles", above).
 
 **The marker rule (decision-log row 20).** Only tested numbers are shown as validated; every EDT that is not
 validated carries "not yet validated" on every surface that prints or exports it. `edt_s` stays a value

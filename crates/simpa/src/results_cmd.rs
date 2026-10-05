@@ -87,7 +87,8 @@ pub fn results_cmd(args: &[&str]) -> ExitCode {
 /// A value to its precision, with its range as `±<half-width>` when it has one (decision-log row
 /// 37 (3)), the half-width the larger side's, rounded up, so that the range is never shown
 /// narrower than it is, and `w` after it when the range is wider than the quantity's difference
-/// limen (`status` `wide`); or `NE(<why>)` for a refusal; for a refusal for its Monte-Carlo
+/// limen (`status` `wide`), and `!` after that when the band lost enough particles for a warning
+/// (`lost_share_warning`, decision 56); or `NE(<why>)` for a refusal; for a refusal for its Monte-Carlo
 /// noise, `NE(noise:<count>)` with the particles per source that would bring it within its limit
 /// ([`particles`]), or `NE(noise)` when none can be named; for a run outside the noise model's
 /// calibration, `NE(uncal:<count>)` with the particles per source that reach it, or
@@ -99,6 +100,7 @@ fn cell(e: &Evaluated, digits: usize, scale: f64) -> String {
             status,
             lo: Some(lo),
             hi: Some(hi),
+            lost_share_warning,
             ..
         } => {
             let step = 10f64.powi(-(digits as i32));
@@ -110,7 +112,12 @@ fn cell(e: &Evaluated, digits: usize, scale: f64) -> String {
             } else {
                 ""
             };
-            format!("{:.*}±{half:.*}{wide}", digits, value * scale, digits)
+            let lost = if lost_share_warning.is_some() {
+                "!"
+            } else {
+                ""
+            };
+            format!("{:.*}±{half:.*}{wide}{lost}", digits, value * scale, digits)
         }
         Evaluated::Value { value, .. } => format!("{:.*}", digits, value * scale),
         Evaluated::NotEvaluable { not_evaluable: r } => {
@@ -224,6 +231,7 @@ fn text(rep: &Report) -> String {
              run's."
         );
         let mut edt_marked = false;
+        let mut lost_marked = false;
         for r in &sp.point_receivers {
             let arrival = r
                 .arrival_s
@@ -251,6 +259,15 @@ fn text(rep: &Report) -> String {
             for (label, p) in rows {
                 let edt = edt_cell(p);
                 edt_marked |= edt.ends_with('*');
+                lost_marked |= [&p.edt_s, &p.t20_s, &p.t30_s].iter().any(|e| {
+                    matches!(
+                        e,
+                        Evaluated::Value {
+                            lost_share_warning: Some(_),
+                            ..
+                        }
+                    )
+                });
                 let _ = writeln!(
                     s,
                     "{label:>8} {:>11} {:>12} {:>11} {:>11} {:>11} {:>11} {:>11} {:>11}",
@@ -274,6 +291,14 @@ to 1 m, in either computation mode; not for the broadband aggregate, receivers o
 receiver whose start time is uncertain, no direct path from the source (the first arrival is \
 estimated from the first recorded hit; VERDICT-2 H3, G4 R007) \
 (JSON: parameters.edt_validated, parameters.edt.validation_note)"
+            );
+        }
+        if lost_marked {
+            let _ = writeln!(
+                s,
+                "! lost particles: the band lost from 0.3 % to under 1 % of its particles; values \
+may be slightly low in the late decay. From 1 % they are refused, NE(lost_particles): holes or a \
+bad mesh (decision 56; JSON: lost_share_warning, the band's lost_share)"
             );
         }
         match &sp.reference {

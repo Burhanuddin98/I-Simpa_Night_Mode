@@ -372,7 +372,11 @@ its end, and the tail bound cannot see it:
   accepted.
 - **Lost particles.** SPPS counts particles lost to infinite loops and meshing problems
   (`partLoop`, `partLost`, `CalculationCore.cpp:102-107`); each stops mid-path, and what it would
-  still have brought is missing.
+  still have brought is missing. **Since decision 56 (results version 16) `core::results` no longer
+  gives `params` their share**: lost particles are reported beside EDT, T20 and T30, a warning from
+  0.3 % lost and a refusal (`lost_particles`) from 1 % (`docs/results.md`, "Lost particles"). The
+  share below is what `with_lost_share` still takes, for the particles left alive at the end of a
+  complete band, and what this library can bound.
 
 `EnergySeries::with_solver_floor(floor_db, alive_share)` and `with_lost_share(share)` say so. The
 most energy that can be missing is bounded, as a share of `S(onset)`, the energy the receiver

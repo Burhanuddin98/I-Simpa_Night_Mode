@@ -126,7 +126,7 @@ fn nulls(v: &Value, path: String, out: &mut Vec<String>) {
 
 /// The keys `docs/formats/results-json.md` documents as nullable in a report, and in a refusal's
 /// typed `error`.
-const NULLABLE: [&str; 34] = [
+const NULLABLE: [&str; 35] = [
     ".crossings_per_particle",
     ".lambert_walls",
     ".uniform_lambert_walls",
@@ -148,6 +148,7 @@ const NULLABLE: [&str; 34] = [
     ".decay_arrival",
     ".floor_db",
     ".lost_share",
+    ".unfinished_share",
     ".crossings",
     ".sd",
     ".with_tail",
@@ -259,7 +260,7 @@ fn assert_bed_read_from_the_summary(rep: &Value) {
     }
     let all_pass = want.values().all(|p| p["status"] == "PASS");
     assert_eq!(rep["validated_by_bed"], all_pass);
-    assert_eq!(rep["results_version"], 15);
+    assert_eq!(rep["results_version"], 16);
 }
 
 /// M12 gate (b)'s plant through the CLI (P4): `$SIMPA_BED_DEMOTE` naming
@@ -1113,7 +1114,7 @@ fn m12_the_report_carries_the_rooms_din_targets_absorption_by_group_and_sabine()
         let o = results(&fixture(name), true);
         assert_eq!(o.code, 0, "{o:#?}");
         let rep = json(&o);
-        assert_eq!(rep["results_version"], 15, "{name}");
+        assert_eq!(rep["results_version"], 16, "{name}");
         let room = &rep["room"];
         assert_eq!(room["status"], "computed", "{name}: {room}");
         let (v, s) = (f(&room["volume_m3"]), f(&room["area_m2"]));

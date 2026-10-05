@@ -287,6 +287,14 @@ export type Evaluated =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -536,6 +544,17 @@ export type NotEvaluable =
       with_missing?: number | null;
     }
   | {
+      /**
+       * A fraction.
+       */
+      limit: number;
+      /**
+       * Lost over emitted, a fraction.
+       */
+      share: number;
+      why: 'lost_particles';
+    }
+  | {
       continued: number;
       high?: number | null;
       /**
@@ -740,6 +759,14 @@ export type Evaluated1 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -799,6 +826,14 @@ export type Evaluated2 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -853,6 +888,14 @@ export type Evaluated3 =
        * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
        */
       lo?: number | null;
+      /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
       /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
@@ -909,6 +952,14 @@ export type Evaluated4 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -963,6 +1014,14 @@ export type Evaluated5 =
        * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
        */
       lo?: number | null;
+      /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
       /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
@@ -1024,6 +1083,14 @@ export type Evaluated6 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -1078,6 +1145,14 @@ export type Evaluated7 =
        * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
        */
       lo?: number | null;
+      /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
       /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
@@ -1134,6 +1209,14 @@ export type Evaluated8 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -1189,6 +1272,14 @@ export type Evaluated9 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -1243,6 +1334,14 @@ export type Evaluated10 =
        * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
        */
       lo?: number | null;
+      /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
       /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
@@ -1342,6 +1441,14 @@ export type Evaluated11 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -1381,6 +1488,12 @@ export type Evaluated11 =
   | {
       not_evaluable: Refused;
     };
+/**
+ * `ok` below 0.3 % lost; `warning` from it, EDT, T20 and T30 carrying `lost_share_warning`;
+ * `refused` from 1 %, where they and the curvature are refused `lost_particles`
+ * ([`LostStatus`]).
+ */
+export type LostStatus = 'ok' | 'warning' | 'refused';
 /**
  * What the values' Monte-Carlo noise is estimated from (`params::noise`).
  */
@@ -1442,6 +1555,14 @@ export type Evaluated12 =
        * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
        */
       lo?: number | null;
+      /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
       /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
@@ -1525,6 +1646,14 @@ export type Evaluated13 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -1582,6 +1711,14 @@ export type Evaluated14 =
        * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
        */
       lo?: number | null;
+      /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
       /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
@@ -1686,6 +1823,14 @@ export type Evaluated15 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -1747,6 +1892,14 @@ export type Evaluated16 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -1801,6 +1954,14 @@ export type Evaluated17 =
        * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
        */
       lo?: number | null;
+      /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
       /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
@@ -1883,6 +2044,14 @@ export type Evaluated18 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -1938,6 +2107,14 @@ export type Evaluated19 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -1992,6 +2169,14 @@ export type Evaluated20 =
        * (`params::noise::RANGE_Z`), or EDT's own (`edt.lo_s`). Present with `status`.
        */
       lo?: number | null;
+      /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
       /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
@@ -2155,6 +2340,14 @@ export type Evaluated21 =
        */
       lo?: number | null;
       /**
+       * Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+       * from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+       * (decision 56): the share, lost over emitted, shown beside the value as a warning that
+       * it may read slightly low in the late decay. From 1 % the value is refused
+       * `lost_particles`.
+       */
+      lost_share_warning?: number | null;
+      /**
        * The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);
        * `null` for a value that does not come from a Monte-Carlo histogram, such as TCR's
        * analytic references.
@@ -2201,6 +2394,14 @@ export type Evaluated21 =
  * via the `definition` "Gender".
  */
 export type Gender1 = 'male' | 'female';
+/**
+ * What a band's lost share ([`SppsResults::lost_share`]) does to its EDT, T20 and T30
+ * (decision 56).
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "LostStatus".
+ */
+export type LostStatus1 = 'ok' | 'warning' | 'refused';
 /**
  * SPPS's computation method (`computation_method`): how a crossing's deposit is modelled, and
  * which of [`calibration`]'s tables apply.
@@ -3876,8 +4077,8 @@ export interface ReceiverBandReport {
    * `spps::SppsResults::band_complete`), so the series is given to `params` as complete and no
    * tail after its end is bounded; in energetic mode its floor still is (`floor_db`).
    * Otherwise `params` bounds that tail. **Lost particles, and those few left alive, do not
-   * make a band incomplete:** the energy their unfinished paths would have brought is bounded
-   * separately, `lost_share`.
+   * make a band incomplete:** the energy the few left alive would have brought is bounded
+   * separately, `unfinished_share`; the lost ones are reported, `lost_share`.
    */
   complete: boolean;
   /**
@@ -3935,18 +4136,14 @@ export interface ReceiverBandReport {
   freq_hz: number;
   g_db: Evaluated11;
   /**
-   * Energetic mode: what the lost particles would still have brought falls with the decay, so
-   * `lost_share` bounds the energy from every time on, not a lump added at the end.
-   */
-  lost_follows_decay: boolean;
-  /**
-   * The share of the energy from the arrival on that unfinished particles (lost, or in a
-   * complete band left alive at the end) can have taken with them
-   * (`spps::SppsResults::lost_share`), or, when `lost_follows_decay`, that lost particles can
-   * have taken of the energy from every time on (`spps::SppsResults::lost_share_following_
-   * decay`); `params` bounds what it can move. `null` when there are none.
+   * The share of the band's particles SPPS lost (`partLoop`, `partLost`) over those emitted
+   * (`spps::SppsResults::lost_share`); `null` when none was lost. **Reported, not bounded**
+   * (decision 56, as Odeon reports lost rays): `lost_status` says what it does to EDT, T20 and
+   * T30. Until results version 16 this was the share of the energy the lost particles were
+   * bounded to have taken.
    */
   lost_share?: number | null;
+  lost_status: LostStatus;
   noise_model: NoiseModel;
   /**
    * The first bin within 20 dB of the largest; `null` when the series is refused.
@@ -3962,6 +4159,13 @@ export interface ReceiverBandReport {
    * Their sum.
    */
   total_pa2: number;
+  /**
+   * The share of the energy from the arrival on that the particles left alive at the end of a
+   * complete band can have taken with them (`spps::SppsResults::unfinished_share`); `params`
+   * bounds what it can move. `null` when there are none. Until results version 16 the lost
+   * particles were counted here too, as `lost_share`.
+   */
+  unfinished_share?: number | null;
 }
 /**
  * T20 against T30: the curved-decay flag.

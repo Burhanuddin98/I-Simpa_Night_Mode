@@ -968,7 +968,7 @@ pub(crate) fn missing_energy(series: &EnergySeries) -> Option<Missing> {
 /// The most a share `s` of missing energy that follows the decay can move each quantity: the
 /// true curve is `S(u)·(1 + a(u))` with `a(u)` anywhere in `[0, s]`, so every level moves by at
 /// most `Δ = 10·lg(1 + s)` dB (`docs/params.md`, "Missing energy").
-pub(crate) mod following {
+mod following {
     /// Level change, dB.
     pub fn level_db(s: f64) -> f64 {
         10.0 * (1.0 + s).log10()

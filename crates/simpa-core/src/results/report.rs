@@ -16,7 +16,8 @@ use serde::Serialize;
 use super::reference::{REFERENCE_LABEL, Reference};
 use super::room::{DIN18041_NOTE, Room};
 use super::spps::{
-    BandEnergy, ParticleFileSummary, PointReceiver, SourcePoint, SourceTotals, SppsResults,
+    BandEnergy, LOST_SHARE_REFUSED, LostStatus, ParticleFileSummary, PointReceiver, SourcePoint,
+    SourceTotals, SppsResults,
 };
 use super::tcr::{self, MainBand, TcrResults};
 use super::{Refusal, RunResults, SolverBuild, SolverResults, SurfaceFile, value_invalid};
@@ -79,8 +80,16 @@ use crate::schema::SolverKind;
 /// `obstacle_volume_m3`, the volume left out. No other field changes. 15 (backlog 84): `edt_s` is
 /// refused `missing_moves` where the energy the solver's floor and lost particles can carry,
 /// added back, moves EDT outside its own range (`edt_missing`); earlier versions never checked EDT
-/// against it. `edt` is unchanged. No other field changes.
-pub const REPORT_VERSION: u32 = 15;
+/// against it. `edt` is unchanged. No other field changes. 16 (decision 56, backlogs 82 and 84):
+/// lost particles are reported, not bounded, as Odeon reports lost rays. A band's `lost_share` is
+/// now lost over emitted, beside `lost_status`; EDT, T20 and T30 carry `lost_share_warning` from
+/// 0.3 % lost and are refused `lost_particles` from 1 % (the curvature with them), and the
+/// worst-case bound on what lost particles carried (`ENERGETIC_LOST_ENERGY_RATIO` x lost/emitted
+/// following the decay, or random mode's lump) no longer refuses any quantity: `missing_moves`
+/// and `missing_not_cleared` come from the solver's floor and the particles left alive at the end
+/// of a complete band, which a band's `unfinished_share` gives (the old `lost_share`'s other
+/// part); `lost_follows_decay` is gone. No other field changes.
+pub const REPORT_VERSION: u32 = 16;
 
 /// A quantity's value, or why it has none.
 #[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
@@ -124,6 +133,13 @@ pub enum Evaluated {
         /// widened by `2.5·mc_sd` each way.
         #[serde(skip_serializing_if = "Option::is_none")]
         straddle: Option<[f64; 2]>,
+        /// Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost
+        /// from [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted
+        /// (decision 56): the share, lost over emitted, shown beside the value as a warning that
+        /// it may read slightly low in the late decay. From 1 % the value is refused
+        /// `lost_particles`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        lost_share_warning: Option<f64>,
     },
     /// `core::params` refused it.
     NotEvaluable { not_evaluable: Refused },
@@ -161,6 +177,7 @@ impl Evaluated {
             hi: None,
             refused_resamples: None,
             straddle: None,
+            lost_share_warning: None,
         }
     }
 
@@ -203,6 +220,7 @@ impl Evaluated {
                 hi: Some(s.hi),
                 refused_resamples: s.refused_resamples,
                 straddle: s.straddle.map(|(lo, hi)| [lo, hi]),
+                lost_share_warning: None,
             },
             Err(e) => Self::refused(e),
         }
@@ -485,22 +503,28 @@ pub struct ReceiverBandReport {
     /// `spps::SppsResults::band_complete`), so the series is given to `params` as complete and no
     /// tail after its end is bounded; in energetic mode its floor still is (`floor_db`).
     /// Otherwise `params` bounds that tail. **Lost particles, and those few left alive, do not
-    /// make a band incomplete:** the energy their unfinished paths would have brought is bounded
-    /// separately, `lost_share`.
+    /// make a band incomplete:** the energy the few left alive would have brought is bounded
+    /// separately, `unfinished_share`; the lost ones are reported, `lost_share`.
     pub complete: bool,
     /// The level below a particle's start at which SPPS drops it, dB, when that can cost the
     /// histogram energy (energetic mode: `-10·trans_epsilon`); `params` bounds what it can have
     /// dropped. `null` otherwise.
     pub floor_db: Option<f64>,
-    /// The share of the energy from the arrival on that unfinished particles (lost, or in a
-    /// complete band left alive at the end) can have taken with them
-    /// (`spps::SppsResults::lost_share`), or, when `lost_follows_decay`, that lost particles can
-    /// have taken of the energy from every time on (`spps::SppsResults::lost_share_following_
-    /// decay`); `params` bounds what it can move. `null` when there are none.
+    /// The share of the energy from the arrival on that the particles left alive at the end of a
+    /// complete band can have taken with them (`spps::SppsResults::unfinished_share`); `params`
+    /// bounds what it can move. `null` when there are none. Until results version 16 the lost
+    /// particles were counted here too, as `lost_share`.
+    pub unfinished_share: Option<f64>,
+    /// The share of the band's particles SPPS lost (`partLoop`, `partLost`) over those emitted
+    /// (`spps::SppsResults::lost_share`); `null` when none was lost. **Reported, not bounded**
+    /// (decision 56, as Odeon reports lost rays): `lost_status` says what it does to EDT, T20 and
+    /// T30. Until results version 16 this was the share of the energy the lost particles were
+    /// bounded to have taken.
     pub lost_share: Option<f64>,
-    /// Energetic mode: what the lost particles would still have brought falls with the decay, so
-    /// `lost_share` bounds the energy from every time on, not a lump added at the end.
-    pub lost_follows_decay: bool,
+    /// `ok` below 0.3 % lost; `warning` from it, EDT, T20 and T30 carrying `lost_share_warning`;
+    /// `refused` from 1 %, where they and the curvature are refused `lost_particles`
+    /// ([`LostStatus`]).
+    pub lost_status: LostStatus,
     /// Always true for SPPS, whose reverberation begins with the first reflection: how it ran
     /// between the arrival and the first bin wholly after the direct sound is not known, so each
     /// value is read three ways, with the reverberation beginning at the arrival (the decay of
@@ -681,6 +705,7 @@ fn strength(spl: &Evaluated, power_rho_c: f64) -> Evaluated {
         hi,
         refused_resamples,
         straddle,
+        ..
     } = spl
     else {
         return spl.clone();
@@ -694,6 +719,7 @@ fn strength(spl: &Evaluated, power_rho_c: f64) -> Evaluated {
             hi: hi.map(|x| x - free),
             refused_resamples: *refused_resamples,
             straddle: straddle.map(|[a, b]| [a - free, b - free]),
+            lost_share_warning: None,
         },
         Err(e) => Evaluated::refused(e),
     }
@@ -735,6 +761,7 @@ fn dba_report(bands: &[(i32, &Evaluated)]) -> DbaReport {
                         hi: Some(r.hi),
                         refused_resamples: None,
                         straddle: None,
+                        lost_share_warning: None,
                     }
                 }
                 Ok((value, None)) => Evaluated::bare(value, None),
@@ -1435,8 +1462,9 @@ impl RoomReport {
 }
 
 /// A band's series as `params` gets it: complete when the statistics say so, with the run's floor
-/// when it has one, and the share its lost particles can have taken from the arrival's step on
-/// (the onset bin's, when the arrival is not known).
+/// when it has one, and the share the particles left alive at the end of a complete band can have
+/// taken from the arrival's step on (the onset bin's, when the arrival is not known). Lost
+/// particles are not given: reported, not bounded (decision 56, [`Evaluation::lost_particles`]).
 fn series_of(
     s: &SppsResults,
     index: usize,
@@ -1473,11 +1501,11 @@ fn series_of(
         }
         None => base,
     };
-    // Energetic mode: what the lost particles would still have brought follows the decay.
-    if let Some(share) = s.lost_share_following_decay(freq_hz) {
-        return base.with_lost_share_following_decay(share);
-    }
-    match s.lost_share(index, freq_hz, bin) {
+    // Until decision 56 the lost particles' share was given here too, following the decay in
+    // energetic mode (`ENERGETIC_LOST_ENERGY_RATIO`·n/N) and as a lump in random mode: a worst-case
+    // bound that refused T20 in BRAS CR2 at 0.03 % lost, where the 10-05 hall bed measured the
+    // lost particles moving T30 by 1.2e-4 (`docs/investigations/2026-10-05-b82-b84/FINDINGS.md`).
+    match s.unfinished_share(index, freq_hz, bin) {
         Some(share) => base.with_lost_share(share),
         None => Ok(base),
     }
@@ -1496,8 +1524,9 @@ fn series_of(
 ///   from `from` on. Nothing guarantees it: a particle alive late in a coupled space, or near the
 ///   receiver, can bring more per unit than the average did.
 /// - **The floor**, `10^{floor/10} / share` (`EnergySeries::with_solver_floor`).
-/// - **Lost particles**, their share (`SppsResults::lost_share_following_decay` in energetic mode,
-///   `SppsResults::lost_share` otherwise).
+/// - **Particles left alive at the end of a complete band**, their share
+///   (`SppsResults::unfinished_share`). Lost particles are reported, not bounded (decision 56);
+///   until then their share was added here too.
 ///
 /// A run whose `trans_epsilon` is not above 0 drops every particle at its first surface: `None`.
 fn sti_unseen_share(
@@ -1531,10 +1560,7 @@ fn sti_unseen_share(
     if let Some(db) = floor {
         x += 10f64.powf(db / 10.0) / share()?;
     }
-    match s.lost_share_following_decay(freq_hz) {
-        Some(l) => x += l,
-        None => x += s.lost_share(index, freq_hz, from).unwrap_or(0.0),
-    }
+    x += s.unfinished_share(index, freq_hz, from).unwrap_or(0.0);
     x.is_finite().then_some(x)
 }
 
@@ -1639,6 +1665,13 @@ fn aggregate_report(
     });
     let mut e = evaluated(&aggregate, arrival, &aggregate_model(&used));
     e.set_edt(edt_report(s, &aggregate, arrival, true));
+    // The bands summed: the largest share any of them lost.
+    e.lost_particles(
+        valid
+            .iter()
+            .filter_map(|&f| s.lost_share(f))
+            .reduce(f64::max),
+    );
     if contributing.len() > 1 {
         e.several_sources(contributing);
     }
@@ -1742,17 +1775,20 @@ fn edt_report(
     })
 }
 
-/// EDT checked against the energy `series` can lack, the solver's floor and its lost particles
-/// (`params::decay::missing_energy`; `docs/params.md`, "Missing energy"), as T20 and T30 are, but
-/// against its own range (backlog 84). The method `o` came from is run again on the bins with that
-/// energy appended after their end, so that every backward sum its fit reads gains it whole, as
-/// T20 and T30's `with_missing` curve does; in energetic mode the most a lost share following the
-/// decay can move a decay time over 10 dB (`following::decay_relative(s, 10)`) is added to the
-/// distance, as `settle` adds it. Refused `missing_moves` when the value so moved falls outside
-/// `edt_lo`..`edt_hi`. T20 and T30's 0.5 % limit is not used: over 10 dB it would refuse every
-/// EDT, even at 0.02 % lost. `None` when nothing is missing, the method refused, or the value
-/// stays inside its range; refused with `with_missing` `None` when the energy has no finite bound
-/// or the method gives no value with it.
+/// EDT checked against the energy `series` can lack, the solver's floor and the particles left
+/// alive at the end of a complete band (`params::decay::missing_energy`; `docs/params.md`,
+/// "Missing energy"), as T20 and T30 are, but against its own range (backlog 84). The method `o`
+/// came from is run again on the bins with that energy appended after their end, so that every
+/// backward sum its fit reads gains it whole, as T20 and T30's `with_missing` curve does. Refused
+/// `missing_moves` when the value so moved falls outside `edt_lo`..`edt_hi`. T20 and T30's 0.5 %
+/// limit is not used: over 10 dB it would refuse almost every EDT. `None` when nothing is
+/// missing, the method refused, or the value stays inside its range; refused with `with_missing`
+/// `None` when the energy has no finite bound or the method gives no value with it.
+///
+/// Lost particles are not in it (decision 56): [`series_of`] no longer gives their share, and
+/// [`Evaluation::lost_particles`] reports it. Until then, in energetic mode, the most a lost
+/// share following the decay could move a decay time over 10 dB was added to the distance, which
+/// refused every EDT of BRAS CR2 at 0.03-0.05 % lost.
 ///
 /// The refusal's `limit` is the range's relative half-width on the side the value moved to,
 /// `hi/value − 1` (added energy only lengthens a decay) or `1 − lo/value`: the one it exceeded.
@@ -1776,32 +1812,20 @@ fn edt_missing(
     } else {
         None
     };
-    let follows = m
-        .following
-        .map_or(0.0, |s| decay::following::decay_relative(s, 10.0));
     let up = with_missing.is_none_or(|w| w >= value);
     let limit = if up {
         hi / value - 1.0
     } else {
         1.0 - lo / value
     };
-    let moved = with_missing.map(|w| (w / value - 1.0).abs() + follows);
-    if moved.is_some_and(|d| d <= limit) {
+    if with_missing.is_some_and(|w| (w / value - 1.0).abs() <= limit) {
         return None;
     }
-    // The value moved by both, in the direction the appended energy moves it.
-    let reported = with_missing
-        .zip(moved)
-        .map(|(w, d)| match (follows == 0.0, up) {
-            (true, _) => w,
-            (false, true) => value * (1.0 + d),
-            (false, false) => value * (1.0 - d),
-        });
     Some(NotEvaluable::MissingMoves {
         floor_db: m.floor_db,
         lost_share: m.lost_share,
         value,
-        with_missing: reported,
+        with_missing,
         limit,
     })
 }
@@ -1860,6 +1884,7 @@ impl EdtReport {
                 hi: self.hi_s,
                 refused_resamples: None,
                 straddle: None,
+                lost_share_warning: None,
             },
             _ => Evaluated::refused(params::not_evaluable(
                 Quantity::Edt,
@@ -1872,6 +1897,44 @@ impl EdtReport {
 }
 
 impl Evaluation {
+    /// Decision 56: lost particles are reported, not bounded, as Odeon reports lost rays. EDT,
+    /// T20 and T30 of a band that lost `share` of its particles (lost over emitted,
+    /// [`SppsResults::lost_share`]; `None`: none lost) are shown as they are below
+    /// [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING), shown with the share as `lost_share_warning` from it, and refused
+    /// `lost_particles` from [`LOST_SHARE_REFUSED`], whatever else they read (the model is
+    /// broken), the curvature from T20 and T30 with them. Every other refusal stays.
+    fn lost_particles(&mut self, share: Option<f64>) {
+        let p = &mut self.parameters;
+        match (LostStatus::of(share), share) {
+            (LostStatus::Warning, Some(_)) => {
+                for e in [&mut p.edt_s, &mut p.t20_s, &mut p.t30_s] {
+                    if let Evaluated::Value {
+                        lost_share_warning, ..
+                    } = e
+                    {
+                        *lost_share_warning = share;
+                    }
+                }
+            }
+            (LostStatus::Refused, Some(share)) => {
+                let refuse = |q: Quantity| {
+                    params::not_evaluable(
+                        q,
+                        NotEvaluable::LostParticles {
+                            share,
+                            limit: LOST_SHARE_REFUSED,
+                        },
+                    )
+                };
+                p.edt_s = Evaluated::refused(refuse(Quantity::Edt));
+                p.t20_s = Evaluated::refused(refuse(Quantity::T20));
+                p.t30_s = Evaluated::refused(refuse(Quantity::T30));
+                self.curvature = CurvatureReport::of(Err(refuse(Quantity::Curvature)));
+            }
+            _ => {}
+        }
+    }
+
     /// EDT is the port's ([`edt_report`]); the old estimate stays in `params` for the noise
     /// calibration's own evidence and does not reach the report. `None` leaves what the series'
     /// refusal gave.
@@ -1967,6 +2030,7 @@ fn receiver_report(
         let se = series_of(s, i, b.freq_hz, &b.energy, arrival);
         let mut e = evaluated(&se, arrival, &model);
         e.set_edt(edt_report(s, &se, arrival, false));
+        e.lost_particles(s.lost_share(b.freq_hz));
         if contributing.len() > 1 {
             e.several_sources(&contributing);
         }
@@ -2007,7 +2071,7 @@ fn receiver_report(
                 ),
                 (Ok(_), None) => Some(
                     "nothing bounds the energy its series lacks (dropped at the solver's floor, \
-                     or lost)"
+                     or left alive at the end)"
                         .into(),
                 ),
                 (Ok(_), Some(_)) => None,
@@ -2018,11 +2082,9 @@ fn receiver_report(
             freq_hz: b.freq_hz,
             complete: s.band_complete(b.freq_hz),
             floor_db: s.floor_db(),
-            lost_share: se.as_ref().ok().and_then(EnergySeries::lost_share),
-            lost_follows_decay: se
-                .as_ref()
-                .ok()
-                .is_some_and(EnergySeries::lost_follows_decay),
+            unfinished_share: se.as_ref().ok().and_then(EnergySeries::lost_share),
+            lost_share: s.lost_share(b.freq_hz),
+            lost_status: LostStatus::of(s.lost_share(b.freq_hz)),
             early_reverberation_unresolved: se
                 .as_ref()
                 .ok()
@@ -2084,6 +2146,7 @@ fn receiver_report(
                 .map(|(i, (((b, energy), se), model))| {
                     let mut e = evaluated(se, arrival, model);
                     e.set_edt(edt_report(s, se, arrival, false));
+                    e.lost_particles(s.lost_share(b.freq_hz));
                     let total_pa2: f64 = energy.iter().sum();
                     let g_db = strength(
                         &e.parameters.spl_db,
@@ -2577,8 +2640,8 @@ mod tests {
     /// the pair below no longer matches: bump the version, write its history line (here and in
     /// `docs/formats/results-json.md`), and pin the new pair.
     const REQUIRED_FIELDS_PIN: (u32, &str) = (
-        15,
-        "619f0a1204ea173dfc9cc14d422aa871aac545ca77672b716b130207e4e0f6b2",
+        16,
+        "51b5ae7703844a40d3f773e08b6561b9823f096dd4be41b665f89927165739ef",
     );
 
     /// Every `required` list of `v`, as `<path>: <fields, sorted>`, sorted.
@@ -2989,10 +3052,12 @@ mod tests {
         );
     }
 
-    /// A 0.6 s decay whose particles a share `share` of were lost at 0.4 s: the histogram holds
-    /// `1 − share` of the decay from there on, and the series says so (random mode's lump,
-    /// `EnergySeries::with_lost_share`). With `share` 0 nothing is lost and nothing said.
-    fn lost_late(share: f64) -> (SppsResults, Result<EnergySeries, ParamError>, Arrival) {
+    /// A 0.6 s decay whose particles a share `share` of stopped unfinished at 0.4 s: the histogram
+    /// holds `1 − share` of the decay from there on, and the series says so
+    /// (`EnergySeries::with_lost_share`, a lump from the arrival: since decision 56 `series_of`
+    /// gives it only for particles left alive at the end of a complete band, no longer for lost
+    /// ones). With `share` 0 nothing is missing and nothing said.
+    fn unfinished_late(share: f64) -> (SppsResults, Result<EnergySeries, ParamError>, Arrival) {
         let dt = f64::from(DT);
         let arrival_s = emission_s(0.0, DT) + DISTANCE_M / C;
         let bins: Vec<f64> = decay(1500, arrival_s, 0.6)
@@ -3014,12 +3079,14 @@ mod tests {
         (s, series, arrival)
     }
 
-    /// Backlog 84: EDT is computed again with the lost energy added back, as T20 and T30 are,
+    /// Backlog 84: EDT is computed again with the missing energy added back, as T20 and T30 are,
     /// and refused `missing_moves` where that value leaves EDT's own range; the method's own
-    /// report (`edt`) is unchanged.
+    /// report (`edt`) is unchanged. Decision 56 took the energetic lost share following the decay
+    /// out of this check (this test pinned it, `value·(1 + decay_relative(0.03, 10))`): lost
+    /// particles are reported, not bounded.
     #[test]
-    fn edt_is_refused_where_the_lost_energy_moves_it_outside_its_range() {
-        let (s, series, arrival) = lost_late(0.03);
+    fn edt_is_refused_where_the_missing_energy_moves_it_outside_its_range() {
+        let (s, series, arrival) = unfinished_late(0.03);
         let e = edt_report(&s, &series, arrival, false).expect("an EDT report");
         assert_ne!(e.status, edt::Status::Refused, "the method shows it: {e:?}");
         let (value, hi) = (e.value_s.unwrap(), e.hi_s.unwrap());
@@ -3039,29 +3106,11 @@ mod tests {
         };
         assert_eq!((floor_db, lost_share, v), (None, Some(0.03), value));
         // Energy added back only lengthens the decay; the limit is the range's upper half-width.
-        let w = with_missing.expect("the curve with the lost energy is fitted");
+        let w = with_missing.expect("the curve with the missing energy is fitted");
         assert!(w > hi, "{w} outside the range's top {hi}");
         assert!((limit - (hi / value - 1.0)).abs() < 1e-12, "{limit}");
-        // Energetic mode: the share follows the decay, nothing is appended, and the most it can
-        // move a decay time over 10 dB is the distance, as `settle` takes it for T20 and T30.
-        let follows = decay::following::decay_relative(0.03, 10.0);
-        let energetic = series
-            .clone()
-            .and_then(|x| x.with_lost_share_following_decay(0.03));
-        let e = edt_report(&s, &energetic, arrival, false).unwrap();
-        let why = e
-            .evaluated()
-            .refusal()
-            .unwrap()
-            .error
-            .not_evaluable()
-            .cloned();
-        let Some(NotEvaluable::MissingMoves { with_missing, .. }) = why else {
-            panic!("refused missing_moves, got {why:?}");
-        };
-        assert_eq!(with_missing, Some(value * (1.0 + follows)));
-        // Without the loss nothing is checked and the value is shown as the method gives it.
-        let (s, series, arrival) = lost_late(0.0);
+        // Without it nothing is checked and the value is shown as the method gives it.
+        let (s, series, arrival) = unfinished_late(0.0);
         let e = edt_report(&s, &series, arrival, false).unwrap();
         assert_eq!(e.evaluated().value(), e.value_s);
         assert!(e.value_s.is_some());
@@ -3069,15 +3118,15 @@ mod tests {
 
     /// Backlog 84: a share too small to move EDT out of its range leaves it shown.
     #[test]
-    fn a_tiny_lost_share_leaves_edt_shown_unchanged() {
-        let (s0, plain, arrival) = lost_late(0.0);
-        let unlost = edt_report(&s0, &plain, arrival, false).unwrap();
-        let (s, series, arrival) = lost_late(1e-4);
+    fn a_tiny_missing_share_leaves_edt_shown_unchanged() {
+        let (s0, plain, arrival) = unfinished_late(0.0);
+        let whole = edt_report(&s0, &plain, arrival, false).unwrap();
+        let (s, series, arrival) = unfinished_late(1e-4);
         let e = edt_report(&s, &series, arrival, false).unwrap();
         assert_eq!(series.as_ref().unwrap().lost_share(), Some(1e-4));
         assert_eq!(e.evaluated().value(), e.value_s, "{:?}", e.evaluated());
         // The histogram itself barely changed: the same method, a value within a hair of it.
-        let (a, b) = (e.value_s.unwrap(), unlost.value_s.unwrap());
+        let (a, b) = (e.value_s.unwrap(), whole.value_s.unwrap());
         assert!((a / b - 1.0).abs() < 1e-3, "{a} vs {b}");
     }
 
@@ -3322,6 +3371,7 @@ mod tests {
                 hi: Some(value + half),
                 refused_resamples: None,
                 straddle: None,
+                lost_share_warning: None,
             },
             "deposit {d}"
         );
@@ -3345,6 +3395,7 @@ mod tests {
                 hi,
                 refused_resamples: None,
                 straddle,
+                lost_share_warning: None,
             } = q
             else {
                 panic!("{name}: {q:?}")
@@ -3504,6 +3555,7 @@ mod tests {
                 hi: Some(value + half),
                 refused_resamples: Some(refused_resamples),
                 straddle: None,
+                lost_share_warning: None,
             },
             "deposit {d}"
         );
@@ -3588,6 +3640,7 @@ mod tests {
             hi: Some(s.hi),
             refused_resamples: None,
             straddle: None,
+            lost_share_warning: None,
         }
     }
 
@@ -4018,6 +4071,202 @@ mod tests {
                 b.freq_hz
             );
         }
+    }
+
+    // --- Decision 56: lost particles reported, not bounded (results version 16) -----------------
+
+    /// [`energetic_octave_run`] on 500 Hz alone (complete, its floor `-10·eps` dB) at 200,000
+    /// particles, inside the noise calibration's domain, `lost` of them lost to meshing problems.
+    fn lost_run(lost: u32, eps: f64) -> SppsResults {
+        let mut s = energetic_octave_run(&[500], 0, 0.0);
+        s.trans_epsilon = eps;
+        s.particles_per_source = 200_000;
+        let b = &mut s.particles.bands[0];
+        b.total = 200_000;
+        b.lost_by_meshing_problems = lost;
+        b.absorbed_by_materials = 200_000 - lost;
+        s
+    }
+
+    fn lost_band(s: &SppsResults) -> SppsReceiverReport {
+        receiver_report(&[500], s, &s.point_receivers[0], true)
+    }
+
+    /// The share a value carries as a warning, or why it has none.
+    fn warning(e: &Evaluated) -> Result<Option<f64>, String> {
+        match e {
+            Evaluated::Value {
+                lost_share_warning, ..
+            } => Ok(*lost_share_warning),
+            Evaluated::NotEvaluable { not_evaluable } => Err(not_evaluable.message.clone()),
+        }
+    }
+
+    fn lost_refusal(e: &Evaluated) -> Option<NotEvaluable> {
+        e.refusal()
+            .and_then(|r| r.error.not_evaluable().cloned())
+            .filter(|w| matches!(w, NotEvaluable::LostParticles { .. }))
+    }
+
+    /// Test 1: 0.5 % lost (1,000 of 200,000): T30 is shown, the share beside it as a warning, and
+    /// the band says so.
+    #[test]
+    fn a_band_that_lost_half_a_percent_shows_t30_with_the_warning() {
+        let rep = lost_band(&lost_run(1000, 5.0));
+        let b = &rep.bands[0];
+        assert_eq!(b.lost_share, Some(0.005));
+        assert_eq!(b.lost_status, LostStatus::Warning);
+        assert_eq!(b.unfinished_share, None);
+        let p = &b.parameters;
+        assert_eq!(warning(&p.t30_s), Ok(Some(0.005)), "{:?}", p.t30_s);
+        assert_eq!(warning(&p.t20_s), Ok(Some(0.005)), "{:?}", p.t20_s);
+        // Nothing else carries it.
+        assert_eq!(warning(&p.spl_db), Ok(None));
+        assert_eq!(warning(&b.g_db), Ok(None));
+        // The JSON names it beside the value, and not where there is none.
+        let v = serde_json::to_value(&p.t30_s).unwrap();
+        assert_eq!(v["lost_share_warning"], 0.005);
+        let none =
+            serde_json::to_value(&lost_band(&lost_run(0, 5.0)).bands[0].parameters.t30_s).unwrap();
+        assert!(none.get("lost_share_warning").is_none(), "{none}");
+        // The bands summed carry it too: the largest share any band lost.
+        assert_eq!(
+            warning(&rep.aggregate.parameters.t30_s),
+            Ok(Some(0.005)),
+            "{:?}",
+            rep.aggregate.parameters.t30_s
+        );
+    }
+
+    /// Test 2: 1.5 % lost: EDT, T20, T30 and the curvature are refused `lost_particles`, saying
+    /// the share and what it means; the other quantities stay.
+    #[test]
+    fn a_band_that_lost_one_and_a_half_percent_refuses_lost_particles() {
+        let rep = lost_band(&lost_run(3000, 5.0));
+        let b = &rep.bands[0];
+        assert_eq!(b.lost_status, LostStatus::Refused);
+        let want = Some(NotEvaluable::LostParticles {
+            share: 0.015,
+            limit: LOST_SHARE_REFUSED,
+        });
+        let p = &b.parameters;
+        for e in [&p.edt_s, &p.t20_s, &p.t30_s, &b.curvature.percent] {
+            assert_eq!(lost_refusal(e), want, "{e:?}");
+        }
+        let r = p.t30_s.refusal().unwrap();
+        assert_eq!(r.code, crate::params::codes::NOT_EVALUABLE);
+        assert!(
+            r.message
+                .contains("1.50 % of the band's particles were lost (holes or a bad mesh?)"),
+            "{}",
+            r.message
+        );
+        assert_eq!(b.curvature.curved, None);
+        // SPL, C80 and the method's own EDT report are not touched.
+        assert!(p.spl_db.value().is_some());
+        assert_eq!(lost_refusal(&p.c80_db), None);
+        assert!(p.edt.as_ref().unwrap().value_s.is_some());
+        assert_eq!(lost_refusal(&rep.aggregate.parameters.t30_s), want);
+        // 1 % exactly is refused; just under it is a warning.
+        assert_eq!(
+            lost_band(&lost_run(2000, 5.0)).bands[0].lost_status,
+            LostStatus::Refused
+        );
+        assert_eq!(
+            lost_band(&lost_run(1999, 5.0)).bands[0].lost_status,
+            LostStatus::Warning
+        );
+    }
+
+    /// Test 3, BRAS CR2's shape: energetic, 0.03 % lost. The old bound (10 × lost/emitted
+    /// following the decay, `following::decay_relative` = 9·10·lg(1+s)/range) refused T20
+    /// `missing_moves` on its own; now T20 is shown, without a warning.
+    #[test]
+    fn a_band_that_lost_three_in_ten_thousand_shows_t20_the_old_bound_refused() {
+        let s = lost_run(60, 5.0);
+        let rep = lost_band(&s);
+        let b = &rep.bands[0];
+        assert_eq!(b.lost_share, Some(3e-4));
+        assert_eq!(b.lost_status, LostStatus::Ok);
+        let p = &b.parameters;
+        for e in [&p.edt_s, &p.t20_s, &p.t30_s] {
+            assert_eq!(warning(e), Ok(None), "{e:?}");
+        }
+        // What the old bound said on the same series: refused, by the lost share alone.
+        let r = &s.point_receivers[0];
+        let arrival = known_arrival(&s, s.arrival_s(r));
+        let series = series_of(&s, 0, 500, &r.bands[0].energy, arrival);
+        let old = series
+            .clone()
+            .and_then(|x| x.with_lost_share_following_decay(10.0 * 3e-4));
+        let model = s.noise_model(0, &["S"]);
+        let (old, _) = parameters(&old, arrival, &model);
+        assert!(
+            matches!(
+                old.t20_s.refusal().and_then(|r| r.error.not_evaluable()),
+                Some(NotEvaluable::MissingMoves {
+                    lost_share: Some(_),
+                    ..
+                })
+            ),
+            "{:?}",
+            old.t20_s
+        );
+        let (now, _) = parameters(&series, arrival, &model);
+        assert!(now.t20_s.value().is_some(), "{:?}", now.t20_s);
+    }
+
+    /// Test 4: the floor's bound stays. A floor at −15 dB (`trans_epsilon` 1.5) refuses T30
+    /// `missing_moves` or `missing_not_cleared` with nothing lost, and the same with 0.03 % lost.
+    #[test]
+    fn the_floor_alone_still_refuses_what_it_refused() {
+        let floor_only = lost_band(&lost_run(0, 1.5));
+        let with_lost = lost_band(&lost_run(60, 1.5));
+        let why = |r: &SppsReceiverReport| {
+            r.bands[0]
+                .parameters
+                .t30_s
+                .refusal()
+                .and_then(|r| r.error.not_evaluable().cloned())
+        };
+        let w = why(&floor_only);
+        assert!(
+            matches!(
+                w,
+                Some(NotEvaluable::MissingMoves {
+                    floor_db: Some(_),
+                    lost_share: None,
+                    ..
+                }) | Some(NotEvaluable::MissingNotCleared {
+                    floor_db: Some(_),
+                    lost_share: None,
+                    ..
+                })
+            ),
+            "{w:?}"
+        );
+        assert_eq!(why(&with_lost), w);
+    }
+
+    /// Test 5: EDT follows the same tiers: shown below 0.3 %, shown with the warning from it,
+    /// refused `lost_particles` from 1 %.
+    #[test]
+    fn edt_follows_the_same_lost_particle_tiers() {
+        let edt = |lost: u32| {
+            lost_band(&lost_run(lost, 5.0)).bands[0]
+                .parameters
+                .edt_s
+                .clone()
+        };
+        assert_eq!(warning(&edt(60)), Ok(None), "{:?}", edt(60));
+        assert_eq!(warning(&edt(1000)), Ok(Some(0.005)), "{:?}", edt(1000));
+        assert_eq!(
+            lost_refusal(&edt(3000)),
+            Some(NotEvaluable::LostParticles {
+                share: 0.015,
+                limit: LOST_SHARE_REFUSED
+            })
+        );
     }
 
     #[test]

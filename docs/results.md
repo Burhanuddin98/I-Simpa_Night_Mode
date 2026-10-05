@@ -313,7 +313,7 @@ Energetic mode drops a particle once its energy falls below `10^-trans_epsilon` 
 (`sppsNantes.cpp:75`), counted as absorbed, not remaining (`CalculationCore.cpp:57-60, 88-107,
 305-310`). With none remaining, the histogram holds every path up to its drop, absorption or loss;
 what the dropped would still have brought is the floor's missing energy, which `params` bounds
-(`docs/params.md`, "A series that ended at its floor"), and the lost ones' share follows the decay
+(`docs/params.md`, "A series that ended at its floor"), and the lost ones' share is reported
 ("Lost particles", below). A remaining particle's energy is bounded by neither, so in energetic
 mode one is enough to leave the band incomplete, its tail bounded from the series. **Until
 2026-10-02 energetic mode never claimed completeness**, and the tail of a series that had ended at
@@ -330,8 +330,9 @@ M8's counts SPPS leaves about one particle in 10⁸ to 10⁹ alive at the end in
 trapped, reaching no receiver ("What M8 needs", "Particles left alive at the end"), and each one
 refused its band's every onset-relative quantity through the tail of a ragged random-mode end. A
 remaining particle's path is unfinished as a lost one's is, so up to one in a million are now
-bounded with the lost ones, `(lost + remaining)/(N·f)` of the energy from the arrival
-(`SppsResults::lost_share`, below); more than that is a run cut short, left incomplete, its tail
+bounded as unfinished paths, `remaining/(N·f)` of the energy from the arrival
+(`SppsResults::unfinished_share`; until decision 56 the lost ones were counted with them,
+`(lost + remaining)/(N·f)`, "Lost particles", below); more than that is a run cut short, left incomplete, its tail
 bounded from the series (`a_particle_in_a_million_left_alive_is_bounded_as_unfinished_not_refused`
 says no at 11 in 10 million).
 
@@ -349,6 +350,27 @@ starts at −19.1 dB, so both were fitted over the same −5 to −19.1 dB. With
 reaches its bottom before that bin, and both are refused.
 
 ### Lost particles
+
+**Reported, not bounded (decision 56, results version 16, 2026-10-05), as Odeon reports lost rays.**
+A band's lost share is its lost particles over those emitted (`SppsResults::lost_share`, the JSON's
+`lost_share` per band, with `lost_status`). EDT, T20 and T30 are shown whatever the share; from
+0.3 % (`LOST_SHARE_WARNING`) each carries `lost_share_warning`, the share, shown beside it ("0.40 %
+of particles lost: values may be slightly low in the late decay"); from 1 % (`LOST_SHARE_REFUSED`)
+they and the curvature are refused `lost_particles` ("2.10 % of particles lost (holes or a bad
+mesh?)"), where the model is broken. The aggregate takes the largest share of its bands. The
+thresholds are a forecast from the 10-05 hall bed (`docs/investigations/2026-10-05-b82-b84/FINDINGS.md`):
+the lost particles actually moved T30 by 5.3e-4 in Elmia at 0.15 % lost and 1.2e-4 in BRAS CR2 at
+0.23 %, against the 5e-3 limit; scaled linearly from the worse room (0.36 × the share), 0.3 % moves T30
+about 1e-3, 1 % about 3.6e-3, and the limit is reached near 1.4 %. The run's verdict already refuses a
+band over 1 % whole (`run/verdict.rs`, `particle_loss_excess`).
+
+The worst-case bound that came before, below, **no longer refuses anything**: `series_of` gives
+`params` no lost share, so `missing_moves` and `missing_not_cleared` come from the floor and the
+particles left alive at the end of a complete band alone, and STI's unseen share no longer adds it.
+It refused T20 in BRAS CR2 at 0.03 % lost and every EDT there (backlogs 82 and 84): the bed found its
+cap of 10 had to stay (one Elmia run's mean ratio reached 9.8) and its pessimism in its shape,
+`following::decay_relative` assuming the missing share anywhere in `[0, s]` at every level.
+`ENERGETIC_LOST_ENERGY_RATIO` is gone with it. What follows is that bound's history.
 
 SPPS loses a few particles to infinite loops and meshing problems (`partLoop`, `partLost`,
 `CalculationCore.cpp:102-107`), and the verdict accepts up to 1 % (`run/verdict.rs`). A lost
@@ -368,16 +390,18 @@ instead (`SppsResults::lost_share`):
   few particles left alive at the end are counted with them ("Complete series").
 
 **EDT too** (backlog 84, results version 15): until then only T20 and T30 were checked. EDT v2.1 is
-run again with the same missing energy added to every backward sum (and in energetic mode the
-following bound over 10 dB added to the distance) and refused `missing_moves` only where that value
-leaves the method's own range; T20 and T30's 0.5 % would refuse every EDT over 10 dB, even at 0.02 %
-lost (`report::edt_missing`).
+run again with the same missing energy added to every backward sum and refused `missing_moves` only
+where that value leaves the method's own range; T20 and T30's 0.5 % would refuse almost every EDT over
+10 dB (`report::edt_missing`). Version 15 also added energetic mode's following bound over 10 dB to the
+distance; since version 16 only the floor's energy (and the few left alive) is checked, and EDT
+follows the lost-share tiers above.
 
 The JSON gives the share per band (`lost_share`). The report path is tested on the committed runs
-(`results_load.rs`): the random-mode Seat run with 20 lost planted at 500 Hz gives `n/(N·f)`, not
-following the decay.
+(`results_load.rs`): the random-mode Seat run with 20 lost of 2,000 planted at 500 Hz is 1 %, refused
+`lost_particles`; the energetic run with 200 of 50,000 planted is 0.4 %, a warning, where the old
+bound refused SPL, and with 500 (1 %) refused.
 
-**Energetic mode** (M7 follow-up). There every particle is kept until the floor, its energy falling
+**Energetic mode** (M7 follow-up; until decision 56). There every particle is kept until the floor, its energy falling
 with the room's, so a particle lost at `t` carries about the mean energy of the particles then,
 and what it would still have brought is its share of what they all bring after `t`: it falls with
 the decay. `n` lost of `N` emitted, each carrying at most `ρ` times the mean energy when it was

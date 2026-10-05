@@ -488,15 +488,16 @@ impl SppsResults {
     /// steps run out while it is alive (`spps/CalculationCore.cpp:49, 88-92`).
     /// - In random mode a particle's energy never dwindles, it is absorbed whole
     ///   (`CalculationCore.cpp:62-67, 288-300`), so the histogram holds every particle's whole
-    ///   path, except the unfinished paths of the lost and the remaining ones, which
-    ///   [`SppsResults::lost_share`] bounds together.
+    ///   path, except the unfinished paths of the lost and the remaining ones: the remaining
+    ///   ones' [`SppsResults::unfinished_share`] bounds, the lost ones' share is reported
+    ///   ([`SppsResults::lost_share`], decision 56).
     /// - Energetic mode drops a particle once its energy falls below `10^-trans_epsilon` of its
     ///   start (`sppsNantes.cpp:75`; `CalculationCore.cpp:57-60, 305`), counted as absorbed, not
     ///   remaining. With none remaining, the histogram holds every path up to its drop, absorption
     ///   or loss: what the dropped would still have brought is the floor's missing energy
-    ///   (`params::EnergySeries::with_solver_floor`), and the lost ones' is
-    ///   [`SppsResults::lost_share_following_decay`]. A remaining particle's energy is not bounded
-    ///   by either, so one is enough to leave the band incomplete, its tail bounded from the
+    ///   (`params::EnergySeries::with_solver_floor`), and the lost ones' share is reported
+    ///   ([`SppsResults::lost_share`], decision 56). A remaining particle's energy is not bounded
+    ///   by the floor, so one is enough to leave the band incomplete, its tail bounded from the
     ///   series. Until 2026-10-02 energetic mode was never complete, and the tail of a series
     ///   that had ended at its floor was estimated from its last few particles, which read as
     ///   "not decaying" at random (round 2's G5: `docs/results.md`, "Complete series").
@@ -515,29 +516,29 @@ impl SppsResults {
                 .is_some_and(|b| f64::from(b.remaining) <= allowed * f64::from(b.total))
     }
 
-    /// The particles of band `freq_hz` whose paths stopped unfinished: lost (`partLoop`,
-    /// `partLost`), and, when the band is complete ([`SppsResults::band_complete`]), remaining
-    /// at the end.
+    /// The particles of band `freq_hz` left alive at the end when the band is complete
+    /// ([`SppsResults::band_complete`]): their paths stopped unfinished. Lost particles
+    /// (`partLoop`, `partLost`) are no longer counted with them (decision 56): their share is
+    /// reported, [`SppsResults::lost_share`].
     fn unfinished(&self, b: &crate::run::stats::BandStats) -> u64 {
-        let remaining = if self.band_complete(b.freq_hz) {
+        if self.band_complete(b.freq_hz) {
             u64::from(b.remaining)
         } else {
             0
-        };
-        b.lost() + remaining
+        }
     }
 
-    /// The share of a receiver's energy after step `bin` that band `index`'s unfinished particles
-    /// can have taken with them, or `None` when there are none: those lost (`partLoop` and
-    /// `partLost`, `CalculationCore.cpp:102-107`) and, in a complete band, those remaining at the
-    /// end ([`SppsResults::band_complete`]). Such a particle stops mid-path; what it would still
-    /// have brought is, on average, what any particle alive at that time brings. The room table
+    /// The share of a receiver's energy after step `bin` that band `index`'s particles left alive
+    /// at the end of a complete band ([`SppsResults::band_complete`]) can have taken with them, or
+    /// `None` when there are none. Such a particle stops mid-path; what it would still have
+    /// brought is, on average, what any particle alive at that time brings. The room table
     /// (`<cumul_filename>`) holds the energy of the particles alive at the end of each step times
     /// `ρc` (`reportmanager.cpp:155-166, 426-437`), and the `.gap` the sources' power times `ρc`,
     /// so their ratio at `bin` is the share of the emitted energy still alive then, `f`. With
     /// `n` particles unfinished of `N` emitted, the share is `n / (N·f)` of the energy the
-    /// receiver gets from `bin` on (`docs/results.md`, "Lost particles").
-    pub fn lost_share(&self, index: usize, freq_hz: i32, bin: usize) -> Option<f64> {
+    /// receiver gets from `bin` on (`docs/results.md`, "Complete series"). Until decision 56
+    /// (results version 16) the lost particles were counted here too, as `lost_share`.
+    pub fn unfinished_share(&self, index: usize, freq_hz: i32, bin: usize) -> Option<f64> {
         let b = self.particles.bands.iter().find(|b| b.freq_hz == freq_hz)?;
         let n = self.unfinished(b);
         if n == 0 {
@@ -551,28 +552,15 @@ impl SppsResults {
         })
     }
 
-    /// In energetic mode, the share of the energy a receiver gets from any time on that band
-    /// `freq_hz`'s lost particles can have taken with them, or `None` when none was lost or the
-    /// mode is random. Energetic mode keeps every particle until the floor, its energy falling
-    /// with the room's, so a particle lost at `t` carries about the mean energy of the particles
-    /// then, and what it would still have brought is its share of what they all bring after `t`:
-    /// at most [`ENERGETIC_LOST_ENERGY_RATIO`]`·n/N` of the energy from every time on
-    /// (`params::EnergySeries::with_lost_share_following_decay`; `docs/results.md`, "Lost
-    /// particles").
-    pub fn lost_share_following_decay(&self, freq_hz: i32) -> Option<f64> {
-        if self.computation_method == 0 {
-            return None;
-        }
+    /// The share of band `freq_hz`'s particles SPPS lost (`partLoop` and `partLost`,
+    /// `CalculationCore.cpp:102-107`): lost over emitted, the sources' particles together; `None`
+    /// when none was lost or nothing was emitted. **Reported, not bounded** (decision 56, as Odeon
+    /// reports lost rays): EDT, T20 and T30 carry a warning from [`LOST_SHARE_WARNING`] and are
+    /// refused `lost_particles` from [`LOST_SHARE_REFUSED`] ([`LostStatus::of`]).
+    pub fn lost_share(&self, freq_hz: i32) -> Option<f64> {
         let b = self.particles.bands.iter().find(|b| b.freq_hz == freq_hz)?;
-        if b.lost() == 0 {
-            return None;
-        }
         let emitted = f64::from(self.particles_per_source) * self.sources.len() as f64;
-        Some(if emitted > 0.0 {
-            ENERGETIC_LOST_ENERGY_RATIO * b.lost() as f64 / emitted
-        } else {
-            f64::MAX
-        })
+        (b.lost() > 0 && emitted > 0.0).then(|| b.lost() as f64 / emitted)
     }
 
     /// The share of the emitted energy of band `index` the room held at the end of step `bin`: the
@@ -603,19 +591,43 @@ impl SppsResults {
 /// particles alive, stays incomplete, and its tail is bounded from the series.
 pub const REMAINING_UNFINISHED_SHARE: f64 = 1e-6;
 
-/// In energetic mode, the most a lost particle's energy is taken to be over the mean energy of the
-/// particles when it was lost: **an empirical cap, not a bound.** Measured on tutorial 1 in
-/// energetic mode (3 seeds, 6 octave bands, 150,000 particles with every trajectory saved): of the
-/// 24 particles SPPS counted as lost, the 17 found in the trajectories carried 0.16 to 2.02 times
-/// the mean (`crates/simpa/tests/m8_evidence.rs`, `energetic_lost_particles_from_saved_
-/// trajectories`); the other 7 ended with less than 10⁻⁴ of their start energy, so their ratio is
-/// not known: 10 is five times the largest measured there. In an M8 cell (5×4×3 m, α 0.4,
-/// energetic, `trans_epsilon` 9, 300,000 particles, 3 seeds) the 44 of 76 lost that ended well
-/// above the floor carried 0.04 to 4.4 times the mean, so 10 is about 2.3 times the largest
-/// measured there, and for the other 32 the ratio is not known (`docs/results.md`, "Lost particles
-/// in an M8 cell"). No check can say no to it: a late loss in a uniform, strongly absorbing room
-/// can exceed it (`docs/results.md`, "Lost particles", for what that can move).
-pub const ENERGETIC_LOST_ENERGY_RATIO: f64 = 10.0;
+/// From this share of a band's particles lost ([`SppsResults::lost_share`]), its EDT, T20 and T30
+/// carry a warning beside their value (decision 56). **A forecast, not a measurement:** the 10-05
+/// hall bed (`docs/investigations/2026-10-05-b82-b84/FINDINGS.md`) measured what the lost
+/// particles moved T30 by, 5.3e-4 in Elmia at 0.15 % lost (the worst room, about 0.36 x the lost
+/// share) and 1.2e-4 in BRAS CR2 at 0.23 %, against the 5e-3 limit; scaled linearly from Elmia,
+/// 0.3 % lost moves T30 by about 1e-3, a fifth of the limit.
+pub const LOST_SHARE_WARNING: f64 = 0.003;
+
+/// From this share of a band's particles lost its EDT, T20 and T30 are refused `lost_particles`
+/// (decision 56): the model is broken (holes, a bad mesh). The same forecast as
+/// [`LOST_SHARE_WARNING`]: 1 % lost moves T30 by about 3.6e-3, and the 5e-3 limit is reached near
+/// 1.4 %. The run's verdict accepts up to 1 % too (`run/verdict.rs`).
+pub const LOST_SHARE_REFUSED: f64 = 0.01;
+
+/// What a band's lost share ([`SppsResults::lost_share`]) does to its EDT, T20 and T30
+/// (decision 56).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LostStatus {
+    /// Below [`LOST_SHARE_WARNING`], none lost included: shown as they are.
+    Ok,
+    /// From [`LOST_SHARE_WARNING`]: shown, with the share beside them as a warning.
+    Warning,
+    /// From [`LOST_SHARE_REFUSED`]: refused `lost_particles`.
+    Refused,
+}
+
+impl LostStatus {
+    /// The status of a band that lost `share` of its particles (`None`: none lost).
+    pub fn of(share: Option<f64>) -> Self {
+        match share {
+            Some(s) if s >= LOST_SHARE_REFUSED => LostStatus::Refused,
+            Some(s) if s >= LOST_SHARE_WARNING => LostStatus::Warning,
+            _ => LostStatus::Ok,
+        }
+    }
+}
 
 const CONFIG: &str = crate::config_xml::names::CONFIG;
 const BY_SOURCE: &str = fixed::POINT_RECEIVER_BY_SOURCE;
@@ -1333,13 +1345,17 @@ mod tests {
     }
 
     #[test]
-    fn the_lost_share_is_the_lost_over_the_alive() {
-        // None lost: no share.
-        assert_eq!(run(0, 5.0, 0, 0).lost_share(0, 500, 0), None);
-        // Lost, and nothing known alive: nothing bounds it.
-        assert_eq!(run(0, 5.0, 0, 3).lost_share(0, 500, 0), Some(f64::MAX));
-        // 3 lost of 1000 emitted, a quarter of the emitted energy alive at the end of step 1.
-        let mut r = run(0, 5.0, 0, 3);
+    fn the_unfinished_share_is_the_remaining_over_the_alive() {
+        // None remaining: no share; lost particles are no longer counted (decision 56).
+        assert_eq!(run(0, 5.0, 0, 0).unfinished_share(0, 500, 0), None);
+        assert_eq!(run(0, 5.0, 0, 3).unfinished_share(0, 500, 0), None);
+        // Remaining in a complete band (1000 particles: none may remain, so give it a million
+        // below), and nothing known alive: nothing bounds it.
+        let mut r = run(0, 5.0, 3, 0);
+        r.particles.bands[0].total = 10_000_000;
+        assert!(r.band_complete(500));
+        assert_eq!(r.unfinished_share(0, 500, 0), Some(f64::MAX));
+        // 3 remaining of 1000 emitted, a quarter of the emitted energy alive at the end of step 1.
         r.sources = vec![SourcePoint {
             name: "S".into(),
             position_m: None,
@@ -1367,7 +1383,7 @@ mod tests {
             by_source: Vec::new(),
             echograms: Vec::new(),
         }];
-        let share = r.lost_share(0, 500, 1).unwrap();
+        let share = r.unfinished_share(0, 500, 1).unwrap();
         assert!((share - 3.0 / (1000.0 * 0.25)).abs() < 1e-15, "{share}");
     }
 
@@ -1411,20 +1427,22 @@ mod tests {
             }];
             r
         };
-        // 3 remaining and 2 lost of 10 million: complete, the 5 unfinished bounded together.
+        // 3 remaining and 2 lost of 10 million: complete, the 3 remaining bounded; the 2 lost are
+        // reported, not bounded (decision 56; until then the 5 were bounded together).
         let r = big(3, 2);
         assert!(r.band_complete(500));
-        let share = r.lost_share(0, 500, 1).unwrap();
+        let share = r.unfinished_share(0, 500, 1).unwrap();
         assert!(
-            (share - 5.0 / (10_000_000.0 * 0.25)).abs() < 1e-18,
+            (share - 3.0 / (10_000_000.0 * 0.25)).abs() < 1e-18,
             "{share}"
         );
+        assert_eq!(r.lost_share(500), Some(2.0 / 10_000_000.0));
         // 10 remaining is one in a million: still complete; 11 is not, and the remaining ones are
-        // then left to the tail, the share counting the lost alone.
+        // then left to the tail: nothing is bounded as unfinished.
         assert!(big(10, 0).band_complete(500));
         let r = big(11, 2);
         assert!(!r.band_complete(500));
-        assert_eq!(r.lost_share(0, 500, 1), Some(2.0 / (10_000_000.0 * 0.25)));
+        assert_eq!(r.unfinished_share(0, 500, 1), None);
         // Energetic mode: complete with none remaining, and not with one in 10 million, whose
         // energy the floor does not bound.
         let mut e = big(0, 0);
@@ -1436,7 +1454,7 @@ mod tests {
     }
 
     #[test]
-    fn energetic_lost_particles_take_rho_n_over_n_of_the_energy_from_every_time_on() {
+    fn the_lost_share_is_the_lost_over_the_emitted_in_either_mode() {
         let with_source = |method: i32, lost: u32| {
             let mut r = run(method, 5.0, 0, lost);
             r.sources = vec![SourcePoint {
@@ -1448,25 +1466,32 @@ mod tests {
             }];
             r
         };
-        // 3 lost of 1000 emitted, energetic: ρ·3/1000.
-        let share = with_source(1, 3).lost_share_following_decay(500).unwrap();
-        assert_eq!(share, ENERGETIC_LOST_ENERGY_RATIO * 3.0 / 1000.0);
+        // 3 lost of 1000 emitted, in either mode: 0.3 %, a warning (decision 56).
+        for method in [0, 1] {
+            let share = with_source(method, 3).lost_share(500);
+            assert_eq!(share, Some(3.0 / 1000.0));
+            assert_eq!(LostStatus::of(share), LostStatus::Warning);
+        }
         // Two sources emit twice the particles.
         let mut two = with_source(1, 3);
         two.sources.push(two.sources[0].clone());
+        assert_eq!(two.lost_share(500), Some(3.0 / 2000.0));
+        assert_eq!(LostStatus::of(two.lost_share(500)), LostStatus::Ok);
+        // 10 of 1000 is 1 %: refused; 9 is not.
         assert_eq!(
-            two.lost_share_following_decay(500),
-            Some(ENERGETIC_LOST_ENERGY_RATIO * 3.0 / 2000.0)
+            LostStatus::of(with_source(0, 10).lost_share(500)),
+            LostStatus::Refused
         );
-        // Says no: random mode keeps its lump from the arrival; none lost gives none; a band the
-        // statistics do not list gives none; nothing emitted leaves nothing bounded.
-        assert_eq!(with_source(0, 3).lost_share_following_decay(500), None);
-        assert_eq!(with_source(1, 0).lost_share_following_decay(500), None);
-        assert_eq!(with_source(1, 3).lost_share_following_decay(1000), None);
         assert_eq!(
-            run(1, 5.0, 0, 3).lost_share_following_decay(500),
-            Some(f64::MAX)
+            LostStatus::of(with_source(0, 9).lost_share(500)),
+            LostStatus::Warning
         );
+        // Says no: none lost gives none; a band the statistics do not list gives none; nothing
+        // emitted gives none.
+        assert_eq!(with_source(1, 0).lost_share(500), None);
+        assert_eq!(LostStatus::of(None), LostStatus::Ok);
+        assert_eq!(with_source(1, 3).lost_share(1000), None);
+        assert_eq!(run(1, 5.0, 0, 3).lost_share(500), None);
     }
 
     #[test]

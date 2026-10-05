@@ -395,9 +395,13 @@ fn every_spps_band_is_measured_from_the_arrival_and_its_spread_with_its_early_re
     }
 }
 
+/// Decision 56 (results version 16): lost particles are reported, not bounded. Until then this
+/// test pinned the energetic bound, `ENERGETIC_LOST_ENERGY_RATIO`·n/N following the decay, which
+/// refused SPL at 200 planted lost; that bound is gone.
 #[test]
-fn energetic_lost_particles_are_bounded_as_following_the_decay_through_the_report() {
-    use simpa_core::results::spps::ENERGETIC_LOST_ENERGY_RATIO;
+fn energetic_lost_particles_are_reported_not_bounded_through_the_report() {
+    use simpa_core::params::NotEvaluable;
+    use simpa_core::results::spps::LostStatus;
     // The committed energetic run lost 2 of 50,000 particles at 500 Hz and none at 1 kHz.
     let r = load(ENERGETIC);
     let s = r.spps().unwrap();
@@ -406,23 +410,20 @@ fn energetic_lost_particles_are_bounded_as_following_the_decay_through_the_repor
     for p in &sp.point_receivers {
         for (b, st) in p.bands.iter().zip(&s.particles.bands) {
             assert_eq!(b.freq_hz, st.freq_hz);
+            assert_eq!(b.unfinished_share, None, "{} {}", p.label, b.freq_hz);
+            assert_eq!(b.lost_status, LostStatus::Ok);
             if st.lost() > 0 {
-                assert!(b.lost_follows_decay, "{} {}", p.label, b.freq_hz);
-                assert_eq!(
-                    b.lost_share,
-                    Some(ENERGETIC_LOST_ENERGY_RATIO * st.lost() as f64 / 50_000.0)
-                );
+                assert_eq!(b.lost_share, Some(st.lost() as f64 / 50_000.0));
             } else {
-                assert!(!b.lost_follows_decay && b.lost_share.is_none());
+                assert!(b.lost_share.is_none());
             }
         }
     }
     let seat = &sp.point_receivers[0];
     assert_eq!(seat.label, "Seat");
     assert!(seat.bands[0].parameters.spl_db.value().is_some());
-    // 200 lost at 500 Hz: a share of 10·200/50,000 = 0.04 following the decay moves every level by
-    // 10·lg(1.04) = 0.17 dB, beyond SPL's 0.1 dB, so SPL is refused there; as random mode's lump
-    // of 200/(50,000·f) from the arrival it would move SPL by about 0.02 dB and pass.
+    // 200 lost at 500 Hz, 0.4 %: a warning on EDT, T20 and T30, and nothing refused for it. The
+    // old bound (a share of 10·200/50,000 = 0.04 following the decay) refused SPL here.
     let run = copy_of(ENERGETIC, "energetic-lost-200");
     // Column 1 is 500 Hz; row 4 is lost by meshing problems.
     plant_int(&run.join("solve/SPPS particle statistics.gabe"), 1, 4, 200);
@@ -431,47 +432,85 @@ fn energetic_lost_particles_are_bounded_as_following_the_decay_through_the_repor
     assert_eq!(s.particles.bands[0].lost(), 200);
     let rep = results::report(&r);
     let b = &rep.spps.as_ref().unwrap().point_receivers[0].bands[0];
-    assert!(b.lost_follows_decay);
-    assert_eq!(b.lost_share, Some(0.04));
-    let why = b.parameters.spl_db.refusal().expect("SPL refused");
+    assert_eq!(b.lost_share, Some(0.004));
+    assert_eq!(b.lost_status, LostStatus::Warning);
     assert!(
-        matches!(
-            why.error.not_evaluable(),
-            Some(simpa_core::params::NotEvaluable::MissingMoves { .. })
-        ),
-        "{}",
-        why.message
+        b.parameters.spl_db.value().is_some(),
+        "{:?}",
+        b.parameters.spl_db
     );
-    // The lump random mode would have used passes SPL: what the report would have said.
-    let bin = (s.arrival_s(&s.point_receivers[0]).unwrap() / s.time_step_s).floor() as usize;
-    let lump = s.lost_share(0, 500, bin).unwrap();
-    assert!(lump < 0.01, "{lump}");
+    let p = &b.parameters;
+    for e in [&p.edt_s, &p.t20_s, &p.t30_s] {
+        match e {
+            simpa_core::results::report::Evaluated::Value {
+                lost_share_warning, ..
+            } => assert_eq!(*lost_share_warning, Some(0.004)),
+            simpa_core::results::report::Evaluated::NotEvaluable { not_evaluable } => assert!(
+                !matches!(
+                    not_evaluable.error.not_evaluable(),
+                    Some(NotEvaluable::LostParticles { .. })
+                ),
+                "{}",
+                not_evaluable.message
+            ),
+        }
+    }
+    // 500 lost, 1 %: EDT, T20 and T30 refused `lost_particles`; SPL still shown. (Over 1 % the
+    // run's verdict refuses the whole run, `particle_loss_excess`.)
+    let run = copy_of(ENERGETIC, "energetic-lost-500");
+    plant_int(&run.join("solve/SPPS particle statistics.gabe"), 1, 4, 500);
+    let r = results::load(&run).unwrap_or_else(|e| panic!("{e}"));
+    let rep = results::report(&r);
+    let b = &rep.spps.as_ref().unwrap().point_receivers[0].bands[0];
+    assert_eq!(b.lost_status, LostStatus::Refused);
+    assert!(b.parameters.spl_db.value().is_some());
+    for e in [
+        &b.parameters.edt_s,
+        &b.parameters.t20_s,
+        &b.parameters.t30_s,
+    ] {
+        let why = e.refusal().expect("refused").error.not_evaluable().cloned();
+        assert_eq!(
+            why,
+            Some(NotEvaluable::LostParticles {
+                share: 0.01,
+                limit: 0.01
+            })
+        );
+    }
 }
 
+/// Decision 56: random mode's lost particles are no longer a lump from the arrival either. Until
+/// then this test pinned that lump, `n/(N·f)`.
 #[test]
-fn random_mode_lost_particles_are_a_lump_from_the_arrival_through_the_report() {
-    // 20 lost at 500 Hz in a copy of the random-mode Seat run: the share is n/(N·f) of the energy
-    // from the arrival, as a lump, not following the decay.
+fn random_mode_lost_particles_are_reported_not_bounded_through_the_report() {
+    use simpa_core::params::NotEvaluable;
+    use simpa_core::results::spps::LostStatus;
+    // 20 lost at 500 Hz in a copy of the random-mode Seat run, of 2,000 emitted: 1 %, refused.
     let run = copy_of(SPPS, "random-lost-20");
     plant_int(&run.join("solve/SPPS particle statistics.gabe"), 1, 4, 20);
     let r = results::load(&run).unwrap_or_else(|e| panic!("{e}"));
-    let s = r.spps().unwrap();
     let rep = results::report(&r);
-    for (p, raw) in rep
-        .spps
-        .as_ref()
-        .unwrap()
-        .point_receivers
-        .iter()
-        .zip(&s.point_receivers)
-    {
-        let bin = (s.arrival_s(raw).unwrap() / s.time_step_s).floor() as usize;
+    for p in &rep.spps.as_ref().unwrap().point_receivers {
         let b = &p.bands[0];
-        assert!(!b.lost_follows_decay);
-        assert_eq!(b.lost_share, s.lost_share(0, 500, bin));
-        let f = s.alive_share(0, bin).unwrap();
-        assert!((b.lost_share.unwrap() - 20.0 / (2000.0 * f)).abs() < 1e-12);
+        assert_eq!(b.unfinished_share, None);
+        assert_eq!(b.lost_share, Some(20.0 / 2000.0));
+        assert_eq!(b.lost_status, LostStatus::Refused);
+        for e in [
+            &b.parameters.edt_s,
+            &b.parameters.t20_s,
+            &b.parameters.t30_s,
+        ] {
+            assert!(
+                matches!(
+                    e.refusal().and_then(|r| r.error.not_evaluable()),
+                    Some(NotEvaluable::LostParticles { .. })
+                ),
+                "{e:?}"
+            );
+        }
         assert_eq!(p.bands[1].lost_share, None);
+        assert_eq!(p.bands[1].lost_status, LostStatus::Ok);
     }
 }
 

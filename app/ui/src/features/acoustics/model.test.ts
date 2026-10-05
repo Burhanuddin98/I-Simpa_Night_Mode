@@ -14,6 +14,8 @@ import {
   decay,
   din,
   EDT_MARKS,
+  LOST_REFUSED,
+  LOST_WARNING,
   MQ2_WORDING,
   PARAM_SPECS,
   paramMarks,
@@ -142,6 +144,42 @@ test('Acoustics: a refusal is shown by its code and kind, never as a number', ()
   const bare = report();
   (at(bare, 'spps.point_receivers.0.bands.0.parameters') as Record<string, unknown>).spl_db = { value: 60, mc_sd: null };
   assert.equal(cell(bare, PARAM_SPECS[0], 0, 0), null);
+});
+
+test('Acoustics (decision 56): a lost-particle warning and refusal name the share as a number of the report', () => {
+  const r = report(['spl_db']);
+  const t30 = PARAM_SPECS.find((p) => p.name === 't30_s')!;
+  const t20 = PARAM_SPECS.find((p) => p.name === 't20_s')!;
+  // No warning in the report: none in the cell.
+  assert.equal(cell(r, t30, 0, 0)?.lost, undefined);
+  // A warning: the share, in %, a path into the report at its decimals.
+  const band = at(r, 'spps.point_receivers.0.bands.0.parameters') as Record<string, Record<string, unknown>>;
+  band.t30_s.lost_share_warning = 0.0041;
+  const c = cell(r, t30, 0, 0)!;
+  assert.equal(c.status, 'ok');
+  assert.deepEqual(c.lost, { path: 'spps.point_receivers.0.bands.0.parameters.t30_s.lost_share_warning', digits: 2, scale: 100, text: '0.41' });
+  assert.equal(cell(r, t20, 0, 0)?.lost, undefined, 'only the value that carries it');
+  assert.doesNotMatch(LOST_WARNING, /\d/, 'the words hold no digit; the share is the number');
+  // A refusal lost_particles: the share it names.
+  band.t20_s = {
+    not_evaluable: {
+      code: 'params_not_evaluable',
+      message: 'm',
+      error: { kind: 'not_evaluable', quantity: 'T20', why: { why: 'lost_particles', share: 0.021, limit: 0.01 } },
+    },
+  };
+  const refusedCell = cell(r, t20, 0, 0)!;
+  assert.equal(refusedCell.status, 'refused');
+  assert.equal(refusedCell.refusal?.why?.text, 'lost_particles');
+  assert.deepEqual(refusedCell.refusal?.lost, {
+    path: 'spps.point_receivers.0.bands.0.parameters.t20_s.not_evaluable.error.why.share',
+    digits: 2,
+    scale: 100,
+    text: '2.10',
+  });
+  assert.doesNotMatch(LOST_REFUSED, /\d/);
+  // Says no: another refusal names no share.
+  assert.equal(cell(r, t30, 0, 1)?.refusal?.lost, undefined);
 });
 
 test('Acoustics: STI shows its value with the noise-range note; dB(A) and G where the report has them', () => {

@@ -246,6 +246,17 @@ pub enum NotEvaluable {
         with_missing: Option<f64>,
         limit: f64,
     },
+    /// The band lost `share` of its particles (lost over emitted), at least `limit`
+    /// (`results::spps::LOST_SHARE_REFUSED`, decision 56): the model is broken (holes, a bad
+    /// mesh), so EDT, T20 and T30 are refused whatever they read. Below it the share is reported
+    /// beside them, not bounded. Made by `core::results`, which knows the particle statistics;
+    /// `params` never sees them.
+    LostParticles {
+        /// Lost over emitted, a fraction.
+        share: f64,
+        /// A fraction.
+        limit: f64,
+    },
     /// The series' early reverberation is not resolved
     /// ([`EnergySeries::with_early_reverberation_unresolved`]), and where it begins moves the
     /// value by more than `limit`: `continued` is the value with the reverberation beginning at
@@ -508,6 +519,13 @@ impl fmt::Display for NotEvaluable {
             NotEvaluable::NoTimeSeries { detail } => {
                 write!(f, "no_time_series: the solver wrote none: {detail}")
             }
+            NotEvaluable::LostParticles { share, limit } => write!(
+                f,
+                "lost_particles: {:.2} % of the band's particles were lost (holes or a bad \
+                 mesh?), at least {} %: the model is broken",
+                share * 100.0,
+                limit * 100.0
+            ),
             NotEvaluable::EdtRefused { reason } => write!(
                 f,
                 "edt_refused: {reason}: {}",
@@ -656,7 +674,9 @@ impl NotEvaluable {
 /// What made energy go missing, in words.
 fn missing_cause(floor_db: Option<f64>, lost_share: Option<f64>) -> String {
     let floor = floor_db.map(|db| format!("the solver's floor ({db} dB below a particle's start)"));
-    let lost = lost_share.map(|s| format!("its lost particles (share {s:.2e})"));
+    // Since decision 56 `core::results` gives only particles left alive at the end of a complete
+    // band here; lost particles are reported beside the values, not bounded.
+    let lost = lost_share.map(|s| format!("its unfinished particles (share {s:.2e})"));
     match (floor, lost) {
         (Some(a), Some(b)) => format!("{a} and {b}"),
         (Some(a), None) | (None, Some(a)) => a,

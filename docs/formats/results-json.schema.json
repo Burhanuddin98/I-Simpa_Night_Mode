@@ -816,6 +816,14 @@
                   "null"
                 ]
               },
+              "lost_share_warning": {
+                "description": "Present only on EDT, T20 or T30 of an SPPS band (or aggregate) whose particles were lost\nfrom [`LOST_SHARE_WARNING`](super::spps::LOST_SHARE_WARNING) (0.3 %) up to [`LOST_SHARE_REFUSED`] (1 %) of those emitted\n(decision 56): the share, lost over emitted, shown beside the value as a warning that\nit may read slightly low in the late decay. From 1 % the value is refused\n`lost_particles`.",
+                "format": "double",
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
               "mc_sd": {
                 "description": "The estimated Monte-Carlo standard deviation, in the same unit (`params::noise`);\n`null` for a value that does not come from a Monte-Carlo histogram, such as TCR's\nanalytic references.",
                 "format": "double",
@@ -1083,6 +1091,26 @@
           "absorption_area_m2"
         ],
         "type": "object"
+      },
+      "LostStatus": {
+        "description": "What a band's lost share ([`SppsResults::lost_share`]) does to its EDT, T20 and T30\n(decision 56).",
+        "oneOf": [
+          {
+            "const": "ok",
+            "description": "Below [`LOST_SHARE_WARNING`], none lost included: shown as they are.",
+            "type": "string"
+          },
+          {
+            "const": "warning",
+            "description": "From [`LOST_SHARE_WARNING`]: shown, with the share beside them as a warning.",
+            "type": "string"
+          },
+          {
+            "const": "refused",
+            "description": "From [`LOST_SHARE_REFUSED`]: refused `lost_particles`.",
+            "type": "string"
+          }
+        ]
       },
       "MainBand": {
         "description": "One band row of `Main results.gabe`.",
@@ -1499,6 +1527,31 @@
             "required": [
               "why",
               "value",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "description": "The band lost `share` of its particles (lost over emitted), at least `limit`\n(`results::spps::LOST_SHARE_REFUSED`, decision 56): the model is broken (holes, a bad\nmesh), so EDT, T20 and T30 are refused whatever they read. Below it the share is reported\nbeside them, not bounded. Made by `core::results`, which knows the particle statistics;\n`params` never sees them.",
+            "properties": {
+              "limit": {
+                "description": "A fraction.",
+                "format": "double",
+                "type": "number"
+              },
+              "share": {
+                "description": "Lost over emitted, a fraction.",
+                "format": "double",
+                "type": "number"
+              },
+              "why": {
+                "const": "lost_particles",
+                "type": "string"
+              }
+            },
+            "required": [
+              "why",
+              "share",
               "limit"
             ],
             "type": "object"
@@ -2671,7 +2724,7 @@
             "type": "number"
           },
           "complete": {
-            "description": "SPPS's statistics show that at most one particle in a million was still alive when the\nsteps ran out in random mode, none in energetic mode (`trans_epsilon` above 0:\n`spps::SppsResults::band_complete`), so the series is given to `params` as complete and no\ntail after its end is bounded; in energetic mode its floor still is (`floor_db`).\nOtherwise `params` bounds that tail. **Lost particles, and those few left alive, do not\nmake a band incomplete:** the energy their unfinished paths would have brought is bounded\nseparately, `lost_share`.",
+            "description": "SPPS's statistics show that at most one particle in a million was still alive when the\nsteps ran out in random mode, none in energetic mode (`trans_epsilon` above 0:\n`spps::SppsResults::band_complete`), so the series is given to `params` as complete and no\ntail after its end is bounded; in energetic mode its floor still is (`floor_db`).\nOtherwise `params` bounds that tail. **Lost particles, and those few left alive, do not\nmake a band incomplete:** the energy the few left alive would have brought is bounded\nseparately, `unfinished_share`; the lost ones are reported, `lost_share`.",
             "type": "boolean"
           },
           "contributing_sources": {
@@ -2751,17 +2804,17 @@
             "$ref": "#/$defs/Evaluated",
             "description": "Sound strength G, dB ([`strength`]): `parameters.spl_db` less the free field's level at\n10 m of the same sources, `source_power_rho_c` over `4π·100 m²` against the same `p₀²`, so\nSPPS's `ρc` cancels (ISO 3382-1:2009 A.2.1, Eqs. A.1-A.3; not Eq. A.9's `+31 dB`, which\nassumes `ρc ≈ 400`). With several sources, every source's energy at the receiver against\nevery source's free field, both summed. SPL's `mc_sd`, `status` and range, shifted by the\nsame constant; refused as SPL is."
           },
-          "lost_follows_decay": {
-            "description": "Energetic mode: what the lost particles would still have brought falls with the decay, so\n`lost_share` bounds the energy from every time on, not a lump added at the end.",
-            "type": "boolean"
-          },
           "lost_share": {
-            "description": "The share of the energy from the arrival on that unfinished particles (lost, or in a\ncomplete band left alive at the end) can have taken with them\n(`spps::SppsResults::lost_share`), or, when `lost_follows_decay`, that lost particles can\nhave taken of the energy from every time on (`spps::SppsResults::lost_share_following_\ndecay`); `params` bounds what it can move. `null` when there are none.",
+            "description": "The share of the band's particles SPPS lost (`partLoop`, `partLost`) over those emitted\n(`spps::SppsResults::lost_share`); `null` when none was lost. **Reported, not bounded**\n(decision 56, as Odeon reports lost rays): `lost_status` says what it does to EDT, T20 and\nT30. Until results version 16 this was the share of the energy the lost particles were\nbounded to have taken.",
             "format": "double",
             "type": [
               "number",
               "null"
             ]
+          },
+          "lost_status": {
+            "$ref": "#/$defs/LostStatus",
+            "description": "`ok` below 0.3 % lost; `warning` from it, EDT, T20 and T30 carrying `lost_share_warning`;\n`refused` from 1 %, where they and the curvature are refused `lost_particles`\n([`LostStatus`])."
           },
           "noise_model": {
             "$ref": "#/$defs/NoiseModel",
@@ -2790,12 +2843,20 @@
             "description": "Their sum.",
             "format": "double",
             "type": "number"
+          },
+          "unfinished_share": {
+            "description": "The share of the energy from the arrival on that the particles left alive at the end of a\ncomplete band can have taken with them (`spps::SppsResults::unfinished_share`); `params`\nbounds what it can move. `null` when there are none. Until results version 16 the lost\nparticles were counted here too, as `lost_share`.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
           }
         },
         "required": [
           "freq_hz",
           "complete",
-          "lost_follows_decay",
+          "lost_status",
           "early_reverberation_unresolved",
           "arrival",
           "contributing_sources",

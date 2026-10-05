@@ -34,6 +34,8 @@ import {
   din,
   dinGroups,
   dinTarget,
+  LOST_REFUSED,
+  LOST_WARNING,
   MQ2_WORDING,
   paramMarks,
   receiverRows,
@@ -68,6 +70,11 @@ function RefusalView({ r }: { r: Refusal }) {
           <S s={r.why} />
         </>
       ) : null}
+      {r.lost ? (
+        <span className="ac-note" data-lost="refused">
+          <N n={r.lost} unit="%" /> {LOST_REFUSED}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -93,6 +100,11 @@ function CellView({ c, unit }: { c: Cell; unit: string }) {
           {c.note ? (
             <span className="ac-note" data-note={c.note}>
               {c.note}
+            </span>
+          ) : null}
+          {c.lost ? (
+            <span className="ac-note" data-lost="warning">
+              <N n={c.lost} unit="%" /> {LOST_WARNING}
             </span>
           ) : null}
         </>
