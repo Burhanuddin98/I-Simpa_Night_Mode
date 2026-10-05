@@ -571,6 +571,93 @@ source's parameters, measured from that source's own arrival (`per_source`). The
 weaker and 20 ms late, and the switch on) holds it; spoiled copies with a source's echogram
 removed, one value changed by 1 %, or a folder no source names are refused.
 
+## The run-quality advisor (backlog 80, M12b)
+
+Plan: `docs/investigations/2026-10-04-advisor/PLAN.md` (decisions 49, 54, 56, 57). Code:
+`crates/simpa-core/src/advise.rs` and `advise/` (`before.rs`, `after.rs`, `tests.rs`). It tells the
+user, in plain words, why values are noisy or refused and which **setting** addresses it, with the
+value "Apply" sets. It never names a value the run will produce (the noise fell 9x and 15x where the
+square-root rule forecast 3.2x, `B:\data\m12\b78-mesh\FINDINGS.md`), never blocks a run, never hides
+or softens a refusal, and never changes a setting without the click. Every Apply is one
+`Op::SetSolverSettings` with one field changed, through the app's checked apply (one undo step,
+refused by the validator like any edit), and is refused, `ADVICE_PROJECT_CHANGED`, when the
+project's value is no longer the one the advice was given for. The words hold no digit, so the
+Simulate step's number scanner (m10-h, m11-h) stays green; the numbers are the setting's `from` and
+`to`, at report paths after a run (`advice.<i>.fix.to`, M12 gate (a)).
+
+**Before a run** (`advise::before`; the Simulate step's "Run quality", `SceneState.advice`;
+`simpa advise <project> [--json]`):
+
+| code | when | fix (Apply) |
+|---|---|---|
+| `mesh_splits_walls` | `-Y` off: "This meshing splits the walls; expect lost particles" | Preserve walls when meshing (-Y) on; with a surface-receiver refinement, none: the two cannot be on together (Q3) |
+| `receivers_small` | `N·r²/V` below K = 13.8 (`N` particles per source, `r` the radius, `V` the air's volume from the geometry check) | the largest radius below every receiver's clearance on a 0.05 m grid, at most 1 m (Elmia: 0.6); when that is not above `r`, more particles, no count |
+| `run_short` | the duration below the slowest computed band's Sabine time (the larger of Sabine and Eyring; the air left out, which only shortens it; absent when Sabine is refused) | the new-project 10 s, or the longest the 16-bit step counter allows |
+| `particles_few` | fewer particles per source than the noise calibration's minimum for some quantity (150,000 energetic, 50,000 random) | that minimum: a calibration domain, not a forecast |
+
+**K.** Arms of backlog 78 on Elmia (`B:\data\m12\b78-mesh\FINDINGS.md`): B 1.39 (9 of 36 T30
+ranges below zero, median noise 34 % of the value), D 13.88 and E 14.44 (none; 3.7 % and 2.3 %),
+H 34.65 (none; 1.2 %). K is D's 13.88 rounded down, the lowest measured value with no T30 range
+below zero. Tutorial 2 as shipped, 9.25, lies between B and D and was **not measured** (the plan's
+arm I): it is warned because it is below every arm measured good, not because a run at 9.25 was
+seen to fail. Decision 54 asks Burhan when the arms cannot separate it; until arm I runs, 13.8 stands
+as the plan's fallback.
+
+**After a run** (`advise::after`, the report's `advice`, results version 17; the Results step's
+"Why values are missing" card, each refused or `wide` cell marked `[data-advice]`, "Apply and
+re-run"). Every value of the eight parameters, G, dB(A) and STI (and per source) that is refused,
+`wide` or carries `lost_share_warning` gets an item; an `ok` value none. The mapping is an exhaustive
+`match` on `ParamError` and `NotEvaluable`, so a new refusal kind does not compile until it has
+advice; EDT's reasons are held to theirs by `every_edt_refusal_reason_has_its_own_advice`.
+
+| refusal or status | code | fix (Apply) |
+|---|---|---|
+| `monte_carlo_noise` | `monte_carlo_noise` | a larger radius up to the cap; else the count the refusal names (Q1: `named` or `resampled`, labelled a setting, not a forecast); else particles, no count |
+| `range_below_zero` | `range_below_zero` | as `monte_carlo_noise`, the radius first; it names no count |
+| `wide` | `wide` | as `monte_carlo_noise` |
+| `wide` with `straddle` | `straddle` | the time step down to 1 ms |
+| `noise_uncalibrated` | `noise_uncalibrated` | `particles_at_least`; and/or the smaller radius `receiver_radius_scale_at_most` allows |
+| `noise_unknown` | `noise_unknown` | none |
+| `missing_moves`, `missing_not_cleared` with `floor_db` | `solver_floor` | the extinction up to the new-project 7 |
+| the same without a floor (particles left alive at the end) | `particles_left_alive` | a longer run |
+| `lost_particles` (from 1 % lost) | `lost_particles` | -Y on when the run was meshed without it (its `mesh/mesh.json`); with -Y already, or a refinement, or no mesh record, no Apply; never more particles |
+| `lost_share_warning` (0.3 % to 1 %) | `lost_share_warning` | as `lost_particles` |
+| `truncated`, `range_not_reached`, `params_series_too_short`, EDT `run_too_short` / `not_decaying_at_run_end` | `run_too_short` | the new-project 10 s, or the step limit's longest |
+| `unresolved`, `early_unresolved`, EDT `step_too_coarse` | `onset_too_coarse` | the time step down to 1 ms, when the duration still fits the step counter |
+| `range_too_short`, `not_decaying`, `empty_window` | `decay_not_fitted` | none |
+| `several_sources` | `several_sources` | echogram per source on; when on, "choose a source" (a view, not a setting) |
+| `no_time_series` | `no_time_series` | none: "use SPPS" |
+| EDT `too_few_particles` | `edt_too_few_particles` | particles, no count |
+| EDT `receiver_too_large` | `edt_receiver_too_large` | the radius down to 1 m (and below the walls) |
+| EDT `no_energy`, `no_energy_after_arrival`, `direct_only`, `not_decaying` | `edt_outside_method` | none |
+| `no_a_weight`, `band_missing`, `not_octave_bands` | `bands_not_covered` | none: "Change bands…" is named, not applied |
+| `band_refused` | `band_refused` | none: that band's own advice |
+| any other `ParamError` | `input_fault` | none |
+
+The radius cap after a run is the smallest of: below the nearest receiver's distance to a face of
+the run's own `.cbin` (0.05 m grid), 1 m (EDT is unchecked above it), and the noise calibration's
+crossings per particle (`r·√(max_n/n)`, the smallest calibrated `max_n` over the largest `n` of any
+band); `bound` says which set it. Without the clearance no radius is proposed. A room outside the
+calibration's 60 to 1,000 m³ carries the note that the fix is not checked there (Elmia, 10,389 m³).
+
+**Decision 56.** The plan was written when `missing_moves` carried the lost-particle bound
+(`ENERGETIC_LOST_ENERGY_RATIO`), and gave lost-share `missing_moves` the `-Y` advice. Since decision
+56 that bound refuses nothing: `missing_moves` and `missing_not_cleared` come from the solver's floor
+and the particles left alive at the end only, and lost particles are their own refusal,
+`lost_particles` from 1 %, with a warning from 0.3 %. The advisor follows: `-Y` answers
+`lost_particles` and `lost_share_warning`, not `missing_moves`. The pre-run `mesh_splits_walls` stays
+(Elmia without `-Y` lost about four times as many particles, arms A against B), though at Elmia's
+0.08 % to 0.11 % those losses no longer refuse anything.
+
+Tests (each rule with its say-NO): `advise::tests` (23; 16 red with the rules planted empty,
+`B:\data\m12\advisor\red-planted-advise-empty.txt`), among them A2 on the committed runs (every
+advice path a refused, `wide` or warned value of the report; every such value explained) and arm B's
+stored run (`range_below_zero` T30 at 0.31 m names 0.6 m, bound `clearance`; skipped where the run is
+not on disk); `crates/simpa/tests/cli_advise.rs`; the app's `bridge::advisor_tests` (Apply one undo
+step, refused once the project changed); the UI models (`adviceRows`, `adviceCards`, `withMeshing`).
+The e2e, `app/e2e/specs/b80.advisor.e2e.ts` (`b80-pre`, `b80-h`, `b80-after`, `b80-undo`), runs in
+`tools/gates/m12.ps1` on the arm-B fixture `tests/fixtures/rooms/elmia_arm_b.simpa`.
+
 ## Level calibration (gate M7(c))
 
 `rooms/level_box_20m.simpa`: a 20 × 20 × 20 m box, SPPS with `direct_calc = 1` and air absorption
