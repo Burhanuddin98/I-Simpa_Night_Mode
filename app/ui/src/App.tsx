@@ -3,11 +3,15 @@
 // package), the 3D view (`features/viewport`), the materials panel (`features/materials`), the
 // dock (`features/dock`), the Simulate and Results panels (`features/simulate`, mounted by the
 // properties panel) and the save prompt (`chrome/SavePrompt`). Every region reads the stores;
-// none takes props from here.
+// none takes props from here. While no project is open the landing page (`chrome/Landing`) covers
+// the step bar and the work area, which are inert behind it (still laid out: the self-test reads
+// the step bar's boxes).
 import { useEffect } from 'react';
 import * as actions from './actions';
 import { asCmdError, backend } from './backend';
 import { ImportDialog } from './chrome/ImportDialog';
+import { Landing } from './chrome/Landing';
+import { landingShown } from './chrome/landingModel';
 import { MenuBar } from './chrome/MenuBar';
 import { PropertiesPanel } from './chrome/PropertiesPanel';
 import { SavePrompt } from './chrome/SavePrompt';
@@ -20,7 +24,7 @@ import { Viewport } from './features/viewport/Viewport';
 import { isReloadKey, joinBlockers, projectBlockers } from './flow';
 import { probeWebGL } from './gpu';
 import { runSelftest } from './selftest';
-import { log, runStore, sceneStore, solversStatusStore, solverStore, statusStore } from './store';
+import { log, runStore, sceneStore, solversStatusStore, solverStore, statusStore, useStore } from './store';
 import { installTestHooks } from './testhooks';
 
 let booted = false;
@@ -107,6 +111,7 @@ function onKey(e: KeyboardEvent): void {
 }
 
 export function App() {
+  const landing = landingShown(useStore(sceneStore));
   useEffect(() => {
     void boot();
     window.addEventListener('keydown', onKey);
@@ -119,14 +124,17 @@ export function App() {
   return (
     <div className="shell">
       <MenuBar />
-      <StepBar />
-      <div className="work">
-        <ScenePanel />
-        <main className="center">
-          <Viewport />
-          <Dock />
-        </main>
-        <PropertiesPanel />
+      <Landing />
+      <div className="behind-landing" inert={landing}>
+        <StepBar />
+        <div className="work">
+          <ScenePanel />
+          <main className="center">
+            <Viewport />
+            <Dock />
+          </main>
+          <PropertiesPanel />
+        </div>
       </div>
       <StatusBar />
       <ImportDialog />

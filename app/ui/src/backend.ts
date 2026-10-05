@@ -120,6 +120,9 @@ export const backend = {
   sceneState: () => invoke<SceneState | null>('scene_state'),
   sceneNew: (name: string) => invoke<SceneState>('scene_new', { name }),
   sceneOpen: (path: string) => invoke<SceneState>('scene_open', { path }),
+  /** The landing page's example `id`: the core writes a fresh copy into Documents\Night Mode\Examples
+   * (never over a file) and opens it as `scene_open` does. */
+  exampleOpen: (id: string) => invoke<SceneState>('example_open', { id }),
   modelImport: (path: string, unit: Unit, up: Up) => invoke<SceneState>('model_import', { path, unit, up }),
   /** `null` saves to the project's own path; a path is Save As. */
   projectSave: (path: string | null) => invoke<SceneState>('project_save', { path }),

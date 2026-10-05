@@ -18,6 +18,13 @@ describe('M10 harness smoke', () => {
     // No project yet: Run is disabled and names no blocker but the missing project.
     const run = await $('[data-part="run"]');
     assert.equal(await run.isEnabled(), false, 'Run is disabled');
+    // No project yet: the landing page stands in for the empty window, with the shipped examples
+    // (src-tauri/src/examples.rs) and New project and Open… (Burhan, 2026-10-06 01:24).
+    const landing = await browser.execute(() => ({
+      examples: [...document.querySelectorAll('[data-part="landing"] [data-example]')].map((e) => e.getAttribute('data-example')),
+      actions: [...document.querySelectorAll('[data-part="landing"] [data-landing-action]')].map((e) => e.getAttribute('data-landing-action')),
+    }));
+    assert.deepEqual(landing, { examples: ['elmia', 'bras-cr2', 'bras-cr4'], actions: ['new-project', 'open'] });
     const title = await browser.getTitle();
     assert.equal(title, 'I-Simpa Night Mode');
   });

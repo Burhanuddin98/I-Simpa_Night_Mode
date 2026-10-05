@@ -1018,3 +1018,139 @@
   color: var(--red);
   background: var(--red-wash);
 }
+
+/* The landing page (Landing.tsx), while no project is open: one calm card over the 3D view's own
+   background (viewport.css, .viewport-host), between the menu bar (z-index 5, above it) and the
+   status bar (raised above it while it shows). Red only on the primary action and on focus. */
+.landing {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(36px + 3 * var(--gap)) 24px calc(24px + 3 * var(--gap));
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: var(--bg) radial-gradient(ellipse at 50% 55%, rgba(224, 32, 46, 0.07) 0%, rgba(9, 9, 11, 0) 60%);
+}
+.shell:has(> .landing) .statusbar {
+  z-index: 3;
+}
+/* The regions behind the landing page, made inert while it shows (App.tsx); no box of its own. */
+.behind-landing {
+  display: contents;
+}
+.landing-card {
+  width: min(820px, 100%);
+  margin: auto;
+  padding: 28px 32px 26px;
+  border-radius: 10px;
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  box-sizing: border-box;
+}
+.landing-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+}
+.landing-lead {
+  margin: 6px 0 22px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.landing-head {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.landing-examples {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.landing-examples li {
+  display: flex;
+}
+.landing-example {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 7px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  text-align: left;
+}
+.landing-example:not(:disabled):hover {
+  background: var(--raised-2);
+  border-color: #34343c;
+}
+.landing-example:focus-visible {
+  outline-offset: 2px;
+}
+.landing-example:disabled {
+  color: var(--text-2);
+}
+.landing-example .name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+.landing-example .line {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.landing-example .opening {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.landing-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.landing-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+.landing-actions button {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+}
+.landing-actions button:not(:disabled):hover {
+  background: var(--raised-2);
+}
+.landing-actions button.primary {
+  border-color: var(--red);
+  background: var(--red);
+  color: #fff;
+  font-weight: 600;
+}
+.landing-actions button.primary:not(:disabled):hover {
+  border-color: var(--red-hi);
+  background: var(--red-hi);
+}
+.landing-actions button:disabled {
+  opacity: 0.55;
+}
+.landing-error {
+  margin-top: 14px;
+  color: var(--fail-text);
+}

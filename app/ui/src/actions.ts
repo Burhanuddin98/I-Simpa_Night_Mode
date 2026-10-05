@@ -148,6 +148,19 @@ export async function openProject(path: string): Promise<SceneState> {
   return state;
 }
 
+/** The landing page's example `id` (src-tauri/src/examples.rs), after the save prompt: the core
+ * copies it into the user's Documents and opens the copy as Open opens a `.simpa`. `null` when
+ * the user cancelled or a run is active. */
+export async function openExample(id: string): Promise<SceneState | null> {
+  if (refuseDuringRun('Open')) return null;
+  if (!(await confirmDiscard())) return null;
+  refusalStore.set(new Map());
+  const state = await run('Could not open the example', async () => accept(await backend.exampleOpen(id)));
+  forgetRuns();
+  fire(refreshRuns());
+  return state;
+}
+
 export async function importModel(path: string, unit: Unit, up: Up): Promise<SceneState> {
   refusalStore.set(new Map());
   const state = await run(`Could not import ${path}`, async () => accept(await backend.modelImport(path, unit, up)));

@@ -67,6 +67,7 @@ class Backend {
   plan: Promise<void> | null = null;
   scene = scene('room', 'C:/p/room.simpa', false);
   rows: RunRow[] = [];
+  exampleIds: string[] = [];
 
   count(cmd: string): number {
     return this.calls.filter((c) => c === cmd).length;
@@ -100,6 +101,10 @@ class Backend {
         return this.scene;
       case 'proj_import':
         this.scene = scene('tutorial_1', null, true);
+        return this.scene;
+      case 'example_open':
+        this.exampleIds.push(String(args.id));
+        this.scene = scene(String(args.id), `C:/Users/u/Documents/Night Mode/Examples/${String(args.id)}.simpa`, false);
         return this.scene;
       default:
         throw { code: 'NO_STANDIN', message: `the stand-in backend has no ${cmd}` };
@@ -317,4 +322,29 @@ test('a runs_list answer from before the end of a run this page streamed does no
     store.runStore.set(null);
     (globalThis as Record<string, unknown>).__TAURI_TEST_IPC__ = ipc;
   }
+});
+
+test('an example opens through example_open after the save prompt, and forgets the previous run; a run or a cancelled prompt stops it', async () => {
+  store.selectedRunStore.set('R-old');
+  const opened = await actions.openExample('bras-cr4');
+  assert.deepEqual(backend.exampleIds, ['bras-cr4']);
+  assert.equal(opened?.info.path, 'C:/Users/u/Documents/Night Mode/Examples/bras-cr4.simpa');
+  assert.equal(store.sceneStore.get(), opened, 'the copy is the open project');
+  assert.equal(store.selectedRunStore.get(), null, "the previous project's run is forgotten");
+
+  // A run is active: nothing is copied or opened.
+  store.runStore.set({ id: 1, run: 'R-live', status: 'running' } as unknown as NonNullable<ReturnType<typeof store.runStore.get>>);
+  assert.equal(await actions.openExample('elmia'), null);
+  store.runStore.set(null);
+
+  // A changed project asks first; Cancel leaves it open and copies nothing.
+  backend.scene = scene('room', 'C:/p/room.simpa', true);
+  store.sceneStore.set(backend.scene);
+  const pending = actions.openExample('elmia');
+  await until('the save prompt is up', () => store.promptStore.get() !== null);
+  store.promptStore.get()!.resolve('cancel');
+  assert.equal(await pending, null);
+  assert.deepEqual(backend.exampleIds, ['bras-cr4'], 'example_open was not called again');
+  assert.equal(store.sceneStore.get()?.info.name, 'room');
+  await sleep(5); // the refreshRuns() the first open fired
 });
