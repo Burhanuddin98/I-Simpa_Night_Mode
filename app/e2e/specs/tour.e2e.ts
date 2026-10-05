@@ -12,6 +12,10 @@
 // Results step and saves one PNG per camera angle into $TOUR_PROBE (a %TEMP% folder), to choose
 // the angles; those are looked at and deleted.
 //
+// With TOUR_WINDOW set (a folder) and TOUR_WINDOW_RUN (a run of TOUR_HALL), it saves the map
+// window's before/after pair: the 1 kHz plane map at step TOUR_WINDOW_STEP (300 by default), flat
+// colour, with the window Off (`cr4-before.png`) and at 10 ms (`cr4-after.png`), the app window only.
+//
 // Into M11_SCREENS: progress.log, one line per thing shown; `tour start` first and `tour end` last
 // (the recorder keys on them), and `MARK <name> <epoch ms>` lines for the cut. The hall is copied
 // to `<M11_SCREENS>\work-<stamp>\cr4`, so its run lands there (B:), never in the repository.
@@ -239,8 +243,45 @@ const PROBE = process.env.TOUR_PROBE ?? '';
 /** The response window on a finished CR4 run (Burhan 2026-10-04: "WHAT ABOUT THE IR SPECTROGRAM
  * RESULT"): TOUR_IR is the one picture's path, TOUR_IR_RUN the run, opened in TOUR_HALL itself. */
 const IR_SHOT = process.env.TOUR_IR ?? '';
+/** The map window's before/after pair (Burhan 2026-10-05 01:59): TOUR_WINDOW is the folder. */
+const WINDOW_SHOTS = process.env.TOUR_WINDOW ?? '';
 
-if (IR_SHOT) {
+if (WINDOW_SHOTS) {
+  describe('Tour pair: the map window off and at 10 ms on the CR4 plane', function () {
+    this.timeout(1_200_000);
+    it('window', async () => {
+      mkdirSync(WINDOW_SHOTS, { recursive: true });
+      progress(`tour start; window pair into ${WINDOW_SHOTS}`);
+      await waitForHooks(['idle', 'openProject', 'setStep', 'runsRows', 'selectRun', 'm12Map', 'm12SetStep', 'cameraState', 'flyCamera', 'projectJson']);
+      await m10.openProject(need('TOUR_HALL'));
+      await m10.setStep('results');
+      const run = need('TOUR_WINDOW_RUN');
+      let rows: Row[] = [];
+      await browser.waitUntil(async () => (rows = await hook<Row[]>('runsRows')).some((r) => r.run === run), { timeout: 30_000 }).catch(() => {
+        throw new Error(`the project lists no run ${run}: ${JSON.stringify(rows).slice(0, 600)}`);
+      });
+      await hook('selectRun', run);
+      await mapOf(run);
+      await clickSelector('[data-map-band="1000"]');
+      await mapOf(run, 1000);
+      for (const panel of ['scene', 'props', 'dock'] as const) await fold(panel, true);
+      const pl = planeOf(await project());
+      await fly(add(pl.centre, MAP_FROM), add(pl.centre, MAP_LOOK), 300);
+      const step = Number(process.env.TOUR_WINDOW_STEP ?? '300');
+      await browser.action('pointer', { parameters: { pointerType: 'mouse' } }).move({ x: 2, y: 2, origin: 'viewport', duration: 0 }).perform();
+      for (const [name, ms] of [['cr4-before', 0], ['cr4-after', 10]] as const) {
+        await clickSelector(`[data-map-window="${ms}"]`);
+        await browser.waitUntil(async () => (await hook<{ windowSteps: number } | null>('m12Map'))?.windowSteps === (ms === 0 ? 1 : 10), { timeout: 30_000, timeoutMsg: `the map did not take the ${ms} ms window` });
+        await hook('m12SetStep', step);
+        await pause(900);
+        const file = path.join(WINDOW_SHOTS, `${name}.png`);
+        await browser.saveScreenshot(file);
+        progress(`window ${name}: ${ms} ms, step ${step}, ${await camText()}; legend "${await text('[data-part="map-legend"] .vp-legend-title')}"; ${await readoutText()}`);
+      }
+      progress('tour end');
+    });
+  });
+} else if (IR_SHOT) {
   describe('Tour clip: the response window on CR4, two receivers and the two sources', function () {
     this.timeout(1_200_000);
     afterEach(function () {

@@ -14,6 +14,7 @@ import type { SurfaceMap } from '../../resultsData.ts';
 import { parseStrictDecimal } from '../../numbers.ts';
 import { cumulativeAt } from './cumulative.ts';
 import { levelDb, type Range } from './mapData.ts';
+import { windowedAt, windowLabel } from './window.ts';
 
 /** The most faces a node may link for the GPU's average loop; a map above it is drawn flat only. */
 export const MAX_NODE_FACES = 64;
@@ -126,7 +127,7 @@ export function probeOf(
   m: SurfaceMap,
   face: number,
   step: number,
-  o: { what: string; band: string; dtS: number | null | undefined; smooth: boolean; base?: SurfaceMap | null; cumulative?: boolean },
+  o: { what: string; band: string; dtS: number | null | undefined; smooth: boolean; base?: SurfaceMap | null; cumulative?: boolean; windowSteps?: number },
 ): ProbeView {
   const title = `${o.what} · ${o.band} · ${stepTime(step, o.dtS)}`;
   const note = o.smooth ? "The face's own value from the file. The colours between faces are smoothed, not values." : null;
@@ -137,6 +138,31 @@ export function probeOf(
     const l = levelDb(sum);
     if (l === null) return { face, step, title, level: null, bits: null, value: 'No energy yet at this step', note: sumNote };
     return { face, step, title, level: `${l.toFixed(1)} dB`, bits: valueBits(sum), value: `the file's values summed from the first step to this one, ${sum.toExponential(4)}`, note: sumNote };
+  }
+  // The time window (window.ts): the face's mean of the file's values over the window, as the shader draws it.
+  const w = o.windowSteps ?? 1;
+  const span = windowLabel(w, o.dtS);
+  if (span) {
+    const over = span.replace('averaged over ', '');
+    const meanNote = o.smooth ? "The face's own mean from the file. The colours between faces are smoothed, not values." : null;
+    const a = windowedAt(m, face, step, w);
+    const la = levelDb(a.mean);
+    if (o.base) {
+      const b = windowedAt(o.base, face, step, w);
+      const lb = levelDb(b.mean);
+      if (la === null || lb === null) return { face, step, title, level: null, bits: la === null ? null : valueBits(a.mean), value: `No energy in one of the runs in the ${over} up to this step`, note: meanNote };
+      return { face, step, title, level: signed(la - lb), bits: valueBits(a.mean), value: `this run ${la.toFixed(1)} dB, baseline ${lb.toFixed(1)} dB, each averaged over ${over}`, note: meanNote };
+    }
+    if (la === null) return { face, step, title, level: null, bits: null, value: `No energy in the ${over} up to this step`, note: meanNote };
+    return {
+      face,
+      step,
+      title,
+      level: `${la.toFixed(1)} dB`,
+      bits: valueBits(a.mean),
+      value: `mean of the file's values over ${over} (steps ${a.from}–${a.to}, ${a.withEnergy} of ${a.count} with energy), ${a.mean.toExponential(4)}`,
+      note: meanNote,
+    };
   }
   let rec: number | null = null;
   for (let k = m.offsets[face]; k < m.offsets[face + 1]; k++) if (m.steps[k] === step) rec = m.values[k];

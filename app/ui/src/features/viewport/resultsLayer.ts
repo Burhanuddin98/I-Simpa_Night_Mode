@@ -15,6 +15,10 @@
 //     triangles for the value probe, whose number is the CPU's read of the face's record.
 //   - W2 (cumulative.ts): a cumulative map is the same layout with each texel the face's running
 //     sum (upstream's float32 rule), built on the CPU and uploaded in place of the instantaneous one.
+//   - The time window (window.ts): `faceValue` is the mean of a face's texels over the last uWin
+//     steps up to the step, a non-finite one as 0, divided by the steps the window holds; uWin 1
+//     is the texel itself. The draw, the difference, the node mean and the read-back all go
+//     through it, so a window changes one uniform and uploads nothing.
 //   - W3 (particles.ts): trails, one line segment per pair of consecutive records, both ends
 //     tagged with the head's step and the particle's last step; `keptTrail()` keeps a segment
 //     whole. Counted like gate (d): the trail material drawn as points in its count mode.
@@ -52,6 +56,7 @@ import type { Particles, SurfaceMap } from '../../resultsData';
 import { COOL, denseValues, HOT, mapLayout, rampFloats, type MapLayout, type Range } from './mapData';
 import { cumulativeValues } from './cumulative';
 import { MAX_NODE_FACES, nodeFaces, type NodeFaces } from './mapView';
+import { MAX_WINDOW_STEPS } from './window';
 import { PARTICLE_FRAGMENT_GLSL, PARTICLE_VERTEX_GLSL, recordSteps, TRAIL_BYTES_PER_SEGMENT, TRAIL_FRAGMENT_GLSL, TRAIL_VERTEX_GLSL, trailRefusal, trailSegments } from './particles';
 
 /** The GLSL that reads the map: the draw and the read-back hook share it. */
@@ -60,16 +65,31 @@ uniform highp sampler2D uMap;
 uniform highp sampler2D uBase;
 uniform int uWidth;
 uniform int uSteps;
+uniform int uWin;
 float mapTexel(highp sampler2D t, int face, int step) {
   int i = face * uSteps + step;
   return texelFetch(t, ivec2(i % uWidth, i / uWidth), 0).r;
+}
+// The time window (window.ts): the face's texels over steps max(0, step - uWin + 1) .. step, a
+// non-finite one as 0, added in step order and divided by the steps held; uWin 1 is the texel.
+float faceValue(highp sampler2D t, int face, int step) {
+  if (uWin <= 1) return mapTexel(t, face, step);
+  int from = max(0, step - uWin + 1);
+  float s = 0.0;
+  for (int k = 0; k < ${MAX_WINDOW_STEPS}; k++) {
+    int j = from + k;
+    if (j > step) break;
+    float e = mapTexel(t, face, j);
+    if (!isinf(e) && !isnan(e)) s += e;
+  }
+  return s / float(step - from + 1);
 }
 // Upstream's level, dB re 1e-12; the caller checks e > 0.
 float levelDb(float e) { return 10.0 * log2(e) * 0.30102999566398120 + 120.0; }
 // This run's level minus the baseline's; 'ok' false where either has no energy.
 float diffDb(int face, int step, out bool ok) {
-  float a = mapTexel(uMap, face, step);
-  float b = mapTexel(uBase, face, step);
+  float a = faceValue(uMap, face, step);
+  float b = faceValue(uBase, face, step);
   ok = a > 0.0 && b > 0.0 && !isinf(a) && !isinf(b) && !isnan(a) && !isnan(b);
   return ok ? levelDb(a) - levelDb(b) : 0.0;
 }
@@ -85,7 +105,7 @@ float nodeEnergy(highp sampler2D t, int start, int n, int step) {
     if (k >= n) break;
     int j = start + k;
     int face = int(texelFetch(uAdj, ivec2(j % uAdjWidth, j / uAdjWidth), 0).r + 0.5);
-    float e = mapTexel(t, face, step);
+    float e = faceValue(t, face, step);
     if (!isinf(e) && !isnan(e)) s += e;
   }
   return n > 0 ? s / float(n) : 0.0;
@@ -119,6 +139,7 @@ function mapMaterial(): ShaderMaterial {
       uAdjWidth: { value: 1 },
       uWidth: { value: 1 },
       uSteps: { value: 1 },
+      uWin: { value: 1 },
       uStep: { value: 0 },
       uDiff: { value: 0 },
       uSmooth: { value: 0 },
@@ -150,7 +171,7 @@ function mapMaterial(): ShaderMaterial {
           float d = diffDb(face, uStep, ok);
           if (ok) { vFaceOk = 1.0; vFaceLevel = d; }
         } else {
-          float e = mapTexel(uMap, face, uStep);
+          float e = faceValue(uMap, face, uStep);
           if (e > 0.0 && !isinf(e) && !isnan(e)) { vFaceOk = 1.0; vFaceLevel = levelDb(e); }
         }
         vLevel = 0.0;
@@ -211,7 +232,7 @@ function mapMaterial(): ShaderMaterial {
 /** W5's read-back: point i writes the node mean (nodeEnergy) of sample i (start, count, step) to pixel i. */
 function nodeProbeMaterial(): ShaderMaterial {
   return new ShaderMaterial({
-    uniforms: { uMap: { value: null }, uBase: { value: null }, uAdj: { value: null }, uAdjWidth: { value: 1 }, uWidth: { value: 1 }, uSteps: { value: 1 }, uN: { value: 1 } },
+    uniforms: { uMap: { value: null }, uBase: { value: null }, uAdj: { value: null }, uAdjWidth: { value: 1 }, uWidth: { value: 1 }, uSteps: { value: 1 }, uWin: { value: 1 }, uN: { value: 1 } },
     vertexShader: /* glsl */ `
       ${MAP_GLSL}
       ${NODE_GLSL}
@@ -237,7 +258,7 @@ function nodeProbeMaterial(): ShaderMaterial {
 /** The read-back pass: point i of the draw writes mapTexel (or diffDb) of sample i to pixel i. */
 function probeMaterial(): ShaderMaterial {
   return new ShaderMaterial({
-    uniforms: { uMap: { value: null }, uBase: { value: null }, uWidth: { value: 1 }, uSteps: { value: 1 }, uWhat: { value: 0 }, uN: { value: 1 } },
+    uniforms: { uMap: { value: null }, uBase: { value: null }, uWidth: { value: 1 }, uSteps: { value: 1 }, uWin: { value: 1 }, uWhat: { value: 0 }, uN: { value: 1 } },
     vertexShader: /* glsl */ `
       ${MAP_GLSL}
       uniform int uWhat;
@@ -251,6 +272,8 @@ function probeMaterial(): ShaderMaterial {
           bool ok;
           float d = diffDb(face, step, ok);
           vValue = vec4(d, ok ? 1.0 : 0.0, 0.0, 1.0);
+        } else if (uWhat == 2) {
+          vValue = vec4(faceValue(uMap, face, step), 0.0, 0.0, 1.0);
         } else {
           vValue = vec4(mapTexel(uMap, face, step), 0.0, 0.0, 1.0);
         }
@@ -303,6 +326,8 @@ export interface MapMeta {
   baseline: string | null;
   /** W2: the texture holds each face's running sum from the first step (cumulative.ts). */
   cumulative?: boolean;
+  /** The time window in steps (window.ts), 1 for none. */
+  windowSteps?: number;
 }
 
 /** W5: how the map is drawn (smooth colour, contour spacing in dB, 0 for none). */
@@ -436,11 +461,30 @@ export class ResultsLayer {
     u.uWidth.value = l.width;
     u.uSteps.value = l.steps;
     u.uDiff.value = meta.kind === 'diff' && base ? 1 : 0;
+    u.uWin.value = this.windowOf(meta);
     u.uLo.value = meta.range.lo;
     u.uHi.value = meta.range.hi;
     this.mapMeta = meta;
     this.map.visible = true;
     return null;
+  }
+
+  /** The window a map is drawn with: none on a cumulative map (window.ts), at most MAX_WINDOW_STEPS. */
+  private windowOf(meta: MapMeta): number {
+    const w = Math.floor(meta.windowSteps ?? 1);
+    return meta.cumulative || !(w > 1) ? 1 : Math.min(w, MAX_WINDOW_STEPS);
+  }
+
+  /** The time window, steps (1: each step on its own), without reloading the map. */
+  setWindow(steps: number): void {
+    if (!this.mapMeta) return;
+    this.mapMeta = { ...this.mapMeta, windowSteps: steps };
+    this.map.material.uniforms.uWin.value = this.windowOf(this.mapMeta);
+  }
+
+  /** The window the map is drawn with now, steps. */
+  windowSteps(): number {
+    return this.map.material.uniforms.uWin.value as number;
   }
 
   /** W5: smooth colour and contours; smooth stays off where `smoothRefusal` says why. */
@@ -506,6 +550,7 @@ export class ResultsLayer {
     u.uAdjWidth.value = this.map.material.uniforms.uAdjWidth.value;
     u.uWidth.value = l.width;
     u.uSteps.value = l.steps;
+    u.uWin.value = this.windowSteps();
     u.uN.value = n;
     try {
       const px = this.readPass(n, (r) => r.render(scene, new OrthographicCamera()));
@@ -684,8 +729,12 @@ export class ResultsLayer {
     return out;
   }
 
-  /** The texture's texels at (face, step), as float32 bits, read back from the GPU. */
-  readTexels(samples: [number, number][], what: 'texel' | 'diff' = 'texel'): number[] {
+  /**
+   * The texture's texels at (face, step), as float32 bits, read back from the GPU: 'texel' the
+   * texture as held, 'drawn' the face's value the draw colours (`faceValue`, the window applied),
+   * 'diff' the difference in dB the draw colours (the window applied to both runs).
+   */
+  readTexels(samples: [number, number][], what: 'texel' | 'drawn' | 'diff' = 'texel'): number[] {
     const l = this.layout;
     if (!l || !this.mapTex) throw new Error('no map loaded');
     if (what === 'diff' && !this.baseTex) throw new Error('no baseline loaded');
@@ -706,7 +755,8 @@ export class ResultsLayer {
     u.uBase.value = this.baseTex ?? this.mapTex;
     u.uWidth.value = l.width;
     u.uSteps.value = l.steps;
-    u.uWhat.value = what === 'diff' ? 1 : 0;
+    u.uWin.value = this.windowSteps();
+    u.uWhat.value = what === 'diff' ? 1 : what === 'drawn' ? 2 : 0;
     u.uN.value = n;
     try {
       const px = this.readPass(n, (r) => r.render(scene, new OrthographicCamera()));

@@ -117,6 +117,9 @@ $specIds = [ordered]@{
     'm12.fill' = @('w2-fill', 'w2-probe', 'w2-refuse')
     'm12.trails' = @('w3-count', 'w3-play', 'w3-refuse')
     'm12.export' = @('w9-csv', 'w9-json', 'w9-png', 'w9-refuse', 'w9-layout')
+    # The map's time window (Burhan 2026-10-05 01:59, app/ui/src/features/viewport/window.ts):
+    # each face's mean over the last steps, on a 1 ms box run; with cumulative and difference.
+    'm12.mapwindow' = @('mw-default', 'mw-off', 'mw-probe', 'mw-cumulative', 'mw-diff')
     # Not a gate spec: the app tour of BRAS CR4, recorded as a video (specs/tour.e2e.ts), no
     # id. Its progress.log goes to -ScreensDir, its project copy and runs beside it; no pictures.
     tour     = @()

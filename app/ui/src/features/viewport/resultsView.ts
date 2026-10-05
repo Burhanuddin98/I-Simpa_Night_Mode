@@ -11,6 +11,11 @@
 // face's running sum in the texture; a difference is not offered cumulative. W3 (particles.ts):
 // trails of a chosen length over the particles shown, refused without particles or past the budget.
 //
+// The time window (window.ts, Burhan 2026-10-05): each face's mean over the last few steps, a view
+// choice kept like W5's (default 10 ms), applied by one uniform without a reload; the legend's
+// title and the probe say so. A cumulative map takes none (the switch says why); a difference
+// averages both runs alike.
+//
 // Nothing loads off the Results step. A run whose results are refused or unverified shows no map
 // (the panel says why); a run that saved no particles shows MQ4's notice instead of playback.
 import * as actions from '../../actions';
@@ -23,6 +28,7 @@ import { resultsLayer, renderNow, showMap, showParticles } from './engine';
 import { cumulativeRange, cumulativeRefusal } from './cumulative';
 import { diffRange, legendGradient, legendLabels, levelRange, surfaceMismatch, type Range } from './mapData';
 import { emissionStep, noParticlesText } from './particles';
+import { DEFAULT_WINDOW_MS, windowChoice, WINDOW_CUMULATIVE_REFUSAL, windowLabel } from './window';
 
 export interface MapGroup {
   key: string;
@@ -51,7 +57,16 @@ export interface ResultsView {
   baseline: string | null;
   baselineLabel: string | null;
   baselineReason: string | null;
-  map: { path: string; kind: 'level' | 'diff'; cumulative: boolean; range: Range; legend: { lo: string; mid: string; hi: string; gradient: string; title: string } } | null;
+  map: {
+    path: string;
+    kind: 'level' | 'diff';
+    cumulative: boolean;
+    /** The window the map is drawn with, steps (1: none), and the map's time step. */
+    windowSteps: number;
+    dtS: number | null;
+    range: Range;
+    legend: { lo: string; mid: string; hi: string; gradient: string; title: string };
+  } | null;
   mapMessage: string | null;
   /** W5: smooth colour (R46), contours every `isoDb` dB on it, 0 for none (R48). */
   smooth: boolean;
@@ -64,6 +79,9 @@ export interface ResultsView {
   cumulative: boolean;
   /** Why the shown map has no cumulative view, or null. */
   cumulativeRefusal: string | null;
+  /** The time window chosen, ms of sound (0: each step on its own); why it is not drawn as chosen, or null. */
+  windowMs: number;
+  windowRefusal: string | null;
   /** W3: trail length in steps, 0 for none; and why trails cannot be drawn, or null. */
   trails: number;
   trailRefusal: string | null;
@@ -91,16 +109,18 @@ const OFF: ResultsView = {
   fixed: null,
   cumulative: false,
   cumulativeRefusal: null,
+  windowMs: DEFAULT_WINDOW_MS,
+  windowRefusal: null,
   trails: 0,
   trailRefusal: null,
   particles: { state: 'off' },
 };
 
 /** The view choices a new run keeps (W5). */
-const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, trails: v.trails });
+const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, windowMs: v.windowMs, trails: v.trails });
 
 /** The map on screen and its baseline, as decoded: the probe reads its values here. */
-let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string; cumulative: boolean } | null = null;
+let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string; cumulative: boolean; windowSteps: number } | null = null;
 export const shownMaps = () => shown;
 
 export const resultsViewStore = new Store<ResultsView>(OFF);
@@ -216,20 +236,23 @@ async function loadMap(g: number): Promise<void> {
     // W2: cumulative for a level map only; a difference says why not.
     const cumRefusal = now.cumulative ? cumulativeRefusal(v.diff ? 'diff' : kind) : null;
     const cumulative = now.cumulative && cumRefusal === null;
+    const win = windowOf(now.windowMs, m.timeStepS, cumulative);
     const range = kind === 'diff' && base ? diffRange(m, base) : cumulative ? cumulativeRange(m) : levelRange(m);
     const what = groupLabel(info);
     // W5: a fixed range applies to level maps; a difference keeps its own symmetric range.
     const fixed = kind === 'level' ? now.fixed : null;
     const shownRange = fixed ?? range ?? { lo: 0, hi: 1 };
-    const err = showMap(m, { run: v.run, path: info.path, bandHz: v.bandHz, kind, range: shownRange, baseline: base ? v.baseline : null, cumulative }, base);
+    const err = showMap(m, { run: v.run, path: info.path, bandHz: v.bandHz, kind, range: shownRange, baseline: base ? v.baseline : null, cumulative, windowSteps: win.steps }, base);
     if (!fresh(g)) return;
     const layer = resultsLayer();
     layer.setLook({ smooth: now.smooth, isoDb: now.isoDb });
     renderNow();
-    shown = err ? null : { map: m, base, what, cumulative };
+    shown = err ? null : { map: m, base, what, cumulative, windowSteps: win.steps };
+    const dtS = m.timeStepS || null;
     set({
-      map: err ? null : { path: info.path, kind, cumulative, range: shownRange, legend: legendOf(shownRange, kind, v.bandHz, fixed !== null, cumulative) },
+      map: err ? null : { path: info.path, kind, cumulative, windowSteps: win.steps, dtS, range: shownRange, legend: legendOf(shownRange, kind, v.bandHz, fixed !== null, cumulative, windowLabel(win.steps, dtS)) },
       cumulativeRefusal: cumRefusal,
+      windowRefusal: win.refusal,
       mapMessage: err ?? (range ? null : `No energy reached the ${what.toLowerCase()} at ${bandName(v.bandHz)}.`),
       smoothRefusal: err ? null : layer.smoothRefusal,
       baselineLabel: v.baseline ? runLabel(v.baseline) : null,
@@ -244,13 +267,19 @@ async function loadMap(g: number): Promise<void> {
   }
 }
 
-/** The legend of a map shown with `range` (a fixed one says so in its title). */
-function legendOf(range: Range, kind: 'level' | 'diff', bandHz: number | null, fixed: boolean, cumulative = false) {
+/** The window a map is drawn with: the chosen ms in the map's steps, none on a cumulative map; and why, when not as chosen. */
+function windowOf(ms: number, dtS: number | null | undefined, cumulative: boolean): { steps: number; refusal: string | null } {
+  if (cumulative) return { steps: 1, refusal: ms > 0 ? WINDOW_CUMULATIVE_REFUSAL : null };
+  return windowChoice(ms, dtS);
+}
+
+/** The legend of a map shown with `range` (a fixed one says so in its title, a window too). */
+function legendOf(range: Range, kind: 'level' | 'diff', bandHz: number | null, fixed: boolean, cumulative = false, window: string | null = null) {
   const v = resultsViewStore.get();
   const what = shown?.what ?? groupLabel(v.data?.surfaces.find((s) => groupKey(s) === v.group) ?? ({ cutting_plane: false } as SurfaceMapInfo));
   const title = kind === 'diff'
-    ? `Difference from ${runLabel(v.baseline as string)} · ${bandName(bandHz)}`
-    : `${what} · ${cumulative ? 'cumulative level from 0 ms' : 'level'} · ${bandName(bandHz)}${fixed ? ' · fixed range' : ''}`;
+    ? `Difference from ${runLabel(v.baseline as string)} · ${bandName(bandHz)}${window ? ` · ${window}` : ''}`
+    : `${what} · ${cumulative ? 'cumulative level from 0 ms' : 'level'} · ${bandName(bandHz)}${window ? ` · ${window}` : ''}${fixed ? ' · fixed range' : ''}`;
   return { ...legendLabels(range, kind), gradient: legendGradient(kind), title };
 }
 
@@ -351,12 +380,24 @@ export const resultsView = {
     const r = range ?? (shown.cumulative ? cumulativeRange(shown.map) : levelRange(shown.map)) ?? { lo: 0, hi: 1 };
     resultsLayer().setRange(r);
     renderNow();
-    set({ map: { ...v.map, range: r, legend: legendOf(r, 'level', v.bandHz, range !== null, shown.cumulative) } });
+    set({ map: { ...v.map, range: r, legend: legendOf(r, 'level', v.bandHz, range !== null, shown.cumulative, windowLabel(v.map.windowSteps, v.map.dtS)) } });
   },
   /** W2: the cumulative map on or off; the map reloads (its texture is the running sum). */
   setCumulative(on: boolean): void {
     set({ cumulative: on });
     fire();
+  },
+  /** The time window, `ms` of sound (0: each step on its own), kept across bands and runs; no reload, one uniform. */
+  setWindow(ms: number): void {
+    set({ windowMs: ms });
+    const v = resultsViewStore.get();
+    if (!v.map || !shown) return;
+    const win = windowOf(ms, v.map.dtS, v.map.cumulative);
+    resultsLayer().setWindow(win.steps);
+    renderNow();
+    shown = { ...shown, windowSteps: win.steps };
+    const label = windowLabel(win.steps, v.map.dtS);
+    set({ windowRefusal: win.refusal, map: { ...v.map, windowSteps: win.steps, legend: legendOf(v.map.range, v.map.kind, v.bandHz, v.map.kind === 'level' && v.fixed !== null, v.map.cumulative, label) } });
   },
   /** W3: trails `steps` long (0 for none), over the particles shown; no reload. */
   setTrails(steps: number): void {

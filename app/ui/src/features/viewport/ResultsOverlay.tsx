@@ -17,6 +17,10 @@
 // panel, the trails' length in the timeline's card. The bottom of the view is one dock
 // (`.vp-dock`): the probe, the "no particles" notice, the legend and the timeline sit in it in flow,
 // so none covers another (W5's screenshot had them overlapping).
+//
+// The time window (window.ts): chips in the map panel (Off, 5, 10, 20, 50 ms; 10 by default), each
+// one that is a single step of this run, or any on a cumulative map, disabled with the reason; the
+// legend's title says "averaged over 10 ms", and the probe shows the window mean and says so.
 import { useEffect, useState } from 'react';
 import { planesNotInRun, rerunText } from '../../chrome/planes';
 import { sceneStore, stepStore, useStore } from '../../store';
@@ -29,6 +33,7 @@ import { CUMULATIVE_HINT, CUMULATIVE_NOTE } from './cumulative';
 import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, type ProbeView } from './mapView';
 import { TRAIL_HINT, TRAIL_LENGTHS, TRAIL_NOTE } from './particles';
 import { bandLabel, bandName, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
+import { WINDOW_CHOICES_MS, windowChoice, WINDOW_CUMULATIVE_REFUSAL, WINDOW_HINT } from './window';
 
 const PlayIcon = () => (
   <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden>
@@ -70,6 +75,7 @@ function registerM12Hooks(): () => void {
         bandHz: meta.bandHz,
         kind: meta.kind,
         cumulative: meta.cumulative === true,
+        windowSteps: layer.windowSteps(),
         faces: s.faces,
         steps: s.steps,
         step: layer.mapStep(),
@@ -108,6 +114,8 @@ function registerM12Hooks(): () => void {
     }),
     registerHook('m12Texels', (samples: [number, number][]) => layer.readTexels(samples, 'texel')),
     registerHook('m12DiffTexels', (samples: [number, number][]) => layer.readTexels(samples, 'diff')),
+    // The time window: each face's value as the draw colours it (`faceValue`), as float32 bits.
+    registerHook('m12DrawnTexels', (samples: [number, number][]) => layer.readTexels(samples, 'drawn')),
     registerHook('m12SetStep', (step: number) => {
       Animator.pause();
       Animator.setStep(step);
@@ -209,7 +217,7 @@ function currentProbe(): (ProbeView & { x: number; y: number }) | null {
   const step = Math.min(animatorStore.get().step, s.map.timeStepCount - 1);
   const dt = v.data?.time_step_s ?? v.data?.surfaces[0]?.time_step_s;
   const base = v.map.kind === 'diff' ? s.base : null;
-  return { ...probeOf(s.map, at.face, step, { what: s.what, band: bandName(v.bandHz), dtS: dt, smooth: v.smooth, base, cumulative: s.cumulative }), x: at.x, y: at.y };
+  return { ...probeOf(s.map, at.face, step, { what: s.what, band: bandName(v.bandHz), dtS: s.map.timeStepS || dt, smooth: v.smooth, base, cumulative: s.cumulative, windowSteps: s.windowSteps }), x: at.x, y: at.y };
 }
 
 /** The probe card, docked at the bottom of the view (it names its face). */
@@ -372,6 +380,32 @@ export function ResultsOverlay() {
             <span className="knob" />
           </span>
         </button>
+        <div className="vp-row" role="radiogroup" aria-label="Time window" data-part="map-window" title={WINDOW_HINT}>
+          <span className="vp-row-label">Window</span>
+          {WINDOW_CHOICES_MS.map((ms) => {
+            const steps = v.map?.windowSteps ?? 1;
+            const why = ms === 0 ? null : v.map?.cumulative ? WINDOW_CUMULATIVE_REFUSAL : windowChoice(ms, v.map?.dtS).refusal;
+            return (
+              <button
+                key={ms}
+                className="vp-chip-btn mono"
+                role="radio"
+                data-map-window={ms}
+                aria-checked={ms === 0 ? steps <= 1 : steps > 1 && v.windowMs === ms}
+                disabled={why !== null}
+                title={why ? `${why}.` : ms === 0 ? 'Each step on its own: the file’s value at the step' : `Each face’s mean over the last ${ms} ms up to the step`}
+                onClick={() => resultsView.setWindow(ms)}
+              >
+                {ms === 0 ? 'Off' : `${ms} ms`}
+              </button>
+            );
+          })}
+        </div>
+        {v.map && v.windowMs > 0 && v.windowRefusal && (
+          <div className="vp-diff-note" data-part="window-refused">
+            {v.windowRefusal}.
+          </div>
+        )}
         {v.cumulative && v.cumulativeRefusal && (
           <div className="vp-diff-note" data-part="cumulative-refused">
             {v.cumulativeRefusal}.
