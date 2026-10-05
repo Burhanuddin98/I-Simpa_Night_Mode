@@ -296,7 +296,7 @@ pub(super) fn advise_value(ctx: &Ctx, e: &Evaluated) -> Vec<Item> {
                 out.push(item(
                     code::LOST_SHARE_WARNING,
                     "Some particles were lost through the mesh in this band: the value is \
-                     shown, but its late decay may hold slightly too little energy.",
+                     shown, but its late decay may hold too little energy.",
                     lost_fix(ctx),
                 ));
             }
@@ -659,8 +659,7 @@ fn lost_fix(ctx: &Ctx) -> Fix {
             words,
             Setting::PreserveBoundary,
             Some(SettingValue::Bool(false)),
-            "a surface receiver was refined when meshing, which splits its faces; -Y forbids \
-             that, so the two cannot be on together.",
+            super::REFINEMENT_CONFLICT,
         ),
         Meshing::Known {
             preserve_boundary: true,

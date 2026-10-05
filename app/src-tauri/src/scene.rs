@@ -47,6 +47,10 @@ pub struct SceneState {
     /// particles than the noise model was measured with. Never a run blocker; each item names a
     /// setting and the value "Apply" sets (`advice_apply`).
     pub advice: Vec<simpa_core::advise::Advice>,
+    /// The Applies the project as it is now would refuse, with why in plain words
+    /// (`simpa_core::advise::apply_conflicts`): the Results step offers no Apply for them, even
+    /// when the run's own meshing allowed it (a surface-receiver refinement added since, Q3).
+    pub advice_conflicts: Vec<simpa_core::advise::ApplyConflict>,
     /// Console lines produced since the last state was returned.
     pub lines: Vec<LogLine>,
 }

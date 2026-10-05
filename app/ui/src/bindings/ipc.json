@@ -193,6 +193,26 @@
         }
       ]
     },
+    "ApplyConflict": {
+      "description": "An Apply the project as it is now would refuse, and why, in plain words: the screen offers no\nApply for it, whatever the run it comes from was meshed with.",
+      "properties": {
+        "setting": {
+          "$ref": "#/$defs/Setting"
+        },
+        "to": {
+          "$ref": "#/$defs/SettingValue"
+        },
+        "why": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "setting",
+        "to",
+        "why"
+      ],
+      "type": "object"
+    },
     "Arrival": {
       "description": "When the direct sound arrived, which every onset-relative quantity is measured from.",
       "oneOf": [
@@ -5446,6 +5466,13 @@
           },
           "type": "array"
         },
+        "advice_conflicts": {
+          "description": "The Applies the project as it is now would refuse, with why in plain words\n(`simpa_core::advise::apply_conflicts`): the Results step offers no Apply for them, even\nwhen the run's own meshing allowed it (a surface-receiver refinement added since, Q3).",
+          "items": {
+            "$ref": "#/$defs/ApplyConflict"
+          },
+          "type": "array"
+        },
         "check": {
           "anyOf": [
             {
@@ -5505,6 +5532,7 @@
         "run_blockers",
         "solver_issues",
         "advice",
+        "advice_conflicts",
         "lines"
       ],
       "type": "object"

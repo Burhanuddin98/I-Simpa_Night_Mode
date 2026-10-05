@@ -49,8 +49,7 @@ fn mesh_splits_walls(p: &Project) -> Option<Advice> {
             words,
             setting,
             Some(SettingValue::Bool(false)),
-            "a surface receiver is refined when meshing, which splits its faces; -Y forbids \
-             that, so the two cannot be on together. Remove the refinement first to use -Y.",
+            super::REFINEMENT_CONFLICT,
         )
     } else {
         Fix::apply(
@@ -62,8 +61,8 @@ fn mesh_splits_walls(p: &Project) -> Option<Advice> {
     };
     Some(Advice {
         code: code::MESH_SPLITS_WALLS.into(),
-        cause: "This meshing splits the walls; expect lost particles. TetGen may add points on \
-                the room's surfaces, and particles are lost where the split faces meet."
+        cause: "This meshing splits the walls; it can lose particles. TetGen may add points on \
+                the room's surfaces, and particles can be lost where the split faces meet."
             .into(),
         fix,
         values: vec![setting.pointer().into()],

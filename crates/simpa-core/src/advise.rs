@@ -371,6 +371,45 @@ pub struct ApplyArgs {
     pub to: SettingValue,
 }
 
+/// Q3 in the advisor's words: a surface-receiver refinement and `-Y` cannot be on together.
+pub const REFINEMENT_CONFLICT: &str = "a surface receiver is refined when meshing, which splits its faces; -Y forbids that, so the two cannot be on together. Remove the refinement first to use -Y.";
+
+/// An Apply the project as it is now would refuse, and why, in plain words: the screen offers no
+/// Apply for it, whatever the run it comes from was meshed with.
+#[derive(Clone, Debug, PartialEq, Serialize, JsonSchema)]
+pub struct ApplyConflict {
+    pub setting: Setting,
+    pub to: SettingValue,
+    pub why: String,
+}
+
+/// Why setting `setting` to `to` cannot be offered on `p` as it is now; `None` when it can. Only
+/// `-Y` on with a surface-receiver refinement set (Q3; the validator's `mesh_settings_conflict`).
+pub fn conflict(p: &Project, setting: Setting, to: SettingValue) -> Option<&'static str> {
+    match (setting, to) {
+        (Setting::PreserveBoundary, SettingValue::Bool(true))
+            if p.solvers.meshing.surface_receiver_max_area_m2.is_some() =>
+        {
+            Some(REFINEMENT_CONFLICT)
+        }
+        _ => None,
+    }
+}
+
+/// Every Apply [`conflict`] holds back on `p` (`SceneState.advice_conflicts`).
+pub fn apply_conflicts(p: &Project) -> Vec<ApplyConflict> {
+    [(Setting::PreserveBoundary, SettingValue::Bool(true))]
+        .into_iter()
+        .filter_map(|(setting, to)| {
+            conflict(p, setting, to).map(|why| ApplyConflict {
+                setting,
+                to,
+                why: why.to_string(),
+            })
+        })
+        .collect()
+}
+
 /// Why [`apply_op`] refused.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ApplyRefusal {
@@ -380,6 +419,8 @@ pub enum ApplyRefusal {
     ProjectChanged { setting: Setting },
     /// The value is not of the setting's kind.
     BadValue(String),
+    /// The project as it is now cannot take the value ([`conflict`]).
+    Conflict(&'static str),
 }
 
 impl ApplyRefusal {
@@ -389,6 +430,7 @@ impl ApplyRefusal {
             ApplyRefusal::NoApply => "ADVICE_NO_APPLY",
             ApplyRefusal::ProjectChanged { .. } => "ADVICE_PROJECT_CHANGED",
             ApplyRefusal::BadValue(_) => "ADVICE_BAD_VALUE",
+            ApplyRefusal::Conflict(_) => "ADVICE_CONFLICT",
         }
     }
 }
@@ -404,6 +446,7 @@ impl std::fmt::Display for ApplyRefusal {
                 setting.label()
             ),
             ApplyRefusal::BadValue(why) => write!(f, "{why}"),
+            ApplyRefusal::Conflict(why) => write!(f, "not applied: {why}"),
         }
     }
 }
@@ -412,6 +455,7 @@ impl std::fmt::Display for ApplyRefusal {
 /// one field changed. Refused when the fix offers no Apply, or when the project's value is not
 /// `fix.from` (the project changed since the run the advice came from). The app sends the op
 /// through its checked apply, so the validator still refuses an edit that introduces an error.
+/// Refused, too, when the project as it is now cannot take the value ([`conflict`]).
 pub fn apply_op(
     p: &Project,
     setting: Setting,
@@ -420,6 +464,9 @@ pub fn apply_op(
 ) -> Result<Op, ApplyRefusal> {
     if !same(setting.get(&p.solvers), from) {
         return Err(ApplyRefusal::ProjectChanged { setting });
+    }
+    if let Some(why) = conflict(p, setting, to) {
+        return Err(ApplyRefusal::Conflict(why));
     }
     let settings = setting
         .set(&p.solvers, to)

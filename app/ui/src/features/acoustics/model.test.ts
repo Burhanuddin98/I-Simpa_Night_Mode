@@ -467,3 +467,16 @@ test('a refused or wide cell names the advice that explains it; an ok one names 
   // A report without advice (before results version 17) shows none.
   assert.deepEqual(adviceCards(report([])), []);
 });
+
+// Audit fix (b80): an Apply the open project would refuse is not offered.
+import { applyConflict } from './model.ts';
+
+test('applyConflict: the -Y Apply is held back while the project refines a surface receiver', () => {
+  const cards = adviceCards(advised());
+  const yes = { setting: 'preserve_boundary' as const, from: false, to: true };
+  const conflicts = [{ setting: 'preserve_boundary' as const, to: true, why: 'refined; -Y forbids that' }];
+  assert.equal(applyConflict(yes, conflicts), 'refined; -Y forbids that');
+  // Says no: another setting, or no conflict.
+  assert.equal(applyConflict(cards[0].apply!, conflicts), null);
+  assert.equal(applyConflict(yes, []), null);
+});

@@ -3,7 +3,7 @@
 // b80.advisor` on m11.ps1's harness. Each id with its control:
 //   b80-pre    tutorial 2 as upstream ships it (tutorial_2.proj imported by `simpa import-proj`:
 //              `-q2` without `-Y`, 0.31 m receivers) shows, on the Simulate step and before any
-//              run, "this meshing splits the walls; expect lost particles" (`mesh_splits_walls`,
+//              run, "this meshing splits the walls; it can lose particles" (`mesh_splits_walls`,
 //              Apply: -Y off → on) and "receivers small for this room" (`receivers_small`, Apply:
 //              Receiver radius 0.31 m → 0.6 m); the advice never blocks Run. Control: the Elmia
 //              fixture (-Y, 0.6 m, a million particles) shows neither
@@ -126,7 +126,7 @@ describe('Backlog 80: the run-quality advisor', () => {
     assert.equal(mesh.change, 'off → on');
     assert.equal(small.change, '0.31 m → 0.6 m');
     const meshText = await $('[data-advice="mesh_splits_walls"]').getText();
-    assert.match(meshText, /This meshing splits the walls; expect lost particles/);
+    assert.match(meshText, /This meshing splits the walls; it can lose particles/);
     assert.ok(await $('[data-advice="receivers_small"] [data-part="advice-apply"]').isExisting());
     // Advice never blocks Run.
     const blockers = await hook<string[]>('runBlockers');

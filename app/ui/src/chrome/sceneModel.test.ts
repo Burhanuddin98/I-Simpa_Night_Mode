@@ -122,6 +122,7 @@ function scene(v: ProjectView, c: CheckSummary | null, assigned: number): SceneS
     run_blockers: [],
     solver_issues: { spps: [], tcr: [] },
     advice: [],
+    advice_conflicts: [],
     lines: [],
   };
 }

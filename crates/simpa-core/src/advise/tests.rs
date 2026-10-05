@@ -111,7 +111,7 @@ fn tutorial2_as_shipped_gets_both_warnings_before_its_run() {
     let mesh = find(&a, code::MESH_SPLITS_WALLS);
     assert!(
         mesh.cause
-            .starts_with("This meshing splits the walls; expect lost particles")
+            .starts_with("This meshing splits the walls; it can lose particles")
     );
     assert_eq!(mesh.fix.setting, Some(Setting::PreserveBoundary));
     assert_eq!(mesh.fix.to, Some(SettingValue::Bool(true)));
@@ -893,4 +893,79 @@ fn arm_b_range_below_zero_t30_names_a_radius_of_0_6() {
         a.values.len(),
         codes_of(&rep.advice)
     );
+}
+
+/// Audit fix (b80): a post-run -Y Apply is decided from the run's meshing, but the project may
+/// have gained a surface-receiver refinement since; Apply then is refused in the advisor's own
+/// words (Q3), and `apply_conflicts` tells the screen to offer none.
+#[test]
+fn y_apply_is_refused_in_plain_words_when_the_project_now_refines_a_surface_receiver() {
+    let mut p = load("rooms/elmia_corrected.simpa");
+    p.solvers.meshing.preserve_boundary = false;
+    // Says no: no refinement, the Apply goes through.
+    assert!(apply_conflicts(&p).is_empty());
+    assert!(
+        apply_op(
+            &p,
+            Setting::PreserveBoundary,
+            SettingValue::Bool(false),
+            SettingValue::Bool(true)
+        )
+        .is_ok()
+    );
+    p.solvers.meshing.surface_receiver_max_area_m2 = Some(F64::new(0.1));
+    let e = apply_op(
+        &p,
+        Setting::PreserveBoundary,
+        SettingValue::Bool(false),
+        SettingValue::Bool(true),
+    )
+    .unwrap_err();
+    assert_eq!(e.code(), "ADVICE_CONFLICT");
+    let words = e.to_string();
+    assert!(
+        words.contains("refined") && !words.contains("mesh_settings_conflict"),
+        "{words}"
+    );
+    assert!(!words.chars().any(|c| c.is_ascii_digit()), "{words}");
+    let c = apply_conflicts(&p);
+    assert_eq!(c.len(), 1);
+    assert_eq!(
+        (c[0].setting, c[0].to),
+        (Setting::PreserveBoundary, SettingValue::Bool(true))
+    );
+    // Other settings are not held back by it.
+    assert!(
+        apply_op(
+            &p,
+            Setting::ReceiverRadius,
+            SettingValue::Number(0.6),
+            SettingValue::Number(0.5)
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn the_advisor_neither_forecasts_lost_particles_nor_bounds_their_effect() {
+    let a = before(&tutorial2_as_shipped());
+    let m = find(&a, code::MESH_SPLITS_WALLS);
+    assert!(
+        m.cause
+            .starts_with("This meshing splits the walls; it can lose particles"),
+        "{}",
+        m.cause
+    );
+    assert!(!m.cause.contains("expect"), "{}", m.cause);
+    let c = ctx(&KNOWN_Y, settings());
+    let mut warned = shown(RangeStatus::Ok);
+    if let Evaluated::Value {
+        lost_share_warning, ..
+    } = &mut warned
+    {
+        *lost_share_warning = Some(0.005);
+    }
+    for (_, cause, _) in advise_value(&c, &warned) {
+        assert!(!cause.contains("slightly"), "{cause}");
+    }
 }

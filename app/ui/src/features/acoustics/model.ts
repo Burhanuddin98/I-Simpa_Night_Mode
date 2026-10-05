@@ -14,7 +14,7 @@
 //   37 (3)); STI, which has no range yet, carries "noise range not computed" (MQ3); EDT carries
 //   row 37's two marks wherever it appears, and a per-value mark where `edt_validated` is false.
 // - **No screen text says "validated"** (MQ2, decision 39): `MQ2_WORDING` is the tab's words.
-import type { Advice, Report, Setting } from '../../bindings/ipc';
+import type { Advice, ApplyConflict, Report, Setting } from '../../bindings/ipc';
 
 /** The words on the Results screen (MQ2, Burhan 2026-10-03 08:31). */
 export const MQ2_WORDING =
@@ -516,6 +516,13 @@ export interface AdviceCard {
   /** What "Apply and re-run" sends; null when the core offers no Apply. */
   apply: { setting: Setting; from: number | boolean; to: number | boolean } | null;
   values: string[];
+}
+
+/** Why the open project would refuse `apply` (`SceneState.advice_conflicts`, in the advisor's own
+ * words), or null when it would take it: the card then offers no Apply, whatever the run's own
+ * meshing allowed (Q3). */
+export function applyConflict(apply: { setting: Setting; to: number | boolean }, conflicts: readonly Pick<ApplyConflict, 'setting' | 'to' | 'why'>[]): string | null {
+  return conflicts.find((c) => c.setting === apply.setting && c.to === apply.to)?.why ?? null;
 }
 
 /** The report's advice (results version 17), one card per item, in the core's order; none in a

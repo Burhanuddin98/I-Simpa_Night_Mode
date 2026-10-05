@@ -105,6 +105,8 @@ pub struct Session {
     solver_issues: SolverIssues,
     /// The run-quality advisor on the current state ([`SceneState::advice`]).
     advice: Vec<simpa_core::advise::Advice>,
+    /// [`SceneState::advice_conflicts`] on the current state.
+    advice_conflicts: Vec<simpa_core::advise::ApplyConflict>,
     /// Console lines not yet returned in a [`SceneState`].
     lines: Vec<LogLine>,
 }
@@ -188,6 +190,7 @@ impl Session {
             self.issues.clear();
             self.solver_issues = SolverIssues::default();
             self.advice.clear();
+            self.advice_conflicts.clear();
             return;
         };
         if p.geometry.faces.is_empty() {
@@ -226,6 +229,11 @@ impl Session {
             ),
             None => Vec::new(),
         };
+        self.advice_conflicts = self
+            .project
+            .as_ref()
+            .map(simpa_core::advise::apply_conflicts)
+            .unwrap_or_default();
     }
 
     fn replace(
@@ -419,6 +427,7 @@ impl Session {
             run_blockers: scene::run_blockers(p, check.as_ref(), &self.issues),
             solver_issues: self.solver_issues.clone(),
             advice: self.advice.clone(),
+            advice_conflicts: self.advice_conflicts.clone(),
             check,
             issues: self.issues.clone(),
             lines: std::mem::take(&mut self.lines),
@@ -1762,6 +1771,43 @@ mod advisor_tests {
             )
             .unwrap();
         assert!(!e.applied);
+        assert_eq!(s.info().unwrap().undo_depth, depth);
+    }
+}
+
+/// Audit fix (b80): the -Y Apply against the project as it is now.
+#[cfg(test)]
+mod advisor_conflict_tests {
+    use super::*;
+
+    #[test]
+    fn y_apply_is_refused_and_not_offered_once_the_project_refines_a_surface_receiver() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/rooms/tutorial1_box.simpa");
+        let mut s = Session::default();
+        s.scene_open(&path).unwrap();
+        let p = s.project().unwrap();
+        assert!(
+            !p.solvers.meshing.preserve_boundary
+                && p.solvers.meshing.surface_receiver_max_area_m2.is_some()
+        );
+        let state = s.scene_state().unwrap();
+        assert_eq!(
+            state.advice_conflicts.len(),
+            1,
+            "{:?}",
+            state.advice_conflicts
+        );
+        let depth = s.info().unwrap().undo_depth;
+        let e = s
+            .advice_apply_text(r#"{"setting": "preserve_boundary", "from": false, "to": true}"#)
+            .unwrap_err();
+        assert_eq!(e.code, "ADVICE_CONFLICT");
+        assert!(
+            !e.message.contains("mesh_settings_conflict"),
+            "{}",
+            e.message
+        );
         assert_eq!(s.info().unwrap().undo_depth, depth);
     }
 }

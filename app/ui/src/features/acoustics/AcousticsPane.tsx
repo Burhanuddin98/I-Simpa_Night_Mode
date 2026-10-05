@@ -23,13 +23,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import * as actions from '../../actions';
-import type { ReportView } from '../../bindings/ipc';
+import type { ApplyConflict, ReportView } from '../../bindings/ipc';
 import { reportStore, runsStore, sceneStore, selectedRunStore, stepStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
 import { runVariantName, solverLabel } from '../simulate/model';
 import {
   type AdviceCard,
   adviceCards,
+  applyConflict,
   absorption,
   bandNum,
   bandText,
@@ -137,7 +138,7 @@ function SettingValueView({ n, word, unit }: { n: AdviceCard['from']; word: stri
 /** "Why values are missing" (backlog 80): the run-quality advisor's items for this run, each its
  * cause, the setting that addresses it and, where the core offers one, "Apply and re-run" (one
  * checked edit, one undo step, then a run of the same solver). */
-function AdviceCardView({ cards, solver }: { cards: AdviceCard[]; solver: 'spps' | 'tcr' }) {
+function AdviceCardView({ cards, solver, conflicts }: { cards: AdviceCard[]; solver: 'spps' | 'tcr'; conflicts: readonly ApplyConflict[] }) {
   if (!cards.length) return null;
   return (
     <section className="ac-card ac-advice-card" aria-label="Why values are missing" data-part="advice-card">
@@ -164,7 +165,11 @@ function AdviceCardView({ cards, solver }: { cards: AdviceCard[]; solver: 'spps'
             ) : null}
           </div>
           {c.note ? <S s={c.note} className="ac-note block" /> : null}
-          {c.apply && solver === 'spps' ? (
+          {c.apply && applyConflict(c.apply, conflicts) !== null ? (
+            <span className="ac-note block" data-part="advice-conflict">
+              Not offered: {applyConflict(c.apply, conflicts)}
+            </span>
+          ) : c.apply && solver === 'spps' ? (
             <button
               type="button"
               className="small-button"
@@ -468,7 +473,7 @@ export function AcousticsPane() {
         </div>
       ) : null}
       <div className="ac-body">
-        <AdviceCardView cards={adviceCards(report)} solver={report.solver === 'tcr' ? 'tcr' : 'spps'} />
+        <AdviceCardView cards={adviceCards(report)} solver={report.solver === 'tcr' ? 'tcr' : 'spps'} conflicts={scene?.advice_conflicts ?? []} />
         <section className="ac-card ac-rt" aria-label="Reverberation time against DIN 18041">
           <div className="ac-card-head">
             <span className="ac-card-title">Reverberation time</span>

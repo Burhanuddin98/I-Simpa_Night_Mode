@@ -590,7 +590,7 @@ Simulate step's number scanner (m10-h, m11-h) stays green; the numbers are the s
 
 | code | when | fix (Apply) |
 |---|---|---|
-| `mesh_splits_walls` | `-Y` off: "This meshing splits the walls; expect lost particles" | Preserve walls when meshing (-Y) on; with a surface-receiver refinement, none: the two cannot be on together (Q3) |
+| `mesh_splits_walls` | `-Y` off: "This meshing splits the walls; it can lose particles" | Preserve walls when meshing (-Y) on; with a surface-receiver refinement, none: the two cannot be on together (Q3) |
 | `receivers_small` | `N·r²/V` below K = 13.8 (`N` particles per source, `r` the radius, `V` the air's volume from the geometry check) | the largest radius below every receiver's clearance on a 0.05 m grid, at most 1 m (Elmia: 0.6); when that is not above `r`, more particles, no count |
 | `run_short` | the duration below the slowest computed band's Sabine time (the larger of Sabine and Eyring; the air left out, which only shortens it; absent when Sabine is refused) | the new-project 10 s, or the longest the 16-bit step counter allows |
 | `particles_few` | fewer particles per source than the noise calibration's minimum for some quantity (150,000 energetic, 50,000 random) | that minimum: a calibration domain, not a forecast |
@@ -620,7 +620,7 @@ advice; EDT's reasons are held to theirs by `every_edt_refusal_reason_has_its_ow
 | `noise_unknown` | `noise_unknown` | none |
 | `missing_moves`, `missing_not_cleared` with `floor_db` | `solver_floor` | the extinction up to the new-project 7 |
 | the same without a floor (particles left alive at the end) | `particles_left_alive` | a longer run |
-| `lost_particles` (from 1 % lost) | `lost_particles` | -Y on when the run was meshed without it (its `mesh/mesh.json`); with -Y already, or a refinement, or no mesh record, no Apply; never more particles |
+| `lost_particles` (from 1 % lost) | `lost_particles` | -Y on when the run was meshed without it (its `mesh/mesh.json`); with -Y already, or a refinement in the run or in the project as it is now (`advice_conflicts`, Q3 in the advisor's words; Apply refused `ADVICE_CONFLICT`), or no mesh record, no Apply; never more particles |
 | `lost_share_warning` (0.3 % to 1 %) | `lost_share_warning` | as `lost_particles` |
 | `truncated`, `range_not_reached`, `params_series_too_short`, EDT `run_too_short` / `not_decaying_at_run_end` | `run_too_short` | the new-project 10 s, or the step limit's longest |
 | `unresolved`, `early_unresolved`, EDT `step_too_coarse` | `onset_too_coarse` | the time step down to 1 ms, when the duration still fits the step counter |

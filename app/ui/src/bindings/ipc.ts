@@ -2848,6 +2848,12 @@ export interface SceneState {
    */
   advice: Advice[];
   /**
+   * The Applies the project as it is now would refuse, with why in plain words
+   * (`simpa_core::advise::apply_conflicts`): the Results step offers no Apply for them, even
+   * when the run's own meshing allowed it (a surface-receiver refinement added since, Q3).
+   */
+  advice_conflicts: ApplyConflict[];
+  /**
    * The model check of the current geometry; `None` when the project has no faces.
    */
   check?: CheckSummary | null;
@@ -2942,6 +2948,18 @@ export interface Fix {
    * The fix in plain words, naming the setting; no number.
    */
   words: string;
+}
+/**
+ * An Apply the project as it is now would refuse, and why, in plain words: the screen offers no
+ * Apply for it, whatever the run it comes from was meshed with.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "ApplyConflict".
+ */
+export interface ApplyConflict {
+  setting: Setting;
+  to: SettingValue;
+  why: string;
 }
 /**
  * The model check, for the Geometry panel and the view's highlight.
