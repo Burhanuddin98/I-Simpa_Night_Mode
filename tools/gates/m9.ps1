@@ -261,7 +261,8 @@ Check "(f) capabilities: 0 'shell:' and 0 'fs:'; dialog is the only plugin" {
         ($rustPlugins -join ',') -eq 'tauri-plugin-dialog' -and ($jsPlugins -join ',') -eq '@tauri-apps/plugin-dialog'
 }
 
-Check "strict CSP: 'self' only, no unsafe-inline or unsafe-eval, no remote origin" {
+# Decision 52 (2026-10-05): images may also be data: URLs (the response window's PNG); nothing else widens.
+Check "strict CSP: 'self' only (img-src also data:, decision 52), no unsafe-inline or unsafe-eval, no remote origin" {
     $conf = Get-Content (Join-Path $tauriDir 'tauri.conf.json') -Raw | ConvertFrom-Json
     $csp = $conf.app.security.csp
     $pairs = @($csp.PSObject.Properties | ForEach-Object { "$($_.Name) $($_.Value)" })
@@ -269,7 +270,8 @@ Check "strict CSP: 'self' only, no unsafe-inline or unsafe-eval, no remote origi
     $remote = @([regex]::Matches($all, 'https?://[^\s;]+') | ForEach-Object { $_.Value } | Where-Object { $_ -ne 'http://ipc.localhost' })
     Note "csp: $all"
     Note "freezePrototype: $($conf.app.security.freezePrototype); withGlobalTauri: $($conf.app.withGlobalTauri)"
-    $csp.'default-src' -eq "'self'" -and $csp.'script-src' -eq "'self'" -and $all -notmatch 'unsafe-' -and
+    $csp.'default-src' -eq "'self'" -and $csp.'script-src' -eq "'self'" -and $csp.'img-src' -eq "'self' data:" -and
+        @([regex]::Matches($all, 'data:')).Count -eq 1 -and $all -notmatch 'unsafe-' -and
         $remote.Count -eq 0 -and $all -notmatch '\*' -and $conf.app.security.freezePrototype -eq $true -and
         $conf.app.withGlobalTauri -eq $false
 }
