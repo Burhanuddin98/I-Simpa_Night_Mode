@@ -1,12 +1,14 @@
 // The variant switch (design:57-64): Baseline (the base project) and the project's variants. A
 // click makes one active (`set_active_variant`); "+" adds one and makes it active in one undo
 // step (`batch(add_variant, set_active_variant)`); a double-click renames a variant in place
-// (PLAN.md 7.5, point 2). Every change is an edit through the checked apply.
+// (PLAN.md 7.5, point 2); "−" removes the active variant, back to Baseline first, in one undo step
+// (`batch(set_active_variant(null), remove_variant)`: the core refuses to remove the active one).
+// Every change is an edit through the checked apply.
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
 import type { UiIssue } from '../bindings/ipc';
 import { fieldKey } from '../issues';
-import { addVariant, batch, rename, setActiveVariant } from '../ops';
+import { addVariant, batch, removeVariant, rename, setActiveVariant } from '../ops';
 import { sceneStore, useStore } from '../store';
 import { nextVariantName } from './sceneModel';
 
@@ -84,6 +86,11 @@ export function VariantSwitch() {
     const op = batch([addVariant(view.variants.length, { id, name: nextVariantName(view), overrides: [] }), setActiveVariant(id)]);
     actions.fire(actions.apply(op, fieldKey('variant', 'new')));
   };
+  const remove = () => {
+    if (!view || active === null) return;
+    actions.fire(actions.apply(batch([setActiveVariant(null), removeVariant(active)]), fieldKey('variant', active)));
+  };
+  const activeName = view?.variants.find((v) => v.id === active)?.name;
 
   return (
     <div className="variants">
@@ -117,6 +124,16 @@ export function VariantSwitch() {
         onClick={add}
       >
         +
+      </button>
+      <button
+        className="variant-add variant-remove"
+        data-part="variant-remove"
+        aria-label={activeName ? `Remove the variant ${activeName}` : 'Remove a variant'}
+        title={activeName ? `Remove "${activeName}" and go back to Baseline (Ctrl+Z brings it back)` : 'Pick a variant to remove it'}
+        disabled={!view || active === null}
+        onClick={remove}
+      >
+        −
       </button>
     </div>
   );

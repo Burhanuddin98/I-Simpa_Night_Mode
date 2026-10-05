@@ -97,6 +97,7 @@ export function assignMaterial(group: string, material: string, activeVariant: s
 
 export const addVariant = (index: number, variant: Variant): Op => ({ op: 'add_variant', index, variant });
 export const setActiveVariant = (variant: string | null): Op => ({ op: 'set_active_variant', variant });
+export const removeVariant = (id: string): Op => ({ op: 'remove_variant', id });
 
 /** Several ops as one edit and one undo step, applied all or nothing. */
 export const batch = (ops: Op[]): Op => ({ op: 'batch', ops });
