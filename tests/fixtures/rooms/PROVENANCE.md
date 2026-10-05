@@ -54,6 +54,7 @@ give back the same bytes.
 | `tutorial1_box_seeded.simpa` | `tutorial1_box.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 150,000 → 10,000: M1's reference configuration | gate M6(a) | `9786c83432c2be57` |
 | `tutorial1_box_fitting.simpa` | `tutorial1_box_seeded.simpa` | one fitting zone, below | gate M5(e) | `0fb1de7a635cb854` |
 | `elmia_loss_gate.simpa` | `elmia_corrected.simpa` | SPPS `random_seed` 0 → 1, `particles_per_source` 1,000,000 → 100,000; `bands_computed` true for 125, 250, 500, 1000, 2000 and 4000 Hz only, in both solvers (SPPS already had exactly these; TCR had all 27) | gate M6(c) | `ae8e2ecbe83309f0` |
+| `elmia_arm_b.simpa` | `elmia_corrected.simpa` | SPPS `particles_per_source` 1,000,000 → 150,000, `particles_saved` 0 → 100, `receiver_radius_m` 0.6 → 0.31; sources S02 and S03 disabled: backlog 78's arm B (`B:\data\m12\b78-mesh\elmia_s01_B_q5_Y.simpa`, equal to it), whose T30 is refused `range_below_zero` | the run-quality advisor's e2e (backlog 80, Q2; `app/e2e/specs/b80.advisor.e2e.ts`) | `ebb197b3f317f4a8` |
 
 The fitting zone: id `0c0be000-0000-4000-8000-00000000f177`, name `Fitting zone`, enabled, a
 box from (1, 1, 0.5) to (2, 2, 1.5) m (1 m³, dyadic corners, so the gate's 1e-9 volume check

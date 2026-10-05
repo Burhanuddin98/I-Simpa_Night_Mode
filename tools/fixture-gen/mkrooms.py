@@ -8,7 +8,11 @@ From <rooms-dir>/tutorial1_box.simpa and elmia_corrected.simpa (tests/fixtures/r
 - elmia_loss_gate.simpa: SPPS random_seed 1 and 100,000 particles per source, and both solvers'
   bands_computed true for 125, 250, 500, 1000, 2000 and 4000 Hz only, for gate M6(c);
 - tutorial1_box_fitting.simpa: tutorial1_box_seeded plus one enabled box fitting zone from
-  (1, 1, 0.5) to (2, 2, 1.5) m, for gate M5(e).
+  (1, 1, 0.5) to (2, 2, 1.5) m, for gate M5(e);
+- elmia_arm_b.simpa: backlog 78's arm B (B:/data/m12/b78-mesh/elmia_s01_B_q5_Y.simpa, which equals
+  this derivation): S01 alone (S02 and S03 disabled), 150,000 particles per source, 100 saved,
+  0.31 m receivers, for the run-quality advisor's e2e (backlog 80, Q2: its T30 is refused
+  `range_below_zero`, which the advisor answers with a larger receiver radius).
 
 The edits are made on the canonical text (docs of `schema::to_json`: two-space indent, scalar
 arrays on one line), so the files keep the writer's layout. Two checks can refuse the result:
@@ -31,6 +35,9 @@ SEED = 1
 BOX_PARTICLES = 10_000
 HALL_PARTICLES = 100_000
 LOSS_GATE_BANDS = (125, 250, 500, 1000, 2000, 4000)
+# Backlog 78's arm B (decision 49; backlog 80, Q2).
+ARM_B = {"particles_per_source": 150_000, "particles_saved": 100, "receiver_radius_m": 0.31}
+ARM_B_OFF = ("S02", "S03")
 ZONE = {
     # A fixed id, so the file is the same on every run (the negative fixtures do the same).
     "id": "0c0be000-0000-4000-8000-00000000f177",
@@ -151,6 +158,22 @@ def derive(rooms: Path) -> dict[str, str]:
     want["solvers"]["tcr"]["bands_computed"] = bands
     expect_equal("elmia_loss_gate", gate, want)
     out["elmia_loss_gate.simpa"] = gate
+
+    spps = hall["solvers"]["spps"]
+    arm = hall_text
+    for key, new in ARM_B.items():
+        s_, e_ = section(arm, "spps")
+        arm = replace_once(arm, f'"{key}": {json.dumps(spps[key])},', f'"{key}": {json.dumps(new)},', s_, e_)
+    for name in ARM_B_OFF:
+        at = arm.index(f'"name": "{name}",')
+        arm = replace_once(arm, '"enabled": true,', '"enabled": false,', at, at + 200)
+    want = copy.deepcopy(hall)
+    want["solvers"]["spps"].update(ARM_B)
+    for src in want["sources"]:
+        if src["name"] in ARM_B_OFF:
+            src["enabled"] = False
+    expect_equal("elmia_arm_b", arm, want)
+    out["elmia_arm_b.simpa"] = arm
     return out
 
 

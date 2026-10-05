@@ -214,6 +214,49 @@ if ($Only -eq 'all') {
     }
 } else { Note "P3 e2e ($p3Spec): not run (-Only static)" }
 
+# ---- M12b: the run-quality advisor (backlog 80, decision 57) --------------------------------------
+# docs/investigations/2026-10-04-advisor/PLAN.md. The core's rules and their say-NO cases, the
+# report's `advice` (results version 17), `simpa advise`, the session's Apply, the UI's models; then
+# app/e2e/specs/b80.advisor.e2e.ts on m11.ps1's harness, as P2's and P3's specs run.
+Check "M12b: the advisor's rules, each with its say-NO (cargo test -p simpa-core --lib advise::; -p simpa --test cli_advise)" {
+    $a = CargoTest '-p simpa-core --lib -- advise::' 'advise-core'
+    $b = CargoTest '-p simpa --test cli_advise' 'advise-cli'
+    $a -and $b
+}
+
+Check "M12b: Apply in the session, one undo step, refused once the project changed (cargo test -p app advisor_tests)" {
+    CargoTest '-p app advisor_tests' 'advise-app'
+}
+
+Check "M12b: the Simulate and Results models of the advice (node --test, with the scanner's say-NO)" {
+    $log = Join-Path $work 'advise-node.log'
+    Push-Location (Join-Path $repo 'app')
+    try { $code = Native 'node --test ui/src/features/simulate/model.test.ts ui/src/features/simulate/settings.test.ts ui/src/features/acoustics/model.test.ts' $log } finally { Pop-Location }
+    Tail $log 8
+    $code -eq 0
+}
+
+$b80Spec = 'b80.advisor'
+$b80Ids = [ordered]@{
+    'b80-pre'   = 'tutorial 2 as upstream ships it (-q2 without -Y, 0.31 m) shows mesh_splits_walls and receivers_small (0.31 m -> 0.6 m) before its run, never a blocker; the Elmia fixture shows neither'
+    'b80-h'     = 'the Simulate step with the advice shown holds no number next to s, ms, dB or % and no parameter name followed by a number; a planted "T30 1.96 s" is caught'
+    'b80-after' = 'arm B: the range_below_zero T30 names the receiver radius 0.31 -> 0.6 m, every card number == simpa results --json; Apply and re-run is one undo step and the re-run shows every such T30'
+    'b80-undo'  = "Apply on the first run's card is refused once the project holds 0.6 (the project changed since this run), nothing runs; undo restores 0.31 exactly"
+}
+if ($Only -eq 'all') {
+    $script:b80Log = Join-Path $work 'b80-e2e.log'
+    Check "M12b e2e: m11.ps1 -Only e2e -Spec $b80Spec exits 0" {
+        $code = Native "powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\tools\gates\m11.ps1`" -Only e2e -Spec $b80Spec -TargetDir `"$target`" -SolversDir `"$SolversDir`" -Upstream `"$Upstream`"" $script:b80Log
+        Get-Content $script:b80Log | Where-Object { $_ -match '^(PASS|FAIL) |^M11 |receipt' } | ForEach-Object { Note $_.Trim() }
+        $code -eq 0
+    }
+    foreach ($id in $b80Ids.Keys) {
+        Check "${id}: $($b80Ids[$id])" {
+            (Test-Path $script:b80Log) -and @(Get-Content $script:b80Log | Where-Object { $_ -match "^\s+passed\s+[\d.,]+ s\s+$([regex]::Escape($id))\s" }).Count -eq 1
+        }
+    }
+} else { Note "M12b e2e ($b80Spec): not run (-Only static)" }
+
 # ---- 2. the gate's e2e ids (P2, P3; wired by P4) ---------------------------------------------------
 if ($Only -eq 'all') {
     foreach ($id in $gateIds.Keys) {
