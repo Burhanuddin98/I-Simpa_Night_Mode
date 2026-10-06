@@ -479,3 +479,16 @@
 .sim-advice-row .small-button {
   align-self: flex-start;
 }
+
+/* The run-size line (runSize.ts): its verdict is a sentence, so it wraps instead of running off the panel. */
+.sim-field-line[data-part='results-cube'] .v {
+  white-space: normal;
+  text-align: right;
+  line-height: 1.35;
+}
+.sim-field-line[data-part='results-cube'].fail .v {
+  color: var(--fail-text);
+}
+.sim-field-line[data-part='results-cube'].warn .v {
+  color: var(--warn);
+}
