@@ -300,6 +300,29 @@ function shaded<M extends Material>(m: M, uniforms: Record<string, IUniform>): M
   return m;
 }
 
+/**
+ * The floating panels' boxes, in client pixels (the canvas fills the window, so these are canvas
+ * pixels too). The panels are see-through glass: a label under one would read as the panel's own
+ * text, so labels there are hidden (the UI study's increment 1, "marker labels ... with a mask").
+ */
+const PANELS = '.menubar, .stepbar, .statusbar, .scene, .props, .dock, .plan-inset, .viewport .float-panel';
+function panelRects(): DOMRect[] {
+  return Array.from(document.querySelectorAll(PANELS), (e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+}
+/** A label's size, measured once per text (0 x 0 until it has been shown once: then its anchor point alone is tested). */
+const labelSizes = new WeakMap<HTMLElement, { w: number; h: number; text: string }>();
+function labelSize(el: HTMLElement): { w: number; h: number } {
+  const known = labelSizes.get(el);
+  if (known && known.text === el.textContent) return known;
+  const m = { w: el.offsetWidth, h: el.offsetHeight, text: el.textContent ?? '' };
+  if (m.w > 0) labelSizes.set(el, m);
+  return m;
+}
+/** Whether the box at `left`, `top`, `w` by `h` touches any of `rects`. */
+function underPanel(left: number, top: number, w: number, h: number, rects: DOMRect[]): boolean {
+  return rects.some((r) => left <= r.right && left + w >= r.left && top <= r.bottom && top + h >= r.top);
+}
+
 /** The edges with the distance fade taken from their opacity (fade.ts). */
 function fadingLines<M extends Material>(m: M, uniforms: Record<string, IUniform>): M {
   m.onBeforeCompile = (shader) => {
@@ -713,8 +736,9 @@ class ViewportEngine {
       r.render(this.scene, main);
       if (this.results.particleMeta && stepStore.get() === 'results') noteDrawn(this.results.particleStep());
       if (this.view === 'perspective' && this.bounds) this.renderInset(r, dom.inset);
-      this.placeLabels(main, w, h);
-      this.placeDims(main, w, h);
+      const covers = panelRects();
+      this.placeLabels(main, w, h, covers);
+      this.placeDims(main, w, h, covers);
       this.placeGizmo(main);
     }
     const vp = viewportStore.get();
@@ -796,18 +820,18 @@ class ViewportEngine {
     p.updateMatrixWorld();
   }
 
-  private placeLabels(camera: Camera, w: number, h: number): void {
+  private placeLabels(camera: Camera, w: number, h: number, covers: DOMRect[]): void {
     const v = new Vector3();
     for (const m of this.markers) {
       v.copy(m.p).project(camera);
-      const visible = v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02;
+      const x = ((v.x + 1) / 2) * w;
+      const y = ((1 - v.y) / 2) * h;
+      const left = x + (m.kind === 'source' ? 12 : 10);
+      const top = y - 8;
+      const size = labelSize(m.label);
+      const visible = v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02 && !underPanel(left, top, size.w, size.h, covers);
       m.label.style.display = visible ? '' : 'none';
-      if (visible) {
-        const x = ((v.x + 1) / 2) * w;
-        const y = ((1 - v.y) / 2) * h;
-        const dx = m.kind === 'source' ? 12 : 10;
-        m.label.style.transform = `translate(${Math.round(x + dx)}px, ${Math.round(y - 8)}px)`;
-      }
+      if (visible) m.label.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
     }
   }
 
@@ -854,15 +878,18 @@ class ViewportEngine {
     this.dimMids = all.map((l) => l.p);
   }
 
-  private placeDims(camera: Camera, w: number, h: number): void {
+  private placeDims(camera: Camera, w: number, h: number, covers: DOMRect[]): void {
     const v = new Vector3();
     this.dimLabels.forEach((d, i) => {
       const m = this.dimMids[i];
       if (!m) return void (d.style.display = 'none');
       v.set(m[0], m[1], m[2]).project(camera);
-      const visible = v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02;
+      const x = ((v.x + 1) / 2) * w;
+      const y = ((1 - v.y) / 2) * h;
+      const size = labelSize(d);
+      const visible = v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02 && !underPanel(x - size.w / 2, y - size.h / 2, size.w, size.h, covers);
       d.style.display = visible ? '' : 'none';
-      if (visible) d.style.transform = `translate(${Math.round(((v.x + 1) / 2) * w)}px, ${Math.round(((1 - v.y) / 2) * h)}px) translate(-50%, -50%)`;
+      if (visible) d.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -50%)`;
     });
   }
 
