@@ -28,3 +28,48 @@
 body {
   font-feature-settings: 'cv11' 1, 'ss01' 1, 'zero' 1, 'tnum' 1;
 }
+
+/* 4: Physical buttons (Burhan 05:28: "what if all of the buttons and shit all looked a bit more, 3D, like when you
+   click them they actually look physical"). A lit top edge and a shaded bottom edge, as on a hardware key; pressed,
+   the key sinks a pixel and its face goes into shadow. Only buttons with a face: not rows, menu items or icons. */
+.run,
+.primary,
+.small-button,
+.tool,
+.commands,
+.view-style-button,
+.vp-chip-btn,
+.segmented > button {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 235, 0.12),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(0, 0, 0, 0.55) !important;
+  transition:
+    transform 70ms ease,
+    box-shadow 70ms ease,
+    filter 70ms ease;
+}
+.run:hover:not(:disabled),
+.primary:hover:not(:disabled),
+.small-button:hover:not(:disabled),
+.tool:hover:not(:disabled),
+.commands:hover:not(:disabled),
+.view-style-button:hover:not(:disabled),
+.vp-chip-btn:hover:not(:disabled),
+.segmented > button:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+.run:active:not(:disabled),
+.primary:active:not(:disabled),
+.small-button:active:not(:disabled),
+.tool:active:not(:disabled),
+.commands:active:not(:disabled),
+.view-style-button:active:not(:disabled),
+.vp-chip-btn:active:not(:disabled),
+.segmented > button:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.92);
+  box-shadow:
+    inset 0 2px 3px rgba(0, 0, 0, 0.6),
+    inset 0 -1px 0 rgba(255, 240, 235, 0.05) !important;
+}
