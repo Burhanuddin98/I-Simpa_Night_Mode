@@ -70,6 +70,7 @@ import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
 import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
 import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, pulsePhase, spriteScale, STILL_PHASE, withGlow } from './glow';
+import { aoReach, bakeAo, withAo } from './ao';
 import { planeCells } from '../../chrome/planes';
 
 export type ViewMode = 'perspective' | 'plan';
@@ -129,9 +130,11 @@ export interface ViewStyle {
   edges: EdgeStyle;
   /** The near walls' opacity in see-through, percent, 0 to 60. */
   glass: number;
+  /** Corner shading (ao.ts) on. */
+  corners: boolean;
 }
 const STYLE_KEY = 'nm.viewStyle';
-const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15 };
+const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15, corners: true };
 function loadStyle(): ViewStyle {
   try {
     const v = JSON.parse(localStorage.getItem(STYLE_KEY) ?? 'null') as Partial<ViewStyle> | null;
@@ -140,6 +143,7 @@ function loadStyle(): ViewStyle {
       surfaces: (['colour', 'grey', 'glass', 'wire'] as const).includes(v.surfaces as SurfaceStyle) ? (v.surfaces as SurfaceStyle) : DEFAULT_STYLE.surfaces,
       edges: v.edges === 'feature' ? 'feature' : 'all',
       glass: typeof v.glass === 'number' ? Math.min(60, Math.max(0, v.glass)) : DEFAULT_STYLE.glass,
+      corners: v.corners !== false,
     };
   } catch {
     return DEFAULT_STYLE;
@@ -264,17 +268,21 @@ function stillMotion(): boolean {
   }
 }
 
-/** `m` with the sources' glow added to its colour (glow.ts), reading the shared `uniforms`. */
-function glowing<M extends Material>(m: M, uniforms: Record<string, IUniform>): M {
+/** `m` with the corner shading (ao.ts) and then the sources' glow (glow.ts) in its colour, reading the shared `uniforms`. */
+function shaded<M extends Material>(m: M, uniforms: Record<string, IUniform>): M {
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
-    const g = withGlow(shader.vertexShader, shader.fragmentShader);
+    const a = withAo(shader.vertexShader, shader.fragmentShader);
+    const g = withGlow(a.vertex, a.fragment);
     shader.vertexShader = g.vertex;
     shader.fragmentShader = g.fragment;
   };
-  m.customProgramCacheKey = () => 'nm-glow';
+  m.customProgramCacheKey = () => 'nm-shaded';
   return m;
 }
+
+/** Faces baked per frame: about 15 ms of rays on Grace, so the view stays live while a hall bakes. */
+const AO_SLICE = 220;
 
 class ViewportEngine {
   private renderer: WebGLRenderer | null = null;
@@ -323,8 +331,9 @@ class ViewportEngine {
   private readonly planeOutline: LineSegments2;
   private readonly planeGrid: LineSegments2;
   private planeSummary: { name: string; corners: Vec[]; u: number; v: number; gridLines: number }[] = [];
-  /** The sources' glow on the surfaces (glow.ts): shared by every surface material, and its pulse. */
+  /** The surface materials' shared uniforms: the corner shading's switch (ao.ts) and the sources' glow (glow.ts). */
   private readonly glow = {
+    nmAoMix: { value: 1 },
     glowPos: { value: Array.from({ length: GLOW_MAX }, () => new Vector3()) },
     glowCount: { value: 0 },
     glowRadius: { value: 1.5 },
@@ -334,6 +343,8 @@ class ViewportEngine {
   private glowFrame = 0;
   private glowDrawn = 0;
   private glowPhase = STILL_PHASE;
+  /** The corner-shading bake in progress (its next slice's frame), cancelled when the model changes. */
+  private aoFrame = 0;
 
   // The pointer between down and up.
   private down = { x: 0, y: 0, moved: false };
@@ -372,7 +383,7 @@ class ViewportEngine {
       new MeshMatcapMaterial({ matcap, vertexColors: true, side: FrontSide, flatShading: true, transparent: true, opacity: 0.15, depthWrite: false }),
     );
     this.ghost.visible = false;
-    for (const m of [this.tintColour, this.tintGrey, this.tintWire, this.ghost.material as MeshMatcapMaterial]) glowing(m, this.glow);
+    for (const m of [this.tintColour, this.tintGrey, this.tintWire, this.ghost.material as MeshMatcapMaterial]) shaded(m, this.glow);
     this.edges = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }));
     this.highlight = new Mesh(
       new BufferGeometry(),
@@ -730,6 +741,7 @@ class ViewportEngine {
       this.faces.geometry = geometry;
       this.tint.geometry = geometry.toNonIndexed();
       this.ghost.geometry = this.tint.geometry;
+      this.bakeCorners(mesh);
       this.recolor();
       this.triangleEdges = new EdgesGeometry(geometry, 1);
       this.featureEdges = new EdgesGeometry(geometry, 20);
@@ -742,7 +754,46 @@ class ViewportEngine {
     this.onScene();
   }
 
+  /**
+   * Corner shading (ao.ts): the faces start unshaded (1) so the room draws at once, and the baked
+   * values replace them when the last slice is done, in one upload, so no frame is half shaded.
+   */
+  private bakeCorners(mesh: SceneMesh): void {
+    const g = this.tint.geometry;
+    const pos = g.getAttribute('position');
+    const bvh = this.bvh;
+    g.setAttribute('nmAo', new BufferAttribute(new Float32Array(pos.count).fill(1), 1));
+    if (!bvh) return;
+    const positions = pos.array as Float32Array;
+    const faces = Math.floor(pos.count / 3);
+    const reach = aoReach(this.bounds);
+    const out = new Float32Array(pos.count).fill(1);
+    const done = new Map<string, number>();
+    const ray = new Ray();
+    const hit = (o: Vec, d: Vec, far: number) => {
+      ray.origin.set(o[0], o[1], o[2]);
+      ray.direction.set(d[0], d[1], d[2]);
+      return !!bvh.raycastFirst(ray, DoubleSide, 0, far);
+    };
+    let from = 0;
+    const slice = () => {
+      if (this.tint.geometry !== g) return;
+      bakeAo(positions, mesh.indices, hit, reach, from, from + AO_SLICE, out, done);
+      from += AO_SLICE;
+      if (from < faces) {
+        this.aoFrame = requestAnimationFrame(slice);
+        return;
+      }
+      this.aoFrame = 0;
+      g.setAttribute('nmAo', new BufferAttribute(out, 1));
+      this.invalidate();
+    };
+    this.aoFrame = requestAnimationFrame(slice);
+  }
+
   private disposeModel(): void {
+    if (this.aoFrame) cancelAnimationFrame(this.aoFrame);
+    this.aoFrame = 0;
     for (const o of [this.faces, this.tint, this.highlight, this.selectionWash]) {
       o.geometry.dispose();
       o.geometry = new BufferGeometry();
@@ -788,6 +839,7 @@ class ViewportEngine {
     this.ghost.visible = st.surfaces === 'glass';
     (this.ghost.material as MeshMatcapMaterial).opacity = st.glass / 100;
     this.edges.geometry = st.edges === 'feature' ? this.featureEdges : this.triangleEdges;
+    this.glow.nmAoMix.value = st.corners ? 1 : 0;
     this.invalidate();
   }
 

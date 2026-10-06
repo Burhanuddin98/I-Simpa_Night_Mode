@@ -92,6 +92,16 @@ export function ViewStyleMenu() {
               {e.label}
             </button>
           ))}
+          <div className="view-style-head">Shading</div>
+          <button
+            role="menuitemcheckbox"
+            aria-checked={style.corners}
+            data-corners=""
+            title="Corners, the floor under balconies and stair steps drawn darker, so the room reads in depth"
+            onClick={() => set({ corners: !style.corners })}
+          >
+            Darker corners
+          </button>
         </div>
       )}
     </div>
