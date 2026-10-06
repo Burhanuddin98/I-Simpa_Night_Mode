@@ -28,6 +28,11 @@ def params(run_dir):
     d = json.load(open(os.path.join(run_dir, "results.json"), encoding="utf-8"))
     out = {}
     entries = []
+    if "spps" not in d:
+        # simpa results refused the whole report: compared by its reason
+        why = d.get("refused", {})
+        out[("(report)", 0, "spl_db")] = ("ne", "refused:" + (why.get("code", "") if isinstance(why, dict) else str(why)), None, None)
+        return out, {}, None
     for rp in d["spps"]["point_receivers"]:
         entries.append((rp["label"], rp["bands"]))
         # with output_recp_bysource, each source's own echogram (the sum refuses onset-relative values)
