@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import type { CheckSummary, Material, ProjectView, SceneState, UiIssue } from '../bindings/ipc.ts';
 import {
   blockerText,
+  displayName,
   checkRows,
   coord,
   effectiveMaterial,
@@ -322,4 +323,15 @@ test("a point receiver's folder reads as its group path, and the filter finds it
   assert.equal(receiverFolder({ group: null }), '');
   assert.equal(receiverFolder({}), '', 'a project saved before receiver groups');
   assert.ok(matchesFilter('front', 'Receiver 1', receiverFolder({ group: 'Stalls / Front' })));
+});
+
+test('surface and material names read as words: the import prefix dropped, sentence case, the stored name untouched', () => {
+  assert.equal(displayName('mat_CR4_whitePanels'), 'White panels');
+  assert.equal(displayName('mat_CR1_tablesEquipment'), 'Tables equipment');
+  assert.equal(displayName('mat_CR3_structuredPlaster'), 'Structured plaster');
+  assert.equal(displayName('door_room1'), 'Door room 1');
+  assert.equal(displayName('ext_walls'), 'Ext walls');
+  assert.equal(displayName('audience'), 'Audience');
+  // A name that is all prefix keeps its stored form rather than showing nothing.
+  assert.equal(displayName('mat_CR2_'), 'mat_CR2_');
 });

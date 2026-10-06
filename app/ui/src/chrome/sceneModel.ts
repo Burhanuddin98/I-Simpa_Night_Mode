@@ -301,3 +301,21 @@ export function directivityName(d: Directivity): string {
 export function powerText(globalDb: F64): string {
   return `${exact(globalDb)} dB`;
 }
+
+/**
+ * A surface group's or material's name as the scene list shows it (Burhan 2026-10-06): the import
+ * prefix `mat_<room>_` dropped, underscores and camelCase split into words, sentence case
+ * ("mat_CR4_whitePanels" reads "White panels", "door_room1" "Door room 1"). On screen only: the
+ * project keeps its names, and the row's tooltip shows the stored one.
+ */
+export function displayName(raw: string): string {
+  const words = raw
+    .replace(/^mat_[A-Za-z0-9]+_/, '')
+    .replace(/_/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Za-z])(\d)/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : raw;
+}

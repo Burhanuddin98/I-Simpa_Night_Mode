@@ -19,7 +19,7 @@ import { issuesByEntity, projectIssues } from '../issues';
 import { refusalStore, sceneStore, selectionStore, useStore } from '../store';
 import { FoldButton, useFold } from './fold';
 import { Search, Trash2 } from './icons';
-import { coord, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
+import { coord, displayName, effectiveMaterial, matchesFilter, receiverFolder, sentence, uniqueIssues, worstSeverity } from './sceneModel';
 import { onEntityKey, removeEntity, selectGroup, selectPoint } from './sceneUi';
 
 // ---- the source switch (M26) -------------------------------------------------------------------
@@ -195,15 +195,20 @@ export function ScenePanel() {
                     className={`swatch${assigned ? '' : ' unassigned'}`}
                     style={assigned && m ? { background: m.color } : undefined}
                   />
-                  <span className="row-name">{g.name}</span>
-                  <IssueTag issues={issuesOf('surface_group', g.id)} />
-                  <span
-                    className="row-detail"
-                    data-input
-                    title={assigned ? m?.name : `${m?.name ?? 'No material'}: the import placeholder, not assigned yet`}
-                  >
-                    {assigned ? (m?.name ?? '—') : 'unassigned'}
+                  <span className="row-name" title={g.name}>
+                    {displayName(g.name)}
                   </span>
+                  <IssueTag issues={issuesOf('surface_group', g.id)} />
+                  {/* The material, unless it only repeats the surface's own name (BRAS names both alike). */}
+                  {!(assigned && m && displayName(m.name) === displayName(g.name)) && (
+                    <span
+                      className="row-detail"
+                      data-input
+                      title={assigned ? m?.name : `${m?.name ?? 'No material'}: the import placeholder, not assigned yet`}
+                    >
+                      {assigned ? (m ? displayName(m.name) : '—') : 'unassigned'}
+                    </span>
+                  )}
                 </button>
               );
             })}
