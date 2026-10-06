@@ -521,7 +521,11 @@ function LossBound([double]$floor) { $floor + 4 * [math]::Sqrt([math]::Max($floo
 Check "(c) says NO: the PROPOSED bound refuses ours = floor + 4 sqrt(floor) + 1 (floor 144: bound 192, ours 193), and passes ours = bound" {
     (193 -gt (LossBound 144)) -and (192 -le (LossBound 144)) -and (4 -le (LossBound 0)) -and -not (5 -le (LossBound 0))
 }
-$upstreamRoot = if ($env:SIMPA_UPSTREAM) { $env:SIMPA_UPSTREAM } else { Join-Path $repo 'target\solvers\src-929a5c8' }
+# The build's extract is src-929a5c8, or src-929a5c8-p<hash> when solvers/build.ps1 applied patches\ (the first in name order).
+$upstreamRoot = if ($env:SIMPA_UPSTREAM) { $env:SIMPA_UPSTREAM } else {
+    $x = @(Get-ChildItem (Join-Path $repo 'target\solvers') -Directory -Filter 'src-929a5c8*' -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -First 1)
+    if ($x.Count) { $x[0].FullName } elseif (Test-Path 'B:\repos\I-Simpa-upstream\src\lib_interface') { 'B:\repos\I-Simpa-upstream' } else { Join-Path $repo 'target\solvers\src-929a5c8' }
+}
 $floorTetgen = Join-Path $work 'floor-tetgen'; $floorMesh = Join-Path $work 'floor-mesh'; $cRuns = Join-Path $work 'hall-runs'
 Check "(c) free space on B: at least 1 GB before the hall runs (measured: one run's folder 80 MB, peak drop 90 MB)" {
     $free = (Get-PSDrive B).Free

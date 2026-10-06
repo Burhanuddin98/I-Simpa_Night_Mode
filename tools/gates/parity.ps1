@@ -75,7 +75,11 @@ $env:CARGO_TARGET_DIR = Join-Path $repo 'target'
 $env:SIMPA_REQUIRE_UPSTREAM = '1'
 if (-not $env:SIMPA_UPSTREAM) { $env:SIMPA_UPSTREAM = 'B:\repos\I-Simpa-upstream' }
 if (-not $SolversDir) { $SolversDir = Join-Path $repo 'target\solvers\bin' }
-if (-not $Tetgen160) { $Tetgen160 = Join-Path (Split-Path -Parent $SolversDir) 'build\src\tetgen\Release\tetgen.exe' }
+# The build tree is build\, or build-p<hash>\ when solvers/build.ps1 applied patches\: the first that holds the file.
+if (-not $Tetgen160) {
+    $t160 = @(Get-ChildItem (Split-Path -Parent $SolversDir) -Directory -Filter 'build*' -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { Join-Path $_.FullName 'src\tetgen\Release\tetgen.exe' } | Where-Object { Test-Path $_ } | Select-Object -First 1)
+    $Tetgen160 = if ($t160.Count) { $t160[0] } else { Join-Path (Split-Path -Parent $SolversDir) 'build\src\tetgen\Release\tetgen.exe' }
+}
 $env:SIMPA_SOLVERS_DIR = $SolversDir
 
 $failures = @(); $blocked = @(); $script:checks = 0

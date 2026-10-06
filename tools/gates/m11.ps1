@@ -369,7 +369,8 @@ if (-not $SkipCore) {
         if (Test-Path $staged) { Note "NOTE: $staged exists (M10's staging); nothing here relies on it" }
         $env:SIMPA_SOLVERS_DIR = $SolversDir
         $t160 = if ($Tetgen160) { $Tetgen160 } elseif ($env:SIMPA_TETGEN160) { $env:SIMPA_TETGEN160 } else {
-            @((Join-Path (Split-Path -Parent $SolversDir) 'build\src\tetgen\Release\tetgen.exe'),
+            # The build tree is build\, or build-p<hash>\ when solvers/build.ps1 applied patches\.
+            @(@(Get-ChildItem (Split-Path -Parent $SolversDir) -Directory -Filter 'build*' -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { Join-Path $_.FullName 'src\tetgen\Release\tetgen.exe' }) +
                 'C:\tmp\nm-m10-solvers\build\src\tetgen\Release\tetgen.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1 }
         if (-not $t160) { throw 'no TetGen 1.6.0 reference build (pass -Tetgen160)' }
         $env:SIMPA_TETGEN160 = $t160

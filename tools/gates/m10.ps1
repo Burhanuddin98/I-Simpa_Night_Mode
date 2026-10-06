@@ -272,7 +272,11 @@ if (-not $SkipCore) {
         # The TetGen 1.6.0 reference two tests refuse by name: $SIMPA_TETGEN160 when set (a solver
         # build without solvers/build.ps1's layout beside it, such as C:\tmp\nm-m8a-solvers, has
         # none), else beside the solver build.
-        if (-not $env:SIMPA_TETGEN160) { $env:SIMPA_TETGEN160 = Join-Path (Split-Path -Parent $solvers) 'build\src\tetgen\Release\tetgen.exe' }
+        # The build tree is build\, or build-p<hash>\ when solvers/build.ps1 applied patches\: the first that holds the file.
+        if (-not $env:SIMPA_TETGEN160) {
+            $t160 = @(Get-ChildItem (Split-Path -Parent $solvers) -Directory -Filter 'build*' -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { Join-Path $_.FullName 'src\tetgen\Release\tetgen.exe' } | Where-Object { Test-Path $_ } | Select-Object -First 1)
+            $env:SIMPA_TETGEN160 = if ($t160.Count) { $t160[0] } else { Join-Path (Split-Path -Parent $solvers) 'build\src\tetgen\Release\tetgen.exe' }
+        }
         $env:SIMPA_UPSTREAM = $Upstream
         $env:SIMPA_TEST_SCRATCH_ROOT = Join-Path $target 'test-scratch'
         # At most 4 solver processes at once (M11 PLAN.md T18): the tests run 4 at a time.
