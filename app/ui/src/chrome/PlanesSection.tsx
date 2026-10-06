@@ -5,6 +5,7 @@
 // `cutting_plane_invalid` refuses inline, the project unchanged), and a plane is removed with its
 // button. A tilted plane (only a `.proj` import makes one) is shown, not edited. Every edit says
 // what it costs: a new or moved plane has no map until SPPS runs again.
+import { cubeText, REFUSE_GB, resultCube, settingsStore, WARN_GB } from '../features/simulate/runSize';
 import { useState } from 'react';
 import * as actions from '../actions';
 import type { SceneState, SurfaceReceiver, UiIssue } from '../bindings/ipc';
@@ -38,6 +39,7 @@ function PlaneRow({ scene, plane, box }: { scene: SceneState; plane: Plane; box:
       else delete n[f];
       return n;
     });
+  const settings = useStore(settingsStore);
   const current = (): Plane | undefined => scene.view.surface_receivers.find((r): r is Plane => r.id === id && isPlane(r));
   const send = async (shape: Plane['shape']) => {
     const now = current();
@@ -126,6 +128,19 @@ function PlaneRow({ scene, plane, box }: { scene: SceneState; plane: Plane; box:
             {grid ? `${grid.u} × ${grid.v}` : '—'}
           </span>
         </div>
+        {(() => {
+          // This plane's share of what the solver holds in memory (runSize.ts): the trap of 2026-10-06, a 0.1 m cell
+          // over a whole hall, 149 GB, shows here as it is typed.
+          const own = resultCube({ ...scene, view: { ...scene.view, surface_receivers: [plane] } }, 'spps', settings);
+          if (!own || !grid) return null;
+          const level = own.gb >= REFUSE_GB ? 'fail' : own.gb >= WARN_GB ? 'warn' : '';
+          return (
+            <div className={`fact-cell${level ? ` ${level}` : ''}`} data-part="plane-memory" data-level={level || 'ok'}>
+              <span className="k">Memory per run</span>
+              <span className="mono">{cubeText(own)}</span>
+            </div>
+          );
+        })()}
       </div>
       <Issues refused={refused} current={[]} />
     </div>

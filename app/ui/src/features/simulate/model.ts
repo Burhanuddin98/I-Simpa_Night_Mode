@@ -214,6 +214,7 @@ export const PREFLIGHT: readonly { key: string; label: string; codes: readonly s
     codes: ['RECEIVER_OUTSIDE', 'RECEIVER_ON_SURFACE', 'RECEIVER_SPHERE_CROSSES'],
   },
   { key: 'air', label: 'Air absorption set', codes: ['ATMOSPHERE_INVALID', 'ABSATMO_INVALID'] },
+  { key: 'memory', label: 'Results fit in memory', codes: ['RESULTS_TOO_BIG'] },
   { key: 'solvers', label: 'Solvers are the verified build', codes: ['SOLVER_NOT_FOUND', 'SOLVER_UNVERIFIED'] },
 ];
 

@@ -24,7 +24,8 @@ import { Fragment, useEffect, useRef, useState, type KeyboardEvent } from 'react
 import * as actions from '../../actions';
 import type { SceneState } from '../../bindings/ipc';
 import { runTooltip } from '../../chrome/sceneModel';
-import { detailTitle, joinBlockers, projectBlockers } from '../../flow';
+import { detailTitle, joinBlockers } from '../../flow';
+import { blockersWithSize, settingsStore } from './runSize';
 import { Issues } from '../../chrome/SourcesPanel';
 import {
   type ActiveRun,
@@ -343,7 +344,7 @@ export function SimulatePanel() {
   const solver = useStore(solverStore);
   const settings = useProjectSettings(scene);
 
-  const project = projectBlockers(scene, solver);
+  const project = blockersWithSize(scene, solver, useStore(settingsStore));
   const blockers = joinBlockers(project, solvers, active !== null);
   const preflight = preflightRows({
     blockers: project,

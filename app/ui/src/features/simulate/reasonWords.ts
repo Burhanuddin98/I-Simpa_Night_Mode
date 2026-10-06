@@ -136,6 +136,7 @@ const WORDS: Record<string, string> = {
   source_not_located: 'The solver could not find which part of the room a source is in.',
   particle_loss_reported: 'The solver reported particles lost.',
   unclassified_line: 'The solver printed an error this app does not recognise.',
+  results_too_big: 'The results would not fit in memory during the run. Use fewer cells on the sound-level planes, fewer bands, or a coarser time step.',
 };
 
 /** The sentence for a reason's core code; a code with none reads as its words ("some_code" -> "Some code."). */

@@ -26,6 +26,7 @@ import { setBandComputed, setEnvironment, setSolverSettings } from '../../ops';
 import { refusalStore, type SolverName, useStore } from '../../store';
 import { EDT_MARKS } from '../acoustics/model';
 import { bandsText, hzText, projectSettings, type ProjectSettings, settingsRows } from './model';
+import { cubeText, REFUSE_GB, resultCube, WARN_GB } from './runSize';
 import {
   BAND_PRESETS,
   bandPresetOf,
@@ -182,6 +183,20 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
           {bandsText(s.bands, flags)}
         </span>
       </div>
+      {solver === 'spps' && (() => {
+        const cube = resultCube(scene, 'spps', s);
+        if (!cube) return null;
+        const level = cube.gb >= REFUSE_GB ? 'fail' : cube.gb >= WARN_GB ? 'warn' : '';
+        return (
+          <div className={`sim-field-line${level ? ` ${level}` : ''}`} data-part="results-cube" data-level={level || 'ok'}>
+            <span className="k">Results held in memory during the run</span>
+            <span className="v mono">
+              {cubeText(cube)}
+              {level === 'fail' ? ' · too much for this machine, Run is refused' : level === 'warn' ? ' · heavy for this machine' : ''}
+            </span>
+          </div>
+        );
+      })()}
       <div className="sim-bands" role="group" aria-label={`Bands ${solver === 'tcr' ? 'TCR' : 'SPPS'} computes`}>
         {s.bands.frequencies_hz.map((f, i) => (
           <label key={f} className="sim-band" data-band={i} data-hz={f}>

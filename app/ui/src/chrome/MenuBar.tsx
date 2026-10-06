@@ -14,11 +14,12 @@
 // - Edit › New group from selection (scope row 15 (1), G19), the viewport's context menu entry.
 // - File › Export view as PNG…, Export parameters as CSV… and as JSON… (wow list W9,
 //   features/export/), each disabled with the reason where there is nothing to export.
+import { blockersWithSize, settingsStore } from '../features/simulate/runSize';
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../actions';
 import { exportParams, exportView, paramsRefusal, viewRefusal } from '../features/export/exportActions';
 import { frameModel, setView } from '../features/viewport/engine';
-import { joinBlockers, projectBlockers } from '../flow';
+import { joinBlockers } from '../flow';
 import { reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
 import { Search } from './icons';
 import { RunButton } from './RunButton';
@@ -71,7 +72,7 @@ export function MenuBar() {
 
   const hasModel = !!scene?.check;
   const running = active !== null;
-  const blockers = joinBlockers(projectBlockers(scene, solver), solvers, running);
+  const blockers = joinBlockers(blockersWithSize(scene, solver, useStore(settingsStore)), solvers, running);
   const items: Partial<Record<MenuName, Item[]>> = {
     File: [
       {

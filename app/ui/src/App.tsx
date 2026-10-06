@@ -6,6 +6,8 @@
 // none takes props from here. While no project is open the landing page (`chrome/Landing`) covers
 // the step bar and the work area, which are inert behind it (still laid out: the self-test reads
 // the step bar's boxes).
+import { blockersWithSize, settingsStore } from './features/simulate/runSize';
+import { projectSettings } from './features/simulate/model';
 import { useEffect } from 'react';
 import * as actions from './actions';
 import { asCmdError, backend } from './backend';
@@ -21,7 +23,7 @@ import { StepBar } from './chrome/StepBar';
 import { Dock } from './features/dock/Dock';
 import { frameModel } from './features/viewport/engine';
 import { Viewport } from './features/viewport/Viewport';
-import { isReloadKey, joinBlockers, projectBlockers } from './flow';
+import { isReloadKey, joinBlockers } from './flow';
 import { probeWebGL } from './gpu';
 import { runSelftest } from './selftest';
 import { log, runStore, sceneStore, solversStatusStore, solverStore, statusStore, useStore } from './store';
@@ -61,6 +63,13 @@ async function boot(): Promise<void> {
   }
 }
 
+// The run-size check (runSize.ts) needs the project's settings, which live in the project file's text: read
+// them again on every scene change, so Run's blockers and the Simulate step see the cube as set now.
+sceneStore.subscribe(() => {
+  if (!sceneStore.get()) return void settingsStore.set(null);
+  actions.projectJson().then((json) => settingsStore.set(projectSettings(json))).catch(() => settingsStore.set(null));
+});
+
 /** Keys that stay with a text field while it has focus. */
 function typing(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -73,7 +82,7 @@ function onPlainKey(e: KeyboardEvent): boolean {
   if (e.key === 'F5') {
     // Never the webview's reload.
     e.preventDefault();
-    const blockers = joinBlockers(projectBlockers(sceneStore.get(), solverStore.get()), solversStatusStore.get(), runStore.get() !== null);
+    const blockers = joinBlockers(blockersWithSize(sceneStore.get(), solverStore.get()), solversStatusStore.get(), runStore.get() !== null);
     if (blockers !== null && blockers.length === 0) actions.fire(actions.runStart(solverStore.get()));
     return true;
   }

@@ -7,12 +7,13 @@
 // the gate can tell one reason from another; the tooltip spells each one out as text (a
 // disabled control does not explain itself). With none, a click (or F5, App.tsx) runs the chosen
 // solver on the saved project (actions.runStart, which saves first, PQ1).
+import { blockersWithSize, settingsStore } from '../features/simulate/runSize';
 import { useEffect } from 'react';
 import * as actions from '../actions';
 import { Parts } from '../features/simulate/SimulatePanel';
 import { runLabel } from '../features/simulate/model';
 import '../features/simulate/simulate.css';
-import { joinBlockers, projectBlockers } from '../flow';
+import { joinBlockers } from '../flow';
 import { runStore, sceneStore, type SolverName, solversStatusStore, solverStore, useStore } from '../store';
 import { registerHook } from '../testhooks';
 import { Play } from './icons';
@@ -34,7 +35,7 @@ export function RunButton() {
       }),
     [],
   );
-  const blockers = joinBlockers(projectBlockers(scene, solver), solvers, active !== null);
+  const blockers = joinBlockers(blockersWithSize(scene, solver, useStore(settingsStore)), solvers, active !== null);
   const tip = runTooltip(blockers);
   const disabled = blockers === null || blockers.length > 0;
   return (

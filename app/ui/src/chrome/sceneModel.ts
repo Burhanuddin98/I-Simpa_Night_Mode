@@ -155,6 +155,7 @@ const BLOCKERS: Record<string, string> = {
   SOLVER_NOT_FOUND: 'a solver executable was not found (set SIMPA_SOLVERS_DIR to the solver build)',
   SOLVER_UNVERIFIED: 'a solver executable is not the verified build (solvers/manifest.json)',
   RUN_ACTIVE: 'a run is active: cancel it first',
+  RESULTS_TOO_BIG: 'the results would not fit in memory: fewer cells on the sound-level planes, fewer bands, or a coarser time step',
 };
 
 /** One blocker as a line of text: its code, then what it means. */
