@@ -29,13 +29,15 @@ export type SubKey = 'geometry' | 'materials' | 'sources' | 'simulate' | 'result
  */
 export function stepSubs(scene: SceneState | null): Record<SubKey, string> {
   const check = scene?.check;
-  const geometry = !check ? 'no model' : check.verdict === 'ok' ? 'closed' : 'refused';
+  // In words (the UI study's increment 2): "room closed", "6 of 10 set", "2 sources · 5 receivers".
+  const geometry = !check ? 'no model' : check.verdict === 'ok' ? 'room closed' : 'not closed';
   if (!scene) return { geometry, materials: '', sources: '', simulate: '', results: '' };
   const enabled = scene.view.sources.filter((s) => s.enabled).length;
+  const receivers = scene.view.point_receivers.length;
   return {
     geometry,
-    materials: `${scene.info.groups_assigned} / ${scene.info.surface_groups}`,
-    sources: `${enabled} · ${scene.view.point_receivers.length}`,
+    materials: `${scene.info.groups_assigned} of ${scene.info.surface_groups} set`,
+    sources: `${enabled} ${enabled === 1 ? 'source' : 'sources'} · ${receivers} ${receivers === 1 ? 'receiver' : 'receivers'}`,
     simulate: '',
     results: '',
   };

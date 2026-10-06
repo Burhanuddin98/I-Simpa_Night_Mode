@@ -131,14 +131,14 @@ function scene(v: ProjectView, c: CheckSummary | null, assigned: number): SceneS
 test('step subs: closed, refused or no model; assigned / groups; enabled sources · receivers', () => {
   const v = view({ sources: [source(true), source(false)], point_receivers: [receiver('r1'), receiver('r2'), receiver('r3')] });
   assert.deepEqual(stepSubs(scene(v, check(), 2)), {
-    geometry: 'closed',
-    materials: '2 / 2',
-    sources: '1 · 3',
+    geometry: 'room closed',
+    materials: '2 of 2 set',
+    sources: '1 source · 3 receivers',
     simulate: '',
     results: '',
   });
-  assert.equal(stepSubs(scene(v, check({ verdict: 'refused' }), 0)).geometry, 'refused');
-  assert.equal(stepSubs(scene(v, check({ verdict: 'refused' }), 0)).materials, '0 / 2');
+  assert.equal(stepSubs(scene(v, check({ verdict: 'refused' }), 0)).geometry, 'not closed');
+  assert.equal(stepSubs(scene(v, check({ verdict: 'refused' }), 0)).materials, '0 of 2 set');
   assert.equal(stepSubs(scene(view({ surface_groups: [] }), null, 0)).geometry, 'no model');
   assert.deepEqual(stepSubs(null), { geometry: 'no model', materials: '', sources: '', simulate: '', results: '' });
 });

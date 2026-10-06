@@ -1,7 +1,7 @@
 // The viewport package's gate ids (PLAN.md 3 and 6.1), and the package's extra checks.
 //   m10-a-highlight  raw hall: __m10.highlightedFaceCount() > 0, the overlay turns at least
 //                    MIN_WARN_PIXELS pixels of the drawn view warn (highlightPixels), and the
-//                    chip "FAIL · n faces highlighted" visible; teaching room: 0, no pixel
+//                    chip "Problem · n faces highlighted" visible; teaching room: 0, no pixel
 //                    changed, no chip
 //   m10-d            the box: double-click the ceiling (aimAtFace) selects faces [10, 11], group
 //                    Ceiling; a wall double-click selects 2 faces, not the Walls group's 8
@@ -121,7 +121,7 @@ describe('M10 viewport', () => {
     const c = await chip();
     assert.ok(c, 'the check chip is in the DOM');
     assert.ok(c.shown, 'the check chip is visible');
-    assert.equal(c.text, `FAIL · ${n} faces highlighted`);
+    assert.equal(c.text, `Problem · ${n} faces highlighted`);
 
     // Negative control: the teaching room passes the check, so nothing is highlighted.
     await m10.openProject(TEACHING_ROOM());

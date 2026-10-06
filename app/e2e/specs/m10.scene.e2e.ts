@@ -1,8 +1,8 @@
 // The scene package's gate ids (PLAN.md 3 and 6.3), and the extra checks section 3 gives it.
 //   m10-a-run        raw hall: [data-part=run] disabled, data-blockers holds GEOMETRY_REFUSED;
 //                    teaching room: data-blockers is exactly M11_PENDING
-//   m10-b-materials  corrected hall: [data-step="materials"] [data-part="sub"] reads "0 / 10";
-//                    tutorial1_box.simpa reads "3 / 3"
+//   m10-b-materials  corrected hall: [data-step="materials"] [data-part="sub"] reads "0 of 10 set";
+//                    tutorial1_box.simpa reads "3 of 3 set"
 //   m10-e-outside    R1's position.x = 20 + Enter: [data-issue-code="RECEIVER_OUTSIDE"] shown,
 //                    projectJson() and undoDepth() unchanged; x = 4 accepted
 //   m10-e-label      R1's name "a/b" + Enter: [data-issue-code="LABEL_UNSAFE"] shown, project
@@ -104,17 +104,17 @@ describe('M10 scene', () => {
     assert.equal(await run.isEnabled(), true, 'Run is enabled on a clean project');
   });
 
-  it("m10-b-materials: the step bar reads Materials '0 / 10' on the corrected hall", async () => {
+  it("m10-b-materials: the step bar reads Materials '0 of 10 set' on the corrected hall", async () => {
     const sub = () => $('[data-step="materials"] [data-part="sub"]').getText();
     await m10.importModel(CORRECTED_HALL(), 'm', 'z');
     const hall = await sub();
     console.log(`m10-b-materials receipt: corrected hall reads '${hall}'`);
-    assert.equal(hall, '0 / 10');
+    assert.equal(hall, '0 of 10 set');
     // Control: every group of the box has a real material.
     await m10.openProject(BOX());
     const box = await sub();
     console.log(`m10-b-materials receipt: tutorial1_box reads '${box}'`);
-    assert.equal(box, '3 / 3');
+    assert.equal(box, '3 of 3 set');
   });
 
   it('m10-e-outside: a receiver placed outside shows RECEIVER_OUTSIDE and changes nothing', async () => {
@@ -166,23 +166,23 @@ describe('M10 scene', () => {
 
   it('scene: the step subs read the project (closed, refused, no model; assigned; sources · receivers)', async () => {
     await m10.openProject(TEACHING_ROOM());
-    assert.deepEqual(await subs(), { geometry: 'closed', materials: '6 / 6', sources: '1 · 3', simulate: '', results: '' });
+    assert.deepEqual(await subs(), { geometry: 'room closed', materials: '6 of 6 set', sources: '1 source · 3 receivers', simulate: '', results: '' });
     const r4: Op = {
       op: 'add_point_receiver',
       index: 3,
       receiver: { id: randomUUID(), name: 'R4', position: [6, 3, 1.2], orientation: [1, 0, 0], background_noise: null, solver_id: null },
     };
     assert.equal((await m10.edit(r4)).applied, true);
-    assert.equal((await subs()).sources, '1 · 4');
+    assert.equal((await subs()).sources, '1 source · 4 receivers');
 
     await m10.importModel(env('M10_ELMIA_RAW'), 'm', 'z');
-    assert.equal((await subs()).geometry, 'refused');
+    assert.equal((await subs()).geometry, 'not closed');
 
     // File › New project, through the menu.
     await clickSelector('[data-menu="File"]');
     await clickSelector('[data-menu-item="new-project"]');
     await m10.idle();
-    assert.deepEqual(await subs(), { geometry: 'no model', materials: '0 / 0', sources: '0 · 0', simulate: '', results: '' });
+    assert.deepEqual(await subs(), { geometry: 'no model', materials: '0 of 0 set', sources: '0 sources · 0 receivers', simulate: '', results: '' });
   });
 
   it('scene: the dirty dot follows edits, saves and undo', async () => {
@@ -342,7 +342,7 @@ describe('M10 scene', () => {
     await m10.idle();
     await $('[data-part="import-dialog"]').waitForExist({ reverse: true, timeout: 30_000 });
     const s = await subs();
-    assert.equal(s.geometry, 'closed');
-    assert.equal(s.materials, '0 / 10');
+    assert.equal(s.geometry, 'room closed');
+    assert.equal(s.materials, '0 of 10 set');
   });
 });

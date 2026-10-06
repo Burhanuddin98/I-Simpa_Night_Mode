@@ -97,7 +97,7 @@ export function ResultsPanel() {
         {state === 'verified' && (
           <>
             <div className="res-verdict ok">
-              <span className="res-label">OK</span>
+              <span className="res-label">Verified</span>
               Results verified
             </div>
             <div className="res-text">
@@ -114,7 +114,7 @@ export function ResultsPanel() {
         {state === 'unverified' && (
           <>
             <div className="res-verdict warn">
-              <span className="res-label">UNVERIFIED</span>
+              <span className="res-label">Not verified</span>
               Results unverified
             </div>
             <Codes reasons={resultsCodes(answer)} part="unverified" />
@@ -127,7 +127,7 @@ export function ResultsPanel() {
         {state === 'refused' && (
           <>
             <div className="res-verdict fail">
-              <span className="res-label">FAIL</span>
+              <span className="res-label">Withheld</span>
               Results refused
             </div>
             <Codes reasons={resultsCodes(answer)} part="refusal" />
@@ -143,7 +143,7 @@ export function ResultsPanel() {
         {state === 'error' && error && (
           <>
             <div className="res-verdict fail">
-              <span className="res-label">FAIL</span>
+              <span className="res-label">Not checked</span>
               The results could not be checked
             </div>
             <div className="res-codes" data-part="error">

@@ -21,7 +21,7 @@
 //                absorption in all 6 bands is exactly the core's value (widen_f32 of the f32 0.3:
 //                the shortest decimal that reads back to it, 0.3, which is also what tutorial 1's
 //                .proj import gives it), name and colour the core's, law specular; assigned to
-//                the Floor, the Materials sub stays "6 / 6". The entry then reads "in project".
+//                the Floor, the Materials sub stays "6 of 6 set". The entry then reads "in project".
 //   m11-b18      the raw hall: the volume row holds no digit and says the model is refused; the
 //                three dimensions share two decimals. Control: the corrected hall shows the volume
 //                `simpa check` measures, at the status bar's spelling, inside [data-geometry].
@@ -494,7 +494,7 @@ describe('M11 project', () => {
     await clickSelector(`[data-material-option="${added.id}"]`);
     await m10.idle();
     assert.equal((await project()).surface_groups.find((g) => g.id === floor.id)?.material, added.id);
-    assert.equal((await subs()).materials, '6 / 6');
+    assert.equal((await subs()).materials, '6 of 6 set');
   });
 
   it('m11-b18: a refused model shows no volume, and the three dimensions share one precision', async () => {

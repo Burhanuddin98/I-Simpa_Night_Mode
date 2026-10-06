@@ -160,7 +160,7 @@ function PreflightList({ rows }: { rows: PreflightRow[] | null }) {
       {rows.map((r) => (
         <div key={r.key} className="sim-check" data-preflight={r.key} data-state={r.state}>
           <span className={`sim-state ${r.state.toLowerCase()}`} title={r.state === 'UNCHECKED' ? 'Not checked yet' : undefined}>
-            {r.state === 'UNCHECKED' ? '—' : r.state}
+            {r.state === 'UNCHECKED' ? '—' : r.state === 'OK' ? 'Ready' : 'Blocked'}
           </span>
           <span className="sim-check-body">
             <span className="k">{r.label}</span>

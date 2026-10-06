@@ -46,7 +46,7 @@ export function StepBar() {
             <span className="name" data-part="name">
               {s.name}
             </span>
-            <span className={`sub${subs[s.key] === 'refused' ? ' fail' : ''}`} data-part="sub">
+            <span className={`sub${subs[s.key] === 'not closed' ? ' fail' : ''}`} data-part="sub">
               {s.key === 'simulate' && simulate.length > 0 ? <SubParts parts={simulate} /> : subs[s.key]}
             </span>
           </button>

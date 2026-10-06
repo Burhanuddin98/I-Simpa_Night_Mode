@@ -155,7 +155,7 @@ export function Viewport() {
           {ui.error ? (
             <>
               <div className="title">
-                <span className="vp-fail">FAIL</span> The 3D view cannot start
+                <span className="vp-fail">Error</span> The 3D view cannot start
               </div>
               <div className="empty">{ui.error}</div>
             </>
@@ -177,7 +177,7 @@ export function Viewport() {
         {n > 0 && (
           <div className="vp-chip fail" data-part="check-chip" role="status">
             <span className="swatch" aria-hidden />
-            <span className="vp-fail">FAIL</span> · {n} {n === 1 ? 'face' : 'faces'} highlighted
+            <span className="vp-fail">Problem</span> · {n} {n === 1 ? 'face' : 'faces'} highlighted
           </div>
         )}
         {placing && ui.hasModel && (

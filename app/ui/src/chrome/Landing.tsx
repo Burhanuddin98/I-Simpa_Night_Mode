@@ -76,7 +76,7 @@ export function Landing() {
 
         {error && (
           <div className="issue landing-error" role="alert" data-part="landing-error">
-            <span className="code">FAIL</span>
+            <span className="state">Error</span>
             <span>{error}</span>
           </div>
         )}
