@@ -18,6 +18,7 @@ import type { ReasonUi } from '../../bindings/ipc';
 import { reportStore, resultsStore, runsStore, sceneStore, selectedRunStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
 import { resultsCodes, resultsStateName, runVariantName, solverLabel } from './model';
+import { reasonWords } from './reasonWords';
 import './simulate.css';
 
 /** A reason's title on this step: where its detail is, never the detail. */
@@ -28,8 +29,8 @@ function Codes({ reasons, part }: { reasons: readonly ReasonUi[]; part: string }
     <div className="res-codes" data-part={part}>
       {reasons.map((r, i) => (
         <div key={`${r.code}-${i}`} className="res-code" data-code={r.ui_code} title={DETAIL_ON_RUNS_TAB}>
-          <span className="code">{r.ui_code}</span>
-          <span className="core">{r.code}</span>
+          <span className="words">{reasonWords(r.code)}</span>
+          <span className="core">{r.ui_code}</span>
         </div>
       ))}
     </div>
@@ -147,7 +148,8 @@ export function ResultsPanel() {
             </div>
             <div className="res-codes" data-part="error">
               <div className="res-code" data-code={error.code} title="The message is in the Console">
-                <span className="code">{error.code}</span>
+                <span className="words">{reasonWords(error.code)}</span>
+                <span className="core">{error.code}</span>
               </div>
             </div>
           </>

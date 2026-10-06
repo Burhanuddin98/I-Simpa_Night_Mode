@@ -59,6 +59,7 @@ import {
   solverLabel,
 } from './model';
 import { SettingsEditor } from './SettingsEditor';
+import { reasonWords } from './reasonWords';
 import './simulate.css';
 
 /**
@@ -292,8 +293,8 @@ function LastRun({ last }: { last: LastRunView }) {
         <div className="sim-reasons" data-part="last-reasons">
           {last.reasons.map((r, i) => (
             <div key={`${r.code}-${i}`} className="sim-reason" data-code={r.ui_code} title={detailTitle(r.detail)}>
-              <span className="code">{r.ui_code}</span>
-              <span className="core">{r.code}</span>
+              <span className="words">{reasonWords(r.code)}</span>
+              <span className="core">{r.ui_code}</span>
             </div>
           ))}
         </div>
@@ -323,9 +324,9 @@ function LastRun({ last }: { last: LastRunView }) {
         <div className="sim-reasons" data-part="last-run-warnings">
           {last.warnings.map((w, i) => (
             <div key={`${w.code}-${i}`} className="sim-reason warn" data-code={w.ui_code} title={detailTitle(w.detail)}>
-              <span className="label-warn">WARN</span>
-              <span className="code">{w.ui_code}</span>
-              <span className="core">{w.code}</span>
+              <span className="label-warn">Warning</span>
+              <span className="words">{reasonWords(w.code)}</span>
+              <span className="core">{w.ui_code}</span>
             </div>
           ))}
         </div>

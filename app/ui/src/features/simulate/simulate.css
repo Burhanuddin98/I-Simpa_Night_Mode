@@ -373,6 +373,11 @@
   font-size: 11px;
   color: var(--text-3);
 }
+/* Words first, the code after it, smaller (the UI study's increment 2). */
+.sim-reason .words,
+.res-code .words {
+  color: var(--text);
+}
 .sim-kv {
   height: 28px;
   display: flex;

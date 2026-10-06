@@ -1,0 +1,150 @@
+// Words, not codes (the UI study's increment 2): the sentence shown for a reason a run ended with,
+// or a warning it carries, keyed by the core's code (`ReasonUi.code`). The code itself is still
+// shown after it, smaller, for the Console and for anyone reporting a problem. A code with no
+// sentence here (a new one) reads as its words, so nothing ever shows as a bare code.
+//
+// Every code a run can carry: the union the Rust test `the_ui_code_table_covers_every_code_a_run_can_carry`
+// (app/src-tauri/src/runs.rs) builds.
+
+const WORDS: Record<string, string> = {
+  // The run's verdict (simpa-core run::verdict).
+  solver_unverified: 'The solver programs could not be verified against their known build, so they were not run.',
+  geometry_refused: 'The room model failed its geometry check, so it was not sent to the solver.',
+  mesh_missing: 'The volume mesh this run should reuse is missing or incomplete.',
+  mesh_parity: 'The volume mesh given was made in a test mode and cannot be used for a real run.',
+  export_failed: "The solver's input files could not be written.",
+  source_unlocatable: 'A source sits where the solver cannot place it inside the room.',
+  receiver_unlocatable: 'A receiver sits where the solver cannot place it inside the room.',
+  launch_failed: 'The solver could not be started.',
+  log_write_failed: "The solver's log could not be saved in full; the run itself was not affected.",
+  cancelled: 'The run was cancelled.',
+  crash_access_violation: 'The solver crashed (it read or wrote memory it should not have).',
+  crash_abort: 'The solver stopped itself on an internal error.',
+  crash_other: 'The solver crashed.',
+  exit_nonzero: 'The solver finished but reported an error.',
+  end_of_calculation_missing: 'The solver stopped before reporting that its calculation was complete.',
+  config_attribute_missing: 'A setting the solver needs is missing from its input.',
+  stats_unreadable: "The solver's particle statistics could not be read.",
+  stats_band_mismatch: "The solver's statistics do not cover the frequency bands asked for.",
+  particle_total_short: 'Fewer particles were traced than were asked for.',
+  particle_loss_excess: 'Too many particles were lost for the result to hold enough energy.',
+  expected_file_missing: 'A result file the solver should have written is missing.',
+  nonfinite_result: 'A result contains values that are not numbers (infinite or undefined).',
+  result_unreadable: 'A result file could not be read.',
+
+  // Reading a run's results back (simpa-core results).
+  results_manifest_missing: "This run's record is missing, so its results cannot be checked.",
+  results_manifest_invalid: "This run's record could not be read, so its results cannot be checked.",
+  results_run_failed: 'This run failed, so it has no results to show.',
+  results_run_cancelled: 'This run was cancelled, so it has no results to show.',
+  results_inputs_changed: "The run's input files have changed since it ran, so its results no longer match them.",
+  results_outputs_invalid: "The run's outputs no longer pass the checks they passed when it finished.",
+  results_file_invalid: 'A result file is damaged or not laid out as the solver writes it.',
+  results_value_invalid: 'A result holds a value that cannot be right (not a number, or out of range).',
+  solver_build_unrecorded: 'This run did not record which solver build made it.',
+  solver_build_mismatch: 'The solver that made this run is not the verified build.',
+  solver_build_unchecked: 'The solver that made this run was not checked against the verified build.',
+  solver_manifest_override: 'The solvers were checked against a substitute list of builds, not the shipped one.',
+
+  // Meshing the room's volume (simpa-core mesh).
+  mesh_settings_conflict: 'Two meshing settings conflict with each other.',
+  input_invalid: "The room could not be turned into the mesher's input.",
+  stale_delete_failed: 'Files left by an earlier mesh could not be removed.',
+  input_write_failed: "The mesher's input files could not be written.",
+  tetgen_launch_failed: 'The mesher (TetGen) could not be started.',
+  tetgen_crash: 'The mesher (TetGen) crashed.',
+  tetgen_exit_nonzero: 'The mesher (TetGen) finished with an error.',
+  tetgen_timeout: 'The mesher (TetGen) ran past its time limit and was stopped.',
+  tetgen_skipped_facets: 'The mesher skipped surfaces it found intersecting each other.',
+  tetgen_self_intersection: 'The mesher stopped: some surfaces of the room intersect each other.',
+  tetgen_output_missing: "The mesher's output files are missing.",
+  neigh_missing: "The mesher did not write the neighbour list the solver needs.",
+  tetgen_output_invalid: "The mesher's output could not be read or does not match the room.",
+  mesh_invalid: 'The volume mesh failed its checks.',
+  mbin_write_failed: 'The volume mesh could not be saved.',
+  preprocess_launch_failed: 'The model repair step could not be started.',
+  preprocess_crash: 'The model repair step crashed.',
+  preprocess_exit_nonzero: 'The model repair step finished with an error.',
+  preprocess_timeout: 'The model repair step ran past its time limit and was stopped.',
+  preprocess_aborted: 'The model repair step gave up without changing the model.',
+  preprocess_output_invalid: 'What the model repair step saved does not match the room.',
+
+  // The project's own checks (simpa-core validate).
+  band_set_empty: 'No frequency bands are chosen.',
+  band_duplicate: 'A frequency band is listed twice.',
+  band_frequency_not_integer: 'A band frequency is not a whole number of hertz.',
+  band_set_mismatch: "The frequency bands do not match the materials' bands.",
+  no_band_computed: 'No frequency band is set to be computed.',
+  material_unassigned: 'A surface has no material.',
+  material_placeholder: 'A surface still has the placeholder material from import.',
+  material_value_out_of_range: 'A material value is outside its allowed range.',
+  material_diffusion_ignored: "A material's scattering is set but this solver ignores it.",
+  material_transmission_exceeds_absorption: "A material transmits more sound than it absorbs, which cannot be.",
+  source_none: 'There is no source switched on.',
+  source_outside_volume: 'A source is outside the room.',
+  source_near_surface: 'A source is very close to a surface.',
+  receiver_outside_volume: 'A receiver is outside the room.',
+  receiver_on_surface: 'A receiver sits on a surface.',
+  receiver_sphere_crosses_surface: "A receiver's sphere crosses a surface.",
+  receiver_radius_invalid: "A receiver's radius is not valid.",
+  direction_vector_zero: 'A direction is set to zero length.',
+  directivity_file_missing: "A source's directivity file is missing.",
+  directivity_file_invalid: "A source's directivity file could not be read.",
+  directivity_band_missing: "A source's directivity file lacks a band being computed.",
+  time_step_invalid: 'The time step is not valid.',
+  step_count_overflow: 'The duration and time step give more steps than the solver can hold.',
+  source_delay_invalid: "A source's delay is not valid.",
+  trans_epsilon_invalid: 'The transmission threshold is not valid.',
+  particle_count_invalid: 'The number of particles is not valid.',
+  atmosphere_invalid: 'The air settings (temperature, humidity, pressure) are not valid.',
+  absatmo_invalid: 'The air absorption setting is not valid.',
+  atmosphere_outside_formula_range: "The air settings are outside the range the air absorption formula covers.",
+  name_too_long: 'A name is too long for the solver.',
+  name_not_filename_safe: 'A name contains characters that cannot be used in a file name.',
+  name_duplicate: 'Two items share the same name.',
+  surface_receiver_empty: 'A sound-level surface covers no surfaces.',
+  cutting_plane_invalid: 'A sound-level plane is not valid (its corners do not make a plane).',
+  fitting_parameters_invalid: "A fitting zone's settings are not valid.",
+  variant_reference_invalid: 'A variant refers to something that no longer exists.',
+  mesh_out_of_date: 'The volume mesh is out of date with the room.',
+  working_directory_invalid: "The run's working folder cannot be used.",
+  output_path_too_long: "The run's folder path is too long for the solver.",
+  docalc_not_literal_one: 'A calculation switch is not set the way the solver reads it.',
+  config_value_format: "A setting is written in a form the solver cannot read.",
+  solver_id_mapping_invalid: "The solver's internal numbering for the project is not consistent.",
+  fitting_id_collides_with_room_region: "A fitting zone's number collides with the room's own.",
+  version: 'The project file was made by a different version of the app.',
+  bands: 'The project lists no frequency bands.',
+  duplicate_id: 'Two items in the project share one id.',
+  dangling_reference: 'Something refers to a surface group that does not exist.',
+  face_vertex: 'The model has a face that points past its list of corners.',
+  repeated_group: 'A surface group is listed twice in one place.',
+  override_order: "A variant's overrides are out of order.",
+  solver_int_range: 'The random seed or a solver number is too large for the solver.',
+
+  // A line the solver printed that ended the run (simpa-core run::classify).
+  xml_property_missing: 'The solver could not find a setting it needs in its input.',
+  scene_mesh_unreadable: 'The solver could not read the room model.',
+  tetra_mesh_unreadable: 'The solver could not read the volume mesh.',
+  tetra_mesh_empty: 'The volume mesh the solver read is empty.',
+  config_path_missing: "The solver could not find its input file.",
+  directivity_not_open: 'The solver could not open a directivity file.',
+  source_moved_off_vertex: 'The solver had to move a source slightly to place it.',
+  material_missing: 'The solver met a surface whose material it does not have.',
+  degenerate_tetrahedron: 'The volume mesh has a cell with no volume.',
+  source_on_surface: 'The solver found a source on a surface.',
+  source_not_located: 'The solver could not find which part of the room a source is in.',
+  particle_loss_reported: 'The solver reported particles lost.',
+  unclassified_line: 'The solver printed an error this app does not recognise.',
+};
+
+/** The sentence for a reason's core code; a code with none reads as its words ("some_code" -> "Some code."). */
+export function reasonWords(code: string): string {
+  const known = WORDS[code];
+  if (known) return known;
+  const words = code.replace(/_/g, ' ').trim();
+  return words ? `${words.charAt(0).toUpperCase()}${words.slice(1)}.` : 'The run stopped for a reason this app does not describe.';
+}
+
+/** For tests: how many codes have their own sentence. */
+export const WORDED = Object.keys(WORDS);
