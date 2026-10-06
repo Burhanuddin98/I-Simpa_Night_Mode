@@ -76,7 +76,8 @@ import { aoReach, bakeAo, withAo } from './ao';
 import { FADE_BG, FADE_MAX, fadeRange, withFade } from './fade';
 import { withGlass } from './glass';
 import { GROUND_FRAGMENT, GROUND_VERTEX, groundLayout } from './ground';
-import { planeCells } from '../../chrome/planes';
+import { planeCells, roomBox } from '../../chrome/planes';
+import { dimensionLines } from './dims';
 
 export type ViewMode = 'perspective' | 'plan';
 
@@ -141,9 +142,11 @@ export interface ViewStyle {
   fade: boolean;
   /** The floor grid and shadow under the room (ground.ts) on. */
   ground: boolean;
+  /** The dimensions overlay (dims.ts) on: length, width and height beside the room. */
+  dims: boolean;
 }
 const STYLE_KEY = 'nm.viewStyle';
-const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15, corners: true, fade: true, ground: true };
+const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15, corners: true, fade: true, ground: true, dims: false };
 function loadStyle(): ViewStyle {
   try {
     const v = JSON.parse(localStorage.getItem(STYLE_KEY) ?? 'null') as Partial<ViewStyle> | null;
@@ -155,6 +158,7 @@ function loadStyle(): ViewStyle {
       corners: v.corners !== false,
       fade: v.fade !== false,
       ground: v.ground !== false,
+      dims: v.dims === true,
     };
   } catch {
     return DEFAULT_STYLE;
@@ -382,6 +386,10 @@ class ViewportEngine {
   /** The floor grid and shadow under the room (ground.ts), and the height it sits at. */
   private readonly ground: Mesh;
   private groundZ = 0;
+  /** The dimensions overlay (dims.ts): its lines, its three labels (made on first use) and where they go. */
+  private readonly dimLines: LineSegments;
+  private dimLabels: HTMLDivElement[] = [];
+  private dimMids: Vec[] = [];
 
   // The pointer between down and up.
   private down = { x: 0, y: 0, moved: false };
@@ -470,8 +478,13 @@ class ViewportEngine {
       }),
     );
     this.ground.visible = false;
+    // Drawn over everything, like a drawing's dimension lines, so a wall never hides one.
+    this.dimLines = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false }));
+    this.dimLines.frustumCulled = false;
+    this.dimLines.visible = false;
     const order: [{ renderOrder: number }, number][] = [
       [this.ground, 0.2],
+      [this.dimLines, 9],
       [this.faces, 0],
       [this.tint, 0.5],
       [this.ghost, 2.5],
@@ -504,6 +517,7 @@ class ViewportEngine {
       this.sourcePoints,
       this.halo,
       this.ground,
+      this.dimLines,
       this.results.group,
     );
     this.results.setShown(stepStore.get() === 'results');
@@ -695,10 +709,12 @@ class ViewportEngine {
       this.setFade(main === this.persp);
       // The ground only from above, in the perspective view; never in plan, where it would be a second grid.
       this.ground.visible = main === this.persp && !!this.bounds && viewStyle.get().ground && this.persp.position.z > this.groundZ;
+      this.updateDims(main === this.persp);
       r.render(this.scene, main);
       if (this.results.particleMeta && stepStore.get() === 'results') noteDrawn(this.results.particleStep());
       if (this.view === 'perspective' && this.bounds) this.renderInset(r, dom.inset);
       this.placeLabels(main, w, h);
+      this.placeDims(main, w, h);
       this.placeGizmo(main);
     }
     const vp = viewportStore.get();
@@ -737,6 +753,7 @@ class ViewportEngine {
     r.clear();
     this.setFade(false);
     this.ground.visible = false;
+    this.dimLines.visible = false;
     this.fitPlan(b.width / b.height);
     this.setMarkerScale(INSET_MARKER_SCALE);
     r.render(this.scene, this.plan);
@@ -792,6 +809,55 @@ class ViewportEngine {
         m.label.style.transform = `translate(${Math.round(x + dx)}px, ${Math.round(y - 8)}px)`;
       }
     }
+  }
+
+  /**
+   * The dimensions overlay (dims.ts) for the perspective view: the model check's box, the lines on
+   * the sides facing the camera. Hidden in plan, without a model, or when switched off.
+   */
+  private updateDims(perspective: boolean): void {
+    const box = roomBox(sceneStore.get()?.check);
+    const on = perspective && !!box && !!this.mesh && viewStyle.get().dims;
+    this.dimLines.visible = on;
+    if (!on || !box) {
+      this.dimMids = [];
+      for (const l of this.dimLabels) l.style.display = 'none';
+      return;
+    }
+    const p = this.persp.position;
+    const { lines, segments } = dimensionLines(box, [p.x, p.y, p.z]);
+    const g = this.dimLines.geometry;
+    const pos = g.getAttribute('position');
+    if (pos && pos.count * 3 === segments.length) {
+      (pos.array as Float32Array).set(segments);
+      pos.needsUpdate = true;
+    } else {
+      g.setAttribute('position', new Float32BufferAttribute(segments, 3));
+    }
+    if (this.dimLabels.length === 0 && this.dom) {
+      this.dimLabels = lines.map(() => document.createElement('div'));
+      this.dom.labels.append(...this.dimLabels);
+    }
+    lines.forEach((l, i) => {
+      const d = this.dimLabels[i];
+      if (!d) return;
+      d.className = 'vp-label dim';
+      d.dataset.dim = l.key;
+      d.textContent = l.text;
+    });
+    this.dimMids = lines.map((l) => l.mid);
+  }
+
+  private placeDims(camera: Camera, w: number, h: number): void {
+    const v = new Vector3();
+    this.dimLabels.forEach((d, i) => {
+      const m = this.dimMids[i];
+      if (!m) return void (d.style.display = 'none');
+      v.set(m[0], m[1], m[2]).project(camera);
+      const visible = v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1.02 && Math.abs(v.y) <= 1.02;
+      d.style.display = visible ? '' : 'none';
+      if (visible) d.style.transform = `translate(${Math.round(((v.x + 1) / 2) * w)}px, ${Math.round(((1 - v.y) / 2) * h)}px) translate(-50%, -50%)`;
+    });
   }
 
   private placeGizmo(camera: Camera): void {
@@ -1103,7 +1169,7 @@ class ViewportEngine {
     for (const s of view?.sources ?? []) make('source', s.id, s.name, s.position, !s.enabled);
     for (const r of view?.point_receivers ?? []) make('receiver', r.id, r.name, r.position, false);
     this.markers = list;
-    labels?.replaceChildren(...list.map((m) => m.label));
+    labels?.replaceChildren(...list.map((m) => m.label), ...this.dimLabels);
 
     const points = (kind: MarkerKind) => {
       const ms = list.filter((m) => m.kind === kind);

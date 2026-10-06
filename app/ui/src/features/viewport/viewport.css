@@ -196,6 +196,14 @@
 .vp-label.off {
   opacity: 0.5;
 }
+/* The dimensions overlay's sizes (dims.ts), on a dark plate so they read over the room. */
+.vp-label.dim {
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: rgba(9, 9, 11, 0.78);
+  font-size: 11px;
+  color: var(--text);
+}
 
 .gizmo {
   position: absolute;

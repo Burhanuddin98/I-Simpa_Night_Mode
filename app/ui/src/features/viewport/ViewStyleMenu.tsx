@@ -120,6 +120,16 @@ export function ViewStyleMenu() {
           >
             Floor grid
           </button>
+          <div className="view-style-head">Show</div>
+          <button
+            role="menuitemcheckbox"
+            aria-checked={style.dims}
+            data-dims=""
+            title="Length, width and height beside the room, as the Room model panel gives them"
+            onClick={() => set({ dims: !style.dims })}
+          >
+            Dimensions
+          </button>
         </div>
       )}
     </div>
