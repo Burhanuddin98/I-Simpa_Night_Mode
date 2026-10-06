@@ -6,17 +6,18 @@
    features/viewport/viewport.css and features/materials/materials.css. */
 :root {
   color-scheme: dark;
-  --bg: #09090b;
-  --panel: #0f0f11;
-  --line: #1d1d21;
-  --line-soft: #16161a;
-  --edge: #26262b;
-  --raised: #131316;
-  --raised-2: #1a1a1e;
-  --badge: #1f1f24;
-  --text: #ededef;
-  --text-2: #c2c2ca;
-  --text-3: #a6a6b0;
+  /* Our own warm neutrals, a trace of the logo's red in them, not Tailwind's zinc (decision 64). */
+  --bg: #0c0a0a;
+  --panel: #131010;
+  --line: #221d1c;
+  --line-soft: #1a1615;
+  --edge: #2c2524;
+  --raised: #171312;
+  --raised-2: #1e1918;
+  --badge: #241e1d;
+  --text: #efe9e5;
+  --text-2: #cbc2bd;
+  --text-3: #b0a6a0;
   --red: #e0202e;
   --red-hi: #ff6b74;
   --red-deep: #3a0b10;
@@ -32,10 +33,10 @@
      never `opacity` on a panel. */
   /* Legibility on glass (the UI study's increment 1): every text colour here reads at 4.5:1 or more
      through this fill over pure white and over #FCD270, the brightest things the view can put behind
-     a panel (worst: --red-hi over white, 4.57). At the earlier 0.4 the main text read 2.26 over white. */
-  --glass: rgba(15, 15, 17, 0.85);
+     a panel (worst: --red-hi over white, 4.81). At the earlier 0.4 the main text read 2.26 over white. */
+  --glass: rgba(19, 16, 16, 0.87);
   --glass-blur: 12px;
-  --glass-edge: rgba(255, 255, 255, 0.08);
+  --glass-edge: rgba(255, 236, 230, 0.1);
   --gap: 8px;
 }
 

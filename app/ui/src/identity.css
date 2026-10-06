@@ -1,0 +1,30 @@
+/* Less like a stock AI-built app, with minimal change (decision 64; Burhan 2026-10-06 05:24: "HOW DO we actually make sure it
+   doesnt look like claude vibe coded stuff. with minimal change and very little disruption"). Three moves, styling
+   only; layout, behaviour and wording untouched:
+   1. Our own neutrals instead of Tailwind's zinc greys: a warm black and greys with a trace of the logo's red.
+      Every text colour still reads at 4.5:1 or more through a panel over white, #FCD270 and the map's top.
+   2. Near-square corners (2 px) and no soft floating shadows; round things stay round.
+   3. Inter with its alternate shapes (single-storey a, open digits, slashed zero) and figures of one width. */
+
+/* 1: the neutrals live in theme.css's tokens. */
+
+
+/* 2: square, except what is meant to be round. */
+*:not(.dirty-dot, .marker, .dot, .radio, .knob, .track, .switch-track, .switch-knob, .mat-swatch, .vp-switch *) {
+  border-radius: 2px !important;
+}
+.dropdown,
+.view-style-menu,
+.vp-menu,
+.mg-lib-list,
+.rw,
+.landing-card,
+.dialog,
+[role='dialog'] {
+  box-shadow: none !important;
+}
+
+/* 3: Inter's alternates and one-width figures everywhere it is used. */
+body {
+  font-feature-settings: 'cv11' 1, 'ss01' 1, 'zero' 1, 'tnum' 1;
+}

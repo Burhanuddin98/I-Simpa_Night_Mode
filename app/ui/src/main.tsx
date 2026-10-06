@@ -7,6 +7,7 @@ import './theme.css';
 import { App } from './App';
 // Last, so its transitions sit over the packages' own rules.
 import './motion.css';
+import './identity.css';
 
 // Under WebDriver nothing in the chrome moves (motion.css): the gates measure panels and compare frames.
 if (navigator.webdriver) document.documentElement.setAttribute('data-no-motion', '');
