@@ -40,6 +40,8 @@ struct GpuAcc {
   unsigned long long* states;   // 6 states, then child overflow
   double* overflowE;
   int nbSteps, nbBins, nbSrc, bySource;
+  unsigned rpMask;        // point-receiver replicas - 1 (a power of two)
+  size_t nRS, nSrcAll;    // R x nbSteps, R x source columns: one replica's size
   // The per-step total takes every living particle's energy at every step (600 k adds a step on CR4):
   // TOTAL_REPLICAS copies of the array, one per thread slot, summed on the host in a fixed order. It
   // spreads the atomics and keeps each copy's rounding to a few thousand adds.
@@ -53,15 +55,18 @@ struct GpuAcc {
   }
   __host__ __device__ void addRp(int r, int step, int src, double e, double lf, double lfc, double ix, double iy, double iz) {
 #ifdef __CUDA_ARCH__
+    // replicated like the total: a source whose particles all take one path (a unidirectional source
+    // in specular, energetic mode) adds 200 k equal terms to one cell
+    size_t slot = (size_t)((blockIdx.x * blockDim.x + threadIdx.x) & rpMask);
     size_t k = (size_t)r * nbSteps + step;
-    atomicAdd(&rpE[k], e);
-    atomicAdd(&rpLf[k], lf);
-    atomicAdd(&rpLfc[k], lfc);
-    atomicAdd(&rpI[3 * k], ix);
-    atomicAdd(&rpI[3 * k + 1], iy);
-    atomicAdd(&rpI[3 * k + 2], iz);
+    atomicAdd(&rpE[slot * nRS + k], e);
+    atomicAdd(&rpLf[slot * nRS + k], lf);
+    atomicAdd(&rpLfc[slot * nRS + k], lfc);
+    atomicAdd(&rpI[slot * 3 * nRS + 3 * k], ix);
+    atomicAdd(&rpI[slot * 3 * nRS + 3 * k + 1], iy);
+    atomicAdd(&rpI[slot * 3 * nRS + 3 * k + 2], iz);
     size_t cols = bySource ? (size_t)nbSteps * nbSrc : (size_t)nbSrc;
-    atomicAdd(&rpSrc[(size_t)r * cols + (bySource ? (size_t)step * nbSrc + src : (size_t)src)], e);
+    atomicAdd(&rpSrc[slot * nSrcAll + (size_t)r * cols + (bySource ? (size_t)step * nbSrc + src : (size_t)src)], e);
 #endif
   }
   __host__ __device__ void addSurf(int face, int bin, double v) {
@@ -427,12 +432,13 @@ int main(int argc, char** argv) {
   unsigned long long* dNextFam = nullptr;
   unsigned int* dBusy = nullptr;
   int nslots = 0;
+  unsigned rpRep = 1;
   long long launches = 0;
   const long long totalFamilies = (long long)NS * cfg.nbPart;
   if (!cpu) {
     size_t freeB = 0, totB = 0;
     cudaMemGetInfo(&freeB, &totB);
-    size_t need = (surfN + cutN) * 4 + ((size_t)S * TOTAL_REPLICAS + 6ull * R * S + R * srcCols) * 8 + 64ull * 1048576 + 49152ull * (sizeof(Slot) + QCAP * sizeof(Particle)) * 2;
+    size_t need = (surfN + cutN) * 4 + ((size_t)S * TOTAL_REPLICAS + 6ull * R * S + R * srcCols) * 8 + 64ull * 1048576 + (256ull << 20) + 49152ull * (sizeof(Slot) + QCAP * sizeof(Particle)) * 2;
     if (need > freeB) {
       std::cerr << "spps-gpu: refused: surface_maps_too_large: the band's sums need " << need / 1048576 << " MiB of device memory, "
                 << freeB / 1048576 << " MiB are free; set recepteurs_surfaciques_pas_temps to a longer bin (patch 0001) or a coarser plane" << std::endl;
@@ -446,11 +452,19 @@ int main(int argc, char** argv) {
     check(cudaMalloc(&dv.mat, std::max<size_t>(1, cfg.materials.size()) * sizeof(MatBand)), "mat");
     check(cudaMalloc(&dv.srcs, std::max<size_t>(1, (size_t)NS) * sizeof(SrcBand)), "srcs");
     check(cudaMalloc(&ga.total, std::max<size_t>(1, (size_t)S * TOTAL_REPLICAS) * 8), "total");
-    check(cudaMalloc(&ga.rpE, std::max<size_t>(1, (size_t)R * S) * 8), "rpE");
-    check(cudaMalloc(&ga.rpLf, std::max<size_t>(1, (size_t)R * S) * 8), "rpLf");
-    check(cudaMalloc(&ga.rpLfc, std::max<size_t>(1, (size_t)R * S) * 8), "rpLfc");
-    check(cudaMalloc(&ga.rpI, std::max<size_t>(1, 3ull * R * S) * 8), "rpI");
-    check(cudaMalloc(&ga.rpSrc, std::max<size_t>(1, (size_t)R * srcCols) * 8), "rpSrc");
+    {
+      // as many point-receiver replicas as fit in 256 MiB, at most 64
+      size_t one = ((size_t)R * S * 6 + (size_t)R * srcCols) * 8;
+      unsigned rep = 64;
+      while (rep > 1 && one * rep > (256ull << 20)) rep >>= 1;
+      rpRep = rep;
+    }
+    ga.rpMask = rpRep - 1; ga.nRS = (size_t)R * S; ga.nSrcAll = (size_t)R * srcCols;
+    check(cudaMalloc(&ga.rpE, std::max<size_t>(1, (size_t)R * S * rpRep) * 8), "rpE");
+    check(cudaMalloc(&ga.rpLf, std::max<size_t>(1, (size_t)R * S * rpRep) * 8), "rpLf");
+    check(cudaMalloc(&ga.rpLfc, std::max<size_t>(1, (size_t)R * S * rpRep) * 8), "rpLfc");
+    check(cudaMalloc(&ga.rpI, std::max<size_t>(1, 3ull * R * S * rpRep) * 8), "rpI");
+    check(cudaMalloc(&ga.rpSrc, std::max<size_t>(1, (size_t)R * srcCols * rpRep) * 8), "rpSrc");
     check(cudaMalloc(&ga.surf, std::max<size_t>(1, surfN) * 4), "surf");
     check(cudaMalloc(&ga.cut, std::max<size_t>(1, cutN) * 4), "cut");
     check(cudaMalloc(&ga.states, 8 * 8), "states");
@@ -532,11 +546,11 @@ int main(int argc, char** argv) {
       check(cudaMemcpy(dv.mat, mats.data(), mats.size() * sizeof(MatBand), cudaMemcpyHostToDevice), "mat");
       if (NS) check(cudaMemcpy(dv.srcs, sbs.data(), NS * sizeof(SrcBand), cudaMemcpyHostToDevice), "srcs");
       cudaMemset(ga.total, 0, std::max<size_t>(1, (size_t)S * TOTAL_REPLICAS) * 8);
-      cudaMemset(ga.rpE, 0, std::max<size_t>(1, (size_t)R * S) * 8);
-      cudaMemset(ga.rpLf, 0, std::max<size_t>(1, (size_t)R * S) * 8);
-      cudaMemset(ga.rpLfc, 0, std::max<size_t>(1, (size_t)R * S) * 8);
-      cudaMemset(ga.rpI, 0, std::max<size_t>(1, 3ull * R * S) * 8);
-      cudaMemset(ga.rpSrc, 0, std::max<size_t>(1, (size_t)R * srcCols) * 8);
+      cudaMemset(ga.rpE, 0, std::max<size_t>(1, (size_t)R * S * rpRep) * 8);
+      cudaMemset(ga.rpLf, 0, std::max<size_t>(1, (size_t)R * S * rpRep) * 8);
+      cudaMemset(ga.rpLfc, 0, std::max<size_t>(1, (size_t)R * S * rpRep) * 8);
+      cudaMemset(ga.rpI, 0, std::max<size_t>(1, 3ull * R * S * rpRep) * 8);
+      cudaMemset(ga.rpSrc, 0, std::max<size_t>(1, (size_t)R * srcCols * rpRep) * 8);
       cudaMemset(ga.surf, 0, std::max<size_t>(1, surfN) * 4);
       cudaMemset(ga.cut, 0, std::max<size_t>(1, cutN) * 4);
       cudaMemset(ga.states, 0, 64);
@@ -575,11 +589,18 @@ int main(int argc, char** argv) {
           for (int st = 0; st < S; st++) bs.total[st] += rep[(size_t)k * S + st];
       }
       if (R) {
-        check(cudaMemcpy(bs.rpE.data(), ga.rpE, (size_t)R * S * 8, cudaMemcpyDeviceToHost), "copy");
-        check(cudaMemcpy(bs.rpLf.data(), ga.rpLf, (size_t)R * S * 8, cudaMemcpyDeviceToHost), "copy");
-        check(cudaMemcpy(bs.rpLfc.data(), ga.rpLfc, (size_t)R * S * 8, cudaMemcpyDeviceToHost), "copy");
-        check(cudaMemcpy(bs.rpI.data(), ga.rpI, 3ull * R * S * 8, cudaMemcpyDeviceToHost), "copy");
-        check(cudaMemcpy(bs.rpSrc.data(), ga.rpSrc, (size_t)R * srcCols * 8, cudaMemcpyDeviceToHost), "copy");
+        // the replicas, summed in a fixed order
+        auto fold = [&](std::vector<double>& dst, const double* src, size_t n) {
+          std::vector<double> rep(n * rpRep);
+          check(cudaMemcpy(rep.data(), src, rep.size() * 8, cudaMemcpyDeviceToHost), "copy");
+          for (unsigned k = 0; k < rpRep; k++)
+            for (size_t i = 0; i < n; i++) dst[i] += rep[k * n + i];
+        };
+        fold(bs.rpE, ga.rpE, (size_t)R * S);
+        fold(bs.rpLf, ga.rpLf, (size_t)R * S);
+        fold(bs.rpLfc, ga.rpLfc, (size_t)R * S);
+        fold(bs.rpI, ga.rpI, 3ull * R * S);
+        fold(bs.rpSrc, ga.rpSrc, (size_t)R * srcCols);
       }
       if (surfN) check(cudaMemcpy(bs.surf.data(), ga.surf, surfN * 4, cudaMemcpyDeviceToHost), "copy");
       if (cutN) check(cudaMemcpy(bs.cut.data(), ga.cut, cutN * 4, cudaMemcpyDeviceToHost), "copy");
