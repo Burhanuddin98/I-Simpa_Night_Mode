@@ -15,24 +15,26 @@
   --raised-2: #1a1a1e;
   --badge: #1f1f24;
   --text: #ededef;
-  --text-2: #a1a1aa;
-  --text-3: #85858e;
+  --text-2: #c2c2ca;
+  --text-3: #a6a6b0;
   --red: #e0202e;
-  --red-hi: #ff4a55;
+  --red-hi: #ff6b74;
   --red-deep: #3a0b10;
   --red-wash: #1a0b0e;
   --ok: #74d39f;
   --warn: #f2a93b;
   --fail-text: #ffb3b8;
-  /* Windows' own faces (row 50): nothing bundled. */
   /* Decision 60 (Burhan's pick, 2026-10-06): Inter and JetBrains Mono, bundled. */
   --sans: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
   --cond: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
   --mono: 'JetBrains Mono Variable', 'Cascadia Mono', Consolas, ui-monospace, monospace;
   /* A floating panel's fill and blur (row 50). The fill is see-through, the text on it is not:
      never `opacity` on a panel. */
-  --glass: rgba(15, 15, 17, 0.4);
-  --glass-blur: 0px;
+  /* Legibility on glass (the UI study's increment 1): every text colour here reads at 4.5:1 or more
+     through this fill over pure white and over #FCD270, the brightest things the view can put behind
+     a panel (worst: --red-hi over white, 4.57). At the earlier 0.4 the main text read 2.26 over white. */
+  --glass: rgba(15, 15, 17, 0.85);
+  --glass-blur: 12px;
   --glass-edge: rgba(255, 255, 255, 0.08);
   --gap: 8px;
 }
