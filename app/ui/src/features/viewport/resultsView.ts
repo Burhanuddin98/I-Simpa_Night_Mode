@@ -24,10 +24,11 @@ import type { RunData, SurfaceMapInfo } from '../../bindings/ipc';
 import { decodeParticles, decodeSurfaceMap, type SurfaceMap } from '../../resultsData';
 import { runsStore, sceneStore, selectedRunStore, stepStore, Store } from '../../store';
 import { Animator } from './animator';
-import { resultsLayer, renderNow, showMap, showParticles } from './engine';
+import { resultsLayer, renderNow, setGlow, showMap, showParticles, type Glow } from './engine';
 import { cumulativeRange, cumulativeRefusal } from './cumulative';
 import { diffRange, legendGradient, legendLabels, levelRange, surfaceMismatch, type Range } from './mapData';
 import { emissionStep, noParticlesText } from './particles';
+import type { ParticleLook } from './rays';
 import { DEFAULT_WINDOW_MS, windowChoice, WINDOW_CUMULATIVE_REFUSAL, windowLabel } from './window';
 
 export interface MapGroup {
@@ -85,6 +86,12 @@ export interface ResultsView {
   /** W3: trail length in steps, 0 for none; and why trails cannot be drawn, or null. */
   trails: number;
   trailRefusal: string | null;
+  /** B2 (decision 68 (b)): how particles are drawn, and why the GPU looks cannot be, or null. */
+  look: ParticleLook;
+  /** Why each GPU look cannot be drawn, or null (rays need WebGPU; glow runs on the WebGL2 fallback too). */
+  lookRefusal: { glow: string | null; rays: string | null };
+  /** Decision 69: how strongly the particles' light blooms. */
+  glow: Glow;
   particles: ParticlesView;
 }
 
@@ -113,11 +120,14 @@ const OFF: ResultsView = {
   windowRefusal: null,
   trails: 0,
   trailRefusal: null,
+  look: 'dots',
+  lookRefusal: { glow: null, rays: null },
+  glow: 'soft',
   particles: { state: 'off' },
 };
 
 /** The view choices a new run keeps (W5). */
-const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, windowMs: v.windowMs, trails: v.trails });
+const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, windowMs: v.windowMs, trails: v.trails, look: v.look, glow: v.glow });
 
 /** The map on screen and its baseline, as decoded: the probe reads its values here. */
 let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string; cumulative: boolean; windowSteps: number } | null = null;
@@ -324,8 +334,9 @@ async function loadParticles(g: number): Promise<void> {
     Animator.setStart(emissionStep(p));
     const layer = resultsLayer();
     layer.setTrails(resultsViewStore.get().trails);
+    const look = layer.setParticleLook(resultsViewStore.get().look);
     renderNow();
-    set({ particles: { state: 'shown', bandHz: band, particles: p.particleCount }, trailRefusal: layer.trailRefusal });
+    set({ particles: { state: 'shown', bandHz: band, particles: p.particleCount }, trailRefusal: layer.trailRefusal, look, lookRefusal: { glow: layer.particleLookRefusal('glow'), rays: layer.particleLookRefusal('rays') } });
   } catch (e) {
     if (!fresh(g)) return;
     const err = asCmdError(e);
@@ -414,6 +425,18 @@ export const resultsView = {
     shown = { ...shown, windowSteps: win.steps };
     const label = windowLabel(win.steps, v.map.dtS);
     set({ windowRefusal: win.refusal, map: { ...v.map, windowSteps: win.steps, legend: legendOf(v.map.range, v.map.kind, v.bandHz, v.map.kind === 'level' && v.fixed !== null, v.map.cumulative, label) } });
+  },
+  /** B2: particles as dots (per record), glowing with fading trails, or their rays (GPU); no reload. */
+  setLook(look: ParticleLook): void {
+    const layer = resultsLayer();
+    if (layer.particleLookRefusal(look)) return;
+    set({ look: layer.setParticleLook(look) });
+    renderNow();
+  },
+  /** Decision 69: the light's bloom, off (no bloom pass), soft or full. */
+  setGlow(g: Glow): void {
+    set({ glow: g });
+    setGlow(g);
   },
   /** W3: trails `steps` long (0 for none), over the particles shown; no reload. */
   setTrails(steps: number): void {

@@ -32,6 +32,17 @@ import { drawnSteps, framePixels, frameRgba, mapFacePoint, mapPixels, mapPointer
 import { CUMULATIVE_HINT, CUMULATIVE_NOTE } from './cumulative';
 import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, type ProbeView } from './mapView';
 import { TRAIL_HINT, TRAIL_LENGTHS, TRAIL_NOTE } from './particles';
+import { PARTICLE_LOOKS, type ParticleLook } from './rays';
+import { warmGradient, warmLabels } from './warmRamp';
+
+/** Decision 69: the particle looks, as the card names them. */
+const LOOK_LABELS: Record<ParticleLook, string> = { dots: 'Dots', glow: 'Glow', rays: 'Rays' };
+const LOOK_TITLES: Record<ParticleLook, string> = {
+  dots: "Each saved particle as a dot at its step, in the map's colours: the measuring view",
+  glow: 'Each particle as light, moving smoothly between its saved steps, with a trail that cools behind it',
+  rays: "Each particle's whole path so far, glowing, with a spark where it turns at a wall",
+};
+const LOOK_HINT = 'How the saved particles are drawn. Glow and rays are light: brighter where louder, against a dimmed room while they play.';
 import { bandLabel, bandName, resultsView, resultsViewStore, shownMaps, startResultsView } from './resultsView';
 import { WINDOW_CHOICES_MS, windowChoice, WINDOW_CUMULATIVE_REFUSAL, WINDOW_HINT } from './window';
 
@@ -582,6 +593,52 @@ export function ResultsOverlay() {
                   </button>
                 ))}
               </div>
+            )}
+            {v.particles.state === 'shown' && (
+              <div className="vp-row" role="radiogroup" aria-label="Particles drawn as" data-part="particle-look">
+                <span className="vp-row-label" title={LOOK_HINT}>
+                  Particles
+                </span>
+                {PARTICLE_LOOKS.map((l) => {
+                  const refusal = l === 'dots' ? null : v.lookRefusal[l];
+                  return (
+                    <button
+                      key={l}
+                      className="vp-chip-btn mono"
+                      role="radio"
+                      data-look={l}
+                      aria-checked={v.look === l}
+                      disabled={refusal !== null}
+                      title={refusal ? `${refusal}.` : LOOK_TITLES[l]}
+                      onClick={() => resultsView.setLook(l)}
+                    >
+                      {LOOK_LABELS[l]}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {v.particles.state === 'shown' && v.look !== 'dots' && (
+              <>
+                <div className="vp-row" role="radiogroup" aria-label="Glow" data-part="particle-glow">
+                  <span className="vp-row-label" title="How strongly the light blooms; off draws the particles without the bloom pass.">
+                    Glow
+                  </span>
+                  {(['off', 'soft', 'full'] as const).map((g) => (
+                    <button key={g} className="vp-chip-btn mono" role="radio" data-glow={g} aria-checked={v.glow === g} onClick={() => resultsView.setGlow(g)}>
+                      {g === 'off' ? 'Off' : g === 'soft' ? 'Soft' : 'Full'}
+                    </button>
+                  ))}
+                </div>
+                <div className="vp-warm-legend" data-part="warm-legend" data-results-region title="Each particle's level against the loudest particle of the band, drawn as light: louder is hotter and brighter.">
+                  <div className="vp-legend-bar" style={{ background: warmGradient() }} />
+                  <div className="vp-legend-labels">
+                    <span>{warmLabels().lo}</span>
+                    <span>{warmLabels().mid}</span>
+                    <span>{warmLabels().hi} re loudest</span>
+                  </div>
+                </div>
+              </>
             )}
             {v.trails > 0 && !v.trailRefusal && (
               <div className="vp-diff-note" data-part="trails-note" title={TRAIL_HINT}>

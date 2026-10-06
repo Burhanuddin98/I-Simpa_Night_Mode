@@ -64,6 +64,8 @@ import { cumulativeValues } from './cumulative';
 import { MAX_NODE_FACES, nodeFaces, type NodeFaces } from './mapView';
 import { MAX_WINDOW_STEPS } from './window';
 import { keptRecord, keptTrail, recordSteps, TRAIL_BYTES_PER_SEGMENT, trailRefusal, trailSegments } from './particles';
+import { GpuParticles, type ParticleLook } from './rays';
+import { particleAt } from './raysData';
 import { diffDb, faceLevel, faceValue, hot, lookUniforms, mapColour, mapTexel, mapUniforms, nodeEnergy, nodeLevel, NODE_OPS, rampPlaceNode, trailAlphaNode, type MapUniforms } from './mapNodes';
 
 const { attribute, dot, float, Fn, instancedBufferAttribute, int, modelViewProjection, screenDPR, select, uniform, uv, varying, vec4 } = T;
@@ -177,6 +179,8 @@ export class ResultsLayer {
   private readonly tLength = uniform(0);
   private readonly tLogMax = uniform(0);
   private trailData: { segments: number; bytes: number } | null = null;
+  /** W3's trails are on (drawn as lines while the particles are dots; the GPU looks draw their own). */
+  private trailsOn = false;
   private trailSource: Particles | null = null;
   /** W3: why trails cannot be drawn for the particles shown, or null. */
   trailRefusal: string | null = 'No particles saved for this run';
@@ -196,6 +200,8 @@ export class ResultsLayer {
   /** The read-back passes' materials, built once each. */
   private readonly probes = new Map<string, PointsNodeMaterial>();
   private readonly probeN = uniform(1);
+  /** B2: the GPU particle layer (rays.ts): compute-animated glow and rays over the same particles. */
+  readonly gpu = new GpuParticles();
 
   constructor() {
     const mat = new MeshBasicNodeMaterial({ side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
@@ -219,11 +225,13 @@ export class ResultsLayer {
     this.map.visible = false;
     this.particles.visible = false;
     this.trails.visible = false;
+    // The GPU looks are light: the engine draws `gpu.group` into its own half-float target (decision 69).
     this.group.add(this.map, this.particles, this.trails);
   }
 
   setRenderer(r: WebGPURenderer | null): void {
     this.renderer = r;
+    this.gpu.setRenderer(r);
     if (r) this.maxTexture = maxTextureSizeOf(r);
   }
 
@@ -457,6 +465,58 @@ export class ResultsLayer {
     this.trailRefusal = trailRefusal(this.trailSource);
     this.tLogMax.value = logMax;
     this.setTrails(this.trailSteps());
+    this.gpu.setParticles(p && meta ? p : null, logMax);
+    this.setParticleLook(this.gpu.currentLook());
+  }
+
+  /** B2: how the particles are drawn; returns the look in force ('dots' where the GPU looks are refused). */
+  setParticleLook(look: ParticleLook): ParticleLook {
+    const inForce = this.gpu.setLook(look);
+    // The per-record playback draws only as dots; its count pass (gate (d)) stays whichever look is drawn.
+    this.particles.visible = !!this.particleMeta && inForce === 'dots';
+    this.trails.visible = this.trailsOn && inForce === 'dots';
+    return inForce;
+  }
+
+  /** Why a particle look cannot be drawn now, or null. */
+  particleLookRefusal(look: ParticleLook): string | null {
+    return this.gpu.refusal(look);
+  }
+
+  /** The timeline's fractional step while it plays (the GPU looks move smoothly between records). */
+  setTime(t: number): void {
+    this.gpu.setTime(t);
+  }
+
+  /**
+   * B2's check: the compute pass's particles at fractional step `t` against raysData.ts `particleAt` on
+   * the CPU, for `indices` (the file's own particles): the largest difference of position (m) and of
+   * energy (relative), and how many agree on alive or dead.
+   */
+  async checkGpuParticles(indices: number[], t: number): Promise<{ t: number; checked: number; aliveAgree: number; alive: number; maxPosM: number; maxEnergyRel: number }> {
+    const p = this.trailSource;
+    if (!p) throw new Error('no particles loaded');
+    this.gpu.setTime(t);
+    const gpu = await this.gpu.readState(indices);
+    let agree = 0;
+    let alive = 0;
+    let dp = 0;
+    let de = 0;
+    indices.forEach((i, k) => {
+      const cpu = particleAt(p, i, t);
+      const g = gpu[k];
+      if ((cpu === null) === (g[3] < 0)) agree++;
+      if (!cpu || g[3] < 0) return;
+      alive++;
+      dp = Math.max(dp, Math.hypot(cpu[0] - g[0], cpu[1] - g[1], cpu[2] - g[2]));
+      de = Math.max(de, Math.abs(cpu[3] - g[3]) / Math.max(Math.abs(cpu[3]), 1e-30));
+    });
+    return { t, checked: indices.length, aliveAgree: agree, alive, maxPosM: dp, maxEnergyRel: de };
+  }
+
+  /** The GPU particles' compute pass for this frame (before the draw). */
+  computeFrame(): void {
+    this.gpu.update();
   }
 
   /** W3: the trails' length in steps (0: off). Built on first use; refused where `trailRefusal` says why. */
@@ -474,7 +534,9 @@ export class ResultsLayer {
       this.trails.geometry = g;
       this.trailData = { segments: t.segments, bytes: TRAIL_BYTES_PER_SEGMENT * t.segments };
     }
-    this.trails.visible = on;
+    this.trailsOn = on;
+    this.trails.visible = on && this.gpu.currentLook() === 'dots';
+    this.gpu.setTrailSteps(on ? steps : 0);
   }
 
   trailSteps(): number {
@@ -483,7 +545,7 @@ export class ResultsLayer {
 
   /** W3's hook: what the trails hold and draw now. */
   trailState(): { steps: number; on: boolean; segments: number; bytes: number; refusal: string | null } {
-    return { steps: this.trailSteps(), on: this.trails.visible, segments: this.trailData?.segments ?? 0, bytes: this.trailData?.bytes ?? 0, refusal: this.trailRefusal };
+    return { steps: this.trailSteps(), on: this.trailsOn, segments: this.trailData?.segments ?? 0, bytes: this.trailData?.bytes ?? 0, refusal: this.trailRefusal };
   }
 
   private trailCounter: Points | null = null;
@@ -492,7 +554,7 @@ export class ResultsLayer {
   async countTrails(): Promise<number> {
     const r = this.renderer;
     if (!r) throw new Error('no renderer');
-    if (!this.trails.visible || !this.trailData) throw new Error('no trails drawn');
+    if (!this.trailsOn || !this.trailData) throw new Error('no trails drawn');
     if (!floatBlendable(r)) throw new Error('float32 blending is not available: float32 additive counting cannot run');
     if (!this.trailCounter) {
       this.trailCounter = new Points(this.trails.geometry, countMaterial(keptTrail(NODE_OPS, attribute('aLast', 'float'), attribute('aHead', 'float'), this.tStep, this.tLength)));
@@ -510,6 +572,7 @@ export class ResultsLayer {
     this.lu.step.value = Math.max(0, Math.min(steps - 1, Math.floor(step / ratio)));
     this.pStep.value = step;
     this.tStep.value = step;
+    this.gpu.setTime(step);
   }
 
   /** Hides the map for one draw (the m12 pixel hook); returns the restore. */

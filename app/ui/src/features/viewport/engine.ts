@@ -24,8 +24,13 @@
 // step's layer (resultsLayer.ts: the surface map and particle playback, M12 P3) is drawn in this
 // scene, only on that step, at the shared Animator's step (animator.ts).
 import {
+  AddEquation,
   AlwaysDepth,
   AmbientLight,
+  CustomBlending,
+  HalfFloatType,
+  OneFactor,
+  RenderTarget,
   BackSide,
   FrontSide,
   BufferAttribute,
@@ -63,6 +68,7 @@ import {
   MeshLambertNodeMaterial,
   MeshMatcapNodeMaterial,
   PointsNodeMaterial,
+  QuadMesh,
   WebGPURenderer,
 } from 'three/webgpu';
 import { T } from './tsl';
@@ -89,10 +95,12 @@ import { glassOpacity } from './glass';
 import { BUILD_MS, buildHeight, buildKeep, buildLine, NO_CUT, swingAngle } from './build';
 import { groundColour, groundLayout } from './ground';
 import { emptyFat, emptyGeometry, FatLineMaterial, inSrgb, rawColor } from './nodes';
+import { bloom } from 'three/addons/tsl/display/BloomNode.js';
+import type { ParticleLook } from './rays';
 import { planeCells, roomBox } from '../../chrome/planes';
 import { dimensionLines } from './dims';
 
-const { float, instancedBufferAttribute, materialOpacity, mix, output, positionGeometry, sRGBTransferOETF, uniform, uniformArray, vec3, vec4 } = T;
+const { acesFilmicToneMapping, clamp, Fn, max, screenUV, texture, float, instancedBufferAttribute, materialOpacity, mix, output, positionGeometry, sRGBTransferOETF, uniform, uniformArray, vec3, vec4 } = T;
 
 export type ViewMode = 'perspective' | 'plan';
 
@@ -317,6 +325,8 @@ class MarkerSprites {
 function sharedUniforms() {
   return {
     nmAoMix: uniform(1),
+    /** Decision 69: the room dimmed (0 to 1) while the particles' light plays, so the light carries the image. */
+    nmDim: uniform(0),
     nmBuildZ: uniform(NO_CUT),
     nmBuildBand: uniform(0.3),
     nmFadeNear: uniform(0),
@@ -364,6 +374,19 @@ function forceWebGL(): boolean {
   }
 }
 
+/** GPU timestamps for the benchmark hook: `localStorage['nm.gpuTiming'] = '1'`, then reload (off by default: it queries every pass). */
+function gpuTiming(): boolean {
+  try {
+    return localStorage.getItem('nm.gpuTiming') === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** How strongly the particles' light blooms (decision 69: "so it can be toned down for measurement"). */
+export type Glow = 'off' | 'soft' | 'full';
+export const GLOW_STRENGTH: Record<Glow, number> = { off: 0, soft: 0.35, full: 0.8 };
+
 /**
  * The adapter's own limits for what the view needs beyond WebGPU's defaults (a map texture wider than
  * 8192, large particle buffers, big compute workgroups); undefined without WebGPU (the fallback).
@@ -396,7 +419,8 @@ function shaded<M extends { maskNode: unknown; outputNode: unknown }>(m: M, u: S
   const lit = output.rgb
     .mul(aoFactor(u.nmAoMix))
     .add(glowTerm({ pos: u.glowPos, count: u.glowCount, radius: u.glowRadius, level: u.glowLevel, color: u.glowColor }))
-    .add(buildLine(u.nmBuildZ, u.nmBuildBand));
+    .add(buildLine(u.nmBuildZ, u.nmBuildBand))
+    .mul(float(1).sub(u.nmDim.mul(0.75)));
   const faded = mix(lit, u.nmFadeColor, fadeAmount({ near: u.nmFadeNear, far: u.nmFadeFar, max: u.nmFadeMax }));
   m.outputNode = vec4(sRGBTransferOETF(faded), output.a);
   return m;
@@ -428,7 +452,7 @@ function underPanel(left: number, top: number, w: number, h: number, rects: DOMR
 /** The edges with the distance fade taken from their opacity (fade.ts), cut by the build-up, in sRGB. */
 function fadingLines(m: LineBasicNodeMaterial, u: Shared): LineBasicNodeMaterial {
   m.maskNode = buildKeep(u.nmBuildZ);
-  m.opacityNode = materialOpacity.mul(float(1).sub(fadeAmount({ near: u.nmFadeNear, far: u.nmFadeFar, max: u.nmFadeMax })));
+  m.opacityNode = materialOpacity.mul(float(1).sub(fadeAmount({ near: u.nmFadeNear, far: u.nmFadeFar, max: u.nmFadeMax }))).mul(float(1).sub(u.nmDim.mul(0.5)));
   return inSrgb(m);
 }
 
@@ -453,6 +477,26 @@ class ViewportEngine {
   private contextLost = false;
   /** Which backend the renderer runs on, once it has started. */
   private backend: 'webgpu' | 'webgl2' | null = null;
+  /**
+   * Decision 69's light: the GPU particle looks drawn additively into a half-float target with the room's
+   * depth (`fxDepth`, the picked faces' geometry, depth only), bloomed, tone mapped (ACES, black stays
+   * black) and added onto the frame. Only while a GPU look is on; otherwise nothing of it runs.
+   */
+  private readonly fxScene = new Scene();
+  private readonly fxDepth: Mesh;
+  private fxTarget: RenderTarget | null = null;
+  private readonly fxInput = texture(new DataTexture(new Uint8Array(4), 1, 1));
+  private readonly fxStrength = uniform(GLOW_STRENGTH.soft);
+  private fxGlow: Glow = 'soft';
+  /** The composite: a full-view quad in a scene of its own, drawn like the inset's background (a QuadMesh pass on the canvas lost the frame). */
+  private fxBloomed: Scene | null = null;
+  private fxPlain: Scene | null = null;
+  /** The bloom, drawn into its own target first (its node renders passes of its own, which must not run inside the frame's). */
+  private fxBloomPass: QuadMesh | null = null;
+  private fxBloomTarget: RenderTarget | null = null;
+  private readonly fxBloomInput = texture(new DataTexture(new Uint8Array(4), 1, 1));
+  private dimHold = false;
+  private dimAt = 0;
   /** The inset's background: a quad that replaces colour and depth inside the scissor (WebGPU clears whole attachments only). */
   private readonly insetClear = new Scene();
   private readonly scene = new Scene();
@@ -602,6 +646,8 @@ class ViewportEngine {
     const clearQuad = new Mesh(new PlaneGeometry(2, 2), clear);
     clearQuad.frustumCulled = false;
     this.insetClear.add(clearQuad);
+    this.fxDepth = new Mesh(emptyGeometry(), new MeshBasicNodeMaterial({ side: BackSide, colorWrite: false, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+    this.fxScene.add(this.fxDepth, this.results.gpu.group);
     this.ground.visible = false;
     // Drawn over everything, like a drawing's dimension lines, so a wall never hides one.
     this.dimLines = new LineSegments(emptyGeometry(), inSrgb(new LineBasicNodeMaterial({ color: LINE, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false })));
@@ -683,7 +729,10 @@ class ViewportEngine {
         this.invalidate();
       }),
       animatorStore.subscribe(() => {
-        this.results.setStep(animatorStore.get().step);
+        const a = animatorStore.get();
+        this.results.setStep(a.step);
+        // B2: the GPU looks move between records at the fraction of the step the timeline has carried.
+        if (a.playing) this.results.setTime(a.step + a.carry);
         this.invalidate();
       }),
       () => resize.disconnect(),
@@ -711,6 +760,27 @@ class ViewportEngine {
       registerHook('gpuBackend', () => this.backend),
       // The device the view runs on: its limits and features as granted (the WebGL2 fallback: its texture limit).
       registerHook('gpuInfo', () => this.gpuInfo()),
+      // B2: the GPU particles: their look, glow and count; their computed state; the dimming held; the benchmark.
+      registerHook('gpuParticles', () => ({ look: this.results.gpu.currentLook(), glow: this.fxGlow, particles: this.results.gpu.particles(), active: this.results.gpu.active(), dim: this.shared.nmDim.value, refusal: { glow: this.results.particleLookRefusal('glow'), rays: this.results.particleLookRefusal('rays') } })),
+      registerHook('gpuParticleState', (indices: number[]) => this.results.gpu.readState(indices)),
+      registerHook('gpuParticleCheck', (indices: number[], t: number) => this.results.checkGpuParticles(indices, t)),
+      registerHook('gpuDimHold', (on: boolean) => {
+        this.dimHold = on;
+        this.invalidate();
+        return on;
+      }),
+      registerHook('gpuGlow', (g: Glow) => {
+        this.setGlow(g);
+        return g;
+      }),
+      registerHook('gpuBench', (n: number | null, frames: number, look: ParticleLook, glow: Glow) => this.bench(n, frames, look, glow)),
+      // The benchmark's particle count held (null: the file's own), to look at what it draws.
+      registerHook('gpuBenchSet', (n: number | null) => {
+        const c = this.results.gpu.bench(n);
+        this.results.setParticleLook(this.results.gpu.currentLook());
+        this.invalidate();
+        return c;
+      }),
     ];
     // A remount (React StrictMode in dev) rebuilds the DOM-side state from the stores.
     this.setMesh(meshStore.get(), true);
@@ -795,7 +865,7 @@ class ViewportEngine {
   private async startRenderer(canvas: HTMLCanvasElement): Promise<void> {
     let renderer: WebGPURenderer;
     try {
-      renderer = new WebGPURenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance', forceWebGL: forceWebGL(), requiredLimits: await gpuLimits() });
+      renderer = new WebGPURenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance', forceWebGL: forceWebGL(), requiredLimits: await gpuLimits(), trackTimestamp: gpuTiming() });
       await renderer.init();
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -874,7 +944,14 @@ class ViewportEngine {
       // The ground only from above, in the perspective view; never in plan, where it would be a second grid.
       this.ground.visible = main === this.persp && !!this.bounds && viewStyle.get().ground && this.persp.position.z > this.groundZ;
       this.updateDims(main === this.persp);
+      const fx = stepStore.get() === 'results' && this.results.gpu.active();
+      this.easeDim(fx);
+      if (fx) this.results.computeFrame();
       r.render(this.scene, main);
+      if (fx) {
+        this.fxParticles(r, main);
+        this.fxComposite(r, w, h);
+      }
       if (this.results.particleMeta && stepStore.get() === 'results') noteDrawn(this.results.particleStep());
       if (this.view === 'perspective' && this.bounds) this.renderInset(r, dom.inset);
       const covers = panelRects();
@@ -887,6 +964,183 @@ class ViewportEngine {
     const live = this.canvas !== null;
     const drawnRev = this.renderer ? this.builtRev : vp.drawnRev;
     if (vp.live !== live || vp.drawnRev !== drawnRev) viewportStore.set({ live, drawnRev });
+  }
+
+  /** The room dimmed while the light plays (or is held for a still), eased over about a third of a second. */
+  private easeDim(fx: boolean): void {
+    const now = performance.now();
+    const dt = this.dimAt ? Math.min(100, now - this.dimAt) : 16;
+    this.dimAt = now;
+    const target = fx && (animatorStore.get().playing || this.dimHold) ? 1 : 0;
+    const u = this.shared.nmDim;
+    const cur = u.value as number;
+    const next = stillMotion() ? target : cur + (target - cur) * Math.min(1, dt / 120);
+    u.value = Math.abs(next - target) < 0.004 ? target : next;
+    if (u.value !== target) this.invalidate();
+  }
+
+  /** The light pass: the GPU looks, additive, into the half-float target at the drawing buffer's size, against the room's depth. */
+  private fxParticles(r: WebGPURenderer, camera: Camera): void {
+    const size = r.getDrawingBufferSize(new Vector2());
+    if (!this.fxTarget) {
+      this.fxTarget = new RenderTarget(size.x, size.y, { type: HalfFloatType, samples: 4, depthBuffer: true });
+      this.fxInput.value = this.fxTarget.texture;
+    } else if (this.fxTarget.width !== size.x || this.fxTarget.height !== size.y) {
+      this.fxTarget.setSize(size.x, size.y);
+    }
+    const prev = r.getRenderTarget();
+    r.setRenderTarget(this.fxTarget);
+    r.setClearColor(0x000000, 0);
+    r.clear();
+    r.render(this.fxScene, camera);
+    r.setRenderTarget(prev);
+  }
+
+  /** The light onto the frame: plus its bloom (unless the glow is off), ACES tone mapped, to sRGB, added. */
+  private fxComposite(r: WebGPURenderer, w: number, h: number): void {
+    if (this.fxGlow !== 'off' && this.fxTarget) {
+      if (!this.fxBloomPass) {
+        const bm = new MeshBasicNodeMaterial({ depthTest: false, depthWrite: false });
+        bm.fragmentNode = bloom(this.fxInput, this.fxStrength, 0.2, 0.35);
+        this.fxBloomPass = new QuadMesh(bm);
+      }
+      if (!this.fxBloomTarget) {
+        this.fxBloomTarget = new RenderTarget(this.fxTarget.width, this.fxTarget.height, { type: HalfFloatType, depthBuffer: false });
+        this.fxBloomInput.value = this.fxBloomTarget.texture;
+      } else if (this.fxBloomTarget.width !== this.fxTarget.width || this.fxBloomTarget.height !== this.fxTarget.height) {
+        this.fxBloomTarget.setSize(this.fxTarget.width, this.fxTarget.height);
+      }
+      const prev = r.getRenderTarget();
+      r.setRenderTarget(this.fxBloomTarget);
+      this.fxBloomPass.render(r);
+      r.setRenderTarget(prev);
+    }
+    const quad = this.fxGlow === 'off' ? (this.fxPlain ??= this.fxQuad(false)) : (this.fxBloomed ??= this.fxQuad(true));
+    r.setScissorTest(false);
+    r.setViewport(0, 0, w, h);
+    r.render(quad, this.persp);
+  }
+
+  private fxQuad(withBloom: boolean): Scene {
+    const m = new MeshBasicNodeMaterial({ transparent: true, depthTest: false, depthWrite: false });
+    m.blending = CustomBlending;
+    m.blendSrc = OneFactor;
+    m.blendDst = OneFactor;
+    m.blendEquation = AddEquation;
+    m.blendSrcAlpha = OneFactor;
+    m.blendDstAlpha = OneFactor;
+    m.blendEquationAlpha = AddEquation;
+    m.fragmentNode = Fn(() => {
+      const light = withBloom ? texture(this.fxInput, screenUV).rgb.add(texture(this.fxBloomInput, screenUV).rgb) : texture(this.fxInput, screenUV).rgb;
+      const c = sRGBTransferOETF(clamp(acesFilmicToneMapping(light, float(1)), 0, 1)).toVar();
+      return vec4(c, clamp(max(c.r, max(c.g, c.b)), 0, 1));
+    })();
+    m.vertexNode = vec4(positionGeometry.xy, 0.5, 1);
+    const quad = new Mesh(new PlaneGeometry(2, 2), m);
+    quad.frustumCulled = false;
+    const scene = new Scene();
+    scene.add(quad);
+    return scene;
+  }
+
+  /** Decision 69's glow control: off (no bloom pass), soft or full. */
+  setGlow(g: Glow): void {
+    this.fxGlow = g;
+    this.fxStrength.value = GLOW_STRENGTH[g];
+    this.invalidate();
+  }
+
+  glow(): Glow {
+    return this.fxGlow;
+  }
+
+  /**
+   * B2's measurement: `frames` frames of `n` particles (null: the file's own) in `look` and `glow`, the
+   * timeline advancing a quarter step a frame. Wall: the interval between animation frames and the CPU time
+   * of the draw. GPU (with `nm.gpuTiming`): timestamp queries per stage, each stage resolved before the next.
+   */
+  private async bench(n: number | null, frames: number, look: ParticleLook, glow: Glow): Promise<Record<string, unknown>> {
+    const r = this.renderer;
+    if (!r || !this.dom) throw new Error('no renderer');
+    if (stepStore.get() !== 'results') throw new Error('open the Results step first');
+    const gpu = this.results.gpu;
+    const count = gpu.bench(n);
+    const inForce = this.results.setParticleLook(look);
+    this.setGlow(glow);
+    const t0 = animatorStore.get().step;
+    const stats = (xs: number[]) => {
+      const s = [...xs].sort((a, b) => a - b);
+      const q = (p: number) => s[Math.min(s.length - 1, Math.floor(p * s.length))];
+      return { mean: +(s.reduce((a, b) => a + b, 0) / s.length).toFixed(3), p50: +q(0.5).toFixed(3), p95: +q(0.95).toFixed(3), max: +s[s.length - 1].toFixed(3) };
+    };
+    const wall: number[] = [];
+    const cpu: number[] = [];
+    await new Promise<void>((done) => {
+      let i = 0;
+      let last = 0;
+      const tick = (now: number) => {
+        if (last) wall.push(now - last);
+        last = now;
+        this.results.setTime(t0 + 0.25 * i);
+        const c0 = performance.now();
+        this.renderNow();
+        cpu.push(performance.now() - c0);
+        if (++i <= frames) requestAnimationFrame(tick);
+        else done();
+      };
+      requestAnimationFrame(tick);
+    });
+    const out: Record<string, unknown> = { particles: count, look: inForce, glow, frames, backend: this.backend, canvas: r.getDrawingBufferSize(new Vector2()).toArray(), wallMs: stats(wall), fps: +(1000 / stats(wall).mean).toFixed(1), drawCpuMs: stats(cpu) };
+    // Unthrottled (no display refresh): each frame drawn and waited for on the GPU queue, and the same frames back to back.
+    const dev = (r.backend as unknown as { device?: { queue: { onSubmittedWorkDone(): Promise<void> } } }).device;
+    if (dev) {
+      const synced: number[] = [];
+      for (let i = 0; i < frames; i++) {
+        const a = performance.now();
+        this.results.setTime(t0 + 0.25 * i);
+        this.renderNow();
+        await dev.queue.onSubmittedWorkDone();
+        synced.push(performance.now() - a);
+      }
+      const b0 = performance.now();
+      for (let i = 0; i < frames; i++) {
+        this.results.setTime(t0 + 0.25 * i);
+        this.renderNow();
+      }
+      await dev.queue.onSubmittedWorkDone();
+      out.frameSyncedMs = stats(synced);
+      out.frameBatchedMs = +((performance.now() - b0) / frames).toFixed(3);
+    }
+    if (gpuTiming() && this.backend === 'webgpu') {
+      const comp: number[] = [];
+      const main: number[] = [];
+      const part: number[] = [];
+      const post: number[] = [];
+      const size = this.syncSize();
+      const cam = this.mainCamera(size ? size.w / size.h : 1);
+      await r.resolveTimestampsAsync('render');
+      await r.resolveTimestampsAsync('compute');
+      for (let i = 0; i < frames; i++) {
+        this.results.setTime(t0 + 0.25 * i);
+        gpu.invalidate();
+        gpu.update();
+        comp.push((await r.resolveTimestampsAsync('compute')) ?? NaN);
+        r.setViewport(0, 0, size?.w ?? 1, size?.h ?? 1);
+        r.setClearColor(0x000000, 0);
+        r.clear();
+        r.render(this.scene, cam);
+        main.push((await r.resolveTimestampsAsync('render')) ?? NaN);
+        this.fxParticles(r, cam);
+        part.push((await r.resolveTimestampsAsync('render')) ?? NaN);
+        this.fxComposite(r, size?.w ?? 1, size?.h ?? 1);
+        post.push((await r.resolveTimestampsAsync('render')) ?? NaN);
+      }
+      out.gpuMs = { compute: stats(comp), scene: stats(main), particles: stats(part), bloomAndComposite: stats(post) };
+    }
+    gpu.bench(null);
+    this.results.setTime(t0);
+    this.invalidate();
+    return out;
   }
 
   /** The distance fade (fade.ts) across the model's bounding sphere as the perspective camera sees it; none in plan. */
@@ -1073,6 +1327,7 @@ class ViewportEngine {
       this.bounds = faceBounds(mesh.positions, mesh.indices);
       if (this.bounds) this.layoutGround(this.bounds);
       this.faces.geometry = geometry;
+      this.fxDepth.geometry = geometry;
       this.tint.geometry = geometry.toNonIndexed();
       this.ghost.geometry = this.tint.geometry;
       this.bakeCorners(mesh);
@@ -1191,6 +1446,7 @@ class ViewportEngine {
     }
     this.tint.geometry = emptyTint();
     this.ghost.geometry = this.tint.geometry;
+    this.fxDepth.geometry = emptyGeometry();
     this.triangleEdges.dispose();
     this.featureEdges.dispose();
     this.triangleEdges = emptyGeometry();
@@ -2026,6 +2282,11 @@ export const resultsLayer = (): ResultsLayer => engine.results;
 /** Draws now (a test hook's read must see the current step). */
 export function renderNow(): void {
   engine.invalidate();
+}
+
+/** Decision 69: the particles' light, bloom off, soft or full. */
+export function setGlow(g: Glow): void {
+  engine.setGlow(g);
 }
 
 /** Frames the model in the perspective view (View › Frame model may call it). */

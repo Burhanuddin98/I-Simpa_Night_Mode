@@ -544,3 +544,11 @@
   accent-color: var(--red);
   width: 90px;
 }
+
+/* Decision 69: the particles' warm ramp, under the look and glow rows of the timeline card. */
+.vp-warm-legend {
+  margin: 2px 0 6px;
+}
+.vp-warm-legend .vp-legend-bar {
+  height: 6px;
+}
