@@ -597,16 +597,19 @@ pub async fn run_data(state: State<'_, AppState>, run: String) -> CmdResult<RunD
 }
 
 /// One surface map (`path` as `run_data` lists it) as SMAP bytes (`results_data`): an
-/// ArrayBuffer in JS, the `.csbin`'s float32 values bit for bit.
+/// ArrayBuffer in JS, the `.csbin`'s float32 values bit for bit when the map fits the bounds, else
+/// at a coarser time bin (the header says which). `max_texels` is the viewport's texture budget
+/// (faces x steps); absent, `results_data::MAP_TEXELS_MAX`.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn run_surface_map(
     state: State<'_, AppState>,
     run: String,
     path: String,
+    max_texels: Option<u64>,
 ) -> CmdResult<Response> {
     let session = state.session.clone();
     guard::blocking("run_surface_map", move || {
-        results_data::surface_map_bytes(&runs_root_for(&session, &run)?, &run, &path)
+        results_data::surface_map_bytes(&runs_root_for(&session, &run)?, &run, &path, max_texels)
             .map(Response::new)
     })
     .await

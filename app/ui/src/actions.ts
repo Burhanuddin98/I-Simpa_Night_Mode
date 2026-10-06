@@ -566,7 +566,7 @@ export async function exportWrite(kind: 'csv' | 'json' | 'png', path: string, by
  * itself (`asCmdError`), so no busy line or Console entry is added here. Here because the backend
  * is called only from this file (M10's lint). */
 export const runData = (runName: string) => backend.runData(runName);
-export const runSurfaceMap = (runName: string, path: string) => backend.runSurfaceMap(runName, path);
+export const runSurfaceMap = (runName: string, path: string, maxTexels: number) => backend.runSurfaceMap(runName, path, maxTexels);
 export const runParticles = (runName: string, bandHz: number) => backend.runParticles(runName, bandHz);
 
 /**

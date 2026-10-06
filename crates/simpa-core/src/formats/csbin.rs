@@ -349,6 +349,83 @@ fn build(c: &mut Cursor<'_>, h: Header) -> Result<Csbin> {
     })
 }
 
+/// Second pass, binned: like [`build`], but each face's records are merged `per_bin` time steps to
+/// a bin (bin `b` holds the steps `[b * per_bin, (b + 1) * per_bin)`), their energies summed in
+/// `f64` in file order and stored as `f32`. The header's `time_step` is multiplied by `per_bin` and
+/// its `time_step_count` becomes the bin count, so a reader that scales by the header (the app's
+/// viewport does) sees a map at a coarser time bin, as the solver itself writes one when the
+/// sound-map time step is set (patch 0001). Only [`RecordType::SplStandard`]'s values are
+/// energies that add; the caller checks the type.
+fn build_binned(c: &mut Cursor<'_>, h: Header, per_bin: u32) -> Result<Csbin> {
+    debug_assert!(per_bin >= 1);
+    let mut nodes = Vec::with_capacity(h.quant_nodes);
+    for _ in 0..h.quant_nodes {
+        let mut r = record(c, h.lengths.node)?;
+        nodes.push([r.f32()?, r.f32()?, r.f32()?]);
+    }
+    let mut receivers = Vec::with_capacity(h.quant_rs);
+    // Per face, scratch of (bin, sum) in file order; sorted and merged if the file was not sorted.
+    let mut bins: Vec<(u16, f64)> = Vec::new();
+    for _ in 0..h.quant_rs {
+        let (xml_index, quant_faces, name) = receiver_fields(c, &h)?;
+        let mut faces = Vec::with_capacity(quant_faces);
+        for _ in 0..quant_faces {
+            let (vertices, nb_records) = face_fields(c, &h)?;
+            bins.clear();
+            let mut sorted = true;
+            for _ in 0..nb_records {
+                let v = value_fields(c, &h)?;
+                // time_step < time_step_count <= u16::MAX + 1, so the bin fits a u16.
+                let bin = (u32::from(v.time_step) / per_bin) as u16;
+                match bins.last_mut() {
+                    Some((b, sum)) if *b == bin => *sum += f64::from(v.energy),
+                    Some((b, _)) if *b > bin => {
+                        sorted = false;
+                        bins.push((bin, f64::from(v.energy)));
+                    }
+                    _ => bins.push((bin, f64::from(v.energy))),
+                }
+            }
+            if !sorted {
+                bins.sort_by_key(|&(b, _)| b);
+                let mut merged: Vec<(u16, f64)> = Vec::with_capacity(bins.len());
+                for &(b, s) in &bins {
+                    match merged.last_mut() {
+                        Some((mb, ms)) if *mb == b => *ms += s,
+                        _ => merged.push((b, s)),
+                    }
+                }
+                bins = merged;
+            }
+            let records: Vec<Record> = bins
+                .iter()
+                .map(|&(time_step, sum)| Record {
+                    time_step,
+                    energy: sum as f32,
+                })
+                .collect();
+            faces.push(Face {
+                vertices,
+                records: records.into_boxed_slice(),
+            });
+        }
+        receivers.push(Receiver {
+            xml_index,
+            name: name.to_vec(),
+            faces,
+        });
+    }
+    Ok(Csbin {
+        version: VERSION,
+        lengths: h.lengths,
+        time_step_count: h.time_step_count.div_ceil(per_bin),
+        time_step: h.time_step * per_bin as f32,
+        record_type: h.record_type,
+        nodes,
+        receivers,
+    })
+}
+
 /// Parses a `.csbin` file held in memory. Bytes after the last record are ignored, as upstream
 /// ignores them.
 pub fn read(bytes: &[u8]) -> Result<Csbin> {
@@ -360,10 +437,98 @@ pub fn read(bytes: &[u8]) -> Result<Csbin> {
     build(&mut c, h)
 }
 
+/// Parses a `.csbin` file held in memory with its time steps merged `per_bin` to a bin
+/// ([`build_binned`]); `per_bin` 1 is [`read`]. The records a face ends with number at most
+/// `ceil(time_step_count / per_bin)`, whatever it held: this is how a map of hundreds of millions
+/// of records is served to a viewer at a size it can hold.
+pub fn read_binned(bytes: &[u8], per_bin: u32) -> Result<Csbin> {
+    if per_bin <= 1 {
+        return read(bytes);
+    }
+    let mut c = Cursor::new(bytes, WHAT);
+    let h = header(&mut c)?;
+    let body = c.pos();
+    validate(&mut c, &h)?;
+    c.seek(body)?;
+    build_binned(&mut c, h, per_bin)
+}
+
 /// Reads a `.csbin` file. A missing file is [`FormatError::NotFound`]; upstream's `ImportBIN`
 /// reports success there, with an uninitialised header.
 pub fn read_file(path: &Path) -> Result<Csbin> {
     read(&super::read_file(path)?)
+}
+
+/// [`read_binned`] of a file.
+pub fn read_file_binned(path: &Path, per_bin: u32) -> Result<Csbin> {
+    read_binned(&super::read_file(path)?, per_bin)
+}
+
+#[cfg(test)]
+mod binned_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn fixture(rel: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/results")
+            .join(rel)
+    }
+
+    /// Binned = dense summed per bin in file order, bit for bit; the header scales; per_bin 1 is
+    /// the dense read; a per_bin past the step count leaves one bin.
+    #[test]
+    fn a_binned_read_sums_each_faces_records_per_bin_and_scales_the_header() {
+        let path = fixture("outputs_spps/solve/Surface receiver/500 Hz/Sound level.csbin");
+        let bytes = std::fs::read(&path).expect("the committed fixture");
+        let dense = read(&bytes).unwrap();
+        assert!(dense.time_step_count > 4, "{}", dense.time_step_count);
+        let total: usize = dense
+            .receivers
+            .iter()
+            .flat_map(|r| r.faces.iter())
+            .map(|f| f.records.len())
+            .sum();
+        assert!(total > 0);
+        for per_bin in [1u32, 2, 3, 7, dense.time_step_count, dense.time_step_count + 5] {
+            let b = read_binned(&bytes, per_bin).unwrap();
+            assert_eq!(b.nodes, dense.nodes);
+            assert_eq!(b.time_step_count, dense.time_step_count.div_ceil(per_bin));
+            assert_eq!(b.time_step, dense.time_step * per_bin as f32);
+            assert_eq!(b.record_type, dense.record_type);
+            assert_eq!(b.receivers.len(), dense.receivers.len());
+            let mut compared = 0usize;
+            for (rb, rd) in b.receivers.iter().zip(&dense.receivers) {
+                assert_eq!((rb.xml_index, &rb.name), (rd.xml_index, &rd.name));
+                assert_eq!(rb.faces.len(), rd.faces.len());
+                for (fb, fd) in rb.faces.iter().zip(&rd.faces) {
+                    assert_eq!(fb.vertices, fd.vertices);
+                    let mut want: Vec<(u16, f64)> = Vec::new();
+                    for r in &fd.records {
+                        let bin = (u32::from(r.time_step) / per_bin) as u16;
+                        match want.iter_mut().find(|(b, _)| *b == bin) {
+                            Some((_, s)) => *s += f64::from(r.energy),
+                            None => want.push((bin, f64::from(r.energy))),
+                        }
+                    }
+                    want.sort_by_key(|&(b, _)| b);
+                    let got: Vec<(u16, u32)> =
+                        fb.records.iter().map(|r| (r.time_step, r.energy.to_bits())).collect();
+                    let want: Vec<(u16, u32)> =
+                        want.iter().map(|&(b, s)| (b, (s as f32).to_bits())).collect();
+                    assert_eq!(got, want, "per_bin {per_bin}");
+                    assert!(fb.records.len() <= b.time_step_count as usize);
+                    compared += fb.records.len();
+                }
+            }
+            if per_bin == 1 {
+                assert_eq!(compared, total, "per_bin 1 is the dense read");
+            }
+            if per_bin >= dense.time_step_count {
+                assert_eq!(b.time_step_count, 1);
+            }
+        }
+    }
 }
 
 /// The canonical dump (grammar in `docs/formats/csbin.md`).

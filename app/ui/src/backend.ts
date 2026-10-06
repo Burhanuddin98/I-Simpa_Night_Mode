@@ -162,8 +162,13 @@ export const backend = {
   // `report.bed.parameters[name].status` is PASS (gate (b)). The bytes decode in resultsData.ts.
   runReport: (run: string) => invoke<ReportView>('run_report', { run }),
   runData: (run: string) => invoke<RunDataIndex>('run_data', { run }),
-  /** A surface map, `path` as `runData` lists it, as SMAP bytes (`decodeSurfaceMap`). */
-  runSurfaceMap: (run: string, path: string) => invoke<ArrayBuffer>('run_surface_map', { run, path }),
+  /**
+   * A surface map, `path` as `runData` lists it, as SMAP bytes (`decodeSurfaceMap`). `maxTexels` is the
+   * viewport's budget for faces x steps (its texture is dense): a map past it, or past the backend's record
+   * bound, arrives at a coarser time bin, which its header carries.
+   */
+  runSurfaceMap: (run: string, path: string, maxTexels: number) =>
+    invoke<ArrayBuffer>('run_surface_map', { run, path, max_texels: maxTexels }),
   /** One band's saved particles as PART bytes (`decodeParticles`). */
   runParticles: (run: string, bandHz: number) => invoke<ArrayBuffer>('run_particles', { run, band_hz: bandHz }),
   runEchogram: (run: string, receiver: string) => invoke<EchogramView>('run_echogram', { run, receiver }),

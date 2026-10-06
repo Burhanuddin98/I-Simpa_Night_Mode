@@ -195,8 +195,21 @@ async function loadIndex(run: string, g: number): Promise<void> {
   }
 }
 
+/**
+ * Texels (faces x steps) a map may ask of the GPU: what one texture holds (`mapLayout`), and no more
+ * than 64 Mi, 256 MB of texture and as much again in the array it is filled from. A denser map
+ * arrives at a coarser time bin (the backend merges steps; the header says by how much), so the
+ * densest run still draws: CR4 at 27 bands with its 0.1 m plane is 87,860 faces x 10,000 steps.
+ */
+export const MAP_TEXELS_MAX = 64 * 1024 * 1024;
+
+function texelBudget(): number {
+  const side = resultsLayer().maxTextureSize();
+  return Math.min(side * side, MAP_TEXELS_MAX);
+}
+
 async function mapBytes(run: string, path: string): Promise<SurfaceMap> {
-  return decodeSurfaceMap(await actions.runSurfaceMap(run, path));
+  return decodeSurfaceMap(await actions.runSurfaceMap(run, path, texelBudget()));
 }
 
 async function loadMap(g: number): Promise<void> {
