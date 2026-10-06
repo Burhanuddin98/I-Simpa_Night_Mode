@@ -1,12 +1,13 @@
 ﻿{
     "upstream_commit":  "929a5c8e5f590b189f29155faeff8670f3699479",
     "patches":  {
-                    "0001-surface-receiver-time-bin.patch":  "43cff4fa1c37eadac4a60d27a33d29847f78c2f91df0163a4c31113237af90ae"
+                    "0001-surface-receiver-time-bin.patch":  "43cff4fa1c37eadac4a60d27a33d29847f78c2f91df0163a4c31113237af90ae",
+                    "0002-sparse-surface-receiver-series.patch":  "a8a5e02cc78c1699ccc7f58eedf9c5c48772daccfacdf54b42be2ae3a210e701"
                 },
     "cmake_version":  "4.3.2",
     "generator":  "Visual Studio 17 2022 (x64)",
-    "build_dir":  "build-p058e76a3",
-    "build_log":  "build-build-20261006-145502.log",
+    "build_dir":  "build-pe414beeb",
+    "build_log":  "build-build-20261006-155625.log",
     "compiler":  "19.44.35226.0",
     "options":  [
                     "SKIPISIMPA=ON",
@@ -15,14 +16,14 @@
                 ],
     "crt":  "dynamic (upstream default)",
     "sha256":  {
-                   "spps.exe":  "ca19caaa155fac12690474c0050232c3e7be1d8bfacfd56052c407bb662b2092",
-                   "classicalTheory.exe":  "c98a494fbe0251a072d11b89cd49475c6a131ee2eac79ca56f50f73b87456e83",
+                   "spps.exe":  "973059a5f4f2070bd906e6fd1c1a0d90c0357d265b5f87d7c64aa83574bdff87",
+                   "classicalTheory.exe":  "e025b5afb053c3107576d656a3ba0e25c659a88edfbbc14a981ae1753fca69d1",
                    "tetgen.exe":  "26ff485e77aba22602f02c9daf372b29e659ba72a13759feb34eeac291662550",
-                   "preprocess.exe":  "b23326314b927b173c3219b8915967c793b1ebb1af93dc613e1e716fadfff6de"
+                   "preprocess.exe":  "468522b6534a17bbda1236fbbf1b9a57ff263902cffd5e872b288a7e5f90a5a4"
                },
     "code_sha256":  {
-                        "spps.exe":  "143223ff75b75333f22b05ca86b0d9ef7c3436835c98443cd567c76292bed342",
-                        "classicalTheory.exe":  "9c03a6f60bf9224376cbb31ef4e8b78e5a6fd2bb2cbe6e2628313815f9600c9a",
+                        "spps.exe":  "d0ec3220e73306a5b970adbd9f9a881df69d2ffc436ce86dae3c2cd7bd8167c2",
+                        "classicalTheory.exe":  "6a0ac763b852989f993016553bda7bce299dd2c8046df5462b8ed2db4bbfcda3",
                         "tetgen.exe":  "d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f",
                         "preprocess.exe":  "7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26"
                     },
@@ -48,9 +49,9 @@
                    "command_lines":  "equal to upstream\u0027s tetgen target at 929a5c8, 3 records",
                    "exe_sha256":  "26ff485e77aba22602f02c9daf372b29e659ba72a13759feb34eeac291662550",
                    "exe_code_sha256":  "d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f",
-                   "upstream_160_reference_sha256":  "73fd831d45fbbb215974f0001b75d61a7655d56da74b3b7152a664a09dcf9b60",
+                   "upstream_160_reference_sha256":  "d16ef331351f775e8c5c1261eea3d80b8a97807d40d4024fc121d75689c6830e",
                    "upstream_160_reference_code_sha256":  "b0c89b7fe8de05dcd64c5acc37a54492bc29710476a70e8a62c91f3c27f4663b",
                    "upstream_160_reference":  "build\\src\\tetgen\\Release\\tetgen.exe (not shipped)"
                },
-    "built_at":  "2026-10-06T14:55:51"
+    "built_at":  "2026-10-06T15:56:34"
 }

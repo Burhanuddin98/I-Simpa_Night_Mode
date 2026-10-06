@@ -48,6 +48,9 @@ pub enum Writer {
     /// On a material band that transmits ("if the material transmits"); its absence means no
     /// transmission, so it is never missing.
     IfTransmits,
+    /// In SPPS's config when the project sets the sound-map time step ("if the sound-map time
+    /// step is set", patch 0001); its absence means the particle step, so it is never missing.
+    IfMapTimeStep,
     /// Never written.
     Never,
 }
@@ -85,7 +88,8 @@ const fn attr(
 
 use AttrKind::{Int, IntRange, Real, Text};
 use Writer::{
-    Always, IfBalloon, IfDirected, IfElement, IfTransmits, Never, Spps as SppsOnly, Tcr as TcrOnly,
+    Always, IfBalloon, IfDirected, IfElement, IfMapTimeStep, IfTransmits, Never, Spps as SppsOnly,
+    Tcr as TcrOnly,
 };
 
 const ROOT: &str = "configuration";
@@ -103,8 +107,8 @@ const CUT: &str = "recepteur_surfacique_coupe";
 const FIT: &str = "encombrement";
 const FIT_BAND: &str = "encombrement/bfreq";
 
-/// Every attribute of `docs/formats/config_xml.md`'s reference tables, in the page's order: 94.
-pub const CONFIG_ATTRIBUTES: [ConfigAttribute; 94] = [
+/// Every attribute of `docs/formats/config_xml.md`'s reference tables, in the page's order: 95.
+pub const CONFIG_ATTRIBUTES: [ConfigAttribute; 95] = [
     attr(ROOT, "workingdirectory", Text, Always),
     attr(ATMO, "temperature", Real, Always),
     attr(ATMO, "pression", Real, Always),
@@ -118,6 +122,7 @@ pub const CONFIG_ATTRIBUTES: [ConfigAttribute; 94] = [
     attr(SIM, "tetrameshFileName", Text, Always),
     attr(SIM, "pasdetemps", Real, SppsOnly),
     attr(SIM, "duree_simulation", Real, SppsOnly),
+    attr(SIM, "recepteurs_surfaciques_pas_temps", Real, IfMapTimeStep),
     attr(SIM, "directivities_directory", Text, Always),
     attr(SIM, "recepteurss_directory", Text, Always),
     attr(SIM, "recepteurss_filename", Text, Always),
@@ -639,7 +644,7 @@ fn required(a: &ConfigAttribute, solver: SolverKind, node: Node) -> bool {
         TcrOnly => solver == SolverKind::Tcr,
         IfDirected => matches!(atoi(node.attribute("directivite").unwrap_or("")), 1 | 5),
         IfBalloon => atoi(node.attribute("directivite").unwrap_or("")) == 5,
-        IfTransmits | Never => false,
+        IfTransmits | IfMapTimeStep | Never => false,
     }
 }
 

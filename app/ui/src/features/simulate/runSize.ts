@@ -1,19 +1,22 @@
 // How much the solver would hold in memory for a run, before it is launched (Burhan 2026-10-06 06:39: "HOW CAN
 // ALL THE HEAVIEST FEATURES WORK WITHOUT KILLING THE FUCKING APP AGAIN AND AGAIN BECAUSE OF FUCKING MEMORY
-// ISSUES"; docs/investigations/2026-10-06-third-octave-bug/MEMORY.md and COMPACT.md). SPPS allocates, at the
-// start of the run, one float32 per sound-map cell per time bin per computed band, for the whole run
-// (`coreTypes.h:255-305` `r_SurfCut::Init`, `coreinitialisation.cpp:266`; the surface-group receivers' faces the
-// same, `r_Surf_Face::InitFreq`). A sound-level plane of 33 x 33 m at 0.1 m (110,888 cells) over 10 s at 1 ms and
-// 18 bands is 74 GB, and the solver aborts 15 s in while zero-filling it.
+// ISSUES"; 15:44: "its literally just data man, raw data"; docs/investigations/2026-10-06-third-octave-bug/
+// MEMORY.md, COMPACT.md, SPARSE.md, BED-0002.md).
 //
-// The model: cube = cells x bins x bands x 4 bytes, where cells are every enabled plane's cells plus every enabled
-// surface-group receiver's faces; bins = ceil(steps / ratio) with ratio the sound-map time step in particle steps
-// (patch 0001: `recepteurs_surfaciques_pas_temps`, 1 when unset); bands = every band computed (the allocation
-// does not look at "sound maps per band"). Sources do not multiply it: one cube serves every source. The 14:45
-// correction: the 07:30 reading of "double" was the point receivers' accumulator (`l_decimal`), not the maps'.
-// The cube alone, with no solver overhead: a floor, not a measurement (no sampled run has calibrated it yet). The
-// limits are a stop-gap against this machine's 32 GB until the app can read the machine's memory: refuse from
-// REFUSE_GB, warn from WARN_GB.
+// Our SPPS build (patches 0001 and 0002) keeps a sound-map cell's time series sparse: only the (step, energy)
+// records a particle left, 9 bytes each with the vectors' growth, switching a cell to a dense float32 array once
+// more than an eighth of its steps hold energy. So a band's maps cost the smaller of two bounds:
+//   the grid:  cells x bins x 4 bytes            (every cell dense; what upstream's solver always allocated)
+//   the data:  particles x sources x crossings x 9 bytes   (a record for every cell-step a particle crossed)
+// Crossings a particle makes over the run: 32, realised on CR4 (0.1 m plane, 18 bands, 300,000 particles a
+// source, 10 s): 19 million cell-steps a band for 600,000 particles; that run's peak was 3.06 GB against this
+// model's 3.1 GB (BED-0002.md). One room, one duration: a forecast calibrated once, not a law. cells are every
+// enabled plane's cells plus every enabled surface-group receiver's faces; bins = ceil(steps / ratio) with ratio
+// the sound-map time step in particle steps (patch 0001, 1 when unset); bands = every band computed (the
+// allocation does not look at "sound maps per band"). The old solver's 74 GB for the 0.1 m whole-room plane is
+// the grid bound; the data bound for it is about 1.5 GB, which is what the sparse solver holds.
+// The limits are a stop-gap against this machine's 32 GB until the app can read the machine's memory: refuse
+// from REFUSE_GB, warn from WARN_GB.
 import type { SceneState } from '../../bindings/ipc.ts';
 import { planeCells } from '../../chrome/planes.ts';
 import { projectBlockers } from '../../flow.ts';
@@ -26,8 +29,14 @@ export const settingsStore = new Store<ProjectSettings | null>(null);
 export const RESULTS_TOO_BIG = 'RESULTS_TOO_BIG';
 export const REFUSE_GB = 24;
 export const WARN_GB = 8;
-/** `t_cell` is `decimal` = `float` (`coreTypes.h:255`, `mathlib.h:54`). */
+/** A dense cell-step: `t_cell` is `decimal` = `float` (`coreTypes.h:255`, `mathlib.h:54`). */
 export const BYTES_PER_VALUE = 4;
+/** A sparse record: a `uint16_t` step and a `float` energy, with the vectors' growth (`SparseTimeSeries`, patch 0002). */
+export const BYTES_PER_RECORD = 9;
+/** Cell-steps one particle crosses over a run: realised on CR4 at 10 s (BED-0002.md), the model's one calibration. */
+export const CROSSINGS_PER_PARTICLE = 32;
+/** A cell goes dense past this share of its steps (`SparseTimeSeries::denseThreshold`). */
+export const DENSE_SHARE = 1 / 8;
 
 export interface ResultCube {
   cells: number;
@@ -38,6 +47,10 @@ export interface ResultCube {
   /** Sound-map time bins, ceil(steps / ratio): the time axis the maps are stored on. */
   bins: number;
   bands: number;
+  /** Cell-steps with energy forecast per band: the smaller of the grid and the data bounds. */
+  records: number;
+  /** Whether the forecast is the sparse form (records x 9 bytes) or the dense one (cells x bins x 4). */
+  sparse: boolean;
   bytes: number;
   gb: number;
 }
@@ -83,8 +96,16 @@ export function resultCube(
       for (const id of r.shape.groups) cells += facesOf.get(id) ?? 0;
     }
   }
-  const bytes = cells * bins * bands * BYTES_PER_VALUE;
-  return { cells, steps, ratio, bins, bands, bytes, gb: bytes / 2 ** 30 };
+  const particles = num(s.particles_per_source) ?? 0;
+  const sources = v.sources.filter((x) => x.enabled).length;
+  const grid = cells * bins;
+  const data = particles * sources * CROSSINGS_PER_PARTICLE;
+  const records = Math.min(grid, data);
+  // The cells go dense when their share of steps with energy passes an eighth: then the grid bound is the cost.
+  const sparse = cells > 0 && records / cells < bins * DENSE_SHARE;
+  const perBand = sparse ? records * BYTES_PER_RECORD : grid * BYTES_PER_VALUE;
+  const bytes = perBand * bands;
+  return { cells, steps, ratio, bins, bands, records, sparse, bytes, gb: bytes / 2 ** 30 };
 }
 
 /** "about 149 GB", "about 2.4 GB", "about 120 MB". */

@@ -145,6 +145,7 @@ fn the_attribute_table_is_config_xml_mds_reference() {
                 "if type 5" => Writer::IfBalloon,
                 "if the material transmits" => Writer::IfTransmits,
                 "if surface receivers" | "if cutting planes" | "if fittings" => Writer::IfElement,
+                "if the sound-map time step is set" => Writer::IfMapTimeStep,
                 other => panic!("writer {other:?} in {line}"),
             }
         };
@@ -164,7 +165,7 @@ fn the_attribute_table_is_config_xml_mds_reference() {
             (a.key(), kind, a.writer)
         })
         .collect();
-    assert_eq!(documented.len(), 94);
+    assert_eq!(documented.len(), 95);
     assert_eq!(
         documented, ours,
         "same keys, order, types and Writer column"

@@ -210,6 +210,10 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
     add("step_count_overflow", &|p| {
         p.solvers.spps.duration_s = F64::new(200.0);
     });
+    // Shorter than the time step: the solver would round it to one step (patch 0001).
+    add("map_time_step_invalid", &|p| {
+        p.solvers.spps.map_time_step_s = Some(F64::new(0.0005));
+    });
     add("source_delay_invalid", &|p| {
         p.sources[0].delay_s = F64::new(1.5);
     });

@@ -205,8 +205,9 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
           <div className={`sim-field-line${level ? ` ${level}` : ''}`} data-part="results-cube" data-level={level || 'ok'}>
             <span className="k">Memory</span>
             <span className="v mono">
-              {cubeText(cube)} of sound maps during the run
+              {cubeText(cube)} for the sound maps during the run, forecast
               {cube.ratio > 1 ? ` · ${cube.bins.toLocaleString('en-US')} bins` : ''}
+              {cube.sparse ? ` · ${(cube.records / 1e6).toFixed(1)} million records a band` : ' · every cell dense'}
               {level === 'fail' ? ' · too much for this machine, Run is refused: set a longer sound-map time step' : level === 'warn' ? ' · heavy for this machine' : ''}
             </span>
           </div>

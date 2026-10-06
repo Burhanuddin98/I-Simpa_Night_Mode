@@ -47,12 +47,12 @@ fn written_pairs(xml: &str) -> BTreeSet<(String, String)> {
 }
 
 #[test]
-fn the_reference_tables_parse_to_94_attributes() {
+fn the_reference_tables_parse_to_95_attributes() {
     let attrs = doc_attrs();
     let keys: BTreeSet<&str> = attrs.iter().map(|a| a.key.as_str()).collect();
     println!("documented attributes: {}", attrs.len());
-    assert_eq!(attrs.len(), 94, "the page's Count paragraph says 94");
-    assert_eq!(keys.len(), 94, "no key twice");
+    assert_eq!(attrs.len(), 95, "the page's Count paragraph says 95");
+    assert_eq!(keys.len(), 95, "no key twice");
     let (ignored, elements) = doc_ignored();
     println!("ignored: {ignored:?} and elements {elements:?}");
     let expected = [
@@ -73,6 +73,22 @@ fn the_reference_tables_parse_to_94_attributes() {
     ];
     assert_eq!(ignored, expected);
     assert_eq!(elements, ["subdomains"]);
+}
+
+/// `recepteurs_surfaciques_pas_temps` (patch 0001) is written for SPPS exactly when the project
+/// sets `map_time_step_s`, with the value as stored, and never for TCR.
+#[test]
+fn the_sound_map_time_step_is_written_when_set() {
+    let mut p = rich_cube();
+    assert!(p.solvers.spps.map_time_step_s.is_none());
+    assert!(!wr(&p, SolverKind::Spps, None).contains("recepteurs_surfaciques_pas_temps"));
+    p.solvers.spps.map_time_step_s = Some(F64::new(0.01));
+    let spps = wr(&p, SolverKind::Spps, None);
+    assert!(
+        spps.contains(r#"recepteurs_surfaciques_pas_temps="0.01""#),
+        "{spps}"
+    );
+    assert!(!wr(&p, SolverKind::Tcr, None).contains("recepteurs_surfaciques_pas_temps"));
 }
 
 /// Every Writer obligation, attribute by attribute, for both solvers, on the base project and on
@@ -178,6 +194,11 @@ fn every_writer_obligation_holds_for_both_solvers() {
                         "{solver}: rich_cube has no {element}"
                     );
                     expect_all(true);
+                } else if w == "if the sound-map time step is set" {
+                    // SPPS only, and only when the project names a bin (patch 0001); rich_cube
+                    // leaves it unset, and the_sound_map_time_step_is_written_when_set covers set.
+                    assert!(!instances.is_empty(), "{solver}: no {element}");
+                    expect_all(*solver == "SPPS" && p.solvers.spps.map_time_step_s.is_some());
                 } else {
                     panic!("unknown Writer obligation '{w}' for {key}: update this test");
                 }

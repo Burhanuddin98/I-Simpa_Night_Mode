@@ -1,0 +1,458 @@
+diff --git a/src/ctr/TC_CalculationCore.cpp b/src/ctr/TC_CalculationCore.cpp
+index f6d2cd3..01a42a5 100644
+--- a/src/ctr/TC_CalculationCore.cpp
++++ b/src/ctr/TC_CalculationCore.cpp
+@@ -446,7 +446,7 @@ void CalculationCore::SetEnergyDirectCut( entier idFreq, std::vector<r_SurfCut*>
+ 			for(unsigned int idcol=0;idcol<(*Rs)->nbcols;idcol++) //V
+ 			{
+ 				vec3 Gcell=(*Rs)->Bvert+(vCellVec*(float)idcol)+(uCellVec*(float)idrow)+Goffset;
+-				(*Rs)->data[idFreq][idrow][idcol][0]=Get_Champ_Direct_Lin(idFreq,Gcell,*this->configurationTool->FastGetConfigValue(Core_Configuration::IPROP_DO_SURFACE_ANGULAR_WEIGHTING),(*Rs)->planeNormal);
++				(*Rs)->data[idFreq][idrow][idcol].set(0,Get_Champ_Direct_Lin(idFreq,Gcell,*this->configurationTool->FastGetConfigValue(Core_Configuration::IPROP_DO_SURFACE_ANGULAR_WEIGHTING),(*Rs)->planeNormal));
+ 			}
+ 		}
+ 	}
+@@ -464,7 +464,7 @@ void CalculationCore::SetEnergyDirect( entier idFreq, std::vector<r_Surf*>& rece
+ 			vec3 v_faceNormal=FaceNormal(currentFace->sommets[0],currentFace->sommets[1],currentFace->sommets[2]);
+ 			//Translation du Point G d'une distance d'EPSILON le long de la normal de la face afin de ne pas ï¿½tre occultï¿½ par la face elle mï¿½me lors du test de collision.
+ 			G+=v_faceNormal*BARELY_EPSILON;
+-			currentFace->energieRecu[idFreq][0]=Get_Champ_Direct_Lin(idFreq,G,*this->configurationTool->FastGetConfigValue(Core_Configuration::IPROP_DO_SURFACE_ANGULAR_WEIGHTING),v_faceNormal);
++			currentFace->energieRecu[idFreq]->set(0,Get_Champ_Direct_Lin(idFreq,G,*this->configurationTool->FastGetConfigValue(Core_Configuration::IPROP_DO_SURFACE_ANGULAR_WEIGHTING),v_faceNormal));
+ 		}
+ 	}
+ }
+@@ -482,7 +482,7 @@ void CalculationCore::SetEnergyLinCut( MODE_CALCUL modeCalcul, entier idFreq , s
+ 			for(unsigned int idcol=0;idcol<(*Rs)->nbcols;idcol++) //V
+ 			{
+ 				vec3 Gcell=(*Rs)->Bvert+(uCellVec*(float)idcol)+(vCellVec*(float)idrow)+Goffset;
+-				(*Rs)->data[idFreq][idrow][idcol][0]=Get_Recepteur_S_Champ_Total(recepteurSDirect[idrs]->data[idFreq][idrow][idcol][0],mainData.frequencyDependentValues[idFreq].modeCalcul[modeCalcul].NiveauSonoreChampReverbereLineaire);
++				(*Rs)->data[idFreq][idrow][idcol].set(0,Get_Recepteur_S_Champ_Total(recepteurSDirect[idrs]->data[idFreq][idrow][idcol].get(0),mainData.frequencyDependentValues[idFreq].modeCalcul[modeCalcul].NiveauSonoreChampReverbereLineaire));
+ 			}
+ 		}
+ 		idrs++;
+@@ -496,7 +496,7 @@ void CalculationCore::SetEnergyLin( MODE_CALCUL modeCalcul, entier idFreq , std:
+ 		for(std::size_t idFace=0;idFace<recepteurSLin[idRs]->nbFaces;idFace++)
+ 		{
+ 			r_Surf_Face* currentFaceDirect=&recepteurSDirect[idRs]->faces[idFace];
+-			recepteurSLin[idRs]->faces[idFace].energieRecu[idFreq][0]=Get_Recepteur_S_Champ_Total(currentFaceDirect->energieRecu[idFreq][0],mainData.frequencyDependentValues[idFreq].modeCalcul[modeCalcul].NiveauSonoreChampReverbereLineaire);
++			recepteurSLin[idRs]->faces[idFace].energieRecu[idFreq]->set(0,Get_Recepteur_S_Champ_Total(currentFaceDirect->energieRecu[idFreq]->get(0),mainData.frequencyDependentValues[idFreq].modeCalcul[modeCalcul].NiveauSonoreChampReverbereLineaire));
+ 		}
+ 	}
+ }
+diff --git a/src/ctr/input_output/reportmanager.cpp b/src/ctr/input_output/reportmanager.cpp
+index 4cf106a..52f21f2 100644
+--- a/src/ctr/input_output/reportmanager.cpp
++++ b/src/ctr/input_output/reportmanager.cpp
+@@ -14,7 +14,7 @@ ReportManager::~ReportManager()
+ }
+ void ReportManager::CopyRecepteurCut(std::vector<r_SurfCut*>& source,std::vector<r_SurfCut*>& destination)
+ {
+-	//Copie des récepteurs surfacique
++	//Copie des rï¿½cepteurs surfacique
+ 	for(uentier idrs=0;idrs<source.size();idrs++)
+ 	{
+ 		r_SurfCut* newRs=new r_SurfCut(*source[idrs]);
+@@ -23,7 +23,7 @@ void ReportManager::CopyRecepteurCut(std::vector<r_SurfCut*>& source,std::vector
+ }
+ void ReportManager::CopyRecepteurSurf(std::vector<r_Surf*>& source,std::vector<r_Surf*>& destination)
+ {
+-	//Copie des récepteurs surfacique
++	//Copie des rï¿½cepteurs surfacique
+ 	for(uentier idrs=0;idrs<source.size();idrs++)
+ 	{
+ 		r_Surf* newRs=new r_Surf(*source[idrs]);
+@@ -44,7 +44,7 @@ void ReportManager::SauveFusionRecepteursSurfaciques(const stringClass& rootFold
+ 				GABE_Data_Float* colrs=new GABE_Data_Float((*rsit)->nbFaces);
+ 				for(uentier idface=0;idface<(*rsit)->nbFaces;idface++)
+ 				{
+-					colrs->Set(idface,(*rsit)->faces[idface].energieRecu[idfreq][0]);
++					colrs->Set(idface,(*rsit)->faces[idface].energieRecu[idfreq]->get(0));
+ 				}
+ 				rsExporter.SetCol(idfreq,colrs);
+ 			}
+@@ -73,7 +73,7 @@ void ReportManager::SauveFusionCutSurfaceReceiver(const stringClass& rootFolder,
+ 					for (uentier idrow = 0; idrow < (*rsit)->nbrows; idrow++)
+ 					{
+ 						if((*rsit)->data[idfreq].size() > idrow && (*rsit)->data[idfreq][idrow].size() > idcol) {
+-							colrs->Set(idcol * (*rsit)->nbrows + idrow, (*rsit)->data[idfreq][idrow][idcol][0]);
++							colrs->Set(idcol * (*rsit)->nbrows + idrow, (*rsit)->data[idfreq][idrow][idcol].get(0));
+ 						} else {
+ 							colrs->Set(idcol * (*rsit)->nbrows + idrow, 0);
+ 						}
+@@ -109,25 +109,25 @@ void ReportManager::SauveTCRecepteursPonctuels(stringClass rootFolder, const std
+ 	using namespace formatGABE;
+ 	entier nbFreq=freqLst.size();
+ 	entier nbCols=colsLblLst.size();
+-	//Créé un fichier pour chaque récépteur
++	//Crï¿½ï¿½ un fichier pour chaque rï¿½cï¿½pteur
+ 	for(std::size_t idrp=0;idrp<tabRecepteurP->size();idrp++)
+ 	{
+ 		t_TC_RecepteurPonctuel* currentRecP=&(*tabRecepteurP)[idrp];
+ 
+-		GABE binExporter(nbCols+1); //+1 pour le libellé des lignes
++		GABE binExporter(nbCols+1); //+1 pour le libellï¿½ des lignes
+ 		binExporter.LockData();
+-		//Ajout du libellé
++		//Ajout du libellï¿½
+ 		GABE_Data_ShortString* lblCol = new GABE_Data_ShortString(nbFreq+1); // + 1 pour la ligne Global
+ 		for(int idfreq=0;idfreq<nbFreq;idfreq++)
+ 			lblCol->SetString(idfreq,freqLst[idfreq].c_str());
+ 		lblCol->SetString(nbFreq,"Global");
+ 		lblCol->SetLabel("SPL (dB)");
+ 		binExporter.SetCol(0,lblCol);
+-		//Pour chaque theorie de calcul utilisé
++		//Pour chaque theorie de calcul utilisï¿½
+ 		for(int idcol=0;idcol<nbCols;idcol++)
+ 		{
+ 			//////////////////////////////////
+-			// Copie des données en dB
++			// Copie des donnï¿½es en dB
+ 			GABE_Data_Float* dataCol = new GABE_Data_Float(nbFreq+1); // + 1 pour la ligne Global
+ 			(*dataCol).SetLabel(colsLblLst[idcol].c_str());
+ 			float globalValue=0.f;
+@@ -156,10 +156,10 @@ void ReportManager::SauveTCGlobalsValues(stringClass filePath, const std::vector
+ 	using namespace formatGABE;
+ 	entier nbFreq=freqLst.size();
+ 	entier nbCols=colsLblLst.size();
+-	GABE binExporter(nbCols+1); //+1 pour le libellé des lignes
++	GABE binExporter(nbCols+1); //+1 pour le libellï¿½ des lignes
+ 	binExporter.LockData();
+ 
+-	//Ajout du libellé
++	//Ajout du libellï¿½
+ 	GABE_Data_ShortString* lblCol = new GABE_Data_ShortString(nbFreq+1); // + 1 pour la ligne Global
+ 	for(int idfreq=0;idfreq<nbFreq;idfreq++)
+ 		lblCol->SetString(idfreq,freqLst[idfreq].c_str());
+@@ -170,16 +170,16 @@ void ReportManager::SauveTCGlobalsValues(stringClass filePath, const std::vector
+ 	//Pour chaque mode de calcul
+ 	for(int idModeCalcul=0;idModeCalcul<NB_THEORIES;idModeCalcul++)
+ 	{
+-		//Pour chaque colonne de donnée
++		//Pour chaque colonne de donnï¿½e
+ 		for(entier idData=0;idData<NB_COLS_BY_THEORIE;idData++)
+ 		{
+ 			//////////////////////////////////
+-			// Copie des données en dB
++			// Copie des donnï¿½es en dB
+ 			GABE_Data_Float* dataCol = new GABE_Data_Float(nbFreq+1); // + 1 pour la ligne Global
+ 			(*dataCol).SetLabel(colsLblLst[(idModeCalcul*NB_COLS_BY_THEORIE)+idData].c_str());
+ 			float globalValue=0.f;
+ 
+-			//Pour chaque bande de fréquence
++			//Pour chaque bande de frï¿½quence
+ 			for(int idfreq=0;idfreq<nbFreq;idfreq++)
+ 			{
+ 				decimal rowVal;
+diff --git a/src/lib_interface/coreTypes.cpp b/src/lib_interface/coreTypes.cpp
+index 8bb99a6..f784768 100644
+--- a/src/lib_interface/coreTypes.cpp
++++ b/src/lib_interface/coreTypes.cpp
+@@ -76,7 +76,7 @@ void r_Surf_Face::deleteData()
+ 	if(energieRecu && nbfreq>0)
+ 	{
+ 		for(uentier idfreq=0;idfreq<nbfreq;idfreq++)
+-			delete[] energieRecu[idfreq];
++			delete energieRecu[idfreq];
+ 	}
+ 	delete[] energieRecu;
+ 	energieRecu=NULL;
+@@ -85,17 +85,18 @@ void r_Surf_Face::InitTabFreq(uentier _nbfreq)
+ {
+ 	deleteData();
+ 	nbfreq=_nbfreq;
+-	energieRecu=new decimal*[nbfreq];
+-	memset(energieRecu,0,sizeof( decimal*)*nbfreq);
++	energieRecu=new SparseTimeSeries*[nbfreq];
++	memset(energieRecu,0,sizeof(SparseTimeSeries*)*nbfreq);
+ }
+ void r_Surf_Face::InitFreq(uentier idfreq, uentier _nbtimestep)
+ {
+ 	nbtimestep=_nbtimestep;
+ 	if(nbfreq>idfreq)
+ 	{
+-		delete[] energieRecu[idfreq];
+-		energieRecu[idfreq]=new decimal[_nbtimestep];
+-		memset(energieRecu[idfreq],0,sizeof(decimal)*_nbtimestep);
++		delete energieRecu[idfreq];
++		//Sparse: every step reads 0 and no memory is taken until a particle hits the face (patch 0002)
++		energieRecu[idfreq]=new SparseTimeSeries();
++		energieRecu[idfreq]->resize(_nbtimestep);
+ 	}
+ }
+ 
+@@ -109,7 +110,7 @@ void r_Surf_Face::operator=(const r_Surf_Face& copyFrom)
+ 		if(copyFrom.energieRecu[idfreq])
+ 		{
+ 			this->InitFreq(idfreq,copyFrom.nbtimestep);
+-			memcpy(energieRecu[idfreq],copyFrom.energieRecu[idfreq],sizeof(decimal)*copyFrom.nbtimestep);
++			*energieRecu[idfreq]=*copyFrom.energieRecu[idfreq];
+ 		}
+ 	}
+ }
+diff --git a/src/lib_interface/coreTypes.h b/src/lib_interface/coreTypes.h
+index c64f7c1..33d2e01 100644
+--- a/src/lib_interface/coreTypes.h
++++ b/src/lib_interface/coreTypes.h
+@@ -30,6 +30,7 @@
+ #include "input_output/directivity/directivityBalloon.h"
+ #include <vector>
+ #include <cstdint>
++#include <algorithm>
+ 
+ #ifndef CORE_TYPES
+ #define CORE_TYPES
+@@ -40,6 +41,96 @@
+ 
+ const double _REF_W0_=pow(10.,-12.);
+ 
++/**
++ * @brief One cell's or face's energy over the time steps, stored sparse (I-Simpa Night Mode, patch 0002).
++ *
++ * Only the steps that received energy are kept, sorted by step, as (step, energy) pairs; once more than an
++ * eighth of the steps hold energy the series switches to a dense array, which is then the cheaper form.
++ * Adds land on their step in arrival order, so every sum is the dense array's bit for bit. Readers call
++ * get(), never an index. Why: a cutting plane of 110,888 cells over 10,000 steps and 18 bands held 74 GB
++ * as dense arrays, almost all of it zeros, and SPPS aborted while zero-filling it at start-up.
++ */
++class SparseTimeSeries
++{
++public:
++	SparseTimeSeries():nbtimestep(0){}
++	/** Sets the step count. The series is empty (every step 0) and takes no memory until energy arrives. */
++	void resize(uentier _nbtimestep)
++	{
++		nbtimestep=_nbtimestep;
++		steps.clear();values.clear();dense.clear();
++		if(nbtimestep>65535) //A step index must fit uint16_t; a longer run keeps the dense array as before
++			dense.assign(nbtimestep,0);
++	}
++	uentier size() const { return nbtimestep; }
++	bool empty() const { return nbtimestep==0; }
++	/**
++	 * Adds energy at a step. The particle's energy is a double (l_decimal) and the dense array was a float,
++	 * so upstream's `cell += energy` added in double and rounded once; this does the same, bit for bit.
++	 * A step past the count is ignored (the dense array wrote out of bounds there).
++	 */
++	void add(uentier step,double energy)
++	{
++		if(step>=nbtimestep) return;
++		if(!dense.empty()) { dense[step]=(decimal)((double)dense[step]+energy); return; }
++		std::vector<uint16_t>::iterator it=std::lower_bound(steps.begin(),steps.end(),(uint16_t)step);
++		std::size_t at=it-steps.begin();
++		if(it!=steps.end() && *it==step) { values[at]=(decimal)((double)values[at]+energy); return; }
++		if(steps.size()+1>denseThreshold()) { toDense(); dense[step]=(decimal)((double)dense[step]+energy); return; }
++		steps.insert(it,(uint16_t)step);
++		values.insert(values.begin()+at,(decimal)energy);
++	}
++	/** Sets the energy at a step (rounded to the cell's float, as an assignment to the dense array was). */
++	void set(uentier step,double energy)
++	{
++		if(step>=nbtimestep) return;
++		decimal v=(decimal)energy;
++		if(!dense.empty()) { dense[step]=v; return; }
++		std::vector<uint16_t>::iterator it=std::lower_bound(steps.begin(),steps.end(),(uint16_t)step);
++		std::size_t at=it-steps.begin();
++		if(it!=steps.end() && *it==step) { values[at]=v; return; }
++		if(steps.size()+1>denseThreshold()) { toDense(); dense[step]=v; return; }
++		steps.insert(it,(uint16_t)step);
++		values.insert(values.begin()+at,v);
++	}
++	/** The energy at a step; 0 where none arrived. */
++	decimal get(uentier step) const
++	{
++		if(step>=nbtimestep) return 0;
++		if(!dense.empty()) return dense[step];
++		if(steps.empty() || step<steps.front() || step>steps.back()) return 0;
++		std::vector<uint16_t>::const_iterator it=std::lower_bound(steps.begin(),steps.end(),(uint16_t)step);
++		return (it!=steps.end() && *it==step) ? values[it-steps.begin()] : 0;
++	}
++	/** Multiplies every stored energy; a zero stays zero, as in the dense array. */
++	void scale(decimal factor)
++	{
++		for(std::size_t i=0;i<dense.size();i++) dense[i]*=factor;
++		for(std::size_t i=0;i<values.size();i++) values[i]*=factor;
++	}
++	/** Steps holding energy (the dense array counts its non-zeros). */
++	std::size_t count() const
++	{
++		if(dense.empty()) return steps.size();
++		std::size_t n=0;
++		for(std::size_t i=0;i<dense.size();i++) if(dense[i]!=0) n++;
++		return n;
++	}
++private:
++	std::size_t denseThreshold() const { return (std::size_t)nbtimestep/8+1; }
++	void toDense()
++	{
++		dense.assign(nbtimestep,0);
++		for(std::size_t i=0;i<steps.size();i++) dense[steps[i]]=values[i];
++		std::vector<uint16_t>().swap(steps);
++		std::vector<decimal>().swap(values);
++	}
++	uentier nbtimestep;
++	std::vector<uint16_t> steps;
++	std::vector<decimal> values;
++	std::vector<decimal> dense;
++};
++
+ 
+ /**
+  * @brief Structure de donnÃ©es correspondant aux informations d'absorption atmosphÃ©rique
+@@ -146,7 +237,7 @@ class r_Surf_Face
+ public:
+ 	ivec3 indiceSommets;  /*!< Indice des sommets de la face */
+ 	vec3 sommets[3];
+-	decimal** energieRecu; /*!< Tableau de nombre decimal dÃ©signant l'Ã©nÃ©rgie recu sur le nombre de pas de temps */
++	SparseTimeSeries** energieRecu; /*!< Par bande de frÃ©quence (NULL si non calculÃ©e), l'Ã©nergie reÃ§ue sur les pas de temps, stockÃ©e creuse (patch 0002; Ã©tait decimal**) */
+ 	/**
+ 	 *  AppelÃ© par r_Surf::r_Surf(). Initilialise le tableau gÃ©nÃ©ral
+ 	 */
+@@ -253,7 +344,7 @@ private:
+ 
+ 
+ typedef decimal t_cell;
+-typedef std::vector<t_cell> t_time_ar;
++typedef SparseTimeSeries t_time_ar; //Was std::vector<t_cell>: one value per time step, zeros included (patch 0002)
+ typedef std::vector<t_time_ar> t_col_ar;
+ typedef std::vector<t_col_ar> t_row_ar;
+ typedef std::vector<t_row_ar> t_freq_ar;
+@@ -296,7 +387,7 @@ struct r_SurfCut
+ 					col_ar.resize(_nbcols);
+ 					for(uentier idcol=0;idcol<_nbcols;idcol++)
+ 					{
+-						col_ar[idcol].resize(_nbtimestep,0);
++						col_ar[idcol].resize(_nbtimestep); //Sparse: no memory until a particle crosses the cell (patch 0002)
+ 						//memset(col_ar[idcol].data,0,_nbtimestep*sizeof(t_cell));
+ 					}
+ 				}
+diff --git a/src/lib_interface/input_output/baseReportManager.cpp b/src/lib_interface/input_output/baseReportManager.cpp
+index 8d844a3..44397fd 100644
+--- a/src/lib_interface/input_output/baseReportManager.cpp
++++ b/src/lib_interface/input_output/baseReportManager.cpp
+@@ -58,7 +58,7 @@ void ExportTouteBande(formatRSBIN::t_ExchangeData& mainData,std::vector<r_Surf*>
+ 				{
+ 					if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq]!=NULL)
+ 					{
+-						if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq][idTimeStep]!=0)
++						if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq]->get(idTimeStep)!=0)
+ 						{
+ 							somethingRecordedAtThisTimeStep=true;
+ 						}
+@@ -78,12 +78,12 @@ void ExportTouteBande(formatRSBIN::t_ExchangeData& mainData,std::vector<r_Surf*>
+ 				{
+ 					if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq]!=NULL)
+ 					{
+-						if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq][idTimeStep]!=0)
++						if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq]->get(idTimeStep)!=0)
+ 						{
+ 							incrementTimeStep=true;
+ 							mainData.tabRs[idRs].dataFaces[idFace].tabTimeStep[idCol].timeStep=idTimeStep;
+ 
+-							mainData.tabRs[idRs].dataFaces[idFace].tabTimeStep[idCol].energy+=tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq][idTimeStep]/aireSubRecepteurS;
++							mainData.tabRs[idRs].dataFaces[idFace].tabTimeStep[idCol].energy+=tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq]->get(idTimeStep)/aireSubRecepteurS;
+ 						}
+ 					}
+ 				}
+@@ -115,7 +115,7 @@ void ExportSimpleBande(formatRSBIN::t_ExchangeData& mainData,std::vector<r_Surf*
+ 			memcpy(&mainData.tabRs[idRs].dataFaces[idFace].dataFace.sommetsIndex,&tabRecepteurS[idRs]->faces[idFace].indiceSommets,sizeof(ivec3));
+ 			for(int idTimeStep=0;idTimeStep<mainData.nbTimeStep;idTimeStep++)
+ 			{
+-				if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq][idTimeStep]!=0)
++				if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq]->get(idTimeStep)!=0)
+ 					mainData.tabRs[idRs].dataFaces[idFace].dataFace.nbRecords++;
+ 			}
+ 			mainData.tabRs[idRs].dataFaces[idFace].tabTimeStep = new t_faceValue[mainData.tabRs[idRs].dataFaces[idFace].dataFace.nbRecords];
+@@ -125,10 +125,10 @@ void ExportSimpleBande(formatRSBIN::t_ExchangeData& mainData,std::vector<r_Surf*
+ 			{
+ 				if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq]!=NULL)
+ 				{
+-					if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq][idTimeStep]!=0)
++					if(tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq]->get(idTimeStep)!=0)
+ 					{
+ 						mainData.tabRs[idRs].dataFaces[idFace].tabTimeStep[idCol].timeStep=idTimeStep;
+-						mainData.tabRs[idRs].dataFaces[idFace].tabTimeStep[idCol].energy=tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq][idTimeStep]/aireSubRecepteurS;
++						mainData.tabRs[idRs].dataFaces[idFace].tabTimeStep[idCol].energy=tabRecepteurS[idRs]->faces[idFace].energieRecu[idfreq]->get(idTimeStep)/aireSubRecepteurS;
+ 						idCol++;
+ 					}
+ 				}
+@@ -277,7 +277,7 @@ void BaseReportManager::SauveRecepteursSurfaciquesCoupe(stringClass rootFolder,s
+ 						{
+ 							if(!(*itrs)->data[ifreq].empty())
+ 							{
+-								if((*itrs)->data[ifreq][idrow][idcol][idTimeStep]!=0)
++								if((*itrs)->data[ifreq][idrow][idcol].get(idTimeStep)!=0)
+ 								{
+ 									somethingrecorded=true;
+ 									break;
+@@ -287,7 +287,7 @@ void BaseReportManager::SauveRecepteursSurfaciquesCoupe(stringClass rootFolder,s
+ 						if(somethingrecorded)
+ 							mainData.tabRs[idRs].dataFaces[idFace].dataFace.nbRecords++;
+ 					}else{
+-						if((*itrs)->data[idfreq][idrow][idcol][idTimeStep]!=0)
++						if((*itrs)->data[idfreq][idrow][idcol].get(idTimeStep)!=0)
+ 							mainData.tabRs[idRs].dataFaces[idFace].dataFace.nbRecords++;
+ 					}
+ 				}
+@@ -304,10 +304,10 @@ void BaseReportManager::SauveRecepteursSurfaciquesCoupe(stringClass rootFolder,s
+ 						for(uentier ifreq=0;ifreq<(*itrs)->nbfreq;ifreq++)
+ 						{
+ 							if(!(*itrs)->data[ifreq].empty())
+-								cellData+=((*itrs)->data[ifreq][idrow][idcol][idTimeStep]);
++								cellData+=((*itrs)->data[ifreq][idrow][idcol].get(idTimeStep));
+ 						}
+ 					}else{
+-						cellData=((*itrs)->data[idfreq][idrow][idcol][idTimeStep]);
++						cellData=((*itrs)->data[idfreq][idrow][idcol].get(idTimeStep));
+ 					}
+ 					if(cellData!=0)
+ 					{
+diff --git a/src/spps/input_output/reportmanager.cpp b/src/spps/input_output/reportmanager.cpp
+index 4b02d9d..f2e3561 100644
+--- a/src/spps/input_output/reportmanager.cpp
++++ b/src/spps/input_output/reportmanager.cpp
+@@ -187,9 +187,9 @@ void ReportManager::ParticuleFreeTranslation(CONF_PARTICULE& particleInfos, cons
+ 				// The step's energy goes into its surface-receiver time bin (the step itself at a ratio of 1)
+ 				uentier binIndex=particleInfos.pasCourant/paramReport.surfaceStepRatio;
+ 				if (*(this->paramReport.configManager->FastGetConfigValue(Core_Configuration::I_PROP_SURFACE_RECEIVER_MODE)) == 0)
+-					(*itrs)->data[particleInfos.frequenceIndex][CellRow][CellCol][binIndex] += particleInfos.energie;
++					(*itrs)->data[particleInfos.frequenceIndex][CellRow][CellCol].add(binIndex,particleInfos.energie);
+ 				else
+-					(*itrs)->data[particleInfos.frequenceIndex][CellRow][CellCol][binIndex]+=particleInfos.energie / max(cosf(normal.angle(particleInfos.direction)), 0.000000001f);
++					(*itrs)->data[particleInfos.frequenceIndex][CellRow][CellCol].add(binIndex,particleInfos.energie / max(cosf(normal.angle(particleInfos.direction)), 0.000000001f));
+ 			}
+ 		}
+ 	}
+@@ -283,9 +283,9 @@ void ReportManager::ParticuleCollideWithSceneMesh(CONF_PARTICULE& particleInfos)
+ 		// The step's energy goes into its surface-receiver time bin (the step itself at a ratio of 1)
+ 		uentier binIndex=particleInfos.pasCourant/paramReport.surfaceStepRatio;
+ 		if (*(this->paramReport.configManager->FastGetConfigValue(Core_Configuration::I_PROP_SURFACE_RECEIVER_MODE)) == 0)
+-			face->recepteurS->energieRecu[particleInfos.frequenceIndex][binIndex] += particleInfos.energie;
++			face->recepteurS->energieRecu[particleInfos.frequenceIndex]->add(binIndex,particleInfos.energie);
+ 		else
+-			face->recepteurS->energieRecu[particleInfos.frequenceIndex][binIndex] += particleInfos.energie / max(cosf(normal.angle(particleInfos.direction)), 0.000000001f);
++			face->recepteurS->energieRecu[particleInfos.frequenceIndex]->add(binIndex,particleInfos.energie / max(cosf(normal.angle(particleInfos.direction)), 0.000000001f));
+ 	}
+ }
+ 
+@@ -552,8 +552,8 @@ void ReportManager::SetPostProcessSurfaceReceiver(Core_Configuration& coreConfig
+ 			for(unsigned int idFace=0;idFace<currentRs.nbFaces;idFace++)
+ 			{
+ 				r_Surf_Face& curFace(currentRs.faces[idFace]);
+-				for(std::size_t idTimeStep=0;idTimeStep<curFace.nbtimestep;idTimeStep++)
+-					curFace.energieRecu[freqIndex][idTimeStep]*=i0_div_p0sqr;
++				if(curFace.energieRecu[freqIndex])
++					curFace.energieRecu[freqIndex]->scale(i0_div_p0sqr); //Every stored step; a zero stays zero (patch 0002)
+ 			}
+ 		}
+ 	}
+@@ -571,10 +571,7 @@ void ReportManager::SetPostProcessCutSurfaceReceiver(Core_Configuration& coreCon
+ 			{
+ 				for(uentier idcol=0;idcol<currentRs.nbcols;idcol++)
+ 				{
+-					for(unsigned int idTimeStep=0;idTimeStep<currentRs.nbtimestep;idTimeStep++)
+-					{
+-						currentRs.data[freqIndex][idrow][idcol][idTimeStep]*=i0_div_p0sqr;
+-					}
++					currentRs.data[freqIndex][idrow][idcol].scale(i0_div_p0sqr); //Every stored step; a zero stays zero (patch 0002)
+ 				}
+ 			}
+ 		}
