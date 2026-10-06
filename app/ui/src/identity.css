@@ -73,3 +73,66 @@ body {
     inset 0 2px 3px rgba(0, 0, 0, 0.6),
     inset 0 -1px 0 rgba(255, 240, 235, 0.05) !important;
 }
+
+/* 5: Fields set into the panel, like a display window: darker than the panel, shadowed at the top. */
+input:not([type='range'], [type='checkbox'], [type='radio']),
+select {
+  background-color: #0a0808 !important;
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.75),
+    inset 0 -1px 0 rgba(255, 240, 235, 0.06) !important;
+}
+
+/* 6: Segmented controls: a recessed tray, its keys raised in it. */
+.segmented {
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.65) !important;
+}
+
+/* 7: Slide switches: a recessed slot and a raised, lit knob. */
+.switch-track,
+.vp-switch .track {
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.75) !important;
+}
+.switch-knob,
+.vp-switch .knob {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(0, 0, 0, 0.15)) !important;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
+}
+
+/* 8: Radios as LEDs: a dark lens, lit red when chosen. */
+.mat-option .radio {
+  background: #070606;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+.mat-option[aria-checked='true'] .dot {
+  box-shadow: 0 0 6px 1px rgba(224, 32, 46, 0.85);
+}
+
+/* 9: The step you are on, pressed in; the step numbers raised like keycaps. */
+.step[aria-current='step'] {
+  background: rgba(0, 0, 0, 0.35) !important;
+  border-bottom-color: transparent !important;
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.6),
+    inset 0 -2px 0 var(--red) !important;
+}
+.step .badge {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 235, 0.15),
+    0 1px 0 rgba(0, 0, 0, 0.6);
+}
+
+/* 10: Machined panel edges: a light line along the top, a dark one along the bottom. */
+.scene,
+.props,
+.dock,
+.stepbar,
+.menubar,
+.statusbar,
+.float-panel:not(button) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 235, 0.07),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.55) !important;
+}
