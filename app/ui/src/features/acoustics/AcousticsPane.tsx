@@ -23,6 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
 import * as actions from '../../actions';
+import { displayName } from '../../chrome/sceneModel';
 import type { ApplyConflict, ReportView } from '../../bindings/ipc';
 import { reportStore, runsStore, sceneStore, selectedRunStore, stepStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
@@ -686,7 +687,9 @@ export function AcousticsPane() {
                   <tr key={row.materialId.path}>
                     <td>
                       {row.names.length ? (
-                        <span data-label="group">{row.names.join(', ')}</span>
+                        <span data-label="group" title={row.names.join(', ')}>
+                          {row.names.map(displayName).join(', ')}
+                        </span>
                       ) : (
                         <span>
                           material <N n={row.materialId} />

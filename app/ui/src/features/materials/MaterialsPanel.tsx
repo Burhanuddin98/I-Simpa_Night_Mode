@@ -4,6 +4,7 @@
 // through `actions.apply` with `ops`.
 import { useState } from 'react';
 import * as actions from '../../actions';
+import { displayName } from '../../chrome/sceneModel';
 import { fieldKey } from '../../issues';
 import { assignMaterial, batch } from '../../ops';
 import { STEPS } from '../../steps';
@@ -64,7 +65,7 @@ function GroupSection() {
   const area = stats.reduce((a, s) => a + (typeof s.area_m2 === 'number' ? s.area_m2 : NaN), 0);
   const faces = stats.reduce((a, s) => a + s.faces, 0);
   const unassigned = stats.filter((s) => !s.assigned).length;
-  const title = groups.length === 1 ? groups[0].name : `${groups.length} surface groups`;
+  const title = groups.length === 1 ? displayName(groups[0].name) : `${groups.length} surface groups`;
   const idsKey = ids.join(',');
   const ownKey = (key: string) => ids.some((id) => key === fieldKey('surface_group', id, 'material'));
   const many = view.bands.frequencies_hz.length > 12;
@@ -89,7 +90,7 @@ function GroupSection() {
       <section className="mat-sec mat-group" data-part="material-group" data-group-ids={idsKey}>
         <div className="mat-title">{title}</div>
         <div className="mat-sub" data-geometry="">
-          {groups.length === 1 ? 'Surface group' : groups.map((g) => g.name).join(', ')} · {formatArea(area)} m² · {faces}{' '}
+          {groups.length === 1 ? 'Surface group' : groups.map((g) => displayName(g.name)).join(', ')} · {formatArea(area)} m² · {faces}{' '}
           {faces === 1 ? 'face' : 'faces'}
         </div>
         {variant && (
@@ -128,7 +129,7 @@ function GroupSection() {
                 <span className="mat-swatch" style={{ background: m.color }} />
                 {/* A material's name is an input ("30% absorbing" is a name, not a result). */}
                 <span className="name" title={m.name} data-input="">
-                  {m.name}
+                  {displayName(m.name)}
                 </span>
                 <span className={many ? 'mat-bars many' : 'mat-bars'} aria-hidden="true">
                   {alphaBars(m.absorption).map((h, i) => (

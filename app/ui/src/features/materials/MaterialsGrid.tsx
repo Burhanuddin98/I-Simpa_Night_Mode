@@ -15,6 +15,7 @@
 // `actions.addFromLibrary`, which do the same.
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import * as actions from '../../actions';
+import { displayName } from '../../chrome/sceneModel';
 import type { Material, Op } from '../../bindings/schema';
 import { fieldKey } from '../../issues';
 import { NOT_A_NUMBER, parseStrictDecimal } from '../../numbers';
@@ -609,7 +610,7 @@ export function MaterialsGrid() {
                           <span className="mat-swatch" style={{ background: m.color }} />
                           <span className="mg-label">
                             <span className="mg-text" title={m.name}>
-                              {m.name}
+                              {displayName(m.name)}
                             </span>
                             <span className="mg-used">used by {used.get(m.id) ?? 0}</span>
                           </span>
@@ -695,8 +696,8 @@ export function MaterialsGrid() {
         <div className="mat-row" title="Transmission is read-only in this version">
           <span>
             Transmission{' '}
-            <span className="mg-of" data-input="">
-              · {focused.name}
+            <span className="mg-of" data-input="" title={focused.name}>
+              · {displayName(focused.name)}
             </span>
           </span>
           <span className="mono">{transmissionText(focused)}</span>
