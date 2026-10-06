@@ -72,6 +72,7 @@ import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
 import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, pulsePhase, spriteScale, STILL_PHASE, withGlow } from './glow';
 import { aoReach, bakeAo, withAo } from './ao';
 import { FADE_BG, FADE_MAX, fadeRange, withFade } from './fade';
+import { withGlass } from './glass';
 import { planeCells } from '../../chrome/planes';
 
 export type ViewMode = 'perspective' | 'plan';
@@ -411,6 +412,14 @@ class ViewportEngine {
     );
     this.ghost.visible = false;
     for (const m of [this.tintColour, this.tintGrey, this.tintWire, this.ghost.material as MeshMatcapMaterial]) shaded(m, this.shared);
+    // The glass case (glass.ts): the see-through layer's opacity by view angle, after the shared shading.
+    const ghostMaterial = this.ghost.material as MeshMatcapMaterial;
+    const shade = ghostMaterial.onBeforeCompile;
+    ghostMaterial.onBeforeCompile = (shader, r) => {
+      shade.call(ghostMaterial, shader, r);
+      shader.fragmentShader = withGlass(shader.fragmentShader);
+    };
+    ghostMaterial.customProgramCacheKey = () => 'nm-shaded-glass';
     this.edges = new LineSegments(new BufferGeometry(), fadingLines(new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }), this.shared));
     this.highlight = new Mesh(
       new BufferGeometry(),
