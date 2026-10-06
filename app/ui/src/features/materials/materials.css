@@ -228,8 +228,6 @@
   background: var(--raised-2);
   font-family: var(--cond);
   font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
   cursor: pointer;
 }
 .mg-band {
@@ -365,8 +363,6 @@
   text-align: left;
   font-family: var(--cond);
   font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
   cursor: default;
 }
 .mg thead th.mg-law:hover {

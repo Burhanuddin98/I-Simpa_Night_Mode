@@ -228,31 +228,15 @@ async function probeBridge() {
   };
 }
 
-// Decision 50: the fonts are Windows' own, none bundled. A family is installed when a span set in
-// it measures differently from both generic fallbacks (DOM, not a canvas: the one-canvas rule).
-// document.fonts.check() cannot answer this: it reports true for any family with no @font-face.
-function installedFamily(family: string): boolean {
-  const span = document.createElement('span');
-  span.textContent = 'mmmmmmmmmmlli1WQ@#';
-  span.style.cssText = 'position:absolute;visibility:hidden;font-size:72px;white-space:nowrap';
-  document.body.appendChild(span);
-  try {
-    return ['monospace', 'serif'].some((generic) => {
-      span.style.fontFamily = generic;
-      const base = span.offsetWidth;
-      span.style.fontFamily = `"${family}", ${generic}`;
-      return span.offsetWidth !== base;
-    });
-  } finally {
-    span.remove();
-  }
-}
+// Decision 60: the fonts ship with the app, Inter and JetBrains Mono, and nothing else is bundled.
+// document.fonts.load() resolves to the faces it loaded: none means the family fell back to the system.
+const BUNDLED_FONTS = ['Inter Variable', 'JetBrains Mono Variable'];
 
 async function probeFonts() {
-  const bundled = [...document.fonts].map((f) => f.family.replace(/["']/g, ''));
-  const sans = installedFamily('Segoe UI');
-  const mono = ['Cascadia Mono', 'Cascadia Code', 'Consolas'].find(installedFamily) ?? null;
-  return { bundled, sans, mono };
+  const bundled = [...new Set([...document.fonts].map((f) => f.family.replace(/["']/g, '')))];
+  const loaded: Record<string, boolean> = {};
+  for (const family of BUNDLED_FONTS) loaded[family] = (await document.fonts.load(`16px "${family}"`)).length > 0;
+  return { bundled, loaded };
 }
 
 async function probeCsp() {
@@ -359,7 +343,8 @@ export async function runSelftest(webgl: WebGLInfo): Promise<void> {
     checks.bridge_undo = bridge.applied_can_undo && bridge.undo_can_redo && bridge.camera_after_undo === null;
     checks.step_bar_five_steps = JSON.stringify(dom.steps) === JSON.stringify(STEP_NAMES) && dom.steps_visible.every(Boolean);
     checks.no_acoustic_numbers = dom.acoustic_number_matches === 0;
-    checks.fonts_system_none_bundled = fonts.bundled.length === 0 && fonts.sans && fonts.mono !== null;
+    checks.fonts_bundled_loaded =
+      BUNDLED_FONTS.every((f) => fonts.loaded[f]) && fonts.bundled.every((f) => BUNDLED_FONTS.includes(f));
     checks.csp_blocks_inline_script = !csp.inline_script_ran;
     checks.csp_blocks_eval = csp.eval_blocked;
     checks.prototype_frozen = csp.prototype_frozen;

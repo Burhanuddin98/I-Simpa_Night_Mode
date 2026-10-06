@@ -25,9 +25,10 @@
   --warn: #f2a93b;
   --fail-text: #ffb3b8;
   /* Windows' own faces (row 50): nothing bundled. */
-  --sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-  --cond: 'Segoe UI Variable Display', 'Segoe UI Semibold', 'Segoe UI', sans-serif;
-  --mono: 'Cascadia Mono', 'Cascadia Code', Consolas, ui-monospace, monospace;
+  /* Decision 60 (Burhan's pick, 2026-10-06): Inter and JetBrains Mono, bundled. */
+  --sans: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --cond: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --mono: 'JetBrains Mono Variable', 'Cascadia Mono', Consolas, ui-monospace, monospace;
   /* A floating panel's fill and blur (row 50). The fill is see-through, the text on it is not:
      never `opacity` on a panel. */
   --glass: rgba(15, 15, 17, 0.4);
@@ -94,8 +95,6 @@ button:focus-visible {
   font-family: var(--cond);
   font-weight: 600;
   font-size: 12px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
   color: var(--text-3);
 }
 .mono {

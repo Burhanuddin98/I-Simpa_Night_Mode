@@ -104,7 +104,7 @@ export async function exportView(path?: string): Promise<ExportDone | null> {
     { width: frame.width, height: frame.height, rgba: composite(frame.rgba, bg) },
     strip,
     v.map?.legend.gradient ?? null,
-    { bg: bgText, text: cssVar('--text', '#ececee'), dim: cssVar('--text-2', '#a1a1aa'), font: cssVar('--sans', 'Segoe UI') },
+    { bg: bgText, text: cssVar('--text', '#ececee'), dim: cssVar('--text-2', '#a1a1aa'), font: cssVar('--sans', 'Inter Variable') },
   );
   const bytes = await actions.exportWrite('png', target, png, 'the 3D view');
   const done: ExportDone = { kind: 'png', path: target, bytes, width: frame.width, height: frame.height, strip };

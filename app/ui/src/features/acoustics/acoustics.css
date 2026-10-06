@@ -66,8 +66,6 @@
   font-family: var(--cond);
   font-weight: 600;
   font-size: 12px;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
   color: var(--text-3);
 }
 .ac-sub {
