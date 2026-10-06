@@ -9,13 +9,13 @@
 //   run's end re-reads it too (actions.ts).
 import { useEffect, useRef, useState } from 'react';
 import * as actions from '../../actions';
-import { consoleStore, runsStore, runStore, useStore } from '../../store';
+import { consoleStore, runsStore, runStore, stepStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
 import { AcousticsPane, useAcousticsDock } from '../acoustics/AcousticsPane';
 import { ConsolePane } from './ConsolePane';
 import { consoleBadge, runsBadge } from './model';
 import { RunsPane } from './RunsPane';
-import { FoldButton, useFold } from '../../chrome/fold';
+import { FoldButton, openDockFor, useFold } from '../../chrome/fold';
 import './dock.css';
 
 const DOCK_TABS = [
@@ -63,6 +63,16 @@ export function Dock() {
     };
   }, []);
   const folded = useFold('dock');
+  // A folded dock opens itself on the Results step (the Acoustics tab) and when an error is logged.
+  useEffect(() => {
+    const offStep = stepStore.subscribe(() => openDockFor({ step: stepStore.get() }));
+    const offLog = consoleStore.subscribe(() => openDockFor({ tag: consoleStore.get().at(-1)?.tag }));
+    openDockFor({ step: stepStore.get() });
+    return () => {
+      offStep();
+      offLog();
+    };
+  }, []);
 
   return (
     <section className="dock" aria-label="Analysis dock" data-folded={folded}>
