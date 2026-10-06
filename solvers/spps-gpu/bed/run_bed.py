@@ -20,6 +20,21 @@ CASES = {
     "outputs": (os.path.join(FIX, "outputs_spps", "solve"), {"nbparticules": "200000"}),
     "sources2": (os.path.join(FIX, "sources2_spps", "solve"), {"nbparticules": "200000"}),
     "cr4-1k": (CR4, {"only_band": "1000"}),
+    # rule variants on the energetic box (energetic mode, 1 s): reflection laws, direct field only,
+    # source types, surface map in "SPL" mode, single-sided materials, no air absorption; and the
+    # random mode with diffusion on the seats box
+    "v-lambert": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "mat.diffusion": "1", "mat.loi": "2"}),
+    "v-uniform": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "mat.diffusion": "0.5", "mat.loi": "1"}),
+    "v-w2": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "mat.diffusion": "0.7", "mat.loi": "3"}),
+    "v-w4": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "mat.diffusion": "1", "mat.loi": "5"}),
+    "v-direct": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "direct_calc": "1"}),
+    "v-srcxy": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "src.directivite": "2"}),
+    "v-srcyz": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "src.directivite": "3"}),
+    "v-srcuni": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "src.directivite": "1", "src.u": "0", "src.v": "1", "src.w": "0.2"}),
+    "v-surfspl": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "surf_receiv_method": "1"}),
+    "v-onesided": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "side.material": "0"}),
+    "v-noatmo": (os.path.join(FIX, "energetic_spps", "solve"), {"nbparticules": "200000", "abs_atmo_calc": "0"}),
+    "v-random-diffuse": (os.path.join(FIX, "seats_spps", "solve"), {"nbparticules": "200000", "duree_simulation": "3", "mat.diffusion": "0.6", "mat.loi": "2"}),
 }
 
 if __name__ == "__main__":

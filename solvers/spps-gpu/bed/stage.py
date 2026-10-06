@@ -38,6 +38,28 @@ def set_attrs(text, wd, attrs):
             return re.sub(r'docalc="[^"]*"', 'docalc="%s"' % ("1" if f == only else "0"), tag)
         fe = re.search(r"<freq_enum>.*?</freq_enum>", text, re.S)
         text = text[:fe.start()] + re.sub(r"<bfreq\b[^>]*/>", fix, fe.group(0)) + text[fe.end():]
+    # rule variants for the bed: every material band's attribute (mat.<attr>), every material's
+    # side_material (side.material), every source's attribute (src.<attr>), the atmosphere (atmo.<attr>)
+    for k in [k for k in attrs if "." in k]:
+        v = attrs.pop(k)
+        scope, a = k.split(".", 1)
+        if scope == "mat":
+            se = re.search(r"<surface_absorption_enum>.*?</surface_absorption_enum>", text, re.S)
+            body = re.sub(r'(<bfreq\b[^>]*?\s' + re.escape(a) + r'=")[^"]*(")', lambda m: m.group(1) + v + m.group(2), se.group(0))
+            text = text[:se.start()] + body + text[se.end():]
+        elif scope == "side":
+            text = re.sub(r'(<type_surface\b[^>]*\bside_material=")[^"]*(")', lambda m: m.group(1) + v + m.group(2), text)
+        elif scope == "src":
+            def put(m, a=a, v=v):
+                tag = m.group(0)
+                if re.search(r'\s' + re.escape(a) + r'="', tag):
+                    return re.sub(r'(\s' + re.escape(a) + r'=")[^"]*(")', lambda n: n.group(1) + v + n.group(2), tag)
+                return tag.replace("<source", "<source " + a + '="' + v + '"', 1)
+            text = re.sub(r"<source\b[^>]*>", put, text)
+        elif scope == "atmo":
+            text = re.sub(r'(<condition_atmospherique\b[^>]*\s' + re.escape(a) + r'=")[^"]*(")', lambda m: m.group(1) + v + m.group(2), text)
+        else:
+            sys.exit(f"unknown variant key {k}")
     for k, v in attrs.items():
         pat = re.compile(r'(<simulation\b[^>]*?)\s' + re.escape(k) + r'="[^"]*"')
         if v == "-":

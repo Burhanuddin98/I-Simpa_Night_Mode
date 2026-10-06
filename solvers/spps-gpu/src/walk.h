@@ -75,15 +75,26 @@ SPG_F void d_sincos(double x, double* s, double* c) {
 SPG_F double d_sin(double x) { double s, c; d_sincos(x, &s, &c); return s; }
 SPG_F double d_cos(double x) { double s, c; d_sincos(x, &s, &c); return c; }
 
-// asin by its series on |z| <= 0.5 (terms below 1e-20 by n = 30)
+// The series' coefficients as literals (no division in the loops: a double division costs dozens of
+// instructions on a consumer GPU), evaluated by Horner's rule, the same operations on both builds.
+#if defined(__CUDA_ARCH__)
+#define SPG_UNROLL _Pragma("unroll")
+#else
+#define SPG_UNROLL
+#endif
+// asin by its series on |z| <= 0.5: sum over n of (2n)! / (4^n (n!)^2 (2n + 1)) z^(2n+1), to n = 30
 SPG_F double d_asin_small(double z) {
-  double z2 = z * z, term = z, t = 1.0, sum = z;
-  for (int n = 1; n <= 30; n++) {
-    t = t * (double)(2 * n - 1) / (double)(2 * n);
-    term = term * z2;
-    sum += t * term / (double)(2 * n + 1);
-  }
-  return sum;
+  const double C[31] = {1.00000000000000000e+00, 1.66666666666666657e-01, 7.49999999999999972e-02, 4.46428571428571438e-02,
+      3.03819444444444441e-02, 2.23721590909090919e-02, 1.73527644230769239e-02, 1.39648437500000007e-02, 1.15518008961397051e-02,
+      9.76160952919407840e-03, 8.39033580961681506e-03, 7.31252587359884545e-03, 6.44721031188964875e-03, 5.74003767084192359e-03,
+      5.15330968231990458e-03, 4.66014348691509619e-03, 4.24090709367936324e-03, 3.88096455883766905e-03, 3.56920539382593474e-03,
+      3.29705950347348488e-03, 3.05782164925803065e-03, 2.84617840110894206e-03, 2.65787063820729008e-03, 2.48944867824688358e-03,
+      2.33809189211197505e-03, 2.20147397371013836e-03, 2.07766103251816759e-03, 1.96503361627728369e-03, 1.86222640640312754e-03,
+      1.76808112051541830e-03, 1.68160939358310679e-03};
+  double z2 = z * z, p = C[30];
+  SPG_UNROLL
+  for (int n = 29; n >= 0; n--) p = p * z2 + C[n];
+  return z * p;
 }
 // acos; NaN outside [-1, 1], as acosf returns there (upstream's angle() can feed it 1 + 1 ulp)
 SPG_F double d_acos(double x) {
@@ -98,18 +109,31 @@ SPG_F double d_log(double x) {
   int e;
   double m = frexp(x, &e);
   if (m < 7.07106781186547524401e-01) { m *= 2.0; e -= 1; }
-  double z = (m - 1.0) / (m + 1.0), z2 = z * z, term = z, sum = z;
-  for (int n = 1; n <= 14; n++) { term *= z2; sum += term / (double)(2 * n + 1); }
-  return 2.0 * sum + (double)e * LN2;
+  // log m = 2 atanh z, z = (m - 1)/(m + 1), |z| <= 0.172: 2 z sum over n of z^(2n) / (2n + 1), to n = 14
+  const double C[15] = {1.00000000000000000e+00, 3.33333333333333315e-01, 2.00000000000000011e-01, 1.42857142857142849e-01,
+      1.11111111111111105e-01, 9.09090909090909116e-02, 7.69230769230769273e-02, 6.66666666666666657e-02, 5.88235294117647051e-02,
+      5.26315789473684181e-02, 4.76190476190476164e-02, 4.34782608695652162e-02, 4.00000000000000008e-02, 3.70370370370370350e-02,
+      3.44827586206896547e-02};
+  double z = (m - 1.0) / (m + 1.0), z2 = z * z, p = C[14];
+  SPG_UNROLL
+  for (int n = 13; n >= 0; n--) p = p * z2 + C[n];
+  return 2.0 * (z * p) + (double)e * LN2;
 }
 SPG_F double d_exp(double y) {
   const double INV_LN2 = 1.44269504088896338700e+00;
   const double LN2_HI = 6.93147180369123816490e-01, LN2_LO = 1.90821492927058770002e-10;
   double k = floor(y * INV_LN2 + 0.5);
   double r = (y - k * LN2_HI) - k * LN2_LO;
-  double term = 1.0, sum = 1.0;
-  for (int n = 1; n <= 20; n++) { term = term * r / (double)n; sum += term; }
-  return ldexp(sum, (int)k);
+  // |r| <= ln2 / 2: sum over n of r^n / n!, to n = 20
+  const double C[21] = {1.00000000000000000e+00, 1.00000000000000000e+00, 5.00000000000000000e-01, 1.66666666666666657e-01,
+      4.16666666666666644e-02, 8.33333333333333322e-03, 1.38888888888888894e-03, 1.98412698412698413e-04, 2.48015873015873016e-05,
+      2.75573192239858925e-06, 2.75573192239858883e-07, 2.50521083854417202e-08, 2.08767569878681002e-09, 1.60590438368216133e-10,
+      1.14707455977297245e-11, 7.64716373181981641e-13, 4.77947733238738525e-14, 2.81145725434552060e-15, 1.56192069685862253e-16,
+      8.22063524662432950e-18, 4.11031762331216484e-19};
+  double p = C[20];
+  SPG_UNROLL
+  for (int n = 19; n >= 0; n--) p = p * r + C[n];
+  return ldexp(p, (int)k);
 }
 SPG_F double d_pow(double a, double b) {
   if (a == 0.0) return 0.0;
