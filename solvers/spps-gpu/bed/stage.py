@@ -11,7 +11,7 @@ usage:
                                                                         (workingdirectory="__RUNDIR__")
   python stage.py run <exe> <dest-dir> [extra args ...]                 run a solver on a staged folder
 attr=value pairs set <simulation> attributes (e.g. nbparticules=20000 random_seed=7); a value of
-"-" removes the attribute.
+"-" removes the attribute; only_band=<freq> computes that band alone.
 """
 import os, re, shutil, subprocess, sys, time
 import xml.etree.ElementTree as ET
@@ -29,6 +29,15 @@ def inside_roots(path):
 def set_attrs(text, wd, attrs):
     # Edit the XML text in place (the attribute order and the rest of the file stay as they were).
     text = re.sub(r'(<configuration\b[^>]*\bworkingdirectory=")[^"]*(")', lambda m: m.group(1) + wd + m.group(2), text, count=1)
+    only = attrs.pop("only_band", None)
+    if only is not None:
+        # compute one band: docalc="1" on it, "0" on the others (spectra stay mapped by position)
+        def fix(m):
+            tag = m.group(0)
+            f = re.search(r'freq="([^"]*)"', tag).group(1)
+            return re.sub(r'docalc="[^"]*"', 'docalc="%s"' % ("1" if f == only else "0"), tag)
+        fe = re.search(r"<freq_enum>.*?</freq_enum>", text, re.S)
+        text = text[:fe.start()] + re.sub(r"<bfreq\b[^>]*/>", fix, fe.group(0)) + text[fe.end():]
     for k, v in attrs.items():
         pat = re.compile(r'(<simulation\b[^>]*?)\s' + re.escape(k) + r'="[^"]*"')
         if v == "-":

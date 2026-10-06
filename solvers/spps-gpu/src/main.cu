@@ -27,6 +27,8 @@ using namespace spg;
 
 static const char* VERSION = "0.1.0 (A2, 2026-10-06)";
 
+constexpr unsigned TOTAL_REPLICAS = 256;
+
 struct WalkRec { uint32_t steps; int32_t state; double E; uint32_t children; uint32_t pad; uint64_t childSteps; };
 
 // ---------------------------------------------------------------------------------------------
@@ -38,25 +40,13 @@ struct GpuAcc {
   unsigned long long* states;   // 6 states, then child overflow
   double* overflowE;
   int nbSteps, nbBins, nbSrc, bySource;
+  // The per-step total takes every living particle's energy at every step (600 k adds a step on CR4):
+  // TOTAL_REPLICAS copies of the array, one per thread slot, summed on the host in a fixed order. It
+  // spreads the atomics and keeps each copy's rounding to a few thousand adds.
   __host__ __device__ void addTotal(int step, double e) {
 #ifdef __CUDA_ARCH__
-    unsigned active = __activemask();
-    unsigned peers = __match_any_sync(active, step);
-    int lane = threadIdx.x & 31;
-    int leader = __ffs(peers) - 1;
-    double sum = 0;
-    if (peers == 0xFFFFFFFFu) {
-      sum = e;
-      for (int o = 16; o > 0; o >>= 1) sum += __shfl_xor_sync(0xFFFFFFFFu, sum, o);
-    } else {
-      unsigned mm = peers;
-      while (mm) {
-        int l = __ffs(mm) - 1;
-        sum += __shfl_sync(peers, e, l);
-        mm &= mm - 1;
-      }
-    }
-    if (lane == leader) atomicAdd(&total[step], sum);
+    unsigned slot = (blockIdx.x * blockDim.x + threadIdx.x) & (TOTAL_REPLICAS - 1);
+    atomicAdd(&total[(size_t)slot * nbSteps + step], e);
 #endif
   }
   __host__ __device__ void addRp(int r, int step, int src, double e, double lf, double lfc, double ix, double iy, double iz) {
@@ -135,24 +125,34 @@ static inline void casAddF(float* p, float v) {
   *p += v;
 #endif
 }
+// Kahan-compensated add: a thread's sums run over tens of thousands of nearly equal terms, whose
+// plain rounding drifts by 1e-12; compensated, each thread's sum is good to a few ulp.
+static inline void kahan(double& sum, double& comp, double x) {
+  double y = x - comp;
+  double t = sum + y;
+  comp = (t - sum) - y;
+  sum = t;
+}
 struct CpuAcc {
   std::vector<double> total, rpE, rpLf, rpLfc, rpI, rpSrc;
+  std::vector<double> cTotal, cE, cLf, cLfc, cI, cSrc;   // compensations
   float *surf = nullptr, *cut = nullptr;
   uint64_t states[7] = {0, 0, 0, 0, 0, 0, 0};
   double overflowE = 0;
   int nbSteps = 0, nbBins = 0, nbSrc = 0, bySource = 0;
   __host__ __device__ void addTotal(int step, double e) {
 #ifndef __CUDA_ARCH__
-    total[step] += e;
+    kahan(total[step], cTotal[step], e);
 #endif
   }
   __host__ __device__ void addRp(int r, int step, int src, double e, double lf, double lfc, double ix, double iy, double iz) {
 #ifndef __CUDA_ARCH__
     size_t k = (size_t)r * nbSteps + step;
-    rpE[k] += e; rpLf[k] += lf; rpLfc[k] += lfc;
-    rpI[3 * k] += ix; rpI[3 * k + 1] += iy; rpI[3 * k + 2] += iz;
+    kahan(rpE[k], cE[k], e); kahan(rpLf[k], cLf[k], lf); kahan(rpLfc[k], cLfc[k], lfc);
+    kahan(rpI[3 * k], cI[3 * k], ix); kahan(rpI[3 * k + 1], cI[3 * k + 1], iy); kahan(rpI[3 * k + 2], cI[3 * k + 2], iz);
     size_t cols = bySource ? (size_t)nbSteps * nbSrc : (size_t)nbSrc;
-    rpSrc[(size_t)r * cols + (bySource ? (size_t)step * nbSrc + src : (size_t)src)] += e;
+    size_t j = (size_t)r * cols + (bySource ? (size_t)step * nbSrc + src : (size_t)src);
+    kahan(rpSrc[j], cSrc[j], e);
 #endif
   }
   __host__ __device__ void addSurf(int face, int bin, double v) {
@@ -372,7 +372,7 @@ int main(int argc, char** argv) {
   if (!cpu) {
     size_t freeB = 0, totB = 0;
     cudaMemGetInfo(&freeB, &totB);
-    size_t need = (surfN + cutN) * 4 + (S + 6ull * R * S + R * srcCols) * 8 + 64ull * 1048576;
+    size_t need = (surfN + cutN) * 4 + ((size_t)S * TOTAL_REPLICAS + 6ull * R * S + R * srcCols) * 8 + 64ull * 1048576;
     if (need > freeB) {
       std::cerr << "spps-gpu: refused: surface_maps_too_large: the band's sums need " << need / 1048576 << " MiB of device memory, "
                 << freeB / 1048576 << " MiB are free; set recepteurs_surfaciques_pas_temps to a longer bin (patch 0001) or a coarser plane" << std::endl;
@@ -384,7 +384,7 @@ int main(int argc, char** argv) {
     dv.smat = upload(hs.smat); dv.senc = upload(hs.senc); dv.cuts = upload(hs.cuts);
     check(cudaMalloc(&dv.mat, std::max<size_t>(1, cfg.materials.size()) * sizeof(MatBand)), "mat");
     check(cudaMalloc(&dv.srcs, std::max<size_t>(1, (size_t)NS) * sizeof(SrcBand)), "srcs");
-    check(cudaMalloc(&ga.total, std::max<size_t>(1, S) * 8), "total");
+    check(cudaMalloc(&ga.total, std::max<size_t>(1, (size_t)S * TOTAL_REPLICAS) * 8), "total");
     check(cudaMalloc(&ga.rpE, std::max<size_t>(1, (size_t)R * S) * 8), "rpE");
     check(cudaMalloc(&ga.rpLf, std::max<size_t>(1, (size_t)R * S) * 8), "rpLf");
     check(cudaMalloc(&ga.rpLfc, std::max<size_t>(1, (size_t)R * S) * 8), "rpLfc");
@@ -407,7 +407,7 @@ int main(int argc, char** argv) {
   std::ofstream walkOut, sumsOut;
   if (!dumpWalk.empty()) walkOut.open(std::filesystem::u8path(dumpWalk), std::ios::binary | std::ios::trunc);
   if (!dumpSums.empty()) sumsOut.open(std::filesystem::u8path(dumpSums), std::ios::binary | std::ios::trunc);
-  double traceSeconds = 0;
+  double traceSeconds = 0, kernelSeconds = 0;
   uint64_t overflowTotal = 0;
   int bandsDone = 0;
   const int nbCalc = std::max(1, cfg.nbBandsCalc);
@@ -456,7 +456,7 @@ int main(int argc, char** argv) {
     if (!cpu) {
       check(cudaMemcpy(dv.mat, mats.data(), mats.size() * sizeof(MatBand), cudaMemcpyHostToDevice), "mat");
       if (NS) check(cudaMemcpy(dv.srcs, sbs.data(), NS * sizeof(SrcBand), cudaMemcpyHostToDevice), "srcs");
-      cudaMemset(ga.total, 0, std::max<size_t>(1, S) * 8);
+      cudaMemset(ga.total, 0, std::max<size_t>(1, (size_t)S * TOTAL_REPLICAS) * 8);
       cudaMemset(ga.rpE, 0, std::max<size_t>(1, (size_t)R * S) * 8);
       cudaMemset(ga.rpLf, 0, std::max<size_t>(1, (size_t)R * S) * 8);
       cudaMemset(ga.rpLfc, 0, std::max<size_t>(1, (size_t)R * S) * 8);
@@ -479,13 +479,19 @@ int main(int argc, char** argv) {
         check(cudaGetLastError(), "kernel launch");
         float ms = 0;
         cudaEventElapsedTime(&ms, e0, e1);
+        kernelSeconds += ms / 1000.0;
         done += n;
         double target = 300.0;   // ms
         if (ms > 0) chunk = (long long)std::max(1024.0, std::min(4.0 * chunk, chunk * target / ms));
         prog.show(100.0 * (bandsDone + (double)done / std::max(1LL, totalFamilies)) / nbCalc);
       }
       cudaEventDestroy(e0); cudaEventDestroy(e1);
-      check(cudaMemcpy(bs.total.data(), ga.total, (size_t)S * 8, cudaMemcpyDeviceToHost), "copy");
+      {
+        std::vector<double> rep((size_t)S * TOTAL_REPLICAS);
+        check(cudaMemcpy(rep.data(), ga.total, rep.size() * 8, cudaMemcpyDeviceToHost), "copy");
+        for (unsigned k = 0; k < TOTAL_REPLICAS; k++)
+          for (int st = 0; st < S; st++) bs.total[st] += rep[(size_t)k * S + st];
+      }
       if (R) {
         check(cudaMemcpy(bs.rpE.data(), ga.rpE, (size_t)R * S * 8, cudaMemcpyDeviceToHost), "copy");
         check(cudaMemcpy(bs.rpLf.data(), ga.rpLf, (size_t)R * S * 8, cudaMemcpyDeviceToHost), "copy");
@@ -513,6 +519,8 @@ int main(int argc, char** argv) {
       for (CpuAcc& a : accs) {
         a.total.assign(S, 0.0); a.rpE.assign((size_t)R * S, 0.0); a.rpLf.assign((size_t)R * S, 0.0); a.rpLfc.assign((size_t)R * S, 0.0);
         a.rpI.assign(3ull * R * S, 0.0); a.rpSrc.assign((size_t)R * srcCols, 0.0);
+        a.cTotal.assign(S, 0.0); a.cE.assign((size_t)R * S, 0.0); a.cLf.assign((size_t)R * S, 0.0); a.cLfc.assign((size_t)R * S, 0.0);
+        a.cI.assign(3ull * R * S, 0.0); a.cSrc.assign((size_t)R * srcCols, 0.0);
         a.surf = bs.surf.data(); a.cut = bs.cut.data();
         a.nbSteps = S; a.nbBins = NB; a.nbSrc = NS; a.bySource = base.bySource;
       }
@@ -622,6 +630,7 @@ int main(int argc, char** argv) {
     for (char ch : d) { if (ch == '"' || ch == '\\') esc += '\\'; esc += ch; }
     j << "  \"device\": \"" << esc << "\",\n  \"seed\": " << seed << ",\n  \"seed_from_config\": " << (cfg.seed != 0 ? "true" : "false") << ",\n";
     j << "  \"rng\": \"philox4x32-10, key (seed, band << 16 | source), counter (particle, child, draw / 4, 0)\",\n";
+    j << "  \"kernel_seconds\": " << kernelSeconds << ",\n";
     j << "  \"trace_seconds\": " << traceSeconds << ",\n  \"wall_seconds\": " << wall << ",\n";
     j << "  \"child_queue_overflow\": " << overflowTotal << "\n}\n";
   }
