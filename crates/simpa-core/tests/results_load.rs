@@ -1018,12 +1018,8 @@ fn cutting_planes_and_surface_receivers_are_kept_apart_by_name() {
     let s = r.spps().unwrap();
     let mut seen = Vec::new();
     for f in &s.surfaces {
-        let names: Vec<(i32, String)> = f
-            .data
-            .receivers
-            .iter()
-            .map(|x| (x.xml_index, x.name_lossy().into_owned()))
-            .collect();
+        let names: Vec<(i32, String)> =
+            f.receivers.iter().map(|x| (x.id, x.name.clone())).collect();
         let want = if f.cutting_plane {
             (1, "Cut".to_string())
         } else {

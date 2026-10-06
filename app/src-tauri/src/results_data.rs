@@ -289,31 +289,26 @@ fn surfaces(r: &RunResults) -> &[SurfaceFile] {
 }
 
 fn surface_info(f: &SurfaceFile) -> SurfaceMapInfo {
-    let data = &f.data;
+    // From the summary `load` kept, not the records (a run's maps can be gigabytes).
     SurfaceMapInfo {
         path: f.path.clone(),
         field: f.field.clone(),
         band_hz: f.band_hz,
         cutting_plane: f.cutting_plane,
-        time_step_count: data.time_step_count,
-        time_step_s: f64::from(data.time_step),
-        receivers: data
+        time_step_count: f.time_step_count,
+        time_step_s: f64::from(f.time_step),
+        receivers: f
             .receivers
             .iter()
             .map(|r| SurfaceReceiverInfo {
-                xml_index: r.xml_index,
-                name: r.name_lossy().into_owned(),
-                faces: r.faces.len(),
+                xml_index: r.id,
+                name: r.name.clone(),
+                faces: r.faces,
             })
             .collect(),
-        nodes: data.nodes.len(),
-        faces: data.receivers.iter().map(|r| r.faces.len()).sum(),
-        records: data
-            .receivers
-            .iter()
-            .flat_map(|r| &r.faces)
-            .map(|face| face.records.len())
-            .sum(),
+        nodes: f.nodes,
+        faces: f.receivers.iter().map(|r| r.faces).sum(),
+        records: f.receivers.iter().map(|r| r.records).sum(),
     }
 }
 
@@ -426,7 +421,15 @@ pub fn surface_map_bytes(root: &Path, run: &str, path: &str) -> CmdResult<Vec<u8
                 format!("run '{run}' has no surface map '{path}'"),
             )
         })?;
-    encode_surface(&file.data)
+    // The records are not kept with the results (a run's maps can be gigabytes): the one file asked
+    // for is read now, encoded, and dropped. `load` already read and checked it.
+    let data = csbin::read_file(&r.folder.join("solve").join(&file.path)).map_err(|e| {
+        CmdError::new(
+            "MAP_UNREADABLE",
+            format!("run '{run}': surface map '{path}' does not read now: {e}"),
+        )
+    })?;
+    encode_surface(&data)
 }
 
 /// A `.pbin` as PART v1 (the module's header).

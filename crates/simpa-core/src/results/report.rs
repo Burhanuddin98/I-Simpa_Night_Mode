@@ -924,24 +924,18 @@ impl SurfaceSummary {
                 .is_none()
                 .then(|| AGGREGATE_GLOBAL_FILE.to_string()),
             cutting_plane: s.cutting_plane,
-            record_type: format!("{:?}", s.data.record_type),
-            time_steps: s.data.time_step_count,
-            time_step_s: f64::from(s.data.time_step),
+            record_type: format!("{:?}", s.record_type),
+            time_steps: s.time_step_count,
+            time_step_s: f64::from(s.time_step),
             receivers: s
-                .data
                 .receivers
                 .iter()
                 .map(|r| SurfaceReceiverSummary {
-                    id: r.xml_index,
-                    name: r.name_lossy().into_owned(),
-                    faces: r.faces.len(),
-                    records: r.faces.iter().map(|f| f.records.len()).sum(),
-                    value_sum: r
-                        .faces
-                        .iter()
-                        .flat_map(|f| f.records.iter())
-                        .map(|v| f64::from(v.energy))
-                        .sum(),
+                    id: r.id,
+                    name: r.name.clone(),
+                    faces: r.faces,
+                    records: r.records,
+                    value_sum: r.value_sum,
                 })
                 .collect(),
         }

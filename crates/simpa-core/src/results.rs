@@ -551,7 +551,11 @@ pub(crate) fn band_of(label: &[u8]) -> Option<i32> {
     crate::run::stats::band_label(label)
 }
 
-/// A decoded surface-receiver or cutting-plane file.
+/// A surface-receiver or cutting-plane file, read, checked and summarised. The records themselves
+/// are NOT kept: a run's maps can be gigabytes (CR4 at 27 bands with a 0.1 m plane: 28 files,
+/// 6.7 GB, 700 million records), and holding them killed the app on the Results step
+/// (2026-10-06 17:07 and 17:17). A map is read again from its file when it is drawn
+/// (`csbin::read_file`), one file at a time.
 #[derive(Clone, Debug)]
 pub struct SurfaceFile {
     /// Relative to `solve/`, `/`-separated.
@@ -563,7 +567,30 @@ pub struct SurfaceFile {
     pub band_hz: Option<i32>,
     /// Whether it is the cutting-plane file (`recepteurss_cut_filename`), not the receiver file.
     pub cutting_plane: bool,
-    pub data: crate::formats::csbin::Csbin,
+    /// The header's `recordType`.
+    pub record_type: crate::formats::csbin::RecordType,
+    /// The header's `nbTimeStep`: the bins the maps are stored on.
+    pub time_step_count: u32,
+    /// The header's `timeStep`, seconds (the sound-map time bin, patch 0001; the particle step
+    /// when unset).
+    pub time_step: f32,
+    /// `quantNodes`: the node positions the faces index.
+    pub nodes: usize,
+    /// Every receiver in the file, summarised.
+    pub receivers: Vec<SurfaceReceiverStats>,
+}
+
+/// One receiver of a surface file, as [`SurfaceFile`] keeps it: counts and the sum, not the records.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SurfaceReceiverStats {
+    /// `xmlIndex`: its id in `config.xml`.
+    pub id: i32,
+    pub name: String,
+    pub faces: usize,
+    /// Records over every face.
+    pub records: usize,
+    /// The sum of every stored value, in `f64`.
+    pub value_sum: f64,
 }
 
 /// `recepteur_surfacique_coupe@id` of each cutting plane in `solve/config.xml`, read as the solver
@@ -649,13 +676,35 @@ pub(crate) fn read_surfaces(
                 ),
             ));
         }
+        // Summarise and drop the records: the next file's decode reuses the memory.
+        let receivers = data
+            .receivers
+            .iter()
+            .map(|r| SurfaceReceiverStats {
+                id: r.xml_index,
+                name: r.name_lossy().into_owned(),
+                faces: r.faces.len(),
+                records: r.faces.iter().map(|f| f.records.len()).sum(),
+                value_sum: r
+                    .faces
+                    .iter()
+                    .flat_map(|f| f.records.iter())
+                    .map(|v| f64::from(v.energy))
+                    .sum(),
+            })
+            .collect();
         out.push(SurfaceFile {
             path: p.clone(),
             field,
             band_hz,
             cutting_plane,
-            data,
+            record_type: data.record_type,
+            time_step_count: data.time_step_count,
+            time_step: data.time_step,
+            nodes: data.nodes.len(),
+            receivers,
         });
+        drop(data);
     }
     Ok(out)
 }
