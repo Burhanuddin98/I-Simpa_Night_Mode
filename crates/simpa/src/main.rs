@@ -46,6 +46,10 @@ const USAGE: &str = "usage:
   simpa results <run-folder> [--json]                        a verified run's results and parameters
       exit 0; 2 usage; 5 the run is FAIL, CRASH or CANCELLED; 6 its results do not verify
   simpa results --schema                                     the JSON Schemas of results --json
+  simpa reband <project.simpa> <out.simpa> --kind octave|third_octave --lo <hz> --hi <hz>
+      the project moved onto every nominal band of that kind from --lo to --hi, each new band
+      taking every per-band value of the nearest current band (the app's band presets, PQ3 C26);
+      exit 2 for a range that is not nominal frequencies, lowest first
   simpa advise <project.simpa> [--json]                      the run-quality advisor before a run:
       meshing that splits the walls, receivers small for the room, a run shorter than its decay,
       fewer particles than the noise model was measured with; each names a setting and the value
@@ -90,6 +94,7 @@ fn main() -> ExitCode {
         ["run-folder", rest @ ..] => mesh_run::run_folder_cmd(rest),
         ["results", rest @ ..] => results_cmd::results_cmd(rest),
         ["advise", rest @ ..] => advise_cmd(rest),
+        ["reband", rest @ ..] => reband_cmd(rest),
         ["bed", rest @ ..] => bed_cmd::bed_cmd(rest),
         [command, ..] => fail(&format!("unknown command '{command}'\n{USAGE}")),
     }
@@ -117,6 +122,70 @@ fn dump(format: &str, file: &Path) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// `reband <in> <out> --kind octave|third_octave --lo <hz> --hi <hz>`: the app's band preset as a
+/// command (`Project::rebanded`, through the same op the app applies), so a project can be moved
+/// onto another band set without the UI. Writes `out` as the app writes a project.
+fn reband_cmd(args: &[&str]) -> ExitCode {
+    use simpa_core::schema::{BandKind, BandSet};
+    let (mut input, mut output, mut kind, mut lo, mut hi) = (None, None, None, None, None);
+    let mut i = 0;
+    while i < args.len() {
+        match args[i] {
+            "--kind" | "--lo" | "--hi" if i + 1 < args.len() => {
+                match args[i] {
+                    "--kind" => kind = Some(args[i + 1]),
+                    "--lo" => lo = args[i + 1].parse::<u32>().ok(),
+                    _ => hi = args[i + 1].parse::<u32>().ok(),
+                }
+                i += 2;
+            }
+            a if input.is_none() => {
+                input = Some(a);
+                i += 1;
+            }
+            a if output.is_none() => {
+                output = Some(a);
+                i += 1;
+            }
+            a => return fail(&format!("unexpected argument '{a}'\n{USAGE}")),
+        }
+    }
+    let (Some(input), Some(output), Some(kind), Some(lo), Some(hi)) = (input, output, kind, lo, hi)
+    else {
+        return fail(&format!("reband needs <in> <out> --kind --lo --hi\n{USAGE}"));
+    };
+    let kind = match kind {
+        "octave" => BandKind::Octave,
+        "third_octave" => BandKind::ThirdOctave,
+        other => return fail(&format!("unknown band kind '{other}': octave or third_octave")),
+    };
+    let mut project = match validate::read_project(Path::new(input)) {
+        Ok(p) => p,
+        Err(e) => return fail(&format!("{input}: {e} ({})", e.code())),
+    };
+    let Some(bands) = BandSet::range(kind, lo, hi) else {
+        return fail(&format!(
+            "{lo} Hz to {hi} Hz is not a range of nominal {kind:?} frequencies, lowest first"
+        ));
+    };
+    let Some(op) = project.rebanded(bands) else {
+        return fail("the project's bands cannot be mapped onto that set");
+    };
+    if let Err(e) = op.apply(&mut project) {
+        return fail(&format!("reband refused: {e}"));
+    }
+    if let Err(e) = std::fs::write(output, schema::to_json(&project)) {
+        return fail(&format!("{output}: {e}"));
+    }
+    println!(
+        "{output}: {} bands, {} Hz to {} Hz",
+        project.bands.frequencies_hz.len(),
+        project.bands.frequencies_hz.first().copied().unwrap_or(0),
+        project.bands.frequencies_hz.last().copied().unwrap_or(0)
+    );
+    ExitCode::SUCCESS
 }
 
 /// `advise <project> [--json]`: the run-quality advisor before a run (`simpa_core::advise::before`).
