@@ -188,7 +188,7 @@ export interface ViewportDom {
 }
 
 // Colours: the design's (concept-b-approved.dc.html) and theme.css's tokens.
-const PANEL = new Color(0x0f0f11);
+const PANEL = new Color(0x131010);
 const LINE = 0xededef;
 const WARN = 0xf2a93b;
 const SELECT = 0xe0202e;

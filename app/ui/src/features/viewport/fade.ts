@@ -8,7 +8,7 @@
 /** How far the far side goes toward the background (surfaces) or toward clear (edges). */
 export const FADE_MAX = 0.6;
 /** The page's background (theme.css --bg), which the canvas shows through. */
-export const FADE_BG = '#09090b';
+export const FADE_BG = '#0c0a0a';
 
 /** The depths, from the camera, where the fade starts and ends: the model's bounding sphere's near and far side. */
 export function fadeRange(cameraToCentre: number, radius: number): { near: number; far: number } {

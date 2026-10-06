@@ -231,7 +231,7 @@
    behind the head (the plot itself sits on both fills). `.rw.glass` so it wins over theme.css's
    `.glass` whatever the import order; the edge stays. */
 .rw.glass {
-  background: rgba(9, 9, 11, 0.95);
+  background: rgba(12, 10, 10, 0.95);
 }
 .rw-head {
   display: flex;
@@ -271,7 +271,7 @@
   display: grid;
   padding: 8px 6px 6px;
   border-radius: 5px;
-  background: rgba(9, 9, 11, 0.88);
+  background: rgba(12, 10, 10, 0.88);
   grid-template-columns: 64px 1fr 64px;
   grid-template-rows: clamp(150px, calc(var(--rw-rows) * 30px), 300px) 72px 18px auto auto;
   column-gap: 8px;

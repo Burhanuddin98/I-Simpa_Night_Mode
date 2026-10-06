@@ -21,7 +21,7 @@
   position: fixed;
   inset: 0;
   z-index: 0;
-  background: var(--bg) radial-gradient(ellipse at 50% 55%, rgba(224, 32, 46, 0.07) 0%, rgba(9, 9, 11, 0) 60%);
+  background: var(--bg) radial-gradient(ellipse at 50% 55%, rgba(224, 32, 46, 0.07) 0%, rgba(12, 10, 10, 0) 60%);
 }
 .viewport-canvas {
   position: absolute;
@@ -200,7 +200,7 @@
 .vp-label.dim {
   padding: 2px 5px;
   border-radius: 3px;
-  background: rgba(9, 9, 11, 0.78);
+  background: rgba(12, 10, 10, 0.78);
   font-size: 11px;
   color: var(--text);
 }
