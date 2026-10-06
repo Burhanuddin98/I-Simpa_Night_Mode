@@ -57,7 +57,7 @@ par_path = Path(a.gpu_json).with_name("cpu-all-threads.json")
 par = None
 if par_path.exists():
     for l in par_path.read_text(encoding="utf-8", errors="replace").splitlines():
-        if l.strip().startswith("{"):
+        if l.strip().startswith("{") and "cpu_all_threads" in l:
             par = json.loads(l)
 if par and par.get("cpu_par_particles"):
     lines.append(f"| same code, CPU all {par['cpu_all_threads']} threads | {par['cpu_par_particles']:,} | {par['cpu_par_s']:.3f} | {par['rate_cpu_par']:.3g} |")
