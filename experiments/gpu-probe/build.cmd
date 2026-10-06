@@ -14,6 +14,6 @@ for /d %%d in ("C:\Program Files\Microsoft Visual Studio\2022\*") do if exist "%
 if "%VSDEV%"=="" ( echo no VS 2022 VsDevCmd.bat & exit /b 2 )
 call "%VSDEV%" -arch=amd64 -no_logo 2>nul
 nvcc --version | findstr /c:"release"
-nvcc -O3 -std=c++17 %ARCH% -lineinfo -o "%OUT%\box_tracer.exe" "%~dp0box_tracer.cu"
+nvcc -O3 -std=c++17 %ARCH% -Xcompiler "/openmp /O2" -lineinfo -o "%OUT%\box_tracer.exe" "%~dp0box_tracer.cu"
 if errorlevel 1 ( echo nvcc failed & exit /b 1 )
 dir "%OUT%\box_tracer.exe" | findstr box_tracer

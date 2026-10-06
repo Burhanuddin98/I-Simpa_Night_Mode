@@ -1,5 +1,5 @@
 @echo off
-rem The GPU probe on this machine: the CUDA arm, the SPPS arm (about 3 min on Grace's one thread; the
+rem The GPU probe on this machine: the CUDA arm, the same code on every CPU thread, the SPPS arm (about 3 min on Grace's one thread; the
 rem fixed seed keeps SPPS on one thread), then RESULT-<machine>.md beside this file. Double-click, or
 rem   run-probe.cmd [particles] [steps]       (default 10000000 2000, 1 ms steps)
 rem Needs: an NVIDIA driver that runs CUDA 13.2 programs (R580 or newer); Python 3 with no extra
@@ -14,9 +14,10 @@ if "%S%"=="" set S=2000
 set OUT=%HERE%out-%COMPUTERNAME%
 if not exist "%OUT%" mkdir "%OUT%"
 echo [%TIME%] CUDA arm: %P% particles, %S% steps
-"%HERE%box_tracer.exe" %P% %S% "%OUT%\gpu.csv" 100000 > "%OUT%\gpu.json"
+"%HERE%box_tracer.exe" %P% %S% "%OUT%\gpu.csv" 100000 %P% > "%OUT%\gpu.json" 2> "%OUT%\cpu-all-threads.json"
 if errorlevel 1 ( echo the CUDA arm failed & type "%OUT%\gpu.json" & pause & exit /b 1 )
 type "%OUT%\gpu.json"
+type "%OUT%\cpu-all-threads.json"
 echo [%TIME%] SPPS arm: %P% particles, %S% steps (minutes)
 set SIMPA_SOLVERS_DIR=%HERE%solvers
 python "%HERE%spps_arm.py" %P% %S% "%OUT%\spps" --simpa "%HERE%simpa.exe" --solvers "%HERE%solvers" --fixture "%HERE%seats_box.simpa" > "%OUT%\spps.json"

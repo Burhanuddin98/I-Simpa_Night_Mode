@@ -9,6 +9,7 @@
 #include <chrono>
 #include <vector>
 #include <string>
+#include <omp.h>
 
 // ---- the box (tests/fixtures/rooms/seats_box.simpa) ----------------------------------------------
 #define LX 6.0f
@@ -183,6 +184,29 @@ int main(int argc, char** argv) {
       if (rp > cpu_maxpeak) cpu_maxpeak = rp;
     }
   }
+
+  // All CPU threads (OpenMP), the same function: argv[5] particles, if given.
+  uint32_t npar = argc > 5 ? (uint32_t)strtoull(argv[5], nullptr, 10) : 0;
+  double par_s = 0; unsigned long long par_done = 0; int par_threads = 0;
+  if (npar > 0) {
+    std::vector<double> total(hist_n, 0.0);
+    auto p0 = std::chrono::steady_clock::now();
+    #pragma omp parallel reduction(+:par_done)
+    {
+      #pragma omp single
+      par_threads = omp_get_num_threads();
+      std::vector<double> mine(hist_n, 0.0);
+      #pragma omp for schedule(dynamic, 1024)
+      for (long long id = 0; id < (long long)npar; id++)
+        par_done += trace_particle((uint32_t)id, steps, h_alpha, h_src, h_rx, h_rx_r, CpuAdd{mine.data(), steps});
+      #pragma omp critical
+      for (size_t i = 0; i < hist_n; i++) total[i] += mine[i];
+    }
+    auto p1 = std::chrono::steady_clock::now();
+    par_s = std::chrono::duration<double>(p1 - p0).count();
+  }
+  fprintf(stderr, "{\"cpu_all_threads\":%d,\"cpu_par_particles\":%u,\"cpu_par_s\":%.4f,\"cpu_par_traced\":%llu,\"rate_cpu_par\":%.4g}\n",
+          par_threads, npar, par_s, par_done, npar ? (double)npar * steps / par_s : 0.0);
 
   FILE* f = fopen(out, "w");
   if (!f) { fprintf(stderr, "cannot write %s\n", out); return 2; }

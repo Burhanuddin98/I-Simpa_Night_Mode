@@ -53,12 +53,22 @@ lines.append("")
 lines.append("| arm | particles | wall s | particle-steps/s |")
 lines.append("|---|---|---|---|")
 lines.append(f"| CUDA kernel | {gpu['particles']:,} | {gpu['kernel_s']:.3f} (kernel) / {gpu['wall_s']:.3f} (with copies) | {gpu['rate_kernel']:.3g} (kernel) / {gpu['rate_wall']:.3g} |")
+par_path = Path(a.gpu_json).with_name("cpu-all-threads.json")
+par = None
+if par_path.exists():
+    for l in par_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if l.strip().startswith("{"):
+            par = json.loads(l)
+if par and par.get("cpu_par_particles"):
+    lines.append(f"| same code, CPU all {par['cpu_all_threads']} threads | {par['cpu_par_particles']:,} | {par['cpu_par_s']:.3f} | {par['rate_cpu_par']:.3g} |")
 if gpu.get("cpu_particles"):
     lines.append(f"| same code, CPU one thread | {gpu['cpu_particles']:,} | {gpu['cpu_s']:.3f} | {gpu['rate_cpu']:.3g} |")
 sp_rate = spps.get("rate_solver") or spps["rate_wall"]
 sp_s = spps.get("solver_s") or spps["wall_s"]
 lines.append(f"| SPPS | {spps['particles']:,} | {sp_s:.1f}{'' if spps.get('solver_s') else ' (whole `simpa run`: export, mesh, solve, results)'} | {sp_rate:.3g} |")
 lines.append("")
+if par and par.get("cpu_par_particles"):
+    lines.append(f"**GPU over this machine's whole CPU, same code, realised: {par['rate_cpu_par'] and gpu['rate_kernel']/par['rate_cpu_par']:.1f}x.**")
 lines.append(f"**Speed-up, realised: CUDA kernel / SPPS = {gpu['rate_kernel']/sp_rate:.1f}x; with copies {gpu['rate_wall']/sp_rate:.1f}x.**")
 if gpu.get("cpu_particles"):
     lines.append(f"Same code CPU one thread / SPPS = {gpu['rate_cpu']/sp_rate:.2f}x (how much of the gain is the GPU, not the simpler code). "

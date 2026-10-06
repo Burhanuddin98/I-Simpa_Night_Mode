@@ -11,6 +11,7 @@ absorption, 1 ms steps, 2,000 steps (2 s), 10,000,000 particles, extinction at 1
 |---|---|---|
 | SPPS, one thread (a fixed seed turns its threads off; decision 51) | **185.3 s** | run.json `outcome.elapsed_ms` |
 | this probe's code, one CPU thread | 27.8 s | 100 k particles in 0.278 s, scaled linearly |
+| this probe's code, all 28 CPU threads (OpenMP, i7-14700KF) | **2.193 s** | measured at 10 M, 19:20 |
 | this probe's code, CUDA kernel | **0.162 s** | cudaEvent; 0.163 s with the copy back |
 | the CUDA process end to end, CUDA start-up included | 0.327 s | |
 
@@ -18,9 +19,9 @@ absorption, 1 ms steps, 2,000 steps (2 s), 10,000,000 particles, extinction at 1
 
 - **6.7x is the simpler problem**, not the GPU: the probe's walls are six analytic planes, SPPS walks a
   tetrahedral mesh (any geometry) and keeps its full accounting. A real tracer must walk a mesh too.
-- **171x is the GPU** over the same code on one CPU thread. Against the same code on all of Grace's 20
-  cores the GPU's lead would be about 171 / 14 = 12x (FORECAST: 14x assumed for 28 threads on 20 cores,
-  not measured).
+- **171x is the GPU** over the same code on one CPU thread, and **13.5x over the same code on all 28 of
+  Grace's CPU threads** (2.193 s against 0.162 s, REALISED 19:20; the 18:19 forecast said 12x). That is
+  the honest GPU-versus-CPU number: same algorithm, whole chip against whole chip.
 
 **Physics agrees** (a sanity check, not a bed): T20 from the Schroeder-integrated echograms, CUDA vs SPPS,
 Seat 0.868 vs 0.869 s, Seat2 0.850 vs 0.850 s, ratio 0.999 and 1.000. The GPU's and the same code's CPU
