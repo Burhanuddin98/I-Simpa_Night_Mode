@@ -48,6 +48,8 @@ import {
   Vector3,
   WebGLRenderer,
   type Camera,
+  type IUniform,
+  type Material,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -67,6 +69,7 @@ import { firstFace, modelGeometry, pickingBvh } from './pick';
 import { ResultsLayer, type MapMeta, type ParticleMeta } from './resultsLayer';
 import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPoint, planDimensions, rayOnFacePlane, type Box, type Vec } from './geometry';
 import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
+import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, pulsePhase, spriteScale, STILL_PHASE, withGlow } from './glow';
 import { planeCells } from '../../chrome/planes';
 
 export type ViewMode = 'perspective' | 'plan';
@@ -252,6 +255,27 @@ function markerMaterial(pixels: Uint8Array, texSize: number, px: number): Points
   });
 }
 
+/** The glow's pulse holds still under prefers-reduced-motion, and under WebDriver, where the gates compare frames. */
+function stillMotion(): boolean {
+  try {
+    return navigator.webdriver || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
+/** `m` with the sources' glow added to its colour (glow.ts), reading the shared `uniforms`. */
+function glowing<M extends Material>(m: M, uniforms: Record<string, IUniform>): M {
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    const g = withGlow(shader.vertexShader, shader.fragmentShader);
+    shader.vertexShader = g.vertex;
+    shader.fragmentShader = g.fragment;
+  };
+  m.customProgramCacheKey = () => 'nm-glow';
+  return m;
+}
+
 class ViewportEngine {
   private renderer: WebGLRenderer | null = null;
   private canvas: HTMLCanvasElement | null = null;
@@ -299,6 +323,17 @@ class ViewportEngine {
   private readonly planeOutline: LineSegments2;
   private readonly planeGrid: LineSegments2;
   private planeSummary: { name: string; corners: Vec[]; u: number; v: number; gridLines: number }[] = [];
+  /** The sources' glow on the surfaces (glow.ts): shared by every surface material, and its pulse. */
+  private readonly glow = {
+    glowPos: { value: Array.from({ length: GLOW_MAX }, () => new Vector3()) },
+    glowCount: { value: 0 },
+    glowRadius: { value: 1.5 },
+    glowLevel: { value: 0 },
+    glowColor: { value: new Vector3(...GLOW_RGB) },
+  };
+  private glowFrame = 0;
+  private glowDrawn = 0;
+  private glowPhase = STILL_PHASE;
 
   // The pointer between down and up.
   private down = { x: 0, y: 0, moved: false };
@@ -337,6 +372,7 @@ class ViewportEngine {
       new MeshMatcapMaterial({ matcap, vertexColors: true, side: FrontSide, flatShading: true, transparent: true, opacity: 0.15, depthWrite: false }),
     );
     this.ghost.visible = false;
+    for (const m of [this.tintColour, this.tintGrey, this.tintWire, this.ghost.material as MeshMatcapMaterial]) glowing(m, this.glow);
     this.edges = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }));
     this.highlight = new Mesh(
       new BufferGeometry(),
@@ -424,6 +460,7 @@ class ViewportEngine {
         this.results.setShown(stepStore.get() === 'results');
         if (stepStore.get() !== 'results') mapPointerStore.set(null);
         this.updatePlanes();
+        this.updateGlow();
         this.invalidate();
       }),
       animatorStore.subscribe(() => {
@@ -466,6 +503,8 @@ class ViewportEngine {
     this.canvas?.remove();
     if (this.frameRequest) cancelAnimationFrame(this.frameRequest);
     this.frameRequest = 0;
+    if (this.glowFrame) cancelAnimationFrame(this.glowFrame);
+    this.glowFrame = 0;
     if (this.dom) this.dom.labels.replaceChildren();
     this.markers = [];
     this.dom = null;
@@ -604,7 +643,7 @@ class ViewportEngine {
   }
 
   private setMarkerScale(k: number): void {
-    (this.sourcePoints.material as PointsMaterial).size = SOURCE_PX * k;
+    (this.sourcePoints.material as PointsMaterial).size = SOURCE_PX * k * spriteScale(this.glowPhase);
     (this.receiverPoints.material as PointsMaterial).size = RECEIVER_PX * k;
     (this.halo.material as PointsMaterial).size = HALO_PX * k;
   }
@@ -938,7 +977,41 @@ class ViewportEngine {
     const halo = new BufferGeometry();
     if (picked) halo.setAttribute('position', new Float32BufferAttribute([picked.p.x, picked.p.y, picked.p.z], 3));
     this.halo.geometry = halo;
+
+    const lit = (view?.sources ?? []).filter((s) => s.enabled && s.position.every(finite)).slice(0, GLOW_MAX);
+    lit.forEach((s, i) => this.glow.glowPos.value[i].set(...(s.position as [number, number, number])));
+    this.glow.glowCount.value = lit.length;
+    this.updateGlow();
   }
+
+  /**
+   * The glow's strength and its pulse: off on the Results step (a red pool there would read as a level
+   * on the map) and with no enabled source; the pulse runs at about 30 frames a second while the view
+   * is mounted, unless motion is to hold still.
+   */
+  private updateGlow(): void {
+    const u = this.glow;
+    u.glowRadius.value = glowRadius(this.bounds);
+    const on = u.glowCount.value > 0 && stepStore.get() !== 'results';
+    const moving = on && !!this.dom && !stillMotion();
+    if (!moving) {
+      if (this.glowFrame) cancelAnimationFrame(this.glowFrame);
+      this.glowFrame = 0;
+      this.glowPhase = STILL_PHASE;
+    } else if (!this.glowFrame) {
+      this.glowFrame = requestAnimationFrame(this.glowTick);
+    }
+    u.glowLevel.value = on ? glowLevel(this.glowPhase) : 0;
+  }
+
+  private readonly glowTick = (now: number): void => {
+    this.glowFrame = requestAnimationFrame(this.glowTick);
+    if (now - this.glowDrawn < 33) return;
+    this.glowDrawn = now;
+    this.glowPhase = pulsePhase(now);
+    this.glow.glowLevel.value = glowLevel(this.glowPhase);
+    this.invalidate();
+  };
 
   /**
    * W1: every enabled cutting plane as its parallelogram A, B, C, A + C - B, and, off the Results
