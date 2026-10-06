@@ -212,9 +212,9 @@
   position: sticky;
   left: 0;
   z-index: 1;
-  width: 96px;
-  min-width: 96px;
-  max-width: 96px;
+  width: 116px;
+  min-width: 116px;
+  max-width: 116px;
   padding: 0 6px;
   background: var(--raised);
   text-align: left;
@@ -255,8 +255,13 @@
   line-height: 1.2;
 }
 .mg-text {
+  /* A long name wraps to a second line before it is cut ("Wood pan..." on 10-06). */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .mg-used {
   font-size: 10.5px;
