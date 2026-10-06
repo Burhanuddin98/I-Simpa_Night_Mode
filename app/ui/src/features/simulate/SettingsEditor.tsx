@@ -15,7 +15,7 @@
 // beside the fields (a step count, a file size) are the UI's own arithmetic on the inputs, never
 // a solver's number. A field shows the stored value exactly; a time step is shown and read in
 // milliseconds by moving the decimal point in the text (settings.ts).
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as actions from '../../actions';
 import type { SceneState, UiIssue } from '../../bindings/ipc';
 import type { ComputationMethod, Op } from '../../bindings/schema';
@@ -151,8 +151,19 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
   const refusals = useStore(refusalStore);
   const flags = s.solvers[solver].bands_computed;
   const current = bandPresetOf(s.bands);
+  // The dropdown shows the bands in effect, never a choice that is not: picking a preset opens the
+  // confirmation at once, and Cancel (or Esc) puts the dropdown back (Burhan 2026-10-06 06:12: "i selected
+  // third octaves and yet it doesnt use that setting"; the earlier two-step left the dropdown saying
+  // third-octave while the project, the band row and the summary stayed on octaves).
   const [pick, setPick] = useState<string>(current?.key ?? '');
   const [confirm, setConfirm] = useState(false);
+  useEffect(() => {
+    if (!confirm) setPick(current?.key ?? '');
+  }, [current?.key, confirm]);
+  const cancel = () => {
+    setConfirm(false);
+    setPick(current?.key ?? '');
+  };
   const key = keyOf(solver, 'bands');
   const presetKey = keyOf('project', 'bands');
   const chosen = BAND_PRESETS.find((p) => p.key === pick) ?? null;
@@ -186,8 +197,9 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
           aria-label="Band preset"
           value={pick}
           onChange={(e) => {
+            const next = BAND_PRESETS.find((p) => p.key === e.target.value) ?? null;
             setPick(e.target.value);
-            setConfirm(false);
+            setConfirm(!!next && next.key !== current?.key);
           }}
         >
           {!current && <option value="">Custom bands (as they are)</option>}
@@ -197,14 +209,6 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
             </option>
           ))}
         </select>
-        <button
-          className="small-button"
-          data-part="reband"
-          disabled={!chosen || chosen.key === current?.key}
-          onClick={() => setConfirm(true)}
-        >
-          Change bands…
-        </button>
       </div>
       {confirm && chosen && (
         <div className="sim-confirm" data-part="reband-confirm" role="alertdialog" aria-label="Change the bands">
@@ -216,7 +220,7 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
             <button className="small-button" data-part="reband-apply" onClick={() => actions.fire(apply())}>
               Change bands
             </button>
-            <button className="small-button" data-part="reband-cancel" onClick={() => setConfirm(false)}>
+            <button className="small-button" data-part="reband-cancel" onClick={cancel}>
               Cancel
             </button>
           </div>

@@ -222,8 +222,8 @@ describe('PQ3 settings editor', () => {
     const text0 = await m10.projectJson();
     const before = JSON.parse(text0) as ProjectFile;
     const depth0 = await hook<number>('undoDepth');
+    // Picking a preset opens the confirmation itself (2026-10-06: the earlier two-step left the dropdown lying).
     await $('select[data-field="band-preset"]').selectByAttribute('value', 'third_octave-100-5000');
-    await clickSelector('[data-part="reband"]');
     await $('[data-part="reband-confirm"]').waitForDisplayed({ timeout: 10_000 });
     assert.equal(JSON.stringify(JSON.parse(await m10.projectJson()).bands), JSON.stringify(before.bands), 'nothing changes before the confirm');
     await clickSelector('[data-part="reband-apply"]');
