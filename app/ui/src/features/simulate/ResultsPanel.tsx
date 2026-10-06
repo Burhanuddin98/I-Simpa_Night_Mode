@@ -97,6 +97,7 @@ export function ResultsPanel() {
         {state === 'verified' && (
           <>
             <div className="res-verdict ok">
+              <i className="led" data-on="ok" aria-hidden="true" />
               <span className="res-label">Verified</span>
               Results verified
             </div>
@@ -114,6 +115,7 @@ export function ResultsPanel() {
         {state === 'unverified' && (
           <>
             <div className="res-verdict warn">
+              <i className="led" data-on="warn" aria-hidden="true" />
               <span className="res-label">Not verified</span>
               Results unverified
             </div>
@@ -127,6 +129,7 @@ export function ResultsPanel() {
         {state === 'refused' && (
           <>
             <div className="res-verdict fail">
+              <i className="led" data-on="fail" aria-hidden="true" />
               <span className="res-label">Withheld</span>
               Results refused
             </div>
@@ -143,6 +146,7 @@ export function ResultsPanel() {
         {state === 'error' && error && (
           <>
             <div className="res-verdict fail">
+              <i className="led" data-on="fail" aria-hidden="true" />
               <span className="res-label">Not checked</span>
               The results could not be checked
             </div>

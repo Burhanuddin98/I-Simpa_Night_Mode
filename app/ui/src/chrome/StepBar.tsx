@@ -5,7 +5,7 @@ import { Fragment } from 'react';
 import { simulateSubParts } from '../features/simulate/model';
 import { STEPS } from '../steps';
 import { type LinePart, runsStore, runStore, sceneStore, stepStore, useStore } from '../store';
-import { stepSubs } from './sceneModel';
+import { stepsDone, stepSubs } from './sceneModel';
 import { VariantSwitch } from './VariantSwitch';
 
 /** A sub's parts; a diagnostic part is a leaf `data-diagnostic` span (M11 PLAN.md 3.4 rule 1). */
@@ -27,10 +27,19 @@ function SubParts({ parts }: { parts: readonly LinePart[] }) {
 
 export function StepBar() {
   const current = useStore(stepStore);
-  const subs: Record<string, string> = { ...stepSubs(useStore(sceneStore)) };
+  const scene = useStore(sceneStore);
+  const subs: Record<string, string> = { ...stepSubs(scene) };
+  const done = stepsDone(scene);
   // The Simulate sub is the simulate package's (M11 PLAN.md 3.3): "<p> %" while running, its
   // percentage in a progress_pct diagnostic span, else "run <n> <status>".
-  const simulate = simulateSubParts(useStore(runStore), useStore(runsStore));
+  const run = useStore(runStore);
+  const runs = useStore(runsStore);
+  const simulate = simulateSubParts(run, runs);
+  // Each step's light: green when done, amber while a run is going; the words beside it say the same.
+  const light = (key: string): 'ok' | 'warn' | undefined =>
+    key === 'simulate' ? (run ? 'warn' : runs?.rows.some((r) => r.status === 'OK') ? 'ok' : undefined)
+    : key === 'results' ? undefined
+    : done[key as keyof typeof done] ? 'ok' : undefined;
   return (
     <div className="stepbar">
       <nav className="steps" aria-label="Workflow">
@@ -42,7 +51,9 @@ export function StepBar() {
             aria-current={s.key === current ? 'step' : undefined}
             onClick={() => stepStore.set(s.key)}
           >
-            <span className="badge">{i + 1}</span>
+            <span className="badge" data-on={light(s.key)}>
+              {i + 1}
+            </span>
             <span className="name" data-part="name">
               {s.name}
             </span>

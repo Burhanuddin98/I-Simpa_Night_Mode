@@ -10,7 +10,7 @@
 
 
 /* 2: square, except what is meant to be round. */
-*:not(.dirty-dot, .marker, .dot, .radio, .knob, .track, .switch-track, .switch-knob, .mat-swatch, .vp-switch *) {
+*:not(.dirty-dot, .marker, .dot, .radio, .knob, .track, .switch-track, .switch-knob, .mat-swatch, .vp-switch *, .led) {
   border-radius: 2px !important;
 }
 .dropdown,

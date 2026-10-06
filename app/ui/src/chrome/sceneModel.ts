@@ -27,6 +27,20 @@ export type SubKey = 'geometry' | 'materials' | 'sources' | 'simulate' | 'result
  * `<groups assigned> / <surface groups>`; Sources & receivers `<enabled sources> · <point
  * receivers>`; Simulate and Results empty (M11 and M12 fill them).
  */
+/**
+ * Which steps are complete, for the step bar's lights (hardware.css H1): geometry when the model check
+ * passes, materials when every group has a material, sources when a source is on and a receiver exists.
+ * Simulate and Results are the run's business (StepBar reads the runs store for those).
+ */
+export function stepsDone(scene: SceneState | null): Record<'geometry' | 'materials' | 'sources', boolean> {
+  if (!scene) return { geometry: false, materials: false, sources: false };
+  return {
+    geometry: scene.check?.verdict === 'ok',
+    materials: scene.info.surface_groups > 0 && scene.info.groups_assigned === scene.info.surface_groups,
+    sources: scene.view.sources.some((s) => s.enabled) && scene.view.point_receivers.length > 0,
+  };
+}
+
 export function stepSubs(scene: SceneState | null): Record<SubKey, string> {
   const check = scene?.check;
   // In words (the UI study's increment 2): "room closed", "6 of 10 set", "2 sources · 5 receivers".

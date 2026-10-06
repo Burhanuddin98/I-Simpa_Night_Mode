@@ -22,6 +22,7 @@ export function StatusBar() {
     <footer className="statusbar">
       {active ? (
         <span className="status busy" data-part="run-status">
+          <i className="led" data-on="warn" aria-hidden="true" />
           <span className="dot" />
           {active.status === 'cancelling' ? 'Cancelling' : 'Simulating'}
           {progress !== null && (
@@ -33,6 +34,7 @@ export function StatusBar() {
         </span>
       ) : (
         <span className={`status ${status.kind === 'ready' ? '' : status.kind}`}>
+          <i className="led" data-on={status.kind === 'ready' ? 'ok' : status.kind === 'busy' ? 'warn' : 'fail'} aria-hidden="true" />
           <span className="dot" />
           {status.text}
         </span>

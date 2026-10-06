@@ -87,6 +87,7 @@ export function GeometryPanel() {
         <div className="check-list" data-geometry>
           {checkRows(check, unitsText(info)).map((r) => (
             <div key={r.key} className="check-row" data-check={r.key}>
+              <i className="led" data-on={r.state === 'FAIL' ? 'fail' : r.state === 'OK' ? 'ok' : undefined} aria-hidden="true" />
               <span className={`state ${r.state === 'FAIL' ? 'fail' : r.state === 'OK' ? 'ok' : 'none'}`}>
                 {r.state ?? ''}
               </span>
