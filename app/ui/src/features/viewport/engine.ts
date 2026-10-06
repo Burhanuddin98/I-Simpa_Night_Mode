@@ -37,6 +37,8 @@ import {
   MeshMatcapMaterial,
   OrthographicCamera,
   PerspectiveCamera,
+  PlaneGeometry,
+  ShaderMaterial,
   Points,
   PointsMaterial,
   Ray,
@@ -73,6 +75,7 @@ import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, pulsePhase, spriteScale, STI
 import { aoReach, bakeAo, withAo } from './ao';
 import { FADE_BG, FADE_MAX, fadeRange, withFade } from './fade';
 import { withGlass } from './glass';
+import { GROUND_FRAGMENT, GROUND_VERTEX, groundLayout } from './ground';
 import { planeCells } from '../../chrome/planes';
 
 export type ViewMode = 'perspective' | 'plan';
@@ -136,9 +139,11 @@ export interface ViewStyle {
   corners: boolean;
   /** Distance fade (fade.ts) on. */
   fade: boolean;
+  /** The floor grid and shadow under the room (ground.ts) on. */
+  ground: boolean;
 }
 const STYLE_KEY = 'nm.viewStyle';
-const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15, corners: true, fade: true };
+const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15, corners: true, fade: true, ground: true };
 function loadStyle(): ViewStyle {
   try {
     const v = JSON.parse(localStorage.getItem(STYLE_KEY) ?? 'null') as Partial<ViewStyle> | null;
@@ -149,6 +154,7 @@ function loadStyle(): ViewStyle {
       glass: typeof v.glass === 'number' ? Math.min(60, Math.max(0, v.glass)) : DEFAULT_STYLE.glass,
       corners: v.corners !== false,
       fade: v.fade !== false,
+      ground: v.ground !== false,
     };
   } catch {
     return DEFAULT_STYLE;
@@ -373,6 +379,9 @@ class ViewportEngine {
   private glowPhase = STILL_PHASE;
   /** The corner-shading bake in progress (its next slice's frame), cancelled when the model changes. */
   private aoFrame = 0;
+  /** The floor grid and shadow under the room (ground.ts), and the height it sits at. */
+  private readonly ground: Mesh;
+  private groundZ = 0;
 
   // The pointer between down and up.
   private down = { x: 0, y: 0, moved: false };
@@ -439,7 +448,30 @@ class ViewportEngine {
     this.receiverStems = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.5 }));
     this.planeOutline = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: SELECT, linewidth: 3.5, transparent: true, opacity: 0.95, depthWrite: false }));
     this.planeGrid = new LineSegments2(new LineSegmentsGeometry(), new LineMaterial({ color: SELECT, linewidth: 1.5, transparent: true, opacity: 0.45, depthWrite: false }));
+    this.ground = new Mesh(
+      new PlaneGeometry(1, 1),
+      new ShaderMaterial({
+        vertexShader: GROUND_VERTEX,
+        fragmentShader: GROUND_FRAGMENT,
+        transparent: true,
+        depthWrite: false,
+        side: DoubleSide,
+        uniforms: {
+          uCentre: { value: new Vector2() },
+          uHalf: { value: 1 },
+          uStep: { value: 1 },
+          uFootMin: { value: new Vector2() },
+          uFootMax: { value: new Vector2() },
+          uSoft: { value: 1 },
+          uLine: { value: new Color(LINE) },
+          uLineA: { value: 0.14 },
+          uShadowA: { value: 0.55 },
+        },
+      }),
+    );
+    this.ground.visible = false;
     const order: [{ renderOrder: number }, number][] = [
+      [this.ground, 0.2],
       [this.faces, 0],
       [this.tint, 0.5],
       [this.ghost, 2.5],
@@ -471,6 +503,7 @@ class ViewportEngine {
       this.receiverPoints,
       this.sourcePoints,
       this.halo,
+      this.ground,
       this.results.group,
     );
     this.results.setShown(stepStore.get() === 'results');
@@ -660,6 +693,8 @@ class ViewportEngine {
       const main = this.mainCamera(w / h);
       this.setMarkerScale(1);
       this.setFade(main === this.persp);
+      // The ground only from above, in the perspective view; never in plan, where it would be a second grid.
+      this.ground.visible = main === this.persp && !!this.bounds && viewStyle.get().ground && this.persp.position.z > this.groundZ;
       r.render(this.scene, main);
       if (this.results.particleMeta && stepStore.get() === 'results') noteDrawn(this.results.particleStep());
       if (this.view === 'perspective' && this.bounds) this.renderInset(r, dom.inset);
@@ -701,6 +736,7 @@ class ViewportEngine {
     r.setClearColor(PANEL, 0.35);
     r.clear();
     this.setFade(false);
+    this.ground.visible = false;
     this.fitPlan(b.width / b.height);
     this.setMarkerScale(INSET_MARKER_SCALE);
     r.render(this.scene, this.plan);
@@ -792,6 +828,7 @@ class ViewportEngine {
       geometry.computeVertexNormals();
       this.topo = buildTopology(mesh.positions, mesh.indices);
       this.bounds = faceBounds(mesh.positions, mesh.indices);
+      if (this.bounds) this.layoutGround(this.bounds);
       this.faces.geometry = geometry;
       this.tint.geometry = geometry.toNonIndexed();
       this.ghost.geometry = this.tint.geometry;
@@ -806,6 +843,21 @@ class ViewportEngine {
     if (previousRev !== this.builtRev && selectionStore.get().kind === 'faces') selectionStore.set({ kind: 'none' });
     this.frame();
     this.onScene();
+  }
+
+  /** Places the ground plane (ground.ts) under `box` and sets its grid and shadow. */
+  private layoutGround(box: Box): void {
+    const g = groundLayout(box);
+    this.groundZ = g.z;
+    this.ground.position.set(g.centre[0], g.centre[1], g.z);
+    this.ground.scale.set(2 * g.half, 2 * g.half, 1);
+    const u = (this.ground.material as ShaderMaterial).uniforms;
+    u.uCentre.value.set(g.centre[0], g.centre[1]);
+    u.uHalf.value = g.half;
+    u.uStep.value = g.step;
+    u.uFootMin.value.set(box.min[0], box.min[1]);
+    u.uFootMax.value.set(box.max[0], box.max[1]);
+    u.uSoft.value = g.soft;
   }
 
   /**

@@ -111,6 +111,15 @@ export function ViewStyleMenu() {
           >
             Distance fade
           </button>
+          <button
+            role="menuitemcheckbox"
+            aria-checked={style.ground}
+            data-ground=""
+            title="A grey grid and a soft shadow under the room, so it sits on something"
+            onClick={() => set({ ground: !style.ground })}
+          >
+            Floor grid
+          </button>
         </div>
       )}
     </div>
