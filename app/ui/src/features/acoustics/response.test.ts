@@ -4,6 +4,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { Report } from '../../bindings/ipc';
+import type { DbMatrix } from './response.ts';
 import { at } from './model.ts';
 import {
   broadband,
@@ -25,7 +26,7 @@ import {
   responseView,
   SPAN_DB,
   SPAN_LABELS,
-  timeTicks, binSum } from './response.ts';
+  timeTicks, binSum, clampRange, zoomRange, panRange, rangeTicks, labelEvery, spanLabels, SPANS, MIN_COLS } from './response.ts';
 
 // SPPS's time step as the report carries it: 0.01 s through f32, widened.
 const DT = Math.fround(0.01);
@@ -370,4 +371,103 @@ test('binSum: each run of steps summed exactly, the last run shorter, energy kep
   const s = [0.5, 0.25, 0.125, 0.0625, 0.03125];
   assert.equal(binSum(s, 2).reduce((a, b) => a + b, 0), s.reduce((a, b) => a + b, 0));
   assert.throws(() => binSum(s, 0), RangeError);
+});
+
+test('spanLabels: the ends and the thirds of any span; SPAN_LABELS is the 60 dB set; a span not above 0 is refused', () => {
+  assert.deepEqual(
+    spanLabels(60).map((l) => [l.db, l.text]),
+    [
+      [0, '0 dB'],
+      [-20, '−20'],
+      [-40, '−40'],
+      [-60, '−60 dB'],
+    ],
+  );
+  assert.deepEqual(spanLabels(100).map((l) => l.text), ['0 dB', '−33.3', '−66.7', '−100 dB']);
+  assert.deepEqual(spanLabels(SPAN_DB), SPAN_LABELS);
+  for (const s of SPANS) assert.equal(spanLabels(s).length, 4);
+  assert.throws(() => spanLabels(0), RangeError);
+});
+
+test('clampRange: whole columns inside the map, at least MIN_COLS wide, pushed back from the ends', () => {
+  assert.deepEqual(clampRange({ c0: 10, c1: 20 }, 100), { c0: 10, c1: 20 });
+  assert.deepEqual(clampRange({ c0: -5, c1: 5 }, 100), { c0: 0, c1: 10 }, 'kept inside at the start, width kept');
+  assert.deepEqual(clampRange({ c0: 95, c1: 105 }, 100), { c0: 90, c1: 100 }, 'kept inside at the end, width kept');
+  assert.deepEqual(clampRange({ c0: 50, c1: 51 }, 100), { c0: 49, c1: 49 + MIN_COLS }, 'never narrower than MIN_COLS, widened about its centre');
+  assert.deepEqual(clampRange({ c0: 0, c1: 2 }, 2), { c0: 0, c1: 2 }, 'a map narrower than MIN_COLS shows whole');
+  assert.deepEqual(clampRange({ c0: 10.4, c1: 20.6 }, 100), { c0: 10, c1: 20 }, 'whole columns');
+  assert.deepEqual(clampRange({ c0: -10, c1: 200 }, 100), { c0: 0, c1: 100 }, 'wider than the map: the map');
+});
+
+test('zoomRange: in by the factor about the anchor, the anchored column staying put; out past the map is the map', () => {
+  const r = { c0: 0, c1: 100 };
+  assert.deepEqual(zoomRange(r, 2, 0.5, 100), { c0: 25, c1: 75 });
+  assert.deepEqual(zoomRange(r, 2, 0, 100), { c0: 0, c1: 50 }, 'anchored at the left edge');
+  assert.deepEqual(zoomRange(r, 2, 1, 100), { c0: 50, c1: 100 }, 'anchored at the right edge');
+  assert.deepEqual(zoomRange({ c0: 40, c1: 60 }, 0.5, 0.5, 100), { c0: 30, c1: 70 }, 'out');
+  assert.deepEqual(zoomRange({ c0: 40, c1: 60 }, 0.1, 0.5, 100), { c0: 0, c1: 100 }, 'out past the map');
+  assert.deepEqual(zoomRange({ c0: 40, c1: 60 }, 100, 0.5, 100), { c0: 48, c1: 52 }, 'in to MIN_COLS');
+  assert.throws(() => zoomRange(r, 0, 0.5, 100), RangeError);
+  assert.throws(() => zoomRange(r, Number.NaN, 0.5, 100), RangeError);
+});
+
+test('panRange: moved by whole columns, the width kept, stopped at the ends', () => {
+  assert.deepEqual(panRange({ c0: 10, c1: 20 }, 5, 100), { c0: 15, c1: 25 });
+  assert.deepEqual(panRange({ c0: 10, c1: 20 }, -50, 100), { c0: 0, c1: 10 });
+  assert.deepEqual(panRange({ c0: 10, c1: 20 }, 500, 100), { c0: 90, c1: 100 });
+  assert.deepEqual(panRange({ c0: 10, c1: 20 }, 2.6, 100), { c0: 13, c1: 23 }, 'rounded');
+});
+
+test('rangeTicks: whole multiples of the 1-2-5 interval across the window, as absolute columns; from 0 it is timeTicks', () => {
+  const dt = 0.001;
+  const whole = rangeTicks(dt, { c0: 0, c1: 10_000 });
+  assert.deepEqual(whole, timeTicks(dt, 10_000), "from the start: the full run's ticks");
+  const z = rangeTicks(dt, { c0: 1234, c1: 2234 });
+  // About 6 ticks over 1 s: every 0.2 s, at 1.4, 1.6, 1.8, 2.0, 2.2 s.
+  assert.deepEqual(z.map((t) => t.j), [1400, 1600, 1800, 2000, 2200]);
+  assert.ok(z.every((t) => t.j >= 1234 && t.j <= 2234));
+  assert.ok(z.every((t) => t.digits === 1));
+  assert.deepEqual(rangeTicks(0, { c0: 0, c1: 10 }), []);
+  assert.deepEqual(rangeTicks(dt, { c0: 5, c1: 5 }), []);
+  const fine = rangeTicks(dt, { c0: 500, c1: 504 });
+  assert.ok(fine.every((t) => t.j >= 500 && t.j <= 504), `${JSON.stringify(fine)}`);
+});
+
+test('labelEvery: every band at 13 px rows and over, every second under, never under 1', () => {
+  assert.equal(labelEvery(30), 1);
+  assert.equal(labelEvery(13), 1);
+  assert.equal(labelEvery(11), 2);
+  assert.equal(labelEvery(6.5), 2);
+  assert.equal(labelEvery(6), 3);
+  assert.equal(labelEvery(0), 1);
+  assert.equal(labelEvery(Number.NaN), 1);
+});
+
+test("mapPixels from a column: the window's pixels are the full map's at the offset; outside the map refused", () => {
+  const m = dbMatrix([
+    [1, 2, 4, 8, 16],
+    [16, 8, 4, 2, 1],
+  ]) as DbMatrix;
+  const full = mapPixels(m);
+  const win = mapPixels(m, SPAN_DB, 2, 3);
+  for (let row = 0; row < 2; row++) {
+    for (let c = 0; c < 2; c++) {
+      for (let k = 0; k < 4; k++) {
+        assert.equal(win[(row * 2 + c) * 4 + k], full[(row * 5 + c + 3) * 4 + k], `row ${row} col ${c}`);
+      }
+    }
+  }
+  assert.throws(() => mapPixels(m, SPAN_DB, 3, 3), RangeError);
+  assert.throws(() => mapPixels(m, SPAN_DB, 1, -1), RangeError);
+  assert.throws(() => mapPixels(m, SPAN_DB, 1, 1.5), RangeError);
+});
+
+test('responseView with a span: the crop and the floor follow the span, the strip is clipped to it', () => {
+  const r = report();
+  const v60 = responseView(r, 0, null, 1, 60);
+  const v30 = responseView(r, 0, null, 1, 30);
+  assert.ok(v60 && v30);
+  assert.ok((v30.crop?.cols ?? v30.map.db[0].length) <= (v60.crop?.cols ?? v60.map.db[0].length), 'a narrower span reaches the floor no later');
+  assert.ok(v30.broadband && v30.broadband.every((d) => d >= -30 && d <= 0));
+  assert.ok(v60.broadband && v60.broadband.some((d) => d < -30), 'the 60 dB strip goes deeper');
 });

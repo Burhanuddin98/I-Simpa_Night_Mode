@@ -29,13 +29,25 @@ export const RESPONSE_NOTE =
 /** The span of the map below its maximum, dB. */
 export const SPAN_DB = 60;
 
-/** The colour bar's labels: the span's ends and its thirds, dB re the map's maximum. */
-export const SPAN_LABELS: readonly { db: number; text: string }[] = [
-  { db: 0, text: '0 dB' },
-  { db: -20, text: '−20' },
-  { db: -40, text: '−40' },
-  { db: -60, text: '−60 dB' },
-];
+/** The spans the window offers, dB below the maximum (Burhan 2026-10-06 18:20: the window
+ * "legitimately manipulated and controlled"); `SPAN_DB` is the default. */
+export const SPANS = [30, 40, 60, 80, 100] as const;
+
+/** The colour bar's labels for a span: its ends and its thirds, dB re the map's maximum. */
+export function spanLabels(span: number): { db: number; text: string }[] {
+  if (!(span > 0)) throw new RangeError(`spanLabels: span ${span}`);
+  const third = span / 3;
+  const fmt = (db: number) => (Number.isInteger(db) ? `${db}` : db.toFixed(1)).replace('-', '−');
+  return [
+    { db: 0, text: '0 dB' },
+    { db: -third, text: fmt(-third) },
+    { db: -2 * third, text: fmt(-2 * third) },
+    { db: -span, text: `${fmt(-span)} dB` },
+  ];
+}
+
+/** The default span's labels. */
+export const SPAN_LABELS: readonly { db: number; text: string }[] = spanLabels(SPAN_DB);
 
 export type Rgb = readonly [number, number, number];
 
@@ -132,7 +144,70 @@ export function binSum(series: readonly number[], bin: number): number[] {
 }
 
 /** The time bins the response window offers, in steps (Burhan 05:12: "the resulting IR spectrogram seems coarse"). */
-export const RESPONSE_BINS = [1, 5, 10] as const;
+export const RESPONSE_BINS = [1, 2, 5, 10, 20, 50] as const;
+
+/** A window of columns `[c0, c1)` of a map `cols` wide: what the map and the strip draw. */
+export interface ColRange {
+  c0: number;
+  c1: number;
+}
+
+/** The fewest columns a zoom may show. */
+export const MIN_COLS = 4;
+
+/** `r` kept inside `[0, cols)`, at least `MIN_COLS` wide (or all of a narrower map), whole columns:
+ * the one place a range is made legal. */
+export function clampRange(r: ColRange, cols: number): ColRange {
+  if (!(cols >= 1)) return { c0: 0, c1: 1 };
+  const want = r.c1 - r.c0;
+  const width = Math.min(cols, Math.max(MIN_COLS, Math.round(want)));
+  // A range narrower than the floor widens about its centre, so a zoom-in stays where it aimed.
+  let c0 = Math.round(want < MIN_COLS ? (r.c0 + r.c1) / 2 - width / 2 : r.c0);
+  c0 = Math.max(0, Math.min(cols - width, c0));
+  return { c0, c1: c0 + width };
+}
+
+/** `r` zoomed by `factor` (above 1 zooms in) about the column at fraction `anchor` (0 its left
+ * edge, 1 its right) of its width, so the column under the cursor stays under it; clamped. */
+export function zoomRange(r: ColRange, factor: number, anchor: number, cols: number): ColRange {
+  if (!(factor > 0) || !Number.isFinite(factor)) throw new RangeError(`zoomRange: factor ${factor}`);
+  const a = Math.min(1, Math.max(0, anchor));
+  const width = r.c1 - r.c0;
+  const pivot = r.c0 + a * width;
+  const w = width / factor;
+  return clampRange({ c0: pivot - a * w, c1: pivot + (1 - a) * w }, cols);
+}
+
+/** `r` moved by `by` columns (positive: later), clamped; its width is kept. */
+export function panRange(r: ColRange, by: number, cols: number): ColRange {
+  const width = r.c1 - r.c0;
+  const c0 = Math.max(0, Math.min(cols - width, r.c0 + by));
+  return clampRange({ c0, c1: c0 + width }, cols);
+}
+
+/** Ticks over the columns `[c0, c1)` of a map stepped `stepS`: whole multiples of the 1-2-5
+ * interval giving about `target` ticks across the window, each at the whole step nearest it,
+ * inside the window; `j` is the absolute column, so the label is `stepS` times `j`. */
+export function rangeTicks(stepS: number, r: ColRange, target = 6): { j: number; digits: number }[] {
+  const width = r.c1 - r.c0;
+  if (!(stepS > 0) || !(width > 0) || !Number.isFinite(stepS)) return [];
+  const { interval: nice, digits } = niceInterval(width * stepS, target);
+  const out: { j: number; digits: number }[] = [];
+  const first = Math.max(1, Math.ceil((r.c0 * stepS) / nice - 1e-9));
+  for (let n = first; ; n++) {
+    const j = Math.round((n * nice) / stepS);
+    if (j > r.c1) break;
+    if (j >= r.c0 && !out.some((t) => t.j === j)) out.push({ j, digits });
+  }
+  return out;
+}
+
+/** Every how-manieth band label is shown when the rows are `pitchPx` tall: all at 13 px and over,
+ * every second at 7 to 13, and so on; never under 1. */
+export function labelEvery(pitchPx: number): number {
+  if (!(pitchPx > 0) || !Number.isFinite(pitchPx)) return 1;
+  return Math.max(1, Math.ceil(13 / pitchPx));
+}
 
 /** The bands summed, step by step; null when the rows differ in length or there is none. */
 export function broadband(rows: readonly (readonly number[])[]): number[] | null {
@@ -148,18 +223,19 @@ export function decayDb(series: readonly number[], span = SPAN_DB): number[] | n
   return m ? m.db[0].map((d) => clipDb(d, span)) : null;
 }
 
-/** The map as RGBA pixels, one per bin: `cols` wide (the first `cols` steps; all by default), one
- * row per band, the highest band on top (image row 0 is the last band). Refuses a column count
- * outside 1 to the map's steps. */
-export function mapPixels(m: DbMatrix, span = SPAN_DB, cols = m.db[0].length): Uint8ClampedArray {
+/** The map as RGBA pixels, one per bin: `cols` wide from column `c0` (the first `cols` steps by
+ * default), one row per band, the highest band on top (image row 0 is the last band). Refuses a
+ * window outside the map's steps or under one column. */
+export function mapPixels(m: DbMatrix, span = SPAN_DB, cols = m.db[0].length, c0 = 0): Uint8ClampedArray {
   const rows = m.db.length;
   const all = m.db[0].length;
   if (!Number.isInteger(cols) || cols < 1 || cols > all) throw new RangeError(`mapPixels: ${cols} columns of ${all}`);
+  if (!Number.isInteger(c0) || c0 < 0 || c0 + cols > all) throw new RangeError(`mapPixels: columns ${c0} to ${c0 + cols} of ${all}`);
   const px = new Uint8ClampedArray(rows * cols * 4);
   for (let b = 0; b < rows; b++) {
     const y = rows - 1 - b;
     for (let c = 0; c < cols; c++) {
-      const [r, g, bl] = colourAt(levelT(m.db[b][c], span));
+      const [r, g, bl] = colourAt(levelT(m.db[b][c0 + c], span));
       const i = (y * cols + c) * 4;
       px[i] = r;
       px[i + 1] = g;
@@ -275,7 +351,7 @@ export interface Tick {
  * window draws and prints it; null for a TCR run, a receiver or source the report has no
  * echogram for, or an echogram with no energy.
  */
-export function responseView(report: Report, r: number, src: SourceSel, bin = 1): ResponseView | null {
+export function responseView(report: Report, r: number, src: SourceSel, bin = 1, span = SPAN_DB): ResponseView | null {
   if (report.solver === 'tcr') return null;
   const rx = `spps.point_receivers.${r}`;
   const receiver = str(report, `${rx}.label`);
@@ -319,9 +395,9 @@ export function responseView(report: Report, r: number, src: SourceSel, bin = 1)
   const stepNum = (digits: number, k: number) => num(report, 'spps.time_step_s', digits, k * bin) as Num;
   const ticksOver = (n: number): Tick[] => timeTicks(step * bin, n).map((t) => ({ col: t.j, num: stepNum(t.digits, t.j) }));
   const runDigits = niceInterval(cols * step * bin).digits;
-  const n = cropCols(map, step * bin);
+  const n = cropCols(map, step * bin, span);
   const cropDigits = n === null ? runDigits : niceInterval(n * step * bin).digits;
-  const last = lastAbove(map);
+  const last = lastAbove(map, span);
   // The floor's time to the step's own decimals (0.001 s: 3; the f32 widening's last digits
   // ignored): a whole number of steps, not rounded to a tick.
   const stepDigits = Math.max(0, Math.ceil(-Math.log10(step) - 1e-6));
@@ -333,7 +409,7 @@ export function responseView(report: Report, r: number, src: SourceSel, bin = 1)
     bands,
     energy,
     map,
-    broadband: sum ? decayDb(sum) : null,
+    broadband: sum ? decayDb(sum, span) : null,
     ticks: ticksOver(cols),
     run: stepNum(runDigits, cols),
     floor: last >= cols - 1 ? null : stepNum(stepDigits, last + 1),

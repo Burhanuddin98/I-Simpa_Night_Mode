@@ -628,7 +628,9 @@ export function AcousticsPane() {
             </span>
           </div>
           {curve ? <DecayChart curve={curve} /> : <div className="ac-none">No decay curve for this receiver and band.</div>}
-          {responseOpen && report.solver !== 'tcr' ? <ResponseWindow report={report} receiver={r} source={src} onClose={closeResponse} /> : null}
+          {responseOpen && report.solver !== 'tcr' ? (
+            <ResponseWindow report={report} receiver={r} source={src} receivers={names} sources={srcNames} onReceiver={setReceiver} onSource={setSource} onClose={closeResponse} />
+          ) : null}
         </section>
 
         <section className="ac-card ac-classical" aria-label="Sabine and Eyring">

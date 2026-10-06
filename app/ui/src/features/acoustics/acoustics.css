@@ -214,9 +214,16 @@
   top: 50%;
   transform: translate(-50%, -50%);
   z-index: 30;
-  width: min(980px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
-  overflow: auto;
+  width: min(1120px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 48px));
+  min-width: 640px;
+  min-height: 420px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  /* Resized by its corner (the browser's handle); moved by its title bar (ResponseWindow.tsx
+     useFrame), after which it sits at left/top and the centring transform is dropped. */
+  resize: both;
+  overflow: hidden;
   box-sizing: border-box;
   padding: 10px 14px 12px;
   display: flex;
@@ -272,11 +279,117 @@
   padding: 8px 6px 6px;
   border-radius: 5px;
   background: rgba(12, 10, 10, 0.88);
-  grid-template-columns: 64px 1fr 64px;
-  grid-template-rows: clamp(150px, calc(var(--rw-rows) * 30px), 300px) 72px 18px auto auto;
+  grid-template-columns: 64px 1fr 72px;
+  /* The map takes what the window gives (at least 180 px), the strip 96 px. */
+  grid-template-rows: minmax(180px, 1fr) 96px 18px auto auto;
   column-gap: 8px;
   row-gap: 4px;
   margin-top: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.rw-moved {
+  transform: none;
+}
+.rw-head {
+  cursor: move;
+  user-select: none;
+}
+.rw-pick {
+  display: inline-flex;
+  gap: 10px;
+  margin-left: 12px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.rw-pick label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.rw-pick select,
+.rw-strip-pick {
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--glass-edge);
+  background: rgba(12, 10, 10, 0.9);
+  color: var(--text);
+  font-size: 11.5px;
+  padding: 0 4px;
+}
+.rw-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 18px;
+  margin: 2px 0 6px;
+}
+.rw-controls .rw-bins {
+  margin: 0;
+}
+.rw-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.rw-num {
+  width: 72px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid var(--glass-edge);
+  background: rgba(12, 10, 10, 0.9);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  padding: 0 6px;
+  box-sizing: border-box;
+}
+.rw-dash,
+.rw-unit {
+  color: var(--text-3);
+}
+.rw-range .rw-full {
+  margin-left: 4px;
+}
+.rw-full:disabled {
+  opacity: 0.45;
+  border-color: var(--glass-edge);
+  color: var(--text-3);
+}
+.rw-map-box {
+  position: relative;
+  min-height: 0;
+  cursor: crosshair;
+  touch-action: none;
+}
+.rw-band-thin {
+  visibility: hidden;
+}
+.rw-sel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.18);
+  border-left: 1px solid rgba(255, 255, 255, 0.7);
+  border-right: 1px solid rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+.rw-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+.rw-readout {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
 }
 .rw-y {
   display: flex;
@@ -297,6 +410,8 @@
   display: block;
   width: 100%;
   height: 100%;
+  position: absolute;
+  inset: 0;
   object-fit: fill;
   image-rendering: pixelated;
   user-select: none;
@@ -381,7 +496,7 @@
 .rw-shown {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 10px;
   color: var(--text-2);
   font-size: 11.5px;
