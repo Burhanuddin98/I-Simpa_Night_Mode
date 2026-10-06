@@ -3,30 +3,35 @@
 //
 //   - The map: the `.csbin`'s own triangles (its nodes and faces, as SMAP v1 carries them), each
 //     vertex tagged with its face. Its values live in one float32 texture, faces x steps,
-//     face-major (mapData.ts), unfiltered: the vertex shader fetches the texel of (face, step)
-//     with `texelFetch` and colours the face from it. A step changes one uniform, nothing else.
+//     face-major (mapData.ts), unfiltered: the vertex stage loads the texel of (face, step)
+//     (`textureLoad`) and colours the face from it. A step changes one uniform, nothing else.
 //     Difference from the baseline: a second texture of the same layout, subtracted in dB.
 //   - Particles: every record of the band's `.pbin` uploaded once (position, step, energy); the
-//     vertex shader keeps a record only at its own step. Changing the step uploads nothing.
+//     vertex stage keeps a record only at its own step. Changing the step uploads nothing.
 //   - W5 (wow list; mapView.ts): smooth colour, upstream's node mean of the linked faces' texels
-//     at the step, computed in the vertex shader from a node-to-faces texture, its level
+//     at the step, computed in the vertex stage from a node-to-faces texture, its level
 //     interpolated across the face and coloured per fragment; iso-contours on that level
-//     (`fwidth`); a fixed colour range (the uLo/uHi uniforms); and a BVH over the map's own
+//     (`fwidth`); a fixed colour range (the lo/hi uniforms); and a BVH over the map's own
 //     triangles for the value probe, whose number is the CPU's read of the face's record.
 //   - W2 (cumulative.ts): a cumulative map is the same layout with each texel the face's running
 //     sum (upstream's float32 rule), built on the CPU and uploaded in place of the instantaneous one.
-//   - The time window (window.ts): `faceValue` is the mean of a face's texels over the last uWin
-//     steps up to the step, a non-finite one as 0, divided by the steps the window holds; uWin 1
+//   - The time window (window.ts): `faceValue` is the mean of a face's texels over the last `win`
+//     steps up to the step, a non-finite one as 0, divided by the steps the window holds; win 1
 //     is the texel itself. The draw, the difference, the node mean and the read-back all go
 //     through it, so a window changes one uniform and uploads nothing.
 //   - W3 (particles.ts): trails, one line segment per pair of consecutive records, both ends
 //     tagged with the head's step and the particle's last step; `keptTrail()` keeps a segment
-//     whole. Counted like gate (d): the trail material drawn as points in its count mode.
-//   - Test hooks (gate (c), (d)) read what the GPU holds and draws, through the same GLSL: texels
-//     read back by a pass that calls the map shader's own `mapTexel` into a float32 target, and
-//     the particle count by drawing the particle material itself, in its count mode, additively
-//     into a 1 x 1 float32 target.
+//     whole. Counted like gate (d): the trail rule drawn as points in its count pass.
+//   - Test hooks (gate (c), (d)) read what the GPU holds and draws, through the same code: texels
+//     read back by a pass that calls the map's own `mapTexel` (mapNodes.ts) into a float32 target,
+//     and the particle count by drawing every record through the draw's own keep rule
+//     (`keptRecord`), additively into a 1 x 1 float32 target.
+//
+// Decision 68 (b): all of it is TSL (mapNodes.ts), so it runs on WebGPURenderer's WebGPU backend and
+// on its WebGL2 fallback alike. Reading back from the GPU is asynchronous on both, so the hooks that
+// read pixels return promises (the e2e harness awaits every hook).
 import {
+  AddEquation,
   BufferAttribute,
   BufferGeometry,
   CustomBlending,
@@ -34,287 +39,37 @@ import {
   DoubleSide,
   FloatType,
   Group,
+  InstancedBufferAttribute,
   LineSegments,
   Mesh,
   NearestFilter,
   NoBlending,
   OneFactor,
-  AddEquation,
-  NormalBlending,
   OrthographicCamera,
   type Ray,
   Points,
   RedFormat,
+  RenderTarget,
   RGBAFormat,
   Scene,
-  ShaderMaterial,
-  WebGLRenderTarget,
-  type WebGLRenderer,
+  Sprite,
 } from 'three';
+import { LineBasicNodeMaterial, MeshBasicNodeMaterial, PointsNodeMaterial, type WebGPURenderer } from 'three/webgpu';
+import { T } from './tsl';
 import { MeshBVH } from 'three-mesh-bvh';
+import { emptyGeometry } from './nodes';
 import type { Particles, SurfaceMap } from '../../resultsData';
-import { COOL, denseValues, HOT, mapLayout, rampFloats, type MapLayout, type Range } from './mapData';
+import { denseValues, mapLayout, type MapLayout, type Range } from './mapData';
 import { cumulativeValues } from './cumulative';
 import { MAX_NODE_FACES, nodeFaces, type NodeFaces } from './mapView';
 import { MAX_WINDOW_STEPS } from './window';
-import { PARTICLE_FRAGMENT_GLSL, PARTICLE_VERTEX_GLSL, recordSteps, TRAIL_BYTES_PER_SEGMENT, TRAIL_FRAGMENT_GLSL, TRAIL_VERTEX_GLSL, trailRefusal, trailSegments } from './particles';
+import { keptRecord, keptTrail, recordSteps, TRAIL_BYTES_PER_SEGMENT, trailRefusal, trailSegments } from './particles';
+import { diffDb, faceLevel, faceValue, hot, lookUniforms, mapColour, mapTexel, mapUniforms, nodeEnergy, nodeLevel, NODE_OPS, rampPlaceNode, trailAlphaNode, type MapUniforms } from './mapNodes';
 
-/** The GLSL that reads the map: the draw and the read-back hook share it. */
-const MAP_GLSL = /* glsl */ `
-uniform highp sampler2D uMap;
-uniform highp sampler2D uBase;
-uniform int uWidth;
-uniform int uSteps;
-uniform int uWin;
-float mapTexel(highp sampler2D t, int face, int step) {
-  int i = face * uSteps + step;
-  return texelFetch(t, ivec2(i % uWidth, i / uWidth), 0).r;
-}
-// The time window (window.ts): the face's texels over steps max(0, step - uWin + 1) .. step, a
-// non-finite one as 0, added in step order and divided by the steps held; uWin 1 is the texel.
-float faceValue(highp sampler2D t, int face, int step) {
-  if (uWin <= 1) return mapTexel(t, face, step);
-  int from = max(0, step - uWin + 1);
-  float s = 0.0;
-  for (int k = 0; k < ${MAX_WINDOW_STEPS}; k++) {
-    int j = from + k;
-    if (j > step) break;
-    float e = mapTexel(t, face, j);
-    if (!isinf(e) && !isnan(e)) s += e;
-  }
-  return s / float(step - from + 1);
-}
-// Upstream's level, dB re 1e-12; the caller checks e > 0.
-float levelDb(float e) { return 10.0 * log2(e) * 0.30102999566398120 + 120.0; }
-// This run's level minus the baseline's; 'ok' false where either has no energy.
-float diffDb(int face, int step, out bool ok) {
-  float a = faceValue(uMap, face, step);
-  float b = faceValue(uBase, face, step);
-  ok = a > 0.0 && b > 0.0 && !isinf(a) && !isinf(b) && !isnan(a) && !isnan(b);
-  return ok ? levelDb(a) - levelDb(b) : 0.0;
-}
-`;
+const { attribute, dot, float, Fn, instancedBufferAttribute, int, modelViewProjection, screenDPR, select, uniform, uv, varying, vec4 } = T;
 
-/** W5: a node's energy, upstream's mean of its linked faces' texels (mapView.ts `nodeEnergy`). */
-const NODE_GLSL = /* glsl */ `
-uniform highp sampler2D uAdj;
-uniform int uAdjWidth;
-float nodeEnergy(highp sampler2D t, int start, int n, int step) {
-  float s = 0.0;
-  for (int k = 0; k < ${MAX_NODE_FACES}; k++) {
-    if (k >= n) break;
-    int j = start + k;
-    int face = int(texelFetch(uAdj, ivec2(j % uAdjWidth, j / uAdjWidth), 0).r + 0.5);
-    float e = faceValue(t, face, step);
-    if (!isinf(e) && !isnan(e)) s += e;
-  }
-  return n > 0 ? s / float(n) : 0.0;
-}
-`;
-
-const RAMP_GLSL = /* glsl */ `
-uniform vec3 uHot[9];
-uniform vec3 uCool[8];
-vec3 hot(float t) {
-  float u = clamp(t, 0.0, 1.0) * 8.0;
-  int k = min(7, int(floor(u)));
-  return mix(uHot[k], uHot[k + 1], u - float(k));
-}
-vec3 cool(float t) {
-  float u = clamp(t, 0.0, 1.0) * 7.0;
-  int k = min(6, int(floor(u)));
-  return mix(uCool[k], uCool[k + 1], u - float(k));
-}
-`;
-
-/** A `vec3[]` uniform's value: three's array setters take it flat. */
-const vec3s = (stops: readonly string[]) => new Float32Array(rampFloats(stops));
-
-function mapMaterial(): ShaderMaterial {
-  return new ShaderMaterial({
-    uniforms: {
-      uMap: { value: null },
-      uBase: { value: null },
-      uAdj: { value: null },
-      uAdjWidth: { value: 1 },
-      uWidth: { value: 1 },
-      uSteps: { value: 1 },
-      uWin: { value: 1 },
-      uStep: { value: 0 },
-      uDiff: { value: 0 },
-      uSmooth: { value: 0 },
-      uIso: { value: 0 },
-      uLo: { value: 0 },
-      uHi: { value: 1 },
-      uHot: { value: vec3s(HOT) },
-      uCool: { value: vec3s(COOL) },
-    },
-    vertexShader: /* glsl */ `
-      ${MAP_GLSL}
-      ${NODE_GLSL}
-      uniform int uStep;
-      uniform int uDiff;
-      uniform int uSmooth;
-      attribute float aFace;
-      attribute float aAdj;
-      attribute float aAdjN;
-      flat varying float vFaceOk;
-      flat varying float vFaceLevel;
-      varying float vLevel;
-      varying float vOk;
-      void main() {
-        int face = int(aFace + 0.5);
-        vFaceOk = 0.0;
-        vFaceLevel = 0.0;
-        if (uDiff == 1) {
-          bool ok;
-          float d = diffDb(face, uStep, ok);
-          if (ok) { vFaceOk = 1.0; vFaceLevel = d; }
-        } else {
-          float e = faceValue(uMap, face, uStep);
-          if (e > 0.0 && !isinf(e) && !isnan(e)) { vFaceOk = 1.0; vFaceLevel = levelDb(e); }
-        }
-        vLevel = 0.0;
-        vOk = 0.0;
-        if (uSmooth == 1) {
-          int start = int(aAdj + 0.5);
-          int n = int(aAdjN + 0.5);
-          float a = nodeEnergy(uMap, start, n, uStep);
-          if (uDiff == 1) {
-            float b = nodeEnergy(uBase, start, n, uStep);
-            if (a > 0.0 && b > 0.0) { vOk = 1.0; vLevel = levelDb(a) - levelDb(b); }
-          } else if (a > 0.0) { vOk = 1.0; vLevel = levelDb(a); }
-        }
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      ${RAMP_GLSL}
-      uniform int uDiff;
-      uniform int uSmooth;
-      uniform float uIso;
-      uniform float uLo;
-      uniform float uHi;
-      flat varying float vFaceOk;
-      flat varying float vFaceLevel;
-      varying float vLevel;
-      varying float vOk;
-      vec3 colourOf(float l) {
-        if (uDiff == 1) {
-          float t = l / max(uHi, 1e-6);
-          return t < 0.0 ? cool(-t) : hot(t);
-        }
-        return hot((l - uLo) / max(uHi - uLo, 1e-6));
-      }
-      void main() {
-        if (vFaceOk < 0.5) discard;
-        // Smooth where every corner of the face has energy, else the face's own flat colour.
-        bool smoothHere = uSmooth == 1 && vOk > 0.999;
-        float l = smoothHere ? vLevel : vFaceLevel;
-        vec3 c = colourOf(l);
-        if (smoothHere && uIso > 0.0) {
-          float f = l / uIso;
-          float w = max(fwidth(f), 1e-6);
-          float d = abs(fract(f + 0.5) - 0.5);
-          float line = 1.0 - smoothstep(0.5 * w, 1.5 * w, d);
-          c = mix(c, vec3(0.93, 0.93, 0.94), 0.85 * line);
-        }
-        gl_FragColor = vec4(c, 1.0);
-      }
-    `,
-    side: DoubleSide,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -2,
-  });
-}
-
-/** W5's read-back: point i writes the node mean (nodeEnergy) of sample i (start, count, step) to pixel i. */
-function nodeProbeMaterial(): ShaderMaterial {
-  return new ShaderMaterial({
-    uniforms: { uMap: { value: null }, uBase: { value: null }, uAdj: { value: null }, uAdjWidth: { value: 1 }, uWidth: { value: 1 }, uSteps: { value: 1 }, uWin: { value: 1 }, uN: { value: 1 } },
-    vertexShader: /* glsl */ `
-      ${MAP_GLSL}
-      ${NODE_GLSL}
-      uniform float uN;
-      attribute vec4 aSample; // start, count, step, index
-      flat varying vec4 vValue;
-      void main() {
-        vValue = vec4(nodeEnergy(uMap, int(aSample.x + 0.5), int(aSample.y + 0.5), int(aSample.z + 0.5)), 0.0, 0.0, 1.0);
-        gl_Position = vec4((2.0 * aSample.w + 1.0) / uN - 1.0, 0.0, 0.0, 1.0);
-        gl_PointSize = 1.0;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      flat varying vec4 vValue;
-      void main() { gl_FragColor = vValue; }
-    `,
-    blending: NoBlending,
-    depthTest: false,
-    depthWrite: false,
-  });
-}
-
-/** The read-back pass: point i of the draw writes mapTexel (or diffDb) of sample i to pixel i. */
-function probeMaterial(): ShaderMaterial {
-  return new ShaderMaterial({
-    uniforms: { uMap: { value: null }, uBase: { value: null }, uWidth: { value: 1 }, uSteps: { value: 1 }, uWin: { value: 1 }, uWhat: { value: 0 }, uN: { value: 1 } },
-    vertexShader: /* glsl */ `
-      ${MAP_GLSL}
-      uniform int uWhat;
-      uniform float uN;
-      attribute vec3 aSample; // face, step, index
-      flat varying vec4 vValue;
-      void main() {
-        int face = int(aSample.x + 0.5);
-        int step = int(aSample.y + 0.5);
-        if (uWhat == 1) {
-          bool ok;
-          float d = diffDb(face, step, ok);
-          vValue = vec4(d, ok ? 1.0 : 0.0, 0.0, 1.0);
-        } else if (uWhat == 2) {
-          vValue = vec4(faceValue(uMap, face, step), 0.0, 0.0, 1.0);
-        } else {
-          vValue = vec4(mapTexel(uMap, face, step), 0.0, 0.0, 1.0);
-        }
-        gl_Position = vec4((2.0 * aSample.z + 1.0) / uN - 1.0, 0.0, 0.0, 1.0);
-        gl_PointSize = 1.0;
-      }
-    `,
-    fragmentShader: /* glsl */ `
-      flat varying vec4 vValue;
-      void main() { gl_FragColor = vValue; }
-    `,
-    blending: NoBlending,
-    depthTest: false,
-    depthWrite: false,
-  });
-}
-
-/** Particle size on screen, px. */
+/** Particle size on screen, device px. */
 const PARTICLE_PX = 4;
-
-function particleMaterial(): ShaderMaterial {
-  return new ShaderMaterial({
-    uniforms: { uStep: { value: 0 }, uCount: { value: 0 }, uSize: { value: PARTICLE_PX }, uLogMax: { value: 0 }, uHot: { value: vec3s(HOT) }, uCool: { value: vec3s(COOL) } },
-    vertexShader: `${RAMP_GLSL}
-${PARTICLE_VERTEX_GLSL}`,
-    fragmentShader: PARTICLE_FRAGMENT_GLSL,
-    transparent: true,
-    depthWrite: false,
-  });
-}
-
-function trailMaterial(): ShaderMaterial {
-  return new ShaderMaterial({
-    uniforms: { uStep: { value: 0 }, uCount: { value: 0 }, uLength: { value: 1 }, uLogMax: { value: 0 }, uHot: { value: vec3s(HOT) }, uCool: { value: vec3s(COOL) } },
-    vertexShader: `${RAMP_GLSL}
-${TRAIL_VERTEX_GLSL}`,
-    fragmentShader: TRAIL_FRAGMENT_GLSL,
-    transparent: true,
-    depthWrite: false,
-  });
-}
 
 /** What the map shows; the hooks report it. */
 export interface MapMeta {
@@ -351,7 +106,7 @@ export interface ParticleMeta {
 
 const floatTexture = (data: Float32Array, l: MapLayout): DataTexture => {
   const t = new DataTexture(data, l.width, l.height, RedFormat, FloatType);
-  t.internalFormat = 'R32F';
+  // No internalFormat: WebGPU would take it as its own format name; red + float is r32float / R32F on both backends.
   t.minFilter = NearestFilter;
   t.magFilter = NearestFilter;
   t.generateMipmaps = false;
@@ -361,13 +116,66 @@ const floatTexture = (data: Float32Array, l: MapLayout): DataTexture => {
   return t;
 };
 
+/** The textures' stand-in while no map is loaded (a texture binding is never empty). */
+const PLACEHOLDER = floatTexture(new Float32Array(1), { faces: 1, steps: 1, width: 1, height: 1 });
+
+/** Whether `r` can add float32 values by blending (the count passes): WebGPU's `float32-blendable`, WebGL2's `EXT_float_blend`. */
+function floatBlendable(r: WebGPURenderer): boolean {
+  const b = r.backend as unknown as { isWebGPUBackend?: boolean; extensions?: { has(name: string): boolean } };
+  return b.isWebGPUBackend ? r.hasFeature('float32-blendable') : !!b.extensions?.has('EXT_float_blend');
+}
+
+/** The GPU's 2D texture size limit. */
+export function maxTextureSizeOf(r: WebGPURenderer): number {
+  const b = r.backend as unknown as { isWebGPUBackend?: boolean; device?: { limits: { maxTextureDimension2D: number } }; gl?: WebGL2RenderingContext };
+  if (b.isWebGPUBackend && b.device) return b.device.limits.maxTextureDimension2D;
+  if (b.gl) return b.gl.getParameter(b.gl.MAX_TEXTURE_SIZE) as number;
+  return 16384;
+}
+
+/** A points material that writes `value` (computed in the vertex stage, flat) to pixel `index` of an n x 1 target. */
+function readMaterial(index: unknown, n: unknown, value: unknown): PointsNodeMaterial {
+  const m = new PointsNodeMaterial({ blending: NoBlending, depthTest: false, depthWrite: false });
+  const i = index as ReturnType<typeof float>;
+  m.vertexNode = vec4(i.mul(2).add(1).div(n as number).sub(1), 0, 0, 1);
+  m.fragmentNode = varying(value as ReturnType<typeof vec4>).setInterpolation('flat');
+  return m;
+}
+
+/** A points material that adds 1 to the one pixel of a 1 x 1 target for every vertex `kept` lets through. */
+function countMaterial(kept: unknown): PointsNodeMaterial {
+  const m = new PointsNodeMaterial({ transparent: true, depthTest: false, depthWrite: false });
+  m.blending = CustomBlending;
+  m.blendSrc = OneFactor;
+  m.blendDst = OneFactor;
+  m.blendEquation = AddEquation;
+  m.blendSrcAlpha = OneFactor;
+  m.blendDstAlpha = OneFactor;
+  m.blendEquationAlpha = AddEquation;
+  m.vertexNode = select(kept as ReturnType<typeof float>, vec4(0, 0, 0, 1), vec4(2, 2, 2, 1));
+  m.fragmentNode = vec4(1, 0, 0, 1);
+  return m;
+}
+
 export class ResultsLayer {
   readonly group = new Group();
-  private renderer: WebGLRenderer | null = null;
-  private readonly map = new Mesh(new BufferGeometry(), mapMaterial());
-  private readonly particles = new Points(new BufferGeometry(), particleMaterial());
+  private renderer: WebGPURenderer | null = null;
+  private maxTexture = 16384;
+  private readonly mu: MapUniforms = mapUniforms(PLACEHOLDER);
+  private readonly lu = lookUniforms();
+  private readonly map: Mesh<BufferGeometry, MeshBasicNodeMaterial>;
+  /** The playback: one sprite instance per record, its size 0 unless the record is at the step. */
+  private particles: Sprite;
+  private readonly pStep = uniform(0);
+  private readonly pLogMax = uniform(0);
+  private readonly pSize = uniform(PARTICLE_PX);
+  /** The count pass's points: one per record, with the record's step. */
+  private particleCount: Points | null = null;
   /** W3: the band's trail segments, drawn while `trailSteps` > 0. */
-  private readonly trails = new LineSegments(new BufferGeometry(), trailMaterial());
+  private readonly trails: LineSegments<BufferGeometry, LineBasicNodeMaterial>;
+  private readonly tStep = uniform(0);
+  private readonly tLength = uniform(0);
+  private readonly tLogMax = uniform(0);
   private trailData: { segments: number; bytes: number } | null = null;
   private trailSource: Particles | null = null;
   /** W3: why trails cannot be drawn for the particles shown, or null. */
@@ -385,8 +193,23 @@ export class ResultsLayer {
   particleMeta: ParticleMeta | null = null;
   private particleBytes = 0;
   private textureBytes = 0;
+  /** The read-back passes' materials, built once each. */
+  private readonly probes = new Map<string, PointsNodeMaterial>();
+  private readonly probeN = uniform(1);
 
   constructor() {
+    const mat = new MeshBasicNodeMaterial({ side: DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+    const face = int(attribute('aFace', 'float').add(0.5));
+    const flat = varying(faceLevel(this.mu, this.lu, face)).setInterpolation('flat');
+    const smooth = varying(nodeLevel(this.mu, this.lu, int(attribute('aAdj', 'float').add(0.5)), int(attribute('aAdjN', 'float').add(0.5))));
+    mat.fragmentNode = mapColour(this.lu, flat, smooth);
+    this.map = new Mesh(emptyGeometry(), mat);
+    this.particles = new Sprite(new PointsNodeMaterial());
+    const trailMat = new LineBasicNodeMaterial({ transparent: true, depthWrite: false });
+    const head = attribute('aHead', 'float');
+    trailMat.vertexNode = select(keptTrail(NODE_OPS, attribute('aLast', 'float'), head, this.tStep, this.tLength), modelViewProjection, vec4(2, 2, 2, 1));
+    trailMat.colorNode = vec4(varying(hot(rampPlaceNode(attribute('aEnergy', 'float'), this.tLogMax))), varying(trailAlphaNode(this.tStep, head, this.tLength)));
+    this.trails = new LineSegments(emptyGeometry(), trailMat);
     this.map.renderOrder = 1;
     this.particles.renderOrder = 9;
     this.trails.renderOrder = 8;
@@ -399,13 +222,14 @@ export class ResultsLayer {
     this.group.add(this.map, this.particles, this.trails);
   }
 
-  setRenderer(r: WebGLRenderer | null): void {
+  setRenderer(r: WebGPURenderer | null): void {
     this.renderer = r;
+    if (r) this.maxTexture = maxTextureSizeOf(r);
   }
 
-  /** The GPU's texture size limit (16384 without a renderer, the WebGL2 floor's double). */
+  /** The GPU's texture size limit (16384 before the renderer is up, the WebGL2 floor's double). */
   maxTextureSize(): number {
-    return this.renderer?.capabilities.maxTextureSize ?? 16384;
+    return this.maxTexture;
   }
 
   /** Uploads `m` (and `base` for a difference); returns why it cannot, or null. */
@@ -447,7 +271,7 @@ export class ResultsLayer {
       }
     }
     this.map.geometry.dispose();
-    const g = new BufferGeometry();
+    const g = emptyGeometry();
     g.setAttribute('position', new BufferAttribute(pos, 3));
     g.setAttribute('aFace', new BufferAttribute(face, 1));
     g.setAttribute('aAdj', new BufferAttribute(adjStart, 1));
@@ -458,18 +282,18 @@ export class ResultsLayer {
     g.setIndex(new BufferAttribute(index, 1));
     this.map.geometry = g;
     this.mapBvh = m.faceCount > 0 ? new MeshBVH(g, { indirect: true }) : null;
-    const u = this.map.material.uniforms;
-    u.uMap.value = this.mapTex;
-    u.uBase.value = this.baseTex ?? this.mapTex;
-    u.uAdj.value = this.adjTex ?? this.mapTex;
-    u.uAdjWidth.value = adjW;
-    if (this.smoothRefusal) u.uSmooth.value = 0;
-    u.uWidth.value = l.width;
-    u.uSteps.value = l.steps;
-    u.uDiff.value = meta.kind === 'diff' && base ? 1 : 0;
-    u.uWin.value = this.windowOf(meta);
-    u.uLo.value = meta.range.lo;
-    u.uHi.value = meta.range.hi;
+    const u = this.mu;
+    u.map.value = this.mapTex;
+    u.base.value = this.baseTex ?? this.mapTex;
+    u.adj.value = this.adjTex ?? this.mapTex;
+    u.adjWidth.value = adjW;
+    if (this.smoothRefusal) this.lu.smooth.value = 0;
+    u.width.value = l.width;
+    u.steps.value = l.steps;
+    this.lu.diff.value = meta.kind === 'diff' && base ? 1 : 0;
+    u.win.value = this.windowOf(meta);
+    this.lu.lo.value = meta.range.lo;
+    this.lu.hi.value = meta.range.hi;
     this.mapMeta = meta;
     this.map.visible = true;
     return null;
@@ -485,32 +309,30 @@ export class ResultsLayer {
   setWindow(steps: number): void {
     if (!this.mapMeta) return;
     this.mapMeta = { ...this.mapMeta, windowSteps: steps };
-    this.map.material.uniforms.uWin.value = this.windowOf(this.mapMeta);
+    this.mu.win.value = this.windowOf(this.mapMeta);
   }
 
   /** The window the map is drawn with now, steps. */
   windowSteps(): number {
-    return this.map.material.uniforms.uWin.value as number;
+    return this.mu.win.value as number;
   }
 
   /** W5: smooth colour and contours; smooth stays off where `smoothRefusal` says why. */
   setLook(look: MapLook): void {
-    const u = this.map.material.uniforms;
-    u.uSmooth.value = look.smooth && !this.smoothRefusal ? 1 : 0;
-    u.uIso.value = look.smooth && look.isoDb > 0 ? look.isoDb : 0;
+    this.lu.smooth.value = look.smooth && !this.smoothRefusal ? 1 : 0;
+    this.lu.iso.value = look.smooth && look.isoDb > 0 ? look.isoDb : 0;
   }
 
   /** W5: the colour scale's range (a fixed range, R47), without reloading the map. */
   setRange(range: Range): void {
-    const u = this.map.material.uniforms;
-    u.uLo.value = range.lo;
-    u.uHi.value = range.hi;
+    this.lu.lo.value = range.lo;
+    this.lu.hi.value = range.hi;
     if (this.mapMeta) this.mapMeta = { ...this.mapMeta, range };
   }
 
   look(): { smooth: boolean; isoDb: number; lo: number; hi: number } {
-    const u = this.map.material.uniforms;
-    return { smooth: u.uSmooth.value === 1, isoDb: u.uIso.value as number, lo: u.uLo.value as number, hi: u.uHi.value as number };
+    const u = this.lu;
+    return { smooth: u.smooth.value === 1, isoDb: u.iso.value as number, lo: u.lo.value as number, hi: u.hi.value as number };
   }
 
   /** The map face a ray meets first (either side), and how far; null off the map or with none shown. */
@@ -530,8 +352,20 @@ export class ResultsLayer {
     return out;
   }
 
-  /** W5's read-back: each node's mean energy at a step, computed by the map shader's `nodeEnergy`, as float32 bits. */
-  readNodes(samples: [number, number][]): number[] {
+  /** A read-back pass's material, built on first use: `make` gets the sample attribute and returns the vec4 to write. */
+  private probe(key: string, size: number, make: (s: ReturnType<typeof attribute>) => unknown): PointsNodeMaterial {
+    let m = this.probes.get(key);
+    if (!m) {
+      const s = attribute('aSample', size === 4 ? 'vec4' : 'vec3');
+      // Built inside a TSL function: the window and node loops are statements, which need a function body.
+      m = readMaterial(size === 4 ? s.w : s.z, this.probeN, Fn(() => make(s))());
+      this.probes.set(key, m);
+    }
+    return m;
+  }
+
+  /** W5's read-back: each node's mean energy at a step, computed by the map's own `nodeEnergy`, as float32 bits. */
+  async readNodes(samples: [number, number][]): Promise<number[]> {
     const l = this.layout;
     const adj = this.adj;
     if (!l || !this.mapTex || !adj || !this.adjTex) throw new Error('no map with a node list loaded');
@@ -541,37 +375,23 @@ export class ResultsLayer {
       if (adj.offsets[n + 1] - adj.offsets[n] > MAX_NODE_FACES) throw new Error(`node ${n} links more than ${MAX_NODE_FACES} faces`);
     }
     const n = samples.length;
-    const mat = nodeProbeMaterial();
-    const g = new BufferGeometry();
+    const mat = this.probe('node', 4, (s) => vec4(nodeEnergy(this.mu, this.mu.map, int(s.x.add(0.5)), int(s.y.add(0.5)), int(s.z.add(0.5))), 0, 0, 1));
+    const g = emptyGeometry();
     g.setAttribute('position', new BufferAttribute(new Float32Array(3 * n), 3));
     g.setAttribute('aSample', new BufferAttribute(new Float32Array(samples.flatMap(([v, s], i) => [adj.offsets[v], adj.offsets[v + 1] - adj.offsets[v], s, i])), 4));
-    const pts = new Points(g, mat);
-    pts.frustumCulled = false;
-    const scene = new Scene();
-    scene.add(pts);
-    const u = mat.uniforms;
-    u.uMap.value = this.mapTex;
-    u.uBase.value = this.mapTex;
-    u.uAdj.value = this.adjTex;
-    u.uAdjWidth.value = this.map.material.uniforms.uAdjWidth.value;
-    u.uWidth.value = l.width;
-    u.uSteps.value = l.steps;
-    u.uWin.value = this.windowSteps();
-    u.uN.value = n;
     try {
-      const px = this.readPass(n, (r) => r.render(scene, new OrthographicCamera()));
-      const bits = new Uint32Array(px.buffer);
+      const px = await this.readPass(n, new Points(g, mat));
+      const bits = new Uint32Array(px.buffer, px.byteOffset, px.length);
       return samples.map((_, i) => bits[4 * i]);
     } finally {
       g.dispose();
-      mat.dispose();
     }
   }
 
   clearMap(): void {
     this.disposeTextures();
     this.map.geometry.dispose();
-    this.map.geometry = new BufferGeometry();
+    this.map.geometry = emptyGeometry();
     this.map.visible = false;
     this.mapMeta = null;
     this.layout = null;
@@ -581,6 +401,9 @@ export class ResultsLayer {
   }
 
   private disposeTextures(): void {
+    this.mu.map.value = PLACEHOLDER;
+    this.mu.base.value = PLACEHOLDER;
+    this.mu.adj.value = PLACEHOLDER;
     this.mapTex?.dispose();
     this.baseTex?.dispose();
     this.adjTex?.dispose();
@@ -591,37 +414,58 @@ export class ResultsLayer {
   }
 
   setParticles(p: Particles | null, meta: ParticleMeta | null): void {
-    this.particles.geometry.dispose();
-    const g = new BufferGeometry();
+    this.group.remove(this.particles);
+    (this.particles.material as PointsNodeMaterial).dispose();
+    this.particleCount?.geometry.dispose();
+    (this.particleCount?.material as PointsNodeMaterial | undefined)?.dispose();
+    this.particleCount = null;
     this.particleBytes = 0;
+    let logMax = 0;
+    const mat = new PointsNodeMaterial({ transparent: true, depthWrite: false, sizeAttenuation: false });
+    mat.alphaToCoverage = false;
+    this.particles = new Sprite(mat);
     if (p && meta) {
-      g.setAttribute('position', new BufferAttribute(p.positions, 3));
-      g.setAttribute('aStep', new BufferAttribute(recordSteps(p), 1));
-      g.setAttribute('aEnergy', new BufferAttribute(p.energies, 1));
+      const steps = recordSteps(p);
+      for (let k = 0; k < p.recordCount; k++) if (p.energies[k] > logMax && Number.isFinite(p.energies[k])) logMax = p.energies[k];
+      logMax = logMax > 0 ? 10 * Math.log10(logMax) : 0;
+      // The draw: a sprite instance per record, sized 0 unless the record is at the step (keptRecord).
+      const step = instancedBufferAttribute(new InstancedBufferAttribute(steps, 1));
+      mat.positionNode = instancedBufferAttribute(new InstancedBufferAttribute(p.positions, 3));
+      mat.sizeNode = select(keptRecord(NODE_OPS, step, this.pStep), this.pSize.div(screenDPR), float(0));
+      mat.colorNode = vec4(varying(hot(rampPlaceNode(instancedBufferAttribute(new InstancedBufferAttribute(p.energies, 1)), this.pLogMax))), 1);
+      const d = uv().sub(0.5);
+      mat.maskNode = dot(d, d).lessThanEqual(0.25);
+      this.particles.count = p.recordCount;
+      // The count pass: the same records and the same keep rule, as points.
+      const cg = emptyGeometry();
+      cg.setAttribute('position', new BufferAttribute(p.positions, 3));
+      cg.setAttribute('aStep', new BufferAttribute(steps, 1));
+      this.particleCount = new Points(cg, countMaterial(keptRecord(NODE_OPS, attribute('aStep', 'float'), this.pStep)));
+      this.particleCount.frustumCulled = false;
       this.particleBytes = 20 * p.recordCount;
-      let max = 0;
-      for (let k = 0; k < p.recordCount; k++) if (p.energies[k] > max && Number.isFinite(p.energies[k])) max = p.energies[k];
-      this.particles.material.uniforms.uLogMax.value = max > 0 ? 10 * Math.log10(max) : 0;
     }
-    this.particles.geometry = g;
+    this.pLogMax.value = logMax;
+    this.particles.renderOrder = 9;
+    this.particles.frustumCulled = false;
+    this.group.add(this.particles);
     this.particles.visible = !!p;
     this.particleMeta = p ? meta : null;
     this.trailSource = p && meta ? p : null;
     this.trails.geometry.dispose();
-    this.trails.geometry = new BufferGeometry();
+    this.trails.geometry = emptyGeometry();
     this.trailData = null;
     this.trailRefusal = trailRefusal(this.trailSource);
-    this.trails.material.uniforms.uLogMax.value = this.particles.material.uniforms.uLogMax.value;
+    this.tLogMax.value = logMax;
     this.setTrails(this.trailSteps());
   }
 
   /** W3: the trails' length in steps (0: off). Built on first use; refused where `trailRefusal` says why. */
   setTrails(steps: number): void {
     const on = steps > 0 && this.trailRefusal === null && this.trailSource !== null;
-    this.trails.material.uniforms.uLength.value = steps > 0 ? steps : 0;
+    this.tLength.value = steps > 0 ? steps : 0;
     if (on && !this.trailData) {
       const t = trailSegments(this.trailSource as Particles);
-      const g = new BufferGeometry();
+      const g = emptyGeometry();
       g.setAttribute('position', new BufferAttribute(t.positions, 3));
       g.setAttribute('aHead', new BufferAttribute(t.head, 1));
       g.setAttribute('aLast', new BufferAttribute(t.last, 1));
@@ -634,7 +478,7 @@ export class ResultsLayer {
   }
 
   trailSteps(): number {
-    return this.trails.material.uniforms.uLength.value as number;
+    return this.tLength.value as number;
   }
 
   /** W3's hook: what the trails hold and draw now. */
@@ -642,45 +486,30 @@ export class ResultsLayer {
     return { steps: this.trailSteps(), on: this.trails.visible, segments: this.trailData?.segments ?? 0, bytes: this.trailData?.bytes ?? 0, refusal: this.trailRefusal };
   }
 
-  /** W3: the segments the trail draw keeps at its step, counted on the GPU (two points a segment, the material's count mode). */
-  countTrails(): number {
+  private trailCounter: Points | null = null;
+
+  /** W3: the segments the trail draw keeps at its step, counted on the GPU (two points a segment, the draw's keptTrail rule). */
+  async countTrails(): Promise<number> {
     const r = this.renderer;
-    if (!r) throw new Error('no WebGL renderer');
+    if (!r) throw new Error('no renderer');
     if (!this.trails.visible || !this.trailData) throw new Error('no trails drawn');
-    if (!r.extensions.has('EXT_float_blend')) throw new Error('EXT_float_blend is not available: float32 additive counting cannot run');
-    const mat = this.trails.material;
-    const u = mat.uniforms;
-    const saved = { blending: mat.blending, src: mat.blendSrc, dst: mat.blendDst, eq: mat.blendEquation, depthTest: mat.depthTest };
-    const pts = new Points(this.trails.geometry, mat);
-    pts.frustumCulled = false;
-    const scene = new Scene();
-    scene.add(pts);
-    u.uCount.value = 1;
-    mat.blending = CustomBlending;
-    mat.blendSrc = OneFactor;
-    mat.blendDst = OneFactor;
-    mat.blendEquation = AddEquation;
-    mat.depthTest = false;
-    try {
-      const px = this.readPass(1, (rr) => rr.render(scene, new OrthographicCamera()));
-      return px[0] / 2;
-    } finally {
-      u.uCount.value = 0;
-      mat.blending = saved.blending ?? NormalBlending;
-      mat.blendSrc = saved.src;
-      mat.blendDst = saved.dst;
-      mat.blendEquation = saved.eq;
-      mat.depthTest = saved.depthTest;
+    if (!floatBlendable(r)) throw new Error('float32 blending is not available: float32 additive counting cannot run');
+    if (!this.trailCounter) {
+      this.trailCounter = new Points(this.trails.geometry, countMaterial(keptTrail(NODE_OPS, attribute('aLast', 'float'), attribute('aHead', 'float'), this.tStep, this.tLength)));
+      this.trailCounter.frustumCulled = false;
     }
+    this.trailCounter.geometry = this.trails.geometry;
+    const px = await this.readPass(1, this.trailCounter);
+    return px[0] / 2;
   }
 
   /** The timeline's step, for both: the map at its bin for the step (stepRatio), clamped to its own bins (TCR has one). */
   setStep(step: number): void {
     const steps = this.layout?.steps ?? 1;
     const ratio = Math.max(1, Math.floor(this.mapMeta?.stepRatio ?? 1));
-    this.map.material.uniforms.uStep.value = Math.max(0, Math.min(steps - 1, Math.floor(step / ratio)));
-    this.particles.material.uniforms.uStep.value = step;
-    this.trails.material.uniforms.uStep.value = step;
+    this.lu.step.value = Math.max(0, Math.min(steps - 1, Math.floor(step / ratio)));
+    this.pStep.value = step;
+    this.tStep.value = step;
   }
 
   /** Hides the map for one draw (the m12 pixel hook); returns the restore. */
@@ -698,11 +527,11 @@ export class ResultsLayer {
   }
 
   mapStep(): number | null {
-    return this.mapMeta ? (this.map.material.uniforms.uStep.value as number) : null;
+    return this.mapMeta ? (this.lu.step.value as number) : null;
   }
 
   particleStep(): number {
-    return this.particles.material.uniforms.uStep.value as number;
+    return this.pStep.value as number;
   }
 
   sizes() {
@@ -715,25 +544,30 @@ export class ResultsLayer {
     };
   }
 
-  /** Runs `draw` into a fresh n x 1 float32 target and returns its RGBA floats. */
-  private readPass(n: number, draw: (r: WebGLRenderer, target: WebGLRenderTarget) => void): Float32Array {
+  /** Draws `object` alone into a fresh n x 1 float32 target and returns its RGBA floats. */
+  private async readPass(n: number, object: Points): Promise<Float32Array> {
     const r = this.renderer;
-    if (!r) throw new Error('no WebGL renderer');
-    const target = new WebGLRenderTarget(n, 1, { type: FloatType, format: RGBAFormat, minFilter: NearestFilter, magFilter: NearestFilter, depthBuffer: false });
-    const out = new Float32Array(4 * n);
+    if (!r) throw new Error('no renderer');
+    const target = new RenderTarget(n, 1, { type: FloatType, format: RGBAFormat, minFilter: NearestFilter, magFilter: NearestFilter, depthBuffer: false });
     const prev = r.getRenderTarget();
+    const scene = new Scene();
+    object.frustumCulled = false;
+    scene.add(object);
+    this.probeN.value = n;
     try {
       r.setScissorTest(false);
       r.setRenderTarget(target);
       r.setClearColor(0x000000, 0);
       r.clear(true, false, false);
-      draw(r, target);
-      r.readRenderTargetPixels(target, 0, 0, n, 1, out);
+      r.render(scene, new OrthographicCamera());
+      r.setRenderTarget(prev);
+      const px = (await r.readRenderTargetPixelsAsync(target, 0, 0, n, 1)) as Float32Array;
+      return px.slice(0, 4 * n);
     } finally {
+      scene.remove(object);
       r.setRenderTarget(prev);
       target.dispose();
     }
-    return out;
   }
 
   /**
@@ -741,7 +575,7 @@ export class ResultsLayer {
    * texture as held, 'drawn' the face's value the draw colours (`faceValue`, the window applied),
    * 'diff' the difference in dB the draw colours (the window applied to both runs).
    */
-  readTexels(samples: [number, number][], what: 'texel' | 'drawn' | 'diff' = 'texel'): number[] {
+  async readTexels(samples: [number, number][], what: 'texel' | 'drawn' | 'diff' = 'texel'): Promise<number[]> {
     const l = this.layout;
     if (!l || !this.mapTex) throw new Error('no map loaded');
     if (what === 'diff' && !this.baseTex) throw new Error('no baseline loaded');
@@ -749,68 +583,41 @@ export class ResultsLayer {
       if (!(f >= 0 && f < l.faces && s >= 0 && s < l.steps)) throw new Error(`no cell (${f}, ${s}) in ${l.faces} faces x ${l.steps} steps`);
     }
     const n = samples.length;
-    const mat = probeMaterial();
-    const g = new BufferGeometry();
+    const mu = this.mu;
+    const mat = this.probe(what, 3, (s) => {
+      const face = int(s.x.add(0.5));
+      const step = int(s.y.add(0.5));
+      if (what === 'diff') {
+        const r = diffDb(mu, face, step);
+        return vec4(r.d, select(r.ok, float(1), float(0)), 0, 1);
+      }
+      return vec4(what === 'drawn' ? faceValue(mu, mu.map, face, step) : mapTexel(mu, mu.map, face, step), 0, 0, 1);
+    });
+    const g = emptyGeometry();
     g.setAttribute('position', new BufferAttribute(new Float32Array(3 * n), 3));
     g.setAttribute('aSample', new BufferAttribute(new Float32Array(samples.flatMap(([f, s], i) => [f, s, i])), 3));
-    const pts = new Points(g, mat);
-    pts.frustumCulled = false;
-    const scene = new Scene();
-    scene.add(pts);
-    const u = mat.uniforms;
-    u.uMap.value = this.mapTex;
-    u.uBase.value = this.baseTex ?? this.mapTex;
-    u.uWidth.value = l.width;
-    u.uSteps.value = l.steps;
-    u.uWin.value = this.windowSteps();
-    u.uWhat.value = what === 'diff' ? 1 : what === 'drawn' ? 2 : 0;
-    u.uN.value = n;
     try {
-      const px = this.readPass(n, (r) => r.render(scene, new OrthographicCamera()));
-      const bits = new Uint32Array(px.buffer);
+      const px = await this.readPass(n, new Points(g, mat));
+      const bits = new Uint32Array(px.buffer, px.byteOffset, px.length);
       return samples.map((_, i) => {
         if (what === 'diff' && px[4 * i + 1] !== 1) throw new Error(`cell (${samples[i][0]}, ${samples[i][1]}) has no energy in one of the runs`);
         return bits[4 * i];
       });
     } finally {
       g.dispose();
-      mat.dispose();
     }
   }
 
   /**
-   * The particles the playback draw lets through at its current step, counted on the GPU: the
-   * particle material itself in count mode, each drawn particle adding 1 to one float32 pixel.
+   * The particles the playback draw lets through at its current step, counted on the GPU: every
+   * record through the draw's own keep rule (`keptRecord`), each kept one adding 1 to one float32 pixel.
    */
-  countParticles(): number {
+  async countParticles(): Promise<number> {
     const r = this.renderer;
-    if (!r) throw new Error('no WebGL renderer');
-    if (!this.particleMeta) throw new Error('no particles loaded');
-    if (!r.extensions.has('EXT_float_blend')) throw new Error('EXT_float_blend is not available: float32 additive counting cannot run');
-    const mat = this.particles.material;
-    const u = mat.uniforms;
-    const saved = { blending: mat.blending, src: mat.blendSrc, dst: mat.blendDst, eq: mat.blendEquation, depthTest: mat.depthTest, transparent: mat.transparent };
-    const pts = new Points(this.particles.geometry, mat);
-    pts.frustumCulled = false;
-    const scene = new Scene();
-    scene.add(pts);
-    u.uCount.value = 1;
-    mat.blending = CustomBlending;
-    mat.blendSrc = OneFactor;
-    mat.blendDst = OneFactor;
-    mat.blendEquation = AddEquation;
-    mat.depthTest = false;
-    try {
-      const px = this.readPass(1, (rr) => rr.render(scene, new OrthographicCamera()));
-      return px[0];
-    } finally {
-      u.uCount.value = 0;
-      mat.blending = saved.blending ?? NormalBlending;
-      mat.blendSrc = saved.src;
-      mat.blendDst = saved.dst;
-      mat.blendEquation = saved.eq;
-      mat.depthTest = saved.depthTest;
-      mat.transparent = saved.transparent;
-    }
+    if (!r) throw new Error('no renderer');
+    if (!this.particleMeta || !this.particleCount) throw new Error('no particles loaded');
+    if (!floatBlendable(r)) throw new Error('float32 blending is not available: float32 additive counting cannot run');
+    const px = await this.readPass(1, this.particleCount);
+    return px[0];
   }
 }

@@ -1,9 +1,6 @@
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { buildHeight, NO_CUT, swingAngle, withBuild } from './build.ts';
+import { buildHeight, NO_CUT, swingAngle } from './build.ts';
 
 test('the cut rises from the floor past the ceiling, then lifts away', () => {
   assert.equal(buildHeight(0, 2, 18), 2);
@@ -22,14 +19,3 @@ test('the camera starts swung back and ends on its framing', () => {
   assert.equal(swingAngle(1), -0);
 });
 
-test('the cut attaches to the surface and edge shaders three.js ships, and refuses others', () => {
-  const three = dirname(dirname(createRequire(import.meta.url).resolve('three')));
-  for (const [name, mode] of [['meshmatcap', 'surface'], ['meshlambert', 'surface'], ['meshbasic', 'line']] as const) {
-    const src = readFileSync(join(three, 'src/renderers/shaders/ShaderLib', `${name}.glsl.js`), 'utf8');
-    const part = (k: string) => src.split(`export const ${k} = /* glsl */\``)[1].split('`;')[0];
-    const g = withBuild(part('vertex'), part('fragment'), mode);
-    assert.ok(g.fragment.indexOf('if (vNmWorldZ > nmBuildZ) discard;') < g.fragment.indexOf('#include <opaque_fragment>'), name);
-    assert.equal(g.fragment.includes('outgoingLight += vec3(1.0, 0.86, 0.78)'), mode === 'surface', name);
-  }
-  assert.throws(() => withBuild('void main() {}', '#include <common>\n#include <opaque_fragment>', 'line'), /vertex shader has no/);
-});

@@ -1,9 +1,6 @@
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { AO_STRENGTH, aoReach, bakeAo, hemisphere, withAo, type HitTest } from './ao.ts';
+import { AO_STRENGTH, aoReach, bakeAo, hemisphere, type HitTest } from './ao.ts';
 import type { Vec } from './geometry.ts';
 
 /** A brute-force, two-sided hit test over `tris` (9 numbers a triangle), Moller-Trumbore. */
@@ -70,14 +67,3 @@ test('the reach is a twelfth of the longest side, between 0.5 and 4 m', () => {
   assert.equal(aoReach(box(200)), 4);
 });
 
-test('the shading attaches to the matcap and Lambert shaders three.js ships, and refuses others', () => {
-  const three = dirname(dirname(createRequire(import.meta.url).resolve('three')));
-  for (const name of ['meshmatcap', 'meshlambert']) {
-    const src = readFileSync(join(three, 'src/renderers/shaders/ShaderLib', `${name}.glsl.js`), 'utf8');
-    const part = (k: string) => src.split(`export const ${k} = /* glsl */\``)[1].split('`;')[0];
-    const g = withAo(part('vertex'), part('fragment'));
-    assert.match(g.vertex, /attribute float nmAo;/);
-    assert.ok(g.fragment.indexOf('vec3 outgoingLight') < g.fragment.indexOf('outgoingLight *= mix(1.0, vNmAo, nmAoMix);'), name);
-  }
-  assert.throws(() => withAo('void main() {}', '#include <common>\n#include <opaque_fragment>'), /vertex shader has no/);
-});

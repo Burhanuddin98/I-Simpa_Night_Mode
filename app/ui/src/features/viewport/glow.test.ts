@@ -1,34 +1,6 @@
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { GLOW_MAX, glowLevel, glowRadius, GLOW_PEAK, pulsePhase, PULSE_MS, spriteScale, STILL_PHASE, withGlow } from './glow.ts';
-
-// The installed three.js's own shader sources, read as text: the anchors are checked against what ships.
-const three = dirname(dirname(createRequire(import.meta.url).resolve('three'))); // .../three/build/three.cjs
-const shaderOf = (name: string): { vertex: string; fragment: string } => {
-  const src = readFileSync(join(three, 'src/renderers/shaders/ShaderLib', `${name}.glsl.js`), 'utf8');
-  const part = (k: string) => src.split(`export const ${k} = /* glsl */\``)[1].split('`;')[0];
-  return { vertex: part('vertex'), fragment: part('fragment') };
-};
-
-test('the glow attaches to the matcap and Lambert shaders three.js ships', () => {
-  for (const name of ['meshmatcap', 'meshlambert']) {
-    const s = shaderOf(name);
-    const g = withGlow(s.vertex, s.fragment);
-    assert.match(g.vertex, /vGlowWorld = \(modelMatrix \* vec4\(transformed, 1\.0\)\)\.xyz;/, name);
-    assert.match(g.fragment, new RegExp(`uniform vec3 glowPos\\[${GLOW_MAX}\\];`), name);
-    // The glow is added to the colour before it is written, not after.
-    assert.ok(g.fragment.indexOf('outgoingLight += glowColor') < g.fragment.indexOf('#include <opaque_fragment>'), name);
-    assert.ok(g.fragment.indexOf('vec3 outgoingLight') < g.fragment.indexOf('outgoingLight += glowColor'), name);
-  }
-});
-
-test('a shader without the anchors is refused, not passed through', () => {
-  assert.throws(() => withGlow('void main() {}', '#include <common>\n#include <opaque_fragment>'), /vertex shader has no/);
-  assert.throws(() => withGlow('#include <common>\n#include <project_vertex>', 'void main() {}'), /fragment shader has no/);
-});
+import { glowLevel, glowRadius, GLOW_PEAK, pulsePhase, PULSE_MS, spriteScale, STILL_PHASE } from './glow.ts';
 
 test('the radius is a tenth of the longest side, between 1.5 and 8 m', () => {
   const box = (x: number, y: number, z: number) => ({ min: [0, 0, 0] as [number, number, number], max: [x, y, z] as [number, number, number] });

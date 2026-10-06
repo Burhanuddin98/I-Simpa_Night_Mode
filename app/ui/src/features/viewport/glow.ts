@@ -5,7 +5,10 @@
 // way: it marks where a source is, it does not simulate light. Kept apart from the selection's red by
 // its shape (a fall-off, never a flat wash) and a warmer hue. It pulses slowly, except under
 // prefers-reduced-motion or WebDriver (the gates compare frames), where it holds still at mid pulse.
+import { T } from './tsl.ts';
 import type { Box } from './geometry.ts';
+
+const { Break, dot, exp, float, Fn, If, Loop, min, positionWorld } = T;
 
 /** At most this many sources glow (the shader's array length); the first ones in the project's order. */
 export const GLOW_MAX = 16;
@@ -40,44 +43,31 @@ export function spriteScale(phase: number): number {
   return 0.94 + 0.12 * phase;
 }
 
-const anchor = (src: string, at: string, what: string): void => {
-  if (!src.includes(at)) throw new Error(`glow: the ${what} shader has no '${at}' (three.js changed its chunks)`);
-};
+/** The glow's uniforms, shared by every surface material (engine.ts). */
+export interface GlowUniforms {
+  /** GLOW_MAX source positions, the first `count` used. */
+  pos: any;
+  count: any;
+  radius: any;
+  level: any;
+  color: any;
+}
 
 /**
- * The faces' shaders with the glow added: the world position passed from the vertex stage, and before
- * the colour is written, the sum of exp(-d^2 / r^2) over the sources (capped at 1.5) times the colour.
- * Throws when an anchor is missing, so a three.js upgrade that moves them fails a test, not silently.
+ * The light the glow adds to a face's colour before it is written: the sum of exp(-d^2 / r^2) over
+ * the sources (capped at 1.5), times the colour and the pulse's level. d is from the fragment's world
+ * position, as before.
  */
-export function withGlow(vertex: string, fragment: string): { vertex: string; fragment: string } {
-  for (const [src, what] of [[vertex, 'vertex'], [fragment, 'fragment']] as const) anchor(src, '#include <common>', what);
-  anchor(vertex, '#include <project_vertex>', 'vertex');
-  anchor(fragment, '#include <opaque_fragment>', 'fragment');
-  return {
-    vertex: vertex
-      .replace('#include <common>', '#include <common>\nvarying vec3 vGlowWorld;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvGlowWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;'),
-    fragment: fragment
-      .replace(
-        '#include <common>',
-        `#include <common>
-varying vec3 vGlowWorld;
-uniform vec3 glowPos[${GLOW_MAX}];
-uniform int glowCount;
-uniform float glowRadius;
-uniform float glowLevel;
-uniform vec3 glowColor;`,
-      )
-      .replace(
-        '#include <opaque_fragment>',
-        `float glowSum = 0.0;
-	for (int i = 0; i < ${GLOW_MAX}; i++) {
-		if (i >= glowCount) break;
-		vec3 glowD = vGlowWorld - glowPos[i];
-		glowSum += exp(-dot(glowD, glowD) / (glowRadius * glowRadius));
-	}
-	outgoingLight += glowColor * glowLevel * min(glowSum, 1.5);
-	#include <opaque_fragment>`,
-      ),
-  };
+export function glowTerm(u: GlowUniforms): any {
+  return Fn(() => {
+    const sum = float(0).toVar();
+    Loop(GLOW_MAX, ({ i }: { i: any }) => {
+      If(i.greaterThanEqual(u.count), () => {
+        Break();
+      });
+      const d = positionWorld.sub(u.pos.element(i));
+      sum.addAssign(exp(dot(d, d).negate().div(u.radius.mul(u.radius))));
+    });
+    return u.color.mul(u.level).mul(min(sum, 1.5));
+  })();
 }

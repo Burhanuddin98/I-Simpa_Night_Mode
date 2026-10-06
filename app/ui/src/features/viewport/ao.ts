@@ -7,7 +7,10 @@
 // A face's stored normal points out of the room (the faces are drawn BackSide, seen from inside), so
 // the rays go along -n. Per vertex: a wall of two large triangles is shaded by its four corners alone,
 // so a coarse room darkens a little everywhere, not only in its corners.
+import { T } from './tsl.ts';
 import type { Box, Vec } from './geometry.ts';
+
+const { attribute, float, mix } = T;
 
 /** Rays per sample point. */
 export const AO_RAYS = 16;
@@ -97,24 +100,10 @@ const norm = (a: Vec): Vec => {
   return [a[0] / l, a[1] / l, a[2] / l];
 };
 
-const anchor = (src: string, at: string, what: string): void => {
-  if (!src.includes(at)) throw new Error(`ao: the ${what} shader has no '${at}' (three.js changed its chunks)`);
-};
-
 /**
- * The faces' shaders with the baked value (attribute `nmAo`) multiplied into the colour before it is
- * written, by `nmAoMix` (1 on, 0 off: the Style menu's "Darker corners").
+ * The factor the faces' colour is multiplied by before it is written: the baked value (attribute
+ * `nmAo`) by `aoMix` (1 on, 0 off: the Style menu's "Darker corners"). TSL, so both backends run it.
  */
-export function withAo(vertex: string, fragment: string): { vertex: string; fragment: string } {
-  for (const [src, what] of [[vertex, 'vertex'], [fragment, 'fragment']] as const) anchor(src, '#include <common>', what);
-  anchor(vertex, '#include <project_vertex>', 'vertex');
-  anchor(fragment, '#include <opaque_fragment>', 'fragment');
-  return {
-    vertex: vertex
-      .replace('#include <common>', '#include <common>\nattribute float nmAo;\nvarying float vNmAo;')
-      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvNmAo = nmAo;'),
-    fragment: fragment
-      .replace('#include <common>', '#include <common>\nvarying float vNmAo;\nuniform float nmAoMix;')
-      .replace('#include <opaque_fragment>', 'outgoingLight *= mix(1.0, vNmAo, nmAoMix);\n\t#include <opaque_fragment>'),
-  };
+export function aoFactor(aoMix: unknown): any {
+  return mix(float(1), attribute('nmAo', 'float'), aoMix as number);
 }

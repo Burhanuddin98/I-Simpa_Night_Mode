@@ -94,7 +94,7 @@ function registerM12Hooks(): () => void {
     registerHook('wowOffMapPoint', () => offMapPoint()),
     registerHook('wowFramePixels', () => framePixels()),
     // W3: the trails' state, and the segments the draw keeps now, counted on the GPU.
-    registerHook('wowTrails', () => ({ ...layer.trailState(), step: layer.particleStep(), drawn: layer.trailState().on ? layer.countTrails() : 0 })),
+    registerHook('wowTrails', async () => ({ ...layer.trailState(), step: layer.particleStep(), drawn: layer.trailState().on ? await layer.countTrails() : 0 })),
     // The bottom dock's cards and the panels around them, as client rectangles (W9's layout check).
     registerHook('wowCardRects', () => cardRects()),
     // W9: an export to `path` (the dialog's answer, given), as File › Export does; its refusal as {code, message}.
@@ -107,8 +107,8 @@ function registerM12Hooks(): () => void {
     }),
     registerHook('wowLastExport', () => lastExportStore.get()),
     // W9: the frame's own RGBA (premultiplied, as the GPU holds it) at buffer points, top row first.
-    registerHook('wowFrameSamples', (points: [number, number][]) => {
-      const f = frameRgba();
+    registerHook('wowFrameSamples', async (points: [number, number][]) => {
+      const f = await frameRgba();
       if (!f) return null;
       return { width: f.width, height: f.height, rgba: points.map(([x, y]) => [...f.rgba.subarray(4 * (y * f.width + x), 4 * (y * f.width + x) + 4)]) };
     }),
@@ -127,7 +127,7 @@ function registerM12Hooks(): () => void {
       return { ...a, stepsPerSecond: stepsPerSecond(a), rate: rateText(a) };
     }),
     registerHook('m12DrawnSteps', () => drawnSteps()),
-    registerHook('m12Particles', () => {
+    registerHook('m12Particles', async () => {
       const meta = layer.particleMeta;
       if (!meta) return null;
       return {
@@ -135,7 +135,7 @@ function registerM12Hooks(): () => void {
         bandHz: meta.bandHz,
         step: layer.particleStep(),
         mapStep: layer.mapStep(),
-        rendered: layer.countParticles(),
+        rendered: await layer.countParticles(),
         particles: meta.particles,
         records: meta.records,
         bufferBytes: layer.sizes().particleBytes,

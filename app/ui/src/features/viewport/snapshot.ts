@@ -108,3 +108,27 @@ export async function encodeViewPng(frame: { width: number; height: number; rgba
   if (!blob) throw new Error('the image could not be encoded as PNG');
   return new Uint8Array(await blob.arrayBuffer());
 }
+
+/**
+ * WebGPU copies a texture to a buffer in rows padded to 256 bytes: the `w` x `h` RGBA rows of `src`
+ * (`bytesPerRow` apart) packed tight.
+ */
+export function unpadRows(src: Uint8Array, w: number, h: number, bytesPerRow: number): Uint8Array {
+  const row = 4 * w;
+  if (bytesPerRow < row) throw new RangeError(`unpadRows: ${bytesPerRow} bytes a row for ${w} pixels`);
+  if (src.length < bytesPerRow * (h - 1) + row) throw new RangeError(`unpadRows: ${src.length} bytes for ${h} rows of ${bytesPerRow}`);
+  if (bytesPerRow === row) return src.slice(0, row * h);
+  const out = new Uint8Array(row * h);
+  for (let y = 0; y < h; y++) out.set(src.subarray(y * bytesPerRow, y * bytesPerRow + row), y * row);
+  return out;
+}
+
+/** BGRA bytes (the canvas format WebGPU prefers on Windows) as RGBA, in place. */
+export function bgraToRgba<T extends Uint8Array | Uint8ClampedArray>(px: T): T {
+  for (let i = 0; i < px.length; i += 4) {
+    const b = px[i];
+    px[i] = px[i + 2];
+    px[i + 2] = b;
+  }
+  return px;
+}

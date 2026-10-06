@@ -52,49 +52,58 @@ export function noParticlesText(steps: number, sources: number): { title: string
 }
 
 /**
- * The playback's vertex shader (after the ramp's GLSL), in draw mode and in count mode (gate (d),
- * `ResultsLayer.countParticles`). Both pass through `kept()` first, the one place a record is
- * dropped: it is the `.pbin`'s own definition of alive (a record at its step, `aliveCounts`),
- * so the count is of what the draw keeps. Energy is colour, never a cull: a record alive by the
- * file is drawn and counted whatever its energy (zero draws at the ramp's floor). What count
- * mode does not share with the draw is the camera (each kept record lands on the one pixel, so
- * the count does not depend on the view: a particle off-screen or behind a wall is still alive)
- * and, in the fragment shader, the round sprite's corners (every point keeps its centre pixels).
- * particles.test.ts holds this shape: the gate, the count branch right after it, no cull after.
+ * The arithmetic the playback's keep rules are written in: plain numbers (the tests, which run the
+ * rules themselves) or TSL nodes (the GPU's draw and its count mode). One definition of what is kept,
+ * so the count is of what the draw keeps and the tests hold the rule the GPU runs.
  */
-export const PARTICLE_VERTEX_GLSL = /* glsl */ `
-uniform float uStep;
-uniform float uCount;
-uniform float uSize;
-uniform float uLogMax;
-attribute float aStep;
-attribute float aEnergy;
-varying vec3 vColor;
-// The records drawn now: the particles alive at the timeline's step.
-bool kept() {
-  return abs(aStep - uStep) <= 0.5;
+export interface KeepOps<V, B> {
+  c(x: number): V;
+  sub(a: V, b: V): V;
+  add(a: V, b: V): V;
+  abs(a: V): V;
+  le(a: V, b: V): B;
+  ge(a: V, b: V): B;
+  gt(a: V, b: V): B;
+  and(a: B, b: B): B;
 }
-void main() {
-  if (!kept()) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vColor = vec3(0.0); return; }
-  if (uCount > 0.5) { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); gl_PointSize = 1.0; vColor = vec3(1.0); return; }
-  float db = aEnergy > 0.0 ? 10.0 * log2(aEnergy) * 0.30102999566398120 : -1e9;
-  vColor = hot(0.55 + 0.45 * clamp((db - uLogMax + 40.0) / 40.0, 0.0, 1.0));
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  gl_PointSize = uSize;
-}
-`;
 
-/** The playback's fragment shader. */
-export const PARTICLE_FRAGMENT_GLSL = /* glsl */ `
-      uniform float uCount;
-      varying vec3 vColor;
-      void main() {
-        if (uCount > 0.5) { gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); return; }
-        vec2 d = gl_PointCoord - 0.5;
-        if (dot(d, d) > 0.25) discard;
-        gl_FragColor = vec4(vColor, 1.0);
-      }
-`;
+export const NUMBER_OPS: KeepOps<number, boolean> = {
+  c: (x) => x,
+  sub: (a, b) => a - b,
+  add: (a, b) => a + b,
+  abs: Math.abs,
+  le: (a, b) => a <= b,
+  ge: (a, b) => a >= b,
+  gt: (a, b) => a > b,
+  and: (a, b) => a && b,
+};
+
+/**
+ * The records drawn now (gate (d)): a record is drawn exactly at its own step, the `.pbin`'s own
+ * definition of alive (`aliveCounts`). Energy is colour, never a cull: it is not an argument here.
+ */
+export function keptRecord<V, B>(o: KeepOps<V, B>, recordStep: V, step: V): B {
+  return o.le(o.abs(o.sub(recordStep, step)), o.c(0.5));
+}
+
+/**
+ * W3: the trail segments drawn now: the particle is alive at the step and the head is one of its last
+ * `length` steps. On the steps alone, never energy.
+ */
+export function keptTrail<V, B>(o: KeepOps<V, B>, last: V, head: V, step: V, length: V): B {
+  return o.and(o.and(o.ge(last, o.sub(step, o.c(0.5))), o.le(head, o.add(step, o.c(0.5)))), o.gt(head, o.add(o.sub(step, length), o.c(0.5))));
+}
+
+/** Where on the map's hot ramp a record's energy is drawn: 0.55 to 1 over the 40 dB below the band's loudest record. */
+export function rampPlace(energy: number, logMax: number): number {
+  const db = energy > 0 ? 10 * Math.log10(energy) : -1e9;
+  return 0.55 + 0.45 * Math.min(1, Math.max(0, (db - logMax + 40) / 40));
+}
+
+/** A trail segment's opacity: 1 at the head's own step, down to 0.15 at the far end of the trail. */
+export function trailAlpha(step: number, head: number, length: number): number {
+  return 1 - 0.85 * Math.min(1, Math.max(0, (step - head) / Math.max(length, 1)));
+}
 
 // ---- W3: particle trails (wow list; parity R54; docs/investigations/2026-10-04-wow-w2w3w9/PLAN.md) ----
 //
@@ -178,43 +187,3 @@ export function trailRefusal(p: Particles | null): string | null {
   return null;
 }
 
-/**
- * The trails' vertex shader (after the ramp's GLSL), in draw mode and in count mode (the W3 hook,
- * `ResultsLayer.countTrails`, draws this material as points, two a kept segment). Both pass
- * through `keptTrail()` first, on the steps alone; energy is colour, never a cull.
- */
-export const TRAIL_VERTEX_GLSL = /* glsl */ `
-uniform float uStep;
-uniform float uCount;
-uniform float uLength;
-uniform float uLogMax;
-attribute float aHead;
-attribute float aLast;
-attribute float aEnergy;
-varying vec3 vColor;
-varying float vAlpha;
-// The segments drawn now: the particle is alive at the step and the head is one of its last uLength steps.
-bool keptTrail() {
-  return aLast >= uStep - 0.5 && aHead <= uStep + 0.5 && aHead > uStep - uLength + 0.5;
-}
-void main() {
-  if (!keptTrail()) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; vColor = vec3(0.0); vAlpha = 0.0; return; }
-  if (uCount > 0.5) { gl_Position = vec4(0.0, 0.0, 0.0, 1.0); gl_PointSize = 1.0; vColor = vec3(1.0); vAlpha = 1.0; return; }
-  float db = aEnergy > 0.0 ? 10.0 * log2(aEnergy) * 0.30102999566398120 : -1e9;
-  vColor = hot(0.55 + 0.45 * clamp((db - uLogMax + 40.0) / 40.0, 0.0, 1.0));
-  vAlpha = 1.0 - 0.85 * clamp((uStep - aHead) / max(uLength, 1.0), 0.0, 1.0);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  gl_PointSize = 1.0;
-}
-`;
-
-/** The trails' fragment shader. */
-export const TRAIL_FRAGMENT_GLSL = /* glsl */ `
-      uniform float uCount;
-      varying vec3 vColor;
-      varying float vAlpha;
-      void main() {
-        if (uCount > 0.5) { gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0); return; }
-        gl_FragColor = vec4(vColor, vAlpha);
-      }
-`;
