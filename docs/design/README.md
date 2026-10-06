@@ -15,7 +15,7 @@ inside that canvas.
 - **The theme is Dockyard Acoustics red and black.** Near-black panels, with the logo's red
   (`#E0202E`) for selection, the Run button, the active step and the source marker. The results map
   runs from black through red to yellow.
-- **No logo or wordmark in the chrome.** The brand is carried by colour alone.
+- **No logo or wordmark in the chrome.** The brand is carried by colour alone. The app's icon (window, taskbar, file) is the I-Simpa Night Mode logo, the red tile with sound waves (decision 62).
 - **The layout:**
   - a menu bar with the project as a tab
   - a step bar (Geometry → Materials → Sources & receivers → Simulate → Results) with the variant switch on the right
