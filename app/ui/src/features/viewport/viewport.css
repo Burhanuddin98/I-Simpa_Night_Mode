@@ -204,6 +204,12 @@
   font-size: 11px;
   color: var(--text);
 }
+/* The rulers' numbers beside the dimension lines, one every 5 m (dims.ts). */
+.vp-label.dim-tick {
+  font-size: 9.5px;
+  color: var(--text-2, var(--text));
+  opacity: 0.85;
+}
 
 .gizmo {
   position: absolute;

@@ -825,7 +825,7 @@ class ViewportEngine {
       return;
     }
     const p = this.persp.position;
-    const { lines, segments } = dimensionLines(box, [p.x, p.y, p.z]);
+    const { lines, marks, segments } = dimensionLines(box, [p.x, p.y, p.z]);
     const g = this.dimLines.geometry;
     const pos = g.getAttribute('position');
     if (pos && pos.count * 3 === segments.length) {
@@ -834,18 +834,24 @@ class ViewportEngine {
     } else {
       g.setAttribute('position', new Float32BufferAttribute(segments, 3));
     }
-    if (this.dimLabels.length === 0 && this.dom) {
-      this.dimLabels = lines.map(() => document.createElement('div'));
+    // The three sizes, then the rulers' numbers; their count changes only with the model.
+    const all = [
+      ...lines.map((l) => ({ cls: 'vp-label dim', key: l.key, text: l.text, p: l.mid })),
+      ...marks.map((m) => ({ cls: 'vp-label dim-tick', key: '', text: m.text, p: m.p })),
+    ];
+    if (this.dimLabels.length !== all.length && this.dom) {
+      for (const d of this.dimLabels) d.remove();
+      this.dimLabels = all.map(() => document.createElement('div'));
       this.dom.labels.append(...this.dimLabels);
     }
-    lines.forEach((l, i) => {
+    all.forEach((l, i) => {
       const d = this.dimLabels[i];
       if (!d) return;
-      d.className = 'vp-label dim';
-      d.dataset.dim = l.key;
+      d.className = l.cls;
+      if (l.key) d.dataset.dim = l.key;
       d.textContent = l.text;
     });
-    this.dimMids = lines.map((l) => l.mid);
+    this.dimMids = all.map((l) => l.p);
   }
 
   private placeDims(camera: Camera, w: number, h: number): void {

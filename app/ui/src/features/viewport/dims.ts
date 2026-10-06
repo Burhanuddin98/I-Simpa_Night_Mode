@@ -26,11 +26,27 @@ export function dimText(key: DimKey, metres: number): string {
   return `${NAMES[key]} ${metres.toFixed(2)} m`;
 }
 
+/** A number on a ruler's tick, and where it goes. */
+export interface DimMark {
+  text: string;
+  p: Vec;
+}
+
 /**
- * The three measuring lines for `box` seen from `eye`: their labels, and the line segments to draw
- * (each measuring line plus an extension line from the box to each of its ends), 6 numbers a segment.
+ * The numbered ticks' spacing, metres (Burhan 03:13: "to get a sense of scale i need to know how much
+ * one metre is ... one metre increments kinda helps"): every 5 m up to a 60 m room, then 10, then 25,
+ * so the numbers never crowd. A tick every metre whatever the room.
  */
-export function dimensionLines(box: Box, eye: Vec): { lines: DimLine[]; segments: number[] } {
+export function majorStep(longest: number): number {
+  return longest <= 60 ? 5 : longest <= 150 ? 10 : 25;
+}
+
+/**
+ * The three measuring lines for `box` seen from `eye`: their labels, the numbered ticks, and the line
+ * segments to draw, 6 numbers a segment: first each measuring line with an extension line from the box
+ * to each of its ends (9), then the ruler's ticks, one a metre from the room's edge, longer where numbered.
+ */
+export function dimensionLines(box: Box, eye: Vec): { lines: DimLine[]; marks: DimMark[]; segments: number[] } {
   const [x0, y0, z0] = box.min;
   const [x1, y1, z1] = box.max;
   const off = 0.04 * Math.max(x1 - x0, y1 - y0, z1 - z0);
@@ -56,10 +72,27 @@ export function dimensionLines(box: Box, eye: Vec): { lines: DimLine[]; segments
   // Height, along z.
   add([xw, yh, z0], [xw, yh, z1]);
   for (const z of [z0, z1]) add([xEdge, yFar, z], [xw + nx * tick, yh, z]);
+  // The rulers: from each line's start, along it, ticks pointing outward (away from the room).
+  const major = majorStep(Math.max(x1 - x0, y1 - y0, z1 - z0));
+  const marks: DimMark[] = [];
+  const ruler = (start: Vec, along: Vec, out: Vec, length: number) => {
+    for (let k = 0; k <= length + 1e-9; k++) {
+      const p: Vec = [start[0] + k * along[0], start[1] + k * along[1], start[2] + k * along[2]];
+      const numbered = k % major === 0;
+      const t = (numbered ? 0.5 : 0.25) * off;
+      add(p, [p[0] + t * out[0], p[1] + t * out[1], p[2] + t * out[2]]);
+      if (numbered) marks.push({ text: String(k), p: [p[0] + 0.95 * off * out[0], p[1] + 0.95 * off * out[1], p[2] + 0.95 * off * out[2]] });
+    }
+  };
+  ruler([x0, yl, z0], [1, 0, 0], [0, ny, 0], x1 - x0);
+  ruler([xw, y0, z0], [0, 1, 0], [nx, 0, 0], y1 - y0);
+  ruler([xw, yh, z0], [0, 0, 1], [nx, 0, 0], z1 - z0);
+  // The sizes sit further out than the numbers, so the two never collide.
+  const far = 2.1 * off;
   const lines: DimLine[] = [
-    { key: 'length', text: dimText('length', x1 - x0), mid: [(x0 + x1) / 2, yl, z0] },
-    { key: 'width', text: dimText('width', y1 - y0), mid: [xw, (y0 + y1) / 2, z0] },
-    { key: 'height', text: dimText('height', z1 - z0), mid: [xw, yh, (z0 + z1) / 2] },
+    { key: 'length', text: dimText('length', x1 - x0), mid: [(x0 + x1) / 2, yl + ny * far, z0] },
+    { key: 'width', text: dimText('width', y1 - y0), mid: [xw + nx * far, (y0 + y1) / 2, z0] },
+    { key: 'height', text: dimText('height', z1 - z0), mid: [xw + nx * far, yh, (z0 + z1) / 2] },
   ];
-  return { lines, segments: seg };
+  return { lines, marks, segments: seg };
 }
