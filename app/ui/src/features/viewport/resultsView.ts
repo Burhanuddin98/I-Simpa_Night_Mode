@@ -242,7 +242,10 @@ async function loadMap(g: number): Promise<void> {
     // W5: a fixed range applies to level maps; a difference keeps its own symmetric range.
     const fixed = kind === 'level' ? now.fixed : null;
     const shownRange = fixed ?? range ?? { lo: 0, hi: 1 };
-    const err = showMap(m, { run: v.run, path: info.path, bandHz: v.bandHz, kind, range: shownRange, baseline: base ? v.baseline : null, cumulative, windowSteps: win.steps }, base);
+    // A map stored in time bins longer than the particle step (patch 0001) is shown at bin floor(step / ratio).
+    const runDt = d.time_step_s ?? null;
+    const stepRatio = runDt && m.timeStepS > runDt ? Math.max(1, Math.round(m.timeStepS / runDt)) : 1;
+    const err = showMap(m, { run: v.run, path: info.path, bandHz: v.bandHz, kind, range: shownRange, baseline: base ? v.baseline : null, cumulative, windowSteps: win.steps, stepRatio }, base);
     if (!fresh(g)) return;
     const layer = resultsLayer();
     layer.setLook({ smooth: now.smooth, isoDb: now.isoDb });

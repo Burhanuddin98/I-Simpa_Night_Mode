@@ -326,6 +326,7 @@ test('settings: read from the project file, SPPS and TCR each as drawn', () => {
       ['Particles per source and band', '150,000'],
       ['Duration', '1.5 s'],
       ['Time step', '10 ms'],
+      ['Sound-map time step', 'same as the time step'],
       ['Bands', '1/1 oct · 125–4k'],
       ['Air absorption', '20 °C · 50 %'],
     ],

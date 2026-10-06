@@ -70,16 +70,35 @@ pub fn tetgen_exe() -> PathBuf {
 
 /// Upstream's own TetGen 1.6.0, the pinned commit's `tetgen` target, which `solvers/build.ps1`
 /// builds beside ours as the reference the parity bed's refusals need (never the mesher):
-/// `$SIMPA_TETGEN160`, else `<solvers_dir>/../build/src/tetgen/Release/tetgen.exe`, the place
-/// `tools/gates/parity.ps1` takes it from. Panics, naming where it looked, when it is absent, and
-/// when it is not the manifest's 1.6.0 reference ([`tetgen160_mismatch`]).
+/// `$SIMPA_TETGEN160`, else `<solvers_dir>/../build*/src/tetgen/Release/tetgen.exe` (the build
+/// folder is `build`, or `build-p<hash>` when `solvers/build.ps1` applied `patches/`; the first in
+/// name order that holds the file), the place `tools/gates/parity.ps1` takes it from. Panics,
+/// naming where it looked, when it is absent, and when it is not the manifest's 1.6.0 reference
+/// ([`tetgen160_mismatch`]).
 pub fn tetgen160_exe() -> PathBuf {
     let p = match std::env::var_os("SIMPA_TETGEN160") {
         Some(d) if !d.is_empty() => PathBuf::from(d),
-        _ => solvers_dir()
-            .parent()
-            .map(|d| d.join("build/src/tetgen/Release/tetgen.exe"))
-            .unwrap_or_default(),
+        _ => {
+            let root = solvers_dir().parent().map(Path::to_path_buf).unwrap_or_default();
+            let plain = root.join("build/src/tetgen/Release/tetgen.exe");
+            let mut found: Vec<PathBuf> = std::fs::read_dir(&root)
+                .ok()
+                .map(|rd| {
+                    rd.filter_map(|e| e.ok())
+                        .map(|e| e.path())
+                        .filter(|d| {
+                            d.file_name()
+                                .and_then(|n| n.to_str())
+                                .is_some_and(|n| n == "build" || n.starts_with("build-p"))
+                        })
+                        .map(|d| d.join("src/tetgen/Release/tetgen.exe"))
+                        .filter(|f| f.is_file())
+                        .collect()
+                })
+                .unwrap_or_default();
+            found.sort();
+            found.into_iter().next().unwrap_or(plain)
+        }
     };
     assert!(
         p.is_file(),
@@ -150,12 +169,36 @@ pub fn code_sha256(exe: &Path) -> Result<String, String> {
     }
 }
 
-/// The upstream source tree: `$SIMPA_UPSTREAM`, else `<repo>/target/solvers/src-929a5c8`. Panics
-/// when it has no `src/lib_interface` folder.
+/// The upstream source tree: `$SIMPA_UPSTREAM`, else the build's extract under
+/// `<repo>/target/solvers/src-929a5c8*` (`solvers/build.ps1` suffixes the folder with the patch
+/// set, `-p<hash>`, when `patches/` holds any), else the pinned read-only checkout
+/// `B:\repos\I-Simpa-upstream` when it exists. Panics when it has no `src/lib_interface` folder.
 pub fn upstream_root() -> PathBuf {
     let root = match std::env::var_os("SIMPA_UPSTREAM") {
         Some(d) if !d.is_empty() => PathBuf::from(d),
-        _ => repo_root().join("target/solvers/src-929a5c8"),
+        _ => {
+            let solvers = repo_root().join("target/solvers");
+            let extracted = std::fs::read_dir(&solvers).ok().and_then(|rd| {
+                let mut dirs: Vec<PathBuf> = rd
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| {
+                        p.file_name()
+                            .and_then(|n| n.to_str())
+                            .is_some_and(|n| n.starts_with("src-929a5c8"))
+                            && p.join("src/lib_interface").is_dir()
+                    })
+                    .collect();
+                dirs.sort();
+                dirs.into_iter().next()
+            });
+            let checkout = PathBuf::from(r"B:\repos\I-Simpa-upstream");
+            match extracted {
+                Some(p) => p,
+                None if checkout.join("src/lib_interface").is_dir() => checkout,
+                None => solvers.join("src-929a5c8"),
+            }
+        }
     };
     assert!(
         root.join("src/lib_interface").is_dir(),

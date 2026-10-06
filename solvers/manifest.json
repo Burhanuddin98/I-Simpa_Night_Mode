@@ -1,9 +1,12 @@
 ﻿{
     "upstream_commit":  "929a5c8e5f590b189f29155faeff8670f3699479",
+    "patches":  {
+                    "0001-surface-receiver-time-bin.patch":  "43cff4fa1c37eadac4a60d27a33d29847f78c2f91df0163a4c31113237af90ae"
+                },
     "cmake_version":  "4.3.2",
     "generator":  "Visual Studio 17 2022 (x64)",
-    "build_dir":  "build",
-    "build_log":  "build-build-20260924-064739.log",
+    "build_dir":  "build-p058e76a3",
+    "build_log":  "build-build-20261006-145502.log",
     "compiler":  "19.44.35226.0",
     "options":  [
                     "SKIPISIMPA=ON",
@@ -12,14 +15,14 @@
                 ],
     "crt":  "dynamic (upstream default)",
     "sha256":  {
-                   "spps.exe":  "5b2fac424a025b948027d30692ff6897548d60bd138c66ecaa9c21f9631b8b7a",
-                   "classicalTheory.exe":  "9ea03b323df1be9e6ba0c859c35d132a987cc9a3bfecc055833189e676296f1f",
-                   "tetgen.exe":  "1b11ad94c54ddf5e4f7867b6da558b4cfa2d6e85cf32497ad232c014e2a0bc5b",
-                   "preprocess.exe":  "01a862c7220d756be4d95ac99530a8fcb335b22d2071305aef924a0514ccd4e9"
+                   "spps.exe":  "ca19caaa155fac12690474c0050232c3e7be1d8bfacfd56052c407bb662b2092",
+                   "classicalTheory.exe":  "c98a494fbe0251a072d11b89cd49475c6a131ee2eac79ca56f50f73b87456e83",
+                   "tetgen.exe":  "26ff485e77aba22602f02c9daf372b29e659ba72a13759feb34eeac291662550",
+                   "preprocess.exe":  "b23326314b927b173c3219b8915967c793b1ebb1af93dc613e1e716fadfff6de"
                },
     "code_sha256":  {
-                        "spps.exe":  "550485c6952925013b421207a726e0f0f0faf45d17652955445c562b6601963d",
-                        "classicalTheory.exe":  "fad4ab5d3f024829ed7398de3de326f89148c4ad5d70a0743ab037954bd82234",
+                        "spps.exe":  "143223ff75b75333f22b05ca86b0d9ef7c3436835c98443cd567c76292bed342",
+                        "classicalTheory.exe":  "9c03a6f60bf9224376cbb31ef4e8b78e5a6fd2bb2cbe6e2628313815f9600c9a",
                         "tetgen.exe":  "d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f",
                         "preprocess.exe":  "7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26"
                     },
@@ -43,11 +46,11 @@
                    "cmake":  "solvers/tetgen/CMakeLists.txt",
                    "build_dir":  "build-tetgen150",
                    "command_lines":  "equal to upstream\u0027s tetgen target at 929a5c8, 3 records",
-                   "exe_sha256":  "1b11ad94c54ddf5e4f7867b6da558b4cfa2d6e85cf32497ad232c014e2a0bc5b",
+                   "exe_sha256":  "26ff485e77aba22602f02c9daf372b29e659ba72a13759feb34eeac291662550",
                    "exe_code_sha256":  "d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f",
-                   "upstream_160_reference_sha256":  "e3170ef318490eb09b17529d2630f6665d8ee96ea356c1dfe8ce33152c2aef16",
+                   "upstream_160_reference_sha256":  "73fd831d45fbbb215974f0001b75d61a7655d56da74b3b7152a664a09dcf9b60",
                    "upstream_160_reference_code_sha256":  "b0c89b7fe8de05dcd64c5acc37a54492bc29710476a70e8a62c91f3c27f4663b",
                    "upstream_160_reference":  "build\\src\\tetgen\\Release\\tetgen.exe (not shipped)"
                },
-    "built_at":  "2026-09-24T06:48:30"
+    "built_at":  "2026-10-06T14:55:51"
 }

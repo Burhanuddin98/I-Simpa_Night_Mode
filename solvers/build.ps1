@@ -1,6 +1,9 @@
 # Builds the solvers we ship:
-# - spps.exe, classicalTheory.exe and preprocess.exe: I-Simpa's own, unchanged, from the pinned
-#   upstream commit. The upstream checkout is only read (git archive), never written to.
+# - spps.exe, classicalTheory.exe and preprocess.exe: I-Simpa's own from the pinned upstream
+#   commit, with the repo's patches\*.patch applied in name order (each is also a pull request
+#   upstream; CLAUDE.md). The upstream checkout is only read (git archive), never written to:
+#   the archive is extracted into a source folder named by the commit and the patch set, and the
+#   patches are applied there. The manifest lists each patch with its sha256.
 #   Configuration matches the 2026-09-08 reference build in <upstream>\build_solvers: upstream's
 #   own top-level CMakeLists, SKIPISIMPA=ON, Visual Studio 17 2022, x64, Release.
 # - tetgen.exe: WIAS TetGen 1.5.0 from third_party/tetgen-1.5.0 (= upstream 4db335c, the TetGen
@@ -37,8 +40,22 @@ $customRoot = [bool]$Root
 $root = if ($customRoot) { [IO.Path]::GetFullPath($Root) } else { Join-Path $repo 'target\solvers' }
 $manifestPath = Join-Path $root 'manifest.json'
 $committedManifest = Join-Path $repo 'solvers\manifest.json'
-$src = Join-Path $root ('src-' + $Commit.Substring(0, 7))
-$bld = Join-Path $root $BuildName
+# The patch set: every patches\*.patch in name order, each hashed. The source and build folders
+# carry a suffix from the set, so a changed patch is a from-scratch extract and compile and an
+# unchanged one reuses its folders.
+$patchDir = Join-Path $repo 'patches'
+$patchFiles = @(if (Test-Path $patchDir) { Get-ChildItem $patchDir -Filter '*.patch' | Sort-Object Name })
+$patchList = [ordered]@{}
+foreach ($p in $patchFiles) { $patchList[$p.Name] = (Get-FileHash -LiteralPath $p.FullName -Algorithm SHA256).Hash.ToLower() }
+$patchSuffix = ''
+if ($patchFiles.Count) {
+    $joined = (@($patchFiles | ForEach-Object { $_.Name + ':' + $patchList[$_.Name] }) -join "`n")
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    $hex = (($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($joined))) | ForEach-Object { $_.ToString('x2') }) -join ''
+    $patchSuffix = '-p' + $hex.Substring(0, 8)
+}
+$src = Join-Path $root ('src-' + $Commit.Substring(0, 7) + $patchSuffix)
+$bld = Join-Path $root ($BuildName + $patchSuffix)
 $tgSrc = Join-Path $repo 'third_party\tetgen-1.5.0'
 $tgBld = Join-Path $root "$BuildName-tetgen150"
 $bin = Join-Path $root 'bin'
@@ -90,6 +107,10 @@ if (-not (Test-Path (Join-Path $src 'CMakeLists.txt'))) {
     $tar = Join-Path $root 'upstream.tar'
     Run 'git' @('-C', $Upstream, 'archive', '--format=tar', '-o', $tar, $Commit)
     Run 'tar' @('-xf', $tar, '-C', $src)
+    # The patches, in name order, onto the fresh extract only (the folder's name says they are in).
+    foreach ($p in $patchFiles) {
+        Run 'git' @('-C', $src, 'apply', '--whitespace=nowarn', '-p1', $p.FullName)
+    }
 }
 
 Run 'cmake' @('-S', $src, '-B', $bld, '-G', 'Visual Studio 17 2022', '-A', 'x64',
@@ -135,9 +156,11 @@ $tgCompiler = (Select-String -Path $ccf.FullName -Pattern 'set\(CMAKE_CXX_COMPIL
 if ($tgCompiler -ne $compiler) { throw "TetGen compiled by $tgCompiler, the solvers by $compiler" }
 $manifest = [ordered]@{
     upstream_commit = $Commit
+    # patches\*.patch applied onto the commit, in this order, each with its sha256 (none: upstream as is).
+    patches         = $patchList
     cmake_version   = ((cmake --version | Select-Object -First 1) -replace 'cmake version ', '')
     generator       = 'Visual Studio 17 2022 (x64)'
-    build_dir       = $BuildName
+    build_dir       = (Split-Path -Leaf $bld)
     build_log       = (Split-Path -Leaf $log)
     compiler        = $compiler
     options         = @('SKIPISIMPA=ON', 'CMAKE_BUILD_TYPE=Release', "CPM_SOURCE_CACHE=$CpmCache")

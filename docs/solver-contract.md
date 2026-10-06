@@ -93,6 +93,7 @@ conventions: short source names, paths under `target/solvers/src-929a5c8/src/`, 
 |---|---|---|---|---|
 | `time_step_invalid` | project | error | Time step > 0 and duration > 0, both finite | ceil(d/0) does not fit in an int. VERIFIED P2 `no_dt`: SPPS printed `Xml Property pasdetemps doesn't exist !` and aborted `0xC0000409` after 13 s (`base_core_configuration.cpp:94`) |
 | `step_count_overflow` | project | error | ceil(duration / time step) < 65,536 | A particle's step counter is a u16 (`sppsTypes.h:69`; `CalculationCore.cpp:49, 85`), and `.pbin` and `.csbin` store u16 steps (`part_binary.h:61`; `rsbin.h:114-115`). Past 65,535 steps the counter wraps (inferred), as the delay's does in the next rule |
+| `map_time_step_invalid` | project | error | When the sound-map time step is set: finite and ≥ the time step | Our solver build's `patches/0001-surface-receiver-time-bin.patch` reads `recepteurs_surfaciques_pas_temps` and rounds it to a whole number of particle steps, at least 1; a shorter value would silently be the time step. The sound maps' memory (one value per cell per bin, `coreTypes.h:280`) divides by that number |
 | `source_delay_invalid` | project | error | 0 ≤ delay < duration, and ceil(delay / time step) < 65,536 | The start step is cast to u16 (`sppsNantes.cpp:91`). VERIFIED P2 `delay_wrap`: a 655.37 s delay in a 2 s run emitted from step 1 instead of never. A delay at or after the end emits nothing, silently (`sppsNantes.cpp:93`) |
 
 #### SPPS settings

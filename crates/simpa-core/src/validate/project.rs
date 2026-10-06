@@ -590,6 +590,22 @@ fn time(p: &Project, out: &mut Vec<Issue>) {
             ),
         ));
     }
+    // The sound maps' time bin: the solver rounds it to a whole number of steps, at least 1
+    // (`recepteurs_surfaciques_pas_temps`, patch 0001), so it must be finite and at least the
+    // time step; a shorter one would silently be the time step.
+    if let Some(bin) = spps.map_time_step_s {
+        let bin = bin.get();
+        if !positive(bin) || bin < dt {
+            out.push(issue(
+                MAP_TIME_STEP_INVALID,
+                "/solvers/spps/map_time_step_s",
+                format!(
+                    "the sound-map time step is {bin} s; it must be finite and at least the \
+                     time step, {dt} s (the solver rounds it to whole steps)"
+                ),
+            ));
+        }
+    }
     for (i, s) in p.sources.iter().enumerate() {
         if !s.enabled {
             continue;

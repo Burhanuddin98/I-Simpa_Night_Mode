@@ -267,6 +267,7 @@ pub fn generate(seed: u64) -> Project {
             particles_saved,
             duration_s: F64::new(r.value(0.1, 3.0)),
             time_step_s: F64::new(r.value(0.0005, 0.02)),
+            map_time_step_s: None,
             random_seed: r.below(1 << 31) as u32,
             method: if r.below(2) == 0 {
                 ComputationMethod::Random

@@ -931,6 +931,14 @@ pub struct SppsSettings {
     pub duration_s: F64,
     /// `@pasdetemps`, seconds. `duration / time step` must stay below 65,536 steps.
     pub time_step_s: F64,
+    /// `@recepteurs_surfaciques_pas_temps`, seconds: the time bin of the sound maps (cutting planes
+    /// and surface receivers), a whole multiple of the time step. The solver keeps one value per
+    /// map cell per bin for the whole run, so a longer bin divides that memory by the multiple;
+    /// the per-cell sums are unchanged. `None` is the time step itself (every step its own bin),
+    /// which is also what a solver without the patch does. Read by our solver build's
+    /// `patches/0001-surface-receiver-time-bin.patch`; an unpatched SPPS ignores the attribute.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub map_time_step_s: Option<F64>,
     /// `@random_seed`: 0 leaves the generator unseeded and runs one thread per band; any other
     /// value seeds it and forces a single thread. The solver reads it as a C `int`.
     #[schemars(range(max = 2_147_483_647))]
@@ -986,6 +994,7 @@ impl SppsSettings {
             particles_saved: 0,
             duration_s: F64::new(10.0),
             time_step_s: F64::new(0.001),
+            map_time_step_s: None,
             random_seed: 0,
             method: ComputationMethod::Energetic,
             air_absorption: true,

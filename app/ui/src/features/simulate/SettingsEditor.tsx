@@ -19,6 +19,7 @@ import { useEffect, useState } from 'react';
 import * as actions from '../../actions';
 import type { SceneState, UiIssue } from '../../bindings/ipc';
 import type { ComputationMethod, Op } from '../../bindings/schema';
+import type { F64 } from '../../chrome/sceneModel';
 import { CommitInput, Issues } from '../../chrome/SourcesPanel';
 import { fieldKey } from '../../issues';
 import { parseStrictDecimal } from '../../numbers';
@@ -26,7 +27,7 @@ import { setBandComputed, setEnvironment, setSolverSettings } from '../../ops';
 import { refusalStore, type SolverName, useStore } from '../../store';
 import { EDT_MARKS } from '../acoustics/model';
 import { bandsText, hzText, projectSettings, type ProjectSettings, settingsRows } from './model';
-import { cubeText, REFUSE_GB, resultCube, WARN_GB } from './runSize';
+import { cubeText, mapStepRatio, REFUSE_GB, resultCube, WARN_GB } from './runSize';
 import {
   BAND_PRESETS,
   bandPresetOf,
@@ -49,6 +50,19 @@ type Read = { ok: true; value: number } | { ok: false; code: string };
 
 /** The key a settings field's refusals are filed under: `settings:<group>:<field>`. */
 const keyOf = (group: string, field: string) => fieldKey('settings', group, field);
+
+/**
+ * What the sound-map time step does to the maps' time axis: the bins the maps are stored on, and the
+ * division of their memory (runSize.ts). Said in words, from the UI's own arithmetic on the inputs.
+ */
+function mapBinsText(duration: F64, step: F64, mapStep: F64 | null): string {
+  const steps = stepCount(duration, step);
+  if (steps === null) return '—';
+  const ratio = mapStepRatio(step, mapStep);
+  if (ratio <= 1) return 'Same as the time step: the maps keep every step, the most memory they can take';
+  const bins = Math.ceil(steps / ratio);
+  return `${ratio} steps a bin: the maps keep ${bins.toLocaleString('en-US')} bins instead of ${steps.toLocaleString('en-US')} steps, ${ratio}x less memory; per-cell sums unchanged`;
+}
 
 /** The project's issues on these JSON pointers (exactly, or below them). */
 function issuesAt(issues: readonly UiIssue[], paths: readonly string[]): UiIssue[] {
@@ -191,8 +205,9 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
           <div className={`sim-field-line${level ? ` ${level}` : ''}`} data-part="results-cube" data-level={level || 'ok'}>
             <span className="k">Memory</span>
             <span className="v mono">
-              {cubeText(cube)} during the run
-              {level === 'fail' ? ' · too much for this machine, Run is refused' : level === 'warn' ? ' · heavy for this machine' : ''}
+              {cubeText(cube)} of sound maps during the run
+              {cube.ratio > 1 ? ` · ${cube.bins.toLocaleString('en-US')} bins` : ''}
+              {level === 'fail' ? ' · too much for this machine, Run is refused: set a longer sound-map time step' : level === 'warn' ? ' · heavy for this machine' : ''}
             </span>
           </div>
         );
@@ -409,6 +424,26 @@ export function SettingsEditor({ scene, settings, solver }: { scene: SceneState 
         />
         <div className="sim-hint mono" data-part="steps">
           {stepCountText(spps.duration_s, step)}
+        </div>
+      </div>
+      <div className="sim-setting sim-block" data-setting="map_time_step">
+        <NumberField
+          group="spps"
+          field="map_time_step"
+          label="Sound-map time step"
+          unit="ms"
+          value={spps.map_time_step_s == null ? '' : timeStepInputText(spps.map_time_step_s)}
+          // Empty (or 0) is "same as the time step": the project stores nothing and the solver bins by its step.
+          read={(text) => (text.trim() === '' ? { ok: true, value: 0 } : secondsFromMs(text))}
+          op={(now, v) => {
+            const want = v > 0 ? v : null;
+            const have = now.solvers.spps.map_time_step_s ?? null;
+            return want === have ? null : setSolverSettings(withSpps(now.solvers, { map_time_step_s: want }));
+          }}
+          current={issuesAt(issues, ['/solvers/spps/map_time_step_s'])}
+        />
+        <div className="sim-hint" data-part="map-bins">
+          {mapBinsText(spps.duration_s, step, spps.map_time_step_s ?? null)}
         </div>
       </div>
       <div className="sim-setting sim-block" data-setting="receiver_radius">

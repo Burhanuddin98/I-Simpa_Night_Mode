@@ -157,6 +157,7 @@ pub mod codes {
     // Time.
     pub const TIME_STEP_INVALID: &str = "time_step_invalid";
     pub const STEP_COUNT_OVERFLOW: &str = "step_count_overflow";
+    pub const MAP_TIME_STEP_INVALID: &str = "map_time_step_invalid";
     pub const SOURCE_DELAY_INVALID: &str = "source_delay_invalid";
     // SPPS settings.
     pub const TRANS_EPSILON_INVALID: &str = "trans_epsilon_invalid";
@@ -217,9 +218,9 @@ const fn rule(code: &'static str, stage: Stage, severity: Severity) -> Rule {
 use Severity::{Error as E, Warning as W};
 use Stage::{Export as X, Project as P};
 
-/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 38 project rules and 7
-/// export rules, 41 errors and 4 warnings.
-pub const RULES: [Rule; 45] = [
+/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 39 project rules and 7
+/// export rules, 42 errors and 4 warnings.
+pub const RULES: [Rule; 46] = [
     rule(codes::BAND_SET_EMPTY, P, E),
     rule(codes::BAND_DUPLICATE, P, E),
     rule(codes::BAND_FREQUENCY_NOT_INTEGER, P, E),
@@ -243,6 +244,7 @@ pub const RULES: [Rule; 45] = [
     rule(codes::DIRECTIVITY_BAND_MISSING, P, E),
     rule(codes::TIME_STEP_INVALID, P, E),
     rule(codes::STEP_COUNT_OVERFLOW, P, E),
+    rule(codes::MAP_TIME_STEP_INVALID, P, E),
     rule(codes::SOURCE_DELAY_INVALID, P, E),
     rule(codes::TRANS_EPSILON_INVALID, P, E),
     rule(codes::PARTICLE_COUNT_INVALID, P, E),
@@ -516,13 +518,13 @@ mod tests {
 
     #[test]
     fn rule_table_matches_the_contract_counts() {
-        assert_eq!(RULES.len(), 45);
+        assert_eq!(RULES.len(), 46);
         let project = RULES.iter().filter(|r| r.stage == Stage::Project).count();
         let warnings = RULES
             .iter()
             .filter(|r| r.severity == Severity::Warning)
             .count();
-        assert_eq!((project, 45 - project), (38, 7));
+        assert_eq!((project, 46 - project), (39, 7));
         assert_eq!((45 - warnings, warnings), (41, 4));
         let mut all: Vec<&str> = RULES.iter().map(|r| r.code).collect();
         all.extend(STRUCTURAL_CODES);

@@ -1016,6 +1016,15 @@ export interface SppsSettings {
    * `@enc_calc`: fitting zones on. Off, the solver ignores them silently.
    */
   fittings: boolean;
+  /**
+   * `@recepteurs_surfaciques_pas_temps`, seconds: the time bin of the sound maps (cutting planes
+   * and surface receivers), a whole multiple of the time step. The solver keeps one value per
+   * map cell per bin for the whole run, so a longer bin divides that memory by the multiple;
+   * the per-cell sums are unchanged. `None` is the time step itself (every step its own bin),
+   * which is also what a solver without the patch does. Read by our solver build's
+   * `patches/0001-surface-receiver-time-bin.patch`; an unpatched SPPS ignores the attribute.
+   */
+  map_time_step_s?: (number | string) | null;
   method: ComputationMethod;
   /**
    * `@nbparticules`: particles per source per band. The solver raises values below 1 to 1.

@@ -305,6 +305,16 @@ pub fn write(
                 ),
                 ("pasdetemps", real("SPPS time step", s.time_step_s.get())?),
                 ("nbparticules", s.particles_per_source.to_string()),
+            ]);
+            // The sound maps' time bin, only when the project names one: an absent attribute is
+            // the time step itself in the patched solver, and nothing in an unpatched one.
+            if let Some(bin) = s.map_time_step_s {
+                sim.push((
+                    "recepteurs_surfaciques_pas_temps",
+                    real("SPPS sound-map time step", bin.get())?,
+                ));
+            }
+            sim.extend([
                 ("nbparticules_rendu", s.particles_saved.to_string()),
                 ("random_seed", s.random_seed.to_string()),
                 ("computation_method", s.method.solver_code().to_string()),

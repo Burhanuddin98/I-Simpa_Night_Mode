@@ -414,6 +414,15 @@ fn import(xml: &str, mesh: Option<&cbin::Model>) -> Result<Project> {
                 particles_saved: count("nbparticules_rendu")?,
                 duration_s: F64::new(real_attr(sim, "duree_simulation", sw)?),
                 time_step_s: F64::new(real_attr(sim, "pasdetemps", sw)?),
+                // Our patched build's sound-map time bin; absent in upstream's own files.
+                map_time_step_s: match sim.attribute("recepteurs_surfaciques_pas_temps") {
+                    Some(_) => Some(F64::new(real_attr(
+                        sim,
+                        "recepteurs_surfaciques_pas_temps",
+                        sw,
+                    )?)),
+                    None => None,
+                },
                 random_seed: match sim.attribute("random_seed") {
                     Some(_) => count("random_seed")?,
                     None => 0,

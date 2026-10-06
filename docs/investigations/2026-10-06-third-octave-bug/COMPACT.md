@@ -16,10 +16,16 @@ that needs no solver change).
   (`particleInfos.pasCourant`, line 163) into the cell's series.
 - Lines 135-141: the output header (`enteteSortie`) carries `nbTimeStepMax` and `timeStep` itself, so a reader
   already takes the step count and length from the file, not from the project.
-- The value type is `l_decimal`, which is `#define l_decimal double` (`src/lib_interface/coreString.h:43`): **8 bytes
-  a value**, so every size in MEMORY.md written at 4 bytes doubles. CR4-third's 0.1 m plane at 18 bands is 298 GB
-  in the solver; CR4 at 6 bands with its 0.1 m plane was about 25 GB, which is why it fitted under the 36 GB line
-  and 27 bands (112 GB) did not. `runSize.ts` now counts 8 bytes.
+- ~~The value type is `l_decimal` = `double`, 8 bytes a value~~ **RETRACTED 14:45.** That reading was the point
+  receivers' accumulator (`t_Recepteur_P::energy_sum`, `l_decimal**`). The maps are `float`: `r_SurfCut::data` is
+  `t_freq_ar` = nested vectors of `t_cell` = `decimal` = `float` (`coreTypes.h:255-259`, `mathlib.h:54`), and
+  `r_Surf_Face::energieRecu` is `decimal**` (`coreTypes.h:149`). **4 bytes a value, and one cube for every
+  source** (`r_SurfCut::Init` has no source dimension; `coreinitialisation.cpp:253-267` allocates every band with
+  `doCalculation` once, at start-up, zero-filled). So the table in MEMORY.md as first written (4 bytes) is right
+  about the bytes and wrong about the x2 for sources: CR4-third's 0.1 m plane at 18 bands is 74 GB, CR4 at 6 bands
+  with its 0.1 m plane about 6 GB (ran), 27 bands about 28 GB (aborted; the commit limit was 36.6 GB with the
+  mesh and particles on top), CR4-third's 9 octaves about 40 GB (aborted). Every row still sits on the right side
+  of the line. `runSize.ts` counts 4 bytes, no sources, every computed band, and the bin ratio.
 
 ## The patch (in `patches/` here, and a pull request upstream, per CLAUDE.md)
 

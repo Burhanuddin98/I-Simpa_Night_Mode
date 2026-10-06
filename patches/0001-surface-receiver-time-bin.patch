@@ -1,0 +1,167 @@
+diff --git a/src/lib_interface/coreinitialisation.cpp b/src/lib_interface/coreinitialisation.cpp
+index eb37aeb..e2f0c48 100644
+--- a/src/lib_interface/coreinitialisation.cpp
++++ b/src/lib_interface/coreinitialisation.cpp
+@@ -263,7 +263,8 @@ void InitRecepteurSCut(std::vector<r_SurfCut*>& recepteursSurfaciques,Base_Core_
+ 	}
+ 	for(std::size_t idr=0;idr<recepteursSurfaciques.size();idr++)
+ 	{
+-		recepteursSurfaciques[idr]->Init(configManager.freqList.size(),usage,recepteursSurfaciques[idr]->NbCellU,recepteursSurfaciques[idr]->NbCellV,*configManager.FastGetConfigValue(Base_Core_Configuration::IPROP_QUANT_TIMESTEP));
++		// One value per cell per surface-receiver time bin (the particle step unless the configuration asks for a longer bin)
++		recepteursSurfaciques[idr]->Init(configManager.freqList.size(),usage,recepteursSurfaciques[idr]->NbCellU,recepteursSurfaciques[idr]->NbCellV,*configManager.FastGetConfigValue(Base_Core_Configuration::IPROP_QUANT_SURFACE_RECEIVER_TIMESTEP));
+ 	}
+ 
+ 
+diff --git a/src/lib_interface/data_manager/base_core_configuration.cpp b/src/lib_interface/data_manager/base_core_configuration.cpp
+index 4d65975..c99b015 100644
+--- a/src/lib_interface/data_manager/base_core_configuration.cpp
++++ b/src/lib_interface/data_manager/base_core_configuration.cpp
+@@ -92,6 +92,25 @@ bool Base_Core_Configuration::LoadCfgFile( CXml& fichierXml, bool verbose_mode)
+ 			SetConfigInformation(FPROP_TIME_STEP,simuNode->GetProperty("pasdetemps").ToFloat());
+ 			SetConfigInformation(FPROP_SIMULATION_TIME,simuNode->GetProperty("duree_simulation").ToFloat());
+ 			SetConfigInformation(IPROP_QUANT_TIMESTEP,(entier)(ceil((*FastGetConfigValue(FPROP_SIMULATION_TIME))/(*FastGetConfigValue(FPROP_TIME_STEP)))));
++			// Surface receivers and cutting planes keep one value per cell per time bin for the whole
++			// run. The bin is the particle time step unless recepteurs_surfaciques_pas_temps asks for
++			// a longer one; it is rounded to a whole number of steps so every step falls in one bin,
++			// and the memory and file size of those receivers divide by that number.
++			{
++				float timeStep=*FastGetConfigValue(FPROP_TIME_STEP);
++				float surfaceStep=timeStep;
++				if(simuNode->IsPropertyExist("recepteurs_surfaciques_pas_temps"))
++					surfaceStep=simuNode->GetProperty("recepteurs_surfaciques_pas_temps").ToFloat();
++				entier ratio=1;
++				if(timeStep>0 && surfaceStep>timeStep)
++					ratio=(entier)floor(surfaceStep/timeStep+0.5f);
++				if(ratio<1)
++					ratio=1;
++				entier nbTimeStep=*FastGetConfigValue(IPROP_QUANT_TIMESTEP);
++				SetConfigInformation(FPROP_SURFACE_RECEIVER_TIME_STEP,timeStep*(float)ratio);
++				SetConfigInformation(IPROP_SURFACE_RECEIVER_STEP_RATIO,ratio);
++				SetConfigInformation(IPROP_QUANT_SURFACE_RECEIVER_TIMESTEP,(entier)((nbTimeStep+ratio-1)/ratio));
++			}
+ 
+ 			SetConfigInformation(SPROP_DIRECTIVITY_FOLDER_PATH, simuNode->GetProperty("directivities_directory"));
+ 
+diff --git a/src/lib_interface/data_manager/base_core_configuration.h b/src/lib_interface/data_manager/base_core_configuration.h
+index b2113de..d220413 100644
+--- a/src/lib_interface/data_manager/base_core_configuration.h
++++ b/src/lib_interface/data_manager/base_core_configuration.h
+@@ -79,7 +79,8 @@ public:
+ 		FPROP_Z0,																			/*!< Paramètre de rugosité */
+ 		FPROP_ALOG,																	/*!< Paramètre de gradient de célérité */
+ 		FPROP_BLIN,																		/*!< Paramètre de gradient de célérité */
+-		FPROP_LAST																		/*!< Dernière énumération (Insérer les nouveaux éléments avant celui-ci) */
++		FPROP_SURFACE_RECEIVER_TIME_STEP,							/*!< Time bin of the surface receivers and cutting planes (s): a whole multiple of FPROP_TIME_STEP, the step itself by default (recepteurs_surfaciques_pas_temps) */
++		FPROP_LAST																	/*!< Dernière énumération (Insérer les nouveaux éléments avant celui-ci) */
+ 	};
+ 	/**
+ 	 * Enumeration des propriétés de type entier
+@@ -89,7 +90,9 @@ public:
+ 		IPROP_QUANT_BFREQ_TO_CALCULATE=100,		/*!< Nombre de bande de frequence qui vont etre calculées*/
+ 		IPROP_QUANT_TIMESTEP,			     	/*!< Nombre de pas de temps*/
+ 		IPROP_CUTTING_PLANE_USAGE,				/*!< Utilisation d'un ou plusieurs récepteur plan */
+-		IPROP_LAST								/*!< Dernière énumération (Insérer les nouveaux éléments avant celui-ci) */
++		IPROP_SURFACE_RECEIVER_STEP_RATIO,		/*!< Particle steps per surface-receiver time bin (FPROP_SURFACE_RECEIVER_TIME_STEP / FPROP_TIME_STEP), at least 1 */
++		IPROP_QUANT_SURFACE_RECEIVER_TIMESTEP,	/*!< Number of surface-receiver time bins: ceil(IPROP_QUANT_TIMESTEP / IPROP_SURFACE_RECEIVER_STEP_RATIO) */
++		IPROP_LAST							/*!< Dernière énumération (Insérer les nouveaux éléments avant celui-ci) */
+ 	};
+ 	/**
+ 	 * Initialisation des paramètres du coeur de calcul à partir d'un fichier XML
+diff --git a/src/spps/input_output/reportmanager.cpp b/src/spps/input_output/reportmanager.cpp
+index 227bb49..4b02d9d 100644
+--- a/src/spps/input_output/reportmanager.cpp
++++ b/src/spps/input_output/reportmanager.cpp
+@@ -184,10 +184,12 @@ void ReportManager::ParticuleFreeTranslation(CONF_PARTICULE& particleInfos, cons
+ 				vec3 normal=(*itrs)->planeNormal;
+ 				if(particleInfos.direction.dot(normal)<0) //si la face du recepteur est orient�e dans l'autre direction on inverse la normal
+ 					normal*=-1;
++				// The step's energy goes into its surface-receiver time bin (the step itself at a ratio of 1)
++				uentier binIndex=particleInfos.pasCourant/paramReport.surfaceStepRatio;
+ 				if (*(this->paramReport.configManager->FastGetConfigValue(Core_Configuration::I_PROP_SURFACE_RECEIVER_MODE)) == 0)
+-					(*itrs)->data[particleInfos.frequenceIndex][CellRow][CellCol][particleInfos.pasCourant] += particleInfos.energie;
++					(*itrs)->data[particleInfos.frequenceIndex][CellRow][CellCol][binIndex] += particleInfos.energie;
+ 				else
+-					(*itrs)->data[particleInfos.frequenceIndex][CellRow][CellCol][particleInfos.pasCourant]+=particleInfos.energie / max(cosf(normal.angle(particleInfos.direction)), 0.000000001f);
++					(*itrs)->data[particleInfos.frequenceIndex][CellRow][CellCol][binIndex]+=particleInfos.energie / max(cosf(normal.angle(particleInfos.direction)), 0.000000001f);
+ 			}
+ 		}
+ 	}
+@@ -278,10 +280,12 @@ void ReportManager::ParticuleCollideWithSceneMesh(CONF_PARTICULE& particleInfos)
+ 		if(particleInfos.direction.dot(normal)<0) //If the receiver surface is on the other side then revert the normal
+ 			normal*=-1;
+ 		//Add particle energy to receiver
++		// The step's energy goes into its surface-receiver time bin (the step itself at a ratio of 1)
++		uentier binIndex=particleInfos.pasCourant/paramReport.surfaceStepRatio;
+ 		if (*(this->paramReport.configManager->FastGetConfigValue(Core_Configuration::I_PROP_SURFACE_RECEIVER_MODE)) == 0)
+-			face->recepteurS->energieRecu[particleInfos.frequenceIndex][particleInfos.pasCourant] += particleInfos.energie;
++			face->recepteurS->energieRecu[particleInfos.frequenceIndex][binIndex] += particleInfos.energie;
+ 		else
+-			face->recepteurS->energieRecu[particleInfos.frequenceIndex][particleInfos.pasCourant] += particleInfos.energie / max(cosf(normal.angle(particleInfos.direction)), 0.000000001f); 
++			face->recepteurS->energieRecu[particleInfos.frequenceIndex][binIndex] += particleInfos.energie / max(cosf(normal.angle(particleInfos.direction)), 0.000000001f);
+ 	}
+ }
+ 
+diff --git a/src/spps/input_output/reportmanager.h b/src/spps/input_output/reportmanager.h
+index 4005807..acf78a8 100644
+--- a/src/spps/input_output/reportmanager.h
++++ b/src/spps/input_output/reportmanager.h
+@@ -101,6 +101,7 @@ public:
+ 		uentier freqIndex;
+ 		uentier freqValue;
+ 		decimal timeStep;
++		entier surfaceStepRatio;	/*!< Particle steps per surface-receiver time bin (1: every step keeps its own value) */
+ 		stringClass _particlePath;
+ 		stringClass _particleFileName;
+ 		stringClass _recepteur_surf_Path;
+diff --git a/src/spps/sppsNantes.cpp b/src/spps/sppsNantes.cpp
+index a2c79cd..dd48516 100644
+--- a/src/spps/sppsNantes.cpp
++++ b/src/spps/sppsNantes.cpp
+@@ -176,7 +176,7 @@ void runFrequenceCalculation(  progressOperation* parentOperation, ReportManager
+ {
+     using namespace std;
+ 	//Reserve l'espace mémoire pour cette bande de fréquence
+-	InitRecepteurSBfreq(applicationTools.configurationTool->recepteur_s_List,threadData->freqInfos->freqIndex,*applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::IPROP_QUANT_TIMESTEP));
++	InitRecepteurSBfreq(applicationTools.configurationTool->recepteur_s_List,threadData->freqInfos->freqIndex,*applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::IPROP_QUANT_SURFACE_RECEIVER_TIMESTEP));
+ 	//Initialisation du gestionnaire de sortie de données
+ 	reportParameter.freqIndex=threadData->freqInfos->freqIndex;
+ 	reportParameter.freqValue=threadData->freqInfos->freqValue;
+@@ -218,12 +218,12 @@ void runFrequenceCalculation(  progressOperation* parentOperation, ReportManager
+ 		//Sauvegarde des récepteurs surfacique pour cette bande de fréquence
+ 		if(applicationTools.configurationTool->recepteur_s_List.size()>0 &&  *applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::IPROP_OUTPUT_RECEPTEURS_SURF_BY_FREQ))
+ #ifdef UTILISER_MAILLAGE_OPTIMISATION
+-			ReportManager::SauveRecepteursSurfaciques(reportParameter._recepteur_surf_Path,threadData->freqInfos->freqIndex,applicationTools.configurationTool->recepteur_s_List,*applicationTools.tetraMesh,*applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::FPROP_TIME_STEP));
++			ReportManager::SauveRecepteursSurfaciques(reportParameter._recepteur_surf_Path,threadData->freqInfos->freqIndex,applicationTools.configurationTool->recepteur_s_List,*applicationTools.tetraMesh,*applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::FPROP_SURFACE_RECEIVER_TIME_STEP));
+ #else
+-			ReportManager::SauveRecepteursSurfaciques(reportParameter._recepteur_surf_Path,threadData->freqInfos->freqIndex,applicationTools.configurationTool->recepteur_s_List,*applicationTools.sceneMesh,*applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::FPROP_TIME_STEP));
++			ReportManager::SauveRecepteursSurfaciques(reportParameter._recepteur_surf_Path,threadData->freqInfos->freqIndex,applicationTools.configurationTool->recepteur_s_List,*applicationTools.sceneMesh,*applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::FPROP_SURFACE_RECEIVER_TIME_STEP));
+ #endif
+ 		if(applicationTools.configurationTool->recepteur_scut_List.size()>0 &&  *applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::IPROP_OUTPUT_RECEPTEURS_SURF_BY_FREQ))
+-			ReportManager::SauveRecepteursSurfaciquesCoupe(reportParameter._recepteur_surf_cut_Path,applicationTools.configurationTool->recepteur_scut_List,*applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::FPROP_TIME_STEP),true,false,threadData->freqInfos->freqIndex);
++			ReportManager::SauveRecepteursSurfaciquesCoupe(reportParameter._recepteur_surf_cut_Path,applicationTools.configurationTool->recepteur_scut_List,*applicationTools.configurationTool->FastGetConfigValue(Core_Configuration::FPROP_SURFACE_RECEIVER_TIME_STEP),true,false,threadData->freqInfos->freqIndex);
+ 		outputTool.SaveAndCloseParticleFile();				//Finalisation du fichier de particule
+ 		threadData->GabeColData=outputTool.GetColStats();	//Recupere les données des etats de particules
+ 		threadData->GabeSumEnergyFreq=outputTool.GetSumEnergy();//Recupere les données du niveau sonore global
+@@ -332,6 +332,7 @@ int MainProcess(int argc, char* argv[])
+ 	reportParameter.nbParticles=*configManager.FastGetConfigValue(Core_Configuration::IPROP_QUANT_PARTICLE_OUTPUT)*configManager.srcList.size();
+ 	reportParameter.nbTimeStep=*configManager.FastGetConfigValue(Core_Configuration::IPROP_QUANT_TIMESTEP); //(int)((*configManager.FastGetConfigValue(Core_Configuration::FPROP_SIMULATION_TIME))/(*configManager.FastGetConfigValue(Core_Configuration::FPROP_TIME_STEP)));
+ 	reportParameter.timeStep=*configManager.FastGetConfigValue(Core_Configuration::FPROP_TIME_STEP);
++	reportParameter.surfaceStepRatio=*configManager.FastGetConfigValue(Core_Configuration::IPROP_SURFACE_RECEIVER_STEP_RATIO);
+ 	reportParameter.tetraModel=&sceneTetraMesh;
+ 	reportParameter.configManager=&configManager;
+ 	reportParameter.sceneModel=&sceneMesh;
+@@ -414,11 +415,11 @@ int MainProcess(int argc, char* argv[])
+ 	if (verbose_mode) { cout << "Saving Global Surface Receiver Data..." << endl; }
+ 	#ifndef _PROFILE_
+ 		#ifdef UTILISER_MAILLAGE_OPTIMISATION
+-			ReportManager::SauveGlobalRecepteursSurfaciques(globalRecSurfPath,configManager.recepteur_s_List,sceneTetraMesh,*configManager.FastGetConfigValue(Core_Configuration::FPROP_TIME_STEP));
++			ReportManager::SauveGlobalRecepteursSurfaciques(globalRecSurfPath,configManager.recepteur_s_List,sceneTetraMesh,*configManager.FastGetConfigValue(Core_Configuration::FPROP_SURFACE_RECEIVER_TIME_STEP));
+ 		#else
+-			ReportManager::SauveGlobalRecepteursSurfaciques(globalRecSurfPath,configManager.recepteur_s_List,sceneMesh,*configManager.FastGetConfigValue(Core_Configuration::FPROP_TIME_STEP));
++			ReportManager::SauveGlobalRecepteursSurfaciques(globalRecSurfPath,configManager.recepteur_s_List,sceneMesh,*configManager.FastGetConfigValue(Core_Configuration::FPROP_SURFACE_RECEIVER_TIME_STEP));
+ 		#endif
+-		ReportManager::SauveRecepteursSurfaciquesCoupe(globalSurfCutPath,configManager.recepteur_scut_List,*configManager.FastGetConfigValue(Core_Configuration::FPROP_TIME_STEP));
++		ReportManager::SauveRecepteursSurfaciquesCoupe(globalSurfCutPath,configManager.recepteur_scut_List,*configManager.FastGetConfigValue(Core_Configuration::FPROP_SURFACE_RECEIVER_TIME_STEP));
+ 	#endif
+ 		if (verbose_mode) { cout << "End of save Global Surface Receiver Data." << endl; }
+ 

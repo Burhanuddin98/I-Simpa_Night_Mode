@@ -355,6 +355,7 @@ export function settingsRows(s: ProjectSettings | null, solver: SolverName): Set
     { key: 'particles', label: 'Particles per source and band', value: spps ? groupedInt(spps.particles_per_source) : dash },
     { key: 'duration', label: 'Duration', value: spps ? `${exact(spps.duration_s)} s` : dash },
     { key: 'time_step', label: 'Time step', value: spps ? timeStepText(spps.time_step_s) : dash },
+    { key: 'map_time_step', label: 'Sound-map time step', value: spps ? (spps.map_time_step_s == null ? 'same as the time step' : timeStepText(spps.map_time_step_s)) : dash },
     { key: 'bands', label: 'Bands', value: s && spps ? bandsText(s.bands, spps.bands_computed) : dash },
     { key: 'air', label: 'Air absorption', value: s && spps ? airText(s.environment, spps.air_absorption) : dash },
   ];

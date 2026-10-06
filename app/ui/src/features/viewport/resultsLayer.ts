@@ -328,6 +328,12 @@ export interface MapMeta {
   cumulative?: boolean;
   /** The time window in steps (window.ts), 1 for none. */
   windowSteps?: number;
+  /**
+   * Particle steps per map time bin (patch 0001, `recepteurs_surfaciques_pas_temps`): the timeline runs in
+   * particle steps and the map's texture in its own bins, so a step shows bin floor(step / stepRatio). 1 (or
+   * unset) when the map was stored at the particle step.
+   */
+  stepRatio?: number;
 }
 
 /** W5: how the map is drawn (smooth colour, contour spacing in dB, 0 for none). */
@@ -668,10 +674,11 @@ export class ResultsLayer {
     }
   }
 
-  /** The timeline's step, for both: the map clamped to its own steps (TCR has one). */
+  /** The timeline's step, for both: the map at its bin for the step (stepRatio), clamped to its own bins (TCR has one). */
   setStep(step: number): void {
     const steps = this.layout?.steps ?? 1;
-    this.map.material.uniforms.uStep.value = Math.max(0, Math.min(steps - 1, step));
+    const ratio = Math.max(1, Math.floor(this.mapMeta?.stepRatio ?? 1));
+    this.map.material.uniforms.uStep.value = Math.max(0, Math.min(steps - 1, Math.floor(step / ratio)));
     this.particles.material.uniforms.uStep.value = step;
     this.trails.material.uniforms.uStep.value = step;
   }

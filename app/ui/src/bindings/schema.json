@@ -2652,6 +2652,26 @@
           "description": "`@enc_calc`: fitting zones on. Off, the solver ignores them silently.",
           "type": "boolean"
         },
+        "map_time_step_s": {
+          "anyOf": [
+            {
+              "description": "A float. Finite values are numbers; non-finite values are strings.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(NaN|Infinity|-Infinity|NaN:0x[0-9a-fA-F]{16})$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`@recepteurs_surfaciques_pas_temps`, seconds: the time bin of the sound maps (cutting planes\nand surface receivers), a whole multiple of the time step. The solver keeps one value per\nmap cell per bin for the whole run, so a longer bin divides that memory by the multiple;\nthe per-cell sums are unchanged. `None` is the time step itself (every step its own bin),\nwhich is also what a solver without the patch does. Read by our solver build's\n`patches/0001-surface-receiver-time-bin.patch`; an unpatched SPPS ignores the attribute."
+        },
         "method": {
           "$ref": "#/$defs/ComputationMethod"
         },
