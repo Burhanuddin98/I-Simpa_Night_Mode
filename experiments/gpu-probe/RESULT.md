@@ -43,3 +43,30 @@ runs both arms at 10 M particles and writes `RESULT-<machine>.md` beside it. `bo
 for the RTX 2060 (sm_75) and the RTX 5070 (sm_120); it needs an NVIDIA driver that runs CUDA 13.2
 programs (R580 or newer). With an older driver, rebuild there with `build.cmd . sm75` in a VS 2022 +
 CUDA 11.8 prompt. Checked on Grace at 200 k particles x 500 steps (19:18): both arms ran, T20 within 2 %.
+
+## A1: the mesh walk on CR4 (2026-10-06 19:30-19:43, REALISED on Grace)
+
+CR4's own tetrahedral mesh from the CR4-27 run (11,150 tetrahedra, 5,148 scene faces), each face's 1 kHz
+absorption from the run's config.xml (0.048 to 0.349), specular, energetic, source LS1, receivers MP1-MP5
+(r = 1 m), 1 ms steps, 2 s, extinction 1e-5, no air absorption. `prep_mesh.py` makes the input,
+`mesh_walk.cu` walks it (planes per tetrahedron, the neighbour across the exit face, reflection on scene
+faces), `spps_cr4_arm.py` runs SPPS on a copy of the same folder with the same settings (diffusion set to 0
+at the band). Raw: `.out/gpu-probe/a1/`.
+
+| arm | particles | time | per particle |
+|---|---|---|---|
+| SPPS, the verified build (one band: one thread) | 200,000 | 19.59 s (process, outputs included) | 98.0 us |
+| the walk, all 28 CPU threads | 200,000 | 0.958 s | 4.79 us |
+| the walk, CUDA kernel, RTX 5070 | 10,000,000 | 3.023 s | **0.302 us** |
+
+**GPU over SPPS at equal particles on CR4: 324x. GPU over the same walk on the whole CPU: 15.6x.** 0 of
+10 M particles lost; the walk's GPU and CPU histograms agree to 4.3e-4 of the peak.
+
+T20 (Schroeder over the 2 s), GPU at 10 M vs SPPS at 200 k: MP1 2.976 / 2.925, MP2 2.917 / 2.881, MP3 2.945 /
+2.976, MP4 2.911 / 2.895, MP5 2.963 / 2.960: ratios 0.990 to 1.017, inside the 5 % JND. A sanity check, not
+a bed: the 2 s window truncates both decays alike.
+
+FORECAST (from A1's per-particle times, transfer history: none): CR4-27 as the app runs it (2 sources x
+300 k particles x 27 bands x 10 s, SPPS threaded per band) took 525 s at 19:40; the GPU at about 1 us a
+particle for 10 s would trace its 16.2 M particles in 15 to 25 s, about 20 to 35x faster, before A2 adds
+SPPS's full rules (diffusion, children, air absorption), which cost the GPU and SPPS alike.
