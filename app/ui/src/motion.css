@@ -1,0 +1,96 @@
+/* Motion in the chrome (Burhan 2026-10-06 04:40: "when i expand, collapse the windows, can they expand,
+   collapse smoothly, and do that for every drop down"; 04:41: "when i switch fro geometry to materials
+   to sources to receivers to simulate, make sure there is a clear animation transition in that window
+   where the options change").
+
+   - The floating panels fold and unfold by size (width for the side panels, height for the dock),
+     their contents fading out before they leave and in as they arrive. `interpolate-size` lets a
+     size run to and from its content's own; `allow-discrete` keeps contents shown until they have
+     faded, rather than cutting them at the start.
+   - The properties panel's contents slide in from the side the step bar moved toward (data-step-dir).
+   - Every drop-down and menu fades and drops in as it opens. Closing is immediate.
+   - Nothing moves under prefers-reduced-motion, nor under WebDriver (html[data-no-motion]), where
+     the gates measure the panels and compare frames. */
+
+:root {
+  interpolate-size: allow-keywords;
+}
+
+/* ---- Folding panels ------------------------------------------------------------------------ */
+.scene,
+.props {
+  transition:
+    width 240ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    height 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.scene[data-folded='true'],
+.props[data-folded='true'] {
+  height: 36px;
+}
+.scene > :not(.fold),
+.props > :not(.fold),
+.dock > .dock-body {
+  transition:
+    opacity 300ms ease,
+    transform 360ms cubic-bezier(0.25, 0.8, 0.25, 1),
+    display 300ms allow-discrete;
+}
+.scene[data-folded='true'] > :not(.fold),
+.props[data-folded='true'] > :not(.fold),
+.dock[data-folded='true'] > .dock-body {
+  opacity: 0;
+}
+.dock {
+  transition: height 240ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@starting-style {
+  .scene > :not(.fold),
+  .props > :not(.fold),
+  .dock > .dock-body {
+    opacity: 0;
+  }
+  /* A step's options arriving: from the right going forward, from the left going back. */
+  .props[data-step-dir='next'] > :not(.fold) {
+    transform: translateX(28px);
+  }
+  .props[data-step-dir='prev'] > :not(.fold) {
+    transform: translateX(-28px);
+  }
+}
+
+/* ---- Drop-downs and menus ------------------------------------------------------------------ */
+.dropdown,
+.view-style-menu,
+.vp-menu,
+.mg-lib-list {
+  transform-origin: top left;
+  transition:
+    opacity 150ms ease,
+    transform 170ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@starting-style {
+  .dropdown,
+  .view-style-menu,
+  .vp-menu,
+  .mg-lib-list {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+}
+
+/* ---- No motion ----------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+html[data-no-motion] *,
+html[data-no-motion] *::before,
+html[data-no-motion] *::after {
+  transition: none !important;
+  animation: none !important;
+}
