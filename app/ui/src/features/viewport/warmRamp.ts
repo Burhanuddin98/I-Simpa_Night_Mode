@@ -73,7 +73,31 @@ export function warmGradient(samples = 16): string {
   return `linear-gradient(90deg, ${parts.join(', ')})`;
 }
 
-/** The legend's labels: the floor, the middle and the top, dB re the loudest particle. */
-export function warmLabels(): { lo: string; mid: string; hi: string } {
-  return { lo: `−${WARM_DEPTH_DB}`, mid: `−${WARM_DEPTH_DB / 2}`, hi: '0 dB' };
+/** The legend's labels: the floor, the middle and the top, dB re the loudest particle, for a ramp `depth` dB deep. */
+export function warmLabels(depth = WARM_DEPTH_DB): { lo: string; mid: string; hi: string } {
+  const half = depth / 2;
+  return { lo: `−${depth}`, mid: `−${Number.isInteger(half) ? half : half.toFixed(1)}`, hi: '0 dB' };
+}
+
+/** The narrowest and widest spans the ramp is fitted to, dB. */
+export const WARM_FIT_MIN_DB = 12;
+export const WARM_FIT_PERCENTILE = 0.02;
+
+/**
+ * The span the ramp covers for one band's particles, dB below the loudest (`logMax`): from the loudest record
+ * down to the quietest 2 % (sampled, at most 200,000 records), rounded up to whole 3 dB, between
+ * WARM_FIT_MIN_DB and WARM_DEPTH_DB. A path then cools through the whole ramp, white-hot at the source to ember
+ * at its late bounces, and the legend says the span in dB. Without energies: WARM_DEPTH_DB.
+ */
+export function fitDepthDb(energies: ArrayLike<number>, logMax: number): number {
+  const stride = Math.max(1, Math.floor(energies.length / 200_000));
+  const db: number[] = [];
+  for (let k = 0; k < energies.length; k += stride) {
+    const e = energies[k];
+    if (e > 0 && Number.isFinite(e)) db.push(10 * Math.log10(e));
+  }
+  if (db.length === 0) return WARM_DEPTH_DB;
+  db.sort((a, b) => a - b);
+  const span = logMax - db[Math.floor(WARM_FIT_PERCENTILE * (db.length - 1))];
+  return Math.min(WARM_DEPTH_DB, Math.max(WARM_FIT_MIN_DB, 3 * Math.ceil(span / 3)));
 }

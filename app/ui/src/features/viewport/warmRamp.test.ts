@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import { fromOklab, oklab, WARM, warmAt, warmLut, warmPlace, WARM_DEPTH_DB, WARM_LUT_SIZE } from './warmRamp.ts';
+import { fitDepthDb, fromOklab, oklab, WARM, warmAt, warmLabels, warmLut, warmPlace, WARM_DEPTH_DB, WARM_FIT_MIN_DB, WARM_LUT_SIZE } from './warmRamp.ts';
 
 const hex = (c: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255) as [number, number, number];
 
@@ -33,4 +33,15 @@ test('OKLab round trip, the lookup texture and the place of an energy on the ram
   assert.ok(Math.abs(warmPlace(1e-3, 0) - 0.5) < 1e-12, `${WARM_DEPTH_DB / 2} dB down is half way`);
   assert.equal(warmPlace(1e-7, 0), 0);
   assert.equal(warmPlace(0, 0), 0);
+});
+
+test('the ramp fitted to a band: loudest to the quietest 2 %, whole 3 dB, between the floor and 60 dB; the legend says it', () => {
+  // 1000 records spread evenly over 0 to -30 dB re the loudest (logMax 0): the 2 % point is at about -29.4 dB.
+  const e = Float32Array.from({ length: 1000 }, (_, i) => 10 ** (-(30 * i) / 999 / 10));
+  assert.equal(fitDepthDb(e, 0), 30);
+  assert.equal(fitDepthDb(Float32Array.from([1, 1, 1]), 0), WARM_FIT_MIN_DB, 'no spread: the floor');
+  assert.equal(fitDepthDb(Float32Array.from({ length: 100 }, (_, i) => 10 ** (-i)), 0), WARM_DEPTH_DB, 'wider than 60 dB: 60');
+  assert.equal(fitDepthDb(new Float32Array(0), 0), WARM_DEPTH_DB);
+  assert.deepEqual(warmLabels(30), { lo: '−30', mid: '−15', hi: '0 dB' });
+  assert.deepEqual(warmLabels(21), { lo: '−21', mid: '−10.5', hi: '0 dB' });
 });

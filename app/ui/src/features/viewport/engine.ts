@@ -137,6 +137,13 @@ export function drawnSteps(): { t: number; step: number }[] {
 
 export const mapPointerStore = new Store<{ face: number; x: number; y: number } | null>(null);
 
+/** Round 2: the presentation view (no panels) and its turntable camera. */
+export const presentStore = new Store<{ on: boolean; turntable: boolean }>({ on: false, turntable: false });
+/** The benchmark's replication in force (the card says so in words), or null: the real saved particles. */
+export const replicaStore = new Store<{ saved: number; copies: number } | null>(null);
+/** The turntable's speed, degrees a second. */
+const TURN_DEG_S = 6;
+
 export const viewportUi = new Store<ViewportUi>({
   view: 'perspective',
   hasModel: false,
@@ -385,7 +392,7 @@ function gpuTiming(): boolean {
 
 /** How strongly the particles' light blooms (decision 69: "so it can be toned down for measurement"). */
 export type Glow = 'off' | 'soft' | 'full';
-export const GLOW_STRENGTH: Record<Glow, number> = { off: 0, soft: 0.35, full: 0.8 };
+export const GLOW_STRENGTH: Record<Glow, number> = { off: 0, soft: 0.6, full: 1.2 };
 
 /**
  * The adapter's own limits for what the view needs beyond WebGPU's defaults (a map texture wider than
@@ -414,8 +421,10 @@ function stillMotion(): boolean {
  * the distance fade (fade.ts) in its colour, in that order, then converted to sRGB as WebGLRenderer
  * did; fragments above the build-up's cut are discarded.
  */
-function shaded<M extends { maskNode: unknown; outputNode: unknown }>(m: M, u: Shared): M {
+function shaded<M extends { maskNode: unknown; outputNode: unknown; opacityNode: unknown }>(m: M, u: Shared): M {
   m.maskNode = buildKeep(u.nmBuildZ);
+  // Ghosted while the light plays (engine.setGhosted makes the surfaces see-through): 10 % at full dim.
+  m.opacityNode = materialOpacity.mul(float(1).sub(u.nmDim.mul(0.9)));
   const lit = output.rgb
     .mul(aoFactor(u.nmAoMix))
     .add(glowTerm({ pos: u.glowPos, count: u.glowCount, radius: u.glowRadius, level: u.glowLevel, color: u.glowColor }))
@@ -452,7 +461,7 @@ function underPanel(left: number, top: number, w: number, h: number, rects: DOMR
 /** The edges with the distance fade taken from their opacity (fade.ts), cut by the build-up, in sRGB. */
 function fadingLines(m: LineBasicNodeMaterial, u: Shared): LineBasicNodeMaterial {
   m.maskNode = buildKeep(u.nmBuildZ);
-  m.opacityNode = materialOpacity.mul(float(1).sub(fadeAmount({ near: u.nmFadeNear, far: u.nmFadeFar, max: u.nmFadeMax }))).mul(float(1).sub(u.nmDim.mul(0.5)));
+  m.opacityNode = materialOpacity.mul(float(1).sub(fadeAmount({ near: u.nmFadeNear, far: u.nmFadeFar, max: u.nmFadeMax }))).mul(float(1).sub(u.nmDim.mul(0.6)));
   return inSrgb(m);
 }
 
@@ -497,6 +506,9 @@ class ViewportEngine {
   private readonly fxBloomInput = texture(new DataTexture(new Uint8Array(4), 1, 1));
   private dimHold = false;
   private dimAt = 0;
+  private ghosted = false;
+  private mapFullWhilePlaying = false;
+  private turnFrame = 0;
   /** The inset's background: a quad that replaces colour and depth inside the scissor (WebGPU clears whole attachments only). */
   private readonly insetClear = new Scene();
   private readonly scene = new Scene();
@@ -769,6 +781,11 @@ class ViewportEngine {
         this.invalidate();
         return on;
       }),
+      registerHook('present', (on: boolean, turntable = false) => {
+        this.setPresent(on);
+        if (on) this.setTurntable(turntable);
+        return presentStore.get();
+      }),
       registerHook('gpuGlow', (g: Glow) => {
         this.setGlow(g);
         return g;
@@ -777,6 +794,7 @@ class ViewportEngine {
       // The benchmark's particle count held (null: the file's own), to look at what it draws.
       registerHook('gpuBenchSet', (n: number | null) => {
         const c = this.results.gpu.bench(n);
+        replicaStore.set(this.results.gpu.replicas());
         this.results.setParticleLook(this.results.gpu.currentLook());
         this.invalidate();
         return c;
@@ -977,6 +995,71 @@ class ViewportEngine {
     const next = stillMotion() ? target : cur + (target - cur) * Math.min(1, dt / 120);
     u.value = Math.abs(next - target) < 0.004 ? target : next;
     if (u.value !== target) this.invalidate();
+    this.setGhosted((u.value as number) > 0);
+    this.results.setMapFade(this.mapFullWhilePlaying ? 1 : 1 - 0.75 * (u.value as number));
+  }
+
+  /**
+   * Round 2, item 4: while the light plays the room is a ghost, its surfaces see-through (10 %, depth-faded)
+   * and its edges thin dim lines, so no slab hides a particle; the depth that hid the light behind the walls is
+   * off. Restored, exactly as drawn before, when the dimming has eased back to 0.
+   */
+  private setGhosted(on: boolean): void {
+    if (on === this.ghosted) return;
+    this.ghosted = on;
+    for (const m of [this.tintColour, this.tintGrey, this.tintWire]) {
+      m.transparent = on;
+      m.depthWrite = !on;
+      m.needsUpdate = true;
+    }
+    this.faces.visible = !on;
+    this.fxDepth.visible = !on;
+  }
+
+  /** Round 2, item 5: keep the map at full strength while the light plays (else it fades to 25 %). */
+  setMapWhilePlaying(full: boolean): void {
+    this.mapFullWhilePlaying = full;
+    this.invalidate();
+  }
+
+  /**
+   * Round 2, item 6: the presentation view (H, or the tools' button): every panel hidden, the canvas alone. The
+   * turntable (O while presenting, or its button) circles the camera slowly about the view's target.
+   */
+  setPresent(on: boolean): void {
+    presentStore.set({ ...presentStore.get(), on });
+    try {
+      document.documentElement.classList.toggle('present', on);
+    } catch {
+      // No document (tests).
+    }
+    if (!on) this.setTurntable(false);
+    this.invalidate();
+  }
+
+  setTurntable(on: boolean): void {
+    presentStore.set({ ...presentStore.get(), turntable: on });
+    if (this.turnFrame) cancelAnimationFrame(this.turnFrame);
+    this.turnFrame = 0;
+    const controls = this.controls;
+    if (!on || !controls || stillMotion()) return;
+    let last = 0;
+    const stop = () => this.setTurntable(false);
+    controls.addEventListener('start', stop);
+    const tick = (now: number) => {
+      if (!presentStore.get().turntable) {
+        controls.removeEventListener('start', stop);
+        return;
+      }
+      const dt = last ? Math.min(50, now - last) : 16;
+      last = now;
+      const off = this.persp.position.clone().sub(controls.target).applyAxisAngle(new Vector3(0, 0, 1), (TURN_DEG_S * Math.PI * dt) / 180000);
+      this.persp.position.copy(controls.target).add(off);
+      controls.update();
+      this.invalidate();
+      this.turnFrame = requestAnimationFrame(tick);
+    };
+    this.turnFrame = requestAnimationFrame(tick);
   }
 
   /** The light pass: the GPU looks, additive, into the half-float target at the drawing buffer's size, against the room's depth. */
@@ -1001,7 +1084,8 @@ class ViewportEngine {
     if (this.fxGlow !== 'off' && this.fxTarget) {
       if (!this.fxBloomPass) {
         const bm = new MeshBasicNodeMaterial({ depthTest: false, depthWrite: false });
-        bm.fragmentNode = bloom(this.fxInput, this.fxStrength, 0.2, 0.35);
+        // Only the hottest light blooms (threshold on luminance), in a tight radius: sparks, not smudges.
+        bm.fragmentNode = bloom(this.fxInput, this.fxStrength, 0.12, 0.85);
         this.fxBloomPass = new QuadMesh(bm);
       }
       if (!this.fxBloomTarget) {
@@ -1065,6 +1149,7 @@ class ViewportEngine {
     if (stepStore.get() !== 'results') throw new Error('open the Results step first');
     const gpu = this.results.gpu;
     const count = gpu.bench(n);
+    replicaStore.set(gpu.replicas());
     const inForce = this.results.setParticleLook(look);
     this.setGlow(glow);
     const t0 = animatorStore.get().step;
@@ -1138,6 +1223,7 @@ class ViewportEngine {
       out.gpuMs = { compute: stats(comp), scene: stats(main), particles: stats(part), bloomAndComposite: stats(post) };
     }
     gpu.bench(null);
+    replicaStore.set(null);
     this.results.setTime(t0);
     this.invalidate();
     return out;
@@ -1147,6 +1233,11 @@ class ViewportEngine {
   private setFade(perspective: boolean): void {
     const u = this.shared;
     const b = this.bounds;
+    if (b) {
+      const c = new Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
+      const range = fadeRange(this.persp.position.distanceTo(c), Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) / 2);
+      this.results.gpu.setDepthRange(range.near, range.far);
+    }
     if (!perspective || !b || !viewStyle.get().fade) {
       u.nmFadeMax.value = 0;
       return;
@@ -2287,6 +2378,19 @@ export function renderNow(): void {
 /** Decision 69: the particles' light, bloom off, soft or full. */
 export function setGlow(g: Glow): void {
   engine.setGlow(g);
+}
+
+/** Round 2: the map at full strength while the light plays (else faded to 25 %). */
+export function setMapWhilePlaying(full: boolean): void {
+  engine.setMapWhilePlaying(full);
+}
+
+/** Round 2: the presentation view and its turntable. */
+export function setPresent(on: boolean): void {
+  engine.setPresent(on);
+}
+export function setTurntable(on: boolean): void {
+  engine.setTurntable(on);
 }
 
 /** Frames the model in the perspective view (View › Frame model may call it). */

@@ -24,7 +24,7 @@ import type { RunData, SurfaceMapInfo } from '../../bindings/ipc';
 import { decodeParticles, decodeSurfaceMap, type SurfaceMap } from '../../resultsData';
 import { runsStore, sceneStore, selectedRunStore, stepStore, Store } from '../../store';
 import { Animator } from './animator';
-import { resultsLayer, renderNow, setGlow, showMap, showParticles, type Glow } from './engine';
+import { resultsLayer, renderNow, setGlow, setMapWhilePlaying, showMap, showParticles, type Glow } from './engine';
 import { cumulativeRange, cumulativeRefusal } from './cumulative';
 import { diffRange, legendGradient, legendLabels, levelRange, surfaceMismatch, type Range } from './mapData';
 import { emissionStep, noParticlesText } from './particles';
@@ -92,6 +92,10 @@ export interface ResultsView {
   lookRefusal: { glow: string | null; rays: string | null };
   /** Decision 69: how strongly the particles' light blooms. */
   glow: Glow;
+  /** The warm ramp's span for the band shown, dB below its loudest particle (the legend's floor). */
+  warmDepth: number;
+  /** Round 2: the map kept at full strength while the light plays (else faded to 25 %). */
+  mapFull: boolean;
   particles: ParticlesView;
 }
 
@@ -123,11 +127,13 @@ const OFF: ResultsView = {
   look: 'dots',
   lookRefusal: { glow: null, rays: null },
   glow: 'soft',
+  warmDepth: 60,
+  mapFull: false,
   particles: { state: 'off' },
 };
 
 /** The view choices a new run keeps (W5). */
-const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, windowMs: v.windowMs, trails: v.trails, look: v.look, glow: v.glow });
+const kept = (v: ResultsView) => ({ smooth: v.smooth, isoDb: v.isoDb, fixed: v.fixed, cumulative: v.cumulative, windowMs: v.windowMs, trails: v.trails, look: v.look, glow: v.glow, mapFull: v.mapFull });
 
 /** The map on screen and its baseline, as decoded: the probe reads its values here. */
 let shown: { map: SurfaceMap; base: SurfaceMap | null; what: string; cumulative: boolean; windowSteps: number } | null = null;
@@ -336,7 +342,7 @@ async function loadParticles(g: number): Promise<void> {
     layer.setTrails(resultsViewStore.get().trails);
     const look = layer.setParticleLook(resultsViewStore.get().look);
     renderNow();
-    set({ particles: { state: 'shown', bandHz: band, particles: p.particleCount }, trailRefusal: layer.trailRefusal, look, lookRefusal: { glow: layer.particleLookRefusal('glow'), rays: layer.particleLookRefusal('rays') } });
+    set({ particles: { state: 'shown', bandHz: band, particles: p.particleCount }, trailRefusal: layer.trailRefusal, look, lookRefusal: { glow: layer.particleLookRefusal('glow'), rays: layer.particleLookRefusal('rays') }, warmDepth: layer.gpu.depthDb() });
   } catch (e) {
     if (!fresh(g)) return;
     const err = asCmdError(e);
@@ -432,6 +438,11 @@ export const resultsView = {
     if (layer.particleLookRefusal(look)) return;
     set({ look: layer.setParticleLook(look) });
     renderNow();
+  },
+  /** Round 2: the map at full strength while the light plays, or faded to 25 %. */
+  setMapFull(full: boolean): void {
+    set({ mapFull: full });
+    setMapWhilePlaying(full);
   },
   /** Decision 69: the light's bloom, off (no bloom pass), soft or full. */
   setGlow(g: Glow): void {

@@ -13,11 +13,14 @@
 //   - 'glow': soft round sprites, a gaussian core and halo, sized by level and attenuated with depth, with a
 //     faint per-particle shimmer from a hashed phase; trails over the last steps of each path (the card's Trails)
 //     that cool along their length, head colour to crimson to black, as screen-space ribbons.
-//   - 'rays': each particle's whole path up to the step, every pair of consecutive records a faint ribbon in
-//     that segment's colour, so the colour steps down the ramp at each bounce as the energy drops; each bounce
+//   - 'rays': each particle's whole path up to the step, every pair of consecutive records a 2.5 px ribbon in
+//     that segment's colour on a ramp fitted to the step (the loudest particle down to 6 dB under the field's
+//     level then), so every path cools through the whole ramp, white-hot at the source to crimson at its
+//     newest bounces; a segment burns at full light for its first steps, then keeps an ember glow; each bounce
 //     (raysData.ts `bounceRecords`) flashes a spark for SPARK_STEPS steps, expanding and fading. Heads glow.
 //   - The benchmark (`bench`) replays the saved paths as many times as asked, copy c offset by a fixed jitter
-//     (raysData.ts `copyJitter`), for a million particles from the 400 or so a run saves.
+//     (raysData.ts `copyJitter`): a visual density for measuring the GPU, not more particles. Off unless a test
+//     hook asks; while it is on the timeline card says so in words.
 //
 // The WebGL2 fallback has no storage buffers in the vertex stage: there 'glow' is the same sprites drawn
 // once per saved record, kept at its own step (particles.ts `keptRecord`), without trails, and 'rays' is
@@ -27,9 +30,9 @@ import { MeshBasicNodeMaterial, PointsNodeMaterial, StorageBufferAttribute, type
 import type { Particles } from '../../resultsData';
 import { keptRecord, recordSteps } from './particles';
 import { NODE_OPS } from './mapNodes';
-import { bounceRecords, particleTable, recordOwners, recordTable } from './raysData';
+import { bounceRecords, particleTable, raySpanDb, recordOwners, recordTable, stepLevels } from './raysData';
 import { T } from './tsl';
-import { WARM_DEPTH_DB, warmLut } from './warmRamp';
+import { fitDepthDb, WARM_DEPTH_DB, warmLut } from './warmRamp';
 
 const {
   bitOr,
@@ -75,7 +78,9 @@ export const RAYS_REFUSAL_WEBGL = 'Rays need WebGPU (storage buffers and compute
 
 /** The glow trail's segments; its length follows the timeline card's Trails choice (0: particles only). The spark's life in steps. */
 const TRAIL_SEGMENTS = 6;
-export const SPARK_STEPS = 4;
+export const SPARK_STEPS = 6;
+/** Rays: the steps over which a segment cools from full light to its ember glow. */
+const RAY_FRESH = 30;
 
 type N = ReturnType<typeof float>;
 
@@ -90,23 +95,42 @@ const LUT = (() => {
   return t;
 })();
 
-/** warmRamp.ts `warmPlace` on the GPU: 0 to 1 over the top WARM_DEPTH_DB re the loudest (`logMax`, dB). */
-function placeOf(energy: N, logMax: N): N {
+/** The ramp's span for the band shown, dB below the loudest (warmRamp.ts `fitDepthDb`); the legend shows it. */
+const RAMP_DEPTH = uniform(WARM_DEPTH_DB);
+/** The view's depth range across the model (engine.ts sets it with the distance fade): far light fades a little. */
+const DEPTH_NEAR = uniform(0);
+const DEPTH_FAR = uniform(1);
+
+/** The rays' span: from the loudest particle down to 6 dB under the field's level at the step (raysData.ts `raySpanDb`). */
+const RAY_DEPTH = uniform(WARM_DEPTH_DB);
+
+/** warmRamp.ts `warmPlace` on the GPU: 0 to 1 over `span` dB re the loudest (`logMax`, dB). */
+function placeOf(energy: N, logMax: N, span: N = RAMP_DEPTH): N {
   const db = log2(max(energy, 1e-30)).mul(10 * 0.3010299956639812);
-  return select(energy.greaterThan(0), clamp(db.sub(logMax).add(WARM_DEPTH_DB).div(WARM_DEPTH_DB), 0, 1), float(0));
+  return select(energy.greaterThan(0), clamp(db.sub(logMax).add(span).div(span), 0, 1), float(0));
 }
+
+/** Light at view depth `w`: full at the model's near side, 45 % at its far side. */
+const depthFade = (w: N): N => float(1).sub(T.smoothstep(DEPTH_NEAR, DEPTH_FAR, w).mul(0.55));
 
 /** The ramp's colour at `x`, linear. */
 const warm = (x: N): N => texture(LUT, vec2(x.mul(255 / 256).add(0.5 / 256), 0.5)).rgb;
 
 /** Light by level: an ember at the floor, past white (into the bloom) at the top. */
-const brightness = (x: N): N => float(0.04).add(pow(x, 2.6).mul(1.5));
+const brightness = (x: N): N => float(0.12).add(pow(x, 2.2).mul(2.2));
 
-/** A soft round sprite: a gaussian core and a wider halo, zero at the rim. */
+/** A spark of light: a hot core about a third of the sprite across and a tight halo, zero at the rim. */
 function sprite(): N {
   const q = uv().sub(0.5).mul(2);
   const r2 = dot(q, q);
-  return exp(r2.mul(-9)).add(exp(r2.mul(-2.5)).mul(0.3)).mul(clamp(float(1).sub(r2), 0, 1));
+  return exp(r2.mul(-22)).add(exp(r2.mul(-6)).mul(0.22)).mul(clamp(float(1).sub(r2), 0, 1));
+}
+
+/** A spark's flash: a soft ring that opens out, for the bounce sparks. */
+function flash(): N {
+  const q = uv().sub(0.5).mul(2);
+  const r2 = dot(q, q);
+  return exp(r2.mul(-10)).add(exp(r2.sub(0.45).mul(r2.sub(0.45)).mul(-60)).mul(0.6)).mul(clamp(float(1).sub(r2), 0, 1));
 }
 
 /** The u32 hash of raysData.ts `copyJitter` on the GPU: a copy's fixed offset, 0 for copy 0. */
@@ -157,12 +181,12 @@ function headMaterial(pos: N, x: N, alive: N, phase: N, time: N, size: N, gain: 
   const m = new PointsNodeMaterial({ ...additive(), sizeAttenuation: false });
   m.alphaToCoverage = false;
   m.positionNode = pos;
-  // Attenuated with depth, as a point of light would be, but held between 2.5 and 18 px so a particle
-  // passing the camera does not fill the view and a far one does not vanish.
+  // Attenuated with depth, as a point of light would be, but held between 4 and 10 px (the hot core a third of
+  // that): sharp sparks, never a blur that fills the view as a particle passes the camera.
   const depth = max(cameraViewMatrix.mul(vec4(pos, 1)).z.negate(), 0.05);
-  m.sizeNode = select(alive, clamp(size.mul(viewportSize.y).div(depth), 2.5, 18).mul(mix(0.45, 1.25, x)), float(0));
+  m.sizeNode = select(alive, clamp(size.mul(viewportSize.y).div(depth), 4, 10).mul(mix(0.7, 1.15, x)), float(0));
   const shimmer = float(0.86).add(sin(time.mul(2.3).add(phase.mul(6.2831853))).mul(0.14));
-  m.colorNode = vec4(varying(warm(x).mul(brightness(x)).mul(shimmer).mul(gain)), sprite());
+  m.colorNode = vec4(varying(warm(x).mul(brightness(x)).mul(shimmer).mul(gain).mul(depthFade(depth))), sprite());
   return m;
 }
 
@@ -189,6 +213,8 @@ export class GpuParticles {
   private meta: StorageBufferAttribute | null = null;
   private owners: StorageBufferAttribute | null = null;
   private tablesOf: Particles | null = null;
+  /** Per step, the field's mean level (raysData.ts `stepLevels`), for the rays' span. */
+  private levels: Float32Array | null = null;
   private state: StorageBufferAttribute | null = null;
   private kernel: unknown = null;
   private heads: Sprite | null = null;
@@ -222,6 +248,8 @@ export class GpuParticles {
   setParticles(p: Particles | null, logMax: number): void {
     this.source = p;
     this.logMax.value = logMax;
+    this.levels = p ? stepLevels(p, Math.max(1, p.maxSteps)) : null;
+    RAMP_DEPTH.value = p ? fitDepthDb(p.energies, logMax) : WARM_DEPTH_DB;
     this.build(p ? p.particleCount : 0, 0);
   }
 
@@ -247,9 +275,26 @@ export class GpuParticles {
     this.apply();
   }
 
+  /** The ramp's span for the band shown, dB below its loudest particle (the legend's floor). */
+  depthDb(): number {
+    return RAMP_DEPTH.value as number;
+  }
+
+  /** The view's depth across the model (the distance fade's range): far light fades a little. */
+  setDepthRange(near: number, far: number): void {
+    DEPTH_NEAR.value = near;
+    DEPTH_FAR.value = Math.max(far, near + 1e-3);
+  }
+
+  /** The rays' ramp span at step `t`, dB below the loudest (the legend's floor in Rays). */
+  raySpanAt(t: number): number {
+    return this.levels ? raySpanDb(this.levels, t, this.logMax.value as number) : WARM_DEPTH_DB;
+  }
+
   /** The timeline's step, fractional while it plays. */
   setTime(t: number): void {
     this.time.value = t;
+    RAY_DEPTH.value = this.raySpanAt(t);
   }
 
   /** The benchmark: `n` particles (the saved ones replayed, a fixed offset per copy), or back to the file's own with null. */
@@ -263,6 +308,12 @@ export class GpuParticles {
 
   particles(): number {
     return this.count;
+  }
+
+  /** The benchmark's replication in force, or null: the saved particles and how many times each path is drawn. */
+  replicas(): { saved: number; copies: number } | null {
+    const p = this.source;
+    return p && this.count > p.particleCount ? { saved: p.particleCount, copies: Math.round(this.count / p.particleCount) } : null;
   }
 
   /** Runs the compute pass if the look needs it and the time moved; call before each render. */
@@ -383,7 +434,8 @@ export class GpuParticles {
     tm.vertexNode = ribbon(pa.xyz, pb.xyz, float(1.4).add(px.mul(1.6)), pa.w.greaterThanEqual(0).and(pb.w.greaterThanEqual(0)));
     const u = float(seg).add(positionGeometry.x.add(0.5)).div(TRAIL_SEGMENTS);
     const cool = px.mul(pow(float(1).sub(u), 0.8));
-    tm.colorNode = vec4(varying(warm(cool).mul(brightness(px).mul(0.55)).mul(pow(float(1).sub(u), 1.6)).mul(this.gain)), 1);
+    const tw = cameraProjectionMatrix.mul(cameraViewMatrix).mul(vec4(pa.xyz, 1)).w;
+    tm.colorNode = vec4(varying(warm(cool).mul(brightness(px).mul(0.5)).mul(pow(float(1).sub(u), 1.6)).mul(this.gain).mul(depthFade(tw))), 1);
     this.trails = new Mesh(quads(count * TRAIL_SEGMENTS), tm);
 
     // Rays: every pair of consecutive records of the saved particles, up to the step.
@@ -395,9 +447,16 @@ export class GpuParticles {
     const stepOfNext = float(om.z.add(k.add(uint(1)).sub(om.x)));
     const ra = recs.element(k);
     const rb = recs.element(k.add(uint(1)));
-    const rx = placeOf(ra.w, this.logMax);
-    rm.vertexNode = ribbon(ra.xyz, rb.xyz, float(1.1), same.and(stepOfNext.lessThanEqual(this.time)));
-    rm.colorNode = vec4(varying(warm(rx).mul(float(0.004).add(pow(rx, 3).mul(0.06)))), 1);
+    const rx = placeOf(ra.w, this.logMax, RAY_DEPTH);
+    // Each segment in its particle's colour on that segment: a path cools down the whole ramp, bounce by
+    // bounce, white-hot at the source to crimson and ember at its late reflections. 2.5 px, additive; only the
+    // hottest segments cross the bloom's threshold. Older segments of a path dim a little, so the front reads.
+    rm.vertexNode = ribbon(ra.xyz, rb.xyz, float(2.5), same.and(stepOfNext.lessThanEqual(this.time)));
+    const rw = cameraProjectionMatrix.mul(cameraViewMatrix).mul(vec4(ra.xyz, 1)).w;
+    // A path's last RAY_FRESH steps burn at full light; older segments keep their colour as an ember glow.
+    const ageR = this.time.sub(stepOfNext).max(0);
+    const fresh = mix(float(0.12), float(1), exp(ageR.div(RAY_FRESH).negate()));
+    rm.colorNode = vec4(varying(warm(rx).mul(mix(float(0.07), float(0.3), pow(rx, 1.5))).mul(fresh).mul(depthFade(rw))), 1);
     this.rays = new Mesh(quads(Math.max(0, p.recordCount - 1)), rm);
 
     // Sparks at the bounces: a flash for SPARK_STEPS steps, expanding and fading, in the particle's colour then.
@@ -415,11 +474,11 @@ export class GpuParticles {
     sm.alphaToCoverage = false;
     sm.positionNode = instancedBufferAttribute(new InstancedBufferAttribute(bx, 3));
     const age = this.time.sub(instancedBufferAttribute(new InstancedBufferAttribute(bs, 1))).div(SPARK_STEPS);
-    const sx = placeOf(instancedBufferAttribute(new InstancedBufferAttribute(be, 1)), this.logMax);
+    const sx = placeOf(instancedBufferAttribute(new InstancedBufferAttribute(be, 1)), this.logMax, RAY_DEPTH);
     const live = age.greaterThanEqual(0).and(age.lessThan(1));
-    sm.sizeNode = select(live, mix(5, 26, pow(clamp(age, 0, 1), 0.6)), float(0));
-    const fadeS = pow(float(1).sub(clamp(age, 0, 1)), 2);
-    sm.colorNode = vec4(varying(warm(sx).mul(brightness(sx).mul(1.6).add(0.4)).mul(fadeS)), sprite());
+    sm.sizeNode = select(live, mix(6, 30, pow(clamp(age, 0, 1), 0.5)), float(0));
+    const fadeS = pow(float(1).sub(clamp(age, 0, 1)), 1.6);
+    sm.colorNode = vec4(varying(warm(max(sx, 0.35)).mul(brightness(sx).mul(1.3).add(1.2)).mul(fadeS)), flash());
     this.sparks = new Sprite(sm);
     this.sparks.count = Math.max(1, bounces.length);
 

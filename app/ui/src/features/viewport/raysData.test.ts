@@ -2,7 +2,7 @@ import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import type { Particles } from '../../resultsData.ts';
 import { aliveCounts } from './particles.ts';
-import { aliveAt, bounceRecords, copyJitter, particleAt, particleTable, recordOwners, recordTable } from './raysData.ts';
+import { aliveAt, bounceRecords, copyJitter, particleAt, particleTable, raySpanDb, recordOwners, recordTable, stepLevels } from './raysData.ts';
 
 /** Two particles: one along x from step 2 (bouncing back at its third record), one still for one record at step 5. */
 function sample(): Particles {
@@ -51,4 +51,16 @@ test("the benchmark's copies: copy 0 is the file's own particle, every other a f
   assert.deepEqual(copyJitter(7, 0.6), a);
   for (const v of a) assert.ok(Math.abs(v) <= 0.3);
   assert.notDeepEqual(copyJitter(8, 0.6), a);
+});
+
+test("the rays' ramp follows the field: the mean level per step, and the span down to 6 dB under it", () => {
+  const p = sample();
+  const lv = stepLevels(p, 8);
+  assert.ok(Number.isNaN(lv[0]) && Number.isNaN(lv[1]), 'no particle before step 2');
+  assert.ok(Math.abs(lv[2] - 0) < 1e-9);
+  assert.ok(Math.abs(lv[5] - (10 * Math.log10(0.125) + 10 * Math.log10(2)) / 2) < 1e-6, 'step 5: both particles');
+  assert.equal(raySpanDb(lv, 2, 0), 12, 'at the source: the narrowest span');
+  assert.equal(raySpanDb(Float32Array.from([0, -40]), 1, 0), 46);
+  assert.equal(raySpanDb(Float32Array.from([0, -80]), 1, 0), 60);
+  assert.equal(raySpanDb(Float32Array.from([0, NaN]), 1, 0), 12, 'a step with no energy reads the one before');
 });

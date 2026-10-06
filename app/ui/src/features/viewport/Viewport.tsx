@@ -19,7 +19,7 @@ import { MeasureTool, OrbitTool, ReceiverTool, SectionTool, SelectTool } from '.
 import { REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
 import { onWindowEntityKey } from '../../chrome/sceneUi';
 import { sceneStore, selectionStore, toolStore, useStore, type Tool } from '../../store';
-import { attachViewport, frameModel, setView, viewportUi, type ViewMode } from './engine';
+import { attachViewport, frameModel, presentStore, setPresent, setTurntable, setView, viewportUi, type ViewMode } from './engine';
 import { VIEWPORT_LIBRARIES } from './libraries';
 import { ResultsOverlay } from './ResultsOverlay';
 import { ViewStyleMenu } from './ViewStyleMenu';
@@ -33,6 +33,34 @@ const SourceTool = () => (
     <path d="M10 11.6V17M7 17h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>
 );
+
+/** Present: a screen with nothing over it, in the toolbar's line style. */
+const PresentTool = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <rect x="2.5" y="4" width="15" height="10" rx="1" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M7 17h6M10 14v3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
+/** Turntable: an arc around a point. */
+const TurntableTool = () => (
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <ellipse cx="10" cy="12" rx="7" ry="3" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M15.5 7.5l1.5 2.5-2.8.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <circle cx="10" cy="7" r="1.8" fill="currentColor" />
+  </svg>
+);
+
+/** H: the presentation view on and off; Esc leaves it; O: the turntable while presenting. Not while typing. */
+function onPresentKey(e: KeyboardEvent): void {
+  if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+  const t = e.target;
+  if (t instanceof HTMLElement && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return;
+  const p = presentStore.get();
+  if (e.key === 'h' || e.key === 'H') setPresent(!p.on);
+  else if (e.key === 'Escape' && p.on) setPresent(false);
+  else if ((e.key === 'o' || e.key === 'O') && p.on) setTurntable(!p.turntable);
+}
 
 /** Frame model: the model's box inside four corner marks, in the toolbar's line style. */
 const FrameTool = () => (
@@ -83,6 +111,11 @@ export function Viewport() {
       window.removeEventListener('keydown', esc);
     };
   }, [menu]);
+  // Round 2: the presentation view's keys.
+  useEffect(() => {
+    window.addEventListener('keydown', onPresentKey);
+    return () => window.removeEventListener('keydown', onPresentKey);
+  }, []);
   // Del and F2 on a source or receiver picked in the view (the panels handle their own).
   useEffect(() => {
     window.addEventListener('keydown', onWindowEntityKey);
@@ -240,6 +273,29 @@ export function Viewport() {
           onClick={() => frameModel()}
         >
           <FrameTool />
+        </button>
+        <button
+          className="tool"
+          data-tool="present"
+          aria-label="Present"
+          title={ui.hasModel ? 'Present (H): the view alone, every panel hidden; H or Esc brings them back' : 'Present (H): no model to show'}
+          disabled={!ui.hasModel}
+          onClick={() => setPresent(true)}
+        >
+          <PresentTool />
+        </button>
+        <button
+          className="tool"
+          data-tool="turntable"
+          aria-label="Turntable"
+          title={ui.hasModel ? 'Turntable (O while presenting): the camera circles the room slowly; a drag stops it' : 'Turntable: no model to show'}
+          disabled={!ui.hasModel}
+          onClick={() => {
+            setPresent(true);
+            setTurntable(true);
+          }}
+        >
+          <TurntableTool />
         </button>
       </div>
 

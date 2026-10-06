@@ -552,3 +552,17 @@
 .vp-warm-legend .vp-legend-bar {
   height: 6px;
 }
+
+/* Round 2: the presentation view (H). The canvas alone: every panel, label and tool hidden. */
+html.present .menubar,
+html.present .stepbar,
+html.present .statusbar,
+html.present .scene,
+html.present .props,
+html.present .dock,
+html.present .viewport > :not(.viewport-host) {
+  display: none !important;
+}
+.vp-replica-note {
+  color: var(--red-hi);
+}

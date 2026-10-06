@@ -28,7 +28,7 @@ import { registerHook } from '../../testhooks';
 import { asCmdError } from '../../actions';
 import { exportParams, exportView, lastExportStore } from '../export/exportActions';
 import { Animator, animatorStore, rateText, readout, SPEEDS, speedLabel, stepsPerSecond } from './animator';
-import { drawnSteps, framePixels, frameRgba, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, resultsLayer } from './engine';
+import { drawnSteps, framePixels, frameRgba, mapFacePoint, mapPixels, mapPointerStore, offMapPoint, replicaStore, resultsLayer } from './engine';
 import { CUMULATIVE_HINT, CUMULATIVE_NOTE } from './cumulative';
 import { CONTOUR_STEPS_DB, contourText, parseRange, probeOf, type ProbeView } from './mapView';
 import { TRAIL_HINT, TRAIL_LENGTHS, TRAIL_NOTE } from './particles';
@@ -315,7 +315,10 @@ function RangeFields({ lo, hi }: { lo: number; hi: number }) {
 export function ResultsOverlay() {
   const step = useStore(stepStore);
   const v = useStore(resultsViewStore);
+  const replicas = useStore(replicaStore);
   const anim = useStore(animatorStore);
+  // The legend's span: the band's fitted span, or in Rays the span fitted to the step shown.
+  const warmSpan = v.look === 'rays' ? resultsLayer().gpu.raySpanAt(anim.step) : v.warmDepth;
   const scene = useStore(sceneStore);
 
   useEffect(() => {
@@ -630,14 +633,30 @@ export function ResultsOverlay() {
                     </button>
                   ))}
                 </div>
-                <div className="vp-warm-legend" data-part="warm-legend" data-results-region title="Each particle's level against the loudest particle of the band, drawn as light: louder is hotter and brighter.">
+                <div className="vp-row" role="radiogroup" aria-label="Map while playing" data-part="map-while-playing">
+                  <span className="vp-row-label" title="While the particles play the map fades so their light carries the image; Full keeps it as measured.">
+                    Map
+                  </span>
+                  <button className="vp-chip-btn mono" role="radio" data-map-full="false" aria-checked={!v.mapFull} onClick={() => resultsView.setMapFull(false)}>
+                    Faded
+                  </button>
+                  <button className="vp-chip-btn mono" role="radio" data-map-full="true" aria-checked={v.mapFull} onClick={() => resultsView.setMapFull(true)}>
+                    Full
+                  </button>
+                </div>
+                <div className="vp-warm-legend" data-part="warm-legend" data-results-region title="Each particle's level against the loudest particle of the band, drawn as light: louder is hotter and brighter. The span fits this band's particles.">
                   <div className="vp-legend-bar" style={{ background: warmGradient() }} />
                   <div className="vp-legend-labels">
-                    <span>{warmLabels().lo}</span>
-                    <span>{warmLabels().mid}</span>
-                    <span>{warmLabels().hi} re loudest</span>
+                    <span>{warmLabels(warmSpan).lo}</span>
+                    <span>{warmLabels(warmSpan).mid}</span>
+                    <span>{warmLabels(warmSpan).hi} re loudest</span>
                   </div>
                 </div>
+                {replicas && (
+                  <div className="vp-diff-note vp-replica-note" data-part="replica-note" role="status">
+                    {replicas.saved.toLocaleString('en-GB')} saved paths, each shown {replicas.copies.toLocaleString('en-GB')}×, offset: a visual density, not more particles.
+                  </div>
+                )}
               </>
             )}
             {v.trails > 0 && !v.trailRefusal && (

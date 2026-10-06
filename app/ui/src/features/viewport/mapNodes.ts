@@ -136,7 +136,7 @@ export const cool = (t: N): N => ramp(COOL_STOPS, COOL.length, t);
  * The map's colour per fragment (a `fragmentNode`, raw), from the vertex stage's flat face value
  * (x: has energy, y: level) and smooth node value (x: every corner has energy, y: level).
  */
-export function mapColour(look: LookUniforms, flat: N, smooth: N): N {
+export function mapColour(look: LookUniforms, flat: N, smooth: N, alpha: N = float(1)): N {
   return Fn(() => {
     // Smooth where every corner of the face has energy, else the face's own flat colour.
     const smoothHere = look.smooth.equal(1).and(smooth.x.greaterThan(0.999)).toVar();
@@ -154,7 +154,7 @@ export function mapColour(look: LookUniforms, flat: N, smooth: N): N {
       c.assign(mix(c, vec3(0.93, 0.93, 0.94), line.mul(0.85)));
     });
     Discard(flat.x.lessThan(0.5));
-    return vec4(c, 1);
+    return vec4(c, alpha);
   })();
 }
 

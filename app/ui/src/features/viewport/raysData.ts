@@ -99,3 +99,32 @@ export function bounceRecords(p: Particles, minDeg = 25): Uint32Array {
   }
   return Uint32Array.from(out);
 }
+
+/**
+ * Per step, the mean level (dB, 10 log10 E) of the records alive at that step; NaN where none has energy.
+ * The rays fit their ramp to it: at step t a path spans the loudest particle to the field's level at t.
+ */
+export function stepLevels(p: Particles, steps: number): Float32Array {
+  const sum = new Float64Array(steps);
+  const n = new Uint32Array(steps);
+  for (let i = 0; i < p.particleCount; i++) {
+    for (let k = p.offsets[i]; k < p.offsets[i + 1]; k++) {
+      const s = p.firstStep[i] + (k - p.offsets[i]);
+      const e = p.energies[k];
+      if (s < steps && e > 0 && Number.isFinite(e)) {
+        sum[s] += 10 * Math.log10(e);
+        n[s]++;
+      }
+    }
+  }
+  return Float32Array.from(sum, (v, s) => (n[s] ? v / n[s] : NaN));
+}
+
+/** The rays' ramp span at step `t`, dB below the loudest (`logMax`): down to 6 dB under the field's mean level then, 12 to 60 dB. */
+export function raySpanDb(levels: Float32Array, t: number, logMax: number): number {
+  let s = Math.min(levels.length - 1, Math.max(0, Math.floor(t)));
+  while (s > 0 && !Number.isFinite(levels[s])) s--;
+  const l = levels[s];
+  if (!Number.isFinite(l)) return 60;
+  return Math.min(60, Math.max(12, Math.ceil(logMax - l + 6)));
+}

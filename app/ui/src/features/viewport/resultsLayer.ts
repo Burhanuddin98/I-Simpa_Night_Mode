@@ -165,6 +165,8 @@ export class ResultsLayer {
   private maxTexture = 16384;
   private readonly mu: MapUniforms = mapUniforms(PLACEHOLDER);
   private readonly lu = lookUniforms();
+  /** The map's opacity: 1 (opaque, as measured) except while the particles' light plays (round 2: 25 %). */
+  private readonly mapAlpha = uniform(1);
   private readonly map: Mesh<BufferGeometry, MeshBasicNodeMaterial>;
   /** The playback: one sprite instance per record, its size 0 unless the record is at the step. */
   private particles: Sprite;
@@ -208,7 +210,7 @@ export class ResultsLayer {
     const face = int(attribute('aFace', 'float').add(0.5));
     const flat = varying(faceLevel(this.mu, this.lu, face)).setInterpolation('flat');
     const smooth = varying(nodeLevel(this.mu, this.lu, int(attribute('aAdj', 'float').add(0.5)), int(attribute('aAdjN', 'float').add(0.5))));
-    mat.fragmentNode = mapColour(this.lu, flat, smooth);
+    mat.fragmentNode = mapColour(this.lu, flat, smooth, this.mapAlpha);
     this.map = new Mesh(emptyGeometry(), mat);
     this.particles = new Sprite(new PointsNodeMaterial());
     const trailMat = new LineBasicNodeMaterial({ transparent: true, depthWrite: false });
@@ -573,6 +575,18 @@ export class ResultsLayer {
     this.pStep.value = step;
     this.tStep.value = step;
     this.gpu.setTime(step);
+  }
+
+  /** The map faded to `a` (1: as measured, opaque, drawn exactly as before); see-through below 1. */
+  setMapFade(a: number): void {
+    const m = this.map.material;
+    const faded = a < 1;
+    if (m.transparent !== faded) {
+      m.transparent = faded;
+      m.depthWrite = !faded;
+      m.needsUpdate = true;
+    }
+    this.mapAlpha.value = a;
   }
 
   /** Hides the map for one draw (the m12 pixel hook); returns the restore. */
