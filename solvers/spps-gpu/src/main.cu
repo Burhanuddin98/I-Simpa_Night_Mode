@@ -45,8 +45,10 @@ struct GpuAcc {
   // spreads the atomics and keeps each copy's rounding to a few thousand adds.
   __host__ __device__ void addTotal(int step, double e) {
 #ifdef __CUDA_ARCH__
+#ifndef SPG_NO_TOTAL
     unsigned slot = (blockIdx.x * blockDim.x + threadIdx.x) & (TOTAL_REPLICAS - 1);
     atomicAdd(&total[(size_t)slot * nbSteps + step], e);
+#endif
 #endif
   }
   __host__ __device__ void addRp(int r, int step, int src, double e, double lf, double lfc, double ix, double iy, double iz) {
@@ -85,23 +87,68 @@ struct GpuAcc {
   }
 };
 
-__global__ void kFamilies(Scene s, const SrcBand* srcs, int N, long long first, long long count, GpuAcc acc, WalkRec* dump) {
-  long long g = first + (long long)blockIdx.x * blockDim.x + threadIdx.x;
-  if (g >= first + count) return;
-  int src = (int)(g / N);
-  uint32_t idpart = (uint32_t)(g % N);
-  const SrcBand sb = srcs[src];
-  if (!sb.active) return;
+#ifndef SPG_MINB
+#define SPG_MINB 8   // 64 registers a thread: measured fastest on CR4 (1, 4, 6, 8)
+#endif
+// Persistent slots: one per resident thread. A slot holds a family in flight (the particle, its
+// child queue) across launches; each launch advances every slot by at most `budget` steps, taking
+// the next family from a shared counter when its family ends. Launches stay short (the display
+// driver's watchdog), and no launch waits on one long-lived particle while the rest of the GPU idles.
+struct Slot {
+  Particle p;
+  long long fam;
+  int phase;               // 0 needs a family, 1 primary running, 2 child running, 3 no work left
+  int qh, qn;
+  uint32_t nextChild, partIndex;
+  int curStart;
+  uint32_t nch;
+  uint64_t chs;
+};
+__global__ void __launch_bounds__(128, SPG_MINB) kSlots(Scene s, const SrcBand* srcs, int N, long long total, GpuAcc acc, Slot* slots,
+                                                       Particle* queues, unsigned long long* nextFam, int budget, int nslots,
+                                                       unsigned int* busy, WalkRec* dump) {
+  int sid = blockIdx.x * blockDim.x + threadIdx.x;
+  if (sid >= nslots) return;
+  Slot st = slots[sid];
+  if (st.phase == 3) return;
   NullRec rec;
-  Walker<GpuAcc, NullRec> w(s, acc, rec);
-  if (dump) {
-    WalkRec& d = dump[g];
-    int st; double E; uint32_t steps, ch; uint64_t chs;
-    w.family(sb, idpart, src, 0, &steps, &st, &E, &ch, &chs);
-    d.steps = steps; d.state = st; d.E = E; d.children = ch; d.childSteps = chs; d.pad = 0;
-  } else {
-    w.family(sb, idpart, src, 0, nullptr, nullptr, nullptr, nullptr, nullptr);
+  Walker<GpuAcc, NullRec> w(s, acc, rec, queues + (size_t)sid * QCAP);
+  w.qh = st.qh; w.qn = st.qn; w.nextChild = st.nextChild; w.partIndex = st.partIndex;
+  int b = budget;
+  for (;;) {
+    if (st.phase == 0) {
+      unsigned long long g = atomicAdd(nextFam, 1ull);
+      if (g >= (unsigned long long)total) { st.phase = 3; break; }
+      int src = (int)(g / N);
+      uint32_t idpart = (uint32_t)(g % N);
+      const SrcBand sb = srcs[src];
+      if (!sb.active) continue;
+      st.fam = (long long)g;
+      w.initFamily(sb, idpart, src, 0, st.p);
+      w.start(st.p);
+      st.phase = 1; st.curStart = st.p.step; st.nch = 0; st.chs = 0;
+    }
+    if (!w.advance(st.p, b)) break;   // the budget ran out mid-run: resume at the next launch
+    if (st.phase == 1) {
+      if (dump) { WalkRec& d = dump[st.fam]; d.steps = (uint32_t)(st.p.step - st.curStart); d.state = st.p.state; d.E = st.p.E; d.pad = 0; }
+    } else {
+      st.nch++;
+      st.chs += (uint64_t)(st.p.step - st.curStart);
+    }
+    Particle c;
+    if (w.popChild(c)) {
+      st.p = c;
+      w.start(st.p);
+      st.curStart = st.p.step;
+      st.phase = 2;
+    } else {
+      if (dump) { WalkRec& d = dump[st.fam]; d.children = st.nch; d.childSteps = st.chs; }
+      st.phase = 0;
+    }
   }
+  st.qh = w.qh; st.qn = w.qn; st.nextChild = w.nextChild; st.partIndex = w.partIndex;
+  slots[sid] = st;
+  if (st.phase != 3) atomicAdd(busy, 1u);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -219,6 +266,7 @@ struct HostRec {
 
 // ---------------------------------------------------------------------------------------------
 struct HostScene {
+  std::vector<TFace> tf;
   std::vector<int> rpOff, rpList, cutOff, cutList, smat;
   std::vector<unsigned char> senc;
   std::vector<V3> sn, rpPos, rpOri;
@@ -345,6 +393,12 @@ int main(int argc, char** argv) {
   }
   hs.rpOff[T] = (int)hs.rpList.size();
   hs.cutOff[T] = (int)hs.cutList.size();
+  for (int k = 0; k < 4 * T; k++) {
+    TFace F;
+    F.p0 = m.nodes[m.fv[3 * k]]; F.p1 = m.nodes[m.fv[3 * k + 1]]; F.p2 = m.nodes[m.fv[3 * k + 2]]; F.n = m.fn[k];
+    F.nb = m.nb[k]; F.sf = m.sf[k]; F.rf = m.rf[k]; F.pad = 0;
+    hs.tf.push_back(F);
+  }
   for (const auto& f : m.faces) { hs.sn.push_back(f.normal); hs.smat.push_back(f.mat); hs.senc.push_back(f.enc >= 0 ? 1 : 0); }
   for (const auto& r : cfg.receivers) { hs.rpPos.push_back(r.pos); hs.rpOri.push_back(r.orient); }
   for (const auto& c : cfg.cuts) {
@@ -365,19 +419,26 @@ int main(int argc, char** argv) {
   base.saveSurfHist = cfg.saveSurf != 0; base.saveRpHist = cfg.saveRp != 0; base.seed = seed;
 
   // device copies of the band-independent arrays
-  struct Dev { V3 *nodes, *fn, *sn, *rpPos, *rpOri; int *fv, *nb, *sf, *rf, *corner, *rpOff, *rpList, *cutOff, *cutList, *smat; unsigned char* senc; CutPlane* cuts; MatBand* mat; SrcBand* srcs; } dv{};
+  struct Dev { TFace* tf; V3 *nodes, *fn, *sn, *rpPos, *rpOri; int *fv, *nb, *sf, *rf, *corner, *rpOff, *rpList, *cutOff, *cutList, *smat; unsigned char* senc; CutPlane* cuts; MatBand* mat; SrcBand* srcs; } dv{};
   GpuAcc ga{};
   WalkRec* dDump = nullptr;
+  Slot* dSlots = nullptr;
+  Particle* dQueues = nullptr;
+  unsigned long long* dNextFam = nullptr;
+  unsigned int* dBusy = nullptr;
+  int nslots = 0;
+  long long launches = 0;
   const long long totalFamilies = (long long)NS * cfg.nbPart;
   if (!cpu) {
     size_t freeB = 0, totB = 0;
     cudaMemGetInfo(&freeB, &totB);
-    size_t need = (surfN + cutN) * 4 + ((size_t)S * TOTAL_REPLICAS + 6ull * R * S + R * srcCols) * 8 + 64ull * 1048576;
+    size_t need = (surfN + cutN) * 4 + ((size_t)S * TOTAL_REPLICAS + 6ull * R * S + R * srcCols) * 8 + 64ull * 1048576 + 49152ull * (sizeof(Slot) + QCAP * sizeof(Particle)) * 2;
     if (need > freeB) {
       std::cerr << "spps-gpu: refused: surface_maps_too_large: the band's sums need " << need / 1048576 << " MiB of device memory, "
                 << freeB / 1048576 << " MiB are free; set recepteurs_surfaciques_pas_temps to a longer bin (patch 0001) or a coarser plane" << std::endl;
       return 2;
     }
+    dv.tf = upload(hs.tf);
     dv.nodes = upload(m.nodes); dv.fn = upload(m.fn); dv.sn = upload(hs.sn); dv.rpPos = upload(hs.rpPos); dv.rpOri = upload(hs.rpOri);
     dv.fv = upload(m.fv); dv.nb = upload(m.nb); dv.sf = upload(m.sf); dv.rf = upload(m.rf); dv.corner = upload(m.corner);
     dv.rpOff = upload(hs.rpOff); dv.rpList = upload(hs.rpList); dv.cutOff = upload(hs.cutOff); dv.cutList = upload(hs.cutList);
@@ -395,13 +456,27 @@ int main(int argc, char** argv) {
     check(cudaMalloc(&ga.states, 8 * 8), "states");
     check(cudaMalloc(&ga.overflowE, 8), "overflow");
     ga.nbSteps = S; ga.nbBins = NB; ga.nbSrc = NS; ga.bySource = base.bySource;
+    {
+      int perSM = 0;
+      cudaOccupancyMaxActiveBlocksPerMultiprocessor(&perSM, kSlots, 128, 0);
+      cudaDeviceProp prop;
+      cudaGetDeviceProperties(&prop, 0);
+      nslots = std::max(1, perSM) * 128 * prop.multiProcessorCount;
+      check(cudaMalloc(&dSlots, (size_t)nslots * sizeof(Slot)), "slots");
+      check(cudaMalloc(&dQueues, (size_t)nslots * QCAP * sizeof(Particle)), "queues");
+      check(cudaMalloc(&dNextFam, 8), "next");
+      check(cudaMalloc(&dBusy, 4), "busy");
+    }
     if (!dumpWalk.empty()) check(cudaMalloc(&dDump, std::max<long long>(1, totalFamilies) * sizeof(WalkRec)), "dump");
     Scene& b = base;
+    b.tf = dv.tf;
     b.nodes = dv.nodes; b.fv = dv.fv; b.fn = dv.fn; b.nb = dv.nb; b.sf = dv.sf; b.rf = dv.rf; b.corner = dv.corner;
     b.rpOff = dv.rpOff; b.rpList = dv.rpList; b.cutOff = dv.cutOff; b.cutList = dv.cutList; b.sn = dv.sn; b.smat = dv.smat;
     b.senc = dv.senc; b.mat = dv.mat; b.rpPos = dv.rpPos; b.rpOri = dv.rpOri; b.cuts = dv.cuts;
   }
 
+  double setupSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+  double retraceSeconds = 0, bandOutSeconds = 0, finishSeconds = 0;
   Report report(cfg, m);
   Progress prog;
   std::ofstream walkOut, sumsOut;
@@ -467,23 +542,30 @@ int main(int argc, char** argv) {
       cudaMemset(ga.states, 0, 64);
       cudaMemset(ga.overflowE, 0, 8);
       // launches short enough to stay well under the display driver's watchdog (TDR)
-      long long chunk = 16384, done = 0;
+      cudaMemset(dSlots, 0, (size_t)nslots * sizeof(Slot));
+      cudaMemset(dNextFam, 0, 8);
+      if (dDump) cudaMemset(dDump, 0, (size_t)totalFamilies * sizeof(WalkRec));
+      int budget = 256;   // steps a slot may advance in one launch, then sized for ~250 ms launches
       cudaEvent_t e0, e1;
       cudaEventCreate(&e0); cudaEventCreate(&e1);
-      while (done < totalFamilies) {
-        long long n = std::min(chunk, totalFamilies - done);
+      for (;;) {
+        cudaMemset(dBusy, 0, 4);
         cudaEventRecord(e0);
-        kFamilies<<<(unsigned)((n + 127) / 128), 128>>>(sc, dv.srcs, cfg.nbPart, done, n, ga, dDump);
+        kSlots<<<(unsigned)((nslots + 127) / 128), 128>>>(sc, dv.srcs, cfg.nbPart, totalFamilies, ga, dSlots, dQueues, dNextFam, budget, nslots, dBusy, dDump);
         cudaEventRecord(e1);
         check(cudaEventSynchronize(e1), "kernel");
         check(cudaGetLastError(), "kernel launch");
         float ms = 0;
         cudaEventElapsedTime(&ms, e0, e1);
         kernelSeconds += ms / 1000.0;
-        done += n;
-        double target = 300.0;   // ms
-        if (ms > 0) chunk = (long long)std::max(1024.0, std::min(4.0 * chunk, chunk * target / ms));
-        prog.show(100.0 * (bandsDone + (double)done / std::max(1LL, totalFamilies)) / nbCalc);
+        launches++;
+        unsigned int busy = 0;
+        unsigned long long taken = 0;
+        check(cudaMemcpy(&busy, dBusy, 4, cudaMemcpyDeviceToHost), "busy");
+        check(cudaMemcpy(&taken, dNextFam, 8, cudaMemcpyDeviceToHost), "next");
+        prog.show(100.0 * (bandsDone + (double)std::min<unsigned long long>(taken, totalFamilies) / std::max(1LL, totalFamilies)) / nbCalc);
+        if (busy == 0) break;
+        if (ms > 0) budget = (int)std::max(64.0, std::min(4.0 * budget, budget * 250.0 / ms));
       }
       cudaEventDestroy(e0); cudaEventDestroy(e1);
       {
@@ -509,6 +591,7 @@ int main(int argc, char** argv) {
       if (dDump) check(cudaMemcpy(walk.data(), dDump, (size_t)totalFamilies * sizeof(WalkRec), cudaMemcpyDeviceToHost), "copy");
     } else {
       // the CPU build: host pointers
+      sc.tf = hs.tf.data();
       sc.nodes = m.nodes.data(); sc.fv = m.fv.data(); sc.fn = m.fn.data(); sc.nb = m.nb.data(); sc.sf = m.sf.data(); sc.rf = m.rf.data();
       sc.corner = m.corner.data(); sc.rpOff = hs.rpOff.data(); sc.rpList = hs.rpList.data(); sc.cutOff = hs.cutOff.data();
       sc.cutList = hs.cutList.data(); sc.sn = hs.sn.data(); sc.smat = hs.smat.data(); sc.senc = hs.senc.data(); sc.mat = mats.data();
@@ -528,7 +611,8 @@ int main(int argc, char** argv) {
       const long long block = 65536;
       std::vector<Walker<CpuAcc, NullRec>*> walkers(nt, nullptr);
       std::vector<NullRec> recs(nt);
-      for (int t = 0; t < nt; t++) walkers[t] = new Walker<CpuAcc, NullRec>(sc, accs[t], recs[t]);
+      std::vector<std::vector<Particle>> queues(nt, std::vector<Particle>(QCAP));
+      for (int t = 0; t < nt; t++) walkers[t] = new Walker<CpuAcc, NullRec>(sc, accs[t], recs[t], queues[t].data());
       while (done < totalFamilies) {
         long long n = std::min(block, totalFamilies - done);
 #pragma omp parallel for schedule(dynamic, 64)
@@ -570,8 +654,10 @@ int main(int argc, char** argv) {
     // the particle file: SPPS marks every k-th particle of each source (sppsNantes.cpp:66-72, 129-138);
     // the same walk re-traces those particles on the host, identical paths, to record them
     if ((size_t)cfg.nbPartRender * NS != 0) {
+      auto tr0 = std::chrono::steady_clock::now();
       ParticleFiles pf(cfg, (int)bi);
       Scene hsc = sc;
+      hsc.tf = hs.tf.data();
       hsc.nodes = m.nodes.data(); hsc.fv = m.fv.data(); hsc.fn = m.fn.data(); hsc.nb = m.nb.data(); hsc.sf = m.sf.data(); hsc.rf = m.rf.data();
       hsc.corner = m.corner.data(); hsc.rpOff = hs.rpOff.data(); hsc.rpList = hs.rpList.data(); hsc.cutOff = hs.cutOff.data();
       hsc.cutList = hs.cutList.data(); hsc.sn = hs.sn.data(); hsc.smat = hs.smat.data(); hsc.senc = hs.senc.data(); hsc.mat = mats.data();
@@ -590,12 +676,14 @@ int main(int argc, char** argv) {
           bool flag = false;
           if (current >= 1) { flag = true; current = 0; }
           if (!flag) continue;
-          Walker<NullAcc, HostRec>* w = new Walker<NullAcc, HostRec>(hsc, na, hr);
+          std::vector<Particle> qb(QCAP);
+          Walker<NullAcc, HostRec>* w = new Walker<NullAcc, HostRec>(hsc, na, hr, qb.data());
           w->family(sb, (uint32_t)(idpart - 1), src, 1, nullptr, nullptr, nullptr, nullptr, nullptr);
           delete w;
         }
       }
       pf.close();
+      retraceSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - tr0).count();
     }
     if (walkOut) {
       int32_t hdr[2] = {(int32_t)bi, (int32_t)totalFamilies};
@@ -616,10 +704,14 @@ int main(int argc, char** argv) {
       uint64_t st[8] = {bs.states[0], bs.states[1], bs.states[2], bs.states[3], bs.states[4], bs.states[5], bs.childOverflow, 0};
       sumsOut.write((const char*)st, 64);
     }
+    auto to0 = std::chrono::steady_clock::now();
     report.band(bs);
+    bandOutSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - to0).count();
     bandsDone++;
   }
+  auto tf0 = std::chrono::steady_clock::now();
   report.finish();
+  finishSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - tf0).count();
   double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
   // the run's own record beside the outputs: what traced it, with which seed (a run is replayable)
   {
@@ -630,6 +722,9 @@ int main(int argc, char** argv) {
     for (char ch : d) { if (ch == '"' || ch == '\\') esc += '\\'; esc += ch; }
     j << "  \"device\": \"" << esc << "\",\n  \"seed\": " << seed << ",\n  \"seed_from_config\": " << (cfg.seed != 0 ? "true" : "false") << ",\n";
     j << "  \"rng\": \"philox4x32-10, key (seed, band << 16 | source), counter (particle, child, draw / 4, 0)\",\n";
+    j << "  \"setup_seconds\": " << setupSeconds << ",\n  \"retrace_seconds\": " << retraceSeconds << ",\n";
+    j << "  \"band_output_seconds\": " << bandOutSeconds << ",\n  \"finish_seconds\": " << finishSeconds << ",\n";
+    j << "  \"gpu_slots\": " << nslots << ",\n  \"gpu_launches\": " << launches << ",\n";
     j << "  \"kernel_seconds\": " << kernelSeconds << ",\n";
     j << "  \"trace_seconds\": " << traceSeconds << ",\n  \"wall_seconds\": " << wall << ",\n";
     j << "  \"child_queue_overflow\": " << overflowTotal << "\n}\n";

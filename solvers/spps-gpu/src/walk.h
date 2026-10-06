@@ -194,7 +194,15 @@ struct SrcBand {      // one source at the band, as runSourceCalculation sets up
   int tetra, type, startStep, active;
 };
 
+// One tetrahedron face as the walk reads it, packed: its three corners (copies of the mesh nodes,
+// bit for bit), its normal, the neighbour across it, its scene face and its surface-receiver face.
+struct TFace {
+  V3 p0, p1, p2, n;
+  int nb, sf, rf, pad;
+};
+
 struct Scene {
+  const TFace* tf;        // 4 per tetrahedron
   // tetrahedra, 4 faces each, index 4 t + f
   const V3* nodes;
   const int* fv;          // 3 node indices per tetra face
@@ -346,19 +354,19 @@ struct Walker {
   const Scene& s;
   Acc& acc;
   Rec& rec;
-  Particle q[QCAP];
+  Particle* q;          // the child queue, QCAP particles, storage owned by the caller
   int qh, qn;
   uint32_t nextChild;
   uint32_t partIndex;
 
-  SPG_HD Walker(const Scene& sc, Acc& a, Rec& r) : s(sc), acc(a), rec(r), qh(0), qn(0), nextChild(1), partIndex(0) {}
+  SPG_HD Walker(const Scene& sc, Acc& a, Rec& r, Particle* queue) : s(sc), acc(a), rec(r), q(queue), qh(0), qn(0), nextChild(1), partIndex(0) {}
 
   // CalculationCore.cpp:9-12 TetraFaceTest
   SPG_HD bool faceTest(int T, int f, V3 pos, V3 dir, float* t) {
-    int k = 4 * T + f;
-    if (dot(s.fn[k], dir) < EPS) {
+    const TFace& F = s.tf[4 * T + f];
+    if (dot(F.n, dir) < EPS) {
       float u, v;
-      if (intersect_triangle(pos, dir, s.nodes[s.fv[3 * k]], s.nodes[s.fv[3 * k + 1]], s.nodes[s.fv[3 * k + 2]], t, &u, &v) == 1) return true;
+      if (intersect_triangle(pos, dir, F.p0, F.p1, F.p2, t, &u, &v) == 1) return true;
     }
     return false;
   }
@@ -367,7 +375,7 @@ struct Walker {
     for (int f = 0; f < 4; f++) if (faceTest(p.tetra, f, p.pos, dir, t)) return f;
     int old = p.tetra;
     for (int k = 0; k < 4; k++) {
-      int nbt = s.nb[4 * old + k];
+      int nbt = s.tf[4 * old + k].nb;
       if (nbt >= 0) {
         p.tetra = nbt;
         const int* c = s.corner + 4 * nbt;
@@ -433,12 +441,12 @@ struct Walker {
   // collision then reads it: on a surface-receiver face SPPS flips the shared normal IN PLACE to face
   // the particle (hazard 4); the flip is reproduced per hit, its persistence across particles is not.
   SPG_HD V3 collideScene(Particle& p) {
-    int k = 4 * p.tetra + p.idface;
-    int sfi = s.sf[k];
+    const TFace& F = s.tf[4 * p.tetra + p.idface];
+    int sfi = F.sf;
     if (sfi < 0) return mk(0, 0, 0);
     V3 n = s.sn[sfi];
     if (p.flag && s.saveSurfHist) { p.reflOrder++; rec.surfHit(p, n); }
-    int rfi = s.rf[k];
+    int rfi = F.rf;
     if (rfi >= 0) {
       if (dot(p.dir, n) < 0) n = mul(n, -1.0f);
       double val = p.E;
@@ -449,7 +457,7 @@ struct Walker {
   }
   // CalculationCore.cpp:357-387 TraverserTetra (fittings refused upstream of the walk)
   SPG_HD void traverse(Particle& p) {
-    int nbt = s.nb[4 * p.tetra + p.idface];
+    int nbt = s.tf[4 * p.tetra + p.idface].nb;
     if (nbt < 0) {
       p.E = 0;
       if (p.state == ALIVE) p.state = LOST;
@@ -514,11 +522,11 @@ struct Walker {
         V3 vecTranslation = sub(p.colPos, p.pos);
         p.elapsed += len(divs(vecTranslation, len(p.dir))) * deltaT;
         freeTranslation(p, vecTranslation);
-        int k = 4 * p.tetra + p.idface;
-        int sfi = s.sf[k];
+        const TFace& F = s.tf[4 * p.tetra + p.idface];
+        int sfi = F.sf;
         bool doInvertNormal = false;
         if (sfi >= 0) doInvertNormal = (dot(p.dir, n) <= -BEPS);
-        if (sfi < 0 || ((s.senc[sfi] || (!s.mat[s.smat[sfi]].doubleSided && doInvertNormal)) && s.nb[k] >= 0)) {
+        if (sfi < 0 || ((s.senc[sfi] || (!s.mat[s.smat[sfi]].doubleSided && doInvertNormal)) && F.nb >= 0)) {
           traverse(p);
           collisionResolution = true;
         } else {
@@ -550,7 +558,7 @@ struct Walker {
             }
           } else {
             if (p.rng.next() <= m.absorption) {
-              if (s.transCalc && m.dotransmission && s.nb[k] >= 0 && p.rng.next() * m.absorption <= m.tau) {
+              if (s.transCalc && m.dotransmission && F.nb >= 0 && p.rng.next() * m.absorption <= m.tau) {
                 transmission = true;
               } else {
                 if (p.state == ALIVE) p.state = ABS_SURF;
@@ -595,11 +603,17 @@ struct Walker {
       p.elapsed = 0;
     }
   }
-  // CalculationCore.cpp:41-111 Run
-  SPG_HD void run(Particle& p) {
+  // CalculationCore.cpp:41-111 Run, split so a run can stop between two steps and resume: start()
+  // is its first collision search, advance() its step loop for at most `budget` steps. It returns true
+  // when the run ended (the fate is then counted). Stopping between steps changes no arithmetic.
+  SPG_HD void start(Particle& p) {
     rec.newParticle(p);
     setNextCollision(p);
+  }
+  SPG_HD bool advance(Particle& p, int& budget) {
     while (p.state == ALIVE && p.step < s.nbSteps) {
+      if (budget <= 0) return false;
+      budget--;
       if (s.absAtmo) {
         if (s.energetic) {
           p.E *= (double)s.densite;
@@ -617,10 +631,22 @@ struct Walker {
     }
     acc.stat(p.state);
     rec.saveParticle();
+    return true;
   }
-  // sppsNantes.cpp:97-155: one particle of a source, then its transmitted children, FIFO
-  SPG_HD void family(const SrcBand& sb, uint32_t idpart, int src, int flag, uint32_t* outSteps, int* outState, double* outE, uint32_t* outChildren, uint64_t* outChildSteps) {
-    Particle p;
+  SPG_HD void run(Particle& p) {
+    start(p);
+    int big = 0x7FFFFFFF;
+    advance(p, big);
+  }
+  SPG_HD bool popChild(Particle& c) {
+    if (qn <= 0) return false;
+    c = q[qh];
+    qh = (qh + 1) % QCAP;
+    qn--;
+    return true;
+  }
+  // sppsNantes.cpp:97-140: a source's particle, its direction drawn (the family's child queue emptied)
+  SPG_HD void initFamily(const SrcBand& sb, uint32_t idpart, int src, int flag, Particle& p) {
     p.pos = sb.pos;
     p.E = sb.energie;
     p.eps = sb.eps;
@@ -651,14 +677,17 @@ struct Walker {
         p.dir = mk(n * costheta * f_cos(phi), n * costheta * f_sin(phi), n * z);
       } break;
     }
-    int start = p.step;
+  }
+  // sppsNantes.cpp:97-155: one particle of a source, then its transmitted children, FIFO
+  SPG_HD void family(const SrcBand& sb, uint32_t idpart, int src, int flag, uint32_t* outSteps, int* outState, double* outE, uint32_t* outChildren, uint64_t* outChildSteps) {
+    Particle p;
+    initFamily(sb, idpart, src, flag, p);
+    int st0 = p.step;
     run(p);
-    if (outSteps) { *outSteps = (uint32_t)(p.step - start); *outState = p.state; *outE = p.E; }
+    if (outSteps) { *outSteps = (uint32_t)(p.step - st0); *outState = p.state; *outE = p.E; }
     uint32_t nch = 0; uint64_t chs = 0;
-    while (qn > 0) {
-      Particle c = q[qh];
-      qh = (qh + 1) % QCAP;
-      qn--;
+    Particle c;
+    while (popChild(c)) {
       int cs = c.step;
       run(c);
       nch++;
