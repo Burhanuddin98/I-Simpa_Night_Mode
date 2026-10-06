@@ -75,6 +75,7 @@ import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, pulsePhase, spriteScale, STI
 import { aoReach, bakeAo, withAo } from './ao';
 import { FADE_BG, FADE_MAX, fadeRange, withFade } from './fade';
 import { withGlass } from './glass';
+import { BUILD_MS, buildHeight, NO_CUT, swingAngle, withBuild } from './build';
 import { GROUND_FRAGMENT, GROUND_VERTEX, groundLayout } from './ground';
 import { planeCells, roomBox } from '../../chrome/planes';
 import { dimensionLines } from './dims';
@@ -292,7 +293,8 @@ function shaded<M extends Material>(m: M, uniforms: Record<string, IUniform>): M
     Object.assign(shader.uniforms, uniforms);
     const a = withAo(shader.vertexShader, shader.fragmentShader);
     const g = withGlow(a.vertex, a.fragment);
-    const f = withFade(g.vertex, g.fragment, 'mix');
+    const b = withBuild(g.vertex, g.fragment, 'surface');
+    const f = withFade(b.vertex, b.fragment, 'mix');
     shader.vertexShader = f.vertex;
     shader.fragmentShader = f.fragment;
   };
@@ -327,7 +329,8 @@ function underPanel(left: number, top: number, w: number, h: number, rects: DOMR
 function fadingLines<M extends Material>(m: M, uniforms: Record<string, IUniform>): M {
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
-    const f = withFade(shader.vertexShader, shader.fragmentShader, 'alpha');
+    const b = withBuild(shader.vertexShader, shader.fragmentShader, 'line');
+    const f = withFade(b.vertex, b.fragment, 'alpha');
     shader.vertexShader = f.vertex;
     shader.fragmentShader = f.fragment;
   };
@@ -391,6 +394,8 @@ class ViewportEngine {
    */
   private readonly shared = {
     nmAoMix: { value: 1 },
+    nmBuildZ: { value: NO_CUT },
+    nmBuildBand: { value: 0.3 },
     nmFadeNear: { value: 0 },
     nmFadeFar: { value: 1 },
     nmFadeMax: { value: 0 },
@@ -409,6 +414,9 @@ class ViewportEngine {
   /** The floor grid and shadow under the room (ground.ts), and the height it sits at. */
   private readonly ground: Mesh;
   private groundZ = 0;
+  /** The build-up (build.ts): the model it last played for, and its frame while running. */
+  private builtKey = '';
+  private buildFrame = 0;
   /** The dimensions overlay (dims.ts): its lines, its three labels (made on first use) and where they go. */
   private readonly dimLines: LineSegments;
   private dimLabels: HTMLDivElement[] = [];
@@ -622,6 +630,9 @@ class ViewportEngine {
     this.frameRequest = 0;
     if (this.glowFrame) cancelAnimationFrame(this.glowFrame);
     this.glowFrame = 0;
+    if (this.buildFrame) cancelAnimationFrame(this.buildFrame);
+    this.buildFrame = 0;
+    this.shared.nmBuildZ.value = NO_CUT;
     if (this.dom) this.dom.labels.replaceChildren();
     this.markers = [];
     this.dom = null;
@@ -942,6 +953,48 @@ class ViewportEngine {
     if (previousRev !== this.builtRev && selectionStore.get().kind === 'faces') selectionStore.set({ kind: 'none' });
     this.frame();
     this.onScene();
+    // A new model (not an edit of this one, which keeps its faces and box) builds itself up.
+    const key = mesh && this.bounds ? `${mesh.faceCount}:${this.bounds.min.join(',')}:${this.bounds.max.join(',')}` : '';
+    if (key && key !== this.builtKey) {
+      this.builtKey = key;
+      this.startBuild();
+    }
+  }
+
+  /**
+   * The build-up (build.ts): the cut rises floor to ceiling while the camera swings into the framing
+   * `frame()` just set. Any drag on the view stops the swing; the cut always finishes.
+   */
+  private startBuild(): void {
+    const b = this.bounds;
+    const controls = this.controls;
+    if (this.buildFrame) cancelAnimationFrame(this.buildFrame);
+    this.buildFrame = 0;
+    this.shared.nmBuildZ.value = NO_CUT;
+    if (!b || !this.dom || stillMotion() || this.view !== 'perspective') return;
+    const target = controls ? controls.target.clone() : new Vector3();
+    const offset = this.persp.position.clone().sub(target);
+    let swinging = !!controls;
+    const stop = () => (swinging = false);
+    controls?.addEventListener('start', stop);
+    this.shared.nmBuildBand.value = 0.02 * (b.max[2] - b.min[2]) + 0.05;
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const f = Math.min(1, (now - t0) / BUILD_MS);
+      this.shared.nmBuildZ.value = buildHeight(f, b.min[2], b.max[2]);
+      if (swinging && controls) {
+        this.persp.position.copy(target).add(offset.clone().applyAxisAngle(new Vector3(0, 0, 1), swingAngle(f)));
+        controls.update();
+      }
+      this.invalidate();
+      if (f < 1) {
+        this.buildFrame = requestAnimationFrame(tick);
+      } else {
+        this.buildFrame = 0;
+        controls?.removeEventListener('start', stop);
+      }
+    };
+    this.buildFrame = requestAnimationFrame(tick);
   }
 
   /** Places the ground plane (ground.ts) under `box` and sets its grid and shadow. */
