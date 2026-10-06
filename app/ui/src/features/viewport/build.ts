@@ -1,16 +1,16 @@
 // The room builds itself when it opens (the UI study's motion list: "Import assembles the hall in
 // building order ... the ceiling settles last", his "how things get built up"): a cut rises from the
-// floor to the ceiling over `BUILD_MS` (6 s), the surfaces and edges above it not yet drawn, a faint warm
+// floor to the ceiling over `BUILD_MS` (2.4 s), the surfaces and edges above it not yet drawn, a faint warm
 // line where it cuts (not red: red is for actions and selection), while the camera swings `SWING_DEG`
 // into its framing. Only when a new model loads; never under prefers-reduced-motion or WebDriver.
 
-/** Burhan 04:08: "can you make this sort of animation last a bit longer, like 6 seconds". */
-export const BUILD_MS = 6000;
+/** Burhan 04:08 asked for 6 s; 04:11, having seen it: "make it 2.4 seconds". */
+export const BUILD_MS = 2400;
 export const SWING_DEG = 25;
 /** The cut's height when no build is running: above anything. */
 export const NO_CUT = 1e9;
 
-/** Eased progress: a gentle start and finish, an even rise between (at 6 s a fast start would stall half way). */
+/** Eased progress: a gentle start and finish, an even rise between (a fast start front-loads the rise and leaves it crawling). */
 export function easeOut(f: number): number {
   const c = Math.min(1, Math.max(0, f));
   return c * c * (3 - 2 * c);
