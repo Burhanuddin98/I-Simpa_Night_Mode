@@ -189,9 +189,9 @@ function BandsEditor({ scene, s, solver }: { scene: SceneState; s: ProjectSettin
         const level = cube.gb >= REFUSE_GB ? 'fail' : cube.gb >= WARN_GB ? 'warn' : '';
         return (
           <div className={`sim-field-line${level ? ` ${level}` : ''}`} data-part="results-cube" data-level={level || 'ok'}>
-            <span className="k">Results held in memory during the run</span>
+            <span className="k">Memory</span>
             <span className="v mono">
-              {cubeText(cube)}
+              {cubeText(cube)} during the run
               {level === 'fail' ? ' · too much for this machine, Run is refused' : level === 'warn' ? ' · heavy for this machine' : ''}
             </span>
           </div>
