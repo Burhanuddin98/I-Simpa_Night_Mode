@@ -43,7 +43,7 @@ def main():
     rep = json.loads(r.stdout)
     spps = rep["spps"]
     dt = float(spps["time_step_s"])
-    receivers = spps["receivers"]
+    receivers = spps["point_receivers"]
     print(f"run {run}: {len(rep['bands_hz'])} bands {rep['bands_hz'][0]}-{rep['bands_hz'][-1]} Hz, dt {dt*1000:g} ms, {len(receivers)} receivers")
     for rx in receivers:
         label = rx["label"]
@@ -74,22 +74,28 @@ def main():
         fig.tight_layout()
         fig.savefig(os.path.join(out, f"{label}-echogram.png"), dpi=130, facecolor="black")
         plt.close(fig)
-        # Spectrogram: every band x every step, 60 dB under the peak.
+        # Spectrogram: every band x every step, 60 dB under the peak; the time axis ends where the energy does,
+        # and a second panel holds the first 500 ms.
         D = db(E)
         top = D.max()
-        fig, ax = plt.subplots(figsize=(14, 6), facecolor="black")
-        ax.set_facecolor("black")
-        im = ax.imshow(D, aspect="auto", origin="lower", cmap=RAMP, vmin=top - 60, vmax=top,
-                       extent=[0, t[-1] * 1000, -0.5, len(hz) - 0.5], interpolation="nearest")
-        ax.set_yticks(range(len(hz)))
-        ax.set_yticklabels([f"{h/1000:g}k" if h >= 1000 else str(h) for h in hz], fontsize=7)
-        ax.set_xlabel("time (ms)", color="white")
-        ax.set_ylabel("band (Hz)", color="white")
-        ax.tick_params(colors="white")
-        ax.set_title(f"{label}: energy per band per {dt*1000:g} ms step, dB, 60 dB under the peak. {len(hz)} third-octave bands: the frequency detail SPPS has.", color="white", fontsize=10)
-        cb = fig.colorbar(im, ax=ax, pad=0.01)
-        cb.ax.yaxis.set_tick_params(color="white")
-        plt.setp(cb.ax.get_yticklabels(), color="white")
+        last = int(np.nonzero(total > 0)[0].max()) if (total > 0).any() else steps - 1
+        t_end = min(t[-1], (last + 1) * dt * 1.05) * 1000
+        fig, axes = plt.subplots(2, 1, figsize=(14, 10), facecolor="black", gridspec_kw={"height_ratios": [3, 2]})
+        for ax, tmax in zip(axes, (t_end, 500.0)):
+            ax.set_facecolor("black")
+            n = int(min(steps, np.ceil(tmax / 1000 / dt)))
+            im = ax.imshow(D[:, :n], aspect="auto", origin="lower", cmap=RAMP, vmin=top - 60, vmax=top,
+                           extent=[0, n * dt * 1000, -0.5, len(hz) - 0.5], interpolation="nearest")
+            ax.set_yticks(range(len(hz)))
+            ax.set_yticklabels([f"{h/1000:g}k" if h >= 1000 else str(h) for h in hz], fontsize=7)
+            ax.set_xlabel("time (ms)", color="white")
+            ax.set_ylabel("band (Hz)", color="white")
+            ax.tick_params(colors="white")
+            cb = fig.colorbar(im, ax=ax, pad=0.01)
+            cb.ax.yaxis.set_tick_params(color="white")
+            plt.setp(cb.ax.get_yticklabels(), color="white")
+        axes[0].set_title(f"{label}: energy per band per {dt*1000:g} ms step, dB, 60 dB under the peak. {len(hz)} third-octave bands: the frequency detail SPPS has.", color="white", fontsize=10)
+        axes[1].set_title("the first 500 ms", color="white", fontsize=10)
         fig.tight_layout()
         fig.savefig(os.path.join(out, f"{label}-spectrogram.png"), dpi=130, facecolor="black")
         plt.close(fig)
