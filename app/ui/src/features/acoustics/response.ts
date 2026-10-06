@@ -114,6 +114,26 @@ export function dbMatrix(rows: readonly (readonly number[])[]): DbMatrix | null 
   return { db: rows.map((row) => row.map((e) => (e > 0 ? 10 * Math.log10(e / max) : -Infinity))), max, at: where };
 }
 
+/**
+ * A series summed over each run of `bin` steps (the last run may be shorter): the energy in each
+ * wider time bin, exactly, since each step holds the energy that arrived in it. Display only: the
+ * reported values (decay times and the rest) are computed from the unbinned series.
+ */
+export function binSum(series: readonly number[], bin: number): number[] {
+  if (!Number.isInteger(bin) || bin < 1) throw new RangeError(`binSum: bin ${bin}`);
+  if (bin === 1) return [...series];
+  const out: number[] = [];
+  for (let i = 0; i < series.length; i += bin) {
+    let s = 0;
+    for (let k = i; k < Math.min(i + bin, series.length); k++) s += series[k];
+    out.push(s);
+  }
+  return out;
+}
+
+/** The time bins the response window offers, in steps (Burhan 05:12: "the resulting IR spectrogram seems coarse"). */
+export const RESPONSE_BINS = [1, 5, 10] as const;
+
 /** The bands summed, step by step; null when the rows differ in length or there is none. */
 export function broadband(rows: readonly (readonly number[])[]): number[] | null {
   if (rows.length === 0) return null;
@@ -255,7 +275,7 @@ export interface Tick {
  * window draws and prints it; null for a TCR run, a receiver or source the report has no
  * echogram for, or an echogram with no energy.
  */
-export function responseView(report: Report, r: number, src: SourceSel): ResponseView | null {
+export function responseView(report: Report, r: number, src: SourceSel, bin = 1): ResponseView | null {
   if (report.solver === 'tcr') return null;
   const rx = `spps.point_receivers.${r}`;
   const receiver = str(report, `${rx}.label`);
@@ -289,17 +309,18 @@ export function responseView(report: Report, r: number, src: SourceSel): Respons
     const e = at(report, path);
     if (!label || !Array.isArray(e)) return null;
     bands.push({ label, path });
-    energy.push((e as number[]).slice(k0));
+    energy.push(binSum((e as number[]).slice(k0), bin));
   }
   const map = dbMatrix(energy);
   if (!map) return null;
   const sum = broadband(energy);
   const cols = map.db[0].length;
-  const stepNum = (digits: number, k: number) => num(report, 'spps.time_step_s', digits, k) as Num;
-  const ticksOver = (n: number): Tick[] => timeTicks(step, n).map((t) => ({ col: t.j, num: stepNum(t.digits, t.j) }));
-  const runDigits = niceInterval(cols * step).digits;
-  const n = cropCols(map, step);
-  const cropDigits = n === null ? runDigits : niceInterval(n * step).digits;
+  // A column is `bin` steps; times are the report's step times a whole number of steps.
+  const stepNum = (digits: number, k: number) => num(report, 'spps.time_step_s', digits, k * bin) as Num;
+  const ticksOver = (n: number): Tick[] => timeTicks(step * bin, n).map((t) => ({ col: t.j, num: stepNum(t.digits, t.j) }));
+  const runDigits = niceInterval(cols * step * bin).digits;
+  const n = cropCols(map, step * bin);
+  const cropDigits = n === null ? runDigits : niceInterval(n * step * bin).digits;
   const last = lastAbove(map);
   // The floor's time to the step's own decimals (0.001 s: 3; the f32 widening's last digits
   // ignored): a whole number of steps, not rounded to a tick.

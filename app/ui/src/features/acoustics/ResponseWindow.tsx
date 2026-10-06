@@ -17,7 +17,7 @@ import type { Report } from '../../bindings/ipc';
 import { N, S } from './Marked';
 import type { SourceSel } from './model';
 import { pngDataUrl } from './png';
-import { colourBarCss, mapPixels, RESPONSE_NOTE, RESPONSE_TITLE, responseView, SPAN_DB, SPAN_LABELS, type ResponseView } from './response';
+import { colourBarCss, mapPixels, RESPONSE_NOTE, RESPONSE_TITLE, responseView, SPAN_DB, SPAN_LABELS, type ResponseView, RESPONSE_BINS } from './response';
 
 /** What the window shows, for the `responseView` test hook; null while it is closed. */
 export interface ResponseHookView {
@@ -92,7 +92,10 @@ function SpanWord() {
 }
 
 export function ResponseWindow({ report, receiver, source, onClose }: { report: Report; receiver: number; source: SourceSel; onClose: () => void }) {
-  const v = useMemo(() => responseView(report, receiver, source), [report, receiver, source]);
+  // The time bin shown: 1, 5 or 10 steps a column (display only; response.ts `binSum`).
+  const [bin, setBin] = useState<number>(1);
+  const v = useMemo(() => responseView(report, receiver, source, bin), [report, receiver, source, bin]);
+  const stepMs = (report.spps?.time_step_s ?? 0) * 1000;
   // The time axis ends shortly after the last bin above the floor (response.ts `cropCols`);
   // "Full run" shows the whole duration. The choice holds across receivers and sources.
   const [fullRun, setFullRun] = useState(false);
@@ -135,6 +138,22 @@ export function ResponseWindow({ report, receiver, source, onClose }: { report: 
       </div>
       <div className="rw-note" data-part="response-note">
         {RESPONSE_NOTE}
+      </div>
+      <div className="rw-bins segmented" role="radiogroup" aria-label="Time bin" data-part="response-bins">
+        <span className="rw-bins-label">Time bin</span>
+        {RESPONSE_BINS.map((b) => (
+          <button
+            key={b}
+            type="button"
+            role="radio"
+            aria-checked={bin === b}
+            data-bin={b}
+            title={b === 1 ? 'Every time step of the run' : `${b} time steps summed per column: smoother, less detail in the early reflections`}
+            onClick={() => setBin(b)}
+          >
+            {`${+(stepMs * b).toFixed(3)} ms`}
+          </button>
+        ))}
       </div>
       {v ? (
         <div className="rw-grid" style={{ ['--rw-rows' as string]: String(v.bands.length) }}>

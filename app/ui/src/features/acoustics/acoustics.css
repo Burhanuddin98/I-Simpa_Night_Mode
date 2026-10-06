@@ -422,3 +422,16 @@
 .ac-advice .small-button {
   align-self: flex-start;
 }
+
+/* The response window's time bin (response.ts binSum): display only. */
+.rw-bins {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 2px 0 8px;
+}
+.rw-bins-label {
+  margin-right: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}

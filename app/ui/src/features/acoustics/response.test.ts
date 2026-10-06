@@ -25,8 +25,7 @@ import {
   responseView,
   SPAN_DB,
   SPAN_LABELS,
-  timeTicks,
-} from './response.ts';
+  timeTicks, binSum } from './response.ts';
 
 // SPPS's time step as the report carries it: 0.01 s through f32, widened.
 const DT = Math.fround(0.01);
@@ -363,4 +362,12 @@ test("responseView: a source's own echogram, from its emission; the sources summ
   assert.equal(summed?.emission?.source.text, 'S2', 'the first to emit');
   // say NO: a source the run does not have.
   assert.equal(responseView(r, 0, 'S9'), null);
+});
+
+test('binSum: each run of steps summed exactly, the last run shorter, energy kept', () => {
+  assert.deepEqual(binSum([1, 2, 3, 4, 5, 6, 7], 3), [6, 15, 7]);
+  assert.deepEqual(binSum([1, 2, 3], 1), [1, 2, 3]);
+  const s = [0.5, 0.25, 0.125, 0.0625, 0.03125];
+  assert.equal(binSum(s, 2).reduce((a, b) => a + b, 0), s.reduce((a, b) => a + b, 0));
+  assert.throws(() => binSum(s, 0), RangeError);
 });
