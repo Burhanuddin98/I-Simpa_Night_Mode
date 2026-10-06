@@ -377,7 +377,7 @@ describe('M12 P3 viewport: surface maps and particle playback', () => {
     console.log(`receipt m12-p3-maps: legend ${await lab('lo')} / ${await lab('mid')} / ${await lab('hi')}, file ${lo.toFixed(3)}..${hi.toFixed(3)} dB`);
     assert.equal(await lab('lo'), String(bottom));
     assert.equal(await lab('hi'), `${top} dB`);
-    assert.match(m.legend?.gradient ?? '', /#0B0B0E.*#B0161F.*#FCD270/i, 'black through red to yellow');
+    assert.match(m.legend?.gradient ?? '', /#0B0B0E.*#D81F2D.*#FFF7F2/i, 'black through red to white (decision 63)');
     // The map is drawn: at a step with energy, hiding it changes pixels on screen.
     await hook('m12SetStep', 0);
     const px = await hook<{ pixels: number; changed: number } | null>('m12MapPixels');

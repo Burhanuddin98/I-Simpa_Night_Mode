@@ -115,8 +115,8 @@ test('a baseline must be the same surface: nodes, faces and steps', () => {
 
 test('the ramps are the design’s: black through red to yellow, and its cool ramp for quieter', () => {
   assert.deepEqual(rampColor(HOT, 0), [0x0b, 0x0b, 0x0e]);
-  assert.deepEqual(rampColor(HOT, 1), [0xfc, 0xd2, 0x70]);
-  assert.deepEqual(rampColor(HOT, 0.5), [0xb0, 0x16, 0x1f]);
+  assert.deepEqual(rampColor(HOT, 1), [0xff, 0xf7, 0xf2]);
+  assert.deepEqual(rampColor(HOT, 0.5), [0xd8, 0x1f, 0x2d]);
   assert.deepEqual(rampColor(HOT, -3), rampColor(HOT, 0));
   assert.deepEqual(rampColor(COOL, 1), [0xa3, 0xcd, 0xe3]);
 });
@@ -125,4 +125,19 @@ test('legend labels: whole dB, the middle to a tenth when it falls between', () 
   assert.deepEqual(legendLabels({ lo: 30, hi: 65 }, 'level'), { lo: '30', mid: '47.5', hi: '65 dB' });
   assert.deepEqual(legendLabels({ lo: 40, hi: 80 }, 'level'), { lo: '40', mid: '60', hi: '80 dB' });
   assert.deepEqual(legendLabels({ lo: -10, hi: 10 }, 'diff'), { lo: '−10', mid: '0', hi: '+10 dB' });
+});
+
+test('decision 63: each level stop is lighter than the last by an even step (CIELAB L*)', () => {
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const lstar = (h: string) => {
+    const [r, g, b] = [1, 3, 5].map((i) => lin(parseInt(h.slice(i, i + 2), 16) / 255));
+    const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    return 116 * (y > 0.008856 ? Math.cbrt(y) : 7.787 * y + 16 / 116) - 16;
+  };
+  const l = HOT.map(lstar);
+  for (let i = 1; i < l.length; i++) {
+    const step = l[i] - l[i - 1];
+    assert.ok(step >= 8 && step <= 14, `stop ${i}: L* ${l[i - 1].toFixed(1)} -> ${l[i].toFixed(1)}`);
+  }
+  assert.ok(l[l.length - 1] > 95, 'the loudest is near white');
 });

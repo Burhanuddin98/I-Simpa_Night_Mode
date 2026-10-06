@@ -8,12 +8,13 @@
 // - A level is upstream's `10 log10(E / 1e-12)` (`isimpa/3dengine/Core/Recepteurs_surfacique.cpp`,
 //   "Conversion en dB"), for record types SPL_STANDART and SPL_GAIN; a cell with no energy has no
 //   level and is not coloured.
-// - The ramps are the approved design's (`docs/design/concept-b-approved.dc.html`, HOT and COOL):
-//   levels run black through red to yellow; a difference from the baseline runs through black at
-//   0, the cool ramp where this run is quieter and the hot ramp where it is louder.
+// - Levels run black through the brand red to white (decision 63), each stop lighter than the last by an
+//   even step (CIELAB L* 3 to 98, steps 9 to 13; picked at even OKLab lightness), so a louder cell always
+//   reads brighter. A difference from the baseline runs through black at 0, the cool ramp (the approved
+//   design's COOL) where this run is quieter and the hot ramp where it is louder.
 import type { SurfaceMap } from '../../resultsData.ts';
 
-export const HOT: readonly string[] = ['#0B0B0E', '#2A0A12', '#520C18', '#7F101E', '#B0161F', '#DB2F1F', '#F2601C', '#F99A2E', '#FCD270'];
+export const HOT: readonly string[] = ['#0B0B0E', '#420C12', '#72111A', '#A31823', '#D81F2D', '#EF5F5A', '#FD938B', '#FFC5BE', '#FFF7F2'];
 export const COOL: readonly string[] = ['#0E1116', '#15212C', '#1C3446', '#264B63', '#356683', '#4A84A5', '#6AA6C6', '#A3CDE3'];
 
 /** The deepest level range drawn, dB below the top. */
