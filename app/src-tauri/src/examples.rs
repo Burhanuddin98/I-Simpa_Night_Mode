@@ -42,6 +42,11 @@ pub const EXAMPLES: &[Example] = &[
         bytes: include_bytes!("../examples/elmia_hall.simpa"),
     },
     Example {
+        id: "industrial",
+        file_stem: "Industrial hall",
+        bytes: include_bytes!("../examples/industrial_hall.simpa"),
+    },
+    Example {
         id: "bras-cr1",
         file_stem: "BRAS CR1",
         bytes: include_bytes!("../examples/bras_cr1.simpa"),

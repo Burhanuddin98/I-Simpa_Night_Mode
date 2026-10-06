@@ -41,6 +41,16 @@ export const EXAMPLES: readonly ExampleCard[] = [
     variants: 0,
   },
   {
+    id: 'industrial',
+    name: 'Industrial hall',
+    what: 'A factory hall, I-Simpa’s third tutorial room, with two milling machines among the machinery',
+    file: 'industrial_hall.simpa',
+    sources: 6,
+    receivers: 5,
+    planes: 1,
+    variants: 0,
+  },
+  {
     id: 'bras-cr1',
     name: 'BRAS CR1',
     what: 'Coupled rooms from the BRAS benchmark, a laboratory opening onto a reverberation chamber',

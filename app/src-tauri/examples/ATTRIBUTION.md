@@ -1,12 +1,13 @@
 # The example projects: sources and licences
 
-These five `.simpa` files ship inside the app (`src/examples.rs`, `include_bytes!`) and are
+These six `.simpa` files ship inside the app (`src/examples.rs`, `include_bytes!`) and are
 offered on the landing page while no project is open. Opening one writes a copy into the user's
 `Documents\Night Mode\Examples` folder. The files here are never modified at run time.
 
 | file | room | source | licence |
 |---|---|---|---|
 | `elmia_hall.simpa` | Elmia hall | Upstream I-Simpa's tutorial 2 (`tutorial_2.proj`) | GPL-3.0 |
+| `industrial_hall.simpa` | Industrial hall | Upstream I-Simpa's tutorial 3 (`tutorial_3.proj`, `Industrial_hall.ply`) | GPL-3.0 |
 | `bras_cr1.simpa` | BRAS CR1, coupled rooms: laboratory and reverberation chamber (BRAS scene 8) | The BRAS database | CC BY-SA 4.0 |
 | `bras_cr2.simpa` | BRAS CR2, seminar room (BRAS scene 9) | The BRAS database | CC BY-SA 4.0 |
 | `bras_cr3.simpa` | BRAS CR3, chamber music hall (BRAS scene 10) | The BRAS database | CC BY-SA 4.0 |
@@ -18,15 +19,24 @@ A byte-for-byte copy of `tests/fixtures/rooms/elmia_corrected.simpa`
 (sha256 `70439d85fc202377207d2a9d0539a439713f4f74b5f81a26115f20aa9690a9d4`). It holds the
 settings of decision-log row 49. The geometry, groups, materials, sources and receivers come from
 upstream I-Simpa's second tutorial project, `src/isimpa/resources/doc/tutorial/tutorial 2/tutorial_2.proj`
-(Université Gustave Eiffel, <https://github.com/Universite-Gustave-Eiffel/I-Simpa>), imported by
+(UniversitÃ© Gustave Eiffel, <https://github.com/Universite-Gustave-Eiffel/I-Simpa>), imported by
 `simpa_core::geometry::import::import_proj`. `tests/fixtures/rooms/PROVENANCE.md` documents the
 import and every edit. I-Simpa is GPL-3.0, as is this app.
+
+## Industrial hall
+
+Upstream I-Simpa's third tutorial project, `src/isimpa/resources/doc/tutorial/tutorial 3/tutorial_3.proj` with
+`Industrial_hall.ply` (UniversitÃ© Gustave Eiffel, GPL-3.0), imported by `simpa import-proj` (88 faces, 10 surface
+groups, 2 fitting zones, 6 sources on two milling machines, 5 receivers, upstream's cutting plane; closed, no self-intersection), then edited
+by `build_industrial.py` beside this file: Receiver 1, which upstream placed on a wall (`simpa validate`:
+receiver_on_surface), moved along its own line to (0.5, 1.5, 1.6); the sources renamed per machine; SPPS at the
+app's new-project defaults. sha256 `f8fca0216b9c485e8e3316d3314f7a60df5ea276e24b61b5af5cad2e579adefe`.
 
 ## BRAS CR2 and BRAS CR4
 
 Both rooms are derived from the Benchmark for Room Acoustical Simulation (BRAS):
 
-> L. Aspöck, M. Vorländer, F. Brinkmann, D. Ackermann and S. Weinzierl, *Benchmark for Room
+> L. AspÃ¶ck, M. VorlÃ¤nder, F. Brinkmann, D. Ackermann and S. Weinzierl, *Benchmark for Room
 > Acoustical Simulation (BRAS)*, RWTH Aachen University, Institute of Technical Acoustics, and
 > TU Berlin, Audio Communication Group. Documentation of the database, 15 May 2019.
 
