@@ -62,7 +62,7 @@ memory sampled every 5 s for 240 s. Log `C:\tmp\nm-bed-part2.log`.
 | 16:05 (before) | died at 90 s on the Results step | 5.9 GB (commit 9.8 GB) | |
 | 17:23 (part 1) | alive at 17:24 | 6.46 GB | |
 | 18:11 (part 2, cache + record bound) | alive 213 s; Results "verified" in under 40 s; the Acoustics report shown; the 1000 Hz plane map REFUSED by the viewport ("87860 faces x 10000 steps is more than one 16384 x 16384 texture holds") | 1.41 GB (42 samples) | 1.63 GB; WebView tree 0.96 GB |
-| 18:16 (part 2 + texel budget) | (fill from `nm-bed-part2.log`) | | |
+| 18:16 (part 2 + texel budget) | alive 300 s; Results verified; the Acoustics report shown; the 1 kHz plane map DRAWN and animating (legend −2 to 58 dB, "one step is already 27 ms": the served bin), screenshot `.out/ui/cr4-27/plots/app-results-1khz-plane-2026-10-06-1818.png` | 0.30 GB | 0.31 GB; WebView tree 1.02 GB |
 
 The 18:11 refusal: the record bound did not bind (the 1000 Hz file fits 32 Mi records; it is sparse), but
 the viewport's texture is dense, faces x steps, and 878 M texels is more than 16384² holds. So the UI now
