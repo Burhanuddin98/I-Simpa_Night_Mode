@@ -18,7 +18,9 @@ casualties of the solver's allocation, not causes.
 | 06:37:09 app | CR4-third | 18 | **Plane 1**, 33.1 x 33.3 m at **0.1 m** | **110,888** | **149 GB** | abort |
 | 06:37:46 app | CR4-third | 9 (octaves) | Plane 1 at 0.1 m | 110,888 | 74 GB | abort |
 
-Cube = cells x time steps (10 s / 1 ms = 10,000) x bands x sources (2) x 4 bytes. SPPS keeps the whole cube of the
+Cube = cells x time steps (10 s / 1 ms = 10,000) x bands x sources (2) x 4 bytes AS FIRST WRITTEN; 07:30: SPPS
+accumulates in `l_decimal` = `double` (upstream `coreString.h:43`), so every figure in the table is x2 (298 GB, 25 GB,
+112 GB, 149 GB) and the 'fitted' row sat at about 25 GB under the 36 GB line. SPPS keeps the whole cube of the
 surface receivers in memory for the run; the machine has 31.8 GB RAM and a page file of about 4.8 GB (commit limit
 36.6 GB). The row that fitted and the rows that did not sit either side of that line; the exact peak was not
 measured (no sampler ran), so the line is a forecast from the cube alone, not a realised number.

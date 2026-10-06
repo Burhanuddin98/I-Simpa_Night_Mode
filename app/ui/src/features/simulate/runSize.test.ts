@@ -29,12 +29,12 @@ function scene(resolution: number, bands = 18, extra: Record<string, unknown> = 
   return [sc, { bands: { kind: 'third_octave', frequencies_hz: [] }, environment: {}, solvers: { spps, tcr: {} } } as unknown as ProjectSettings];
 }
 
-test('the whole-room plane at 0.1 m is about 149 GB and blocks the run; at 0.5 m it is a few GB and does not', () => {
+test('the whole-room plane at 0.1 m is about 298 GB and blocks the run; at 0.5 m it is a few GB and does not', () => {
   const [bigScene, bigSettings] = scene(0.1);
   const big = resultCube(bigScene, 'spps', bigSettings);
   assert.ok(big && big.cells === 110888, `${big?.cells}`);
-  assert.ok(big && big.gb > 140 && big.gb < 160, `${big?.gb}`);
-  assert.equal(cubeText(big!), 'about 149 GB');
+  assert.ok(big && big.gb > 290 && big.gb < 310, `${big?.gb}`);
+  assert.equal(cubeText(big!), 'about 298 GB');
   assert.deepEqual(blockersWithSize(bigScene, 'spps', bigSettings), [RESULTS_TOO_BIG]);
   const [smallScene, smallSettings] = scene(0.5);
   const small = resultCube(smallScene, 'spps', smallSettings);

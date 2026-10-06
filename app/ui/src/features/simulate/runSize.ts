@@ -2,11 +2,11 @@
 // ALL THE HEAVIEST FEATURES WORK WITHOUT KILLING THE FUCKING APP AGAIN AND AGAIN BECAUSE OF FUCKING MEMORY
 // ISSUES"; docs/investigations/2026-10-06-third-octave-bug/MEMORY.md). SPPS keeps every surface receiver's
 // energy for every time step, band and source for the whole run: a sound-level plane of 33 x 33 m at 0.1 m
-// (110,888 cells) over 10 s at 1 ms, 18 bands and 2 sources is 149 GB, and the solver aborts 15 s in.
+// (110,888 cells) over 10 s at 1 ms, 18 bands and 2 sources is 298 GB, and the solver aborts 15 s in.
 //
-// The model: cube = cells x steps x bands x sources x 4 bytes, where cells are every enabled plane's cells plus
+// The model: cube = cells x steps x bands x sources x 8 bytes (SPPS accumulates in `l_decimal`, a double), where cells are every enabled plane's cells plus
 // every enabled surface-group receiver's faces, bands count only with sound maps per band, sources only with an
-// echogram per source. The float32 cube alone, with no solver overhead: a floor, not a measurement (no sampled run
+// echogram per source. The cube alone, with no solver overhead: a floor, not a measurement (no sampled run
 // has calibrated it yet). The limits are a stop-gap against this machine's 32 GB until the app can read the
 // machine's memory: refuse from REFUSE_GB, warn from WARN_GB.
 import type { SceneState } from '../../bindings/ipc.ts';
@@ -61,7 +61,7 @@ export function resultCube(
   }
   const bands = s.sound_maps_per_band ? bandsOn : 1;
   const sources = s.echogram_per_source ? sourcesOn : 1;
-  const bytes = cells * steps * bands * sources * 4;
+  const bytes = cells * steps * bands * sources * 8;
   return { cells, steps, bands, sources, bytes, gb: bytes / 2 ** 30 };
 }
 
