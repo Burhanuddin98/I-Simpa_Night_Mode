@@ -71,6 +71,7 @@ import { faceBounds, faceCentroid, fitOrtho, gizmoAxes, isFloorLike, placementPo
 import { BG, glowPixels, RED, ringPixels, WHITE } from './sprites';
 import { GLOW_MAX, GLOW_RGB, glowLevel, glowRadius, pulsePhase, spriteScale, STILL_PHASE, withGlow } from './glow';
 import { aoReach, bakeAo, withAo } from './ao';
+import { FADE_BG, FADE_MAX, fadeRange, withFade } from './fade';
 import { planeCells } from '../../chrome/planes';
 
 export type ViewMode = 'perspective' | 'plan';
@@ -132,9 +133,11 @@ export interface ViewStyle {
   glass: number;
   /** Corner shading (ao.ts) on. */
   corners: boolean;
+  /** Distance fade (fade.ts) on. */
+  fade: boolean;
 }
 const STYLE_KEY = 'nm.viewStyle';
-const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15, corners: true };
+const DEFAULT_STYLE: ViewStyle = { surfaces: 'colour', edges: 'all', glass: 15, corners: true, fade: true };
 function loadStyle(): ViewStyle {
   try {
     const v = JSON.parse(localStorage.getItem(STYLE_KEY) ?? 'null') as Partial<ViewStyle> | null;
@@ -144,6 +147,7 @@ function loadStyle(): ViewStyle {
       edges: v.edges === 'feature' ? 'feature' : 'all',
       glass: typeof v.glass === 'number' ? Math.min(60, Math.max(0, v.glass)) : DEFAULT_STYLE.glass,
       corners: v.corners !== false,
+      fade: v.fade !== false,
     };
   } catch {
     return DEFAULT_STYLE;
@@ -268,16 +272,32 @@ function stillMotion(): boolean {
   }
 }
 
-/** `m` with the corner shading (ao.ts) and then the sources' glow (glow.ts) in its colour, reading the shared `uniforms`. */
+/**
+ * `m` with the corner shading (ao.ts), the sources' glow (glow.ts) and the distance fade (fade.ts)
+ * in its colour, in that order, reading the shared `uniforms`.
+ */
 function shaded<M extends Material>(m: M, uniforms: Record<string, IUniform>): M {
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     const a = withAo(shader.vertexShader, shader.fragmentShader);
     const g = withGlow(a.vertex, a.fragment);
-    shader.vertexShader = g.vertex;
-    shader.fragmentShader = g.fragment;
+    const f = withFade(g.vertex, g.fragment, 'mix');
+    shader.vertexShader = f.vertex;
+    shader.fragmentShader = f.fragment;
   };
   m.customProgramCacheKey = () => 'nm-shaded';
+  return m;
+}
+
+/** The edges with the distance fade taken from their opacity (fade.ts). */
+function fadingLines<M extends Material>(m: M, uniforms: Record<string, IUniform>): M {
+  m.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    const f = withFade(shader.vertexShader, shader.fragmentShader, 'alpha');
+    shader.vertexShader = f.vertex;
+    shader.fragmentShader = f.fragment;
+  };
+  m.customProgramCacheKey = () => 'nm-fading-lines';
   return m;
 }
 
@@ -331,9 +351,16 @@ class ViewportEngine {
   private readonly planeOutline: LineSegments2;
   private readonly planeGrid: LineSegments2;
   private planeSummary: { name: string; corners: Vec[]; u: number; v: number; gridLines: number }[] = [];
-  /** The surface materials' shared uniforms: the corner shading's switch (ao.ts) and the sources' glow (glow.ts). */
-  private readonly glow = {
+  /**
+   * The surface and edge materials' shared uniforms: the corner shading's switch (ao.ts), the
+   * distance fade (fade.ts, set before each render) and the sources' glow (glow.ts).
+   */
+  private readonly shared = {
     nmAoMix: { value: 1 },
+    nmFadeNear: { value: 0 },
+    nmFadeFar: { value: 1 },
+    nmFadeMax: { value: 0 },
+    nmFadeColor: { value: new Color(FADE_BG) },
     glowPos: { value: Array.from({ length: GLOW_MAX }, () => new Vector3()) },
     glowCount: { value: 0 },
     glowRadius: { value: 1.5 },
@@ -383,8 +410,8 @@ class ViewportEngine {
       new MeshMatcapMaterial({ matcap, vertexColors: true, side: FrontSide, flatShading: true, transparent: true, opacity: 0.15, depthWrite: false }),
     );
     this.ghost.visible = false;
-    for (const m of [this.tintColour, this.tintGrey, this.tintWire, this.ghost.material as MeshMatcapMaterial]) shaded(m, this.glow);
-    this.edges = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }));
+    for (const m of [this.tintColour, this.tintGrey, this.tintWire, this.ghost.material as MeshMatcapMaterial]) shaded(m, this.shared);
+    this.edges = new LineSegments(new BufferGeometry(), fadingLines(new LineBasicMaterial({ color: LINE, transparent: true, opacity: 0.3, depthWrite: false }), this.shared));
     this.highlight = new Mesh(
       new BufferGeometry(),
       new MeshBasicMaterial({ color: WARN, transparent: true, opacity: 0.55, side: DoubleSide, depthWrite: false }),
@@ -623,6 +650,7 @@ class ViewportEngine {
       r.clear();
       const main = this.mainCamera(w / h);
       this.setMarkerScale(1);
+      this.setFade(main === this.persp);
       r.render(this.scene, main);
       if (this.results.particleMeta && stepStore.get() === 'results') noteDrawn(this.results.particleStep());
       if (this.view === 'perspective' && this.bounds) this.renderInset(r, dom.inset);
@@ -632,6 +660,22 @@ class ViewportEngine {
     const vp = viewportStore.get();
     const live = this.renderer !== null;
     if (vp.live !== live || vp.drawnRev !== this.builtRev) viewportStore.set({ live, drawnRev: this.builtRev });
+  }
+
+  /** The distance fade (fade.ts) across the model's bounding sphere as the perspective camera sees it; none in plan. */
+  private setFade(perspective: boolean): void {
+    const u = this.shared;
+    const b = this.bounds;
+    if (!perspective || !b || !viewStyle.get().fade) {
+      u.nmFadeMax.value = 0;
+      return;
+    }
+    const centre = new Vector3((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2);
+    const radius = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]) / 2;
+    const { near, far } = fadeRange(this.persp.position.distanceTo(centre), radius);
+    u.nmFadeNear.value = near;
+    u.nmFadeFar.value = far;
+    u.nmFadeMax.value = FADE_MAX;
   }
 
   /** The plan inset: the same scene through the top camera, scissored to the DOM box. */
@@ -647,6 +691,7 @@ class ViewportEngine {
     // The inset is a floating panel too (decision-log row 50): its box is see-through.
     r.setClearColor(PANEL, 0.35);
     r.clear();
+    this.setFade(false);
     this.fitPlan(b.width / b.height);
     this.setMarkerScale(INSET_MARKER_SCALE);
     r.render(this.scene, this.plan);
@@ -839,7 +884,7 @@ class ViewportEngine {
     this.ghost.visible = st.surfaces === 'glass';
     (this.ghost.material as MeshMatcapMaterial).opacity = st.glass / 100;
     this.edges.geometry = st.edges === 'feature' ? this.featureEdges : this.triangleEdges;
-    this.glow.nmAoMix.value = st.corners ? 1 : 0;
+    this.shared.nmAoMix.value = st.corners ? 1 : 0;
     this.invalidate();
   }
 
@@ -1031,8 +1076,8 @@ class ViewportEngine {
     this.halo.geometry = halo;
 
     const lit = (view?.sources ?? []).filter((s) => s.enabled && s.position.every(finite)).slice(0, GLOW_MAX);
-    lit.forEach((s, i) => this.glow.glowPos.value[i].set(...(s.position as [number, number, number])));
-    this.glow.glowCount.value = lit.length;
+    lit.forEach((s, i) => this.shared.glowPos.value[i].set(...(s.position as [number, number, number])));
+    this.shared.glowCount.value = lit.length;
     this.updateGlow();
   }
 
@@ -1042,7 +1087,7 @@ class ViewportEngine {
    * is mounted, unless motion is to hold still.
    */
   private updateGlow(): void {
-    const u = this.glow;
+    const u = this.shared;
     u.glowRadius.value = glowRadius(this.bounds);
     const on = u.glowCount.value > 0 && stepStore.get() !== 'results';
     const moving = on && !!this.dom && !stillMotion();
@@ -1061,7 +1106,7 @@ class ViewportEngine {
     if (now - this.glowDrawn < 33) return;
     this.glowDrawn = now;
     this.glowPhase = pulsePhase(now);
-    this.glow.glowLevel.value = glowLevel(this.glowPhase);
+    this.shared.glowLevel.value = glowLevel(this.glowPhase);
     this.invalidate();
   };
 

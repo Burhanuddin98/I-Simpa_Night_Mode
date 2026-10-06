@@ -102,6 +102,15 @@ export function ViewStyleMenu() {
           >
             Darker corners
           </button>
+          <button
+            role="menuitemcheckbox"
+            aria-checked={style.fade}
+            data-fade=""
+            title="The far side of the room sinks toward the background, so near and far separate"
+            onClick={() => set({ fade: !style.fade })}
+          >
+            Distance fade
+          </button>
         </div>
       )}
     </div>
