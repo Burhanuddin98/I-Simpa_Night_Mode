@@ -1,5 +1,18 @@
 # A2: `spps-gpu`, built and bedded (2026-10-06 20:46-21:45, Grace)
 
+> **Audit 2026-10-06 21:49 (fresh-context review, `A2-AUDIT.md` beside this file), and Jarvis's own check.**
+> The three headline claims hold against the raw files: CPU and GPU walks identical in 17 of 17 cases (worst
+> double relative difference 4.557e-14); CR4 within the Monte-Carlo noise in 54 of 55 evaluable values against
+> the verified SPPS build (20 of 55 per pair are not evaluable on both arms and are not counted); CR4 1 kHz,
+> 2 x 300 k, 10 s: SPPS 108.886 s against spps-gpu 4.030 s, configs equal but for workingdirectory. Every run's
+> working directory was inside `.out\spps-gpu` or `C:\tmp\nm-spps-gpu`; nothing under `tests\fixtures` or
+> `.out\ui` changed. **Corrections:** the identity set's primary particles sum to 7.4 M (not 9.0 M) and 1.522 B
+> steps (not 1.53 B); the XZ directivity plane is not in it (only unidirectional, XY and YZ). Untested: rule 11
+> (transmission children), rule 10 (one-sided pass-through); direct-field runs have no parameter comparison.
+> Independent check (Jarvis, 21:48, a case the builder never ran): CR4 1 kHz, LS1, 200 k particles, 2 s,
+> against the SPPS run of 19:42: spps-gpu 0.36 s for the whole process against SPPS 19.6 s (54x); T20 ratio
+> 0.995-1.022 and total energy ratio 0.990-1.036 at MP1-MP5.
+
 **What it means.** There is now a GPU particle solver that `simpa run-folder` and `simpa results` accept
 exactly as they accept SPPS. On CR4's 1 kHz band (2 sources x 300,000 particles, 10 s) it takes
 **4.0 s against SPPS's 108.9 s (27x)**. Every parameter it gives is within the Monte-Carlo noise of SPPS's
