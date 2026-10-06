@@ -20,13 +20,9 @@ export function IssueLines({ lines, part }: { lines: readonly Line[]; part: stri
     <div className="mat-issues" role="status" data-part={part}>
       {lines.map((l, i) => (
         <div key={i} className={l.label === 'WARN' ? 'issue warning' : 'issue'} data-issue-code={l.code}>
-          <span className="code">
-            {l.label} {l.code}:
-          </span>
-          <span>
-            {' '}
-            {l.message}
-          </span>
+          <span className="state">{l.label === 'WARN' ? 'Warning:' : 'Error:'}</span>
+          <span className="msg"> {l.message} </span>
+          <span className="code">{l.code}</span>
         </div>
       ))}
     </div>

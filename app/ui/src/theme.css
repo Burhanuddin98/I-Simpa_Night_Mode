@@ -129,8 +129,8 @@ input[aria-invalid='true'] {
   border-color: var(--red-hi);
 }
 
-/* An inline issue: the UI code as text, then the message. A failure always carries its label
-   (FAIL, or the code), never colour alone: red is also the brand colour. */
+/* An inline issue: Error or Warning in words, the message, then the UI code, smaller. A failure
+   always carries its word, never colour alone: red is also the brand colour. */
 .issue {
   display: flex;
   gap: 6px;
@@ -138,15 +138,20 @@ input[aria-invalid='true'] {
   line-height: 1.45;
   color: var(--fail-text);
 }
-.issue .code {
+.issue .state {
   flex-shrink: 0;
-  font-family: var(--mono);
-  font-size: 11px;
   font-weight: 600;
   color: var(--red-hi);
 }
+.issue .code {
+  flex-shrink: 0;
+  align-self: baseline;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-3);
+}
 .issue.warning,
-.issue.warning .code {
+.issue.warning .state {
   color: var(--warn);
 }
 /* Segmented control: the variant switch and the view tabs. */

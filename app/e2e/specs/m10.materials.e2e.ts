@@ -214,7 +214,7 @@ describe('M10 materials', () => {
     let lines = await issueLines();
     const range = lines.find((l) => l.code === 'MATERIAL_VALUE_OUT_OF_RANGE');
     assert.ok(range, JSON.stringify(lines));
-    assert.ok(range.text.startsWith('FAIL MATERIAL_VALUE_OUT_OF_RANGE:'), range.text);
+    assert.ok(range.text.startsWith('Error: ') && range.text.trim().endsWith('MATERIAL_VALUE_OUT_OF_RANGE'), range.text);
     assert.equal(await cellIssue('2:1'), 'MATERIAL_VALUE_OUT_OF_RANGE', 'the cell is outlined');
     assert.equal(await m10.projectJson(), before);
     assert.equal(await m10.undoDepth(), depth);
@@ -223,7 +223,7 @@ describe('M10 materials', () => {
     lines = await issueLines();
     const nan = lines.find((l) => l.code === 'NOT_A_NUMBER');
     assert.ok(nan, JSON.stringify(lines));
-    assert.ok(nan.text.startsWith('FAIL NOT_A_NUMBER:') && nan.text.includes("'0,5'"), nan.text);
+    assert.ok(nan.text.startsWith('Error: ') && nan.text.trim().endsWith('NOT_A_NUMBER') && nan.text.includes("'0,5'"), nan.text);
     assert.ok(!lines.some((l) => l.code === 'MATERIAL_VALUE_OUT_OF_RANGE'), 'the messages are the latest attempt');
     assert.equal(await cellIssue('2:1'), 'NOT_A_NUMBER');
     assert.equal(await m10.projectJson(), before);
@@ -285,7 +285,7 @@ describe('M10 materials', () => {
       await clickSelector('[data-grid-cell="0:0"]');
       await clipboard('paste', text);
       const lines = await issueLines();
-      assert.ok(lines.some((l) => l.code === code && l.text.startsWith(`FAIL ${code}:`)), `${code}: ${JSON.stringify(lines)}`);
+      assert.ok(lines.some((l) => l.code === code && l.text.startsWith('Error: ') && l.text.trim().endsWith(code)), `${code}: ${JSON.stringify(lines)}`);
       assert.equal(await m10.projectJson(), before, `${code} changed the project`);
       assert.equal(await m10.undoDepth(), depth + 2);
     }

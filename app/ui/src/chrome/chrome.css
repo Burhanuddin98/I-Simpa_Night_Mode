@@ -404,7 +404,7 @@
   height: 10px;
   border: 1.5px dashed var(--text-3);
 }
-/* A row's issue: FAIL or WARN and the code, as text. */
+/* A row's issue: Error or Warning as a word, and how many more; the codes are in its tooltip. */
 .issue-tag {
   flex-shrink: 0;
   max-width: 62%;

@@ -41,19 +41,18 @@ type Point = Source | PointReceiver;
 /** The F2 requests already acted on (a panel mounted after the request still takes it). */
 let renamesTaken = 0;
 
-/** One inline issue: FAIL or WARN and the UI code as text, the message, and the core rule. */
+/** One inline issue: Error or Warning, the message, then the UI code, smaller (words first, the UI study's increment 2). */
 export function IssueLine({ issue, refused }: { issue: UiIssue; refused: boolean }) {
   const fail = issue.severity === 'error';
   return (
     <div className={`issue${fail ? '' : ' warning'}`} data-issue-code={issue.code} role={fail ? 'alert' : undefined}>
-      <span className="code">
-        {fail ? 'FAIL' : 'WARN'} {issue.code}
-      </span>
+      <span className="state">{fail ? 'Error' : 'Warning'}</span>
       <span className="msg">
         {sentence(issue.message)}
         {refused && ' Refused; the project is unchanged.'}
         {issue.rule && <span className="rule"> ({issue.rule})</span>}
       </span>
+      <span className="code">{issue.code}</span>
     </div>
   );
 }

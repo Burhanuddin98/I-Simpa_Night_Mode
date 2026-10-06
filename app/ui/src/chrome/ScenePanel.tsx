@@ -104,11 +104,8 @@ export function IssueTag({ issues }: { issues: readonly UiIssue[] }) {
       data-row-issue={first.code}
       title={issues.map((i) => `${i.code} (${i.rule}): ${i.message}`).join('\n')}
     >
-      <span className="state">{worst === 'error' ? 'FAIL' : 'WARN'}</span>
-      <span className="code">
-        {first.code}
-        {more}
-      </span>
+      <span className="state">{worst === 'error' ? 'Error' : 'Warning'}</span>
+      {more && <span className="code">{more}</span>}
     </span>
   );
 }
