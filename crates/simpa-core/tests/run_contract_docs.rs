@@ -250,7 +250,7 @@ fn no_two_patterns_match_one_documented_sample() {
         "A sound source position is intersecting with the 3D model. Move the sound source",
         "Unable to find the source position!",
         "Warning 5 particles has been in error on 10 particles. The computation result may be",
-        "spps-gpu: refused: fittings_unsupported: enc_calc is on and the mesh holds fitting volumes",
+        "spps-gpu: refused: fittings_unsupported: SPPS on the GPU does not support fittings in this version; run SPPS on the CPU, or turn fittings off",
     ];
     for (s, r) in samples.iter().zip(&LINE_RULES) {
         assert_eq!(classify::matching_rules(s), [r.id], "{s}");

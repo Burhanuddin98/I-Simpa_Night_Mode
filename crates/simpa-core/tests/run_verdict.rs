@@ -262,8 +262,8 @@ fn fail_sample(id: &str) -> Vec<Line> {
         }],
         // spps-gpu.exe's refusal, exit 2 (decision 70; solvers/spps-gpu/src/main.cu:372).
         "spps_gpu_refused" => vec![err(
-            "spps-gpu: refused: fittings_unsupported: enc_calc is on and the mesh holds fitting \
-             volumes (encombrement)",
+            "spps-gpu: refused: fittings_unsupported: SPPS on the GPU does not support fittings in \
+             this version; run SPPS on the CPU, or turn fittings off",
         )],
         other => panic!("no sample for {other}"),
     }
