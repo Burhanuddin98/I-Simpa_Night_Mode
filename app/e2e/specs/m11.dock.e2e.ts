@@ -121,10 +121,17 @@ interface Scroll {
   atBottom: boolean;
 }
 const consoleScroll = () => hook<Scroll | null>('consoleScroll');
+// The scroll event a scrollTop write raises is dispatched on the next frame. During a live run a
+// render (a PROGRESS batch) can land in between, and the pane, not yet told, puts the Console
+// back at the bottom: m11-dock-live failed once so (C4 run 20261007-154608, top 2122 = the
+// bottom) and passed on the rerun (20261007-155028). The event is dispatched here in the same
+// task, so the pane hears of the scroll before any render can run. Backlog 95 owns the app side.
 const scrollConsole = (to: 'top' | 'bottom') =>
   browser.execute((where: string) => {
     const el = document.querySelector<HTMLElement>('[data-dock-panel="console"]');
-    if (el) el.scrollTop = where === 'top' ? 0 : el.scrollHeight;
+    if (!el) return;
+    el.scrollTop = where === 'top' ? 0 : el.scrollHeight;
+    el.dispatchEvent(new Event('scroll'));
   }, to);
 
 /** One FAIL line in the Console: a results check of a run that does not exist (RUN_NOT_FOUND,
