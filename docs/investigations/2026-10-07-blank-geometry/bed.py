@@ -21,7 +21,7 @@ flags = [a for a in sys.argv[1:] if a.startswith("--")]
 app, solvers, out = args[0], args[1], args[2]
 GROUPED = "--grouped" in flags
 GPU = "--gpu" in flags
-port = 9241
+port = 9263
 for i, a in enumerate(sys.argv):
     if a == "--port":
         port = int(sys.argv[i + 1])

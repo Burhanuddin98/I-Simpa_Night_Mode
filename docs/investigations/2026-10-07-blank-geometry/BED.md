@@ -65,3 +65,29 @@ and nothing on screen points at the source. Any stranger who imports a 3 m high 
 4. Transmission per band in the grid.
 5. The run failure from a centred source. This is a solver behaviour with a symptom the app misnames. It
    is reported for Burhan's call, not fixed in the solver. See the report for what was done about it.
+
+## After the build (blank `2f48212`, app built 14:18 by the gate run, beds 14:21 to 14:22)
+
+The same `bed.py`, now on port 9263. Receipts: `.out\blank\bed-after-blank\` and `bed-after-grouped\`.
+
+| Step | Groupless box | Grouped box |
+|---|---|---|
+| Import | OK: one group, `box_blank` (named for the file), 12 faces. The Geometry step reads "No groups in the file", with how to carve it. | OK: six groups from `g` |
+| Carve floor, ceiling and south wall | OK | n/a |
+| Move selection to group (north triangle 2) | **OK**: the view's menu lists the groups under "Move to group"; the group then holds 2 faces | n/a |
+| Merge two groups (west) | **OK**: Ctrl+click both rows, Edit › Merge groups; one group of 2 faces remains | n/a |
+| Rename (F2 on the row) | **OK** for all six: floor, ceiling, wall south, wall north, wall west, wall east | **OK** for all six |
+| Library material, absorption and scattering typed | OK | OK |
+| Transmission typed per band | **OK**: 20 dB in band 1, then switched off again (Backspace, Enter), back to no transmission | **OK** |
+| Add a source | OK: S1 at (2.292, 4.14, 1.5), off the centre | OK |
+| Source power, spectrum, directivity | **OK**: 95 dB; spectrum ES_VL from upstream's eight; directivity omni, unidirectional, planes XY, YZ, XZ | **OK** |
+| Receivers and a plane | OK | OK |
+| SPPS on the CPU | **OK**, 5.5 s, the solver's and TetGen's stderr empty | **OK** |
+| Results, Acoustics, map | **OK**: Results "verified", Acoustics "ready", the plane's map (`rs_cut.csbin`, 120 faces) | **OK** |
+| SPPS on the GPU | **OK**, 1.0 s, RTX 5070 named in the row | not run |
+
+The first two after-beds, at 14:19 and 14:21, ran on port 9241 and connected to another app: the `dock`
+builder's `app.exe` (pid 12808, started 14:17 from `C:\tmp\nm-target-dock`), whose WebView2 listened on
+the same port. They drove that app's old UI: imported the box, carved it, and ran SPPS twice into this
+folder's `.out\blank\bed-wrong-app-port9241\`. That is why the bed's port moved to 9263. Those
+receipts are not evidence for this build. The other builder's app was not stopped.
