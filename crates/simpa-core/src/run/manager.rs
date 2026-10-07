@@ -1681,7 +1681,7 @@ fn judged(rec: &Record, outcome: Outcome, lines: &[Classified]) -> Launched {
         Ok(e) => Outputs::read(&rec.solve, e),
         Err(_) => Outputs::default(),
     };
-    let verdict = judge(&Evidence {
+    let mut verdict = judge(&Evidence {
         solver: opts.solver,
         outcome: &outcome,
         lines,
@@ -1689,6 +1689,15 @@ fn judged(rec: &Record, outcome: Outcome, lines: &[Classified]) -> Launched {
         outputs: &outputs,
         loss_limit: opts.loss_limit,
     });
+    // C1 audit: a loss from a source on an edge of the mesh says where it comes from.
+    if let Some(r) = verdict
+        .reasons
+        .iter_mut()
+        .find(|r| r.code == codes::PARTICLE_LOSS_EXCESS)
+        && let Some(hint) = locate::edge_hint_folder(&rec.solve)
+    {
+        r.detail = format!("{}. {hint}", r.detail);
+    }
     let files = match &exp {
         Ok(e) => FileCounts::of(&e.expected_files(), &outputs),
         Err(_) => FileCounts {

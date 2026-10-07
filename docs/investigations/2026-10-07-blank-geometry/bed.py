@@ -15,6 +15,8 @@ Needs websocket-client (do not run with python -I). Stops only the app.exe it st
 """
 import base64, json, math, os, subprocess, sys, time, urllib.request
 import websocket
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bedport import refuse_if_taken, require_owner
 
 args = [a for a in sys.argv[1:] if not a.startswith("--")]
 flags = [a for a in sys.argv[1:] if a.startswith("--")]
@@ -78,6 +80,7 @@ R["obj_text"] = open(obj).read()
 env = dict(os.environ, SIMPA_SOLVERS_DIR=solvers,
            WEBVIEW2_USER_DATA_FOLDER=os.environ.get("BED_WEBVIEW_DIR", "C:/tmp/nm-target-blank/webview2"),
            WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=f"--remote-debugging-port={port}")
+refuse_if_taken(port)
 proc = subprocess.Popen([app, "--e2e"], env=env)
 log(f"started app pid {proc.pid}")
 ws = None
@@ -271,6 +274,7 @@ def rename_group(gid, name):
 
 try:
     connect()
+    R["port_owner_chain"] = require_owner(port, proc.pid)
     wait_js("!!window.__m10 && !!document.querySelector('[data-step]')", 60)
     hook("frame") if js("window.__m10.ready(['frame'])") else None
 
