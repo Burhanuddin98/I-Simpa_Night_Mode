@@ -203,15 +203,20 @@ fn every_run_folder_fixture_gives_its_expected_verdict() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 
     // M6(e): every row is hit through run-folder, and the unterminated last line is captured.
+    // Every row but `spps_gpu_refused` (decision 70, A5): it is spps-gpu.exe's line, not upstream's,
+    // and these fixtures are generated against upstream's source and solvers (mkstubs.py,
+    // mkexpected.py's stub evidence); run_verdict.rs judges it, and the A5 bed ran it on the real
+    // executable (docs/investigations/2026-10-06-gpu/A5-REPORT.md, bed 3).
     let missed: Vec<&str> = LINE_RULES
         .iter()
         .map(|r| r.id)
+        .filter(|id| *id != "spps_gpu_refused")
         .filter(|id| !hit.contains(id))
         .collect();
     println!(
-        "{}/{} classifier rows hit",
-        LINE_RULES.len() - missed.len(),
-        LINE_RULES.len()
+        "{}/{} classifier rows hit (spps_gpu_refused is judged in run_verdict.rs)",
+        LINE_RULES.len() - 1 - missed.len(),
+        LINE_RULES.len() - 1
     );
     assert!(missed.is_empty(), "rows no fixture hit: {missed:?}");
     assert!(

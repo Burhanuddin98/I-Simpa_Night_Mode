@@ -260,6 +260,11 @@ fn fail_sample(id: &str) -> Vec<Line> {
                  result may be wrong, please check the particles statitics file for more details.",
             )
         }],
+        // spps-gpu.exe's refusal, exit 2 (decision 70; solvers/spps-gpu/src/main.cu:372).
+        "spps_gpu_refused" => vec![err(
+            "spps-gpu: refused: fittings_unsupported: enc_calc is on and the mesh holds fitting \
+             volumes (encombrement)",
+        )],
         other => panic!("no sample for {other}"),
     }
 }
@@ -271,7 +276,7 @@ fn each_fail_line_is_its_own_reason_code() {
         .filter(|r| r.class == LineClass::Fail)
         .map(|r| r.id)
         .collect();
-    assert_eq!(fails.len(), 11);
+    assert_eq!(fails.len(), 12);
     for solver in [SolverKind::Spps, SolverKind::Tcr] {
         let exp = tutorial1_expectation(solver);
         for id in &fails {

@@ -1519,3 +1519,38 @@ fn t54_3_run_folder_also_verifies_its_solver_by_default() {
     assert_eq!(r.code, 0, "{r:#?}");
     assert_eq!(json(&r)["solver_build"]["status"], "verified", "{r:#?}");
 }
+
+// -------------------------------------------------------------------------------------------
+// A5 (decision 70): `--device gpu` runs SPPS on the GPU. Each refusal below is a usage error,
+// exit 2, before any run folder exists: no GPU is needed to see them.
+
+/// `--device` takes cpu or gpu; gpu with TCR is refused (TCR has no GPU build); gpu with an
+/// executable that is not the verified `spps-gpu.exe` (here `spps.exe` given as `--solver-exe`)
+/// is refused before it is ever started, with the reason.
+#[test]
+fn a5_device_gpu_is_refused_with_its_reason_before_any_run() {
+    let root = scratch("a5-device");
+    let project = fixture(BOX);
+    let runs = root.join("runs");
+    let spps = solver_exe("spps.exe");
+    let spps = spps.display().to_string();
+    for (solver, extra, want) in [
+        (
+            "spps",
+            vec!["--device", "cuda"],
+            "--device: unknown device 'cuda'",
+        ),
+        ("tcr", vec!["--device", "gpu"], "TCR has no GPU build"),
+        (
+            "spps",
+            vec!["--device", "gpu", "--solver-exe", spps.as_str()],
+            "is not the verified build",
+        ),
+    ] {
+        let o = run(&project, solver, &runs, &extra);
+        assert_eq!(o.code, 2, "{extra:?}: {o:#?}");
+        assert!(o.stderr.contains(want), "{extra:?}: {}", o.stderr);
+        assert!(o.stdout.is_empty(), "{extra:?}: {o:#?}");
+        assert!(!runs.exists(), "{extra:?}: a run folder was made");
+    }
+}

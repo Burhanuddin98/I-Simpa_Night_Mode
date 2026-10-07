@@ -32,7 +32,10 @@ fn the_probe_names_the_device_and_says_why_when_there_is_none() {
         t0.elapsed().as_secs_f64(),
         found.display()
     );
-    assert!(line.contains(", sm_") && line.contains("driver CUDA"), "{line}");
+    assert!(
+        line.contains(", sm_") && line.contains("driver CUDA"),
+        "{line}"
+    );
 
     // No device visible: exit 1 with its own words, never a device.
     // SAFETY: this binary runs one test; nothing else reads the environment concurrently.
