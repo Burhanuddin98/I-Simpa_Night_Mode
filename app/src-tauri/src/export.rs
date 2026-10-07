@@ -5,16 +5,18 @@
 //! frame read back for the view); this module reads nothing of a run. The path is the one the save
 //! dialog returned (the e2e passes one as its save-as hook does). What is checked here, so a wrong
 //! call writes nothing:
-//! - the kind is one of `csv`, `json`, `png`, and the path is absolute with that extension;
+//! - the kind is one of `csv`, `json`, `png`, `wav` (C5's saved responses), and the path is
+//!   absolute with that extension;
 //! - its folder exists, and the path is not a folder;
-//! - the bytes are what the kind says: UTF-8 for CSV, a JSON document for JSON, a PNG signature;
+//! - the bytes are what the kind says: UTF-8 for CSV, a JSON document for JSON, a PNG signature,
+//!   a RIFF/WAVE header for WAV;
 //! - the file is written whole or not at all: a temporary file beside it, then renamed over it.
 
 use std::path::{Path, PathBuf};
 
 use crate::guard::{CmdError, CmdResult};
 
-pub const KINDS: [&str; 3] = ["csv", "json", "png"];
+pub const KINDS: [&str; 4] = ["csv", "json", "png", "wav"];
 const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
 
 /// Decodes a header's `encodeURIComponent` text: `%XX` bytes, then UTF-8.
@@ -48,7 +50,7 @@ pub fn checked_path(kind: &str, path: &str) -> CmdResult<PathBuf> {
     if !KINDS.contains(&kind) {
         return Err(CmdError::new(
             "EXPORT_KIND",
-            format!("'{kind}' is not an export kind: csv, json or png"),
+            format!("'{kind}' is not an export kind: csv, json, png or wav"),
         ));
     }
     let p = PathBuf::from(path);
@@ -96,6 +98,9 @@ pub fn check_content(kind: &str, bytes: &[u8]) -> CmdResult<()> {
     };
     match kind {
         "png" if !bytes.starts_with(&PNG_SIGNATURE) => bad("no PNG signature"),
+        "wav" if bytes.len() < 12 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WAVE" => {
+            bad("no RIFF/WAVE header")
+        }
         "csv" if std::str::from_utf8(bytes).is_err() => bad("not UTF-8 text"),
         "json" if serde_json::from_slice::<serde_json::Value>(bytes).is_err() => {
             bad("not a JSON document")
@@ -236,6 +241,18 @@ mod tests {
         let mut ok = PNG_SIGNATURE.to_vec();
         ok.extend_from_slice(b"rest");
         assert_eq!(write("png", png.to_str().unwrap(), &ok).unwrap(), 12);
+        // C5: a WAV is a RIFF/WAVE file, nothing else.
+        let wav = d.join("ir.wav");
+        assert_eq!(
+            write("wav", wav.to_str().unwrap(), b"RIFF\0\0\0\0AVI junk")
+                .unwrap_err()
+                .code,
+            "EXPORT_CONTENT"
+        );
+        assert_eq!(
+            write("wav", wav.to_str().unwrap(), b"RIFF\x04\0\0\0WAVE").unwrap(),
+            12
+        );
         std::fs::remove_dir_all(&d).unwrap();
     }
 

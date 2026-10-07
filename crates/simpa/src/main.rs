@@ -3,6 +3,7 @@ use std::process::ExitCode;
 
 use simpa_core::{config_xml, formats, schema, validate};
 
+mod aural_cmd;
 mod bed_cmd;
 mod mesh_run;
 mod results_cmd;
@@ -64,6 +65,13 @@ const USAGE: &str = "usage:
       report.json, summary.json and decays/ under <root>/<UTC stamp>/. Exit 0 only when
       report.pass is true; 8 not passed; 5 a run was not OK; 2 usage or an invalid bed file.
   simpa bed --schema | --canonical                            report.json's schema; M8a's bed file
+  simpa auralize <run-folder> --receiver <name> [--source <name> | --summed] [--source-audio <wav>]
+            --out <wav> [--pcm24] [--seed <n>]
+      a receiver's impulse response synthesised from the SPPS energy echogram (not a measured or
+      wave-based one), or with --source-audio a dry or anechoic recording convolved with it (resampled to 48 kHz
+      first); mono, 48 kHz, peak -1 dBFS, 32-bit float or 24-bit PCM; the seed and the gain to the
+      run's scale in the WAV's comment. The sources summed unless --source names one. Exit 0; 2
+      usage or refused; 5, 6 as results
   Executables: --solver-exe / --tetgen, else $SIMPA_SOLVERS_DIR, else beside simpa.exe (its
   solvers/ folder first), else the nearest target/solvers/bin above it.";
 
@@ -98,6 +106,7 @@ fn main() -> ExitCode {
         ["advise", rest @ ..] => advise_cmd(rest),
         ["reband", rest @ ..] => reband_cmd(rest),
         ["bed", rest @ ..] => bed_cmd::bed_cmd(rest),
+        ["auralize", rest @ ..] => aural_cmd::auralize_cmd(rest),
         [command, ..] => fail(&format!("unknown command '{command}'\n{USAGE}")),
     }
 }

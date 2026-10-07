@@ -48,6 +48,7 @@
     "allow-run-surface-map",
     "allow-run-particles",
     "allow-run-echogram",
+    "allow-run-auralize",
     "allow-proj-import",
     "allow-material-library",
     "allow-spectrum-library",

@@ -625,15 +625,15 @@ export async function reportFor(runName: string): Promise<ReportView> {
 }
 
 /** W9: asks the save dialog where a `kind` export goes (null: cancelled), unless `path` is given. */
-export async function exportPath(kind: 'csv' | 'json' | 'png', defaultName: string, path?: string): Promise<string | null> {
+export async function exportPath(kind: 'csv' | 'json' | 'png' | 'wav', defaultName: string, path?: string): Promise<string | null> {
   if (path !== undefined) return path;
-  const names = { csv: 'CSV table', json: 'JSON', png: 'PNG image' } as const;
+  const names = { csv: 'CSV table', json: 'JSON', png: 'PNG image', wav: 'WAV audio' } as const;
   const target = await saveDialog({ defaultPath: defaultName, filters: [{ name: names[kind], extensions: [kind] }] });
   return typeof target === 'string' ? target : null;
 }
 
 /** W9: writes an export the core checks (absolute path, the kind's extension, the kind's bytes). */
-export async function exportWrite(kind: 'csv' | 'json' | 'png', path: string, bytes: Uint8Array, what: string): Promise<number> {
+export async function exportWrite(kind: 'csv' | 'json' | 'png' | 'wav', path: string, bytes: Uint8Array, what: string): Promise<number> {
   const n = await run(`Could not export ${what} to ${path}`, () => backend.exportWrite(kind, path, bytes));
   log('OK', `Exported ${what} to ${path}`);
   return n;
@@ -646,6 +646,16 @@ export async function exportWrite(kind: 'csv' | 'json' | 'png', path: string, by
 export const runData = (runName: string) => backend.runData(runName);
 export const runSurfaceMap = (runName: string, path: string, maxTexels: number) => backend.runSurfaceMap(runName, path, maxTexels);
 export const runParticles = (runName: string, bandHz: number) => backend.runParticles(runName, bandHz);
+/** C5: the listening window's read (features/acoustics/AuralWindow.tsx), passed through as the
+ * backend returns it; the window reads a refusal itself. */
+export const runAuralize = (runName: string, receiver: string, source: string | null, dry: { clip?: string; path?: string }) =>
+  backend.runAuralize(runName, receiver, source, dry);
+
+/** C5: asks the open dialog for a WAV to auralize (null: cancelled). */
+export async function openWavDialog(): Promise<string | null> {
+  const p = await open({ multiple: false, directory: false, filters: [{ name: 'WAV audio', extensions: ['wav'] }] });
+  return typeof p === 'string' ? p : null;
+}
 
 /**
  * The run stream's handler for the run with `ActiveRun.id` `id`, the one writer of

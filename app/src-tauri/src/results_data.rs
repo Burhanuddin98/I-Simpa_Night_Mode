@@ -342,7 +342,7 @@ fn refused(run: &str, r: results::Refusal) -> ResultsState {
 }
 
 /// The run's results, or `RESULTS_REFUSED` naming why: for the reads that serve data.
-fn loaded(root: &Path, run: &str) -> CmdResult<Arc<RunResults>> {
+pub(crate) fn loaded(root: &Path, run: &str) -> CmdResult<Arc<RunResults>> {
     match open(root, run)? {
         (_, Some(r)) => Ok(r),
         (state, None) => {

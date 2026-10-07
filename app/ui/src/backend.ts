@@ -181,7 +181,11 @@ export const backend = {
   /** One band's saved particles as PART bytes (`decodeParticles`). */
   runParticles: (run: string, bandHz: number) => invoke<ArrayBuffer>('run_particles', { run, band_hz: bandHz }),
   runEchogram: (run: string, receiver: string) => invoke<EchogramView>('run_echogram', { run, receiver }),
+  /** C5: a receiver's synthesised impulse response, or a clip or WAV file convolved with it, as
+   * WAV bytes (`readWav`, features/acoustics/aural.ts). */
+  runAuralize: (run: string, receiver: string, source: string | null, dry: { clip?: string; path?: string }) =>
+    invoke<ArrayBuffer>('run_auralize', { run, receiver, source, clip: dry.clip ?? null, path: dry.path ?? null }),
   /** W9: writes `bytes` to `path` (the save dialog's) as a `kind` file; the core checks both. */
-  exportWrite: (kind: 'csv' | 'json' | 'png', path: string, bytes: Uint8Array) =>
+  exportWrite: (kind: 'csv' | 'json' | 'png' | 'wav', path: string, bytes: Uint8Array) =>
     invokeWith<number>('export_write', bytes, { headers: { 'x-export-path': encodeURIComponent(path), 'x-export-kind': kind } }),
 };
