@@ -200,7 +200,9 @@ async function renameRow(id: string, name: string): Promise<void> {
   await browser.keys('F2');
   const input = await $('[data-part="group-name-input"]');
   await input.waitForDisplayed({ timeout: 10_000 });
-  await input.setValue(name);
+  // The field opens with its name selected: typing replaces it. (WebDriver's clear blurs the
+  // field, which commits it.)
+  await browser.keys([...name]);
   await browser.keys('Enter');
   await m10.idle();
 }
@@ -539,9 +541,9 @@ describe('C1: a blank geometry to results', () => {
     assert.deepEqual(f.stderr, ['', ''], "the solver's and TetGen's stderr are empty");
     cpuRun = r.run;
     assert.equal(await resultsReady(r.run), 'ready');
-    await clickSelector('[data-map-kind="plane|"]');
+    // The plane is the run's only surface receiver, so its map is the one shown.
     let m: { run: string; error: string | null; faces: number; path: string } | null = null;
-    await browser.waitUntil(async () => (m = await hook('m12Map')) !== null && m.run === r.run && m.error === null && m.faces > 0, {
+    await browser.waitUntil(async () => (m = await hook('m12Map')) !== null && m.run === r.run && m.error === null && m.faces > 0 && /cut/.test(m.path), {
       timeout: 60_000,
       timeoutMsg: `no plane map: ${JSON.stringify(m)}`,
     });
