@@ -1,5 +1,6 @@
 // spps-gpu: SPPS's output files. Receipts are paths under B:/repos/I-Simpa-upstream/src.
 #include "output.h"
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -479,8 +480,59 @@ void Report::finish() {
 }
 
 // ---------------------------------------------------------------------------------------------
+// B3: the live stream (output.h)
+bool LiveStream::open(const std::string& p, const Config& cfg) {
+  path = p;
+  out.open(fs::u8path(path), std::ios::out | std::ios::binary | std::ios::trunc);
+  if (!out) return false;
+  std::vector<int32_t> calc;
+  for (const Band& b : cfg.bands)
+    if (b.docalc) calc.push_back(b.freq);
+  uint32_t h[6];
+  h[0] = MAGIC; h[1] = VERSION;
+  memcpy(&h[2], &cfg.dt, 4);
+  h[3] = (uint32_t)cfg.nbSteps;
+  h[4] = (uint32_t)(cfg.nbPartRender * cfg.sources.size());
+  h[5] = (uint32_t)calc.size();
+  out.write((const char*)h, sizeof(h));
+  if (!calc.empty()) out.write((const char*)calc.data(), (std::streamsize)(calc.size() * 4));
+  out.flush();
+  bytes = sizeof(h) + calc.size() * 4;
+  return (bool)out;
+}
+void LiveStream::frame(int bandHz, uint32_t index, uint32_t firstStep, const std::vector<float>& xyze) {
+  if (!out.is_open()) return;
+  auto t0 = std::chrono::steady_clock::now();
+  const uint32_t n = (uint32_t)(xyze.size() / 4);
+  const size_t total = 4 + 16 + 16ull * n;
+  buf.resize(total);
+  char* p = buf.data();
+  uint32_t len = (uint32_t)(total - 4);
+  int32_t band = bandHz;
+  memcpy(p, &len, 4); memcpy(p + 4, &band, 4); memcpy(p + 8, &index, 4); memcpy(p + 12, &firstStep, 4); memcpy(p + 16, &n, 4);
+  float* pos = (float*)(p + 20);
+  float* en = pos + 3ull * n;
+  for (uint32_t k = 0; k < n; k++) {
+    pos[3 * k] = xyze[4 * k]; pos[3 * k + 1] = xyze[4 * k + 1]; pos[3 * k + 2] = xyze[4 * k + 2];
+    en[k] = xyze[4 * k + 3];
+  }
+  out.write(p, (std::streamsize)total);
+  out.flush();
+  frames++;
+  bytes += total;
+  seconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+}
+void LiveStream::close(bool keep) {
+  if (!out.is_open()) return;
+  out.close();
+  if (!keep) {
+    std::error_code ec;
+    removed = fs::remove(fs::u8path(path), ec) && !ec;
+  }
+}
+
 // reportmanager.cpp:90-146 writeParticleFile
-ParticleFiles::ParticleFiles(const Config& c, int band) : cfg(c) {
+ParticleFiles::ParticleFiles(const Config& c, int band, LiveStream* l) : cfg(c), live(l), bandHz(c.bands[band].freq) {
   std::string partPath = cfg.wd + cfg.partDir;
   mkdirs(partPath);
   std::string freqFolder = partPath + fromInt(cfg.bands[band].freq) + SEP;
@@ -524,6 +576,8 @@ void ParticleFiles::save() {
     memcpy(hdr + 4, &fs16, 2);
     pbin.write(hdr, 8);
     pbin.write((const char*)pos.data(), (std::streamsize)(pos.size() * 4));
+    // B3: the same particle, the same records, to the live stream as it is saved
+    if (live) live->frame(bandHz, real - 1, (uint32_t)fs16, pos);
     pos.clear();
   }
   if (haveS)

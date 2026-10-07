@@ -148,8 +148,9 @@ export const backend = {
 
   // M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.10). A run answers at once and reports
   // through `onEvent`; nothing here returns a solver-computed number.
-  runStart: (solver: SolverName, device: SppsDevice, onEvent: Channel<RunStreamBatch>) =>
-    invoke<RunStarted>('run_start', { solver, device, on_event: onEvent }),
+  /** B3: a run on the GPU also sends its saved particles to `onLive` as LIVE v1 batches (ArrayBuffers). */
+  runStart: (solver: SolverName, device: SppsDevice, onEvent: Channel<RunStreamBatch>, onLive: Channel<ArrayBuffer>) =>
+    invoke<RunStarted>('run_start', { solver, device, on_event: onEvent, on_live: onLive }),
   runCancel: () => invoke<boolean>('run_cancel'),
   runsList: () => invoke<RunsView>('runs_list'),
   runResults: (run: string) => invoke<ResultsState>('run_results', { run }),

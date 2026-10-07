@@ -209,6 +209,7 @@ export class GpuParticles {
   /** Each particle's share of the light: 1 for the file's own, saved / drawn for the benchmark's copies (the room's light stays the same, finer grained). */
   private readonly gain = uniform(1);
   private count = 0;
+  private rampDepth = WARM_DEPTH_DB;
   private recs: StorageBufferAttribute | null = null;
   private meta: StorageBufferAttribute | null = null;
   private owners: StorageBufferAttribute | null = null;
@@ -249,8 +250,14 @@ export class GpuParticles {
     this.source = p;
     this.logMax.value = logMax;
     this.levels = p ? stepLevels(p, Math.max(1, p.maxSteps)) : null;
-    RAMP_DEPTH.value = p ? fitDepthDb(p.energies, logMax) : WARM_DEPTH_DB;
+    this.rampDepth = p ? fitDepthDb(p.energies, logMax) : WARM_DEPTH_DB;
+    RAMP_DEPTH.value = this.rampDepth;
     this.build(p ? p.particleCount : 0, 0);
+  }
+
+  /** B3: the ramp's span is shared by every layer's materials; the layer shown takes it back for its band. */
+  claimRamp(): void {
+    RAMP_DEPTH.value = this.rampDepth;
   }
 
   /** The look; one the GPU cannot draw falls back to dots (returns the look in force). */

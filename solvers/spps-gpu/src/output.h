@@ -67,11 +67,42 @@ class Report {
   void saveCut(const std::string& path, const std::vector<float>& data, bool global);
 };
 
+// B3 (decision 71): the live stream of the saved particles, `spps-gpu.pstream` in the working
+// directory, one per run. Not an SPPS output: a channel to the app, which tails it while the run is
+// live and draws each saved particle's trajectory as it is written. The particles and their records
+// are those of the `.pbin` files, written as each one is re-traced; the `.pbin` files are unchanged.
+// Little-endian, every field 4 bytes:
+//   header  u32 magic 0x4D545350 ("PSTM"), u32 version 1, f32 time step (s), u32 time-step count,
+//           u32 particles saved per band (the .pbin header's count), u32 B bands computed,
+//           i32 x B the computed bands, Hz, in computation order
+//   frame   u32 length of the rest of the frame (16 + 16 n), i32 band (Hz), u32 the particle's index
+//           in its band's .pbin, u32 its first time step (the .pbin's u16), u32 n records,
+//           f32 x 3n positions, f32 x n energies (the .pbin's values, bit for bit)
+// Each frame is written in one call and flushed, so a reader sees whole frames and at most one torn
+// tail, which it leaves until its length is there.
+class LiveStream {
+ public:
+  static constexpr uint32_t MAGIC = 0x4D545350u, VERSION = 1u;
+  bool open(const std::string& path, const Config& cfg);
+  void frame(int bandHz, uint32_t index, uint32_t firstStep, const std::vector<float>& xyze);
+  // Closes the file; removes it unless `keep` (the stream is a channel, not a result).
+  void close(bool keep);
+  bool isOpen() const { return out.is_open(); }
+  uint64_t frames = 0, bytes = 0;
+  double seconds = 0;   // spent writing and flushing frames
+  bool removed = false;
+
+ private:
+  std::ofstream out;
+  std::string path;
+  std::vector<char> buf;
+};
+
 // The particle file and its two CSVs for one band (reportmanager.cpp:90-146, 288-343, 439-479),
 // fed by the host re-trace of the particles SPPS would mark.
 class ParticleFiles {
  public:
-  ParticleFiles(const Config& cfg, int band);
+  ParticleFiles(const Config& cfg, int band, LiveStream* live = nullptr);
   ~ParticleFiles();
   void newParticle();
   void step(const V3& pos, double E, int stepIndex);
@@ -82,6 +113,8 @@ class ParticleFiles {
 
  private:
   const Config& cfg;
+  LiveStream* live;
+  int bandHz;
   std::ofstream pbin, csvS, csvR;
   bool open = false, haveS = false, haveR = false;
   uint32_t real = 0;

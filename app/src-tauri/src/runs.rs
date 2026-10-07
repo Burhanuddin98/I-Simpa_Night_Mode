@@ -38,6 +38,7 @@ use tauri::ipc::Channel;
 use crate::bridge::Session;
 use crate::events::{BATCH_PERIOD, Batcher, Stream};
 use crate::guard::{CmdError, CmdResult, lock, payload_message};
+use crate::live;
 use crate::scene;
 
 /// The runs root of a project: `runs` beside the project file, the CLI's default (T1).
@@ -1117,8 +1118,14 @@ fn plan(
     })
 }
 
+/// Where the live particles of a run go (B3): one LIVE v1 batch at a time (`live.rs`); `false`
+/// when it was not delivered.
+pub type LiveSink = Box<dyn FnMut(Vec<u8>) -> bool + Send>;
+
 /// Starts a run of the open project with `solver` and returns at once; the run reports through
-/// `channel` (PLAN.md 2.5).
+/// `channel` (PLAN.md 2.5). A run of SPPS on the GPU also sends its saved particles to `live` as
+/// the solver writes them (B3); other runs never touch it.
+#[allow(clippy::too_many_arguments)]
 pub fn start(
     session: &Mutex<Session>,
     slot: &Arc<Mutex<RunSlot>>,
@@ -1127,6 +1134,7 @@ pub fn start(
     solver: &str,
     device: Option<&str>,
     channel: Channel<RunStreamBatch>,
+    live: Option<LiveSink>,
 ) -> CmdResult<RunStarted> {
     let p = plan(session, slot, cache, gpu_cache, solver, device)?;
     let root = runs_root(&p.project);
@@ -1172,6 +1180,7 @@ pub fn start(
     let thread_slot = slot.clone();
     let project = p.project.clone();
     let variant = p.variant.clone();
+    let live = if p.gpu_device.is_some() { live } else { None };
     let spawned = std::thread::Builder::new()
         .name("run".to_string())
         .spawn(move || {
@@ -1182,6 +1191,7 @@ pub fn start(
                 finished,
                 slot: thread_slot,
                 channel,
+                live,
             };
             run_thread(job, |token, on_event| {
                 run_project(&project, variant.as_deref(), &mesh, &opts, token, on_event)
@@ -1207,6 +1217,8 @@ struct RunJob {
     finished: Arc<AtomicBool>,
     slot: Arc<Mutex<RunSlot>>,
     channel: Channel<RunStreamBatch>,
+    /// B3: SPPS on the GPU's saved particles, tailed from the run's stream file while it runs.
+    live: Option<LiveSink>,
 }
 
 fn stream_of(s: process::Stream) -> Stream {
@@ -1262,7 +1274,8 @@ fn stream_event(e: &RunEvent, seq: u64, t_ms: f64) -> RunStreamEvent {
 
 /// The run thread: `run` (the core's `run_project`) with every event streamed, a panic caught,
 /// and the slot freed before the last event, so the UI can start the next run when it reads
-/// `ended`.
+/// `ended`. With a live sink, the run folder's stream file is tailed from `started` on, and the
+/// tail is stopped and joined before the last event, so no live batch follows `ended`.
 fn run_thread<F>(job: RunJob, run: F)
 where
     F: FnOnce(&CancelToken, &mut dyn FnMut(&RunEvent)) -> Result<RunReport, RunError>,
@@ -1274,7 +1287,12 @@ where
         finished,
         slot,
         channel,
+        live,
     } = job;
+    let mut live = live;
+    let live_stop = Arc::new(AtomicBool::new(false));
+    let mut tail: Option<std::thread::JoinHandle<live::TailStats>> = None;
+    let mut stream: Option<PathBuf> = None;
     let batcher: Batcher<RunStreamEvent> =
         Batcher::spawn(BATCH_PERIOD, move |batch, events, last| {
             channel
@@ -1292,6 +1310,13 @@ where
         run(&token, &mut |e: &RunEvent| {
             if let RunEvent::Started(dir) = e {
                 run_dir = Some(dir.to_path_buf());
+                if let Some(sink) = live.take() {
+                    let path = live::stream_path(dir);
+                    // a stream already there is not this run's (the solver has not started yet)
+                    live::remove_stream(&path);
+                    tail = live::spawn_tail(path.clone(), live::POLL, live_stop.clone(), sink).ok();
+                    stream = Some(path);
+                }
                 let name = dir.file_name().map(|n| n.to_string_lossy().into_owned());
                 if let Ok(mut s) = slot.lock()
                     && let Some(a) = s.active.as_mut()
@@ -1304,6 +1329,15 @@ where
             seq += 1;
         })
     }));
+    live_stop.store(true, Ordering::SeqCst);
+    if let Some(t) = tail {
+        let _ = t.join();
+    }
+    // The solver removes its stream at a normal end; a cancelled or crashed one cannot, so the app
+    // removes it once the tail has stopped, unless the stream was asked to be kept.
+    if let Some(path) = stream {
+        live::remove_stream(&path);
+    }
     finished.store(true, Ordering::SeqCst);
     if let Ok(mut s) = slot.lock()
         && s.active.as_ref().is_some_and(|a| a.id == id)
@@ -1705,6 +1739,7 @@ mod tests {
             finished: finished.clone(),
             slot: slot.clone(),
             channel,
+            live: None,
         };
         run_thread(job, |t, on| run_folder(&fixture, &opts, t, on));
 
@@ -1799,6 +1834,7 @@ mod tests {
             finished,
             slot: slot.clone(),
             channel,
+            live: None,
         };
         run_thread(job, |_, _| panic!("a deliberate panic in the run"));
         assert!(!slot.lock().unwrap().run_active());
@@ -1811,6 +1847,85 @@ mod tests {
         assert_eq!(events[0]["kind"], "failed");
         assert_eq!(events[0]["error"]["code"], "RUN_PANIC");
         assert!(batches.last().unwrap()["last"].as_bool().unwrap());
+    }
+
+    /// B3: with a live sink, the run folder's stream file is tailed from `started` on, its
+    /// particles reach the sink as LIVE v1 batches, and the tail has stopped before the last event,
+    /// so nothing reaches the sink after `run_thread` returns.
+    #[test]
+    fn a_live_run_tails_its_stream_and_stops_before_the_last_event() {
+        let dir = scratch("live");
+        let run_dir = dir.join("20261007-101010-000-spps");
+        let solve = run_dir.join("solve");
+        std::fs::create_dir_all(&solve).unwrap();
+        let channel: Channel<RunStreamBatch> = Channel::new(|_| Ok(()));
+        let got = Arc::new(Mutex::new(Vec::<Vec<u8>>::new()));
+        let sink_got = got.clone();
+        let done = Arc::new(AtomicBool::new(false));
+        let late = Arc::new(AtomicBool::new(false));
+        let (sink_done, sink_late) = (done.clone(), late.clone());
+        let slot = Arc::new(Mutex::new(RunSlot::default()));
+        let job = RunJob {
+            id: 13,
+            project: dir.join("none.simpa"),
+            token: CancelToken::new(),
+            finished: Arc::new(AtomicBool::new(false)),
+            slot,
+            channel,
+            live: Some(Box::new(move |b| {
+                if sink_done.load(Ordering::SeqCst) {
+                    sink_late.store(true, Ordering::SeqCst);
+                }
+                sink_got.lock().unwrap().push(b);
+                true
+            })),
+        };
+        let stream = solve.join(live::STREAM_FILE);
+        std::fs::write(solve.join("config.xml"), b"<keep me/>").unwrap();
+        // a stale stream from before the run: removed at `started`, before the solver writes its own
+        std::fs::write(&stream, b"stale").unwrap();
+        run_thread(job, |_, on| {
+            on(&RunEvent::Started(&run_dir));
+            // the solver: a header, then one frame a poll apart, then a torn frame it never finishes
+            let mut b: Vec<u8> = Vec::new();
+            for v in [live::STREAM_MAGIC, live::STREAM_VERSION, 0.001f32.to_bits(), 100, 2, 1, 1000] {
+                b.extend_from_slice(&v.to_le_bytes());
+            }
+            use std::io::Write;
+            let mut file = std::fs::File::create(&stream).unwrap();
+            file.write_all(&b).unwrap();
+            for i in 0..2u32 {
+                let mut f = Vec::new();
+                for v in [32u32, 1000, i, 5, 1] {
+                    f.extend_from_slice(&v.to_le_bytes());
+                }
+                for v in [1.0f32, 2.0, 3.0, 0.5] {
+                    f.extend_from_slice(&v.to_le_bytes());
+                }
+                file.write_all(&f).unwrap();
+                file.flush().unwrap();
+                std::thread::sleep(live::POLL * 3);
+            }
+            file.write_all(&64u32.to_le_bytes()).unwrap();
+            file.flush().unwrap();
+            Err(RunError::Io {
+                path: run_dir.clone(),
+                source: std::io::Error::other("the fake run ends here"),
+            })
+        });
+        done.store(true, Ordering::SeqCst);
+        std::thread::sleep(live::POLL * 2);
+        assert!(!late.load(Ordering::SeqCst), "a batch reached the sink after the run thread ended");
+        let got = got.lock().unwrap();
+        let particles: u32 = got
+            .iter()
+            .map(|b| u32::from_le_bytes(b[live::LIVE_HEADER + 8..live::LIVE_HEADER + 12].try_into().unwrap()))
+            .sum();
+        assert_eq!(particles, 2, "both whole frames arrived, the torn one did not");
+        assert!(!stream.exists(), "the stream the fake solver left is removed once the tail stopped");
+        assert_eq!(std::fs::read(solve.join("config.xml")).unwrap(), b"<keep me/>", "the run's other files are untouched");
+        assert_eq!(u32::from_le_bytes(got.last().unwrap()[8..12].try_into().unwrap()), 2);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     /// The Runs tab's rows from run folders of every kind: OK, FAIL, CANCELLED, Interrupted,
@@ -2032,6 +2147,7 @@ mod tests {
             finished: finished.clone(),
             slot: slot.clone(),
             channel,
+            live: None,
         };
         let t0 = Instant::now();
         run_thread(job, |t, on| run_folder(&fixture, &opts, t, on));

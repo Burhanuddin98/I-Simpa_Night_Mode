@@ -8,8 +8,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import stage  # noqa: E402
 
+# The build under test: SPPS_GPU_EXE (A4's name) or SPPS_GPU_BED_EXE (B3's), else the default build dir.
 # A4 runs the manifest's pinned build: SPPS_GPU_EXE=C:\tmp\nm-solvers-a5\spps-gpu.exe
-EXE = os.environ.get("SPPS_GPU_EXE", r"C:\tmp\nm-spps-gpu\bin\spps-gpu.exe")
+EXE = os.environ.get("SPPS_GPU_EXE") or os.environ.get("SPPS_GPU_BED_EXE") or r"C:\tmp\nm-spps-gpu\bin\spps-gpu.exe"
 
 if __name__ == "__main__":
     if len(sys.argv) < 5:

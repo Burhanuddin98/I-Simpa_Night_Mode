@@ -486,13 +486,16 @@ pub async fn scene_mesh(state: State<'_, AppState>) -> CmdResult<Response> {
 
 /// Starts a run of the open project, saved and unblocked, with `solver` (`spps` or `tcr`) on
 /// `device` (`cpu`, the default, or `gpu`: SPPS on the GPU, decision 70), and returns at once. The
-/// run streams its events into `on_event`, batched, `last: true` at the end.
+/// run streams its events into `on_event`, batched, `last: true` at the end. A run on the GPU also
+/// sends its saved particles to `on_live` as the solver writes them (B3, decision 71: LIVE v1
+/// batches, raw bytes, an ArrayBuffer in JS, `live.rs`); no batch follows `ended`.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn run_start(
     state: State<'_, AppState>,
     solver: String,
     device: Option<String>,
     on_event: Channel<RunStreamBatch>,
+    on_live: Channel<Response>,
 ) -> CmdResult<RunStarted> {
     let (session, slot, solvers, gpu) = (
         state.session.clone(),
@@ -509,6 +512,7 @@ pub async fn run_start(
             &solver,
             device.as_deref(),
             on_event,
+            Some(Box::new(move |b: Vec<u8>| on_live.send(Response::new(b)).is_ok())),
         )
     })
     .await
