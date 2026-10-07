@@ -15,6 +15,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <string>
 #include <vector>
 #ifdef _WIN32
@@ -398,6 +399,36 @@ struct Progress {
   }
 };
 
+// The working directory's files and their write times, before any band writes. On a failed run,
+// removeWritten deletes every file new or rewritten since, then the folders the run made that are
+// left empty, so no band's results outlive a run that stopped (child_pool_overflow).
+using FileTimes = std::map<std::filesystem::path, std::filesystem::file_time_type>;
+static FileTimes snapshot(const std::string& wd) {
+  namespace fs = std::filesystem;
+  FileTimes t;
+  std::error_code ec;
+  for (fs::recursive_directory_iterator it(fs::u8path(wd), ec), end; !ec && it != end; it.increment(ec)) {
+    std::error_code e2;
+    t[it->path()] = it->is_directory(e2) ? fs::file_time_type::min() : fs::last_write_time(it->path(), e2);
+  }
+  return t;
+}
+static size_t removeWritten(const std::string& wd, const FileTimes& before) {
+  namespace fs = std::filesystem;
+  std::vector<fs::path> files, dirs;
+  std::error_code ec;
+  for (fs::recursive_directory_iterator it(fs::u8path(wd), ec), end; !ec && it != end; it.increment(ec)) {
+    std::error_code e2;
+    auto was = before.find(it->path());
+    if (it->is_directory(e2)) { if (was == before.end()) dirs.push_back(it->path()); continue; }
+    if (was == before.end() || was->second != fs::last_write_time(it->path(), e2)) files.push_back(it->path());
+  }
+  size_t n = 0;
+  for (const auto& f : files) { std::error_code e2; if (fs::remove(f, e2)) n++; }
+  for (auto d = dirs.rbegin(); d != dirs.rend(); ++d) { std::error_code e2; if (fs::is_empty(*d, e2)) fs::remove(*d, e2); }
+  return n;
+}
+
 // A material at a band, as the walk reads it
 static MatBand matBandAt(const Config& cfg, size_t i, size_t bi) {
   const MatBandCfg& mb = cfg.materials[i].bands[bi];
@@ -612,6 +643,7 @@ int main(int argc, char** argv) {
 
   double setupSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
   double retraceSeconds = 0, bandOutSeconds = 0, finishSeconds = 0;
+  const FileTimes before = snapshot(cfg.wd);
   Report report(cfg, m);
   Progress prog;
   std::ofstream walkOut, sumsOut;
@@ -805,7 +837,8 @@ int main(int argc, char** argv) {
       std::cerr << "spps-gpu: failed: child_pool_overflow: " << bs.childOverflow << " transmitted particles did not fit the child pool ("
                 << poolCap << " entries, " << (poolCap * sizeof(Particle)) / 1048576 << " MiB) at " << cfg.bands[bi].freq << " Hz, energy "
                 << bs.overflowEnergy << " J (" << (srcE > 0 ? bs.overflowEnergy / srcE : 0.0)
-                << " of the band's source energy) dropped; the run is stopped and its results are not written; run SPPS on the CPU" << std::endl;
+                << " of the band's source energy) dropped; the run is stopped and the " << removeWritten(cfg.wd, before)
+                << " result files its earlier bands wrote are removed; run SPPS on the CPU" << std::endl;
       return 2;
     }
     // the particle file: SPPS marks every k-th particle of each source (sppsNantes.cpp:66-72, 129-138);
