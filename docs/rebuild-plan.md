@@ -96,7 +96,7 @@ Every scope dimension (engine work before M8, decisions, upstream parity, backlo
 | M11 | Concept B: Simulate, Console, Runs | M10, M6 |
 | M8 | Physics test bed at `dt` 1 ms: T30 against Kuttruff's corrected Eyring with `γ²` from the room's geometry (5 %) and the independent transport as the tight cross-check, and EDT (Burhan's decisions of 2026-09-24 23:14 and 2026-09-25 00:20, final); SPL's diffuse field, C80 and D50 reported, not gated, until their references are chosen | M7 |
 | M12 | Concept B: Results. Only numbers with a passing bed are shown (lost particles reported with a warning, decision 56). **Closed 2026-10-05** (decision 57) | M11, M7, M8 |
-| M12b | The run-quality advisor (backlog 80, decisions 49, 54, 56): before a run and on the Results screen. v1, Burhan asked for it | M12 |
+| M12b | The run-quality advisor (backlog 80, decisions 49, 54, 56): before a run and on the Results screen. v1, Burhan asked for it. **Closed 2026-10-07**: its e2e `b80.advisor` 4/4 for the first time (run `C:\tmp\nm-target\gates\m11\` 22:49; 20 T30 range_below_zero at 0.31 m, 0 at 0.6 m), after two spec fixes (a Simulate-only hook awaited up front; the Console read with its tab closed) | M12 |
 | M13 | Windows installer (one NSIS build) | M12, M12b, M1 |
 | M14 | v1.1: every item in `docs/v1.1-backlog.md` closed, or dropped by Burhan in his own words. The backlog is the only place a deferral lives (Burhan's filter, 2026-09-25) | M13 |
 

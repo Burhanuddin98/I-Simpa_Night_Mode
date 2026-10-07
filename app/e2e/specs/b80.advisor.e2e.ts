@@ -46,6 +46,8 @@ interface AdviceRowView {
 }
 
 async function simulateAdvice(): Promise<AdviceRowView[]> {
+  // `simulateView` registers when the Simulate panel mounts, so it exists only once the Simulate step is open.
+  await waitForHooks(['simulateView'], 30_000);
   const v = await hook<{ advice: AdviceRowView[] | null }>('simulateView');
   return v.advice ?? [];
 }
@@ -106,7 +108,8 @@ describe('Backlog 80: the run-quality advisor', () => {
   let firstJson: Json = {};
 
   before(async () => {
-    await waitForHooks(['idle', 'openProject', 'setStep', 'dockTab', 'runStart', 'runState', 'runsRows', 'selectRun', 'setSolver', 'acousticsView', 'simulateView', 'projectJson', 'undoDepth']);
+    // `simulateView` is not here: it registers only once the Simulate step is open (simulateAdvice waits for it).
+    await waitForHooks(['idle', 'openProject', 'setStep', 'dockTab', 'runStart', 'runState', 'runsRows', 'selectRun', 'setSolver', 'acousticsView', 'projectJson', 'undoDepth']);
     mkdirSync(WORK(), { recursive: true });
   });
 
@@ -230,12 +233,22 @@ describe('Backlog 80: the run-quality advisor', () => {
     await $(card).waitForExist({ timeout: 30_000 });
     const depth = await hook<number>('undoDepth');
     const before = new Set((await hook<Row[]>('runsRows')).map((r) => r.run));
-    const failsBefore = (await allConsoleLines()).length;
+    // The Console's lines are on the page only while its tab is open: read them there, and count the refusal
+    // lines rather than slice by position (the pane may trim old lines).
+    const refusal = (l: string) => /ADVICE_PROJECT_CHANGED/.test(l) && /the project changed since this run/.test(l);
+    const consoleNow = async () => {
+      await hook('dockTab', 'console');
+      await m10.idle();
+      return allConsoleLines();
+    };
+    const refusalsBefore = (await consoleNow()).filter(refusal).length;
+    await hook('dockTab', 'acoustics');
+    await $(card).waitForExist({ timeout: 30_000 });
     await $(`${card} [data-part="advice-apply-rerun"]`).click();
     await m10.idle();
     await browser.pause(1000);
-    const lines = (await allConsoleLines()).slice(failsBefore);
-    assert.ok(lines.some((l) => /ADVICE_PROJECT_CHANGED/.test(l) && /the project changed since this run/.test(l)), `no refusal line in ${JSON.stringify(lines)}`);
+    const lines = await consoleNow();
+    assert.ok(lines.filter(refusal).length > refusalsBefore, `no new refusal line in ${JSON.stringify(lines.slice(-8))}`);
     assert.equal(await hook<number>('undoDepth'), depth, 'the refused Apply changed the history');
     assert.equal((await hook<Row[]>('runsRows')).filter((r) => !before.has(r.run)).length, 0, 'a refused Apply started a run');
     assert.equal(projectRadius(await m10.projectJson()), 0.6);
