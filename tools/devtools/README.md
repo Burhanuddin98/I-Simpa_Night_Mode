@@ -1,0 +1,14 @@
+# devtools: driving the app headless (banked from the 2026-10-06 session's scratchpad)
+
+- `cdp.py <port> "<js>" [timeout]`: evaluates JS in the app's WebView2 page over the DevTools protocol (awaits
+  promises). The app must be started with `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=<port>`;
+  the websocket sends no Origin header (`suppress_origin`), or WebView2 answers 403. Needs `websocket-client`
+  (user site of Python 3.13 on Grace); do not run with `python -I`.
+- `cdp-shot.py <port> <out.png>`: a screenshot of the page, no window focus, no mouse.
+- `bed-cr4-27-v2.ps1`: app `--e2e` on CR4-27, Results step via `window.__m10.setStep('results')`, memory sampled.
+- `shot-rw.ps1`: the response window's screenshots (default, wheel zoom, span 100 + bin 5).
+- `package-zeph.ps1 -Sha <sha>`: app.exe + verified solvers into OneDrive for Zeph.
+- `du.py <root> <depth> <minGB>`: folder sizes, junctions skipped.
+
+The app is built with `npx --no-install tauri build --no-bundle` in `app/` (CARGO_TARGET_DIR set); a plain
+`cargo build -p app` is a dev-mode binary with no UI embedded. Never click in Burhan's window: drive the page.
