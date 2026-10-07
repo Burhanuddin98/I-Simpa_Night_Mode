@@ -75,14 +75,13 @@ export function spectrumKey(shape: SpectrumShape, library: readonly LibrarySpect
   return same ? `ref:${same.reference_id}` : 'custom';
 }
 
-/** The select's options: upstream's list, then "Typed per band" (shown only while it is). */
+/** The select's options: upstream's list as the core gives it, then "Typed per band" (shown only
+ * while it is). */
 export function spectrumOptions(library: readonly LibrarySpectrumLike[], current: string): { value: string; label: string }[] {
   const out = library.map((l) => ({
     value: l.shape.kind === 'custom' ? `ref:${l.reference_id}` : l.shape.kind,
     label: l.name,
   }));
-  if (!out.some((o) => o.value === 'pink')) out.unshift({ value: 'pink', label: 'Pink noise' });
-  if (!out.some((o) => o.value === 'white')) out.splice(1, 0, { value: 'white', label: 'White noise' });
   if (current === 'custom') out.push({ value: 'custom', label: 'Typed per band' });
   return out;
 }
