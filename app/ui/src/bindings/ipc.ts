@@ -2722,6 +2722,7 @@ export interface IpcBindings {
   edit_outcome: EditOutcome;
   events_probe_report: EventsProbeReport;
   float_probe: FloatProbe;
+  gpu_status: GpuStatus;
   library_material: LibraryMaterial;
   prepared: Prepared;
   project_info: ProjectInfo;
@@ -3448,6 +3449,28 @@ export interface FloatProbe {
    * Read with `serde_json::from_str`, as a command argument typed `f64` would be.
    */
   serde_json_bits: string[];
+}
+/**
+ * Whether SPPS can run on the GPU here (decision 70): `spps-gpu.exe`, found as the other solvers
+ * are and the verified build, answered `--probe` with a device. Asked once per app session
+ * ([`spps_gpu_status`]). Never a blocker of the run: SPPS on the CPU and TCR are unaffected.
+ *
+ * This interface was referenced by `IpcBindings`'s JSON-Schema
+ * via the `definition` "GpuStatus".
+ */
+export interface GpuStatus {
+  available: boolean;
+  /**
+   * The device line `spps-gpu --probe` printed, when available: `NVIDIA GeForce RTX 5070,
+   * sm_120, 48 SMs, 11.9 GiB, driver CUDA 13.2, runtime 13.2`.
+   */
+  device?: string | null;
+  /**
+   * Why SPPS cannot run on the GPU here, when not: the executable not found (where it was
+   * looked for), not the verified build, no CUDA device (its own words and exit), or no
+   * answer in time.
+   */
+  reason?: string | null;
 }
 /**
  * One of upstream's reference materials, as the library adds it (`library_material`).
@@ -5131,6 +5154,10 @@ export interface RunEvent {
  * via the `definition` "RunStarted".
  */
 export interface RunStarted {
+  /**
+   * SPPS on the GPU (decision 70): the device line the probe printed; `None` on the CPU.
+   */
+  gpu_device?: string | null;
   project_path: string;
   runs_root: string;
   solver: string;
@@ -5170,6 +5197,11 @@ export interface RunRow {
    */
   exe?: FileRefUi | null;
   exit_code?: number | null;
+  /**
+   * SPPS on the GPU (decision 70): `run.json`'s `gpu_device`, the device line `spps-gpu
+   * --probe` printed before the run; `None` for a run on the CPU.
+   */
+  gpu_device?: string | null;
   lines?: LineCounts | null;
   /**
    * SPPS with its statistics table read.

@@ -1826,6 +1826,32 @@
       ],
       "type": "string"
     },
+    "GpuStatus": {
+      "description": "Whether SPPS can run on the GPU here (decision 70): `spps-gpu.exe`, found as the other solvers\nare and the verified build, answered `--probe` with a device. Asked once per app session\n([`spps_gpu_status`]). Never a blocker of the run: SPPS on the CPU and TCR are unaffected.",
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "device": {
+          "description": "The device line `spps-gpu --probe` printed, when available: `NVIDIA GeForce RTX 5070,\nsm_120, 48 SMs, 11.9 GiB, driver CUDA 13.2, runtime 13.2`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "description": "Why SPPS cannot run on the GPU here, when not: the executable not found (where it was\nlooked for), not the verified build, no CUDA device (its own words and exit), or no\nanswer in time.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "type": "object"
+    },
     "Group": {
       "description": "A group-A use.",
       "oneOf": [
@@ -5038,6 +5064,13 @@
             "null"
           ]
         },
+        "gpu_device": {
+          "description": "SPPS on the GPU (decision 70): `run.json`'s `gpu_device`, the device line `spps-gpu\n--probe` printed before the run; `None` for a run on the CPU.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "lines": {
           "anyOf": [
             {
@@ -5160,6 +5193,13 @@
     "RunStarted": {
       "description": "What `run_start` answers at once; the run itself reports through the stream.",
       "properties": {
+        "gpu_device": {
+          "description": "SPPS on the GPU (decision 70): the device line the probe printed; `None` on the CPU.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "project_path": {
           "type": "string"
         },
@@ -7244,6 +7284,9 @@
     "float_probe": {
       "$ref": "#/$defs/FloatProbe"
     },
+    "gpu_status": {
+      "$ref": "#/$defs/GpuStatus"
+    },
     "library_material": {
       "$ref": "#/$defs/LibraryMaterial"
     },
@@ -7291,6 +7334,7 @@
     "edit_outcome",
     "events_probe_report",
     "float_probe",
+    "gpu_status",
     "library_material",
     "prepared",
     "project_info",

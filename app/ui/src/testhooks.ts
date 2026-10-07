@@ -20,6 +20,7 @@ import {
   runsStore,
   runStore,
   sceneStore,
+  gpuStatusStore,
   solversStatusStore,
   type SolverName,
   solverStore,
@@ -187,7 +188,7 @@ function frameLoop(t: number): void {
 /** The M11 foundation's hooks (PLAN.md 3.5). */
 function runHooks(): Record<string, Hook> {
   return {
-    runStart: (solver: SolverName) => actions.runStart(solver),
+    runStart: (solver: SolverName, device?: 'cpu' | 'gpu') => actions.runStart(solver, device),
     runCancel: () => actions.runCancel(),
     runState: () => {
       const r = runStore.get();
@@ -230,6 +231,10 @@ function runHooks(): Record<string, Hook> {
     },
     pid: () => actions.startupPid(),
     solversStatus: () => actions.refreshSolvers(),
+    gpuStatus: async () => {
+      await actions.refreshGpu();
+      return gpuStatusStore.get();
+    },
     openProj: async (path: string) => {
       await actions.importProj(path);
       return idle();
