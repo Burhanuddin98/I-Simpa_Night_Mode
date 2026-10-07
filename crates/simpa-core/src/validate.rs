@@ -220,8 +220,8 @@ const fn rule(code: &'static str, stage: Stage, severity: Severity) -> Rule {
 use Severity::{Error as E, Warning as W};
 use Stage::{Export as X, Project as P};
 
-/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 39 project rules and 7
-/// export rules, 42 errors and 4 warnings.
+/// Every rule of `docs/solver-contract.md` Part A, in the page's order: 40 project rules and 7
+/// export rules, 42 errors and 5 warnings.
 pub const RULES: [Rule; 47] = [
     rule(codes::BAND_SET_EMPTY, P, E),
     rule(codes::BAND_DUPLICATE, P, E),

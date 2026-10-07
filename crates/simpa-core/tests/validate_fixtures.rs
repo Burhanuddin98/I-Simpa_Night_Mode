@@ -20,9 +20,9 @@ use std::process::Command;
 
 use simpa_core::schema::{
     self, AirAbsorption, AttenuationUnit, DiffusionLaw, Directivity, F64, FittingShape,
-    FittingZone, FittingZoneId, MaterialId, MaterialOverride, PointReceiver, PointReceiverId,
-    Project, SolverKind, SurfaceReceiver, SurfaceReceiverId, SurfaceReceiverShape, Variant,
-    VariantId, Vec3,
+    FittingZone, FittingZoneId, GroupId, MaterialId, MaterialOverride, PointReceiver,
+    PointReceiverId, Project, SolverKind, SurfaceGroup, SurfaceReceiver, SurfaceReceiverId,
+    SurfaceReceiverShape, Variant, VariantId, Vec3,
 };
 use simpa_core::validate::{
     self, Context, Issue, RULES, Severity, Stage, mesh_input_hash, severity_of, validate_export,
@@ -252,6 +252,20 @@ fn negative_projects() -> Vec<(&'static str, Project)> {
             solver_id: None,
             group: None,
         });
+    });
+    add("group_name_duplicate", &|p| {
+        // A second group whose name is the first's with other case and spaces (C1 audit): the
+        // core refuses it from a rename or a new group, but a project file can still hold one.
+        // It takes the cube's two floor faces, so it is not an empty group.
+        let first = p.surface_groups[0].clone();
+        let twin = GroupId::from_u128(fixed(0x909));
+        p.surface_groups.push(SurfaceGroup {
+            id: twin,
+            name: format!(" {} ", first.name.to_uppercase()),
+            material: first.material,
+        });
+        p.geometry.faces[0].group = twin;
+        p.geometry.faces[1].group = twin;
     });
     add("surface_receiver_empty", &|p| {
         p.surface_receivers.push(SurfaceReceiver {
