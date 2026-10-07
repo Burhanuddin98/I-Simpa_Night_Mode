@@ -194,3 +194,53 @@ Receipts under `C:\tmp\nm-a6\`:
 - `runs\a2-a\` (A2 arm a), with `oldnew-*-gpu.json` against A2's dumps;
 - `runs\trans-600k\`;
 - the build logs.
+
+## Fixes after audit (2026-10-07 11:01-11:20)
+
+The audit's verdict on `30819ba..3e6d5b2` was SHIP-WITH-FIXES, with six fixes. Each is its own commit on
+`a6`, except fix 4, which was measured and reverted. Every number below is REALISED on Grace, with the GPU
+otherwise idle (3 % utilisation before each timing).
+
+| fix | commit | receipt |
+|---|---|---|
+| 1. Pool floor and override clamp | `7fe3fbd` | **A pool below two full queues a slot is refused at start.** On Grace that is 2 x 49,152 x 16 = 1,572,864 particles, 204 MiB. `simpa run-folder` on the band-3 template with `SPPS_GPU_FREE_BYTES=800000000` (`.out\a6\band3\runs-memlow\20261007-111422-095-spps`): exit 2, FAIL, reasons `exit_nonzero` and `spps_gpu_refused` with the detail "refused: gpu_memory_low: ... at least 1572864 particles (204 MiB) ... 762 MiB of its 12226 MiB are free (a quarter may be used: 190 MiB) ...". **`SPPS_GPU_POOL_CAP=100000000000` is clamped** to half the free memory, 41,754,142 entries, and the run is OK (`runs-bigcap\20261007-111422-460-spps`), not a `cuda_error`. A program holding 10 GB of device memory did **not** lower what spps-gpu read (11.36 GB free, `C:\tmp\nm-a6\hog`), because WDDM pages an idle allocation out. That is why the bed lowers the reading with `SPPS_GPU_FREE_BYTES`, which can only lower it. |
+| 2. No files left by an overflowing run | `302b78a` | **The new bed row: an overflow forced in band 3 of 5 leaves no result file.** The case is `bed/a6_band3.py`, built from A4's `trans` with bands 125, 250, 500, 1000 and 2000 Hz. The panel transmits from 500 Hz only. It has a cutting plane and 10 saved particles. With `SPPS_GPU_POOL_CAP=1000` (`.out\a6\band3\runs-cap1000\20261007-111402-350-spps`): progress reached #40 (bands 1 and 2 done) and stopped in band 3 with exit 2, verdict FAIL, reasons `exit_nonzero` and `child_pool_overflow` ("2896 transmitted particles did not fit ... at 500 Hz ... the 4 result files its earlier bands wrote are removed"). **`solve\` holds only `config.xml`, `mesh.cbin` and `tetramesh.mbin`.** `simpa results` refuses the run (`results_run_failed`, exit 5). The same template without the cap (`runs-nocap\20261007-111402-903-spps`) is OK and writes 62 files, including the 4 removed above: `Surface receiver\125 Hz\rs_cut.csbin`, `Surface receiver\250 Hz\rs_cut.csbin`, `Particles\125\particles.pbin` and `Particles\250\particles.pbin`. Method: the working directory is listed before the first band. On the overflow exit, every file new or rewritten since is removed, and then every folder the run made that is left empty. |
+| 3. One rule for making a child | `5dcea5d` | `makesChildren(MatBand, energetic, directCalc, transCalc)` in `walk.h` is the walk's own branch condition, and the pool sizing calls it on the same `MatBand` (`matBandAt`). `beam-a1` and `trans-a1` (alpha 1) no longer allocate a pool: `child_pool_capacity` 0 (A6's report had 4.19 M and 12.8 M entries). The walk is unchanged: see the identity rows below. |
+| 4. Re-poll the pool within a launch | **none: reverted** | Built and measured. Entries carried a ready word, so a slot could take a child given earlier in the same launch, and a slot with no family left polled the pool until its budget was spent. The walk stayed identical (0 mismatches on `beam` and `trans`), but **it was slower.** Trace seconds, 3 runs each, same configs, alternating: `beam` 2.586, 2.574, 2.593 without it against 2.798, 2.846, 2.820 with it; `trans` 8.572, 8.556, 8.579 against 8.693, 8.718, 8.694 (`.out\a6\fix4-timings.txt`; the diff is kept in `.out\a6\fix4-repoll-reverted.diff`). **The audit's premise does not hold on a quiet machine.** The 4.06 and 10.1 s in A6's report were measured while other GPU work ran; quiet, `beam` is 2.59 s on the GPU against 2.84-2.90 s for the CPU build, and `trans` 8.57 against 8.42-8.49 s. `trans`'s rate per step, 1.70 G steps in 8.57 s (0.198 G/s), is the rate A4 measured before the pool existed (1.27 G in 6.43 s, 0.198 G/s). So the pool adds no cost. The slowness is this scene's own cost per step, against CR4's 1.36 G steps in 0.61 s. |
+| 5. Stale cites | `b5b6e2a` | `classify.rs`, `run_verdict.rs` and `docs/solver-contract.md` now cite `main.cu:483, 494, 557, 626` (the refusals, `gpu_memory_low` among them) and `main.cu:837` (the overflow). B3's merge will move them again. |
+| 6. One host spill | `a9b338a` | `HostSpill` (the deque, `spillWaiting`, `spill`, `unspill`) is the base of `CpuAcc` and `NullAcc`: 30 lines added, 51 removed. |
+
+**Re-pinned** (`013423e`): the fat build of `302b78a` (tree `50bde32`), `spps-gpu.exe` sha256
+`6589412c61aac3b6341b38558f0264ccd65d299e9669be2258257c77f9c23d53`, code sha256
+`e274ca463b3ec6b34b240836739e5919425aa7e2122cb205ba3abc7a0619f7d9`, built 2026-10-07T11:11. The exe was
+copied to `C:\tmp\nm-solvers-a6\`; the 10:42 build is kept there as `spps-gpu-1042-superseded.exe.bak`.
+`simpa.exe` was rebuilt in `C:\tmp\nm-target-a6` with the new manifest embedded. Every run below reads
+"solver build verified".
+
+**Re-bedded with the re-pinned build:**
+- **A2 `cpu_gpu_all.py`: 17 of 17 walk-identical**, double sums within 1e-12 (`C:\tmp\nm-a6\runs\a2-a-fix`).
+- **A4 arm (a): 8 of 8 walk-identical**, CPU against GPU, with the same step counts as before
+  (`C:\tmp\nm-a6\runs\a-fix`). The `beam` and `trans` GPU dumps are identical to the 10:42 build's.
+- **A4 arm (b), seeds 101 and 202** (`.out\a6\fix\bed\`):
+  - `beam` 16 of 16 and `beam-a1` 16 of 16 series bit-identical to SPPS at both seeds. The beam is within
+    1.65e-5 of the exact model.
+  - `trans`: particles 14,429,954 and 14,420,798 against SPPS's 14,459,245 and 14,427,504 (the same as
+    before). Room-1 T30 at 500 Hz: mean -0.08 % against SPPS, 4 of 8 values below SPPS's mean, not every
+    one below. Within the noise band: 150 of 152 and 152 of 152, against controls 152 of 152.
+  - All 12 runs OK.
+- **Cost, CR4 1 kHz, 2 x 300 k, 10 s, three interleaved runs each** (`.out\a6\cost-fix\cost.jsonl`):
+  kernel 0.6296, 0.6302, 0.6317 s for A5's build against 0.6272, 0.6280, 0.6308 s after the fixes.
+  Solver process 1.389, 1.230, 1.249 s against 1.313, 1.231, 1.207 s. No pool is allocated, and stderr is
+  empty.
+- Tests:
+  - `simpa-core` `run_verdict` 31 passed and `run_contract_docs` 4 passed, after the cite change.
+  - C: had 22-23 GB free.
+  - The rest were not rerun: no Rust code changed beyond the cite strings.
+
+**Left:**
+- A real near-full device was not reproduced: WDDM pages other processes out, so `gpu_memory_low` was bedded
+  through `SPPS_GPU_FREE_BYTES`.
+- The cleanup removes by listing the working directory. A working directory shared with unrelated files that
+  are written during the run would lose those files too. The run manager's solve folders are the run's own.
+- Transmission-heavy scenes stay about as fast on the GPU as on the CPU build: the cost is per step, not the
+  pool's.
