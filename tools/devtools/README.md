@@ -6,6 +6,9 @@
   (user site of Python 3.13 on Grace); do not run with `python -I`.
 - `cdp-shot.py <port> <out.png>`: a screenshot of the page, no window focus, no mouse.
 - `bed-cr4-27-v2.ps1`: app `--e2e` on CR4-27, Results step via `window.__m10.setStep('results')`, memory sampled.
+- `bed-a5.py <app.exe> <solvers> <cr4.simpa> <fitting.simpa> <out>`: A5's app bed (SPPS on the GPU): the Simulate
+  step's GPU entry, a CR4 run from the Run button, the Results step and Acoustics tab naming solver and device,
+  spps-gpu's refusal of a fitting; screenshots and `app-bed.json` in `<out>`. Stops only the app it started.
 - `shot-rw.ps1`: the response window's screenshots (default, wheel zoom, span 100 + bin 5).
 - `package-zeph.ps1 -Sha <sha>`: app.exe + verified solvers into OneDrive for Zeph.
 - `du.py <root> <depth> <minGB>`: folder sizes, junctions skipped.

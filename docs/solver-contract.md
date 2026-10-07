@@ -741,7 +741,9 @@ solver run that did not succeed (`docs/results.md`, "Verified runs only").
 its `run.json` alone (backlog 38): the executables' checks (`solvers`) must be recorded, every one
 must match the verified build (`solvers/manifest.json`), the checks must have been made against
 that embedded manifest and not a test override (`solver_manifest.source`, M8b), and one must name
-the solver the run executed, as `check_solvers` names them (`spps.exe`, `classicalTheory.exe`).
+the solver the run executed, as `check_solvers` names them (`spps.exe`, `classicalTheory.exe`;
+`spps-gpu.exe` for SPPS on the GPU, a run whose `run.json` records `gpu_device`, decision 70: the
+device line `spps-gpu --probe` printed, absent for every run on the CPU).
 Otherwise the run is marked unverified with one of these codes. None is a refusal: `results::load`
 reads the run as before, `simpa results` still exits 0 and prints the verdict (a line of the text,
 `solver_build` in `--json`), and the app's Results step reads "Results unverified", never "Results
