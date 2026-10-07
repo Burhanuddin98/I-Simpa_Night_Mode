@@ -309,7 +309,11 @@ export function Dock() {
             role="tab"
             data-dock-tab={d.key}
             aria-selected={d.key === tab}
-            onClick={() => setTab(d.key)}
+            onClick={() => {
+              setTab(d.key);
+              // A tab clicked on the folded strip is a tab asked for: the dock opens to show it.
+              if (foldStore.get().dock) setFold('dock', false);
+            }}
           >
             {d.name}
             {d.key === 'console' && consoleTag && (
