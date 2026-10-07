@@ -17,7 +17,8 @@ import os, re, shutil, subprocess, sys, time
 import xml.etree.ElementTree as ET
 
 ROOTS = [os.path.normcase(os.path.abspath(p)) + os.sep for p in (
-    r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu", r"C:\tmp\nm-spps-gpu")]
+    r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu", r"C:\tmp\nm-spps-gpu",
+    r"B:\repos\I-Simpa_Night_Mode\.out\a4", r"C:\tmp\nm-a4")]
 INPUTS = ("config.xml", "mesh.cbin", "tetramesh.mbin")
 
 
