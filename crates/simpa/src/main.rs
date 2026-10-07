@@ -156,12 +156,18 @@ fn reband_cmd(args: &[&str]) -> ExitCode {
     }
     let (Some(input), Some(output), Some(kind), Some(lo), Some(hi)) = (input, output, kind, lo, hi)
     else {
-        return fail(&format!("reband needs <in> <out> --kind --lo --hi\n{USAGE}"));
+        return fail(&format!(
+            "reband needs <in> <out> --kind --lo --hi\n{USAGE}"
+        ));
     };
     let kind = match kind {
         "octave" => BandKind::Octave,
         "third_octave" => BandKind::ThirdOctave,
-        other => return fail(&format!("unknown band kind '{other}': octave or third_octave")),
+        other => {
+            return fail(&format!(
+                "unknown band kind '{other}': octave or third_octave"
+            ));
+        }
     };
     let mut project = match validate::read_project(Path::new(input)) {
         Ok(p) => p,

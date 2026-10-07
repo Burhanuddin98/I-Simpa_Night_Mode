@@ -167,7 +167,11 @@ pub(super) fn read(bytes: &[u8], options: &ImportOptions) -> Result<ImportedMode
         notes.push(format!("{ignored_points} point elements (`p`) ignored"));
     }
     let source_faces = polygons.len();
-    let ungrouped = !(if by_material { named_material } else { named_group });
+    let ungrouped = !(if by_material {
+        named_material
+    } else {
+        named_group
+    });
     RawMesh {
         vertices,
         polygons,

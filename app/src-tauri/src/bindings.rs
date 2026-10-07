@@ -19,7 +19,8 @@ use crate::events::{AppEvent, RunEventBatch};
 use crate::guard::CmdError;
 use crate::results_data::{EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
-    GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunStarted, RunStreamBatch, RunsView, SolversStatus,
+    GpuStatus, LibraryMaterial, LibrarySpectrum, ResultsState, RunStarted, RunStreamBatch,
+    RunsView, SolversStatus,
 };
 use crate::scene::{EditOutcome, SceneState};
 

@@ -360,7 +360,11 @@ fn a6_lost_transmitted_children_fail_the_run_from_either_build() {
     );
     assert_only(&v, Status::Fail, "child_pool_overflow");
     assert!(v.warnings.is_empty(), "{v:#?}");
-    assert!(v.reasons[0].detail.contains("3968312 transmitted particles dropped at 500 Hz"));
+    assert!(
+        v.reasons[0]
+            .detail
+            .contains("3968312 transmitted particles dropped at 500 Hz")
+    );
     assert!(v.reasons[0].detail.ends_with("(2 lines)"), "{v:#?}");
     // the new build: exit 2, the band's output stopped before any receiver file
     let mut lines = clean_spps_lines();

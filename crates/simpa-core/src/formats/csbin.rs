@@ -464,73 +464,6 @@ pub fn read_file_binned(path: &Path, per_bin: u32) -> Result<Csbin> {
     read_binned(&super::read_file(path)?, per_bin)
 }
 
-#[cfg(test)]
-mod binned_tests {
-    use super::*;
-    use std::path::PathBuf;
-
-    fn fixture(rel: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../tests/fixtures/results")
-            .join(rel)
-    }
-
-    /// Binned = dense summed per bin in file order, bit for bit; the header scales; per_bin 1 is
-    /// the dense read; a per_bin past the step count leaves one bin.
-    #[test]
-    fn a_binned_read_sums_each_faces_records_per_bin_and_scales_the_header() {
-        let path = fixture("outputs_spps/solve/Surface receiver/500 Hz/Sound level.csbin");
-        let bytes = std::fs::read(&path).expect("the committed fixture");
-        let dense = read(&bytes).unwrap();
-        assert!(dense.time_step_count > 4, "{}", dense.time_step_count);
-        let total: usize = dense
-            .receivers
-            .iter()
-            .flat_map(|r| r.faces.iter())
-            .map(|f| f.records.len())
-            .sum();
-        assert!(total > 0);
-        for per_bin in [1u32, 2, 3, 7, dense.time_step_count, dense.time_step_count + 5] {
-            let b = read_binned(&bytes, per_bin).unwrap();
-            assert_eq!(b.nodes, dense.nodes);
-            assert_eq!(b.time_step_count, dense.time_step_count.div_ceil(per_bin));
-            assert_eq!(b.time_step, dense.time_step * per_bin as f32);
-            assert_eq!(b.record_type, dense.record_type);
-            assert_eq!(b.receivers.len(), dense.receivers.len());
-            let mut compared = 0usize;
-            for (rb, rd) in b.receivers.iter().zip(&dense.receivers) {
-                assert_eq!((rb.xml_index, &rb.name), (rd.xml_index, &rd.name));
-                assert_eq!(rb.faces.len(), rd.faces.len());
-                for (fb, fd) in rb.faces.iter().zip(&rd.faces) {
-                    assert_eq!(fb.vertices, fd.vertices);
-                    let mut want: Vec<(u16, f64)> = Vec::new();
-                    for r in &fd.records {
-                        let bin = (u32::from(r.time_step) / per_bin) as u16;
-                        match want.iter_mut().find(|(b, _)| *b == bin) {
-                            Some((_, s)) => *s += f64::from(r.energy),
-                            None => want.push((bin, f64::from(r.energy))),
-                        }
-                    }
-                    want.sort_by_key(|&(b, _)| b);
-                    let got: Vec<(u16, u32)> =
-                        fb.records.iter().map(|r| (r.time_step, r.energy.to_bits())).collect();
-                    let want: Vec<(u16, u32)> =
-                        want.iter().map(|&(b, s)| (b, (s as f32).to_bits())).collect();
-                    assert_eq!(got, want, "per_bin {per_bin}");
-                    assert!(fb.records.len() <= b.time_step_count as usize);
-                    compared += fb.records.len();
-                }
-            }
-            if per_bin == 1 {
-                assert_eq!(compared, total, "per_bin 1 is the dense read");
-            }
-            if per_bin >= dense.time_step_count {
-                assert_eq!(b.time_step_count, 1);
-            }
-        }
-    }
-}
-
 /// The canonical dump (grammar in `docs/formats/csbin.md`).
 pub fn dump(value: &Csbin) -> String {
     let mut s = String::new();
@@ -590,5 +523,84 @@ fn error_kind(e: &FormatError) -> &'static str {
         FormatError::Version { .. } => "version",
         FormatError::Invalid(_) => "invalid",
         FormatError::Io(_) => "io",
+    }
+}
+
+#[cfg(test)]
+mod binned_tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn fixture(rel: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/results")
+            .join(rel)
+    }
+
+    /// Binned = dense summed per bin in file order, bit for bit; the header scales; per_bin 1 is
+    /// the dense read; a per_bin past the step count leaves one bin.
+    #[test]
+    fn a_binned_read_sums_each_faces_records_per_bin_and_scales_the_header() {
+        let path = fixture("outputs_spps/solve/Surface receiver/500 Hz/Sound level.csbin");
+        let bytes = std::fs::read(&path).expect("the committed fixture");
+        let dense = read(&bytes).unwrap();
+        assert!(dense.time_step_count > 4, "{}", dense.time_step_count);
+        let total: usize = dense
+            .receivers
+            .iter()
+            .flat_map(|r| r.faces.iter())
+            .map(|f| f.records.len())
+            .sum();
+        assert!(total > 0);
+        for per_bin in [
+            1u32,
+            2,
+            3,
+            7,
+            dense.time_step_count,
+            dense.time_step_count + 5,
+        ] {
+            let b = read_binned(&bytes, per_bin).unwrap();
+            assert_eq!(b.nodes, dense.nodes);
+            assert_eq!(b.time_step_count, dense.time_step_count.div_ceil(per_bin));
+            assert_eq!(b.time_step, dense.time_step * per_bin as f32);
+            assert_eq!(b.record_type, dense.record_type);
+            assert_eq!(b.receivers.len(), dense.receivers.len());
+            let mut compared = 0usize;
+            for (rb, rd) in b.receivers.iter().zip(&dense.receivers) {
+                assert_eq!((rb.xml_index, &rb.name), (rd.xml_index, &rd.name));
+                assert_eq!(rb.faces.len(), rd.faces.len());
+                for (fb, fd) in rb.faces.iter().zip(&rd.faces) {
+                    assert_eq!(fb.vertices, fd.vertices);
+                    let mut want: Vec<(u16, f64)> = Vec::new();
+                    for r in &fd.records {
+                        let bin = (u32::from(r.time_step) / per_bin) as u16;
+                        match want.iter_mut().find(|(b, _)| *b == bin) {
+                            Some((_, s)) => *s += f64::from(r.energy),
+                            None => want.push((bin, f64::from(r.energy))),
+                        }
+                    }
+                    want.sort_by_key(|&(b, _)| b);
+                    let got: Vec<(u16, u32)> = fb
+                        .records
+                        .iter()
+                        .map(|r| (r.time_step, r.energy.to_bits()))
+                        .collect();
+                    let want: Vec<(u16, u32)> = want
+                        .iter()
+                        .map(|&(b, s)| (b, (s as f32).to_bits()))
+                        .collect();
+                    assert_eq!(got, want, "per_bin {per_bin}");
+                    assert!(fb.records.len() <= b.time_step_count as usize);
+                    compared += fb.records.len();
+                }
+            }
+            if per_bin == 1 {
+                assert_eq!(compared, total, "per_bin 1 is the dense read");
+            }
+            if per_bin >= dense.time_step_count {
+                assert_eq!(b.time_step_count, 1);
+            }
+        }
     }
 }

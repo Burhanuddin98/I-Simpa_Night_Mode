@@ -847,8 +847,7 @@ fn holds(groups: &[GroupId], from: &[GroupId]) -> Option<bool> {
 /// name in another case is allowed.
 fn group_name_free(p: &Project, name: &str, except: Option<GroupId>) -> Result<()> {
     let key = crate::validate::group_name_key(name);
-    if p
-        .surface_groups
+    if p.surface_groups
         .iter()
         .any(|g| Some(g.id) != except && crate::validate::group_name_key(&g.name) == key)
     {
@@ -911,9 +910,21 @@ fn move_faces(p: &mut Project, group: GroupId, faces: Vec<u32>) -> Result<Op> {
             let from_name = p.group(g).map_or_else(String::new, |x| x.name.clone());
             return Err(OpError::Split(format!(
                 "{what} holds {} but not {}: moving the faces would {} it",
-                if holds_target { format!("surface group '{}'", p.surface_groups[target].name) } else { format!("surface group '{from_name}'") },
-                if holds_target { format!("surface group '{from_name}'") } else { format!("surface group '{}'", p.surface_groups[target].name) },
-                if holds_target { "add faces to" } else { "take faces out of" },
+                if holds_target {
+                    format!("surface group '{}'", p.surface_groups[target].name)
+                } else {
+                    format!("surface group '{from_name}'")
+                },
+                if holds_target {
+                    format!("surface group '{from_name}'")
+                } else {
+                    format!("surface group '{}'", p.surface_groups[target].name)
+                },
+                if holds_target {
+                    "add faces to"
+                } else {
+                    "take faces out of"
+                },
             )));
         }
     }

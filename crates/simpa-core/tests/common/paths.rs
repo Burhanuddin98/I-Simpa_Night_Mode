@@ -79,7 +79,10 @@ pub fn tetgen160_exe() -> PathBuf {
     let p = match std::env::var_os("SIMPA_TETGEN160") {
         Some(d) if !d.is_empty() => PathBuf::from(d),
         _ => {
-            let root = solvers_dir().parent().map(Path::to_path_buf).unwrap_or_default();
+            let root = solvers_dir()
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_default();
             let plain = root.join("build/src/tetgen/Release/tetgen.exe");
             let mut found: Vec<PathBuf> = std::fs::read_dir(&root)
                 .ok()

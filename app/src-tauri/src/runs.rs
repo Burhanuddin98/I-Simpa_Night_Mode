@@ -1505,7 +1505,6 @@ mod tests {
         assert_eq!(c.0.device.as_deref(), Some("RTX"));
         let d = probed_with(&cache, &mut probe).unwrap();
         assert_eq!(d, c);
-        drop(probe);
         assert_eq!(calls, 3, "two failures asked again, the success kept");
     }
 
@@ -1914,7 +1913,15 @@ mod tests {
             on(&RunEvent::Started(&run_dir));
             // the solver: a header, then one frame a poll apart, then a torn frame it never finishes
             let mut b: Vec<u8> = Vec::new();
-            for v in [live::STREAM_MAGIC, live::STREAM_VERSION, 0.001f32.to_bits(), 100, 2, 1, 1000] {
+            for v in [
+                live::STREAM_MAGIC,
+                live::STREAM_VERSION,
+                0.001f32.to_bits(),
+                100,
+                2,
+                1,
+                1000,
+            ] {
                 b.extend_from_slice(&v.to_le_bytes());
             }
             use std::io::Write;
@@ -1941,16 +1948,38 @@ mod tests {
         });
         done.store(true, Ordering::SeqCst);
         std::thread::sleep(live::POLL * 2);
-        assert!(!late.load(Ordering::SeqCst), "a batch reached the sink after the run thread ended");
+        assert!(
+            !late.load(Ordering::SeqCst),
+            "a batch reached the sink after the run thread ended"
+        );
         let got = got.lock().unwrap();
         let particles: u32 = got
             .iter()
-            .map(|b| u32::from_le_bytes(b[live::LIVE_HEADER + 8..live::LIVE_HEADER + 12].try_into().unwrap()))
+            .map(|b| {
+                u32::from_le_bytes(
+                    b[live::LIVE_HEADER + 8..live::LIVE_HEADER + 12]
+                        .try_into()
+                        .unwrap(),
+                )
+            })
             .sum();
-        assert_eq!(particles, 2, "both whole frames arrived, the torn one did not");
-        assert!(!stream.exists(), "the stream the fake solver left is removed once the tail stopped");
-        assert_eq!(std::fs::read(solve.join("config.xml")).unwrap(), b"<keep me/>", "the run's other files are untouched");
-        assert_eq!(u32::from_le_bytes(got.last().unwrap()[8..12].try_into().unwrap()), 2);
+        assert_eq!(
+            particles, 2,
+            "both whole frames arrived, the torn one did not"
+        );
+        assert!(
+            !stream.exists(),
+            "the stream the fake solver left is removed once the tail stopped"
+        );
+        assert_eq!(
+            std::fs::read(solve.join("config.xml")).unwrap(),
+            b"<keep me/>",
+            "the run's other files are untouched"
+        );
+        assert_eq!(
+            u32::from_le_bytes(got.last().unwrap()[8..12].try_into().unwrap()),
+            2
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

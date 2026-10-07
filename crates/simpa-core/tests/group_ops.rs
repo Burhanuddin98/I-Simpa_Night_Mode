@@ -7,15 +7,15 @@
 //! fitting zone gains or loses a face; a merge keeps the first group's name and material; a
 //! refused op changes nothing.
 
+use simpa_core::config_xml::widen_f32;
 use simpa_core::geometry::import::{
     self, ImportOptions, REFERENCE_SPECTRA, Unit, Up, reference_spectrum,
 };
 use simpa_core::schema::{
     self, BandKind, BandSet, DiffusionLaw, F64, FittingShape, FittingZone, FittingZoneId, GroupId,
-    History, MaterialId, Op, OpError, Project, Spectrum, SpectrumShape,
-    SurfaceReceiverShape, Variant, VariantId, Vec3,
+    History, MaterialId, Op, OpError, Project, Spectrum, SpectrumShape, SurfaceReceiverShape,
+    Variant, VariantId, Vec3,
 };
-use simpa_core::config_xml::widen_f32;
 use simpa_core::validate;
 
 #[allow(dead_code)]
@@ -76,7 +76,10 @@ fn move_faces_into_an_existing_group_and_undo_is_exact() {
     let walls = group_named(&original, "Walls");
     let regroup = original.regrouped(&[2, 3], NEW, "Group 1", MaterialId::random());
     regroup.apply(&mut original).unwrap();
-    let ceiling_mat = original.group(group_named(&original, "Ceiling")).unwrap().material;
+    let ceiling_mat = original
+        .group(group_named(&original, "Ceiling"))
+        .unwrap()
+        .material;
     Op::SetGroupMaterial {
         group: NEW,
         material: ceiling_mat,
@@ -94,7 +97,10 @@ fn move_faces_into_an_existing_group_and_undo_is_exact() {
     assert_eq!(faces_of(&p, NEW), [2, 3, 4]);
     assert_eq!(faces_of(&p, walls), [5, 6, 7, 8, 9]);
     assert_eq!(p.effective_material(NEW, None), Some(ceiling_mat));
-    assert_eq!(p.surface_groups, original.surface_groups, "no group added or removed");
+    assert_eq!(
+        p.surface_groups, original.surface_groups,
+        "no group added or removed"
+    );
     assert!(!validate::has_errors(&validate::validate(&p)));
 
     // A face already in the group stays; moving a whole group empties it, and it stays.
@@ -128,7 +134,10 @@ fn move_faces_refusals_change_nothing() {
     // floor face into the Ceiling would take one out of it.
     let err = refused(&original, mv(floor, &[2]));
     assert_eq!(err.code(), "split", "{err}");
-    assert!(err.to_string().contains("surface receiver 'Receiver'"), "{err}");
+    assert!(
+        err.to_string().contains("surface receiver 'Receiver'"),
+        "{err}"
+    );
     assert!(err.to_string().contains("add faces to"), "{err}");
     let err = refused(&original, mv(ceiling, &[0]));
     assert_eq!(err.code(), "split", "{err}");
@@ -148,7 +157,10 @@ fn merge_two_groups_keeps_the_first_and_undo_is_exact() {
         .apply(&mut original)
         .unwrap();
     // Give the new group a different material: the merge keeps the first's.
-    let ceiling_mat = original.group(group_named(&original, "Ceiling")).unwrap().material;
+    let ceiling_mat = original
+        .group(group_named(&original, "Ceiling"))
+        .unwrap()
+        .material;
     Op::SetGroupMaterial {
         group: NEW,
         material: ceiling_mat,
@@ -242,13 +254,19 @@ fn merge_refusals_change_nothing() {
     };
     assert_eq!(refused(&original, merge(walls, &[])).code(), "groups");
     assert_eq!(refused(&original, merge(walls, &[walls])).code(), "groups");
-    assert_eq!(refused(&original, merge(walls, &[ceiling, ceiling])).code(), "groups");
+    assert_eq!(
+        refused(&original, merge(walls, &[ceiling, ceiling])).code(),
+        "groups"
+    );
     assert_eq!(refused(&original, merge(walls, &[NEW])).code(), "not_found");
     assert_eq!(refused(&original, merge(NEW, &[walls])).code(), "not_found");
     // The scene receiver holds Floor alone.
     let err = refused(&original, merge(walls, &[floor]));
     assert_eq!(err.code(), "split", "{err}");
-    assert!(err.to_string().contains("surface receiver 'Receiver'"), "{err}");
+    assert!(
+        err.to_string().contains("surface receiver 'Receiver'"),
+        "{err}"
+    );
     // A surfaces fitting zone on Walls alone refuses a merge with the Ceiling.
     let n = original.bands.len();
     Op::AddFittingZone {
@@ -279,7 +297,10 @@ fn merge_refusals_change_nothing() {
 fn the_ops_read_from_the_ui_text() {
     let g = "6e65772d-6772-6f75-7000-000000000001";
     let h = "6e65772d-6772-6f75-7000-000000000002";
-    let op = Op::from_json(&format!(r#"{{"op":"move_faces","group":"{g}","faces":[3,1]}}"#)).unwrap();
+    let op = Op::from_json(&format!(
+        r#"{{"op":"move_faces","group":"{g}","faces":[3,1]}}"#
+    ))
+    .unwrap();
     assert_eq!(
         op,
         Op::MoveFaces {
@@ -291,8 +312,15 @@ fn the_ops_read_from_the_ui_text() {
         r#"{{"op":"merge_surface_groups","into":"{g}","from":["{h}"]}}"#
     ))
     .unwrap();
-    assert!(matches!(op, Op::MergeSurfaceGroups { into, ref from } if into == NEW && from.len() == 1));
-    assert!(Op::from_json(&format!(r#"{{"op":"move_faces","group":"{g}","faces":[1],"x":1}}"#)).is_err());
+    assert!(
+        matches!(op, Op::MergeSurfaceGroups { into, ref from } if into == NEW && from.len() == 1)
+    );
+    assert!(
+        Op::from_json(&format!(
+            r#"{{"op":"move_faces","group":"{g}","faces":[1],"x":1}}"#
+        ))
+        .is_err()
+    );
 }
 
 // ---- a mesh file with no groups ---------------------------------------------------------------
@@ -305,18 +333,29 @@ fn a_groupless_obj_imports_as_one_group_named_for_the_file() {
     let opts = ImportOptions::new(Unit::Metre, Up::Z);
     let m = import::read_obj(BOX.as_bytes(), &opts).unwrap();
     assert!(m.report.ungrouped);
-    assert_eq!(m.group_names, ["default"], "the reader's own name is unchanged");
+    assert_eq!(
+        m.group_names,
+        ["default"],
+        "the reader's own name is unchanged"
+    );
     let p = m.to_project("box_blank");
     assert_eq!(p.surface_groups.len(), 1);
     assert_eq!(p.surface_groups[0].name, "box_blank");
     assert_eq!(p.geometry.faces.len(), 12);
     assert_eq!(m.to_project("  ").surface_groups[0].name, "Surfaces");
     // The ids are the model's: the name given changes no id.
-    assert_eq!(m.to_project("a").surface_groups[0].id, m.to_project("b").surface_groups[0].id);
+    assert_eq!(
+        m.to_project("a").surface_groups[0].id,
+        m.to_project("b").surface_groups[0].id
+    );
     p.check_integrity().unwrap();
 
     // `g` statements, `o`, or `usemtl` are groups: not ungrouped, and their names are kept.
-    for (head, name) in [("g walls\n", "walls"), ("o room\n", "room"), ("usemtl plaster\n", "plaster")] {
+    for (head, name) in [
+        ("g walls\n", "walls"),
+        ("o room\n", "room"),
+        ("usemtl plaster\n", "plaster"),
+    ] {
         let m = import::read_obj(format!("{head}{BOX}").as_bytes(), &opts).unwrap();
         assert!(!m.report.ungrouped, "{head}");
         assert_eq!(m.to_project("box").surface_groups[0].name, name);
@@ -353,8 +392,14 @@ element face 4\nproperty list uchar int vertex_indices\nend_header\n0 0 0\n1 0 0
 fn reference_spectra_map_onto_third_octave_and_octave_bands() {
     let thirds = BandSet::range(BandKind::ThirdOctave, 50, 20000).unwrap();
     let octaves = BandSet::range(BandKind::Octave, 125, 4000).unwrap();
-    assert_eq!(reference_spectrum(1).unwrap().shape_on(&octaves), Some(SpectrumShape::Pink));
-    assert_eq!(reference_spectrum(0).unwrap().shape_on(&octaves), Some(SpectrumShape::White));
+    assert_eq!(
+        reference_spectrum(1).unwrap().shape_on(&octaves),
+        Some(SpectrumShape::Pink)
+    );
+    assert_eq!(
+        reference_spectrum(0).unwrap().shape_on(&octaves),
+        Some(SpectrumShape::White)
+    );
 
     let es_vl = reference_spectrum(2).unwrap();
     let Some(SpectrumShape::Custom { relative_db }) = es_vl.shape_on(&thirds) else {
@@ -364,7 +409,11 @@ fn reference_spectra_map_onto_third_octave_and_octave_bands() {
     for (i, v) in relative_db.iter().enumerate() {
         assert_eq!(v.get(), widen_f32(es_vl.band_db[i]), "band {i}");
     }
-    assert_eq!(relative_db[13].get(), 77.7, "1 kHz is the f32's shortest decimal");
+    assert_eq!(
+        relative_db[13].get(),
+        77.7,
+        "1 kHz is the f32's shortest decimal"
+    );
 
     // An octave band is the energy sum of its three thirds: 1 kHz spans 800, 1000, 1250 Hz.
     let Some(SpectrumShape::Custom { relative_db }) = es_vl.shape_on(&octaves) else {
@@ -395,7 +444,11 @@ fn reference_spectra_map_onto_third_octave_and_octave_bands() {
             };
             if let SpectrumShape::Custom { relative_db } = shape {
                 assert_eq!(relative_db.len(), b.len());
-                assert!(relative_db.iter().all(|v| v.get().is_finite()), "{}", r.name);
+                assert!(
+                    relative_db.iter().all(|v| v.get().is_finite()),
+                    "{}",
+                    r.name
+                );
             }
         }
     }
@@ -423,7 +476,10 @@ fn group_names_are_unique_trimmed_and_without_case() {
     assert_eq!(p.group(floor).unwrap().name, "FLOOR");
     apply_exact(&original, rename(walls, "Wall north"));
     // New group from selection under a taken name.
-    let err = refused(&original, original.regrouped(&[2], NEW, " walls", MaterialId::random()));
+    let err = refused(
+        &original,
+        original.regrouped(&[2], NEW, " walls", MaterialId::random()),
+    );
     let err = match err {
         OpError::Batch { error, .. } => *error,
         e => e,
@@ -432,9 +488,17 @@ fn group_names_are_unique_trimmed_and_without_case() {
 
     // A project that holds two alike (an imported file) is warned about, at the second.
     let issues = validate::validate(&original);
-    assert!(!issues.iter().any(|i| i.code == validate::codes::GROUP_NAME_DUPLICATE));
+    assert!(
+        !issues
+            .iter()
+            .any(|i| i.code == validate::codes::GROUP_NAME_DUPLICATE)
+    );
     let mut dup = original.clone();
-    let i = dup.surface_groups.iter().position(|g| g.id == walls).unwrap();
+    let i = dup
+        .surface_groups
+        .iter()
+        .position(|g| g.id == walls)
+        .unwrap();
     dup.surface_groups[i].name = "floor ".into();
     let issues = validate::validate(&dup);
     let hit: Vec<_> = issues
@@ -446,5 +510,9 @@ fn group_names_are_unique_trimmed_and_without_case() {
     assert!(hit[0].path.ends_with("/name"), "{}", hit[0].path);
     // Telling the two apart is one undo step that gives the duplicate back exactly.
     let fixed = apply_exact(&dup, rename(walls, "Walls"));
-    assert!(validate::validate(&fixed).iter().all(|i| i.code != validate::codes::GROUP_NAME_DUPLICATE));
+    assert!(
+        validate::validate(&fixed)
+            .iter()
+            .all(|i| i.code != validate::codes::GROUP_NAME_DUPLICATE)
+    );
 }
