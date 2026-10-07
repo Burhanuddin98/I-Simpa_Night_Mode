@@ -8,7 +8,8 @@
 //   w9-json    the same for the JSON export, and its wording is the tab's (MQ2)
 //   w9-png     Export view as PNG: the file decodes (this spec's own PNG reader), is the frame's
 //              size plus the legend strip, and its pixels at sampled points equal the frame the
-//              GPU holds over the window's background; the strip's texts are the on-screen
+//              GPU holds over the window's background (the page's --bg, which <body> paints), the
+//              frame settled and unchanged between the two read-backs; the strip's texts are the on-screen
 //              legend's. Controls: some sampled pixels are not the background (the map is in the
 //              frame), and the strip differs from the frame. The PNG is written to $M11_SCREENS
 //              as w9-export.png
@@ -30,7 +31,7 @@ import { clickSelector, RESULTS_STEP_CURRENT } from '../lib/dom.ts';
 import { hook, m10, waitForHooks } from '../lib/hooks.ts';
 import { env } from '../lib/types.ts';
 
-const HOOKS = ['idle', 'openProject', 'edit', 'projectJson', 'runStart', 'runState', 'runsRows', 'selectRun', 'setStep', 'm12Map', 'm12SetStep', 'wowExport', 'wowLastExport', 'wowFrameSamples', 'wowCardRects', 'wowMapFacePoint'];
+const HOOKS = ['idle', 'openProject', 'edit', 'projectJson', 'runStart', 'runState', 'runsRows', 'selectRun', 'setStep', 'm12Map', 'm12SetStep', 'wowExport', 'wowLastExport', 'wowFrameSamples', 'wowFramePixels', 'wowCardRects', 'wowMapFacePoint'];
 const MQ2 =
   'Computed to ISO 3382-1 / IEC 60268-16 and checked against exact solutions to within the just-noticeable difference. Simulated with I-Simpa’s solvers; not compared with measured rooms.';
 
@@ -251,6 +252,20 @@ describe('W9: export, and the bottom dock', () => {
   it('w9-png: the PNG is the frame as drawn over the background, with the legend\'s own texts in a strip', async () => {
     await mapOf(run);
     await hook('m12SetStep', 20);
+    // The frame settles first: after a step change the view eases in for a moment (two read-backs
+    // 9,045 of 36,000 pixels apart right after the step, 0 three seconds later; C3 2026-10-07), and
+    // the export and the samples below are two read-backs, so both must be of the same frame.
+    const frameHash = async () => (await hook<{ hash: number } | null>('wowFramePixels'))?.hash ?? null;
+    let settled: number | null = null;
+    await browser.waitUntil(
+      async () => {
+        const h = await frameHash();
+        const same = h !== null && h === settled;
+        settled = h;
+        return same;
+      },
+      { timeout: 20_000, interval: 400, timeoutMsg: 'the frame did not settle' },
+    );
     const target = path.join(env('M11_SCREENS'), 'w9-export.png');
     const r = await hook<Result>('wowExport', 'png', target);
     assert.equal(r.error, null, JSON.stringify(r.error));
@@ -264,7 +279,16 @@ describe('W9: export, and the bottom dock', () => {
     for (let y = 5; y < h; y += Math.max(1, Math.floor(h / 14))) for (let x = 5; x < w; x += Math.max(1, Math.floor(w / 14))) points.push([x, y]);
     const s = await hook<{ width: number; height: number; rgba: number[][] }>('wowFrameSamples', points);
     assert.deepEqual([s.width, s.height], [w, h]);
-    const bg = [9, 9, 11];
+    assert.equal(await frameHash(), settled, 'the frame changed between the export and the samples');
+    // The window's background, as the page paints it (the theme's --bg on <body>), read from the
+    // page: re-pinned 2026-10-07 (C3) from a hard-coded [9, 9, 11], the --bg #09090b that ff820a9
+    // (decision 64, 10-06 05:27) made #0c0a0a; 170 of 210 samples differed by that alone (at most
+    // 3 levels), not by the export.
+    const bgCss = await browser.execute(() => ({ token: getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(), body: getComputedStyle(document.body).backgroundColor }));
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(bgCss.token);
+    assert.ok(m, `--bg: ${bgCss.token}`);
+    const bg = [1, 2, 3].map((k) => parseInt(m[k], 16));
+    assert.equal(bgCss.body, `rgb(${bg.join(', ')})`, 'the window background is --bg');
     let bad = 0;
     let drawn = 0;
     points.forEach(([x, y], i) => {

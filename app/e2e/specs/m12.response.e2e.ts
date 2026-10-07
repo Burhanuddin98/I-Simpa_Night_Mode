@@ -16,10 +16,15 @@
 //                 (that time plus 5 %, rounded up to the 1-2-5 tick interval), computed here from
 //                 the JSON; every bin past it is 60 dB down or more; "Full run" draws every step and
 //                 says so, a second click cuts it again. Control: the cut map against the full
-//                 run's width is caught
+//                 run's width is caught. With nothing to cut, "Full run" is shown pressed and
+//                 "Fit energy" disabled (re-pinned 2026-10-07: 7e44f63 offers the range always)
 //   resp-numbers  every number the window prints (band labels, time ticks) equals the JSON at
 //                 the precision shown, every name is the JSON's, the colour bar's words are the
-//                 span's, and no digit is outside them. Control: a planted wrong digit is caught.
+//                 span's, and no digit is outside them; the time bins' widths are the JSON's time
+//                 step, the span chips the offered spans, the readout (pointer off the map) holds
+//                 no digit, and the pickers' options, checked on their own as the tab's are, are
+//                 the JSON's receivers and the printed band labels. Control: a planted wrong digit
+//                 is caught, and a changed receiver label.
 //                 A screenshot of the open window goes to $M11_SCREENS (ir-window.png)
 //
 // Its files, under <M11_WORK>\m12-response (C:). The repository is only read.
@@ -39,6 +44,8 @@ const TITLE = 'Energy response per band (SPPS echogram)';
 const SPAN = 60;
 /** The colour bar's words, the span's ends and thirds. */
 const SPAN_WORDS = ['0 dB', '−20', '−40', '−60 dB'];
+/** The level spans the window offers (Burhan 2026-10-06 18:20: "the level span 30 to 100 dB"). */
+const SPAN_CHOICES = ['30 dB', '40 dB', '60 dB', '80 dB', '100 dB'];
 /** The map's stops as the request gives them: black, deep red #3a0b10, red #e0202e, white. */
 const STOPS: [number, number[]][] = [
   [0, [0, 0, 0]],
@@ -181,8 +188,15 @@ const scanWindow = () =>
     const w = document.querySelector<HTMLElement>(sel);
     const all = (s: string) => (w ? [...w.querySelectorAll<HTMLElement>(s)] : []);
     const clone = w ? (w.cloneNode(true) as HTMLElement) : null;
-    clone?.querySelectorAll('[data-num], [data-str], [data-label]').forEach((e) => e.remove());
+    // The pickers (`<select>`) leave the stray text as the tab's scan has them leave it
+    // (acousticsTab.ts `scan`); their options are returned and checked on their own below.
+    clone?.querySelectorAll('[data-num], [data-str], [data-label], select').forEach((e) => e.remove());
+    const options = (part: string) => all(`select[data-part="${part}"] option`).map((o) => ({ value: (o as HTMLOptionElement).value, text: o.textContent ?? '' }));
     return {
+      receiverOptions: options('response-receiver'),
+      sourceOptions: options('response-source'),
+      stripOptions: options('response-strip-band'),
+      bandLabels: all('[data-part="response-bands"] > *').map((e) => e.textContent ?? ''),
       nums: all('[data-num]').map((e) => ({ path: e.getAttribute('data-json') ?? '', text: e.textContent ?? '', digits: e.getAttribute('data-digits'), scale: e.getAttribute('data-scale') })),
       bandPaths: all('[data-part="response-bands"] [data-num]').map((e) => e.getAttribute('data-json') ?? ''),
       tickPaths: all('[data-part="response-ticks"] [data-num]').map((e) => ({ path: e.getAttribute('data-json') ?? '', scale: e.getAttribute('data-scale') ?? '' })),
@@ -294,18 +308,25 @@ describe('The response window: the energy echogram per band', () => {
     const shownAs = () => browser.execute(() => {
       const el = document.querySelector<HTMLElement>('[data-response-window] [data-part="response-shown"]');
       const b = document.querySelector<HTMLElement>('[data-response-window] [data-action="response-full"]');
-      return { shown: el?.getAttribute('data-shown') ?? '', text: el?.innerText ?? '', button: b ? b.getAttribute('aria-pressed') : null };
+      const fit = document.querySelector<HTMLButtonElement>('[data-response-window] [data-action="response-fit"]');
+      return { shown: el?.getAttribute('data-shown') ?? '', text: el?.innerText ?? '', button: b ? b.getAttribute('aria-pressed') : null, fit: fit ? { pressed: fit.getAttribute('aria-pressed'), disabled: fit.disabled } : null };
     });
     const v = await hook<HookView>('responseView');
     assert.equal(v.crop, want.crop, 'the crop, against the JSON');
     const s0 = await shownAs();
     if (want.crop === null) {
-      // The full run, and no toggle to offer.
+      // The full run, with nothing to cut. Re-pinned 2026-10-07 (C3): since 7e44f63 (Burhan
+      // 2026-10-06 18:20, the window "legitimately manipulated and controlled") the time range is
+      // always under the user's hand, so "Full run" is always offered: it is the preset that also
+      // undoes a zoom. With nothing cut it reads pressed (the full run is what is shown), and
+      // "Fit energy", the crop's preset, is offered disabled. The old pin was "no toggle at all".
       assert.equal(v.shown, want.cols);
+      assert.equal(v.full, true);
       assert.equal(s0.shown, 'full');
-      assert.equal(s0.button, null, 'a "Full run" toggle with nothing cut');
+      assert.equal(s0.button, 'true', '"Full run" with nothing cut: shown pressed');
+      assert.deepEqual(s0.fit, { pressed: 'false', disabled: true }, '"Fit energy" with nothing to cut');
       assert.match(s0.text, /^Shown: the full run/);
-      console.log(`resp-crop receipt: run ${run?.run}: no crop (${want.cols} steps), the full run shown, no toggle`);
+      console.log(`resp-crop receipt: run ${run?.run}: no crop (${want.cols} steps), the full run shown, "Full run" pressed, "Fit energy" disabled`);
       return;
     }
     // Every bin past the end is 60 dB down or more: nothing above the floor is cut off.
@@ -354,10 +375,27 @@ describe('The response window: the energy echogram per band', () => {
     }
     assert.deepEqual(mismatches, [], `${mismatches.length} of ${s.nums.length} numbers and ${s.strs.length} strings`);
     assert.equal(strayDigits(s.stray), null, `a digit outside the marked numbers: ${strayDigits(s.stray)}`);
+    // Words that are not the report's (narrowed 2026-10-07, C3, for 7e44f63's controls): the colour
+    // bar's span words; the span chips, the window's own choices; the readout, derived from the map
+    // under the pointer, which is off the map here, so it holds no digit at all.
     for (const l of s.labels) {
-      assert.equal(l.kind, 'span', `a label of kind ${l.kind}`);
-      assert.ok(SPAN_WORDS.includes(l.text), `a span word not known: ${JSON.stringify(l.text)}`);
+      if (l.kind === 'span') assert.ok(SPAN_WORDS.includes(l.text), `a span word not known: ${JSON.stringify(l.text)}`);
+      else if (l.kind === 'control') assert.ok(SPAN_CHOICES.includes(l.text), `a span choice not offered: ${JSON.stringify(l.text)}`);
+      else if (l.kind === 'readout') assert.equal(strayDigits(l.text), null, `a digit in the readout with the pointer off the map: ${strayDigits(l.text)}`);
+      else assert.fail(`a label of kind ${l.kind}: ${JSON.stringify(l.text)}`);
     }
+    assert.deepEqual(s.labels.filter((l) => l.kind === 'control').map((l) => l.text), SPAN_CHOICES, 'the span chips');
+    // The pickers' options, on their own: the receivers are the JSON's labels in order; the strip's
+    // bands are the band labels the map prints (each a checked [data-num]) after "bands summed"; a
+    // source is a name of the JSON's echograms per source.
+    const labelsJson = (at(json, 'spps.point_receivers') as { label: string }[]).map((x) => x.label);
+    assert.deepEqual(s.receiverOptions.map((o) => o.text), labelsJson, 'the receiver picker');
+    assert.deepEqual(s.stripOptions.map((o) => o.text), ['bands summed', ...s.bandLabels], 'the strip picker');
+    const perSource = new Set((at(json, 'spps.point_receivers') as { per_source?: { source: string }[] }[]).flatMap((x) => (x.per_source ?? []).map((p) => p.source)));
+    for (const o of s.sourceOptions) assert.ok(o.value === '' || (perSource.has(o.text) && o.value === o.text), `a source option not the JSON's: ${JSON.stringify(o)}`);
+    // Control: the receiver picker against the JSON's labels with one changed is caught.
+    const wrongOption = labelsJson.map((t, i) => (i === 0 ? `${t}0` : t));
+    assert.notDeepEqual(s.receiverOptions.map((o) => o.text), wrongOption, 'the control: a changed receiver label');
     assert.ok(!/validated/i.test(s.text), 'no "validated"');
     // The band labels are the receiver's bands, lowest first; the ticks the step times a whole number.
     const bands = (at(json, 'spps.point_receivers.0.bands') as unknown[]).length;
