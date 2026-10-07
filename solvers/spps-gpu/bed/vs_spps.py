@@ -14,11 +14,12 @@ import json, os, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(__file__))
 import stage  # noqa: E402
 
-REPO = r"B:\repos\I-Simpa_Night_Mode\.claude\worktrees\spps-gpu"
-OUT = r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu\bed"
-SIMPA = r"C:\tmp\nm-target\release\simpa.exe"
-SPPS = r"C:\tmp\nm-solvers-timebin\bin\spps.exe"
-GPU = r"C:\tmp\nm-spps-gpu\bin\spps-gpu.exe"
+# A6 re-runs it on its own tree and builds: BED_REPO, BED_OUT, BED_SIMPA, BED_SPPS, BED_GPU
+REPO = os.environ.get("BED_REPO", r"B:\repos\I-Simpa_Night_Mode\.claude\worktrees\spps-gpu")
+OUT = os.environ.get("BED_OUT", r"B:\repos\I-Simpa_Night_Mode\.out\spps-gpu\bed")
+SIMPA = os.environ.get("BED_SIMPA", r"C:\tmp\nm-target\release\simpa.exe")
+SPPS = os.environ.get("BED_SPPS", r"C:\tmp\nm-solvers-timebin\bin\spps.exe")
+GPU = os.environ.get("BED_GPU", r"C:\tmp\nm-spps-gpu\bin\spps-gpu.exe")
 
 
 def override_manifest():

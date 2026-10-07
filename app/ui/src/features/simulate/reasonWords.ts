@@ -32,6 +32,7 @@ const WORDS: Record<string, string> = {
   nonfinite_result: 'A result contains values that are not numbers (infinite or undefined).',
   result_unreadable: 'A result file could not be read.',
   spps_gpu_refused: 'SPPS on the GPU does not run this project; SPPS on the CPU does.',
+  child_pool_overflow: 'SPPS on the GPU had no room left for the sound passing through a wall, so the run was stopped; SPPS on the CPU runs this project.',
 
   // Reading a run's results back (simpa-core results).
   results_manifest_missing: "This run's record is missing, so its results cannot be checked.",

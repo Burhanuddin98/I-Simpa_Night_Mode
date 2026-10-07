@@ -161,7 +161,7 @@ fn ours() -> Vec<Row> {
 #[test]
 fn the_classifier_table_is_the_contract_pages_part_b() {
     let rows = documented(&read("docs/solver-contract.md")).unwrap();
-    assert_eq!(rows.len(), 23, "Part B's table has 23 rows");
+    assert_eq!(rows.len(), 24, "Part B's table has 24 rows");
     assert_eq!(
         rows,
         ours(),
@@ -176,7 +176,7 @@ fn the_classifier_table_is_the_contract_pages_part_b() {
             n(LineClass::Fail),
             n(LineClass::Warn)
         ],
-        [1, 7, 1, 12, 2]
+        [1, 7, 1, 13, 2]
     );
     println!("{} rows match docs/solver-contract.md Part B", rows.len());
 }
@@ -251,7 +251,15 @@ fn no_two_patterns_match_one_documented_sample() {
         "Unable to find the source position!",
         "Warning 5 particles has been in error on 10 particles. The computation result may be",
         "spps-gpu: refused: fittings_unsupported: SPPS on the GPU does not support fittings in this version; run SPPS on the CPU, or turn fittings off",
+        "spps-gpu: failed: child_pool_overflow: 45000 transmitted particles did not fit the child pool (1000 entries, 0 MiB) at 500 Hz",
     ];
+    // an older spps-gpu's count of dropped children is the same row
+    assert_eq!(
+        classify::matching_rules(
+            "spps-gpu: warning: child_queue_overflow: 104146 transmitted particles dropped at 1000 Hz (queue of 16 per particle), energy 2.4335e-11 J"
+        ),
+        ["child_pool_overflow"]
+    );
     for (s, r) in samples.iter().zip(&LINE_RULES) {
         assert_eq!(classify::matching_rules(s), [r.id], "{s}");
     }

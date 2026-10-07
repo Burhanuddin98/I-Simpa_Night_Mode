@@ -129,8 +129,8 @@ pub const UNCLASSIFIED: &str = "unclassified_line";
 /// The id of the line an SPPS OK requires.
 pub const END_OF_CALCULATION: &str = "spps_end_of_calculation";
 
-/// `docs/solver-contract.md` Part B's classification table, in the page's order: 23 rows.
-pub const LINE_RULES: [LineRule; 23] = [
+/// `docs/solver-contract.md` Part B's classification table, in the page's order: 24 rows.
+pub const LINE_RULES: [LineRule; 24] = [
     rule(
         "progress",
         OUT,
@@ -296,6 +296,16 @@ pub const LINE_RULES: [LineRule; 23] = [
         Some(r"^spps-gpu: refused: [a-z_]+: "),
         Fail,
         "solvers/spps-gpu/src/main.cu:372, 383, 443",
+    ),
+    // spps-gpu lost transmitted children (decision 72, A6): a build with the child pool prints
+    // `failed: child_pool_overflow` and exits 2; an older one printed `warning:
+    // child_queue_overflow`, exited 0 and wrote every file, so the line alone must fail the run.
+    rule(
+        "child_pool_overflow",
+        ERR,
+        Some(r"^spps-gpu: (failed: child_pool_overflow|warning: child_queue_overflow): "),
+        Fail,
+        "solvers/spps-gpu/src/main.cu:804",
     ),
     rule(UNCLASSIFIED, None, None, Warn, ""),
 ];
