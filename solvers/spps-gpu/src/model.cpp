@@ -752,17 +752,17 @@ bool checkSourcePosition(const Config& cfg, const Model& m) {
 std::vector<std::string> refusals(const Config& cfg, const Model& m) {
   std::vector<std::string> r;
   if (cfg.alog != 0 || cfg.blin != 0)
-    r.push_back("stratified_unsupported: condition_atmospherique alog/blin set a sound-speed gradient; SPPS re-aims every particle each step in a stratified medium (CalculationCore.cpp:80-84, 389-410), which spps-gpu does not port in A2");
+    r.push_back("stratified_unsupported: SPPS on the GPU does not support air with a sound-speed gradient (a stratified medium) in this version; run SPPS on the CPU");
   if (cfg.encCalc) {
     for (int t = 0; t < m.T; t++)
       if (m.volEnc[t] >= 0) {
-        r.push_back("fittings_unsupported: enc_calc is on and the mesh holds fitting volumes (encombrement); the fitting walk (CalculationCore.cpp:32-39, 132-185) comes in A3");
+        r.push_back("fittings_unsupported: SPPS on the GPU does not support fittings in this version; run SPPS on the CPU, or turn fittings off");
         break;
       }
   }
   for (size_t i = 0; i < cfg.sources.size(); i++) {
     int ty = cfg.sources[i].type;
-    if (ty == 5) r.push_back("directivity_balloon_unsupported: source '" + cfg.sources[i].name + "' uses a measured directivity balloon (directivite 5), which comes in A3");
+    if (ty == 5) r.push_back("directivity_balloon_unsupported: source '" + cfg.sources[i].name + "' uses a measured directivity balloon, which SPPS on the GPU does not support in this version; run SPPS on the CPU");
     else if (ty < 0 || ty > 5) r.push_back("source_type_unknown: source '" + cfg.sources[i].name + "' has directivite " + std::to_string(ty) + ", for which SPPS has no branch");
     if (cfg.sources[i].tetra < 0)
       r.push_back("source_outside_mesh: source '" + cfg.sources[i].name + "' lies in no tetrahedron (SPPS crashes there with 0xC0000005, sppsInitialisation.cpp:13-20)");

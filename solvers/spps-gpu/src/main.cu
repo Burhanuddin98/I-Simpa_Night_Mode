@@ -25,7 +25,7 @@
 
 using namespace spg;
 
-static const char* VERSION = "0.1.0 (A2, 2026-10-06)";
+static const char* VERSION = "0.1.1 (A5, 2026-10-07)";
 
 constexpr unsigned TOTAL_REPLICAS = 256;
 
@@ -380,7 +380,7 @@ int main(int argc, char** argv) {
   std::string device;
   if (!cpu) {
     if (probe(device) != 0) {
-      std::cerr << "spps-gpu: refused: no_cuda_device: " << device << "; run with --cpu (or SPPS_GPU_BACKEND=cpu) for the CPU build of the same walk" << std::endl;
+      std::cerr << "spps-gpu: refused: no_cuda_device: no usable CUDA device was found (" << device << "); run SPPS on the CPU" << std::endl;
       return 2;
     }
   }
