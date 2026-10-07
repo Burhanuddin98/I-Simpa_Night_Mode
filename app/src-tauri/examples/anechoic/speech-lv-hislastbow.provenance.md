@@ -1,0 +1,12 @@
+# speech-lv-hislastbow.wav
+- Title: "His Last Bow" (Arthur Conan Doyle, 1917), section 15 "His Last Bow, part 1", LibriVox recording
+- Source page: https://librivox.org/his-last-bow-by-sir-arthur-conan-doyle/ ; Internet Archive item https://archive.org/details/hislastbow_0711_librivox
+- Direct file URL: https://archive.org/download/hislastbow_0711_librivox/hislastbow_15_doyle.mp3 (VBR MP3; only bytes 0-2999999 were fetched via HTTP Range, about the first 187 s)
+- Author/performer: text by Sir Arthur Conan Doyle; reader Zachary Brewster-Geisz (per the LibriVox API, section 15)
+- Licence: Public domain (LibriVox recordings; the Internet Archive item carries licenseurl http://creativecommons.org/licenses/publicdomain/)
+- Licence text, quoted from https://librivox.org/pages/public-domain/ : "LibriVox records only texts that are in the public domain (in the USA - see below for why), and all our recordings are public domain (definitely in the USA, and maybe in your country as well, see below). This means anyone can use all our recordings however they wish (even to sell them)." Also on that page: "if you record for LibriVox, all your recordings will be donated to the public domain". Caveat from the same page: "all our recordings are public domain in the USA, but not necessarily in other countries". The text itself (Doyle, died 1930) is public domain in life+70 countries too.
+- Date fetched: 2026-10-07
+- sha256 original (the 3,000,000-byte partial MP3 as saved, raw/lv_hislastbow_15.part.mp3): 076c9201ee2d5f7c0068696de54c63ae85b813538c4a7bb02f393d4b16cff474
+- sha256 converted: 67587dfbe7fa88740824659187f3e826f0f5b6ed723e82e95f34a64eea41d34a
+- Processing: decoded with soundfile (libsndfile 1.2.2), 44.1 kHz mono; excerpt 46.55 s to 54.50 s of the decoded file (7.95 s, bounded by pauses); scipy resample_poly 44100 -> 48000 (up 160, down 147); 10 ms linear fade-in, 50 ms linear fade-out; peak-normalised to -1.0 dBFS; 16-bit PCM. Script: scripts/proc.py. The transcript of the excerpt was not checked.
+- Dryness note: NOT anechoic. A home-recorded audiobook, lossy MP3 (LibriVox publishes MP3 only, so no lossless source exists). LibriVox makes no statement about the room. Measured: pauses sit about 70 dB below speech peaks and levels fall 40-50 dB within 200 ms after phrases, so no audible room tail in practice, but this is close-miked speech with possible gating or noise reduction, not a measured anechoic recording.

@@ -592,3 +592,79 @@
 .dock[data-tall='true'] .ac-chart {
   flex-basis: 220px;
 }
+
+/* The listening window (AuralWindow.tsx, C5): the response window's glass and head, smaller,
+   at the right so both can be open. */
+.ac-listen {
+  height: 22px;
+  margin-left: 6px;
+}
+.aw.rw {
+  left: auto;
+  right: 24px;
+  top: 72px;
+  transform: none;
+  width: min(560px, calc(100vw - 48px));
+  height: auto;
+  min-width: 420px;
+  min-height: 0;
+  resize: none;
+  gap: 8px;
+}
+.aw-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.aw-sec-title {
+  font-weight: 600;
+  color: var(--text);
+}
+.aw-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.aw-row select {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+.aw-info {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.aw-meter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.aw-meter-bar {
+  position: relative;
+  flex: 1 1 auto;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.aw-meter-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--red, #e0202e);
+}
+.aw-meter-text {
+  min-width: 84px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.aw-clip,
+.aw-error {
+  color: #ff5a5a;
+  font-weight: 600;
+}

@@ -30,6 +30,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod aural;
 mod bench;
 mod bindings;
 mod bridge;
@@ -271,6 +272,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::run_surface_map,
             commands::run_particles,
             commands::run_echogram,
+            commands::run_auralize,
             commands::proj_import,
             commands::material_library,
             commands::spectrum_library,

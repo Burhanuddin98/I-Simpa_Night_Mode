@@ -43,6 +43,7 @@ fn main() {
         "run_surface_map",
         "run_particles",
         "run_echogram",
+        "run_auralize",
         "proj_import",
         "material_library",
         "spectrum_library",

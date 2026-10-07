@@ -62,6 +62,7 @@ import {
 } from './model';
 import './acoustics.css';
 import { N, S } from './Marked';
+import { auralHookOpen, auralHookSave, auralHookView, AuralWindow } from './AuralWindow';
 import { responseHookView, ResponseWindow } from './ResponseWindow';
 
 function Band({ report, index }: { report: NonNullable<ReportView['report']>; index: number }) {
@@ -320,6 +321,9 @@ let paneView: HookView | null = null;
 export function useAcousticsDock(): void {
   useEffect(() => registerHook('acousticsView', () => paneView), []);
   useEffect(() => registerHook('responseView', () => responseHookView()), []);
+  useEffect(() => registerHook('auralView', () => auralHookView()), []);
+  useEffect(() => registerHook('auralSave', ((what: 'ir' | 'aural', path: string) => auralHookSave(what, path)) as never), []);
+  useEffect(() => registerHook('auralOpen', ((path: string) => auralHookOpen(path)) as never), []);
   useVariantRunFollow();
 }
 
@@ -353,6 +357,9 @@ export function AcousticsPane() {
   const [error, setError] = useState<{ run: string; code: string } | null>(null);
   const [responseOpen, setResponseOpen] = useState(false);
   const closeResponse = useCallback(() => setResponseOpen(false), []);
+  // C5's listening window: it closes with the run it plays, and off the Results step.
+  const [auralOpen, setAuralOpen] = useState(false);
+  const closeAural = useCallback(() => setAuralOpen(false), []);
 
   const onResults = step === 'results';
   const row = selected ? (runs?.rows.find((r) => r.run === selected) ?? null) : null;
@@ -407,6 +414,7 @@ export function AcousticsPane() {
   // The response window holds numbers: it closes with the run it shows, and off the Results step.
   useEffect(() => {
     if (state !== 'ready') setResponseOpen(false);
+    if (state !== 'ready') setAuralOpen(false);
   }, [state, selected]);
 
   if (state === 'off-step') {
@@ -621,6 +629,11 @@ export function AcousticsPane() {
                 Open response
               </button>
             ) : null}
+            {report.solver !== 'tcr' ? (
+              <button type="button" className="small-button ac-listen" data-action="open-aural" aria-pressed={auralOpen} title="Hear the receiver's impulse response, synthesised from the echogram, and an anechoic recording through it" onClick={() => setAuralOpen((o) => !o)}>
+                Listen
+              </button>
+            ) : null}
             <span className="ac-sub">
               {names[r] !== undefined ? <S s={{ path: `${report.solver === 'tcr' ? 'tcr' : 'spps'}.point_receivers.${r}.label`, text: names[r] }} /> : null}
               {' · '}
@@ -632,6 +645,20 @@ export function AcousticsPane() {
           {curve ? <DecayChart curve={curve} /> : <div className="ac-none">No decay curve for this receiver and band.</div>}
           {responseOpen && report.solver !== 'tcr' ? (
             <ResponseWindow report={report} receiver={r} source={src} receivers={names} sources={srcNames} onReceiver={setReceiver} onSource={setSource} onClose={closeResponse} />
+          ) : null}
+          {auralOpen && selected && report.solver !== 'tcr' ? (
+            <AuralWindow
+              run={selected}
+              runNumber={row?.number ?? null}
+              project={scene?.info.name ?? null}
+              receiver={r}
+              source={src}
+              receivers={names}
+              sources={srcNames}
+              onReceiver={setReceiver}
+              onSource={setSource}
+              onClose={closeAural}
+            />
           ) : null}
         </section>
 

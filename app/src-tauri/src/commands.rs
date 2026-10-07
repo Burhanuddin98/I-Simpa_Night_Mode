@@ -664,6 +664,41 @@ pub async fn run_echogram(
     .await
 }
 
+/// C5: a receiver's impulse response synthesised from the run's SPPS energy echogram, or an
+/// anechoic recording convolved with it (`clip`, a shipped one by id, or `path`, a WAV the open
+/// dialog returned), as WAV bytes (`aural::auralize_bytes`): an ArrayBuffer in JS. The sources
+/// summed unless `source` names one.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn run_auralize(
+    state: State<'_, AppState>,
+    run: String,
+    receiver: String,
+    source: Option<String>,
+    clip: Option<String>,
+    path: Option<String>,
+) -> CmdResult<Response> {
+    let session = state.session.clone();
+    guard::blocking("run_auralize", move || {
+        let dry = match (&clip, &path) {
+            (Some(c), None) => crate::aural::Dry::Clip(c),
+            (None, Some(p)) => crate::aural::Dry::File(p),
+            (None, None) => crate::aural::Dry::None,
+            (Some(_), Some(_)) => {
+                return Err(CmdError::new("AURAL_ARGS", "a clip or a path, not both"));
+            }
+        };
+        crate::aural::auralize_bytes(
+            &runs_root_for(&session, &run)?,
+            &run,
+            &receiver,
+            source.as_deref(),
+            dry,
+        )
+        .map(Response::new)
+    })
+    .await
+}
+
 /// Opens an upstream I-Simpa `.proj` as a new, unsaved project.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn proj_import(state: State<'_, AppState>, path: String) -> CmdResult<SceneState> {
@@ -761,7 +796,7 @@ pub async fn selftest_report(
 }
 
 /// W9 export: writes the request's raw bytes to the path the save dialog returned. The path
-/// (`encodeURIComponent`) and the kind (`csv`, `json`, `png`) ride in the `x-export-path` and
+/// (`encodeURIComponent`) and the kind (`csv`, `json`, `png`, `wav`) ride in the `x-export-path` and
 /// `x-export-kind` headers; `export::write` refuses a path without the kind's extension and
 /// bytes that are not the kind, and writes the file whole or not at all. Returns the bytes written.
 #[tauri::command(rename_all = "snake_case")]
