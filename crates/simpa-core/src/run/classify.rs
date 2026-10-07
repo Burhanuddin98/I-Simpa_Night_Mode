@@ -305,7 +305,7 @@ pub const LINE_RULES: [LineRule; 24] = [
         ERR,
         Some(r"^spps-gpu: (failed: child_pool_overflow|warning: child_queue_overflow): "),
         Fail,
-        "solvers/spps-gpu/src/main.cu:804",
+        "solvers/spps-gpu/src/main.cu:805",
     ),
     rule(UNCLASSIFIED, None, None, Warn, ""),
 ];

@@ -525,7 +525,7 @@ int main(int argc, char** argv) {
   unsigned int* dBusy = nullptr;
   Particle* dPool = nullptr;
   unsigned long long* dPoolCtl = nullptr;
-  size_t poolCap = 0;
+  size_t poolCap = 0, poolFreeAtSizing = 0;
   int nslots = 0;
   unsigned rpRep = 1;
   long long launches = 0;
@@ -590,6 +590,7 @@ int main(int argc, char** argv) {
       if (children && transmitting) {
         size_t freeP = 0, totP = 0;
         cudaMemGetInfo(&freeP, &totP);
+        poolFreeAtSizing = freeP;
         size_t want = std::max<size_t>(1u << 22, 64ull * (size_t)std::max<long long>(1, totalFamilies));
         poolCap = std::min(want, freeP / 4 / sizeof(Particle));
         if (const char* pc = getenv("SPPS_GPU_POOL_CAP")) poolCap = (size_t)std::max(1LL, atoll(pc));
@@ -884,6 +885,7 @@ int main(int argc, char** argv) {
     j << "  \"kernel_seconds\": " << kernelSeconds << ",\n";
     j << "  \"trace_seconds\": " << traceSeconds << ",\n  \"wall_seconds\": " << wall << ",\n";
     j << "  \"child_pool_capacity\": " << poolCap << ",\n  \"child_pool_entry_bytes\": " << sizeof(Particle) << ",\n";
+    j << "  \"child_pool_free_bytes_at_sizing\": " << poolFreeAtSizing << ",\n";
     j << "  \"child_pool_given\": " << poolGiven << ",\n  \"child_pool_peak\": " << poolPeak << ",\n";
     j << "  \"child_queue_overflow\": " << overflowTotal << "\n}\n";
   }
