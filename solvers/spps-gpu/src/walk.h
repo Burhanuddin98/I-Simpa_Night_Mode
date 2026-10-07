@@ -223,6 +223,11 @@ struct MatBand {      // t_Material_BFreq at the band (coreTypes.h), plus the ma
   float absorption, diffusion, tau;
   int dotransmission, law, doubleSided;
 };
+// Whether a face of this material can make a transmitted child (CalculationCore.cpp, the energetic
+// branch with 0 < absorption < 1): the one rule the walk applies and the GPU pool's sizing reads.
+SPG_F bool makesChildren(const MatBand& m, int energetic, int directCalc, int transCalc) {
+  return energetic && !directCalc && transCalc && m.dotransmission && m.tau != 0 && m.absorption != 0 && m.absorption != 1;
+}
 struct CutPlane {     // r_SurfCut (coreTypes.h:263)
   V3 A, B, C, normal;
   int nu, nv;         // NbCellU (along BC), NbCellV (along BA)
@@ -595,7 +600,7 @@ struct Walker {
               transmission = true;
               p.E *= m.tau;
             } else if (m.absorption != 0) {
-              if (m.dotransmission && m.tau != 0 && p.E * m.tau > p.eps && s.transCalc) {
+              if (makesChildren(m, s.energetic, s.directCalc, s.transCalc) && p.E * m.tau > p.eps) {
                 Particle c = p;
                 c.E *= m.tau;
                 uint64_t L = childLineage(p.rng.lineage(), ++p.kids);

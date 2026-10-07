@@ -419,6 +419,15 @@ struct Progress {
   }
 };
 
+// A material at a band, as the walk reads it
+static MatBand matBandAt(const Config& cfg, size_t i, size_t bi) {
+  const MatBandCfg& mb = cfg.materials[i].bands[bi];
+  MatBand r;
+  r.absorption = mb.absorption; r.diffusion = mb.diffusion; r.tau = mb.tau;
+  r.dotransmission = mb.dotrans; r.law = mb.law; r.doubleSided = cfg.materials[i].doubleSided ? 1 : 0;
+  return r;
+}
+
 int main(int argc, char** argv) {
   std::string path;
   bool cpu = false, probeOnly = false;
@@ -578,16 +587,16 @@ int main(int argc, char** argv) {
     }
     if (!dumpWalk.empty()) check(cudaMalloc(&dDump, std::max<long long>(1, totalFamilies) * sizeof(WalkRec)), "dump");
     {
-      // The child pool, only when a child can be made (energetic, trans_calc, a transmitting material
-      // in a computed band): max(2^22, 64 x the band's families) entries, at most a quarter of the
-      // device memory still free, sizeof(Particle) bytes each. SPPS_GPU_POOL_CAP=<entries> sets it
-      // (the bed's overflow test). A4's beam (2,000 families) peaks at 818,594 waiting children.
-      bool children = cfg.method != 0 && cfg.transCalc != 0 && cfg.directCalc == 0;
-      bool transmitting = false;
-      for (const auto& mt : cfg.materials)
-        for (size_t bi = 0; bi < cfg.bands.size() && bi < mt.bands.size(); bi++)
-          if (cfg.bands[bi].docalc && mt.bands[bi].dotrans && mt.bands[bi].tau != 0) transmitting = true;
-      if (children && transmitting) {
+      // The child pool, only when a child can be made: makesChildren (walk.h), the walk's own rule,
+      // true for some material in a computed band. max(2^22, 64 x the band's families) entries, at
+      // most a quarter of the device memory still free, sizeof(Particle) bytes each.
+      // SPPS_GPU_POOL_CAP=<entries> sets it (the bed's overflow test). A4's beam (2,000 families)
+      // peaks at 818,594 waiting children.
+      bool children = false;
+      for (size_t i = 0; i < cfg.materials.size(); i++)
+        for (size_t bi = 0; bi < cfg.bands.size(); bi++)
+          if (cfg.bands[bi].docalc && makesChildren(matBandAt(cfg, i, bi), base.energetic, base.directCalc, base.transCalc)) children = true;
+      if (children) {
         size_t freeP = 0, totP = 0;
         cudaMemGetInfo(&freeP, &totP);
         poolFreeAtSizing = freeP;
@@ -623,11 +632,7 @@ int main(int argc, char** argv) {
     if (!cfg.bands[bi].docalc) continue;
     // material and source parameters at the band
     std::vector<MatBand> mats(cfg.materials.size());
-    for (size_t i = 0; i < cfg.materials.size(); i++) {
-      const MatBandCfg& mb = cfg.materials[i].bands[bi];
-      mats[i].absorption = mb.absorption; mats[i].diffusion = mb.diffusion; mats[i].tau = mb.tau;
-      mats[i].dotransmission = mb.dotrans; mats[i].law = mb.law; mats[i].doubleSided = cfg.materials[i].doubleSided ? 1 : 0;
-    }
+    for (size_t i = 0; i < cfg.materials.size(); i++) mats[i] = matBandAt(cfg, i, bi);
     std::vector<SrcBand> sbs(NS);
     for (int i = 0; i < NS; i++) {
       const Source& s = cfg.sources[i];
