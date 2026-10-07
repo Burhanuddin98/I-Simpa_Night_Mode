@@ -184,3 +184,43 @@ fn t54_override_a_run_checked_against_the_override_manifest_never_verifies() {
     };
     assert_eq!(results::solver_build(&no_record), SolverBuild::Verified);
 }
+
+/// A5 (decision 70): a run of SPPS on the GPU (`gpu_device` recorded) executed `spps-gpu.exe`, so
+/// only a check of `spps-gpu.exe` covers its solver: a check of `spps.exe` alone leaves it
+/// unchecked, and the same checks on a CPU run of the same manifest are the reverse.
+#[test]
+fn a5_a_gpu_run_is_verified_by_its_spps_gpu_check_only() {
+    let text = std::fs::read_to_string(common::fixture(SPPS).join("run.json")).unwrap();
+    let base = RunManifest::from_json(&text).unwrap();
+    assert_eq!(
+        base.gpu_device, None,
+        "the committed SPPS fixture is a CPU run"
+    );
+    let gpu = |checks: Vec<SolverCheck>| RunManifest {
+        gpu_device: Some("NVIDIA GeForce RTX 5070, sm_120".into()),
+        solvers: Some(checks),
+        ..base.clone()
+    };
+    let b = results::solver_build(&gpu(vec![
+        check("spps.exe", true),
+        check(TETGEN_EXE_NAME, true),
+    ]));
+    assert_eq!(
+        unverified_code("gpu, spps.exe checked", &b),
+        build_codes::UNCHECKED
+    );
+    assert!(b.reason().unwrap().detail.contains("spps-gpu.exe"), "{b:?}");
+    let checks = vec![check("spps-gpu.exe", true), check(TETGEN_EXE_NAME, true)];
+    assert_eq!(
+        results::solver_build(&gpu(checks.clone())),
+        SolverBuild::Verified
+    );
+    let cpu = RunManifest {
+        solvers: Some(checks),
+        ..base
+    };
+    assert_eq!(
+        unverified_code("cpu, spps-gpu.exe checked", &results::solver_build(&cpu)),
+        build_codes::UNCHECKED
+    );
+}

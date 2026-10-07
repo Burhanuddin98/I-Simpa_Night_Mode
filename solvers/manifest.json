@@ -19,13 +19,15 @@
                    "spps.exe":  "973059a5f4f2070bd906e6fd1c1a0d90c0357d265b5f87d7c64aa83574bdff87",
                    "classicalTheory.exe":  "e025b5afb053c3107576d656a3ba0e25c659a88edfbbc14a981ae1753fca69d1",
                    "tetgen.exe":  "26ff485e77aba22602f02c9daf372b29e659ba72a13759feb34eeac291662550",
-                   "preprocess.exe":  "468522b6534a17bbda1236fbbf1b9a57ff263902cffd5e872b288a7e5f90a5a4"
+                   "preprocess.exe":  "468522b6534a17bbda1236fbbf1b9a57ff263902cffd5e872b288a7e5f90a5a4",
+                   "spps-gpu.exe":  "45879035c109af3d96e2a1865b119df5b9f1ac9f1419b6482bc32dc689ec68a1"
                },
     "code_sha256":  {
                         "spps.exe":  "d0ec3220e73306a5b970adbd9f9a881df69d2ffc436ce86dae3c2cd7bd8167c2",
                         "classicalTheory.exe":  "6a0ac763b852989f993016553bda7bce299dd2c8046df5462b8ed2db4bbfcda3",
                         "tetgen.exe":  "d0704003805eb9fdf22c8a2ebf18f2ad6270cb1d59086aa40f86fb12cac5c60f",
-                        "preprocess.exe":  "7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26"
+                        "preprocess.exe":  "7d4ba6afab56b2a13053c76213876f081cf5786abf8cec01f21a3c62f3d79e26",
+                        "spps-gpu.exe":  "23107f29e9c296025e906073f0af8b3aac4e62099682d16e035cff961b2dc388"
                     },
     "code_sha256_of":  "the exe with IMAGE_FILE_HEADER.TimeDateStamp and every IMAGE_DEBUG_DIRECTORY TimeDateStamp zeroed (solvers/pe-fingerprint.ps1)",
     "tetgen":  {
@@ -53,5 +55,19 @@
                    "upstream_160_reference_code_sha256":  "b0c89b7fe8de05dcd64c5acc37a54492bc29710476a70e8a62c91f3c27f4663b",
                    "upstream_160_reference":  "build\\src\\tetgen\\Release\\tetgen.exe (not shipped)"
                },
+    "spps_gpu":  {
+                     "source":  "solvers/spps-gpu (this repository; not upstream code)",
+                     "source_commit":  "8f9f891125dc3966250e6766457f7803a9904a4d",
+                     "source_tree":  "baaae08bbea82de918060c6f0cf660ebef7a04e0",
+                     "built_from_checkout":  "11347e6b6fb1333a36a5546cd025e5daeb1264e3",
+                     "build":  "solvers/spps-gpu/build.cmd C:\\tmp\\nm-spps-gpu\\fat fat",
+                     "build_log":  "C:\\tmp\\nm-spps-gpu-fat-0903.log",
+                     "nvcc":  "13.2 (V13.2.78)",
+                     "host_compiler":  "VS 2022 cl (VsDevCmd), /openmp /O2 /EHsc /fp:precise",
+                     "architectures":  "sm_75 with compute_75 PTX, sm_120",
+                     "exe_sha256":  "45879035c109af3d96e2a1865b119df5b9f1ac9f1419b6482bc32dc689ec68a1",
+                     "exe_code_sha256":  "23107f29e9c296025e906073f0af8b3aac4e62099682d16e035cff961b2dc388",
+                     "built_at":  "2026-10-07T09:02"
+                 },
     "built_at":  "2026-10-06T15:56:34"
 }

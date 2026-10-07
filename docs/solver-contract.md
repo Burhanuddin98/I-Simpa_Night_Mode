@@ -368,6 +368,7 @@ TCR returns `MainProcess`'s value (`main_tc.cpp:160-173`):
 | `source_on_surface` | stderr | `^A sound source position is intersecting with the 3D model` | FAIL | `sppsNantes.cpp:323` |
 | `source_not_located` | stderr | `^Unable to find the source position!` (no newline; unreachable in practice) | FAIL | `sppsNantes.cpp:63` |
 | `particle_loss_reported` | stderr | `^Warning (\d+) particles has been in error on (\d+) particles\.` (no newline) | FAIL | `sppsNantes.cpp:425-439` |
+| `spps_gpu_refused` | stderr | `^spps-gpu: refused: [a-z_]+: ` (our GPU build of SPPS, decision 70: a project it does not take, or no CUDA device; exit 2) | FAIL | `solvers/spps-gpu/src/main.cu:372, 383, 443` |
 | `unclassified_line` | either | anything else | WARN | – |
 
 Notes on the classifier:

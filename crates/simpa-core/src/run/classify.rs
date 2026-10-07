@@ -129,8 +129,8 @@ pub const UNCLASSIFIED: &str = "unclassified_line";
 /// The id of the line an SPPS OK requires.
 pub const END_OF_CALCULATION: &str = "spps_end_of_calculation";
 
-/// `docs/solver-contract.md` Part B's classification table, in the page's order: 22 rows.
-pub const LINE_RULES: [LineRule; 22] = [
+/// `docs/solver-contract.md` Part B's classification table, in the page's order: 23 rows.
+pub const LINE_RULES: [LineRule; 23] = [
     rule(
         "progress",
         OUT,
@@ -290,6 +290,13 @@ pub const LINE_RULES: [LineRule; 22] = [
         Fail,
         "sppsNantes.cpp:425-439",
     )),
+    rule(
+        "spps_gpu_refused",
+        ERR,
+        Some(r"^spps-gpu: refused: [a-z_]+: "),
+        Fail,
+        "solvers/spps-gpu/src/main.cu:372, 383, 443",
+    ),
     rule(UNCLASSIFIED, None, None, Warn, ""),
 ];
 

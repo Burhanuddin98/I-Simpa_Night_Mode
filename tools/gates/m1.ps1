@@ -215,7 +215,11 @@ function Test-Manifest($m) {
     $listed = @($t.files_sha256.PSObject.Properties)
     $filesOk = ($listed.Count -eq $tarMembers.Count) -and (@($tarMembers.Keys | Where-Object { $t.files_sha256.$_ -ne $tarMembers[$_] }).Count -eq 0)
     $hex = '^[0-9a-f]{64}$'
-    $codeOk = ($null -ne $m.code_sha256) -and (@($m.code_sha256.PSObject.Properties).Count -eq 4) -and
+    # A fifth record is allowed only for spps-gpu.exe (decision 70: our own GPU build of SPPS's walk,
+    # pinned beside upstream's four; build.ps1 carries it over and does not build it).
+    $nCode = @($m.code_sha256.PSObject.Properties).Count
+    $gpuOk = ($nCode -eq 4) -or (($nCode -eq 5) -and ("$($m.code_sha256.'spps-gpu.exe')" -match '^[0-9a-f]{64}$'))
+    $codeOk = ($null -ne $m.code_sha256) -and $gpuOk -and
         (@('spps.exe', 'classicalTheory.exe', 'tetgen.exe', 'preprocess.exe' | Where-Object { "$($m.code_sha256.$_)" -notmatch $hex }).Count -eq 0) -and
         ("$($t.upstream_160_reference_code_sha256)" -match $hex)
     return ($m.upstream_commit -eq $commit) -and ($t.version -eq '1.5.0') -and ($tarSha -eq $TetgenTarballSha256) -and

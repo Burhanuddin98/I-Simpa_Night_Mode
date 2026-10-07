@@ -16,12 +16,14 @@
 //! - [`manager`] runs a project or a run folder end to end: the run folder, the pre-launch
 //!   refusals, the launch through [`crate::process`], and the verdict, reported to an event
 //!   callback and written to `run.json`.
+//! - [`gpu`] SPPS on the GPU (`spps-gpu.exe`, decision 70): the run option and the device probe.
 //! - [`locate`] emulates SPPS's own `f32` test for which tetrahedron holds a source or a point
 //!   receiver, for the manager's SPPS-only refusal before launch.
 
 pub mod classify;
 pub mod clock;
 pub mod expect;
+pub mod gpu;
 pub mod locate;
 pub mod manager;
 pub mod manifest;
@@ -33,6 +35,7 @@ pub use classify::{
     classify_all,
 };
 pub use expect::{Band, ExpectError, Expectation, OutputNames, SppsSettings};
+pub use gpu::{SPPS_GPU_EXE_NAME, SppsDevice};
 pub use manager::{
     CancelAfterLaunch, CancelTimer, ExeNotFound, ExeSearch, ExitClass, MeshChoice, PreLaunch,
     RunError, RunEvent, RunOptions, RunReport, Stage, check_mesh_dir, create_run_folder,

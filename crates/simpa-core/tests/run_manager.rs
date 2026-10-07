@@ -29,6 +29,7 @@ fn options(label: &str, solver: SolverKind, exe: PathBuf) -> RunOptions {
         cancel_after_ms: None,
         cancel_after_progress: None,
         verify: None,
+        gpu_device: None,
     }
 }
 

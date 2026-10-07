@@ -25,8 +25,8 @@ use crate::examples;
 use crate::guard::{self, CmdError, CmdResult, lock};
 use crate::results_data::{self, EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
-    self, LibraryMaterial, ResultsState, RunSlot, RunStarted, RunStreamBatch, RunsView,
-    SolversCache, SolversStatus,
+    self, GpuCache, GpuStatus, LibraryMaterial, ResultsState, RunSlot, RunStarted, RunStreamBatch,
+    RunsView, SolversCache, SolversStatus,
 };
 use crate::scene::{EditOutcome, SceneState};
 use crate::selftest::Selftest;
@@ -48,6 +48,8 @@ pub struct AppState {
     pub ui_events: Arc<Mutex<Option<Channel<AppEvent>>>>,
     /// The solver checks, by (path, size, modification time).
     pub solvers: Arc<Mutex<SolversCache>>,
+    /// SPPS on the GPU: `spps-gpu --probe`'s answer, asked once per session (decision 70).
+    pub gpu: Arc<Mutex<GpuCache>>,
     /// The first close request the UI has not answered yet.
     pub close: Arc<Mutex<CloseState>>,
 }
@@ -482,21 +484,32 @@ pub async fn scene_mesh(state: State<'_, AppState>) -> CmdResult<Response> {
 
 // ---- M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.2) --------------------------------------
 
-/// Starts a run of the open project, saved and unblocked, with `solver` (`spps` or `tcr`), and
-/// returns at once. The run streams its events into `on_event`, batched, `last: true` at the end.
+/// Starts a run of the open project, saved and unblocked, with `solver` (`spps` or `tcr`) on
+/// `device` (`cpu`, the default, or `gpu`: SPPS on the GPU, decision 70), and returns at once. The
+/// run streams its events into `on_event`, batched, `last: true` at the end.
 #[tauri::command(rename_all = "snake_case")]
 pub async fn run_start(
     state: State<'_, AppState>,
     solver: String,
+    device: Option<String>,
     on_event: Channel<RunStreamBatch>,
 ) -> CmdResult<RunStarted> {
-    let (session, slot, solvers) = (
+    let (session, slot, solvers, gpu) = (
         state.session.clone(),
         state.run.clone(),
         state.solvers.clone(),
+        state.gpu.clone(),
     );
     guard::blocking("run_start", move || {
-        runs::start(&session, &slot, &solvers, &solver, on_event)
+        runs::start(
+            &session,
+            &slot,
+            &solvers,
+            &gpu,
+            &solver,
+            device.as_deref(),
+            on_event,
+        )
     })
     .await
 }
@@ -668,6 +681,14 @@ pub async fn material_library() -> CmdResult<Vec<LibraryMaterial>> {
 pub async fn solvers_status(state: State<'_, AppState>) -> CmdResult<SolversStatus> {
     let solvers = state.solvers.clone();
     guard::blocking("solvers_status", move || runs::solvers_status(&solvers)).await
+}
+
+/// Whether SPPS can run on the GPU here, and on which device (decision 70): `spps-gpu --probe`,
+/// run once per app session and kept.
+#[tauri::command(rename_all = "snake_case")]
+pub async fn spps_gpu_status(state: State<'_, AppState>) -> CmdResult<GpuStatus> {
+    let gpu = state.gpu.clone();
+    guard::blocking("spps_gpu_status", move || runs::spps_gpu_status(&gpu)).await
 }
 
 /// Registers the UI's app-event channel (the close request). Until it is registered, a close

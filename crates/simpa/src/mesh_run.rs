@@ -15,6 +15,7 @@ use simpa_core::mesh::{
     Timeouts, verify,
 };
 use simpa_core::process::{CancelToken, Line};
+use simpa_core::run::gpu::{self, SppsDevice};
 use simpa_core::run::manager::{self, PREPROCESS_EXE_NAME, TETGEN_EXE_NAME, solver_exe_name};
 use simpa_core::run::{
     CancelAfterLaunch, DEFAULT_LOSS_LIMIT, ExeSearch, ExitClass, MeshChoice, RunEvent, RunOptions,
@@ -540,21 +541,49 @@ fn solver_manifest() -> Result<SolverManifest, String> {
 /// the app has none either. A build that is not the verified one is refused before anything runs
 /// (`solver_unverified`, exit class 2), and the checks that found so are recorded in `run.json`'s
 /// `solvers`, so `simpa results` can read a matching run as verified.
+///
+/// `--device gpu` (decision 70) runs SPPS on the GPU: `spps-gpu.exe`, found as the others are
+/// (`--solver-exe` names it), checked against the manifest, then asked for its device
+/// (`spps-gpu --probe`) before anything else; no device, or not the verified build, is a usage
+/// error with the reason and no run folder. The device line is recorded in `run.json`.
 fn run_options(a: &Args, default_root: PathBuf) -> Result<RunOptions, String> {
     let solver = solver_of(a)?;
+    let device = match a.value("device") {
+        None => SppsDevice::Cpu,
+        Some(d) => SppsDevice::parse(d).map_err(|e| format!("--device: {e}"))?,
+    };
+    let manifest = solver_manifest()?;
+    let (solver_exe, gpu_device) = match (device, solver) {
+        (SppsDevice::Cpu, _) => (
+            find_exe(a.path("solver-exe"), solver_exe_name(solver))?,
+            None,
+        ),
+        (SppsDevice::Gpu, SolverKind::Tcr) => {
+            return Err("--device gpu runs SPPS on the GPU; TCR has no GPU build".into());
+        }
+        (SppsDevice::Gpu, SolverKind::Spps) => {
+            let search = ExeSearch::from_env(a.path("solver-exe"));
+            let (exe, line) = gpu::probe_verified(&search, &manifest, gpu::PROBE_TIMEOUT)
+                .map_err(|why| format!("SPPS cannot run on the GPU here: {why}"))?;
+            eprintln!("simpa: SPPS on the GPU: {line}");
+            (exe, Some(line))
+        }
+    };
     Ok(RunOptions {
         solver,
-        solver_exe: find_exe(a.path("solver-exe"), solver_exe_name(solver))?,
+        solver_exe,
         runs_root: a.path("runs").unwrap_or(default_root),
         loss_limit: loss_limit(a)?,
         cancel_after_ms: a.millis("cancel-after-ms")?,
         cancel_after_progress: progress(a)?,
-        verify: Some(solver_manifest()?),
+        verify: Some(manifest),
+        gpu_device,
     })
 }
 
-const RUN_VALUES: [&str; 6] = [
+const RUN_VALUES: [&str; 7] = [
     "solver",
+    "device",
     "runs",
     "solver-exe",
     "loss-limit",

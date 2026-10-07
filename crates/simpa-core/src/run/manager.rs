@@ -305,6 +305,16 @@ pub fn solver_exe_name(solver: SolverKind) -> &'static str {
     }
 }
 
+/// The executable a run of `solver` launches, `gpu` when it runs on the GPU (decision 70): SPPS on
+/// the GPU is `spps-gpu.exe`; TCR has no GPU build, so `gpu` changes nothing for it. The name
+/// `solvers/manifest.json` checks it by, and the one [`crate::results::solver_build`] looks for.
+pub fn run_exe_name(solver: SolverKind, gpu: bool) -> &'static str {
+    match (solver, gpu) {
+        (SolverKind::Spps, true) => super::gpu::SPPS_GPU_EXE_NAME,
+        (s, _) => solver_exe_name(s),
+    }
+}
+
 /// TetGen's executable file name.
 pub const TETGEN_EXE_NAME: &str = "tetgen.exe";
 
@@ -428,6 +438,21 @@ pub struct RunOptions {
     /// checks are recorded in `run.json`'s `solvers`. `None` (the CLI, the bed, the tests):
     /// no check, and no `solvers` key.
     pub verify: Option<SolverManifest>,
+    /// SPPS on the GPU (decision 70): the device line `spps-gpu --probe` printed
+    /// ([`super::gpu::probe`]), when `solver_exe` is `spps-gpu.exe`. It names the executable the
+    /// `solvers` stage checks (`spps-gpu.exe`, [`run_exe_name`]) and is recorded in `run.json`
+    /// (`gpu_device`). `None`: the CPU, as every run before it. Ignored for TCR, which has no GPU
+    /// build (the CLI and the app refuse the pair before a run).
+    pub gpu_device: Option<String>,
+}
+
+impl RunOptions {
+    /// The device line when this is a run of SPPS on the GPU.
+    pub fn on_gpu(&self) -> Option<&str> {
+        self.gpu_device
+            .as_deref()
+            .filter(|_| self.solver == SolverKind::Spps)
+    }
 }
 
 /// Where `run_project`'s mesh comes from.
@@ -496,6 +521,7 @@ impl Record<'_> {
             source: self.source,
             solver: self.opts.solver,
             exe: self.exe,
+            gpu_device: self.opts.on_gpu().map(str::to_string),
             solvers: self.solvers,
             solver_manifest: self.opts.verify.as_ref().map(|m| SolverManifestRecord {
                 source: m.source.clone(),
@@ -574,7 +600,10 @@ impl Record<'_> {
 /// The executables a run launches, by the manifest's names: the solver, then the mesher's when
 /// the run builds its mesh.
 fn run_exes(opts: &RunOptions, mesh: Option<&MeshChoice>) -> Vec<(&'static str, PathBuf)> {
-    let mut exes = vec![(solver_exe_name(opts.solver), opts.solver_exe.clone())];
+    let mut exes = vec![(
+        run_exe_name(opts.solver, opts.on_gpu().is_some()),
+        opts.solver_exe.clone(),
+    )];
     if let Some(MeshChoice::Build { tetgen, preprocess }) = mesh {
         exes.push((TETGEN_EXE_NAME, tetgen.clone()));
         if let Some(p) = preprocess {
