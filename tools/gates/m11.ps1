@@ -124,8 +124,7 @@ $specIds = [ordered]@{
     'b80.advisor' = @('b80-pre', 'b80-h', 'b80-after', 'b80-undo')
     # C1 (docs/investigations/2026-10-07-blank-geometry/SPEC.md): a raw blank box to results, run
     # on this harness on its own (-Only e2e -Spec m13.blank); its GPU run needs spps-gpu.exe in
-    # -SolversDir (C:	mp
-m-solvers-gpu).
+    # -SolversDir (the verified five, as C:\tmp\nm-solvers-gpu holds them).
     'm13.blank' = @('c1-import', 'c1-carve', 'c1-rename', 'c1-materials', 'c1-source', 'c1-receivers', 'c1-run-cpu', 'c1-run-gpu', 'c1-grouped')
     # Not a gate spec: the app tour of BRAS CR4, recorded as a video (specs/tour.e2e.ts), no
     # id. Its progress.log goes to -ScreensDir, its project copy and runs beside it; no pictures.
