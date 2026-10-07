@@ -450,10 +450,15 @@ export async function refreshSolvers(): Promise<SolversStatus | null> {
 /** Whether SPPS can run on the GPU here (decision 70): the backend probes once per session. */
 export async function refreshGpu(): Promise<void> {
   try {
+    const before = gpuStatusStore.get();
     const s = await backend.sppsGpuStatus();
     gpuStatusStore.set(s);
-    if (s.available) log('INFO', `SPPS on the GPU: ${s.device ?? ''}`);
-    else log('INFO', `SPPS on the GPU unavailable: ${s.reason ?? ''}`);
+    // Logged when the answer changes: the backend keeps a found device and probes a failure
+    // again, so the Simulate step re-asks while there is none.
+    if (before?.available !== s.available || before?.device !== s.device || before?.reason !== s.reason) {
+      if (s.available) log('INFO', `SPPS on the GPU: ${s.device ?? ''}`);
+      else log('INFO', `SPPS on the GPU unavailable: ${s.reason ?? ''}`);
+    }
     // A GPU chosen earlier in the session with no device now runs nothing: back to the CPU.
     if (!s.available && deviceStore.get() === 'gpu') deviceStore.set('cpu');
   } catch (e) {

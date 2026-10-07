@@ -126,6 +126,11 @@ function useNow(on: boolean): number {
 function SolverChoice({ solver }: { solver: SolverName }) {
   const device = useStore(deviceStore);
   const gpu = useStore(gpuStatusStore);
+  // No device yet: ask again each time the step is shown (a failure is probed afresh, a found
+  // device is kept by the backend for the session).
+  useEffect(() => {
+    if (gpuStatusStore.get()?.available === false) actions.fire(actions.refreshGpu());
+  }, []);
   const choices = solverChoices(gpu);
   const current = choiceKey(solver, device);
   const refs = useRef<Record<SolverChoiceKey, HTMLButtonElement | null>>({ spps: null, tcr: null, 'spps-gpu': null });
