@@ -9,6 +9,10 @@
 - `bed-a5.py <app.exe> <solvers> <cr4.simpa> <fitting.simpa> <out>`: A5's app bed (SPPS on the GPU): the Simulate
   step's GPU entry, a CR4 run from the Run button, the Results step and Acoustics tab naming solver and device,
   spps-gpu's refusal of a fitting; screenshots and `app-bed.json` in `<out>`. Stops only the app it started.
+- `bed-dock.py <app.exe> <solvers> <project.simpa> <out> [port]`: C2's bed, the bottom dock dragged, maximised,
+  keyed and carried across steps on a project's results, in a WebView2 profile of its own
+  (`WEBVIEW2_USER_DATA_FOLDER`, beside the target dir) so nothing it stores reaches another app.exe; the pointer
+  and keys are CDP input events, no OS mouse. Screenshots at three heights and `bed-dock.json` in `<out>`.
 - `shot-rw.ps1`: the response window's screenshots (default, wheel zoom, span 100 + bin 5).
 - `package-zeph.ps1 -Sha <sha>`: app.exe + verified solvers into OneDrive for Zeph.
 - `du.py <root> <depth> <minGB>`: folder sizes, junctions skipped.

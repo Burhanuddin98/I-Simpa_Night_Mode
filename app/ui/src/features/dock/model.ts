@@ -293,6 +293,119 @@ export function baseName(path: string): string {
   return i < 0 ? path : path.slice(i + 1);
 }
 
+// ---- the dock's height (C2, decision-log row 74) -----------------------------------------------------
+//
+// The dock's top edge drags it from the tab strip alone (folded) to the whole work area, where the
+// 3D view is hidden (maximised). In between, the 3D view always keeps VIEW_MIN, so the Simulate
+// step's live run stays in sight: a drag past that point maximises, a drag below DOCK_MIN folds.
+// Either way the height the dock had before the drag is kept, and is where it comes back to.
+// `room` is the dock's column less the gap above it: the 3D view and the dock share it.
+
+/** The tab strip and the dock's borders: the folded dock's height. */
+export const DOCK_STRIP = 36;
+/** The least height of a dock with its body shown; a drag below it folds the dock. */
+export const DOCK_MIN = 60;
+/** The opening height (the dock's fixed height before C2). */
+export const DOCK_DEFAULT = 250;
+/** The least height the 3D view keeps beside a dock that is not maximised. */
+export const VIEW_MIN = 120;
+/** The handle's arrow-key step; Shift moves four. */
+export const KEY_STEP = 24;
+/** From this height the Acoustics tab lays its cards out in rows across the width. */
+export const DOCK_TALL = 440;
+/** The tallest height kept: a stored value above it is not one this app wrote. */
+const STORED_MAX = 10_000;
+
+/** The dock's height when it is not maximised, and whether it is maximised. */
+export interface DockSize {
+  height: number;
+  max: boolean;
+}
+/** A size and the fold (chrome/fold.tsx), which is the dock's minimum. */
+export interface DockPlace {
+  size: DockSize;
+  folded: boolean;
+}
+
+/** The height a dock that is not maximised is drawn at in `room`. */
+export function clampHeight(height: number, room: number): number {
+  return Math.max(DOCK_MIN, Math.min(height, room - VIEW_MIN));
+}
+
+/** The height the unfolded dock takes of `room` (maximised, all of it). */
+export function dockHeight(size: DockSize, room: number): number {
+  return size.max ? Math.max(room, DOCK_MIN) : clampHeight(size.height, room);
+}
+
+/**
+ * Where a drag of the top edge to `height` puts a dock that was at `start` when the drag began:
+ * folded below DOCK_MIN, maximised when the 3D view would be left less than VIEW_MIN, else that
+ * height, in whole pixels. Folding and maximising keep the start height to come back to.
+ */
+export function dragTo(start: DockSize, height: number, room: number): DockPlace {
+  if (height < DOCK_MIN) return { size: { height: start.height, max: false }, folded: true };
+  if (room - height < VIEW_MIN) return { size: { height: start.height, max: true }, folded: false };
+  return { size: { height: Math.round(height), max: false }, folded: false };
+}
+
+/** The maximise button and a double-click on the tab strip: full height and back. A folded
+ * dock opens maximised. */
+export function toggleMax(p: DockPlace): DockPlace {
+  return { size: { height: p.size.height, max: p.folded ? true : !p.size.max }, folded: false };
+}
+
+/** Escape: a maximised dock goes back to its height; otherwise nothing (null). */
+export function escapeMax(p: DockPlace): DockPlace | null {
+  return p.size.max && !p.folded ? { size: { height: p.size.height, max: false }, folded: false } : null;
+}
+
+/**
+ * A key on the focused handle: the arrows move the edge by KEY_STEP (four with Shift), Home folds,
+ * End maximises, Enter or Space toggles maximised. Null when the key does nothing here.
+ */
+export function keyTo(p: DockPlace, key: string, shift: boolean, room: number): DockPlace | null {
+  const step = KEY_STEP * (shift ? 4 : 1);
+  switch (key) {
+    case 'Home':
+      return p.folded ? null : { size: { height: p.size.height, max: false }, folded: true };
+    case 'End':
+      return p.size.max && !p.folded ? null : { size: { height: p.size.height, max: true }, folded: false };
+    case 'Enter':
+    case ' ':
+      return toggleMax(p);
+    case 'ArrowUp':
+      if (p.folded) return { size: { height: p.size.height, max: false }, folded: false };
+      if (p.size.max) return null;
+      return dragTo(p.size, dockHeight(p.size, room) + step, room);
+    case 'ArrowDown':
+      if (p.folded) return null;
+      if (p.size.max) return escapeMax(p);
+      return dragTo(p.size, dockHeight(p.size, room) - step, room);
+    default:
+      return null;
+  }
+}
+
+/** Whether the Acoustics tab has the height to lay its cards out in rows. */
+export function dockTall(p: DockPlace): boolean {
+  return !p.folded && (p.size.max || p.size.height >= DOCK_TALL);
+}
+
+/**
+ * The stored height (localStorage, like the fold): whole pixels from DOCK_MIN up, else the
+ * opening height. Maximised is not stored: a new launch never opens with the 3D view hidden.
+ */
+export function parseDockHeight(text: string | null): number {
+  if (text === null || !/^\d{1,5}$/.test(text)) return DOCK_DEFAULT;
+  const h = Number(text);
+  return h >= DOCK_MIN && h <= STORED_MAX ? h : DOCK_DEFAULT;
+}
+
+/** The height as it is stored. */
+export function dockHeightText(height: number): string {
+  return String(Math.round(Math.max(DOCK_MIN, Math.min(height, STORED_MAX))));
+}
+
 // ---- free text from the core -------------------------------------------------------------------------
 
 // A reason's detail is the core's prose, which the no-acoustic-number check cannot prove; the

@@ -3,6 +3,7 @@
 /* Dock (design:175-275) */
 .dock {
   height: 250px;
+  box-sizing: border-box;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -333,4 +334,73 @@
 }
 .dock[data-folded='true'] > .dock-tabs {
   border-bottom: none;
+}
+
+/* C2 (decision-log row 74): the dock's height. Dock.tsx sets it inline, clamped so the 3D view
+   keeps its minimum; the top edge is the handle, a hairline pill that lights on hover and focus. */
+.dock-grip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 6px;
+  z-index: 2;
+  cursor: ns-resize;
+  touch-action: none;
+  outline: none;
+}
+.dock-grip::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 40px;
+  height: 2px;
+  margin-left: -20px;
+  border-radius: 1px;
+  background: var(--glass-edge);
+}
+.dock-grip:hover::after,
+.dock[data-dragging] .dock-grip::after {
+  background: var(--text-3);
+}
+.dock-grip:focus-visible::after {
+  width: 64px;
+  margin-left: -32px;
+  background: var(--red);
+}
+/* While dragged the edge follows the pointer: no height transition (motion.css), no text selection. */
+.dock[data-dragging] {
+  transition: none;
+  cursor: ns-resize;
+  user-select: none;
+}
+/* The maximise button, beside the fold chevron, in its look. */
+.dock > .dock-max {
+  position: absolute;
+  top: 6px;
+  right: 34px;
+  z-index: 1;
+}
+.dock > .dock-max[aria-pressed='true'] {
+  color: var(--text);
+}
+.dock-tabs {
+  padding-right: 64px;
+}
+/* Maximised: the dock covers the whole work area between the step bar and the status bar, side
+   panels included, on an opaque fill; the 3D view behind it is hidden (the canvas keeps drawing,
+   so a live run and playback go on, and it is back as it was on restore). */
+.work:has(.dock[data-max='true']) {
+  position: relative;
+}
+.dock[data-max='true'] {
+  position: absolute;
+  inset: var(--gap);
+  height: auto;
+  z-index: 3;
+  background: var(--panel);
+}
+.center:has(> .dock[data-max='true']) > .viewport {
+  visibility: hidden;
 }
