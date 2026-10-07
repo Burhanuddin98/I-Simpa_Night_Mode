@@ -8,8 +8,10 @@
 }
 .ac-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 12px;
+  column-gap: 12px;
+  row-gap: 2px;
   padding: 6px 12px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
@@ -22,7 +24,10 @@
   color: var(--text-3);
   white-space: nowrap;
 }
+/* C2: the wording takes the rest of the line, or a line of its own below 360 px, never a narrow
+   column of wrapped words beside the run's name (.out55-results-gpu.png). */
 .ac-wording {
+  flex: 1 1 360px;
   color: var(--text-3);
   font-size: 11.5px;
   line-height: 1.3;
@@ -549,4 +554,41 @@
   margin-right: 6px;
   font-size: 12px;
   color: var(--text-2);
+}
+
+/* C2: a tall dock (Dock.tsx `data-tall`, from 440 px or maximised) lays the cards out in a grid
+   across the width, the body scrolling down, rather than one strip scrolling sideways. Each card is
+   as tall as its content (max-content rows: a card is a scroll container, and an auto row would
+   share the body's height out and cut it short). The advice card and the two wide tables
+   (receivers, absorption) take a row each, the narrower cards fill the rows between them (dense),
+   each at its own height (the decay chart would otherwise stretch to the reverberation table's);
+   a card wider than its cell scrolls its own table sideways, never the body (nothing is clipped);
+   the charts get more height. */
+.dock[data-tall='true'] .ac-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  grid-auto-rows: max-content;
+  grid-auto-flow: row dense;
+  align-content: start;
+  gap: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--panel);
+}
+.dock[data-tall='true'] .ac-card {
+  align-self: start;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.dock[data-tall='true'] .ac-advice-card,
+.dock[data-tall='true'] .ac-receivers,
+.dock[data-tall='true'] .ac-absorption {
+  grid-column: 1 / -1;
+}
+.dock[data-tall='true'] .ac-chart {
+  flex-basis: 220px;
 }

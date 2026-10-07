@@ -5,14 +5,26 @@ import { emptyLog } from '../../flow.ts';
 import type { ActiveRun, ConsoleLine, RunLog } from '../../store.ts';
 import {
   buildMark,
+  clampHeight,
   consoleBadge,
   type ConsoleItem,
   consoleItems,
   countsEqual,
   detailView,
+  DOCK_DEFAULT,
+  DOCK_MIN,
+  type DockPlace,
+  dockHeight,
+  dockHeightText,
+  dockTall,
+  dragTo,
+  escapeMax,
   exitText,
   hasManifest,
+  KEY_STEP,
+  keyTo,
   newestFirst,
+  parseDockHeight,
   progressPct,
   runsBadge,
   shortSha,
@@ -20,7 +32,9 @@ import {
   solversMark,
   stageLabel,
   statusTone,
+  toggleMax,
   variantLabel,
+  VIEW_MIN,
   warningsText,
 } from './model.ts';
 
@@ -310,4 +324,79 @@ test('t38_8 the Runs row marks the solver build by the verdict runs_list sends, 
     ),
     { kind: 'unverified', names: ['spps.exe', 'tetgen.exe'], reason: override_ },
   );
+});
+
+// ---- the dock's height (C2) -------------------------------------------------------------------------
+
+const ROOM = 700;
+const at = (height: number, max = false, folded = false): DockPlace => ({ size: { height, max }, folded });
+
+test('c2 a dragged height is clamped: never below DOCK_MIN, never leaving the 3D view less than VIEW_MIN', () => {
+  assert.equal(clampHeight(300, ROOM), 300);
+  assert.equal(clampHeight(10, ROOM), DOCK_MIN);
+  assert.equal(clampHeight(5_000, ROOM), ROOM - VIEW_MIN);
+  // A window too short for both: the dock keeps its minimum.
+  assert.equal(clampHeight(300, 100), DOCK_MIN);
+  // Maximised, it takes the whole room, whatever height it will come back to.
+  assert.equal(dockHeight({ height: 300, max: true }, ROOM), ROOM);
+  assert.equal(dockHeight({ height: 300, max: false }, ROOM), 300);
+  // The stored height outlives a smaller window: drawn clamped, kept as it was.
+  assert.equal(dockHeight({ height: 650, max: false }, 500), 500 - VIEW_MIN);
+});
+
+test('c2 a drag folds below DOCK_MIN, maximises past the 3D view minimum, and keeps the start height for both', () => {
+  const start = { height: 250, max: false };
+  assert.deepEqual(dragTo(start, 400.4, ROOM), at(400));
+  assert.deepEqual(dragTo(start, DOCK_MIN, ROOM), at(DOCK_MIN));
+  assert.deepEqual(dragTo(start, DOCK_MIN - 1, ROOM), at(250, false, true));
+  assert.deepEqual(dragTo(start, ROOM - VIEW_MIN, ROOM), at(ROOM - VIEW_MIN));
+  assert.deepEqual(dragTo(start, ROOM - VIEW_MIN + 1, ROOM), at(250, true));
+  assert.deepEqual(dragTo(start, ROOM + 50, ROOM), at(250, true));
+  // Dragged down from maximised: the height under the pointer, no longer maximised.
+  assert.deepEqual(dragTo({ height: 250, max: true }, 480, ROOM), at(480));
+  // From maximised straight to the strip: folded, and it comes back at 250.
+  assert.deepEqual(dragTo({ height: 250, max: true }, 20, ROOM), at(250, false, true));
+});
+
+test('c2 maximise toggles between the last height and full window; Escape only restores', () => {
+  assert.deepEqual(toggleMax(at(320)), at(320, true));
+  assert.deepEqual(toggleMax(at(320, true)), at(320));
+  // A folded dock opens maximised.
+  assert.deepEqual(toggleMax(at(320, false, true)), at(320, true));
+  assert.deepEqual(escapeMax(at(320, true)), at(320));
+  assert.equal(escapeMax(at(320)), null);
+  assert.equal(escapeMax(at(320, false, true)), null);
+});
+
+test('c2 the handle\'s keys move by a step, fold, maximise and toggle, with the drag\'s limits', () => {
+  assert.deepEqual(keyTo(at(300), 'ArrowUp', false, ROOM), at(300 + KEY_STEP));
+  assert.deepEqual(keyTo(at(300), 'ArrowDown', true, ROOM), at(300 - 4 * KEY_STEP));
+  assert.deepEqual(keyTo(at(DOCK_MIN), 'ArrowDown', false, ROOM), at(DOCK_MIN, false, true));
+  assert.deepEqual(keyTo(at(ROOM - VIEW_MIN), 'ArrowUp', false, ROOM), at(ROOM - VIEW_MIN, true));
+  assert.deepEqual(keyTo(at(300), 'Home', false, ROOM), at(300, false, true));
+  assert.deepEqual(keyTo(at(300), 'End', false, ROOM), at(300, true));
+  assert.deepEqual(keyTo(at(300), 'Enter', false, ROOM), at(300, true));
+  assert.deepEqual(keyTo(at(300, true), ' ', false, ROOM), at(300));
+  assert.deepEqual(keyTo(at(300, true), 'ArrowDown', false, ROOM), at(300));
+  assert.deepEqual(keyTo(at(300, false, true), 'ArrowUp', false, ROOM), at(300));
+  // Nothing to do: null, so the key is left to the page.
+  assert.equal(keyTo(at(300, true), 'ArrowUp', false, ROOM), null);
+  assert.equal(keyTo(at(300, false, true), 'ArrowDown', false, ROOM), null);
+  assert.equal(keyTo(at(300, false, true), 'Home', false, ROOM), null);
+  assert.equal(keyTo(at(300, true), 'End', false, ROOM), null);
+  assert.equal(keyTo(at(300), 'a', false, ROOM), null);
+});
+
+test('c2 the stored height round-trips; anything else opens at the default; maximised is never stored', () => {
+  assert.equal(parseDockHeight(dockHeightText(412.6)), 413);
+  assert.equal(parseDockHeight(null), DOCK_DEFAULT);
+  for (const bad of ['', 'abc', '-40', '12.5', '1e3', '20', '999999', '{"height":300}']) {
+    assert.equal(parseDockHeight(bad), DOCK_DEFAULT, bad);
+  }
+  assert.equal(dockHeightText(5), String(DOCK_MIN));
+  // The Acoustics tab's rows: from DOCK_TALL, or maximised; never folded.
+  assert.equal(dockTall(at(439)), false);
+  assert.equal(dockTall(at(440)), true);
+  assert.equal(dockTall(at(250, true)), true);
+  assert.equal(dockTall(at(600, true, true)), false);
 });
