@@ -366,6 +366,15 @@ Check "(f) built dist: 0 googleapis, 0 http(s):// outside the listed exceptions"
         'http://www.w3.org/XML/1998/namespace' = 'XML namespace name (react-dom setAttributeNS), never fetched'
         'http://www.w3.org/1999/xhtml'        = 'XML namespace name (three.js createElementNS, src/utils.js), never fetched'
         'https://jcgt.org/published/0007/04/01/' = 'a citation in a GLSL comment of three.js PMREMGenerator (Heitz 2018, GGX VNDF sampling), never fetched'
+        # Added 2026-10-07 (C4), each exact. The URL pattern takes a closing parenthesis, so the two
+        # project addresses are listed as the licence texts' "(https://...)" leaves them.
+        # Decision 60 (b754938, 10-06): the OFL texts shipped beside the fonts name their projects and the licence's home.
+        'https://github.com/rsms/inter)'            = "the Inter project's address in its OFL licence text (licenses/OFL-Inter.txt, decision 60), never fetched"
+        'https://github.com/JetBrains/JetBrainsMono)' = "the JetBrains Mono project's address in its OFL licence text (licenses/OFL-JetBrainsMono.txt, decision 60), never fetched"
+        'http://scripts.sil.org/OFL'                = "the OFL's own address, in both licence texts (decision 60), never fetched"
+        # The viewport on three.js's WebGPURenderer (61f9e24, B1, 10-06; merged into gpu):
+        'https://github.com/mrdoob/three.js/issues/32012' = "three.js WebGPURenderer's message that waitForGPU() was removed, never fetched"
+        'https://www.shadertoy.com/view/WtyXRy'          = "a citation in a WGSL comment of three.js's texture sampling nodes, never fetched"
     }
     $files = @(Get-ChildItem $dist -Recurse -File)
     $google = 0; $counts = @{}; $bad = @(); $licence = 0
