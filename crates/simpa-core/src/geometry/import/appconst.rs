@@ -76,8 +76,11 @@ impl ReferenceSpectrum {
     /// upstream's two noises as the shapes they are, `Pink` (id 1, the same level in every
     /// band) and `White` (id 0, +1 dB per third-octave band); any other as `Custom` relative
     /// levels: a third-octave band takes the reference's `f32`-widened level, an octave band
-    /// the energy sum of the three third-octave bands it spans. `None` when `bands` holds a
-    /// frequency that is not a nominal one.
+    /// the energy sum of the three third-octave bands it spans. Every band a `BandSet` allows has
+    /// its levels here: the lowest octave (63 Hz) spans 50, 63 and 80 Hz and the highest (16 kHz)
+    /// 12.5, 16 and 20 kHz, all inside upstream's 27 bands, so no spectrum is ever left out
+    /// (`tests/group_ops.rs` checks every spectrum on the widest band sets). `None` only when
+    /// `bands` holds a frequency that is not a nominal one, which the schema refuses.
     pub fn shape_on(&self, bands: &crate::schema::BandSet) -> Option<crate::schema::SpectrumShape> {
         use crate::schema::{BandKind, F64, SpectrumShape};
         match self.id {

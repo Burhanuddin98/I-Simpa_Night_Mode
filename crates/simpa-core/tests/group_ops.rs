@@ -385,9 +385,19 @@ fn reference_spectra_map_onto_third_octave_and_octave_bands() {
             assert!((a - f64::from(b)).abs() < 0.01, "{}: {a} vs {b}", r.name);
         }
     }
-    // Every reference spectrum maps onto both band sets.
+    // Every reference spectrum maps onto every band set the schema allows, the widest included:
+    // none is ever missing from the source editor's list (C1 audit).
+    let all_octaves = BandSet::range(BandKind::Octave, 63, 16000).unwrap();
     for r in &REFERENCE_SPECTRA {
-        assert!(r.shape_on(&thirds).is_some() && r.shape_on(&octaves).is_some(), "{}", r.name);
+        for b in [&thirds, &octaves, &all_octaves] {
+            let Some(shape) = r.shape_on(b) else {
+                panic!("{} on {:?}", r.name, b.frequencies_hz)
+            };
+            if let SpectrumShape::Custom { relative_db } = shape {
+                assert_eq!(relative_db.len(), b.len());
+                assert!(relative_db.iter().all(|v| v.get().is_finite()), "{}", r.name);
+            }
+        }
     }
 }
 
