@@ -266,7 +266,7 @@ export function ScenePanel() {
               return (
                 <button
                   key={g.id}
-                  className="scene-row"
+                  className="scene-row group-row"
                   data-entity={`surface_group:${g.id}`}
                   aria-pressed={on}
                   title="Click to set its material; Ctrl+click to pick several, to merge them; F2 to rename"
@@ -284,23 +284,29 @@ export function ScenePanel() {
                     className={`swatch${assigned ? '' : ' unassigned'}`}
                     style={assigned && m ? { background: m.color } : undefined}
                   />
-                  <span className="row-name" title={g.name}>
-                    {displayName(g.name)}
-                  </span>
-                  <span className="row-count mono" data-group-faces={faces} title={`${faces} ${faces === 1 ? 'face' : 'faces'}`}>
-                    {faces} {faces === 1 ? 'face' : 'faces'}
+                  {/* C1 audit: the name has the row's whole width (renaming is the feature); the face
+                      count and the material go on a second line, and shorten first. */}
+                  <span className="row-main">
+                    <span className="row-name" title={g.name}>
+                      {displayName(g.name)}
+                    </span>
+                    <span className="row-sub">
+                      <span className="row-count mono" data-group-faces={faces} title={`${faces} ${faces === 1 ? 'face' : 'faces'}`}>
+                        {faces} {faces === 1 ? 'face' : 'faces'}
+                      </span>
+                      {/* The material, unless it only repeats the surface's own name (BRAS names both alike). */}
+                      {!(assigned && m && displayName(m.name) === displayName(g.name)) && (
+                        <span
+                          className="row-detail"
+                          data-input
+                          title={assigned ? m?.name : `${m?.name ?? 'No material'}: the import placeholder, not assigned yet`}
+                        >
+                          {assigned ? (m ? displayName(m.name) : '—') : 'unassigned'}
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <IssueTag issues={issuesOf('surface_group', g.id)} />
-                  {/* The material, unless it only repeats the surface's own name (BRAS names both alike). */}
-                  {!(assigned && m && displayName(m.name) === displayName(g.name)) && (
-                    <span
-                      className="row-detail"
-                      data-input
-                      title={assigned ? m?.name : `${m?.name ?? 'No material'}: the import placeholder, not assigned yet`}
-                    >
-                      {assigned ? (m ? displayName(m.name) : '—') : 'unassigned'}
-                    </span>
-                  )}
                 </button>
               );
             })}

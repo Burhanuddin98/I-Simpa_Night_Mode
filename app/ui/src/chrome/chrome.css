@@ -1233,3 +1233,33 @@
   font-size: 12px;
   box-sizing: border-box;
 }
+
+/* C1 audit: a surface row on two lines, the name on the first with the row's whole width, the face
+   count and material under it (they shorten first). */
+.scene-row.group-row {
+  height: auto;
+  min-height: 40px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.row-main {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.row-sub {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.row-sub .row-detail {
+  max-width: none;
+  font-size: 11px;
+}
+.scene-row[aria-pressed='true'] .row-sub {
+  color: rgba(255, 255, 255, 0.75);
+}
