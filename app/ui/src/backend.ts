@@ -15,6 +15,7 @@ import type {
   FloatProbe,
   GpuStatus,
   LibraryMaterial,
+  LibrarySpectrum,
   Prepared,
   ProjectInfo,
   ReportView,
@@ -49,6 +50,7 @@ export type {
   EditOutcome,
   GpuStatus,
   LibraryMaterial,
+  LibrarySpectrum,
   ProjectInfo,
   ResultsState,
   RunEventBatch,
@@ -156,6 +158,8 @@ export const backend = {
   runResults: (run: string) => invoke<ResultsState>('run_results', { run }),
   projImport: (path: string) => invoke<SceneState>('proj_import', { path }),
   materialLibrary: () => invoke<LibraryMaterial[]>('material_library'),
+  /** C1: upstream's reference spectra as source shapes on the open project's bands. */
+  spectrumLibrary: () => invoke<LibrarySpectrum[]>('spectrum_library'),
   solversStatus: () => invoke<SolversStatus>('solvers_status'),
   /** SPPS on the GPU (decision 70): `spps-gpu --probe`'s answer, run once per app session. */
   sppsGpuStatus: () => invoke<GpuStatus>('spps_gpu_status'),

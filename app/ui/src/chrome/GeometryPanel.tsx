@@ -157,6 +157,17 @@ export function GeometryPanel() {
         </div>
       </div>
 
+      {info.imported_ungrouped && (
+        <div className="props-section" data-part="ungrouped-note">
+          <div className="label section-label">No groups in the file</div>
+          <div className="hint">
+            The file names no surface groups, so every face came in as one group named after the file. To give walls their
+            own materials: double-click a wall in the 3D view, right-click it, then New group from selection, or Move to group.
+            In the scene list, F2 renames a group and Ctrl+click picks several to merge.
+          </div>
+        </div>
+      )}
+
       <ImportBlock />
     </div>
   );

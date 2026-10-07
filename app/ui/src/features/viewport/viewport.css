@@ -606,3 +606,16 @@ html.present .viewport > :not(.viewport-host) {
 .vp-replica-note {
   color: var(--red-hi);
 }
+
+/* C1: Move selection to group, the groups under a head, scrolling past twelve. */
+.vp-menu-head {
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--edge);
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.vp-menu-list {
+  max-height: 360px;
+  overflow-y: auto;
+}

@@ -284,6 +284,23 @@ export function roomCentre(check: CheckSummary | null | undefined, lift: number)
   return p.every((v) => typeof v === 'number' && Number.isFinite(v)) ? p : null;
 }
 
+/**
+ * Where + Source puts a new source (C1, decision 73): off the room's centre, at 0.382 of the
+ * bounding box's length and 0.414 of its width (two unrelated fractions), `lift` metres above its
+ * lowest point, never above mid-height. The centre is a bad default twice over: in a box 3 m
+ * high the centre at 1.5 m is the box's centroid, on the diagonal every tetrahedron of its mesh
+ * shares, where SPPS loses 3 % of its particles to loops in every band and the run fails
+ * `PARTICLE_LOSS_EXCESS` (BED.md, 2026-10-07: 0.00 % once the source moved); and a source at a
+ * room's centre excites none of its odd modes. Null without a usable bounding box.
+ */
+export function sourceSpot(check: CheckSummary | null | undefined, lift: number): [number, number, number] | null {
+  if (!check) return null;
+  const [x0, y0, z0] = check.bbox_min;
+  const [ex, ey, ez] = check.extents_m;
+  const p: [number, number, number] = [x0 + 0.382 * ex, y0 + 0.414 * ey, z0 + Math.min(lift, ez / 2)];
+  return p.every((v) => typeof v === 'number' && Number.isFinite(v)) ? p : null;
+}
+
 // ---- emission (read-only in M10, PLAN.md 7.5 point 6) ------------------------------------------
 
 export function spectrumName(shape: SpectrumShape): string {

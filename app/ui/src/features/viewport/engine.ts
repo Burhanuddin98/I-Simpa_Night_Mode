@@ -1717,10 +1717,14 @@ class ViewportEngine {
   private selectedFaces(): number[] {
     const s = selectionStore.get();
     if (s.kind === 'faces') return s.faces;
-    if (s.kind === 'group') {
+    if (s.kind === 'group' || s.kind === 'groups') {
+      const ids = new Set(s.kind === 'group' ? [s.id] : s.ids);
       const groups = sceneStore.get()?.view.surface_groups ?? [];
-      const gi = groups.findIndex((g) => g.id === s.id);
-      return gi < 0 ? [] : this.facesOfGroupIndices(new Set([gi]));
+      const indices = new Set<number>();
+      groups.forEach((g, i) => {
+        if (ids.has(g.id)) indices.add(i);
+      });
+      return this.facesOfGroupIndices(indices);
     }
     return [];
   }
@@ -1766,6 +1770,10 @@ class ViewportEngine {
       const faces = this.selectedFaces();
       const name = sceneStore.get()?.view.surface_groups.find((g) => g.id === s.id)?.name;
       return { faces, groups: name === undefined ? [] : [name] };
+    }
+    if (s.kind === 'groups') {
+      const names = (sceneStore.get()?.view.surface_groups ?? []).filter((g) => s.ids.includes(g.id)).map((g) => g.name);
+      return { faces: this.selectedFaces(), groups: [...new Set(names)].sort() };
     }
     return { faces: [], groups: [] };
   }

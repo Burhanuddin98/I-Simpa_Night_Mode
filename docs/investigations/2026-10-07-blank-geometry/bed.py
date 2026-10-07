@@ -431,8 +431,15 @@ try:
                 got = next(x for x in project()["materials"] if x["id"] == m["id"])
                 tl = got["transmission_loss_db"]
                 step("typed transmission loss, band 1", "OK" if tl and tl[0] is not None and float(tl[0]) == 20 else "FAIL", transmission=tl and tl[:3])
-                # Back off: the box has nothing behind its walls; keep the run plain.
-                js("void 0")
+                # Switched off again (Backspace, Enter): the box has nothing behind its walls, and
+                # the run stays plain.
+                cell = center(f'[data-grid-cell="{row_i}:0"]')
+                mouse(cell["x"], cell["y"])
+                cdp("Input.dispatchKeyEvent", {"type": "rawKeyDown", "key": "Backspace", "code": "Backspace", "windowsVirtualKeyCode": 8})
+                cdp("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Backspace", "code": "Backspace", "windowsVirtualKeyCode": 8})
+                key("Enter")
+                got = next(x for x in project()["materials"] if x["id"] == m["id"])
+                step("transmission switched off again", "OK" if got["transmission_loss_db"] is None else "FAIL", transmission=got["transmission_loss_db"])
             else:
                 step("typed transmission loss", "MISSING", tabs=tabs,
                      panel=js("document.querySelector('.mat-row[title*=\"Transmission\"]')?.title ?? null"))
@@ -464,8 +471,8 @@ try:
         step("source power", "MISSING", fields=fields,
              emission=js("document.querySelector('[data-props-step=\"sources\"] [data-input]')?.innerText ?? null"))
     if exists('[data-props-step="sources"] [data-field="spectrum"]'):
-        opts = js("[...document.querySelector('[data-props-step=\"sources\"] [data-field=\"spectrum\"]').options].map(o => o.value)")
-        want = next((o for o in opts if "ES_VL" in o), None) or opts[-1]
+        opts = js("[...document.querySelector('[data-props-step=\"sources\"] [data-field=\"spectrum\"]').options].map(o => [o.value, o.text])")
+        want = next((v for v, t in opts if t == "ES_VL"), None) or opts[-1][0]
         js(f"""(() => {{ const s = document.querySelector('[data-props-step="sources"] [data-field="spectrum"]');
             const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(s, {json.dumps(want)});
             s.dispatchEvent(new Event('change', {{bubbles: true}})); }})()""")

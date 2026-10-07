@@ -1,8 +1,9 @@
 // The Sources & receivers step's properties (design:352-384). The selected source or receiver:
 // its name (`data-field="name"`) and position (`data-field="position.x|y|z"`), each committed on
 // Enter or blur (numbers through `parseStrictDecimal`, then a move op through the checked apply);
-// inline `[data-issue-code]` messages from the refusals and the validator; a source's emission,
-// read-only, inside `[data-input]` (PLAN.md 7.5, point 6). Then the sources and receivers with
+// inline `[data-issue-code]` messages from the refusals and the validator; a source's emission
+// inside `[data-input]`, edited since C1 (EmissionEditor.tsx: power overall and per band,
+// spectrum, directivity). Then the sources and receivers with
 // + Source, + Receiver and Place in view; Del removes and F2 renames the selection.
 //
 // M11 (row 22, M26): each source in the list has its on/off switch (`[data-source-toggle]`, the
@@ -17,17 +18,16 @@ import { fieldKey, issuesByEntity, issuesForField } from '../issues';
 import { NOT_A_NUMBER, parseStrictDecimal } from '../numbers';
 import { moveReceiver, moveSource, rename } from '../ops';
 import { refusalStore, sceneStore, selectionStore, toolStore, useStore } from '../store';
+import { EmissionEditor } from './EmissionEditor';
 import { PlanesSection } from './PlanesSection';
 import { IssueTag, SourceSwitch, toggleRefusals } from './ScenePanel';
 import {
   AXES,
   coord,
-  directivityName,
   exact,
-  powerText,
   roomCentre,
+  sourceSpot,
   sentence,
-  spectrumName,
   uniqueIssues,
   withAxis,
   worstSeverity,
@@ -297,24 +297,7 @@ function PointEditor({ scene, kind, point }: { scene: SceneState; kind: Kind; po
         <Issues refused={[...localPos, ...posRefused]} current={posIssues} />
       </div>
 
-      {source && (
-        <div className="props-section" data-input>
-          <div className="label section-label">Emission</div>
-          <div className="kv">
-            <span>Sound power</span>
-            <span className="mono">{powerText(source.power.global_db)}</span>
-          </div>
-          <div className="kv">
-            <span>Spectrum</span>
-            <span>{spectrumName(source.power.shape)}</span>
-          </div>
-          <div className="kv">
-            <span>Directivity</span>
-            <span>{directivityName(source.directivity)}</span>
-          </div>
-          <div className="hint">Read-only in this build. The switch in the list below turns the source on or off.</div>
-        </div>
-      )}
+      {source && <EmissionEditor scene={scene} source={source} />}
     </>
   );
 }
@@ -390,7 +373,7 @@ export function SourcesPanel() {
 
   const canPlace = !!scene.check;
   const add = async (kind: 'source' | 'receiver') => {
-    const p = roomCentre(scene.check, actions.PLACE_HEIGHT_M[kind]);
+    const p = kind === 'source' ? sourceSpot(scene.check, actions.PLACE_HEIGHT_M.source) : roomCentre(scene.check, actions.PLACE_HEIGHT_M.receiver);
     if (!p) return;
     const out = await actions.placeAt(kind, p);
     if (!out.applied) return;

@@ -16,7 +16,8 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import * as actions from '../../actions';
 import { MeasureTool, OrbitTool, ReceiverTool, SectionTool, SelectTool } from '../../chrome/icons';
-import { REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
+import { MOVE_TO_LABEL, moveTargets } from '../../chrome/groupsModel';
+import { displayName, REGROUP_LABEL, regroupFaces } from '../../chrome/sceneModel';
 import { onWindowEntityKey } from '../../chrome/sceneUi';
 import { sceneStore, selectionStore, stepStore, toolStore, useStore, type Tool } from '../../store';
 import { attachViewport, frameModel, presentStore, setPresent, setTurntable, setView, viewportUi, type ViewMode } from './engine';
@@ -102,6 +103,8 @@ export function Viewport() {
   const info = useStore(sceneStore)?.info ?? null;
   const selection = useStore(selectionStore);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const groups = useStore(sceneStore)?.view.surface_groups ?? [];
+  const targets = selection.kind === 'faces' ? moveTargets(groups, selection.groups) : [];
   const live = useStore(liveStore);
   const step = useStore(stepStore);
   const rightDown = useRef<{ x: number; y: number } | null>(null);
@@ -185,6 +188,28 @@ export function Viewport() {
               {regroupFaces(selection)?.length ?? 0} {regroupFaces(selection)?.length === 1 ? 'face' : 'faces'}
             </span>
           </button>
+          {/* C1: Move selection to group, one entry per group that would change. */}
+          {targets.length > 0 && (
+            <div className="vp-menu-head" role="presentation">
+              {MOVE_TO_LABEL}
+            </div>
+          )}
+          <div className="vp-menu-list">
+            {targets.map((g) => (
+              <button
+                key={g.id}
+                role="menuitem"
+                data-menu-item={`move-to-group:${g.id}`}
+                title={`Move the picked faces into ${g.name}: they take its material`}
+                onClick={() => {
+                  setMenu(null);
+                  actions.fire(actions.moveSelectionToGroup(g.id));
+                }}
+              >
+                <span className="grow">{displayName(g.name)}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div className="vp-labels" ref={labelsRef} aria-hidden />

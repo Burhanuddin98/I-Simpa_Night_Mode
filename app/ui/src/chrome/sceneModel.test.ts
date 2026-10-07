@@ -18,6 +18,7 @@ import {
   receiverFolder,
   regroupFaces,
   roomCentre,
+  sourceSpot,
   runTooltip,
   sentence,
   stepSubs,
@@ -295,6 +296,13 @@ test('a new point goes to the middle of the bounding box, lifted from its floor'
   assert.deepEqual(roomCentre(check(), 1.2), [5, 3, 1.2]);
   assert.deepEqual(roomCentre(check({ bbox_min: [-5, 0, 2], extents_m: [10, 6, 1] }), 1.2), [0, 3, 2.5], 'never above mid-height');
   assert.equal(roomCentre(null, 1.2), null);
+  // C1: + Source sits off the centre: the 6 x 10 x 3 m box's centroid fails SPPS on loops.
+  const box = check({ bbox_min: [0, 0, 0], extents_m: [6, 10, 3] });
+  const s = sourceSpot(box, 1.5)!;
+  assert.notDeepEqual(s, roomCentre(box, 1.5));
+  assert.ok(Math.abs(s[0] - 2.292) < 1e-12 && Math.abs(s[1] - 4.14) < 1e-12 && s[2] === 1.5, String(s));
+  assert.notEqual(s[0] / 6, s[1] / 10, 'not on the plane x/Lx = y/Ly a box mesh has');
+  assert.equal(sourceSpot(null, 1.5), null);
   assert.equal(roomCentre(check({ extents_m: [NaN, 6, 3] }), 1.2), null);
 });
 

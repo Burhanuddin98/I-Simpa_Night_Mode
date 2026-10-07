@@ -6,7 +6,7 @@ type KeyEvent = Pick<KeyboardEvent, 'key' | 'target' | 'ctrlKey' | 'altKey' | 'm
 import * as actions from '../actions';
 import { fieldKey } from '../issues';
 import { removeReceiver, removeSource } from '../ops';
-import { selectionStore, stepStore, Store } from '../store';
+import { groupRenameStore, selectionStore, stepStore, Store } from '../store';
 
 /** Bumped by F2 on a selected source or receiver: the Sources panel focuses its name field. */
 export const renameRequestStore = new Store<number>(0);
@@ -66,6 +66,12 @@ export function typing(target: EventTarget | null): boolean {
 export function onEntityKey(e: KeyEvent): void {
   if (typing(e.target) || e.ctrlKey || e.altKey || e.metaKey) return;
   const sel = selectionStore.get();
+  // C1: F2 on a selected surface group edits its name in the scene list.
+  if (sel.kind === 'group' && e.key === 'F2') {
+    e.preventDefault();
+    groupRenameStore.set(sel.id);
+    return;
+  }
   if (sel.kind !== 'source' && sel.kind !== 'receiver') return;
   if (e.key === 'Delete') {
     e.preventDefault();

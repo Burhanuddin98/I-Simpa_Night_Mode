@@ -12,6 +12,8 @@
 // - Simulate › Run and Simulate › Cancel run (PQ2), the same actions as the Run button, F5 and
 //   the Simulate step's Cancel.
 // - Edit › New group from selection (scope row 15 (1), G19), the viewport's context menu entry.
+// - Edit › Rename group (F2) and Merge groups (C1): one picked group, and two or more Ctrl+clicked
+//   in the scene list.
 // - File › Export view as PNG…, Export parameters as CSV… and as JSON… (wow list W9,
 //   features/export/), each disabled with the reason where there is nothing to export.
 import { blockersWithSize, settingsStore } from '../features/simulate/runSize';
@@ -20,7 +22,8 @@ import * as actions from '../actions';
 import { exportParams, exportView, paramsRefusal, viewRefusal } from '../features/export/exportActions';
 import { frameModel, setView } from '../features/viewport/engine';
 import { joinBlockers } from '../flow';
-import { reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
+import { groupRenameStore, reportStore, runStore, sceneStore, selectedRunStore, selectionStore, solversStatusStore, solverStore, stepStore, useStore, viewportStore } from '../store';
+import { MERGE_LABEL, mergePlan, RENAME_GROUP_LABEL, renameTarget } from './groupsModel';
 import { Search } from './icons';
 import { RunButton } from './RunButton';
 import { REGROUP_LABEL, regroupFaces, runTooltip } from './sceneModel';
@@ -125,6 +128,26 @@ export function MenuBar() {
         title: regroupFaces(selection)
           ? 'Send the faces picked in the 3D view to a new surface group'
           : 'Pick faces in the 3D view first: click a face, or double-click for its flat surface',
+      },
+      {
+        id: 'rename-group',
+        label: RENAME_GROUP_LABEL,
+        keys: 'F2',
+        run: () => {
+          const id = renameTarget(selection);
+          if (id) groupRenameStore.set(id);
+        },
+        disabled: !renameTarget(selection),
+        title: renameTarget(selection) ? 'Edit the picked surface group\'s name in the scene list' : 'Pick one surface group in the scene list first',
+      },
+      {
+        id: 'merge-groups',
+        label: MERGE_LABEL,
+        run: () => actions.fire(actions.mergeSelectedGroups()),
+        disabled: !mergePlan(selection, scene?.view.surface_groups ?? []),
+        title: mergePlan(selection, scene?.view.surface_groups ?? [])
+          ? 'Merge the picked surface groups into the first picked, which keeps its name and material'
+          : 'Ctrl+click two or more surface groups in the scene list first',
       },
     ],
     View: [
