@@ -433,3 +433,12 @@
   font-size: 11.5px;
   color: var(--text-3);
 }
+
+/* C1 audit: a transmission loss the solver will not get as typed shows what it gets (→). */
+.mg-cell.clamped {
+  color: var(--warn);
+}
+.mg-written {
+  color: var(--warn);
+  font-size: 11px;
+}

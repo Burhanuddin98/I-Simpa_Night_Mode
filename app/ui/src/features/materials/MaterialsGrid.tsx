@@ -34,7 +34,7 @@ import { boundsOf, clampCell, inRect, planFill, rectOf, type Cell } from './fill
 import { dismiss, errorOf, IssueLines, lineOf, visibleRefusals, type Line } from './inline';
 import { changesLaw, LAWS, lawOf, lawState, lawTitle, lawValue, PER_BAND, SEMI_DIFFUSE_NOTE, usesLaw } from './law';
 import { LibraryMenu } from './LibraryMenu';
-import { bandValue, newMaterial, nextSort, sortRows, transmissionText, usage, withTransmission, type Quantity, type SortState } from './model';
+import { bandValue, newMaterial, nextSort, sortRows, transmissionNote, transmissionText, usage, withTransmission, type Quantity, type SortState } from './model';
 import { planPaste } from './paste';
 import { displayValue, formatExact, ROUNDED_MARK, toTsv } from './tsv';
 
@@ -647,6 +647,8 @@ export function MaterialsGrid() {
                     {columns.map((c, col) => {
                       const v = bandValue(m, q, c.index);
                       const shown = displayValue(v);
+                      // C1 audit: a loss the solver will not get as typed says so on the cell.
+                      const written = q === 'transmission' && v !== '' ? transmissionNote(v, m.absorption[c.index] ?? 0) : null;
                       const issue = bad.get(cellKey(m.id, q, c.index));
                       const isEditing = editing && editing.row === row && editing.col === col;
                       const cls = [
@@ -655,6 +657,7 @@ export function MaterialsGrid() {
                         cur.row === row && cur.col === col ? 'cur' : '',
                         issue ? 'bad' : '',
                         shown.rounded ? 'rounded' : '',
+                        written ? 'clamped' : '',
                       ]
                         .filter(Boolean)
                         .join(' ');
@@ -665,9 +668,21 @@ export function MaterialsGrid() {
                           data-grid-cell={`${row}:${col}`}
                           aria-selected={inRect(rect, row, col)}
                           data-cell-issue={issue}
-                          title={`${m.name} · ${c.label}: ${formatExact(v)}${issue ? ` · FAIL ${issue}` : ''}`}
+                          title={`${m.name} · ${c.label}: ${formatExact(v)}${issue ? ` · FAIL ${issue}` : ''}${written ? ` · ${written.title}` : ''}`}
+                          data-transmission-written={written?.short}
                         >
-                          {isEditing && editing ? renderEditor(editing) : shown.text}
+                          {isEditing && editing ? (
+                            renderEditor(editing)
+                          ) : written ? (
+                            <>
+                              {shown.text}
+                              <span className="mg-written" aria-label={written.title}>
+                                {' '}→ {written.short}
+                              </span>
+                            </>
+                          ) : (
+                            shown.text
+                          )}
                         </td>
                       );
                     })}
@@ -721,7 +736,8 @@ export function MaterialsGrid() {
       <IssueLines lines={lines} part="grid-issues" />
       {q === 'transmission' && (
         <div className="mg-note" data-part="transmission-note">
-          Transmission loss in dB. An empty band does not transmit: type a loss there to switch it on, clear it to switch it off.
+          Transmission loss in dB. An empty band does not transmit: type a loss there to switch it on, clear it to switch it off. A
+          loss that would let through more than the band absorbs shows what the solver gets instead (→).
         </div>
       )}
       {focused && (

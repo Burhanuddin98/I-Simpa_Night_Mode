@@ -458,6 +458,24 @@ describe('C1: a blank geometry to results', () => {
     await m10.idle();
     const tl = (await project()).materials.find((m) => m.id === mat.id)!.transmission_loss_db;
     assert.deepEqual(tl, [20, ...Array.from({ length: n - 1 }, () => null)]);
+    // Control: 20 dB lets through tau 0.01 under alpha 0.05, so the cell shows it as typed.
+    assert.equal(await $(`[data-grid-cell="${rowIndex}:0"]`).getAttribute('data-transmission-written'), null);
+    // 5 dB lets through tau 0.316, more than alpha 0.05 absorbs: the writer clamps it to
+    // -10 log10(0.05) = 13.01 dB, and the cell says so, with why, beside the typed 5.
+    await $(`[data-grid-cell="${rowIndex}:0"]`).doubleClick();
+    await browser.keys(['Backspace', 'Backspace', '5', 'Enter']);
+    await m10.idle();
+    assert.equal((await project()).materials.find((m) => m.id === mat.id)!.transmission_loss_db?.[0], 5);
+    const cell = await $(`[data-grid-cell="${rowIndex}:0"]`);
+    assert.equal(await cell.getAttribute('data-transmission-written'), '13.01');
+    assert.match(await cell.getText(), /5\s*→\s*13\.01/);
+    assert.match((await cell.getAttribute('title')) ?? '', /Written as 13\.01 dB: tau = 10\^\(-R\/10\) = 0\.316 exceeds alpha = 0\.05/);
+    assert.match(
+      await $('[data-part="grid-issues"]').getText(),
+      /material_transmission_exceeds_absorption/i,
+      "the validator's warning is under the grid too",
+    );
+    console.log(`c1-materials receipt: 5 dB at alpha 0.05 shows "${(await cell.getText()).replace(/\s+/g, ' ')}"`);
     await clickSelector(`[data-grid-cell="${rowIndex}:0"]`);
     await browser.keys(['Backspace', 'Enter']);
     await m10.idle();

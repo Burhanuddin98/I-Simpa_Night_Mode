@@ -16,6 +16,40 @@ export function bandValue(m: Material, quantity: Quantity, band: number): F64 {
 }
 
 /**
+ * What config.xml gives the solver for a typed transmission loss (C1 audit), as the core's writer
+ * decides it (`config_xml::write::transmission_loss_written`, upstream's GUI rule,
+ * `e_data_row_materiau.h:98-145`): `off` when the band's absorption is 0 as an `f32` (the band
+ * then does not transmit at all); the loss `-10 log10(alpha)` when tau = 10^(-R/10) exceeds alpha
+ * (no more is transmitted than absorbed); else the loss as typed (`same`).
+ */
+export type TransmissionWritten = { kind: 'same' } | { kind: 'off' } | { kind: 'clamped'; db: number; tau: number; alpha: number };
+
+export function transmissionWritten(lossDb: F64, absorption: F64): TransmissionWritten {
+  const r = Number(lossDb);
+  const a = Number(absorption);
+  if (!(Math.fround(a) > 0)) return { kind: 'off' };
+  const tau = 10 ** (-r / 10);
+  return tau > a ? { kind: 'clamped', db: -10 * Math.log10(a), tau, alpha: a } : { kind: 'same' };
+}
+
+/** The cell's words for a typed loss the solver will not get as typed, or null. */
+export function transmissionNote(lossDb: F64, absorption: F64): { short: string; title: string } | null {
+  const w = transmissionWritten(lossDb, absorption);
+  if (w.kind === 'same') return null;
+  if (w.kind === 'off') {
+    return {
+      short: 'off',
+      title: `Not written: the absorption here is 0, so this band does not transmit (upstream's rule: transmission needs alpha > 0).`,
+    };
+  }
+  const db = Math.round(w.db * 100) / 100;
+  return {
+    short: `${db}`,
+    title: `Written as ${db} dB: tau = 10^(-R/10) = ${w.tau.toPrecision(3)} exceeds alpha = ${w.alpha}, so the solver gets tau = alpha (no more is transmitted than absorbed, as upstream's GUI does).`,
+  };
+}
+
+/**
  * `m` with its transmission loss in `band` set to `value` dB, or switched off there with `null`
  * (C1). A material whose every band is off has no transmission at all (`null`), as a new
  * material has; one switched on in a band starts with every other band off.
