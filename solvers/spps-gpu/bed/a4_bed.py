@@ -17,13 +17,16 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import stage  # noqa: E402
 
-OUT = r"B:\repos\I-Simpa_Night_Mode\.out\a4"
-SIMPA = r"C:\tmp\nm-target-a4\release\simpa.exe"
-SOLVERS = r"C:\tmp\nm-solvers-a5"
+# A6 re-runs the bed against its own build: A4_BED_OUT (.out\a6), A4_SIMPA, A4_SOLVERS, and SPPS_GPU_EXE
+# for arm (a). The meshing runs stay A4's, read only (A4_MESH_RUNS).
+OUT = os.environ.get("A4_BED_OUT", r"B:\repos\I-Simpa_Night_Mode\.out\a4")
+MESH = os.environ.get("A4_MESH_RUNS", r"B:\repos\I-Simpa_Night_Mode\.out\a4\mesh-runs")
+SIMPA = os.environ.get("A4_SIMPA", r"C:\tmp\nm-target-a4\release\simpa.exe")
+SOLVERS = os.environ.get("A4_SOLVERS", r"C:\tmp\nm-solvers-a5")
 
 
 def src(case):
-    runs = sorted(glob.glob(os.path.join(OUT, "mesh-runs", case, "*", "solve")))
+    runs = sorted(glob.glob(os.path.join(MESH, case, "*", "solve")))
     if len(runs) != 1:
         sys.exit(f"{case}: expected one meshing run, found {runs}")
     return runs[0]
@@ -44,7 +47,8 @@ CASES = {
 
 def arm_a(root, cases):
     os.makedirs(root, exist_ok=True)
-    env = dict(os.environ, SPPS_GPU_EXE=os.path.join(SOLVERS, "spps-gpu.exe"))
+    env = dict(os.environ)
+    env.setdefault("SPPS_GPU_EXE", os.path.join(SOLVERS, "spps-gpu.exe"))
     for case in cases:
         proj, attrs = CASES[case]
         cmd = [sys.executable, os.path.join(HERE, "cpu_gpu.py"), root, case, src(proj), "11"] + [f"{k}={v}" for k, v in attrs.items()]
@@ -101,7 +105,10 @@ def arm_b(tag, arms, seeds, cases):
                         rec["results_exit"] = r.returncode
                         js = os.path.join(run_dir, "solve", "spps-gpu.json")
                         if os.path.exists(js):
-                            rec["child_queue_overflow"] = json.load(open(js, encoding="utf-8")).get("child_queue_overflow")
+                            gj = json.load(open(js, encoding="utf-8"))
+                            for k in ("version", "child_queue_overflow", "child_pool_capacity", "child_pool_given", "child_pool_peak"):
+                                if k in gj:
+                                    rec[k] = gj[k]
                 with open(log, "a", encoding="utf-8") as fh:
                     fh.write(json.dumps(rec) + "\n")
                 print(json.dumps(rec), flush=True)

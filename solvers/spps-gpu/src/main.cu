@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -25,7 +26,7 @@
 
 using namespace spg;
 
-static const char* VERSION = "0.1.1 (A5, 2026-10-07)";
+static const char* VERSION = "0.2.0 (A6, 2026-10-07)";
 
 constexpr unsigned TOTAL_REPLICAS = 256;
 
@@ -39,6 +40,13 @@ struct GpuAcc {
   float *surf, *cut;
   unsigned long long* states;   // 6 states, then child overflow
   double* overflowE;
+  // The child pool: children that did not fit a slot's queue, waiting for any slot to take them as a
+  // family. A ring of poolCap entries; poolCtl[0] counts entries taken, poolCtl[1] entries given. A
+  // launch takes only what was given before it (poolHead0 .. poolAvail, settled by the launch
+  // boundary) and gives only into places already taken (index < poolLimit = poolHead0 + poolCap).
+  Particle* pool;
+  unsigned long long* poolCtl;
+  unsigned long long poolCap, poolHead0, poolAvail, poolLimit;
   int nbSteps, nbBins, nbSrc, bySource;
   unsigned rpMask;        // point-receiver replicas - 1 (a power of two)
   size_t nRS, nSrcAll;    // R x nbSteps, R x source columns: one replica's size
@@ -90,6 +98,19 @@ struct GpuAcc {
     atomicAdd(overflowE, e);
 #endif
   }
+  __host__ __device__ bool spillWaiting() const { return false; }
+  __host__ __device__ bool spill(const Particle& c) {
+#ifdef __CUDA_ARCH__
+    if (poolCap == 0) return false;
+    unsigned long long t = atomicAdd(&poolCtl[1], 1ull);
+    if (t >= poolLimit) return false;   // the pool is full: counted by the caller, and the run fails
+    pool[t % poolCap] = c;
+    return true;
+#else
+    return false;
+#endif
+  }
+  __host__ __device__ bool unspill(Particle&) { return false; }
 };
 
 #ifndef SPG_MINB
@@ -104,7 +125,7 @@ struct Slot {
   long long fam;
   int phase;               // 0 needs a family, 1 primary running, 2 child running, 3 no work left
   int qh, qn;
-  uint32_t nextChild, partIndex;
+  int famsDone;            // the shared counter has no family left for this slot
   int curStart;
   uint32_t nch;
   uint64_t chs;
@@ -115,15 +136,36 @@ __global__ void __launch_bounds__(128, SPG_MINB) kSlots(Scene s, const SrcBand* 
   int sid = blockIdx.x * blockDim.x + threadIdx.x;
   if (sid >= nslots) return;
   Slot st = slots[sid];
-  if (st.phase == 3) return;
+  const bool poolWork = acc.poolAvail > acc.poolHead0;   // children given to the pool before this launch
+  if (st.phase == 3) {
+    if (!poolWork) return;
+    st.phase = 0;
+  }
   NullRec rec;
   Walker<GpuAcc, NullRec> w(s, acc, rec, queues + (size_t)sid * QCAP);
-  w.qh = st.qh; w.qn = st.qn; w.nextChild = st.nextChild; w.partIndex = st.partIndex;
+  w.qh = st.qh; w.qn = st.qn;
   int b = budget;
   for (;;) {
+    if (st.phase == 0 && poolWork) {
+      // a pooled child first: it runs as a family of its own, its children in this slot's queue
+      unsigned long long h = *(volatile unsigned long long*)&acc.poolCtl[0];
+      while (h < acc.poolAvail) {
+        unsigned long long o = atomicCAS(&acc.poolCtl[0], h, h + 1);
+        if (o == h) break;
+        h = o;
+      }
+      if (h < acc.poolAvail) {
+        st.p = acc.pool[h % acc.poolCap];
+        st.fam = (long long)st.p.src * N + (long long)st.p.rng.part;
+        w.qh = 0; w.qn = 0;
+        w.start(st.p);
+        st.phase = 2; st.curStart = st.p.step; st.nch = 0; st.chs = 0;
+      }
+    }
     if (st.phase == 0) {
+      if (st.famsDone) { st.phase = 3; break; }
       unsigned long long g = atomicAdd(nextFam, 1ull);
-      if (g >= (unsigned long long)total) { st.phase = 3; break; }
+      if (g >= (unsigned long long)total) { st.famsDone = 1; st.phase = 3; break; }
       int src = (int)(g / N);
       uint32_t idpart = (uint32_t)(g % N);
       const SrcBand sb = srcs[src];
@@ -147,11 +189,12 @@ __global__ void __launch_bounds__(128, SPG_MINB) kSlots(Scene s, const SrcBand* 
       st.curStart = st.p.step;
       st.phase = 2;
     } else {
-      if (dump) { WalkRec& d = dump[st.fam]; d.children = st.nch; d.childSteps = st.chs; }
+      // a family's children may run in several slots (the pool): each adds its share
+      if (dump) { WalkRec& d = dump[st.fam]; atomicAdd(&d.children, st.nch); atomicAdd((unsigned long long*)&d.childSteps, (unsigned long long)st.chs); }
       st.phase = 0;
     }
   }
-  st.qh = w.qh; st.qn = w.qn; st.nextChild = w.nextChild; st.partIndex = w.partIndex;
+  st.qh = w.qh; st.qn = w.qn;
   slots[sid] = st;
   if (st.phase != 3) atomicAdd(busy, 1u);
 }
@@ -227,6 +270,31 @@ struct CpuAcc {
     states[6]++; overflowE += e;
 #endif
   }
+  // the host's spill: unbounded, as SPPS's std::list (CalculationCore.h:33), drained FIFO behind the queue
+  std::deque<Particle> spilled;
+  __host__ __device__ bool spillWaiting() const {
+#ifndef __CUDA_ARCH__
+    return !spilled.empty();
+#else
+    return false;
+#endif
+  }
+  __host__ __device__ bool spill(const Particle& c) {
+#ifndef __CUDA_ARCH__
+    spilled.push_back(c);
+#endif
+    return true;
+  }
+  __host__ __device__ bool unspill(Particle& c) {
+#ifndef __CUDA_ARCH__
+    if (spilled.empty()) return false;
+    c = spilled.front();
+    spilled.pop_front();
+    return true;
+#else
+    return false;
+#endif
+  }
 };
 // No sums: the host re-trace of the particles SPPS writes to its particle file
 struct NullAcc {
@@ -236,6 +304,30 @@ struct NullAcc {
   __host__ __device__ void addCut(long long, double) {}
   __host__ __device__ void stat(int) {}
   __host__ __device__ void childOverflow(double) {}
+  std::deque<Particle> spilled;   // as CpuAcc's
+  __host__ __device__ bool spillWaiting() const {
+#ifndef __CUDA_ARCH__
+    return !spilled.empty();
+#else
+    return false;
+#endif
+  }
+  __host__ __device__ bool spill(const Particle& c) {
+#ifndef __CUDA_ARCH__
+    spilled.push_back(c);
+#endif
+    return true;
+  }
+  __host__ __device__ bool unspill(Particle& c) {
+#ifndef __CUDA_ARCH__
+    if (spilled.empty()) return false;
+    c = spilled.front();
+    spilled.pop_front();
+    return true;
+#else
+    return false;
+#endif
+  }
 };
 struct HostRec {
   ParticleFiles* pf;
@@ -431,6 +523,9 @@ int main(int argc, char** argv) {
   Particle* dQueues = nullptr;
   unsigned long long* dNextFam = nullptr;
   unsigned int* dBusy = nullptr;
+  Particle* dPool = nullptr;
+  unsigned long long* dPoolCtl = nullptr;
+  size_t poolCap = 0;
   int nslots = 0;
   unsigned rpRep = 1;
   long long launches = 0;
@@ -482,6 +577,27 @@ int main(int argc, char** argv) {
       check(cudaMalloc(&dBusy, 4), "busy");
     }
     if (!dumpWalk.empty()) check(cudaMalloc(&dDump, std::max<long long>(1, totalFamilies) * sizeof(WalkRec)), "dump");
+    {
+      // The child pool, only when a child can be made (energetic, trans_calc, a transmitting material
+      // in a computed band): max(2^22, 64 x the band's families) entries, at most a quarter of the
+      // device memory still free, sizeof(Particle) bytes each. SPPS_GPU_POOL_CAP=<entries> sets it
+      // (the bed's overflow test). A4's beam (2,000 families) peaks at 818,594 waiting children.
+      bool children = cfg.method != 0 && cfg.transCalc != 0 && cfg.directCalc == 0;
+      bool transmitting = false;
+      for (const auto& mt : cfg.materials)
+        for (size_t bi = 0; bi < cfg.bands.size() && bi < mt.bands.size(); bi++)
+          if (cfg.bands[bi].docalc && mt.bands[bi].dotrans && mt.bands[bi].tau != 0) transmitting = true;
+      if (children && transmitting) {
+        size_t freeP = 0, totP = 0;
+        cudaMemGetInfo(&freeP, &totP);
+        size_t want = std::max<size_t>(1u << 22, 64ull * (size_t)std::max<long long>(1, totalFamilies));
+        poolCap = std::min(want, freeP / 4 / sizeof(Particle));
+        if (const char* pc = getenv("SPPS_GPU_POOL_CAP")) poolCap = (size_t)std::max(1LL, atoll(pc));
+        check(cudaMalloc(&dPool, poolCap * sizeof(Particle)), "pool");
+      }
+      check(cudaMalloc(&dPoolCtl, 16), "poolctl");
+      ga.pool = dPool; ga.poolCtl = dPoolCtl; ga.poolCap = poolCap;
+    }
     Scene& b = base;
     b.tf = dv.tf;
     b.nodes = dv.nodes; b.fv = dv.fv; b.fn = dv.fn; b.nb = dv.nb; b.sf = dv.sf; b.rf = dv.rf; b.corner = dv.corner;
@@ -497,7 +613,7 @@ int main(int argc, char** argv) {
   if (!dumpWalk.empty()) walkOut.open(std::filesystem::u8path(dumpWalk), std::ios::binary | std::ios::trunc);
   if (!dumpSums.empty()) sumsOut.open(std::filesystem::u8path(dumpSums), std::ios::binary | std::ios::trunc);
   double traceSeconds = 0, kernelSeconds = 0;
-  uint64_t overflowTotal = 0;
+  uint64_t overflowTotal = 0, poolGiven = 0, poolPeak = 0;
   int bandsDone = 0;
   const int nbCalc = std::max(1, cfg.nbBandsCalc);
   int threads = 1;
@@ -559,11 +675,14 @@ int main(int argc, char** argv) {
       cudaMemset(dSlots, 0, (size_t)nslots * sizeof(Slot));
       cudaMemset(dNextFam, 0, 8);
       if (dDump) cudaMemset(dDump, 0, (size_t)totalFamilies * sizeof(WalkRec));
+      cudaMemset(dPoolCtl, 0, 16);
+      unsigned long long pool[2] = {0, 0};   // taken, given
       int budget = 256;   // steps a slot may advance in one launch, then sized for ~250 ms launches
       cudaEvent_t e0, e1;
       cudaEventCreate(&e0); cudaEventCreate(&e1);
       for (;;) {
         cudaMemset(dBusy, 0, 4);
+        ga.poolHead0 = pool[0]; ga.poolAvail = pool[1]; ga.poolLimit = pool[0] + poolCap;
         cudaEventRecord(e0);
         kSlots<<<(unsigned)((nslots + 127) / 128), 128>>>(sc, dv.srcs, cfg.nbPart, totalFamilies, ga, dSlots, dQueues, dNextFam, budget, nslots, dBusy, dDump);
         cudaEventRecord(e1);
@@ -578,7 +697,15 @@ int main(int argc, char** argv) {
         check(cudaMemcpy(&busy, dBusy, 4, cudaMemcpyDeviceToHost), "busy");
         check(cudaMemcpy(&taken, dNextFam, 8, cudaMemcpyDeviceToHost), "next");
         prog.show(100.0 * (bandsDone + (double)std::min<unsigned long long>(taken, totalFamilies) / std::max(1LL, totalFamilies)) / nbCalc);
-        if (busy == 0) break;
+        if (poolCap) {
+          unsigned long long ov = 0;
+          check(cudaMemcpy(pool, dPoolCtl, 16, cudaMemcpyDeviceToHost), "pool");
+          check(cudaMemcpy(&ov, ga.states + 6, 8, cudaMemcpyDeviceToHost), "overflow");
+          if (ov) break;   // the pool is full: the run fails below
+          poolPeak = std::max<uint64_t>(poolPeak, pool[1] - pool[0]);
+          if (busy == 0 && pool[0] == pool[1]) break;
+          if (busy == 0) continue;   // only pooled children left: the next launch takes them
+        } else if (busy == 0) break;
         if (ms > 0) budget = (int)std::max(64.0, std::min(4.0 * budget, budget * 250.0 / ms));
       }
       cudaEventDestroy(e0); cudaEventDestroy(e1);
@@ -609,6 +736,7 @@ int main(int argc, char** argv) {
       for (int k = 0; k < 6; k++) bs.states[k] = st[k];
       bs.childOverflow = st[6];
       check(cudaMemcpy(&bs.overflowEnergy, ga.overflowE, 8, cudaMemcpyDeviceToHost), "copy");
+      poolGiven += pool[1];
       if (dDump) check(cudaMemcpy(walk.data(), dDump, (size_t)totalFamilies * sizeof(WalkRec), cudaMemcpyDeviceToHost), "copy");
     } else {
       // the CPU build: host pointers
@@ -669,9 +797,16 @@ int main(int argc, char** argv) {
     }
     traceSeconds += std::chrono::duration<double>(std::chrono::steady_clock::now() - tb).count();
     overflowTotal += bs.childOverflow;
-    if (bs.childOverflow)
-      std::cerr << "spps-gpu: warning: child_queue_overflow: " << bs.childOverflow << " transmitted particles dropped at " << cfg.bands[bi].freq
-                << " Hz (queue of " << QCAP << " per particle), energy " << bs.overflowEnergy << " J" << std::endl;
+    if (bs.childOverflow) {
+      // never a result with children missing: no further band, no receiver file, no "End of calculation."
+      double srcE = 0;
+      for (const SrcBand& sb : sbs) if (sb.active) srcE += sb.energie * (double)cfg.nbPart;
+      std::cerr << "spps-gpu: failed: child_pool_overflow: " << bs.childOverflow << " transmitted particles did not fit the child pool ("
+                << poolCap << " entries, " << (poolCap * sizeof(Particle)) / 1048576 << " MiB) at " << cfg.bands[bi].freq << " Hz, energy "
+                << bs.overflowEnergy << " J (" << (srcE > 0 ? bs.overflowEnergy / srcE : 0.0)
+                << " of the band's source energy) dropped; the run is stopped and its results are not written; run SPPS on the CPU" << std::endl;
+      return 2;
+    }
     // the particle file: SPPS marks every k-th particle of each source (sppsNantes.cpp:66-72, 129-138);
     // the same walk re-traces those particles on the host, identical paths, to record them
     if ((size_t)cfg.nbPartRender * NS != 0) {
@@ -742,12 +877,14 @@ int main(int argc, char** argv) {
     std::string esc;
     for (char ch : d) { if (ch == '"' || ch == '\\') esc += '\\'; esc += ch; }
     j << "  \"device\": \"" << esc << "\",\n  \"seed\": " << seed << ",\n  \"seed_from_config\": " << (cfg.seed != 0 ? "true" : "false") << ",\n";
-    j << "  \"rng\": \"philox4x32-10, key (seed, band << 16 | source), counter (particle, child, draw / 4, 0)\",\n";
+    j << "  \"rng\": \"philox4x32-10, key (seed, band << 16 | source), counter (particle, lineage low, draw / 4, lineage high)\",\n";
     j << "  \"setup_seconds\": " << setupSeconds << ",\n  \"retrace_seconds\": " << retraceSeconds << ",\n";
     j << "  \"band_output_seconds\": " << bandOutSeconds << ",\n  \"finish_seconds\": " << finishSeconds << ",\n";
     j << "  \"gpu_slots\": " << nslots << ",\n  \"gpu_launches\": " << launches << ",\n";
     j << "  \"kernel_seconds\": " << kernelSeconds << ",\n";
     j << "  \"trace_seconds\": " << traceSeconds << ",\n  \"wall_seconds\": " << wall << ",\n";
+    j << "  \"child_pool_capacity\": " << poolCap << ",\n  \"child_pool_entry_bytes\": " << sizeof(Particle) << ",\n";
+    j << "  \"child_pool_given\": " << poolGiven << ",\n  \"child_pool_peak\": " << poolPeak << ",\n";
     j << "  \"child_queue_overflow\": " << overflowTotal << "\n}\n";
   }
   return 0;

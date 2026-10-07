@@ -162,8 +162,11 @@ SPG_F V3 rotation(V3 self, V3 n, float an) {
 
 // ---------------------------------------------------------------------------------------------
 // Philox-4x32-10 (Salmon et al. 2011, Random123; the generator cuRAND implements), written out.
-// key = (seed, band << 16 | source), counter = (particle, child, draw block, 0); one call gives four
-// 32-bit draws, used in order, so the n-th draw of a particle's stream is lane n & 3 of block n >> 2.
+// key = (seed, band << 16 | source), counter = (particle, lineage low, draw block, lineage high); one
+// call gives four 32-bit draws, used in order, so the n-th draw of a particle's stream is lane n & 3 of
+// block n >> 2. A source particle's lineage is 0; a transmitted child's is childLineage() of its
+// parent's lineage and its ordinal among the parent's children, so a child draws the same numbers
+// whichever thread, queue or pool runs it.
 
 SPG_F uint32_t mulhilo(uint32_t a, uint32_t b, uint32_t* hi) {
   uint64_t p = (uint64_t)a * (uint64_t)b;
@@ -182,16 +185,30 @@ SPG_F void philox4x32_10(uint32_t c0, uint32_t c1, uint32_t c2, uint32_t c3, uin
   out[0] = c0; out[1] = c1; out[2] = c2; out[3] = c3;
 }
 
+// splitmix64's finaliser (a bijection on 64 bits)
+SPG_F uint64_t fmix64(uint64_t z) {
+  z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+  z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+  return z ^ (z >> 31);
+}
+// The lineage of the k-th child (k >= 1) of a particle of lineage L: two siblings never share one
+// (fmix64 is a bijection), and 0, a source particle's, is never given to a child.
+SPG_F uint64_t childLineage(uint64_t L, uint32_t k) {
+  uint64_t z = fmix64(L ^ fmix64((uint64_t)k + 0x9E3779B97F4A7C15ull));
+  return z == 0 ? 1 : z;
+}
+
 struct Rng {
-  uint32_t k0, k1, part, child, n, blk;
+  uint32_t k0, k1, part, child, lin, n, blk;   // child, lin: the lineage's low and high words
   uint32_t b[4];
-  SPG_F void init(uint32_t key0, uint32_t key1, uint32_t particle, uint32_t childId) {
-    k0 = key0; k1 = key1; part = particle; child = childId; n = 0; blk = 0xFFFFFFFFu;
+  SPG_F void init(uint32_t key0, uint32_t key1, uint32_t particle, uint32_t childId, uint32_t lineHi = 0u) {
+    k0 = key0; k1 = key1; part = particle; child = childId; lin = lineHi; n = 0; blk = 0xFFFFFFFFu;
   }
+  SPG_F uint64_t lineage() const { return ((uint64_t)lin << 32) | child; }
   // a float in [0, 1), 24 bits (GetRandValue, sppsTypes.cpp:19-22, returns a float too)
   SPG_F float next() {
     uint32_t want = n >> 2;
-    if (want != blk) { philox4x32_10(part, child, want, 0u, k0, k1, b); blk = want; }
+    if (want != blk) { philox4x32_10(part, child, want, lin, k0, k1, b); blk = want; }
     uint32_t lane = n & 3u, v;
     if (lane == 0) v = b[0]; else if (lane == 1) v = b[1]; else if (lane == 2) v = b[2]; else v = b[3];
     n++;
@@ -263,6 +280,7 @@ struct Scene {
 
 struct Particle {
   V3 pos, dir, colPos;
+  uint32_t kids;        // transmitted children made so far: the next child's ordinal - 1
   double E, eps;
   float elapsed;
   int idface, tetra, step, state, src;
@@ -368,7 +386,12 @@ SPG_F bool raySphere(V3 p1, V3 p2, V3 sc, double r, double* mu1, double* mu2) {
 // ---------------------------------------------------------------------------------------------
 // The walk. Acc receives the sums, Rec the particle-file events (a no-op outside the host re-trace).
 
-constexpr int QCAP = 16;   // transmitted children waiting per thread; overflow is counted, never silent
+// Transmitted children waiting in a thread's own queue (the fast path). A child that does not fit
+// goes to the accumulator's spill: on the GPU the global pool, from which any slot takes it as a new
+// family (main.cu); on the host an unbounded FIFO behind the queue, so the order is SPPS's
+// (sppsNantes.cpp:148-155). Only a spill that is refused (the GPU pool full) loses a child, counted
+// by childOverflow, and the run then fails (child_pool_overflow).
+constexpr int QCAP = 16;
 
 #if defined(__CUDACC__)
 #pragma nv_exec_check_disable
@@ -380,10 +403,8 @@ struct Walker {
   Rec& rec;
   Particle* q;          // the child queue, QCAP particles, storage owned by the caller
   int qh, qn;
-  uint32_t nextChild;
-  uint32_t partIndex;
 
-  SPG_HD Walker(const Scene& sc, Acc& a, Rec& r, Particle* queue) : s(sc), acc(a), rec(r), q(queue), qh(0), qn(0), nextChild(1), partIndex(0) {}
+  SPG_HD Walker(const Scene& sc, Acc& a, Rec& r, Particle* queue) : s(sc), acc(a), rec(r), q(queue), qh(0), qn(0) {}
 
   // CalculationCore.cpp:9-12 TetraFaceTest
   SPG_HD bool faceTest(int T, int f, V3 pos, V3 dir, float* t) {
@@ -525,7 +546,10 @@ struct Walker {
     }
   }
   SPG_HD void pushChild(const Particle& c) {
-    if (qn >= QCAP) { acc.childOverflow(c.E); return; }
+    if (qn >= QCAP || acc.spillWaiting()) {
+      if (!acc.spill(c)) acc.childOverflow(c.E);
+      return;
+    }
     q[(qh + qn) % QCAP] = c;
     qn++;
   }
@@ -574,7 +598,9 @@ struct Walker {
               if (m.dotransmission && m.tau != 0 && p.E * m.tau > p.eps && s.transCalc) {
                 Particle c = p;
                 c.E *= m.tau;
-                c.rng.init(p.rng.k0, p.rng.k1, partIndex, nextChild++);
+                uint64_t L = childLineage(p.rng.lineage(), ++p.kids);
+                c.rng.init(p.rng.k0, p.rng.k1, p.rng.part, (uint32_t)L, (uint32_t)(L >> 32));
+                c.kids = 0;
                 traverse(c);
                 if (c.E > c.eps) pushChild(c);
               }
@@ -667,6 +693,8 @@ struct Walker {
     c = q[qh];
     qh = (qh + 1) % QCAP;
     qn--;
+    Particle w;   // host: the oldest spilled child takes the freed place, keeping one FIFO
+    if (acc.unspill(w)) { q[(qh + qn) % QCAP] = w; qn++; }
     return true;
   }
   // sppsNantes.cpp:97-140: a source's particle, its direction drawn (the family's child queue emptied)
@@ -684,8 +712,7 @@ struct Walker {
     p.idface = -1;
     p.colPos = mk(0, 0, 0);
     p.rng.init(s.seed, (s.band << 16) | (uint32_t)src, idpart, 0u);
-    partIndex = idpart;
-    nextChild = 1;
+    p.kids = 0;
     qh = 0; qn = 0;
     float n = sb.norm;
     // dotdistribution.cpp: phi then z for the sphere; one angle for the planes
