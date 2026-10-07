@@ -578,11 +578,27 @@ int main(int argc, char** argv) {
       if (children) {
         size_t freeP = 0, totP = 0;
         cudaMemGetInfo(&freeP, &totP);
+        // the bed's stand-in for a busy device: under WDDM another process's allocation can be paged
+        // out, so a program holding memory does not lower what this one reads (A6, gpu_memory_low)
+        if (const char* fb = getenv("SPPS_GPU_FREE_BYTES")) freeP = std::min<size_t>(freeP, (size_t)std::max(0LL, atoll(fb)));
         poolFreeAtSizing = freeP;
+        const size_t entry = sizeof(Particle);
         size_t want = std::max<size_t>(1u << 22, 64ull * (size_t)std::max<long long>(1, totalFamilies));
-        poolCap = std::min(want, freeP / 4 / sizeof(Particle));
-        if (const char* pc = getenv("SPPS_GPU_POOL_CAP")) poolCap = (size_t)std::max(1LL, atoll(pc));
-        check(cudaMalloc(&dPool, poolCap * sizeof(Particle)), "pool");
+        poolCap = std::min(want, freeP / 4 / entry);
+        // the floor: two full queues a slot (the peaks measured in A6 stayed near one, 49,152 x 16);
+        // below it the run would only end later in child_pool_overflow, so it is refused now
+        size_t floorCap = 2ull * (size_t)nslots * QCAP;
+        if (const char* pc = getenv("SPPS_GPU_POOL_CAP")) {
+          // the bed's override, clamped to half the free memory so a large value cannot fail the allocation
+          poolCap = std::min<size_t>((size_t)std::max(1LL, atoll(pc)), std::max<size_t>(1, freeP / 2 / entry));
+        } else if (poolCap < floorCap) {
+          std::cerr << "spps-gpu: refused: gpu_memory_low: this project's transmitting surfaces need a child pool of at least " << floorCap
+                    << " particles (" << floorCap * entry / 1048576 << " MiB) on the GPU, and " << freeP / 1048576 << " MiB of its "
+                    << totP / 1048576 << " MiB are free (a quarter may be used: " << freeP / 4 / 1048576
+                    << " MiB); close programs using the GPU, or run SPPS on the CPU" << std::endl;
+          return 2;
+        }
+        check(cudaMalloc(&dPool, poolCap * entry), "pool");
       }
       check(cudaMalloc(&dPoolCtl, 16), "poolctl");
       ga.pool = dPool; ga.poolCtl = dPoolCtl; ga.poolCap = poolCap;
