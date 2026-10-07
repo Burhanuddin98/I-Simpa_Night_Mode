@@ -15,9 +15,11 @@
 // out when their rows are shorter than a line (`labelEvery`), so 27 third-octave bands read.
 //
 // What response.ts decides is drawn and printed here, with the tab's DOM contract: every number
-// of the report a `[data-num][data-json]` path (band labels, time ticks, the emission), every
-// name a `[data-str]`, the colour bar's span `[data-label="span"]`; the readout's numbers are
-// derived from the map, marked `[data-label="readout"]`. No canvas (M10 PLAN rule 3): the map is a
+// of the report a `[data-num][data-json]` path (band labels, time ticks, the emission, the time
+// bins' widths), every name a `[data-str]`, the colour bar's span `[data-label="span"]`, the span
+// chips the window's own choices `[data-label="control"]`; the readout's numbers are derived from
+// the map, marked `[data-label="readout"]`; the pickers' options are checked on their own, as the
+// tab's are (m12.response.e2e.ts resp-numbers). No canvas (M10 PLAN rule 3): the map is a
 // PNG of one pixel per bin (`mapPixels`, png.ts), scaled up by CSS, so a pixel decoded from it is
 // the bin's colour; the strip and its marks are SVG, the colour bar a CSS gradient of the stops.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -185,6 +187,12 @@ export function ResponseWindow({
   const v = useMemo(() => responseView(report, receiver, source, bin, span), [report, receiver, source, bin, span]);
   const stepS = report.spps?.time_step_s ?? 0;
   const stepMs = stepS * 1000;
+  // A time bin's width, the report's time step times the steps per column, in ms: a number of the
+  // report (`[data-num]`, m12.response's resp-numbers), at the decimals it needs (up to 3).
+  const binNum = (b: number) => {
+    const text = String(+(stepMs * b).toFixed(3));
+    return { path: 'spps.time_step_s', digits: (text.split('.')[1] ?? '').length, scale: 1000 * b, text };
+  };
   const cols = v ? v.map.db[0].length : 1;
   // The range: a preset ("Fit energy" where the map has a crop, else the full run; "Full run" on
   // the toggle), or the user's zoom. The preset holds across receivers, sources, bins and spans;
@@ -424,7 +432,7 @@ export function ResponseWindow({
               title={b === 1 ? 'Every time step of the run' : `${b} time steps summed per column: smoother, less detail in the early reflections`}
               onClick={() => setBin(b)}
             >
-              {`${+(stepMs * b).toFixed(3)} ms`}
+              <N n={binNum(b)} unit="ms" />
             </button>
           ))}
         </div>
@@ -432,7 +440,7 @@ export function ResponseWindow({
           <span className="rw-bins-label">Span</span>
           {SPANS.map((s) => (
             <button key={s} type="button" role="radio" aria-checked={span === s} aria-selected={span === s} data-span={s} title={`Colours and the strip run ${s} dB below the maximum`} onClick={() => setSpan(s)}>
-              {`${s} dB`}
+              <span data-label="control">{`${s} dB`}</span>
             </button>
           ))}
         </div>
