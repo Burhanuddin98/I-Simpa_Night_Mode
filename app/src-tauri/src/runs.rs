@@ -818,8 +818,10 @@ pub fn solvers_status(cache: &Mutex<SolversCache>) -> CmdResult<SolversStatus> {
     Ok(SolversStatus { checks, blockers })
 }
 
-/// The probe's answer for this app session, and the executable it found: asked once, then kept
-/// (`spps-gpu --probe` starts the CUDA runtime, which need not be paid on every Simulate step).
+/// The probe's answer for this app session, and the executable it found, once it found a device:
+/// kept, since `spps-gpu --probe` starts the CUDA runtime, which need not be paid on every Simulate
+/// step. A failure is never kept: a transient one, or a driver installed since, is probed again on
+/// the next ask.
 #[derive(Default)]
 pub struct GpuCache {
     probed: Option<(GpuStatus, Option<PathBuf>)>,
@@ -847,18 +849,33 @@ pub fn probe_status(search: &ExeSearch, manifest: &SolverManifest) -> (GpuStatus
     }
 }
 
-/// SPPS on the GPU here, probed once per app session (the first call runs the probe, with its
-/// timeout, holding the cache's lock; later calls answer from it).
+/// SPPS on the GPU here: the kept answer once a device was found, else a fresh probe (with its
+/// timeout and its kill on timeout, holding the cache's lock).
 pub fn spps_gpu_status(cache: &Mutex<GpuCache>) -> CmdResult<GpuStatus> {
     Ok(probed(cache)?.0)
 }
 
 fn probed(cache: &Mutex<GpuCache>) -> CmdResult<(GpuStatus, Option<PathBuf>)> {
+    probed_with(cache, &mut || {
+        Ok(probe_status(&ExeSearch::from_env(None), &manifest()?))
+    })
+}
+
+/// [`probed`] with the probe given: a success is kept, a failure is returned and asked again next
+/// time.
+fn probed_with(
+    cache: &Mutex<GpuCache>,
+    probe: &mut dyn FnMut() -> CmdResult<(GpuStatus, Option<PathBuf>)>,
+) -> CmdResult<(GpuStatus, Option<PathBuf>)> {
     let mut c = lock(cache, "gpu")?;
-    if c.probed.is_none() {
-        c.probed = Some(probe_status(&ExeSearch::from_env(None), &manifest()?));
+    if let Some(kept) = &c.probed {
+        return Ok(kept.clone());
     }
-    Ok(c.probed.clone().expect("probed above"))
+    let got = probe()?;
+    if got.0.available {
+        c.probed = Some(got.clone());
+    }
+    Ok(got)
 }
 
 // ---- the run slot and the run thread ----------------------------------------------------------------
@@ -1395,6 +1412,41 @@ mod tests {
             spps_device(Some("cuda")).unwrap_err().code,
             "DEVICE_UNKNOWN"
         );
+    }
+
+    /// A5 audit fix 2: a failed probe is asked again on the next call (a transient failure, a
+    /// driver installed since); the first success is kept and the probe is not run again.
+    #[test]
+    fn a5_a_failed_probe_is_asked_again_and_a_success_is_kept() {
+        let cache = Mutex::new(GpuCache::default());
+        let mut calls = 0;
+        let mut answers = vec![
+            (true, "RTX"),
+            (false, "no CUDA device (--probe exited 1)"),
+            (false, "did not answer within 5 s"),
+        ];
+        let mut probe = || {
+            calls += 1;
+            let (ok, text) = answers.pop().expect("asked more often than answered");
+            Ok((
+                GpuStatus {
+                    available: ok,
+                    device: ok.then(|| text.to_string()),
+                    reason: (!ok).then(|| text.to_string()),
+                },
+                ok.then(|| PathBuf::from("spps-gpu.exe")),
+            ))
+        };
+        let a = probed_with(&cache, &mut probe).unwrap();
+        assert!(!a.0.available && a.0.reason.as_deref() == Some("did not answer within 5 s"));
+        let b = probed_with(&cache, &mut probe).unwrap();
+        assert!(!b.0.available, "{b:?}");
+        let c = probed_with(&cache, &mut probe).unwrap();
+        assert_eq!(c.0.device.as_deref(), Some("RTX"));
+        let d = probed_with(&cache, &mut probe).unwrap();
+        assert_eq!(d, c);
+        drop(probe);
+        assert_eq!(calls, 3, "two failures asked again, the success kept");
     }
 
     #[test]
