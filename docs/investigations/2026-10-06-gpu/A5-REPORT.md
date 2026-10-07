@@ -216,3 +216,91 @@ Run with `CARGO_TARGET_DIR=C:\tmp\nm-target-a5` and `SIMPA_SOLVERS_DIR=C:\tmp\nm
 `f41cdda` the core, the CLI, the manifest pin and the app backend · `855e8cf` the UI · `bba993a` the ACL
 and the bed driver · `30547cf` decision 70 and the contract's words · `f30a4d9` the test fixes and the CLI `--device` test ·
 the report commit (this file).
+
+## Fixes after audit (2026-10-07 09:47-09:59)
+
+The audit's verdict on `75e63ab..f1fe2d0` was SHIP-WITH-FIXES, with four fixes, plus a fifth from the
+coordinator. Each fix is its own commit on `a5`.
+
+1. **False GPU label** (`d2d10ba`). If `SPPS_GPU_BACKEND` was set in the environment, a GPU run inherited
+   it, so `spps-gpu.exe` could trace on its CPU walk while `run.json` recorded the GPU's device.
+   `process::Spec` gains `env_remove`, and the run manager's `solver_spec` names `SPPS_GPU_BACKEND` for
+   runs on the GPU only. The probe drops the variable too. Tests:
+   - `run::manager::spec_tests::a_gpu_run_does_not_inherit_the_backend_switch`: the GPU spec carries the
+     variable in `env_remove`; the CPU spec, and TCR given a device line, do not.
+   - `process_job::a_removed_variable_does_not_reach_the_child`: a variable set in the parent reaches
+     `cmd.exe` as `[present]`, and is gone once removed.
+   - `run_manager` 5/5, `process_job` 18/18 (2 ignored), `run_locate` 14/14, `run_solvers` 6/6.
+2. **Probe cache** (`68db4b5`, UI half `b94d89b`). Only a found device is kept for the session. A failure
+   is probed again on the next ask, still with the 5 s cancel timer and its kill. The Simulate step asks
+   again each time it is shown while no device was found, and the Console logs only when the answer
+   changes. Test: `runs::tests::a5_a_failed_probe_is_asked_again_and_a_success_is_kept`: two failures
+   are probed twice, then the success is kept, 3 probes for 4 asks.
+3. **Labels** (`9f85cde`, solver source `3631e91`).
+   - The Runs tab's solver column reads "SPPS on the GPU" (the device in its tooltip). It goes by the
+     run's `gpu_device`, or by the active run's device before its `run.json` exists. The column is
+     120 px wide.
+   - The status bar reads "Solvers: I-Simpa 1.4.0 · SPPS, TCR · SPPS on the GPU" once the probe found a
+     device.
+   - spps-gpu's refusals are now plain words, for example "fittings_unsupported: SPPS on the GPU does not
+     support fittings in this version; run SPPS on the CPU, or turn fittings off". Stratified air, the
+     balloon and `no_cuda_device` are reworded the same way. The version string is 0.1.1.
+   - **spps-gpu is rebuilt and re-pinned.** Only those strings changed in the source; the walk did not.
+     The fat build is at `C:\tmp\nm-solvers-a5\build-fat\spps-gpu.exe`, source commit `3631e91`, sha256
+     `2401ae86...15ebf80`, code sha256 `03a22c1d...7ced495`. The manifest's `spps_gpu` record names the
+     new commit, tree, build command and log. The 09:02 build is kept as
+     `C:\tmp\nm-solvers-a5\spps-gpu-0902-superseded.exe.bak`. Runs made before 09:51 record the old hash,
+     and their recorded checks still read verified.
+   - **Receipt, CLI:** CR4 on the GPU with the new build, run `.out\a5\cr4-1k\runs\20261007-095324-597-spps`,
+     OK, 1.198 s. 38 of its 40 output files are byte-identical to the 09:17 run, every point receiver
+     among them. The two cut-plane `.csbin` differ run to run under float atomics, as two runs of the old
+     build also do (`app-cr4` runs 1 and 2: Global `rs_cut.csbin` 1d1c89f7... against c0b11217...).
+   - **Receipt, CLI refusal:** `.out\a5\refusal\runs\20261007-095324-333-spps` prints the new text.
+   - **Receipt, app:** app rebuilt 09:55. Re-bed at 09:56 (`.out\a5\app-bed.json`, the pre-audit receipts
+     are in `pre-audit-0928\`): Run 3 on the GPU is OK and Verified. The Runs tab reads "SPPS on the GPU"
+     on all three runs, with the device in the tooltip, and the status bar matches the text above
+     (`a5-runs-tab.png`). The refusal shows the new words (`a5-refusal.png`).
+   - Tests: `dock/model.test.ts` covers `solverLabel(…, onGpu)`. The `run_verdict` and
+     `run_contract_docs` samples carry the new text (30/30, 4/4); `gpu_probe --ignored` 1/1 on the new
+     build.
+4. **The bed and the manifest** (`30f8741`). Nothing committed changed with the manifest:
+   - `beds/m8a-20260929T093134Z/report.json` records `solver_manifest_sha256` `d159c9dc…`, the 09-29
+     manifest. That pin was already superseded on 10-06 (patch 0002 moved it to `5cf2d2b4…`) before A5
+     touched it, and no test holds a committed report to the current manifest.
+   - **The bed need not cover spps-gpu.** `SOLVER_EXES` stays at the four the M8a bed runs and E1
+     checks. spps-gpu is not an M8a arm: by PLAN's rule a GPU run stands in for no SPPS run until A4, its
+     own bed, passes. Adding it to `SOLVER_EXES` would also make E1 and the app's `solvers_status` demand
+     it on every machine, those without CUDA included.
+   - New test `bed::pe::tests::the_embedded_manifest_pins_the_bed_four_and_spps_gpu_only`: the
+     manifest's `sha256` and `code_sha256` keys are exactly `SOLVER_EXES` plus `spps-gpu.exe`, so a sixth
+     row fails until it is decided.
+5. **The coarser-bin map test** (`7be3c4b`, then `b18e3a7`).
+   - The test's own body was wrong: it took the face offsets at `HEADER + 16·nf`, skipping SMAP's node
+     positions (12 bytes a node). It now reads `nn` from the header and adds `12·nn`. The cutting-plane
+     loop after it reads only header fields, so it had no such mistake.
+   - With that fixed, the binning code passes; **no binning failure**.
+   - Once that test ran to its end, its extra loads exposed `a_run_is_loaded_once_and_again_when_its_manifest_changes`.
+     That test failed 3 times in 3 full `cargo test -p app` runs and passed alone, at "the second open is
+     the first's results". Every test in the process shares the results cache's bound of 4, so other
+     tests' loads evicted the run it opens twice. Unit-test builds now get a bound of 64; the app's stays 4
+     (`cfg!(test)`). Afterwards `cargo test -p app` passed **88/88 five times in five**.
+
+**Test counts after the fixes:**
+
+| suite | passed | ignored |
+|---|---|---|
+| `cargo test -p app` | 88/88 | - |
+| `cargo test -p simpa-core --lib` | 313 | 1 |
+| `cli_run` | 22/22 | - |
+| `cli_mesh` | 10/10 | - |
+| `run_folder_fixtures` | 3/3 | - |
+| `npm test` | 330/330 | - |
+
+`npm run typecheck` is clean.
+
+**Untested, still:**
+- Zeph.
+- The app on a machine with no CUDA. A probe failing and then succeeding in the real app is covered
+  only by the unit test.
+- The m10/m11/m12 e2e gates, against the new Runs-tab width and status-bar text.
+- A run of `spps-gpu --cpu` from the app (not offered).
