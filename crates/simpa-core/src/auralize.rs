@@ -641,10 +641,10 @@ pub fn moving_sum(x: &[f64], w: usize) -> Vec<f64> {
 }
 
 /// Each of `xs` through its band's filter of `filters` (zero-phase, two bands to a transform),
-/// padded by at least a quarter second so a filter's ringing does not wrap.
+/// padded to twice the length, so a filter's ringing (its acausal half too, at the low bands\n/// several hundred ms) never wraps round into the response's end.
 fn band_limit(xs: &[Vec<f64>], filters: &Filters, rate: u32) -> Vec<Vec<f64>> {
     let n = xs.first().map_or(0, Vec::len);
-    let nfft = next_pow2(n + rate as usize / 4);
+    let nfft = next_pow2(2 * n);
     let df = f64::from(rate) / nfft as f64;
     let nb = xs.len();
     let mut out = vec![Vec::new(); nb];
