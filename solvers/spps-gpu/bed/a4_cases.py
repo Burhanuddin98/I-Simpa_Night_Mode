@@ -16,6 +16,10 @@ Cases (octave bands 500 and 1000 Hz; walls, floor and ceiling one material):
              particle follows one deterministic path, so the energies are exact (no RNG).
   onesided   panel alpha 0.2, no transmission, single-sided (side_material 0); one source in each
              room; walls and panel diffuse; echograms per source.
+  beam-a1    the beam with the trans-a1 panel (alpha 1, TL 10 / 20 dB): the parent itself passes.
+  beam-onesided  the onesided panel and walls, specular, air absorption off: a unidirectional source
+             in room 1 aimed +y (at the panel's reflecting side) and one in room 2 aimed -y (at its
+             passing side), receivers on the beam axis.
 Random (particle) mode is the trans case staged with computation_method=0.
 
 usage: python a4_cases.py <out-dir>      writes <case>.simpa for each case
@@ -100,21 +104,25 @@ BEAM_RX = [("B1a", (BEAM_X, 0.6, BEAM_Z)), ("B1b", (BEAM_X, 3.3, BEAM_Z)), ("B2a
 
 
 def project(case):
-    lambert = case != "beam"
+    lambert = case not in ("beam", "beam-onesided", "beam-a1")
     sc = [1.0, 1.0] if lambert else [0.0, 0.0]
     law = "lambert" if lambert else "specular"
     wall = material("wall", [0.2, 0.2], sc, law, None, True, 31)
     if case in ("trans", "beam"):
         panel = material("panel", [0.3, 0.3], sc, law, [10.0, 20.0], True, 32)
-    elif case == "trans-a1":
+    elif case in ("trans-a1", "beam-a1"):
         panel = material("panel", [1.0, 1.0], [0.0, 0.0], "specular", [10.0, 20.0], True, 32)
-    elif case == "onesided":
+    elif case in ("onesided", "beam-onesided"):
         panel = material("panel", [0.2, 0.2], sc, law, None, False, 32)
     else:
         sys.exit(f"unknown case {case}")
     groups = [{"id": G[k], "name": k, "material": (panel if k == "panel" else wall)["id"]} for k in G]
-    if case == "beam":
+    if case in ("beam", "beam-a1"):
         sources = [source("S1", (BEAM_X, 1.6, BEAM_Z), 901, {"kind": "unidirectional", "direction": [0.0, 1.0, 0.0]})]
+        rx = BEAM_RX
+    elif case == "beam-onesided":
+        sources = [source("Srefl", (BEAM_X, 1.6, BEAM_Z), 901, {"kind": "unidirectional", "direction": [0.0, 1.0, 0.0]}),
+                   source("Spass", (BEAM_X, 8.0, BEAM_Z), 902, {"kind": "unidirectional", "direction": [0.0, -1.0, 0.0]})]
         rx = BEAM_RX
     elif case == "onesided":
         sources = [source("Srefl", (2.1, 1.4, 1.45), 901), source("Spass", (3.0, 7.4, 1.60), 902)]
@@ -139,7 +147,7 @@ def project(case):
                         "celerity_gradient_log": 0.0, "celerity_gradient_lin": 0.0},
         "solvers": {
             "spps": {"particles_per_source": 2000, "particles_saved": 0, "duration_s": 3.0, "time_step_s": 0.001,
-                     "random_seed": 1, "method": "energetic", "air_absorption": case != "beam", "fittings": True,
+                     "random_seed": 1, "method": "energetic", "air_absorption": not case.startswith("beam"), "fittings": True,
                      "direct_field_only": False, "transmission": True, "extinction_exponent": 7.0,
                      "receiver_radius_m": 0.31, "sound_map": "intensity", "sound_maps_per_band": True,
                      "echogram_per_source": True, "save_surface_intersections": False,
@@ -156,7 +164,7 @@ if __name__ == "__main__":
         sys.exit(__doc__)
     out = sys.argv[1]
     os.makedirs(out, exist_ok=True)
-    for case in ("trans", "trans-a1", "beam", "onesided"):
+    for case in ("trans", "trans-a1", "beam", "onesided", "beam-onesided", "beam-a1"):
         p = os.path.join(out, case + ".simpa")
         with open(p, "w", encoding="utf-8") as fh:
             json.dump(project(case), fh, indent=1)

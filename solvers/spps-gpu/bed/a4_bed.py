@@ -35,6 +35,8 @@ CASES = {
     "trans-random": ("trans", {"nbparticules": "200000", "computation_method": "0"}),
     "trans-a1": ("trans-a1", {"nbparticules": "200000"}),
     "beam": ("beam", {"nbparticules": "2000"}),
+    "beam-onesided": ("beam-onesided", {"nbparticules": "2000"}),
+    "beam-a1": ("beam-a1", {"nbparticules": "2000"}),
     "onesided": ("onesided", {"nbparticules": "200000"}),
     "onesided-random": ("onesided", {"nbparticules": "200000", "computation_method": "0"}),
 }
