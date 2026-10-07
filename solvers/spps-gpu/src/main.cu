@@ -228,7 +228,35 @@ static inline void kahan(double& sum, double& comp, double x) {
   comp = (t - sum) - y;
   sum = t;
 }
-struct CpuAcc {
+// The host's spill (CpuAcc, NullAcc): unbounded, as SPPS's std::list (CalculationCore.h:33), drained
+// FIFO behind the walker's queue
+struct HostSpill {
+  std::deque<Particle> spilled;
+  __host__ __device__ bool spillWaiting() const {
+#ifndef __CUDA_ARCH__
+    return !spilled.empty();
+#else
+    return false;
+#endif
+  }
+  __host__ __device__ bool spill(const Particle& c) {
+#ifndef __CUDA_ARCH__
+    spilled.push_back(c);
+#endif
+    return true;
+  }
+  __host__ __device__ bool unspill(Particle& c) {
+#ifndef __CUDA_ARCH__
+    if (spilled.empty()) return false;
+    c = spilled.front();
+    spilled.pop_front();
+    return true;
+#else
+    return false;
+#endif
+  }
+};
+struct CpuAcc : HostSpill {
   std::vector<double> total, rpE, rpLf, rpLfc, rpI, rpSrc;
   std::vector<double> cTotal, cE, cLf, cLfc, cI, cSrc;   // compensations
   float *surf = nullptr, *cut = nullptr;
@@ -270,64 +298,15 @@ struct CpuAcc {
     states[6]++; overflowE += e;
 #endif
   }
-  // the host's spill: unbounded, as SPPS's std::list (CalculationCore.h:33), drained FIFO behind the queue
-  std::deque<Particle> spilled;
-  __host__ __device__ bool spillWaiting() const {
-#ifndef __CUDA_ARCH__
-    return !spilled.empty();
-#else
-    return false;
-#endif
-  }
-  __host__ __device__ bool spill(const Particle& c) {
-#ifndef __CUDA_ARCH__
-    spilled.push_back(c);
-#endif
-    return true;
-  }
-  __host__ __device__ bool unspill(Particle& c) {
-#ifndef __CUDA_ARCH__
-    if (spilled.empty()) return false;
-    c = spilled.front();
-    spilled.pop_front();
-    return true;
-#else
-    return false;
-#endif
-  }
 };
 // No sums: the host re-trace of the particles SPPS writes to its particle file
-struct NullAcc {
+struct NullAcc : HostSpill {
   __host__ __device__ void addTotal(int, double) {}
   __host__ __device__ void addRp(int, int, int, double, double, double, double, double, double) {}
   __host__ __device__ void addSurf(int, int, double) {}
   __host__ __device__ void addCut(long long, double) {}
   __host__ __device__ void stat(int) {}
   __host__ __device__ void childOverflow(double) {}
-  std::deque<Particle> spilled;   // as CpuAcc's
-  __host__ __device__ bool spillWaiting() const {
-#ifndef __CUDA_ARCH__
-    return !spilled.empty();
-#else
-    return false;
-#endif
-  }
-  __host__ __device__ bool spill(const Particle& c) {
-#ifndef __CUDA_ARCH__
-    spilled.push_back(c);
-#endif
-    return true;
-  }
-  __host__ __device__ bool unspill(Particle& c) {
-#ifndef __CUDA_ARCH__
-    if (spilled.empty()) return false;
-    c = spilled.front();
-    spilled.pop_front();
-    return true;
-#else
-    return false;
-#endif
-  }
 };
 struct HostRec {
   ParticleFiles* pf;
