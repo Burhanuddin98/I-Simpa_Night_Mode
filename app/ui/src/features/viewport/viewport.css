@@ -283,10 +283,12 @@
   position: absolute;
   top: 52px;
   left: 12px;
-  /* Its right edge stays left of the bottom dock (364 px), and its foot above the plan inset
-     (about 160 px tall at the bottom left): a taller panel scrolls instead of covering either. */
+  /* Its right edge stays left of the bottom dock (364 px), and its foot 214 px above the view's
+     bottom: above the plan inset (about 160 px tall at the bottom left) and above the legend the
+     dock's bottom row places right of the inset (up to about 190 px tall with every note on; C3
+     2026-10-07). A taller panel scrolls instead of covering either. */
   box-sizing: border-box;
-  max-height: calc(100% - 52px - 184px);
+  max-height: calc(100% - 52px - 214px);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -371,8 +373,13 @@
   font-size: 12px;
   color: var(--text-3);
 }
+/* Never wider than its row: a long title (cumulative, fixed range) wraps instead of running under
+   the tools (W9's layout check, C3 2026-10-07). */
 .vp-legend {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -404,12 +411,18 @@
   min-width: 220px;
 }
 /* The bottom of the view (W5's overlap fixed, wow W2/W3/W9 PLAN.md): the probe, the "no particles"
-   notice, the legend and the timeline in one dock, in flow, so none covers another. It starts
-   right of the map panel's widest (12 + 340 px) and ends left of the axis gizmo; the plan inset
-   (left, bottom) and the map panel (left, top) are outside its columns. */
+   notice, the legend and the timeline in one dock, in flow, so none covers another. It ends left
+   of the tools and the axis gizmo (84 px). Its rows start right of the map panel's widest
+   (12 + 340 + 12 = 364 px), which the map panel (left, top) never crosses.
+   The bottom row, the legend beside the timeline, starts further left, right of the plan inset
+   (12 + 202 + 8 = 222 px), below the map panel's foot (its max-height keeps it 214 px above the
+   view's bottom): a short legend fits there, and one column of all four cards no longer fits a
+   1440 x 900 window since the timeline grew (Particles, Glow; C3 2026-10-07, the probe's title
+   was pushed above the view). Where that row is too narrow for both cards side by side, every
+   row keeps to the 364 px column, as before. */
 .vp-dock {
   position: absolute;
-  left: 364px;
+  left: 222px;
   right: 84px;
   bottom: 12px;
   display: flex;
@@ -417,12 +430,23 @@
   justify-content: flex-end;
   gap: 8px;
   pointer-events: none;
+  container: vp-dock / inline-size;
 }
 .vp-dock-row {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 8px;
+  margin-left: 142px;
+}
+@container vp-dock (min-width: 470px) {
+  .vp-dock-row:last-child:has(> .vp-legend) {
+    flex-wrap: nowrap;
+    margin-left: 0;
+  }
+  .vp-dock-row:last-child > .vp-legend {
+    flex: 0 0 226px;
+  }
 }
 .vp-dock-row:empty {
   display: none;
