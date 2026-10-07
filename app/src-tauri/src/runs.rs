@@ -1292,6 +1292,7 @@ where
     let mut live = live;
     let live_stop = Arc::new(AtomicBool::new(false));
     let mut tail: Option<std::thread::JoinHandle<live::TailStats>> = None;
+    let mut stream: Option<PathBuf> = None;
     let batcher: Batcher<RunStreamEvent> =
         Batcher::spawn(BATCH_PERIOD, move |batch, events, last| {
             channel
@@ -1310,7 +1311,11 @@ where
             if let RunEvent::Started(dir) = e {
                 run_dir = Some(dir.to_path_buf());
                 if let Some(sink) = live.take() {
-                    tail = live::spawn_tail(live::stream_path(dir), live::POLL, live_stop.clone(), sink).ok();
+                    let path = live::stream_path(dir);
+                    // a stream already there is not this run's (the solver has not started yet)
+                    live::remove_stream(&path);
+                    tail = live::spawn_tail(path.clone(), live::POLL, live_stop.clone(), sink).ok();
+                    stream = Some(path);
                 }
                 let name = dir.file_name().map(|n| n.to_string_lossy().into_owned());
                 if let Ok(mut s) = slot.lock()
@@ -1327,6 +1332,11 @@ where
     live_stop.store(true, Ordering::SeqCst);
     if let Some(t) = tail {
         let _ = t.join();
+    }
+    // The solver removes its stream at a normal end; a cancelled or crashed one cannot, so the app
+    // removes it once the tail has stopped, unless the stream was asked to be kept.
+    if let Some(path) = stream {
+        live::remove_stream(&path);
     }
     finished.store(true, Ordering::SeqCst);
     if let Ok(mut s) = slot.lock()
@@ -1871,6 +1881,9 @@ mod tests {
             })),
         };
         let stream = solve.join(live::STREAM_FILE);
+        std::fs::write(solve.join("config.xml"), b"<keep me/>").unwrap();
+        // a stale stream from before the run: removed at `started`, before the solver writes its own
+        std::fs::write(&stream, b"stale").unwrap();
         run_thread(job, |_, on| {
             on(&RunEvent::Started(&run_dir));
             // the solver: a header, then one frame a poll apart, then a torn frame it never finishes
@@ -1909,6 +1922,8 @@ mod tests {
             .map(|b| u32::from_le_bytes(b[live::LIVE_HEADER + 8..live::LIVE_HEADER + 12].try_into().unwrap()))
             .sum();
         assert_eq!(particles, 2, "both whole frames arrived, the torn one did not");
+        assert!(!stream.exists(), "the stream the fake solver left is removed once the tail stopped");
+        assert_eq!(std::fs::read(solve.join("config.xml")).unwrap(), b"<keep me/>", "the run's other files are untouched");
         assert_eq!(u32::from_le_bytes(got.last().unwrap()[8..12].try_into().unwrap()), 2);
         std::fs::remove_dir_all(&dir).unwrap();
     }

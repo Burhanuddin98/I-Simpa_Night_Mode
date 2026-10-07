@@ -235,6 +235,20 @@ pub fn stream_path(run_dir: &Path) -> PathBuf {
     run_dir.join(simpa_core::run::manager::SOLVE_DIR).join(STREAM_FILE)
 }
 
+/// The stream is kept when the solver was asked to keep it (`SPPS_GPU_STREAM=keep` in the
+/// environment the app and its solver share).
+pub fn keep_requested() -> bool {
+    std::env::var("SPPS_GPU_STREAM").is_ok_and(|v| v == "keep")
+}
+
+/// Removes a run's stream file unless it is to be kept; a missing file is not an error, and
+/// nothing else in the folder is touched.
+pub fn remove_stream(path: &Path) {
+    if !keep_requested() {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 /// Reads what `file` grew by since `at`.
 fn read_more(file: &mut File, at: &mut u64) -> std::io::Result<Vec<u8>> {
     file.seek(SeekFrom::Start(*at))?;
