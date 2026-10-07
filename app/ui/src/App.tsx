@@ -54,6 +54,7 @@ async function boot(): Promise<void> {
     // once (the solvers again before each run), and a --project's runs are listed.
     await actions.listenAppEvents();
     actions.fire(actions.refreshSolvers());
+    actions.fire(actions.refreshGpu());
     actions.fire(actions.loadLibrary());
     actions.fire(actions.refreshRuns());
   } catch (e) {

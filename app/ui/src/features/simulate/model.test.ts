@@ -1,12 +1,16 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
-import type { RunRow, RunsView } from '../../bindings/ipc.ts';
+import type { GpuStatus, RunRow, RunsView } from '../../bindings/ipc.ts';
 import type { Environment } from '../../bindings/schema.ts';
 import { joinBlockers, RUN_ACTIVE } from '../../flow.ts';
 import type { ActiveRun } from '../../store.ts';
 import {
   airText,
   bandsText,
+  choiceKey,
+  deviceName,
+  runSolverText,
+  solverChoices,
   elapsedText,
   groupedInt,
   hzText,
@@ -472,4 +476,58 @@ test('adviceRows: no row text trips the m10-h number scanner', () => {
       if (t) assert.ok(!ACOUSTIC_NUMBER_RE.test(t), `${r.key}: ${t}`);
     }
   }
+});
+
+// ---- A5: SPPS on the GPU ----
+
+const LINE = 'NVIDIA GeForce RTX 5070, sm_120, 48 SMs, 11.9 GiB, driver CUDA 13.2, runtime 13.2';
+
+test('A5: the GPU entry names the device when the probe found one', () => {
+  const ok: GpuStatus = { available: true, device: LINE, reason: null };
+  const c = solverChoices(ok);
+  assert.deepEqual(c.map((x) => x.key), ['spps', 'tcr', 'spps-gpu']);
+  const g = c[2];
+  assert.equal(g.disabled, false);
+  assert.equal(g.what, 'NVIDIA GeForce RTX 5070');
+  assert.equal(g.title, LINE);
+  assert.equal(g.solver, 'spps');
+  assert.equal(g.device, 'gpu');
+  assert.equal(deviceName(LINE), 'NVIDIA GeForce RTX 5070');
+  assert.equal(deviceName('no comma'), 'no comma');
+});
+
+test('A5 bed 4: no device (missing exe, exit 1, unverified): the GPU entry is shown disabled with the reason', () => {
+  for (const reason of [
+    'spps-gpu.exe not found; tried C:\\x\\spps-gpu.exe (give its path, or set SIMPA_SOLVERS_DIR to the folder of the solver build)',
+    'no CUDA device: no CUDA-capable device is detected (--probe exited 1)',
+  ]) {
+    const c = solverChoices({ available: false, device: null, reason });
+    assert.equal(c.length, 3, 'never hidden');
+    const g = c[2];
+    assert.equal(g.disabled, true);
+    assert.equal(g.what, 'Unavailable');
+    assert.equal(g.why, reason);
+    assert.equal(g.title, reason);
+  }
+  // Not answered yet: disabled, saying so.
+  const wait = solverChoices(null)[2];
+  assert.equal(wait.disabled, true);
+  assert.equal(wait.what, 'Looking for a CUDA device…');
+  // An answer with no reason still says why.
+  assert.equal(solverChoices({ available: false })[2].why, 'No CUDA device was found.');
+  // Available but with no device line is not available.
+  assert.equal(solverChoices({ available: true, device: null })[2].disabled, true);
+});
+
+test('A5: the choice, the Run label and the run\'s solver text', () => {
+  assert.equal(choiceKey('spps', 'cpu'), 'spps');
+  assert.equal(choiceKey('spps', 'gpu'), 'spps-gpu');
+  assert.equal(choiceKey('tcr', 'gpu'), 'tcr');
+  assert.deepEqual(runLabel(null, 'spps', 'gpu'), [{ text: 'Run SPPS on the GPU' }]);
+  assert.deepEqual(runLabel(null, 'tcr', 'gpu'), [{ text: 'Run TCR' }]);
+  assert.deepEqual(runLabel(null, 'spps'), [{ text: 'Run SPPS' }]);
+  assert.equal(runSolverText('spps', LINE), 'SPPS on the GPU, NVIDIA GeForce RTX 5070');
+  assert.equal(runSolverText('spps', null), 'SPPS');
+  assert.equal(runSolverText('tcr', undefined), 'TCR');
+  assert.equal(runSolverText(undefined, undefined), 'Run');
 });

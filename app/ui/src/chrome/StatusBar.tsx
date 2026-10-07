@@ -8,13 +8,15 @@
 // half up in integers). SPPS prints 4 significant digits, so its raw text below 10 % ("1.667e-05",
 // "0.0006667") would break the progress_pct grammar m11-h proves.
 import { progressDisplay } from '../features/simulate/model';
-import { runStore, sceneStore, statusStore, useStore } from '../store';
+import { gpuStatusStore, runStore, sceneStore, statusStore, useStore } from '../store';
 import { fact, variantName } from './sceneModel';
 
 export function StatusBar() {
   const status = useStore(statusStore);
   const scene = useStore(sceneStore);
   const active = useStore(runStore);
+  // A5: the GPU solver is listed once the session's probe found a device.
+  const gpu = useStore(gpuStatusStore);
   const check = scene?.check ?? null;
   const groups = scene?.info.surface_groups ?? 0;
   const progress = active && active.status !== 'cancelling' ? progressDisplay(active.progressText) : null;
@@ -51,7 +53,9 @@ export function StatusBar() {
         ))}
       {scene && <span data-part="variant">{variantName(scene.view)}</span>}
       <span className="grow" />
-      <span>Solvers: I-Simpa 1.4.0 · SPPS, TCR</span>
+      <span data-part="solvers" title={gpu?.available ? (gpu.device ?? undefined) : undefined}>
+        {`Solvers: I-Simpa 1.4.0 · SPPS, TCR${gpu?.available ? ' · SPPS on the GPU' : ''}`}
+      </span>
       <span>Units: m</span>
     </footer>
   );

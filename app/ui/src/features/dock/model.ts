@@ -205,8 +205,10 @@ export function variantLabel(
   return name(row.variant);
 }
 
-export function solverLabel(solver: string | null | undefined): string {
-  if (solver === 'spps') return 'SPPS';
+/** The Runs tab's solver column: `SPPS`, `SPPS on the GPU` (the run's `gpu_device`, or the
+ * active run's device before its run.json exists), `TCR`. */
+export function solverLabel(solver: string | null | undefined, onGpu = false): string {
+  if (solver === 'spps') return onGpu ? 'SPPS on the GPU' : 'SPPS';
   if (solver === 'tcr') return 'TCR';
   return '—';
 }

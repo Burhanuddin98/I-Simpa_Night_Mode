@@ -31,6 +31,7 @@ const WORDS: Record<string, string> = {
   expected_file_missing: 'A result file the solver should have written is missing.',
   nonfinite_result: 'A result contains values that are not numbers (infinite or undefined).',
   result_unreadable: 'A result file could not be read.',
+  spps_gpu_refused: 'SPPS on the GPU does not run this project; SPPS on the CPU does.',
 
   // Reading a run's results back (simpa-core results).
   results_manifest_missing: "This run's record is missing, so its results cannot be checked.",

@@ -37,6 +37,7 @@ fn run(dir: &Path, solver: SolverKind) -> Run {
         program: exe_for(solver),
         args: vec!["config.xml".into()],
         cwd: dir.to_path_buf(),
+        env_remove: Vec::new(),
     };
     let mut classifier = Classifier::new();
     let mut lines = Vec::new();

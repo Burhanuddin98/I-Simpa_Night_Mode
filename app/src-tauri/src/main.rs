@@ -222,6 +222,7 @@ fn run(args: GuiArgs) -> ExitCode {
         run: Arc::new(Mutex::new(runs::RunSlot::default())),
         ui_events: Arc::new(Mutex::new(None)),
         solvers: Arc::new(Mutex::new(runs::SolversCache::default())),
+        gpu: Arc::new(Mutex::new(runs::GpuCache::default())),
         close: Arc::new(Mutex::new(CloseState::default())),
     };
     let app = tauri::Builder::default()
@@ -272,6 +273,7 @@ fn run(args: GuiArgs) -> ExitCode {
             commands::proj_import,
             commands::material_library,
             commands::solvers_status,
+            commands::spps_gpu_status,
             commands::app_events,
             commands::app_quit,
             commands::export_write,

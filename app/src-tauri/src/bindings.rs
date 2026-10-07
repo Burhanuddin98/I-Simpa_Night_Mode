@@ -19,7 +19,7 @@ use crate::events::{AppEvent, RunEventBatch};
 use crate::guard::CmdError;
 use crate::results_data::{EchogramView, ReportView, RunDataIndex};
 use crate::runs::{
-    LibraryMaterial, ResultsState, RunStarted, RunStreamBatch, RunsView, SolversStatus,
+    GpuStatus, LibraryMaterial, ResultsState, RunStarted, RunStreamBatch, RunsView, SolversStatus,
 };
 use crate::scene::{EditOutcome, SceneState};
 
@@ -113,6 +113,8 @@ fn dumps() -> Vec<Dump> {
                     schema_for!(SolversStatus).to_value(),
                 ),
                 ("app_event", "AppEvent", schema_for!(AppEvent).to_value()),
+                // A5 (decision 70): SPPS on the GPU.
+                ("gpu_status", "GpuStatus", schema_for!(GpuStatus).to_value()),
                 // M12 (docs/investigations/2026-10-03-m12/PLAN.md, P1 item 3).
                 (
                     "report_view",

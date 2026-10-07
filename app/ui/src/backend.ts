@@ -13,6 +13,7 @@ import type {
   EditOutcome,
   EventsProbeReport,
   FloatProbe,
+  GpuStatus,
   LibraryMaterial,
   Prepared,
   ProjectInfo,
@@ -30,7 +31,7 @@ import type {
 } from './bindings/ipc';
 import type { BandKind, Op } from './bindings/schema';
 import { opText } from './ops';
-import { busyStore, type SolverName } from './store';
+import { busyStore, type SolverName, type SppsDevice } from './store';
 
 /** An advice Apply's arguments as JSON text: a finite number or on/off each (the core reads them
  * exactly, as it reads an op). */
@@ -46,6 +47,7 @@ export type {
   ReportView,
   RunDataIndex,
   EditOutcome,
+  GpuStatus,
   LibraryMaterial,
   ProjectInfo,
   ResultsState,
@@ -58,7 +60,7 @@ export type {
   StartupInfo,
 };
 export { Channel };
-export type { SolverName };
+export type { SolverName, SppsDevice };
 
 /** A mesh file's length unit and vertical axis, as `model_import` names them. */
 export type Unit = 'm' | 'cm' | 'mm' | 'ft' | 'in';
@@ -146,14 +148,16 @@ export const backend = {
 
   // M11 (docs/investigations/2026-09-29-m11/PLAN.md 2.10). A run answers at once and reports
   // through `onEvent`; nothing here returns a solver-computed number.
-  runStart: (solver: SolverName, onEvent: Channel<RunStreamBatch>) =>
-    invoke<RunStarted>('run_start', { solver, on_event: onEvent }),
+  runStart: (solver: SolverName, device: SppsDevice, onEvent: Channel<RunStreamBatch>) =>
+    invoke<RunStarted>('run_start', { solver, device, on_event: onEvent }),
   runCancel: () => invoke<boolean>('run_cancel'),
   runsList: () => invoke<RunsView>('runs_list'),
   runResults: (run: string) => invoke<ResultsState>('run_results', { run }),
   projImport: (path: string) => invoke<SceneState>('proj_import', { path }),
   materialLibrary: () => invoke<LibraryMaterial[]>('material_library'),
   solversStatus: () => invoke<SolversStatus>('solvers_status'),
+  /** SPPS on the GPU (decision 70): `spps-gpu --probe`'s answer, run once per app session. */
+  sppsGpuStatus: () => invoke<GpuStatus>('spps_gpu_status'),
   appEvents: (onEvent: Channel<AppEvent>) => invoke<null>('app_events', { on_event: onEvent }),
   appQuit: () => invoke<null>('app_quit'),
 

@@ -8,10 +8,10 @@
 // came. The one number this module shapes is SPPS's progress, which it takes from the `#` line's
 // text by string and integer operations only (`progressDisplay`), never by formatting a float.
 // Settings are inputs, shown inside `[data-input]` exactly as stored (a time step in ms).
-import type { Advice, CheckSummary, ProjectInfo, ReasonUi, ResultsState, RunRow, RunsView, Setting, SolversStatus } from '../../bindings/ipc.ts';
+import type { Advice, CheckSummary, GpuStatus, ProjectInfo, ReasonUi, ResultsState, RunRow, RunsView, Setting, SolversStatus } from '../../bindings/ipc.ts';
 import type { BandSet, Environment, SolverSettings, Variant } from '../../bindings/schema.ts';
 import { RUN_ACTIVE, statusWord } from '../../flow.ts';
-import type { ActiveRun, LinePart, SolverName } from '../../store.ts';
+import type { ActiveRun, LinePart, SolverName, SppsDevice } from '../../store.ts';
 
 /** A number as the schema stores it: finite values as numbers, non-finite ones as strings. */
 type F64 = number | string;
@@ -127,13 +127,78 @@ export function solverLabel(solver: SolverName): string {
   return solver === 'tcr' ? 'TCR' : 'SPPS';
 }
 
+// ---- SPPS on the GPU (decision 70, A5) ------------------------------------------------------------
+
+/** The Simulate step's three solver entries: SPPS on the CPU, SPPS on the GPU, TCR. */
+export type SolverChoiceKey = 'spps' | 'spps-gpu' | 'tcr';
+
+export interface SolverChoice {
+  key: SolverChoiceKey;
+  solver: SolverName;
+  device: SppsDevice;
+  name: string;
+  /** The second line: what it is, or for the GPU the device's name, or `Unavailable`. */
+  what: string;
+  /** Shown disabled, never hidden: the GPU entry while no device is found. */
+  disabled: boolean;
+  /** Why it is disabled, shown under it (and as its tooltip). */
+  why: string | null;
+  /** The tooltip: the GPU's whole device line, or why it is unavailable. */
+  title: string | null;
+}
+
+/** The device's name, the probe line's first field: `NVIDIA GeForce RTX 5070`. */
+export function deviceName(line: string): string {
+  const i = line.indexOf(',');
+  return (i < 0 ? line : line.slice(0, i)).trim();
+}
+
+/** The entry a solver and device pick. */
+export function choiceKey(solver: SolverName, device: SppsDevice): SolverChoiceKey {
+  return solver === 'tcr' ? 'tcr' : device === 'gpu' ? 'spps-gpu' : 'spps';
+}
+
+/** The solver entries, in the panel's order, with the GPU's state from the session's probe
+ * (`null`: not answered yet). */
+export function solverChoices(gpu: GpuStatus | null): SolverChoice[] {
+  const gpuEntry: SolverChoice =
+    gpu === null
+      ? { key: 'spps-gpu', solver: 'spps', device: 'gpu', name: 'SPPS on the GPU', what: 'Looking for a CUDA device…', disabled: true, why: null, title: null }
+      : gpu.available && gpu.device
+        ? { key: 'spps-gpu', solver: 'spps', device: 'gpu', name: 'SPPS on the GPU', what: deviceName(gpu.device), disabled: false, why: null, title: gpu.device }
+        : {
+            key: 'spps-gpu',
+            solver: 'spps',
+            device: 'gpu',
+            name: 'SPPS on the GPU',
+            what: 'Unavailable',
+            disabled: true,
+            why: gpu.reason ?? 'No CUDA device was found.',
+            title: gpu.reason ?? null,
+          };
+  return [
+    { key: 'spps', solver: 'spps', device: 'cpu', name: 'SPPS', what: 'Particle tracing', disabled: false, why: null, title: null },
+    { key: 'tcr', solver: 'tcr', device: 'cpu', name: 'TCR', what: 'Classical theory', disabled: false, why: null, title: null },
+    gpuEntry,
+  ];
+}
+
+/** Which solver made a run, as the Results step and the Acoustics tab name it: `SPPS`, `TCR`, or
+ * `SPPS on the GPU, <device name>` from `run.json`'s `gpu_device` (the Runs row's). */
+export function runSolverText(solver: string | null | undefined, gpuDevice: string | null | undefined): string {
+  if (solver === 'tcr') return 'TCR';
+  if (solver !== 'spps') return 'Run';
+  return gpuDevice ? `SPPS on the GPU, ${deviceName(gpuDevice)}` : 'SPPS';
+}
+
 /**
- * The Run button's label (design:43, `runLabel`): `Run SPPS` or `Run TCR` when idle; while a
- * run is active `Running <p> %` (the percentage a diagnostic part), `Running…` before SPPS has
- * printed one (and for TCR, which prints none), `Cancelling…` once Cancel was pressed.
+ * The Run button's label (design:43, `runLabel`): `Run SPPS`, `Run SPPS on the GPU` or `Run TCR`
+ * when idle; while a run is active `Running <p> %` (the percentage a diagnostic part), `Running…`
+ * before SPPS has printed one (and for TCR, which prints none), `Cancelling…` once Cancel was
+ * pressed.
  */
-export function runLabel(run: ActiveRun | null, solver: SolverName): LinePart[] {
-  if (!run) return [{ text: `Run ${solverLabel(solver)}` }];
+export function runLabel(run: ActiveRun | null, solver: SolverName, device: SppsDevice = 'cpu'): LinePart[] {
+  if (!run) return [{ text: `Run ${solverLabel(solver)}${solver === 'spps' && device === 'gpu' ? ' on the GPU' : ''}` }];
   if (run.status === 'cancelling') return [{ text: 'Cancelling…' }];
   const p = progressPart(run);
   return p ? [{ text: 'Running ' }, p] : [{ text: 'Running…' }];

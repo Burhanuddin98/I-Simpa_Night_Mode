@@ -528,7 +528,7 @@ pub fn solver_build(m: &RunManifest) -> SolverBuild {
             format!("not the verified build (solvers/manifest.json): {bad}"),
         );
     }
-    let solver = crate::run::manager::solver_exe_name(m.solver);
+    let solver = crate::run::manager::run_exe_name(m.solver, m.gpu_device.is_some());
     if !checks.iter().any(|c| c.name == solver) {
         return unverified(
             build_codes::UNCHECKED,

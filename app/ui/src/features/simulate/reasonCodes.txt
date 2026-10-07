@@ -97,6 +97,7 @@ source_not_located
 source_on_surface
 source_outside_volume
 source_unlocatable
+spps_gpu_refused
 stale_delete_failed
 stats_band_mismatch
 stats_unreadable

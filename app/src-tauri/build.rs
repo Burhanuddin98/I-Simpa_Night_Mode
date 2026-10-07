@@ -46,6 +46,7 @@ fn main() {
         "proj_import",
         "material_library",
         "solvers_status",
+        "spps_gpu_status",
         "app_events",
         "app_quit",
         "export_write",

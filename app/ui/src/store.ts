@@ -3,6 +3,7 @@
 // read it and write only their own UI state (selection, tool, step).
 import { useSyncExternalStore } from 'react';
 import type {
+  GpuStatus,
   LibraryMaterial,
   LineClass,
   ReportView,
@@ -106,6 +107,9 @@ export const viewportStore = new Store<{ live: boolean; drawnRev: number | null 
 // ---- M11 (docs/investigations/2026-09-29-m11/PLAN.md 3.1) -------------------------------------
 
 export type SolverName = 'spps' | 'tcr';
+/** Where SPPS runs (decision 70): upstream's spps.exe on the CPU, or spps-gpu.exe on the GPU. A
+ * run option, never saved in the project; TCR always runs on the CPU. */
+export type SppsDevice = 'cpu' | 'gpu';
 
 /** The run in progress: written only by the run actions in actions.ts. */
 export interface ActiveRun {
@@ -115,6 +119,8 @@ export interface ActiveRun {
   /** The run folder's name, once the core has made it (the `started` event). */
   run?: string;
   solver: SolverName;
+  /** SPPS on the GPU or the CPU (A5). */
+  device?: SppsDevice;
   variant: string | null;
   /** The stage the run is in: solvers, geometry, validate, mesh, export, pre_launch, solve. */
   stage: string | null;
@@ -158,6 +164,11 @@ export const resultsStore = new Store<ReadonlyMap<string, ResultsState>>(new Map
 export const reportStore = new Store<ReadonlyMap<string, ReportView>>(new Map());
 /** The solver the Simulate step runs: session state, not saved in the project. */
 export const solverStore = new Store<SolverName>('spps');
+/** Where the Simulate step runs SPPS: session state, not saved in the project (decision 70). */
+export const deviceStore = new Store<SppsDevice>('cpu');
+/** Whether SPPS can run on the GPU here (`spps-gpu --probe`, asked once per session); `null` until
+ * the answer arrives. */
+export const gpuStatusStore = new Store<GpuStatus | null>(null);
 /** The four executables, checked against the verified build (at boot and before each run). */
 export const solversStatusStore = new Store<SolversStatus | null>(null);
 

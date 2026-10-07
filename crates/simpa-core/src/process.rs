@@ -50,12 +50,16 @@ pub struct Line {
     pub terminated: bool,
 }
 
-/// What to run. `args` are passed as given; `cwd` is the child's working folder.
-#[derive(Clone, Debug)]
+/// What to run. `args` are passed as given; `cwd` is the child's working folder. The child
+/// inherits this process's environment less the variables named in `env_remove`.
+#[derive(Clone, Debug, Default)]
 pub struct Spec {
     pub program: PathBuf,
     pub args: Vec<OsString>,
     pub cwd: PathBuf,
+    /// Variables the child must not inherit (SPPS on the GPU: `SPPS_GPU_BACKEND`, which would
+    /// switch `spps-gpu.exe` to its CPU walk under a run recorded as the GPU's).
+    pub env_remove: Vec<OsString>,
 }
 
 /// A cancel flag shared between the caller, the line callback and other threads.
@@ -123,6 +127,9 @@ pub fn run(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    for k in &spec.env_remove {
+        command.env_remove(k);
+    }
     #[cfg(windows)]
     let (tree, stdout, stderr) = winproc::JobTree::spawn(command)?;
     #[cfg(not(windows))]

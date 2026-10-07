@@ -70,6 +70,28 @@
   font-size: 12px;
   color: var(--text-3);
 }
+/* SPPS on the GPU (A5): its own row under SPPS and TCR, the device named; disabled with its reason. */
+.sim-solver[data-solver='spps-gpu'] {
+  grid-column: 1 / -1;
+}
+.sim-solver:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.sim-solver:disabled:hover {
+  border-color: var(--edge);
+}
+.sim-solver .why {
+  font-size: 11px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+.sim-reason .detail {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
 
 /* ---- Simulate: the settings (design:397-401), editable since PQ3 ---- */
 .sim-settings {

@@ -17,7 +17,7 @@ import * as actions from '../../actions';
 import type { ReasonUi } from '../../bindings/ipc';
 import { reportStore, resultsStore, runsStore, sceneStore, selectedRunStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
-import { resultsCodes, resultsStateName, runVariantName, solverLabel } from './model';
+import { resultsCodes, resultsStateName, runSolverText, runVariantName } from './model';
 import { reasonWords } from './reasonWords';
 import './simulate.css';
 
@@ -76,7 +76,9 @@ export function ResultsPanel() {
 
   const variants = scene?.view.variants ?? [];
   const label = row ? `Run ${row.number} · ${runVariantName(row.variant, variants)}` : selected;
-  const solver = row?.solver === 'tcr' || row?.solver === 'spps' ? solverLabel(row.solver) : 'Run';
+  // Which solver made the run, read from its run.json (A5): `SPPS on the GPU, <device>` names the
+  // device, whose name may hold digits, so it sits in a run-label span like the run's own name.
+  const solver = runSolverText(row?.solver, row?.gpu_device);
 
   return (
     <div data-part="results-panel">
@@ -84,7 +86,18 @@ export function ResultsPanel() {
         <div className="title" data-run-label>
           {label ?? 'Results'}
         </div>
-        <div className="sub">{selected ? `${solver} · results checked before any value is shown` : 'Checked values only'}</div>
+        <div className="sub">
+          {selected ? (
+            <>
+              <span data-run-label data-part="run-solver" data-device={row?.gpu_device ? 'gpu' : 'cpu'}>
+                {solver}
+              </span>
+              {' · results checked before any value is shown'}
+            </>
+          ) : (
+            'Checked values only'
+          )}
+        </div>
       </div>
       <div className="props-section res-state" data-results-state={state} data-run={selected ?? ''}>
         {state === 'none' && (

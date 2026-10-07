@@ -161,7 +161,7 @@ fn ours() -> Vec<Row> {
 #[test]
 fn the_classifier_table_is_the_contract_pages_part_b() {
     let rows = documented(&read("docs/solver-contract.md")).unwrap();
-    assert_eq!(rows.len(), 22, "Part B's table has 22 rows");
+    assert_eq!(rows.len(), 23, "Part B's table has 23 rows");
     assert_eq!(
         rows,
         ours(),
@@ -176,7 +176,7 @@ fn the_classifier_table_is_the_contract_pages_part_b() {
             n(LineClass::Fail),
             n(LineClass::Warn)
         ],
-        [1, 7, 1, 11, 2]
+        [1, 7, 1, 12, 2]
     );
     println!("{} rows match docs/solver-contract.md Part B", rows.len());
 }
@@ -250,6 +250,7 @@ fn no_two_patterns_match_one_documented_sample() {
         "A sound source position is intersecting with the 3D model. Move the sound source",
         "Unable to find the source position!",
         "Warning 5 particles has been in error on 10 particles. The computation result may be",
+        "spps-gpu: refused: fittings_unsupported: SPPS on the GPU does not support fittings in this version; run SPPS on the CPU, or turn fittings off",
     ];
     for (s, r) in samples.iter().zip(&LINE_RULES) {
         assert_eq!(classify::matching_rules(s), [r.id], "{s}");

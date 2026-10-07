@@ -269,7 +269,14 @@ function Row({
       <div className="run-main">
         <span className="c-run mono" role="cell" data-part="number">{`#${row.number}`}</span>
         <span className="c-variant" role="cell">{variantLabel(row, variants, active)}</span>
-        <span className="c-solver" role="cell">{solverLabel(row.solver)}</span>
+        <span
+          className="c-solver"
+          role="cell"
+          data-device={row.gpu_device || (active?.run === row.run && active.device === 'gpu') ? 'gpu' : 'cpu'}
+          title={row.gpu_device ?? undefined}
+        >
+          {solverLabel(row.solver, !!row.gpu_device || (active?.run === row.run && active.device === 'gpu'))}
+        </span>
         <span className={`c-status ${statusTone(row.status)}`} role="cell" data-part="status">
           {statusWord(row.status)}
         </span>

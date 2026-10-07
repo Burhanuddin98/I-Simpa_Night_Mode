@@ -445,4 +445,22 @@ pub(crate) mod tests {
             assert!(m.sha256.contains_key(name), "{name}");
         }
     }
+
+    /// A5 audit fix 4: the manifest pins exactly the bed's four executables and `spps-gpu.exe`.
+    /// The bed (`SOLVER_EXES`, E1) checks the four it runs; `spps-gpu.exe` is not one of its arms
+    /// (a GPU run stands in for no SPPS run until A4's own bed passes), and the app does not
+    /// require it either (`solvers_status` blocks on the four only). A sixth row must come with its
+    /// own decision, so it fails here.
+    #[test]
+    fn the_embedded_manifest_pins_the_bed_four_and_spps_gpu_only() {
+        let m =
+            SolverManifest::parse(crate::bed::SOLVER_MANIFEST, ManifestSource::Embedded).unwrap();
+        let mut want: Vec<&str> = crate::bed::SOLVER_EXES.to_vec();
+        want.push(crate::run::gpu::SPPS_GPU_EXE_NAME);
+        want.sort_unstable();
+        let code: Vec<&str> = m.code_sha256.keys().map(String::as_str).collect();
+        let raw: Vec<&str> = m.sha256.keys().map(String::as_str).collect();
+        assert_eq!(code, want);
+        assert_eq!(raw, want);
+    }
 }

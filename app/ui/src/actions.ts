@@ -67,6 +67,9 @@ import {
   type SolverName,
   solversStatusStore,
   solverStore,
+  deviceStore,
+  gpuStatusStore,
+  type SppsDevice,
 } from './store';
 
 /** A rejected action's `{code, message}`, for a package that shows it inline (packages never
@@ -444,6 +447,27 @@ export async function refreshSolvers(): Promise<SolversStatus | null> {
   }
 }
 
+/** Whether SPPS can run on the GPU here (decision 70): the backend probes once per session. */
+export async function refreshGpu(): Promise<void> {
+  try {
+    const before = gpuStatusStore.get();
+    const s = await backend.sppsGpuStatus();
+    gpuStatusStore.set(s);
+    // Logged when the answer changes: the backend keeps a found device and probes a failure
+    // again, so the Simulate step re-asks while there is none.
+    if (before?.available !== s.available || before?.device !== s.device || before?.reason !== s.reason) {
+      if (s.available) log('INFO', `SPPS on the GPU: ${s.device ?? ''}`);
+      else log('INFO', `SPPS on the GPU unavailable: ${s.reason ?? ''}`);
+    }
+    // A GPU chosen earlier in the session with no device now runs nothing: back to the CPU.
+    if (!s.available && deviceStore.get() === 'gpu') deviceStore.set('cpu');
+  } catch (e) {
+    const err = asCmdError(e);
+    gpuStatusStore.set({ available: false, device: null, reason: `${err.message} (${err.code})` });
+    log('FAIL', `Probing the GPU: ${err.message} (${err.code})`);
+  }
+}
+
 /** Upstream's reference materials, from the core, once at boot. */
 export async function loadLibrary(): Promise<void> {
   const lib = await run('Reading the material library', () => backend.materialLibrary());
@@ -632,7 +656,10 @@ function runEvents(id: number): (batch: RunStreamBatch) => void {
  * the run starts; its events arrive through the channel. Returns what `run_start` answered, or
  * `null` when nothing was started.
  */
-export async function runStart(solver: SolverName = solverStore.get()): Promise<RunStarted | null> {
+export async function runStart(
+  solver: SolverName = solverStore.get(),
+  device: SppsDevice = solver === 'spps' ? deviceStore.get() : 'cpu',
+): Promise<RunStarted | null> {
   if (refuseDuringRun('Run')) return null;
   const state = sceneStore.get();
   if (!state) return null;
@@ -649,6 +676,7 @@ export async function runStart(solver: SolverName = solverStore.get()): Promise<
     runStore.set({
       id,
       solver,
+      device,
       variant: info?.active_variant ?? null,
       stage: null,
       progress: null,
@@ -659,8 +687,9 @@ export async function runStart(solver: SolverName = solverStore.get()): Promise<
     const channel = new Channel<RunStreamBatch>();
     channel.onmessage = runEvents(id);
     try {
-      const started = await backend.runStart(solver, channel);
-      log('INFO', `${solver.toUpperCase()} run started: ${started.project_path}`);
+      const started = await backend.runStart(solver, device, channel);
+      const on = started.gpu_device ? ` on the GPU (${started.gpu_device})` : '';
+      log('INFO', `${solver.toUpperCase()} run started${on}: ${started.project_path}`);
       resendCancel(id);
       return started;
     } catch (e) {

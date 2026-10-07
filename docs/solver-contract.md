@@ -368,6 +368,7 @@ TCR returns `MainProcess`'s value (`main_tc.cpp:160-173`):
 | `source_on_surface` | stderr | `^A sound source position is intersecting with the 3D model` | FAIL | `sppsNantes.cpp:323` |
 | `source_not_located` | stderr | `^Unable to find the source position!` (no newline; unreachable in practice) | FAIL | `sppsNantes.cpp:63` |
 | `particle_loss_reported` | stderr | `^Warning (\d+) particles has been in error on (\d+) particles\.` (no newline) | FAIL | `sppsNantes.cpp:425-439` |
+| `spps_gpu_refused` | stderr | `^spps-gpu: refused: [a-z_]+: ` (our GPU build of SPPS, decision 70: a project it does not take, or no CUDA device; exit 2) | FAIL | `solvers/spps-gpu/src/main.cu:372, 383, 443` |
 | `unclassified_line` | either | anything else | WARN | – |
 
 Notes on the classifier:
@@ -740,7 +741,9 @@ solver run that did not succeed (`docs/results.md`, "Verified runs only").
 its `run.json` alone (backlog 38): the executables' checks (`solvers`) must be recorded, every one
 must match the verified build (`solvers/manifest.json`), the checks must have been made against
 that embedded manifest and not a test override (`solver_manifest.source`, M8b), and one must name
-the solver the run executed, as `check_solvers` names them (`spps.exe`, `classicalTheory.exe`).
+the solver the run executed, as `check_solvers` names them (`spps.exe`, `classicalTheory.exe`;
+`spps-gpu.exe` for SPPS on the GPU, a run whose `run.json` records `gpu_device`, decision 70: the
+device line `spps-gpu --probe` printed, absent for every run on the CPU).
 Otherwise the run is marked unverified with one of these codes. None is a refusal: `results::load`
 reads the run as before, `simpa results` still exits 0 and prints the verdict (a line of the text,
 `solver_build` in `--json`), and the app's Results step reads "Results unverified", never "Results

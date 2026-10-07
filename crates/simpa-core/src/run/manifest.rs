@@ -154,6 +154,12 @@ pub struct RunManifest {
     pub solver: SolverKind,
     /// The solver executable, absolute, and its sha256.
     pub exe: FileRef,
+    /// SPPS on the GPU (decision 70): the device line `spps-gpu --probe` printed before the run
+    /// (`NVIDIA GeForce RTX 5070, sm_120, 48 SMs, 11.9 GiB, driver CUDA 13.2, runtime 13.2`);
+    /// `exe` is then `spps-gpu.exe`. `None` for a run on the CPU: absent from the file, so every
+    /// manifest of a CPU run is byte for byte what it was before the field existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_device: Option<String>,
     /// The executables checked against the verified build (`solvers/manifest.json`) before the
     /// run, when the caller asked for it (`RunOptions::verify`; the desktop app always does):
     /// the solver, and with a mesh built in the run, `tetgen.exe` and `preprocess.exe`. `None`

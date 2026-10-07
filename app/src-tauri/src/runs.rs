@@ -25,6 +25,7 @@ use simpa_core::bed::pe::{ManifestSource, SolverCheck, SolverManifest, check_sol
 use simpa_core::geometry::import::{REFERENCE_MATERIALS, library_material};
 use simpa_core::mesh;
 use simpa_core::process::{self, CancelToken};
+use simpa_core::run::gpu::{self, SPPS_GPU_EXE_NAME, SppsDevice};
 use simpa_core::run::manager::{PREPROCESS_EXE_NAME, TETGEN_EXE_NAME, solver_exe_name};
 use simpa_core::run::{
     DEFAULT_LOSS_LIMIT, ExeSearch, LineClass as CoreClass, MeshChoice, RunError, RunEvent,
@@ -52,6 +53,8 @@ pub const QUIT_WAIT: Duration = Duration::from_secs(3);
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct RunStarted {
     pub solver: String,
+    /// SPPS on the GPU (decision 70): the device line the probe printed; `None` on the CPU.
+    pub gpu_device: Option<String>,
     /// The active variant's id, `None` for the project's own materials.
     pub variant: Option<String>,
     pub project_path: String,
@@ -232,6 +235,9 @@ pub struct RunRow {
     pub lines: Option<LineCounts>,
     /// The solver executable and its sha256.
     pub exe: Option<FileRefUi>,
+    /// SPPS on the GPU (decision 70): `run.json`'s `gpu_device`, the device line `spps-gpu
+    /// --probe` printed before the run; `None` for a run on the CPU.
+    pub gpu_device: Option<String>,
     pub mesh_sha256: Option<String>,
     /// The executables checked against the verified build before the run; `None` for a CLI run
     /// or one written before M11.
@@ -308,6 +314,21 @@ pub struct SolversStatus {
     pub checks: Vec<SolverCheck>,
     /// `SOLVER_NOT_FOUND` and/or `SOLVER_UNVERIFIED`; empty when all four are the verified build.
     pub blockers: Vec<String>,
+}
+
+/// Whether SPPS can run on the GPU here (decision 70): `spps-gpu.exe`, found as the other solvers
+/// are and the verified build, answered `--probe` with a device. Asked once per app session
+/// ([`spps_gpu_status`]). Never a blocker of the run: SPPS on the CPU and TCR are unaffected.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct GpuStatus {
+    pub available: bool,
+    /// The device line `spps-gpu --probe` printed, when available: `NVIDIA GeForce RTX 5070,
+    /// sm_120, 48 SMs, 11.9 GiB, driver CUDA 13.2, runtime 13.2`.
+    pub device: Option<String>,
+    /// Why SPPS cannot run on the GPU here, when not: the executable not found (where it was
+    /// looked for), not the verified build, no CUDA device (its own words and exit), or no
+    /// answer in time.
+    pub reason: Option<String>,
 }
 
 // ---- numbers, formatted with integer rules (PLAN.md 2.3, T14) ----------------------------------
@@ -539,6 +560,7 @@ pub fn row_from_manifest(run: &str, number: u32, m: &RunManifest) -> RunRow {
             path: m.exe.path.clone(),
             sha256: m.exe.sha256.clone(),
         }),
+        gpu_device: m.gpu_device.clone(),
         mesh_sha256: m.mesh.as_ref().map(|x| x.mbin_sha256.clone()),
         solvers: m.solvers.clone(),
         solver_build: Some(SolverBuildUi::of(&results::solver_build(m))),
@@ -571,6 +593,7 @@ fn bare_row(
         loss: None,
         lines: None,
         exe: None,
+        gpu_device: None,
         mesh_sha256: None,
         solvers: None,
         solver_build: None,
@@ -759,6 +782,8 @@ fn not_found_check(name: &str, detail: String) -> SolverCheck {
 }
 
 pub const SOLVER_NOT_FOUND: &str = "SOLVER_NOT_FOUND";
+/// `run_start` with the GPU, where [`spps_gpu_status`] found none, or with TCR, which has none.
+pub const SPPS_GPU_UNAVAILABLE: &str = "SPPS_GPU_UNAVAILABLE";
 pub const SOLVER_UNVERIFIED: &str = "SOLVER_UNVERIFIED";
 pub const RUN_ACTIVE: &str = "RUN_ACTIVE";
 
@@ -791,6 +816,66 @@ pub fn solvers_status(cache: &Mutex<SolversCache>) -> CmdResult<SolversStatus> {
         blockers.push(SOLVER_UNVERIFIED.to_string());
     }
     Ok(SolversStatus { checks, blockers })
+}
+
+/// The probe's answer for this app session, and the executable it found, once it found a device:
+/// kept, since `spps-gpu --probe` starts the CUDA runtime, which need not be paid on every Simulate
+/// step. A failure is never kept: a transient one, or a driver installed since, is probed again on
+/// the next ask.
+#[derive(Default)]
+pub struct GpuCache {
+    probed: Option<(GpuStatus, Option<PathBuf>)>,
+}
+
+/// The status of `search`'s `spps-gpu.exe` against `manifest`: the device, or why there is none.
+pub fn probe_status(search: &ExeSearch, manifest: &SolverManifest) -> (GpuStatus, Option<PathBuf>) {
+    match gpu::probe_verified(search, manifest, gpu::PROBE_TIMEOUT) {
+        Ok((exe, line)) => (
+            GpuStatus {
+                available: true,
+                device: Some(line),
+                reason: None,
+            },
+            Some(exe),
+        ),
+        Err(why) => (
+            GpuStatus {
+                available: false,
+                device: None,
+                reason: Some(why),
+            },
+            None,
+        ),
+    }
+}
+
+/// SPPS on the GPU here: the kept answer once a device was found, else a fresh probe (with its
+/// timeout and its kill on timeout, holding the cache's lock).
+pub fn spps_gpu_status(cache: &Mutex<GpuCache>) -> CmdResult<GpuStatus> {
+    Ok(probed(cache)?.0)
+}
+
+fn probed(cache: &Mutex<GpuCache>) -> CmdResult<(GpuStatus, Option<PathBuf>)> {
+    probed_with(cache, &mut || {
+        Ok(probe_status(&ExeSearch::from_env(None), &manifest()?))
+    })
+}
+
+/// [`probed`] with the probe given: a success is kept, a failure is returned and asked again next
+/// time.
+fn probed_with(
+    cache: &Mutex<GpuCache>,
+    probe: &mut dyn FnMut() -> CmdResult<(GpuStatus, Option<PathBuf>)>,
+) -> CmdResult<(GpuStatus, Option<PathBuf>)> {
+    let mut c = lock(cache, "gpu")?;
+    if let Some(kept) = &c.probed {
+        return Ok(kept.clone());
+    }
+    let got = probe()?;
+    if got.0.available {
+        c.probed = Some(got.clone());
+    }
+    Ok(got)
 }
 
 // ---- the run slot and the run thread ----------------------------------------------------------------
@@ -889,11 +974,20 @@ fn solver_kind(solver: &str) -> CmdResult<SolverKind> {
     }
 }
 
+/// `cpu` or `gpu`; `None` (a caller from before A5) is the CPU.
+fn spps_device(device: Option<&str>) -> CmdResult<SppsDevice> {
+    device.map_or(Ok(SppsDevice::Cpu), |d| {
+        SppsDevice::parse(d).map_err(|e| CmdError::new("DEVICE_UNKNOWN", e))
+    })
+}
+
 /// What `start` found to run.
 struct Planned {
     project: PathBuf,
     variant: Option<String>,
     kind: SolverKind,
+    /// SPPS on the GPU: the probe's device line.
+    gpu_device: Option<String>,
     solver_exe: PathBuf,
     tetgen: PathBuf,
     preprocess: PathBuf,
@@ -907,9 +1001,18 @@ fn plan(
     session: &Mutex<Session>,
     slot: &Mutex<RunSlot>,
     cache: &Mutex<SolversCache>,
+    gpu_cache: &Mutex<GpuCache>,
     solver: &str,
+    device: Option<&str>,
 ) -> CmdResult<Planned> {
     let kind = solver_kind(solver)?;
+    let device = spps_device(device)?;
+    if device == SppsDevice::Gpu && kind == SolverKind::Tcr {
+        return Err(CmdError::new(
+            SPPS_GPU_UNAVAILABLE,
+            "TCR has no GPU build: the GPU runs SPPS only",
+        ));
+    }
     let (project, variant) = {
         let s = lock(session, "project")?;
         let info = s
@@ -954,13 +1057,36 @@ fn plan(
             .find(name)
             .map_err(|e| CmdError::new(SOLVER_NOT_FOUND, e.to_string()))
     };
-    let solver_exe = find(solver_exe_name(kind))?;
+    // SPPS on the GPU: the executable the session's probe found, with its device; refused with
+    // the probe's reason when it found none. The probe is never run twice in a session.
+    let (solver_name_checked, solver_exe, gpu_device) = match device {
+        SppsDevice::Cpu => (solver_exe_name(kind), find(solver_exe_name(kind))?, None),
+        SppsDevice::Gpu => match probed(gpu_cache)? {
+            (
+                GpuStatus {
+                    available: true,
+                    device: Some(line),
+                    ..
+                },
+                Some(exe),
+            ) => (SPPS_GPU_EXE_NAME, exe, Some(line)),
+            (status, _) => {
+                return Err(CmdError::new(
+                    SPPS_GPU_UNAVAILABLE,
+                    format!(
+                        "SPPS cannot run on the GPU here: {}",
+                        status.reason.as_deref().unwrap_or("no device")
+                    ),
+                ));
+            }
+        },
+    };
     let tetgen = find(TETGEN_EXE_NAME)?;
     let preprocess = find(PREPROCESS_EXE_NAME)?;
     {
         let mut c = lock(cache, "solvers")?;
         for (name, path) in [
-            (solver_exe_name(kind), &solver_exe),
+            (solver_name_checked, &solver_exe),
             (TETGEN_EXE_NAME, &tetgen),
             (PREPROCESS_EXE_NAME, &preprocess),
         ] {
@@ -983,6 +1109,7 @@ fn plan(
         project,
         variant,
         kind,
+        gpu_device,
         solver_exe,
         tetgen,
         preprocess,
@@ -996,13 +1123,16 @@ pub fn start(
     session: &Mutex<Session>,
     slot: &Arc<Mutex<RunSlot>>,
     cache: &Mutex<SolversCache>,
+    gpu_cache: &Mutex<GpuCache>,
     solver: &str,
+    device: Option<&str>,
     channel: Channel<RunStreamBatch>,
 ) -> CmdResult<RunStarted> {
-    let p = plan(session, slot, cache, solver)?;
+    let p = plan(session, slot, cache, gpu_cache, solver, device)?;
     let root = runs_root(&p.project);
     let started = RunStarted {
         solver: solver_name(p.kind).to_string(),
+        gpu_device: p.gpu_device.clone(),
         variant: p.variant.clone(),
         project_path: p.project.display().to_string(),
         runs_root: root.display().to_string(),
@@ -1033,6 +1163,7 @@ pub fn start(
         cancel_after_ms: None,
         cancel_after_progress: None,
         verify: Some(p.manifest.clone()),
+        gpu_device: p.gpu_device.clone(),
     };
     let mesh = MeshChoice::Build {
         tetgen: p.tetgen.clone(),
@@ -1239,6 +1370,83 @@ mod tests {
     /// Every `LINE_RULES` id: a FAIL line's reason is its row id.
     fn line_rule_ids() -> Vec<&'static str> {
         LINE_RULES.iter().map(|r| r.id).collect()
+    }
+
+    /// A5 bed item 4: the probe pointed at a folder with no `spps-gpu.exe` answers unavailable,
+    /// with the reason naming where it looked; one that is not the verified build is never
+    /// started and says so. Neither has a device, and `plan` refuses the GPU with that reason.
+    #[test]
+    fn a5_the_gpu_is_unavailable_with_its_reason_when_the_probe_finds_nothing() {
+        let dir = std::env::temp_dir().join(format!("nm-a5-gpu-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let search = ExeSearch {
+            explicit: None,
+            solvers_dir: Some(dir.clone()),
+            exe_dir: None,
+        };
+        let m = manifest().unwrap();
+        let (missing, exe) = probe_status(&search, &m);
+        assert!(
+            !missing.available && missing.device.is_none() && exe.is_none(),
+            "{missing:?}"
+        );
+        let why = missing.reason.unwrap();
+        assert!(why.contains("spps-gpu.exe not found"), "{why}");
+        assert!(why.contains(&dir.display().to_string()), "{why}");
+        // A file there that is not the verified build: refused before it is ever started.
+        std::fs::write(dir.join(SPPS_GPU_EXE_NAME), b"MZ not a solver").unwrap();
+        let (bad, exe) = probe_status(&search, &m);
+        assert!(!bad.available && exe.is_none(), "{bad:?}");
+        assert!(
+            bad.reason
+                .as_deref()
+                .unwrap()
+                .contains("is not the verified build"),
+            "{bad:?}"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+        // The device names: cpu, gpu, none (the CPU); anything else is refused.
+        assert_eq!(spps_device(None).unwrap(), SppsDevice::Cpu);
+        assert_eq!(spps_device(Some("gpu")).unwrap(), SppsDevice::Gpu);
+        assert_eq!(
+            spps_device(Some("cuda")).unwrap_err().code,
+            "DEVICE_UNKNOWN"
+        );
+    }
+
+    /// A5 audit fix 2: a failed probe is asked again on the next call (a transient failure, a
+    /// driver installed since); the first success is kept and the probe is not run again.
+    #[test]
+    fn a5_a_failed_probe_is_asked_again_and_a_success_is_kept() {
+        let cache = Mutex::new(GpuCache::default());
+        let mut calls = 0;
+        let mut answers = vec![
+            (true, "RTX"),
+            (false, "no CUDA device (--probe exited 1)"),
+            (false, "did not answer within 5 s"),
+        ];
+        let mut probe = || {
+            calls += 1;
+            let (ok, text) = answers.pop().expect("asked more often than answered");
+            Ok((
+                GpuStatus {
+                    available: ok,
+                    device: ok.then(|| text.to_string()),
+                    reason: (!ok).then(|| text.to_string()),
+                },
+                ok.then(|| PathBuf::from("spps-gpu.exe")),
+            ))
+        };
+        let a = probed_with(&cache, &mut probe).unwrap();
+        assert!(!a.0.available && a.0.reason.as_deref() == Some("did not answer within 5 s"));
+        let b = probed_with(&cache, &mut probe).unwrap();
+        assert!(!b.0.available, "{b:?}");
+        let c = probed_with(&cache, &mut probe).unwrap();
+        assert_eq!(c.0.device.as_deref(), Some("RTX"));
+        let d = probed_with(&cache, &mut probe).unwrap();
+        assert_eq!(d, c);
+        drop(probe);
+        assert_eq!(calls, 3, "two failures asked again, the success kept");
     }
 
     #[test]
@@ -1458,6 +1666,7 @@ mod tests {
             cancel_after_ms: None,
             cancel_after_progress: None,
             verify: None,
+            gpu_device: None,
         }
     }
 

@@ -170,6 +170,8 @@ test('a row names its variant, solver and status in words, and says what it does
   assert.equal(variantLabel(row(B, { status: 'RUNNING' }), variants, active({ variant: 'v1' })), 'Treated rear wall');
   assert.equal(variantLabel(row(A, { status: 'FAIL', manifest_error: 'bad' }), variants, null), '—');
   assert.deepEqual([solverLabel('spps'), solverLabel('tcr'), solverLabel(null)], ['SPPS', 'TCR', '—']);
+  // A5: a run of SPPS on the GPU says so; TCR has no GPU build.
+  assert.deepEqual([solverLabel('spps', true), solverLabel('tcr', true)], ['SPPS on the GPU', 'TCR']);
   assert.deepEqual(
     (['OK', 'FAIL', 'CRASH', 'CANCELLED', 'INTERRUPTED', 'RUNNING'] as const).map(statusTone),
     ['ok', 'fail', 'fail', 'muted', 'warn', 'live'],

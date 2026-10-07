@@ -27,7 +27,7 @@ import { displayName } from '../../chrome/sceneModel';
 import type { ApplyConflict, ReportView } from '../../bindings/ipc';
 import { reportStore, runsStore, sceneStore, selectedRunStore, stepStore, useStore } from '../../store';
 import { registerHook } from '../../testhooks';
-import { runVariantName, solverLabel } from '../simulate/model';
+import { runSolverText, runVariantName } from '../simulate/model';
 import {
   type AdviceCard,
   adviceCards,
@@ -449,7 +449,9 @@ export function AcousticsPane() {
         <span className="ac-title" data-run-label>
           {label}
         </span>
-        <span className="ac-solver">{solverLabel(report.solver === 'tcr' ? 'tcr' : 'spps')}</span>
+        <span className="ac-solver" data-run-label data-part="run-solver" title={row?.gpu_device ?? undefined}>
+          {runSolverText(report.solver === 'tcr' ? 'tcr' : 'spps', row?.gpu_device)}
+        </span>
         <span className="ac-wording" data-label="wording" data-part="wording">
           {MQ2_WORDING}
         </span>

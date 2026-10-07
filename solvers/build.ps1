@@ -190,6 +190,16 @@ $manifest = [ordered]@{
 }
 $manifest | ConvertTo-Json -Depth 4 | Set-Content $manifestPath -Encoding UTF8
 if ($UpdateCommittedManifest) {
+    # spps-gpu.exe is not built here (solvers/spps-gpu/build.cmd builds it, decision 70): its rows and
+    # its spps_gpu record are carried over from the committed manifest, never dropped by a rebuild.
+    $old = Get-Content $committedManifest -Raw | ConvertFrom-Json
+    if ($null -ne $old.spps_gpu) {
+        $manifest.sha256 = [ordered]@{} + $hashes
+        $manifest.sha256['spps-gpu.exe'] = $old.sha256.'spps-gpu.exe'
+        $manifest.code_sha256 = [ordered]@{} + $codeHashes
+        $manifest.code_sha256['spps-gpu.exe'] = $old.code_sha256.'spps-gpu.exe'
+        $manifest.Insert($manifest.Count - 1, 'spps_gpu', $old.spps_gpu)
+    }
     $manifest | ConvertTo-Json -Depth 4 | Set-Content $committedManifest -Encoding UTF8
     Write-Host "committed manifest rewritten: $committedManifest"
 }

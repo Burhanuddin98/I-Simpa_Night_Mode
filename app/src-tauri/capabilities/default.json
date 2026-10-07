@@ -51,6 +51,7 @@
     "allow-proj-import",
     "allow-material-library",
     "allow-solvers-status",
+    "allow-spps-gpu-status",
     "allow-app-events",
     "allow-app-quit",
     "allow-export-write"

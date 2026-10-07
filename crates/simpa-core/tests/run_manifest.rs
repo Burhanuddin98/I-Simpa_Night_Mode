@@ -44,6 +44,7 @@ fn sample() -> RunManifest {
             path: r"C:\solvers\spps.exe".into(),
             sha256: sha256_bytes(b"exe"),
         },
+        gpu_device: None,
         solvers: None,
         solver_manifest: None,
         argv: vec!["config.xml".into()],
@@ -188,6 +189,33 @@ fn the_solver_manifest_is_written_only_alongside_a_check() {
     let json = overridden.to_json();
     assert!(json.contains(r#""source": "override""#), "{json}");
     assert_eq!(RunManifest::from_json(&json).unwrap(), overridden);
+}
+
+/// `gpu_device` (decision 70, A5): absent for a CPU run, so every manifest written before the
+/// field and every CPU run reads and writes back byte for byte; for SPPS on the GPU, the device
+/// line `spps-gpu --probe` printed, read back as written.
+#[test]
+fn the_gpu_device_is_written_only_for_a_gpu_run() {
+    let json = sample().to_json();
+    assert!(!json.contains("gpu_device"), "{json}");
+    let back = RunManifest::from_json(&json).unwrap();
+    assert_eq!(back.gpu_device, None);
+    assert_eq!(back.to_json(), json);
+    let line = "NVIDIA GeForce RTX 5070, sm_120, 48 SMs, 11.9 GiB, driver CUDA 13.2, runtime 13.2";
+    let gpu = RunManifest {
+        gpu_device: Some(line.into()),
+        exe: FileRef {
+            path: r"C:\solvers\spps-gpu.exe".into(),
+            sha256: sha256_bytes(b"gpu exe"),
+        },
+        ..sample()
+    };
+    let json = gpu.to_json();
+    assert!(
+        json.contains(&format!(r#""gpu_device": "{line}""#)),
+        "{json}"
+    );
+    assert_eq!(RunManifest::from_json(&json).unwrap(), gpu);
 }
 
 #[test]

@@ -1,6 +1,8 @@
 // The Simulate step's properties panel (design:386-426), top to bottom (M11 PLAN.md 3.3):
 // - the head, "Simulation · Runs in the background · the app stays usable";
-// - the solver choice, SPPS or TCR (`[data-solver]`, `aria-checked`), session state only;
+// - the solver choice, SPPS, TCR or SPPS on the GPU (`[data-solver]` `spps`, `tcr`, `spps-gpu`,
+//   `aria-checked`), session state only. The GPU entry (decision 70, A5) names the device the
+//   session's probe found, or is shown disabled with the probe's reason, never hidden;
 // - the chosen solver's settings as fields (PQ3, SettingsEditor.tsx): each edit an op through the
 //   checked apply, its refusals inline; Run is blocked for the chosen solver's own errors too
 //   (`flow.projectBlockers`: every band off, `NO_BAND_COMPUTED`);
@@ -29,6 +31,8 @@ import { blockersWithSize, settingsStore } from './runSize';
 import { Issues } from '../../chrome/SourcesPanel';
 import {
   type ActiveRun,
+  deviceStore,
+  gpuStatusStore,
   type LinePart,
   refusalStore,
   runsStore,
@@ -44,6 +48,7 @@ import { registerHook } from '../../testhooks';
 import {
   type AdviceRow,
   adviceRows,
+  choiceKey,
   elapsedText,
   lastRunView,
   latestRun,
@@ -57,7 +62,8 @@ import {
   runLabel,
   runningHead,
   settingsRows,
-  solverLabel,
+  type SolverChoiceKey,
+  solverChoices,
 } from './model';
 import { SettingsEditor } from './SettingsEditor';
 import { reasonWords } from './reasonWords';
@@ -82,11 +88,6 @@ export function Parts({ parts }: { parts: readonly LinePart[] }) {
     </>
   );
 }
-
-const SOLVERS: readonly { key: SolverName; what: string }[] = [
-  { key: 'spps', what: 'Particle tracing' },
-  { key: 'tcr', what: 'Classical theory' },
-];
 
 /**
  * The open project's solver settings, read from its file form. Refetched when the scene state
@@ -123,31 +124,59 @@ function useNow(on: boolean): number {
 }
 
 function SolverChoice({ solver }: { solver: SolverName }) {
-  const refs = useRef<Record<SolverName, HTMLButtonElement | null>>({ spps: null, tcr: null });
+  const device = useStore(deviceStore);
+  const gpu = useStore(gpuStatusStore);
+  // No device yet: ask again each time the step is shown (a failure is probed afresh, a found
+  // device is kept by the backend for the session).
+  useEffect(() => {
+    if (gpuStatusStore.get()?.available === false) actions.fire(actions.refreshGpu());
+  }, []);
+  const choices = solverChoices(gpu);
+  const current = choiceKey(solver, device);
+  const refs = useRef<Record<SolverChoiceKey, HTMLButtonElement | null>>({ spps: null, tcr: null, 'spps-gpu': null });
+  const pick = (key: SolverChoiceKey) => {
+    const c = choices.find((x) => x.key === key);
+    if (!c || c.disabled) return;
+    solverStore.set(c.solver);
+    deviceStore.set(c.device);
+  };
   const onKey = (e: KeyboardEvent) => {
-    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+    const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+    if (step === undefined) return;
     e.preventDefault();
-    const next: SolverName = solver === 'spps' ? 'tcr' : 'spps';
-    solverStore.set(next);
-    refs.current[next]?.focus();
+    const open = choices.filter((c) => !c.disabled);
+    const i = open.findIndex((c) => c.key === current);
+    const next = open[(i + step + open.length) % open.length];
+    pick(next.key);
+    refs.current[next.key]?.focus();
   };
   return (
     <div className="sim-solvers" role="radiogroup" aria-label="Solver" onKeyDown={onKey}>
-      {SOLVERS.map((s) => (
+      {choices.map((c) => (
         <button
-          key={s.key}
+          key={c.key}
           ref={(el) => {
-            refs.current[s.key] = el;
+            refs.current[c.key] = el;
           }}
           className="sim-solver"
           role="radio"
-          aria-checked={solver === s.key}
-          tabIndex={solver === s.key ? 0 : -1}
-          data-solver={s.key}
-          onClick={() => solverStore.set(s.key)}
+          aria-checked={current === c.key}
+          aria-disabled={c.disabled || undefined}
+          disabled={c.disabled}
+          tabIndex={current === c.key ? 0 : -1}
+          data-solver={c.key}
+          data-device={c.device}
+          data-available={c.key === 'spps-gpu' ? String(!c.disabled) : undefined}
+          title={c.title ?? undefined}
+          onClick={() => pick(c.key)}
         >
-          <span className="name">{solverLabel(s.key)}</span>
-          <span className="what">{s.what}</span>
+          <span className="name">{c.name}</span>
+          <span className="what">{c.what}</span>
+          {c.why ? (
+            <span className="why" data-part="gpu-why">
+              {c.why}
+            </span>
+          ) : null}
         </button>
       ))}
     </div>
@@ -261,6 +290,14 @@ function RunningBlock({ active }: { active: ActiveRun }) {
   );
 }
 
+/** spps-gpu's refusal (exit 2, decision 70): its reason is the user's to read, so it is shown. */
+const GPU_REFUSED = 'spps_gpu_refused';
+
+/** The refusal line without its `spps-gpu: refused: ` prefix. */
+function gpuRefusalText(detail: string): string {
+  return detail.replace(/^spps-gpu: refused: /, '');
+}
+
 const STATUS_CLASS: Record<LastRunView['status'], string> = {
   OK: 'ok',
   FAIL: 'fail',
@@ -296,6 +333,11 @@ function LastRun({ last }: { last: LastRunView }) {
             <div key={`${r.code}-${i}`} className="sim-reason" data-code={r.ui_code} title={detailTitle(r.detail)}>
               <span className="words">{reasonWords(r.code)}</span>
               <span className="core">{r.ui_code}</span>
+              {r.code === GPU_REFUSED ? (
+                <span className="detail" data-part="gpu-refusal">
+                  {gpuRefusalText(r.detail)}
+                </span>
+              ) : null}
             </div>
           ))}
         </div>
@@ -342,6 +384,7 @@ export function SimulatePanel() {
   const active = useStore(runStore);
   const runs = useStore(runsStore);
   const solver = useStore(solverStore);
+  const device = useStore(deviceStore);
   const settings = useProjectSettings(scene);
 
   const project = blockersWithSize(scene, solver, useStore(settingsStore));
@@ -407,7 +450,7 @@ export function SimulatePanel() {
               title={tip}
               onClick={() => actions.fire(actions.runStart(solver))}
             >
-              <Parts parts={runLabel(null, solver)} />
+              <Parts parts={runLabel(null, solver, device)} />
             </button>
           </div>
         )}

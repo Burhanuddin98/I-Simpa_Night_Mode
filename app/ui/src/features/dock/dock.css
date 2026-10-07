@@ -230,6 +230,13 @@
 .run-main .c-solver {
   color: var(--text-2);
 }
+/* A5: "SPPS on the GPU" needs more than the 90 px the other columns have. */
+.runs-head span:nth-child(3),
+.run-main .c-solver {
+  width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .run-main .c-status {
   font-weight: 500;
 }
